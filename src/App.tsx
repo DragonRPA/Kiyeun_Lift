@@ -1,5 +1,5 @@
 // d:\Kiyeun_Lift\src\App.tsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from './context/AppContext';
 import {
   LayoutDashboard, Users, UserCheck, Package, Layers, PlusCircle,
@@ -29,19 +29,59 @@ const App: React.FC = () => {
   const [password, setPassword] = useState('');
   const [loginError, setLoginError] = useState(false);
 
+  // 편의기능 체크박스 상태
+  const [rememberId, setRememberId] = useState(false);
+  const [rememberPw, setRememberPw] = useState(false);
+  const [autoLogin, setAutoLogin] = useState(false);
+
   // 모바일 메뉴 사이드바 토글 상태
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   // 현재 활성화된 메뉴 탭 상태
   const [activeTab, setActiveTab] = useState<string>('dashboard');
 
+  // 컴포넌트 마운트 시 저장된 로그인 편의 정보 로드
+  useEffect(() => {
+    const savedId = localStorage.getItem('remember_id');
+    const savedPw = localStorage.getItem('remember_pw');
+    if (savedId) {
+      setLoginId(savedId);
+      setRememberId(true);
+    }
+    if (savedPw) {
+      setPassword(savedPw);
+      setRememberPw(true);
+    }
+    const hasAuto = !!localStorage.getItem('auto_user');
+    if (hasAuto) {
+      setAutoLogin(true);
+    }
+  }, []);
+
   const handleLoginSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const success = login(loginId, password);
+    const success = login(loginId, password, autoLogin);
     if (success) {
       setLoginError(false);
-      setLoginId('');
-      setPassword('');
+      
+      // 아이디 저장 처리
+      if (rememberId) {
+        localStorage.setItem('remember_id', loginId);
+      } else {
+        localStorage.removeItem('remember_id');
+      }
+      
+      // 비밀번호 저장 처리
+      if (rememberPw) {
+        localStorage.setItem('remember_pw', password);
+      } else {
+        localStorage.removeItem('remember_pw');
+      }
+
+      // 필드 정리 (저장 설정 안된 값만 비우기)
+      if (!rememberId) setLoginId('');
+      if (!rememberPw) setPassword('');
+      
       setActiveTab('dashboard'); // 로그인 성공시 대시보드로
     } else {
       setLoginError(true);
@@ -106,13 +146,43 @@ const App: React.FC = () => {
               />
             </div>
 
+            <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px', fontSize: '13px', color: 'var(--text-secondary)', padding: '2px 0' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={rememberId}
+                  onChange={e => setRememberId(e.target.checked)}
+                  style={{ cursor: 'pointer', width: '14px', height: '14px' }}
+                />
+                아이디 저장
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={rememberPw}
+                  onChange={e => setRememberPw(e.target.checked)}
+                  style={{ cursor: 'pointer', width: '14px', height: '14px' }}
+                />
+                비밀번호 저장
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={autoLogin}
+                  onChange={e => setAutoLogin(e.target.checked)}
+                  style={{ cursor: 'pointer', width: '14px', height: '14px' }}
+                />
+                자동 로그인
+              </label>
+            </div>
+
             {loginError && (
               <div style={{ color: 'var(--danger)', fontSize: '13px', textAlign: 'center', fontWeight: '600' }}>
                 아이디 또는 비밀번호가 잘못되었습니다.
               </div>
             )}
 
-            <button type="submit" className="btn-primary" style={{ padding: '12px', fontSize: '16px', fontWeight: '600', marginTop: '8px' }}>
+            <button type="submit" className="btn-primary" style={{ padding: '12px', fontSize: '16px', fontWeight: '600', marginTop: '4px' }}>
               로그인
             </button>
           </form>

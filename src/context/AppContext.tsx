@@ -6,7 +6,7 @@ interface AppContextType {
   currentUser: User | null;
   theme: 'light' | 'dark';
   toggleTheme: () => void;
-  login: (loginId: string, passwordHash: string) => boolean;
+  login: (loginId: string, passwordHash: string, keepLoggedIn?: boolean) => boolean;
   logout: () => void;
   hasPermission: (menuId: string, action: 'view' | 'save') => boolean;
   
@@ -131,8 +131,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     
     // 세션 정보 확인
     const savedUser = sessionStorage.getItem('user');
+    const autoUser = localStorage.getItem('auto_user');
     if (savedUser) {
       setCurrentUser(JSON.parse(savedUser));
+    } else if (autoUser) {
+      setCurrentUser(JSON.parse(autoUser));
     }
     
     refreshAllData();
@@ -145,11 +148,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     document.documentElement.setAttribute('data-theme', nextTheme);
   };
 
-  const login = (loginId: string, passwordHash: string): boolean => {
+  const login = (loginId: string, passwordHash: string, keepLoggedIn?: boolean): boolean => {
     const user = db.users.find(u => u.loginId === loginId && u.passwordHash === passwordHash);
     if (user) {
       setCurrentUser(user);
       sessionStorage.setItem('user', JSON.stringify(user));
+      if (keepLoggedIn) {
+        localStorage.setItem('auto_user', JSON.stringify(user));
+      } else {
+        localStorage.removeItem('auto_user');
+      }
       return true;
     }
     return false;
@@ -158,6 +166,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const logout = () => {
     setCurrentUser(null);
     sessionStorage.removeItem('user');
+    localStorage.removeItem('auto_user');
   };
 
   const hasPermission = (menuId: string, action: 'view' | 'save'): boolean => {
