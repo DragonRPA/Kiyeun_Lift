@@ -1,4 +1,11 @@
-// d:\Kiyeun_Lift\src\services\db.ts
+import { createClient } from '@supabase/supabase-js';
+
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+export const supabase = supabaseUrl && supabaseAnonKey
+  ? createClient(supabaseUrl, supabaseAnonKey)
+  : null;
 
 export interface User {
   id: string;
@@ -468,12 +475,99 @@ class LocalDB {
   get repairConsumables() { return this.get<RepairConsumable>('repairConsumables', SEED_REPAIR_CONSUMABLES); }
   set repairConsumables(val: RepairConsumable[]) { this.set('repairConsumables', val); }
 
-  // 헬퍼 메소드들 - CRUD 시뮬레이션
-  insertRow<T extends { id: string }>(key: keyof LocalDB, row: Omit<T, 'id'>): T {
+  // Supabase 테이블 맵핑
+  private mapToSupabaseTable(key: string): string {
+    const mapping: Record<string, string> = {
+      users: 'users',
+      permissions: 'permissions',
+      customers: 'customers',
+      contacts: 'customer_contacts',
+      sites: 'customer_sites',
+      products: 'products',
+      assets: 'assets',
+      consumables: 'consumables',
+      consumableLogs: 'consumable_logs',
+      contracts: 'contracts',
+      contractAssets: 'contract_assets',
+      contractHistory: 'contract_history',
+      deliveries: 'deliveries',
+      billings: 'billings',
+      billingDetails: 'billing_details',
+      payments: 'payments',
+      repairs: 'repairs',
+      repairConsumables: 'repair_consumables'
+    };
+    return mapping[key] || key;
+  }
+
+  // 비동기 쓰기 큐
+  private pendingWrites: any[] = [];
+
+  isSupabaseConnected(): boolean {
+    return !!supabase;
+  }
+
+  async pullFromSupabase(): Promise<void> {
+    if (!supabase) return;
+
+    // 대기 중인 모든 로컬 백그라운드 쓰기(insert/update/delete)가 완료될 때까지 대기
+    if (this.pendingWrites.length > 0) {
+      try {
+        await Promise.all(this.pendingWrites);
+      } catch (err) {
+        console.error("Error waiting for pending writes:", err);
+      }
+      this.pendingWrites = [];
+    }
+
+    const tables = [
+      'users', 'permissions', 'customers', 'contacts', 'sites', 
+      'products', 'assets', 'consumables', 'consumableLogs', 
+      'contracts', 'contractAssets', 'contractHistory', 'deliveries', 
+      'billings', 'billingDetails', 'payments', 'repairs', 'repairConsumables'
+    ];
+
+    try {
+      const results = await Promise.all(
+        tables.map(async (key) => {
+          const tableName = this.mapToSupabaseTable(key);
+          const { data, error } = await supabase!
+            .from(tableName)
+            .select('*');
+          if (error) throw error;
+          return { key, data };
+        })
+      );
+
+      // 전체 로컬 스토리지 캐시 최신 DB 값으로 덮어쓰기
+      results.forEach(({ key, data }) => {
+        this.set(key, data || []);
+      });
+    } catch (err) {
+      console.error("Supabase pullFromSupabase failed, falling back to local cache:", err);
+      throw err;
+    }
+  }
+
+  // 헬퍼 메소드들 - CRUD 시뮬레이션 및 백그라운드 Supabase 업로드
+  insertRow<T extends { id: string }>(key: keyof LocalDB, row: Omit<T, 'id'> & { id?: string }): T {
     const list = (this[key] as unknown) as T[];
-    const newRow = { ...row, id: Math.random().toString(36).substr(2, 9) } as unknown as T;
+    const newId = row.id || Math.random().toString(36).substr(2, 9);
+    const newRow = { ...row, id: newId } as unknown as T;
     list.push(newRow);
     this.set(key, list);
+
+    if (supabase) {
+      const tableName = this.mapToSupabaseTable(key as string);
+      const promise = supabase
+        .from(tableName)
+        .insert([newRow])
+        .then(({ error }) => {
+          if (error) console.error(`Supabase insert failed for ${tableName}:`, error);
+        });
+      this.pendingWrites.push(promise);
+    }
+
     return newRow;
   }
 
@@ -484,6 +578,19 @@ class LocalDB {
     const updated = { ...list[index], ...updates };
     list[index] = updated;
     this.set(key, list);
+
+    if (supabase) {
+      const tableName = this.mapToSupabaseTable(key as string);
+      const promise = supabase
+        .from(tableName)
+        .update(updates as any)
+        .eq('id', id)
+        .then(({ error }) => {
+          if (error) console.error(`Supabase update failed for ${tableName}:`, error);
+        });
+      this.pendingWrites.push(promise);
+    }
+
     return updated;
   }
 
@@ -492,6 +599,19 @@ class LocalDB {
     const filtered = list.filter(item => item.id !== id);
     if (filtered.length === list.length) return false;
     this.set(key, filtered);
+
+    if (supabase) {
+      const tableName = this.mapToSupabaseTable(key as string);
+      const promise = supabase
+        .from(tableName)
+        .delete()
+        .eq('id', id)
+        .then(({ error }) => {
+          if (error) console.error(`Supabase delete failed for ${tableName}:`, error);
+        });
+      this.pendingWrites.push(promise);
+    }
+
     return true;
   }
 }

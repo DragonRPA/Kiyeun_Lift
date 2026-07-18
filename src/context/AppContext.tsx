@@ -93,7 +93,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [repairs, setRepairs] = useState<Repair[]>([]);
   const [repairConsumables, setRepairConsumables] = useState<RepairConsumable[]>([]);
 
-  const refreshAllData = () => {
+  const refreshAllData = async () => {
+    if (db.isSupabaseConnected()) {
+      try {
+        await db.pullFromSupabase();
+      } catch (err) {
+        console.error("Failed to sync from Supabase:", err);
+      }
+    }
     setUsers(db.users);
     setPermissions(db.permissions);
     setCustomers(db.customers);
