@@ -214,7 +214,8 @@ export interface Billing {
   billingDate: string;
   totalAmount: number;
   paidAmount: number;
-  status: 'UNPAID' | 'PARTIAL' | 'PAID';
+  status: 'REQUESTED' | 'REJECTED' | 'UNPAID' | 'PARTIAL' | 'PAID';
+  rejectReason?: string; // 반려 사유
   createdAt: string;
   updatedAt: string;
   // 가상필드
@@ -275,42 +276,164 @@ export interface Repair {
 }
 
 // 초기 로컬 스토리지 데이터 생성
+const generateMockProducts = (): Product[] => {
+  return [
+    { id: 'prod-1', modelName: 'SKY-800', feet: 8, spec: '배터리형, 8m', manufacturer: 'SKY', createdAt: new Date().toISOString() },
+    { id: 'prod-2', modelName: 'GENIE-1000', feet: 10, spec: '디젤형, 10m', manufacturer: 'GENIE', createdAt: new Date().toISOString() },
+    { id: 'prod-3', modelName: 'LIFT-1200', feet: 12, spec: '전동형, 12m', manufacturer: 'LIFT', createdAt: new Date().toISOString() }
+  ];
+};
+
+const generateMockCustomers = () => {
+  const customers: Customer[] = [];
+  const contacts: CustomerContact[] = [];
+  const sites: CustomerSite[] = [];
+  for (let i = 1; i <= 20; i++) {
+    const custId = `cust-${i}`;
+    customers.push({
+      id: custId,
+      name: `(주)대현테크 ${i}호점`,
+      bizRegNo: `123-45-00${i.toString().padStart(3, '0')}`,
+      isClosed: false,
+      address: `서울시 강남구 테헤란로 ${i}번길`,
+      representative: `대표자${i}`,
+      repContact: `010-1234-${i.toString().padStart(4, '0')}`,
+      repEmail: `ceo${i}@example.com`,
+      createdAt: new Date().toISOString()
+    });
+    
+    const contactCount = Math.floor(Math.random() * 3) + 1; // 1~3명
+    for(let j=1; j<=contactCount; j++) {
+      contacts.push({
+        id: `contact-${i}-${j}`,
+        customerId: custId,
+        name: `김담당${i}-${j}`,
+        position: '대리',
+        contact: `010-9999-${i}${j}`,
+        email: `contact${i}_${j}@example.com`,
+        createdAt: new Date().toISOString()
+      });
+    }
+
+    const siteCount = Math.floor(Math.random() * 2) + 2; // 2~3개
+    for(let j=1; j<=siteCount; j++) {
+      sites.push({
+        id: `site-${i}-${j}`,
+        customerId: custId,
+        name: `강남 래미안 공사현장 ${i}-${j}구역`,
+        address: `경기도 분당구 판교로 ${i}-${j}`,
+        contactName: `이소장${i}-${j}`,
+        contact: `010-8888-${i}${j}`,
+        email: `site${i}_${j}@example.com`,
+        createdAt: new Date().toISOString()
+      });
+    }
+  }
+  return { customers, contacts, sites };
+};
+
+const generateMockAssets = (products: Product[]): Asset[] => {
+  const assets: Asset[] = [];
+  for(let i=1; i<=100; i++) {
+    const prod = products[i % products.length];
+    assets.push({
+      id: `asset-${i}`,
+      modelName: prod.modelName,
+      assetNo: `EQ-${i.toString().padStart(4, '0')}`,
+      ownerType: 'OWNED',
+      status: 'AVAILABLE',
+      acquisitionDate: '2023-01-01',
+      acquisitionPrice: 15000000,
+      depreciationMonths: 60,
+      residualValueRate: 10,
+      accumDepreciation: 0,
+      bookValue: 15000000,
+      cumRentalFee: 0,
+      cumRepairCost: 0,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    });
+  }
+  return assets;
+};
+
+const generateMockContracts = (customers: Customer[], contacts: CustomerContact[], sites: CustomerSite[], assets: Asset[]) => {
+  const contracts: Contract[] = [];
+  const contractAssets: ContractAsset[] = [];
+  
+  let assetIdx = 0;
+  for(let i=1; i<=13; i++) { // 13 contracts
+    const cust = customers[i];
+    const custContacts = contacts.filter(c => c.customerId === cust.id);
+    const custSites = sites.filter(s => s.customerId === cust.id);
+    
+    const contractId = `contract-${i}`;
+    contracts.push({
+      id: contractId,
+      contractNo: `CTR-2026-${i.toString().padStart(3, '0')}`,
+      customerId: cust.id,
+      contactId: custContacts[0]?.id,
+      siteId: custSites[0]?.id,
+      startDate: '2026-07-01',
+      endDate: '2026-12-31',
+      billingDay: 30,
+      status: 'ACTIVE',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    });
+    
+    const count = Math.floor(Math.random() * 2) + 1; // 1~2 assets per contract
+    for(let j=0; j<count; j++) {
+      if(assetIdx >= assets.length) break;
+      const asset = assets[assetIdx];
+      asset.status = 'RENTED';
+      asset.currentCustomerId = cust.id;
+      asset.currentSiteId = custSites[0]?.id;
+      asset.contractStart = '2026-07-01';
+      asset.contractEnd = '2026-12-31';
+      asset.billingDay = 30;
+      asset.monthlyRentalFee = 500000;
+      asset.dailyRentalFee = 16000;
+      
+      contractAssets.push({
+        id: `ca-${contractId}-${j}`,
+        contractId,
+        assetId: asset.id,
+        monthlyRentalFee: 500000,
+        dailyRentalFee: 16000,
+        startDate: '2026-07-01',
+        endDate: '2026-12-31',
+        createdAt: new Date().toISOString()
+      });
+      assetIdx++;
+    }
+  }
+  return { contracts, contractAssets };
+};
+
+const mockDataProducts = generateMockProducts();
+const mockDataCust = generateMockCustomers();
+const mockDataAssets = generateMockAssets(mockDataProducts);
+const mockDataCont = generateMockContracts(mockDataCust.customers, mockDataCust.contacts, mockDataCust.sites, mockDataAssets);
+
 const SEED_USERS: User[] = [];
-
 const SEED_DEPARTMENTS: Department[] = [];
-
 const SEED_PERMISSIONS: MenuPermission[] = [];
-
-const SEED_PRODUCTS: Product[] = [];
-
-const SEED_CUSTOMERS: Customer[] = [];
-
-const SEED_CONTACTS: CustomerContact[] = [];
-
-const SEED_SITES: CustomerSite[] = [];
-
-const SEED_ASSETS: Asset[] = [];
-
+const SEED_PRODUCTS: Product[] = mockDataProducts;
+const SEED_CUSTOMERS: Customer[] = mockDataCust.customers;
+const SEED_CONTACTS: CustomerContact[] = mockDataCust.contacts;
+const SEED_SITES: CustomerSite[] = mockDataCust.sites;
+const SEED_ASSETS: Asset[] = mockDataAssets;
 const SEED_CONSUMABLES: Consumable[] = [];
-
 const SEED_CONSUMABLE_LOGS: ConsumableLog[] = [];
-
-const SEED_CONTRACTS: Contract[] = [];
-
-const SEED_CONTRACT_ASSETS: ContractAsset[] = [];
-
+const SEED_CONTRACTS: Contract[] = mockDataCont.contracts;
+const SEED_CONTRACT_ASSETS: ContractAsset[] = mockDataCont.contractAssets;
 const SEED_DELIVERIES: Delivery[] = [];
-
 const SEED_BILLINGS: Billing[] = [];
-
 const SEED_BILLING_DETAILS: BillingDetail[] = [];
-
 const SEED_PAYMENTS: Payment[] = [];
-
 const SEED_REPAIRS: Repair[] = [];
-
 const SEED_REPAIR_CONSUMABLES: RepairConsumable[] = [];
-
 const SEED_CONTRACT_HISTORY: ContractHistory[] = [];
 
 class LocalDB {

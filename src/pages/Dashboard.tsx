@@ -60,7 +60,21 @@ export const Dashboard: React.FC = () => {
 
   return (
     <div className="dashboard-page">
-      <h2 style={{ marginBottom: '24px', fontWeight: '700' }}>ERP 종합 대시보드</h2>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+        <h2 style={{ fontSize: '24px', fontWeight: '800' }}>ERP 종합 대시보드</h2>
+        <button 
+          className="btn-danger" 
+          onClick={() => {
+            if(confirm('모든 로컬 데이터를 삭제하고 방금 주입된 100개의 테스트 데이터로 초기화하시겠습니까?')) {
+              localStorage.clear();
+              location.reload();
+            }
+          }}
+          style={{ padding: '8px 16px', fontSize: '14px', borderRadius: '8px', boxShadow: '0 4px 6px rgba(239,68,68,0.3)' }}
+        >
+          🔄 테스트 데이터 강제 리셋 (100대/13건 주입)
+        </button>
+      </div>
 
       {/* KPI 그리드 */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '20px', marginBottom: '30px' }}>

@@ -57,6 +57,8 @@ interface AppContextType {
   
   // Billings
   generateBillingsForMonth: (billingYm: string, billingDate: string) => void;
+  approveBilling: (billingId: string) => void;
+  rejectBilling: (billingId: string, reason: string) => void;
   receivePayment: (billingId: string, data: { paymentDate: string; amount: number; method: string; memo: string }) => void;
   
   // Deliveries
@@ -318,7 +320,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       billingDate: disposalData.disposalDate,
       totalAmount: disposalData.disposalPrice,
       paidAmount: 0,
-      status: 'UNPAID',
+      status: 'REQUESTED',
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     });
@@ -823,7 +825,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           billingDate,
           totalAmount: customerTotalAmount,
           paidAmount: 0,
-          status: 'UNPAID',
+          status: 'REQUESTED',
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString()
         });
@@ -854,6 +856,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     });
 
+    refreshAllData();
+  };
+
+  const approveBilling = (billingId: string) => {
+    db.updateRow<Billing>('billings', billingId, { status: 'UNPAID' });
+    refreshAllData();
+  };
+
+  const rejectBilling = (billingId: string, reason: string) => {
+    db.updateRow<Billing>('billings', billingId, { status: 'REJECTED', rejectReason: reason });
     refreshAllData();
   };
 

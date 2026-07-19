@@ -6,10 +6,11 @@ import { emailService } from '../services/email';
 
 export const Billings: React.FC = () => {
   const {
-    billings, billingDetails, customers, generateBillingsForMonth, receivePayment, hasPermission
+    billings, billingDetails, customers, generateBillingsForMonth, receivePayment, hasPermission, currentUser, approveBilling, rejectBilling
   } = useApp();
 
   const canSave = hasPermission('billing', 'save');
+  const isAdmin = currentUser?.role === 'ADMIN';
 
   const [activeTab, setActiveTab] = useState<'LIST' | 'GENERATE'>('LIST');
 
@@ -48,6 +49,17 @@ export const Billings: React.FC = () => {
     
     alert(`${billingYm} 마감일 기준 청구 데이터가 성공적으로 생성되었습니다.`);
     setActiveTab('LIST');
+  };
+
+  const handleApprove = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    approveBilling(id);
+  };
+
+  const handleReject = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const reason = prompt('반려 사유를 입력하세요:');
+    if (reason) rejectBilling(id, reason);
   };
 
   const handleOpenPay = (bId: string, amount: number) => {
@@ -165,22 +177,35 @@ export const Billings: React.FC = () => {
                         </td>
                         <td>
                           <span className={`badge ${
+                            b.status === 'REQUESTED' ? 'badge-warning' :
+                            b.status === 'REJECTED' ? 'badge-danger' :
                             b.status === 'PAID' ? 'badge-success' :
-                            b.status === 'PARTIAL' ? 'badge-warning' : 'badge-danger'
+                            b.status === 'PARTIAL' ? 'badge-warning' : 'badge-info'
                           }`}>
-                            {b.status === 'PAID' ? '완납' : b.status === 'PARTIAL' ? '일부납' : '미납'}
+                            {b.status === 'REQUESTED' ? '결재대기' : 
+                             b.status === 'REJECTED' ? '반려됨' : 
+                             b.status === 'PAID' ? '완납' : 
+                             b.status === 'PARTIAL' ? '일부납' : '승인(미납)'}
                           </span>
                         </td>
                         <td onClick={e => e.stopPropagation()}>
                           <div style={{ display: 'flex', gap: '4px' }}>
-                            {canSave && b.status !== 'PAID' && (
+                            {isAdmin && b.status === 'REQUESTED' && (
+                              <>
+                                <button className="btn-success" onClick={(e) => handleApprove(b.id, e)} style={{ padding: '3px 6px', fontSize: '11px' }}>승인</button>
+                                <button className="btn-danger" onClick={(e) => handleReject(b.id, e)} style={{ padding: '3px 6px', fontSize: '11px' }}>반려</button>
+                              </>
+                            )}
+                            {canSave && (b.status === 'UNPAID' || b.status === 'PARTIAL') && (
                               <button className="btn-success" onClick={() => handleOpenPay(b.id, unpaid)} style={{ padding: '3px 6px', fontSize: '11px' }}>
                                 수납
                               </button>
                             )}
-                            <button className="btn-secondary" onClick={() => handleOpenMail(b.id)} style={{ padding: '3px 6px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '2px' }}>
-                              <Mail size={10} /> 발송
-                            </button>
+                            {(b.status === 'UNPAID' || b.status === 'PARTIAL' || b.status === 'PAID') && (
+                              <button className="btn-secondary" onClick={() => handleOpenMail(b.id)} style={{ padding: '3px 6px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '2px' }}>
+                                <Mail size={10} /> 발송
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -197,8 +222,14 @@ export const Billings: React.FC = () => {
               <div className="card" style={{ margin: 0 }}>
                 <div className="card-header" style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '12px', marginBottom: '16px' }}>
                   <h3 className="card-title">청구 명세서 ({activeBilling.billingYm})</h3>
-                  <span className="badge badge-info">{activeBilling.billingDate} 발행</span>
+                  <span className="badge badge-info">{activeBilling.billingDate} 발행 기안</span>
                 </div>
+                {activeBilling.status === 'REJECTED' && (
+                  <div style={{ padding: '12px', backgroundColor: 'var(--bg-app)', borderLeft: '4px solid var(--danger)', marginBottom: '16px', borderRadius: '4px' }}>
+                    <strong style={{ color: 'var(--danger)', fontSize: '14px', display: 'block', marginBottom: '4px' }}>[반려 사유]</strong>
+                    <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>{activeBilling.rejectReason || '사유 미기재'}</span>
+                  </div>
+                )}
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', fontSize: '14px', marginBottom: '20px' }}>
                   <div><label>고객사명</label><strong>{getCustName(activeBilling.customerId)}</strong></div>
