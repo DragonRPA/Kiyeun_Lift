@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { useApp } from './context/AppContext';
 import {
   LayoutDashboard, Users, UserCheck, Package, Layers, PlusCircle,
-  Truck, Wrench, Shield, ShoppingBag, CreditCard, LogOut, Sun, Moon, Menu, X, Zap, Settings
+  Truck, Wrench, Shield, ShoppingBag, CreditCard, LogOut, Sun, Moon, Menu, X, Zap, Settings, Database as DatabaseIcon
 } from 'lucide-react';
 
 // 페이지 컴포넌트 임포트
@@ -19,6 +19,7 @@ import { Contracts } from './pages/Contracts';
 import { Billings } from './pages/Billings';
 import { TruckDispatch } from './pages/TruckDispatch';
 import { TransportMaster } from './pages/TransportMaster';
+import { DevDataUploader } from './pages/DevDataUploader';
 import { Repairs } from './pages/Repairs';
 import { SmartDispatch } from './pages/SmartDispatch';
 import { AssetAssignment } from './pages/AssetAssignment';
@@ -108,7 +109,9 @@ const App: React.FC = () => {
     { id: 'dispatch_assign', name: '장비 할당 (매핑)', icon: <Layers size={18} />, component: <AssetAssignment /> },
     { id: 'repair', name: '자산 정비수리', icon: <Wrench size={18} />, component: <Repairs /> },
     { id: 'organization', name: '조직/인사 관리', icon: <Users size={18} />, component: <OrganizationSettings /> },
-    { id: 'permission', name: '사용자 및 권한', icon: <Shield size={18} />, component: <UsersPermissions /> }
+    { id: 'permission', name: '사용자 및 권한', icon: <Shield size={18} />, component: <UsersPermissions /> },
+    // 개발자 도구 (ADMIN 전용)
+    { id: 'dev_uploader', name: '[개발] DB 데이터 업로더', icon: <DatabaseIcon size={18} />, component: <DevDataUploader /> },
   ];
 
   // 1. 비로그인 상태: 로그인 화면 렌더링
