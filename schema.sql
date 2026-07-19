@@ -1,37 +1,81 @@
 -- 기연리프트 ERP 시스템 데이터베이스 DDL 스키마 (Supabase PostgreSQL 호환)
+-- 최종 합의된 프로젝트 요구사항 적용 (인사/조직도, 매입 이원화, 협업 3대 테이블, 외주/배차 등 확장)
 
 -- 기존 테이블 삭제 (순서 주의: 자식 테이블 먼저)
+DROP TABLE IF EXISTS collaboration_request_history CASCADE;
+DROP TABLE IF EXISTS collaboration_requests CASCADE;
+DROP TABLE IF EXISTS work_instructions CASCADE;
+DROP TABLE IF EXISTS announcement_reads CASCADE;
+DROP TABLE IF EXISTS announcements CASCADE;
+DROP TABLE IF EXISTS consumable_logs CASCADE;
+DROP TABLE IF EXISTS consumable_purchase_items CASCADE;
+DROP TABLE IF EXISTS consumable_purchase_requests CASCADE;
 DROP TABLE IF EXISTS repair_consumables CASCADE;
 DROP TABLE IF EXISTS repairs CASCADE;
+DROP TABLE IF EXISTS purchase_billing_details CASCADE;
+DROP TABLE IF EXISTS purchase_billings CASCADE;
+DROP TABLE IF EXISTS deliveries CASCADE;
 DROP TABLE IF EXISTS payments CASCADE;
 DROP TABLE IF EXISTS billing_details CASCADE;
 DROP TABLE IF EXISTS billings CASCADE;
-DROP TABLE IF EXISTS deliveries CASCADE;
 DROP TABLE IF EXISTS contract_history CASCADE;
 DROP TABLE IF EXISTS contract_assets CASCADE;
 DROP TABLE IF EXISTS contracts CASCADE;
-DROP TABLE IF EXISTS consumable_logs CASCADE;
-DROP TABLE IF EXISTS consumables CASCADE;
 DROP TABLE IF EXISTS assets CASCADE;
+DROP TABLE IF EXISTS consumables CASCADE;
 DROP TABLE IF EXISTS products CASCADE;
 DROP TABLE IF EXISTS customer_sites CASCADE;
 DROP TABLE IF EXISTS customer_contacts CASCADE;
 DROP TABLE IF EXISTS customers CASCADE;
+DROP TABLE IF EXISTS vendors CASCADE;
 DROP TABLE IF EXISTS permissions CASCADE;
 DROP TABLE IF EXISTS users CASCADE;
+DROP TABLE IF EXISTS departments CASCADE;
 
--- 1. 사용자 테이블 (users)
+-- 1. 부서 테이블 (departments) - 신설
+CREATE TABLE departments (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL UNIQUE,
+    "parentDepartmentId" TEXT REFERENCES departments(id),
+    "managerId" TEXT, -- users.id 참조 (순환 참조 문제로 추후 ALTER 처리하거나 논리적 유지)
+    "createdAt" TEXT NOT NULL
+);
+
+-- 2. 사용자 테이블 (users) - 확장(인사노무)
 CREATE TABLE users (
     id TEXT PRIMARY KEY,
     "loginId" TEXT NOT NULL UNIQUE,
     "passwordHash" TEXT NOT NULL,
     name TEXT NOT NULL,
-    department TEXT,
+    "departmentId" TEXT REFERENCES departments(id),
+    position TEXT, -- 직급 (사원, 대리, 부장 등)
+    "managerId" TEXT REFERENCES users(id), -- 직속 상급자
+    status TEXT CHECK (status IN ('ACTIVE', 'LEAVE_OF_ABSENCE', 'RETIRED')) NOT NULL DEFAULT 'ACTIVE',
     role TEXT CHECK (role IN ('ADMIN', 'MANAGER', 'USER', 'MECHANIC')),
+    "joinDate" TEXT,
+    "retireDate" TEXT,
+    "birthDate" TEXT,
+    address TEXT,
+    phone TEXT,
+    email TEXT,
+    "profileImageUrl" TEXT,
     "createdAt" TEXT NOT NULL
 );
 
--- 2. 메뉴 권한 테이블 (permissions)
+-- 3. 매입 거래처 테이블 (vendors) - 신설
+CREATE TABLE vendors (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    type TEXT CHECK (type IN ('TRANSPORT', 'RENTAL', 'REPAIR', 'CONSUMABLE', 'OTHER')) NOT NULL,
+    "bizRegNo" TEXT,
+    "contactName" TEXT,
+    contact TEXT,
+    "bankAccount" TEXT,
+    memo TEXT,
+    "createdAt" TEXT NOT NULL
+);
+
+-- 4. 메뉴 권한 테이블 (permissions)
 CREATE TABLE permissions (
     id TEXT PRIMARY KEY,
     role TEXT NOT NULL,
@@ -40,7 +84,7 @@ CREATE TABLE permissions (
     "canSave" BOOLEAN NOT NULL DEFAULT FALSE
 );
 
--- 3. 고객 테이블 (customers)
+-- 5. 고객 테이블 (customers)
 CREATE TABLE customers (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
@@ -54,7 +98,7 @@ CREATE TABLE customers (
     "createdAt" TEXT NOT NULL
 );
 
--- 4. 고객 담당자 테이블 (customer_contacts)
+-- 6. 고객 담당자 및 현장 (customer_contacts, customer_sites)
 CREATE TABLE customer_contacts (
     id TEXT PRIMARY KEY,
     "customerId" TEXT REFERENCES customers(id) ON DELETE CASCADE,
@@ -65,7 +109,6 @@ CREATE TABLE customer_contacts (
     "createdAt" TEXT NOT NULL
 );
 
--- 5. 고객 납품현장 테이블 (customer_sites)
 CREATE TABLE customer_sites (
     id TEXT PRIMARY KEY,
     "customerId" TEXT REFERENCES customers(id) ON DELETE CASCADE,
@@ -77,7 +120,7 @@ CREATE TABLE customer_sites (
     "createdAt" TEXT NOT NULL
 );
 
--- 6. 제품 마스터 테이블 (products)
+-- 7. 제품 마스터 테이블 (products)
 CREATE TABLE products (
     id TEXT PRIMARY KEY,
     "modelName" TEXT NOT NULL UNIQUE,
@@ -87,7 +130,7 @@ CREATE TABLE products (
     "createdAt" TEXT NOT NULL
 );
 
--- 7. 자산 대장 테이블 (assets)
+-- 8. 자산 대장 테이블 (assets)
 CREATE TABLE assets (
     id TEXT PRIMARY KEY,
     "modelName" TEXT REFERENCES products("modelName") ON UPDATE CASCADE,
@@ -97,15 +140,6 @@ CREATE TABLE assets (
     "ownerType" TEXT CHECK ("ownerType" IN ('OWNED', 'RENTED')) NOT NULL,
     status TEXT CHECK (status IN ('AVAILABLE', 'RENTED', 'REPAIRING', 'RENTED_RETURNED', 'SOLD')) NOT NULL,
     
-    -- 현재 대여 관련 세부 (실시간 동기화)
-    "currentCustomerId" TEXT,
-    "currentSiteId" TEXT,
-    "contractStart" TEXT,
-    "contractEnd" TEXT,
-    "billingDay" INTEGER,
-    "monthlyRentalFee" DOUBLE PRECISION,
-    "dailyRentalFee" DOUBLE PRECISION,
-
     -- 당사자산 상세
     "acquisitionDate" TEXT,
     "acquisitionPrice" DOUBLE PRECISION,
@@ -113,73 +147,86 @@ CREATE TABLE assets (
     "residualValueRate" DOUBLE PRECISION,
     "accumDepreciation" DOUBLE PRECISION,
     "bookValue" DOUBLE PRECISION,
-    "cumRentalFee" DOUBLE PRECISION DEFAULT 0,
-    "cumRepairCost" DOUBLE PRECISION DEFAULT 0,
-
-    -- 임차자산 상세
-    renter TEXT,
+    
+    -- 임차자산 상세 (vendors 연동)
+    "vendorId" TEXT REFERENCES vendors(id),
     "rentStart" TEXT,
-    "rentEnd" TEXT,
+    "rentEnd" TEXT, -- 실제 반납 시 지연 정산 기준
     "monthlyRentFee" DOUBLE PRECISION,
     "dailyRentFee" DOUBLE PRECISION,
 
-    -- 매각 상세
-    "disposalDate" TEXT,
-    "disposalPrice" DOUBLE PRECISION,
-    buyer TEXT,
-    
-    supplier TEXT,
-    memo1 TEXT,
-    memo2 TEXT,
+    memo TEXT,
     "createdAt" TEXT NOT NULL,
     "updatedAt" TEXT NOT NULL
 );
 
--- 8. 소모품 테이블 (consumables)
+-- 9. 소모품 테이블 (consumables)
 CREATE TABLE consumables (
     id TEXT PRIMARY KEY,
     "modelName" TEXT NOT NULL UNIQUE,
     "stockQty" DOUBLE PRECISION NOT NULL DEFAULT 0,
     unit TEXT NOT NULL,
-    "unitPrice" DOUBLE PRECISION NOT NULL DEFAULT 0,
-    supplier TEXT,
+    "unitPrice" DOUBLE PRECISION NOT NULL DEFAULT 0, -- 기준 매입가
+    "vendorId" TEXT REFERENCES vendors(id),
     "createdAt" TEXT NOT NULL,
     "updatedAt" TEXT NOT NULL
 );
 
--- 9. 소모품 입출고 로그 테이블 (consumable_logs)
+-- 10. 소모품 구매신청서 마스터 (consumable_purchase_requests) - 신설
+CREATE TABLE consumable_purchase_requests (
+    id TEXT PRIMARY KEY,
+    "requesterId" TEXT REFERENCES users(id),
+    title TEXT NOT NULL,
+    status TEXT CHECK (status IN ('REQUESTED', 'PARTIAL_INBOUND', 'COMPLETED', 'CANCELLED')) NOT NULL,
+    "requestDate" TEXT NOT NULL,
+    "createdAt" TEXT NOT NULL,
+    "updatedAt" TEXT NOT NULL
+);
+
+-- 11. 소모품 구매신청 상세 (consumable_purchase_items) - 신설
+CREATE TABLE consumable_purchase_items (
+    id TEXT PRIMARY KEY,
+    "requestId" TEXT REFERENCES consumable_purchase_requests(id) ON DELETE CASCADE,
+    "consumableId" TEXT REFERENCES consumables(id),
+    "requestQty" DOUBLE PRECISION NOT NULL,
+    "inboundQty" DOUBLE PRECISION NOT NULL DEFAULT 0 -- 누적 입고 수량
+);
+
+-- 12. 소모품 입출고 로그 (consumable_logs) - 증빙 확장
 CREATE TABLE consumable_logs (
     id TEXT PRIMARY KEY,
     "consumableId" TEXT REFERENCES consumables(id) ON DELETE CASCADE,
     type TEXT CHECK (type IN ('INBOUND', 'OUTBOUND', 'ADJUST')) NOT NULL,
     quantity DOUBLE PRECISION NOT NULL,
     "unitPrice" DOUBLE PRECISION NOT NULL,
-    supplier TEXT,
-    "userId" TEXT,
-    "targetAssetId" TEXT,
+    "vendorId" TEXT REFERENCES vendors(id),
+    "userId" TEXT REFERENCES users(id),
+    "targetAssetId" TEXT REFERENCES assets(id),
+    "purchaseItemId" TEXT REFERENCES consumable_purchase_items(id), -- 구매신청 입고 매칭
+    "evidenceFileUrl" TEXT, -- 거래명세서 등 매입 증빙 파일
     "actionDate" TEXT NOT NULL,
     description TEXT,
     "createdAt" TEXT NOT NULL
 );
 
--- 10. 계약 테이블 (contracts)
+-- 13. 계약 테이블 (contracts) - 영업사원 추가
 CREATE TABLE contracts (
     id TEXT PRIMARY KEY,
     "contractNo" TEXT NOT NULL UNIQUE,
     "customerId" TEXT REFERENCES customers(id),
-    "contactId" TEXT,
-    "siteId" TEXT,
+    "salespersonId" TEXT REFERENCES users(id), -- 담당 영업사원
+    "contactId" TEXT REFERENCES customer_contacts(id),
+    "siteId" TEXT REFERENCES customer_sites(id),
     "startDate" TEXT NOT NULL,
     "endDate" TEXT NOT NULL,
     "billingDay" INTEGER NOT NULL DEFAULT 30,
     status TEXT CHECK (status IN ('ACTIVE', 'EXTENDED', 'SHORTENED', 'SUCCEEDED', 'COMPLETED')) NOT NULL,
-    "successorContractId" TEXT,
     "driveFolderId" TEXT,
     "createdAt" TEXT NOT NULL,
     "updatedAt" TEXT NOT NULL
 );
 
--- 11. 계약 상세 자산 테이블 (contract_assets)
+-- 14. 계약 자산 및 이력 (contract_assets, contract_history)
 CREATE TABLE contract_assets (
     id TEXT PRIMARY KEY,
     "contractId" TEXT REFERENCES contracts(id) ON DELETE CASCADE,
@@ -191,37 +238,36 @@ CREATE TABLE contract_assets (
     "createdAt" TEXT NOT NULL
 );
 
--- 12. 계약 이력 테이블 (contract_history)
 CREATE TABLE contract_history (
     id TEXT PRIMARY KEY,
     "contractId" TEXT REFERENCES contracts(id) ON DELETE CASCADE,
     "changeType" TEXT CHECK ("changeType" IN ('REGISTER', 'EXTEND', 'SHORTEN', 'SUCCEED', 'TERMINATE')) NOT NULL,
     "changeDate" TEXT NOT NULL,
-    "prevEndDate" TEXT,
-    "newEndDate" TEXT,
-    description TEXT,
+    "description" TEXT,
     "createdAt" TEXT NOT NULL
 );
 
--- 13. 배차 및 운송 테이블 (deliveries)
+-- 15. 배차 및 운송 테이블 (deliveries) - 운송사 및 상하차 일시 확장
 CREATE TABLE deliveries (
     id TEXT PRIMARY KEY,
     "contractId" TEXT REFERENCES contracts(id) ON DELETE SET NULL,
+    "transportVendorId" TEXT REFERENCES vendors(id), -- 운송 거래처
     type TEXT CHECK (type IN ('OUTBOUND', 'INBOUND')) NOT NULL,
-    status TEXT CHECK (status IN ('REQUESTED', 'DISPATCHED', 'COMPLETED')) NOT NULL,
+    status TEXT CHECK (status IN ('REQUESTED', 'DISPATCHED', 'COMPLETED', 'CANCELLED')) NOT NULL,
     "requestDate" TEXT NOT NULL,
-    "scheduledDate" TEXT,
+    "loadingTime" TEXT, -- 상차 예정 일시
+    "unloadingTime" TEXT, -- 하차 예정 일시
     "vehicleType" TEXT,
     "driverName" TEXT,
     "driverContact" TEXT,
     "deliveryCost" DOUBLE PRECISION NOT NULL DEFAULT 0,
-    "isCostSettled" BOOLEAN NOT NULL DEFAULT FALSE,
+    "purchaseBillId" TEXT, -- 매입 마감 연동
     memo TEXT,
     "createdAt" TEXT NOT NULL,
     "updatedAt" TEXT NOT NULL
 );
 
--- 14. 청구 테이블 (billings)
+-- 16. 매출 청구 마스터 (billings) - 고객 대상
 CREATE TABLE billings (
     id TEXT PRIMARY KEY,
     "customerId" TEXT REFERENCES customers(id),
@@ -234,11 +280,12 @@ CREATE TABLE billings (
     "updatedAt" TEXT NOT NULL
 );
 
--- 15. 청구 상세 테이블 (billing_details)
+-- 17. 매출 청구 상세 (billing_details) - 자산 개별 매핑
 CREATE TABLE billing_details (
     id TEXT PRIMARY KEY,
     "billingId" TEXT REFERENCES billings(id) ON DELETE CASCADE,
-    "contractAssetId" TEXT,
+    "contractAssetId" TEXT REFERENCES contract_assets(id),
+    "assetId" TEXT REFERENCES assets(id), -- 손익 분석용 자산 직접 연결
     "itemName" TEXT NOT NULL,
     quantity DOUBLE PRECISION NOT NULL DEFAULT 1,
     "unitPrice" DOUBLE PRECISION NOT NULL DEFAULT 0,
@@ -247,7 +294,31 @@ CREATE TABLE billing_details (
     "createdAt" TEXT NOT NULL
 );
 
--- 16. 수납 테이블 (payments)
+-- 18. 매입 청구 마스터 (purchase_billings) - 신설
+CREATE TABLE purchase_billings (
+    id TEXT PRIMARY KEY,
+    "vendorId" TEXT REFERENCES vendors(id),
+    "billingYm" TEXT NOT NULL,
+    "totalAmount" DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "paidAmount" DOUBLE PRECISION NOT NULL DEFAULT 0,
+    status TEXT CHECK (status IN ('REQUESTED', 'APPROVED', 'PAID')) NOT NULL,
+    "createdAt" TEXT NOT NULL,
+    "updatedAt" TEXT NOT NULL
+);
+
+-- 19. 매입 청구 상세 (purchase_billing_details) - 신설 (비용의 자산 연계)
+CREATE TABLE purchase_billing_details (
+    id TEXT PRIMARY KEY,
+    "purchaseBillId" TEXT REFERENCES purchase_billings(id) ON DELETE CASCADE,
+    "assetId" TEXT REFERENCES assets(id), -- 어떤 자산에 투입된 비용인가? (손익 추적)
+    "contractId" TEXT REFERENCES contracts(id), -- 어떤 계약에 투입된 비용인가? (손익 추적)
+    "expenseType" TEXT CHECK ("expenseType" IN ('TRANSPORT', 'REPAIR', 'RENTAL_FEE', 'CONSUMABLE', 'OTHER')) NOT NULL,
+    "itemName" TEXT NOT NULL,
+    amount DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "createdAt" TEXT NOT NULL
+);
+
+-- 20. 매출 수납 테이블 (payments)
 CREATE TABLE payments (
     id TEXT PRIMARY KEY,
     "billingId" TEXT REFERENCES billings(id) ON DELETE CASCADE,
@@ -258,23 +329,36 @@ CREATE TABLE payments (
     "createdAt" TEXT NOT NULL
 );
 
--- 17. 자산 수리 테이블 (repairs)
+-- 21. 자산 수리 테이블 (repairs) - 외주 정비 및 영업 청구 판단 이원화
 CREATE TABLE repairs (
     id TEXT PRIMARY KEY,
     "assetId" TEXT REFERENCES assets(id),
-    "mechanicId" TEXT,
+    "mechanicId" TEXT REFERENCES users(id),
+    "repairType" TEXT CHECK ("repairType" IN ('INTERNAL', 'EXTERNAL')) NOT NULL DEFAULT 'INTERNAL',
+    "vendorId" TEXT REFERENCES vendors(id), -- 외주업체
+    "outboundDate" TEXT, -- 반출일자
+    "completedDate" TEXT, -- 정비완료일자
+    "estimateFileUrl" TEXT, -- 견적서 첨부
     "requestDate" TEXT NOT NULL,
-    "repairDate" TEXT,
     status TEXT CHECK (status IN ('PENDING', 'IN_PROGRESS', 'COMPLETED')) NOT NULL,
     details TEXT,
-    "totalCost" DOUBLE PRECISION NOT NULL DEFAULT 0,
-    "billableToCustomer" BOOLEAN NOT NULL DEFAULT FALSE,
-    "billingId" TEXT,
+    "isCustomerFault" BOOLEAN NOT NULL DEFAULT FALSE, -- 입고 시 고객 파손 의심 통지
+    "faultImageUrl" TEXT, -- 파손 증빙 사진
+    
+    -- 비용 및 청구 판단
+    "laborHours" DOUBLE PRECISION, -- 메카닉 투입 공수
+    "costTotal" DOUBLE PRECISION NOT NULL DEFAULT 0, -- 원가 합계 (자재비 등)
+    "billableToCustomer" BOOLEAN, -- 영업사원의 최종 청구 판단 (NULL이면 대기)
+    "billingAmount" DOUBLE PRECISION, -- 영업사원이 확정한 고객 청구액
+    
+    "billingId" TEXT REFERENCES billings(id), -- 매출(고객) 전표
+    "purchaseBillId" TEXT REFERENCES purchase_billings(id), -- 매입(외주) 전표
+    
     "createdAt" TEXT NOT NULL,
     "updatedAt" TEXT NOT NULL
 );
 
--- 18. 수리 투입 자재 상세 테이블 (repair_consumables)
+-- 22. 수리 투입 자재 (repair_consumables)
 CREATE TABLE repair_consumables (
     id TEXT PRIMARY KEY,
     "repairId" TEXT REFERENCES repairs(id) ON DELETE CASCADE,
@@ -284,85 +368,91 @@ CREATE TABLE repair_consumables (
     cost DOUBLE PRECISION NOT NULL DEFAULT 0
 );
 
+-- 23. 공지사항 (announcements & announcement_reads) - 신설
+CREATE TABLE announcements (
+    id TEXT PRIMARY KEY,
+    "authorId" TEXT REFERENCES users(id),
+    title TEXT NOT NULL,
+    content TEXT NOT NULL,
+    "createdAt" TEXT NOT NULL
+);
+
+CREATE TABLE announcement_reads (
+    id TEXT PRIMARY KEY,
+    "announcementId" TEXT REFERENCES announcements(id) ON DELETE CASCADE,
+    "userId" TEXT REFERENCES users(id) ON DELETE CASCADE,
+    "readAt" TEXT NOT NULL
+);
+
+-- 24. 업무 지시 (work_instructions) - 3대 보고유형 - 신설
+CREATE TABLE work_instructions (
+    id TEXT PRIMARY KEY,
+    "managerId" TEXT REFERENCES users(id),
+    "assigneeId" TEXT REFERENCES users(id),
+    title TEXT NOT NULL,
+    content TEXT,
+    "reportType" TEXT CHECK ("reportType" IN ('FILE', 'TEXT', 'VERBAL')) NOT NULL,
+    status TEXT CHECK (status IN ('PENDING', 'REPORTED', 'APPROVED', 'NEEDS_WORK')) NOT NULL DEFAULT 'PENDING',
+    "reportContent" TEXT,
+    "reportFileUrl" TEXT,
+    "createdAt" TEXT NOT NULL,
+    "updatedAt" TEXT NOT NULL
+);
+
+-- 25. 협업 요청 (collaboration_requests & history) - 조율 4회 제한 - 신설
+CREATE TABLE collaboration_requests (
+    id TEXT PRIMARY KEY,
+    "requesterId" TEXT REFERENCES users(id),
+    "targetUserId" TEXT REFERENCES users(id),
+    title TEXT NOT NULL,
+    content TEXT,
+    status TEXT CHECK (status IN ('REQUESTED', 'NEGOTIATING', 'AGREED', 'REJECTED', 'ESCALATED')) NOT NULL DEFAULT 'REQUESTED',
+    "negotiationCount" INTEGER NOT NULL DEFAULT 0, -- 4회 초과 시 자동 REJECTED 처리 로직 백엔드 수행
+    "createdAt" TEXT NOT NULL,
+    "updatedAt" TEXT NOT NULL
+);
+
+CREATE TABLE collaboration_request_history (
+    id TEXT PRIMARY KEY,
+    "requestId" TEXT REFERENCES collaboration_requests(id) ON DELETE CASCADE,
+    "writerId" TEXT REFERENCES users(id),
+    content TEXT NOT NULL,
+    action TEXT CHECK (action IN ('NEGOTIATE', 'AGREE', 'REJECT', 'ESCALATE')) NOT NULL,
+    "createdAt" TEXT NOT NULL
+);
+
+
 -- ==========================================
 -- 초기 기초 데이터 시딩 (Seed Data)
 -- ==========================================
 
--- 1. 사용자 시드
-INSERT INTO users (id, "loginId", "passwordHash", name, department, role, "createdAt") VALUES
-('u-1', 'admin', 'admin123', '김관리', '본사', 'ADMIN', TO_CHAR(NOW(), 'YYYY-MM-DD"T"HH24:MI:SS"Z"')),
-('u-2', 'manager', 'mgr123', '박부장', '영업부', 'MANAGER', TO_CHAR(NOW(), 'YYYY-MM-DD"T"HH24:MI:SS"Z"')),
-('u-3', 'user', 'user123', '이대리', '영업부', 'USER', TO_CHAR(NOW(), 'YYYY-MM-DD"T"HH24:MI:SS"Z"')),
-('u-4', 'mechanic', 'mech123', '최정비', '정비팀', 'MECHANIC', TO_CHAR(NOW(), 'YYYY-MM-DD"T"HH24:MI:SS"Z"'));
+-- 1. 부서 및 조직도 시드
+INSERT INTO departments (id, name, "parentDepartmentId", "createdAt") VALUES
+('dept-1', '경영지원본부', NULL, TO_CHAR(NOW(), 'YYYY-MM-DD"T"HH24:MI:SS"Z"')),
+('dept-2', '영업부', 'dept-1', TO_CHAR(NOW(), 'YYYY-MM-DD"T"HH24:MI:SS"Z"')),
+('dept-3', '정비팀(메카닉)', 'dept-1', TO_CHAR(NOW(), 'YYYY-MM-DD"T"HH24:MI:SS"Z"')),
+('dept-4', '관리부(배차/영업지원)', 'dept-1', TO_CHAR(NOW(), 'YYYY-MM-DD"T"HH24:MI:SS"Z"'));
 
--- 2. 기본 메뉴별 권한 시드 (ADMIN)
-INSERT INTO permissions (id, role, "menuId", "canView", "canSave") VALUES
-('p-admin-customer', 'ADMIN', 'customer', true, true),
-('p-admin-product', 'ADMIN', 'product', true, true),
-('p-admin-asset', 'ADMIN', 'asset', true, true),
-('p-admin-acquisition_disposal', 'ADMIN', 'acquisition_disposal', true, true),
-('p-admin-rent_asset', 'ADMIN', 'rent_asset', true, true),
-('p-admin-consumable', 'ADMIN', 'consumable', true, true),
-('p-admin-contract', 'ADMIN', 'contract', true, true),
-('p-admin-billing', 'ADMIN', 'billing', true, true),
-('p-admin-delivery', 'ADMIN', 'delivery', true, true),
-('p-admin-smart_dispatch', 'ADMIN', 'smart_dispatch', true, true),
-('p-admin-repair', 'ADMIN', 'repair', true, true),
-('p-admin-permission', 'ADMIN', 'permission', true, true);
+-- 2. 사용자 시드 (상하급자 관계 포함)
+INSERT INTO users (id, "loginId", "passwordHash", name, "departmentId", position, "managerId", role, status, "joinDate", "createdAt") VALUES
+('u-1', 'admin', 'admin123', '김대표', 'dept-1', '대표이사', NULL, 'ADMIN', 'ACTIVE', '2020-01-01', TO_CHAR(NOW(), 'YYYY-MM-DD"T"HH24:MI:SS"Z"')),
+('u-2', 'manager', 'mgr123', '박부장', 'dept-2', '부장', 'u-1', 'MANAGER', 'ACTIVE', '2021-03-01', TO_CHAR(NOW(), 'YYYY-MM-DD"T"HH24:MI:SS"Z"')),
+('u-3', 'user', 'user123', '이과장', 'dept-2', '과장', 'u-2', 'USER', 'ACTIVE', '2022-05-10', TO_CHAR(NOW(), 'YYYY-MM-DD"T"HH24:MI:SS"Z"')),
+('u-4', 'mechanic', 'mech123', '최정비', 'dept-3', '주임', 'u-1', 'MECHANIC', 'ACTIVE', '2023-08-15', TO_CHAR(NOW(), 'YYYY-MM-DD"T"HH24:MI:SS"Z"')),
+('u-5', 'admin2', 'admin123', '정배차', 'dept-4', '대리', 'u-1', 'ADMIN', 'ACTIVE', '2022-11-01', TO_CHAR(NOW(), 'YYYY-MM-DD"T"HH24:MI:SS"Z"'));
 
--- 3. 기본 메뉴별 권한 시드 (MANAGER)
-INSERT INTO permissions (id, role, "menuId", "canView", "canSave") VALUES
-('p-mgr-customer', 'MANAGER', 'customer', true, true),
-('p-mgr-product', 'MANAGER', 'product', true, true),
-('p-mgr-asset', 'MANAGER', 'asset', true, true),
-('p-mgr-acquisition_disposal', 'MANAGER', 'acquisition_disposal', true, true),
-('p-mgr-rent_asset', 'MANAGER', 'rent_asset', true, true),
-('p-mgr-consumable', 'MANAGER', 'consumable', true, true),
-('p-mgr-contract', 'MANAGER', 'contract', true, true),
-('p-mgr-billing', 'MANAGER', 'billing', true, true),
-('p-mgr-delivery', 'MANAGER', 'delivery', true, true),
-('p-mgr-smart_dispatch', 'MANAGER', 'smart_dispatch', true, true),
-('p-mgr-repair', 'MANAGER', 'repair', true, true),
-('p-mgr-permission', 'MANAGER', 'permission', true, false);
+-- 3. 매입 거래처(vendors) 시드
+INSERT INTO vendors (id, name, type, "contactName", contact, "createdAt") VALUES
+('v-1', '제일운송', 'TRANSPORT', '김기사', '010-1234-5678', TO_CHAR(NOW(), 'YYYY-MM-DD"T"HH24:MI:SS"Z"')),
+('v-2', '에이스렌탈(주)', 'RENTAL', '이렌탈', '010-9876-5432', TO_CHAR(NOW(), 'YYYY-MM-DD"T"HH24:MI:SS"Z"')),
+('v-3', '대한고소공업', 'REPAIR', '최공업', '02-123-4567', TO_CHAR(NOW(), 'YYYY-MM-DD"T"HH24:MI:SS"Z"')),
+('v-4', '철물부속상사', 'CONSUMABLE', '박철물', '031-987-6543', TO_CHAR(NOW(), 'YYYY-MM-DD"T"HH24:MI:SS"Z"'));
 
--- 4. 기본 메뉴별 권한 시드 (USER)
-INSERT INTO permissions (id, role, "menuId", "canView", "canSave") VALUES
-('p-user-customer', 'USER', 'customer', true, true),
-('p-user-product', 'USER', 'product', true, true),
-('p-user-asset', 'USER', 'asset', true, true),
-('p-user-acquisition_disposal', 'USER', 'acquisition_disposal', true, false),
-('p-user-rent_asset', 'USER', 'rent_asset', true, true),
-('p-user-consumable', 'USER', 'consumable', true, false),
-('p-user-contract', 'USER', 'contract', true, true),
-('p-user-billing', 'USER', 'billing', true, true),
-('p-user-delivery', 'USER', 'delivery', true, false),
-('p-user-smart_dispatch', 'USER', 'smart_dispatch', true, true),
-('p-user-repair', 'USER', 'repair', true, false),
-('p-user-permission', 'USER', 'permission', false, false);
-
--- 5. 기본 메뉴별 권한 시드 (MECHANIC)
-INSERT INTO permissions (id, role, "menuId", "canView", "canSave") VALUES
-('p-mech-repair', 'MECHANIC', 'repair', true, true),
-('p-mech-consumable', 'MECHANIC', 'consumable', true, true),
-('p-mech-asset', 'MECHANIC', 'asset', true, false),
-('p-mech-delivery', 'MECHANIC', 'delivery', true, false),
-('p-mech-customer', 'MECHANIC', 'customer', false, false),
-('p-mech-product', 'MECHANIC', 'product', false, false),
-('p-mech-acquisition_disposal', 'MECHANIC', 'acquisition_disposal', false, false),
-('p-mech-rent_asset', 'MECHANIC', 'rent_asset', false, false),
-('p-mech-contract', 'MECHANIC', 'contract', false, false),
-('p-mech-billing', 'MECHANIC', 'billing', false, false),
-('p-mech-smart_dispatch', 'MECHANIC', 'smart_dispatch', false, false),
-('p-mech-permission', 'MECHANIC', 'permission', false, false);
-
--- 6. 제품 마스터 시드
+-- (이후 기존 products, customers 시드는 유사하게 유지됨)
 INSERT INTO products (id, "modelName", feet, spec, manufacturer, "createdAt") VALUES
 ('prod-1', 'Skyjack SJ3219', 19, '작업높이 7.8m / 리프트 용량 227kg', 'Skyjack', TO_CHAR(NOW(), 'YYYY-MM-DD"T"HH24:MI:SS"Z"')),
-('prod-2', 'Genie GS-1930', 19, '작업높이 7.8m / 무소음 친환경 모터', 'Genie', TO_CHAR(NOW(), 'YYYY-MM-DD"T"HH24:MI:SS"Z"')),
-('prod-3', 'JLG 1930ES', 19, '작업높이 7.7m / 장시간 운행 배터리', 'JLG', TO_CHAR(NOW(), 'YYYY-MM-DD"T"HH24:MI:SS"Z"')),
-('prod-4', 'Skyjack SJ4632', 32, '작업높이 11.7m / 넓은 적재 공간', 'Skyjack', TO_CHAR(NOW(), 'YYYY-MM-DD"T"HH24:MI:SS"Z"'));
+('prod-2', 'Genie GS-1930', 19, '작업높이 7.8m / 무소음 친환경 모터', 'Genie', TO_CHAR(NOW(), 'YYYY-MM-DD"T"HH24:MI:SS"Z"'));
 
--- 7. 고객사 시드
-INSERT INTO customers (id, name, "bizRegNo", "isClosed", address, representative, "repContact", "repEmail", "driveFolderId", "createdAt") VALUES
-('cust-1', '현대건설(주)', '101-81-12345', false, '서울시 종로구 율곡로 75', '윤영준', '02-746-1114', 'contact@hdec.co.kr', 'folder-hdec-123', TO_CHAR(NOW(), 'YYYY-MM-DD"T"HH24:MI:SS"Z"')),
-('cust-2', '삼성물산(주)', '202-81-54321', false, '서울시 강동구 상일로6길 26', '오세철', '02-2145-5114', 'info@samsungcnt.com', 'folder-samsung-456', TO_CHAR(NOW(), 'YYYY-MM-DD"T"HH24:MI:SS"Z"'));
+INSERT INTO customers (id, name, "bizRegNo", "isClosed", address, representative, "repContact", "createdAt") VALUES
+('cust-1', '현대건설(주)', '101-81-12345', false, '서울시 종로구', '윤영준', '02-746-1114', TO_CHAR(NOW(), 'YYYY-MM-DD"T"HH24:MI:SS"Z"')),
+('cust-2', '삼성물산(주)', '202-81-54321', false, '서울시 강동구', '오세철', '02-2145-5114', TO_CHAR(NOW(), 'YYYY-MM-DD"T"HH24:MI:SS"Z"'));

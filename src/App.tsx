@@ -20,6 +20,7 @@ import { Billings } from './pages/Billings';
 import { Deliveries } from './pages/Deliveries';
 import { Repairs } from './pages/Repairs';
 import { SmartDispatch } from './pages/SmartDispatch';
+import { OrganizationSettings } from './pages/OrganizationSettings';
 
 const App: React.FC = () => {
   const { currentUser, login, logout, theme, toggleTheme, hasPermission } = useApp();
@@ -102,6 +103,7 @@ const App: React.FC = () => {
     { id: 'delivery', name: '배차/운송 관리', icon: <Truck size={18} />, component: <Deliveries /> },
     { id: 'smart_dispatch', name: '스마트 출고 요청', icon: <Zap size={18} />, component: <SmartDispatch /> },
     { id: 'repair', name: '자산 정비수리', icon: <Wrench size={18} />, component: <Repairs /> },
+    { id: 'organization', name: '조직/인사 관리', icon: <Users size={18} />, component: <OrganizationSettings /> },
     { id: 'permission', name: '사용자 및 권한', icon: <Shield size={18} />, component: <UsersPermissions /> }
   ];
 
@@ -112,47 +114,47 @@ const App: React.FC = () => {
         display: 'flex', minHeight: '100vh', alignItems: 'center', justifyContent: 'center',
         background: 'linear-gradient(135deg, #1e1b4b 0%, #0f172a 100%)', padding: '16px'
       }}>
-        <div className="card" style={{ width: '100%', maxWidth: '420px', padding: '32px', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.3)' }}>
-          <div style={{ textAlign: 'center', marginBottom: '24px' }}>
-            <h1 style={{ fontSize: '26px', fontWeight: '800', color: 'var(--primary)', letterSpacing: '-0.5px' }}>
+        <div className="card" style={{ width: '100%', maxWidth: '380px', padding: '24px', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.3)' }}>
+          <div style={{ textAlign: 'center', marginBottom: '20px' }}>
+            <h1 style={{ fontSize: '24px', fontWeight: '800', color: 'var(--primary)', letterSpacing: '-0.5px' }}>
               KIYEUN LIFT ERP
             </h1>
-            <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '6px' }}>
+            <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '4px' }}>
               소규모 고소작업대 렌탈 관리 시스템
             </p>
           </div>
 
-          <form onSubmit={handleLoginSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <form onSubmit={handleLoginSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             <div>
-              <label style={{ color: 'var(--text-main)' }}>사용자 아이디</label>
+              <label style={{ color: 'var(--text-main)', fontSize: '13px', marginBottom: '4px', display: 'block' }}>사용자 아이디</label>
               <input
                 type="text"
                 value={loginId}
                 onChange={e => setLoginId(e.target.value)}
-                placeholder="아이디를 입력하세요"
+                placeholder="아이디 입력 (admin)"
                 required
-                style={{ fontSize: '15px' }}
+                style={{ fontSize: '14px', padding: '8px 12px' }}
               />
             </div>
             <div>
-              <label style={{ color: 'var(--text-main)' }}>비밀번호</label>
+              <label style={{ color: 'var(--text-main)', fontSize: '13px', marginBottom: '4px', display: 'block' }}>비밀번호</label>
               <input
                 type="password"
                 value={password}
                 onChange={e => setPassword(e.target.value)}
-                placeholder="비밀번호를 입력하세요"
+                placeholder="비밀번호 입력 (admin123)"
                 required
-                style={{ fontSize: '15px' }}
+                style={{ fontSize: '14px', padding: '8px 12px' }}
               />
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px', fontSize: '13px', color: 'var(--text-secondary)', padding: '2px 0' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px', fontSize: '12px', color: 'var(--text-secondary)', padding: '2px 0' }}>
               <label style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}>
                 <input
                   type="checkbox"
                   checked={rememberId}
                   onChange={e => setRememberId(e.target.checked)}
-                  style={{ cursor: 'pointer', width: '14px', height: '14px' }}
+                  style={{ cursor: 'pointer', width: '13px', height: '13px' }}
                 />
                 아이디 저장
               </label>
@@ -161,7 +163,7 @@ const App: React.FC = () => {
                   type="checkbox"
                   checked={rememberPw}
                   onChange={e => setRememberPw(e.target.checked)}
-                  style={{ cursor: 'pointer', width: '14px', height: '14px' }}
+                  style={{ cursor: 'pointer', width: '13px', height: '13px' }}
                 />
                 비밀번호 저장
               </label>
@@ -170,7 +172,7 @@ const App: React.FC = () => {
                   type="checkbox"
                   checked={autoLogin}
                   onChange={e => setAutoLogin(e.target.checked)}
-                  style={{ cursor: 'pointer', width: '14px', height: '14px' }}
+                  style={{ cursor: 'pointer', width: '13px', height: '13px' }}
                 />
                 자동 로그인
               </label>
@@ -188,7 +190,7 @@ const App: React.FC = () => {
           </form>
 
           {/* 테스트 계정 안내 */}
-          <div style={{ marginTop: '24px', padding: '12px', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', backgroundColor: 'var(--bg-app)', fontSize: '12px' }}>
+          <div style={{ marginTop: '16px', padding: '12px', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', backgroundColor: 'var(--bg-app)', fontSize: '12px' }}>
             <div style={{ fontWeight: '700', marginBottom: '6px', color: 'var(--text-main)' }}>[테스트 계정 안내]</div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
               <div>• 최고관리자: <strong>admin / admin123</strong></div>

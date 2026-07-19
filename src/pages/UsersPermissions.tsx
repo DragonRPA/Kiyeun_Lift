@@ -1,28 +1,88 @@
 // d:\Kiyeun_Lift\src\pages\UsersPermissions.tsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
-import { Shield, Plus, Save, UserPlus, Key } from 'lucide-react';
-import { User, MenuPermission } from '../services/db';
+import { Shield } from 'lucide-react';
+import { User, db } from '../services/db';
 
 export const UsersPermissions: React.FC = () => {
-  const { users, permissions, saveUser, updatePermissions, hasPermission, currentUser } = useApp();
-  const canSave = hasPermission('permission', 'save');
+  const { permissions, updatePermissions, hasPermission, currentUser } = useApp();
+  // 권한 통제 화면 자체 접근(저장)을 어드민과 매니저에게만 허용
+  const isSuperAdmin = currentUser?.loginId === 'admin';
+  const canSave = (currentUser?.role === 'ADMIN' || currentUser?.role === 'MANAGER') && hasPermission('permission', 'save');
 
-  // 사용자 등록/수정 모달 상태
-  const [showUserModal, setShowUserModal] = useState(false);
-  const [editingUser, setEditingUser] = useState<Partial<User> | null>(null);
+  // 선택된 사용자 상태 (좌측에서 클릭)
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
 
-  // 권한 롤 필터 상태
-  const [selectedRole, setSelectedRole] = useState<'ADMIN' | 'MANAGER' | 'USER' | 'MECHANIC'>('MANAGER');
+  // 로컬 사용자 상태 (좌측 패널용)
+  const [localUsers, setLocalUsers] = useState<User[]>([]);
+  // 로컬 권한 상태 (우측 패널 에디팅용)
+  const [localPermissions, setLocalPermissions] = useState<MenuPermission[]>([]);
+  const [isDirty, setIsDirty] = useState(false);
 
-  // 메뉴 리스트
+  useEffect(() => {
+    let savedUsers = [...db.users];
+    
+    // 강제 admin 계정 주입 (목록에 없을 경우)
+    if (currentUser?.loginId === 'admin') {
+      const hasAdmin = savedUsers.find(u => u.loginId === 'admin');
+      if (!hasAdmin) {
+        savedUsers.unshift({
+          id: 'sys-admin',
+          loginId: 'admin',
+          name: '최고관리자 (System Admin)',
+          role: 'ADMIN',
+          departmentId: null
+        } as unknown as User);
+      }
+    }
+    setLocalUsers(savedUsers);
+
+    // 권한 목록 복사
+    setLocalPermissions([...db.permissions]);
+  }, [currentUser]);
+
+  // 사용자를 처음 클릭하거나 선택했을 때 기본 선택값 설정 (선택적)
+  useEffect(() => {
+    if (!selectedUserId && localUsers.length > 0) {
+      setSelectedUserId(localUsers[0].id);
+    }
+  }, [localUsers, selectedUserId]);
+
+  const handleRoleChange = (userId: string, newRole: string) => {
+    if (!canSave) {
+      alert('사용자 등급을 수정할 수 없습니다.');
+      return;
+    }
+    
+    // 슈퍼어드민 강제 다운그레이드 방지
+    if (userId === 'sys-admin' && newRole !== 'ADMIN') {
+      alert('시스템 최고관리자의 등급은 변경할 수 없습니다.');
+      return;
+    }
+
+    // 다른 사람에게 ADMIN을 줄 수 있는 건 loginId가 'admin'인 사람뿐
+    if (newRole === 'ADMIN' && !isSuperAdmin) {
+      alert('ADMIN 등급은 최고관리자(admin) 계정만 부여할 수 있습니다.');
+      return;
+    }
+
+    const updatedUsers = localUsers.map(u => 
+      u.id === userId ? { ...u, role: newRole } : u
+    );
+    setLocalUsers(updatedUsers as User[]);
+    setIsDirty(true);
+  };
+
+  // 최신 메뉴 리스트
   const menus = [
+    { id: 'dashboard', name: 'ERP 대시보드' },
+    { id: 'organization', name: '조직/인사 관리' },
     { id: 'customer', name: '고객 관리 (담당자/현장)' },
     { id: 'product', name: '제품 관리' },
     { id: 'asset', name: '자산 관리' },
     { id: 'acquisition_disposal', name: '당사자산 취득/매각' },
     { id: 'rent_asset', name: '임차자산 조회/등록/반납' },
-    { id: 'consumable', name: '소모품 조회/등록/사용' },
+    { id: 'consumable', name: '소모품 관리' },
     { id: 'contract', name: '계약 관리' },
     { id: 'billing', name: '청구/수납 관리' },
     { id: 'delivery', name: '배차 관리 (비용정산)' },
@@ -31,100 +91,147 @@ export const UsersPermissions: React.FC = () => {
     { id: 'permission', name: '사용자 및 권한 설정' }
   ];
 
-  const handleOpenAddUser = () => {
-    setEditingUser({ loginId: '', passwordHash: '', name: '', department: '', role: 'USER' });
-    setShowUserModal(true);
-  };
-
-  const handleOpenEditUser = (user: User) => {
-    setEditingUser(user);
-    setShowUserModal(true);
-  };
-
-  const handleSaveUserSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editingUser || !editingUser.loginId || !editingUser.name || !editingUser.passwordHash) {
-      alert('필수값을 입력해 주세요.');
-      return;
-    }
-    saveUser(editingUser as Omit<User, 'id' | 'createdAt'>);
-    setShowUserModal(false);
-    setEditingUser(null);
-  };
-
   const handlePermissionToggle = (menuId: string, type: 'view' | 'save') => {
-    if (!canSave) {
-      alert('권한 설정을 수정할 수 있는 권한이 없습니다.');
-      return;
-    }
-    if (selectedRole === 'ADMIN') {
-      alert('ADMIN 권한은 강제 조정할 수 없습니다.');
+    if (!canSave || !selectedUserId) return;
+    
+    const targetUser = localUsers.find(u => u.id === selectedUserId);
+    if (targetUser?.role === 'ADMIN') {
+      alert('ADMIN 등급은 모든 메뉴에 대한 권한을 강제로 갖습니다.');
       return;
     }
 
-    const updatedPermissions = permissions.map(p => {
-      if (p.role === selectedRole && p.menuId === menuId) {
-        return {
-          ...p,
-          canView: type === 'view' ? !p.canView : p.canView,
-          canSave: type === 'save' ? !p.canSave : p.canSave
+    setLocalPermissions(prev => {
+      const existingIdx = prev.findIndex(p => p.userId === selectedUserId && p.menuId === menuId);
+      const newPerms = [...prev];
+
+      if (existingIdx >= 0) {
+        newPerms[existingIdx] = {
+          ...newPerms[existingIdx],
+          canView: type === 'view' ? !newPerms[existingIdx].canView : newPerms[existingIdx].canView,
+          canSave: type === 'save' ? !newPerms[existingIdx].canSave : newPerms[existingIdx].canSave
         };
+      } else {
+        newPerms.push({
+          id: `perm-${Date.now()}-${Math.random().toString(36).substr(2,9)}`,
+          userId: selectedUserId,
+          menuId,
+          canView: type === 'view',
+          canSave: type === 'save',
+          createdAt: new Date().toISOString()
+        } as MenuPermission);
       }
-      return p;
+      return newPerms;
     });
-
-    updatePermissions(updatedPermissions);
+    setIsDirty(true);
   };
+
+  // --- Unload Warning ---
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (isDirty) {
+        e.preventDefault();
+        e.returnValue = ''; // 브라우저 표준 경고창 유발
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [isDirty]);
+
+  // --- Manual Save ---
+  const handleSaveAll = () => {
+    // 1. 유저 Role 일괄 저장
+    const realUsers = localUsers.filter(u => u.id !== 'sys-admin');
+    realUsers.forEach(u => {
+      db.updateRow('users', u.id, { role: u.role });
+    });
+    
+    // 2. 권한 일괄 저장
+    // AppContext에 바로 넣어서 글로벌 적용
+    updatePermissions(localPermissions);
+    
+    setIsDirty(false);
+    alert('사용자 권한 설정이 안전하게 저장되었습니다.');
+  };
+
+  const selectedUser = localUsers.find(u => u.id === selectedUserId);
 
   return (
     <div>
-      <h2 style={{ marginBottom: '24px', fontWeight: '700' }}>사용자 및 권한 관리</h2>
-
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '24px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <Shield size={24} color="var(--primary)" />
+          <h2 style={{ fontSize: '22px', fontWeight: '800' }}>사용자 및 권한 관리</h2>
+        </div>
         
-        {/* 사용자 관리 카드 */}
-        <div className="card" style={{ margin: 0 }}>
+        {canSave && (
+          <button 
+            className={`btn-primary ${isDirty ? 'pulse-animation' : ''}`} 
+            onClick={handleSaveAll}
+            style={{ 
+              padding: '10px 20px', 
+              backgroundColor: isDirty ? 'var(--danger)' : 'var(--primary)',
+              boxShadow: isDirty ? '0 0 10px rgba(239, 68, 68, 0.5)' : 'none',
+              transition: 'all 0.3s ease'
+            }}
+          >
+            <Shield size={16} /> {isDirty ? '권한 일괄 저장 (변경됨)' : '권한 일괄 저장'}
+          </button>
+        )}
+      </div>
+      <p style={{ color: 'var(--text-secondary)', marginBottom: '24px' }}>
+        좌측에서 특정 직원을 선택한 뒤 우측에서 <strong>개인별(ID별) 메뉴 접근 권한</strong>을 상세하게 통제할 수 있습니다.<br/>
+        (단, `ADMIN` 등급은 모든 메뉴 접근이 항상 허용됩니다.)
+      </p>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
+        
+        {/* 사용자 리스트 (좌측 패널) */}
+        <div className="card" style={{ margin: 0, height: '650px', display: 'flex', flexDirection: 'column' }}>
           <div className="card-header">
             <h3 className="card-title">등록된 사용자 리스트</h3>
-            {canSave && (
-              <button className="btn-primary" onClick={handleOpenAddUser} style={{ padding: '6px 12px', fontSize: '13px' }}>
-                <UserPlus size={16} /> 사용자 추가
-              </button>
-            )}
+            <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>직원을 클릭하세요</span>
           </div>
 
-          <div className="table-container" style={{ maxHeight: '450px', overflowY: 'auto' }}>
-            <table style={{ minWidth: '400px' }}>
+          <div className="table-container" style={{ flex: 1, overflowY: 'auto' }}>
+            <table style={{ width: '100%' }}>
               <thead>
                 <tr>
-                  <th>이름</th>
-                  <th>ID</th>
-                  <th>부서</th>
-                  <th>권한</th>
-                  <th>관리</th>
+                  <th>이름 (ID)</th>
+                  <th>시스템 등급</th>
                 </tr>
               </thead>
               <tbody>
-                {users.map(u => (
-                  <tr key={u.id}>
-                    <td><strong style={{ color: 'var(--primary)' }}>{u.name}</strong></td>
-                    <td>{u.loginId}</td>
-                    <td>{u.department}</td>
+                {localUsers.map(u => (
+                  <tr 
+                    key={u.id} 
+                    onClick={() => setSelectedUserId(u.id)}
+                    style={{ 
+                      cursor: 'pointer', 
+                      backgroundColor: selectedUserId === u.id ? 'var(--bg-active)' : 'transparent',
+                      borderLeft: selectedUserId === u.id ? '4px solid var(--primary)' : '4px solid transparent'
+                    }}
+                  >
                     <td>
-                      <span className={`badge ${
-                        u.role === 'ADMIN' ? 'badge-danger' : 
-                        u.role === 'MANAGER' ? 'badge-success' : 
-                        u.role === 'MECHANIC' ? 'badge-warning' : 'badge-info'
-                      }`}>
-                        {u.role}
-                      </span>
+                      <strong style={{ color: 'var(--text-primary)' }}>{u.name}</strong> 
+                      <span style={{ fontSize: '12px', color: 'var(--text-secondary)', marginLeft: '8px' }}>({u.loginId || '미등록'})</span>
                     </td>
-                    <td>
-                      {canSave && (
-                        <button className="btn-secondary" onClick={() => handleOpenEditUser(u)} style={{ padding: '4px 8px', fontSize: '12px' }}>
-                          수정
-                        </button>
-                      )}
+                    <td onClick={(e) => e.stopPropagation()}>
+                      <select 
+                        value={u.role || 'USER'}
+                        onChange={(e) => handleRoleChange(u.id, e.target.value)}
+                        disabled={!canSave || u.id === 'sys-admin'}
+                        style={{
+                          padding: '4px 8px', fontSize: '12px', borderRadius: '4px',
+                          border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-app)',
+                          fontWeight: 'bold',
+                          color: u.role === 'ADMIN' ? 'var(--danger)' : u.role === 'MANAGER' ? 'var(--success)' : 'var(--info)'
+                        }}
+                      >
+                        {isSuperAdmin && <option value="ADMIN">ADMIN</option>}
+                        {(!isSuperAdmin && u.role === 'ADMIN') && <option value="ADMIN" disabled>ADMIN</option>}
+                        <option value="MANAGER">MANAGER</option>
+                        <option value="USER">USER</option>
+                      </select>
                     </td>
                   </tr>
                 ))}
@@ -133,28 +240,20 @@ export const UsersPermissions: React.FC = () => {
           </div>
         </div>
 
-        {/* 메뉴별 권한 매트릭스 카드 */}
-        <div className="card" style={{ margin: 0 }}>
+        {/* 메뉴별 권한 매트릭스 (우측 패널) */}
+        <div className="card" style={{ margin: 0, height: '650px', display: 'flex', flexDirection: 'column' }}>
           <div className="card-header">
-            <h3 className="card-title">역할별 메뉴 통제 매트릭스</h3>
-            <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>* ADMIN은 항상 모든 권한 소유</span>
+            <h3 className="card-title">
+              메뉴 권한 상세 설정
+              {selectedUser && <span style={{ marginLeft: '12px', fontSize: '14px', color: 'var(--primary)' }}>- [{selectedUser.name}]</span>}
+            </h3>
+            {selectedUser?.role === 'ADMIN' && (
+              <span style={{ fontSize: '12px', color: 'var(--danger)' }}>* ADMIN은 전권 소유</span>
+            )}
           </div>
 
-          <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
-            {(['MANAGER', 'USER', 'MECHANIC'] as const).map(role => (
-              <button
-                key={role}
-                className={selectedRole === role ? 'btn-primary' : 'btn-secondary'}
-                onClick={() => setSelectedRole(role)}
-                style={{ padding: '8px 14px', flex: 1 }}
-              >
-                {role} 권한
-              </button>
-            ))}
-          </div>
-
-          <div className="table-container" style={{ border: 'none', boxShadow: 'none' }}>
-            <table style={{ minWidth: '400px' }}>
+          <div className="table-container" style={{ flex: 1, overflowY: 'auto', border: 'none', boxShadow: 'none' }}>
+            <table style={{ width: '100%' }}>
               <thead>
                 <tr>
                   <th>대상 메뉴명</th>
@@ -164,26 +263,28 @@ export const UsersPermissions: React.FC = () => {
               </thead>
               <tbody>
                 {menus.map(menu => {
-                  const perm = permissions.find(p => p.role === selectedRole && p.menuId === menu.id) || { canView: false, canSave: false };
+                  const perm = localPermissions.find(p => p.userId === selectedUserId && p.menuId === menu.id) || { canView: false, canSave: false };
+                  const isAdmin = selectedUser?.role === 'ADMIN';
+                  
                   return (
                     <tr key={menu.id}>
                       <td>{menu.name}</td>
                       <td style={{ textAlign: 'center' }}>
                         <input
                           type="checkbox"
-                          checked={perm.canView}
-                          disabled={!canSave || selectedRole === 'ADMIN'}
+                          checked={isAdmin ? true : perm.canView}
+                          disabled={!canSave || isAdmin}
                           onChange={() => handlePermissionToggle(menu.id, 'view')}
-                          style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+                          style={{ width: '18px', height: '18px', cursor: isAdmin ? 'not-allowed' : 'pointer' }}
                         />
                       </td>
                       <td style={{ textAlign: 'center' }}>
                         <input
                           type="checkbox"
-                          checked={perm.canSave}
-                          disabled={!canSave || selectedRole === 'ADMIN'}
+                          checked={isAdmin ? true : perm.canSave}
+                          disabled={!canSave || isAdmin}
                           onChange={() => handlePermissionToggle(menu.id, 'save')}
-                          style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+                          style={{ width: '18px', height: '18px', cursor: isAdmin ? 'not-allowed' : 'pointer' }}
                         />
                       </td>
                     </tr>
@@ -195,80 +296,6 @@ export const UsersPermissions: React.FC = () => {
         </div>
 
       </div>
-
-      {/* 사용자 추가/수정 모달 */}
-      {showUserModal && editingUser && (
-        <div style={{
-          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-          backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000
-        }}>
-          <form onSubmit={handleSaveUserSubmit} className="card" style={{ width: '100%', maxWidth: '400px', backgroundColor: 'var(--bg-card)' }}>
-            <div className="card-header" style={{ marginBottom: '16px' }}>
-              <h3 className="card-title">{editingUser.id ? '사용자 정보 수정' : '신규 사용자 등록'}</h3>
-            </div>
-            
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '20px' }}>
-              <div>
-                <label>로그인 ID *</label>
-                <input
-                  type="text"
-                  value={editingUser.loginId || ''}
-                  disabled={!!editingUser.id}
-                  onChange={e => setEditingUser({ ...editingUser, loginId: e.target.value })}
-                  placeholder="아이디"
-                  required
-                />
-              </div>
-              <div>
-                <label>비밀번호 *</label>
-                <input
-                  type="password"
-                  value={editingUser.passwordHash || ''}
-                  onChange={e => setEditingUser({ ...editingUser, passwordHash: e.target.value })}
-                  placeholder="비밀번호"
-                  required
-                />
-              </div>
-              <div>
-                <label>이름 *</label>
-                <input
-                  type="text"
-                  value={editingUser.name || ''}
-                  onChange={e => setEditingUser({ ...editingUser, name: e.target.value })}
-                  placeholder="성명"
-                  required
-                />
-              </div>
-              <div>
-                <label>소속 부서</label>
-                <input
-                  type="text"
-                  value={editingUser.department || ''}
-                  onChange={e => setEditingUser({ ...editingUser, department: e.target.value })}
-                  placeholder="부서명"
-                />
-              </div>
-              <div>
-                <label>직무 역할 권한</label>
-                <select
-                  value={editingUser.role || 'USER'}
-                  onChange={e => setEditingUser({ ...editingUser, role: e.target.value as User['role'] })}
-                >
-                  <option value="USER">USER (영업사원)</option>
-                  <option value="MANAGER">MANAGER (영업총괄)</option>
-                  <option value="MECHANIC">MECHANIC (현장정비사)</option>
-                  <option value="ADMIN">ADMIN (최고관리자)</option>
-                </select>
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
-              <button type="button" className="btn-secondary" onClick={() => setShowUserModal(false)}>취소</button>
-              <button type="submit" className="btn-primary">저장</button>
-            </div>
-          </form>
-        </div>
-      )}
     </div>
   );
 };

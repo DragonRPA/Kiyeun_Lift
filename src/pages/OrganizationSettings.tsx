@@ -1,0 +1,689 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { 
+  Network, Plus, Trash2, Edit2, AlertCircle, GripVertical, ChevronRight, 
+  ChevronDown, CheckCircle, Upload, Save, X, User as UserIcon, Calendar, 
+  MapPin, Phone, Mail 
+} from 'lucide-react';
+import { useApp } from '../context/AppContext';
+import { db } from '../services/db';
+
+// --- Type Definitions ---
+interface Department {
+  id: string;
+  name: string;
+  parentDepartmentId: string | null;
+}
+
+interface UserNode {
+  id: string;
+  name: string;
+  departmentId: string | null;
+  position: string;
+  status: 'ACTIVE' | 'LEAVE_OF_ABSENCE' | 'RETIRED';
+  role: string;
+  loginId?: string;
+  passwordHash?: string;
+  birthDate?: string;
+  address?: string;
+  phone?: string;
+  email?: string;
+  profileImageUrl?: string;
+}
+
+const INITIAL_DEPTS: Department[] = [];
+
+const INITIAL_USERS: UserNode[] = [];
+
+export const OrganizationSettings: React.FC = () => {
+  const { currentUser } = useApp();
+  const isSuperAdmin = currentUser?.loginId === 'admin';
+  const canEdit = currentUser?.role === 'ADMIN' || currentUser?.role === 'MANAGER';
+  
+  // --- States ---
+  const [departments, setDepartments] = useState<Department[]>([]);
+  const [users, setUsers] = useState<UserNode[]>([]);
+  
+  // Selection States
+  const [selectedDeptId, setSelectedDeptId] = useState<string | null>(null);
+  const [draggedUserId, setDraggedUserId] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<'DEPT' | 'UNASSIGNED'>('DEPT');
+  
+  // Editing Dept States
+  const [editingDeptId, setEditingDeptId] = useState<string | null>(null);
+  const [editingDeptName, setEditingDeptName] = useState<string>('');
+  
+  // Profile Modal State (Slide-out)
+  const [selectedProfile, setSelectedProfile] = useState<UserNode | null>(null);
+  
+  // Handoff Modal State
+  const [showHandoffModal, setShowHandoffModal] = useState<UserNode | null>(null);
+
+  // Hidden File Input Ref for photo upload
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Data load status
+  const [isLoaded, setIsLoaded] = useState(false);
+  const [isDirty, setIsDirty] = useState(false);
+
+  // --- Persistence Load ---
+  useEffect(() => {
+    const savedDepts = localStorage.getItem('erp_departments');
+    const savedUsers = localStorage.getItem('erp_users');
+    
+    let loadedDepts: Department[] = INITIAL_DEPTS;
+    let loadedUsers: UserNode[] = INITIAL_USERS;
+
+    if (savedDepts) loadedDepts = JSON.parse(savedDepts);
+    if (savedUsers) loadedUsers = JSON.parse(savedUsers);
+
+    // 고아(Orphan) 직원 구출: 현재 존재하지 않는 부서 ID를 가진 직원은 '미배정(null)'으로 강제 이동
+    const validDeptIds = new Set(loadedDepts.map(d => d.id));
+    loadedUsers = loadedUsers.map(u => 
+      u.departmentId && !validDeptIds.has(u.departmentId) 
+        ? { ...u, departmentId: null } 
+        : u
+    );
+
+    setDepartments(loadedDepts);
+    setUsers(loadedUsers);
+    
+    setIsLoaded(true);
+  }, []);
+
+  // --- Track Changes for Dirty State ---
+  useEffect(() => {
+    if (isLoaded) {
+      setIsDirty(true);
+    }
+  }, [departments, users, isLoaded]);
+
+  // --- Unload Warning ---
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (isDirty) {
+        e.preventDefault();
+        e.returnValue = ''; // 브라우저 표준 경고창 유발
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [isDirty]);
+
+  // --- Manual Save (Batch to Supabase/DB) ---
+  const handleSaveAll = () => {
+    // 실제 DB (또는 로컬 백그라운드 큐)에 일괄 업데이트
+    db.saveOrganizationBatch(departments, users as any);
+    
+    // 상태 초기화
+    setIsDirty(false);
+    
+    // 혹시 모를 로컬스토리지 찌꺼기 덮어쓰기 (강제 동기화)
+    localStorage.setItem('erp_departments', JSON.stringify(departments));
+    localStorage.setItem('erp_users', JSON.stringify(users));
+    
+    alert('조직도 및 구성원 마스터 데이터가 안전하게 저장되었습니다.');
+  };
+
+  // --- Action Handlers ---
+  const handleAddDept = () => {
+    if (!canEdit) return;
+    const newDept: Department = {
+      id: `dept-${Date.now()}`,
+      name: '새 부서',
+      parentDepartmentId: selectedDeptId || null
+    };
+    setDepartments([...departments, newDept]);
+    setEditingDeptId(newDept.id);
+    setEditingDeptName(newDept.name);
+  };
+
+  const handleDeleteDept = (e: React.MouseEvent, deptId: string) => {
+    e.stopPropagation();
+    if (!canEdit) return;
+    const hasChildren = departments.some(d => d.parentDepartmentId === deptId);
+    const hasUsers = users.some(u => u.departmentId === deptId);
+    if (hasChildren || hasUsers) {
+      alert('소속된 하위 부서나 직원이 존재하여 부서를 삭제할 수 없습니다.');
+      return;
+    }
+    if (confirm('이 부서를 정말 삭제하시겠습니까?')) {
+      setDepartments(prev => prev.filter(d => d.id !== deptId));
+      if (selectedDeptId === deptId) {
+        setSelectedDeptId(null);
+        setActiveTab('UNASSIGNED');
+      }
+    }
+  };
+
+  const handleAddUser = () => {
+    if (!canEdit) return;
+    const newUser: UserNode = {
+      id: `u-${Date.now()}`,
+      name: '신규직원',
+      departmentId: null, // 무조건 미배정으로 생성
+      position: '사원',
+      status: 'ACTIVE',
+      role: 'USER',
+      loginId: '',
+      passwordHash: ''
+    };
+    setUsers([...users, newUser]);
+    setActiveTab('UNASSIGNED');
+    setSelectedProfile(newUser);
+  };
+
+  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0] && selectedProfile) {
+      const file = e.target.files[0];
+      const imageUrl = URL.createObjectURL(file);
+      setSelectedProfile({ ...selectedProfile, profileImageUrl: imageUrl });
+    }
+  };
+
+  // --- Drag & Drop Handlers ---
+  const handleDragStart = (e: React.DragEvent, userId: string) => {
+    if (!canEdit) return;
+    setDraggedUserId(userId);
+    e.dataTransfer.setData('text/plain', userId);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  };
+
+  const handleDropToDept = (e: React.DragEvent, targetDeptId: string) => {
+    e.preventDefault();
+    if (!canEdit || !draggedUserId) return;
+    
+    setUsers(prev => prev.map(u => 
+      u.id === draggedUserId ? { ...u, departmentId: targetDeptId } : u
+    ));
+    setDraggedUserId(null);
+  };
+
+  const handleDropToPool = (e: React.DragEvent) => {
+    e.preventDefault();
+    if (!canEdit || !draggedUserId) return;
+    
+    setUsers(prev => prev.map(u => 
+      u.id === draggedUserId ? { ...u, departmentId: null } : u
+    ));
+    setDraggedUserId(null);
+  };
+
+  // --- Department Edit Handlers ---
+  const startEditDept = (e: React.MouseEvent, dept: Department) => {
+    e.stopPropagation();
+    if (!canEdit) return;
+    setEditingDeptId(dept.id);
+    setEditingDeptName(dept.name);
+  };
+
+  const commitEditDept = () => {
+    if (editingDeptName.trim()) {
+      setDepartments(prev => prev.map(d => 
+        d.id === editingDeptId ? { ...d, name: editingDeptName.trim() } : d
+      ));
+    }
+    setEditingDeptId(null);
+  };
+
+  const handleDeptKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') commitEditDept();
+    if (e.key === 'Escape') setEditingDeptId(null);
+  };
+
+  // --- Profile Handlers ---
+  const handleStatusChange = (userId: string, newStatus: UserNode['status']) => {
+    if (newStatus === 'RETIRED') {
+      const targetUser = users.find(u => u.id === userId);
+      if (targetUser) setShowHandoffModal(targetUser);
+    } else {
+      // 리렌더링을 유발하기 위해 setUsers 호출 및 selectedProfile 동기화
+      setUsers(prev => prev.map(u => u.id === userId ? { ...u, status: newStatus } : u));
+      if (selectedProfile && selectedProfile.id === userId) {
+        setSelectedProfile({ ...selectedProfile, status: newStatus });
+      }
+    }
+  };
+
+  const confirmRetirement = () => {
+    if (showHandoffModal) {
+      setUsers(prev => prev.map(u => u.id === showHandoffModal.id ? { ...u, status: 'RETIRED' } : u));
+      if (selectedProfile?.id === showHandoffModal.id) {
+        setSelectedProfile(prev => prev ? { ...prev, status: 'RETIRED' } : null);
+      }
+      setShowHandoffModal(null);
+    }
+  };
+
+  const applyProfileChanges = () => {
+    if (selectedProfile) {
+      if (selectedProfile.id === 'sys-admin' && selectedProfile.role !== 'ADMIN') {
+        alert('시스템 최고관리자의 시스템 역할은 변경할 수 없습니다.');
+        return;
+      }
+      if (selectedProfile.role === 'ADMIN' && !isSuperAdmin) {
+        alert('ADMIN 시스템 역할은 최고관리자(admin) 계정만 부여할 수 있습니다.');
+        return;
+      }
+      setUsers(prev => prev.map(u => u.id === selectedProfile.id ? selectedProfile : u));
+      setSelectedProfile(null);
+    }
+  };
+
+  // --- Renders ---
+  const renderDeptTree = (parentId: string | null, depth: number = 0) => {
+    const children = departments.filter(d => d.parentDepartmentId === parentId);
+    if (children.length === 0) return null;
+
+    return (
+      <div style={{ marginLeft: depth > 0 ? '20px' : '0' }}>
+        {children.map(dept => {
+          const isSelected = selectedDeptId === dept.id;
+          const userCount = users.filter(u => u.departmentId === dept.id).length;
+          
+          return (
+            <div key={dept.id}>
+              <div 
+                onDragOver={handleDragOver}
+                onDrop={(e) => handleDropToDept(e, dept.id)}
+                onClick={() => {
+                  if (editingDeptId !== dept.id) {
+                    setSelectedDeptId(dept.id);
+                    setActiveTab('DEPT');
+                  }
+                }}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '8px',
+                  padding: '10px 12px',
+                  margin: '4px 0',
+                  borderRadius: 'var(--radius-sm)',
+                  backgroundColor: isSelected ? 'var(--primary-light)' : 'transparent',
+                  color: isSelected ? 'var(--primary)' : 'var(--text-main)',
+                  border: isSelected ? '1px solid var(--primary-border)' : '1px solid transparent',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                  borderStyle: draggedUserId ? 'dashed' : 'solid'
+                }}
+                className={draggedUserId ? 'drop-target-active' : ''}
+              >
+                {departments.some(d => d.parentDepartmentId === dept.id) ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                
+                {editingDeptId === dept.id ? (
+                  <input 
+                    type="text"
+                    value={editingDeptName}
+                    onChange={(e) => setEditingDeptName(e.target.value)}
+                    onBlur={commitEditDept}
+                    onKeyDown={handleDeptKeyDown}
+                    autoFocus
+                    onClick={(e) => e.stopPropagation()}
+                    style={{ flex: 1, padding: '2px 6px', fontSize: '14px', height: 'auto' }}
+                  />
+                ) : (
+                  <>
+                    <span style={{ fontWeight: isSelected ? '600' : '400', flex: 1 }}>{dept.name}</span>
+                    <span style={{ fontSize: '11px', padding: '2px 6px', backgroundColor: 'var(--bg-card)', borderRadius: '10px', color: 'var(--text-secondary)' }}>
+                      {userCount}명
+                    </span>
+                    {canEdit && isSelected && (
+                      <div style={{ display: 'flex', gap: '4px' }}>
+                        <button onClick={(e) => startEditDept(e, dept)} style={{ padding: '4px', background: 'transparent', color: 'var(--text-muted)' }} title="부서명 수정">
+                          <Edit2 size={14} />
+                        </button>
+                        <button onClick={(e) => handleDeleteDept(e, dept.id)} style={{ padding: '4px', background: 'transparent', color: 'var(--danger)' }} title="부서 삭제">
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+              {renderDeptTree(dept.id, depth + 1)}
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
+  const renderUserCard = (user: UserNode) => (
+    <div 
+      key={user.id}
+      draggable={canEdit}
+      onDragStart={(e) => handleDragStart(e, user.id)}
+      onDoubleClick={() => setSelectedProfile(user)}
+      style={{
+        border: '1px solid var(--border-color)',
+        borderRadius: 'var(--radius-md)',
+        padding: '16px',
+        backgroundColor: 'var(--bg-card)',
+        boxShadow: '0 2px 4px rgba(0,0,0,0.02)',
+        cursor: canEdit ? 'grab' : 'pointer',
+        opacity: draggedUserId === user.id ? 0.5 : 1,
+        position: 'relative',
+        transition: 'all 0.2s ease'
+      }}
+      title="더블클릭하여 상세 프로필 수정"
+    >
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+        {canEdit && <GripVertical size={16} color="var(--text-muted)" style={{ cursor: 'grab', marginTop: '4px' }} />}
+        
+        {/* Avatar */}
+        <div style={{
+          width: '40px', height: '40px', borderRadius: '50%', backgroundColor: 'var(--primary-light)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--primary)',
+          backgroundImage: user.profileImageUrl ? `url(${user.profileImageUrl})` : 'none',
+          backgroundSize: 'cover', backgroundPosition: 'center', flexShrink: 0
+        }}>
+          {!user.profileImageUrl && user.name.substring(0, 1)}
+        </div>
+
+        <div style={{ flex: 1 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ fontWeight: '700', fontSize: '15px', color: 'var(--text-main)' }}>{user.name}</div>
+            <span style={{ 
+              fontSize: '11px', padding: '2px 8px', borderRadius: '12px', fontWeight: '600',
+              backgroundColor: user.status === 'ACTIVE' ? 'var(--success-light)' : user.status === 'RETIRED' ? 'var(--danger-light)' : 'var(--warning-light)',
+              color: user.status === 'ACTIVE' ? 'var(--success)' : user.status === 'RETIRED' ? 'var(--danger)' : 'var(--warning)'
+            }}>
+              {user.status === 'ACTIVE' ? '재직' : user.status === 'RETIRED' ? '퇴사' : '휴직'}
+            </span>
+          </div>
+          <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+            {user.position} | {user.role}
+          </div>
+          {user.phone && <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>📞 {user.phone}</div>}
+        </div>
+      </div>
+    </div>
+  );
+
+  const displayedUsers = activeTab === 'DEPT' 
+    ? users.filter(u => u.departmentId === selectedDeptId)
+    : users.filter(u => u.departmentId === null);
+
+  const unassignedCount = users.filter(u => u.departmentId === null).length;
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', height: '100%', position: 'relative', overflow: 'hidden' }}>
+      
+      {/* Header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div>
+          <h2 style={{ fontSize: '22px', fontWeight: '800', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Network size={24} color="var(--primary)" />
+            인사 및 조직도 마스터 설정
+          </h2>
+          <p style={{ color: 'var(--text-secondary)', fontSize: '14px', marginTop: '4px' }}>
+            전사 임직원의 상세 프로필과 부서 배치, 입/퇴사 이력을 통합 관리합니다.
+          </p>
+        </div>
+        
+        {/* Global Save & Reset Buttons */}
+        {canEdit && (
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button 
+              className="btn-secondary" 
+              onClick={() => {
+                if(confirm('경고: 모든 로컬 테스트 데이터를 영구적으로 삭제하고 초기화하시겠습니까?')) {
+                  localStorage.clear();
+                  window.location.reload();
+                }
+              }} 
+              style={{ display: 'none', padding: '10px 16px', color: 'var(--danger)', borderColor: 'var(--danger)' }}
+            >
+              ♻️ 전체 데이터 초기화
+            </button>
+            <button 
+              className={`btn-primary ${isDirty ? 'pulse-animation' : ''}`} 
+              onClick={handleSaveAll} 
+              style={{ 
+                padding: '10px 20px', 
+                backgroundColor: isDirty ? 'var(--danger)' : 'var(--primary)',
+                boxShadow: isDirty ? '0 0 10px rgba(239, 68, 68, 0.5)' : 'none',
+                transition: 'all 0.3s ease'
+              }}
+            >
+              <Save size={16} /> {isDirty ? '전체 저장 (변경됨)' : '전체 저장'}
+            </button>
+          </div>
+        )}
+      </div>
+
+      <div style={{ display: 'flex', gap: '20px', flex: 1, minHeight: '600px' }}>
+        
+        {/* 좌측: 조직 트리 */}
+        <div className="card" style={{ width: '280px', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', borderBottom: '1px solid var(--border-color)', paddingBottom: '12px' }}>
+            <h3 style={{ fontSize: '16px', fontWeight: '700' }}>조직 구조도</h3>
+            {canEdit && (
+              <button onClick={handleAddDept} style={{ background: 'transparent', padding: '4px', color: 'var(--primary)' }} title="선택된 부서 아래에 하위 부서 추가">
+                <Plus size={18} />
+              </button>
+            )}
+          </div>
+          <div style={{ flex: 1, overflowY: 'auto' }}>
+            {renderDeptTree(null)}
+          </div>
+          
+          {/* 미배정 임직원 풀 버튼 */}
+          <div 
+            onClick={() => setActiveTab('UNASSIGNED')}
+            onDragOver={handleDragOver}
+            onDrop={handleDropToPool}
+            style={{
+              marginTop: '16px', padding: '12px', border: '1px dashed var(--border-color)', borderRadius: 'var(--radius-md)',
+              backgroundColor: activeTab === 'UNASSIGNED' ? 'var(--primary-light)' : 'var(--bg-app)',
+              color: activeTab === 'UNASSIGNED' ? 'var(--primary)' : 'var(--text-secondary)',
+              cursor: 'pointer', textAlign: 'center', fontWeight: '600', fontSize: '14px',
+              transition: 'all 0.2s ease', borderStyle: draggedUserId ? 'solid' : 'dashed', borderColor: draggedUserId ? 'var(--primary)' : 'var(--border-color)'
+            }}
+            className={draggedUserId ? 'drop-target-active' : ''}
+          >
+            미배정 인력 풀 (Pool)
+            <div style={{ fontSize: '12px', color: 'var(--danger)', marginTop: '4px' }}>{unassignedCount}명 대기 중</div>
+          </div>
+        </div>
+
+        {/* 중앙: 직원 리스트 뷰 */}
+        <div className="card" style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', borderBottom: '1px solid var(--border-color)', paddingBottom: '12px' }}>
+            <h3 style={{ fontSize: '16px', fontWeight: '700' }}>
+              {activeTab === 'DEPT' 
+                ? `${departments.find(d => d.id === selectedDeptId)?.name || '선택된 부서'} 소속원 (${displayedUsers.length}명)`
+                : `미배정 대기 임직원 (${displayedUsers.length}명)`}
+            </h3>
+            {canEdit && (
+              <button className="btn-secondary" onClick={handleAddUser} style={{ padding: '6px 12px', fontSize: '13px' }}>
+                <Plus size={14} style={{ marginRight: '4px' }} /> 신규 직원 등록
+              </button>
+            )}
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '16px', alignContent: 'start', overflowY: 'auto', flex: 1, padding: '4px' }}>
+            {displayedUsers.length === 0 ? (
+              <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '60px 20px', color: 'var(--text-muted)' }}>
+                이 목록에 직원이 없습니다.
+              </div>
+            ) : (
+              displayedUsers.map(user => renderUserCard(user))
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* 우측: Slide-out 상세 프로필 모달 */}
+      {selectedProfile && (
+        <>
+          {/* Backdrop */}
+          <div 
+            onClick={() => setSelectedProfile(null)}
+            style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.3)', zIndex: 40 }}
+          />
+          
+          {/* Panel */}
+          <div className="card slide-in-right" style={{
+            position: 'absolute', top: 0, right: 0, bottom: 0, width: '340px', margin: 0, borderRadius: 0,
+            boxShadow: '-4px 0 15px rgba(0,0,0,0.1)', zIndex: 50, display: 'flex', flexDirection: 'column',
+            borderLeft: '1px solid var(--border-color)', padding: '16px'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', borderBottom: '1px solid var(--border-color)', paddingBottom: '12px' }}>
+              <h3 style={{ fontSize: '16px', fontWeight: '700' }}>상세 프로필</h3>
+              <button onClick={() => setSelectedProfile(null)} style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)' }}>
+                <X size={18} />
+              </button>
+            </div>
+
+            <div style={{ flex: 1, overflowY: 'auto', paddingRight: '4px' }}>
+              {/* Profile Image Upload Area */}
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '16px' }}>
+                <div style={{
+                  width: '80px', height: '80px', borderRadius: '50%', backgroundColor: 'var(--primary-light)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '28px', color: 'var(--primary)',
+                  backgroundImage: selectedProfile.profileImageUrl ? `url(${selectedProfile.profileImageUrl})` : 'none',
+                  backgroundSize: 'cover', backgroundPosition: 'center', marginBottom: '8px', border: '2px solid var(--border-color)'
+                }}>
+                  {!selectedProfile.profileImageUrl && selectedProfile.name.substring(0, 1)}
+                </div>
+                {canEdit && (
+                  <>
+                    <input 
+                      type="file" 
+                      accept="image/*" 
+                      ref={fileInputRef} 
+                      onChange={handlePhotoUpload} 
+                      style={{ display: 'none' }} 
+                    />
+                    <button className="btn-secondary" onClick={() => fileInputRef.current?.click()} style={{ fontSize: '12px', padding: '6px 12px' }}>
+                      <Upload size={14} style={{ marginRight: '6px' }} /> 사진 변경
+                    </button>
+                  </>
+                )}
+              </div>
+
+              {/* Form Fields */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                  <div>
+                    <label style={{ marginBottom: '4px', color: 'var(--primary)', fontWeight: 'bold' }}>로그인 아이디 (ID)</label>
+                    <input type="text" style={{ padding: '6px 10px', fontSize: '13px' }} placeholder="시스템 로그인 ID" value={selectedProfile.loginId || ''} onChange={e => setSelectedProfile({...selectedProfile, loginId: e.target.value})} disabled={!canEdit} />
+                  </div>
+                  <div>
+                    <label style={{ marginBottom: '4px', color: 'var(--primary)', fontWeight: 'bold' }}>초기 비밀번호</label>
+                    <input type="password" style={{ padding: '6px 10px', fontSize: '13px' }} placeholder="비밀번호" value={selectedProfile.passwordHash || ''} onChange={e => setSelectedProfile({...selectedProfile, passwordHash: e.target.value})} disabled={!canEdit} />
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                  <div>
+                    <label style={{ marginBottom: '4px' }}>이름</label>
+                    <input type="text" style={{ padding: '6px 10px', fontSize: '13px' }} value={selectedProfile.name} onChange={e => setSelectedProfile({...selectedProfile, name: e.target.value})} disabled={!canEdit} />
+                  </div>
+                  <div>
+                    <label style={{ marginBottom: '4px' }}>상태</label>
+                    <select 
+                      value={selectedProfile.status} 
+                      onChange={e => handleStatusChange(selectedProfile.id, e.target.value as UserNode['status'])}
+                      disabled={!canEdit}
+                      style={{ 
+                        padding: '6px 10px', fontSize: '13px',
+                        color: selectedProfile.status === 'ACTIVE' ? 'var(--success)' : selectedProfile.status === 'RETIRED' ? 'var(--danger)' : 'var(--warning)',
+                        fontWeight: 'bold'
+                      }}
+                    >
+                      <option value="ACTIVE">재직</option>
+                      <option value="LEAVE_OF_ABSENCE">휴직</option>
+                      <option value="RETIRED">퇴사 처리</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                  <div>
+                    <label style={{ marginBottom: '4px' }}>직급</label>
+                    <input type="text" style={{ padding: '6px 10px', fontSize: '13px' }} value={selectedProfile.position} onChange={e => setSelectedProfile({...selectedProfile, position: e.target.value})} disabled={!canEdit} />
+                  </div>
+                  <div>
+                    <label style={{ marginBottom: '4px' }}>시스템 역할</label>
+                    <select 
+                      value={selectedProfile.role} 
+                      style={{ padding: '6px 10px', fontSize: '13px' }} 
+                      onChange={e => setSelectedProfile({...selectedProfile, role: e.target.value})} 
+                      disabled={!canEdit || selectedProfile.id === 'sys-admin'}
+                    >
+                      {isSuperAdmin && <option value="ADMIN">ADMIN</option>}
+                      <option value="MANAGER">MANAGER</option>
+                      <option value="USER">USER</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label style={{ marginBottom: '4px' }}><Phone size={13} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: '4px' }}/> 휴대전화</label>
+                  <input type="text" style={{ padding: '6px 10px', fontSize: '13px' }} placeholder="010-0000-0000" value={selectedProfile.phone || ''} onChange={e => setSelectedProfile({...selectedProfile, phone: e.target.value})} disabled={!canEdit} />
+                </div>
+                
+                <div>
+                  <label style={{ marginBottom: '4px' }}><Mail size={13} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: '4px' }}/> 이메일</label>
+                  <input type="email" style={{ padding: '6px 10px', fontSize: '13px' }} placeholder="example@kiyeun.com" value={selectedProfile.email || ''} onChange={e => setSelectedProfile({...selectedProfile, email: e.target.value})} disabled={!canEdit} />
+                </div>
+
+                <div>
+                  <label style={{ marginBottom: '4px' }}><Calendar size={13} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: '4px' }}/> 생년월일</label>
+                  <input type="date" style={{ padding: '6px 10px', fontSize: '13px' }} value={selectedProfile.birthDate || ''} onChange={e => setSelectedProfile({...selectedProfile, birthDate: e.target.value})} disabled={!canEdit} />
+                </div>
+
+                <div>
+                  <label style={{ marginBottom: '4px' }}><MapPin size={13} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: '4px' }}/> 자택 주소</label>
+                  <textarea rows={2} value={selectedProfile.address || ''} onChange={e => setSelectedProfile({...selectedProfile, address: e.target.value})} disabled={!canEdit} style={{ resize: 'none', padding: '6px 10px', fontSize: '13px' }} />
+                </div>
+              </div>
+            </div>
+
+            {canEdit && (
+              <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '12px', marginTop: '12px', display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+                <button className="btn-secondary" style={{ padding: '6px 12px', fontSize: '13px' }} onClick={() => setSelectedProfile(null)}>취소 (닫기)</button>
+                <button className="btn-primary" style={{ padding: '6px 12px', fontSize: '13px' }} onClick={applyProfileChanges}>
+                  <CheckCircle size={14} style={{ marginRight: '4px' }} /> 적용
+                </button>
+              </div>
+            )}
+          </div>
+        </>
+      )}
+
+      {/* Hand-off Alert Modal for Retirement */}
+      {showHandoffModal && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100
+        }}>
+          <div className="card" style={{ width: '450px', padding: '24px' }}>
+            <div style={{ display: 'flex', gap: '12px', color: 'var(--danger)', marginBottom: '16px' }}>
+              <AlertCircle size={28} />
+              <h3 style={{ fontSize: '18px', fontWeight: '700', marginTop: '2px' }}>퇴사 처리 및 업무 이관 (Hand-off)</h3>
+            </div>
+            
+            <p style={{ fontSize: '14px', color: 'var(--text-main)', lineHeight: '1.5' }}>
+              <strong>{showHandoffModal.name}</strong> 직원을 '퇴사' 상태로 변경하시겠습니까?<br/><br/>
+              현재 이 직원이 담당하고 있는 <span style={{ color: 'var(--danger)', fontWeight: 'bold' }}>진행 중인 미결 업무가 발견</span>되었습니다.<br/>
+              퇴사 처리 시 해당 미결 업무는 직속 상급자(부서장)에게 강제 이관됩니다.
+            </p>
+
+            <div style={{ marginTop: '24px', display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
+              <button className="btn-secondary" onClick={() => setShowHandoffModal(null)}>취소</button>
+              <button className="btn-primary" style={{ backgroundColor: 'var(--danger)' }} onClick={confirmRetirement}>
+                확인 및 이관 실행
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+    </div>
+  );
+};
