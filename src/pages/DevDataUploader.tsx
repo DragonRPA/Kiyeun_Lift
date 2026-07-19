@@ -33,6 +33,7 @@ interface TableDef {
   label: string;
   supabaseTable: string;
   fields: FieldDef[];
+  sampleRows: Record<string, string>[]; // 양식에 포함될 샘플 데이터 2~3행
 }
 
 const TABLE_SCHEMAS: TableDef[] = [
@@ -51,6 +52,11 @@ const TABLE_SCHEMAS: TableDef[] = [
       { key: 'repEmail', label: '대표이메일', type: 'string', required: false, example: 'ceo@company.com' },
       { key: 'createdAt', label: '생성일시', type: 'date', required: true, example: '2024-01-01T00:00:00.000Z' },
     ],
+    sampleRows: [
+      { id: 'CUST-001', name: '(주)한국건설', bizRegNo: '123-45-67890', isClosed: 'false', address: '서울시 강남구 테헤란로 123', representative: '홍길동', repContact: '02-1234-5678', repEmail: 'ceo@hankook.com', createdAt: '2024-01-15T09:00:00.000Z' },
+      { id: 'CUST-002', name: '대우시스템즈(주)', bizRegNo: '234-56-78901', isClosed: 'false', address: '서울시 서초구 서초대로 456', representative: '이영희', repContact: '02-2345-6789', repEmail: 'ceo@daewoo.com', createdAt: '2024-02-10T09:00:00.000Z' },
+      { id: 'CUST-003', name: '(주)삼성엔지니어링', bizRegNo: '345-67-89012', isClosed: 'false', address: '경기도 수원시 영통대로 789', representative: '김철수', repContact: '031-345-6789', repEmail: '', createdAt: '2024-03-05T09:00:00.000Z' },
+    ],
   },
   {
     key: 'contacts',
@@ -64,6 +70,11 @@ const TABLE_SCHEMAS: TableDef[] = [
       { key: 'contact', label: '연락처', type: 'string', required: true, example: '010-1234-5678' },
       { key: 'email', label: '이메일', type: 'string', required: false, example: 'manager@company.com' },
       { key: 'createdAt', label: '생성일시', type: 'date', required: true, example: '2024-01-01T00:00:00.000Z' },
+    ],
+    sampleRows: [
+      { id: 'CONT-001', customerId: 'CUST-001', name: '김담당', position: '과장', contact: '010-1234-5678', email: 'kim@hankook.com', createdAt: '2024-01-15T09:00:00.000Z' },
+      { id: 'CONT-002', customerId: 'CUST-001', name: '이부장', position: '부장', contact: '010-2345-6789', email: 'lee@hankook.com', createdAt: '2024-01-15T09:00:00.000Z' },
+      { id: 'CONT-003', customerId: 'CUST-002', name: '박팀장', position: '팀장', contact: '010-3456-7890', email: '', createdAt: '2024-02-10T09:00:00.000Z' },
     ],
   },
   {
@@ -80,6 +91,11 @@ const TABLE_SCHEMAS: TableDef[] = [
       { key: 'email', label: '현장이메일', type: 'string', required: false, example: 'site@company.com' },
       { key: 'createdAt', label: '생성일시', type: 'date', required: true, example: '2024-01-01T00:00:00.000Z' },
     ],
+    sampleRows: [
+      { id: 'SITE-001', customerId: 'CUST-001', name: '강남 본사 신축공사', address: '서울시 강남구 역삼동 100', contactName: '이현장', contact: '010-9876-5432', email: 'site1@hankook.com', createdAt: '2024-01-16T09:00:00.000Z' },
+      { id: 'SITE-002', customerId: 'CUST-001', name: '영등포IFC 실내공사', address: '서울시 영등포구 국제금융로 10', contactName: '권현장', contact: '010-8765-4321', email: '', createdAt: '2024-02-01T09:00:00.000Z' },
+      { id: 'SITE-003', customerId: 'CUST-002', name: '수원 공장 증축', address: '경기도 수원시 영통구 제조로 55', contactName: '미상', contact: '031-111-2222', email: '', createdAt: '2024-02-12T09:00:00.000Z' },
+    ],
   },
   {
     key: 'products',
@@ -92,6 +108,11 @@ const TABLE_SCHEMAS: TableDef[] = [
       { key: 'spec', label: '규격/스펙', type: 'string', required: false, example: '전기식, 최대하중 2000kg' },
       { key: 'manufacturer', label: '제조사', type: 'string', required: false, example: '현대로지스틱스' },
       { key: 'createdAt', label: '생성일시', type: 'date', required: true, example: '2024-01-01T00:00:00.000Z' },
+    ],
+    sampleRows: [
+      { id: 'PROD-001', modelName: 'HY-15S', feet: '15', spec: '전기식, 최대하중 2000kg', manufacturer: '현대로지스틱스', createdAt: '2024-01-01T09:00:00.000Z' },
+      { id: 'PROD-002', modelName: 'HY-20E', feet: '20', spec: '전기식 관절, 최대하중 1500kg', manufacturer: '현대로지스틱스', createdAt: '2024-01-01T09:00:00.000Z' },
+      { id: 'PROD-003', modelName: 'SL-30D', feet: '30', spec: '디젤, 최대하중 2500kg', manufacturer: '시리우스코리아', createdAt: '2024-01-01T09:00:00.000Z' },
     ],
   },
   {
@@ -111,6 +132,11 @@ const TABLE_SCHEMAS: TableDef[] = [
       { key: 'createdAt', label: '생성일시', type: 'date', required: true, example: '2024-01-01T00:00:00.000Z' },
       { key: 'updatedAt', label: '수정일시', type: 'date', required: true, example: '2024-01-01T00:00:00.000Z' },
     ],
+    sampleRows: [
+      { id: 'ASSET-001', modelName: 'HY-15S', assetNo: 'KL-2024-001', serialNo: 'SN20240001', manufacturer: '현대로지스틱스', ownerType: 'OWNED', status: 'RENTED', acquisitionDate: '2024-01-10', acquisitionPrice: '15000000', createdAt: '2024-01-10T09:00:00.000Z', updatedAt: '2024-06-01T09:00:00.000Z' },
+      { id: 'ASSET-002', modelName: 'HY-15S', assetNo: 'KL-2024-002', serialNo: 'SN20240002', manufacturer: '현대로지스틱스', ownerType: 'OWNED', status: 'AVAILABLE', acquisitionDate: '2024-01-10', acquisitionPrice: '15000000', createdAt: '2024-01-10T09:00:00.000Z', updatedAt: '2024-01-10T09:00:00.000Z' },
+      { id: 'ASSET-003', modelName: 'SL-30D', assetNo: 'KL-2024-003', serialNo: '', manufacturer: '시리우스코리아', ownerType: 'RENTED', status: 'RENTED', acquisitionDate: '', acquisitionPrice: '', createdAt: '2024-02-01T09:00:00.000Z', updatedAt: '2024-02-01T09:00:00.000Z' },
+    ],
   },
   {
     key: 'contracts',
@@ -129,6 +155,11 @@ const TABLE_SCHEMAS: TableDef[] = [
       { key: 'createdAt', label: '생성일시', type: 'date', required: true, example: '2024-01-01T00:00:00.000Z' },
       { key: 'updatedAt', label: '수정일시', type: 'date', required: true, example: '2024-01-01T00:00:00.000Z' },
     ],
+    sampleRows: [
+      { id: 'CT-001', contractNo: 'CT-2024-001', customerId: 'CUST-001', contactId: 'CONT-001', siteId: 'SITE-001', startDate: '2024-01-01', endDate: '2024-12-31', billingDay: '30', status: 'ACTIVE', createdAt: '2024-01-01T09:00:00.000Z', updatedAt: '2024-01-01T09:00:00.000Z' },
+      { id: 'CT-002', contractNo: 'CT-2024-002', customerId: 'CUST-002', contactId: 'CONT-003', siteId: 'SITE-003', startDate: '2024-02-15', endDate: '2025-02-14', billingDay: '25', status: 'ACTIVE', createdAt: '2024-02-15T09:00:00.000Z', updatedAt: '2024-02-15T09:00:00.000Z' },
+      { id: 'CT-003', contractNo: 'CT-2023-099', customerId: 'CUST-001', contactId: '', siteId: 'SITE-002', startDate: '2023-06-01', endDate: '2024-05-31', billingDay: '30', status: 'COMPLETED', createdAt: '2023-06-01T09:00:00.000Z', updatedAt: '2024-05-31T09:00:00.000Z' },
+    ],
   },
   {
     key: 'contractAssets',
@@ -144,6 +175,11 @@ const TABLE_SCHEMAS: TableDef[] = [
       { key: 'startDate', label: '시작일', type: 'date', required: true, example: '2024-01-01' },
       { key: 'endDate', label: '종료일', type: 'date', required: true, example: '2024-12-31' },
       { key: 'createdAt', label: '생성일시', type: 'date', required: true, example: '2024-01-01T00:00:00.000Z' },
+    ],
+    sampleRows: [
+      { id: 'CA-001', contractId: 'CT-001', assetId: 'ASSET-001', expectedModel: 'HY-15S', monthlyRentalFee: '800000', dailyRentalFee: '30000', startDate: '2024-01-01', endDate: '2024-12-31', createdAt: '2024-01-01T09:00:00.000Z' },
+      { id: 'CA-002', contractId: 'CT-001', assetId: 'ASSET-002', expectedModel: 'HY-15S', monthlyRentalFee: '800000', dailyRentalFee: '30000', startDate: '2024-01-01', endDate: '2024-12-31', createdAt: '2024-01-01T09:00:00.000Z' },
+      { id: 'CA-003', contractId: 'CT-002', assetId: '', expectedModel: 'SL-30D', monthlyRentalFee: '1200000', dailyRentalFee: '45000', startDate: '2024-02-15', endDate: '2025-02-14', createdAt: '2024-02-15T09:00:00.000Z' },
     ],
   },
   {
@@ -167,6 +203,11 @@ const TABLE_SCHEMAS: TableDef[] = [
       { key: 'createdAt', label: '생성일시', type: 'date', required: true, example: '2024-01-01T00:00:00.000Z' },
       { key: 'updatedAt', label: '수정일시', type: 'date', required: true, example: '2024-01-01T00:00:00.000Z' },
     ],
+    sampleRows: [
+      { id: 'DEL-001', contractId: 'CT-001', type: 'OUTBOUND', status: 'COMPLETED', requestDate: '2024-01-10', scheduledDate: '2024-01-12', transportCompany: '대한물류', vehicleNo: '서울82가 1234', driverName: '홍길동', driverContact: '010-1111-2222', deliveryCost: '250000', isCostSettled: 'true', memo: '신규 출고', createdAt: '2024-01-10T09:00:00.000Z', updatedAt: '2024-01-12T18:00:00.000Z' },
+      { id: 'DEL-002', contractId: 'CT-002', type: 'OUTBOUND', status: 'DISPATCHED', requestDate: '2024-02-20', scheduledDate: '2024-02-22', transportCompany: '민국운수', vehicleNo: '경기99바 5678', driverName: '이김담', driverContact: '010-3333-4444', deliveryCost: '300000', isCostSettled: 'false', memo: '', createdAt: '2024-02-20T09:00:00.000Z', updatedAt: '2024-02-20T09:00:00.000Z' },
+      { id: 'DEL-003', contractId: 'CT-003', type: 'INBOUND', status: 'REQUESTED', requestDate: '2024-05-25', scheduledDate: '2024-05-31', transportCompany: '', vehicleNo: '', driverName: '', driverContact: '', deliveryCost: '0', isCostSettled: 'false', memo: '계약 만료 회수', createdAt: '2024-05-25T09:00:00.000Z', updatedAt: '2024-05-25T09:00:00.000Z' },
+    ],
   },
   {
     key: 'transportCompanies',
@@ -179,6 +220,11 @@ const TABLE_SCHEMAS: TableDef[] = [
       { key: 'contact', label: '연락처', type: 'string', required: false, example: '1588-0001' },
       { key: 'memo', label: '비고', type: 'string', required: false, example: '주요 파트너' },
       { key: 'createdAt', label: '생성일시', type: 'date', required: true, example: '2024-01-01T00:00:00.000Z' },
+    ],
+    sampleRows: [
+      { id: 'TC-001', name: '대한물류', businessNo: '123-45-67890', contact: '1588-0001', memo: '주요 파트너', createdAt: '2024-01-01T09:00:00.000Z' },
+      { id: 'TC-002', name: '민국운수', businessNo: '234-56-78901', contact: '1588-0002', memo: '', createdAt: '2024-01-01T09:00:00.000Z' },
+      { id: 'TC-003', name: '코리아트랜스', businessNo: '345-67-89012', contact: '02-9999-8888', memo: '대형 화물 전문', createdAt: '2024-03-01T09:00:00.000Z' },
     ],
   },
   {
@@ -193,6 +239,11 @@ const TABLE_SCHEMAS: TableDef[] = [
       { key: 'vehicleNo', label: '차량번호', type: 'string', required: false, example: '서울82가 1234' },
       { key: 'vehicleType', label: '차량종류', type: 'string', required: false, example: '5톤 셀프로더' },
       { key: 'createdAt', label: '생성일시', type: 'date', required: true, example: '2024-01-01T00:00:00.000Z' },
+    ],
+    sampleRows: [
+      { id: 'TD-001', companyId: 'TC-001', driverName: '홍길동', driverContact: '010-1111-1111', vehicleNo: '서울82가 1111', vehicleType: '5톤 셀프로더', createdAt: '2024-01-01T09:00:00.000Z' },
+      { id: 'TD-002', companyId: 'TC-002', driverName: '홍길동', driverContact: '010-2222-2222', vehicleNo: '경기99바 2222', vehicleType: '1톤 화물차', createdAt: '2024-01-01T09:00:00.000Z' },
+      { id: 'TD-003', companyId: 'TC-001', driverName: '김기사', driverContact: '010-3333-3333', vehicleNo: '서울82가 3333', vehicleType: '2.5톤', createdAt: '2024-01-01T09:00:00.000Z' },
     ],
   },
 ];
@@ -283,8 +334,16 @@ export const DevDataUploader: React.FC = () => {
   // ──── CSV 양식 다운로드 ────
   const handleDownloadTemplate = () => {
     const headers = schema.fields.map(f => f.key).join(',');
-    const example = schema.fields.map(f => `"${f.example}"`).join(',');
-    const csv = `${headers}\n${example}`;
+    // 샘플 행 생성: sampleRows가 있으면 사용, 없으면 example에서 1행 생성
+    let sampleLines: string;
+    if (schema.sampleRows && schema.sampleRows.length > 0) {
+      sampleLines = schema.sampleRows.map(row =>
+        schema.fields.map(f => `"${row[f.key] ?? ''}"`).join(',')
+      ).join('\n');
+    } else {
+      sampleLines = schema.fields.map(f => `"${f.example}"`).join(',');
+    }
+    const csv = `${headers}\n${sampleLines}`;
     const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
