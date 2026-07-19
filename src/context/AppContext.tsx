@@ -355,6 +355,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     });
 
+    // 신규 배차(Delivery) - 출고 대기 건 자동 생성
+    db.insertRow<Delivery>('deliveries', {
+      contractId: contract.id,
+      type: 'OUTBOUND',
+      status: 'REQUESTED',
+      requestDate: contract.startDate,
+      scheduledDate: data.loadingTime || contract.startDate,
+      transportCompany: '',
+      vehicleType: '',
+      vehicleNo: '',
+      driverName: '',
+      driverContact: '',
+      deliveryCost: 0,
+      isCostSettled: false,
+      memo: data.note || '',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    });
+
     refreshAllData();
     return { success: true };
   };

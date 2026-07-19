@@ -17,7 +17,7 @@ import { RentAssets } from './pages/RentAssets';
 import { Consumables } from './pages/Consumables';
 import { Contracts } from './pages/Contracts';
 import { Billings } from './pages/Billings';
-import { Deliveries } from './pages/Deliveries';
+import { TruckDispatch } from './pages/TruckDispatch';
 import { Repairs } from './pages/Repairs';
 import { SmartDispatch } from './pages/SmartDispatch';
 import { AssetAssignment } from './pages/AssetAssignment';
@@ -101,7 +101,7 @@ const App: React.FC = () => {
     { id: 'consumable', name: '소모품 관리', icon: <ShoppingBag size={18} />, component: <Consumables /> },
     { id: 'contract', name: '계약 관리', icon: <UserCheck size={18} />, component: <Contracts /> },
     { id: 'billing', name: '청구/수납 관리', icon: <CreditCard size={18} />, component: <Billings /> },
-    { id: 'delivery', name: '배차/운송 관리', icon: <Truck size={18} />, component: <Deliveries /> },
+    { id: 'delivery', name: '배차/운송 관리', icon: <Truck size={18} />, component: <TruckDispatch /> },
     { id: 'smart_dispatch', name: '스마트 출고 요청', icon: <Zap size={18} />, component: <SmartDispatch /> },
     { id: 'dispatch_assign', name: '장비 할당 (매핑)', icon: <Layers size={18} />, component: <AssetAssignment /> },
     { id: 'repair', name: '자산 정비수리', icon: <Wrench size={18} />, component: <Repairs /> },

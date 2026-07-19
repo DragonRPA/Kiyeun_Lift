@@ -238,14 +238,16 @@ export interface Payment {
 export interface Delivery {
   id: string;
   contractId?: string;
-  type: 'OUTBOUND' | 'INBOUND'; // 출고의뢰 / 회수의뢰
+  type: 'OUTBOUND' | 'INBOUND' | 'EXCHANGE' | 'MOVEMENT';
   status: 'REQUESTED' | 'DISPATCHED' | 'COMPLETED';
   requestDate: string;
   scheduledDate?: string;
-  vehicleType?: string; // 'cargo_truck' | 'self_loader'
+  transportCompany?: string; // 운송 거래처 (월 마감 및 정산용)
+  vehicleType?: string; // 예: 1톤, 2.5톤 등
+  vehicleNo?: string; // 차량 번호
   driverName?: string;
   driverContact?: string;
-  deliveryCost: number;
+  deliveryCost: number; // 확정 운송비 (청구 및 물류사 정산에 활용)
   isCostSettled: boolean;
   memo: string;
   createdAt: string;
