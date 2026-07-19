@@ -20,6 +20,7 @@ import { Billings } from './pages/Billings';
 import { Deliveries } from './pages/Deliveries';
 import { Repairs } from './pages/Repairs';
 import { SmartDispatch } from './pages/SmartDispatch';
+import { AssetAssignment } from './pages/AssetAssignment';
 import { OrganizationSettings } from './pages/OrganizationSettings';
 
 const App: React.FC = () => {
@@ -102,6 +103,7 @@ const App: React.FC = () => {
     { id: 'billing', name: '청구/수납 관리', icon: <CreditCard size={18} />, component: <Billings /> },
     { id: 'delivery', name: '배차/운송 관리', icon: <Truck size={18} />, component: <Deliveries /> },
     { id: 'smart_dispatch', name: '스마트 출고 요청', icon: <Zap size={18} />, component: <SmartDispatch /> },
+    { id: 'dispatch_assign', name: '장비 할당 (매핑)', icon: <Layers size={18} />, component: <AssetAssignment /> },
     { id: 'repair', name: '자산 정비수리', icon: <Wrench size={18} />, component: <Repairs /> },
     { id: 'organization', name: '조직/인사 관리', icon: <Users size={18} />, component: <OrganizationSettings /> },
     { id: 'permission', name: '사용자 및 권한', icon: <Shield size={18} />, component: <UsersPermissions /> }

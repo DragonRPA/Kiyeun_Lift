@@ -40,7 +40,7 @@ const STANDARD_SPECS: SpecItem[] = [
 ];
 
 export const SmartDispatch: React.FC = () => {
-  const { hasPermission } = useApp();
+  const { hasPermission, saveSmartDispatch, assets } = useApp();
   const canSave = hasPermission('delivery', 'save');
 
   // 원본 텍스트 입력 상태
@@ -121,6 +121,10 @@ export const SmartDispatch: React.FC = () => {
   const [closingDay, setClosingDay] = useState('');
   const [paymentDay, setPaymentDay] = useState('');
   const [note, setNote] = useState('');
+  const [isCopied, setIsCopied] = useState(false);
+
+  // 유니크 모델명 목록 추출
+  const uniqueModels = Array.from(new Set(assets.map(a => a.modelName).filter(Boolean))).sort();
 
   // 프리뷰 탭 관리
   const [previewTab, setPreviewTab] = useState<'SHEET' | 'TEXT' | 'JSON'>('SHEET');
@@ -547,6 +551,37 @@ ${activeSpecs.map((s, idx) => `  ${idx + 1}. [적용] ${s.label}`).join('\n') ||
     }
   }, []);
 
+  const handleSave = async () => {
+    if (!canSave) {
+      alert('저장 권한이 없습니다.');
+      return;
+    }
+    if (!customerName || !siteName) {
+      alert('파싱된 결과에 고객사명과 현장명이 없습니다.');
+      return;
+    }
+
+    const data = {
+      customerName, siteName, siteAddress, siteContactName, siteContactPhone, siteContactEmail,
+      billingContactName, billingContactPhone, statementEmail, taxBillEmail,
+      loadingTime, unloadingTime, equipments, note
+    };
+
+    let result = await saveSmartDispatch(data, false);
+    if (result.requiresConfirm) {
+      if (confirm(`다음 정보가 데이터베이스에 없습니다.\n${result.missingFields?.join('\n')}\n\n※안내: 배차(물류 배송) 지시와 장비 할당(고유 장비 매핑)은 별개의 권한으로 독립적으로 작동합니다.\n\n신규로 자동 등록하고 출고 지시를 저장하시겠습니까?`)) {
+        result = await saveSmartDispatch(data, true);
+      } else {
+        return;
+      }
+    }
+
+    if (result.success) {
+      alert('출고 지시 1건이 생성되었습니다.\n[배차 관리] 담당자가 빈칸에 구체적인 장비 번호를 할당할 예정입니다.');
+      setRawText('');
+    }
+  };
+
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '20px' }}>
       
@@ -554,11 +589,25 @@ ${activeSpecs.map((s, idx) => `  ${idx + 1}. [적용] ${s.label}`).join('\n') ||
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
           <h2 style={{ fontWeight: '700', marginBottom: '4px' }}>스마트 출고 요청 입력 (디지털 파서)</h2>
-          <p style={{ fontSize: '13px', color: 'var(--text-muted)' }}>카카오톡/메신저로 전송받은 비정형 출고 의뢰 텍스트를 AI 없이 브라우저 단독 정규식으로 안전하게 분할 분석합니다.</p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <p style={{ fontSize: '13px', color: 'var(--text-muted)', margin: 0 }}>카카오톡/메신저로 전송받은 비정형 출고 의뢰 텍스트를 AI 없이 브라우저 단독 정규식으로 안전하게 분할 분석합니다.</p>
+            <span className="badge badge-success" style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px' }}>
+              <Zap size={12} /> AI-less Deterministic Parser
+            </span>
+          </div>
         </div>
-        <span className="badge badge-success" style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '13px' }}>
-          <Zap size={14} /> AI-less Deterministic Parser
-        </span>
+        
+        {/* 액션 버튼 상단 배치 */}
+        <div style={{ display: 'flex', gap: '10px' }}>
+          <button type="button" className="btn-secondary" onClick={() => setRawText('')} style={{ padding: '8px 16px', fontSize: '14px' }}>
+            초기화
+          </button>
+          {canSave && (
+            <button type="button" className="btn-primary" onClick={handleSave} style={{ padding: '8px 16px', fontSize: '14px', fontWeight: 'bold' }}>
+              출고 지시 (자동 생성 및 저장)
+            </button>
+          )}
+        </div>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '20px', alignItems: 'start' }}>
@@ -682,7 +731,8 @@ ${activeSpecs.map((s, idx) => `  ${idx + 1}. [적용] ${s.label}`).join('\n') ||
                   <div key={index} style={{ display: 'flex', gap: '8px', marginBottom: '6px', alignItems: 'center' }}>
                     <input
                       type="text"
-                      placeholder="모델명 (예: GS3246)"
+                      list="unique-models"
+                      placeholder="모델 선택 또는 직접 입력 (예: GS3246)"
                       value={eq.modelName}
                       onChange={e => handleEquipmentChange(index, 'modelName', e.target.value)}
                       style={{ flex: 2 }}
@@ -702,6 +752,13 @@ ${activeSpecs.map((s, idx) => `  ${idx + 1}. [적용] ${s.label}`).join('\n') ||
                     )}
                   </div>
                 ))}
+                
+                {/* 콤보박스 자동완성(Datalist) 데이터 */}
+                <datalist id="unique-models">
+                  {uniqueModels.map(model => (
+                    <option key={model} value={model} />
+                  ))}
+                </datalist>
               </div>
             </div>
 

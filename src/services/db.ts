@@ -92,6 +92,8 @@ export interface Asset {
   ownerType: 'OWNED' | 'RENTED'; // 당사자산 / 임차자산
   status: 'AVAILABLE' | 'RENTED' | 'REPAIRING' | 'RENTED_RETURNED' | 'SOLD';
   
+  maintenanceScore?: number; // 정비 소요 점수 (0이 최상 상태)
+
   // 현재 계약 상태 (타 메뉴 비즈니스 연동 시 변경됨)
   currentCustomerId?: string;
   currentSiteId?: string;
@@ -158,7 +160,8 @@ export interface ConsumableLog {
 export interface ContractAsset {
   id: string;
   contractId: string;
-  assetId: string;
+  assetId?: string;
+  expectedModel?: string;
   monthlyRentalFee: number;
   dailyRentalFee: number;
   startDate: string;
@@ -275,6 +278,17 @@ export interface Repair {
   consumables?: RepairConsumable[];
 }
 
+export interface Todo {
+  id: string;
+  userId: string;
+  type: 'MISSING_INFO' | 'GENERAL';
+  title: string;
+  content: string;
+  isCompleted: boolean;
+  relatedEntityId?: string; // 고객사 ID 등
+  createdAt: string;
+}
+
 // 초기 로컬 스토리지 데이터 생성
 const generateMockProducts = (): Product[] => {
   return [
@@ -350,10 +364,37 @@ const generateMockAssets = (products: Product[]): Asset[] => {
       bookValue: 15000000,
       cumRentalFee: 0,
       cumRepairCost: 0,
+      maintenanceScore: Math.floor(Math.random() * 51), // 0 ~ 50 무작위 점수
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     });
   }
+  
+  // 20개 강제 장비 생성 (스마트 출고 테스트용: GS3246, 1012E 등)
+  const extraModels = ['GS3246', 'GS3246', 'GS3246', 'GS3246', 'GS3246', 'GS3246', 'GS3246', 'GS3246', 'GS3246', 'GS3246',
+                       '1012E', '1012E', '1012E', '1012E', '1012E', '1012E', '1012E', '1012E', '1012E', '1012E'];
+  for(let i=0; i<extraModels.length; i++) {
+    const assetId = 101 + i;
+    assets.push({
+      id: `asset-${assetId}`,
+      modelName: extraModels[i],
+      assetNo: `EQ-${assetId.toString().padStart(4, '0')}`,
+      ownerType: 'OWNED',
+      status: 'AVAILABLE',
+      acquisitionDate: '2023-01-01',
+      acquisitionPrice: 15000000,
+      depreciationMonths: 60,
+      residualValueRate: 10,
+      accumDepreciation: 0,
+      bookValue: 15000000,
+      cumRentalFee: 0,
+      cumRepairCost: 0,
+      maintenanceScore: Math.floor(Math.random() * 51),
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    });
+  }
+
   return assets;
 };
 
@@ -435,6 +476,7 @@ const SEED_PAYMENTS: Payment[] = [];
 const SEED_REPAIRS: Repair[] = [];
 const SEED_REPAIR_CONSUMABLES: RepairConsumable[] = [];
 const SEED_CONTRACT_HISTORY: ContractHistory[] = [];
+const SEED_TODOS: Todo[] = [];
 
 class LocalDB {
   private get<T>(key: string, seed: T[]): T[] {
@@ -506,6 +548,9 @@ class LocalDB {
 
   get repairConsumables() { return this.get<RepairConsumable>('repairConsumables', SEED_REPAIR_CONSUMABLES); }
   set repairConsumables(val: RepairConsumable[]) { this.set('repairConsumables', val); }
+
+  get todos() { return this.get<Todo>('todos', SEED_TODOS); }
+  set todos(val: Todo[]) { this.set('todos', val); }
 
   // Supabase 테이블 맵핑
   private mapToSupabaseTable(key: string): string {

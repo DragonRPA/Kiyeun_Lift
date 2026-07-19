@@ -1,10 +1,12 @@
 // d:\Kiyeun_Lift\src\pages\Dashboard.tsx
 import React from 'react';
 import { useApp } from '../context/AppContext';
-import { Activity, ShieldAlert, Users, Layers, ShieldCheck, Wrench, Truck, CreditCard, ShoppingBag } from 'lucide-react';
+import { Activity, ShieldAlert, Users, Layers, ShieldCheck, Wrench, Truck, CreditCard, ShoppingBag, CheckCircle, Bell } from 'lucide-react';
 
 export const Dashboard: React.FC = () => {
-  const { assets, contracts, consumables, repairs, deliveries, billings, customers } = useApp();
+  const { currentUser, assets, contracts, consumables, repairs, deliveries, billings, customers, todos, completeTodo } = useApp();
+
+  const myTodos = todos.filter(t => t.userId === currentUser?.id && !t.isCompleted);
 
   const totalAssets = assets.length;
   const rentedAssets = assets.filter(a => a.status === 'RENTED').length;
@@ -75,6 +77,33 @@ export const Dashboard: React.FC = () => {
           🔄 테스트 데이터 강제 리셋 (100대/13건 주입)
         </button>
       </div>
+
+      {/* 나의 할 일 (Todo) 알림 패널 */}
+      {myTodos.length > 0 && (
+        <div style={{ backgroundColor: '#fffbe1', border: '1px solid #fde047', borderRadius: '8px', padding: '16px', marginBottom: '24px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#b45309', fontWeight: 'bold' }}>
+            <Bell size={18} />
+            <span>나의 할 일 (정보 보완 요망) - {myTodos.length}건</span>
+          </div>
+          <div style={{ display: 'grid', gap: '8px' }}>
+            {myTodos.map(todo => (
+              <div key={todo.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#fff', padding: '12px', borderRadius: '6px', border: '1px solid #fef08a' }}>
+                <div>
+                  <div style={{ fontWeight: '600', fontSize: '14px', color: '#92400e' }}>{todo.title}</div>
+                  <div style={{ fontSize: '12px', color: '#b45309', marginTop: '4px' }}>{todo.content}</div>
+                </div>
+                <button 
+                  className="btn-primary"
+                  style={{ padding: '6px 12px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px' }}
+                  onClick={() => completeTodo(todo.id)}
+                >
+                  <CheckCircle size={14} /> 확인 (보완 완료)
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* KPI 그리드 */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '20px', marginBottom: '30px' }}>
