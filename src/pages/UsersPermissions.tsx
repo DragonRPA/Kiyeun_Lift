@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { Shield } from 'lucide-react';
-import { User, db } from '../services/db';
+import { User, MenuPermission, db } from '../services/db';
 
 export const UsersPermissions: React.FC = () => {
   const { permissions, updatePermissions, hasPermission, currentUser } = useApp();
@@ -143,7 +143,7 @@ export const UsersPermissions: React.FC = () => {
     // 1. 유저 Role 일괄 저장
     const realUsers = localUsers.filter(u => u.id !== 'sys-admin');
     realUsers.forEach(u => {
-      db.updateRow('users', u.id, { role: u.role });
+      db.updateRow<User>('users', u.id, { role: u.role });
     });
     
     // 2. 권한 일괄 저장

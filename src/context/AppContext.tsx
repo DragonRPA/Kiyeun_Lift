@@ -188,7 +188,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (loginId === 'admin' && passwordHash === 'admin123') {
       const fallbackAdmin: User = { 
         id: 'sys-admin', loginId: 'admin', passwordHash: 'admin123', 
-        name: '최고관리자', department: '시스템', role: 'ADMIN', createdAt: new Date().toISOString() 
+        name: '최고관리자', department: '시스템', departmentId: '', role: 'ADMIN', createdAt: new Date().toISOString() 
       };
       setCurrentUser(fallbackAdmin);
       sessionStorage.setItem('user', JSON.stringify(fallbackAdmin));
@@ -301,6 +301,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         representative: '미상',
         repContact: '미상',
         repEmail: '미상',
+        createdAt: new Date().toISOString()
       });
       
       if (data.siteContactName) {
@@ -309,7 +310,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           name: data.siteContactName,
           position: '담당자',
           contact: data.siteContactPhone || '미상',
-          email: data.siteContactEmail || '미상'
+          email: data.siteContactEmail || '미상',
+          createdAt: new Date().toISOString()
         });
       }
     }
@@ -321,7 +323,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         address: data.siteAddress || '미상',
         contactName: data.siteContactName || '미상',
         contact: data.siteContactPhone || '미상',
-        email: data.siteContactEmail || '미상'
+        email: data.siteContactEmail || '미상',
+        createdAt: new Date().toISOString()
       });
     }
 
@@ -641,7 +644,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
 
     db.insertRow<Delivery>('deliveries', {
-      contractId: contract.id,
+      contractId: contract.id || '',
       type: 'OUTBOUND',
       status: 'REQUESTED',
       requestDate: new Date().toISOString().split('T')[0],
@@ -670,10 +673,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const cAssets = db.contractAssets.filter(ca => ca.contractId === contractId);
     cAssets.forEach(ca => {
       db.updateRow<ContractAsset>('contractAssets', ca.id, { endDate: newEndDate });
-      db.updateRow<Asset>('assets', ca.assetId, {
-        contractEnd: newEndDate,
-        updatedAt: new Date().toISOString()
-      });
+      if (ca.assetId) {
+        db.updateRow<Asset>('assets', ca.assetId, {
+          contractEnd: newEndDate,
+          updatedAt: new Date().toISOString()
+        });
+      }
     });
 
     db.insertRow<ContractHistory>('contractHistory', {
@@ -704,10 +709,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const cAssets = db.contractAssets.filter(ca => ca.contractId === contractId);
     cAssets.forEach(ca => {
       db.updateRow<ContractAsset>('contractAssets', ca.id, { endDate: newEndDate });
-      db.updateRow<Asset>('assets', ca.assetId, {
-        contractEnd: newEndDate,
-        updatedAt: new Date().toISOString()
-      });
+      if (ca.assetId) {
+        db.updateRow<Asset>('assets', ca.assetId, {
+          contractEnd: newEndDate,
+          updatedAt: new Date().toISOString()
+        });
+      }
     });
 
     db.insertRow<ContractHistory>('contractHistory', {
@@ -721,7 +728,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
 
     db.insertRow<Delivery>('deliveries', {
-      contractId: contract.id,
+      contractId: contract.id || '',
       type: 'INBOUND',
       status: 'REQUESTED',
       requestDate: new Date().toISOString().split('T')[0],
@@ -795,13 +802,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         createdAt: new Date().toISOString()
       });
 
-      db.updateRow<Asset>('assets', ca.assetId, {
-        currentCustomerId: successorCustomerId,
-        currentSiteId: successorSiteId,
-        contractStart: nextDay,
-        contractEnd: oldEndDate,
-        updatedAt: new Date().toISOString()
-      });
+      if (ca.assetId) {
+        db.updateRow<Asset>('assets', ca.assetId, {
+          currentCustomerId: successorCustomerId,
+          currentSiteId: successorSiteId,
+          contractStart: nextDay,
+          contractEnd: oldEndDate,
+          updatedAt: new Date().toISOString()
+        });
+      }
     });
 
     db.insertRow<ContractHistory>('contractHistory', {
@@ -823,8 +832,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     
     // 1. ContractAsset 업데이트
     db.updateRow<ContractAsset>('contractAssets', contractAssetId, {
-      assetId: assetId,
-      updatedAt: new Date().toISOString()
+      assetId: assetId
     });
 
     // 2. Asset 상태 업데이트
@@ -1102,10 +1110,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     refreshAllData();
-  };
-
-  const registerRepair = (repairData: Partial<Repair>, usedConsumables: { consumableId: string; quantity: number }[]) => {
-    // ... logic is assumed to be below this ...
   };
 
   const saveTransportDataOnFly = (companyName: string, driverName: string, contact: string, vehicleNo: string, vehicleType: string) => {

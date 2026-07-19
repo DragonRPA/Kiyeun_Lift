@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { useApp } from './context/AppContext';
 import {
   LayoutDashboard, Users, UserCheck, Package, Layers, PlusCircle,
-  Truck, Wrench, Shield, ShoppingBag, CreditCard, LogOut, Sun, Moon, Menu, X, Zap
+  Truck, Wrench, Shield, ShoppingBag, CreditCard, LogOut, Sun, Moon, Menu, X, Zap, Settings
 } from 'lucide-react';
 
 // 페이지 컴포넌트 임포트
