@@ -254,6 +254,25 @@ export interface Delivery {
   updatedAt: string;
 }
 
+export interface TransportCompany {
+  id: string;
+  name: string;
+  businessNo: string;
+  contact: string;
+  memo: string;
+  createdAt: string;
+}
+
+export interface TransportDriver {
+  id: string;
+  companyId: string; // TransportCompany.id
+  driverName: string;
+  driverContact: string;
+  vehicleNo: string;
+  vehicleType: string;
+  createdAt: string;
+}
+
 export interface RepairConsumable {
   id: string;
   repairId: string;
@@ -472,6 +491,15 @@ const SEED_CONSUMABLE_LOGS: ConsumableLog[] = [];
 const SEED_CONTRACTS: Contract[] = mockDataCont.contracts;
 const SEED_CONTRACT_ASSETS: ContractAsset[] = mockDataCont.contractAssets;
 const SEED_DELIVERIES: Delivery[] = [];
+const SEED_TRANSPORT_COMPANIES: TransportCompany[] = [
+  { id: 'TC-001', name: '대한물류', businessNo: '123-45-67890', contact: '1588-0001', memo: '주요 파트너', createdAt: new Date().toISOString() },
+  { id: 'TC-002', name: '민국운수', businessNo: '234-56-78901', contact: '1588-0002', memo: '', createdAt: new Date().toISOString() }
+];
+const SEED_TRANSPORT_DRIVERS: TransportDriver[] = [
+  { id: 'TD-001', companyId: 'TC-001', driverName: '홍길동', driverContact: '010-1111-1111', vehicleNo: '서울82가 1111', vehicleType: '5톤 셀프로더', createdAt: new Date().toISOString() },
+  { id: 'TD-002', companyId: 'TC-002', driverName: '홍길동', driverContact: '010-2222-2222', vehicleNo: '경기99바 2222', vehicleType: '1톤 화물차', createdAt: new Date().toISOString() },
+  { id: 'TD-003', companyId: 'TC-001', driverName: '김기사', driverContact: '010-3333-3333', vehicleNo: '서울82가 3333', vehicleType: '2.5톤', createdAt: new Date().toISOString() }
+];
 const SEED_BILLINGS: Billing[] = [];
 const SEED_BILLING_DETAILS: BillingDetail[] = [];
 const SEED_PAYMENTS: Payment[] = [];
@@ -536,6 +564,12 @@ class LocalDB {
   get deliveries() { return this.get<Delivery>('deliveries', SEED_DELIVERIES); }
   set deliveries(val: Delivery[]) { this.set('deliveries', val); }
 
+  get transportCompanies() { return this.get<TransportCompany>('transportCompanies', SEED_TRANSPORT_COMPANIES); }
+  set transportCompanies(val: TransportCompany[]) { this.set('transportCompanies', val); }
+
+  get transportDrivers() { return this.get<TransportDriver>('transportDrivers', SEED_TRANSPORT_DRIVERS); }
+  set transportDrivers(val: TransportDriver[]) { this.set('transportDrivers', val); }
+
   get billings() { return this.get<Billing>('billings', SEED_BILLINGS); }
   set billings(val: Billing[]) { this.set('billings', val); }
 
@@ -568,9 +602,11 @@ class LocalDB {
       consumables: 'consumables',
       consumableLogs: 'consumable_logs',
       contracts: 'contracts',
-      contractAssets: 'contract_assets',
-      contractHistory: 'contract_history',
+      contractAssets: 'contractAssets',
+      contractHistory: 'contractHistory',
       deliveries: 'deliveries',
+      transportCompanies: 'transportCompanies',
+      transportDrivers: 'transportDrivers',
       billings: 'billings',
       billingDetails: 'billing_details',
       payments: 'payments',
@@ -604,7 +640,8 @@ class LocalDB {
       'users', 'departments', 'permissions', 'customers', 'contacts', 'sites', 
       'products', 'assets', 'consumables', 'consumableLogs', 
       'contracts', 'contractAssets', 'contractHistory', 'deliveries', 
-      'billings', 'billingDetails', 'payments', 'repairs', 'repairConsumables'
+      'transportCompanies', 'transportDrivers',
+      'billings', 'billingDetails', 'payments', 'repairs', 'repairConsumables', 'todos'
     ];
 
     try {

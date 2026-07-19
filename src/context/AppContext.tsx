@@ -1,6 +1,6 @@
 // d:\Kiyeun_Lift\src\context\AppContext.tsx
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { db, User, MenuPermission, Customer, CustomerContact, CustomerSite, Product, Asset, Consumable, ConsumableLog, Contract, ContractAsset, ContractHistory, Billing, BillingDetail, Payment, Delivery, Repair, RepairConsumable, Todo } from '../services/db';
+import { db, User, MenuPermission, Customer, CustomerContact, CustomerSite, Product, Asset, Consumable, ConsumableLog, Contract, ContractAsset, ContractHistory, Billing, BillingDetail, Payment, Delivery, TransportCompany, TransportDriver, Repair, RepairConsumable, Todo } from '../services/db';
 
 export interface SmartDispatchData {
   customerName: string;
@@ -41,6 +41,8 @@ interface AppContextType {
   contractAssets: ContractAsset[];
   contractHistory: ContractHistory[];
   deliveries: Delivery[];
+  transportCompanies: TransportCompany[];
+  transportDrivers: TransportDriver[];
   billings: Billing[];
   billingDetails: BillingDetail[];
   payments: Payment[];
@@ -92,6 +94,9 @@ interface AppContextType {
   
   // Repairs
   registerRepair: (repairData: Partial<Repair>, usedConsumables: { consumableId: string; quantity: number }[]) => void;
+  
+  // Transport Master
+  saveTransportDataOnFly: (companyName: string, driverName: string, contact: string, vehicleNo: string, vehicleType: string) => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -114,6 +119,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [contractAssets, setContractAssets] = useState<ContractAsset[]>([]);
   const [contractHistory, setContractHistory] = useState<ContractHistory[]>([]);
   const [deliveries, setDeliveries] = useState<Delivery[]>([]);
+  const [transportCompanies, setTransportCompanies] = useState<TransportCompany[]>([]);
+  const [transportDrivers, setTransportDrivers] = useState<TransportDriver[]>([]);
   const [billings, setBillings] = useState<Billing[]>([]);
   const [billingDetails, setBillingDetails] = useState<BillingDetail[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
@@ -142,6 +149,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setContractAssets(db.contractAssets);
     setContractHistory(db.contractHistory);
     setDeliveries(db.deliveries);
+    setTransportCompanies(db.transportCompanies);
+    setTransportDrivers(db.transportDrivers);
     setBillings(db.billings);
     setBillingDetails(db.billingDetails);
     setPayments(db.payments);
@@ -1095,10 +1104,56 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     refreshAllData();
   };
 
+  const registerRepair = (repairData: Partial<Repair>, usedConsumables: { consumableId: string; quantity: number }[]) => {
+    // ... logic is assumed to be below this ...
+  };
+
+  const saveTransportDataOnFly = (companyName: string, driverName: string, contact: string, vehicleNo: string, vehicleType: string) => {
+    if (!companyName && !driverName) return;
+
+    let companyId = '';
+    
+    // 1. 운송업체 처리
+    if (companyName) {
+      const existingCompany = db.transportCompanies.find(c => c.name === companyName);
+      if (existingCompany) {
+        companyId = existingCompany.id;
+      } else {
+        const newCompany = db.insertRow<TransportCompany>('transportCompanies', {
+          name: companyName,
+          businessNo: '',
+          contact: contact || '',
+          memo: '자동 추가됨',
+          createdAt: new Date().toISOString()
+        });
+        companyId = newCompany.id;
+      }
+    }
+
+    // 2. 기사 처리
+    if (driverName) {
+      const existingDriver = db.transportDrivers.find(d => 
+        d.driverName === driverName && (companyId ? d.companyId === companyId : true)
+      );
+      if (!existingDriver) {
+        db.insertRow<TransportDriver>('transportDrivers', {
+          companyId: companyId,
+          driverName: driverName,
+          driverContact: contact || '',
+          vehicleNo: vehicleNo || '',
+          vehicleType: vehicleType || '',
+          createdAt: new Date().toISOString()
+        });
+      }
+    }
+    
+    refreshAllData();
+  };
+
   return (
     <AppContext.Provider value={{
       currentUser, theme, toggleTheme, login, logout, hasPermission,
-      users, permissions, customers, contacts, sites, products, assets, consumables, consumableLogs, contracts, contractAssets, contractHistory, deliveries, billings, billingDetails, payments, repairs, repairConsumables, todos,
+      users, permissions, customers, contacts, sites, products, assets, consumables, consumableLogs, contracts, contractAssets, contractHistory, deliveries, billings, billingDetails, payments, repairs, repairConsumables, transportCompanies, transportDrivers, todos,
       refreshAllData, updatePermissions, saveUser, saveCustomer, saveContact, saveSite, saveProduct,
       acquireAsset, disposeAsset, registerRentedAsset, returnRentedAsset,
       purchaseConsumable, useConsumable,
@@ -1106,9 +1161,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       assignAssetToContract,
       saveSmartDispatch,
       completeTodo,
-      generateBillingsForMonth, receivePayment, approveBilling, rejectBilling,
+      generateBillingsForMonth, approveBilling, rejectBilling, receivePayment,
       dispatchDelivery, settleDeliveryCost,
-      registerRepair, completeTodo
+      registerRepair,
+      saveTransportDataOnFly
     }}>
       {children}
     </AppContext.Provider>
