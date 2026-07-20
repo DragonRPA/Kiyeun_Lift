@@ -1,5 +1,5 @@
 // d:\Kiyeun_Lift\src\pages\Consumables.tsx
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useApp } from '../context/AppContext';
 import { ShoppingCart, Hammer, ListCollapse, Layers, Plus, ClipboardList, PackagePlus, CheckCircle2, XCircle, Search, Download, FileText, Camera, Upload, RefreshCw } from 'lucide-react';
 import { exportToExcel } from '../services/excel';
@@ -41,10 +41,12 @@ export const Consumables: React.FC = () => {
   const [selectedReqId, setSelectedReqId] = useState('');
   const [inboundQty, setInboundQty] = useState(1);
   const [uploadMethod, setUploadMethod] = useState<'PC' | 'MOBILE'>('PC');
-  const [filePath, setFilePath] = useState('');
-  const [photoName, setPhotoName] = useState('');
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploadedFileUrl, setUploadedFileUrl] = useState('');
   const [isUploading, setIsUploading] = useState(false);
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
 
   // --- [4] 소모품 사용(Use) 폼 상태 ---
   const [useConsumableId, setUseConsumableId] = useState('');
@@ -171,15 +173,31 @@ export const Consumables: React.FC = () => {
     setActiveTab('REQ_LIST');
   };
 
-  // --- 증빙 파일 가상 업로드 핸들러 (구글드라이브 저장 시뮬레이션) ---
-  const handleUploadProof = () => {
-    const filename = uploadMethod === 'PC' ? filePath : photoName;
-    if (!filename) {
-      alert('업로드할 파일 경로 또는 사진 파일명을 입력해 주세요.');
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      setSelectedFile(e.target.files[0]);
+    }
+  };
+
+  // --- 입고 확정 처리 (제출 시 업로드 수행) ---
+  const handleInboundConfirmSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!canSave) return;
+    if (!selectedReqId || inboundQty <= 0) {
+      alert('입고할 신청건을 선택하고 입고 수량을 지정해 주세요.');
+      return;
+    }
+    if (!selectedFile) {
+      alert('공급자 거래명세서 증빙 파일을 먼저 지정해 주세요.');
       return;
     }
 
     setIsUploading(true);
+
+    const inboundNo = `INB-${new Date().toISOString().split('T')[0].replace(/-/g, '')}-${Math.floor(100 + Math.random() * 900)}`;
+    const originalName = selectedFile.name;
+    const ext = originalName.split('.').pop() || 'pdf';
+    const newFileName = `소모품입고_${inboundNo}_${new Date().toISOString().split('T')[0]}.${ext}`;
 
     setTimeout(() => {
       // 1. 소모품납품증빙 폴더가 있는지 체크하고 없으면 생성
@@ -188,40 +206,24 @@ export const Consumables: React.FC = () => {
         folder = drive.createFolder('소모품납품증빙', 'root');
       }
 
-      // 2. 구글드라이브에 업로드
-      const ext = filename.split('.').pop() || 'png';
+      // 2. 구글드라이브에 가상 파일 업로드
       const mockFile = drive.uploadFile(
-        filename.split('\\').pop() || filename,
-        ext.toLowerCase() === 'pdf' ? 'application/pdf' : 'image/jpeg',
-        '1.2MB',
+        newFileName,
+        selectedFile.type || (ext.toLowerCase() === 'pdf' ? 'application/pdf' : 'image/jpeg'),
+        `${(selectedFile.size / 1024 / 1024).toFixed(2)}MB`,
         folder.id
       );
 
-      setUploadedFileUrl(mockFile.webViewLink);
+      inboundConsumablePurchase(selectedReqId, inboundQty, mockFile.webViewLink);
       setIsUploading(false);
-      alert(`공급자 거래명세서가 구글드라이브 [소모품납품증빙] 폴더에 업로드 완료되었습니다.\n파일명: ${mockFile.name}`);
+      alert(`소모품 입고 처리가 완료되었습니다.\n거래명세서가 구글드라이브 [소모품납품증빙] 폴더에 안전하게 보존되었습니다.\n저장된 파일명: ${newFileName}`);
+      
+      // 리셋
+      setSelectedReqId('');
+      setInboundQty(1);
+      setSelectedFile(null);
+      setActiveTab('STOCK');
     }, 1000);
-  };
-
-  // --- 입고 확정 처리 ---
-  const handleInboundConfirmSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!canSave) return;
-    if (!selectedReqId || inboundQty <= 0 || !uploadedFileUrl) {
-      alert('입고할 신청건을 선택하고, 입고 수량 및 공급자 거래명세서 증빙을 반드시 업로드해 주세요.');
-      return;
-    }
-
-    inboundConsumablePurchase(selectedReqId, inboundQty, uploadedFileUrl);
-    alert('소모품 입고 처리가 완료되어 재고 대장에 누적 반영되었습니다.');
-    
-    // 리셋
-    setSelectedReqId('');
-    setInboundQty(1);
-    setFilePath('');
-    setPhotoName('');
-    setUploadedFileUrl('');
-    setActiveTab('STOCK');
   };
 
 
@@ -671,8 +673,7 @@ export const Consumables: React.FC = () => {
                   } else {
                     setInboundQty(1);
                   }
-                  setFilePath('');
-                  setPhotoName('');
+                  setSelectedFile(null);
                   setUploadedFileUrl('');
                 }} required>
                   <option value="">-- 입고할 완료된 구매신청 선택 --</option>
@@ -727,63 +728,73 @@ export const Consumables: React.FC = () => {
 
                     <div style={{ display: 'flex', gap: '16px', marginBottom: '12px', fontSize: '13px' }}>
                       <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
-                        <input type="radio" name="uploadMethod" checked={uploadMethod === 'PC'} onChange={() => setUploadMethod('PC')} />
+                        <input type="radio" name="uploadMethod" checked={uploadMethod === 'PC'} onChange={() => { setUploadMethod('PC'); setSelectedFile(null); }} />
                         PC 파일 지정 업로드
                       </label>
                       <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
-                        <input type="radio" name="uploadMethod" checked={uploadMethod === 'MOBILE'} onChange={() => setUploadMethod('MOBILE')} />
+                        <input type="radio" name="uploadMethod" checked={uploadMethod === 'MOBILE'} onChange={() => { setUploadMethod('MOBILE'); setSelectedFile(null); }} />
                         핸드폰 카메라 사진 촬영 업로드
                       </label>
                     </div>
 
                     <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                       {uploadMethod === 'PC' ? (
-                        <div style={{ flex: 1, position: 'relative' }}>
+                        <div>
+                          <button
+                            type="button"
+                            className="btn-secondary"
+                            onClick={() => fileInputRef.current?.click()}
+                            style={{ display: 'flex', alignItems: 'center', gap: '6px', height: '38px' }}
+                          >
+                            <Upload size={14} /> 거래명세서 파일 선택 (PDF/이미지)
+                          </button>
                           <input
-                            type="text"
-                            value={filePath}
-                            onChange={e => setFilePath(e.target.value)}
-                            placeholder="예: C:\Users\Downloads\invoice_sebang.pdf"
-                            style={{ paddingLeft: '32px' }}
+                            type="file"
+                            ref={fileInputRef}
+                            onChange={handleFileChange}
+                            style={{ display: 'none' }}
+                            accept="application/pdf,image/*"
                           />
-                          <Upload size={14} style={{ position: 'absolute', left: '10px', top: '12px', color: 'var(--text-muted)' }} />
                         </div>
                       ) : (
-                        <div style={{ flex: 1, position: 'relative' }}>
+                        <div>
+                          <button
+                            type="button"
+                            className="btn-secondary"
+                            onClick={() => cameraInputRef.current?.click()}
+                            style={{ display: 'flex', alignItems: 'center', gap: '6px', height: '38px' }}
+                          >
+                            <Camera size={14} /> 사진 촬영하기
+                          </button>
                           <input
-                            type="text"
-                            value={photoName}
-                            onChange={e => setPhotoName(e.target.value)}
-                            placeholder="촬영된 사진 파일명 (예: IMG_20260720_001.jpg)"
-                            style={{ paddingLeft: '32px' }}
+                            type="file"
+                            ref={cameraInputRef}
+                            onChange={handleFileChange}
+                            style={{ display: 'none' }}
+                            accept="image/*"
+                            capture="environment"
                           />
-                          <Camera size={14} style={{ position: 'absolute', left: '10px', top: '12px', color: 'var(--text-muted)' }} />
                         </div>
                       )}
 
-                      <button
-                        type="button"
-                        className="btn-secondary"
-                        onClick={handleUploadProof}
-                        disabled={isUploading}
-                        style={{ height: '38px', whiteSpace: 'nowrap' }}
-                      >
-                        {isUploading ? <RefreshCw size={14} className="animate-spin" /> : '증빙 업로드'}
-                      </button>
+                      {selectedFile && (
+                        <span style={{ fontSize: '13px', color: 'var(--text-main)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '300px' }}>
+                          선택됨: <strong>{selectedFile.name}</strong> ({((selectedFile.size || 0) / 1024).toFixed(1)} KB)
+                        </span>
+                      )}
                     </div>
 
-                    {uploadedFileUrl ? (
-                      <div style={{ marginTop: '10px', display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--success)', fontSize: '12.5px', fontWeight: '600' }}>
-                        <CheckCircle2 size={16} /> 구글드라이브 [소모품납품증빙] 폴더 업로드 성공!
-                        <a href={uploadedFileUrl} target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'underline', color: 'var(--primary)', marginLeft: '6px' }}>
-                          업로드된 파일 보기
-                        </a>
-                      </div>
-                    ) : (
-                      <div style={{ marginTop: '10px', display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--danger)', fontSize: '12px' }}>
-                        <XCircle size={14} /> 거래명세서 증빙 업로드가 완료되어야 입고 처리가 가능합니다.
-                      </div>
-                    )}
+                    <div style={{ marginTop: '10px', display: 'flex', alignItems: 'center', gap: '6px', color: selectedFile ? 'var(--success)' : 'var(--danger)', fontSize: '12.5px', fontWeight: '600' }}>
+                      {selectedFile ? (
+                        <>
+                          <CheckCircle2 size={16} /> 증빙이 선택되었습니다. [입고완료] 클릭 시 소모품입고번호 형식으로 변환하여 구글 드라이브에 자동 업로드됩니다.
+                        </>
+                      ) : (
+                        <>
+                          <XCircle size={14} /> 거래명세서 증빙 업로드가 필수입니다. 파일을 지정해 주세요.
+                        </>
+                      )}
+                    </div>
                   </div>
                 </>
               )}
@@ -791,8 +802,14 @@ export const Consumables: React.FC = () => {
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
               <button type="button" className="btn-secondary" onClick={() => setActiveTab('STOCK')}>취소</button>
-              <button type="submit" className="btn-primary" disabled={!uploadedFileUrl || inboundQty <= 0}>
-                입고 확정 및 입고처리 완료
+              <button type="submit" className="btn-primary" disabled={isUploading || inboundQty <= 0 || !selectedFile}>
+                {isUploading ? (
+                  <>
+                    <RefreshCw size={14} className="animate-spin" style={{ marginRight: '6px' }} /> 입고 처리 중...
+                  </>
+                ) : (
+                  '입고완료'
+                )}
               </button>
             </div>
           </form>
