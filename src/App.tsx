@@ -4,7 +4,7 @@ import { useApp } from './context/AppContext';
 import {
   LayoutDashboard, Users, UserCheck, Package, Layers, PlusCircle,
   Truck, Wrench, Shield, ShoppingBag, CreditCard, LogOut, Sun, Moon, Menu, X, Zap, Settings, Database as DatabaseIcon,
-  TrendingUp, Clock
+  TrendingUp, Clock, AlertTriangle
 } from 'lucide-react';
 
 // 페이지 컴포넌트 임포트
@@ -29,6 +29,10 @@ import { AssetHistory } from './pages/AssetHistory';
 import { AssetAssignment } from './pages/AssetAssignment';
 import { OrganizationSettings } from './pages/OrganizationSettings';
 import { GoogleConfig } from './pages/GoogleConfig';
+import { PayrollPage } from './pages/PayrollPage';
+import { CorporateCardPage } from './pages/CorporateCardPage';
+import { CashFlowPage } from './pages/CashFlowPage';
+import { DelinquencyPage } from './pages/DelinquencyPage';
 
 const App: React.FC = () => {
   const { currentUser, login, logout, theme, toggleTheme, hasPermission, activeTab, setActiveTab } = useApp();
@@ -114,6 +118,10 @@ const App: React.FC = () => {
     { id: 'dispatch_assign', name: '장비 할당 (매핑)', icon: <Layers size={18} />, component: <AssetAssignment /> },
     { id: 'repair', name: '자산 정비수리', icon: <Wrench size={18} />, component: <Repairs /> },
     { id: 'organization', name: '조직/인사 관리', icon: <Users size={18} />, component: <OrganizationSettings /> },
+    { id: 'payroll', name: '급여 정산', icon: <CreditCard size={18} />, component: <PayrollPage /> },
+    { id: 'corporate_card', name: '법인카드 매입정산', icon: <CreditCard size={18} />, component: <CorporateCardPage /> },
+    { id: 'cash_flow', name: '자금 흐름 분석', icon: <TrendingUp size={18} />, component: <CashFlowPage /> },
+    { id: 'delinquency', name: '미수 채권 연체 관리', icon: <AlertTriangle size={18} />, component: <DelinquencyPage /> },
     { id: 'permission', name: '사용자 및 권한', icon: <Shield size={18} />, component: <UsersPermissions /> },
     { id: 'google_config', name: '구글 관리자 설정', icon: <Settings size={18} />, component: <GoogleConfig /> },
     // 개발자 도구 (ADMIN 전용)

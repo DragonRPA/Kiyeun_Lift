@@ -568,9 +568,17 @@ ${activeSpecs.map((s, idx) => `  ${idx + 1}. [적용] ${s.label}`).join('\n') ||
     };
 
     let result = await saveSmartDispatch(data, false);
+    if (result.errorMessage) {
+      alert(result.errorMessage);
+      return;
+    }
     if (result.requiresConfirm) {
       if (confirm(`다음 정보가 데이터베이스에 없습니다.\n${result.missingFields?.join('\n')}\n\n※안내: 배차(물류 배송) 지시와 장비 할당(고유 장비 매핑)은 별개의 권한으로 독립적으로 작동합니다.\n\n신규로 자동 등록하고 출고 지시를 저장하시겠습니까?`)) {
         result = await saveSmartDispatch(data, true);
+        if (result.errorMessage) {
+          alert(result.errorMessage);
+          return;
+        }
       } else {
         return;
       }

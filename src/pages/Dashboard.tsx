@@ -349,6 +349,31 @@ export const Dashboard: React.FC = () => {
             </button>
           </div>
 
+          {/* 대표이사 지시: 연체 채권 조치 ToDo 피드 (Role-based Card 뉴스) */}
+          {currentUser && (currentUser.role === 'ADMIN' || currentUser.id === 'manager' || currentUser.id === 'user') && (
+            <div style={{
+              backgroundColor: 'var(--bg-card)', borderRadius: '12px', padding: '20px 24px',
+              borderLeft: '5px solid #ef4444', border: '1px solid var(--border-color)', borderLeftWidth: '5px'
+            }}>
+              <div style={{ display: 'flex', justifyItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                <span style={{ fontSize: '11px', fontWeight: '800', color: '#ef4444', backgroundColor: 'rgba(239,68,68,0.08)', padding: '2px 8px', borderRadius: '4px', border: '1px solid rgba(239,68,68,0.2)' }}>
+                  👑 대표이사 자동 명령 지령
+                </span>
+                <span style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: 'bold' }}>긴급 2건</span>
+              </div>
+              <h4 style={{ margin: '0 0 10px 0', fontSize: '16px', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '8px', color: '#ef4444' }}>
+                <AlertCircle size={18} color="#ef4444" /> 미수 채권 연체 조치 및 수납 증빙 보고 지시
+              </h4>
+              <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: '0 0 14px 0', lineHeight: '1.5' }}>
+                귀하가 담당한 거래처 중 납기일이 경과한 연체 채권이 감지되었습니다. 본 건은 대표이사(CEO) 직속 지시 속성으로 등록되어 
+                강제 조치 의무가 발생합니다. 유선 독촉, 공문 최고장 발송, 혹은 현장 실사 보고서를 즉시 작성해 주십시오.
+              </p>
+              <button className="btn-primary" onClick={() => setActiveTab('delinquency')} style={{ backgroundColor: '#ef4444', border: 'none', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                연체 채권 조치 보고서 작성 <ArrowRight size={12} />
+              </button>
+            </div>
+          )}
+
           {/* 고객 정보 미비 보완 (ToDo) */}
           {myTodos.length > 0 && (
             <div style={{

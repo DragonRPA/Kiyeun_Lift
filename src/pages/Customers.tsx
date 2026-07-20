@@ -8,7 +8,7 @@ import { exportToExcel } from '../services/excel';
 export const Customers: React.FC = () => {
   const {
     customers, contacts, sites, saveCustomer, saveContact, saveSite, hasPermission,
-    navigationPayload, setNavigationPayload
+    navigationPayload, setNavigationPayload, currentUser
   } = useApp();
 
   const canSave = hasPermission('customer', 'save');
@@ -519,6 +519,22 @@ export const Customers: React.FC = () => {
                     <option value="false">운영중</option>
                     <option value="true">폐업</option>
                   </select>
+                </div>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div>
+                  <label>거래 승인 상태</label>
+                  <select
+                    value={editingCust.transactionStatus || 'ALLOWED'}
+                    onChange={e => setEditingCust({ ...editingCust, transactionStatus: e.target.value as any })}
+                    disabled={currentUser?.role !== 'ADMIN' && currentUser?.role !== 'MANAGER'}
+                  >
+                    <option value="ALLOWED">🟢 거래가능</option>
+                    <option value="BLOCKED">🔴 거래불가 (신규제한)</option>
+                  </select>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'flex-end', paddingBottom: '4px', fontSize: '11px', color: 'var(--text-muted)' }}>
+                  {currentUser?.role !== 'ADMIN' && currentUser?.role !== 'MANAGER' ? '⚠️ 변경 권한이 없습니다.' : '💡 거래 불가 시 계약/배차 차단'}
                 </div>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>

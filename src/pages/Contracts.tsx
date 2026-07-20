@@ -212,6 +212,14 @@ export const Contracts: React.FC = () => {
     e.preventDefault();
     if (!canSave) return;
 
+    if (custSelect !== 'NEW' && custSelect) {
+      const selectedCustomer = customers.find(c => c.id === custSelect);
+      if (selectedCustomer?.transactionStatus === 'BLOCKED') {
+        alert('⚠️ 거래 불가 상태인 거래처입니다. 신규 계약을 체결할 수 없습니다.');
+        return;
+      }
+    }
+
     if (custSelect === 'NEW' && !newCustName) {
       alert('신규 고객사명을 입력해 주세요.');
       return;
@@ -699,7 +707,9 @@ export const Contracts: React.FC = () => {
                   <option value="">-- 고객사 선택 --</option>
                   <option value="NEW">[NEW] -- 직접 입력 (신규 고객사) --</option>
                   {customers.filter(c => !c.isClosed).map(c => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
+                    <option key={c.id} value={c.id} disabled={c.transactionStatus === 'BLOCKED'}>
+                      {c.name} {c.transactionStatus === 'BLOCKED' ? ' (⚠️ 거래불가)' : ''}
+                    </option>
                   ))}
                 </select>
               </div>

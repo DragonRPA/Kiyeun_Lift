@@ -105,7 +105,7 @@ interface AppContextType {
   
   // 장비 할당
   assignAssetToContract: (contractAssetId: string, assetId: string) => void;
-  saveSmartDispatch: (data: SmartDispatchData, autoRegister: boolean) => Promise<{ success: boolean; requiresConfirm?: boolean; missingFields?: string[] }>;
+  saveSmartDispatch: (data: SmartDispatchData, autoRegister: boolean) => Promise<{ success: boolean; requiresConfirm?: boolean; missingFields?: string[]; errorMessage?: string }>;
   saveSmartReturn: (data: SmartReturnData) => void;
   
   // Todos
@@ -436,6 +436,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const saveSmartDispatch = async (data: SmartDispatchData, autoRegister: boolean) => {
     let customer = db.customers.find(c => c.name.replace(/\s/g, '') === data.customerName.replace(/\s/g, ''));
+    if (customer && customer.transactionStatus === 'BLOCKED') {
+      return { success: false, errorMessage: '⚠️ 해당 고객사는 [거래불가] 상태로 설정되어 있어 신규 출고 및 계약 등록이 원천 차단됩니다.' };
+    }
     const customerId = customer?.id;
     let site = customerId ? db.sites.find(s => s.customerId === customerId && s.name.replace(/\s/g, '') === data.siteName.replace(/\s/g, '')) : null;
     

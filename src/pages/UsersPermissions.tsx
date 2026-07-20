@@ -77,6 +77,10 @@ export const UsersPermissions: React.FC = () => {
   const menus = [
     { id: 'dashboard', name: 'ERP 대시보드' },
     { id: 'organization', name: '조직/인사 관리' },
+    { id: 'payroll', name: '급여 정산' },
+    { id: 'corporate_card', name: '법인카드 매입정산' },
+    { id: 'cash_flow', name: '자금 흐름 분석' },
+    { id: 'delinquency', name: '미수 채권 연체 관리' },
     { id: 'customer', name: '고객 관리 (담당자/현장)' },
     { id: 'product', name: '제품 관리' },
     { id: 'asset', name: '자산 관리' },
@@ -104,6 +108,36 @@ export const UsersPermissions: React.FC = () => {
     if (targetUser?.role === 'ADMIN') {
       alert('ADMIN 등급은 모든 메뉴에 대한 권한을 강제로 갖습니다.');
       return;
+    }
+
+    // 급여 정산 (payroll) 보안 제한 검증 (ADMIN이 아닌 임직원 중 단 1명만 보유 가능)
+    if (menuId === 'payroll') {
+      const existing = localPermissions.find(p => p.userId === selectedUserId && p.menuId === 'payroll');
+      const isTurningOn = existing ? (type === 'view' ? !existing.canView : !existing.canSave) : true;
+
+      if (isTurningOn) {
+        const otherHasPayroll = localPermissions.some(p => {
+          if (p.userId === selectedUserId) return false;
+          if (p.menuId !== 'payroll') return false;
+          if (!p.canView && !p.canSave) return false;
+
+          const userObj = localUsers.find(u => u.id === p.userId);
+          return userObj && userObj.role !== 'ADMIN';
+        });
+
+        if (otherHasPayroll) {
+          const otherPerm = localPermissions.find(p => {
+            if (p.userId === selectedUserId) return false;
+            if (p.menuId !== 'payroll') return false;
+            if (!p.canView && !p.canSave) return false;
+            const userObj = localUsers.find(u => u.id === p.userId);
+            return userObj && userObj.role !== 'ADMIN';
+          });
+          const otherUser = otherPerm ? localUsers.find(u => u.id === otherPerm.userId) : null;
+          alert(`급여 정산 권한은 ADMIN이 아닌 일반 직원 중 단 1명만 보유할 수 있습니다.\n이미 다른 직원(${otherUser?.name || '기타 직원'})에게 이 권한이 부여되어 있으므로, 기존 권한을 명시적으로 해제하기 전에는 다른 임직원에게 추가로 부여할 수 없습니다.`);
+          return;
+        }
+      }
     }
 
     setLocalPermissions(prev => {
@@ -145,6 +179,22 @@ export const UsersPermissions: React.FC = () => {
 
   // --- Manual Save ---
   const handleSaveAll = () => {
+    // 저장 전 최종 보안 검증: ADMIN이 아닌 일반 임직원 중 급여정산 권한 소유자가 2명 이상인지 최종 대조
+    const payrollUsers = new Set<string>();
+    localPermissions.forEach(p => {
+      if (p.menuId === 'payroll' && (p.canView || p.canSave)) {
+        const userObj = localUsers.find(u => u.id === p.userId);
+        if (userObj && userObj.role !== 'ADMIN') {
+          payrollUsers.add(p.userId);
+        }
+      }
+    });
+
+    if (payrollUsers.size > 1) {
+      alert(`저장 실패: 급여 정산 권한은 ADMIN이 아닌 일반 직원 중 단 1명만 보유할 수 있습니다. 현재 ${payrollUsers.size}명의 비-ADMIN 임직원에게 권한이 설정되어 있어 저장이 불가능합니다.\n기존 소유자의 권한을 해제해 주세요.`);
+      return;
+    }
+
     // 1. 유저 Role 일괄 저장
     const realUsers = localUsers.filter(u => u.id !== 'sys-admin');
     realUsers.forEach(u => {
@@ -274,7 +324,16 @@ export const UsersPermissions: React.FC = () => {
                   
                   return (
                     <tr key={menu.id}>
-                      <td>{menu.name}</td>
+                      <td>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <span>{menu.name}</span>
+                          {menu.id === 'payroll' && (
+                            <span style={{ fontSize: '11.5px', color: '#ef4444', fontWeight: 'bold', padding: '2px 6px', borderRadius: '4px', backgroundColor: 'rgba(239, 68, 68, 0.08)', border: '1px solid rgba(239, 68, 68, 0.3)', display: 'inline-flex', alignItems: 'center' }}>
+                              ⚠️ 일반직원 중 단 1명 제한
+                            </span>
+                          )}
+                        </div>
+                      </td>
                       <td style={{ textAlign: 'center' }}>
                         <input
                           type="checkbox"
