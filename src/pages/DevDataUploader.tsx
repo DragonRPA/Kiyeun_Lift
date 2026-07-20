@@ -595,9 +595,20 @@ export const DevDataUploader: React.FC = () => {
   const [bulkUploadResult, setBulkUploadResult] = useState<{ success: number; failed: number } | null>(null);
   const [bulkFileName, setBulkFileName] = useState('');
   const [downloadingBulk, setDownloadingBulk] = useState(false);
+  interface ExecutionHistoryEntry {
+    timestamp: string;
+    action: 'GENERATE' | 'VALIDATE' | 'UPSERT_REQUEST' | 'UPSERT_SUCCESS' | 'UPSERT_FAILURE';
+    table: string;
+    recordCount: number;
+    payloadSample?: any;
+    error?: any;
+  }
+
   const [generatingTestData, setGeneratingTestData] = useState(false);
   const [generationProgress, setGenerationProgress] = useState('');
   const [testDataLogs, setTestDataLogs] = useState<string[]>([]);
+  const [executionHistory, setExecutionHistory] = useState<ExecutionHistoryEntry[]>([]);
+  const [diagnosticsReport, setDiagnosticsReport] = useState<string>('');
   const bulkFileInputRef = useRef<HTMLInputElement>(null);
 
   const handleDownloadBulkTemplate = () => {
@@ -832,6 +843,62 @@ export const DevDataUploader: React.FC = () => {
     repair_consumables: ['id', 'repairId', 'consumableId', 'quantity', 'unitPrice', 'cost']
   };
 
+  const runDiagnostics = (failedTable: string, error: any, chunk: any[]) => {
+    const code = error.code || 'UNKNOWN';
+    const message = error.message || '상세 메시지 없음';
+    const sampleRow = chunk[0] || {};
+    
+    let diagnosis = `🚨 [Supabase 데이터베이스 연산 자가 진단 리포트]\n`;
+    diagnosis += `==================================================\n`;
+    diagnosis += `📍 실패 위치: 테이블 [${failedTable}] (데이터 ${chunk.length}건 업로드 중)\n`;
+    diagnosis += `❌ 에러 코드 (PostgreSQL): ${code}\n`;
+    diagnosis += `💬 에러 메시지: ${message}\n`;
+    diagnosis += `==================================================\n\n`;
+    
+    diagnosis += `💡 [문제 원인 논리적 추론]\n`;
+    if (code === '23503') {
+      diagnosis += `▶️ 외래키 참조 제약조건 위반 (Foreign Key Violation)이 감지되었습니다.\n`;
+      diagnosis += `   - 원인: '${failedTable}' 테이블의 외래키 필드가 참조하는 부모 테이블의 ID가 존재하지 않습니다.\n`;
+      diagnosis += `   - 분석: 현재 적재하려던 레코드 샘플의 참조 필드 값을 점검해야 합니다.\n`;
+      diagnosis += `     (예: customerId, contactId, siteId, contractId, assetId 등)\n`;
+      
+      const fkFields = Object.keys(sampleRow).filter(k => k.toLowerCase().includes('id') && k !== 'id');
+      if (fkFields.length > 0) {
+        diagnosis += `   - 의심되는 참조 필드 및 설정값:\n`;
+        fkFields.forEach(f => {
+          diagnosis += `     * ${f}: "${sampleRow[f]}"\n`;
+        });
+      }
+      diagnosis += `   - 해결 조치: 위 참조 필드들이 가리키는 원본 레코드가 부모 테이블에 'testdata-' 접두사로 정상 생성 및 적재되었는지 확인하십시오.`;
+    } else if (code === '23505') {
+      diagnosis += `▶️ 고유값 제약조건 위반 (Unique Key Violation)이 감지되었습니다.\n`;
+      diagnosis += `   - 원인: 이미 동일한 기본키(id) 또는 고유 식별자(contractNo 등)를 가진 데이터가 DB에 존재합니다.\n`;
+      diagnosis += `   - 분석: '${failedTable}' 테이블에 중복된 ID 또는 고유 필드가 업서트되려고 했습니다.\n`;
+      diagnosis += `   - 해결 조치: 이전에 생성한 테스트 데이터가 정상적으로 완전히 삭제되지 않았을 수 있습니다.\n`;
+      diagnosis += `     '테스트 데이터 일괄 삭제' 버튼을 눌러 DB를 초기화한 후 다시 실행하십시오.`;
+    } else if (code === '23502') {
+      diagnosis += `▶️ NULL 값 입력 제약조건 위반 (Not-Null Violation)이 감지되었습니다.\n`;
+      diagnosis += `   - 원인: 필수적으로 값이 들어가야 하는 컬럼에 null 또는 undefined가 입력되었습니다.\n`;
+      diagnosis += `   - 분석: TABLE_COLUMNS 매핑 정의 중 누락되거나 잘못 필터링된 필수 필드가 있는지 점검해 주십시오.\n`;
+      diagnosis += `   - 해결 조치: 페이로드 스펙을 비교해 필수 컬럼 누락을 해결하십시오.`;
+    } else if (code === '42703') {
+      diagnosis += `▶️ 존재하지 않는 컬럼 지정 에러 (Undefined Column)가 감지되었습니다.\n`;
+      diagnosis += `   - 원인: '${failedTable}' 테이블 스키마에 정의되지 않은 컬럼을 전송했습니다.\n`;
+      diagnosis += `   - 해결 조치: TABLE_COLUMNS 화이트리스트에 잡힌 필드명이 Supabase DB 테이블 정의와 일치하는지 스펠링과 대소문자를 확인하십시오.`;
+    } else {
+      diagnosis += `▶️ 일반 데이터베이스 처리 오류가 발생했습니다.\n`;
+      diagnosis += `   - 원인: 네트워크 유실, 권한(RLS 정책) 미지정 혹은 데이터 타입 불일치일 수 있습니다.\n`;
+      diagnosis += `   - 해결 조치: 에러 메시지를 참고하여 Supabase 콘솔에서 직접 SQL 실행 테스트를 해보시는 것을 추천합니다.`;
+    }
+    
+    diagnosis += `\n\n🔎 [실패한 페이로드 샘플 레코드 (JSON)]\n`;
+    diagnosis += `--------------------------------------------------\n`;
+    diagnosis += JSON.stringify(sampleRow, null, 2) + `\n`;
+    diagnosis += `--------------------------------------------------\n`;
+    
+    return diagnosis;
+  };
+
   const bulkUploadTable = async (tableName: string, rows: any[]) => {
     if (!supabase || rows.length === 0) return;
     const allowed = TABLE_COLUMNS[tableName];
@@ -847,7 +914,6 @@ export const DevDataUploader: React.FC = () => {
         }
       });
 
-      // 외래키 혹은 관계 속성 디버깅 보완
       if (tableName === 'repairs' && r.totalCost !== undefined) {
         newRow.costTotal = r.totalCost;
       }
@@ -864,10 +930,41 @@ export const DevDataUploader: React.FC = () => {
     const chunkSize = 200;
     for (let i = 0; i < sanitized.length; i += chunkSize) {
       const chunk = sanitized.slice(i, i + chunkSize);
+      
+      const reqEntry: ExecutionHistoryEntry = {
+        timestamp: new Date().toLocaleTimeString(),
+        action: 'UPSERT_REQUEST',
+        table: tableName,
+        recordCount: chunk.length,
+        payloadSample: chunk[0]
+      };
+      setExecutionHistory(prev => [...prev, reqEntry]);
+
       const { error } = await supabase.from(tableName).upsert(chunk, { onConflict: 'id' });
       if (error) {
+        const failEntry: ExecutionHistoryEntry = {
+          timestamp: new Date().toLocaleTimeString(),
+          action: 'UPSERT_FAILURE',
+          table: tableName,
+          recordCount: chunk.length,
+          payloadSample: chunk[0],
+          error
+        };
+        setExecutionHistory(prev => [...prev, failEntry]);
+
+        const diag = runDiagnostics(tableName, error, chunk);
+        setDiagnosticsReport(diag);
+
         console.error(`Supabase bulk insert failed for ${tableName} at index ${i}:`, error);
         throw new Error(`Supabase Upsert 실패 [테이블: ${tableName}, 에러코드: ${error.code}, 메시지: ${error.message}]`);
+      } else {
+        const successEntry: ExecutionHistoryEntry = {
+          timestamp: new Date().toLocaleTimeString(),
+          action: 'UPSERT_SUCCESS',
+          table: tableName,
+          recordCount: chunk.length
+        };
+        setExecutionHistory(prev => [...prev, successEntry]);
       }
     }
   };
@@ -878,6 +975,8 @@ export const DevDataUploader: React.FC = () => {
 
     setGeneratingTestData(true);
     setTestDataLogs([]);
+    setExecutionHistory([]);
+    setDiagnosticsReport('');
     addLog("통합 테스트 데이터 생성 시나리오 구동 시작...", "info");
     try {
       // 1. 제품 생성 (90종)
@@ -2026,6 +2125,32 @@ export const DevDataUploader: React.FC = () => {
                     );
                   })}
                 </div>
+              </div>
+            )}
+            {diagnosticsReport && (
+              <div style={{ marginTop: '12px', borderTop: '2px solid var(--danger)', paddingTop: '12px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px', color: 'var(--danger)', fontWeight: '700', fontSize: '12px' }}>
+                  <XCircle size={14} />
+                  <span>🚨 절차 생성 자가 진단 보고서 (Self-Diagnostics)</span>
+                </div>
+                <pre style={{
+                  backgroundColor: '#fef2f2',
+                  color: '#991b1b',
+                  fontFamily: 'monospace',
+                  fontSize: '11px',
+                  padding: '10px',
+                  borderRadius: '6px',
+                  maxHeight: '220px',
+                  overflowY: 'auto',
+                  lineHeight: '1.5',
+                  border: '1px solid #fee2e2',
+                  textAlign: 'left',
+                  margin: 0,
+                  whiteSpace: 'pre-wrap',
+                  wordBreak: 'break-all'
+                }}>
+                  {diagnosticsReport}
+                </pre>
               </div>
             )}
           </div>
