@@ -595,6 +595,8 @@ export const DevDataUploader: React.FC = () => {
   const [bulkUploadResult, setBulkUploadResult] = useState<{ success: number; failed: number } | null>(null);
   const [bulkFileName, setBulkFileName] = useState('');
   const [downloadingBulk, setDownloadingBulk] = useState(false);
+  const [generatingTestData, setGeneratingTestData] = useState(false);
+  const [generationProgress, setGenerationProgress] = useState('');
   const bulkFileInputRef = useRef<HTMLInputElement>(null);
 
   const handleDownloadBulkTemplate = () => {
@@ -800,6 +802,599 @@ export const DevDataUploader: React.FC = () => {
       alert('데이터 초기화 중 오류가 발생했습니다.');
     } finally {
       setBulkUploading(false);
+    }
+  };
+
+  const bulkUploadTable = async (tableName: string, rows: any[]) => {
+    if (!supabase || rows.length === 0) return;
+    const chunkSize = 200;
+    for (let i = 0; i < rows.length; i += chunkSize) {
+      const chunk = rows.slice(i, i + chunkSize);
+      const { error } = await supabase.from(tableName).upsert(chunk, { onConflict: 'id' });
+      if (error) {
+        console.error(`Supabase upsert failed for ${tableName}:`, error);
+        throw error;
+      }
+    }
+  };
+
+  const handleGenerateTestData = async () => {
+    const confirmed = window.confirm("전체 통합 프로세스 테스트용 대규모 연관 모의 데이터를 생성하시겠습니까? 데이터 정합성과 외래키 제약조건이 실시간으로 확인 및 계산되어 로컬 및 Supabase로 일괄 업로드됩니다.");
+    if (!confirmed) return;
+
+    setGeneratingTestData(true);
+    try {
+      // 1. 제품 생성 (90종)
+      setGenerationProgress("1. 제품 90종 생성 중...");
+      const products: any[] = [];
+      for (let i = 1; i <= 90; i++) {
+        products.push({
+          id: `testdata-prod-${i}`,
+          modelName: `TST-MODEL-${i.toString().padStart(2, '0')}`,
+          feet: (i % 6 + 6) * 2,
+          spec: `기연테스트 규격 고소작업대 ${i}호형`,
+          manufacturer: ['GENIE', 'SKYJACK', 'JLG', 'HAULOTTE'][i % 4],
+          isActive: true,
+          createdAt: new Date('2026-01-01').toISOString()
+        });
+      }
+
+      // 2. 자산 생성 (1,000개)
+      setGenerationProgress("2. 자산 1,000개 생성 중...");
+      const assets: any[] = [];
+      for (let i = 1; i <= 1000; i++) {
+        const prod = products[i % products.length];
+        assets.push({
+          id: `testdata-asset-${i}`,
+          modelName: prod.modelName,
+          assetNo: `TST-EQ-${i.toString().padStart(4, '0')}`,
+          serialNo: `SN-TST-${i.toString().padStart(4, '0')}`,
+          manufacturer: prod.manufacturer,
+          ownerType: i % 20 === 0 ? 'RENTED' : 'OWNED', // 5% Rented, 95% Owned
+          status: 'AVAILABLE',
+          maintenanceScore: Math.floor(Math.random() * 30),
+          acquisitionDate: '2025-01-01',
+          acquisitionPrice: 16000000,
+          depreciationMonths: 60,
+          residualValueRate: 10,
+          accumDepreciation: 4000000,
+          bookValue: 12000000,
+          cumRentalFee: 0,
+          cumRepairCost: 0,
+          createdAt: new Date('2025-01-01').toISOString(),
+          updatedAt: new Date().toISOString()
+        });
+      }
+
+      // 3. 고객사 생성 (200사)
+      setGenerationProgress("3. 고객사 200개 및 담당자/현장 각 1,000개 생성 중...");
+      const customers: any[] = [];
+      for (let i = 1; i <= 200; i++) {
+        customers.push({
+          id: `testdata-cust-${i}`,
+          name: `(주)기연테스트건설 ${i}호점`,
+          bizRegNo: `999-88-${i.toString().padStart(5, '0')}`,
+          isClosed: false,
+          address: `인천광역시 남동구 남동서로 ${i}번길`,
+          representative: `김대표${i}`,
+          repContact: `010-8888-${i.toString().padStart(4, '0')}`,
+          repEmail: `ceo_t${i}@example.com`,
+          transactionStatus: 'ALLOWED',
+          createdAt: new Date('2025-01-01').toISOString()
+        });
+      }
+
+      // 4. 담당자 (1,000개) 및 현장 (1,000개) 생성
+      const contacts: any[] = [];
+      const sites: any[] = [];
+      for (let i = 1; i <= 1000; i++) {
+        const custIdx = (i % 200) + 1;
+        contacts.push({
+          id: `testdata-contact-${i}`,
+          customerId: `testdata-cust-${custIdx}`,
+          name: `최담당${i}`,
+          position: ['대리', '과장', '차장', '부장'][i % 4],
+          contact: `010-7777-${i.toString().padStart(4, '0')}`,
+          email: `contact_${i}@example.com`,
+          isActive: i % 10 !== 0,
+          createdAt: new Date('2025-01-01').toISOString()
+        });
+
+        sites.push({
+          id: `testdata-site-${i}`,
+          customerId: `testdata-cust-${custIdx}`,
+          name: `TST-인천 송도 신축현장 ${i}구역`,
+          address: `인천 연수구 송도동 ${i}`,
+          contactName: `이소장${i}`,
+          contact: `010-6666-${i.toString().padStart(4, '0')}`,
+          email: `site_${i}@example.com`,
+          isActive: i % 10 !== 0,
+          createdAt: new Date('2025-01-01').toISOString()
+        });
+      }
+
+      // 5. 계약 및 자산 매칭, 배차 입출고 이력 생성 (600건)
+      setGenerationProgress("4. 계약 600건 및 물류/배차 이력 1,500건 계산 중...");
+      const contracts: any[] = [];
+      const contractAssets: any[] = [];
+      const deliveries: any[] = [];
+
+      const startTs = new Date('2026-01-01').getTime();
+      const endTs = new Date('2026-07-19').getTime();
+      const step = (endTs - startTs) / 599;
+
+      let assetPointer = 1;
+
+      for (let i = 1; i <= 600; i++) {
+        const custIdx = (i % 200) + 1;
+        const siteId = `testdata-site-${((custIdx - 1) * 5) + (i % 5) + 1}`;
+        const contactId = `testdata-contact-${((custIdx - 1) * 5) + (i % 5) + 1}`;
+
+        const startD = new Date(startTs + (i - 1) * step);
+        const startDateStr = startD.toISOString().split('T')[0];
+
+        const duration = 10 + (i % 9) * 10; // 10 to 90 days
+        const endD = new Date(startD);
+        endD.setDate(startD.getDate() + duration);
+        const endDateStr = endD.toISOString().split('T')[0];
+
+        const billingDay = [15, 20, 25, 30][i % 4];
+        const statementClosingDay = billingDay === 30 ? 25 : billingDay - 5;
+
+        const contractId = `testdata-contract-${i}`;
+        const isEnded = new Date(endDateStr) < new Date('2026-07-21');
+
+        contracts.push({
+          id: contractId,
+          contractNo: `TST-CTR-2026-${i.toString().padStart(4, '0')}`,
+          customerId: `testdata-cust-${custIdx}`,
+          contactId,
+          siteId,
+          startDate: startDateStr,
+          endDate: endDateStr,
+          billingDay,
+          statementClosingDay,
+          status: isEnded ? 'COMPLETED' : 'ACTIVE',
+          createdAt: startD.toISOString(),
+          updatedAt: new Date().toISOString()
+        });
+
+        // 계약당 자산 매칭 (1~2대)
+        const assetCount = (i % 2) + 1;
+        for (let j = 0; j < assetCount; j++) {
+          if (assetPointer > 1000) break;
+          const asset = assets[assetPointer - 1];
+
+          if (!isEnded) {
+            asset.status = 'RENTED';
+            asset.currentCustomerId = `testdata-cust-${custIdx}`;
+            asset.currentSiteId = siteId;
+            asset.contractStart = startDateStr;
+            asset.contractEnd = endDateStr;
+            asset.billingDay = billingDay;
+            asset.monthlyRentalFee = 450000;
+            asset.dailyRentalFee = 15000;
+          }
+
+          const contractAssetId = `testdata-ca-${i}-${j}`;
+          contractAssets.push({
+            id: contractAssetId,
+            contractId,
+            assetId: asset.id,
+            monthlyRentalFee: 450000,
+            dailyRentalFee: 15000,
+            startDate: startDateStr,
+            endDate: endDateStr,
+            createdAt: startD.toISOString()
+          });
+
+          // 출고 배차 (OUTBOUND)
+          deliveries.push({
+            id: `testdata-del-out-${i}-${j}`,
+            contractId,
+            assetIds: asset.id,
+            type: 'OUTBOUND',
+            status: 'COMPLETED',
+            requestDate: startDateStr,
+            scheduledDate: startDateStr,
+            transportCompany: '대한물류',
+            vehicleType: '5톤 셀프로더',
+            vehicleNo: '서울82가 1111',
+            driverName: '홍길동',
+            driverContact: '010-1111-1111',
+            deliveryCost: 150000,
+            deliveryCostConfirmed: 150000,
+            isCostSettled: true,
+            memo: '테스트 출고 기연 배차 완료',
+            createdAt: startD.toISOString(),
+            updatedAt: startD.toISOString()
+          });
+
+          // 입고 배차 (INBOUND)
+          if (isEnded) {
+            deliveries.push({
+              id: `testdata-del-in-${i}-${j}`,
+              contractId,
+              assetIds: asset.id,
+              type: 'INBOUND',
+              status: 'COMPLETED',
+              requestDate: endDateStr,
+              scheduledDate: endDateStr,
+              transportCompany: '민국운수',
+              vehicleType: '1톤 화물차',
+              vehicleNo: '경기99바 2222',
+              driverName: '홍길동',
+              driverContact: '010-2222-2222',
+              deliveryCost: 150000,
+              deliveryCostConfirmed: 150000,
+              isCostSettled: true,
+              memo: '테스트 회수 완료',
+              createdAt: endD.toISOString(),
+              updatedAt: endD.toISOString()
+            });
+          } else {
+            deliveries.push({
+              id: `testdata-del-in-${i}-${j}`,
+              contractId,
+              assetIds: asset.id,
+              type: 'INBOUND',
+              status: Math.random() > 0.5 ? 'DISPATCHED' : 'REQUESTED',
+              requestDate: endDateStr,
+              scheduledDate: endDateStr,
+              transportCompany: '대한물류',
+              vehicleType: '2.5톤',
+              vehicleNo: '서울82가 3333',
+              driverName: '김기사',
+              driverContact: '010-3333-3333',
+              deliveryCost: 150000,
+              isCostSettled: false,
+              memo: '회수 예정 배차 대기',
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString()
+            });
+          }
+
+          assetPointer++;
+        }
+      }
+
+      // 6. 청구 및 수납 내역 생성
+      setGenerationProgress("5. 기성 청구 대장 및 결제/수납 2,000건 생성 중...");
+      const billings: any[] = [];
+      const billingDetails: any[] = [];
+      const payments: any[] = [];
+      const bankTransactions: any[] = [];
+
+      contracts.forEach(contract => {
+        const start = new Date(contract.startDate);
+        const end = new Date(contract.endDate);
+        const limit = new Date(end < new Date('2026-07-20') ? end : new Date('2026-07-20'));
+
+        let current = new Date(start.getFullYear(), start.getMonth(), 1);
+        while (current <= limit) {
+          const year = current.getFullYear();
+          const month = current.getMonth();
+          const billingYm = `${year}-${String(month + 1).padStart(2, '0')}`;
+
+          const monthStart = new Date(year, month, 1);
+          const monthEnd = new Date(year, month + 1, 0);
+
+          const calcStart = start > monthStart ? start : monthStart;
+          const calcEnd = limit < monthEnd ? limit : monthEnd;
+
+          const days = Math.floor((calcEnd.getTime() - calcStart.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+
+          if (days > 0) {
+            const billingId = `testdata-bill-${contract.id}-${billingYm}`;
+            const linkedCA = contractAssets.filter(ca => ca.contractId === contract.id);
+            const totalAmount = linkedCA.length * 15000 * days;
+
+            billings.push({
+              id: billingId,
+              customerId: contract.customerId,
+              contractId: contract.id,
+              billingYm,
+              billingDate: `${year}-${String(month + 1).padStart(2, '0')}-${contract.billingDay}`,
+              totalAmount,
+              paidAmount: 0,
+              status: 'UNPAID',
+              createdAt: calcEnd.toISOString(),
+              updatedAt: calcEnd.toISOString()
+            });
+
+            linkedCA.forEach((ca, idx) => {
+              billingDetails.push({
+                id: `testdata-bd-${billingId}-${idx}`,
+                billingId,
+                contractAssetId: ca.id,
+                itemName: `장비렌탈료 (${ca.assetId})`,
+                quantity: days,
+                unitPrice: 15000,
+                amount: 15000 * days,
+                description: `${calcStart.toISOString().split('T')[0]} ~ ${calcEnd.toISOString().split('T')[0]} 렌탈료`,
+                createdAt: calcEnd.toISOString()
+              });
+            });
+          }
+          current.setMonth(current.getMonth() + 1);
+        }
+      });
+
+      // 결제 및 수납 매칭 시뮬레이션
+      billings.forEach(bill => {
+        const isPastMonth = bill.billingYm < '2026-07';
+        const rand = Math.random();
+
+        if (isPastMonth) {
+          if (rand > 0.1) {
+            bill.status = 'PAID';
+            bill.paidAmount = bill.totalAmount;
+
+            const payDate = new Date(bill.billingDate);
+            payDate.setDate(payDate.getDate() + 5);
+            const payDateStr = payDate.toISOString().split('T')[0];
+
+            payments.push({
+              id: `testdata-pay-${bill.id}`,
+              billingId: bill.id,
+              paymentDate: payDateStr,
+              amount: bill.totalAmount,
+              method: 'BANK_TRANSFER',
+              memo: '인터넷뱅킹 이체 수납',
+              createdAt: payDate.toISOString()
+            });
+
+            bankTransactions.push({
+              id: `testdata-bt-${bill.id}`,
+              transactionDate: `${payDateStr} 10:00:00`,
+              senderName: `(주)기연테스트건설 ${bill.customerId.split('-')[2]}호점`,
+              depositAmount: bill.totalAmount,
+              withdrawAmount: 0,
+              memo: '테스트 기성 입금',
+              matchedBillingId: bill.id,
+              matchingType: 'AUTO',
+              createdAt: payDate.toISOString()
+            });
+          } else if (rand > 0.05) {
+            bill.status = 'PARTIAL';
+            bill.paidAmount = Math.floor(bill.totalAmount / 2);
+          }
+        } else {
+          // 7월 당월 청구 (미수금 회수 분석 시나리오용 40% 미납 처리)
+          if (rand > 0.6) {
+            bill.status = 'PAID';
+            bill.paidAmount = bill.totalAmount;
+          } else if (rand > 0.4) {
+            bill.status = 'PARTIAL';
+            bill.paidAmount = Math.floor(bill.totalAmount / 2);
+          }
+        }
+      });
+
+      // 7. 소모품 & 구매신청 생성
+      setGenerationProgress("6. 소모품 목록 및 구매 신청 300건 생성 중...");
+      const consumables: any[] = [];
+      const consumableLogs: any[] = [];
+      const consumablePurchases: any[] = [];
+
+      for (let i = 1; i <= 10; i++) {
+        consumables.push({
+          id: `testdata-consumable-${i}`,
+          modelName: `TST-CONSUM-PART-${i}`,
+          stockQty: 100,
+          unit: '개',
+          unitPrice: 15000 + i * 3000,
+          supplier: '가나상사',
+          createdAt: new Date('2025-01-01').toISOString(),
+          updatedAt: new Date().toISOString()
+        });
+      }
+
+      for (let i = 1; i <= 200; i++) {
+        const con = consumables[i % consumables.length];
+        const reqDateStr = new Date(startTs + Math.random() * (endTs - startTs)).toISOString().split('T')[0];
+        const isComp = i % 10 !== 0;
+
+        consumablePurchases.push({
+          id: `testdata-conpur-${i}`,
+          consumableId: con.id,
+          modelName: con.modelName,
+          requestedQty: 10,
+          unitPrice: con.unitPrice,
+          requestDate: reqDateStr,
+          sellerName: '가나상사',
+          status: isComp ? 'COMPLETED' : 'REQUESTED',
+          receivedQty: isComp ? 10 : 0,
+          requesterId: 'sys-admin',
+          requesterName: '시스템관리자',
+          createdAt: new Date(reqDateStr).toISOString(),
+          updatedAt: new Date(reqDateStr).toISOString()
+        });
+
+        if (isComp) {
+          consumableLogs.push({
+            id: `testdata-cl-${i}`,
+            consumableId: con.id,
+            type: 'INBOUND',
+            quantity: 10,
+            unitPrice: con.unitPrice,
+            supplier: '가나상사',
+            userId: 'sys-admin',
+            actionDate: reqDateStr,
+            description: '모의 테스트 입고',
+            createdAt: new Date(reqDateStr).toISOString()
+          });
+        }
+      }
+
+      // 8. 정비 내역 & 외주정비비
+      setGenerationProgress("7. 정비 보고서 및 외주 정비 내역 200건 생성 중...");
+      const repairs: any[] = [];
+      const repairConsumables: any[] = [];
+
+      for (let i = 1; i <= 150; i++) {
+        const assetIdx = i * 6;
+        if (assetIdx > 1000) break;
+        const asset = assets[assetIdx - 1];
+
+        const reqDateStr = new Date(startTs + Math.random() * (endTs - startTs)).toISOString().split('T')[0];
+        const isCompleted = i % 5 !== 0;
+        const isExt = i % 3 === 0;
+
+        repairs.push({
+          id: `testdata-rep-${i}`,
+          assetId: asset.id,
+          mechanicId: 'sys-admin',
+          repairType: isExt ? 'EXTERNAL' : 'INTERNAL',
+          vendorId: isExt ? 'V-001' : undefined,
+          requestDate: reqDateStr,
+          repairDate: isCompleted ? reqDateStr : undefined,
+          completedDate: isCompleted ? reqDateStr : undefined,
+          status: isCompleted ? 'COMPLETED' : 'IN_PROGRESS',
+          details: isExt ? '외주 유압 실린더 재생 수리' : '상부 컨트롤러 배선 접점 정비',
+          totalCost: isExt ? 350000 : 30000,
+          billableToCustomer: false,
+          createdAt: new Date(reqDateStr).toISOString(),
+          updatedAt: new Date(reqDateStr).toISOString()
+        });
+
+        if (!isExt) {
+          const con = consumables[i % consumables.length];
+          repairConsumables.push({
+            id: `testdata-rc-${i}`,
+            repairId: `testdata-rep-${i}`,
+            consumableId: con.id,
+            quantity: 1,
+            unitPrice: con.unitPrice,
+            cost: con.unitPrice
+          });
+        }
+      }
+
+      // 9. 로컬 저장 적용
+      setGenerationProgress("8. 로컬 스토리지 데이터 동기화 중...");
+      db.products = [...db.products.filter(p => !p.id.startsWith('testdata-')), ...products];
+      db.assets = [...db.assets.filter(a => !a.id.startsWith('testdata-')), ...assets];
+      db.customers = [...db.customers.filter(c => !c.id.startsWith('testdata-')), ...customers];
+      db.contacts = [...db.contacts.filter(c => !c.id.startsWith('testdata-')), ...contacts];
+      db.sites = [...db.sites.filter(s => !s.id.startsWith('testdata-')), ...sites];
+      db.contracts = [...db.contracts.filter(c => !c.id.startsWith('testdata-')), ...contracts];
+      db.contractAssets = [...db.contractAssets.filter(ca => !ca.id.startsWith('testdata-')), ...contractAssets];
+      db.deliveries = [...db.deliveries.filter(d => !d.id.startsWith('testdata-')), ...deliveries];
+      db.billings = [...db.billings.filter(b => !b.id.startsWith('testdata-')), ...billings];
+      db.billingDetails = [...db.billingDetails.filter(bd => !bd.id.startsWith('testdata-')), ...billingDetails];
+      db.payments = [...db.payments.filter(p => !p.id.startsWith('testdata-')), ...payments];
+      db.bankTransactions = [...db.bankTransactions.filter(bt => !bt.id.startsWith('testdata-')), ...bankTransactions];
+      db.consumables = [...db.consumables.filter(c => !c.id.startsWith('testdata-')), ...consumables];
+      db.consumableLogs = [...db.consumableLogs.filter(cl => !cl.id.startsWith('testdata-')), ...consumableLogs];
+      db.consumablePurchases = [...db.consumablePurchases.filter(cp => !cp.id.startsWith('testdata-')), ...consumablePurchases];
+      db.repairs = [...db.repairs.filter(r => !r.id.startsWith('testdata-')), ...repairs];
+      db.repairConsumables = [...db.repairConsumables.filter(rc => !rc.id.startsWith('testdata-')), ...repairConsumables];
+
+      // 10. Supabase 동기화
+      if (supabase) {
+        setGenerationProgress("9. Supabase 원격 데이터베이스 업로드 중...");
+        await bulkUploadTable('products', products);
+        await bulkUploadTable('assets', assets);
+        await bulkUploadTable('customers', customers);
+        await bulkUploadTable('customer_contacts', contacts);
+        await bulkUploadTable('customer_sites', sites);
+        await bulkUploadTable('contracts', contracts);
+        await bulkUploadTable('contract_assets', contractAssets);
+        await bulkUploadTable('deliveries', deliveries);
+        await bulkUploadTable('billings', billings);
+        await bulkUploadTable('billing_details', billingDetails);
+        await bulkUploadTable('payments', payments);
+        await bulkUploadTable('bank_transactions', bankTransactions);
+        await bulkUploadTable('consumables', consumables);
+        await bulkUploadTable('consumable_logs', consumableLogs);
+        await bulkUploadTable('consumable_purchases', consumablePurchases);
+        await bulkUploadTable('repairs', repairs);
+        await bulkUploadTable('repair_consumables', repairConsumables);
+      }
+
+      alert("10,000건 이상의 프로세스 통합 테스트용 모의 데이터가 성공적으로 생성 및 동기화되었습니다!");
+    } catch (err) {
+      console.error(err);
+      alert("데이터 생성 중 오류가 발생했습니다.");
+    } finally {
+      setGeneratingTestData(false);
+      setGenerationProgress("");
+    }
+  };
+
+  const handleDeleteTestData = async () => {
+    const confirmed = window.confirm("정말 생성된 모든 테스트용 모의 데이터(IDs가 testdata-로 시작하는 항목)를 삭제하시겠습니까? 로컬 및 원격 데이터가 모두 영구 제거됩니다.");
+    if (!confirmed) return;
+
+    setGeneratingTestData(true);
+    setGenerationProgress("테스트 데이터 일괄 제거 및 동기화 중...");
+    try {
+      const tables = [
+        'products', 'assets', 'customers', 'contacts', 'sites', 'contracts',
+        'contractAssets', 'deliveries', 'billings', 'billingDetails', 'payments',
+        'bankTransactions', 'consumables', 'consumableLogs', 'consumablePurchases', 'repairs', 'repairConsumables'
+      ];
+
+      const mapping: Record<string, string> = {
+        products: 'products',
+        assets: 'assets',
+        customers: 'customers',
+        contacts: 'customer_contacts',
+        sites: 'customer_sites',
+        contracts: 'contracts',
+        contractAssets: 'contract_assets',
+        deliveries: 'deliveries',
+        billings: 'billings',
+        billingDetails: 'billing_details',
+        payments: 'payments',
+        bankTransactions: 'bank_transactions',
+        consumables: 'consumables',
+        consumableLogs: 'consumable_logs',
+        consumablePurchases: 'consumable_purchases',
+        repairs: 'repairs',
+        repairConsumables: 'repair_consumables'
+      };
+
+      // 1. 로컬 데이터 삭제
+      db.products = db.products.filter(p => !p.id.startsWith('testdata-'));
+      db.assets = db.assets.filter(a => !a.id.startsWith('testdata-'));
+      db.customers = db.customers.filter(c => !c.id.startsWith('testdata-'));
+      db.contacts = db.contacts.filter(c => !c.id.startsWith('testdata-'));
+      db.sites = db.sites.filter(s => !s.id.startsWith('testdata-'));
+      db.contracts = db.contracts.filter(c => !c.id.startsWith('testdata-'));
+      db.contractAssets = db.contractAssets.filter(ca => !ca.id.startsWith('testdata-'));
+      db.deliveries = db.deliveries.filter(d => !d.id.startsWith('testdata-'));
+      db.billings = db.billings.filter(b => !b.id.startsWith('testdata-'));
+      db.billingDetails = db.billingDetails.filter(bd => !bd.id.startsWith('testdata-'));
+      db.payments = db.payments.filter(p => !p.id.startsWith('testdata-'));
+      db.bankTransactions = db.bankTransactions.filter(bt => !bt.id.startsWith('testdata-'));
+      db.consumables = db.consumables.filter(c => !c.id.startsWith('testdata-'));
+      db.consumableLogs = db.consumableLogs.filter(cl => !cl.id.startsWith('testdata-'));
+      db.consumablePurchases = db.consumablePurchases.filter(cp => !cp.id.startsWith('testdata-'));
+      db.repairs = db.repairs.filter(r => !r.id.startsWith('testdata-'));
+      db.repairConsumables = db.repairConsumables.filter(rc => !rc.id.startsWith('testdata-'));
+
+      // 2. Supabase 데이터 삭제
+      if (supabase) {
+        for (const key of tables) {
+          const tableName = mapping[key];
+          if (tableName) {
+            const { error } = await supabase.from(tableName).delete().like('id', 'testdata-%');
+            if (error) {
+              console.error(`Supabase bulk delete failed for ${tableName}:`, error);
+            }
+          }
+        }
+      }
+
+      alert("모든 테스트용 데이터가 성공적으로 일괄 삭제되었습니다!");
+    } catch (err) {
+      console.error(err);
+      alert("삭제 중 오류가 발생했습니다.");
+    } finally {
+      setGeneratingTestData(false);
+      setGenerationProgress("");
     }
   };
 
@@ -1285,6 +1880,38 @@ export const DevDataUploader: React.FC = () => {
                 </div>
               </div>
             )}
+          </div>
+
+          {/* Zone 3: 통합 테스트 데이터 관리 */}
+          <div className="card" style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <h4 style={{ fontWeight: '700', fontSize: '14px', margin: '0 0 6px 0', borderBottom: '1px solid var(--border-color)', paddingBottom: '6px', color: 'var(--primary)' }}>📋 통합 테스트 시나리오 데이터 관리</h4>
+            <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: 0, lineHeight: '1.4' }}>
+              고객사 200개, 자산 1,000개, 제품 90종, 계약 600건, 배차/정비/청구/소모품 등 <strong>총 10,000건 이상의 상호 정합성이 연동된 검증용 대형 가상 데이터셋</strong>을 일괄 생성하거나 삭제합니다.
+            </p>
+            {generatingTestData && (
+              <div style={{ fontSize: '12px', color: 'var(--primary)', fontWeight: '600', padding: '4px 8px', backgroundColor: 'var(--primary-light)', borderRadius: '4px' }}>
+                ⏳ {generationProgress}
+              </div>
+            )}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: 'auto' }}>
+              <button 
+                onClick={handleGenerateTestData} 
+                disabled={generatingTestData}
+                className="btn-primary" 
+                style={{ width: '100%', fontSize: '12.5px', padding: '8px 12px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', opacity: generatingTestData ? 0.5 : 1 }}
+              >
+                {generatingTestData ? <Loader size={14} style={{ animation: 'spin 1s linear infinite' }} /> : <DatabaseIcon size={14} />}
+                절차적(CoT) 테스트 데이터 생성
+              </button>
+              <button 
+                onClick={handleDeleteTestData}
+                disabled={generatingTestData}
+                className="btn-secondary" 
+                style={{ width: '100%', fontSize: '12.5px', padding: '8px 12px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', color: 'var(--danger)', borderColor: 'var(--danger)' }}
+              >
+                <Trash2 size={14} /> 생성된 테스트 데이터 일괄 삭제
+              </button>
+            </div>
           </div>
 
           {/* Zone 3: 위험 영역 */}
