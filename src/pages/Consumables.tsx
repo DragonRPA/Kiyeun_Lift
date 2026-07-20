@@ -104,7 +104,9 @@ export const Consumables: React.FC = () => {
       '완료일': p.completedDate || '-',
       '누적입고수량': p.receivedQty,
       '증빙링크': p.statementFileUrl || '-',
-      '신청자': getUserName(p.requesterId)
+      '신청자': p.requesterName || '-',
+      '접수자': p.accepterName || '-',
+      '입고처리자': p.inbounderName || '-'
     }));
     exportToExcel(excelData, `소모품_구매신청내역_${new Date().toISOString().split('T')[0]}`, '구매신청목록');
   };
@@ -524,7 +526,12 @@ export const Consumables: React.FC = () => {
                             {p.requestedQty}개 <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>(입고: {p.receivedQty}개)</span>
                           </td>
                           <td>{p.unitPrice.toLocaleString()}원</td>
-                          <td>{p.requestDate}</td>
+                          <td>
+                            <div>{p.requestDate}</div>
+                            <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
+                              신청: {p.requesterName}
+                            </div>
+                          </td>
                           <td>
                             {isUrl ? (
                               <a href={p.sellerName.startsWith('http') ? p.sellerName : `https://${p.sellerName}`} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--primary)', textDecoration: 'underline', wordBreak: 'break-all' }}>
@@ -544,8 +551,8 @@ export const Consumables: React.FC = () => {
                             </span>
                           </td>
                           <td style={{ fontSize: '12px' }}>
-                            <div>접수: {p.acceptedDate || '-'}</div>
-                            <div>완료: {p.completedDate || '-'}</div>
+                            <div>접수: {p.acceptedDate || '-'} {p.accepterName ? `(${p.accepterName})` : ''}</div>
+                            <div>완료: {p.completedDate || '-'} {p.inbounderName ? `(입고: ${p.inbounderName})` : ''}</div>
                           </td>
                           <td>
                             {p.statementFileUrl ? (

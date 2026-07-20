@@ -174,7 +174,10 @@ export interface ConsumablePurchaseRequest {
   acceptedDate?: string;
   completedDate?: string;
   requesterId: string;
+  requesterName: string; // 신청자 이름 (로그인 계정)
   accepterId?: string;
+  accepterName?: string; // 접수자 이름 (로그인 계정)
+  inbounderName?: string; // 입고 처리자 이름 (로그인 계정)
   receivedQty: number;
   statementFileUrl?: string;
   createdAt: string;

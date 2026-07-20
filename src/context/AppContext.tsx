@@ -815,6 +815,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       sellerName: data.sellerName,
       status: 'REQUESTED',
       requesterId: currentUser?.id || 'system',
+      requesterName: currentUser?.name || '시스템',
       receivedQty: 0,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
@@ -827,6 +828,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       status: 'ACCEPTED',
       acceptedDate: new Date().toISOString().split('T')[0],
       accepterId: currentUser?.id || 'system',
+      accepterName: currentUser?.name || '시스템',
       updatedAt: new Date().toISOString()
     });
     refreshAllData();
@@ -837,6 +839,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       status: 'COMPLETED',
       completedDate: new Date().toISOString().split('T')[0],
       accepterId: currentUser?.id || 'system',
+      accepterName: currentUser?.name || '시스템',
       updatedAt: new Date().toISOString()
     });
     refreshAllData();
@@ -850,6 +853,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     db.updateRow<ConsumablePurchaseRequest>('consumablePurchases', id, {
       receivedQty: nextReceivedQty,
       statementFileUrl,
+      inbounderName: currentUser?.name || '시스템',
       updatedAt: new Date().toISOString()
     });
 
