@@ -1,6 +1,6 @@
 // d:\Kiyeun_Lift\src\context\AppContext.tsx
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { db, User, MenuPermission, Customer, CustomerContact, CustomerSite, Product, Asset, Consumable, ConsumableLog, Contract, ContractAsset, ContractHistory, Billing, BillingDetail, Payment, Delivery, TransportCompany, TransportDriver, Repair, RepairConsumable, Todo, BankTransaction, BankMatchingRule, AssetInOutLog, Vendor } from '../services/db';
+import { db, User, MenuPermission, Customer, CustomerContact, CustomerSite, Product, Asset, Consumable, ConsumableLog, ConsumablePurchaseRequest, Contract, ContractAsset, ContractHistory, Billing, BillingDetail, Payment, Delivery, TransportCompany, TransportDriver, Repair, RepairConsumable, Todo, BankTransaction, BankMatchingRule, AssetInOutLog, Vendor } from '../services/db';
 
 export interface SmartDispatchData {
   customerName: string;
@@ -52,6 +52,7 @@ interface AppContextType {
   assets: Asset[];
   consumables: Consumable[];
   consumableLogs: ConsumableLog[];
+  consumablePurchases: ConsumablePurchaseRequest[];
   contracts: Contract[];
   contractAssets: ContractAsset[];
   contractHistory: ContractHistory[];
@@ -87,6 +88,10 @@ interface AppContextType {
   // Consumables Mutators
   purchaseConsumable: (data: { modelName: string; qty: number; unit: string; unitPrice: number; supplier: string }) => void;
   useConsumable: (data: { consumableId: string; quantity: number; targetAssetId: string; description: string }) => void;
+  requestConsumablePurchase: (data: { consumableId?: string; modelName: string; qty: number; unitPrice: number; requestDate: string; sellerName: string }) => void;
+  acceptConsumablePurchase: (id: string) => void;
+  completeConsumablePurchase: (id: string) => void;
+  inboundConsumablePurchase: (id: string, qty: number, statementFileUrl: string) => void;
   
   // Contract Mutators
   createContract: (contractData: Omit<Contract, 'id' | 'createdAt' | 'updatedAt' | 'contractNo'>, assetsList: { assetId?: string; expectedModel?: string; monthlyRentalFee: number; dailyRentalFee: number }[]) => void;
@@ -148,6 +153,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [assets, setAssets] = useState<Asset[]>([]);
   const [consumables, setConsumables] = useState<Consumable[]>([]);
   const [consumableLogs, setConsumableLogs] = useState<ConsumableLog[]>([]);
+  const [consumablePurchases, setConsumablePurchases] = useState<ConsumablePurchaseRequest[]>([]);
   const [contracts, setContracts] = useState<Contract[]>([]);
   const [contractAssets, setContractAssets] = useState<ContractAsset[]>([]);
   const [contractHistory, setContractHistory] = useState<ContractHistory[]>([]);
@@ -186,6 +192,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setAssets(db.assets);
     setConsumables(db.consumables);
     setConsumableLogs(db.consumableLogs);
+    setConsumablePurchases(db.consumablePurchases);
     setContracts(db.contracts);
     setContractAssets(db.contractAssets);
     setContractHistory(db.contractHistory);
@@ -794,6 +801,96 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updatedAt: new Date().toISOString()
       });
     }
+
+    refreshAllData();
+  };
+
+  const requestConsumablePurchase = (data: { consumableId?: string; modelName: string; qty: number; unitPrice: number; requestDate: string; sellerName: string }) => {
+    db.insertRow<ConsumablePurchaseRequest>('consumablePurchases', {
+      consumableId: data.consumableId || undefined,
+      modelName: data.modelName,
+      requestedQty: data.qty,
+      unitPrice: data.unitPrice,
+      requestDate: data.requestDate,
+      sellerName: data.sellerName,
+      status: 'REQUESTED',
+      requesterId: currentUser?.id || 'system',
+      receivedQty: 0,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    });
+    refreshAllData();
+  };
+
+  const acceptConsumablePurchase = (id: string) => {
+    db.updateRow<ConsumablePurchaseRequest>('consumablePurchases', id, {
+      status: 'ACCEPTED',
+      acceptedDate: new Date().toISOString().split('T')[0],
+      accepterId: currentUser?.id || 'system',
+      updatedAt: new Date().toISOString()
+    });
+    refreshAllData();
+  };
+
+  const completeConsumablePurchase = (id: string) => {
+    db.updateRow<ConsumablePurchaseRequest>('consumablePurchases', id, {
+      status: 'COMPLETED',
+      completedDate: new Date().toISOString().split('T')[0],
+      accepterId: currentUser?.id || 'system',
+      updatedAt: new Date().toISOString()
+    });
+    refreshAllData();
+  };
+
+  const inboundConsumablePurchase = (id: string, qty: number, statementFileUrl: string) => {
+    const req = db.consumablePurchases.find(p => p.id === id);
+    if (!req) return;
+
+    const nextReceivedQty = req.receivedQty + qty;
+    db.updateRow<ConsumablePurchaseRequest>('consumablePurchases', id, {
+      receivedQty: nextReceivedQty,
+      statementFileUrl,
+      updatedAt: new Date().toISOString()
+    });
+
+    let consumable = req.consumableId ? db.consumables.find(c => c.id === req.consumableId) : null;
+    if (!consumable) {
+      consumable = db.consumables.find(c => c.modelName.replace(/\s/g, '') === req.modelName.replace(/\s/g, '')) || null;
+    }
+
+    if (consumable) {
+      db.updateRow<Consumable>('consumables', consumable.id, {
+        stockQty: consumable.stockQty + qty,
+        unitPrice: req.unitPrice,
+        supplier: req.sellerName,
+        updatedAt: new Date().toISOString()
+      });
+    } else {
+      consumable = db.insertRow<Consumable>('consumables', {
+        modelName: req.modelName,
+        stockQty: qty,
+        unit: '개',
+        unitPrice: req.unitPrice,
+        supplier: req.sellerName,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      });
+      db.updateRow<ConsumablePurchaseRequest>('consumablePurchases', id, {
+        consumableId: consumable.id
+      });
+    }
+
+    db.insertRow<ConsumableLog>('consumableLogs', {
+      consumableId: consumable.id,
+      type: 'INBOUND',
+      quantity: qty,
+      unitPrice: req.unitPrice,
+      supplier: req.sellerName,
+      userId: currentUser?.id,
+      actionDate: new Date().toISOString().split('T')[0],
+      description: `구매신청 연계 입고 (증빙: ${statementFileUrl.split('/').pop()})`,
+      createdAt: new Date().toISOString()
+    });
 
     refreshAllData();
   };
@@ -1886,11 +1983,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   return (
     <AppContext.Provider value={{
       currentUser, theme, toggleTheme, login, logout, hasPermission,
-      users, permissions, customers, contacts, sites, products, assets, consumables, consumableLogs, contracts, contractAssets, contractHistory, deliveries, billings, billingDetails, payments, repairs, repairConsumables, transportCompanies, transportDrivers, todos,
+      users, permissions, customers, contacts, sites, products, assets, consumables, consumableLogs, consumablePurchases, contracts, contractAssets, contractHistory, deliveries, billings, billingDetails, payments, repairs, repairConsumables, transportCompanies, transportDrivers, todos,
       bankTransactions, bankMatchingRules, assetInOutLogs, vendors,
       refreshAllData, updatePermissions, saveUser, saveCustomer, saveContact, saveSite, saveProduct,
       acquireAsset, disposeAsset, registerRentedAsset, returnRentedAsset,
       purchaseConsumable, useConsumable,
+      requestConsumablePurchase, acceptConsumablePurchase, completeConsumablePurchase, inboundConsumablePurchase,
       createContract, extendContract, shortenContract, succeedContract, exchangeAsset,
       assignAssetToContract,
       saveSmartDispatch, saveSmartReturn,

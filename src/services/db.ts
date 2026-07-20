@@ -162,6 +162,25 @@ export interface ConsumableLog {
   createdAt: string;
 }
 
+export interface ConsumablePurchaseRequest {
+  id: string;
+  consumableId?: string;
+  modelName: string;
+  requestedQty: number;
+  unitPrice: number;
+  requestDate: string;
+  sellerName: string;
+  status: 'REQUESTED' | 'ACCEPTED' | 'COMPLETED' | 'CANCELLED';
+  acceptedDate?: string;
+  completedDate?: string;
+  requesterId: string;
+  accepterId?: string;
+  receivedQty: number;
+  statementFileUrl?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface ContractAsset {
   id: string;
   contractId: string;
@@ -663,6 +682,7 @@ const SEED_SITES: CustomerSite[] = mockDataCust.sites;
 const SEED_ASSETS: Asset[] = mockDataAssets;
 const SEED_CONSUMABLES: Consumable[] = [];
 const SEED_CONSUMABLE_LOGS: ConsumableLog[] = [];
+const SEED_CONSUMABLE_PURCHASES: ConsumablePurchaseRequest[] = [];
 const SEED_CONTRACTS: Contract[] = mockDataCont.contracts;
 const SEED_CONTRACT_ASSETS: ContractAsset[] = mockDataCont.contractAssets;
 const SEED_DELIVERIES: Delivery[] = [];
@@ -770,6 +790,9 @@ class LocalDB {
   get consumableLogs() { return this.get<ConsumableLog>('consumableLogs', SEED_CONSUMABLE_LOGS); }
   set consumableLogs(val: ConsumableLog[]) { this.set('consumableLogs', val); }
 
+  get consumablePurchases() { return this.get<ConsumablePurchaseRequest>('consumablePurchases', SEED_CONSUMABLE_PURCHASES); }
+  set consumablePurchases(val: ConsumablePurchaseRequest[]) { this.set('consumablePurchases', val); }
+
   get contracts() { return this.get<Contract>('contracts', SEED_CONTRACTS); }
   set contracts(val: Contract[]) { this.set('contracts', val); }
 
@@ -831,6 +854,7 @@ class LocalDB {
       assets: 'assets',
       consumables: 'consumables',
       consumableLogs: 'consumable_logs',
+      consumablePurchases: 'consumable_purchases',
       contracts: 'contracts',
       contractAssets: 'contractAssets',
       contractHistory: 'contractHistory',
@@ -872,7 +896,7 @@ class LocalDB {
 
     const tables = [
       'users', 'departments', 'permissions', 'customers', 'contacts', 'sites', 
-      'products', 'assets', 'consumables', 'consumableLogs', 
+      'products', 'assets', 'consumables', 'consumableLogs', 'consumablePurchases',
       'contracts', 'contractAssets', 'contractHistory', 'deliveries', 
       'transportCompanies', 'transportDrivers', 'vendors',
       'billings', 'billingDetails', 'payments', 'repairs', 'repairConsumables', 'todos', 'bankTransactions', 'bankMatchingRules'

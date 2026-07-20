@@ -644,14 +644,27 @@ export const Customers: React.FC = () => {
                   placeholder="email@company.com"
                 />
               </div>
-              <div style={{ marginTop: '4px' }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '500' }}>
-                  <input
-                    type="checkbox"
-                    checked={editingContact.isActive !== false}
-                    onChange={e => setEditingContact({ ...editingContact, isActive: e.target.checked })}
-                    style={{ margin: 0 }}
-                  />
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '16px', padding: '10px 14px', backgroundColor: 'var(--bg-app)', borderRadius: '8px', border: '1px solid var(--border)', width: 'fit-content' }}>
+                <input
+                  type="checkbox"
+                  id="contactIsActive"
+                  checked={editingContact.isActive !== false}
+                  onChange={e => setEditingContact({ ...editingContact, isActive: e.target.checked })}
+                  style={{ width: '16px', height: '16px', cursor: 'pointer', margin: 0, padding: 0 }}
+                />
+                <label 
+                  htmlFor="contactIsActive" 
+                  style={{ 
+                    margin: 0, 
+                    padding: 0, 
+                    fontSize: '14px', 
+                    fontWeight: '600', 
+                    cursor: 'pointer', 
+                    color: 'var(--text-primary)', 
+                    display: 'inline-block', 
+                    whiteSpace: 'nowrap' 
+                  }}
+                >
                   사용 여부 (퇴사/직무변경 시 체크 해제)
                 </label>
               </div>
@@ -722,14 +735,27 @@ export const Customers: React.FC = () => {
                   placeholder="현장 메일 주소"
                 />
               </div>
-              <div style={{ marginTop: '4px' }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '500' }}>
-                  <input
-                    type="checkbox"
-                    checked={editingSite.isActive !== false}
-                    onChange={e => setEditingSite({ ...editingSite, isActive: e.target.checked })}
-                    style={{ margin: 0 }}
-                  />
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '16px', padding: '10px 14px', backgroundColor: 'var(--bg-app)', borderRadius: '8px', border: '1px solid var(--border)', width: 'fit-content' }}>
+                <input
+                  type="checkbox"
+                  id="siteIsActive"
+                  checked={editingSite.isActive !== false}
+                  onChange={e => setEditingSite({ ...editingSite, isActive: e.target.checked })}
+                  style={{ width: '16px', height: '16px', cursor: 'pointer', margin: 0, padding: 0 }}
+                />
+                <label 
+                  htmlFor="siteIsActive" 
+                  style={{ 
+                    margin: 0, 
+                    padding: 0, 
+                    fontSize: '14px', 
+                    fontWeight: '600', 
+                    cursor: 'pointer', 
+                    color: 'var(--text-primary)', 
+                    display: 'inline-block', 
+                    whiteSpace: 'nowrap' 
+                  }}
+                >
                   사용 여부 (공사 완공 시 체크 해제)
                 </label>
               </div>

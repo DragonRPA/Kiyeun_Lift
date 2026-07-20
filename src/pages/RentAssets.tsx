@@ -12,9 +12,19 @@ export const RentAssets: React.FC = () => {
   // 활성화 탭 상태: CURRENT (임차자산 현황), SETTLEMENT (지연 및 매입 정산)
   const [activeTab, setActiveTab] = useState<'CURRENT' | 'SETTLEMENT'>('CURRENT');
 
-  // 검색/필터 상태
-  const [searchTerm, setSearchTerm] = useState('');
-  const [renterFilter, setRenterFilter] = useState('');
+  // 검색/필터 입력용 임시 상태
+  const [tempSearchTerm, setTempSearchTerm] = useState('');
+  const [tempRenterFilter, setTempRenterFilter] = useState('');
+  const [tempStartDate, setTempStartDate] = useState('');
+  const [tempEndDate, setTempEndDate] = useState('');
+  const [tempReturnStatus, setTempReturnStatus] = useState('ALL');
+
+  // 실제 조회 버튼을 눌렀을 때 갱신되는 필터 확정 상태
+  const [searchQuery, setSearchQuery] = useState('');
+  const [renterQuery, setRenterQuery] = useState('');
+  const [startDateQuery, setStartDateQuery] = useState('');
+  const [endDateQuery, setEndDateQuery] = useState('');
+  const [returnQuery, setReturnQuery] = useState('ALL');
 
   // 등록/수정 및 반납 상태
   const [showModal, setShowModal] = useState(false);
@@ -29,12 +39,19 @@ export const RentAssets: React.FC = () => {
 
   const filtered = rentedAssets.filter(a => {
     const matchesSearch = 
-      a.assetNo.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      a.modelName.toLowerCase().includes(searchTerm.toLowerCase());
+      a.assetNo.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      a.modelName.toLowerCase().includes(searchQuery.toLowerCase());
     
-    const matchesRenter = !renterFilter || (a.renter && a.renter.toLowerCase().includes(renterFilter.toLowerCase()));
+    const matchesRenter = !renterQuery || (a.renter && a.renter.toLowerCase().includes(renterQuery.toLowerCase()));
 
-    return matchesSearch && matchesRenter;
+    const matchesStartDate = !startDateQuery || (a.rentEnd && a.rentEnd >= startDateQuery);
+    const matchesEndDate = !endDateQuery || (a.rentStart && a.rentStart <= endDateQuery);
+
+    const matchesReturn = returnQuery === 'ALL' ? true :
+                          returnQuery === 'RETURNED' ? a.status === 'RENTED_RETURNED' :
+                          a.status !== 'RENTED_RETURNED';
+
+    return matchesSearch && matchesRenter && matchesStartDate && matchesEndDate && matchesReturn;
   });
 
   // 유니크 임차처 목록 생성 (필터용)
@@ -129,6 +146,29 @@ export const RentAssets: React.FC = () => {
     setReturnAssetId('');
   };
 
+  // 임차자산 현황 내역 엑셀 다운로드
+  const handleExportCurrent = () => {
+    const excelData = filtered.map((a, idx) => {
+      const custName = a.currentCustomerId ? (customers.find(c => c.id === a.currentCustomerId)?.name || '알 수 없음') : '-';
+      return {
+        'No': idx + 1,
+        '관리번호': a.assetNo,
+        '모델명': a.modelName,
+        '임차처': a.renter || '-',
+        '임차 개시일': a.rentStart || '-',
+        '임차 만료일': a.rentEnd || '-',
+        '실제 반납일': a.actualRentReturnDate || (a.status === 'RENTED_RETURNED' ? '반납완료' : '미반납'),
+        '월 임차료(원)': (a.monthlyRentFee || 0),
+        '일 임차료(원)': (a.dailyRentFee || 0),
+        '상태': a.status === 'RENTED_RETURNED' ? '임차반납' : '임차중',
+        '전대 고객사': custName,
+        '고객 대여만료일': a.contractEnd || '-'
+      };
+    });
+    
+    exportToExcel(excelData, `임차장비현황_${new Date().toISOString().split('T')[0]}`, '임차자산목록');
+  };
+
   // 4. 지연 정산 내역 엑셀 다운로드
   const handleExportSettlement = () => {
     const excelData = rentedAssets.map((a, idx) => {
@@ -162,6 +202,11 @@ export const RentAssets: React.FC = () => {
       <div className="card-header" style={{ marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <h2 style={{ fontWeight: '700' }}>임차 전대 자산관리 및 반납 지연 정산</h2>
         <div style={{ display: 'flex', gap: '8px' }}>
+          {activeTab === 'CURRENT' && (
+            <button className="btn-secondary" onClick={handleExportCurrent} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <Download size={14} /> 엑셀 다운로드
+            </button>
+          )}
           {activeTab === 'SETTLEMENT' && (
             <button className="btn-secondary" onClick={handleExportSettlement} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
               <Download size={14} /> 엑셀 다운로드
@@ -243,30 +288,79 @@ export const RentAssets: React.FC = () => {
 
       {/* 검색 필터 */}
       <div className="card" style={{ padding: '20px', marginBottom: '20px' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
-          <div>
-            <label>자산 검색</label>
-            <div style={{ position: 'relative' }}>
-              <input
-                type="text"
-                value={searchTerm}
-                onChange={e => setSearchTerm(e.target.value)}
-                placeholder="관리번호, 모델명 검색..."
-                style={{ paddingLeft: '32px' }}
-              />
-              <Search size={14} style={{ position: 'absolute', left: '10px', top: '12px', color: 'var(--text-muted)' }} />
+        <form onSubmit={(e) => {
+          e.preventDefault();
+          setSearchQuery(tempSearchTerm);
+          setRenterQuery(tempRenterFilter);
+          setStartDateQuery(tempStartDate);
+          setEndDateQuery(tempEndDate);
+          setReturnQuery(tempReturnStatus);
+        }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '16px', alignItems: 'end' }}>
+            <div>
+              <label>자산 검색</label>
+              <div style={{ position: 'relative' }}>
+                <input
+                  type="text"
+                  value={tempSearchTerm}
+                  onChange={e => setTempSearchTerm(e.target.value)}
+                  placeholder="관리번호, 모델명..."
+                  style={{ paddingLeft: '32px' }}
+                />
+                <Search size={14} style={{ position: 'absolute', left: '10px', top: '12px', color: 'var(--text-muted)' }} />
+              </div>
+            </div>
+            <div>
+              <label>임차처 (소유사) 필터</label>
+              <select value={tempRenterFilter} onChange={e => setTempRenterFilter(e.target.value)}>
+                <option value="">전체 임차처</option>
+                {rentersList.map(r => (
+                  <option key={r} value={r}>{r}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label>임차 시작일 (이후)</label>
+              <input type="date" value={tempStartDate} onChange={e => setTempStartDate(e.target.value)} />
+            </div>
+            <div>
+              <label>임차 종료일 (이전)</label>
+              <input type="date" value={tempEndDate} onChange={e => setTempEndDate(e.target.value)} />
+            </div>
+            <div>
+              <label>반납 여부</label>
+              <select value={tempReturnStatus} onChange={e => setTempReturnStatus(e.target.value)}>
+                <option value="ALL">전체 반납 상태</option>
+                <option value="RETURNED">반납 완료</option>
+                <option value="RENTING">미반납 (임차 중)</option>
+              </select>
+            </div>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button type="submit" className="btn-primary" style={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '4px', height: '38px' }}>
+                <Search size={14} /> 조회
+              </button>
+              <button 
+                type="button" 
+                className="btn-secondary" 
+                onClick={() => {
+                  setTempSearchTerm('');
+                  setTempRenterFilter('');
+                  setTempStartDate('');
+                  setTempEndDate('');
+                  setTempReturnStatus('ALL');
+                  setSearchQuery('');
+                  setRenterQuery('');
+                  setStartDateQuery('');
+                  setEndDateQuery('');
+                  setReturnQuery('ALL');
+                }}
+                style={{ height: '38px' }}
+              >
+                초기화
+              </button>
             </div>
           </div>
-          <div>
-            <label>임차처 (소유사) 필터</label>
-            <select value={renterFilter} onChange={e => setRenterFilter(e.target.value)}>
-              <option value="">전체 임차처</option>
-              {rentersList.map(r => (
-                <option key={r} value={r}>{r}</option>
-              ))}
-            </select>
-          </div>
-        </div>
+        </form>
       </div>
 
       {activeTab === 'CURRENT' ? (

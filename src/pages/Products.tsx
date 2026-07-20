@@ -195,14 +195,27 @@ export const Products: React.FC = () => {
                   rows={3}
                 />
               </div>
-              <div style={{ marginTop: '4px' }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '500' }}>
-                  <input
-                    type="checkbox"
-                    checked={editingProduct.isActive !== false}
-                    onChange={e => setEditingProduct({ ...editingProduct, isActive: e.target.checked })}
-                    style={{ margin: 0 }}
-                  />
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '16px', padding: '10px 14px', backgroundColor: 'var(--bg-app)', borderRadius: '8px', border: '1px solid var(--border)', width: 'fit-content' }}>
+                <input
+                  type="checkbox"
+                  id="productIsActive"
+                  checked={editingProduct.isActive !== false}
+                  onChange={e => setEditingProduct({ ...editingProduct, isActive: e.target.checked })}
+                  style={{ width: '16px', height: '16px', cursor: 'pointer', margin: 0, padding: 0 }}
+                />
+                <label 
+                  htmlFor="productIsActive" 
+                  style={{ 
+                    margin: 0, 
+                    padding: 0, 
+                    fontSize: '14px', 
+                    fontWeight: '600', 
+                    cursor: 'pointer', 
+                    color: 'var(--text-primary)', 
+                    display: 'inline-block', 
+                    whiteSpace: 'nowrap' 
+                  }}
+                >
                   사용 여부 (단종/매각 시 체크 해제)
                 </label>
               </div>
