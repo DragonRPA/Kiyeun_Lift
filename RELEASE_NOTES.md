@@ -1,3 +1,16 @@
+# Release Notes (v2.6.9 - 2026-07-21 06:50)
+
+## 🩺 DB 스키마 정합성에 맞춘 PL/pgSQL RPC 프로시저 칼럼 패치 적용 (23502 예외 해결)
+- **DB 컬럼 100% 매칭 동기화**: `assets` 테이블의 `"updatedAt"` Not-Null 제약조건 위반 에러(`23502`)를 근본적으로 해결하기 위해, 원격 DB 테이블 스키마에 정의된 모든 컬럼과 매핑 형식을 [setup_seed_rpc.sql](file:///d:/GoogleDrive/RPA%20개발/01.AntiGravity/Kiyuen_Lift/scripts/setup_seed_rpc.sql) 내 삽입 쿼리들에 완벽하게 일치시켰습니다.
+- **스키마 불일치 테이블 컬럼 전면 수정**: 
+  - `consumables` 테이블의 `name`/`spec` 무효 컬럼을 `"modelName"`으로 변경하고 `"stockQty"`/`"unitPrice"` 매핑을 동기화했습니다.
+  - `contracts` 테이블의 `"statementClosingDay"` 제거 및 `"updatedAt"` 추가.
+  - `contract_assets` 테이블에 필수값인 `"startDate"`, `"endDate"` 삽입 연동.
+  - `deliveries` 테이블의 `type` 필드를 `CHECK` 제약조건인 `'OUTBOUND'`, `'INBOUND'` 규격에 맞게 매핑 수정.
+  - `billings`, `billing_details`, `payments`, `bank_transactions`, `repairs`, `repair_consumables` 등 모든 테이블의 컬럼명과 필수 데이터 형식 동기화 완료.
+
+---
+
 # Release Notes (v2.6.7 - 2026-07-21 06:40)
 
 ## ⚡ Supabase DB-Native RPC 프로시저 완결 시딩 개편 (복사/붙여넣기 전면 퇴출)
