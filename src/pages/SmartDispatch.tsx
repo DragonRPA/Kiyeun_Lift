@@ -410,7 +410,7 @@ ${activeSpecs.map((s, idx) => `  ${idx + 1}. [적용] ${s.label}`).join('\n') ||
       printWindow.document.write(`
         <html>
           <head>
-            <title>기연리프트 출고확인서 - ${customerName}</title>
+            <title>기연리프트 출고요청서 - ${customerName}</title>
             <style>
               body { font-family: 'Malgun Gothic', sans-serif; padding: 20px; color: #333; }
               table { width: 100%; border-collapse: collapse; margin-top: 15px; }
@@ -865,7 +865,7 @@ ${activeSpecs.map((s, idx) => `  ${idx + 1}. [적용] ${s.label}`).join('\n') ||
           </h3>
           <div style={{ display: 'flex', gap: '6px' }}>
             <button className={previewTab === 'SHEET' ? 'btn-primary' : 'btn-secondary'} onClick={() => setPreviewTab('SHEET')} style={{ padding: '6px 12px', fontSize: '13px' }}>
-              <Printer size={13} /> 출고전표 양식
+              <Printer size={13} /> 출고요청서 양식
             </button>
             <button className={previewTab === 'TEXT' ? 'btn-primary' : 'btn-secondary'} onClick={() => setPreviewTab('TEXT')} style={{ padding: '6px 12px', fontSize: '13px' }}>
               <Copy size={13} /> 전송용 정형 텍스트
@@ -882,15 +882,15 @@ ${activeSpecs.map((s, idx) => `  ${idx + 1}. [적용] ${s.label}`).join('\n') ||
           {previewTab === 'SHEET' && (
             <div>
               <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '10px' }}>
-                <button type="button" className="btn-secondary" onClick={handlePrint} style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '13px' }}>
-                  <Printer size={14} /> 출고전표 인쇄하기
+                <button type="button" className="btn-primary" onClick={handlePrint} style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '13px', padding: '6px 14px', fontWeight: 'bold' }}>
+                  <Printer size={14} /> 출고요청서 인쇄하기
                 </button>
               </div>
 
               {/* 실제 인쇄 타겟 컨테이너 */}
               <div id="dispatch-sheet-print" style={{ padding: '24px', backgroundColor: '#ffffff', color: '#111111', borderRadius: '4px', border: '1px solid #ddd', maxWidth: '800px', margin: '0 auto' }}>
                 <div style={{ textAlign: 'center', borderBottom: '2px solid #312e81', paddingBottom: '12px', marginBottom: '24px' }}>
-                  <h1 style={{ margin: 0, fontSize: '24px', fontWeight: '800', color: '#1e1b4b', letterSpacing: '2px' }}>기연리프트 출고확인서</h1>
+                  <h1 style={{ margin: 0, fontSize: '24px', fontWeight: '800', color: '#1e1b4b', letterSpacing: '2px' }}>기연리프트 출고요청서</h1>
                 </div>
 
                 <div style={{ fontSize: '14px', fontWeight: 'bold', borderLeft: '4px solid #312e81', paddingLeft: '8px', marginBottom: '10px', color: '#312e81' }}>1. 거래 정보 및 현장 주소</div>
