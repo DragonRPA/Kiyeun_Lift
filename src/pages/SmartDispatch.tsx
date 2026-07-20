@@ -596,18 +596,6 @@ ${activeSpecs.map((s, idx) => `  ${idx + 1}. [적용] ${s.label}`).join('\n') ||
             </span>
           </div>
         </div>
-        
-        {/* 액션 버튼 상단 배치 */}
-        <div style={{ display: 'flex', gap: '10px' }}>
-          <button type="button" className="btn-secondary" onClick={() => setRawText('')} style={{ padding: '8px 16px', fontSize: '14px' }}>
-            초기화
-          </button>
-          {canSave && (
-            <button type="button" className="btn-primary" onClick={handleSave} style={{ padding: '8px 16px', fontSize: '14px', fontWeight: 'bold' }}>
-              출고 지시 (자동 생성 및 저장)
-            </button>
-          )}
-        </div>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '20px', alignItems: 'start' }}>
@@ -848,10 +836,22 @@ ${activeSpecs.map((s, idx) => `  ${idx + 1}. [적용] ${s.label}`).join('\n') ||
                   <input type="text" value={paymentDay} onChange={e => setPaymentDay(e.target.value)} placeholder="예: 익월 말일" />
                 </div>
               </div>
-              <div style={{ marginTop: '10px' }}>
+              <div style={{ marginTop: '10px', marginBottom: '16px' }}>
                 <label>특이사항 / 메모</label>
                 <input type="text" value={note} onChange={e => setNote(e.target.value)} />
               </div>
+            </div>
+
+            {/* 액션 버튼 하단 배치 */}
+            <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
+              <button type="button" className="btn-secondary" onClick={() => setRawText('')} style={{ flex: 1, padding: '12px', fontSize: '15px' }}>
+                초기화
+              </button>
+              {canSave && (
+                <button type="button" className="btn-primary" onClick={handleSave} style={{ flex: 2, padding: '12px', fontSize: '15px', fontWeight: 'bold' }}>
+                  출고 지시 (자동 생성 및 저장)
+                </button>
+              )}
             </div>
 
           </div>
