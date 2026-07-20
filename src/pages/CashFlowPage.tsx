@@ -611,6 +611,12 @@ export const CashFlowPage: React.FC = () => {
             </div>
           )}
 
+          {/* 각 요약 카드 클릭 시 팝업 팁 안내바 */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12.2px', color: 'var(--text-secondary)', marginBottom: '14px', backgroundColor: 'var(--bg-app)', padding: '10px 14px', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
+            <Info size={14} color="var(--primary)" />
+            <span>💡 <strong>아래 각 지표 카드를 클릭</strong>하시면 일자별/거래처별 상세 정산 내역 및 통장 잔고 구조를 팝업으로 상세 조회할 수 있습니다.</span>
+          </div>
+
           {/* 주거래 통장 잔액 및 종합 요약 카드 피드 (인터랙션 적용: 클릭 시 세부 팝업 표출) */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px', marginBottom: '24px' }}>
             
@@ -630,7 +636,7 @@ export const CashFlowPage: React.FC = () => {
               }}
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                <span style={{ fontSize: '12.5px', color: 'var(--text-secondary)' }}>기준일 시점 시작고</span>
+                <span style={{ fontSize: '12.5px', color: 'var(--text-secondary)' }}>기준일 시점 시작고 <span style={{ fontSize: '10px', color: 'var(--primary)', backgroundColor: 'rgba(59, 130, 246, 0.08)', padding: '1px 4px', borderRadius: '3px', marginLeft: '4px' }}>🖱️ 클릭</span></span>
                 <Landmark size={18} color="var(--primary)" />
               </div>
               <h3 style={{ fontSize: '20px', fontWeight: '800', margin: '4px 0' }}>
@@ -657,7 +663,7 @@ export const CashFlowPage: React.FC = () => {
               }}
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                <span style={{ fontSize: '12.5px', color: 'var(--text-secondary)' }}>30일 내 수납 예정 (Inflow)</span>
+                <span style={{ fontSize: '12.5px', color: 'var(--text-secondary)' }}>30일 내 수납 예정 (Inflow) <span style={{ fontSize: '10px', color: 'var(--success)', backgroundColor: 'rgba(34, 197, 94, 0.08)', padding: '1px 4px', borderRadius: '3px', marginLeft: '4px' }}>🖱️ 클릭</span></span>
                 <ArrowUpRight size={18} color="var(--success)" />
               </div>
               <h3 style={{ fontSize: '20px', fontWeight: '800', margin: '4px 0', color: 'var(--success)' }}>
@@ -684,7 +690,7 @@ export const CashFlowPage: React.FC = () => {
               }}
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                <span style={{ fontSize: '12.5px', color: 'var(--text-secondary)' }}>30일 내 일반 지출 (OPEX)</span>
+                <span style={{ fontSize: '12.5px', color: 'var(--text-secondary)' }}>30일 내 일반 지출 (OPEX) <span style={{ fontSize: '10px', color: 'var(--warning)', backgroundColor: 'rgba(245, 158, 11, 0.08)', padding: '1px 4px', borderRadius: '3px', marginLeft: '4px' }}>🖱️ 클릭</span></span>
                 <ArrowDownRight size={18} color="var(--warning)" />
               </div>
               <h3 style={{ fontSize: '20px', fontWeight: '800', margin: '4px 0', color: 'var(--warning)' }}>
@@ -711,7 +717,7 @@ export const CashFlowPage: React.FC = () => {
               }}
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                <span style={{ fontSize: '12.5px', color: 'var(--text-secondary)' }}>설비자산 투자예정 (CAPEX)</span>
+                <span style={{ fontSize: '12.5px', color: 'var(--text-secondary)' }}>설비자산 투자예정 (CAPEX) <span style={{ fontSize: '10px', color: 'var(--danger)', backgroundColor: 'rgba(239, 68, 68, 0.08)', padding: '1px 4px', borderRadius: '3px', marginLeft: '4px' }}>🖱️ 클릭</span></span>
                 <Layers size={18} color="var(--danger)" />
               </div>
               <h3 style={{ fontSize: '20px', fontWeight: '800', margin: '4px 0', color: 'var(--danger)' }}>
@@ -739,7 +745,7 @@ export const CashFlowPage: React.FC = () => {
               }}
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                <span style={{ fontSize: '12.5px', color: 'var(--text-secondary)' }}>30일 후 예상 잔액</span>
+                <span style={{ fontSize: '12.5px', color: 'var(--text-secondary)' }}>30일 후 예상 잔액 <span style={{ fontSize: '10px', color: 'var(--primary)', backgroundColor: 'rgba(59, 130, 246, 0.08)', padding: '1px 4px', borderRadius: '3px', marginLeft: '4px' }}>🖱️ 클릭</span></span>
                 {finalBalance < 0 ? <AlertTriangle size={18} color="var(--danger)" /> : <CheckCircle size={18} color="var(--success)" />}
               </div>
               <h3 style={{ fontSize: '20px', fontWeight: '800', margin: '4px 0', color: finalBalance < 0 ? 'var(--danger)' : 'var(--success)' }}>
