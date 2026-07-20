@@ -115,13 +115,25 @@ export const GoogleConfig: React.FC = () => {
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!currentConfig) return;
+    
+    // 설정 레코드가 없거나 새로 생성해야 하는 경우를 대비해 ID 기본값 지정
+    const configId = currentConfig?.id || 'default-config';
+
+    // 사용자가 마스킹 값(••••••••••••) 또는 빈값을 입력했을 경우, 기존 저장되어 있던 실제 비밀번호 값을 보존
+    const finalPassword = (googlePassword === '••••••••••••' || !googlePassword) 
+      ? (currentConfig?.googlePassword || '') 
+      : googlePassword;
+
+    const finalAppPassword = (gmailAppPassword === '••••••••••••' || !gmailAppPassword) 
+      ? (currentConfig?.gmailAppPassword || '') 
+      : gmailAppPassword;
 
     const updated: GoogleConfigType = {
-      ...currentConfig,
+      ...(currentConfig || {}),
+      id: configId,
       googleEmail,
-      googlePassword,
-      gmailAppPassword,
+      googlePassword: finalPassword,
+      gmailAppPassword: finalAppPassword,
       contractFolder,
       consumableFolder,
       deliveryFolder,

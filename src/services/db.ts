@@ -957,18 +957,32 @@ class LocalDB {
     try {
       const results = await Promise.all(
         tables.map(async (key) => {
-          const tableName = this.mapToSupabaseTable(key);
-          const { data, error } = await supabase!
-            .from(tableName)
-            .select('*');
-          if (error) throw error;
-          return { key, data };
+          try {
+            const tableName = this.mapToSupabaseTable(key);
+            const { data, error } = await supabase!
+              .from(tableName)
+              .select('*');
+            if (error) {
+              console.warn(`Supabase pull failed for table ${tableName}:`, error);
+              return { key, data: null };
+            }
+            return { key, data };
+          } catch (e) {
+            console.warn(`Supabase pull failed for key ${key}:`, e);
+            return { key, data: null };
+          }
         })
       );
 
-      // 전체 로컬 스토리지 캐시 최신 DB 값으로 덮어쓰기
+      // 전체 로컬 스토리지 캐시 최신 DB 값으로 덮어쓰기 (성공한 데이터만)
       results.forEach(({ key, data }) => {
-        this.set(key, data || []);
+        if (data !== null) {
+          // googleConfigs의 경우 빈 데이터거나 에러이면 덮어쓰지 않음
+          if (key === 'googleConfigs' && (!data || data.length === 0)) {
+            return;
+          }
+          this.set(key, data);
+        }
       });
     } catch (err) {
       console.error("Supabase pullFromSupabase failed, falling back to local cache:", err);

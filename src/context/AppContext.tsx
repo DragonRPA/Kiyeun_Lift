@@ -334,7 +334,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const updateGoogleConfig = (configData: GoogleConfig) => {
-    db.updateRow<GoogleConfig>('googleConfigs', configData.id, configData);
+    const exists = db.googleConfigs.some(cfg => cfg.id === configData.id);
+    if (exists) {
+      db.updateRow<GoogleConfig>('googleConfigs', configData.id, configData);
+    } else {
+      db.insertRow<GoogleConfig>('googleConfigs', configData);
+    }
     refreshAllData();
   };
 
