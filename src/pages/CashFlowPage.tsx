@@ -1027,7 +1027,7 @@ export const CashFlowPage: React.FC = () => {
               {/* 1. 시작고 세부 내역 */}
               {activeDetailModal === 'STARTING' && (
                 <div style={{ fontSize: '13.5px', lineHeight: '1.6' }}>
-                  <table style={{ width: '100%', marginBottom: '16px', tableLayout: 'fixed' }}>
+                  <table style={{ width: '100%', minWidth: 'auto', marginBottom: '16px', tableLayout: 'fixed' }}>
                     <colgroup>
                       <col style={{ width: '60%' }} />
                       <col style={{ width: '40%' }} />
@@ -1071,7 +1071,7 @@ export const CashFlowPage: React.FC = () => {
 
               {/* 2. Inflow 세부 테이블 */}
               {activeDetailModal === 'INFLOW' && (
-                <table style={{ width: '100%', fontSize: '12.5px', tableLayout: 'fixed' }}>
+                <table style={{ width: '100%', minWidth: 'auto', fontSize: '12.5px', tableLayout: 'fixed' }}>
                   <colgroup>
                     <col style={{ width: '100px' }} />
                     <col />
@@ -1110,7 +1110,7 @@ export const CashFlowPage: React.FC = () => {
 
               {/* 3. OPEX 세부 테이블 */}
               {activeDetailModal === 'OPEX' && (
-                <table style={{ width: '100%', fontSize: '12.5px', tableLayout: 'fixed' }}>
+                <table style={{ width: '100%', minWidth: 'auto', fontSize: '12.5px', tableLayout: 'fixed' }}>
                   <colgroup>
                     <col style={{ width: '100px' }} />
                     <col />
@@ -1149,7 +1149,7 @@ export const CashFlowPage: React.FC = () => {
 
               {/* 4. CAPEX 세부 테이블 */}
               {activeDetailModal === 'CAPEX' && (
-                <table style={{ width: '100%', fontSize: '12.5px', tableLayout: 'fixed' }}>
+                <table style={{ width: '100%', minWidth: 'auto', fontSize: '12.5px', tableLayout: 'fixed' }}>
                   <colgroup>
                     <col style={{ width: '100px' }} />
                     <col />
@@ -1189,7 +1189,7 @@ export const CashFlowPage: React.FC = () => {
               {/* 5. 종합 대조 대조표 */}
               {activeDetailModal === 'FINAL' && (
                 <div style={{ fontSize: '13px' }}>
-                  <table style={{ width: '100%', marginBottom: '16px', tableLayout: 'fixed' }}>
+                  <table style={{ width: '100%', minWidth: 'auto', marginBottom: '16px', tableLayout: 'fixed' }}>
                     <colgroup>
                       <col style={{ width: '45%' }} />
                       <col style={{ width: '25%' }} />
