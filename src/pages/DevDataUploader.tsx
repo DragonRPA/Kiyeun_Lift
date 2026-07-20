@@ -463,6 +463,14 @@ export const DevDataUploader: React.FC = () => {
   const [schemaAuditResults, setSchemaAuditResults] = useState<{ table: string; status: 'OK' | 'MISSING' | 'MISMATCH'; message: string }[] | null>(null);
   const [generatedPatchSql, setGeneratedPatchSql] = useState('');
 
+  const schemaTableCount = React.useMemo(() => {
+    try {
+      return Object.keys(parseSqlSchema(schemaSql)).length;
+    } catch (e) {
+      return 0;
+    }
+  }, []);
+
   const isAdmin = currentUser?.role === 'ADMIN';
   const isConnected = !!supabase;
   const schema = TABLE_SCHEMAS.find(t => t.key === selectedTableKey)!;
@@ -1302,7 +1310,7 @@ export const DevDataUploader: React.FC = () => {
         </div>
 
         <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '16px', margin: 0 }}>
-          코드베이스에서 정의된 28개 데이터 테이블의 실제 Supabase 내 존재 여부 및 컬럼 구조를 실시간 검증합니다. 부정합이 있을 시 Supabase SQL Editor에 입력할 DDL 패치 쿼리를 자동 생성합니다.
+          코드베이스에서 정의된 {schemaTableCount}개 데이터 테이블의 실제 Supabase 내 존재 여부 및 컬럼 구조를 실시간 검증합니다. 부정합이 있을 시 Supabase SQL Editor에 입력할 DDL 패치 쿼리를 자동 생성합니다.
         </p>
 
         <button
@@ -1324,6 +1332,7 @@ export const DevDataUploader: React.FC = () => {
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
                 <thead>
                   <tr style={{ backgroundColor: 'var(--bg-body)', borderBottom: '1px solid var(--border-color)', textAlign: 'left' }}>
+                    <th style={{ padding: '10px 12px', fontWeight: '700', width: '60px' }}>번호</th>
                     <th style={{ padding: '10px 12px', fontWeight: '700' }}>테이블명</th>
                     <th style={{ padding: '10px 12px', fontWeight: '700' }}>상태</th>
                     <th style={{ padding: '10px 12px', fontWeight: '700' }}>검증 결과 명세</th>
@@ -1332,6 +1341,7 @@ export const DevDataUploader: React.FC = () => {
                 <tbody>
                   {schemaAuditResults.map((result, i) => (
                     <tr key={i} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                      <td style={{ padding: '10px 12px', color: 'var(--text-muted)' }}>{i + 1}</td>
                       <td style={{ padding: '10px 12px', fontWeight: '600' }}><code>{result.table}</code></td>
                       <td style={{ padding: '10px 12px' }}>
                         <span style={{
