@@ -3,7 +3,8 @@ import React, { useState, useEffect } from 'react';
 import { useApp } from './context/AppContext';
 import {
   LayoutDashboard, Users, UserCheck, Package, Layers, PlusCircle,
-  Truck, Wrench, Shield, ShoppingBag, CreditCard, LogOut, Sun, Moon, Menu, X, Zap, Settings, Database as DatabaseIcon
+  Truck, Wrench, Shield, ShoppingBag, CreditCard, LogOut, Sun, Moon, Menu, X, Zap, Settings, Database as DatabaseIcon,
+  TrendingUp
 } from 'lucide-react';
 
 // 페이지 컴포넌트 임포트
@@ -17,6 +18,7 @@ import { RentAssets } from './pages/RentAssets';
 import { Consumables } from './pages/Consumables';
 import { Contracts } from './pages/Contracts';
 import { Billings } from './pages/Billings';
+import { BankMatching } from './pages/BankMatching';
 import { TruckDispatch } from './pages/TruckDispatch';
 import { TransportMaster } from './pages/TransportMaster';
 import { DevDataUploader } from './pages/DevDataUploader';
@@ -103,6 +105,7 @@ const App: React.FC = () => {
     { id: 'consumable', name: '소모품 관리', icon: <ShoppingBag size={18} />, component: <Consumables /> },
     { id: 'contract', name: '계약 관리', icon: <UserCheck size={18} />, component: <Contracts /> },
     { id: 'billing', name: '청구/수납 관리', icon: <CreditCard size={18} />, component: <Billings /> },
+    { id: 'bank_matching', name: '은행 입출금 매칭', icon: <TrendingUp size={18} />, component: <BankMatching /> },
     { id: 'delivery', name: '배차/운송 관리', icon: <Truck size={18} />, component: <TruckDispatch /> },
     { id: 'transport_master', name: '운송 거래처/기사 관리', icon: <Settings size={18} />, component: <TransportMaster /> },
     { id: 'smart_dispatch', name: '스마트 출고 요청', icon: <Zap size={18} />, component: <SmartDispatch /> },

@@ -1,6 +1,6 @@
 // d:\Kiyeun_Lift\src\context\AppContext.tsx
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { db, User, MenuPermission, Customer, CustomerContact, CustomerSite, Product, Asset, Consumable, ConsumableLog, Contract, ContractAsset, ContractHistory, Billing, BillingDetail, Payment, Delivery, TransportCompany, TransportDriver, Repair, RepairConsumable, Todo } from '../services/db';
+import { db, User, MenuPermission, Customer, CustomerContact, CustomerSite, Product, Asset, Consumable, ConsumableLog, Contract, ContractAsset, ContractHistory, Billing, BillingDetail, Payment, Delivery, TransportCompany, TransportDriver, Repair, RepairConsumable, Todo, BankTransaction, BankMatchingRule } from '../services/db';
 
 export interface SmartDispatchData {
   customerName: string;
@@ -49,6 +49,8 @@ interface AppContextType {
   repairs: Repair[];
   repairConsumables: RepairConsumable[];
   todos: Todo[];
+  bankTransactions: BankTransaction[];
+  bankMatchingRules: BankMatchingRule[];
 
   // Mutators
   refreshAllData: () => void;
@@ -88,6 +90,10 @@ interface AppContextType {
   approveBilling: (billingId: string) => void;
   cancelBilling: (billingId: string) => void;
   receivePayment: (billingId: string, data: { paymentDate: string; amount: number; method: string; memo: string }) => void;
+  uploadBankTransactions: (txs: Omit<BankTransaction, 'id' | 'createdAt'>[]) => void;
+  matchTransactionManual: (txId: string, billingId: string, learnRule: boolean) => void;
+  unmatchTransaction: (txId: string) => void;
+  deleteMatchingRule: (ruleId: string) => void;
   
   // Deliveries
   dispatchDelivery: (deliveryId: string, dispatchData: { scheduledDate: string; vehicleType: string; driverName: string; driverContact: string; deliveryCost: number }) => void;
@@ -128,6 +134,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [repairs, setRepairs] = useState<Repair[]>([]);
   const [repairConsumables, setRepairConsumables] = useState<RepairConsumable[]>([]);
   const [todos, setTodos] = useState<Todo[]>([]);
+  const [bankTransactions, setBankTransactions] = useState<BankTransaction[]>([]);
+  const [bankMatchingRules, setBankMatchingRules] = useState<BankMatchingRule[]>([]);
 
   const refreshAllData = async () => {
     if (db.isSupabaseConnected()) {
@@ -158,6 +166,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setRepairs(db.repairs);
     setRepairConsumables(db.repairConsumables);
     setTodos(db.todos);
+    setBankTransactions(db.bankTransactions);
+    setBankMatchingRules(db.bankMatchingRules);
   };
 
   useEffect(() => {
@@ -1086,6 +1096,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const details = db.billingDetails.filter(bd => bd.billingId === billingId);
 
     details.forEach(bd => {
+      if (bd.itemName === '선수금(예치금) 차감 반영') {
+        const customer = db.customers.find(c => c.id === billing.customerId);
+        if (customer) {
+          db.updateRow<Customer>('customers', customer.id, {
+            prepaidBalance: (customer.prepaidBalance || 0) + Math.abs(bd.amount),
+            updatedAt: new Date().toISOString()
+          } as any);
+        }
+      }
       if (bd.contractAssetId) {
         const ca = db.contractAssets.find(x => x.id === bd.contractAssetId);
         if (ca) {
@@ -1136,6 +1155,217 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       updatedAt: new Date().toISOString()
     });
 
+    refreshAllData();
+  };
+
+  const executeMatch = (txId: string, billingId: string, matchingType: 'AUTO' | 'MANUAL') => {
+    const tx = db.bankTransactions.find(t => t.id === txId);
+    const firstBilling = db.billings.find(b => b.id === billingId);
+    if (!tx || !firstBilling) return;
+
+    const customerId = firstBilling.customerId;
+    let remainingDeposit = tx.depositAmount;
+
+    // 해당 고객사의 미납/일부납 상태 청구서를 오래된 순서(billingYm)로 조회
+    const activeBillings = db.billings
+      .filter(b => b.customerId === customerId && (b.status === 'UNPAID' || b.status === 'PARTIAL'))
+      .sort((a, b) => a.billingYm.localeCompare(b.billingYm));
+
+    // 혹시라도 정렬 목록에 타겟 청구서가 포함되지 않았을 경우 추가 예외 조치
+    if (!activeBillings.some(x => x.id === billingId)) {
+      activeBillings.unshift(firstBilling);
+    }
+
+    const matchedBillingIds: string[] = [];
+
+    // 1. 청구서에 금액 순차 Cascade 배분
+    for (const billing of activeBillings) {
+      if (remainingDeposit <= 0) break;
+
+      const unpaidAmount = billing.totalAmount - billing.paidAmount;
+      if (unpaidAmount <= 0) continue;
+
+      const paymentAmount = Math.min(unpaidAmount, remainingDeposit);
+      remainingDeposit -= paymentAmount;
+
+      // 수납 분할 전표 등록
+      const payId = `pay-matching-${txId}-${billing.id}`;
+      db.insertRow<Payment>('payments', {
+        id: payId,
+        billingId: billing.id,
+        paymentDate: tx.transactionDate.split(' ')[0],
+        amount: paymentAmount,
+        method: 'BANK_TRANSFER',
+        memo: `${matchingType === 'AUTO' ? '자동' : '수동'} 분할 대조 수납 (${tx.senderName})`,
+        createdAt: new Date().toISOString()
+      });
+
+      // 청구서 납부금액 및 상태 업데이트
+      const nextPaid = billing.paidAmount + paymentAmount;
+      const nextStatus: Billing['status'] = nextPaid >= billing.totalAmount ? 'PAID' : 'PARTIAL';
+      db.updateRow<Billing>('billings', billing.id, {
+        paidAmount: nextPaid,
+        status: nextStatus,
+        updatedAt: new Date().toISOString()
+      });
+
+      matchedBillingIds.push(billing.id);
+    }
+
+    // 2. 남은 초과금 선수금 적립
+    if (remainingDeposit > 0) {
+      const customer = db.customers.find(c => c.id === customerId);
+      if (customer) {
+        const prevPrepaid = customer.prepaidBalance || 0;
+        db.updateRow<Customer>('customers', customerId, {
+          prepaidBalance: prevPrepaid + remainingDeposit,
+          updatedAt: new Date().toISOString()
+        } as any);
+
+        // 선수금 가상 수납 전표 등록
+        db.insertRow<Payment>('payments', {
+          id: `pay-matching-${txId}-prepaid`,
+          billingId: '',
+          paymentDate: tx.transactionDate.split(' ')[0],
+          amount: remainingDeposit,
+          method: 'BANK_TRANSFER',
+          memo: `통장 대조 매칭 초과 선수금 적립 (${tx.senderName})`,
+          createdAt: new Date().toISOString()
+        });
+      }
+    }
+
+    // 3. 거래 내역 상태 변경
+    db.updateRow<BankTransaction>('bankTransactions', txId, {
+      matchedBillingId: matchedBillingIds.length > 0 ? matchedBillingIds[0] : billingId,
+      matchingType,
+      updatedAt: new Date().toISOString()
+    } as any);
+  };
+
+  const tryAutoMatchForTransaction = (tx: BankTransaction) => {
+    const rule = db.bankMatchingRules.find(r => r.senderName === tx.senderName);
+    if (rule) {
+      const activeBillings = db.billings.filter(b => 
+        b.customerId === rule.customerId && 
+        (b.status === 'UNPAID' || b.status === 'PARTIAL')
+      );
+      if (activeBillings.length > 0) {
+        let target = activeBillings.find(b => (b.totalAmount - b.paidAmount) === tx.depositAmount);
+        if (!target) {
+          target = activeBillings.sort((a, b) => a.billingYm.localeCompare(b.billingYm))[0];
+        }
+        executeMatch(tx.id, target.id, 'AUTO');
+        return;
+      }
+    }
+
+    const matchedCustomer = db.customers.find(c => 
+      tx.senderName.includes(c.name) || c.name.includes(tx.senderName)
+    );
+    if (matchedCustomer) {
+      const activeBillings = db.billings.filter(b => 
+        b.customerId === matchedCustomer.id && 
+        (b.status === 'UNPAID' || b.status === 'PARTIAL')
+      );
+      if (activeBillings.length > 0) {
+        let target = activeBillings.find(b => (b.totalAmount - b.paidAmount) === tx.depositAmount);
+        if (!target) {
+          target = activeBillings.sort((a, b) => a.billingYm.localeCompare(b.billingYm))[0];
+        }
+        executeMatch(tx.id, target.id, 'AUTO');
+        return;
+      }
+    }
+  };
+
+  const uploadBankTransactions = (txs: Omit<BankTransaction, 'id' | 'createdAt'>[]) => {
+    txs.forEach(tx => {
+      const newTx = db.insertRow<BankTransaction>('bankTransactions', {
+        ...tx,
+        matchedBillingId: undefined,
+        matchingType: undefined,
+        createdAt: new Date().toISOString()
+      } as any);
+
+      if (newTx.depositAmount > 0) {
+        tryAutoMatchForTransaction(newTx);
+      }
+    });
+    refreshAllData();
+  };
+
+  const matchTransactionManual = (txId: string, billingId: string, learnRule: boolean) => {
+    const tx = db.bankTransactions.find(t => t.id === txId);
+    const billing = db.billings.find(b => b.id === billingId);
+    if (!tx || !billing) return;
+
+    executeMatch(txId, billingId, 'MANUAL');
+
+    if (learnRule) {
+      const exists = db.bankMatchingRules.some(r => r.senderName === tx.senderName);
+      if (!exists) {
+        db.insertRow<BankMatchingRule>('bankMatchingRules', {
+          senderName: tx.senderName,
+          customerId: billing.customerId,
+          createdAt: new Date().toISOString()
+        });
+      }
+    }
+    refreshAllData();
+  };
+
+  const unmatchTransaction = (txId: string) => {
+    const tx = db.bankTransactions.find(t => t.id === txId);
+    if (!tx || !tx.matchedBillingId) return;
+
+    // 해당 거래 ID 패턴으로 등록되었던 모든 수납 전표 검색
+    const matchPrefix = `pay-matching-${txId}`;
+    const associatedPayments = db.payments.filter(p => p.id.startsWith(matchPrefix));
+
+    // 대표 청구서를 찾아 customerId 획득
+    const repBilling = db.billings.find(b => b.id === tx.matchedBillingId);
+    const customerId = repBilling?.customerId;
+
+    associatedPayments.forEach(pay => {
+      if (pay.billingId) {
+        // 청구서 수납 잔액 롤백
+        const billing = db.billings.find(b => b.id === pay.billingId);
+        if (billing) {
+          const nextPaid = Math.max(0, billing.paidAmount - pay.amount);
+          const nextStatus: Billing['status'] = nextPaid === 0 ? 'UNPAID' : (nextPaid >= billing.totalAmount ? 'PAID' : 'PARTIAL');
+          db.updateRow<Billing>('billings', billing.id, {
+            paidAmount: nextPaid,
+            status: nextStatus,
+            updatedAt: new Date().toISOString()
+          });
+        }
+      } else if (customerId) {
+        // 선수금 적립 롤백
+        const customer = db.customers.find(c => c.id === customerId);
+        if (customer) {
+          db.updateRow<Customer>('customers', customerId, {
+            prepaidBalance: Math.max(0, (customer.prepaidBalance || 0) - pay.amount),
+            updatedAt: new Date().toISOString()
+          } as any);
+        }
+      }
+
+      db.deleteRow('payments', pay.id);
+    });
+
+    // 거래 정보 복구
+    db.updateRow<BankTransaction>('bankTransactions', txId, {
+      matchedBillingId: '',
+      matchingType: undefined,
+      updatedAt: new Date().toISOString()
+    } as any);
+
+    refreshAllData();
+  };
+
+  const deleteMatchingRule = (ruleId: string) => {
+    db.deleteRow('bankMatchingRules', ruleId);
     refreshAllData();
   };
 
@@ -1270,6 +1500,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     <AppContext.Provider value={{
       currentUser, theme, toggleTheme, login, logout, hasPermission,
       users, permissions, customers, contacts, sites, products, assets, consumables, consumableLogs, contracts, contractAssets, contractHistory, deliveries, billings, billingDetails, payments, repairs, repairConsumables, transportCompanies, transportDrivers, todos,
+      bankTransactions, bankMatchingRules,
       refreshAllData, updatePermissions, saveUser, saveCustomer, saveContact, saveSite, saveProduct,
       acquireAsset, disposeAsset, registerRentedAsset, returnRentedAsset,
       purchaseConsumable, useConsumable,
@@ -1278,6 +1509,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       saveSmartDispatch,
       completeTodo,
       generateBillingsForMonth, approveBilling, cancelBilling, receivePayment,
+      uploadBankTransactions, matchTransactionManual, unmatchTransaction, deleteMatchingRule,
       dispatchDelivery, settleDeliveryCost,
       registerRepair,
       saveTransportDataOnFly

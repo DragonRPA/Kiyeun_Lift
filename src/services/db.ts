@@ -50,6 +50,7 @@ export interface Customer {
   repContact: string;
   repEmail: string;
   driveFolderId?: string;
+  prepaidBalance?: number; // 선수금 (예치금) 잔액
   createdAt: string;
 }
 
@@ -312,6 +313,25 @@ export interface Todo {
   createdAt: string;
 }
 
+export interface BankTransaction {
+  id: string;
+  transactionDate: string; // 'YYYY-MM-DD HH:mm:ss'
+  senderName: string;      // 이체자/입금자명 (적요)
+  depositAmount: number;   // 입금액 (매출 수납용)
+  withdrawAmount: number;  // 출금액
+  memo: string;            // 거래 메모
+  matchedBillingId?: string; // 매칭된 청구서 ID (비어 있으면 미매칭)
+  matchingType?: 'AUTO' | 'MANUAL';
+  createdAt: string;
+}
+
+export interface BankMatchingRule {
+  id: string;
+  senderName: string; // 이체자명
+  customerId: string; // 매핑된 고객사 ID
+  createdAt: string;
+}
+
 // 초기 로컬 스토리지 데이터 생성
 const generateMockProducts = (): Product[] => {
   return [
@@ -554,6 +574,18 @@ const SEED_REPAIR_CONSUMABLES: RepairConsumable[] = [];
 const SEED_CONTRACT_HISTORY: ContractHistory[] = [];
 const SEED_TODOS: Todo[] = [];
 
+const SEED_BANK_TRANSACTIONS: BankTransaction[] = [
+  { id: 'bt-1', transactionDate: '2026-07-20 09:30:15', senderName: '대현테크', depositAmount: 1050000, withdrawAmount: 0, memo: '보통예금입금', createdAt: new Date().toISOString() },
+  { id: 'bt-2', transactionDate: '2026-07-20 10:15:22', senderName: '주식회사기연', depositAmount: 600000, withdrawAmount: 0, memo: '7월분결제', createdAt: new Date().toISOString() },
+  { id: 'bt-3', transactionDate: '2026-07-20 11:00:00', senderName: '이정용', depositAmount: 300000, withdrawAmount: 0, memo: '임대료 송금', createdAt: new Date().toISOString() },
+  { id: 'bt-4', transactionDate: '2026-07-20 13:45:10', senderName: '현장가설', depositAmount: 0, withdrawAmount: 150000, memo: '유류비 지출', createdAt: new Date().toISOString() },
+  { id: 'bt-5', transactionDate: '2026-07-20 14:20:00', senderName: '한성건설', depositAmount: 900000, withdrawAmount: 0, memo: '7월렌탈료', createdAt: new Date().toISOString() }
+];
+
+const SEED_BANK_MATCHING_RULES: BankMatchingRule[] = [
+  { id: 'bmr-1', senderName: '주식회사기연', customerId: 'cust-1', createdAt: new Date().toISOString() }
+];
+
 class LocalDB {
   private get<T>(key: string, seed: T[]): T[] {
     const val = localStorage.getItem(`erp_${key}`);
@@ -634,6 +666,12 @@ class LocalDB {
   get todos() { return this.get<Todo>('todos', SEED_TODOS); }
   set todos(val: Todo[]) { this.set('todos', val); }
 
+  get bankTransactions() { return this.get<BankTransaction>('bankTransactions', SEED_BANK_TRANSACTIONS); }
+  set bankTransactions(val: BankTransaction[]) { this.set('bankTransactions', val); }
+
+  get bankMatchingRules() { return this.get<BankMatchingRule>('bankMatchingRules', SEED_BANK_MATCHING_RULES); }
+  set bankMatchingRules(val: BankMatchingRule[]) { this.set('bankMatchingRules', val); }
+
   // Supabase 테이블 맵핑
   private mapToSupabaseTable(key: string): string {
     const mapping: Record<string, string> = {
@@ -657,7 +695,9 @@ class LocalDB {
       billingDetails: 'billing_details',
       payments: 'payments',
       repairs: 'repairs',
-      repairConsumables: 'repair_consumables'
+      repairConsumables: 'repair_consumables',
+      bankTransactions: 'bank_transactions',
+      bankMatchingRules: 'bank_matching_rules'
     };
     return mapping[key] || key;
   }
@@ -687,7 +727,7 @@ class LocalDB {
       'products', 'assets', 'consumables', 'consumableLogs', 
       'contracts', 'contractAssets', 'contractHistory', 'deliveries', 
       'transportCompanies', 'transportDrivers',
-      'billings', 'billingDetails', 'payments', 'repairs', 'repairConsumables', 'todos'
+      'billings', 'billingDetails', 'payments', 'repairs', 'repairConsumables', 'todos', 'bankTransactions', 'bankMatchingRules'
     ];
 
     try {

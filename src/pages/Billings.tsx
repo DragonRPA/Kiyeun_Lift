@@ -317,12 +317,39 @@ export const Billings: React.FC = () => {
       });
     });
 
+    // 선수금(예치금) 차감 연동
+    const customerInfo = customers.find(c => c.id === selectedContractForWizard.customerId);
+    let finalBillingAmount = overallTotal;
+    
+    if (customerInfo && (customerInfo.prepaidBalance || 0) > 0) {
+      const prepaid = customerInfo.prepaidBalance || 0;
+      const appliedPrepaid = Math.min(overallTotal, prepaid);
+      
+      if (appliedPrepaid > 0) {
+        detailsList.push({
+          contractAssetId: undefined,
+          itemName: '선수금(예치금) 차감 반영',
+          quantity: 1,
+          unitPrice: -appliedPrepaid,
+          amount: -appliedPrepaid,
+          description: `보유 선수금 중 ${appliedPrepaid.toLocaleString()}원 차감 반영`
+        });
+        
+        db.updateRow<any>('customers', customerInfo.id, {
+          prepaidBalance: prepaid - appliedPrepaid,
+          updatedAt: new Date().toISOString()
+        });
+        
+        finalBillingAmount = overallTotal - appliedPrepaid;
+      }
+    }
+
     const billing = db.insertRow<Billing>('billings', {
       customerId: selectedContractForWizard.customerId,
       contractId: selectedContractForWizard.id,
       billingYm: currentYm,
       billingDate: todayStr,
-      totalAmount: overallTotal,
+      totalAmount: finalBillingAmount,
       paidAmount: 0,
       status: 'REQUESTED',
       createdAt: new Date().toISOString(),
@@ -402,7 +429,7 @@ export const Billings: React.FC = () => {
                             b.status === 'PARTIAL' ? 'badge-warning' : 'badge-info'
                           }`}>
                             {b.status === 'REQUESTED' ? '결재대기' : 
-                             b.status === 'REJECTED' ? '반려됨' : 
+                             b.status === 'REJECTED' ? '취소됨' : 
                              b.status === 'PAID' ? '완납' : 
                              b.status === 'PARTIAL' ? '일부납' : '승인(미납)'}
                           </span>
@@ -445,7 +472,7 @@ export const Billings: React.FC = () => {
                 </div>
                 {activeBilling.status === 'REJECTED' && (
                   <div style={{ padding: '12px', backgroundColor: 'var(--bg-app)', borderLeft: '4px solid var(--danger)', marginBottom: '16px', borderRadius: '4px' }}>
-                    <strong style={{ color: 'var(--danger)', fontSize: '14px', display: 'block', marginBottom: '4px' }}>[반려 사유]</strong>
+                    <strong style={{ color: 'var(--danger)', fontSize: '14px', display: 'block', marginBottom: '4px' }}>[취소 사유]</strong>
                     <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>{activeBilling.rejectReason || '사유 미기재'}</span>
                   </div>
                 )}

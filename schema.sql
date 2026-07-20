@@ -95,6 +95,7 @@ CREATE TABLE customers (
     "repContact" TEXT,
     "repEmail" TEXT,
     "driveFolderId" TEXT,
+    "prepaidBalance" DOUBLE PRECISION NOT NULL DEFAULT 0,
     "createdAt" TEXT NOT NULL
 );
 
@@ -418,6 +419,28 @@ CREATE TABLE collaboration_request_history (
     "writerId" TEXT REFERENCES users(id),
     content TEXT NOT NULL,
     action TEXT CHECK (action IN ('NEGOTIATE', 'AGREE', 'REJECT', 'ESCALATE')) NOT NULL,
+    "createdAt" TEXT NOT NULL
+);
+
+
+-- 26. 은행 입출금 거래 내역 (bank_transactions) - 신설
+CREATE TABLE bank_transactions (
+    id TEXT PRIMARY KEY,
+    "transactionDate" TEXT NOT NULL,
+    "senderName" TEXT NOT NULL,
+    "depositAmount" DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "withdrawAmount" DOUBLE PRECISION NOT NULL DEFAULT 0,
+    memo TEXT,
+    "matchedBillingId" TEXT REFERENCES billings(id) ON DELETE SET NULL,
+    "matchingType" TEXT CHECK ("matchingType" IN ('AUTO', 'MANUAL')),
+    "createdAt" TEXT NOT NULL
+);
+
+-- 27. 은행 입금 대조 학습 매핑 룰 (bank_matching_rules) - 신설
+CREATE TABLE bank_matching_rules (
+    id TEXT PRIMARY KEY,
+    "senderName" TEXT NOT NULL UNIQUE,
+    "customerId" TEXT REFERENCES customers(id) ON DELETE CASCADE,
     "createdAt" TEXT NOT NULL
 );
 
