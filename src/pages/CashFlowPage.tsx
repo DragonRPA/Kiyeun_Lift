@@ -4,7 +4,7 @@ import {
   TrendingUp, ArrowDownRight, ArrowUpRight, AlertTriangle, 
   Layers, CheckCircle, RefreshCw, Landmark, HelpCircle,
   Camera, Trash2, Calendar, FileText, PlusCircle, Clock,
-  ChevronLeft, ChevronRight, BarChart2
+  ChevronLeft, ChevronRight, BarChart2, X, Info
 } from 'lucide-react';
 
 interface DailyForecast {
@@ -45,6 +45,12 @@ export const CashFlowPage: React.FC = () => {
   const [showSnapModal, setShowSnapModal] = useState(false);
   const [snapNotes, setSnapNotes] = useState('');
 
+  // 세부 내역 모달 상태 ('STARTING' | 'INFLOW' | 'OPEX' | 'CAPEX' | 'FINAL' | null)
+  const [activeDetailModal, setActiveDetailModal] = useState<'STARTING' | 'INFLOW' | 'OPEX' | 'CAPEX' | 'FINAL' | null>(null);
+
+  // 요약 카드 호버 효과 트래킹
+  const [hoveredCard, setHoveredCard] = useState<string | null>(null);
+
   // 차트 툴팁 제어 상태
   const [hoveredPoint, setHoveredPoint] = useState<{ item: DailyForecast; x: number; y: number } | null>(null);
   const chartRef = useRef<SVGSVGElement | null>(null);
@@ -59,11 +65,15 @@ export const CashFlowPage: React.FC = () => {
   const focusDate = getFocusDate();
   const focusDateString = focusDate.toISOString().split('T')[0];
 
+  // 오늘과 기준일 사이의 누적 자금 변동액 계산
+  const [deltaAmount, setDeltaAmount] = useState(0);
+
   useEffect(() => {
     // 1. 기준일 시점의 시작 잔액 계산 (역산 로직 포함)
     let startingBalance = totalTodayBalance;
     const today = new Date();
-    const todayStr = today.toISOString().split('T')[0];
+
+    let computedDelta = 0;
 
     if (startOffsetDays > 0) {
       // 미래 시점의 시작 잔액: 오늘부터 기준일까지의 예정된 수지 타산을 누적 가산하여 구함
@@ -72,10 +82,10 @@ export const CashFlowPage: React.FC = () => {
         tempDate.setDate(today.getDate() + offset);
         const tempDateStr = tempDate.toISOString().split('T')[0];
 
-        // 미래의 예정 거래내역 계산
         const { inflow, opex, capex } = queryForecastData(offset, tempDateStr);
-        startingBalance += (inflow - opex - capex);
+        computedDelta += (inflow - opex - capex);
       }
+      startingBalance += computedDelta;
     } else if (startOffsetDays < 0) {
       // 과거 시점의 시작 잔액: 오늘 잔액에서 기준일과 오늘 사이의 실제 일어난 입출금을 역산
       // 기준일 이후 실제 발생한 입금은 차감하고, 출금은 더함
@@ -85,14 +95,17 @@ export const CashFlowPage: React.FC = () => {
         tempDate.setDate(today.getDate() - offset);
         const tempDateStr = tempDate.toISOString().split('T')[0];
 
-        // 해당 과거 날짜의 실제 발생 거래 내역 조회 (bankTransactions 활용)
         const histTx = bankTransactions.filter(tx => tx.transactionDate.startsWith(tempDateStr));
         const totalDeposits = histTx.reduce((sum, tx) => sum + tx.depositAmount, 0);
         const totalWithdrawals = histTx.reduce((sum, tx) => sum + tx.withdrawAmount, 0);
 
-        startingBalance = startingBalance - totalDeposits + totalWithdrawals;
+        computedDelta = computedDelta + totalDeposits - totalWithdrawals;
       }
+      startingBalance -= computedDelta;
+      // 과거로 갈수록 시작 잔액이 변경되므로 변동액 마킹
     }
+
+    setDeltaAmount(startOffsetDays >= 0 ? computedDelta : -computedDelta);
 
     // 2. 기준일로부터 30일간의 전망 타임라인 시뮬레이션
     const list: DailyForecast[] = [];
@@ -198,7 +211,7 @@ export const CashFlowPage: React.FC = () => {
       inflowDetail = '포스코이앤씨(주) 미수금 회수예정';
     } else if (dayOfMonth === 30) {
       opex = 1500000;
-      opexDetail = '사무실 임차료(원세) 자동이체';
+      opexDetail = '사무실 임차료(월세) 자동이체';
     }
 
     // 1회성 대형 CAPEX 모의 지출 스케줄링 (8월 초 등)
@@ -237,77 +250,67 @@ export const CashFlowPage: React.FC = () => {
     setSnapNotes('');
   };
 
-  // 차트 마우스 마우스 오버 포인트 계산 (SVG 상대 좌표 좌표)
+  // 차트 마우스 마우스 오버 포인트 계산
   const handleMouseMove = (e: React.MouseEvent<SVGSVGElement, MouseEvent>) => {
     if (!chartRef.current || forecastList.length === 0) return;
     const svg = chartRef.current;
     const rect = svg.getBoundingClientRect();
     const clientX = e.clientX - rect.left;
     
-    // 차트 여백 정의 (가로: 좌 50px, 우 20px)
     const paddingLeft = 60;
     const paddingRight = 20;
     const chartWidth = rect.width - paddingLeft - paddingRight;
 
-    // 마우스가 실제 차트 영역 내에 있는가?
     if (clientX < paddingLeft || clientX > rect.width - paddingRight) {
       setHoveredPoint(null);
       return;
     }
 
-    // 마우스 위치에 가장 가까운 인덱스 계산
     const pct = (clientX - paddingLeft) / chartWidth;
     const rawIndex = pct * (forecastList.length - 1);
     const index = Math.min(Math.max(Math.round(rawIndex), 0), forecastList.length - 1);
     
     const item = forecastList[index];
 
-    // 해당 항목의 Y 좌표 역산
-    const minBal = Math.min(0, ...forecastList.map(p => p.cumulative)) * 1.1;
-    const maxBal = Math.max(safetyThreshold * 2, ...forecastList.map(p => p.cumulative)) * 1.1;
-    const balRange = maxBal - minBal || 1;
-    const chartHeight = 180; // 실제 데이터 렌더링 세로폭
+    const minBalVal = Math.min(0, ...forecastList.map(p => p.cumulative)) * 1.1;
+    const maxBalVal = Math.max(safetyThreshold * 2, ...forecastList.map(p => p.cumulative)) * 1.1;
+    const balRange = maxBalVal - minBalVal || 1;
+    const chartHeight = 180;
     const paddingTop = 20;
 
-    const y = paddingTop + chartHeight - ((item.cumulative - minBal) / balRange) * chartHeight;
+    const y = paddingTop + chartHeight - ((item.cumulative - minBalVal) / balRange) * chartHeight;
     const x = paddingLeft + (index / (forecastList.length - 1)) * chartWidth;
 
     setHoveredPoint({ item, x, y });
   };
 
-  // SVG 차트 패스 생성용 데이터 사전 연산
   const generateSvgPaths = () => {
     if (forecastList.length === 0) return { linePath: '', areaPath: '', zeroY: 0, safetyY: 0, points: [], maxBal: 0, minBal: 0 };
 
     const paddingLeft = 60;
     const paddingRight = 20;
-    const chartWidth = 550; // 고정된 뷰박스 기준 너비
+    const chartWidth = 550;
     const chartHeight = 180;
     const paddingTop = 20;
 
-    const minBal = Math.min(0, ...forecastList.map(p => p.cumulative)) * 1.1;
-    const maxBal = Math.max(safetyThreshold * 2, ...forecastList.map(p => p.cumulative)) * 1.1;
-    const balRange = maxBal - minBal || 1;
+    const minBalVal = Math.min(0, ...forecastList.map(p => p.cumulative)) * 1.1;
+    const maxBalVal = Math.max(safetyThreshold * 2, ...forecastList.map(p => p.cumulative)) * 1.1;
+    const balRange = maxBalVal - minBalVal || 1;
 
-    // 일치 좌표 수집
     const points = forecastList.map((item, idx) => {
       const x = paddingLeft + (idx / (forecastList.length - 1)) * chartWidth;
-      const y = paddingTop + chartHeight - ((item.cumulative - minBal) / balRange) * chartHeight;
+      const y = paddingTop + chartHeight - ((item.cumulative - minBalVal) / balRange) * chartHeight;
       return { x, y };
     });
 
-    // 라인 패스 패스 연결
     const linePath = points.map((p, idx) => `${idx === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
-
-    // 면적 영역 패스 연결 (바닥 라인으로 돌아와서 닫기)
-    const baselineY = paddingTop + chartHeight - ((0 - minBal) / balRange) * chartHeight;
+    const baselineY = paddingTop + chartHeight - ((0 - minBalVal) / balRange) * chartHeight;
     const areaPath = `${linePath} L ${points[points.length - 1].x} ${baselineY} L ${points[0].x} ${baselineY} Z`;
 
-    // 0선 및 안전 임계선 Y 좌표 좌표
-    const zeroY = paddingTop + chartHeight - ((0 - minBal) / balRange) * chartHeight;
-    const safetyY = paddingTop + chartHeight - ((safetyThreshold - minBal) / balRange) * chartHeight;
+    const zeroY = paddingTop + chartHeight - ((0 - minBalVal) / balRange) * chartHeight;
+    const safetyY = paddingTop + chartHeight - ((safetyThreshold - minBalVal) / balRange) * chartHeight;
 
-    return { linePath, areaPath, zeroY, safetyY, points, maxBal, minBal };
+    return { linePath, areaPath, zeroY, safetyY, points, maxBal: maxBalVal, minBal: minBalVal };
   };
 
   const { linePath, areaPath, zeroY, safetyY, points, maxBal, minBal } = generateSvgPaths();
@@ -342,7 +345,7 @@ export const CashFlowPage: React.FC = () => {
 
       {activeSubTab === 'FORECAST' && (
         <>
-          {/* 과거 6개월 ~ 미래 6개월 타임라인 슬라이더 조절바 (1인칭 고급 컨트롤) */}
+          {/* 과거 6개월 ~ 미래 6개월 타임라인 슬라이더 조절바 */}
           <div className="card" style={{ margin: '0 0 20px 0', padding: '16px 20px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -424,7 +427,6 @@ export const CashFlowPage: React.FC = () => {
                   style={{ overflow: 'visible', cursor: 'crosshair' }}
                 >
                   <defs>
-                    {/* 상단 안전영역 그라데이션 */}
                     <linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="0%" stopColor="var(--primary)" stopOpacity="0.25" />
                       <stop offset="100%" stopColor="var(--primary)" stopOpacity="0.00" />
@@ -443,7 +445,7 @@ export const CashFlowPage: React.FC = () => {
                   <text x="50" y="114" fontSize="9" textAnchor="end" fill="var(--text-muted)">{Math.round((maxBal + minBal)/2/1000000)}M</text>
                   <text x="50" y="204" fontSize="9" textAnchor="end" fill="var(--text-muted)">{Math.round(minBal/1000000)}M</text>
 
-                  {/* 안전자금 마진 임계선 (안전 임계치선) */}
+                  {/* 안전자금 마진 임계선 */}
                   {safetyY >= 20 && safetyY <= 200 && (
                     <>
                       <line x1="60" y1={safetyY} x2="610" y2={safetyY} stroke="var(--warning)" strokeWidth="1" strokeDasharray="4 4" />
@@ -451,7 +453,7 @@ export const CashFlowPage: React.FC = () => {
                     </>
                   )}
 
-                  {/* 부도위험선 (Zero-line) */}
+                  {/* 부도위험선 */}
                   {zeroY >= 20 && zeroY <= 200 && (
                     <>
                       <line x1="60" y1={zeroY} x2="610" y2={zeroY} stroke="var(--danger)" strokeWidth="1.5" />
@@ -462,7 +464,7 @@ export const CashFlowPage: React.FC = () => {
                   {/* 채워진 면적 패스 */}
                   <path d={areaPath} fill="url(#areaGrad)" />
 
-                  {/* 30일 잔고 곡선 곡선 */}
+                  {/* 30일 잔고 곡선 */}
                   <path d={linePath} fill="none" stroke="var(--primary)" strokeWidth="2.5" />
 
                   {/* 데이터 포인트 점 */}
@@ -478,7 +480,7 @@ export const CashFlowPage: React.FC = () => {
                     />
                   ))}
 
-                  {/* 인터랙티브 마우스 호버 가이드라인 및 서클 */}
+                  {/* 인터랙티브 마우스 호버 가이드라인 */}
                   {hoveredPoint && (
                     <>
                       <line 
@@ -500,7 +502,7 @@ export const CashFlowPage: React.FC = () => {
                   )}
                 </svg>
 
-                {/* 실시간 SVG 차트 툴팁 레이어 팝업 */}
+                {/* 실시간 SVG 차트 툴팁 */}
                 {hoveredPoint && (
                   <div style={{
                     position: 'absolute',
@@ -527,7 +529,7 @@ export const CashFlowPage: React.FC = () => {
               </div>
             </div>
 
-            {/* 우측: 핵심 마진 조율 패널 및 스냅샷 저장 기능 */}
+            {/* 우측: 핵심 마진 조율 패널 */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <div className="card" style={{ margin: 0, padding: '16px' }}>
                 <h3 className="card-title" style={{ fontSize: '13px', marginBottom: '12px' }}>📊 시뮬레이션 잔고 제어 옵션</h3>
@@ -609,10 +611,24 @@ export const CashFlowPage: React.FC = () => {
             </div>
           )}
 
-          {/* 주거래 통장 잔액 및 종합 요약 카드 피드 */}
+          {/* 주거래 통장 잔액 및 종합 요약 카드 피드 (인터랙션 적용: 클릭 시 세부 팝업 표출) */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px', marginBottom: '24px' }}>
-            {/* 주거래 잔액 */}
-            <div className="card" style={{ margin: 0, padding: '16px' }}>
+            
+            {/* 1. 기준일 시점 시작고 */}
+            <div 
+              className="card" 
+              onClick={() => setActiveDetailModal('STARTING')}
+              onMouseEnter={() => setHoveredCard('starting')}
+              onMouseLeave={() => setHoveredCard(null)}
+              style={{ 
+                margin: 0, padding: '16px', cursor: 'pointer',
+                transition: 'transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease',
+                transform: hoveredCard === 'starting' ? 'scale(1.02)' : 'none',
+                boxShadow: hoveredCard === 'starting' ? '0 10px 20px rgba(0,0,0,0.08)' : 'none',
+                borderColor: hoveredCard === 'starting' ? 'var(--primary)' : 'var(--border-color)',
+                borderWidth: '1px', borderStyle: 'solid'
+              }}
+            >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                 <span style={{ fontSize: '12.5px', color: 'var(--text-secondary)' }}>기준일 시점 시작고</span>
                 <Landmark size={18} color="var(--primary)" />
@@ -620,11 +636,26 @@ export const CashFlowPage: React.FC = () => {
               <h3 style={{ fontSize: '20px', fontWeight: '800', margin: '4px 0' }}>
                 {startingBalanceAtFocus.toLocaleString()}원
               </h3>
-              <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>통장 잔액 기반 오프셋 누적고</span>
+              <span style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '2px' }}>
+                통장 잔액 기반 오프셋 누적고 <Info size={11} />
+              </span>
             </div>
 
-            {/* 30일 내 수납 예정 */}
-            <div className="card" style={{ margin: 0, padding: '16px' }}>
+            {/* 2. 30일 내 수납 예정 */}
+            <div 
+              className="card" 
+              onClick={() => setActiveDetailModal('INFLOW')}
+              onMouseEnter={() => setHoveredCard('inflow')}
+              onMouseLeave={() => setHoveredCard(null)}
+              style={{ 
+                margin: 0, padding: '16px', cursor: 'pointer',
+                transition: 'transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease',
+                transform: hoveredCard === 'inflow' ? 'scale(1.02)' : 'none',
+                boxShadow: hoveredCard === 'inflow' ? '0 10px 20px rgba(0,0,0,0.08)' : 'none',
+                borderColor: hoveredCard === 'inflow' ? 'var(--success)' : 'var(--border-color)',
+                borderWidth: '1px', borderStyle: 'solid'
+              }}
+            >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                 <span style={{ fontSize: '12.5px', color: 'var(--text-secondary)' }}>30일 내 수납 예정 (Inflow)</span>
                 <ArrowUpRight size={18} color="var(--success)" />
@@ -632,11 +663,26 @@ export const CashFlowPage: React.FC = () => {
               <h3 style={{ fontSize: '20px', fontWeight: '800', margin: '4px 0', color: 'var(--success)' }}>
                 +{totalInflow.toLocaleString()}원
               </h3>
-              <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>납기 기한 미수금 건 연동</span>
+              <span style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '2px' }}>
+                납기 기한 미수금 건 연동 <Info size={11} />
+              </span>
             </div>
 
-            {/* 30일 내 지출 예정 */}
-            <div className="card" style={{ margin: 0, padding: '16px' }}>
+            {/* 3. 30일 내 일반 지출 */}
+            <div 
+              className="card" 
+              onClick={() => setActiveDetailModal('OPEX')}
+              onMouseEnter={() => setHoveredCard('opex')}
+              onMouseLeave={() => setHoveredCard(null)}
+              style={{ 
+                margin: 0, padding: '16px', cursor: 'pointer',
+                transition: 'transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease',
+                transform: hoveredCard === 'opex' ? 'scale(1.02)' : 'none',
+                boxShadow: hoveredCard === 'opex' ? '0 10px 20px rgba(0,0,0,0.08)' : 'none',
+                borderColor: hoveredCard === 'opex' ? 'var(--warning)' : 'var(--border-color)',
+                borderWidth: '1px', borderStyle: 'solid'
+              }}
+            >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                 <span style={{ fontSize: '12.5px', color: 'var(--text-secondary)' }}>30일 내 일반 지출 (OPEX)</span>
                 <ArrowDownRight size={18} color="var(--warning)" />
@@ -644,11 +690,26 @@ export const CashFlowPage: React.FC = () => {
               <h3 style={{ fontSize: '20px', fontWeight: '800', margin: '4px 0', color: 'var(--warning)' }}>
                 -{totalOpex.toLocaleString()}원
               </h3>
-              <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>월 고정/변동 비용 정산분</span>
+              <span style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '2px' }}>
+                월 고정/변동 비용 정산분 <Info size={11} />
+              </span>
             </div>
 
-            {/* 30일 내 CAPEX */}
-            <div className="card" style={{ margin: 0, padding: '16px' }}>
+            {/* 4. 30일 내 CAPEX */}
+            <div 
+              className="card" 
+              onClick={() => setActiveDetailModal('CAPEX')}
+              onMouseEnter={() => setHoveredCard('capex')}
+              onMouseLeave={() => setHoveredCard(null)}
+              style={{ 
+                margin: 0, padding: '16px', cursor: 'pointer',
+                transition: 'transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease',
+                transform: hoveredCard === 'capex' ? 'scale(1.02)' : 'none',
+                boxShadow: hoveredCard === 'capex' ? '0 10px 20px rgba(0,0,0,0.08)' : 'none',
+                borderColor: hoveredCard === 'capex' ? 'var(--danger)' : 'var(--border-color)',
+                borderWidth: '1px', borderStyle: 'solid'
+              }}
+            >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                 <span style={{ fontSize: '12.5px', color: 'var(--text-secondary)' }}>설비자산 투자예정 (CAPEX)</span>
                 <Layers size={18} color="var(--danger)" />
@@ -656,11 +717,27 @@ export const CashFlowPage: React.FC = () => {
               <h3 style={{ fontSize: '20px', fontWeight: '800', margin: '4px 0', color: 'var(--danger)' }}>
                 -{totalCapex.toLocaleString()}원
               </h3>
-              <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>장비 신규 취득 투자 규모</span>
+              <span style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '2px' }}>
+                장비 신규 취득 투자 규모 <Info size={11} />
+              </span>
             </div>
 
-            {/* 최종 30일 후 예상 잔액 */}
-            <div className="card" style={{ margin: 0, padding: '16px', backgroundColor: finalBalance < 0 ? 'rgba(239, 68, 68, 0.05)' : 'transparent' }}>
+            {/* 5. 최종 30일 후 예상 잔액 */}
+            <div 
+              className="card" 
+              onClick={() => setActiveDetailModal('FINAL')}
+              onMouseEnter={() => setHoveredCard('final')}
+              onMouseLeave={() => setHoveredCard(null)}
+              style={{ 
+                margin: 0, padding: '16px', cursor: 'pointer',
+                transition: 'transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease',
+                transform: hoveredCard === 'final' ? 'scale(1.02)' : 'none',
+                boxShadow: hoveredCard === 'final' ? '0 10px 20px rgba(0,0,0,0.08)' : 'none',
+                borderColor: hoveredCard === 'final' ? 'var(--primary)' : 'var(--border-color)',
+                borderWidth: '1px', borderStyle: 'solid',
+                backgroundColor: finalBalance < 0 ? 'rgba(239, 68, 68, 0.05)' : 'transparent' 
+              }}
+            >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                 <span style={{ fontSize: '12.5px', color: 'var(--text-secondary)' }}>30일 후 예상 잔액</span>
                 {finalBalance < 0 ? <AlertTriangle size={18} color="var(--danger)" /> : <CheckCircle size={18} color="var(--success)" />}
@@ -668,7 +745,9 @@ export const CashFlowPage: React.FC = () => {
               <h3 style={{ fontSize: '20px', fontWeight: '800', margin: '4px 0', color: finalBalance < 0 ? 'var(--danger)' : 'var(--success)' }}>
                 {finalBalance.toLocaleString()}원
               </h3>
-              <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>시뮬레이션 누적 최종고</span>
+              <span style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '2px' }}>
+                시뮬레이션 누적 최종고 <Info size={11} />
+              </span>
             </div>
           </div>
 
@@ -857,6 +936,263 @@ export const CashFlowPage: React.FC = () => {
               <button type="submit" className="btn-primary">스냅샷 저장</button>
             </div>
           </form>
+        </div>
+      )}
+
+      {/* 세부 내역 분석 분석 팝업 모달 */}
+      {activeDetailModal && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(4px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000
+        }}>
+          <div className="card" style={{ width: '100%', maxWidth: '600px', padding: '24px', backgroundColor: 'var(--bg-card)', borderRadius: '12px', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)' }}>
+            
+            {/* 모달 헤더 */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', borderBottom: '1px solid var(--border-color)', paddingBottom: '12px' }}>
+              <h3 className="card-title" style={{ fontSize: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Info size={18} color="var(--primary)" />
+                {activeDetailModal === 'STARTING' && '기준일 시작 자고 세부 명세'}
+                {activeDetailModal === 'INFLOW' && '30일 이내 매출 수납 예정액 (Inflow) 명세'}
+                {activeDetailModal === 'OPEX' && '30일 이내 일반 매입 지출액 (OPEX) 명세'}
+                {activeDetailModal === 'CAPEX' && '30일 이내 설비투자 예정액 (CAPEX) 명세'}
+                {activeDetailModal === 'FINAL' && '30일 후 종합 유동성 정산 대조표'}
+              </h3>
+              <button 
+                onClick={() => setActiveDetailModal(null)}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* 모달 본문 분기 */}
+            <div style={{ maxHeight: '350px', overflowY: 'auto', marginBottom: '20px' }}>
+              
+              {/* 1. 시작고 세부 내역 */}
+              {activeDetailModal === 'STARTING' && (
+                <div style={{ fontSize: '13.5px', lineHeight: '1.6' }}>
+                  <table style={{ width: '100%', marginBottom: '16px' }}>
+                    <thead>
+                      <tr>
+                        <th>통장 및 계좌 구분</th>
+                        <th style={{ textAlign: 'right' }}>보유 잔액</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td>국민은행 (주거래 통장)</td>
+                        <td style={{ textAlign: 'right', fontWeight: '600' }}>{kookminBalance.toLocaleString()}원</td>
+                      </tr>
+                      <tr>
+                        <td>신한은행 (부거래 통장)</td>
+                        <td style={{ textAlign: 'right', fontWeight: '600' }}>{shinhanBalance.toLocaleString()}원</td>
+                      </tr>
+                      <tr style={{ borderTop: '2px solid var(--border-color)', fontWeight: 'bold' }}>
+                        <td>오늘 시점 총잔액 합계</td>
+                        <td style={{ textAlign: 'right', color: 'var(--primary)' }}>{totalTodayBalance.toLocaleString()}원</td>
+                      </tr>
+                    </tbody>
+                  </table>
+
+                  <div style={{ backgroundColor: 'var(--bg-app)', padding: '12px', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '12.5px' }}>
+                    <strong>📅 시점 이동에 따른 오프셋 잔고 연산 결과:</strong><br/>
+                    • 오늘 대비 타임라인 오프셋: {startOffsetDays === 0 ? '오늘 (0일 오프셋)' : `${startOffsetDays}일 오프셋`}<br/>
+                    • 기준일 시점: {focusDateString}<br/>
+                    • 오프셋 누적 변동액: <strong style={{ color: deltaAmount >= 0 ? 'var(--success)' : 'var(--danger)' }}>
+                      {deltaAmount >= 0 ? `+${deltaAmount.toLocaleString()}` : deltaAmount.toLocaleString()}원
+                    </strong><br/>
+                    <div style={{ borderTop: '1px dashed var(--border-color)', marginTop: '8px', paddingTop: '8px', fontSize: '13.5px', fontWeight: 'bold', display: 'flex', justifyContent: 'space-between' }}>
+                      <span>최종 기준일 시작고:</span>
+                      <span>{startingBalanceAtFocus.toLocaleString()}원</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* 2. Inflow 세부 테이블 */}
+              {activeDetailModal === 'INFLOW' && (
+                <table style={{ width: '100%', fontSize: '12.5px' }}>
+                  <thead>
+                    <tr>
+                      <th>예정 일자</th>
+                      <th>수납 적요 및 거래처</th>
+                      <th style={{ textAlign: 'right' }}>수납 금액</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {forecastList.filter(item => item.inflow > 0).length === 0 ? (
+                      <tr>
+                        <td colSpan={3} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '20px' }}>
+                          해당 30일 전망 구간 내 예정된 수납 내역이 없습니다.
+                        </td>
+                      </tr>
+                    ) : (
+                      forecastList.filter(item => item.inflow > 0).map(item => (
+                        <tr key={item.date}>
+                          <td>{item.date}</td>
+                          <td>{item.inflowDetail}</td>
+                          <td style={{ textAlign: 'right', fontWeight: 'bold', color: 'var(--success)' }}>+{item.inflow.toLocaleString()}원</td>
+                        </tr>
+                      ))
+                    )}
+                    <tr style={{ borderTop: '2px solid var(--border-color)', fontWeight: 'bold', backgroundColor: 'var(--bg-app)' }}>
+                      <td colSpan={2}>30일 내 예정 수납액 합계 (Inflow)</td>
+                      <td style={{ textAlign: 'right', color: 'var(--success)', fontSize: '13.5px' }}>+{totalInflow.toLocaleString()}원</td>
+                    </tr>
+                  </tbody>
+                </table>
+              )}
+
+              {/* 3. OPEX 세부 테이블 */}
+              {activeDetailModal === 'OPEX' && (
+                <table style={{ width: '100%', fontSize: '12.5px' }}>
+                  <thead>
+                    <tr>
+                      <th>예정 일자</th>
+                      <th>지출 내역 요약</th>
+                      <th style={{ textAlign: 'right' }}>지출 금액</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {forecastList.filter(item => item.opex > 0).length === 0 ? (
+                      <tr>
+                        <td colSpan={3} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '20px' }}>
+                          해당 30일 전망 구간 내 예정된 일반 매입 지출이 없습니다.
+                        </td>
+                      </tr>
+                    ) : (
+                      forecastList.filter(item => item.opex > 0).map(item => (
+                        <tr key={item.date}>
+                          <td>{item.date}</td>
+                          <td>{item.opexDetail}</td>
+                          <td style={{ textAlign: 'right', fontWeight: 'bold', color: 'var(--warning)' }}>-{item.opex.toLocaleString()}원</td>
+                        </tr>
+                      ))
+                    )}
+                    <tr style={{ borderTop: '2px solid var(--border-color)', fontWeight: 'bold', backgroundColor: 'var(--bg-app)' }}>
+                      <td colSpan={2}>30일 내 예정 일반지출 합계 (OPEX)</td>
+                      <td style={{ textAlign: 'right', color: 'var(--warning)', fontSize: '13.5px' }}>-{totalOpex.toLocaleString()}원</td>
+                    </tr>
+                  </tbody>
+                </table>
+              )}
+
+              {/* 4. CAPEX 세부 테이블 */}
+              {activeDetailModal === 'CAPEX' && (
+                <table style={{ width: '100%', fontSize: '12.5px' }}>
+                  <thead>
+                    <tr>
+                      <th>예정 일자</th>
+                      <th>투자 대상 자산명</th>
+                      <th style={{ textAlign: 'right' }}>설비 투자금</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {forecastList.filter(item => item.capex > 0).length === 0 ? (
+                      <tr>
+                        <td colSpan={3} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '20px' }}>
+                          해당 30일 전망 구간 내 예정된 설비투자(CAPEX) 일정이 없습니다.
+                        </td>
+                      </tr>
+                    ) : (
+                      forecastList.filter(item => item.capex > 0).map(item => (
+                        <tr key={item.date}>
+                          <td>{item.date}</td>
+                          <td>{item.capexDetail}</td>
+                          <td style={{ textAlign: 'right', fontWeight: 'bold', color: 'var(--danger)' }}>-{item.capex.toLocaleString()}원</td>
+                        </tr>
+                      ))
+                    )}
+                    <tr style={{ borderTop: '2px solid var(--border-color)', fontWeight: 'bold', backgroundColor: 'var(--bg-app)' }}>
+                      <td colSpan={2}>30일 내 설비투자액 합계 (CAPEX)</td>
+                      <td style={{ textAlign: 'right', color: 'var(--danger)', fontSize: '13.5px' }}>-{totalCapex.toLocaleString()}원</td>
+                    </tr>
+                  </tbody>
+                </table>
+              )}
+
+              {/* 5. 종합 대조 대조표 */}
+              {activeDetailModal === 'FINAL' && (
+                <div style={{ fontSize: '13px' }}>
+                  <table style={{ width: '100%', marginBottom: '16px' }}>
+                    <thead>
+                      <tr>
+                        <th>유동성 가감 항목</th>
+                        <th>구분 수식</th>
+                        <th style={{ textAlign: 'right' }}>금액</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td>기준일 시점 시작고</td>
+                        <td style={{ color: 'var(--text-secondary)' }}>시작 기준 자금</td>
+                        <td style={{ textAlign: 'right', fontWeight: '600' }}>{startingBalanceAtFocus.toLocaleString()}원</td>
+                      </tr>
+                      <tr>
+                        <td>30일 내 예정 수납액</td>
+                        <td style={{ color: 'var(--success)' }}>(+) Inflow</td>
+                        <td style={{ textAlign: 'right', fontWeight: '600', color: 'var(--success)' }}>+{totalInflow.toLocaleString()}원</td>
+                      </tr>
+                      <tr>
+                        <td>30일 내 일반지출액</td>
+                        <td style={{ color: 'var(--warning)' }}>(-) OPEX</td>
+                        <td style={{ textAlign: 'right', fontWeight: '600', color: 'var(--warning)' }}>-{totalOpex.toLocaleString()}원</td>
+                      </tr>
+                      <tr>
+                        <td>30일 내 설비투자액</td>
+                        <td style={{ color: 'var(--danger)' }}>(-) CAPEX</td>
+                        <td style={{ textAlign: 'right', fontWeight: '600', color: 'var(--danger)' }}>-{totalCapex.toLocaleString()}원</td>
+                      </tr>
+                      <tr style={{ borderTop: '2px solid var(--border-color)', fontWeight: 'bold', backgroundColor: 'var(--bg-app)', fontSize: '14px' }}>
+                        <td>최종 30일 후 예상 잔고</td>
+                        <td>(=) Net Balance</td>
+                        <td style={{ textAlign: 'right', color: finalBalance < 0 ? 'var(--danger)' : 'var(--success)' }}>
+                          {finalBalance.toLocaleString()}원
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+
+                  {/* 진단 의견 카드 */}
+                  <div style={{ 
+                    padding: '12px', borderRadius: '6px', fontSize: '12.5px', lineHeight: '1.6',
+                    backgroundColor: finalBalance < 0 ? 'rgba(239, 68, 68, 0.06)' : finalBalance < safetyThreshold ? 'rgba(245, 158, 11, 0.06)' : 'rgba(34, 197, 94, 0.06)',
+                    border: '1px solid',
+                    borderColor: finalBalance < 0 ? 'var(--danger)' : finalBalance < safetyThreshold ? 'var(--warning)' : 'var(--success)'
+                  }}>
+                    <strong>💼 대표이사 종합 자금진단 리포트:</strong><br/>
+                    {finalBalance < 0 ? (
+                      <span style={{ color: 'var(--danger)' }}>
+                        ⚠️ [경고] 최종 자금이 고갈되어 자금 숏티지 및 부도 위험이 예상됩니다. 8/5일 예정된 4,500만 원 규모의 고소작업대(CAPEX) 신규 취득 일정을 연기하거나, 미수금 회수를 당겨야 합니다.
+                      </span>
+                    ) : finalBalance < safetyThreshold ? (
+                      <span style={{ color: 'var(--warning)' }}>
+                        ⚠️ [주의] 최종 예상 잔고가 안전자금 임계치(1,000만 원)를 하회하고 있습니다. 미수 채권 연체 관리에 따른 영업사원 회수 상담을 조속히 독려하십시오.
+                      </span>
+                    ) : (
+                      <span style={{ color: 'var(--success)' }}>
+                        🟢 [양호] 30일 후 예상 잔고가 안전 자금 마진선보다 높게 유지되고 있어 유동성 리스크가 현저히 낮습니다. 예정된 투자 및 지출을 그대로 이행 가능합니다.
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
+
+            </div>
+
+            {/* 모달 푸터 */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', borderTop: '1px solid var(--border-color)', paddingTop: '12px' }}>
+              <button 
+                className="btn-primary" 
+                onClick={() => setActiveDetailModal(null)}
+                style={{ padding: '8px 20px', fontSize: '12.5px' }}
+              >
+                확인 및 닫기
+              </button>
+            </div>
+
+          </div>
         </div>
       )}
 
