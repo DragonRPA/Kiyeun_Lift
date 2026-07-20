@@ -1,7 +1,7 @@
 // d:\Kiyeun_Lift\src\pages\GoogleConfig.tsx
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
-import { Settings, Mail, FolderOpen, RefreshCw, CheckCircle2, Lock, Eye, EyeOff, ShieldCheck } from 'lucide-react';
+import { Settings, Mail, FolderOpen, RefreshCw, CheckCircle2, Lock, Eye, EyeOff, ShieldCheck, HelpCircle, AlertTriangle, ExternalLink, Key } from 'lucide-react';
 import { GoogleConfig as GoogleConfigType } from '../services/db';
 
 export const GoogleConfig: React.FC = () => {
@@ -114,7 +114,7 @@ export const GoogleConfig: React.FC = () => {
   };
 
   return (
-    <div style={{ maxWidth: '900px' }}>
+    <div style={{ maxWidth: '1400px', margin: '0 auto' }}>
       
       {/* 타이틀 헤더 */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '24px' }}>
@@ -127,164 +127,235 @@ export const GoogleConfig: React.FC = () => {
         </div>
       </div>
 
-      <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '24px', alignItems: 'start' }}>
         
-        {/* 구글 서비스 계정 인증 */}
-        <div className="card" style={{ margin: 0, padding: '24px' }}>
-          <h3 style={{ fontSize: '15px', fontWeight: '700', borderBottom: '1px solid var(--border)', paddingBottom: '12px', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Mail size={16} style={{ color: 'var(--primary)' }} /> 구글 연동 서비스 계정 및 이메일 인증
-          </h3>
-
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-            <div style={{ gridColumn: 'span 2' }}>
-              <label>구글 서비스 계정 이메일 (G-Suite / Workspace) *</label>
-              <input
-                type="email"
-                value={googleEmail}
-                onChange={e => setGoogleEmail(e.target.value)}
-                placeholder="예: kiyeunlift@gmail.com"
-                required
-              />
-            </div>
-
-            <div style={{ position: 'relative' }}>
-              <label>구글 계정 패스워드 *</label>
-              <div style={{ position: 'relative' }}>
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  value={googlePassword}
-                  onChange={e => setGooglePassword(e.target.value)}
-                  placeholder="구글 비밀번호 입력"
-                  required
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  style={{ position: 'absolute', right: '10px', top: '10px', background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }}
-                >
-                  {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                </button>
-              </div>
-            </div>
-
-            <div style={{ position: 'relative' }}>
-              <label>Gmail 발송용 앱 비밀번호 (App Password) *</label>
-              <div style={{ position: 'relative' }}>
-                <input
-                  type={showAppPassword ? 'text' : 'password'}
-                  value={gmailAppPassword}
-                  onChange={e => setGmailAppPassword(e.target.value)}
-                  placeholder="16자리 Gmail SMTP 앱 비밀번호"
-                  required
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowAppPassword(!showAppPassword)}
-                  style={{ position: 'absolute', right: '10px', top: '10px', background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }}
-                >
-                  {showAppPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                </button>
-              </div>
-              <small style={{ display: 'block', marginTop: '4px', color: 'var(--text-muted)', fontSize: '11px' }}>
-                ※ 구글 계정 2단계 인증 설정 후 발급받은 16자리 SMTP 전용 보안 키값을 입력하세요.
-              </small>
-            </div>
-          </div>
-        </div>
-
-        {/* 구글 드라이브 폴더 체계 */}
-        <div className="card" style={{ margin: 0, padding: '24px' }}>
-          <h3 style={{ fontSize: '15px', fontWeight: '700', borderBottom: '1px solid var(--border)', paddingBottom: '12px', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <FolderOpen size={16} style={{ color: 'var(--primary)' }} /> 파일 유형별 구글 드라이브 폴더명 맵핑
-          </h3>
-
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-            <div>
-              <label>렌탈계약서 보존 폴더명 *</label>
-              <input
-                type="text"
-                value={contractFolder}
-                onChange={e => setContractFolder(e.target.value)}
-                placeholder="예: 렌탈계약서_증빙"
-                required
-              />
-            </div>
-
-            <div>
-              <label>소모품납품증빙 보존 폴더명 *</label>
-              <input
-                type="text"
-                value={consumableFolder}
-                onChange={e => setConsumableFolder(e.target.value)}
-                placeholder="예: 소모품납품증빙"
-                required
-              />
-            </div>
-
-            <div>
-              <label>출고의뢰/배차 증빙 보존 폴더명 *</label>
-              <input
-                type="text"
-                value={deliveryFolder}
-                onChange={e => setDeliveryFolder(e.target.value)}
-                placeholder="예: 출고의뢰_증빙"
-                required
-              />
-            </div>
-
-            <div>
-              <label>정비보고서 보존 폴더명 *</label>
-              <input
-                type="text"
-                value={maintenanceFolder}
-                onChange={e => setMaintenanceFolder(e.target.value)}
-                placeholder="예: 정비보고서_증빙"
-                required
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* 하단 버튼 제어 및 테스트 로그 */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+        {/* 왼쪽 영역: 설정 폼 */}
+        <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
           
-          {showTestConsole && (
-            <div style={{ backgroundColor: '#1e293b', color: '#38bdf8', padding: '16px', borderRadius: '8px', fontFamily: 'monospace', fontSize: '12px', maxHeight: '180px', overflowY: 'auto', border: '1px solid #334155' }}>
-              <div style={{ borderBottom: '1px solid #334155', paddingBottom: '4px', marginBottom: '8px', color: '#94a3b8', fontWeight: 'bold' }}>
-                구글 연동 연계 테스트 콘솔 로그
+          {/* 구글 서비스 계정 인증 */}
+          <div className="card" style={{ margin: 0, padding: '24px' }}>
+            <h3 style={{ fontSize: '15px', fontWeight: '700', borderBottom: '1px solid var(--border)', paddingBottom: '12px', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Mail size={16} style={{ color: 'var(--primary)' }} /> 구글 연동 서비스 계정 및 이메일 인증
+            </h3>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+              <div style={{ gridColumn: 'span 2' }}>
+                <label>구글 서비스 계정 이메일 (G-Suite / Workspace) *</label>
+                <input
+                  type="email"
+                  value={googleEmail}
+                  onChange={e => setGoogleEmail(e.target.value)}
+                  placeholder="예: kiyeunlift@gmail.com"
+                  required
+                />
               </div>
-              {testLog.map((log, idx) => (
-                <div key={idx} style={{ marginBottom: '4px' }}>{log}</div>
-              ))}
-              {isTesting && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '6px', color: '#f59e0b' }}>
-                  <RefreshCw size={12} className="animate-spin" /> 통신 릴레이 확인 중...
+
+              <div style={{ position: 'relative' }}>
+                <label>구글 계정 패스워드 *</label>
+                <div style={{ position: 'relative' }}>
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    value={googlePassword}
+                    onChange={e => setGooglePassword(e.target.value)}
+                    placeholder="구글 비밀번호 입력"
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    style={{ position: 'absolute', right: '10px', top: '10px', background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }}
+                  >
+                    {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
                 </div>
-              )}
+              </div>
+
+              <div style={{ position: 'relative' }}>
+                <label>Gmail 발송용 앱 비밀번호 (App Password) *</label>
+                <div style={{ position: 'relative' }}>
+                  <input
+                    type={showAppPassword ? 'text' : 'password'}
+                    value={gmailAppPassword}
+                    onChange={e => setGmailAppPassword(e.target.value)}
+                    placeholder="16자리 Gmail SMTP 앱 비밀번호"
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowAppPassword(!showAppPassword)}
+                    style={{ position: 'absolute', right: '10px', top: '10px', background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }}
+                  >
+                    {showAppPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
+                <small style={{ display: 'block', marginTop: '4px', color: 'var(--text-muted)', fontSize: '11px' }}>
+                  ※ 구글 계정 2단계 인증 설정 후 발급받은 16자리 SMTP 전용 보안 키값을 입력하세요.
+                </small>
+              </div>
             </div>
-          )}
+          </div>
 
-          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px' }}>
-            <button
-              type="button"
-              className="btn-secondary"
-              onClick={handleTestConnection}
-              disabled={isTesting}
-              style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
-            >
-              {isTesting ? <RefreshCw size={14} className="animate-spin" /> : <ShieldCheck size={14} />}
-              API 연동 테스트 실행
-            </button>
+          {/* 구글 드라이브 폴더 체계 */}
+          <div className="card" style={{ margin: 0, padding: '24px' }}>
+            <h3 style={{ fontSize: '15px', fontWeight: '700', borderBottom: '1px solid var(--border)', paddingBottom: '12px', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <FolderOpen size={16} style={{ color: 'var(--primary)' }} /> 파일 유형별 구글 드라이브 폴더명 맵핑
+            </h3>
 
-            <div style={{ display: 'flex', gap: '10px' }}>
-              <button type="submit" className="btn-primary" style={{ padding: '8px 24px' }}>
-                설정 정보 저장
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+              <div>
+                <label>렌탈계약서 보존 폴더명 *</label>
+                <input
+                  type="text"
+                  value={contractFolder}
+                  onChange={e => setContractFolder(e.target.value)}
+                  placeholder="예: 렌탈계약서_증빙"
+                  required
+                />
+              </div>
+
+              <div>
+                <label>소모품납품증빙 보존 폴더명 *</label>
+                <input
+                  type="text"
+                  value={consumableFolder}
+                  onChange={e => setConsumableFolder(e.target.value)}
+                  placeholder="예: 소모품납품증빙"
+                  required
+                />
+              </div>
+
+              <div>
+                <label>출고의뢰/배차 증빙 보존 폴더명 *</label>
+                <input
+                  type="text"
+                  value={deliveryFolder}
+                  onChange={e => setDeliveryFolder(e.target.value)}
+                  placeholder="예: 출고의뢰_증빙"
+                  required
+                />
+              </div>
+
+              <div>
+                <label>정비보고서 보존 폴더명 *</label>
+                <input
+                  type="text"
+                  value={maintenanceFolder}
+                  onChange={e => setMaintenanceFolder(e.target.value)}
+                  placeholder="예: 정비보고서_증빙"
+                  required
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* 하단 버튼 제어 및 테스트 로그 */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            
+            {showTestConsole && (
+              <div style={{ backgroundColor: '#1e293b', color: '#38bdf8', padding: '16px', borderRadius: '8px', fontFamily: 'monospace', fontSize: '12px', maxHeight: '180px', overflowY: 'auto', border: '1px solid #334155' }}>
+                <div style={{ borderBottom: '1px solid #334155', paddingBottom: '4px', marginBottom: '8px', color: '#94a3b8', fontWeight: 'bold' }}>
+                  구글 연동 연계 테스트 콘솔 로그
+                </div>
+                {testLog.map((log, idx) => (
+                  <div key={idx} style={{ marginBottom: '4px' }}>{log}</div>
+                ))}
+                {isTesting && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '6px', color: '#f59e0b' }}>
+                    <RefreshCw size={12} className="animate-spin" /> 통신 릴레이 확인 중...
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px' }}>
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={handleTestConnection}
+                disabled={isTesting}
+                style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+              >
+                {isTesting ? <RefreshCw size={14} className="animate-spin" /> : <ShieldCheck size={14} />}
+                API 연동 테스트 실행
               </button>
+
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <button type="submit" className="btn-primary" style={{ padding: '8px 24px' }}>
+                  설정 정보 저장
+                </button>
+              </div>
+            </div>
+          </div>
+
+        </form>
+
+        {/* 오른쪽 영역: 구글 공식 앱 비밀번호 가이드 */}
+        <div className="card" style={{ margin: 0, padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px', backgroundColor: 'var(--card-bg)' }}>
+          <h3 style={{ fontSize: '16px', fontWeight: '800', borderBottom: '1px solid var(--border)', paddingBottom: '12px', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Key size={18} style={{ color: 'var(--primary)' }} /> 앱 비밀번호로 로그인 안내
+          </h3>
+
+          {/* 중요 경고 박스 */}
+          <div style={{ backgroundColor: 'var(--warning-light)', color: 'var(--warning-hover)', border: '1px solid var(--warning)', padding: '14px', borderRadius: '8px', fontSize: '13px', lineHeight: '1.6', fontWeight: '500' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: '700', marginBottom: '6px', color: 'var(--warning-hover)' }}>
+              <AlertTriangle size={16} /> 중요 공지사항
+            </div>
+            앱 비밀번호 사용은 권장되지 않으며 대부분의 경우 필요하지 않습니다. 계정을 안전하게 보호하려면 'Google 계정으로 로그인'을 사용하여 앱을 Google 계정에 연결하세요.
+          </div>
+
+          <p style={{ fontSize: '13.5px', color: 'var(--text-main)', lineHeight: '1.6', margin: 0 }}>
+            앱 비밀번호란 보안 수준이 낮은 앱 또는 기기에 Google 계정에 대한 액세스 권한을 부여하는 <strong>16자리 비밀번호</strong>입니다. 앱 비밀번호는 <strong>2단계 인증</strong>이 사용 설정된 계정에서만 이용할 수 있습니다.
+          </p>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <h4 style={{ fontSize: '14px', fontWeight: '700', margin: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <HelpCircle size={15} style={{ color: 'var(--primary)' }} /> 앱 비밀번호를 사용해야 하는 경우
+            </h4>
+            <div style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: '1.6', paddingLeft: '8px', borderLeft: '3px solid var(--border)' }}>
+              <strong>도움말:</strong> iOS 11 이상을 실행하는 iPhone 및 iPad에는 앱 비밀번호가 필요하지 않습니다. 대신 'Google 계정으로 로그인'을 사용하세요.
+            </div>
+            <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: '4px 0 0 0', lineHeight: '1.6' }}>
+              앱에서 'Google 계정으로 로그인'을 제공하지 않는 경우(예: ERP 자체 SMTP 메일 연동 등) 다음 방법 중 하나를 이용하면 됩니다:
+            </p>
+            <ul style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: 0, paddingLeft: '20px', lineHeight: '1.6' }}>
+              <li>구글 계정의 앱 비밀번호 발급 및 사용</li>
+              <li>보안 수준이 높은 앱 또는 기기로 전환</li>
+            </ul>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '4px' }}>
+            <h4 style={{ fontSize: '14px', fontWeight: '700', margin: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <Settings size={15} style={{ color: 'var(--primary)' }} /> 앱 비밀번호 만들고 사용하기
+            </h4>
+            <div style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: '1.6' }}>
+              <strong>필수요건:</strong> 앱 비밀번호를 만들려면 Google 계정에 2단계 인증이 필요합니다.
+            </div>
+            <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: 0, lineHeight: '1.6' }}>
+              2단계 인증을 사용 중이며 로그인할 때 '잘못된 비밀번호' 오류가 표시된다면 앱 비밀번호를 사용해 볼 수 있습니다.
+            </p>
+
+            <a 
+              href="https://myaccount.google.com/apppasswords" 
+              target="_blank" 
+              rel="noreferrer" 
+              className="btn-primary"
+              style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px', textDecoration: 'none', padding: '10px', fontSize: '13px', fontWeight: '700', borderRadius: '8px', marginTop: '6px' }}
+            >
+              앱 비밀번호 생성 및 관리 바로가기 <ExternalLink size={14} />
+            </a>
+
+            <div style={{ fontSize: '12px', color: 'var(--text-muted)', lineHeight: '1.6', marginTop: '8px', backgroundColor: 'var(--body-bg)', padding: '12px', borderRadius: '8px', border: '1px solid var(--border)' }}>
+              <strong>※ 옵션을 찾을 수 없는 경우 원인:</strong>
+              <ul style={{ margin: '4px 0 0 0', paddingLeft: '16px' }}>
+                <li>Google 계정에 보안 키에만 2단계 인증이 설정되어 있습니다.</li>
+                <li>직장, 학교 또는 다른 조직 계정에 로그인한 상태입니다.</li>
+                <li>Google 계정에 고급 보호가 설정되어 있습니다.</li>
+              </ul>
             </div>
           </div>
         </div>
 
-      </form>
+      </div>
     </div>
   );
 };
