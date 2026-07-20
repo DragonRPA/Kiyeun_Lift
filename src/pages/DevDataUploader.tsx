@@ -1402,7 +1402,7 @@ export const DevDataUploader: React.FC = () => {
       const { data, error } = await supabase.rpc('generate_test_data');
       
       if (error) {
-        if (error.code === '42883') {
+        if (error.code === '42883' || error.code === 'PGRST202') {
           addLog("❌ 서버 네이티브 시더(RPC) 함수가 DB에 등록되어 있지 않습니다.", "error");
           addLog("👉 해결법: scripts/setup_seed_rpc.sql 파일 내용을 복사하여 Supabase SQL Editor에서 한번만 실행해 주십시오.", "info");
           
@@ -1448,7 +1448,7 @@ export const DevDataUploader: React.FC = () => {
 
       const { data, error } = await supabase.rpc('clear_test_data');
       if (error) {
-        if (error.code === '42883') {
+        if (error.code === '42883' || error.code === 'PGRST202') {
           addLog("❌ 서버 네이티브 삭제(RPC) 함수가 DB에 등록되어 있지 않습니다.", "error");
           addLog("👉 해결법: scripts/setup_seed_rpc.sql 내 clear_test_data 함수를 SQL Editor에서 실행해 주십시오.", "info");
           
