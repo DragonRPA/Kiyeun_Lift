@@ -4,13 +4,14 @@ import { useApp } from '../context/AppContext';
 import { Plus, Mail, Calendar, ArrowRight, FileText, Check, Send, Download, Search } from 'lucide-react';
 import { drive } from '../services/drive';
 import { emailService } from '../services/email';
-import { Contract } from '../services/db';
+import { Contract, db, Customer, CustomerContact, CustomerSite, Todo } from '../services/db';
 import { exportToExcel } from '../services/excel';
 
 export const Contracts: React.FC = () => {
   const {
     contracts, contractAssets, contractHistory, customers, contacts, sites, assets, users, currentUser,
-    createContract, extendContract, shortenContract, succeedContract, exchangeAsset, hasPermission
+    createContract, extendContract, shortenContract, succeedContract, exchangeAsset, hasPermission,
+    products, refreshAllData
   } = useApp();
 
   const canSave = hasPermission('contract', 'save');
@@ -46,10 +47,34 @@ export const Contracts: React.FC = () => {
   const [endDate, setEndDate] = useState(new Date(new Date().getTime() + 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]);
   const [billingDay, setBillingDay] = useState(30);
   const [statementClosingDay, setStatementClosingDay] = useState(25);
+
+  // 신규 직접등록 세부 필드 상태
+  const [isNewCust, setIsNewCust] = useState(false);
+  const [newCustName, setNewCustName] = useState('');
+  const [newBizRegNo, setNewBizRegNo] = useState('');
+  const [newAddress, setNewAddress] = useState('');
+  const [newRepresentative, setNewRepresentative] = useState('');
+  const [newRepContact, setNewRepContact] = useState('');
+  const [newRepEmail, setNewRepEmail] = useState('');
+
+  const [isNewContact, setIsNewContact] = useState(false);
+  const [newContactName, setNewContactName] = useState('');
+  const [newContactPosition, setNewContactPosition] = useState('담당자');
+  const [newContactPhone, setNewContactPhone] = useState('');
+  const [newContactEmail, setNewContactEmail] = useState('');
+
+  const [isNewSite, setIsNewSite] = useState(false);
+  const [newSiteName, setNewSiteName] = useState('');
+  const [newSiteAddress, setNewSiteAddress] = useState('');
+  const [newSiteContactName, setNewSiteContactName] = useState('');
+  const [newSiteContactPhone, setNewSiteContactPhone] = useState('');
+  const [newSiteContactEmail, setNewSiteContactEmail] = useState('');
   
   // 계약 등록 중 자산 바스켓
-  const [basket, setBasket] = useState<{ assetId: string; monthlyRentalFee: number; dailyRentalFee: number }[]>([]);
+  const [basket, setBasket] = useState<{ assetId?: string; expectedModel?: string; monthlyRentalFee: number; dailyRentalFee: number }[]>([]);
+  const [basketAssetMethod, setBasketAssetMethod] = useState<'ASSET' | 'MODEL'>('ASSET');
   const [selectedAssetToAdd, setSelectedAssetToAdd] = useState('');
+  const [selectedModelToAdd, setSelectedModelToAdd] = useState('');
   const [customMonthly, setCustomMonthly] = useState(400000);
   const [customDaily, setCustomDaily] = useState(15000);
 
@@ -156,34 +181,110 @@ export const Contracts: React.FC = () => {
 
   // 계약 등록 중 자산 추가
   const handleAddToBasket = () => {
-    if (!selectedAssetToAdd) return;
-    if (basket.some(b => b.assetId === selectedAssetToAdd)) return;
-
-    setBasket([...basket, {
-      assetId: selectedAssetToAdd,
-      monthlyRentalFee: customMonthly,
-      dailyRentalFee: customDaily
-    }]);
-
-    setSelectedAssetToAdd('');
+    if (basketAssetMethod === 'ASSET') {
+      if (!selectedAssetToAdd) return;
+      if (basket.some(b => b.assetId === selectedAssetToAdd)) return;
+      setBasket([...basket, {
+        assetId: selectedAssetToAdd,
+        monthlyRentalFee: customMonthly,
+        dailyRentalFee: customDaily
+      }]);
+      setSelectedAssetToAdd('');
+    } else {
+      if (!selectedModelToAdd) return;
+      if (basket.some(b => b.expectedModel === selectedModelToAdd)) return;
+      setBasket([...basket, {
+        expectedModel: selectedModelToAdd,
+        monthlyRentalFee: customMonthly,
+        dailyRentalFee: customDaily
+      }]);
+      setSelectedModelToAdd('');
+    }
   };
 
-  const handleRemoveFromBasket = (id: string) => {
-    setBasket(basket.filter(b => b.assetId !== id));
+  const handleRemoveFromBasket = (id?: string) => {
+    if (!id) return;
+    setBasket(basket.filter(b => b.assetId !== id && b.expectedModel !== id));
   };
 
   const handleCreateContractSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!canSave) return;
-    if (!custSelect || basket.length === 0) {
-      alert('고객사 선택 및 최소 한 대 이상의 자산을 추가해 주세요.');
+
+    if (custSelect === 'NEW' && !newCustName) {
+      alert('신규 고객사명을 입력해 주세요.');
+      return;
+    }
+    if (basket.length === 0) {
+      alert('최소 한 대 이상의 자산 또는 제품 모델을 바스켓에 추가해 주세요.');
       return;
     }
 
+    let finalCustomerId = custSelect;
+    let finalContactId = contactSelect;
+    let finalSiteId = siteSelect;
+
+    // 1. 신규 고객사 등록
+    if (custSelect === 'NEW') {
+      const newCust = db.insertRow<Customer>('customers', {
+        name: newCustName,
+        bizRegNo: newBizRegNo || '미상',
+        isClosed: false,
+        address: newAddress || '미상',
+        representative: newRepresentative || '미상',
+        repContact: newRepContact || '미상',
+        repEmail: newRepEmail || '미상',
+        createdAt: new Date().toISOString()
+      });
+      finalCustomerId = newCust.id;
+
+      // Todo 생성
+      if (currentUser) {
+        db.insertRow<Todo>('todos', {
+          userId: currentUser.id,
+          type: 'MISSING_INFO',
+          title: `신규 고객 정보 보완 (${newCustName})`,
+          content: `계약 직접 등록 시 생성된 고객의 필수 항목(대표자, 주소 등)을 보완해 주세요.`,
+          isCompleted: false,
+          relatedEntityId: newCust.id,
+          createdAt: new Date().toISOString()
+        });
+      }
+    }
+
+    // 2. 신규 담당자 등록
+    if (contactSelect === 'NEW') {
+      const newContact = db.insertRow<CustomerContact>('contacts', {
+        customerId: finalCustomerId,
+        name: newContactName || '미상',
+        position: newContactPosition || '담당자',
+        contact: newContactPhone || '미상',
+        email: newContactEmail || '미상',
+        isActive: true,
+        createdAt: new Date().toISOString()
+      });
+      finalContactId = newContact.id;
+    }
+
+    // 3. 신규 현장 등록
+    if (siteSelect === 'NEW') {
+      const newSite = db.insertRow<CustomerSite>('sites', {
+        customerId: finalCustomerId,
+        name: newSiteName,
+        address: newSiteAddress || '미상',
+        contactName: newSiteContactName || '미상',
+        contact: newSiteContactPhone || '미상',
+        email: newSiteContactEmail || '미상',
+        isActive: true,
+        createdAt: new Date().toISOString()
+      });
+      finalSiteId = newSite.id;
+    }
+
     createContract({
-      customerId: custSelect,
-      contactId: contactSelect || undefined,
-      siteId: siteSelect || undefined,
+      customerId: finalCustomerId,
+      contactId: finalContactId && finalContactId !== 'NEW' ? finalContactId : undefined,
+      siteId: finalSiteId && finalSiteId !== 'NEW' ? finalSiteId : undefined,
       startDate,
       endDate,
       billingDay,
@@ -193,8 +294,28 @@ export const Contracts: React.FC = () => {
     }, basket);
 
     alert('계약 등록이 완료되었으며, 출고 배차 의뢰가 자동 생성되었습니다.');
+    
     // 초기화
     setBasket([]);
+    setCustSelect(customers[0]?.id || '');
+    setContactSelect('');
+    setSiteSelect('');
+    setNewCustName('');
+    setNewBizRegNo('');
+    setNewAddress('');
+    setNewRepresentative('');
+    setNewRepContact('');
+    setNewRepEmail('');
+    setNewContactName('');
+    setNewContactPhone('');
+    setNewContactEmail('');
+    setNewSiteName('');
+    setNewSiteAddress('');
+    setNewSiteContactName('');
+    setNewSiteContactPhone('');
+    setNewSiteContactEmail('');
+
+    refreshAllData();
     setActiveTab('LIST');
   };
 
@@ -560,6 +681,8 @@ export const Contracts: React.FC = () => {
                   setContactSelect('');
                   setSiteSelect('');
                 }} required>
+                  <option value="">-- 고객사 선택 --</option>
+                  <option value="NEW">[NEW] -- 직접 입력 (신규 고객사) --</option>
                   {customers.filter(c => !c.isClosed).map(c => (
                     <option key={c.id} value={c.id}>{c.name}</option>
                   ))}
@@ -604,7 +727,8 @@ export const Contracts: React.FC = () => {
                 <label>고객 담당자 선택</label>
                 <select value={contactSelect} onChange={e => setContactSelect(e.target.value)}>
                   <option value="">-- 담당자 선택 안함 --</option>
-                  {contacts.filter(co => co.customerId === custSelect).map(co => (
+                  <option value="NEW">[NEW] -- 직접 입력 (신규 담당자) --</option>
+                  {contacts.filter(co => co.customerId === custSelect && co.isActive !== false).map(co => (
                     <option key={co.id} value={co.id}>{co.name} ({co.position})</option>
                   ))}
                 </select>
@@ -614,7 +738,8 @@ export const Contracts: React.FC = () => {
                 <label>출고 대상 현장 선택</label>
                 <select value={siteSelect} onChange={e => setSiteSelect(e.target.value)}>
                   <option value="">-- 직납 (현장 없음) --</option>
-                  {sites.filter(s => s.customerId === custSelect).map(s => (
+                  <option value="NEW">[NEW] -- 직접 입력 (신규 현장) --</option>
+                  {sites.filter(s => s.customerId === custSelect && s.isActive !== false).map(s => (
                     <option key={s.id} value={s.id}>{s.name}</option>
                   ))}
                 </select>
@@ -631,27 +756,141 @@ export const Contracts: React.FC = () => {
               </div>
             </div>
 
+            {/* 신규 고객사 직접 입력 카드 */}
+            {custSelect === 'NEW' && (
+              <div className="card" style={{ backgroundColor: 'var(--bg-app)', padding: '16px', marginBottom: '20px', border: '1px dashed var(--primary)' }}>
+                <h4 style={{ fontSize: '13.5px', fontWeight: '700', color: 'var(--primary)', marginBottom: '10px' }}>신규 고객사 직접 입력</h4>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                  <div>
+                    <label style={{ fontSize: '12px' }}>고객사명 *</label>
+                    <input type="text" value={newCustName} onChange={e => setNewCustName(e.target.value)} placeholder="예: (주)한라건설" required={custSelect === 'NEW'} />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '12px' }}>사업자등록번호</label>
+                    <input type="text" value={newBizRegNo} onChange={e => setNewBizRegNo(e.target.value)} placeholder="예: 123-45-67890" />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '12px' }}>대표자명</label>
+                    <input type="text" value={newRepresentative} onChange={e => setNewRepresentative(e.target.value)} placeholder="대표자 이름" />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '12px' }}>대표 연락처</label>
+                    <input type="text" value={newRepContact} onChange={e => setNewRepContact(e.target.value)} placeholder="예: 02-123-4567" />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '12px' }}>대표 이메일</label>
+                    <input type="email" value={newRepEmail} onChange={e => setNewRepEmail(e.target.value)} placeholder="email@company.com" />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '12px' }}>사업장 주소</label>
+                    <input type="text" value={newAddress} onChange={e => setNewAddress(e.target.value)} placeholder="본사 주소" />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* 신규 담당자 직접 입력 카드 */}
+            {contactSelect === 'NEW' && (
+              <div className="card" style={{ backgroundColor: 'var(--bg-app)', padding: '16px', marginBottom: '20px', border: '1px dashed var(--primary)' }}>
+                <h4 style={{ fontSize: '13.5px', fontWeight: '700', color: 'var(--primary)', marginBottom: '10px' }}>신규 고객 담당자 직접 입력</h4>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                  <div>
+                    <label style={{ fontSize: '12px' }}>담당자명 *</label>
+                    <input type="text" value={newContactName} onChange={e => setNewContactName(e.target.value)} placeholder="예: 홍길동" required={contactSelect === 'NEW'} />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '12px' }}>직급</label>
+                    <input type="text" value={newContactPosition} onChange={e => setNewContactPosition(e.target.value)} placeholder="예: 대리, 과장" />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '12px' }}>연락처 *</label>
+                    <input type="text" value={newContactPhone} onChange={e => setNewContactPhone(e.target.value)} placeholder="예: 010-1234-5678" required={contactSelect === 'NEW'} />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '12px' }}>이메일</label>
+                    <input type="email" value={newContactEmail} onChange={e => setNewContactEmail(e.target.value)} placeholder="email@company.com" />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* 신규 현장 직접 입력 카드 */}
+            {siteSelect === 'NEW' && (
+              <div className="card" style={{ backgroundColor: 'var(--bg-app)', padding: '16px', marginBottom: '20px', border: '1px dashed var(--primary)' }}>
+                <h4 style={{ fontSize: '13.5px', fontWeight: '700', color: 'var(--primary)', marginBottom: '10px' }}>신규 현장 직접 입력</h4>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                  <div style={{ gridColumn: 'span 2' }}>
+                    <label style={{ fontSize: '12px' }}>현장명 *</label>
+                    <input type="text" value={newSiteName} onChange={e => setNewSiteName(e.target.value)} placeholder="예: 여의도 주상복합 신축공사 현장" required={siteSelect === 'NEW'} />
+                  </div>
+                  <div style={{ gridColumn: 'span 2' }}>
+                    <label style={{ fontSize: '12px' }}>현장 주소 *</label>
+                    <input type="text" value={newSiteAddress} onChange={e => setNewSiteAddress(e.target.value)} placeholder="현장 납품 주소" required={siteSelect === 'NEW'} />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '12px' }}>현장 담당자명</label>
+                    <input type="text" value={newSiteContactName} onChange={e => setNewSiteContactName(e.target.value)} placeholder="현장 담당 기사/소장 이름" />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '12px' }}>현장 연락처</label>
+                    <input type="text" value={newSiteContactPhone} onChange={e => setNewSiteContactPhone(e.target.value)} placeholder="전화번호" />
+                  </div>
+                  <div style={{ gridColumn: 'span 2' }}>
+                    <label style={{ fontSize: '12px' }}>현장 이메일</label>
+                    <input type="email" value={newSiteContactEmail} onChange={e => setNewSiteContactEmail(e.target.value)} placeholder="email@company.com" />
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* 리프트 장비 추가 바스켓 세션 */}
-            <div style={{ border: '1px solid var(--border-color)', borderRadius: '8px', padding: '16px', marginBottom: '20px' }}>
+            <div style={{ border: '1px solid var(--border)', borderRadius: '8px', padding: '16px', marginBottom: '20px' }}>
               <h4 style={{ fontSize: '14px', fontWeight: '600', marginBottom: '12px' }}>임대 투입 리프트 장비 바스켓 추가</h4>
               
-              <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr auto', gap: '12px', alignItems: 'end', marginBottom: '16px' }}>
-                <div>
-                  <label>임대 가능 장비 목록</label>
-                  <select value={selectedAssetToAdd} onChange={e => {
-                    setSelectedAssetToAdd(e.target.value);
-                    const asset = assets.find(a => a.id === e.target.value);
-                    if (asset) {
-                      setCustomMonthly(asset.monthlyRentalFee || 0);
-                      setCustomDaily(asset.dailyRentalFee || 0);
-                    }
-                  }}>
-                    <option value="">-- 대기 장비 선택 --</option>
-                    {availableAssets.map(a => (
-                      <option key={a.id} value={a.id}>{a.assetNo} - {a.modelName} (기준 월 {(a.monthlyRentalFee || 0).toLocaleString()}원)</option>
-                    ))}
-                  </select>
-                </div>
+              <div style={{ display: 'flex', gap: '16px', marginBottom: '12px', fontSize: '13px' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
+                  <input type="radio" name="addMethod" checked={basketAssetMethod === 'ASSET'} onChange={() => setBasketAssetMethod('ASSET')} />
+                  특정 실물 장비(호기) 지정 추가
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
+                  <input type="radio" name="addMethod" checked={basketAssetMethod === 'MODEL'} onChange={() => setBasketAssetMethod('MODEL')} />
+                  제품 모델 규격(미정 출고용) 지정 추가
+                </label>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '2fr 1.2fr 1.2fr auto', gap: '12px', alignItems: 'end', marginBottom: '16px' }}>
+                {basketAssetMethod === 'ASSET' ? (
+                  <div>
+                    <label>임대 가능 장비 목록</label>
+                    <select value={selectedAssetToAdd} onChange={e => {
+                      setSelectedAssetToAdd(e.target.value);
+                      const asset = assets.find(a => a.id === e.target.value);
+                      if (asset) {
+                        setCustomMonthly(asset.monthlyRentalFee || 400000);
+                        setCustomDaily(asset.dailyRentalFee || 15000);
+                      }
+                    }}>
+                      <option value="">-- 대기 장비 선택 --</option>
+                      {availableAssets.map(a => (
+                        <option key={a.id} value={a.id}>{a.assetNo} - {a.modelName} (기준 월 {(a.monthlyRentalFee || 0).toLocaleString()}원)</option>
+                      ))}
+                    </select>
+                  </div>
+                ) : (
+                  <div>
+                    <label>제품 규격 모델 목록</label>
+                    <select value={selectedModelToAdd} onChange={e => {
+                      setSelectedModelToAdd(e.target.value);
+                      setCustomMonthly(400000);
+                      setCustomDaily(15000);
+                    }}>
+                      <option value="">-- 모델 규격 선택 --</option>
+                      {products.filter(p => p.isActive !== false).map(p => (
+                        <option key={p.id} value={p.modelName}>{p.modelName} ({p.spec})</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
                 <div>
                   <label>합의 월 렌탈료 (원)</label>
                   <input type="number" value={customMonthly} onChange={e => setCustomMonthly(parseInt(e.target.value) || 0)} />
@@ -671,22 +910,36 @@ export const Contracts: React.FC = () => {
                   <table>
                     <thead>
                       <tr>
-                        <th>장비번호</th>
+                        <th>임대 장비 / 모델규격</th>
                         <th>합의 월렌탈료</th>
                         <th>합의 일렌탈료</th>
                         <th style={{ width: '80px' }}>취소</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {basket.map(item => {
-                        const asset = assets.find(a => a.id === item.assetId);
+                      {basket.map((item, idx) => {
+                        const asset = item.assetId ? assets.find(a => a.id === item.assetId) : null;
+                        const key = item.assetId || item.expectedModel || `idx-${idx}`;
                         return (
-                          <tr key={item.assetId}>
-                            <td><strong>{asset?.assetNo}</strong> ({asset?.modelName})</td>
+                          <tr key={key}>
+                            <td>
+                              {item.assetId ? (
+                                <span><span className="badge badge-success" style={{ marginRight: '6px' }}>호기지정</span><strong>{asset?.assetNo}</strong> ({asset?.modelName})</span>
+                              ) : (
+                                <span><span className="badge badge-warning" style={{ marginRight: '6px' }}>모델의뢰</span><strong>(미지정 모델) {item.expectedModel}</strong></span>
+                              )}
+                            </td>
                             <td>{item.monthlyRentalFee.toLocaleString()}원</td>
                             <td>{item.dailyRentalFee.toLocaleString()}원</td>
                             <td>
-                              <button type="button" className="btn-danger" onClick={() => handleRemoveFromBasket(item.assetId)} style={{ padding: '2px 6px', fontSize: '11px' }}>삭제</button>
+                              <button 
+                                type="button" 
+                                className="btn-danger" 
+                                onClick={() => handleRemoveFromBasket(item.assetId || item.expectedModel)} 
+                                style={{ padding: '2px 6px', fontSize: '11px' }}
+                              >
+                                삭제
+                              </button>
                             </td>
                           </tr>
                         );

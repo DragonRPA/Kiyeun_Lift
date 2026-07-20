@@ -89,7 +89,7 @@ interface AppContextType {
   useConsumable: (data: { consumableId: string; quantity: number; targetAssetId: string; description: string }) => void;
   
   // Contract Mutators
-  createContract: (contractData: Omit<Contract, 'id' | 'createdAt' | 'updatedAt' | 'contractNo'>, assetsList: { assetId: string; monthlyRentalFee: number; dailyRentalFee: number }[]) => void;
+  createContract: (contractData: Omit<Contract, 'id' | 'createdAt' | 'updatedAt' | 'contractNo'>, assetsList: { assetId?: string; expectedModel?: string; monthlyRentalFee: number; dailyRentalFee: number }[]) => void;
   extendContract: (contractId: string, newEndDate: string, description: string) => void;
   shortenContract: (contractId: string, newEndDate: string, description: string) => void;
   succeedContract: (contractId: string, successorCustomerId: string, successorContactId: string, successorSiteId: string, successionDate: string, description: string) => void;
@@ -325,27 +325,39 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const saveContact = (contact: Omit<CustomerContact, 'id' | 'createdAt'> & { id?: string }) => {
     if (contact.id) {
-      db.updateRow<CustomerContact>('contacts', contact.id, contact);
+      db.updateRow<CustomerContact>('contacts', contact.id, contact as CustomerContact);
     } else {
-      db.insertRow<CustomerContact>('contacts', { ...contact, createdAt: new Date().toISOString() });
+      db.insertRow<CustomerContact>('contacts', {
+        ...contact,
+        isActive: contact.isActive !== undefined ? contact.isActive : true,
+        createdAt: new Date().toISOString()
+      } as Omit<CustomerContact, 'id'>);
     }
     refreshAllData();
   };
 
   const saveSite = (site: Omit<CustomerSite, 'id' | 'createdAt'> & { id?: string }) => {
     if (site.id) {
-      db.updateRow<CustomerSite>('sites', site.id, site);
+      db.updateRow<CustomerSite>('sites', site.id, site as CustomerSite);
     } else {
-      db.insertRow<CustomerSite>('sites', { ...site, createdAt: new Date().toISOString() });
+      db.insertRow<CustomerSite>('sites', {
+        ...site,
+        isActive: site.isActive !== undefined ? site.isActive : true,
+        createdAt: new Date().toISOString()
+      } as Omit<CustomerSite, 'id'>);
     }
     refreshAllData();
   };
 
   const saveProduct = (prod: Omit<Product, 'id' | 'createdAt'> & { id?: string }) => {
     if (prod.id) {
-      db.updateRow<Product>('products', prod.id, prod);
+      db.updateRow<Product>('products', prod.id, prod as Product);
     } else {
-      db.insertRow<Product>('products', { ...prod, createdAt: new Date().toISOString() });
+      db.insertRow<Product>('products', {
+        ...prod,
+        isActive: prod.isActive !== undefined ? prod.isActive : true,
+        createdAt: new Date().toISOString()
+      } as Omit<Product, 'id'>);
     }
     refreshAllData();
   };
@@ -786,7 +798,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     refreshAllData();
   };
 
-  const createContract = (contractData: Omit<Contract, 'id' | 'createdAt' | 'updatedAt' | 'contractNo'>, assetsList: { assetId: string; monthlyRentalFee: number; dailyRentalFee: number }[]) => {
+  const createContract = (contractData: Omit<Contract, 'id' | 'createdAt' | 'updatedAt' | 'contractNo'>, assetsList: { assetId?: string; expectedModel?: string; monthlyRentalFee: number; dailyRentalFee: number }[]) => {
     const contractNo = `CT-${new Date().toISOString().split('T')[0].replace(/-/g, '').substring(2)}-${Math.floor(100 + Math.random() * 900)}`;
     
     const contract = db.insertRow<Contract>('contracts', {
@@ -801,7 +813,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     assetsList.forEach(item => {
       db.insertRow<ContractAsset>('contractAssets', {
         contractId: contract.id,
-        assetId: item.assetId,
+        assetId: item.assetId || undefined,
+        expectedModel: item.expectedModel || undefined,
         monthlyRentalFee: item.monthlyRentalFee,
         dailyRentalFee: item.dailyRentalFee,
         startDate: contractData.startDate,
@@ -809,16 +822,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         createdAt: new Date().toISOString()
       });
 
-      db.updateRow<Asset>('assets', item.assetId, {
-        status: 'RENTED',
-        currentCustomerId: contractData.customerId,
-        currentSiteId: contractData.siteId,
-        contractStart: contractData.startDate,
-        contractEnd: contractData.endDate,
-        monthlyRentalFee: item.monthlyRentalFee,
-        dailyRentalFee: item.dailyRentalFee,
-        updatedAt: new Date().toISOString()
-      });
+      if (item.assetId) {
+        db.updateRow<Asset>('assets', item.assetId, {
+          status: 'RENTED',
+          currentCustomerId: contractData.customerId,
+          currentSiteId: contractData.siteId,
+          contractStart: contractData.startDate,
+          contractEnd: contractData.endDate,
+          monthlyRentalFee: item.monthlyRentalFee,
+          dailyRentalFee: item.dailyRentalFee,
+          updatedAt: new Date().toISOString()
+        });
+      }
     });
 
     db.insertRow<ContractHistory>('contractHistory', {

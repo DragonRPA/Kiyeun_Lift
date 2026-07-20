@@ -33,8 +33,22 @@ export const Customers: React.FC = () => {
   const [editingSite, setEditingSite] = useState<Partial<CustomerSite> | null>(null);
 
   const activeCustomer = customers.find(c => c.id === selectedCustomerId);
-  const customerContacts = contacts.filter(cc => cc.customerId === selectedCustomerId);
-  const customerSites = sites.filter(cs => cs.customerId === selectedCustomerId);
+  const customerContacts = contacts
+    .filter(cc => cc.customerId === selectedCustomerId)
+    .sort((a, b) => {
+      const aActive = a.isActive !== false;
+      const bActive = b.isActive !== false;
+      if (aActive !== bActive) return aActive ? -1 : 1;
+      return a.name.localeCompare(b.name, 'ko');
+    });
+  const customerSites = sites
+    .filter(cs => cs.customerId === selectedCustomerId)
+    .sort((a, b) => {
+      const aActive = a.isActive !== false;
+      const bActive = b.isActive !== false;
+      if (aActive !== bActive) return aActive ? -1 : 1;
+      return a.name.localeCompare(b.name, 'ko');
+    });
 
   useEffect(() => {
     if (navigationPayload?.editCustomerId) {
@@ -49,13 +63,17 @@ export const Customers: React.FC = () => {
   }, [navigationPayload, customers, setNavigationPayload]);
 
   const isIncompleteCustomer = (c: Customer) => {
-    return (
+    const hasMissingInfo = 
       c.bizRegNo === '미상' || !c.bizRegNo ||
       c.representative === '미상' || !c.representative ||
       c.repContact === '미상' || !c.repContact ||
       c.repEmail === '미상' || !c.repEmail ||
-      c.address === '미상' || !c.address
-    );
+      c.address === '미상' || !c.address;
+
+    const customerContacts = contacts.filter(cc => cc.customerId === c.id);
+    const customerSites = sites.filter(cs => cs.customerId === c.id);
+
+    return hasMissingInfo || customerContacts.length === 0 || customerSites.length === 0;
   };
 
   const handleSearchClick = () => {
@@ -345,21 +363,27 @@ export const Customers: React.FC = () => {
                         <th>직급</th>
                         <th>연락처</th>
                         <th>이메일</th>
+                        <th>사용 여부</th>
                         <th>관리</th>
                       </tr>
                     </thead>
                     <tbody>
                       {customerContacts.length === 0 ? (
                         <tr>
-                          <td colSpan={5} style={{ textAlign: 'center', padding: '20px 0', color: 'var(--text-muted)' }}>등록된 담당자가 없습니다.</td>
+                          <td colSpan={6} style={{ textAlign: 'center', padding: '20px 0', color: 'var(--text-muted)' }}>등록된 담당자가 없습니다.</td>
                         </tr>
                       ) : (
                         customerContacts.map(cc => (
-                          <tr key={cc.id}>
+                          <tr key={cc.id} style={{ opacity: cc.isActive !== false ? 1 : 0.6 }}>
                             <td><strong>{cc.name}</strong></td>
                             <td>{cc.position || '-'}</td>
                             <td>{cc.contact}</td>
                             <td>{cc.email || '-'}</td>
+                            <td>
+                              <span className={`badge ${cc.isActive !== false ? 'badge-success' : 'badge-secondary'}`}>
+                                {cc.isActive !== false ? '사용' : '미사용'}
+                              </span>
+                            </td>
                             <td>
                               {canSave && (
                                 <button className="btn-secondary" onClick={() => handleOpenEditContact(cc)} style={{ padding: '4px 8px', fontSize: '11px' }}>수정</button>
@@ -399,21 +423,27 @@ export const Customers: React.FC = () => {
                         <th>현장 주소</th>
                         <th>현장 담당자</th>
                         <th>연락처</th>
+                        <th>사용 여부</th>
                         <th>관리</th>
                       </tr>
                     </thead>
                     <tbody>
                       {customerSites.length === 0 ? (
                         <tr>
-                          <td colSpan={5} style={{ textAlign: 'center', padding: '20px 0', color: 'var(--text-muted)' }}>등록된 현장이 없습니다.</td>
+                          <td colSpan={6} style={{ textAlign: 'center', padding: '20px 0', color: 'var(--text-muted)' }}>등록된 현장이 없습니다.</td>
                         </tr>
                       ) : (
                         customerSites.map(cs => (
-                          <tr key={cs.id}>
+                          <tr key={cs.id} style={{ opacity: cs.isActive !== false ? 1 : 0.6 }}>
                             <td><strong>{cs.name}</strong></td>
                             <td style={{ fontSize: '13px' }}>{cs.address}</td>
                             <td>{cs.contactName || '-'}</td>
                             <td>{cs.contact || '-'}</td>
+                            <td>
+                              <span className={`badge ${cs.isActive !== false ? 'badge-success' : 'badge-secondary'}`}>
+                                {cs.isActive !== false ? '사용' : '미사용'}
+                              </span>
+                            </td>
                             <td>
                               {canSave && (
                                 <button className="btn-secondary" onClick={() => handleOpenEditSite(cs)} style={{ padding: '4px 8px', fontSize: '11px' }}>수정</button>
@@ -614,6 +644,17 @@ export const Customers: React.FC = () => {
                   placeholder="email@company.com"
                 />
               </div>
+              <div style={{ marginTop: '4px' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '500' }}>
+                  <input
+                    type="checkbox"
+                    checked={editingContact.isActive !== false}
+                    onChange={e => setEditingContact({ ...editingContact, isActive: e.target.checked })}
+                    style={{ margin: 0 }}
+                  />
+                  사용 여부 (퇴사/직무변경 시 체크 해제)
+                </label>
+              </div>
             </div>
             <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
               <button type="button" className="btn-secondary" onClick={() => setShowContactModal(false)}>취소</button>
@@ -680,6 +721,17 @@ export const Customers: React.FC = () => {
                   onChange={e => setEditingSite({ ...editingSite, email: e.target.value })}
                   placeholder="현장 메일 주소"
                 />
+              </div>
+              <div style={{ marginTop: '4px' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '500' }}>
+                  <input
+                    type="checkbox"
+                    checked={editingSite.isActive !== false}
+                    onChange={e => setEditingSite({ ...editingSite, isActive: e.target.checked })}
+                    style={{ margin: 0 }}
+                  />
+                  사용 여부 (공사 완공 시 체크 해제)
+                </label>
               </div>
             </div>
             <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>

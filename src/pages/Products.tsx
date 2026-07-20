@@ -6,21 +6,28 @@ import { exportToExcel } from '../services/excel';
 import { Product } from '../services/db';
 
 export const Products: React.FC = () => {
-  const { products, saveProduct, hasPermission } = useApp();
+  const { products, saveProduct, hasPermission, assets } = useApp();
   const canSave = hasPermission('product', 'save');
 
   const [searchTerm, setSearchTerm] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Partial<Product> | null>(null);
 
-  const filtered = products.filter(p => 
-    p.modelName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    p.manufacturer.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    p.spec.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filtered = products
+    .filter(p => 
+      p.modelName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      p.manufacturer.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      p.spec.toLowerCase().includes(searchTerm.toLowerCase())
+    )
+    .sort((a, b) => {
+      const aActive = a.isActive !== false;
+      const bActive = b.isActive !== false;
+      if (aActive !== bActive) return aActive ? -1 : 1;
+      return a.modelName.localeCompare(b.modelName, 'ko');
+    });
 
   const handleOpenAdd = () => {
-    setEditingProduct({ modelName: '', feet: 19, spec: '', manufacturer: '' });
+    setEditingProduct({ modelName: '', feet: 19, spec: '', manufacturer: '', isActive: true });
     setShowModal(true);
   };
 
@@ -39,14 +46,19 @@ export const Products: React.FC = () => {
 
   const handleExport = () => {
     // 엑셀 저장용 데이터 형식화
-    const excelData = filtered.map((p, idx) => ({
-      '번호': idx + 1,
-      '모델명': p.modelName,
-      '피트(Feet)': p.feet ? `${p.feet} ft` : '-',
-      '제원 및 특징': p.spec,
-      '제조사': p.manufacturer,
-      '등록일': p.createdAt.substring(0, 10)
-    }));
+    const excelData = filtered.map((p, idx) => {
+      const count = assets.filter(a => a.modelName === p.modelName).length;
+      return {
+        '번호': idx + 1,
+        '모델명': p.modelName,
+        '피트(Feet)': p.feet ? `${p.feet} ft` : '-',
+        '제원 및 특징': p.spec,
+        '제조사': p.manufacturer,
+        '사용 여부': p.isActive !== false ? '사용' : '미사용',
+        '보유 대수': `${count}대`,
+        '등록일': p.createdAt.substring(0, 10)
+      };
+    });
 
     exportToExcel(excelData, `제품목록_${new Date().toISOString().split('T')[0]}`, '제품목록');
   };
@@ -89,6 +101,8 @@ export const Products: React.FC = () => {
               <th>피트 (Feet)</th>
               <th>제원 및 특징</th>
               <th>제조사</th>
+              <th>사용 여부</th>
+              <th>보유 대수</th>
               <th style={{ width: '120px' }}>등록일</th>
               {canSave && <th style={{ width: '100px' }}>작업</th>}
             </tr>
@@ -96,28 +110,39 @@ export const Products: React.FC = () => {
           <tbody>
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={canSave ? 7 : 6} style={{ textAlign: 'center', padding: '30px 0', color: 'var(--text-muted)' }}>
+                <td colSpan={canSave ? 9 : 8} style={{ textAlign: 'center', padding: '30px 0', color: 'var(--text-muted)' }}>
                   등록되었거나 검색 조건에 부합하는 제품 모델이 없습니다.
                 </td>
               </tr>
             ) : (
-              filtered.map((p, idx) => (
-                <tr key={p.id}>
-                  <td>{idx + 1}</td>
-                  <td><strong style={{ color: 'var(--primary)' }}>{p.modelName}</strong></td>
-                  <td>{p.feet} ft</td>
-                  <td>{p.spec}</td>
-                  <td>{p.manufacturer}</td>
-                  <td>{p.createdAt.substring(0, 10)}</td>
-                  {canSave && (
+              filtered.map((p, idx) => {
+                const count = assets.filter(a => a.modelName === p.modelName).length;
+                return (
+                  <tr key={p.id} style={{ opacity: p.isActive !== false ? 1 : 0.6 }}>
+                    <td>{idx + 1}</td>
+                    <td><strong style={{ color: 'var(--primary)' }}>{p.modelName}</strong></td>
+                    <td>{p.feet} ft</td>
+                    <td>{p.spec}</td>
+                    <td>{p.manufacturer}</td>
                     <td>
-                      <button className="btn-secondary" onClick={() => handleOpenEdit(p)} style={{ padding: '4px 8px', fontSize: '12px' }}>
-                        수정
-                      </button>
+                      <span className={`badge ${p.isActive !== false ? 'badge-success' : 'badge-secondary'}`}>
+                        {p.isActive !== false ? '사용' : '미사용'}
+                      </span>
                     </td>
-                  )}
-                </tr>
-              ))
+                    <td>
+                      <strong style={{ color: count > 0 ? 'var(--primary)' : 'var(--text-muted)' }}>{count}대</strong>
+                    </td>
+                    <td>{p.createdAt.substring(0, 10)}</td>
+                    {canSave && (
+                      <td>
+                        <button className="btn-secondary" onClick={() => handleOpenEdit(p)} style={{ padding: '4px 8px', fontSize: '12px' }}>
+                          수정
+                        </button>
+                      </td>
+                    )}
+                  </tr>
+                );
+              })
             )}
           </tbody>
         </table>
@@ -169,6 +194,17 @@ export const Products: React.FC = () => {
                   placeholder="작업 높이, 적재 용량 등 제원 기재"
                   rows={3}
                 />
+              </div>
+              <div style={{ marginTop: '4px' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '500' }}>
+                  <input
+                    type="checkbox"
+                    checked={editingProduct.isActive !== false}
+                    onChange={e => setEditingProduct({ ...editingProduct, isActive: e.target.checked })}
+                    style={{ margin: 0 }}
+                  />
+                  사용 여부 (단종/매각 시 체크 해제)
+                </label>
               </div>
             </div>
 

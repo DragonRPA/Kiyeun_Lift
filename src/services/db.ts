@@ -61,6 +61,7 @@ export interface CustomerContact {
   position: string;
   contact: string;
   email: string;
+  isActive?: boolean; // 사용/미사용 (퇴사/부서이동 등)
   createdAt: string;
 }
 
@@ -72,6 +73,7 @@ export interface CustomerSite {
   contactName: string;
   contact: string;
   email: string;
+  isActive?: boolean; // 사용/미사용 (공사 완공 시 미사용)
   createdAt: string;
 }
 
@@ -81,6 +83,7 @@ export interface Product {
   feet: number;
   spec: string;
   manufacturer: string;
+  isActive?: boolean; // 사용/미사용 (단종/매각 등)
   createdAt: string;
 }
 
@@ -376,9 +379,9 @@ export interface AssetInOutLog {
 // 초기 로컬 스토리지 데이터 생성
 const generateMockProducts = (): Product[] => {
   return [
-    { id: 'prod-1', modelName: 'SKY-800', feet: 8, spec: '배터리형, 8m', manufacturer: 'SKY', createdAt: new Date().toISOString() },
-    { id: 'prod-2', modelName: 'GENIE-1000', feet: 10, spec: '디젤형, 10m', manufacturer: 'GENIE', createdAt: new Date().toISOString() },
-    { id: 'prod-3', modelName: 'LIFT-1200', feet: 12, spec: '전동형, 12m', manufacturer: 'LIFT', createdAt: new Date().toISOString() }
+    { id: 'prod-1', modelName: 'SKY-800', feet: 8, spec: '배터리형, 8m', manufacturer: 'SKY', isActive: true, createdAt: new Date().toISOString() },
+    { id: 'prod-2', modelName: 'GENIE-1000', feet: 10, spec: '디젤형, 10m', manufacturer: 'GENIE', isActive: true, createdAt: new Date().toISOString() },
+    { id: 'prod-3', modelName: 'LIFT-1200', feet: 12, spec: '전동형, 12m', manufacturer: 'LIFT', isActive: true, createdAt: new Date().toISOString() }
   ];
 };
 
@@ -409,6 +412,7 @@ const generateMockCustomers = () => {
         position: '대리',
         contact: `010-9999-${i}${j}`,
         email: `contact${i}_${j}@example.com`,
+        isActive: true,
         createdAt: new Date().toISOString()
       });
     }
@@ -423,6 +427,7 @@ const generateMockCustomers = () => {
         contactName: `이소장${i}-${j}`,
         contact: `010-8888-${i}${j}`,
         email: `site${i}_${j}@example.com`,
+        isActive: true,
         createdAt: new Date().toISOString()
       });
     }

@@ -15,7 +15,7 @@ export const SmartReturn: React.FC = () => {
   // [1] 영업사원 모드 (SALES) 상태
   // ==========================================
   const [salesSearch, setSalesSearch] = useState('');
-  const [salesSortBy, setSalesSortBy] = useState<'END_DATE' | 'CUSTOMER_NAME'>('END_DATE');
+  const [salesSortBy, setSalesSortBy] = useState<'END_DATE' | 'CUSTOMER_NAME' | 'SITE_NAME'>('END_DATE');
   const [salesSortDesc, setSalesSortDesc] = useState(false);
   const [selectedContractId, setSelectedContractId] = useState('');
   const [selectedAssetIds, setSelectedAssetIds] = useState<string[]>([]);
@@ -143,6 +143,9 @@ export const SmartReturn: React.FC = () => {
     } else if (salesSortBy === 'CUSTOMER_NAME') {
       valA = customers.find(cust => cust.id === a.customerId)?.name || '';
       valB = customers.find(cust => cust.id === b.customerId)?.name || '';
+    } else if (salesSortBy === 'SITE_NAME') {
+      valA = sites.find(s => s.id === a.siteId)?.name || '';
+      valB = sites.find(s => s.id === b.siteId)?.name || '';
     }
 
     const compare = valA.localeCompare(valB);
@@ -404,6 +407,22 @@ export const SmartReturn: React.FC = () => {
                     style={{ padding: '6px 8px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '2px' }}
                   >
                     <ArrowUpDown size={12} /> 고객명 {salesSortBy === 'CUSTOMER_NAME' && (salesSortDesc ? '▼' : '▲')}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (salesSortBy === 'SITE_NAME') {
+                        setSalesSortDesc(!salesSortDesc);
+                      } else {
+                        setSalesSortBy('SITE_NAME');
+                        setSalesSortDesc(false);
+                      }
+                    }}
+                    className={salesSortBy === 'SITE_NAME' ? 'btn-primary' : 'btn-secondary'}
+                    style={{ padding: '6px 8px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '2px' }}
+                  >
+                    <ArrowUpDown size={12} /> 현장명 {salesSortBy === 'SITE_NAME' && (salesSortDesc ? '▼' : '▲')}
                   </button>
                 </div>
 
