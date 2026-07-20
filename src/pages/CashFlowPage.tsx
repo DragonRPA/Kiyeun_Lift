@@ -250,6 +250,46 @@ export const CashFlowPage: React.FC = () => {
     setSnapNotes('');
   };
 
+  // 30일 시뮬레이션 결과 엑셀(CSV) 다운로드 함수
+  const downloadExcel = () => {
+    if (forecastList.length === 0) {
+      alert("다운로드할 데이터가 없습니다.");
+      return;
+    }
+
+    // CSV 파일 헤더 정의 (BOM 가산하여 엑셀에서 바로 열림 보장)
+    const headers = ["일자", "수납예정(입금)", "수납 적요", "일반지출(OPEX)", "지출 내역 요약", "설비투자(CAPEX)", "투자 자산 요약", "일일 수지차", "예상 누적 잔고", "안전 상태"];
+    
+    const rows = forecastList.map(item => {
+      let statusStr = "안전";
+      if (item.status === "CRITICAL") statusStr = "부도위험";
+      else if (item.status === "WARNING") statusStr = "자금주의";
+
+      return [
+        item.date,
+        item.inflow,
+        `"${item.inflowDetail.replace(/"/g, '""')}"`,
+        item.opex,
+        `"${item.opexDetail.replace(/"/g, '""')}"`,
+        item.capex,
+        `"${item.capexDetail.replace(/"/g, '""')}"`,
+        item.net,
+        item.cumulative,
+        statusStr
+      ];
+    });
+
+    const csvContent = "\uFEFF" + [headers.join(","), ...rows.map(r => r.join(","))].join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `cashflow_forecast_${focusDateString}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   // 차트 마우스 마우스 오버 포인트 계산
   const handleMouseMove = (e: React.MouseEvent<SVGSVGElement, MouseEvent>) => {
     if (!chartRef.current || forecastList.length === 0) return;
@@ -759,9 +799,18 @@ export const CashFlowPage: React.FC = () => {
 
           {/* 일자별 예측 시뮬레이션 테이블 목록 */}
           <div className="card" style={{ margin: 0 }}>
-            <div className="card-header">
-              <h3 className="card-title">30일 캘린더 기준 예측 타임라인</h3>
-              <span style={{ fontSize: '11.5px', color: 'var(--text-secondary)' }}>매일 오전 1회 자동 파싱 및 예측 시뮬레이터 구동 결과</span>
+            <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <h3 className="card-title">30일 캘린더 기준 예측 타임라인</h3>
+                <span style={{ fontSize: '11.5px', color: 'var(--text-secondary)' }}>매일 오전 1회 자동 파싱 및 예측 시뮬레이터 구동 결과</span>
+              </div>
+              <button 
+                className="btn-secondary" 
+                onClick={downloadExcel}
+                style={{ fontSize: '12px', padding: '6px 14px', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', borderColor: 'var(--success)', color: 'var(--success)', fontWeight: 'bold' }}
+              >
+                <FileText size={14} /> 📥 30일 전망 엑셀(CSV) 다운로드
+              </button>
             </div>
 
             <div style={{ maxHeight: '450px', overflowY: 'auto' }}>
