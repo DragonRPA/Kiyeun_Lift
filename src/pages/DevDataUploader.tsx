@@ -2282,6 +2282,42 @@ export const DevDataUploader: React.FC = () => {
                   </div>
                 </div>
 
+                {/* 🌟 Direct Node.js TCP Seeder Guide & Combined Download */}
+                <div style={{
+                  padding: '10px',
+                  backgroundColor: 'rgba(59,130,246,0.05)',
+                  border: '1px solid rgba(59,130,246,0.15)',
+                  borderRadius: '6px',
+                  marginBottom: '10px'
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                    <span style={{ fontSize: '11px', fontWeight: '700', color: 'var(--primary)' }}>⚡ Node.js 직접 TCP 시딩 가이드</span>
+                    <button
+                      onClick={() => {
+                        const entireSql = generatedSqlParts.join('\n\n');
+                        const blob = new Blob([entireSql], { type: 'text/plain;charset=utf-8' });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = sqlType === 'INSERT' ? 'import.sql' : 'delete.sql';
+                        a.click();
+                        URL.revokeObjectURL(url);
+                        alert("전체 통합 SQL 파일이 다운로드되었습니다. scripts/ 폴더에 'import.sql' 명칭으로 저장해 주십시오.");
+                      }}
+                      style={{ fontSize: '10px', padding: '3px 8px', backgroundColor: '#3b82f6', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: '600' }}
+                    >
+                      💾 전체 SQL 다운로드
+                    </button>
+                  </div>
+                  <div style={{ fontSize: '10.5px', color: 'var(--text-secondary)', lineHeight: '1.4', fontFamily: 'monospace' }}>
+                    1. 파일 다운로드 후 <code style={{ backgroundColor: 'var(--bg-body)', padding: '1px 3px', borderRadius: '3px' }}>scripts/import.sql</code>로 저장<br />
+                    2. 터미널에서 아래 명령어 실행 (용량 제한 없음):<br />
+                    <code style={{ display: 'block', padding: '4px', backgroundColor: '#0f172a', color: '#38bdf8', borderRadius: '4px', marginTop: '4px', fontSize: '9.5px', userSelect: 'all' }}>
+                      npm run db:seed
+                    </code>
+                  </div>
+                </div>
+
                 {sqlType === 'INSERT' && (
                   <div style={{
                     display: 'grid',
