@@ -42,6 +42,43 @@ export const OrganizationSettings: React.FC = () => {
   // --- States ---
   const [departments, setDepartments] = useState<Department[]>([]);
   const [users, setUsers] = useState<UserNode[]>([]);
+
+// Enforce manager policies across departments
+const enforceManagerPolicies = (usersList: UserNode[], deptList: Department[]) => {
+  let updated = [...usersList];
+  deptList.forEach(dept => {
+    const deptUsers = updated.filter(u => u.departmentId === dept.id);
+    if (deptUsers.length === 0) return;
+    const managers = deptUsers.filter(u => u.role === 'MANAGER');
+    const isTop = dept.parentDepartmentId === null;
+    if (isTop) {
+      if (managers.length > 0) {
+        const first = managers[0];
+        updated = updated.map(u => {
+          if (u.id === first.id) return { ...u, role: 'ADMIN' };
+          if (u.role === 'MANAGER' && u.departmentId === dept.id) return { ...u, role: 'USER' };
+          return u;
+        });
+      } else if (deptUsers.length === 1) {
+        const sole = deptUsers[0];
+        updated = updated.map(u => u.id === sole.id ? { ...u, role: 'ADMIN' } : u);
+      }
+    } else {
+      if (managers.length > 1) {
+        const first = managers[0];
+        updated = updated.map(u => {
+          if (u.id === first.id) return u;
+          if (u.role === 'MANAGER' && u.departmentId === dept.id) return { ...u, role: 'USER' };
+          return u;
+        });
+      } else if (managers.length === 0 && deptUsers.length === 1) {
+        const sole = deptUsers[0];
+        updated = updated.map(u => u.id === sole.id ? { ...u, role: 'MANAGER' } : u);
+      }
+    }
+  });
+  return updated;
+};
   
   // Selection States
   const [selectedDeptId, setSelectedDeptId] = useState<string | null>(null);
@@ -167,7 +204,9 @@ export const OrganizationSettings: React.FC = () => {
       loginId: '',
       passwordHash: ''
     };
-    setUsers([...users, newUser]);
+    let updated = [...users, newUser];
+    updated = enforceManagerPolicies(updated, departments);
+    setUsers(updated);
     setActiveTab('UNASSIGNED');
     setSelectedProfile(newUser);
   };
@@ -197,9 +236,11 @@ export const OrganizationSettings: React.FC = () => {
     e.preventDefault();
     if (!canEdit || !draggedUserId) return;
     
-    setUsers(prev => prev.map(u => 
+    let updated = users.map(u => 
       u.id === draggedUserId ? { ...u, departmentId: targetDeptId } : u
-    ));
+    );
+    updated = enforceManagerPolicies(updated, departments);
+    setUsers(updated);
     setDraggedUserId(null);
   };
 
@@ -207,9 +248,11 @@ export const OrganizationSettings: React.FC = () => {
     e.preventDefault();
     if (!canEdit || !draggedUserId) return;
     
-    setUsers(prev => prev.map(u => 
+    let updated = users.map(u => 
       u.id === draggedUserId ? { ...u, departmentId: null } : u
-    ));
+    );
+    updated = enforceManagerPolicies(updated, departments);
+    setUsers(updated);
     setDraggedUserId(null);
   };
 
@@ -269,7 +312,9 @@ export const OrganizationSettings: React.FC = () => {
         alert('ADMIN 시스템 역할은 최고관리자(admin) 계정만 부여할 수 있습니다.');
         return;
       }
-      setUsers(prev => prev.map(u => u.id === selectedProfile.id ? selectedProfile : u));
+      let updated = users.map(u => u.id === selectedProfile.id ? selectedProfile : u);
+      updated = enforceManagerPolicies(updated, departments);
+      setUsers(updated);
       setSelectedProfile(null);
     }
   };

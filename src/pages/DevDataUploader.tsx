@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { useApp } from '../context/AppContext';
-import { supabase } from '../services/db';
+import { supabase, db } from '../services/db';
+import * as XLSX from 'xlsx';
 import {
   DatabaseIcon,
   Download,
@@ -11,6 +12,7 @@ import {
   FileText,
   Loader,
   Info,
+  Trash2,
 } from 'lucide-react';
 
 // ──────────────────────────────────────────────
@@ -19,12 +21,13 @@ import {
 type FieldType = 'string' | 'number' | 'boolean' | 'enum' | 'date';
 
 interface FieldDef {
-  key: string;
-  label: string;
+  key: string;                 // DB 컬럼 (영문)
+  label: string;               // CSV 헤더에 표시될 한글 라벨
   type: FieldType;
   required: boolean;
-  enumValues?: string[];
-  example: string;
+  enumValues?: string[];        // 영문 enum 값 배열
+  enumKorean?: string[];        // 한글 enum 라벨 (enumValues 순서와 동일)
+  example: string;             // 영문 예시(내부 사용)
   description?: string;
 }
 
@@ -248,6 +251,79 @@ const TABLE_SCHEMAS: TableDef[] = [
   },
 ];
 
+function mapKoreanRowToEnglish(row: Record<string, string>, schema: TableDef): Record<string, string> {
+  const mapped: Record<string, string> = {};
+  schema.fields.forEach(field => {
+    let val = row[field.key];
+    if (val === undefined || val === null) {
+      val = row[field.label];
+    }
+    if (val === undefined || val === null) {
+      const keys = Object.keys(row);
+      const foundKey = keys.find(k => k.toLowerCase() === field.key.toLowerCase() || k.trim() === field.label.trim());
+      if (foundKey) val = row[foundKey];
+    }
+    
+    if (val === undefined || val === null) {
+      val = '';
+    } else {
+      val = String(val).trim();
+    }
+    
+    if (field.type === 'boolean') {
+      if (val === '예' || val === 'true' || val === 'TRUE' || val === '1') {
+        val = 'true';
+      } else if (val === '아니오' || val === 'false' || val === 'FALSE' || val === '0') {
+        val = 'false';
+      }
+    }
+    
+    if (field.type === 'enum') {
+      if (field.enumValues) {
+        if (field.enumKorean) {
+          const idx = field.enumKorean.indexOf(val);
+          if (idx >= 0) {
+            val = field.enumValues[idx];
+          }
+        }
+        
+        if (field.key === 'ownerType') {
+          if (val === '당사자산' || val === '당사' || val === 'OWNED') val = 'OWNED';
+          if (val === '임차자산' || val === '임차' || val === 'RENTED') val = 'RENTED';
+        }
+        if (field.key === 'status' && schema.key === 'assets') {
+          if (val === '대기중' || val === '대기' || val === 'AVAILABLE') val = 'AVAILABLE';
+          if (val === '렌트중' || val === '임대중' || val === 'RENTED') val = 'RENTED';
+          if (val === '정비중' || val === 'REPAIRING') val = 'REPAIRING';
+          if (val === '반납완료' || val === 'RENTED_RETURNED') val = 'RENTED_RETURNED';
+          if (val === '매각' || val === 'SOLD') val = 'SOLD';
+        }
+        if (field.key === 'type' && schema.key === 'deliveries') {
+          if (val === '출고' || val === 'OUTBOUND') val = 'OUTBOUND';
+          if (val === '입고' || val === '회수' || val === 'INBOUND') val = 'INBOUND';
+          if (val === '교체' || val === 'EXCHANGE') val = 'EXCHANGE';
+          if (val === '이동' || val === 'MOVEMENT') val = 'MOVEMENT';
+        }
+        if (field.key === 'status' && schema.key === 'deliveries') {
+          if (val === '요청' || val === '요청됨' || val === 'REQUESTED') val = 'REQUESTED';
+          if (val === '배차' || val === '배차됨' || val === 'DISPATCHED') val = 'DISPATCHED';
+          if (val === '완료' || val === '완료됨' || val === 'COMPLETED') val = 'COMPLETED';
+        }
+        if (field.key === 'status' && schema.key === 'contracts') {
+          if (val === '활성' || val === '계약중' || val === 'ACTIVE') val = 'ACTIVE';
+          if (val === '연장' || val === '연장됨' || val === 'EXTENDED') val = 'EXTENDED';
+          if (val === '단축' || val === '단축됨' || val === 'SHORTENED') val = 'SHORTENED';
+          if (val === '승계' || val === '승계됨' || val === 'SUCCEEDED') val = 'SUCCEEDED';
+          if (val === '완료' || val === '종료' || val === 'COMPLETED') val = 'COMPLETED';
+        }
+      }
+    }
+    
+    mapped[field.key] = val;
+  });
+  return mapped;
+}
+
 // ──────────────────────────────────────────────
 // 유효성 검사 유틸
 // ──────────────────────────────────────────────
@@ -332,16 +408,39 @@ export const DevDataUploader: React.FC = () => {
   const schema = TABLE_SCHEMAS.find(t => t.key === selectedTableKey)!;
 
   // ──── CSV 양식 다운로드 ────
+  // ----- CSV 한글 헤더·값 변환 유틸 -----
+  const valueToKorean = (value: string, field: FieldDef): string => {
+    if (field.type === 'boolean') {
+      return value === 'true' ? '예' : '아니오';
+    }
+    if (field.type === 'enum' && field.enumKorean) {
+      const idx = field.enumValues?.indexOf(value);
+      return idx !== undefined && idx >= 0 ? field.enumKorean[idx] : value;
+    }
+    return value;
+  };
+
+  const koreanToEnglish = (value: string, field: FieldDef): string => {
+    if (field.type === 'boolean') {
+      return value === '예' ? 'true' : 'false';
+    }
+    if (field.type === 'enum' && field.enumKorean) {
+      const idx = field.enumKorean.indexOf(value);
+      return idx >= 0 && field.enumValues ? field.enumValues[idx] : value;
+    }
+    return value;
+  };
+
   const handleDownloadTemplate = () => {
-    const headers = schema.fields.map(f => f.key).join(',');
-    // 샘플 행 생성: sampleRows가 있으면 사용, 없으면 example에서 1행 생성
+    // 헤더는 한글 라벨 사용
+    const headers = schema.fields.map(f => f.label).join(',');
     let sampleLines: string;
     if (schema.sampleRows && schema.sampleRows.length > 0) {
       sampleLines = schema.sampleRows.map(row =>
-        schema.fields.map(f => `"${row[f.key] ?? ''}"`).join(',')
+        schema.fields.map(f => `"${valueToKorean(row[f.key] ?? '', f)}"`).join(',')
       ).join('\n');
     } else {
-      sampleLines = schema.fields.map(f => `"${f.example}"`).join(',');
+      sampleLines = schema.fields.map(f => `"${valueToKorean(f.example, f)}"`).join(',');
     }
     const csv = `${headers}\n${sampleLines}`;
     const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
@@ -352,6 +451,7 @@ export const DevDataUploader: React.FC = () => {
     a.click();
     URL.revokeObjectURL(url);
   };
+
 
   // ──── 파일 선택 ────
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -365,7 +465,9 @@ export const DevDataUploader: React.FC = () => {
     reader.onload = (ev) => {
       const text = ev.target?.result as string;
       const { rows } = parseCSV(text);
-      setParsedRows(rows);
+      // Map Korean columns & values to English keys & standard values
+      const mapped = rows.map(r => mapKoreanRowToEnglish(r, schema));
+      setParsedRows(mapped);
     };
     reader.readAsText(file, 'utf-8');
   };
@@ -386,6 +488,19 @@ export const DevDataUploader: React.FC = () => {
     let failedCount = 0;
     const converted = parsedRows.map(row => convertRow(row, schema));
 
+    // Update local DB cache too
+    const currentLocalData = (db as any)[selectedTableKey] || [];
+    const updatedLocalData = [...currentLocalData];
+    converted.forEach((newRow: any) => {
+      const idx = updatedLocalData.findIndex((r: any) => r.id === newRow.id);
+      if (idx >= 0) {
+        updatedLocalData[idx] = { ...updatedLocalData[idx], ...newRow };
+      } else {
+        updatedLocalData.push(newRow);
+      }
+    });
+    (db as any)[selectedTableKey] = updatedLocalData;
+
     // 50개씩 배치 업로드
     const batchSize = 50;
     for (let i = 0; i < converted.length; i += batchSize) {
@@ -402,6 +517,282 @@ export const DevDataUploader: React.FC = () => {
     }
     setUploadResult({ success: successCount, failed: failedCount });
     setUploading(false);
+  };
+
+  // ──── 전체 테이블 일괄 관리 (Excel) 상태 및 핸들러 ────
+  const [bulkParsedData, setBulkParsedData] = useState<Record<string, Record<string, string>[]>>({});
+  const [bulkValidationErrors, setBulkValidationErrors] = useState<{ sheet: string; row: number; field: string; message: string }[]>([]);
+  const [bulkValidationDone, setBulkValidationDone] = useState(false);
+  const [bulkUploading, setBulkUploading] = useState(false);
+  const [bulkUploadResult, setBulkUploadResult] = useState<{ success: number; failed: number } | null>(null);
+  const [bulkFileName, setBulkFileName] = useState('');
+  const [downloadingBulk, setDownloadingBulk] = useState(false);
+  const bulkFileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleDownloadBulkTemplate = () => {
+    const wb = XLSX.utils.book_new();
+    TABLE_SCHEMAS.forEach(t => {
+      const headers = t.fields.map(f => f.label);
+      const data = [headers];
+      
+      if (t.sampleRows && t.sampleRows.length > 0) {
+        t.sampleRows.forEach(row => {
+          const rowData = t.fields.map(f => valueToKorean(row[f.key] ?? '', f));
+          data.push(rowData);
+        });
+      } else {
+        const rowData = t.fields.map(f => valueToKorean(f.example, f));
+        data.push(rowData);
+      }
+      
+      const ws = XLSX.utils.aoa_to_sheet(data);
+      XLSX.utils.book_append_sheet(wb, ws, t.key);
+    });
+    XLSX.writeFile(wb, `all_tables_template.xlsx`);
+  };
+
+  const handleDownloadBulkCurrent = async () => {
+    setDownloadingBulk(true);
+    try {
+      const wb = XLSX.utils.book_new();
+      
+      await Promise.all(TABLE_SCHEMAS.map(async (t) => {
+        let dataArray: any[] = [];
+        if (supabase) {
+          const { data, error } = await supabase.from(t.supabaseTable).select('*');
+          if (error) {
+            console.error(`Download error for ${t.key}:`, error);
+          }
+          dataArray = (data && data.length > 0) ? data : (db as any)[t.key] || [];
+        } else {
+          dataArray = (db as any)[t.key] || [];
+        }
+        
+        const headers = t.fields.map(f => f.label);
+        const data = [headers];
+        
+        (dataArray || []).forEach(row => {
+          const rowData = t.fields.map(f => {
+            const val = row[f.key];
+            if (val === undefined || val === null) return '';
+            return valueToKorean(String(val), f);
+          });
+          data.push(rowData);
+        });
+        
+        const ws = XLSX.utils.aoa_to_sheet(data);
+        XLSX.utils.book_append_sheet(wb, ws, t.key);
+      }));
+      
+      XLSX.writeFile(wb, `all_tables_current_data.xlsx`);
+    } catch (err) {
+      console.error("Bulk download error:", err);
+      alert("데이터 다운로드 중 오류가 발생했습니다.");
+    } finally {
+      setDownloadingBulk(false);
+    }
+  };
+
+  const handleBulkFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setBulkFileName(file.name);
+    setBulkValidationDone(false);
+    setBulkValidationErrors([]);
+    setBulkUploadResult(null);
+    
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const data = new Uint8Array(ev.target?.result as ArrayBuffer);
+        const workbook = XLSX.read(data, { type: 'array' });
+        
+        const parsedData: Record<string, Record<string, string>[]> = {};
+        workbook.SheetNames.forEach(sheetName => {
+          const schema = TABLE_SCHEMAS.find(t => t.key === sheetName);
+          if (!schema) return;
+          
+          const sheet = workbook.Sheets[sheetName];
+          const rows = XLSX.utils.sheet_to_json<Record<string, any>>(sheet);
+          
+          const cleanRows = rows.map(row => {
+            const cleanRow: Record<string, string> = {};
+            Object.keys(row).forEach(k => {
+              cleanRow[k] = String(row[k]);
+            });
+            return cleanRow;
+          });
+          
+          const mappedRows = cleanRows.map(r => mapKoreanRowToEnglish(r, schema));
+          parsedData[sheetName] = mappedRows;
+        });
+        
+        setBulkParsedData(parsedData);
+      } catch (err) {
+        console.error("Error parsing Excel file:", err);
+        alert("엑셀 파일 파싱 중 오류가 발생했습니다.");
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  };
+
+  const handleBulkValidate = () => {
+    const errors: { sheet: string; row: number; field: string; message: string }[] = [];
+    
+    Object.keys(bulkParsedData).forEach(sheetName => {
+      const schema = TABLE_SCHEMAS.find(t => t.key === sheetName)!;
+      const sheetRows = bulkParsedData[sheetName];
+      const sheetErrors = validateRows(sheetRows, schema);
+      sheetErrors.forEach(err => {
+        errors.push({
+          sheet: schema.label,
+          row: err.row,
+          field: err.field,
+          message: err.message
+        });
+      });
+    });
+    
+    setBulkValidationErrors(errors);
+    setBulkValidationDone(true);
+  };
+
+  const handleBulkUpload = async () => {
+    if (!supabase || bulkValidationErrors.length > 0) return;
+    setBulkUploading(true);
+    setBulkUploadResult(null);
+    
+    let totalSuccess = 0;
+    let totalFailed = 0;
+    
+    try {
+      for (const sheetName of Object.keys(bulkParsedData)) {
+        const schema = TABLE_SCHEMAS.find(t => t.key === sheetName)!;
+        const sheetRows = bulkParsedData[sheetName];
+        const converted = sheetRows.map(row => convertRow(row, schema));
+        
+        // Update local DB cache for this sheet
+        const currentLocalData = (db as any)[sheetName] || [];
+        const updatedLocalData = [...currentLocalData];
+        converted.forEach((newRow: any) => {
+          const idx = updatedLocalData.findIndex((r: any) => r.id === newRow.id);
+          if (idx >= 0) {
+            updatedLocalData[idx] = { ...updatedLocalData[idx], ...newRow };
+          } else {
+            updatedLocalData.push(newRow);
+          }
+        });
+        (db as any)[sheetName] = updatedLocalData;
+
+        const batchSize = 50;
+        for (let i = 0; i < converted.length; i += batchSize) {
+          const batch = converted.slice(i, i + batchSize);
+          const { error } = await supabase
+            .from(schema.supabaseTable)
+            .upsert(batch as any[], { onConflict: 'id' });
+          if (error) {
+            totalFailed += batch.length;
+            console.error(`Bulk upsert error for ${schema.supabaseTable}:`, error);
+          } else {
+            totalSuccess += batch.length;
+          }
+        }
+      }
+      setBulkUploadResult({ success: totalSuccess, failed: totalFailed });
+    } catch (err) {
+      console.error("Bulk upload failed:", err);
+      alert("업로드 중 오류가 발생했습니다.");
+    } finally {
+      setBulkUploading(false);
+    }
+  };
+
+  const handleClearAllTables = async () => {
+    for (let i = 1; i <= 5; i++) {
+      const confirmed = window.confirm(`[경고] 정말 전체 테이블의 모든 데이터를 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다. (${i}/5)`);
+      if (!confirmed) {
+        alert('데이터 삭제가 취소되었습니다.');
+        return;
+      }
+    }
+    
+    setBulkUploading(true);
+    try {
+      await db.clearAllTables();
+      alert('모든 테이블의 데이터가 삭제되었습니다.');
+      // Reset state
+      setBulkParsedData({});
+      setBulkValidationErrors([]);
+      setBulkValidationDone(false);
+      setBulkUploadResult(null);
+      setBulkFileName('');
+      if (bulkFileInputRef.current) bulkFileInputRef.current.value = '';
+    } catch (err) {
+      console.error("Clear all error:", err);
+      alert('데이터 초기화 중 오류가 발생했습니다.');
+    } finally {
+      setBulkUploading(false);
+    }
+  };
+
+  // ──── 현재 DB 다운로드 ────
+  const handleDownloadCurrent = async () => {
+    let dataArray: any[] = [];
+    if (supabase) {
+      const { data, error } = await supabase.from(schema.supabaseTable).select('*');
+      if (error) {
+        console.error('Download error (Supabase):', error);
+        // fallback to local DB on error
+      }
+      dataArray = (data && data.length > 0) ? data : (db as any)[selectedTableKey] || [];
+    } else {
+      dataArray = (db as any)[selectedTableKey] || [];
+    }
+    generateCsvAndDownload(dataArray);
+  };
+
+  // Helper to convert rows to CSV and trigger download
+  const generateCsvAndDownload = (dataArray: any[]) => {
+    const headers = schema.fields.map(f => f.label).join(',');
+    const rows = (dataArray || []).map(row =>
+      schema.fields.map(f => {
+        const val = row[f.key];
+        if (val === undefined || val === null) return '';
+        if (f.type === 'boolean') return val ? '예' : '아니오';
+        if (f.type === 'enum' && f.enumKorean) {
+          const idx = f.enumValues?.indexOf(val);
+          return idx !== undefined && idx >= 0 ? f.enumKorean[idx] : val;
+        }
+        return val;
+      }).join(',')
+    ).join('\n');
+    const csv = `${headers}\n${rows}`;
+    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${selectedTableKey}_data.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  // ──── 전체 데이터 삭제 ────
+  const handleClearTable = async () => {
+    for (let i = 1; i <= 5; i++) {
+      const confirmed = window.confirm(`정말 전체 데이터를 삭제하시겠습니까? (${i}/5)`);
+      if (!confirmed) {
+        alert('데이터 삭제가 취소되었습니다.');
+        return;
+      }
+    }
+    if (!supabase) return;
+    const { error } = await supabase.from(schema.supabaseTable).delete().neq('id', '');
+    if (error) {
+      console.error('Clear table error:', error);
+      alert('데이터 삭제에 실패했습니다.');
+    } else {
+      alert('전체 데이터가 삭제되었습니다.');
+    }
   };
 
   if (!isAdmin) {
@@ -504,9 +895,21 @@ export const DevDataUploader: React.FC = () => {
               헤더 + 예시 데이터 1행이 포함된 CSV 파일을 다운로드합니다.<br />
               예시 행을 참고하여 데이터를 작성한 후 저장하세요.
             </p>
-            <button onClick={handleDownloadTemplate} className="btn-secondary" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <Download size={15} /> {schema.label} 양식 다운로드 ({selectedTableKey}_template.csv)
-            </button>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+              <button onClick={handleDownloadTemplate} className="btn-secondary" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <Download size={15} /> {schema.label} 양식 다운로드 ({selectedTableKey}_template.csv)
+              </button>
+
+              {/* 신규 버튼: 현재 DB 다운로드 */}
+              <button onClick={handleDownloadCurrent} className="btn-secondary" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <Download size={15} /> 현재 DB 다운로드 ({selectedTableKey}_data.csv)
+              </button>
+
+              {/* 신규 버튼: 전체 데이터 삭제 */}
+              <button onClick={handleClearTable} className="btn-danger" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <Trash2 size={15} /> 전체 데이터 삭제
+              </button>
+            </div>
           </div>
 
           {/* STEP 2: 파일 선택 */}
@@ -592,7 +995,7 @@ export const DevDataUploader: React.FC = () => {
               }}
             >
               {uploading ? <Loader size={16} style={{ animation: 'spin 1s linear infinite' }} /> : <Upload size={16} />}
-              {uploading ? '업로드 중...' : `Supabase에 ${parsedRows.length}건 Upsert`}
+              {uploading ? '업로드 중...' : `Supabase에 ${parsedRows.length}건 삽입/수정`}
             </button>
 
             {uploadResult && (
@@ -615,7 +1018,136 @@ export const DevDataUploader: React.FC = () => {
               </div>
             )}
           </div>
+        </div>
+      </div>
 
+      <hr style={{ border: 'none', borderTop: '1px solid var(--border-color)', margin: '30px 0 20px 0' }} />
+
+      <div className="card" style={{ padding: '24px', backgroundColor: 'var(--bg-card)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
+          <DatabaseIcon size={20} color="var(--primary)" />
+          <h3 style={{ fontWeight: '800', fontSize: '18px', margin: 0 }}>전체 테이블 일괄 관리 (Excel)</h3>
+        </div>
+
+        <div style={{
+          backgroundColor: 'var(--bg-body)', border: '1px solid var(--border-color)',
+          borderRadius: '8px', padding: '12px 16px', marginBottom: '16px', fontSize: '13px', color: 'var(--text-muted)'
+        }}>
+          <Info size={16} style={{ display: 'inline', marginRight: '6px', verticalAlign: 'text-bottom' }} />
+          <span>엑셀 파일(`.xlsx`)의 각 시트명은 <code>customers</code>, <code>contacts</code>, <code>sites</code> 등 테이블명이어야 합니다. 첫 행의 컬럼명은 한글 라벨 또는 영문 키를 지원합니다.</span>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.5fr 1fr', gap: '20px' }}>
+          {/* Zone 1: 다운로드 및 백업 */}
+          <div className="card" style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <h4 style={{ fontWeight: '700', fontSize: '14px', margin: '0 0 6px 0', borderBottom: '1px solid var(--border-color)', paddingBottom: '6px' }}>다운로드 및 백업</h4>
+            <button onClick={handleDownloadBulkTemplate} className="btn-secondary" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+              <Download size={14} /> 전체 테이블 양식 다운로드
+            </button>
+            <button onClick={handleDownloadBulkCurrent} className="btn-secondary" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }} disabled={downloadingBulk}>
+              {downloadingBulk ? <Loader size={14} style={{ animation: 'spin 1s linear infinite' }} /> : <Download size={14} />}
+              전체 테이블 현재 데이터 다운로드
+            </button>
+          </div>
+
+          {/* Zone 2: 일괄 파일 업로드 및 검사 */}
+          <div className="card" style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <h4 style={{ fontWeight: '700', fontSize: '14px', margin: '0 0 6px 0', borderBottom: '1px solid var(--border-color)', paddingBottom: '6px' }}>일괄 파일 업로드 및 검사</h4>
+            <input
+              ref={bulkFileInputRef}
+              type="file"
+              accept=".xlsx, .xls"
+              onChange={handleBulkFileChange}
+              style={{ width: '100%' }}
+            />
+            {bulkFileName && (
+              <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                선택된 파일: <strong>{bulkFileName}</strong>
+              </div>
+            )}
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button
+                onClick={handleBulkValidate}
+                disabled={Object.keys(bulkParsedData).length === 0}
+                className="btn-primary"
+                style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', opacity: Object.keys(bulkParsedData).length === 0 ? 0.5 : 1 }}
+              >
+                <FileText size={14} /> 유효성 검사
+              </button>
+              <button
+                onClick={handleBulkUpload}
+                disabled={!isConnected || !bulkValidationDone || bulkValidationErrors.length > 0 || bulkUploading}
+                className="btn-success"
+                style={{
+                  flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+                  opacity: (!isConnected || !bulkValidationDone || bulkValidationErrors.length > 0 || bulkUploading) ? 0.5 : 1,
+                  backgroundColor: 'var(--success, #22c55e)', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer'
+                }}
+              >
+                {bulkUploading ? <Loader size={14} style={{ animation: 'spin 1s linear infinite' }} /> : <Upload size={14} />}
+                일괄 업서트 실행
+              </button>
+            </div>
+
+            {/* Bulk validation result UI */}
+            {bulkValidationDone && (
+              <div style={{ marginTop: '8px' }}>
+                {bulkValidationErrors.length === 0 ? (
+                  <div style={{
+                    display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 12px',
+                    backgroundColor: 'rgba(34,197,94,0.1)', borderRadius: '6px', color: '#15803d', fontSize: '12px'
+                  }}>
+                    <CheckCircle size={14} />
+                    <span>검사 완료: 모든 테이블 오류 없음!</span>
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <div style={{
+                      display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 12px',
+                      backgroundColor: 'rgba(239,68,68,0.1)', borderRadius: '6px', color: 'var(--danger)', fontSize: '12px'
+                    }}>
+                      <XCircle size={14} />
+                      <span>검사 실패: 오류 {bulkValidationErrors.length}건 발견</span>
+                    </div>
+                    <div style={{ maxHeight: '120px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                      {bulkValidationErrors.slice(0, 10).map((err, i) => (
+                        <div key={i} style={{ fontSize: '11px', padding: '4px 8px', backgroundColor: 'var(--bg-body)', border: '1px solid var(--border-color)', borderRadius: '4px' }}>
+                          <strong>[{err.sheet} - {err.row}행]</strong> {err.field}: {err.message}
+                        </div>
+                      ))}
+                      {bulkValidationErrors.length > 10 && (
+                        <div style={{ fontSize: '10px', color: 'var(--text-muted)', textAlign: 'center', padding: '2px' }}>
+                          외 {bulkValidationErrors.length - 10}건의 오류가 더 있습니다.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {bulkUploadResult && (
+              <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
+                <div style={{ flex: 1, backgroundColor: 'rgba(34,197,94,0.1)', padding: '6px', borderRadius: '4px', textAlign: 'center', fontSize: '11px', color: '#15803d' }}>
+                  성공: <strong>{bulkUploadResult.success}</strong> 건
+                </div>
+                <div style={{ flex: 1, backgroundColor: bulkUploadResult.failed > 0 ? 'rgba(239,68,68,0.1)' : 'var(--bg-body)', padding: '6px', borderRadius: '4px', textAlign: 'center', fontSize: '11px', color: bulkUploadResult.failed > 0 ? 'var(--danger)' : 'var(--text-muted)' }}>
+                  실패: <strong>{bulkUploadResult.failed}</strong> 건
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Zone 3: 위험 영역 */}
+          <div className="card" style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <h4 style={{ fontWeight: '700', fontSize: '14px', margin: '0 0 6px 0', borderBottom: '1px solid var(--border-color)', paddingBottom: '6px', color: 'var(--danger)' }}>위험 영역 (Danger Zone)</h4>
+            <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: 0 }}>
+              DB의 모든 테이블 데이터를 영구히 초기화합니다. 이 작업은 되돌릴 수 없습니다.
+            </p>
+            <button onClick={handleClearAllTables} className="btn-danger" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', marginTop: 'auto' }}>
+              <Trash2 size={14} /> 전체 테이블 초기화 (Clear All)
+            </button>
+          </div>
         </div>
       </div>
     </div>

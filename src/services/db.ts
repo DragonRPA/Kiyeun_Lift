@@ -732,6 +732,45 @@ class LocalDB {
     return true;
   }
 
+  // Bulk upload all tables to Supabase
+  async uploadAllTables(): Promise<void> {
+    if (!supabase) return;
+    const tables = [
+      'users','departments','permissions','customers','contacts','sites',
+      'products','assets','consumables','consumableLogs','contracts','contractAssets',
+      'contractHistory','deliveries','transportCompanies','transportDrivers',
+      'billings','billingDetails','payments','repairs','repairConsumables','todos'
+    ];
+    await Promise.all(tables.map(async (key) => {
+      const data = (this as any)[key] as any[];
+      const tableName = this.mapToSupabaseTable(key);
+      const { error } = await supabase.from(tableName).upsert(data as any[], { onConflict: 'id' });
+      if (error) console.error(`Bulk upsert error for ${tableName}:`, error);
+    }));
+  }
+
+  // Clear all data from Supabase tables
+  async clearAllTables(): Promise<void> {
+    const tables = [
+      'users','departments','permissions','customers','contacts','sites',
+      'products','assets','consumables','consumableLogs','contracts','contractAssets',
+      'contractHistory','deliveries','transportCompanies','transportDrivers',
+      'billings','billingDetails','payments','repairs','repairConsumables','todos'
+    ];
+    // Clear local storage first
+    tables.forEach(key => {
+      this.set(key, []);
+    });
+    
+    if (!supabase) return;
+    await Promise.all(tables.map(async (key) => {
+      const tableName = this.mapToSupabaseTable(key);
+      const { error } = await supabase.from(tableName).delete().neq('id', '');
+      if (error) console.error(`Clear table error for ${tableName}:`, error);
+    }));
+  }
+
+
   // 조직도 및 구성원 일괄 저장 (Batch) - 기존 데이터를 전부 덮어씌움
   saveOrganizationBatch(departments: Department[], users: User[]): void {
     this.set('departments', departments);
