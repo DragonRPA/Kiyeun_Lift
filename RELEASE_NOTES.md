@@ -1,3 +1,13 @@
+# Release Notes (v2.6.5 - 2026-07-21 06:12)
+
+## 🗂️ Supabase 웹 SQL Editor 용량 극복을 위한 10단계 시퀀스 SQL 분할 적재 적용
+- **10단계 순차 데이터 시딩 파이프라인**: 10,000건의 대량 인서트 쿼리가 Supabase API 게이트웨이 및 클라우드플레어 바디 크기 제한(1MB)에 걸려 실패하는 문제를 회피하기 위해, 최대 1,500행 이하(300KB 수준)의 10개 트랜잭션 파트로 고르게 분할하였습니다.
+- **의존성 충돌 제로화 설계**: 1번 파트(제품/자산)부터 10번 파트(정비)까지 시간 순서 및 외래키 상호 참조 관계에 맞춰 완벽하게 순차적(Chronological)으로 빌드되도록 논리를 적용했습니다.
+- **UI 제어 카드 5x2 그리드 탭 개편**: 10개 파트를 직관적으로 제어할 수 있도록 `DevDataUploader.tsx` 하단에 5x2 배열의 슬릭한 그리드형 탭 버튼을 구성하고, 활성 탭에 맞춰 개별 클립보드 복사 및 다운로드가 연동되도록 마감했습니다.
+- **글로벌 프로젝트 정책 제약 사항 문서화**: 데이터베이스 최대 전송 페이로드와 제한 상황 대처 요령을 적은 [SUPABASE_LIMITS.md](file:///d:/GoogleDrive/RPA%20개발/01.AntiGravity/Kiyuen_Lift/SUPABASE_LIMITS.md) 파일과 로컬 프로젝트 규칙 파일 [.agents/AGENTS.md](file:///d:/GoogleDrive/RPA%20개발/01.AntiGravity/Kiyuen_Lift/.agents/AGENTS.md)를 연동 정의했습니다.
+
+---
+
 # Release Notes (v2.6.2 - 2026-07-21 05:51)
 
 ## 🩺 자가 진단형(Self-Diagnostics) 테스트 데이터 생성 감사 로그 및 에러 분석 패널 탑재

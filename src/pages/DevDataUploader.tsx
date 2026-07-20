@@ -991,87 +991,106 @@ export const DevDataUploader: React.FC = () => {
     repairs: any[];
     repairConsumables: any[];
   }) => {
-    const toSqlInsert = (tableName: string, rows: any[]) => {
+    const parts: string[] = [];
+    let currentPartSql = `BEGIN;\n\n`;
+    
+    // Target size limit per part: ~350KB (approx 350,000 characters) to safely bypass Supabase gateway limit
+    const MAX_PART_SIZE = 350000;
+    
+    const TABLE_ORDER = [
+      { key: 'products', name: 'products' },
+      { key: 'assets', name: 'assets' },
+      { key: 'customers', name: 'customers' },
+      { key: 'contacts', name: 'customer_contacts' },
+      { key: 'sites', name: 'customer_sites' },
+      { key: 'contracts', name: 'contracts' },
+      { key: 'contractAssets', name: 'contract_assets' },
+      { key: 'deliveries', name: 'deliveries' },
+      { key: 'billings', name: 'billings' },
+      { key: 'billingDetails', name: 'billing_details' },
+      { key: 'payments', name: 'payments' },
+      { key: 'bankTransactions', name: 'bank_transactions' },
+      { key: 'consumables', name: 'consumables' },
+      { key: 'consumableLogs', name: 'consumable_logs' },
+      { key: 'consumablePurchases', name: 'consumable_purchases' },
+      { key: 'repairs', name: 'repairs' },
+      { key: 'repairConsumables', name: 'repair_consumables' }
+    ];
+
+    const toSqlInsertLine = (tableName: string, r: any) => {
       const allowed = TABLE_COLUMNS[tableName];
-      if (!allowed || rows.length === 0) return '';
+      if (!allowed) return '';
       
-      let query = `-- Insert into ${tableName} (${rows.length} rows)\n`;
-      rows.forEach(r => {
-        const fields: string[] = [];
-        const values: string[] = [];
-        
-        allowed.forEach(k => {
-          if (r[k] !== undefined) {
-            fields.push(`"${k}"`);
-            const val = r[k];
-            if (val === null) {
-              values.push('NULL');
-            } else if (typeof val === 'string') {
-              values.push(`'${val.replace(/'/g, "''")}'`);
-            } else if (typeof val === 'boolean') {
-              values.push(val ? 'TRUE' : 'FALSE');
-            } else {
-              values.push(String(val));
-            }
-          }
-        });
-
-        if (tableName === 'repairs' && r.totalCost !== undefined && !fields.includes('"costTotal"')) {
-          fields.push('"costTotal"');
-          values.push(String(r.totalCost));
-        }
-        if (tableName === 'billing_details' && r.assetId === undefined && r.contractAssetId && !fields.includes('"assetId"')) {
-          const parts = String(r.contractAssetId).split('-');
-          if (parts.length >= 4) {
-            fields.push('"assetId"');
-            values.push(`'testdata-asset-${parts[3]}'`);
+      const fields: string[] = [];
+      const values: string[] = [];
+      
+      allowed.forEach(k => {
+        if (r[k] !== undefined) {
+          fields.push(`"${k}"`);
+          const val = r[k];
+          if (val === null) {
+            values.push('NULL');
+          } else if (typeof val === 'string') {
+            values.push(`'${val.replace(/'/g, "''")}'`);
+          } else if (typeof val === 'boolean') {
+            values.push(val ? 'TRUE' : 'FALSE');
+          } else {
+            values.push(String(val));
           }
         }
-
-        query += `INSERT INTO ${tableName} (${fields.join(', ')}) VALUES (${values.join(', ')}) ON CONFLICT (id) DO UPDATE SET ${fields.map(f => `${f} = EXCLUDED.${f}`).join(', ')};\n`;
       });
-      return query + '\n';
+
+      if (tableName === 'repairs' && r.totalCost !== undefined && !fields.includes('"costTotal"')) {
+        fields.push('"costTotal"');
+        values.push(String(r.totalCost));
+      }
+      if (tableName === 'billing_details' && r.assetId === undefined && r.contractAssetId && !fields.includes('"assetId"')) {
+        const parts = String(r.contractAssetId).split('-');
+        if (parts.length >= 4) {
+          fields.push('"assetId"');
+          values.push(`'testdata-asset-${parts[3]}'`);
+        }
+      }
+
+      return `INSERT INTO ${tableName} (${fields.join(', ')}) VALUES (${values.join(', ')}) ON CONFLICT (id) DO UPDATE SET ${fields.map(f => `${f} = EXCLUDED.${f}`).join(', ')};\n`;
     };
 
-    // Part 1: 기초 기준 마스터 정보 (제품, 자산, 고객사, 담당자, 현장, 소모품 기준정보)
-    let part1 = `BEGIN;\n\n`;
-    part1 += `-- ==================================================\n`;
-    part1 += `-- [1/3] Part 1: 기초 기준 마스터 정보 (제품, 자산, 고객사, 담당자, 현장, 소모품 등)\n`;
-    part1 += `-- ==================================================\n\n`;
-    part1 += toSqlInsert('products', data.products);
-    part1 += toSqlInsert('assets', data.assets);
-    part1 += toSqlInsert('customers', data.customers);
-    part1 += toSqlInsert('customer_contacts', data.contacts);
-    part1 += toSqlInsert('customer_sites', data.sites);
-    part1 += toSqlInsert('consumables', data.consumables);
-    part1 += toSqlInsert('consumable_logs', data.consumableLogs);
-    part1 += toSqlInsert('consumable_purchases', data.consumablePurchases);
-    part1 += `COMMIT;\n`;
+    TABLE_ORDER.forEach(tbl => {
+      const rows = (data as any)[tbl.key] || [];
+      if (rows.length === 0) return;
+      
+      let tableHeaderWritten = false;
 
-    // Part 2: 핵심 비즈니스 계약 및 물류 입출고 이력
-    let part2 = `BEGIN;\n\n`;
-    part2 += `-- ==================================================\n`;
-    part2 += `-- [2/3] Part 2: 핵심 비즈니스 계약 및 물류 입출고 이력 (계약, 계약자산, 배차이력)\n`;
-    part2 += `-- ==================================================\n\n`;
-    part2 += toSqlInsert('contracts', data.contracts);
-    part2 += toSqlInsert('contract_assets', data.contractAssets);
-    part2 += toSqlInsert('deliveries', data.deliveries);
-    part2 += `COMMIT;\n`;
+      rows.forEach((r: any) => {
+        const insertLine = toSqlInsertLine(tbl.name, r);
+        if (!insertLine) return;
+        
+        if (currentPartSql.length + insertLine.length > MAX_PART_SIZE) {
+          currentPartSql += `COMMIT;\n`;
+          parts.push(currentPartSql);
+          
+          currentPartSql = `BEGIN;\n\n`;
+          currentPartSql += `-- ==================================================\n`;
+          currentPartSql += `-- Continued: ${tbl.name} 적재\n`;
+          currentPartSql += `-- ==================================================\n\n`;
+          tableHeaderWritten = true;
+        }
 
-    // Part 3: 기성 정산 청구, 결제 수납 거래 및 유지보수 정비 이력
-    let part3 = `BEGIN;\n\n`;
-    part3 += `-- ==================================================\n`;
-    part3 += `-- [3/3] Part 3: 기성 정산 청구, 결제 수납 거래 및 유지보수 정비 이력\n`;
-    part3 += `-- ==================================================\n\n`;
-    part3 += toSqlInsert('billings', data.billings);
-    part3 += toSqlInsert('billing_details', data.billingDetails);
-    part3 += toSqlInsert('payments', data.payments);
-    part3 += toSqlInsert('bank_transactions', data.bankTransactions);
-    part3 += toSqlInsert('repairs', data.repairs);
-    part3 += toSqlInsert('repair_consumables', data.repairConsumables);
-    part3 += `COMMIT;\n`;
+        if (!tableHeaderWritten) {
+          currentPartSql += `-- Table: ${tbl.name}\n`;
+          tableHeaderWritten = true;
+        }
+        
+        currentPartSql += insertLine;
+      });
+      
+      currentPartSql += `\n`;
+    });
 
-    return [part1, part2, part3];
+    currentPartSql += `COMMIT;\n`;
+    parts.push(currentPartSql);
+
+    return parts;
   };
 
   const getSupabaseSqlEditorUrl = () => {
@@ -2264,24 +2283,35 @@ export const DevDataUploader: React.FC = () => {
                 </div>
 
                 {sqlType === 'INSERT' && (
-                  <div style={{ display: 'flex', borderBottom: '1px solid var(--border-color)', marginBottom: '8px', gap: '2px' }}>
-                    {['1. 기준정보 설정', '2. 계약/배차 거래', '3. 청구/수납/정비'].map((label, idx) => (
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(5, 1fr)',
+                    gap: '4px',
+                    marginBottom: '8px',
+                    borderBottom: '1px solid var(--border-color)',
+                    paddingBottom: '8px'
+                  }}>
+                    {generatedSqlParts.map((_, idx) => (
                       <button
                         key={idx}
                         onClick={() => setSelectedSqlTab(idx)}
                         style={{
-                          flex: 1,
-                          padding: '6px 4px',
-                          fontSize: '11px',
+                          padding: '6px 2px',
+                          fontSize: '9.5px',
                           fontWeight: selectedSqlTab === idx ? '700' : '400',
-                          border: 'none',
-                          borderBottom: selectedSqlTab === idx ? '2px solid var(--primary)' : 'none',
-                          backgroundColor: selectedSqlTab === idx ? 'var(--primary-light)' : 'transparent',
+                          border: '1px solid ' + (selectedSqlTab === idx ? 'var(--primary)' : 'var(--border-color)'),
+                          borderRadius: '4px',
+                          backgroundColor: selectedSqlTab === idx ? 'var(--primary-light)' : 'var(--bg-body)',
                           color: selectedSqlTab === idx ? 'var(--primary)' : 'var(--text-secondary)',
-                          cursor: 'pointer'
+                          cursor: 'pointer',
+                          textAlign: 'center',
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis'
                         }}
+                        title={`Part ${idx + 1}`}
                       >
-                        {label}
+                        Part {idx + 1}
                       </button>
                     ))}
                   </div>
