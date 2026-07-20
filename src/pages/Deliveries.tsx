@@ -1,8 +1,19 @@
 // d:\Kiyeun_Lift\src\pages\Deliveries.tsx
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { Truck, Check, DollarSign, Calendar, Navigation, AlertTriangle, ShieldAlert } from 'lucide-react';
+import { Truck, Check, DollarSign, Calendar, Navigation, AlertTriangle, CheckCircle, ShieldAlert } from 'lucide-react';
 import { Delivery } from '../services/db';
+
+interface SettleVehicle {
+  id: string;
+  transportCompany: string;
+  vehicleType: string;
+  vehicleNo: string;
+  driverName: string;
+  driverContact: string;
+  deliveryCost: number;
+  deliveryCostConfirmed?: number;
+}
 
 export const Deliveries: React.FC = () => {
   const {
@@ -19,6 +30,11 @@ export const Deliveries: React.FC = () => {
   const [driverName, setDriverName] = useState('');
   const [driverContact, setDriverContact] = useState('');
   const [deliveryCost, setDeliveryCost] = useState(0);
+
+  // 운송 정산용 상세 입력 모달 상태
+  const [showSettleModal, setShowSettleModal] = useState(false);
+  const [settleDeliveryId, setSettleDeliveryId] = useState('');
+  const [settleVehicles, setSettleVehicles] = useState<SettleVehicle[]>([]);
 
   // 입고 검수 모달 상태
   const [showInboundModal, setShowInboundModal] = useState(false);
@@ -52,16 +68,91 @@ export const Deliveries: React.FC = () => {
     e.preventDefault();
     if (!canSave || !targetDeliveryId) return;
 
+    // 단일 배정 시에도 JSON 형식 호환을 위해 vehicles 생성
+    const singleVehicle = [
+      {
+        id: 'v-' + Date.now(),
+        transportCompany: '일반운송사',
+        vehicleType,
+        vehicleNo: '미상',
+        driverName,
+        driverContact,
+        deliveryCost
+      }
+    ];
+
     dispatchDelivery(targetDeliveryId, {
       scheduledDate,
+      transportCompany: '일반운송사',
       vehicleType,
+      vehicleNo: '미상',
       driverName,
       driverContact,
-      deliveryCost
+      deliveryCost,
+      vehiclesJson: JSON.stringify(singleVehicle)
     });
 
     alert('운송 차량 배차가 승인 및 확정되었습니다.');
     setShowDispatchModal(false);
+  };
+
+  // 운송료 정산 모달 열기
+  const handleOpenSettleModal = (d: Delivery) => {
+    setSettleDeliveryId(d.id);
+    
+    // 배차 시 지정된 차량 리스트 파싱
+    let list: SettleVehicle[] = [];
+    if (d.vehicles) {
+      try {
+        list = JSON.parse(d.vehicles);
+      } catch (e) {
+        console.error("Failed to parse vehicles JSON in settle", e);
+      }
+    }
+
+    // 만약 차량 지정 목록이 없다면 단일 차량 컬럼 데이터를 바탕으로 가공
+    if (list.length === 0) {
+      list = [
+        {
+          id: 'v-legacy',
+          transportCompany: d.transportCompany || '기본운송사',
+          vehicleType: d.vehicleType || '차종미상',
+          vehicleNo: d.vehicleNo || '번호미상',
+          driverName: d.driverName || '성명미상',
+          driverContact: d.driverContact || '-',
+          deliveryCost: d.deliveryCost,
+          deliveryCostConfirmed: d.deliveryCostConfirmed ?? d.deliveryCost
+        }
+      ];
+    } else {
+      // 이미 확정 금액이 있다면 그대로 사용, 없으면 임시(estimated)금액을 기본값으로 바인딩
+      list = list.map(v => ({
+        ...v,
+        deliveryCostConfirmed: v.deliveryCostConfirmed ?? v.deliveryCost
+      }));
+    }
+
+    setSettleVehicles(list);
+    setShowSettleModal(true);
+  };
+
+  const handleSettleVehicleCostChange = (id: string, val: number) => {
+    setSettleVehicles(prev => prev.map(v => v.id === id ? { ...v, deliveryCostConfirmed: val } : v));
+  };
+
+  const handleSettleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!canSave || !settleDeliveryId) return;
+
+    // 모든 차량 확정운송료 합산
+    const totalConfirmedCost = settleVehicles.reduce((sum, v) => sum + Number(v.deliveryCostConfirmed || 0), 0);
+    const vehiclesJson = JSON.stringify(settleVehicles);
+
+    settleDeliveryCost(settleDeliveryId, totalConfirmedCost, vehiclesJson);
+
+    alert('차량별 운송비 정산 마감이 정상 처리되었습니다.');
+    setShowSettleModal(false);
+    setSettleDeliveryId('');
   };
 
   const handleOpenInboundReview = (d: Delivery) => {
@@ -112,7 +203,7 @@ export const Deliveries: React.FC = () => {
       <div className="card-header" style={{ marginBottom: '24px' }}>
         <h2 style={{ fontWeight: '700' }}>배차 및 운송 정산 관리</h2>
         <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
-          출고 배차 및 장비 회수(INBOUND)를 제어하고, 물류 용역비를 마감 대조합니다.
+          출고 배차 및 장비 회수(INBOUND)를 제어하고, 물류사 차량별 운송비(임시 vs 확정)를 정산 마감합니다.
         </span>
       </div>
 
@@ -123,12 +214,13 @@ export const Deliveries: React.FC = () => {
             <tr>
               <th>번호</th>
               <th>구분</th>
-              <th>계약번호</th>
-              <th>고객사명</th>
-              <th>운송 수단</th>
-              <th>기사/연락처</th>
-              <th>운송 비용</th>
-              <th>상태</th>
+              <th>계약번호 / 의뢰메모</th>
+              <th>고객사명 / 회수지</th>
+              <th>운송 차량</th>
+              <th>담당기사/연락처</th>
+              <th>운송비(임시)</th>
+              <th>운송비(확정)</th>
+              <th>배송상태</th>
               <th>용역 정산</th>
               <th>관리</th>
             </tr>
@@ -136,96 +228,119 @@ export const Deliveries: React.FC = () => {
           <tbody>
             {deliveries.length === 0 ? (
               <tr>
-                <td colSpan={10} style={{ textAlign: 'center', padding: '30px 0', color: 'var(--text-muted)' }}>
+                <td colSpan={11} style={{ textAlign: 'center', padding: '30px 0', color: 'var(--text-muted)' }}>
                   등록된 배송 및 회수 배차 의뢰가 없습니다.
                 </td>
               </tr>
             ) : (
-              [...deliveries].reverse().map((d, idx) => (
-                <tr key={d.id}>
-                  <td>{idx + 1}</td>
-                  <td>
-                    <span className={`badge ${d.type === 'OUTBOUND' ? 'badge-primary' : 'badge-danger'}`}>
-                      {d.type === 'OUTBOUND' ? '출고' : '회수'}
-                    </span>
-                  </td>
-                  <td>{getContractNo(d.contractId)}</td>
-                  <td><strong>{getCustNameFromContract(d.contractId)}</strong></td>
-                  <td style={{ fontSize: '13px' }}>
-                    {d.vehicleType ? `${d.vehicleType} (${d.vehicleNo || '번호미상'})` : '-'}
-                  </td>
-                  <td style={{ fontSize: '13px' }}>
-                    {d.driverName ? `${d.driverName} (${d.driverContact})` : '-'}
-                  </td>
-                  <td>{d.deliveryCost.toLocaleString()}원</td>
-                  <td>
-                    <span className={`badge ${
-                      d.status === 'REQUESTED' ? 'badge-warning' :
-                      d.status === 'DISPATCHED' ? 'badge-info' : 'badge-success'
-                    }`}>
-                      {d.status === 'REQUESTED' ? '의뢰(배차대기)' :
-                       d.status === 'DISPATCHED' ? '배차완료(이동중)' :
-                       d.status === 'COMPLETED' ? '완료' : d.status}
-                    </span>
-                  </td>
-                  <td>
-                    {d.status === 'COMPLETED' ? (
-                      d.isCostSettled ? (
-                        <span style={{ color: 'var(--success)', fontWeight: '600', fontSize: '12px' }}>정산완료</span>
+              [...deliveries].reverse().map((d, idx) => {
+                // 외주정비회수 및 일반회수 가독성 바인딩
+                let displayName = getCustNameFromContract(d.contractId);
+                if (displayName === '-' && d.memo.includes('[외주정비회수]')) {
+                  const match = d.memo.match(/외주업체:\s*(.*?)\s*\|/);
+                  displayName = match ? `${match[1]} (외주회수)` : '외주정비 공장';
+                }
+
+                // 배차된 차량 수 카운트
+                let vehicleCount = 1;
+                if (d.vehicles) {
+                  try {
+                    const parsed = JSON.parse(d.vehicles);
+                    if (Array.isArray(parsed)) vehicleCount = parsed.length;
+                  } catch(e){}
+                }
+
+                return (
+                  <tr key={d.id}>
+                    <td>{idx + 1}</td>
+                    <td>
+                      <span className={`badge ${d.type === 'OUTBOUND' ? 'badge-primary' : 'badge-danger'}`}>
+                        {d.type === 'OUTBOUND' ? '출고' : '회수'}
+                      </span>
+                    </td>
+                    <td style={{ fontSize: '12.5px' }}>
+                      {d.contractId ? getContractNo(d.contractId) : (
+                        <span style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>
+                          일반이동 ({d.memo.substring(0, 15)}...)
+                        </span>
+                      )}
+                    </td>
+                    <td><strong>{displayName}</strong></td>
+                    <td style={{ fontSize: '13px' }}>
+                      {d.vehicleType ? (
+                        <span>
+                          {d.vehicleType} {vehicleCount > 1 && <span style={{ color: 'var(--primary)', fontWeight: 'bold' }}>(총 {vehicleCount}대)</span>}
+                        </span>
+                      ) : '-'}
+                    </td>
+                    <td style={{ fontSize: '13px' }}>
+                      {d.driverName ? `${d.driverName}` : '-'}
+                    </td>
+                    <td>{d.deliveryCost.toLocaleString()}원</td>
+                    <td style={{ fontWeight: 'bold', color: d.deliveryCostConfirmed ? 'var(--primary)' : 'var(--text-muted)' }}>
+                      {d.deliveryCostConfirmed ? `${d.deliveryCostConfirmed.toLocaleString()}원` : '미확정'}
+                    </td>
+                    <td>
+                      <span className={`badge ${
+                        d.status === 'REQUESTED' ? 'badge-warning' :
+                        d.status === 'DISPATCHED' ? 'badge-info' : 'badge-success'
+                      }`}>
+                        {d.status === 'REQUESTED' ? '배차대기' :
+                         d.status === 'DISPATCHED' ? '이동중' :
+                         d.status === 'COMPLETED' ? '배송완료' : d.status}
+                      </span>
+                    </td>
+                    <td>
+                      {d.status === 'COMPLETED' ? (
+                        d.isCostSettled ? (
+                          <span style={{ color: 'var(--success)', fontWeight: '700', fontSize: '12px' }}>정산완료(마감)</span>
+                        ) : (
+                          <button
+                            className="btn-primary"
+                            onClick={() => handleOpenSettleModal(d)}
+                            style={{ padding: '2px 8px', fontSize: '11.5px', fontWeight: 'bold' }}
+                          >
+                            정산등록
+                          </button>
+                        )
                       ) : (
-                        <button
-                          className="btn-secondary"
-                          onClick={() => {
-                            settleDeliveryCost(d.id);
-                            alert('운송비 정산이 마감 완료되었습니다.');
-                          }}
-                          style={{ padding: '2px 6px', fontSize: '11px' }}
-                        >
-                          정산마감
-                        </button>
-                      )
-                    ) : (
-                      <span style={{ color: 'var(--text-muted)', fontSize: '12px' }}>배송 완료 후 가능</span>
-                    )}
-                  </td>
-                  <td>
-                    <div style={{ display: 'flex', gap: '4px' }}>
-                      {canSave && d.status === 'REQUESTED' && (
-                        <button className="btn-primary" onClick={() => handleOpenDispatch(d)} style={{ padding: '4px 8px', fontSize: '12px' }}>
-                          배차하기
-                        </button>
+                        <span style={{ color: 'var(--text-muted)', fontSize: '12px' }}>완료 후 가능</span>
                       )}
-                      {canSave && d.status === 'DISPATCHED' && (
-                        <button
-                          className="btn-success"
-                          onClick={() => {
-                            if (d.type === 'INBOUND') {
-                              handleOpenInboundReview(d);
-                            } else {
-                              completeDelivery(d.id);
-                              alert('배차 완료 처리가 수락되어 자산 대장 및 계약 상태가 최신화되었습니다.');
-                            }
-                          }}
-                          style={{ padding: '4px 8px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '2px' }}
-                        >
-                          <Check size={12} /> 완료
-                        </button>
-                      )}
-                      {canSave && d.status === 'DISPATCHED' && (
-                        <button className="btn-secondary" onClick={() => handleOpenDispatch(d)} style={{ padding: '4px 8px', fontSize: '12px' }}>
-                          수정
-                        </button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ))
+                    </td>
+                    <td>
+                      <div style={{ display: 'flex', gap: '4px' }}>
+                        {canSave && d.status === 'REQUESTED' && (
+                          <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                            배차관리 탭 이용
+                          </span>
+                        )}
+                        {canSave && d.status === 'DISPATCHED' && (
+                          <button
+                            className="btn-success"
+                            onClick={() => {
+                              if (d.type === 'INBOUND') {
+                                handleOpenInboundReview(d);
+                              } else {
+                                completeDelivery(d.id);
+                                alert('배차 완료 처리가 승인되었습니다.');
+                              }
+                            }}
+                            style={{ padding: '4px 8px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '2px' }}
+                          >
+                            <Check size={12} /> 완료처리
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })
             )}
           </tbody>
         </table>
       </div>
 
-      {/* 배차 처리 모달 */}
+      {/* [1] 단일 배차 처리 대체 모달 (백업용) */}
       {showDispatchModal && (
         <div style={{
           position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
@@ -282,7 +397,80 @@ export const Deliveries: React.FC = () => {
         </div>
       )}
 
-      {/* 회수 검수 및 입고 등록 모달 */}
+      {/* [2] 다중차량 운송비 정산 확정 모달 */}
+      {showSettleModal && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000
+        }}>
+          <form onSubmit={handleSettleSubmit} className="card" style={{ width: '100%', maxWidth: '650px', backgroundColor: 'var(--bg-card)' }}>
+            <h3 className="card-title" style={{ marginBottom: '10px' }}>물류 운송료 정산 및 최종 확정</h3>
+            <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '16px' }}>
+              실제 물류 기사로부터 수령한 세금계산서 또는 인수증 영수금액을 기반으로 차량별 <strong>운송료(확정)</strong> 금액을 입력하여 마감 처리합니다.
+            </p>
+            
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '20px' }}>
+              <div style={{ maxHeight: '280px', overflowY: 'auto', border: '1px solid var(--border-color)', borderRadius: '6px' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12.5px' }}>
+                  <thead>
+                    <tr style={{ backgroundColor: 'var(--bg-app)' }}>
+                      <th style={{ padding: '8px', textAlign: 'left', borderBottom: '1px solid var(--border-color)' }}>물류사 / 기사</th>
+                      <th style={{ padding: '8px', textAlign: 'left', borderBottom: '1px solid var(--border-color)' }}>차종 / 차량번호</th>
+                      <th style={{ padding: '8px', textAlign: 'right', borderBottom: '1px solid var(--border-color)' }}>임시운송비</th>
+                      <th style={{ padding: '8px', textAlign: 'left', borderBottom: '1px solid var(--border-color)', width: '150px' }}>확정운송비 *</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {settleVehicles.map(v => (
+                      <tr key={v.id}>
+                        <td style={{ padding: '8px', borderBottom: '1px solid var(--border-color)' }}>
+                          <strong>{v.transportCompany}</strong>
+                          <div style={{ color: 'var(--text-secondary)', fontSize: '11px' }}>{v.driverName}</div>
+                        </td>
+                        <td style={{ padding: '8px', borderBottom: '1px solid var(--border-color)' }}>
+                          {v.vehicleType}
+                          <div style={{ color: 'var(--text-secondary)', fontSize: '11px' }}>{v.vehicleNo}</div>
+                        </td>
+                        <td style={{ padding: '8px', textAlign: 'right', borderBottom: '1px solid var(--border-color)' }}>
+                          {v.deliveryCost.toLocaleString()}원
+                        </td>
+                        <td style={{ padding: '8px', borderBottom: '1px solid var(--border-color)' }}>
+                          <input
+                            type="number"
+                            value={v.deliveryCostConfirmed || ''}
+                            onChange={e => handleSettleVehicleCostChange(v.id, parseInt(e.target.value) || 0)}
+                            style={{ padding: '4px 8px', width: '120px', textAlign: 'right' }}
+                            required
+                          />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* 총액 비교 요약 */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px', backgroundColor: 'var(--bg-app)', borderRadius: '6px', fontSize: '13.5px' }}>
+                <div>
+                  임시운송비 합계: <strong>{settleVehicles.reduce((sum, v) => sum + v.deliveryCost, 0).toLocaleString()}원</strong>
+                </div>
+                <div style={{ color: 'var(--primary)', fontWeight: 'bold' }}>
+                  확정운송비 합계: {settleVehicles.reduce((sum, v) => sum + Number(v.deliveryCostConfirmed || 0), 0).toLocaleString()}원
+                </div>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+              <button type="button" className="btn-secondary" onClick={() => setShowSettleModal(false)}>취소</button>
+              <button type="submit" className="btn-success" style={{ display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 'bold' }}>
+                <CheckCircle size={14} /> 정산 마감 처리 완료
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* [3] 회수 검수 및 입고 등록 모달 */}
       {showInboundModal && (
         <div style={{
           position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,

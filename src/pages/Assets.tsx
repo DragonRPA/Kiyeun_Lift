@@ -8,12 +8,25 @@ import { Asset } from '../services/db';
 export const Assets: React.FC = () => {
   const { assets, customers, sites, setActiveTab, setNavigationPayload } = useApp();
 
+  // 임시 필터 입력 상태 (조회 버튼을 누르기 전까지 홀드)
+  const [tempSearchTerm, setTempSearchTerm] = useState('');
+  const [tempStatusFilter, setTempStatusFilter] = useState('ALL');
+  const [tempOwnerFilter, setTempOwnerFilter] = useState('ALL');
+  const [tempManufacturerFilter, setTempManufacturerFilter] = useState('ALL');
+  const [tempCustomerFilter, setTempCustomerFilter] = useState('ALL');
+
+  // 확정 필터 상태
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [ownerFilter, setOwnerFilter] = useState('ALL');
+  const [manufacturerFilter, setManufacturerFilter] = useState('ALL');
+  const [customerFilter, setCustomerFilter] = useState('ALL');
   
   // 상세조회 모달 상태
   const [selectedAsset, setSelectedAsset] = useState<Asset | null>(null);
+
+  // 고유 제조사 목록 추출
+  const uniqueManufacturers = Array.from(new Set(assets.map(a => a.manufacturer).filter(Boolean))) as string[];
 
   // 필터링 적용
   const filtered = assets.filter(a => {
@@ -24,9 +37,19 @@ export const Assets: React.FC = () => {
     
     const matchesStatus = statusFilter === 'ALL' || a.status === statusFilter;
     const matchesOwner = ownerFilter === 'ALL' || a.ownerType === ownerFilter;
+    const matchesManufacturer = manufacturerFilter === 'ALL' || a.manufacturer === manufacturerFilter;
+    const matchesCustomer = customerFilter === 'ALL' || a.currentCustomerId === customerFilter;
 
-    return matchesSearch && matchesStatus && matchesOwner;
+    return matchesSearch && matchesStatus && matchesOwner && matchesManufacturer && matchesCustomer;
   });
+
+  const handleSearchClick = () => {
+    setSearchTerm(tempSearchTerm);
+    setStatusFilter(tempStatusFilter);
+    setOwnerFilter(tempOwnerFilter);
+    setManufacturerFilter(tempManufacturerFilter);
+    setCustomerFilter(tempCustomerFilter);
+  };
 
   const getCustomerName = (id?: string) => {
     if (!id) return '-';
@@ -90,29 +113,30 @@ export const Assets: React.FC = () => {
         </button>
       </div>
 
-      {/* 필터 세션 */}
+      {/* 다차원 필터 제어부 */}
       <div className="card" style={{ padding: '20px', marginBottom: '20px' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '16px', alignItems: 'end' }}>
           <div>
-            <label>자산 검색</label>
+            <label style={{ fontSize: '12px', fontWeight: '600', marginBottom: '6px', display: 'block' }}>자산 검색</label>
             <input
               type="text"
-              value={searchTerm}
-              onChange={e => setSearchTerm(e.target.value)}
+              value={tempSearchTerm}
+              onChange={e => setTempSearchTerm(e.target.value)}
               placeholder="관리번호, 모델명, 제조번호 검색..."
+              style={{ width: '100%', padding: '8px' }}
             />
           </div>
           <div>
-            <label>자산 구분</label>
-            <select value={ownerFilter} onChange={e => setOwnerFilter(e.target.value)}>
+            <label style={{ fontSize: '12px', fontWeight: '600', marginBottom: '6px', display: 'block' }}>자산 구분</label>
+            <select value={tempOwnerFilter} onChange={e => setTempOwnerFilter(e.target.value)} style={{ width: '100%', padding: '8px' }}>
               <option value="ALL">전체 자산</option>
               <option value="OWNED">당사 자산 (Owned)</option>
               <option value="RENTED">임차 자산 (Rented)</option>
             </select>
           </div>
           <div>
-            <label>장비 상태</label>
-            <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
+            <label style={{ fontSize: '12px', fontWeight: '600', marginBottom: '6px', display: 'block' }}>장비 상태</label>
+            <select value={tempStatusFilter} onChange={e => setTempStatusFilter(e.target.value)} style={{ width: '100%', padding: '8px' }}>
               <option value="ALL">전체 상태</option>
               <option value="AVAILABLE">대기중 (AVAILABLE)</option>
               <option value="RENTED">대여중 (RENTED)</option>
@@ -120,6 +144,34 @@ export const Assets: React.FC = () => {
               <option value="RENTED_RETURNED">임차반납 (RENTED_RETURNED)</option>
               <option value="SOLD">매각완료 (SOLD)</option>
             </select>
+          </div>
+          <div>
+            <label style={{ fontSize: '12px', fontWeight: '600', marginBottom: '6px', display: 'block' }}>제조사</label>
+            <select value={tempManufacturerFilter} onChange={e => setTempManufacturerFilter(e.target.value)} style={{ width: '100%', padding: '8px' }}>
+              <option value="ALL">전체 제조사</option>
+              {uniqueManufacturers.map(m => (
+                <option key={m} value={m}>{m}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label style={{ fontSize: '12px', fontWeight: '600', marginBottom: '6px', display: 'block' }}>현재 고객사</label>
+            <select value={tempCustomerFilter} onChange={e => setTempCustomerFilter(e.target.value)} style={{ width: '100%', padding: '8px' }}>
+              <option value="ALL">전체 고객사</option>
+              {customers.map(c => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+          </div>
+          <div style={{ display: 'flex' }}>
+            <button 
+              type="button" 
+              className="btn-primary" 
+              onClick={handleSearchClick}
+              style={{ width: '100%', height: '38px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', fontWeight: 'bold' }}
+            >
+              <Search size={16} /> 조회
+            </button>
           </div>
         </div>
       </div>

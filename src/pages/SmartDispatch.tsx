@@ -857,30 +857,17 @@ ${activeSpecs.map((s, idx) => `  ${idx + 1}. [적용] ${s.label}`).join('\n') ||
 
       </div>
 
-      {/* 3단계: 실시간 프리뷰 영역 (아래 3탭 구조) */}
+      {/* 3단계: 실시간 프리뷰 영역 */}
       <div className="card" style={{ marginTop: '10px' }}>
-        <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
-          <h3 className="card-title" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <FileText size={16} className="text-success" /> 3단계: 실시간 다중 포맷 프리뷰 및 출력
+        <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', minHeight: '62px' }}>
+          <h3 className="card-title" style={{ display: 'flex', alignItems: 'center', gap: '6px', margin: 0 }}>
+            <FileText size={16} className="text-success" /> 3단계: 실시간 프리뷰 및 출력
           </h3>
-          <div style={{ display: 'flex', gap: '6px' }}>
-            <button className={previewTab === 'SHEET' ? 'btn-primary' : 'btn-secondary'} onClick={() => setPreviewTab('SHEET')} style={{ padding: '6px 12px', fontSize: '13px' }}>
-              <Printer size={13} /> 출고요청서 양식
-            </button>
-            <button className={previewTab === 'TEXT' ? 'btn-primary' : 'btn-secondary'} onClick={() => setPreviewTab('TEXT')} style={{ padding: '6px 12px', fontSize: '13px' }}>
-              <Copy size={13} /> 전송용 정형 텍스트
-            </button>
-            <button className={previewTab === 'JSON' ? 'btn-primary' : 'btn-secondary'} onClick={() => setPreviewTab('JSON')} style={{ padding: '6px 12px', fontSize: '13px' }}>
-              <Braces size={13} /> API용 JSON 데이터
-            </button>
-          </div>
         </div>
 
         <div style={{ minHeight: '300px', padding: '16px', backgroundColor: 'var(--bg-app)', border: '1px solid var(--border-color)', borderRadius: '8px' }}>
           
-          {/* 탭 1: 출고 전표 인쇄 양식 */}
-          {previewTab === 'SHEET' && (
-            <div>
+          <div>
               <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '10px' }}>
                 <button type="button" className="btn-primary" onClick={handlePrint} style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '13px', padding: '6px 14px', fontWeight: 'bold' }}>
                   <Printer size={14} /> 출고요청서 인쇄하기
@@ -977,37 +964,6 @@ ${activeSpecs.map((s, idx) => `  ${idx + 1}. [적용] ${s.label}`).join('\n') ||
                 </table>
               </div>
             </div>
-          )}
-
-          {/* 탭 2: 전송용 정형 텍스트 */}
-          {previewTab === 'TEXT' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                <button type="button" className="btn-secondary" onClick={() => handleCopyToClipboard(generateFormattedText())} style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '13px' }}>
-                  <Copy size={14} /> 텍스트 전체 복사하기
-                </button>
-              </div>
-              <textarea
-                readOnly
-                style={{ width: '100%', minHeight: '380px', fontFamily: 'monospace', fontSize: '13px', lineHeight: '1.6', padding: '12px', backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '4px' }}
-                value={generateFormattedText()}
-              />
-            </div>
-          )}
-
-          {/* 탭 3: API용 JSON 데이터 */}
-          {previewTab === 'JSON' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                <button type="button" className="btn-secondary" onClick={() => handleCopyToClipboard(generateJSON())} style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '13px' }}>
-                  <Copy size={14} /> JSON 데이터 복사하기
-                </button>
-              </div>
-              <pre style={{ margin: 0, padding: '16px', backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '4px', overflowX: 'auto', fontSize: '13px', lineHeight: '1.5', color: '#10b981', fontFamily: 'monospace' }}>
-                {generateJSON()}
-              </pre>
-            </div>
-          )}
 
         </div>
       </div>

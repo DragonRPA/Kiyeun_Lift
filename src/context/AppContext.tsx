@@ -1,6 +1,6 @@
 // d:\Kiyeun_Lift\src\context\AppContext.tsx
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { db, User, MenuPermission, Customer, CustomerContact, CustomerSite, Product, Asset, Consumable, ConsumableLog, Contract, ContractAsset, ContractHistory, Billing, BillingDetail, Payment, Delivery, TransportCompany, TransportDriver, Repair, RepairConsumable, Todo, BankTransaction, BankMatchingRule, AssetInOutLog } from '../services/db';
+import { db, User, MenuPermission, Customer, CustomerContact, CustomerSite, Product, Asset, Consumable, ConsumableLog, Contract, ContractAsset, ContractHistory, Billing, BillingDetail, Payment, Delivery, TransportCompany, TransportDriver, Repair, RepairConsumable, Todo, BankTransaction, BankMatchingRule, AssetInOutLog, Vendor } from '../services/db';
 
 export interface SmartDispatchData {
   customerName: string;
@@ -20,12 +20,18 @@ export interface SmartDispatchData {
 }
 
 export interface SmartReturnData {
-  contractId: string;
+  contractId?: string;
   returnDate: string;
   assetIds: string[];
   loadingTime?: string;
   unloadingTime?: string;
   note?: string;
+  // 정비회수 추가 필드
+  repairId?: string;
+  vendorId?: string;
+  // 고객측 회수 담당 정보
+  contactName?: string;
+  contactPhone?: string;
 }
 
 interface AppContextType {
@@ -61,6 +67,7 @@ interface AppContextType {
   bankTransactions: BankTransaction[];
   bankMatchingRules: BankMatchingRule[];
   assetInOutLogs: AssetInOutLog[];
+  vendors: Vendor[];
 
   // Mutators
   refreshAllData: () => void;
@@ -107,8 +114,8 @@ interface AppContextType {
   deleteMatchingRule: (ruleId: string) => void;
   
   // Deliveries
-  dispatchDelivery: (deliveryId: string, dispatchData: { scheduledDate: string; vehicleType: string; driverName: string; driverContact: string; deliveryCost: number }) => void;
-  settleDeliveryCost: (deliveryId: string) => void;
+  dispatchDelivery: (deliveryId: string, dispatchData: { scheduledDate: string; transportCompany: string; vehicleType: string; vehicleNo: string; driverName: string; driverContact: string; deliveryCost: number; vehiclesJson?: string }) => void;
+  settleDeliveryCost: (deliveryId: string, deliveryCostConfirmed: number, vehiclesJson?: string) => void;
   completeDelivery: (deliveryId: string) => void;
   completeInboundDelivery: (deliveryId: string, actualReturnDate: string, reviews: { assetId: string; status: 'AVAILABLE' | 'REPAIRING'; maintenanceScore: number; memo: string }[]) => void;
   
@@ -156,6 +163,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [bankTransactions, setBankTransactions] = useState<BankTransaction[]>([]);
   const [bankMatchingRules, setBankMatchingRules] = useState<BankMatchingRule[]>([]);
   const [assetInOutLogs, setAssetInOutLogs] = useState<AssetInOutLog[]>([]);
+  const [vendors, setVendors] = useState<Vendor[]>([]);
 
   // Navigation / Routing states
   const [activeTab, setActiveTab] = useState<string>('dashboard');
@@ -193,6 +201,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setBankTransactions(db.bankTransactions);
     setBankMatchingRules(db.bankMatchingRules);
     setAssetInOutLogs(db.assetInOutLogs);
+    setVendors(db.vendors);
   };
 
   useEffect(() => {
@@ -343,7 +352,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const saveSmartDispatch = async (data: SmartDispatchData, autoRegister: boolean) => {
     let customer = db.customers.find(c => c.name.replace(/\s/g, '') === data.customerName.replace(/\s/g, ''));
-    let site = db.sites.find(s => s.name.replace(/\s/g, '') === data.siteName.replace(/\s/g, ''));
+    const customerId = customer?.id;
+    let site = customerId ? db.sites.find(s => s.customerId === customerId && s.name.replace(/\s/g, '') === data.siteName.replace(/\s/g, '')) : null;
     
     const missingFields = [];
     if (!customer) missingFields.push(`고객사: ${data.customerName}`);
@@ -375,11 +385,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           createdAt: new Date().toISOString()
         });
       }
+    } else {
+      // 기존 고객사가 존재하는 경우에도, 새로운 고객담당자(처음 등장하는 사람)라면 자동 등록!
+      if (data.siteContactName) {
+        const targetCustomerId = customer.id;
+        const existingContact = db.contacts.find(ct => ct.customerId === targetCustomerId && ct.name.replace(/\s/g, '') === data.siteContactName.replace(/\s/g, ''));
+        if (!existingContact) {
+          db.insertRow<CustomerContact>('contacts', {
+            customerId: targetCustomerId,
+            name: data.siteContactName,
+            position: '담당자',
+            contact: data.siteContactPhone || '미상',
+            email: data.siteContactEmail || '미상',
+            createdAt: new Date().toISOString()
+          });
+        }
+      }
     }
+
+    const finalCustomer = customer;
 
     if (!site) {
       site = db.insertRow<CustomerSite>('sites', {
-        customerId: customer.id,
+        customerId: finalCustomer.id,
         name: data.siteName,
         address: data.siteAddress || '미상',
         contactName: data.siteContactName || '미상',
@@ -396,15 +424,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         title: `신규 고객/현장 정보 보완 (${data.customerName})`,
         content: `스마트 출고 요청 시 사업자등록번호 등 미상으로 처리된 필수 항목을 채워주세요.`,
         isCompleted: false,
-        relatedEntityId: customer.id,
+        relatedEntityId: finalCustomer.id,
         createdAt: new Date().toISOString()
       });
     }
 
+    const finalSite = site!;
+
     const contract = db.insertRow<Contract>('contracts', {
       contractNo: `S-CTR-${Date.now()}`,
-      customerId: customer.id,
-      siteId: site.id,
+      customerId: finalCustomer.id,
+      siteId: finalSite.id,
       startDate: new Date().toISOString().split('T')[0],
       endDate: '', 
       billingDay: 30,
@@ -452,56 +482,95 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const saveSmartReturn = (data: SmartReturnData) => {
-    const contract = db.contracts.find(c => c.id === data.contractId);
-    if (!contract) return;
+    if (data.contractId) {
+      const contract = db.contracts.find(c => c.id === data.contractId);
+      if (!contract) return;
 
-    db.updateRow<Contract>('contracts', data.contractId, {
-      endDate: data.returnDate,
-      status: 'SHORTENED',
-      updatedAt: new Date().toISOString()
-    });
-
-    data.assetIds.forEach(assetId => {
-      const ca = db.contractAssets.find(c => c.contractId === data.contractId && c.assetId === assetId);
-      if (ca) {
-        db.updateRow<ContractAsset>('contractAssets', ca.id, {
-          endDate: data.returnDate
-        });
-      }
-      db.updateRow<Asset>('assets', assetId, {
-        contractEnd: data.returnDate,
+      db.updateRow<Contract>('contracts', data.contractId, {
+        endDate: data.returnDate,
+        status: 'SHORTENED',
         updatedAt: new Date().toISOString()
       });
-    });
 
-    db.insertRow<ContractHistory>('contractHistory', {
-      contractId: data.contractId,
-      changeType: 'SHORTEN',
-      changeDate: new Date().toISOString().split('T')[0],
-      prevEndDate: contract.endDate,
-      newEndDate: data.returnDate,
-      description: `스마트 회수 등록 (회수 자산: ${data.assetIds.length}대)`,
-      createdAt: new Date().toISOString()
-    });
+      // 새로운 고객담당자(처음 등장하는 사람)라면 자동 등록!
+      if (data.contactName) {
+        const existingContact = db.contacts.find(ct => ct.customerId === contract.customerId && ct.name.replace(/\s/g, '') === data.contactName!.replace(/\s/g, ''));
+        if (!existingContact) {
+          db.insertRow<CustomerContact>('contacts', {
+            customerId: contract.customerId,
+            name: data.contactName,
+            position: '담당자',
+            contact: data.contactPhone || '미상',
+            email: '미상',
+            createdAt: new Date().toISOString()
+          });
+        }
+      }
 
-    db.insertRow<Delivery>('deliveries', {
-      contractId: data.contractId,
-      assetIds: data.assetIds.join(','),
-      type: 'INBOUND',
-      status: 'REQUESTED',
-      requestDate: data.returnDate,
-      scheduledDate: data.loadingTime || data.returnDate,
-      transportCompany: '',
-      vehicleType: '',
-      vehicleNo: '',
-      driverName: '',
-      driverContact: '',
-      deliveryCost: 0,
-      isCostSettled: false,
-      memo: data.note || '',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    });
+      data.assetIds.forEach(assetId => {
+        const ca = db.contractAssets.find(c => c.contractId === data.contractId && c.assetId === assetId);
+        if (ca) {
+          db.updateRow<ContractAsset>('contractAssets', ca.id, {
+            endDate: data.returnDate
+          });
+        }
+        db.updateRow<Asset>('assets', assetId, {
+          contractEnd: data.returnDate,
+          updatedAt: new Date().toISOString()
+        });
+      });
+
+      db.insertRow<ContractHistory>('contractHistory', {
+        contractId: data.contractId,
+        changeType: 'SHORTEN',
+        changeDate: new Date().toISOString().split('T')[0],
+        prevEndDate: contract.endDate,
+        newEndDate: data.returnDate,
+        description: `스마트 회수 등록 (회수 자산: ${data.assetIds.length}대)`,
+        createdAt: new Date().toISOString()
+      });
+
+      const contactInfoMemo = data.contactName || data.contactPhone
+        ? `[고객담당자: ${data.contactName || '-'} (${data.contactPhone || '-'})] `
+        : '';
+      db.insertRow<Delivery>('deliveries', {
+        contractId: data.contractId,
+        assetIds: data.assetIds.join(','),
+        type: 'INBOUND',
+        status: 'REQUESTED',
+        requestDate: data.returnDate,
+        scheduledDate: data.loadingTime || data.returnDate,
+        transportCompany: '',
+        vehicleType: '',
+        vehicleNo: '',
+        driverName: '',
+        driverContact: '',
+        deliveryCost: 0,
+        isCostSettled: false,
+        memo: `${contactInfoMemo}${data.note || ''}`,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      });
+    } else {
+      // Case 4: 외주정비 회수
+      db.insertRow<Delivery>('deliveries', {
+        assetIds: data.assetIds.join(','),
+        type: 'INBOUND',
+        status: 'REQUESTED',
+        requestDate: data.returnDate,
+        scheduledDate: data.loadingTime || data.returnDate,
+        transportCompany: '',
+        vehicleType: '',
+        vehicleNo: '',
+        driverName: '',
+        driverContact: '',
+        deliveryCost: 0,
+        isCostSettled: false,
+        memo: `[외주정비회수] 정비건: ${data.repairId || '-'} / 외주업체: ${data.vendorId || '-'} | ${data.note || ''}`,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      });
+    }
 
     refreshAllData();
   };
@@ -1468,18 +1537,39 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     refreshAllData();
   };
 
-  const dispatchDelivery = (deliveryId: string, dispatchData: { scheduledDate: string; vehicleType: string; driverName: string; driverContact: string; deliveryCost: number }) => {
+  const dispatchDelivery = (
+    deliveryId: string, 
+    dispatchData: { 
+      scheduledDate: string; 
+      transportCompany: string; 
+      vehicleType: string; 
+      vehicleNo: string; 
+      driverName: string; 
+      driverContact: string; 
+      deliveryCost: number; 
+      vehiclesJson?: string;
+    }
+  ) => {
     db.updateRow<Delivery>('deliveries', deliveryId, {
-      ...dispatchData,
+      scheduledDate: dispatchData.scheduledDate,
+      transportCompany: dispatchData.transportCompany,
+      vehicleType: dispatchData.vehicleType,
+      vehicleNo: dispatchData.vehicleNo,
+      driverName: dispatchData.driverName,
+      driverContact: dispatchData.driverContact,
+      deliveryCost: dispatchData.deliveryCost,
+      vehicles: dispatchData.vehiclesJson,
       status: 'DISPATCHED',
       updatedAt: new Date().toISOString()
     });
     refreshAllData();
   };
 
-  const settleDeliveryCost = (deliveryId: string) => {
+  const settleDeliveryCost = (deliveryId: string, deliveryCostConfirmed: number, vehiclesJson?: string) => {
     db.updateRow<Delivery>('deliveries', deliveryId, {
       isCostSettled: true,
+      deliveryCostConfirmed,
+      vehicles: vehiclesJson,
       updatedAt: new Date().toISOString()
     });
     refreshAllData();
@@ -1779,7 +1869,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     <AppContext.Provider value={{
       currentUser, theme, toggleTheme, login, logout, hasPermission,
       users, permissions, customers, contacts, sites, products, assets, consumables, consumableLogs, contracts, contractAssets, contractHistory, deliveries, billings, billingDetails, payments, repairs, repairConsumables, transportCompanies, transportDrivers, todos,
-      bankTransactions, bankMatchingRules, assetInOutLogs,
+      bankTransactions, bankMatchingRules, assetInOutLogs, vendors,
       refreshAllData, updatePermissions, saveUser, saveCustomer, saveContact, saveSite, saveProduct,
       acquireAsset, disposeAsset, registerRentedAsset, returnRentedAsset,
       purchaseConsumable, useConsumable,

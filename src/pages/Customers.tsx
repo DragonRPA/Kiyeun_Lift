@@ -188,15 +188,15 @@ export const Customers: React.FC = () => {
         </button>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '24px', alignItems: 'flex-start' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1.25fr 1.75fr', gap: '24px', alignItems: 'flex-start' }}>
         
         {/* 왼쪽: 고객 목록 */}
         <div className="card" style={{ margin: 0 }}>
           <div className="card-header" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '12px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <h3 className="card-title">고객사 리스트</h3>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11.5px', cursor: 'pointer', margin: 0, padding: '4px 8px', borderRadius: '4px', border: '1px solid var(--border)', backgroundColor: showOnlyIncomplete ? 'rgba(239, 68, 68, 0.08)' : 'var(--bg-secondary)', color: showOnlyIncomplete ? 'var(--danger)' : 'var(--text-secondary)', fontWeight: showOnlyIncomplete ? '600' : 'normal', transition: 'all 0.2s' }} title="사업자등록번호, 대표자, 연락처, 주소 등이 '미상'인 고객만 필터링합니다.">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', cursor: 'pointer', margin: 0, padding: '4px 6px', borderRadius: '4px', border: '1px solid var(--border)', backgroundColor: showOnlyIncomplete ? 'rgba(239, 68, 68, 0.08)' : 'var(--bg-secondary)', color: showOnlyIncomplete ? 'var(--danger)' : 'var(--text-secondary)', fontWeight: showOnlyIncomplete ? '600' : 'normal', transition: 'all 0.2s', whiteSpace: 'nowrap' }} title="사업자등록번호, 대표자, 연락처, 주소 등이 '미상'인 고객만 필터링합니다.">
                   <input 
                     type="checkbox" 
                     checked={showOnlyIncomplete} 
@@ -206,8 +206,8 @@ export const Customers: React.FC = () => {
                   ⚠️ 불완전 정보 고객만 보기
                 </label>
                 {canSave && (
-                  <button className="btn-primary" onClick={handleOpenAddCust} style={{ padding: '6px 12px', fontSize: '13px' }}>
-                    <Plus size={16} /> 신규 고객
+                  <button className="btn-primary" onClick={handleOpenAddCust} style={{ padding: '6px 8px', fontSize: '12.5px', whiteSpace: 'nowrap' }}>
+                    <Plus size={14} /> 신규 고객
                   </button>
                 )}
               </div>

@@ -252,9 +252,11 @@ export interface Delivery {
   vehicleNo?: string; // 차량 번호
   driverName?: string;
   driverContact?: string;
-  deliveryCost: number; // 확정 운송비 (청구 및 물류사 정산에 활용)
+  deliveryCost: number; // 임시/최초 등록 운송비
+  deliveryCostConfirmed?: number; // 확정 운송비 (필드 신설)
   isCostSettled: boolean;
   memo: string;
+  vehicles?: string; // 여러 차량 배차 정보를 위한 JSON 문자열 필드
   createdAt: string;
   updatedAt: string;
 }
@@ -265,6 +267,18 @@ export interface TransportCompany {
   businessNo: string;
   contact: string;
   memo: string;
+  createdAt: string;
+}
+
+export interface Vendor {
+  id: string;
+  name: string;
+  type: 'TRANSPORT' | 'RENTAL' | 'REPAIR' | 'CONSUMABLE' | 'OTHER';
+  bizRegNo?: string;
+  contactName?: string;
+  contact?: string;
+  bankAccount?: string;
+  memo?: string;
   createdAt: string;
 }
 
@@ -291,6 +305,11 @@ export interface Repair {
   id: string;
   assetId: string;
   mechanicId?: string;
+  repairType?: 'INTERNAL' | 'EXTERNAL';
+  vendorId?: string;
+  outboundDate?: string;
+  completedDate?: string;
+  estimateFileUrl?: string;
   requestDate: string;
   repairDate?: string;
   status: 'PENDING' | 'IN_PROGRESS' | 'COMPLETED';
@@ -298,6 +317,7 @@ export interface Repair {
   totalCost: number;
   billableToCustomer: boolean;
   billingId?: string;
+  purchaseBillId?: string;
   createdAt: string;
   updatedAt: string;
   // 가상필드
@@ -652,7 +672,38 @@ const SEED_TRANSPORT_DRIVERS: TransportDriver[] = [
 const SEED_BILLINGS: Billing[] = [];
 const SEED_BILLING_DETAILS: BillingDetail[] = [];
 const SEED_PAYMENTS: Payment[] = [];
-const SEED_REPAIRS: Repair[] = [];
+const SEED_VENDORS: Vendor[] = [
+  { id: 'V-001', name: '가나외주정비', type: 'REPAIR', bizRegNo: '111-22-33333', contactName: '김정비', contact: '010-9999-9999', memo: '경기 서부권 외주수리공장', createdAt: new Date().toISOString() },
+  { id: 'V-002', name: '나라정비센터', type: 'REPAIR', bizRegNo: '222-33-44444', contactName: '이수리', contact: '010-8888-8888', memo: '호남권 외주수리공장', createdAt: new Date().toISOString() }
+];
+const SEED_REPAIRS: Repair[] = [
+  {
+    id: 'REP-001',
+    assetId: 'asset-own-1',
+    repairType: 'EXTERNAL',
+    vendorId: 'V-001',
+    requestDate: '2026-07-15',
+    status: 'IN_PROGRESS',
+    details: '리프트 유압 호스 누유로 외주 입고',
+    totalCost: 250000,
+    billableToCustomer: false,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  },
+  {
+    id: 'REP-002',
+    assetId: 'asset-own-2',
+    repairType: 'EXTERNAL',
+    vendorId: 'V-002',
+    requestDate: '2026-07-18',
+    status: 'PENDING',
+    details: '메인보드 통신 에러 외주 의뢰',
+    totalCost: 450000,
+    billableToCustomer: false,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  }
+];
 const SEED_REPAIR_CONSUMABLES: RepairConsumable[] = [];
 const SEED_CONTRACT_HISTORY: ContractHistory[] = [];
 const SEED_TODOS: Todo[] = [];
@@ -743,6 +794,9 @@ class LocalDB {
   get repairs() { return this.get<Repair>('repairs', SEED_REPAIRS); }
   set repairs(val: Repair[]) { this.set('repairs', val); }
 
+  get vendors() { return this.get<Vendor>('vendors', SEED_VENDORS); }
+  set vendors(val: Vendor[]) { this.set('vendors', val); }
+
   get repairConsumables() { return this.get<RepairConsumable>('repairConsumables', SEED_REPAIR_CONSUMABLES); }
   set repairConsumables(val: RepairConsumable[]) { this.set('repairConsumables', val); }
 
@@ -784,7 +838,8 @@ class LocalDB {
       repairConsumables: 'repair_consumables',
       bankTransactions: 'bank_transactions',
       bankMatchingRules: 'bank_matching_rules',
-      assetInOutLogs: 'asset_inout_logs'
+      assetInOutLogs: 'asset_inout_logs',
+      vendors: 'vendors'
     };
     return mapping[key] || key;
   }
@@ -813,7 +868,7 @@ class LocalDB {
       'users', 'departments', 'permissions', 'customers', 'contacts', 'sites', 
       'products', 'assets', 'consumables', 'consumableLogs', 
       'contracts', 'contractAssets', 'contractHistory', 'deliveries', 
-      'transportCompanies', 'transportDrivers',
+      'transportCompanies', 'transportDrivers', 'vendors',
       'billings', 'billingDetails', 'payments', 'repairs', 'repairConsumables', 'todos', 'bankTransactions', 'bankMatchingRules'
     ];
 
