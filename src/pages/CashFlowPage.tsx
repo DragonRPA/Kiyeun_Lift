@@ -1001,7 +1001,7 @@ export const CashFlowPage: React.FC = () => {
           backgroundColor: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(4px)',
           display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000
         }}>
-          <div className="card" style={{ width: '100%', maxWidth: '600px', padding: '24px', backgroundColor: 'var(--bg-card)', borderRadius: '12px', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)' }}>
+          <div className="card" style={{ width: '100%', maxWidth: '650px', padding: '24px', backgroundColor: 'var(--bg-card)', borderRadius: '12px', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)' }}>
             
             {/* 모달 헤더 */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', borderBottom: '1px solid var(--border-color)', paddingBottom: '12px' }}>
@@ -1022,7 +1022,7 @@ export const CashFlowPage: React.FC = () => {
             </div>
 
             {/* 모달 본문 분기 */}
-            <div style={{ maxHeight: '350px', overflowY: 'auto', marginBottom: '20px' }}>
+            <div style={{ maxHeight: '380px', overflowY: 'auto', overflowX: 'hidden', marginBottom: '20px' }}>
               
               {/* 1. 시작고 세부 내역 */}
               {activeDetailModal === 'STARTING' && (
@@ -1073,9 +1073,9 @@ export const CashFlowPage: React.FC = () => {
               {activeDetailModal === 'INFLOW' && (
                 <table style={{ width: '100%', fontSize: '12.5px', tableLayout: 'fixed' }}>
                   <colgroup>
-                    <col style={{ width: '22%' }} />
-                    <col style={{ width: '53%' }} />
-                    <col style={{ width: '25%' }} />
+                    <col style={{ width: '100px' }} />
+                    <col />
+                    <col style={{ width: '130px' }} />
                   </colgroup>
                   <thead>
                     <tr>
@@ -1112,9 +1112,9 @@ export const CashFlowPage: React.FC = () => {
               {activeDetailModal === 'OPEX' && (
                 <table style={{ width: '100%', fontSize: '12.5px', tableLayout: 'fixed' }}>
                   <colgroup>
-                    <col style={{ width: '22%' }} />
-                    <col style={{ width: '53%' }} />
-                    <col style={{ width: '25%' }} />
+                    <col style={{ width: '100px' }} />
+                    <col />
+                    <col style={{ width: '130px' }} />
                   </colgroup>
                   <thead>
                     <tr>
@@ -1151,9 +1151,9 @@ export const CashFlowPage: React.FC = () => {
               {activeDetailModal === 'CAPEX' && (
                 <table style={{ width: '100%', fontSize: '12.5px', tableLayout: 'fixed' }}>
                   <colgroup>
-                    <col style={{ width: '22%' }} />
-                    <col style={{ width: '53%' }} />
-                    <col style={{ width: '25%' }} />
+                    <col style={{ width: '100px' }} />
+                    <col />
+                    <col style={{ width: '130px' }} />
                   </colgroup>
                   <thead>
                     <tr>
