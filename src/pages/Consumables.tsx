@@ -65,7 +65,7 @@ export const Consumables: React.FC = () => {
   const {
     consumables, consumableLogs, consumablePurchases, assets, purchaseConsumable, useConsumable,
     requestConsumablePurchase, acceptConsumablePurchase, completeConsumablePurchase, inboundConsumablePurchase,
-    hasPermission, users, currentUser
+    hasPermission, users, currentUser, googleConfigs
   } = useApp();
 
   const canSave = hasPermission('consumable', 'save');
@@ -283,11 +283,14 @@ export const Consumables: React.FC = () => {
       console.error("FileReader failed:", err);
     }
 
+    const config = googleConfigs[0];
+    const targetFolderName = config?.consumableFolder || '소모품납품증빙';
+
     setTimeout(() => {
-      // 1. 소모품납품증빙 폴더가 있는지 체크하고 없으면 생성
-      let folder = drive.listFolders().find(f => f.name === '소모품납품증빙');
+      // 1. 구글 드라이브 관리 폴더가 있는지 체크하고 없으면 생성
+      let folder = drive.listFolders().find(f => f.name === targetFolderName);
       if (!folder) {
-        folder = drive.createFolder('소모품납품증빙', 'root');
+        folder = drive.createFolder(targetFolderName, 'root');
       }
 
       // 2. 구글드라이브에 가상 파일 업로드
@@ -301,7 +304,7 @@ export const Consumables: React.FC = () => {
 
       inboundConsumablePurchase(selectedReqId, inboundQty, mockFile.webViewLink);
       setIsUploading(false);
-      alert(`소모품 입고 처리가 완료되었습니다.\n거래명세서가 구글드라이브 [소모품납품증빙] 폴더에 안전하게 보존되었습니다.\n저장된 파일명: ${newFileName}`);
+      alert(`소모품 입고 처리가 완료되었습니다.\n거래명세서가 구글드라이브 [${targetFolderName}] 폴더에 안전하게 보존되었습니다.\n저장된 파일명: ${newFileName}`);
       
       // 리셋
       setSelectedReqId('');

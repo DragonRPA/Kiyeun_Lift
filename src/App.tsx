@@ -28,6 +28,7 @@ import { SmartReturn } from './pages/SmartReturn';
 import { AssetHistory } from './pages/AssetHistory';
 import { AssetAssignment } from './pages/AssetAssignment';
 import { OrganizationSettings } from './pages/OrganizationSettings';
+import { GoogleConfig } from './pages/GoogleConfig';
 
 const App: React.FC = () => {
   const { currentUser, login, logout, theme, toggleTheme, hasPermission, activeTab, setActiveTab } = useApp();
@@ -114,6 +115,7 @@ const App: React.FC = () => {
     { id: 'repair', name: '자산 정비수리', icon: <Wrench size={18} />, component: <Repairs /> },
     { id: 'organization', name: '조직/인사 관리', icon: <Users size={18} />, component: <OrganizationSettings /> },
     { id: 'permission', name: '사용자 및 권한', icon: <Shield size={18} />, component: <UsersPermissions /> },
+    { id: 'google_config', name: '구글 관리자 설정', icon: <Settings size={18} />, component: <GoogleConfig /> },
     // 개발자 도구 (ADMIN 전용)
     { id: 'dev_uploader', name: '[개발] DB 데이터 업로더', icon: <DatabaseIcon size={18} />, component: <DevDataUploader /> },
   ];

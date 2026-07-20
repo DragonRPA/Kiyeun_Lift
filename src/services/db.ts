@@ -380,6 +380,18 @@ export interface BankMatchingRule {
   createdAt: string;
 }
 
+export interface GoogleConfig {
+  id: string;
+  googleEmail: string;
+  googlePassword?: string;
+  gmailAppPassword?: string;
+  contractFolder: string;
+  consumableFolder: string;
+  deliveryFolder: string;
+  maintenanceFolder: string;
+  updatedAt: string;
+}
+
 export interface AssetInOutLog {
   id: string;
   assetId: string;
@@ -749,6 +761,20 @@ const SEED_BANK_MATCHING_RULES: BankMatchingRule[] = [
   { id: 'bmr-1', senderName: '주식회사기연', customerId: 'cust-1', createdAt: new Date().toISOString() }
 ];
 
+const SEED_GOOGLE_CONFIG: GoogleConfig[] = [
+  {
+    id: 'default-config',
+    googleEmail: 'kiyeunlift@gmail.com',
+    googlePassword: '••••••••••••',
+    gmailAppPassword: '••••••••••••',
+    contractFolder: '렌탈계약서_증빙',
+    consumableFolder: '소모품납품증빙',
+    deliveryFolder: '출고의뢰_증빙',
+    maintenanceFolder: '정비보고서_증빙',
+    updatedAt: new Date().toISOString()
+  }
+];
+
 class LocalDB {
   private get<T>(key: string, seed: T[]): T[] {
     const val = localStorage.getItem(`erp_${key}`);
@@ -841,6 +867,9 @@ class LocalDB {
   get bankMatchingRules() { return this.get<BankMatchingRule>('bankMatchingRules', SEED_BANK_MATCHING_RULES); }
   set bankMatchingRules(val: BankMatchingRule[]) { this.set('bankMatchingRules', val); }
 
+  get googleConfigs() { return this.get<GoogleConfig>('googleConfigs', SEED_GOOGLE_CONFIG); }
+  set googleConfigs(val: GoogleConfig[]) { this.set('googleConfigs', val); }
+
   get assetInOutLogs() { return this.get<AssetInOutLog>('assetInOutLogs', []); }
   set assetInOutLogs(val: AssetInOutLog[]) { this.set('assetInOutLogs', val); }
 
@@ -872,6 +901,7 @@ class LocalDB {
       bankTransactions: 'bank_transactions',
       bankMatchingRules: 'bank_matching_rules',
       assetInOutLogs: 'asset_inout_logs',
+      googleConfigs: 'google_configs',
       vendors: 'vendors'
     };
     return mapping[key] || key;
@@ -902,7 +932,7 @@ class LocalDB {
       'products', 'assets', 'consumables', 'consumableLogs', 'consumablePurchases',
       'contracts', 'contractAssets', 'contractHistory', 'deliveries', 
       'transportCompanies', 'transportDrivers', 'vendors',
-      'billings', 'billingDetails', 'payments', 'repairs', 'repairConsumables', 'todos', 'bankTransactions', 'bankMatchingRules'
+      'billings', 'billingDetails', 'payments', 'repairs', 'repairConsumables', 'todos', 'bankTransactions', 'bankMatchingRules', 'googleConfigs'
     ];
 
     try {
@@ -1000,7 +1030,7 @@ class LocalDB {
       'users','departments','permissions','customers','contacts','sites',
       'products','assets','consumables','consumableLogs','contracts','contractAssets',
       'contractHistory','deliveries','transportCompanies','transportDrivers',
-      'billings','billingDetails','payments','repairs','repairConsumables','todos'
+      'billings','billingDetails','payments','repairs','repairConsumables','todos','googleConfigs'
     ];
     await Promise.all(tables.map(async (key) => {
       const data = (this as any)[key] as any[];
@@ -1016,7 +1046,7 @@ class LocalDB {
       'users','departments','permissions','customers','contacts','sites',
       'products','assets','consumables','consumableLogs','contracts','contractAssets',
       'contractHistory','deliveries','transportCompanies','transportDrivers',
-      'billings','billingDetails','payments','repairs','repairConsumables','todos'
+      'billings','billingDetails','payments','repairs','repairConsumables','todos','googleConfigs'
     ];
     // Clear local storage first
     tables.forEach(key => {

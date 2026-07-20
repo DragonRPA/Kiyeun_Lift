@@ -85,11 +85,16 @@ export const UsersPermissions: React.FC = () => {
     { id: 'consumable', name: '소모품 관리' },
     { id: 'contract', name: '계약 관리' },
     { id: 'billing', name: '청구/수납 관리' },
+    { id: 'bank_matching', name: '은행 입출금 매칭' },
     { id: 'delivery', name: '배차 관리 (비용정산)' },
+    { id: 'transport_master', name: '운송 거래처/기사 관리' },
     { id: 'smart_dispatch', name: '스마트 출고 요청 (파서)' },
+    { id: 'smart_return', name: '스마트 회수 요청' },
+    { id: 'asset_inout_history', name: '자산 입출고/정비 이력' },
     { id: 'dispatch_assign', name: '스마트 출고/배차 - 장비 할당 권한' },
     { id: 'repair', name: '자산 수리 관리 (외근정비)' },
-    { id: 'permission', name: '사용자 및 권한 설정' }
+    { id: 'permission', name: '사용자 및 권한 설정' },
+    { id: 'google_config', name: '구글 관리자 설정' }
   ];
 
   const handlePermissionToggle = (menuId: string, type: 'view' | 'save') => {

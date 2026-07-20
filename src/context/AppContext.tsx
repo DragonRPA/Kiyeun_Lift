@@ -1,6 +1,6 @@
 // d:\Kiyeun_Lift\src\context\AppContext.tsx
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { db, User, MenuPermission, Customer, CustomerContact, CustomerSite, Product, Asset, Consumable, ConsumableLog, ConsumablePurchaseRequest, Contract, ContractAsset, ContractHistory, Billing, BillingDetail, Payment, Delivery, TransportCompany, TransportDriver, Repair, RepairConsumable, Todo, BankTransaction, BankMatchingRule, AssetInOutLog, Vendor } from '../services/db';
+import { db, User, MenuPermission, Customer, CustomerContact, CustomerSite, Product, Asset, Consumable, ConsumableLog, ConsumablePurchaseRequest, Contract, ContractAsset, ContractHistory, Billing, BillingDetail, Payment, Delivery, TransportCompany, TransportDriver, Repair, RepairConsumable, Todo, BankTransaction, BankMatchingRule, AssetInOutLog, Vendor, GoogleConfig } from '../services/db';
 
 export interface SmartDispatchData {
   customerName: string;
@@ -69,6 +69,7 @@ interface AppContextType {
   bankMatchingRules: BankMatchingRule[];
   assetInOutLogs: AssetInOutLog[];
   vendors: Vendor[];
+  googleConfigs: GoogleConfig[];
 
   // Mutators
   refreshAllData: () => void;
@@ -78,6 +79,7 @@ interface AppContextType {
   saveContact: (contact: Omit<CustomerContact, 'id' | 'createdAt'> & { id?: string }) => void;
   saveSite: (site: Omit<CustomerSite, 'id' | 'createdAt'> & { id?: string }) => void;
   saveProduct: (prod: Omit<Product, 'id' | 'createdAt'> & { id?: string }) => void;
+  updateGoogleConfig: (config: GoogleConfig) => void;
   
   // Asset Mutators
   acquireAsset: (assetData: Partial<Asset>) => void;
@@ -170,6 +172,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [bankMatchingRules, setBankMatchingRules] = useState<BankMatchingRule[]>([]);
   const [assetInOutLogs, setAssetInOutLogs] = useState<AssetInOutLog[]>([]);
   const [vendors, setVendors] = useState<Vendor[]>([]);
+  const [googleConfigs, setGoogleConfigs] = useState<GoogleConfig[]>([]);
 
   // Navigation / Routing states
   const [activeTab, setActiveTab] = useState<string>('dashboard');
@@ -209,6 +212,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setBankMatchingRules(db.bankMatchingRules);
     setAssetInOutLogs(db.assetInOutLogs);
     setVendors(db.vendors);
+    setGoogleConfigs(db.googleConfigs);
   };
 
   useEffect(() => {
@@ -288,6 +292,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const updatePermissions = (updated: MenuPermission[]) => {
     db.permissions = updated;
+    refreshAllData();
+  };
+
+  const updateGoogleConfig = (configData: GoogleConfig) => {
+    db.updateRow<GoogleConfig>('googleConfigs', configData.id, configData);
     refreshAllData();
   };
 
@@ -1988,8 +1997,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     <AppContext.Provider value={{
       currentUser, theme, toggleTheme, login, logout, hasPermission,
       users, permissions, customers, contacts, sites, products, assets, consumables, consumableLogs, consumablePurchases, contracts, contractAssets, contractHistory, deliveries, billings, billingDetails, payments, repairs, repairConsumables, transportCompanies, transportDrivers, todos,
-      bankTransactions, bankMatchingRules, assetInOutLogs, vendors,
-      refreshAllData, updatePermissions, saveUser, saveCustomer, saveContact, saveSite, saveProduct,
+      bankTransactions, bankMatchingRules, assetInOutLogs, vendors, googleConfigs,
+      refreshAllData, updatePermissions, saveUser, saveCustomer, saveContact, saveSite, saveProduct, updateGoogleConfig,
       acquireAsset, disposeAsset, registerRentedAsset, returnRentedAsset,
       purchaseConsumable, useConsumable,
       requestConsumablePurchase, acceptConsumablePurchase, completeConsumablePurchase, inboundConsumablePurchase,
