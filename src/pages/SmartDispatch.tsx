@@ -602,10 +602,18 @@ ${activeSpecs.map((s, idx) => `  ${idx + 1}. [적용] ${s.label}`).join('\n') ||
         
         {/* 1단계: 레거시 통텍스트 입력 및 스마트 변환 */}
         <div className="card" style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-          <div className="card-header">
-            <h3 className="card-title" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', minHeight: '62px' }}>
+            <h3 className="card-title" style={{ display: 'flex', alignItems: 'center', gap: '6px', margin: 0 }}>
               <Clipboard size={16} className="text-primary" /> 1단계: 메신저 줄글 텍스트 복사/붙여넣기
             </h3>
+            <button
+              type="button"
+              className="btn-primary"
+              onClick={handleParse}
+              style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '6px 12px', fontSize: '13px', fontWeight: 'bold' }}
+            >
+              <Zap size={14} /> 스마트 변환 (추출)
+            </button>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', flex: 1, gap: '12px' }}>
             <textarea
@@ -614,21 +622,23 @@ ${activeSpecs.map((s, idx) => `  ${idx + 1}. [적용] ${s.label}`).join('\n') ||
               onChange={e => setRawText(e.target.value)}
               placeholder="여기에 메신저로 복사한 출고 줄글 텍스트를 그대로 붙여넣으세요..."
             />
-            <button
-              type="button"
-              className="btn-primary"
-              onClick={handleParse}
-              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '12px', fontSize: '15px', fontWeight: '700' }}
-            >
-              <Zap size={18} /> 스마트 폼 데이터로 즉시 변환 (추출)
-            </button>
           </div>
         </div>
 
         {/* 2단계: 구조화 개별 입력 및 편집 폼 */}
         <div className="card">
-          <div className="card-header">
-            <h3 className="card-title">2단계: 개별 세부 정보 확인 및 보정 폼</h3>
+          <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', minHeight: '62px' }}>
+            <h3 className="card-title" style={{ margin: 0 }}>2단계: 개별 세부 정보 확인 및 보정 폼</h3>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button type="button" className="btn-secondary" onClick={() => setRawText('')} style={{ padding: '6px 12px', fontSize: '13px' }}>
+                초기화
+              </button>
+              {canSave && (
+                <button type="button" className="btn-primary" onClick={handleSave} style={{ padding: '6px 12px', fontSize: '13px', fontWeight: 'bold' }}>
+                  출고 지시
+                </button>
+              )}
+            </div>
           </div>
           
           <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
@@ -836,22 +846,10 @@ ${activeSpecs.map((s, idx) => `  ${idx + 1}. [적용] ${s.label}`).join('\n') ||
                   <input type="text" value={paymentDay} onChange={e => setPaymentDay(e.target.value)} placeholder="예: 익월 말일" />
                 </div>
               </div>
-              <div style={{ marginTop: '10px', marginBottom: '16px' }}>
+              <div style={{ marginTop: '10px' }}>
                 <label>특이사항 / 메모</label>
                 <input type="text" value={note} onChange={e => setNote(e.target.value)} />
               </div>
-            </div>
-
-            {/* 액션 버튼 하단 배치 */}
-            <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
-              <button type="button" className="btn-secondary" onClick={() => setRawText('')} style={{ flex: 1, padding: '12px', fontSize: '15px' }}>
-                초기화
-              </button>
-              {canSave && (
-                <button type="button" className="btn-primary" onClick={handleSave} style={{ flex: 2, padding: '12px', fontSize: '15px', fontWeight: 'bold' }}>
-                  출고 지시 (자동 생성 및 저장)
-                </button>
-              )}
             </div>
 
           </div>

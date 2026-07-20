@@ -155,36 +155,49 @@ export const SmartReturn: React.FC = () => {
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px', alignItems: 'start' }}>
         {/* 좌측: 원본 텍스트 입력 및 파서 */}
-        <div className="card" style={{ padding: '20px' }}>
-          <h3 className="card-title" style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '14px' }}>
-            <FileText size={18} style={{ color: 'var(--primary)' }} />
-            원본 오더 텍스트 입력
-          </h3>
+        <div className="card" style={{ padding: '20px', display: 'flex', flexDirection: 'column' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', minHeight: '32px' }}>
+            <h3 className="card-title" style={{ display: 'flex', alignItems: 'center', gap: '6px', margin: 0 }}>
+              <FileText size={18} style={{ color: 'var(--primary)' }} />
+              원본 오더 텍스트 입력
+            </h3>
+            <button 
+              type="button" 
+              className="btn-primary" 
+              onClick={handleParse} 
+              style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '6px 12px', fontSize: '13px', fontWeight: 'bold' }}
+            >
+              <Zap size={14} /> 스마트 변환 (추출)
+            </button>
+          </div>
           <textarea
             value={rawText}
             onChange={e => setRawText(e.target.value)}
-            style={{ width: '100%', height: '300px', fontFamily: 'monospace', fontSize: '13px', padding: '12px', borderRadius: '6px', border: '1px solid var(--border)', backgroundColor: 'var(--bg-input)', color: 'var(--text-primary)', marginBottom: '16px' }}
+            style={{ width: '100%', height: '300px', fontFamily: 'monospace', fontSize: '13px', padding: '12px', borderRadius: '6px', border: '1px solid var(--border)', backgroundColor: 'var(--bg-input)', color: 'var(--text-primary)', margin: 0 }}
             placeholder="여기에 회수 요청 카톡/이메일 텍스트를 붙여넣으세요..."
           />
-          <button 
-            type="button" 
-            className="btn-primary" 
-            onClick={handleParse} 
-            style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
-          >
-            <Zap size={16} /> 텍스트 구조화 파싱 실행
-          </button>
         </div>
 
         {/* 우측: 구조화된 회수의뢰 폼 */}
         <div className="card" style={{ padding: '20px' }}>
-          <h3 className="card-title" style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '16px' }}>
-            <Clipboard size={18} style={{ color: 'var(--success)' }} />
-            구조화된 회수 정보 등록
-          </h3>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', minHeight: '32px' }}>
+            <h3 className="card-title" style={{ display: 'flex', alignItems: 'center', gap: '6px', margin: 0 }}>
+              <Clipboard size={18} style={{ color: 'var(--success)' }} />
+              구조화된 회수 정보 등록
+            </h3>
+            <button 
+              type="submit" 
+              form="smart-return-form"
+              className="btn-success" 
+              style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '6px 12px', fontSize: '13px', fontWeight: 'bold' }}
+              disabled={!canSave || !selectedContractId || selectedAssetIds.length === 0}
+            >
+              <Check size={14} /> 회수의뢰 생성 확정
+            </button>
+          </div>
           
-          <form onSubmit={handleSubmit}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', marginBottom: '24px' }}>
+          <form id="smart-return-form" onSubmit={handleSubmit}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
               <div>
                 <label>회수 대상 계약 선택 *</label>
                 <select 
@@ -275,17 +288,6 @@ export const SmartReturn: React.FC = () => {
                   rows={3}
                 />
               </div>
-            </div>
-
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
-              <button 
-                type="submit" 
-                className="btn-success" 
-                style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
-                disabled={!canSave || !selectedContractId || selectedAssetIds.length === 0}
-              >
-                <Check size={16} /> 스마트 회수의뢰 생성 확정
-              </button>
             </div>
           </form>
         </div>
