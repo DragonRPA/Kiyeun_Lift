@@ -222,10 +222,43 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       localStorage.removeItem('erp_contractAssets');
       localStorage.setItem('seed_v1_8_dummy_contracts_v2', 'true');
     }
-    if (!localStorage.getItem('seed_v2_2_google_config_v2')) {
-      localStorage.removeItem('erp_googleConfigs');
-      localStorage.setItem('seed_v2_2_google_config_v2', 'true');
+    // 안전한 Google Config 마이그레이션 (기존 정보 보존 및 신규 컬럼 주입)
+    const existingConfigsStr = localStorage.getItem('erp_googleConfigs');
+    if (existingConfigsStr) {
+      try {
+        const configs = JSON.parse(existingConfigsStr);
+        if (Array.isArray(configs) && configs.length > 0) {
+          let updated = false;
+          const defaultTemplate: Record<string, any> = {
+            isDevMode: true,
+            quotationTemplateUrl: 'templates/렌탈견적서_양식.html',
+            contractTemplateUrl: 'templates/고소작업대_임대차계약서_양식.html',
+            safetyInspectionTemplateUrl: 'templates/고소작업대_안전점검결과서_양식.html',
+            preDeliveryChecklistTemplateUrl: 'templates/반입전_CHECK_LIST_양식.html',
+            bizRegCertUrl: 'C:/Users/이정용/GoogleDrive/Kiyuen_Lift/company/사업자등록증.pdf',
+            bankbookCopyUrl: 'C:/Users/이정용/GoogleDrive/Kiyuen_Lift/company/통장사본.pdf'
+          };
+
+          const mergedConfigs = configs.map(cfg => {
+            const newCfg = { ...cfg };
+            for (const [key, value] of Object.entries(defaultTemplate)) {
+              if (newCfg[key] === undefined) {
+                newCfg[key] = value;
+                updated = true;
+              }
+            }
+            return newCfg;
+          });
+
+          if (updated) {
+            localStorage.setItem('erp_googleConfigs', JSON.stringify(mergedConfigs));
+          }
+        }
+      } catch (e) {
+        console.error('Failed to migrate google config safely', e);
+      }
     }
+    localStorage.setItem('seed_v2_2_google_config_v2', 'true');
 
     const savedTheme = localStorage.getItem('theme') as 'light' | 'dark';
     if (savedTheme) {

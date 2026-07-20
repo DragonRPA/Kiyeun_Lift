@@ -1,8 +1,9 @@
 // d:\Kiyeun_Lift\src\pages\GoogleConfig.tsx
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
-import { Settings, Mail, FolderOpen, RefreshCw, CheckCircle2, Lock, Eye, EyeOff, ShieldCheck, HelpCircle, AlertTriangle, ExternalLink, Key } from 'lucide-react';
+import { Settings, Mail, FolderOpen, RefreshCw, CheckCircle2, Lock, Eye, EyeOff, ShieldCheck, HelpCircle, AlertTriangle, ExternalLink, Key, Search, Cloud, Folder, File, ArrowLeft } from 'lucide-react';
 import { GoogleConfig as GoogleConfigType } from '../services/db';
+import { drive, DriveFile, DriveFolder } from '../services/drive';
 
 export const GoogleConfig: React.FC = () => {
   const { googleConfigs, updateGoogleConfig, currentUser } = useApp();
@@ -57,6 +58,42 @@ export const GoogleConfig: React.FC = () => {
       setBankbookCopyUrl(currentConfig.bankbookCopyUrl || '');
     }
   }, [currentConfig]);
+
+  // 구글 드라이브 탐색기 모달 상태
+  const [isDriveSelectorOpen, setIsDriveSelectorOpen] = useState(false);
+  const [currentFolderId, setCurrentFolderId] = useState('root');
+  const [driveFolders, setDriveFolders] = useState<DriveFolder[]>([]);
+  const [driveFiles, setDriveFiles] = useState<DriveFile[]>([]);
+  const [selectorTargetField, setSelectorTargetField] = useState<'quotation' | 'contract' | 'safety' | 'checklist' | 'bizCert' | 'bankbook' | null>(null);
+
+  useEffect(() => {
+    if (isDriveSelectorOpen) {
+      const folders = drive.listFolders(currentFolderId);
+      const files = drive.listFiles(currentFolderId);
+      setDriveFolders(folders);
+      setDriveFiles(files);
+    }
+  }, [currentFolderId, isDriveSelectorOpen]);
+
+  const handleSelectFile = (file: DriveFile) => {
+    if (!selectorTargetField) return;
+    const pathOrLink = file.webViewLink;
+    if (selectorTargetField === 'quotation') setQuotationTemplateUrl(pathOrLink);
+    else if (selectorTargetField === 'contract') setContractTemplateUrl(pathOrLink);
+    else if (selectorTargetField === 'safety') setSafetyInspectionTemplateUrl(pathOrLink);
+    else if (selectorTargetField === 'checklist') setPreDeliveryChecklistTemplateUrl(pathOrLink);
+    else if (selectorTargetField === 'bizCert') setBizRegCertUrl(pathOrLink);
+    else if (selectorTargetField === 'bankbook') setBankbookCopyUrl(pathOrLink);
+    
+    setIsDriveSelectorOpen(false);
+    setSelectorTargetField(null);
+  };
+
+  const openDriveSelector = (field: 'quotation' | 'contract' | 'safety' | 'checklist' | 'bizCert' | 'bankbook') => {
+    setSelectorTargetField(field);
+    setCurrentFolderId('root');
+    setIsDriveSelectorOpen(true);
+  };
 
   if (!isAdmin) {
     return (
@@ -267,69 +304,135 @@ export const GoogleConfig: React.FC = () => {
             </h3>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
               <div>
-                <label style={{ fontSize: '12px', fontWeight: 'bold', marginBottom: '6px', display: 'block' }}>1. 견적서 양식 로컬 절대경로 (.html) *</label>
-                <input
-                  type="text"
-                  value={quotationTemplateUrl}
-                  onChange={e => setQuotationTemplateUrl(e.target.value)}
-                  placeholder="예: d:/GoogleDrive/RPA 개발/01.AntiGravity/Kiyuen_Lift/templates/렌탈견적서_양식.html"
-                  required
-                />
+                <label style={{ fontSize: '12px', fontWeight: 'bold', marginBottom: '6px', display: 'block' }}>1. 견적서 양식 경로 또는 클라우드 링크 *</label>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <input
+                    type="text"
+                    value={quotationTemplateUrl}
+                    onChange={e => setQuotationTemplateUrl(e.target.value)}
+                    placeholder="예: d:/GoogleDrive/.../렌탈견적서_양식.html 또는 구글 드라이브 주소"
+                    style={{ flex: 1 }}
+                    required
+                  />
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    onClick={() => openDriveSelector('quotation')}
+                    style={{ padding: '0 12px', display: 'flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap' }}
+                  >
+                    <Cloud size={14} /> 드라이브 탐색
+                  </button>
+                </div>
               </div>
 
               <div>
-                <label style={{ fontSize: '12px', fontWeight: 'bold', marginBottom: '6px', display: 'block' }}>2. 계약서 양식 로컬 절대경로 (.html) *</label>
-                <input
-                  type="text"
-                  value={contractTemplateUrl}
-                  onChange={e => setContractTemplateUrl(e.target.value)}
-                  placeholder="예: d:/GoogleDrive/RPA 개발/01.AntiGravity/Kiyuen_Lift/templates/고소작업대_임대차계약서_양식.html"
-                  required
-                />
+                <label style={{ fontSize: '12px', fontWeight: 'bold', marginBottom: '6px', display: 'block' }}>2. 계약서 양식 경로 또는 클라우드 링크 *</label>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <input
+                    type="text"
+                    value={contractTemplateUrl}
+                    onChange={e => setContractTemplateUrl(e.target.value)}
+                    placeholder="예: d:/GoogleDrive/.../고소작업대_임대차계약서_양식.html 또는 구글 드라이브 주소"
+                    style={{ flex: 1 }}
+                    required
+                  />
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    onClick={() => openDriveSelector('contract')}
+                    style={{ padding: '0 12px', display: 'flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap' }}
+                  >
+                    <Cloud size={14} /> 드라이브 탐색
+                  </button>
+                </div>
               </div>
 
               <div>
-                <label style={{ fontSize: '12px', fontWeight: 'bold', marginBottom: '6px', display: 'block' }}>3. 안전점검결과서 양식 로컬 절대경로 (.html) *</label>
-                <input
-                  type="text"
-                  value={safetyInspectionTemplateUrl}
-                  onChange={e => setSafetyInspectionTemplateUrl(e.target.value)}
-                  placeholder="예: d:/GoogleDrive/RPA 개발/01.AntiGravity/Kiyuen_Lift/templates/고소작업대_안전점검결과서_양식.html"
-                  required
-                />
+                <label style={{ fontSize: '12px', fontWeight: 'bold', marginBottom: '6px', display: 'block' }}>3. 안전점검결과서 양식 경로 또는 클라우드 링크 *</label>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <input
+                    type="text"
+                    value={safetyInspectionTemplateUrl}
+                    onChange={e => setSafetyInspectionTemplateUrl(e.target.value)}
+                    placeholder="예: d:/GoogleDrive/.../고소작업대_안전점검결과서_양식.html 또는 구글 드라이브 주소"
+                    style={{ flex: 1 }}
+                    required
+                  />
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    onClick={() => openDriveSelector('safety')}
+                    style={{ padding: '0 12px', display: 'flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap' }}
+                  >
+                    <Cloud size={14} /> 드라이브 탐색
+                  </button>
+                </div>
               </div>
 
               <div>
-                <label style={{ fontSize: '12px', fontWeight: 'bold', marginBottom: '6px', display: 'block' }}>4. 반입전 체크리스트 양식 로컬 절대경로 (.html) *</label>
-                <input
-                  type="text"
-                  value={preDeliveryChecklistTemplateUrl}
-                  onChange={e => setPreDeliveryChecklistTemplateUrl(e.target.value)}
-                  placeholder="예: d:/GoogleDrive/RPA 개발/01.AntiGravity/Kiyuen_Lift/templates/반입전_CHECK_LIST_양식.html"
-                  required
-                />
+                <label style={{ fontSize: '12px', fontWeight: 'bold', marginBottom: '6px', display: 'block' }}>4. 반입전 체크리스트 양식 경로 또는 클라우드 링크 *</label>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <input
+                    type="text"
+                    value={preDeliveryChecklistTemplateUrl}
+                    onChange={e => setPreDeliveryChecklistTemplateUrl(e.target.value)}
+                    placeholder="예: d:/GoogleDrive/.../반입전_CHECK_LIST_양식.html 또는 구글 드라이브 주소"
+                    style={{ flex: 1 }}
+                    required
+                  />
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    onClick={() => openDriveSelector('checklist')}
+                    style={{ padding: '0 12px', display: 'flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap' }}
+                  >
+                    <Cloud size={14} /> 드라이브 탐색
+                  </button>
+                </div>
               </div>
 
               <div>
-                <label style={{ fontSize: '12px', fontWeight: 'bold', marginBottom: '6px', display: 'block' }}>5. 사업자등록증 파일 로컬 절대경로 (.pdf) *</label>
-                <input
-                  type="text"
-                  value={bizRegCertUrl}
-                  onChange={e => setBizRegCertUrl(e.target.value)}
-                  placeholder="예: d:/GoogleDrive/RPA 개발/01.AntiGravity/Kiyuen_Lift/templates/사업자등록증.pdf"
-                  required
-                />
+                <label style={{ fontSize: '12px', fontWeight: 'bold', marginBottom: '6px', display: 'block' }}>5. 사업자등록증 파일 경로 또는 클라우드 링크 *</label>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <input
+                    type="text"
+                    value={bizRegCertUrl}
+                    onChange={e => setBizRegCertUrl(e.target.value)}
+                    placeholder="예: d:/GoogleDrive/.../사업자등록증.pdf 또는 구글 드라이브 주소"
+                    style={{ flex: 1 }}
+                    required
+                  />
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    onClick={() => openDriveSelector('bizCert')}
+                    style={{ padding: '0 12px', display: 'flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap' }}
+                  >
+                    <Cloud size={14} /> 드라이브 탐색
+                  </button>
+                </div>
               </div>
 
               <div>
-                <label style={{ fontSize: '12px', fontWeight: 'bold', marginBottom: '6px', display: 'block' }}>6. 통장사본 파일 로컬 절대경로 (.pdf) *</label>
-                <input
-                  type="text"
-                  value={bankbookCopyUrl}
-                  onChange={e => setBankbookCopyUrl(e.target.value)}
-                  placeholder="예: d:/GoogleDrive/RPA 개발/01.AntiGravity/Kiyuen_Lift/templates/통장사본.pdf"
-                  required
-                />
+                <label style={{ fontSize: '12px', fontWeight: 'bold', marginBottom: '6px', display: 'block' }}>6. 통장사본 파일 경로 또는 클라우드 링크 *</label>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <input
+                    type="text"
+                    value={bankbookCopyUrl}
+                    onChange={e => setBankbookCopyUrl(e.target.value)}
+                    placeholder="예: d:/GoogleDrive/.../통장사본.pdf 또는 구글 드라이브 주소"
+                    style={{ flex: 1 }}
+                    required
+                  />
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    onClick={() => openDriveSelector('bankbook')}
+                    style={{ padding: '0 12px', display: 'flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap' }}
+                  >
+                    <Cloud size={14} /> 드라이브 탐색
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -493,6 +596,105 @@ export const GoogleConfig: React.FC = () => {
             </div>
           </div>
         </div>
+
+        {/* 구글 드라이브 파일 탐색기 모달 */}
+        {isDriveSelectorOpen && (
+          <div style={{
+            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+            backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100
+          }}>
+            <div className="card" style={{ width: '90%', maxWidth: '600px', maxHeight: '80vh', display: 'flex', flexDirection: 'column', padding: '24px', backgroundColor: 'var(--bg-card)' }}>
+              <div style={{ borderBottom: '1px solid var(--border)', paddingBottom: '12px', marginBottom: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <h3 style={{ fontSize: '16px', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}>
+                  <Cloud style={{ color: 'var(--primary)' }} /> 구글 드라이브 클라우드 파일 탐색기
+                </h3>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => {
+                    setIsDriveSelectorOpen(false);
+                    setSelectorTargetField(null);
+                  }}
+                  style={{ padding: '4px 10px', fontSize: '12px' }}
+                >
+                  닫기
+                </button>
+              </div>
+
+              {/* 경로 내비게이션 */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px', fontSize: '13px', backgroundColor: 'var(--bg-app)', padding: '10px', borderRadius: '6px' }}>
+                {currentFolderId !== 'root' && (
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    onClick={() => {
+                      const folders = drive.listFolders();
+                      const current = folders.find(f => f.id === currentFolderId);
+                      if (current?.parentId) {
+                        setCurrentFolderId(current.parentId);
+                      } else {
+                        setCurrentFolderId('root');
+                      }
+                    }}
+                    style={{ padding: '3px 8px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}
+                  >
+                    <ArrowLeft size={12} /> 상위폴더
+                  </button>
+                )}
+                <span style={{ fontWeight: 'bold', color: 'var(--text-secondary)' }}>현재 폴더:</span>
+                <span style={{ color: 'var(--primary)', fontWeight: '600' }}>
+                  {currentFolderId === 'root' ? '/ (루트)' : `/${drive.listFolders().find(f => f.id === currentFolderId)?.name || ''}`}
+                </span>
+              </div>
+
+              {/* 폴더 및 파일 리스트 */}
+              <div style={{ flex: 1, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: '8px', padding: '8px', display: 'flex', flexDirection: 'column', gap: '4px', minHeight: '250px' }}>
+                
+                {/* 폴더 리스트 */}
+                {driveFolders.length === 0 && driveFiles.length === 0 && (
+                  <div style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '40px 0', fontSize: '13px' }}>
+                    폴더가 비어 있습니다.
+                  </div>
+                )}
+                
+                {driveFolders.map(folder => (
+                  <div
+                    key={folder.id}
+                    onClick={() => setCurrentFolderId(folder.id)}
+                    style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 12px', borderRadius: '6px', cursor: 'pointer', borderBottom: '1px solid var(--border-light)', backgroundColor: 'var(--bg-app)', marginBottom: '4px' }}
+                  >
+                    <Folder size={18} style={{ color: '#eab308' }} />
+                    <span style={{ fontSize: '13.5px', fontWeight: '500', flex: 1 }}>{folder.name}</span>
+                    <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>폴더</span>
+                  </div>
+                ))}
+
+                {/* 파일 리스트 */}
+                {driveFiles.map(file => (
+                  <div
+                    key={file.id}
+                    style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 12px', borderRadius: '6px', borderBottom: '1px solid var(--border-light)', backgroundColor: 'var(--bg-card)', marginBottom: '4px' }}
+                  >
+                    <File size={18} style={{ color: 'var(--primary)' }} />
+                    <div style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
+                      <span style={{ fontSize: '13.5px', fontWeight: '500' }}>{file.name}</span>
+                      <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{file.mimeType} | {file.size}</span>
+                    </div>
+                    <button
+                      type="button"
+                      className="btn-primary"
+                      onClick={() => handleSelectFile(file)}
+                      style={{ padding: '4px 10px', fontSize: '12px' }}
+                    >
+                      선택
+                    </button>
+                  </div>
+                ))}
+
+              </div>
+            </div>
+          </div>
+        )}
 
       </div>
     </div>
