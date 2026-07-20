@@ -167,7 +167,7 @@ export const SmartReturn: React.FC = () => {
               onClick={handleParse} 
               style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '6px 12px', fontSize: '13px', fontWeight: 'bold' }}
             >
-              <Zap size={14} /> 스마트 변환 (추출)
+              <Zap size={14} /> 텍스트 구조화 파싱 실행
             </button>
           </div>
           <textarea
@@ -192,7 +192,7 @@ export const SmartReturn: React.FC = () => {
               style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '6px 12px', fontSize: '13px', fontWeight: 'bold' }}
               disabled={!canSave || !selectedContractId || selectedAssetIds.length === 0}
             >
-              <Check size={14} /> 회수의뢰 생성 확정
+              <Check size={14} /> 스마트 회수의뢰 생성 확정
             </button>
           </div>
           

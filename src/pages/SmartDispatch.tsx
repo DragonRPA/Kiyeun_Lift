@@ -612,7 +612,7 @@ ${activeSpecs.map((s, idx) => `  ${idx + 1}. [적용] ${s.label}`).join('\n') ||
               onClick={handleParse}
               style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '6px 12px', fontSize: '13px', fontWeight: 'bold' }}
             >
-              <Zap size={14} /> 스마트 변환 (추출)
+              <Zap size={14} /> 스마트 폼 데이터로 즉시 변환 (추출)
             </button>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', flex: 1, gap: '12px' }}>
@@ -635,7 +635,7 @@ ${activeSpecs.map((s, idx) => `  ${idx + 1}. [적용] ${s.label}`).join('\n') ||
               </button>
               {canSave && (
                 <button type="button" className="btn-primary" onClick={handleSave} style={{ padding: '6px 12px', fontSize: '13px', fontWeight: 'bold' }}>
-                  출고 지시
+                  출고 지시 (자동 생성 및 저장)
                 </button>
               )}
             </div>
