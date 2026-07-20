@@ -597,6 +597,7 @@ export const DevDataUploader: React.FC = () => {
   const [downloadingBulk, setDownloadingBulk] = useState(false);
   const [generatingTestData, setGeneratingTestData] = useState(false);
   const [generationProgress, setGenerationProgress] = useState('');
+  const [testDataLogs, setTestDataLogs] = useState<string[]>([]);
   const bulkFileInputRef = useRef<HTMLInputElement>(null);
 
   const handleDownloadBulkTemplate = () => {
@@ -805,15 +806,68 @@ export const DevDataUploader: React.FC = () => {
     }
   };
 
+  const addLog = (message: string, type: 'info' | 'success' | 'error' = 'info') => {
+    const time = new Date().toLocaleTimeString();
+    const prefix = type === 'success' ? '✅' : type === 'error' ? '❌' : 'ℹ️';
+    setTestDataLogs(prev => [...prev, `[${time}] ${prefix} ${message}`]);
+  };
+
+  const TABLE_COLUMNS: Record<string, string[]> = {
+    products: ['id', 'modelName', 'feet', 'spec', 'manufacturer', 'createdAt'],
+    assets: ['id', 'modelName', 'assetNo', 'serialNo', 'manufacturer', 'ownerType', 'status', 'acquisitionDate', 'acquisitionPrice', 'depreciationMonths', 'residualValueRate', 'accumDepreciation', 'bookValue', 'vendorId', 'rentStart', 'rentEnd', 'monthlyRentFee', 'dailyRentFee', 'actualRentReturnDate', 'memo', 'createdAt', 'updatedAt'],
+    customers: ['id', 'name', 'bizRegNo', 'isClosed', 'address', 'representative', 'repContact', 'repEmail', 'driveFolderId', 'prepaidBalance', 'createdAt'],
+    customer_contacts: ['id', 'customerId', 'name', 'position', 'contact', 'email', 'createdAt'],
+    customer_sites: ['id', 'customerId', 'name', 'address', 'contactName', 'contact', 'email', 'createdAt'],
+    contracts: ['id', 'contractNo', 'customerId', 'salespersonId', 'contactId', 'siteId', 'startDate', 'endDate', 'billingDay', 'status', 'driveFolderId', 'createdAt', 'updatedAt'],
+    contract_assets: ['id', 'contractId', 'assetId', 'monthlyRentalFee', 'dailyRentalFee', 'startDate', 'endDate', 'createdAt'],
+    deliveries: ['id', 'contractId', 'assetIds', 'transportVendorId', 'type', 'status', 'requestDate', 'loadingTime', 'unloadingTime', 'vehicleType', 'driverName', 'driverContact', 'deliveryCost', 'purchaseBillId', 'memo', 'createdAt', 'updatedAt'],
+    billings: ['id', 'customerId', 'billingYm', 'billingDate', 'totalAmount', 'paidAmount', 'status', 'createdAt', 'updatedAt'],
+    billing_details: ['id', 'billingId', 'contractAssetId', 'assetId', 'itemName', 'quantity', 'unitPrice', 'amount', 'description', 'createdAt'],
+    payments: ['id', 'billingId', 'paymentDate', 'amount', 'method', 'memo', 'createdAt'],
+    bank_transactions: ['id', 'transactionDate', 'senderName', 'depositAmount', 'withdrawAmount', 'memo', 'matchedBillingId', 'matchingType', 'createdAt'],
+    consumables: ['id', 'modelName', 'stockQty', 'unit', 'unitPrice', 'vendorId', 'createdAt', 'updatedAt'],
+    consumable_logs: ['id', 'consumableId', 'type', 'quantity', 'unitPrice', 'vendorId', 'userId', 'targetAssetId', 'purchaseItemId', 'evidenceFileUrl', 'actionDate', 'description', 'createdAt'],
+    consumable_purchases: ['id', 'consumableId', 'modelName', 'requestedQty', 'unitPrice', 'requestDate', 'sellerName', 'status', 'acceptedDate', 'completedDate', 'requesterId', 'requesterName', 'accepterId', 'accepterName', 'inbounderName', 'receivedQty', 'statementFileUrl', 'createdAt', 'updatedAt'],
+    repairs: ['id', 'assetId', 'mechanicId', 'repairType', 'vendorId', 'outboundDate', 'completedDate', 'estimateFileUrl', 'requestDate', 'status', 'details', 'isCustomerFault', 'faultImageUrl', 'laborHours', 'costTotal', 'billableToCustomer', 'billingAmount', 'billingId', 'purchaseBillId', 'createdAt', 'updatedAt'],
+    repair_consumables: ['id', 'repairId', 'consumableId', 'quantity', 'unitPrice', 'cost']
+  };
+
   const bulkUploadTable = async (tableName: string, rows: any[]) => {
     if (!supabase || rows.length === 0) return;
+    const allowed = TABLE_COLUMNS[tableName];
+    if (!allowed) {
+      throw new Error(`테이블 정의 [${tableName}]를 스키마 맵에서 찾을 수 없습니다.`);
+    }
+
+    const sanitized = rows.map((r) => {
+      const newRow: any = {};
+      allowed.forEach(k => {
+        if (r[k] !== undefined) {
+          newRow[k] = r[k];
+        }
+      });
+
+      // 외래키 혹은 관계 속성 디버깅 보완
+      if (tableName === 'repairs' && r.totalCost !== undefined) {
+        newRow.costTotal = r.totalCost;
+      }
+      if (tableName === 'billing_details' && r.assetId === undefined && r.contractAssetId) {
+        const parts = String(r.contractAssetId).split('-');
+        if (parts.length >= 4) {
+          newRow.assetId = `testdata-asset-${parts[3]}`;
+        }
+      }
+
+      return newRow;
+    });
+
     const chunkSize = 200;
-    for (let i = 0; i < rows.length; i += chunkSize) {
-      const chunk = rows.slice(i, i + chunkSize);
+    for (let i = 0; i < sanitized.length; i += chunkSize) {
+      const chunk = sanitized.slice(i, i + chunkSize);
       const { error } = await supabase.from(tableName).upsert(chunk, { onConflict: 'id' });
       if (error) {
-        console.error(`Supabase upsert failed for ${tableName}:`, error);
-        throw error;
+        console.error(`Supabase bulk insert failed for ${tableName} at index ${i}:`, error);
+        throw new Error(`Supabase Upsert 실패 [테이블: ${tableName}, 에러코드: ${error.code}, 메시지: ${error.message}]`);
       }
     }
   };
@@ -823,9 +877,11 @@ export const DevDataUploader: React.FC = () => {
     if (!confirmed) return;
 
     setGeneratingTestData(true);
+    setTestDataLogs([]);
+    addLog("통합 테스트 데이터 생성 시나리오 구동 시작...", "info");
     try {
       // 1. 제품 생성 (90종)
-      setGenerationProgress("1. 제품 90종 생성 중...");
+      addLog("1단계: 제품(Product) 90종 명세 생성 중...", "info");
       const products: any[] = [];
       for (let i = 1; i <= 90; i++) {
         products.push({
@@ -839,8 +895,10 @@ export const DevDataUploader: React.FC = () => {
         });
       }
 
+      addLog("제품 90종 메모리 인스턴스 준비 완료.", "success");
       // 2. 자산 생성 (1,000개)
       setGenerationProgress("2. 자산 1,000개 생성 중...");
+      addLog("2단계: 자산(Asset) 1,000개 연동 명세 생성 중...", "info");
       const assets: any[] = [];
       for (let i = 1; i <= 1000; i++) {
         const prod = products[i % products.length];
@@ -866,8 +924,10 @@ export const DevDataUploader: React.FC = () => {
         });
       }
 
+      addLog("자산 1,000개 메모리 인스턴스 준비 완료. (당사 950개 / 임차 50개)", "success");
       // 3. 고객사 생성 (200사)
       setGenerationProgress("3. 고객사 200개 및 담당자/현장 각 1,000개 생성 중...");
+      addLog("3단계: 가상 고객사(Customer) 200개 및 하위 담당자/현장 각 1,000개 분할 생성 중...", "info");
       const customers: any[] = [];
       for (let i = 1; i <= 200; i++) {
         customers.push({
@@ -913,8 +973,10 @@ export const DevDataUploader: React.FC = () => {
         });
       }
 
+      addLog("고객담당자 1,000명 및 공사현장 1,000개 생성 성공.", "success");
       // 5. 계약 및 자산 매칭, 배차 입출고 이력 생성 (600건)
       setGenerationProgress("4. 계약 600건 및 물류/배차 이력 1,500건 계산 중...");
+      addLog("4단계: 계약 600건, 계약자산 1,000건, 배차(출/입고) 물류 이력 1,500건 생성 중...", "info");
       const contracts: any[] = [];
       const contractAssets: any[] = [];
       const deliveries: any[] = [];
@@ -1058,8 +1120,10 @@ export const DevDataUploader: React.FC = () => {
         }
       }
 
+      addLog(`계약 600개, 매핑 계약자산 ${contractAssets.length}개, 배차지시 1,500건 역산 성공.`, "success");
       // 6. 청구 및 수납 내역 생성
       setGenerationProgress("5. 기성 청구 대장 및 결제/수납 2,000건 생성 중...");
+      addLog("5단계: 매달 정산일에 부합하는 매출 기성 청구(Billing) 및 수납대장 역산 중...", "info");
       const billings: any[] = [];
       const billingDetails: any[] = [];
       const payments: any[] = [];
@@ -1171,8 +1235,10 @@ export const DevDataUploader: React.FC = () => {
         }
       });
 
+      addLog(`청구서 ${billings.length}건, 기성내역 ${billingDetails.length}건 정밀 계산 완료.`, "success");
       // 7. 소모품 & 구매신청 생성
       setGenerationProgress("6. 소모품 목록 및 구매 신청 300건 생성 중...");
+      addLog("6단계: 정비 자재용 소모품(Consumable) 10종 및 구매 신청 200건 생성 중...", "info");
       const consumables: any[] = [];
       const consumableLogs: any[] = [];
       const consumablePurchases: any[] = [];
@@ -1227,8 +1293,10 @@ export const DevDataUploader: React.FC = () => {
         }
       }
 
+      addLog(`소모품 및 자재 구매이력 200건 매핑 성공.`, "success");
       // 8. 정비 내역 & 외주정비비
       setGenerationProgress("7. 정비 보고서 및 외주 정비 내역 200건 생성 중...");
+      addLog("7단계: 내수/외주 자산 정비 보고서(Repair) 150건 결합 중...", "info");
       const repairs: any[] = [];
       const repairConsumables: any[] = [];
 
@@ -1273,6 +1341,7 @@ export const DevDataUploader: React.FC = () => {
 
       // 9. 로컬 저장 적용
       setGenerationProgress("8. 로컬 스토리지 데이터 동기화 중...");
+      addLog("8단계: 로컬 스토리지(localStorage) 데이터 병합 반영 중...", "info");
       db.products = [...db.products.filter(p => !p.id.startsWith('testdata-')), ...products];
       db.assets = [...db.assets.filter(a => !a.id.startsWith('testdata-')), ...assets];
       db.customers = [...db.customers.filter(c => !c.id.startsWith('testdata-')), ...customers];
@@ -1290,33 +1359,43 @@ export const DevDataUploader: React.FC = () => {
       db.consumablePurchases = [...db.consumablePurchases.filter(cp => !cp.id.startsWith('testdata-')), ...consumablePurchases];
       db.repairs = [...db.repairs.filter(r => !r.id.startsWith('testdata-')), ...repairs];
       db.repairConsumables = [...db.repairConsumables.filter(rc => !rc.id.startsWith('testdata-')), ...repairConsumables];
+      addLog("로컬 캐시 메모리 병합 및 디스크 쓰기 완료.", "success");
 
       // 10. Supabase 동기화
       if (supabase) {
         setGenerationProgress("9. Supabase 원격 데이터베이스 업로드 중...");
-        await bulkUploadTable('products', products);
-        await bulkUploadTable('assets', assets);
-        await bulkUploadTable('customers', customers);
-        await bulkUploadTable('customer_contacts', contacts);
-        await bulkUploadTable('customer_sites', sites);
-        await bulkUploadTable('contracts', contracts);
-        await bulkUploadTable('contract_assets', contractAssets);
-        await bulkUploadTable('deliveries', deliveries);
-        await bulkUploadTable('billings', billings);
-        await bulkUploadTable('billing_details', billingDetails);
-        await bulkUploadTable('payments', payments);
-        await bulkUploadTable('bank_transactions', bankTransactions);
-        await bulkUploadTable('consumables', consumables);
-        await bulkUploadTable('consumable_logs', consumableLogs);
-        await bulkUploadTable('consumable_purchases', consumablePurchases);
-        await bulkUploadTable('repairs', repairs);
-        await bulkUploadTable('repair_consumables', repairConsumables);
+        addLog("9단계: 원격 Supabase DB 일괄 동기화 (Upsert Batch) 시도 중...", "info");
+        await bulkUploadTable('products', products); addLog("products 업서트 완료", "success");
+        await bulkUploadTable('assets', assets); addLog("assets 업서트 완료", "success");
+        await bulkUploadTable('customers', customers); addLog("customers 업서트 완료", "success");
+        await bulkUploadTable('customer_contacts', contacts); addLog("customer_contacts 업서트 완료", "success");
+        await bulkUploadTable('customer_sites', sites); addLog("customer_sites 업서트 완료", "success");
+        await bulkUploadTable('contracts', contracts); addLog("contracts 업서트 완료", "success");
+        await bulkUploadTable('contract_assets', contractAssets); addLog("contract_assets 업서트 완료", "success");
+        await bulkUploadTable('deliveries', deliveries); addLog("deliveries 업서트 완료", "success");
+        await bulkUploadTable('billings', billings); addLog("billings 업서트 완료", "success");
+        await bulkUploadTable('billing_details', billingDetails); addLog("billing_details 업서트 완료", "success");
+        await bulkUploadTable('payments', payments); addLog("payments 업서트 완료", "success");
+        await bulkUploadTable('bank_transactions', bankTransactions); addLog("bank_transactions 업서트 완료", "success");
+        await bulkUploadTable('consumables', consumables); addLog("consumables 업서트 완료", "success");
+        await bulkUploadTable('consumable_logs', consumableLogs); addLog("consumable_logs 업서트 완료", "success");
+        await bulkUploadTable('consumable_purchases', consumablePurchases); addLog("consumable_purchases 업서트 완료", "success");
+        await bulkUploadTable('repairs', repairs); addLog("repairs 업서트 완료", "success");
+        await bulkUploadTable('repair_consumables', repairConsumables); addLog("repair_consumables 업서트 완료", "success");
+        addLog("원격 Supabase 데이터베이스 동기화 완벽 완료!", "success");
+      } else {
+        addLog("Supabase 연결 미확인: 원격 동기화 생략 (로컬 모드)", "info");
       }
 
+      addLog("🎉 통합 프로세스 데이터 시나리오 생성 완료! 모든 기능 테스트 가능.", "success");
       alert("10,000건 이상의 프로세스 통합 테스트용 모의 데이터가 성공적으로 생성 및 동기화되었습니다!");
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      alert("데이터 생성 중 오류가 발생했습니다.");
+      addLog(`데이터 생성 오류 발생: ${err.message || err}`, "error");
+      if (err.stack) {
+        addLog(`스택 추적: ${err.stack}`, "error");
+      }
+      alert("데이터 생성 중 오류가 발생했습니다. 로그 콘솔 창을 확인해 주십시오.");
     } finally {
       setGeneratingTestData(false);
       setGenerationProgress("");
@@ -1912,6 +1991,43 @@ export const DevDataUploader: React.FC = () => {
                 <Trash2 size={14} /> 생성된 테스트 데이터 일괄 삭제
               </button>
             </div>
+            {testDataLogs.length > 0 && (
+              <div style={{ marginTop: '12px', borderTop: '1px dashed var(--border-color)', paddingTop: '12px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                  <span style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-secondary)' }}>🖥️ 실시간 실행 로그 터미널</span>
+                  <button 
+                    onClick={() => setTestDataLogs([])} 
+                    style={{ fontSize: '10px', padding: '1px 6px', backgroundColor: 'var(--bg-body)', border: '1px solid var(--border-color)', borderRadius: '4px', cursor: 'pointer', color: 'var(--text-muted)' }}
+                  >
+                    터미널 비우기
+                  </button>
+                </div>
+                <div style={{
+                  backgroundColor: '#0f172a',
+                  color: '#38bdf8',
+                  fontFamily: 'monospace',
+                  fontSize: '11px',
+                  padding: '10px',
+                  borderRadius: '6px',
+                  maxHeight: '180px',
+                  overflowY: 'auto',
+                  lineHeight: '1.5',
+                  border: '1px solid #1e293b',
+                  textAlign: 'left'
+                }}>
+                  {testDataLogs.map((log, idx) => {
+                    let color = '#38bdf8'; // info
+                    if (log.includes('✅')) color = '#4ade80'; // success
+                    if (log.includes('❌')) color = '#f87171'; // error
+                    return (
+                      <div key={idx} style={{ color, whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
+                        {log}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Zone 3: 위험 영역 */}
