@@ -178,6 +178,7 @@ export interface Contract {
   startDate: string;
   endDate: string;
   billingDay: number; // 마감일 (예: 30)
+  statementClosingDay?: number; // 거래명세서 마감일 (예: 25)
   status: 'ACTIVE' | 'EXTENDED' | 'SHORTENED' | 'SUCCEEDED' | 'COMPLETED';
   successorContractId?: string;
   driveFolderId?: string;
@@ -213,6 +214,7 @@ export interface BillingDetail {
 export interface Billing {
   id: string;
   customerId: string;
+  contractId?: string; // 연결된 계약 ID (개별 계약 정산용)
   billingYm: string; // 'YYYY-MM'
   billingDate: string;
   totalAmount: number;
@@ -424,47 +426,91 @@ const generateMockContracts = (customers: Customer[], contacts: CustomerContact[
   const contractAssets: ContractAsset[] = [];
   
   let assetIdx = 0;
-  for(let i=1; i<=13; i++) { // 13 contracts
-    const cust = customers[i];
+  for(let i=1; i<=11; i++) { // 11 contracts
+    const cust = customers[i % customers.length];
     const custContacts = contacts.filter(c => c.customerId === cust.id);
     const custSites = sites.filter(s => s.customerId === cust.id);
     
     const contractId = `contract-${i}`;
+    
+    // 다양한 시작일/종료일 세팅 (일할 계산 테스트용)
+    let startDate = '2026-07-01';
+    let endDate = '2026-12-31';
+    if (i === 4 || i === 5) {
+      startDate = '2026-07-10'; // 이번달 중간부터 시작 (일할 대상)
+    } else if (i === 6) {
+      startDate = '2026-06-15';
+      endDate = '2026-07-20'; // 이번달 중간에 종료 (일할 대상)
+    } else if (i === 8) {
+      startDate = '2026-07-15';
+      endDate = '2026-07-25'; // 아주 짧은 기간 (일할 대상)
+    }
+
+    // 마감일 및 거래명세서 마감일 설정 (오늘 날짜가 20일이므로 오늘 마감 걸리게 20일 다수 분포)
+    let billingDay = 30;
+    let statementClosingDay = 25;
+    
+    if (i === 1 || i === 6) {
+      billingDay = 20; // 청구일 오늘
+      statementClosingDay = 15;
+    } else if (i === 2 || i === 8) {
+      billingDay = 25;
+      statementClosingDay = 20; // 명세서 마감일 오늘
+    } else if (i === 3 || i === 9) {
+      billingDay = 20; // 청구일 오늘
+      statementClosingDay = 20; // 명세서 마감일 오늘
+    } else if (i === 4) {
+      billingDay = 10;
+      statementClosingDay = 5;
+    } else if (i === 5) {
+      billingDay = 28;
+      statementClosingDay = 20; // 명세서 마감일 오늘
+    } else if (i === 10) {
+      billingDay = 20; // 청구일 오늘
+      statementClosingDay = 15;
+    }
+
     contracts.push({
       id: contractId,
       contractNo: `CTR-2026-${i.toString().padStart(3, '0')}`,
       customerId: cust.id,
       contactId: custContacts[0]?.id,
       siteId: custSites[0]?.id,
-      startDate: '2026-07-01',
-      endDate: '2026-12-31',
-      billingDay: 30,
+      startDate,
+      endDate,
+      billingDay,
+      statementClosingDay,
       status: 'ACTIVE',
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     });
     
-    const count = Math.floor(Math.random() * 2) + 1; // 1~2 assets per contract
+    // 다양성을 위해 1~2대의 장비 할당 및 대당 렌탈료 다양화 (월 30만원~90만원 선)
+    const count = (i % 2) + 1; // 1대 또는 2대
     for(let j=0; j<count; j++) {
       if(assetIdx >= assets.length) break;
       const asset = assets[assetIdx];
       asset.status = 'RENTED';
       asset.currentCustomerId = cust.id;
       asset.currentSiteId = custSites[0]?.id;
-      asset.contractStart = '2026-07-01';
-      asset.contractEnd = '2026-12-31';
-      asset.billingDay = 30;
-      asset.monthlyRentalFee = 500000;
-      asset.dailyRentalFee = 16000;
+      asset.contractStart = startDate;
+      asset.contractEnd = endDate;
+      asset.billingDay = billingDay;
+      
+      const monthlyRentalFee = 300000 + ((i + j) % 5) * 150000;
+      const dailyRentalFee = Math.floor(monthlyRentalFee / 30);
+      
+      asset.monthlyRentalFee = monthlyRentalFee;
+      asset.dailyRentalFee = dailyRentalFee;
       
       contractAssets.push({
         id: `ca-${contractId}-${j}`,
         contractId,
         assetId: asset.id,
-        monthlyRentalFee: 500000,
-        dailyRentalFee: 16000,
-        startDate: '2026-07-01',
-        endDate: '2026-12-31',
+        monthlyRentalFee,
+        dailyRentalFee,
+        startDate,
+        endDate,
         createdAt: new Date().toISOString()
       });
       assetIdx++;

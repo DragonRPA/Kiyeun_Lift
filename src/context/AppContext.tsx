@@ -74,6 +74,7 @@ interface AppContextType {
   extendContract: (contractId: string, newEndDate: string, description: string) => void;
   shortenContract: (contractId: string, newEndDate: string, description: string) => void;
   succeedContract: (contractId: string, successorCustomerId: string, successorContactId: string, successorSiteId: string, successionDate: string, description: string) => void;
+  exchangeAsset: (contractId: string, oldAssetId: string, newAssetId: string, exchangeDate: string) => void;
   
   // 장비 할당
   assignAssetToContract: (contractAssetId: string, assetId: string) => void;
@@ -85,7 +86,7 @@ interface AppContextType {
   // Billings
   generateBillingsForMonth: (billingYm: string, billingDate: string) => void;
   approveBilling: (billingId: string) => void;
-  rejectBilling: (billingId: string, reason: string) => void;
+  cancelBilling: (billingId: string) => void;
   receivePayment: (billingId: string, data: { paymentDate: string; amount: number; method: string; memo: string }) => void;
   
   // Deliveries
@@ -160,6 +161,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   useEffect(() => {
+    if (!localStorage.getItem('seed_v1_8_dummy_contracts_v2')) {
+      localStorage.removeItem('erp_contracts');
+      localStorage.removeItem('erp_contractAssets');
+      localStorage.setItem('seed_v1_8_dummy_contracts_v2', 'true');
+    }
+
     const savedTheme = localStorage.getItem('theme') as 'light' | 'dark';
     if (savedTheme) {
       setTheme(savedTheme);
@@ -850,12 +857,91 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     refreshAllData();
   };
 
+  const exchangeAsset = (contractId: string, oldAssetId: string, newAssetId: string, exchangeDate: string) => {
+    const contract = db.contracts.find(c => c.id === contractId);
+    if (!contract) return;
+
+    const caList = db.contractAssets.filter(ca => ca.contractId === contractId && ca.assetId === oldAssetId);
+    const ca = caList.find(c => !c.endDate || new Date(c.endDate) >= new Date(exchangeDate));
+    if (!ca) return;
+
+    const originalEndDate = ca.endDate;
+    db.updateRow<ContractAsset>('contractAssets', ca.id, { endDate: exchangeDate });
+
+    const oldAsset = db.assets.find(a => a.id === oldAssetId);
+    if (oldAsset) {
+      db.updateRow<Asset>('assets', oldAssetId, {
+        status: 'REPAIRING',
+        currentCustomerId: undefined,
+        currentSiteId: undefined,
+        contractStart: undefined,
+        contractEnd: undefined,
+        updatedAt: new Date().toISOString()
+      });
+    }
+
+    const nextDay = new Date(new Date(exchangeDate).getTime() + 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    const newAsset = db.assets.find(a => a.id === newAssetId);
+    if (newAsset) {
+      db.insertRow<ContractAsset>('contractAssets', {
+        contractId: contractId,
+        assetId: newAssetId,
+        monthlyRentalFee: ca.monthlyRentalFee,
+        dailyRentalFee: ca.dailyRentalFee,
+        startDate: nextDay,
+        endDate: originalEndDate || contract.endDate,
+        createdAt: new Date().toISOString()
+      });
+
+      db.updateRow<Asset>('assets', newAssetId, {
+        status: 'RENTED',
+        currentCustomerId: contract.customerId,
+        currentSiteId: contract.siteId,
+        contractStart: nextDay,
+        contractEnd: originalEndDate || contract.endDate,
+        monthlyRentalFee: ca.monthlyRentalFee,
+        dailyRentalFee: ca.dailyRentalFee,
+        updatedAt: new Date().toISOString()
+      });
+    }
+
+    db.insertRow<Delivery>('deliveries', {
+      contractId: contractId,
+      type: 'EXCHANGE',
+      status: 'REQUESTED',
+      requestDate: exchangeDate,
+      deliveryCost: 0,
+      isCostSettled: false,
+      memo: `장비 교체 의뢰 (구: ${oldAsset?.assetNo || '미상'} -> 신: ${newAsset?.assetNo || '미상'})`,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    });
+
+    db.insertRow<ContractHistory>('contractHistory', {
+      contractId,
+      changeType: 'SHORTEN',
+      changeDate: exchangeDate,
+      description: `장비 교체 완료 (구: ${oldAsset?.assetNo || '미상'} -> 신: ${newAsset?.assetNo || '미상'})`,
+      createdAt: new Date().toISOString()
+    });
+
+    refreshAllData();
+  };
+
   const generateBillingsForMonth = (billingYm: string, billingDate: string) => {
     const [year, month] = billingYm.split('-').map(Number);
     const startOfMonth = new Date(year, month - 1, 1);
     const endOfMonth = new Date(year, month, 0);
 
-    const activeContracts = db.contracts.filter(c => c.status !== 'COMPLETED');
+    const activeContracts = db.contracts.filter(c => {
+      const contractStart = new Date(c.startDate);
+      const contractEnd = c.endDate ? new Date(c.endDate) : null;
+      
+      if (contractStart > endOfMonth) return false;
+      if (contractEnd && contractEnd < startOfMonth) return false;
+      
+      return true;
+    });
     
     const customerContractsMap: Record<string, Contract[]> = {};
     activeContracts.forEach(c => {
@@ -877,7 +963,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         
         cAssets.forEach(ca => {
           const assetStart = new Date(ca.startDate);
-          const assetEnd = new Date(ca.endDate);
+          const rawEndDate = ca.endDate || c.endDate;
+          const assetEnd = rawEndDate ? new Date(rawEndDate) : endOfMonth;
           
           const calcStart = assetStart > startOfMonth ? assetStart : startOfMonth;
           const calcEnd = assetEnd < endOfMonth ? assetEnd : endOfMonth;
@@ -992,8 +1079,33 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     refreshAllData();
   };
 
-  const rejectBilling = (billingId: string, reason: string) => {
-    db.updateRow<Billing>('billings', billingId, { status: 'REJECTED', rejectReason: reason });
+  const cancelBilling = (billingId: string) => {
+    const billing = db.billings.find(b => b.id === billingId);
+    if (!billing) return;
+
+    const details = db.billingDetails.filter(bd => bd.billingId === billingId);
+
+    details.forEach(bd => {
+      if (bd.contractAssetId) {
+        const ca = db.contractAssets.find(x => x.id === bd.contractAssetId);
+        if (ca) {
+          const assetInfo = db.assets.find(a => a.id === ca.assetId);
+          if (assetInfo) {
+            db.updateRow<Asset>('assets', assetInfo.id, {
+              cumRentalFee: Math.max(0, (assetInfo.cumRentalFee || 0) - bd.amount),
+              updatedAt: new Date().toISOString()
+            });
+          }
+        }
+      }
+    });
+
+    details.forEach(bd => {
+      db.deleteRow('billingDetails', bd.id);
+    });
+
+    db.deleteRow('billings', billingId);
+
     refreshAllData();
   };
 
@@ -1161,11 +1273,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       refreshAllData, updatePermissions, saveUser, saveCustomer, saveContact, saveSite, saveProduct,
       acquireAsset, disposeAsset, registerRentedAsset, returnRentedAsset,
       purchaseConsumable, useConsumable,
-      createContract, extendContract, shortenContract, succeedContract,
+      createContract, extendContract, shortenContract, succeedContract, exchangeAsset,
       assignAssetToContract,
       saveSmartDispatch,
       completeTodo,
-      generateBillingsForMonth, approveBilling, rejectBilling, receivePayment,
+      generateBillingsForMonth, approveBilling, cancelBilling, receivePayment,
       dispatchDelivery, settleDeliveryCost,
       registerRepair,
       saveTransportDataOnFly

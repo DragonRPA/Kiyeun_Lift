@@ -9,7 +9,7 @@ import { Contract } from '../services/db';
 export const Contracts: React.FC = () => {
   const {
     contracts, contractAssets, contractHistory, customers, contacts, sites, assets,
-    createContract, extendContract, shortenContract, succeedContract, hasPermission
+    createContract, extendContract, shortenContract, succeedContract, exchangeAsset, hasPermission
   } = useApp();
 
   const canSave = hasPermission('contract', 'save');
@@ -26,6 +26,7 @@ export const Contracts: React.FC = () => {
   const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
   const [endDate, setEndDate] = useState(new Date(new Date().getTime() + 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]);
   const [billingDay, setBillingDay] = useState(30);
+  const [statementClosingDay, setStatementClosingDay] = useState(25);
   
   // 계약 등록 중 자산 바스켓
   const [basket, setBasket] = useState<{ assetId: string; monthlyRentalFee: number; dailyRentalFee: number }[]>([]);
@@ -46,6 +47,31 @@ export const Contracts: React.FC = () => {
   const [succSiteId, setSuccSiteId] = useState('');
   const [succDate, setSuccDate] = useState(new Date().toISOString().split('T')[0]);
   const [succDesc, setSuccDesc] = useState('');
+  
+  // --- 장비 교체 상태 ---
+  const [showExchangeModal, setShowExchangeModal] = useState(false);
+  const [exchangeContractAssetId, setExchangeContractAssetId] = useState('');
+  const [exchangeOldAssetId, setExchangeOldAssetId] = useState('');
+  const [exchangeNewAssetId, setExchangeNewAssetId] = useState('');
+  const [exchangeDate, setExchangeDate] = useState(new Date().toISOString().split('T')[0]);
+
+  const handleOpenExchange = (caId: string, oldAssetId: string) => {
+    setExchangeContractAssetId(caId);
+    setExchangeOldAssetId(oldAssetId);
+    setExchangeNewAssetId('');
+    setExchangeDate(new Date().toISOString().split('T')[0]);
+    setShowExchangeModal(true);
+  };
+
+  const handleExchangeSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!canSave || !selectedContractId || !exchangeOldAssetId || !exchangeNewAssetId) return;
+
+    exchangeAsset(selectedContractId, exchangeOldAssetId, exchangeNewAssetId, exchangeDate);
+    alert('장비 교체 처리가 완료되었습니다. 회수 및 대체 출고 배차 의뢰가 자동 생성되었습니다.');
+    setShowExchangeModal(false);
+    setExchangeNewAssetId('');
+  };
 
   // --- 이메일 전송 상태 ---
   const [mailContractId, setMailContractId] = useState('');
@@ -66,6 +92,8 @@ export const Contracts: React.FC = () => {
 
   // 대기상태 장비 목록 (계약 추가용)
   const availableAssets = assets.filter(a => a.status === 'AVAILABLE');
+  const oldAssetToExchange = assets.find(a => a.id === exchangeOldAssetId);
+  const filteredAvailableAssets = assets.filter(a => a.status === 'AVAILABLE' && (oldAssetToExchange ? a.modelName === oldAssetToExchange.modelName : true));
 
   // 계약 등록 중 자산 추가
   const handleAddToBasket = () => {
@@ -100,6 +128,7 @@ export const Contracts: React.FC = () => {
       startDate,
       endDate,
       billingDay,
+      statementClosingDay,
       status: 'ACTIVE'
     }, basket);
 
@@ -282,7 +311,7 @@ export const Contracts: React.FC = () => {
                     <div><label>현장구분</label>{getSiteName(activeContract.siteId)}</div>
                     <div><label>계약시작일</label>{activeContract.startDate}</div>
                     <div><label>계약만료일</label>{activeContract.endDate}</div>
-                    <div><label>마감 기준일</label>매월 {activeContract.billingDay}일</div>
+                    <div><label>청구 / 명세서 마감일</label>매월 {activeContract.billingDay}일 / {activeContract.statementClosingDay || '-'}일</div>
                     <div><label>구글드라이브 폴더</label>
                       <a href={`https://drive.google.com/drive/folders/${activeContract.driveFolderId}`} target="_blank" rel="noreferrer" style={{ color: 'var(--primary)', fontWeight: '600' }}>
                         구글드라이브 열기 (링크)
@@ -292,12 +321,13 @@ export const Contracts: React.FC = () => {
 
                   <h4 style={{ fontWeight: '600', marginBottom: '10px', fontSize: '14px' }}>계약 체결 장비 목록</h4>
                   <div className="table-container" style={{ border: 'none', boxShadow: 'none', marginBottom: '20px' }}>
-                    <table style={{ minWidth: '350px' }}>
+                    <table style={{ minWidth: '400px' }}>
                       <thead>
                         <tr>
                           <th>자산번호</th>
                           <th>모델명</th>
                           <th>월 렌탈료</th>
+                          <th>관리</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -305,9 +335,21 @@ export const Contracts: React.FC = () => {
                           const assetInfo = assets.find(a => a.id === ca.assetId);
                           return (
                             <tr key={ca.id}>
-                              <td><strong>{assetInfo?.assetNo}</strong></td>
-                              <td>{assetInfo?.modelName}</td>
+                              <td><strong>{assetInfo?.assetNo || '미지정'}</strong></td>
+                              <td>{assetInfo?.modelName || ca.expectedModel}</td>
                               <td>{ca.monthlyRentalFee.toLocaleString()}원</td>
+                              <td>
+                                {ca.assetId && activeContract.status !== 'COMPLETED' && canSave && (
+                                  <button
+                                    type="button"
+                                    className="btn-secondary"
+                                    onClick={() => handleOpenExchange(ca.id, ca.assetId!)}
+                                    style={{ padding: '2px 8px', fontSize: '11px' }}
+                                  >
+                                    장비교체
+                                  </button>
+                                )}
+                              </td>
                             </tr>
                           );
                         })}
@@ -374,6 +416,18 @@ export const Contracts: React.FC = () => {
                   type="number"
                   value={billingDay}
                   onChange={e => setBillingDay(parseInt(e.target.value) || 30)}
+                  min={1}
+                  max={30}
+                  required
+                />
+              </div>
+
+              <div>
+                <label>거래명세서 마감일자 기준 (일) *</label>
+                <input
+                  type="number"
+                  value={statementClosingDay}
+                  onChange={e => setStatementClosingDay(parseInt(e.target.value) || 25)}
                   min={1}
                   max={30}
                   required
@@ -707,6 +761,67 @@ export const Contracts: React.FC = () => {
               <button type="submit" className="btn-success" disabled={isSendingMail || !mailContractId}>
                 {isSendingMail ? '발송 중...' : <><Send size={14} /> 메일 발송하기</>}
               </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* 장비 교체 모달 */}
+      {showExchangeModal && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000
+        }}>
+          <form onSubmit={handleExchangeSubmit} className="card" style={{ width: '100%', maxWidth: '400px', backgroundColor: 'var(--bg-card)' }}>
+            <h3 className="card-title" style={{ marginBottom: '16px' }}>장비 교체 (대차 처리)</h3>
+            
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '20px' }}>
+              <div>
+                <label>기존 장비</label>
+                <input 
+                  type="text" 
+                  value={assets.find(a => a.id === exchangeOldAssetId) ? `${assets.find(a => a.id === exchangeOldAssetId)?.modelName} (관리번호: ${assets.find(a => a.id === exchangeOldAssetId)?.assetNo})` : ''} 
+                  disabled 
+                  style={{ width: '100%', padding: '8px', backgroundColor: 'var(--bg-body)' }}
+                />
+              </div>
+
+              <div>
+                <label>교체 장비 선택 *</label>
+                <select 
+                  value={exchangeNewAssetId} 
+                  onChange={e => setExchangeNewAssetId(e.target.value)}
+                  required
+                  style={{ width: '100%', padding: '8px' }}
+                >
+                  <option value="">-- 가용 장비 선택 --</option>
+                  {filteredAvailableAssets.map(a => (
+                    <option key={a.id} value={a.id}>{a.modelName} (관리번호: {a.assetNo})</option>
+                  ))}
+                  {filteredAvailableAssets.length === 0 && (
+                    <option disabled style={{ color: 'var(--danger)' }}>교체 가능한 동일 모델 가용 재고 없음</option>
+                  )}
+                </select>
+              </div>
+
+              <div>
+                <label>교체 일자 *</label>
+                <input 
+                  type="date" 
+                  value={exchangeDate} 
+                  onChange={e => setExchangeDate(e.target.value)} 
+                  required 
+                  style={{ width: '100%', padding: '8px' }}
+                />
+                <small style={{ color: 'var(--text-muted)', fontSize: '11px', display: 'block', marginTop: '4px' }}>
+                  * 교체일 당일까지는 기존 장비 요금이 일할 적용되며, 다음날부터 새 장비 요금이 청구됩니다.
+                </small>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+              <button type="button" className="btn-secondary" onClick={() => setShowExchangeModal(false)}>취소</button>
+              <button type="submit" className="btn-primary" disabled={!exchangeNewAssetId}>교체 완료</button>
             </div>
           </form>
         </div>
