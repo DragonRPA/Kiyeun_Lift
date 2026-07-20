@@ -184,6 +184,7 @@ export interface Contract {
   status: 'ACTIVE' | 'EXTENDED' | 'SHORTENED' | 'SUCCEEDED' | 'COMPLETED';
   successorContractId?: string;
   driveFolderId?: string;
+  salespersonId?: string; // 계약담당자 (영업사원 ID)
   createdAt: string;
   updatedAt: string;
   // 가상필드 (조인 시)

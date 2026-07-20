@@ -8,11 +8,19 @@ import { Contract } from '../services/db';
 
 export const Contracts: React.FC = () => {
   const {
-    contracts, contractAssets, contractHistory, customers, contacts, sites, assets,
+    contracts, contractAssets, contractHistory, customers, contacts, sites, assets, users, currentUser,
     createContract, extendContract, shortenContract, succeedContract, exchangeAsset, hasPermission
   } = useApp();
 
   const canSave = hasPermission('contract', 'save');
+
+  // 계약 변경 권한 검증 함수 (본인 계약 또는 청구 서포터 권한 소유자)
+  const canModifyContract = (contract: Contract) => {
+    if (!currentUser) return false;
+    if (currentUser.role === 'ADMIN') return true;
+    if (hasPermission('billing', 'save')) return true; // 청구 입력 권한 = 영업 서포터
+    return contract.salespersonId === currentUser.id;
+  };
 
   const [activeTab, setActiveTab] = useState<'LIST' | 'CREATE' | 'MODIFY' | 'TRANSFER' | 'EMAIL'>('LIST');
 
@@ -23,6 +31,7 @@ export const Contracts: React.FC = () => {
   const [custSelect, setCustSelect] = useState(customers[0]?.id || '');
   const [contactSelect, setContactSelect] = useState('');
   const [siteSelect, setSiteSelect] = useState('');
+  const [salespersonSelect, setSalespersonSelect] = useState(currentUser?.id || '');
   const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
   const [endDate, setEndDate] = useState(new Date(new Date().getTime() + 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]);
   const [billingDay, setBillingDay] = useState(30);
@@ -129,6 +138,7 @@ export const Contracts: React.FC = () => {
       endDate,
       billingDay,
       statementClosingDay,
+      salespersonId: salespersonSelect || undefined,
       status: 'ACTIVE'
     }, basket);
 
@@ -145,6 +155,11 @@ export const Contracts: React.FC = () => {
     const contract = contracts.find(c => c.id === modContractId);
     if (!contract) {
       alert('선택한 계약을 찾을 수 없습니다.');
+      return;
+    }
+
+    if (!canModifyContract(contract)) {
+      alert('본 계약의 변경 권한이 없습니다.');
       return;
     }
 
@@ -176,6 +191,12 @@ export const Contracts: React.FC = () => {
   const handleSuccessionSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!canSave || !succContractId || !succCustId) return;
+
+    const contract = contracts.find(c => c.id === succContractId);
+    if (!contract || !canModifyContract(contract)) {
+      alert('본 계약의 승계(변경) 권한이 없습니다.');
+      return;
+    }
 
     succeedContract(succContractId, succCustId, succContactId, succSiteId, succDate, succDesc);
     alert('계약 잔여기간 승계 처리가 승인되었습니다. 승계 대상 신규계약이 발행되었습니다.');
@@ -324,9 +345,15 @@ export const Contracts: React.FC = () => {
                   <h3 className="card-title" style={{ marginBottom: '16px', color: 'var(--primary)' }}>
                     계약 상세 명세: {activeContract.contractNo}
                   </h3>
+                  {!canModifyContract(activeContract) && (
+                    <div style={{ padding: '8px 12px', backgroundColor: 'rgba(239, 68, 68, 0.08)', border: '1px solid var(--danger)', borderRadius: '6px', color: 'var(--danger)', fontSize: '12.5px', marginBottom: '12px' }}>
+                      ⚠️ 본 계약의 담당 영업사원이 아니므로 변경 권한이 제한됩니다. (청구서포터 및 최고관리자는 수정 대행 가능)
+                    </div>
+                  )}
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', fontSize: '14px', marginBottom: '20px' }}>
                     <div><label>고객사</label><strong>{getCustName(activeContract.customerId)}</strong></div>
                     <div><label>현장구분</label>{getSiteName(activeContract.siteId)}</div>
+                    <div><label>계약담당자</label><strong>{users.find(u => u.id === activeContract.salespersonId)?.name || '지정없음'}</strong></div>
                     <div><label>계약시작일</label>{activeContract.startDate}</div>
                     <div><label>계약만료일</label>{activeContract.endDate}</div>
                     <div><label>청구 / 명세서 마감일</label>매월 {activeContract.billingDay}일 / {activeContract.statementClosingDay || '-'}일</div>
@@ -357,7 +384,7 @@ export const Contracts: React.FC = () => {
                               <td>{assetInfo?.modelName || ca.expectedModel}</td>
                               <td>{ca.monthlyRentalFee.toLocaleString()}원</td>
                               <td>
-                                {ca.assetId && activeContract.status !== 'COMPLETED' && canSave && (
+                                {ca.assetId && activeContract.status !== 'COMPLETED' && canSave && canModifyContract(activeContract) && (
                                   <button
                                     type="button"
                                     className="btn-secondary"
@@ -424,6 +451,16 @@ export const Contracts: React.FC = () => {
                 }} required>
                   {customers.filter(c => !c.isClosed).map(c => (
                     <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label>계약담당자 (영업사원) *</label>
+                <select value={salespersonSelect} onChange={e => setSalespersonSelect(e.target.value)} required>
+                  <option value="">-- 계약담당자 선택 --</option>
+                  {users.map(u => (
+                    <option key={u.id} value={u.id}>{u.name} ({u.role === 'ADMIN' ? '관리자' : u.role === 'SALES' ? '영업' : u.role === 'REPAIR' ? '정비' : u.role})</option>
                   ))}
                 </select>
               </div>
@@ -566,7 +603,7 @@ export const Contracts: React.FC = () => {
                 <label>변경할 계약 건 선택 *</label>
                 <select value={modContractId} onChange={e => setModContractId(e.target.value)} required>
                   <option value="">-- 활성 렌탈 계약 선택 --</option>
-                  {contracts.filter(c => c.status === 'ACTIVE' || c.status === 'EXTENDED').map(c => (
+                  {contracts.filter(c => (c.status === 'ACTIVE' || c.status === 'EXTENDED') && canModifyContract(c)).map(c => (
                     <option key={c.id} value={c.id}>{c.contractNo} - {getCustName(c.customerId)} (종료일: {c.endDate})</option>
                   ))}
                 </select>
@@ -617,7 +654,7 @@ export const Contracts: React.FC = () => {
                 <label>승계할 기존 계약건 선택 *</label>
                 <select value={succContractId} onChange={e => setSuccContractId(e.target.value)} required>
                   <option value="">-- 기존 진행 계약 선택 --</option>
-                  {contracts.filter(c => c.status === 'ACTIVE' || c.status === 'EXTENDED').map(c => (
+                  {contracts.filter(c => (c.status === 'ACTIVE' || c.status === 'EXTENDED') && canModifyContract(c)).map(c => (
                     <option key={c.id} value={c.id}>{c.contractNo} - {getCustName(c.customerId)} (기간: ~{c.endDate})</option>
                   ))}
                 </select>

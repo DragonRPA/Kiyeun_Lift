@@ -438,6 +438,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       startDate: new Date().toISOString().split('T')[0],
       endDate: '', 
       billingDay: 30,
+      salespersonId: currentUser?.id,
       status: 'ACTIVE',
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
@@ -791,6 +792,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const contract = db.insertRow<Contract>('contracts', {
       ...contractData,
       contractNo,
+      salespersonId: contractData.salespersonId || currentUser?.id,
       status: 'ACTIVE',
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
@@ -966,6 +968,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       startDate: nextDay,
       endDate: oldEndDate,
       billingDay: oldContract.billingDay,
+      salespersonId: oldContract.salespersonId,
       status: 'ACTIVE',
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
