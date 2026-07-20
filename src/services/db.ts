@@ -1036,6 +1036,11 @@ class LocalDB {
   }
 
   deleteRow<T extends { id: string }>(key: keyof LocalDB, id: string): boolean {
+    // 최고관리자 계정 절대 보호
+    if (key === 'users' && (id === 'u-1' || id === 'sys-admin')) {
+      console.warn('Cannot delete system administrator account.');
+      return false;
+    }
     const list = (this[key] as unknown) as T[];
     const filtered = list.filter(item => item.id !== id);
     if (filtered.length === list.length) return false;
@@ -1100,11 +1105,46 @@ class LocalDB {
     this.set('departments', departments);
     this.set('users', users);
     
-    // Supabase 연동 시: 실제 프로덕션에서는 diff(추가,수정,삭제)를 계산해서 각각 API를 호출하거나
-    // Supabase RPC(Stored Procedure)를 호출하여 통째로 동기화해야 하지만,
-    // 현재는 구조만 잡아두고 로컬 스토리지에 우선 저장함.
     if (supabase) {
-      console.log('Batch sync to Supabase (Departments, Users) is required here.');
+      const promise = (async () => {
+        try {
+          // 1. Departments Sync (삭제된 부서 식별 후 삭제, 신규/수정 부서 upsert)
+          const currentDepts = await supabase.from('departments').select('id');
+          if (currentDepts.data) {
+            const deptsToDelete = currentDepts.data
+              .map(d => d.id)
+              .filter(id => !departments.some(d => d.id === id));
+            if (deptsToDelete.length > 0) {
+              const { error: delErr } = await supabase.from('departments').delete().in('id', deptsToDelete);
+              if (delErr) console.error('Supabase delete departments failed:', delErr);
+            }
+          }
+          if (departments.length > 0) {
+            const { error: deptErr } = await supabase.from('departments').upsert(departments, { onConflict: 'id' });
+            if (deptErr) console.error('Supabase batch upsert departments failed:', deptErr);
+          }
+
+          // 2. Users Sync (삭제된 직원 식별 후 삭제, 신규/수정 직원 upsert)
+          const currentUsers = await supabase.from('users').select('id');
+          if (currentUsers.data) {
+            const usersToDelete = currentUsers.data
+              .map(u => u.id)
+              // admin 계정은 절대 삭제 리스트에서 제외
+              .filter(id => id !== 'u-1' && id !== 'sys-admin' && !users.some(u => u.id === id));
+            if (usersToDelete.length > 0) {
+              const { error: delErr } = await supabase.from('users').delete().in('id', usersToDelete);
+              if (delErr) console.error('Supabase delete users failed:', delErr);
+            }
+          }
+          if (users.length > 0) {
+            const { error: userErr } = await supabase.from('users').upsert(users, { onConflict: 'id' });
+            if (userErr) console.error('Supabase batch upsert users failed:', userErr);
+          }
+        } catch (e) {
+          console.error('Failed to sync organization batch to Supabase:', e);
+        }
+      })();
+      this.pendingWrites.push(promise);
     }
   }
 }

@@ -35,7 +35,7 @@ const INITIAL_DEPTS: Department[] = [];
 const INITIAL_USERS: UserNode[] = [];
 
 export const OrganizationSettings: React.FC = () => {
-  const { currentUser } = useApp();
+  const { currentUser, refreshAllData } = useApp();
   const isSuperAdmin = currentUser?.loginId === 'admin';
   const canEdit = currentUser?.role === 'ADMIN' || currentUser?.role === 'MANAGER';
   
@@ -147,7 +147,7 @@ const enforceManagerPolicies = (usersList: UserNode[], deptList: Department[]) =
   }, [isDirty]);
 
   // --- Manual Save (Batch to Supabase/DB) ---
-  const handleSaveAll = () => {
+  const handleSaveAll = async () => {
     // 실제 DB (또는 로컬 백그라운드 큐)에 일괄 업데이트
     db.saveOrganizationBatch(departments, users as any);
     
@@ -157,6 +157,10 @@ const enforceManagerPolicies = (usersList: UserNode[], deptList: Department[]) =
     // 혹시 모를 로컬스토리지 찌꺼기 덮어쓰기 (강제 동기화)
     localStorage.setItem('erp_departments', JSON.stringify(departments));
     localStorage.setItem('erp_users', JSON.stringify(users));
+    
+    if (refreshAllData) {
+      await refreshAllData();
+    }
     
     alert('조직도 및 구성원 마스터 데이터가 안전하게 저장되었습니다.');
   };
@@ -280,8 +284,13 @@ const enforceManagerPolicies = (usersList: UserNode[], deptList: Department[]) =
 
   // --- Profile Handlers ---
   const handleStatusChange = (userId: string, newStatus: UserNode['status']) => {
+    const targetUser = users.find(u => u.id === userId);
+    if (targetUser && (targetUser.loginId === 'admin' || targetUser.id === 'u-1' || targetUser.id === 'sys-admin')) {
+      alert('최고관리자(시스템관리자/admin) 계정은 재직 상태를 변경(퇴사/휴직 처리)할 수 없습니다.');
+      return;
+    }
+    
     if (newStatus === 'RETIRED') {
-      const targetUser = users.find(u => u.id === userId);
       if (targetUser) setShowHandoffModal(targetUser);
     } else {
       // 리렌더링을 유발하기 위해 setUsers 호출 및 selectedProfile 동기화
@@ -294,6 +303,11 @@ const enforceManagerPolicies = (usersList: UserNode[], deptList: Department[]) =
 
   const confirmRetirement = () => {
     if (showHandoffModal) {
+      if (showHandoffModal.loginId === 'admin' || showHandoffModal.id === 'u-1' || showHandoffModal.id === 'sys-admin') {
+        alert('최고관리자 계정은 퇴사 처리가 불가능합니다.');
+        setShowHandoffModal(null);
+        return;
+      }
       setUsers(prev => prev.map(u => u.id === showHandoffModal.id ? { ...u, status: 'RETIRED' } : u));
       if (selectedProfile?.id === showHandoffModal.id) {
         setSelectedProfile(prev => prev ? { ...prev, status: 'RETIRED' } : null);
@@ -304,7 +318,7 @@ const enforceManagerPolicies = (usersList: UserNode[], deptList: Department[]) =
 
   const applyProfileChanges = () => {
     if (selectedProfile) {
-      if (selectedProfile.id === 'sys-admin' && selectedProfile.role !== 'ADMIN') {
+      if ((selectedProfile.id === 'sys-admin' || selectedProfile.id === 'u-1' || selectedProfile.loginId === 'admin') && selectedProfile.role !== 'ADMIN') {
         alert('시스템 최고관리자의 시스템 역할은 변경할 수 없습니다.');
         return;
       }

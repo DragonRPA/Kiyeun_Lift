@@ -470,20 +470,11 @@ CREATE TABLE asset_inout_logs (
 -- 초기 기초 데이터 시딩 (Seed Data)
 -- ==========================================
 
--- 1. 부서 및 조직도 시드
-INSERT INTO departments (id, name, "parentDepartmentId", "createdAt") VALUES
-('dept-1', '경영지원본부', NULL, TO_CHAR(NOW(), 'YYYY-MM-DD"T"HH24:MI:SS"Z"')),
-('dept-2', '영업부', 'dept-1', TO_CHAR(NOW(), 'YYYY-MM-DD"T"HH24:MI:SS"Z"')),
-('dept-3', '정비팀(메카닉)', 'dept-1', TO_CHAR(NOW(), 'YYYY-MM-DD"T"HH24:MI:SS"Z"')),
-('dept-4', '관리부(배차/영업지원)', 'dept-1', TO_CHAR(NOW(), 'YYYY-MM-DD"T"HH24:MI:SS"Z"'));
+-- 1. 부서 및 조직도 시드 (비어 있음)
 
--- 2. 사용자 시드 (상하급자 관계 포함)
+-- 2. 사용자 시드 (최고관리자만 등록)
 INSERT INTO users (id, "loginId", "passwordHash", name, "departmentId", position, "managerId", role, status, "joinDate", "createdAt") VALUES
-('u-1', 'admin', 'admin123', '김대표', 'dept-1', '대표이사', NULL, 'ADMIN', 'ACTIVE', '2020-01-01', TO_CHAR(NOW(), 'YYYY-MM-DD"T"HH24:MI:SS"Z"')),
-('u-2', 'manager', 'mgr123', '박부장', 'dept-2', '부장', 'u-1', 'MANAGER', 'ACTIVE', '2021-03-01', TO_CHAR(NOW(), 'YYYY-MM-DD"T"HH24:MI:SS"Z"')),
-('u-3', 'user', 'user123', '이과장', 'dept-2', '과장', 'u-2', 'USER', 'ACTIVE', '2022-05-10', TO_CHAR(NOW(), 'YYYY-MM-DD"T"HH24:MI:SS"Z"')),
-('u-4', 'mechanic', 'mech123', '최정비', 'dept-3', '주임', 'u-1', 'MECHANIC', 'ACTIVE', '2023-08-15', TO_CHAR(NOW(), 'YYYY-MM-DD"T"HH24:MI:SS"Z"')),
-('u-5', 'admin2', 'admin123', '정배차', 'dept-4', '대리', 'u-1', 'ADMIN', 'ACTIVE', '2022-11-01', TO_CHAR(NOW(), 'YYYY-MM-DD"T"HH24:MI:SS"Z"'));
+('u-1', 'admin', 'admin123', '시스템관리자', NULL, '대표이사', NULL, 'ADMIN', 'ACTIVE', '2020-01-01', TO_CHAR(NOW(), 'YYYY-MM-DD"T"HH24:MI:SS"Z"'));
 
 -- 3. 매입 거래처(vendors) 시드
 INSERT INTO vendors (id, name, type, "contactName", contact, "createdAt") VALUES
