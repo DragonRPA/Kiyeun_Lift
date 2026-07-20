@@ -1,12 +1,13 @@
 // d:\Kiyeun_Lift\src\pages\Customers.tsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { Plus, Search, MapPin, Phone, User, Mail, PlusCircle, Building } from 'lucide-react';
 import { Customer, CustomerContact, CustomerSite } from '../services/db';
 
 export const Customers: React.FC = () => {
   const {
-    customers, contacts, sites, saveCustomer, saveContact, saveSite, hasPermission
+    customers, contacts, sites, saveCustomer, saveContact, saveSite, hasPermission,
+    navigationPayload, setNavigationPayload
   } = useApp();
 
   const canSave = hasPermission('customer', 'save');
@@ -30,6 +31,18 @@ export const Customers: React.FC = () => {
   const activeCustomer = customers.find(c => c.id === selectedCustomerId);
   const customerContacts = contacts.filter(cc => cc.customerId === selectedCustomerId);
   const customerSites = sites.filter(cs => cs.customerId === selectedCustomerId);
+
+  useEffect(() => {
+    if (navigationPayload?.editCustomerId) {
+      const targetCust = customers.find(c => c.id === navigationPayload.editCustomerId);
+      if (targetCust) {
+        setSelectedCustomerId(targetCust.id);
+        setEditingCust({ ...targetCust });
+        setShowCustModal(true);
+      }
+      setNavigationPayload(null);
+    }
+  }, [navigationPayload, customers, setNavigationPayload]);
 
   // 검색 필터링된 고객 목록
   const filteredCustomers = customers.filter(c => 
@@ -314,8 +327,16 @@ export const Customers: React.FC = () => {
           position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
           backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000
         }}>
-          <form onSubmit={handleSaveCustSubmit} className="card" style={{ width: '100%', maxWidth: '500px', backgroundColor: 'var(--bg-card)' }}>
+          <form onSubmit={handleSaveCustSubmit} className="card" style={{ width: '100%', maxWidth: '500px', backgroundColor: 'var(--bg-card)', padding: '24px', borderRadius: '12px' }}>
             <h3 className="card-title" style={{ marginBottom: '16px' }}>{editingCust.id ? '고객사 정보 수정' : '신규 고객사 등록'}</h3>
+            
+            {editingCust.id && (editingCust.bizRegNo === '미상' || editingCust.representative === '미상' || editingCust.repContact === '미상' || editingCust.repEmail === '미상' || editingCust.address === '미상') && (
+              <div style={{ backgroundColor: 'rgba(239, 68, 68, 0.08)', border: '1px solid var(--danger)', borderRadius: '8px', padding: '12px', marginBottom: '16px', fontSize: '12.5px', color: 'var(--danger)', display: 'flex', flexDirection: 'column', gap: '4px', lineHeight: '1.4' }}>
+                <strong style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>⚠️ 임시(가등록) 고객사 정보 보완이 필요합니다.</strong>
+                <span>스마트 출고로 생성된 가등록 정보입니다. 아래의 빨간색 '미상' 항목들을 모두 실제 데이터로 수정해 주시면 대시보드 할 일(ToDo)이 완료 처리됩니다.</span>
+              </div>
+            )}
+
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '20px' }}>
               <div>
                 <label>고객사명 *</label>
@@ -329,12 +350,18 @@ export const Customers: React.FC = () => {
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                 <div>
-                  <label>사업자등록번호</label>
+                  <label style={{ color: (editingCust.bizRegNo === '미상' || !editingCust.bizRegNo) ? 'var(--danger)' : 'inherit', fontWeight: (editingCust.bizRegNo === '미상') ? '600' : 'normal' }}>
+                    사업자등록번호 {(editingCust.bizRegNo === '미상') && ' (입력필수)'}
+                  </label>
                   <input
                     type="text"
                     value={editingCust.bizRegNo || ''}
                     onChange={e => setEditingCust({ ...editingCust, bizRegNo: e.target.value })}
                     placeholder="000-00-00000"
+                    style={{
+                      border: (editingCust.bizRegNo === '미상' || !editingCust.bizRegNo) ? '1.5px solid var(--danger)' : '1px solid var(--border)',
+                      backgroundColor: (editingCust.bizRegNo === '미상') ? 'rgba(239, 68, 68, 0.02)' : 'inherit'
+                    }}
                   />
                 </div>
                 <div>
@@ -350,40 +377,69 @@ export const Customers: React.FC = () => {
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                 <div>
-                  <label>대표자명</label>
+                  <label style={{ color: (editingCust.representative === '미상' || !editingCust.representative) ? 'var(--danger)' : 'inherit', fontWeight: (editingCust.representative === '미상') ? '600' : 'normal' }}>
+                    대표자명 {(editingCust.representative === '미상') && ' (입력필수)'}
+                  </label>
                   <input
                     type="text"
                     value={editingCust.representative || ''}
                     onChange={e => setEditingCust({ ...editingCust, representative: e.target.value })}
                     placeholder="홍길동"
+                    style={{
+                      border: (editingCust.representative === '미상' || !editingCust.representative) ? '1.5px solid var(--danger)' : '1px solid var(--border)',
+                      backgroundColor: (editingCust.representative === '미상') ? 'rgba(239, 68, 68, 0.02)' : 'inherit'
+                    }}
                   />
                 </div>
                 <div>
-                  <label>대표 연락처</label>
+                  <label style={{ color: (editingCust.repContact === '미상' || !editingCust.repContact) ? 'var(--danger)' : 'inherit', fontWeight: (editingCust.repContact === '미상') ? '600' : 'normal' }}>
+                    대표 연락처 {(editingCust.repContact === '미상') && ' (입력필수)'}
+                  </label>
                   <input
                     type="text"
                     value={editingCust.repContact || ''}
                     onChange={e => setEditingCust({ ...editingCust, repContact: e.target.value })}
                     placeholder="02-000-0000"
+                    style={{
+                      border: (editingCust.repContact === '미상' || !editingCust.repContact) ? '1.5px solid var(--danger)' : '1px solid var(--border)',
+                      backgroundColor: (editingCust.repContact === '미상') ? 'rgba(239, 68, 68, 0.02)' : 'inherit'
+                    }}
                   />
                 </div>
               </div>
               <div>
-                <label>대표 이메일</label>
+                <label style={{ color: (editingCust.repEmail === '미상' || !editingCust.repEmail) ? 'var(--danger)' : 'inherit', fontWeight: (editingCust.repEmail === '미상') ? '600' : 'normal' }}>
+                  대표 이메일 {(editingCust.repEmail === '미상') && ' (입력필수)'}
+                </label>
                 <input
                   type="email"
                   value={editingCust.repEmail || ''}
                   onChange={e => setEditingCust({ ...editingCust, repEmail: e.target.value })}
                   placeholder="contact@company.com"
+                  style={{
+                    border: (editingCust.repEmail === '미상' || !editingCust.repEmail) ? '1.5px solid var(--danger)' : '1px solid var(--border)',
+                    backgroundColor: (editingCust.repEmail === '미상') ? 'rgba(239, 68, 68, 0.02)' : 'inherit'
+                  }}
                 />
               </div>
               <div>
-                <label>본사 주소</label>
+                <label style={{ color: (editingCust.address === '미상' || !editingCust.address) ? 'var(--danger)' : 'inherit', fontWeight: (editingCust.address === '미상') ? '600' : 'normal' }}>
+                  본사 주소 {(editingCust.address === '미상') && ' (입력필수)'}
+                </label>
                 <textarea
                   value={editingCust.address || ''}
                   onChange={e => setEditingCust({ ...editingCust, address: e.target.value })}
                   placeholder="도로명 주소"
                   rows={2}
+                  style={{
+                    border: (editingCust.address === '미상' || !editingCust.address) ? '1.5px solid var(--danger)' : '1px solid var(--border)',
+                    backgroundColor: (editingCust.address === '미상') ? 'rgba(239, 68, 68, 0.02)' : 'inherit',
+                    width: '100%',
+                    padding: '8px',
+                    borderRadius: '6px',
+                    fontFamily: 'inherit',
+                    fontSize: '14px'
+                  }}
                 />
               </div>
             </div>

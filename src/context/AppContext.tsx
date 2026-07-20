@@ -104,6 +104,12 @@ interface AppContextType {
   
   // Transport Master
   saveTransportDataOnFly: (companyName: string, driverName: string, contact: string, vehicleNo: string, vehicleType: string) => void;
+
+  // Navigation states (cross-page routing)
+  activeTab: string;
+  setActiveTab: (tab: string) => void;
+  navigationPayload: any;
+  setNavigationPayload: (payload: any) => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -136,6 +142,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [todos, setTodos] = useState<Todo[]>([]);
   const [bankTransactions, setBankTransactions] = useState<BankTransaction[]>([]);
   const [bankMatchingRules, setBankMatchingRules] = useState<BankMatchingRule[]>([]);
+
+  // Navigation / Routing states
+  const [activeTab, setActiveTab] = useState<string>('dashboard');
+  const [navigationPayload, setNavigationPayload] = useState<any>(null);
 
   const refreshAllData = async () => {
     if (db.isSupabaseConnected()) {
@@ -263,6 +273,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     let res: Customer;
     if (cust.id) {
       res = db.updateRow<Customer>('customers', cust.id, cust) as Customer;
+
+      // 고객 정보 보완 완료 시 관련 할 일(Todo) 자동 상계 처리
+      const relatedTodos = db.todos.filter(
+        t => t.relatedEntityId === cust.id && t.type === 'MISSING_INFO' && !t.isCompleted
+      );
+      if (relatedTodos.length > 0) {
+        const isInfoComplete = 
+          cust.bizRegNo && cust.bizRegNo !== '미상' && cust.bizRegNo.trim() !== '' &&
+          cust.representative && cust.representative !== '미상' && cust.representative.trim() !== '' &&
+          cust.repContact && cust.repContact !== '미상' && cust.repContact.trim() !== '' &&
+          cust.address && cust.address !== '미상' && cust.address.trim() !== '' &&
+          cust.repEmail && cust.repEmail !== '미상' && cust.repEmail.trim() !== '';
+
+        if (isInfoComplete) {
+          relatedTodos.forEach(todo => {
+            db.updateRow<Todo>('todos', todo.id, { isCompleted: true });
+          });
+        }
+      }
     } else {
       res = db.insertRow<Customer>('customers', { ...cust, createdAt: new Date().toISOString() }) as Customer;
     }
@@ -1512,7 +1541,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       uploadBankTransactions, matchTransactionManual, unmatchTransaction, deleteMatchingRule,
       dispatchDelivery, settleDeliveryCost,
       registerRepair,
-      saveTransportDataOnFly
+      saveTransportDataOnFly,
+      activeTab,
+      setActiveTab,
+      navigationPayload,
+      setNavigationPayload
     }}>
       {children}
     </AppContext.Provider>

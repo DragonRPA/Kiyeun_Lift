@@ -28,7 +28,7 @@ import { AssetAssignment } from './pages/AssetAssignment';
 import { OrganizationSettings } from './pages/OrganizationSettings';
 
 const App: React.FC = () => {
-  const { currentUser, login, logout, theme, toggleTheme, hasPermission } = useApp();
+  const { currentUser, login, logout, theme, toggleTheme, hasPermission, activeTab, setActiveTab } = useApp();
 
   // 로그인 폼 상태
   const [loginId, setLoginId] = useState('');
@@ -42,9 +42,6 @@ const App: React.FC = () => {
 
   // 모바일 메뉴 사이드바 토글 상태
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-
-  // 현재 활성화된 메뉴 탭 상태
-  const [activeTab, setActiveTab] = useState<string>('dashboard');
 
   // 컴포넌트 마운트 시 저장된 로그인 편의 정보 로드
   useEffect(() => {

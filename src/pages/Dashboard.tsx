@@ -4,7 +4,7 @@ import { useApp } from '../context/AppContext';
 import { Activity, ShieldAlert, Users, Layers, ShieldCheck, Wrench, Truck, CreditCard, ShoppingBag, CheckCircle, Bell } from 'lucide-react';
 
 export const Dashboard: React.FC = () => {
-  const { currentUser, assets, contracts, consumables, repairs, deliveries, billings, customers, todos, completeTodo } = useApp();
+  const { currentUser, assets, contracts, consumables, repairs, deliveries, billings, customers, todos, completeTodo, setActiveTab, setNavigationPayload } = useApp();
 
   const myTodos = todos.filter(t => t.userId === currentUser?.id && !t.isCompleted);
 
@@ -86,21 +86,37 @@ export const Dashboard: React.FC = () => {
             <span>나의 할 일 (정보 보완 요망) - {myTodos.length}건</span>
           </div>
           <div style={{ display: 'grid', gap: '8px' }}>
-            {myTodos.map(todo => (
-              <div key={todo.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#fff', padding: '12px', borderRadius: '6px', border: '1px solid #fef08a' }}>
-                <div>
-                  <div style={{ fontWeight: '600', fontSize: '14px', color: '#92400e' }}>{todo.title}</div>
-                  <div style={{ fontSize: '12px', color: '#b45309', marginTop: '4px' }}>{todo.content}</div>
+            {myTodos.map(todo => {
+              const isMissingInfo = todo.type === 'MISSING_INFO';
+              return (
+                <div key={todo.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#fff', padding: '12px', borderRadius: '6px', border: '1px solid #fef08a' }}>
+                  <div>
+                    <div style={{ fontWeight: '600', fontSize: '14px', color: '#92400e' }}>{todo.title}</div>
+                    <div style={{ fontSize: '12px', color: '#b45309', marginTop: '4px' }}>{todo.content}</div>
+                  </div>
+                  {isMissingInfo ? (
+                    <button 
+                      className="btn-primary"
+                      style={{ padding: '6px 12px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px', backgroundColor: 'var(--primary)' }}
+                      onClick={() => {
+                        setActiveTab('customers');
+                        setNavigationPayload({ editCustomerId: todo.relatedEntityId });
+                      }}
+                    >
+                      <Layers size={14} /> 정보 보완하러 가기
+                    </button>
+                  ) : (
+                    <button 
+                      className="btn-primary"
+                      style={{ padding: '6px 12px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px' }}
+                      onClick={() => completeTodo(todo.id)}
+                    >
+                      <CheckCircle size={14} /> 확인 (보완 완료)
+                    </button>
+                  )}
                 </div>
-                <button 
-                  className="btn-primary"
-                  style={{ padding: '6px 12px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px' }}
-                  onClick={() => completeTodo(todo.id)}
-                >
-                  <CheckCircle size={14} /> 확인 (보완 완료)
-                </button>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
