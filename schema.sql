@@ -546,6 +546,19 @@ CREATE TABLE google_configs (
     "updatedAt" TEXT NOT NULL
 );
 
+-- 39. CashFlow 스냅샷 테이블 (cash_flow_snapshots)
+CREATE TABLE cash_flow_snapshots (
+    id TEXT PRIMARY KEY,
+    "snapshotDate" TEXT NOT NULL,
+    "startingBalance" BIGINT NOT NULL,
+    "projectedInflow" BIGINT NOT NULL,
+    "projectedOpex" BIGINT NOT NULL,
+    "projectedCapex" BIGINT NOT NULL,
+    "projectedFinalBalance" BIGINT NOT NULL,
+    notes TEXT,
+    "createdAt" TEXT NOT NULL
+);
+
 
 -- ==========================================
 -- 초기 기초 데이터 시딩 (Seed Data)

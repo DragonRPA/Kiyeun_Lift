@@ -407,6 +407,18 @@ export interface GoogleConfig {
   updatedAt: string;
 }
 
+export interface CashFlowSnapshot {
+  id: string;
+  snapshotDate: string; // 스냅샷 작성일 (YYYY-MM-DD)
+  startingBalance: number; // 스냅샷 시점의 통장 총잔액
+  projectedInflow: number; // 향후 30일 수납 예정액
+  projectedOpex: number; // 향후 30일 일반 지출예정액
+  projectedCapex: number; // 향후 30일 CAPEX 지출예정액
+  projectedFinalBalance: number; // 30일 후 최종 예상잔액
+  notes?: string; // 경영자 의사결정 코멘트
+  createdAt: string;
+}
+
 export interface AssetInOutLog {
   id: string;
   assetId: string;
@@ -798,6 +810,20 @@ const SEED_GOOGLE_CONFIG: GoogleConfig[] = [
   }
 ];
 
+const SEED_CASH_FLOW_SNAPSHOTS: CashFlowSnapshot[] = [
+  {
+    id: 'snap-1',
+    snapshotDate: '2026-07-20',
+    startingBalance: 17350000,
+    projectedInflow: 38200000,
+    projectedOpex: 28500000,
+    projectedCapex: 45000000,
+    projectedFinalBalance: -17950000,
+    notes: '7월 정기 고소작업대 2대 추가 CAPEX 취득에 따른 일시적 유동성 부족 예상',
+    createdAt: new Date().toISOString()
+  }
+];
+
 class LocalDB {
   private get<T>(key: string, seed: T[]): T[] {
     const val = localStorage.getItem(`erp_${key}`);
@@ -896,6 +922,9 @@ class LocalDB {
   get assetInOutLogs() { return this.get<AssetInOutLog>('assetInOutLogs', []); }
   set assetInOutLogs(val: AssetInOutLog[]) { this.set('assetInOutLogs', val); }
 
+  get cashFlowSnapshots() { return this.get<CashFlowSnapshot>('cashFlowSnapshots', SEED_CASH_FLOW_SNAPSHOTS); }
+  set cashFlowSnapshots(val: CashFlowSnapshot[]) { this.set('cashFlowSnapshots', val); }
+
   // Supabase 테이블 맵핑
   private mapToSupabaseTable(key: string): string {
     const mapping: Record<string, string> = {
@@ -925,7 +954,8 @@ class LocalDB {
       bankMatchingRules: 'bank_matching_rules',
       assetInOutLogs: 'asset_inout_logs',
       googleConfigs: 'google_configs',
-      vendors: 'vendors'
+      vendors: 'vendors',
+      cashFlowSnapshots: 'cash_flow_snapshots'
     };
     return mapping[key] || key;
   }
