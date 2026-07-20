@@ -1,8 +1,9 @@
 // d:\Kiyeun_Lift\src\pages\Deliveries.tsx
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { Truck, Check, DollarSign, Calendar, Navigation, AlertTriangle, CheckCircle, ShieldAlert } from 'lucide-react';
+import { Truck, Check, DollarSign, Calendar, Navigation, AlertTriangle, CheckCircle, ShieldAlert, Download, Search } from 'lucide-react';
 import { Delivery } from '../services/db';
+import { exportToExcel } from '../services/excel';
 
 interface SettleVehicle {
   id: string;
@@ -21,6 +22,17 @@ export const Deliveries: React.FC = () => {
   } = useApp();
 
   const canSave = hasPermission('delivery', 'save');
+
+  // --- 배차 조회 필터 상태 ---
+  const [tempSearchTerm, setTempSearchTerm] = useState('');
+  const [tempTypeFilter, setTempTypeFilter] = useState('ALL');
+  const [tempStatusFilter, setTempStatusFilter] = useState('ALL');
+  const [tempSettleFilter, setTempSettleFilter] = useState('ALL');
+
+  const [searchTerm, setSearchTerm] = useState('');
+  const [typeFilter, setTypeFilter] = useState('ALL');
+  const [statusFilter, setStatusFilter] = useState('ALL');
+  const [settleFilter, setSettleFilter] = useState('ALL');
 
   // 배차 입력 모달 상태
   const [showDispatchModal, setShowDispatchModal] = useState(false);
@@ -52,6 +64,81 @@ export const Deliveries: React.FC = () => {
   const getContractNo = (contractId?: string) => {
     if (!contractId) return '-';
     return contracts.find(c => c.id === contractId)?.contractNo || '-';
+  };
+
+  const handleSearchClick = () => {
+    setSearchTerm(tempSearchTerm);
+    setTypeFilter(tempTypeFilter);
+    setStatusFilter(tempStatusFilter);
+    setSettleFilter(tempSettleFilter);
+  };
+
+  const filteredDeliveries = deliveries.filter(d => {
+    let displayName = getCustNameFromContract(d.contractId).toLowerCase();
+    if (displayName === '-' && d.memo.includes('[외주정비회수]')) {
+      const match = d.memo.match(/외주업체:\s*(.*?)\s*\|/);
+      displayName = match ? `${match[1]} (외주회수)`.toLowerCase() : '외주정비 공장';
+    }
+
+    const matchesSearch = 
+      d.memo.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      displayName.includes(searchTerm.toLowerCase()) ||
+      (d.contractId && getContractNo(d.contractId).toLowerCase().includes(searchTerm.toLowerCase()));
+
+    const matchesType = typeFilter === 'ALL' || d.type === typeFilter;
+    const matchesStatus = statusFilter === 'ALL' || d.status === statusFilter;
+    
+    let matchesSettle = true;
+    if (settleFilter === 'UNSETTLED') {
+      matchesSettle = !d.isCostSettled;
+    } else if (settleFilter === 'SETTLED') {
+      matchesSettle = d.isCostSettled;
+    }
+
+    return matchesSearch && matchesType && matchesStatus && matchesSettle;
+  });
+
+  const handleExportExcel = () => {
+    const excelData = filteredDeliveries.map((d, idx) => {
+      let displayName = getCustNameFromContract(d.contractId);
+      if (displayName === '-' && d.memo.includes('[외주정비회수]')) {
+        const match = d.memo.match(/외주업체:\s*(.*?)\s*\|/);
+        displayName = match ? `${match[1]} (외주회수)` : '외주정비 공장';
+      }
+
+      let vehiclesSummary = '';
+      if (d.vehicles) {
+        try {
+          const parsed = JSON.parse(d.vehicles);
+          if (Array.isArray(parsed)) {
+            vehiclesSummary = parsed.map(v => `${v.transportCompany} ${v.vehicleNo} (${v.driverName})`).join(' / ');
+          }
+        } catch(e) {
+          vehiclesSummary = `${d.vehicleType || ''} ${d.vehicleNo || ''} (${d.driverName || ''})`;
+        }
+      } else {
+        vehiclesSummary = `${d.vehicleType || ''} ${d.vehicleNo || ''} (${d.driverName || ''})`;
+      }
+
+      return {
+        'No': idx + 1,
+        '구분': d.type === 'OUTBOUND' ? '출고' : '회수',
+        '계약번호': getContractNo(d.contractId),
+        '의뢰 메모': d.memo,
+        '고객사/대상지': displayName,
+        '운송 차량 정보': vehiclesSummary,
+        '기사 연락처': d.driverContact || '-',
+        '임시 운송비': d.deliveryCost ? `${d.deliveryCost.toLocaleString()}원` : '0원',
+        '확정 운송비': d.deliveryCostConfirmed ? `${d.deliveryCostConfirmed.toLocaleString()}원` : '0원',
+        '배송 상태': d.status === 'REQUESTED' ? '의뢰중' :
+                   d.status === 'DISPATCHED' ? '배차완료' : '완료',
+        '정산 여부': d.isCostSettled ? '정산완료' : '미정산',
+        '정산 마감일': (d.isCostSettled && d.updatedAt) ? d.updatedAt.split('T')[0] : '-',
+        '등록일': d.createdAt ? d.createdAt.split('T')[0] : '-'
+      };
+    });
+
+    exportToExcel(excelData, `배차정산대장_${new Date().toISOString().split('T')[0]}`, '배차목록');
   };
 
   const handleOpenDispatch = (d: Delivery) => {
@@ -200,11 +287,72 @@ export const Deliveries: React.FC = () => {
 
   return (
     <div>
-      <div className="card-header" style={{ marginBottom: '24px' }}>
-        <h2 style={{ fontWeight: '700' }}>배차 및 운송 정산 관리</h2>
-        <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
-          출고 배차 및 장비 회수(INBOUND)를 제어하고, 물류사 차량별 운송비(임시 vs 확정)를 정산 마감합니다.
-        </span>
+      <div className="card-header" style={{ marginBottom: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div>
+          <h2 style={{ fontWeight: '700', margin: 0 }}>배차 및 운송 정산 관리</h2>
+          <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
+            출고 배차 및 장비 회수(INBOUND)를 제어하고, 물류사 차량별 운송비(임시 vs 확정)를 정산 마감합니다.
+          </span>
+        </div>
+        <button 
+          type="button" 
+          className="btn-secondary" 
+          onClick={handleExportExcel}
+          style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '13px', padding: '8px 14px' }}
+        >
+          <Download size={14} /> 배차목록 엑셀 다운로드
+        </button>
+      </div>
+
+      {/* 필터 제어부 */}
+      <div className="card" style={{ padding: '20px', marginBottom: '20px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '16px', alignItems: 'end' }}>
+          <div>
+            <label style={{ fontSize: '12px', fontWeight: '600', marginBottom: '6px', display: 'block' }}>검색어 (고객명/의뢰메모)</label>
+            <input 
+              type="text" 
+              value={tempSearchTerm} 
+              onChange={e => setTempSearchTerm(e.target.value)} 
+              placeholder="검색어 입력..."
+              style={{ width: '100%', padding: '8px' }}
+            />
+          </div>
+          <div>
+            <label style={{ fontSize: '12px', fontWeight: '600', marginBottom: '6px', display: 'block' }}>배차 구분</label>
+            <select value={tempTypeFilter} onChange={e => setTempTypeFilter(e.target.value)} style={{ width: '100%', padding: '8px' }}>
+              <option value="ALL">전체 구분</option>
+              <option value="OUTBOUND">출고 배차 (OUTBOUND)</option>
+              <option value="INBOUND">회수 배차 (INBOUND)</option>
+            </select>
+          </div>
+          <div>
+            <label style={{ fontSize: '12px', fontWeight: '600', marginBottom: '6px', display: 'block' }}>배송 상태</label>
+            <select value={tempStatusFilter} onChange={e => setTempStatusFilter(e.target.value)} style={{ width: '100%', padding: '8px' }}>
+              <option value="ALL">전체 상태</option>
+              <option value="REQUESTED">의뢰중 (REQUESTED)</option>
+              <option value="DISPATCHED">배차완료 (DISPATCHED)</option>
+              <option value="COMPLETED">배송완료 (COMPLETED)</option>
+            </select>
+          </div>
+          <div>
+            <label style={{ fontSize: '12px', fontWeight: '600', marginBottom: '6px', display: 'block' }}>정산 여부</label>
+            <select value={tempSettleFilter} onChange={e => setTempSettleFilter(e.target.value)} style={{ width: '100%', padding: '8px' }}>
+              <option value="ALL">전체 정산상태</option>
+              <option value="UNSETTLED">미정산 (UNSETTLED)</option>
+              <option value="SETTLED">정산완료 (SETTLED)</option>
+            </select>
+          </div>
+          <div>
+            <button 
+              type="button" 
+              className="btn-primary" 
+              onClick={handleSearchClick}
+              style={{ width: '100%', height: '38px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', fontWeight: 'bold' }}
+            >
+              <Search size={16} /> 조회
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* 배차 관리 대장 목록 */}
@@ -226,14 +374,14 @@ export const Deliveries: React.FC = () => {
             </tr>
           </thead>
           <tbody>
-            {deliveries.length === 0 ? (
+            {filteredDeliveries.length === 0 ? (
               <tr>
                 <td colSpan={11} style={{ textAlign: 'center', padding: '30px 0', color: 'var(--text-muted)' }}>
-                  등록된 배송 및 회수 배차 의뢰가 없습니다.
+                  조회된 배송 및 회수 배차 의뢰가 없습니다.
                 </td>
               </tr>
             ) : (
-              [...deliveries].reverse().map((d, idx) => {
+              [...filteredDeliveries].reverse().map((d, idx) => {
                 // 외주정비회수 및 일반회수 가독성 바인딩
                 let displayName = getCustNameFromContract(d.contractId);
                 if (displayName === '-' && d.memo.includes('[외주정비회수]')) {

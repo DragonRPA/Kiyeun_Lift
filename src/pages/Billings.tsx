@@ -4,6 +4,7 @@ import { useApp } from '../context/AppContext';
 import { db, Asset, Billing, BillingDetail } from '../services/db';
 import { Plus, Download, Mail, CheckCircle, Search, DollarSign, Calendar, FileText, Send } from 'lucide-react';
 import { emailService } from '../services/email';
+import { exportToExcel } from '../services/excel';
 
 export const Billings: React.FC = () => {
   const {
@@ -15,6 +16,15 @@ export const Billings: React.FC = () => {
   const isAdmin = currentUser?.role === 'ADMIN';
 
   const [activeTab, setActiveTab] = useState<'LIST' | 'GENERATE' | 'WIZARD'>('LIST');
+
+  // --- 청구 조회 필터 상태 ---
+  const [tempSearchTerm, setTempSearchTerm] = useState('');
+  const [tempBillingYmFilter, setTempBillingYmFilter] = useState('ALL');
+  const [tempStatusFilter, setTempStatusFilter] = useState('ALL');
+
+  const [searchTerm, setSearchTerm] = useState('');
+  const [billingYmFilter, setBillingYmFilter] = useState('ALL');
+  const [statusFilter, setStatusFilter] = useState('ALL');
 
   // --- 청구 마법사 상태 ---
   const [wizardSearchStartDate, setWizardSearchStartDate] = useState(() => {
@@ -52,6 +62,47 @@ export const Billings: React.FC = () => {
   const [isSending, setIsSending] = useState(false);
 
   const getCustName = (id: string) => customers.find(c => c.id === id)?.name || '-';
+
+  // 고유 청구월 목록 추출
+  const billingMonths = Array.from(new Set(billings.map(b => b.billingYm))).sort().reverse();
+
+  const handleSearchClick = () => {
+    setSearchTerm(tempSearchTerm);
+    setBillingYmFilter(tempBillingYmFilter);
+    setStatusFilter(tempStatusFilter);
+  };
+
+  const filteredBillings = billings.filter(b => {
+    const custName = getCustName(b.customerId).toLowerCase();
+    const matchesSearch = custName.includes(searchTerm.toLowerCase());
+    const matchesBillingYm = billingYmFilter === 'ALL' || b.billingYm === billingYmFilter;
+    const matchesStatus = statusFilter === 'ALL' || b.status === statusFilter;
+
+    return matchesSearch && matchesBillingYm && matchesStatus;
+  });
+
+  const handleExportExcel = () => {
+    const excelData = filteredBillings.map((b, idx) => {
+      const unpaid = b.totalAmount - b.paidAmount;
+      return {
+        'No': idx + 1,
+        '청구월': b.billingYm,
+        '고객사': getCustName(b.customerId),
+        '청구 일자': b.billingDate || '-',
+        '청구 금액': `${b.totalAmount.toLocaleString()}원`,
+        '수납 금액': `${b.paidAmount.toLocaleString()}원`,
+        '미납 금액': `${unpaid.toLocaleString()}원`,
+        '결제 상태': b.status === 'REQUESTED' ? '결재대기' : 
+                   b.status === 'REJECTED' ? '취소됨' : 
+                   b.status === 'PAID' ? '완납' : 
+                   b.status === 'PARTIAL' ? '일부납' : '승인(미납)',
+        '수납 최종일': b.status === 'PAID' ? b.updatedAt.split('T')[0] : '-',
+        '등록일': b.createdAt ? b.createdAt.split('T')[0] : '-'
+      };
+    });
+
+    exportToExcel(excelData, `청구수납대장_${new Date().toISOString().split('T')[0]}`, '청구목록');
+  };
 
   const activeBilling = billings.find(b => b.id === selectedBillingId);
   const activeBillingDetails = billingDetails.filter(bd => bd.billingId === selectedBillingId);
@@ -400,9 +451,69 @@ export const Billings: React.FC = () => {
         <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '24px', alignItems: 'flex-start' }}>
           
           {/* 청구 목록 */}
-          <div className="card" style={{ margin: 0 }}>
-            <h3 className="card-title" style={{ marginBottom: '16px' }}>청구서 리스트</h3>
-            
+          <div className="card" style={{ margin: 0, display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h3 className="card-title" style={{ margin: 0 }}>청구서 리스트</h3>
+              <button 
+                type="button" 
+                className="btn-secondary" 
+                onClick={handleExportExcel}
+                style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px', padding: '6px 12px' }}
+              >
+                <Download size={12} /> 엑셀 다운로드
+              </button>
+            </div>
+
+            {/* 필터 바 */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr auto', gap: '10px', alignItems: 'end', backgroundColor: 'var(--bg-app)', padding: '12px', borderRadius: '8px' }}>
+              <div>
+                <label style={{ fontSize: '11px', fontWeight: '600', marginBottom: '4px', display: 'block' }}>고객사 검색</label>
+                <input 
+                  type="text" 
+                  value={tempSearchTerm} 
+                  onChange={e => setTempSearchTerm(e.target.value)} 
+                  placeholder="고객사명 검색..."
+                  style={{ width: '100%', padding: '6px', fontSize: '12.5px' }}
+                />
+              </div>
+              <div>
+                <label style={{ fontSize: '11px', fontWeight: '600', marginBottom: '4px', display: 'block' }}>청구 월</label>
+                <select 
+                  value={tempBillingYmFilter} 
+                  onChange={e => setTempBillingYmFilter(e.target.value)} 
+                  style={{ width: '100%', padding: '6px', fontSize: '12.5px' }}
+                >
+                  <option value="ALL">전체 월</option>
+                  {billingMonths.map(ym => (
+                    <option key={ym} value={ym}>{ym}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label style={{ fontSize: '11px', fontWeight: '600', marginBottom: '4px', display: 'block' }}>결제 상태</label>
+                <select 
+                  value={tempStatusFilter} 
+                  onChange={e => setTempStatusFilter(e.target.value)} 
+                  style={{ width: '100%', padding: '6px', fontSize: '12.5px' }}
+                >
+                  <option value="ALL">전체 상태</option>
+                  <option value="REQUESTED">결재대기 (REQUESTED)</option>
+                  <option value="UNPAID">미납 (UNPAID)</option>
+                  <option value="PARTIAL">일부납 (PARTIAL)</option>
+                  <option value="PAID">완납 (PAID)</option>
+                  <option value="REJECTED">취소됨 (REJECTED)</option>
+                </select>
+              </div>
+              <button 
+                type="button" 
+                className="btn-primary" 
+                onClick={handleSearchClick}
+                style={{ padding: '6px 12px', height: '33px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '12.5px' }}
+              >
+                조회
+              </button>
+            </div>
+
             <div className="table-container" style={{ border: 'none', boxShadow: 'none' }}>
               <table style={{ minWidth: '450px' }}>
                 <thead>
@@ -416,7 +527,7 @@ export const Billings: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {billings.map(b => {
+                  {filteredBillings.map(b => {
                     const unpaid = b.totalAmount - b.paidAmount;
                     return (
                       <tr key={b.id} style={{ cursor: 'pointer' }} onClick={() => setSelectedBillingId(b.id)}>

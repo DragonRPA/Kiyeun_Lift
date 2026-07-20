@@ -1,10 +1,11 @@
 // d:\Kiyeun_Lift\src\pages\Contracts.tsx
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { Plus, Mail, Calendar, ArrowRight, FileText, Check, Send } from 'lucide-react';
+import { Plus, Mail, Calendar, ArrowRight, FileText, Check, Send, Download, Search } from 'lucide-react';
 import { drive } from '../services/drive';
 import { emailService } from '../services/email';
 import { Contract } from '../services/db';
+import { exportToExcel } from '../services/excel';
 
 export const Contracts: React.FC = () => {
   const {
@@ -23,6 +24,15 @@ export const Contracts: React.FC = () => {
   };
 
   const [activeTab, setActiveTab] = useState<'LIST' | 'CREATE' | 'MODIFY' | 'TRANSFER' | 'EMAIL'>('LIST');
+
+  // --- 계약 조회 필터 상태 ---
+  const [tempSearchTerm, setTempSearchTerm] = useState('');
+  const [tempStatusFilter, setTempStatusFilter] = useState('ALL');
+  const [tempSalespersonFilter, setTempSalespersonFilter] = useState('ALL');
+
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState('ALL');
+  const [salespersonFilter, setSalespersonFilter] = useState('ALL');
 
   // 선택된 계약 상세 조회 상태
   const [selectedContractId, setSelectedContractId] = useState<string | null>(null);
@@ -94,6 +104,46 @@ export const Contracts: React.FC = () => {
   const getCustName = (id: string) => customers.find(c => c.id === id)?.name || '-';
   const getSiteName = (id?: string) => sites.find(s => s.id === id)?.name || '-';
   const getContactName = (id?: string) => contacts.find(c => c.id === id)?.name || '-';
+
+  const handleSearchClick = () => {
+    setSearchTerm(tempSearchTerm);
+    setStatusFilter(tempStatusFilter);
+    setSalespersonFilter(tempSalespersonFilter);
+  };
+
+  const filteredContracts = contracts.filter(c => {
+    const nameCust = getCustName(c.customerId).toLowerCase();
+    const matchesSearch = 
+      c.contractNo.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      nameCust.includes(searchTerm.toLowerCase());
+      
+    const matchesStatus = statusFilter === 'ALL' || c.status === statusFilter;
+    const matchesSalesperson = salespersonFilter === 'ALL' || c.salespersonId === salespersonFilter;
+
+    return matchesSearch && matchesStatus && matchesSalesperson;
+  });
+
+  const handleExportExcel = () => {
+    const excelData = filteredContracts.map((c, idx) => ({
+      'No': idx + 1,
+      '계약번호': c.contractNo,
+      '고객사': getCustName(c.customerId),
+      '현장': getSiteName(c.siteId),
+      '담당자': getContactName(c.contactId),
+      '담당 영업사원': users.find(u => u.id === c.salespersonId)?.name || '지정없음',
+      '임대 시작일': c.startDate,
+      '임대 종료일': c.endDate || '미상',
+      '청구마감일(일)': c.billingDay,
+      '명세서마감일(일)': c.statementClosingDay || '-',
+      '계약상태': c.status === 'ACTIVE' ? '진행중' :
+                 c.status === 'EXTENDED' ? '연장됨' :
+                 c.status === 'SHORTENED' ? '단축됨' :
+                 c.status === 'SUCCEEDED' ? '승계됨' : '종료',
+      '등록일': c.createdAt ? c.createdAt.split('T')[0] : '-'
+    }));
+
+    exportToExcel(excelData, `계약관리대장_${new Date().toISOString().split('T')[0]}`, '계약목록');
+  };
 
   const activeContract = contracts.find(c => c.id === selectedContractId);
   const activeContractHistory = contractHistory.filter(h => h.contractId === selectedContractId);
@@ -290,8 +340,69 @@ export const Contracts: React.FC = () => {
       {activeTab === 'LIST' && (
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px', alignItems: 'flex-start' }}>
           {/* 계약 목록 */}
-          <div className="card" style={{ margin: 0 }}>
-            <h3 className="card-title" style={{ marginBottom: '16px' }}>전체 계약 목록</h3>
+          <div className="card" style={{ margin: 0, display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h3 className="card-title" style={{ margin: 0 }}>계약 목록</h3>
+              <button 
+                type="button" 
+                className="btn-secondary" 
+                onClick={handleExportExcel}
+                style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px', padding: '6px 12px' }}
+              >
+                <Download size={12} /> 엑셀 다운로드
+              </button>
+            </div>
+
+            {/* 필터 바 */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr auto', gap: '10px', alignItems: 'end', backgroundColor: 'var(--bg-app)', padding: '12px', borderRadius: '8px' }}>
+              <div>
+                <label style={{ fontSize: '11px', fontWeight: '600', marginBottom: '4px', display: 'block' }}>계약번호/고객사</label>
+                <input 
+                  type="text" 
+                  value={tempSearchTerm} 
+                  onChange={e => setTempSearchTerm(e.target.value)} 
+                  placeholder="검색어 입력..."
+                  style={{ width: '100%', padding: '6px', fontSize: '12.5px' }}
+                />
+              </div>
+              <div>
+                <label style={{ fontSize: '11px', fontWeight: '600', marginBottom: '4px', display: 'block' }}>계약 상태</label>
+                <select 
+                  value={tempStatusFilter} 
+                  onChange={e => setTempStatusFilter(e.target.value)} 
+                  style={{ width: '100%', padding: '6px', fontSize: '12.5px' }}
+                >
+                  <option value="ALL">전체 상태</option>
+                  <option value="ACTIVE">진행중 (ACTIVE)</option>
+                  <option value="EXTENDED">연장됨 (EXTENDED)</option>
+                  <option value="SHORTENED">단축됨 (SHORTENED)</option>
+                  <option value="SUCCEEDED">승계됨 (SUCCEEDED)</option>
+                  <option value="COMPLETED">종료됨 (COMPLETED)</option>
+                </select>
+              </div>
+              <div>
+                <label style={{ fontSize: '11px', fontWeight: '600', marginBottom: '4px', display: 'block' }}>영업 담당자</label>
+                <select 
+                  value={tempSalespersonFilter} 
+                  onChange={e => setTempSalespersonFilter(e.target.value)} 
+                  style={{ width: '100%', padding: '6px', fontSize: '12.5px' }}
+                >
+                  <option value="ALL">전체 담당자</option>
+                  {users.map(u => (
+                    <option key={u.id} value={u.id}>{u.name}</option>
+                  ))}
+                </select>
+              </div>
+              <button 
+                type="button" 
+                className="btn-primary" 
+                onClick={handleSearchClick}
+                style={{ padding: '6px 12px', height: '33px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '12.5px' }}
+              >
+                조회
+              </button>
+            </div>
+
             <div className="table-container" style={{ border: 'none', boxShadow: 'none' }}>
               <table style={{ minWidth: '400px' }}>
                 <thead>
@@ -304,7 +415,7 @@ export const Contracts: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {contracts.map(c => (
+                  {filteredContracts.map(c => (
                     <tr key={c.id}>
                       <td><strong>{c.contractNo}</strong></td>
                       <td>{getCustName(c.customerId)}</td>

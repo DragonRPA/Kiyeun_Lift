@@ -13,7 +13,9 @@ export const Customers: React.FC = () => {
 
   const canSave = hasPermission('customer', 'save');
 
-  // 검색 상태
+  // 검색 상태 (임시 상태 & 조회 확정 상태)
+  const [tempSearchTerm, setTempSearchTerm] = useState('');
+  const [tempShowOnlyIncomplete, setTempShowOnlyIncomplete] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [showOnlyIncomplete, setShowOnlyIncomplete] = useState(false);
 
@@ -56,6 +58,11 @@ export const Customers: React.FC = () => {
     );
   };
 
+  const handleSearchClick = () => {
+    setSearchTerm(tempSearchTerm);
+    setShowOnlyIncomplete(tempShowOnlyIncomplete);
+  };
+
   // 검색 필터링된 고객 목록
   const filteredCustomers = customers.filter(c => {
     const matchesSearch = 
@@ -68,9 +75,9 @@ export const Customers: React.FC = () => {
     return matchesSearch && matchesCompleteness;
   });
 
-  // 엑셀 다운로드 핸들러
+  // 엑셀 다운로드 핸들러 (조회된 고객 목록 다운로드)
   const handleExportAllCustomers = () => {
-    const excelData = customers.map((c, idx) => ({
+    const excelData = filteredCustomers.map((c, idx) => ({
       'No': idx + 1,
       '고객명': c.name,
       '대표자': c.representative,
@@ -81,7 +88,7 @@ export const Customers: React.FC = () => {
       '영업 상태': c.isClosed ? '폐업' : '영업중',
       '등록 일시': c.createdAt
     }));
-    exportToExcel(excelData, `고객정보_전체목록_${new Date().toISOString().split('T')[0]}`, '고객사대장');
+    exportToExcel(excelData, `고객정보_조회목록_${new Date().toISOString().split('T')[0]}`, '고객사대장');
   };
 
   const handleExportContacts = () => {
@@ -184,7 +191,7 @@ export const Customers: React.FC = () => {
           onClick={handleExportAllCustomers}
           style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '13px', padding: '8px 14px' }}
         >
-          <Download size={14} /> 고객정보 전체 엑셀 다운로드
+          <Download size={14} /> 고객정보 조회목록 엑셀 다운로드
         </button>
       </div>
 
@@ -196,11 +203,11 @@ export const Customers: React.FC = () => {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <h3 className="card-title">고객사 리스트</h3>
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', cursor: 'pointer', margin: 0, padding: '4px 6px', borderRadius: '4px', border: '1px solid var(--border)', backgroundColor: showOnlyIncomplete ? 'rgba(239, 68, 68, 0.08)' : 'var(--bg-secondary)', color: showOnlyIncomplete ? 'var(--danger)' : 'var(--text-secondary)', fontWeight: showOnlyIncomplete ? '600' : 'normal', transition: 'all 0.2s', whiteSpace: 'nowrap' }} title="사업자등록번호, 대표자, 연락처, 주소 등이 '미상'인 고객만 필터링합니다.">
+                <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', cursor: 'pointer', margin: 0, padding: '4px 6px', borderRadius: '4px', border: '1px solid var(--border)', backgroundColor: tempShowOnlyIncomplete ? 'rgba(239, 68, 68, 0.08)' : 'var(--bg-secondary)', color: tempShowOnlyIncomplete ? 'var(--danger)' : 'var(--text-secondary)', fontWeight: tempShowOnlyIncomplete ? '600' : 'normal', transition: 'all 0.2s', whiteSpace: 'nowrap' }} title="사업자등록번호, 대표자, 연락처, 주소 등이 '미상'인 고객만 필터링합니다.">
                   <input 
                     type="checkbox" 
-                    checked={showOnlyIncomplete} 
-                    onChange={e => setShowOnlyIncomplete(e.target.checked)} 
+                    checked={tempShowOnlyIncomplete} 
+                    onChange={e => setTempShowOnlyIncomplete(e.target.checked)} 
                     style={{ margin: 0, cursor: 'pointer' }}
                   />
                   ⚠️ 불완전 정보 고객만 보기
@@ -212,15 +219,25 @@ export const Customers: React.FC = () => {
                 )}
               </div>
             </div>
-            <div style={{ position: 'relative' }}>
-              <Search size={16} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
-              <input
-                type="text"
-                value={searchTerm}
-                onChange={e => setSearchTerm(e.target.value)}
-                placeholder="고객명, 사업자번호 등으로 검색..."
-                style={{ paddingLeft: '32px' }}
-              />
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <div style={{ position: 'relative', flex: 1 }}>
+                <Search size={16} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+                <input
+                  type="text"
+                  value={tempSearchTerm}
+                  onChange={e => setTempSearchTerm(e.target.value)}
+                  placeholder="고객명, 사업자번호 등으로 검색..."
+                  style={{ paddingLeft: '32px', width: '100%' }}
+                />
+              </div>
+              <button 
+                type="button" 
+                className="btn-primary" 
+                onClick={handleSearchClick}
+                style={{ padding: '8px 16px', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 'bold' }}
+              >
+                <Search size={14} /> 조회
+              </button>
             </div>
           </div>
 

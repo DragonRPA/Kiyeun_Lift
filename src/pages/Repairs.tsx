@@ -1,16 +1,26 @@
 // d:\Kiyeun_Lift\src\pages\Repairs.tsx
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { Wrench, Plus, CheckCircle, Smartphone, User, Settings } from 'lucide-react';
+import { Wrench, Plus, CheckCircle, Smartphone, User, Settings, Download, Search } from 'lucide-react';
 import { Repair } from '../services/db';
+import { exportToExcel } from '../services/excel';
 
 export const Repairs: React.FC = () => {
   const {
-    repairs, assets, consumables, repairConsumables, registerRepair, hasPermission, users, currentUser
+    repairs, assets, consumables, repairConsumables, registerRepair, hasPermission, users, currentUser, vendors
   } = useApp();
 
   const canSave = hasPermission('repair', 'save');
   const isMechanic = currentUser?.role === 'MECHANIC';
+
+  // --- 정비 조회 필터 상태 ---
+  const [tempSearchTerm, setTempSearchTerm] = useState('');
+  const [tempTypeFilter, setTempTypeFilter] = useState('ALL');
+  const [tempStatusFilter, setTempStatusFilter] = useState('ALL');
+
+  const [searchTerm, setSearchTerm] = useState('');
+  const [typeFilter, setTypeFilter] = useState('ALL');
+  const [statusFilter, setStatusFilter] = useState('ALL');
 
   // 정비 등록 모달 및 상태
   const [showModal, setShowModal] = useState(false);
@@ -27,6 +37,49 @@ export const Repairs: React.FC = () => {
   const getAssetNo = (id: string) => assets.find(a => a.id === id)?.assetNo || '-';
   const getAssetModel = (id: string) => assets.find(a => a.id === id)?.modelName || '-';
   const getMechanicName = (id?: string) => users.find(u => u.id === id)?.name || '정비사';
+
+  const handleSearchClick = () => {
+    setSearchTerm(tempSearchTerm);
+    setTypeFilter(tempTypeFilter);
+    setStatusFilter(tempStatusFilter);
+  };
+
+  const filteredRepairs = repairs.filter(r => {
+    const assetNo = getAssetNo(r.assetId).toLowerCase();
+    const assetModel = getAssetModel(r.assetId).toLowerCase();
+    const vendorName = r.vendorId ? (vendors.find(v => v.id === r.vendorId)?.name || '').toLowerCase() : '';
+    
+    const matchesSearch = 
+      assetNo.includes(searchTerm.toLowerCase()) || 
+      assetModel.includes(searchTerm.toLowerCase()) || 
+      vendorName.includes(searchTerm.toLowerCase()) || 
+      (r.details && r.details.toLowerCase().includes(searchTerm.toLowerCase()));
+
+    const matchesType = typeFilter === 'ALL' || r.repairType === typeFilter;
+    const matchesStatus = statusFilter === 'ALL' || r.status === statusFilter;
+
+    return matchesSearch && matchesType && matchesStatus;
+  });
+
+  const handleExportExcel = () => {
+    const excelData = filteredRepairs.map((r, idx) => ({
+      'No': idx + 1,
+      '자산번호': getAssetNo(r.assetId),
+      '모델명': getAssetModel(r.assetId),
+      '정비 구분': r.repairType === 'INTERNAL' ? '자사정비' : '외주정비',
+      '외주 정비처': r.vendorId ? (vendors.find(v => v.id === r.vendorId)?.name || '-') : '-',
+      '정비 상태': r.status === 'PENDING' ? '대기중' : r.status === 'IN_PROGRESS' ? '정비중' : '완료',
+      '의뢰일': r.requestDate || '-',
+      '완료일': r.repairDate || '-',
+      '정비 내용': r.details || '',
+      '정비 총비용': `${(r.totalCost || 0).toLocaleString()}원`,
+      '고객사 청구여부': r.billableToCustomer ? '청구' : '미청구',
+      '정비사': getMechanicName(r.mechanicId),
+      '등록일': r.createdAt ? r.createdAt.split('T')[0] : '-'
+    }));
+
+    exportToExcel(excelData, `정비정리대장_${new Date().toISOString().split('T')[0]}`, '정비목록');
+  };
 
   const handleOpenAdd = () => {
     setEditingRepair({
@@ -109,9 +162,66 @@ export const Repairs: React.FC = () => {
       )}
 
       {/* 수리 목록 카드 */}
-      <div className="card" style={{ margin: 0 }}>
-        <h3 className="card-title" style={{ marginBottom: '16px' }}>정비수리 내역</h3>
-        
+      <div className="card" style={{ margin: 0, display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <h3 className="card-title" style={{ margin: 0 }}>정비수리 내역</h3>
+          <button 
+            type="button" 
+            className="btn-secondary" 
+            onClick={handleExportExcel}
+            style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px', padding: '6px 12px' }}
+          >
+            <Download size={12} /> 엑셀 다운로드
+          </button>
+        </div>
+
+        {/* 필터 바 */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr auto', gap: '10px', alignItems: 'end', backgroundColor: 'var(--bg-app)', padding: '12px', borderRadius: '8px' }}>
+          <div>
+            <label style={{ fontSize: '11px', fontWeight: '600', marginBottom: '4px', display: 'block' }}>자산/외주업체 검색</label>
+            <input 
+              type="text" 
+              value={tempSearchTerm} 
+              onChange={e => setTempSearchTerm(e.target.value)} 
+              placeholder="자산번호, 모델명, 수리공장..."
+              style={{ width: '100%', padding: '6px', fontSize: '12.5px' }}
+            />
+          </div>
+          <div>
+            <label style={{ fontSize: '11px', fontWeight: '600', marginBottom: '4px', display: 'block' }}>정비 구분</label>
+            <select 
+              value={tempTypeFilter} 
+              onChange={e => setTempTypeFilter(e.target.value)} 
+              style={{ width: '100%', padding: '6px', fontSize: '12.5px' }}
+            >
+              <option value="ALL">전체 정비구분</option>
+              <option value="INTERNAL">자사 정비 (INTERNAL)</option>
+              <option value="EXTERNAL">외주 정비 (EXTERNAL)</option>
+            </select>
+          </div>
+          <div>
+            <label style={{ fontSize: '11px', fontWeight: '600', marginBottom: '4px', display: 'block' }}>진행 상태</label>
+            <select 
+              value={tempStatusFilter} 
+              onChange={e => setTempStatusFilter(e.target.value)} 
+              style={{ width: '100%', padding: '6px', fontSize: '12.5px' }}
+            >
+              <option value="ALL">전체 진행상태</option>
+              <option value="PENDING">대기중 (PENDING)</option>
+              <option value="IN_PROGRESS">정비중 (IN_PROGRESS)</option>
+              <option value="COMPLETED">정비완료 (COMPLETED)</option>
+            </select>
+          </div>
+          <button 
+            type="button" 
+            className="btn-primary" 
+            onClick={handleSearchClick}
+            style={{ padding: '6px 12px', height: '33px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '12.5px' }}
+          >
+            조회
+          </button>
+        </div>
+
         <div className="table-container" style={{ border: 'none', boxShadow: 'none' }}>
           <table>
             <thead>
@@ -127,14 +237,14 @@ export const Repairs: React.FC = () => {
               </tr>
             </thead>
             <tbody>
-              {repairs.length === 0 ? (
+              {filteredRepairs.length === 0 ? (
                 <tr>
                   <td colSpan={8} style={{ textAlign: 'center', padding: '30px 0', color: 'var(--text-muted)' }}>
-                    등록된 정비이력이 없습니다.
+                    조회된 정비이력이 없습니다.
                   </td>
                 </tr>
               ) : (
-                repairs.map(r => (
+                filteredRepairs.map(r => (
                   <tr key={r.id} onDoubleClick={() => setSelectedDetailRepair(r)} style={{ cursor: 'pointer' }} title="더블클릭하여 수리 상세(소모품/공임) 조회">
                     <td>
                       <strong style={{ color: 'var(--primary)' }}>{getAssetNo(r.assetId)}</strong>
