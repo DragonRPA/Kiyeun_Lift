@@ -609,6 +609,8 @@ export const DevDataUploader: React.FC = () => {
   const [testDataLogs, setTestDataLogs] = useState<string[]>([]);
   const [executionHistory, setExecutionHistory] = useState<ExecutionHistoryEntry[]>([]);
   const [diagnosticsReport, setDiagnosticsReport] = useState<string>('');
+  const [generatedSql, setGeneratedSql] = useState<string>('');
+  const [sqlType, setSqlType] = useState<'INSERT' | 'DELETE' | ''>('');
   const bulkFileInputRef = useRef<HTMLInputElement>(null);
 
   const handleDownloadBulkTemplate = () => {
@@ -967,6 +969,99 @@ export const DevDataUploader: React.FC = () => {
         setExecutionHistory(prev => [...prev, successEntry]);
       }
     }
+  };
+
+  const generateSqlScript = (data: {
+    products: any[];
+    assets: any[];
+    customers: any[];
+    contacts: any[];
+    sites: any[];
+    contracts: any[];
+    contractAssets: any[];
+    deliveries: any[];
+    billings: any[];
+    billingDetails: any[];
+    payments: any[];
+    bankTransactions: any[];
+    consumables: any[];
+    consumableLogs: any[];
+    consumablePurchases: any[];
+    repairs: any[];
+    repairConsumables: any[];
+  }) => {
+    let sql = `BEGIN;\n\n`;
+    
+    const toSqlInsert = (tableName: string, rows: any[]) => {
+      const allowed = TABLE_COLUMNS[tableName];
+      if (!allowed || rows.length === 0) return '';
+      
+      let query = `-- Insert into ${tableName} (${rows.length} rows)\n`;
+      rows.forEach(r => {
+        const fields: string[] = [];
+        const values: string[] = [];
+        
+        allowed.forEach(k => {
+          if (r[k] !== undefined) {
+            fields.push(`"${k}"`);
+            const val = r[k];
+            if (val === null) {
+              values.push('NULL');
+            } else if (typeof val === 'string') {
+              values.push(`'${val.replace(/'/g, "''")}'`);
+            } else if (typeof val === 'boolean') {
+              values.push(val ? 'TRUE' : 'FALSE');
+            } else {
+              values.push(String(val));
+            }
+          }
+        });
+
+        if (tableName === 'repairs' && r.totalCost !== undefined && !fields.includes('"costTotal"')) {
+          fields.push('"costTotal"');
+          values.push(String(r.totalCost));
+        }
+        if (tableName === 'billing_details' && r.assetId === undefined && r.contractAssetId && !fields.includes('"assetId"')) {
+          const parts = String(r.contractAssetId).split('-');
+          if (parts.length >= 4) {
+            fields.push('"assetId"');
+            values.push(`'testdata-asset-${parts[3]}'`);
+          }
+        }
+
+        query += `INSERT INTO ${tableName} (${fields.join(', ')}) VALUES (${values.join(', ')}) ON CONFLICT (id) DO UPDATE SET ${fields.map(f => `${f} = EXCLUDED.${f}`).join(', ')};\n`;
+      });
+      return query + '\n';
+    };
+
+    // FK order constraints
+    sql += toSqlInsert('products', data.products);
+    sql += toSqlInsert('assets', data.assets);
+    sql += toSqlInsert('customers', data.customers);
+    sql += toSqlInsert('customer_contacts', data.contacts);
+    sql += toSqlInsert('customer_sites', data.sites);
+    sql += toSqlInsert('contracts', data.contracts);
+    sql += toSqlInsert('contract_assets', data.contractAssets);
+    sql += toSqlInsert('deliveries', data.deliveries);
+    sql += toSqlInsert('billings', data.billings);
+    sql += toSqlInsert('billing_details', data.billingDetails);
+    sql += toSqlInsert('payments', data.payments);
+    sql += toSqlInsert('bank_transactions', data.bankTransactions);
+    sql += toSqlInsert('consumables', data.consumables);
+    sql += toSqlInsert('consumable_logs', data.consumableLogs);
+    sql += toSqlInsert('consumable_purchases', data.consumablePurchases);
+    sql += toSqlInsert('repairs', data.repairs);
+    sql += toSqlInsert('repair_consumables', data.repairConsumables);
+
+    sql += `COMMIT;\n`;
+    return sql;
+  };
+
+  const getSupabaseSqlEditorUrl = () => {
+    const url = import.meta.env.VITE_SUPABASE_URL || '';
+    const match = url.match(/https:\/\/([a-z0-9\-]+)\.supabase\.co/);
+    const projRef = match ? match[1] : '_';
+    return `https://supabase.com/dashboard/project/${projRef}/sql`;
   };
 
   const handleGenerateTestData = async () => {
@@ -1460,34 +1555,33 @@ export const DevDataUploader: React.FC = () => {
       db.repairConsumables = [...db.repairConsumables.filter(rc => !rc.id.startsWith('testdata-')), ...repairConsumables];
       addLog("로컬 캐시 메모리 병합 및 디스크 쓰기 완료.", "success");
 
-      // 10. Supabase 동기화
-      if (supabase) {
-        setGenerationProgress("9. Supabase 원격 데이터베이스 업로드 중...");
-        addLog("9단계: 원격 Supabase DB 일괄 동기화 (Upsert Batch) 시도 중...", "info");
-        await bulkUploadTable('products', products); addLog("products 업서트 완료", "success");
-        await bulkUploadTable('assets', assets); addLog("assets 업서트 완료", "success");
-        await bulkUploadTable('customers', customers); addLog("customers 업서트 완료", "success");
-        await bulkUploadTable('customer_contacts', contacts); addLog("customer_contacts 업서트 완료", "success");
-        await bulkUploadTable('customer_sites', sites); addLog("customer_sites 업서트 완료", "success");
-        await bulkUploadTable('contracts', contracts); addLog("contracts 업서트 완료", "success");
-        await bulkUploadTable('contract_assets', contractAssets); addLog("contract_assets 업서트 완료", "success");
-        await bulkUploadTable('deliveries', deliveries); addLog("deliveries 업서트 완료", "success");
-        await bulkUploadTable('billings', billings); addLog("billings 업서트 완료", "success");
-        await bulkUploadTable('billing_details', billingDetails); addLog("billing_details 업서트 완료", "success");
-        await bulkUploadTable('payments', payments); addLog("payments 업서트 완료", "success");
-        await bulkUploadTable('bank_transactions', bankTransactions); addLog("bank_transactions 업서트 완료", "success");
-        await bulkUploadTable('consumables', consumables); addLog("consumables 업서트 완료", "success");
-        await bulkUploadTable('consumable_logs', consumableLogs); addLog("consumable_logs 업서트 완료", "success");
-        await bulkUploadTable('consumable_purchases', consumablePurchases); addLog("consumable_purchases 업서트 완료", "success");
-        await bulkUploadTable('repairs', repairs); addLog("repairs 업서트 완료", "success");
-        await bulkUploadTable('repair_consumables', repairConsumables); addLog("repair_consumables 업서트 완료", "success");
-        addLog("원격 Supabase 데이터베이스 동기화 완벽 완료!", "success");
-      } else {
-        addLog("Supabase 연결 미확인: 원격 동기화 생략 (로컬 모드)", "info");
-      }
+      // 10. SQL 스크립트 빌드
+      addLog("9단계: DB 반영을 위한 일괄 SQL 스크립트 빌드 중...", "info");
+      const sql = generateSqlScript({
+        products,
+        assets,
+        customers,
+        contacts,
+        sites,
+        contracts,
+        contractAssets,
+        deliveries,
+        billings,
+        billingDetails,
+        payments,
+        bankTransactions,
+        consumables,
+        consumableLogs,
+        consumablePurchases,
+        repairs,
+        repairConsumables
+      });
+      setGeneratedSql(sql);
+      setSqlType('INSERT');
+      addLog("일괄 SQL 인서트 스크립트 작성 성공!", "success");
 
-      addLog("🎉 통합 프로세스 데이터 시나리오 생성 완료! 모든 기능 테스트 가능.", "success");
-      alert("10,000건 이상의 프로세스 통합 테스트용 모의 데이터가 성공적으로 생성 및 동기화되었습니다!");
+      addLog("🎉 통합 프로세스 데이터 시나리오 생성 완료! 아래 터미널 하단에서 SQL 스크립트를 복사하여 실행하십시오.", "success");
+      alert("로컬 캐시 데이터 시딩이 완료되었으며, 원격 DB 반영을 위한 10,000건 규모의 SQL 스크립트가 준비되었습니다!");
     } catch (err: any) {
       console.error(err);
       addLog(`데이터 생성 오류 발생: ${err.message || err}`, "error");
@@ -1502,39 +1596,18 @@ export const DevDataUploader: React.FC = () => {
   };
 
   const handleDeleteTestData = async () => {
-    const confirmed = window.confirm("정말 생성된 모든 테스트용 모의 데이터(IDs가 testdata-로 시작하는 항목)를 삭제하시겠습니까? 로컬 및 원격 데이터가 모두 영구 제거됩니다.");
+    const confirmed = window.confirm("생성된 테스트용 모의 데이터(IDs가 testdata-로 시작하는 항목)를 삭제하기 위한 SQL 삭제 스크립트를 생성하고 로컬 캐시를 정리하시겠습니까? 데이터 실제 삭제는 SQL Editor에서 수동으로 실행하셔야 합니다.");
     if (!confirmed) return;
 
     setGeneratingTestData(true);
-    setGenerationProgress("테스트 데이터 일괄 제거 및 동기화 중...");
+    setTestDataLogs([]);
+    setGeneratedSql('');
+    setSqlType('');
+    addLog("데이터 삭제 프로세스 시작...", "info");
+
     try {
-      const tables = [
-        'products', 'assets', 'customers', 'contacts', 'sites', 'contracts',
-        'contractAssets', 'deliveries', 'billings', 'billingDetails', 'payments',
-        'bankTransactions', 'consumables', 'consumableLogs', 'consumablePurchases', 'repairs', 'repairConsumables'
-      ];
-
-      const mapping: Record<string, string> = {
-        products: 'products',
-        assets: 'assets',
-        customers: 'customers',
-        contacts: 'customer_contacts',
-        sites: 'customer_sites',
-        contracts: 'contracts',
-        contractAssets: 'contract_assets',
-        deliveries: 'deliveries',
-        billings: 'billings',
-        billingDetails: 'billing_details',
-        payments: 'payments',
-        bankTransactions: 'bank_transactions',
-        consumables: 'consumables',
-        consumableLogs: 'consumable_logs',
-        consumablePurchases: 'consumable_purchases',
-        repairs: 'repairs',
-        repairConsumables: 'repair_consumables'
-      };
-
       // 1. 로컬 데이터 삭제
+      addLog("1단계: 로컬 스토리지 캐시에서 testdata- 데이터 필터링 중...", "info");
       db.products = db.products.filter(p => !p.id.startsWith('testdata-'));
       db.assets = db.assets.filter(a => !a.id.startsWith('testdata-'));
       db.customers = db.customers.filter(c => !c.id.startsWith('testdata-'));
@@ -1552,24 +1625,29 @@ export const DevDataUploader: React.FC = () => {
       db.consumablePurchases = db.consumablePurchases.filter(cp => !cp.id.startsWith('testdata-'));
       db.repairs = db.repairs.filter(r => !r.id.startsWith('testdata-'));
       db.repairConsumables = db.repairConsumables.filter(rc => !rc.id.startsWith('testdata-'));
+      addLog("로컬 스토리지 캐시 정리 완료.", "success");
 
-      // 2. Supabase 데이터 삭제
-      if (supabase) {
-        for (const key of tables) {
-          const tableName = mapping[key];
-          if (tableName) {
-            const { error } = await supabase.from(tableName).delete().like('id', 'testdata-%');
-            if (error) {
-              console.error(`Supabase bulk delete failed for ${tableName}:`, error);
-            }
-          }
-        }
-      }
-
-      alert("모든 테스트용 데이터가 성공적으로 일괄 삭제되었습니다!");
-    } catch (err) {
+      // 2. SQL 삭제 스크립트 빌드
+      addLog("2단계: 원격 DB 삭제를 위한 SQL 트랜잭션 스크립트 작성 중...", "info");
+      const TABLE_DELETE_ORDER = [
+        'repair_consumables', 'repairs', 'consumable_purchases', 'consumable_logs', 'consumables',
+        'bank_transactions', 'payments', 'billing_details', 'billings', 'deliveries',
+        'contract_assets', 'contracts', 'customer_sites', 'customer_contacts', 'customers', 'assets', 'products'
+      ];
+      let sql = `BEGIN;\n\n`;
+      sql += `-- Delete all test data with 'testdata-' prefix\n`;
+      TABLE_DELETE_ORDER.forEach(tbl => {
+        sql += `DELETE FROM ${tbl} WHERE id LIKE 'testdata-%';\n`;
+      });
+      sql += `\nCOMMIT;\n`;
+      
+      setGeneratedSql(sql);
+      setSqlType('DELETE');
+      addLog("삭제 SQL 스크립트 준비 완료! 아래 콘솔에서 복사 또는 다운로드하여 Supabase SQL Editor에서 실행하십시오.", "success");
+      alert("로컬 캐시가 성공적으로 비워졌으며, 원격 DB 삭제를 위한 SQL 스크립트가 준비되었습니다.");
+    } catch (err: any) {
       console.error(err);
-      alert("삭제 중 오류가 발생했습니다.");
+      addLog(`삭제 스크립트 생성 오류 발생: ${err.message || err}`, "error");
     } finally {
       setGeneratingTestData(false);
       setGenerationProgress("");
@@ -2124,6 +2202,84 @@ export const DevDataUploader: React.FC = () => {
                       </div>
                     );
                   })}
+                </div>
+              </div>
+            )}
+            {generatedSql && (
+              <div style={{ marginTop: '12px', borderTop: '1px dashed var(--border-color)', paddingTop: '12px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                  <span style={{ fontSize: '11.5px', fontWeight: '700', color: 'var(--primary)' }}>
+                    {sqlType === 'INSERT' ? '💾 생성용 SQL 스크립트' : '🗑️ 삭제용 SQL 스크립트'} ({generatedSql.split('\n').length - 1}줄)
+                  </span>
+                  <div style={{ display: 'flex', gap: '6px' }}>
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(generatedSql);
+                        alert("SQL 스크립트가 클립보드에 복사되었습니다!");
+                      }}
+                      style={{ fontSize: '10px', padding: '2px 8px', backgroundColor: 'var(--primary)', border: 'none', borderRadius: '4px', color: '#fff', cursor: 'pointer' }}
+                    >
+                      📋 복사하기
+                    </button>
+                    <button
+                      onClick={() => {
+                        const blob = new Blob([generatedSql], { type: 'text/plain;charset=utf-8' });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = sqlType === 'INSERT' ? 'kiyeun_testdata_insert.sql' : 'kiyeun_testdata_delete.sql';
+                        a.click();
+                        URL.revokeObjectURL(url);
+                      }}
+                      style={{ fontSize: '10px', padding: '2px 8px', backgroundColor: 'var(--bg-body)', border: '1px solid var(--border-color)', borderRadius: '4px', cursor: 'pointer', color: 'var(--text-secondary)' }}
+                    >
+                      💾 다운로드
+                    </button>
+                  </div>
+                </div>
+                
+                <div style={{ marginBottom: '8px' }}>
+                  <a 
+                    href={getSupabaseSqlEditorUrl()} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    style={{ 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      justifyContent: 'center', 
+                      gap: '6px', 
+                      fontSize: '11px', 
+                      fontWeight: '700', 
+                      padding: '8px 10px', 
+                      backgroundColor: '#10b981', 
+                      color: '#fff', 
+                      borderRadius: '6px', 
+                      textDecoration: 'none',
+                      textAlign: 'center',
+                      boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+                    }}
+                  >
+                    🔗 Supabase SQL Editor 열기 (바로 붙여넣기)
+                  </a>
+                </div>
+
+                <div style={{
+                  backgroundColor: '#1e293b',
+                  color: '#f8fafc',
+                  fontFamily: 'monospace',
+                  fontSize: '10.5px',
+                  padding: '10px',
+                  borderRadius: '6px',
+                  maxHeight: '150px',
+                  overflowY: 'auto',
+                  lineHeight: '1.4',
+                  border: '1px solid #334155',
+                  textAlign: 'left'
+                }}>
+                  <pre style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-all', color: '#cbd5e1' }}>
+                    {generatedSql.substring(0, 1000)}
+                    {generatedSql.length > 1000 ? '\n... (이하 중략: 다운로드 또는 복사하여 전문을 확인하십시오)' : ''}
+                  </pre>
                 </div>
               </div>
             )}
