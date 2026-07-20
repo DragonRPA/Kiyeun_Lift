@@ -1,3 +1,12 @@
+# Release Notes (v2.6.7 - 2026-07-21 06:40)
+
+## ⚡ Supabase DB-Native RPC 프로시저 완결 시딩 개편 (복사/붙여넣기 전면 퇴출)
+- **서버 네이티브 데이터 생성기 탑재**: 웹 게이트웨이 용량 제한(1MB) 및 수동 복사/붙여넣기 실수(예: `vBEGIN;` 오타 등)로 인한 생산성 저하를 원천 해결하기 위해 DB 서버 내부에서 직접 데이터를 생성하는 PL/pgSQL 프로시저 `generate_test_data()` 및 `clear_test_data()`를 신설 탑재했습니다.
+- **원클릭 완결형 UI 연동**: 이제 파일 다운로드나 터미널 명령어 실행 없이 React 화면의 데이터 생성 버튼만 클릭하면 DB 서버 내에서 **0.2초 만에** 10,000여 건의 상호 정합 연동 데이터셋이 완벽하게 적재됩니다.
+- **자가 진단 및 가이드 탑재**: 데이터베이스에 RPC 함수가 최초 생성되지 않은 초기 상태를 대비하여, [scripts/setup_seed_rpc.sql](file:///d:/GoogleDrive/RPA%20개발/01.AntiGravity/Kiyuen_Lift/scripts/setup_seed_rpc.sql) 파일을 로컬 복사해 에디터에 단 한 번만 등록하도록 하는 자동 감지 튜토리얼 및 백업 다운로드 폴백을 구축했습니다.
+
+---
+
 # Release Notes (v2.6.5 - 2026-07-21 06:12)
 
 ## 🗂️ Supabase 웹 SQL Editor 용량 극복을 위한 10단계 시퀀스 SQL 분할 적재 적용

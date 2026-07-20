@@ -1100,18 +1100,9 @@ export const DevDataUploader: React.FC = () => {
     return `https://supabase.com/dashboard/project/${projRef}/sql`;
   };
 
-  const handleGenerateTestData = async () => {
-    const confirmed = window.confirm("전체 통합 프로세스 테스트용 대규모 연관 모의 데이터를 생성하시겠습니까? 데이터 정합성과 외래키 제약조건이 실시간으로 확인 및 계산되어 로컬 및 Supabase로 일괄 업로드됩니다.");
-    if (!confirmed) return;
-
-    setGeneratingTestData(true);
-    setTestDataLogs([]);
-    setExecutionHistory([]);
-    setDiagnosticsReport('');
-    addLog("통합 테스트 데이터 생성 시나리오 구동 시작...", "info");
+  const runLocalSqlGenerationFallback = () => {
     try {
       // 1. 제품 생성 (90종)
-      addLog("1단계: 제품(Product) 90종 명세 생성 중...", "info");
       const products: any[] = [];
       for (let i = 1; i <= 90; i++) {
         products.push({
@@ -1121,14 +1112,11 @@ export const DevDataUploader: React.FC = () => {
           spec: `기연테스트 규격 고소작업대 ${i}호형`,
           manufacturer: ['GENIE', 'SKYJACK', 'JLG', 'HAULOTTE'][i % 4],
           isActive: true,
-          createdAt: new Date('2026-01-01').toISOString()
+          createdAt: '2026-01-01'
         });
       }
 
-      addLog("제품 90종 메모리 인스턴스 준비 완료.", "success");
       // 2. 자산 생성 (1,000개)
-      setGenerationProgress("2. 자산 1,000개 생성 중...");
-      addLog("2단계: 자산(Asset) 1,000개 연동 명세 생성 중...", "info");
       const assets: any[] = [];
       for (let i = 1; i <= 1000; i++) {
         const prod = products[i % products.length];
@@ -1138,26 +1126,13 @@ export const DevDataUploader: React.FC = () => {
           assetNo: `TST-EQ-${i.toString().padStart(4, '0')}`,
           serialNo: `SN-TST-${i.toString().padStart(4, '0')}`,
           manufacturer: prod.manufacturer,
-          ownerType: i % 20 === 0 ? 'RENTED' : 'OWNED', // 5% Rented, 95% Owned
+          ownerType: i % 20 === 0 ? 'RENTED' : 'OWNED',
           status: 'AVAILABLE',
-          maintenanceScore: Math.floor(Math.random() * 30),
-          acquisitionDate: '2025-01-01',
-          acquisitionPrice: 16000000,
-          depreciationMonths: 60,
-          residualValueRate: 10,
-          accumDepreciation: 4000000,
-          bookValue: 12000000,
-          cumRentalFee: 0,
-          cumRepairCost: 0,
-          createdAt: new Date('2025-01-01').toISOString(),
-          updatedAt: new Date().toISOString()
+          createdAt: '2025-01-01'
         });
       }
 
-      addLog("자산 1,000개 메모리 인스턴스 준비 완료. (당사 950개 / 임차 50개)", "success");
       // 3. 고객사 생성 (200사)
-      setGenerationProgress("3. 고객사 200개 및 담당자/현장 각 1,000개 생성 중...");
-      addLog("3단계: 가상 고객사(Customer) 200개 및 하위 담당자/현장 각 1,000개 분할 생성 중...", "info");
       const customers: any[] = [];
       for (let i = 1; i <= 200; i++) {
         customers.push({
@@ -1169,8 +1144,7 @@ export const DevDataUploader: React.FC = () => {
           representative: `김대표${i}`,
           repContact: `010-8888-${i.toString().padStart(4, '0')}`,
           repEmail: `ceo_t${i}@example.com`,
-          transactionStatus: 'ALLOWED',
-          createdAt: new Date('2025-01-01').toISOString()
+          createdAt: '2025-01-01'
         });
       }
 
@@ -1186,8 +1160,7 @@ export const DevDataUploader: React.FC = () => {
           position: ['대리', '과장', '차장', '부장'][i % 4],
           contact: `010-7777-${i.toString().padStart(4, '0')}`,
           email: `contact_${i}@example.com`,
-          isActive: i % 10 !== 0,
-          createdAt: new Date('2025-01-01').toISOString()
+          createdAt: '2025-01-01'
         });
 
         sites.push({
@@ -1198,41 +1171,30 @@ export const DevDataUploader: React.FC = () => {
           contactName: `이소장${i}`,
           contact: `010-6666-${i.toString().padStart(4, '0')}`,
           email: `site_${i}@example.com`,
-          isActive: i % 10 !== 0,
-          createdAt: new Date('2025-01-01').toISOString()
+          createdAt: '2025-01-01'
         });
       }
 
-      addLog("고객담당자 1,000명 및 공사현장 1,000개 생성 성공.", "success");
-      // 5. 계약 및 자산 매칭, 배차 입출고 이력 생성 (600건)
-      setGenerationProgress("4. 계약 600건 및 물류/배차 이력 1,500건 계산 중...");
-      addLog("4단계: 계약 600건, 계약자산 1,000건, 배차(출/입고) 물류 이력 1,500건 생성 중...", "info");
+      // 5. 계약 (600건) & 계약자산 & 배차 물류 이력 생성
       const contracts: any[] = [];
       const contractAssets: any[] = [];
       const deliveries: any[] = [];
-
       const startTs = new Date('2026-01-01').getTime();
       const endTs = new Date('2026-07-19').getTime();
       const step = (endTs - startTs) / 599;
-
-      let assetPointer = 1;
 
       for (let i = 1; i <= 600; i++) {
         const custIdx = (i % 200) + 1;
         const siteId = `testdata-site-${((custIdx - 1) * 5) + (i % 5) + 1}`;
         const contactId = `testdata-contact-${((custIdx - 1) * 5) + (i % 5) + 1}`;
-
         const startD = new Date(startTs + (i - 1) * step);
         const startDateStr = startD.toISOString().split('T')[0];
-
-        const duration = 10 + (i % 9) * 10; // 10 to 90 days
+        const duration = 10 + (i % 9) * 10;
         const endD = new Date(startD);
         endD.setDate(startD.getDate() + duration);
         const endDateStr = endD.toISOString().split('T')[0];
-
         const billingDay = [15, 20, 25, 30][i % 4];
         const statementClosingDay = billingDay === 30 ? 25 : billingDay - 5;
-
         const contractId = `testdata-contract-${i}`;
         const isEnded = new Date(endDateStr) < new Date('2026-07-21');
 
@@ -1247,353 +1209,155 @@ export const DevDataUploader: React.FC = () => {
           billingDay,
           statementClosingDay,
           status: isEnded ? 'COMPLETED' : 'ACTIVE',
-          createdAt: startD.toISOString(),
-          updatedAt: new Date().toISOString()
+          createdAt: startD.toISOString()
         });
 
-        // 계약당 자산 매칭 (1~2대)
-        const assetCount = (i % 2) + 1;
-        for (let j = 0; j < assetCount; j++) {
-          if (assetPointer > 1000) break;
-          const asset = assets[assetPointer - 1];
+        contractAssets.push({
+          id: `testdata-ctrasst-${i}`,
+          contractId,
+          assetId: `testdata-asset-${(1 + (i % 1000))}`,
+          dailyRentalFee: 20000,
+          monthlyRentalFee: 600000,
+          createdAt: startD.toISOString()
+        });
 
-          if (!isEnded) {
-            asset.status = 'RENTED';
-            asset.currentCustomerId = `testdata-cust-${custIdx}`;
-            asset.currentSiteId = siteId;
-            asset.contractStart = startDateStr;
-            asset.contractEnd = endDateStr;
-            asset.billingDay = billingDay;
-            asset.monthlyRentalFee = 450000;
-            asset.dailyRentalFee = 15000;
-          }
+        deliveries.push({
+          id: `testdata-deliv-out-${i}`,
+          contractId,
+          contractAssetId: `testdata-ctrasst-${i}`,
+          type: 'OUTGOING',
+          scheduledDate: startDateStr,
+          actualDate: startDateStr,
+          status: 'COMPLETED',
+          createdAt: startD.toISOString()
+        });
 
-          const contractAssetId = `testdata-ca-${i}-${j}`;
-          contractAssets.push({
-            id: contractAssetId,
+        if (isEnded) {
+          deliveries.push({
+            id: `testdata-deliv-in-${i}`,
             contractId,
-            assetId: asset.id,
-            monthlyRentalFee: 450000,
-            dailyRentalFee: 15000,
-            startDate: startDateStr,
-            endDate: endDateStr,
+            contractAssetId: `testdata-ctrasst-${i}`,
+            type: 'INCOMING',
+            scheduledDate: endDateStr,
+            actualDate: endDateStr,
+            status: 'COMPLETED',
             createdAt: startD.toISOString()
           });
-
-          // 출고 배차 (OUTBOUND)
-          deliveries.push({
-            id: `testdata-del-out-${i}-${j}`,
-            contractId,
-            assetIds: asset.id,
-            type: 'OUTBOUND',
-            status: 'COMPLETED',
-            requestDate: startDateStr,
-            scheduledDate: startDateStr,
-            transportCompany: '대한물류',
-            vehicleType: '5톤 셀프로더',
-            vehicleNo: '서울82가 1111',
-            driverName: '홍길동',
-            driverContact: '010-1111-1111',
-            deliveryCost: 150000,
-            deliveryCostConfirmed: 150000,
-            isCostSettled: true,
-            memo: '테스트 출고 기연 배차 완료',
-            createdAt: startD.toISOString(),
-            updatedAt: startD.toISOString()
-          });
-
-          // 입고 배차 (INBOUND)
-          if (isEnded) {
-            deliveries.push({
-              id: `testdata-del-in-${i}-${j}`,
-              contractId,
-              assetIds: asset.id,
-              type: 'INBOUND',
-              status: 'COMPLETED',
-              requestDate: endDateStr,
-              scheduledDate: endDateStr,
-              transportCompany: '민국운수',
-              vehicleType: '1톤 화물차',
-              vehicleNo: '경기99바 2222',
-              driverName: '홍길동',
-              driverContact: '010-2222-2222',
-              deliveryCost: 150000,
-              deliveryCostConfirmed: 150000,
-              isCostSettled: true,
-              memo: '테스트 회수 완료',
-              createdAt: endD.toISOString(),
-              updatedAt: endD.toISOString()
-            });
-          } else {
-            deliveries.push({
-              id: `testdata-del-in-${i}-${j}`,
-              contractId,
-              assetIds: asset.id,
-              type: 'INBOUND',
-              status: Math.random() > 0.5 ? 'DISPATCHED' : 'REQUESTED',
-              requestDate: endDateStr,
-              scheduledDate: endDateStr,
-              transportCompany: '대한물류',
-              vehicleType: '2.5톤',
-              vehicleNo: '서울82가 3333',
-              driverName: '김기사',
-              driverContact: '010-3333-3333',
-              deliveryCost: 150000,
-              isCostSettled: false,
-              memo: '회수 예정 배차 대기',
-              createdAt: new Date().toISOString(),
-              updatedAt: new Date().toISOString()
-            });
-          }
-
-          assetPointer++;
         }
       }
 
-      addLog(`계약 600개, 매핑 계약자산 ${contractAssets.length}개, 배차지시 1,500건 역산 성공.`, "success");
-      // 6. 청구 및 수납 내역 생성
-      setGenerationProgress("5. 기성 청구 대장 및 결제/수납 2,000건 생성 중...");
-      addLog("5단계: 매달 정산일에 부합하는 매출 기성 청구(Billing) 및 수납대장 역산 중...", "info");
+      // 6. 청구 마스터 & 상세 & 결제 & 은행 연동
       const billings: any[] = [];
       const billingDetails: any[] = [];
       const payments: any[] = [];
       const bankTransactions: any[] = [];
 
-      contracts.forEach(contract => {
-        const start = new Date(contract.startDate);
-        const end = new Date(contract.endDate);
-        const limit = new Date(end < new Date('2026-07-20') ? end : new Date('2026-07-20'));
+      for (let i = 1; i <= 600; i++) {
+        const custIdx = (i % 200) + 1;
+        const startD = new Date(startTs + (i - 1) * step);
+        const duration = 10 + (i % 9) * 10;
+        const endD = new Date(startD);
+        endD.setDate(startD.getDate() + duration);
+        const endDateStr = endD.toISOString().split('T')[0];
+        const billingDateStr = new Date(Math.min(endD.getTime(), new Date('2026-07-19').getTime())).toISOString().split('T')[0];
 
-        let current = new Date(start.getFullYear(), start.getMonth(), 1);
-        while (current <= limit) {
-          const year = current.getFullYear();
-          const month = current.getMonth();
-          const billingYm = `${year}-${String(month + 1).padStart(2, '0')}`;
-
-          const monthStart = new Date(year, month, 1);
-          const monthEnd = new Date(year, month + 1, 0);
-
-          const calcStart = start > monthStart ? start : monthStart;
-          const calcEnd = limit < monthEnd ? limit : monthEnd;
-
-          const days = Math.floor((calcEnd.getTime() - calcStart.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-
-          if (days > 0) {
-            const billingId = `testdata-bill-${contract.id}-${billingYm}`;
-            const linkedCA = contractAssets.filter(ca => ca.contractId === contract.id);
-            const totalAmount = linkedCA.length * 15000 * days;
-
-            billings.push({
-              id: billingId,
-              customerId: contract.customerId,
-              contractId: contract.id,
-              billingYm,
-              billingDate: `${year}-${String(month + 1).padStart(2, '0')}-${contract.billingDay}`,
-              totalAmount,
-              paidAmount: 0,
-              status: 'UNPAID',
-              createdAt: calcEnd.toISOString(),
-              updatedAt: calcEnd.toISOString()
-            });
-
-            linkedCA.forEach((ca, idx) => {
-              billingDetails.push({
-                id: `testdata-bd-${billingId}-${idx}`,
-                billingId,
-                contractAssetId: ca.id,
-                itemName: `장비렌탈료 (${ca.assetId})`,
-                quantity: days,
-                unitPrice: 15000,
-                amount: 15000 * days,
-                description: `${calcStart.toISOString().split('T')[0]} ~ ${calcEnd.toISOString().split('T')[0]} 렌탈료`,
-                createdAt: calcEnd.toISOString()
-              });
-            });
-          }
-          current.setMonth(current.getMonth() + 1);
-        }
-      });
-
-      // 결제 및 수납 매칭 시뮬레이션
-      billings.forEach(bill => {
-        const isPastMonth = bill.billingYm < '2026-07';
-        const rand = Math.random();
-
-        if (isPastMonth) {
-          if (rand > 0.1) {
-            bill.status = 'PAID';
-            bill.paidAmount = bill.totalAmount;
-
-            const payDate = new Date(bill.billingDate);
-            payDate.setDate(payDate.getDate() + 5);
-            const payDateStr = payDate.toISOString().split('T')[0];
-
-            payments.push({
-              id: `testdata-pay-${bill.id}`,
-              billingId: bill.id,
-              paymentDate: payDateStr,
-              amount: bill.totalAmount,
-              method: 'BANK_TRANSFER',
-              memo: '인터넷뱅킹 이체 수납',
-              createdAt: payDate.toISOString()
-            });
-
-            bankTransactions.push({
-              id: `testdata-bt-${bill.id}`,
-              transactionDate: `${payDateStr} 10:00:00`,
-              senderName: `(주)기연테스트건설 ${bill.customerId.split('-')[2]}호점`,
-              depositAmount: bill.totalAmount,
-              withdrawAmount: 0,
-              memo: '테스트 기성 입금',
-              matchedBillingId: bill.id,
-              matchingType: 'AUTO',
-              createdAt: payDate.toISOString()
-            });
-          } else if (rand > 0.05) {
-            bill.status = 'PARTIAL';
-            bill.paidAmount = Math.floor(bill.totalAmount / 2);
-          }
-        } else {
-          // 7월 당월 청구 (미수금 회수 분석 시나리오용 40% 미납 처리)
-          if (rand > 0.6) {
-            bill.status = 'PAID';
-            bill.paidAmount = bill.totalAmount;
-          } else if (rand > 0.4) {
-            bill.status = 'PARTIAL';
-            bill.paidAmount = Math.floor(bill.totalAmount / 2);
-          }
-        }
-      });
-
-      addLog(`청구서 ${billings.length}건, 기성내역 ${billingDetails.length}건 정밀 계산 완료.`, "success");
-      // 7. 소모품 & 구매신청 생성
-      setGenerationProgress("6. 소모품 목록 및 구매 신청 300건 생성 중...");
-      addLog("6단계: 정비 자재용 소모품(Consumable) 10종 및 구매 신청 200건 생성 중...", "info");
-      const consumables: any[] = [];
-      const consumableLogs: any[] = [];
-      const consumablePurchases: any[] = [];
-
-      for (let i = 1; i <= 10; i++) {
-        consumables.push({
-          id: `testdata-consumable-${i}`,
-          modelName: `TST-CONSUM-PART-${i}`,
-          stockQty: 100,
-          unit: '개',
-          unitPrice: 15000 + i * 3000,
-          supplier: '가나상사',
-          createdAt: new Date('2025-01-01').toISOString(),
-          updatedAt: new Date().toISOString()
-        });
-      }
-
-      for (let i = 1; i <= 200; i++) {
-        const con = consumables[i % consumables.length];
-        const reqDateStr = new Date(startTs + Math.random() * (endTs - startTs)).toISOString().split('T')[0];
-        const isComp = i % 10 !== 0;
-
-        consumablePurchases.push({
-          id: `testdata-conpur-${i}`,
-          consumableId: con.id,
-          modelName: con.modelName,
-          requestedQty: 10,
-          unitPrice: con.unitPrice,
-          requestDate: reqDateStr,
-          sellerName: '가나상사',
-          status: isComp ? 'COMPLETED' : 'REQUESTED',
-          receivedQty: isComp ? 10 : 0,
-          requesterId: 'sys-admin',
-          requesterName: '시스템관리자',
-          createdAt: new Date(reqDateStr).toISOString(),
-          updatedAt: new Date(reqDateStr).toISOString()
+        billings.push({
+          id: `testdata-bill-${i}`,
+          contractId: `testdata-contract-${i}`,
+          billingNo: `TST-BIL-2026-${i.toString().padStart(4, '0')}`,
+          billingDate: billingDateStr,
+          amountNet: 20000 * duration,
+          amountVat: 2000 * duration,
+          amountTotal: 22000 * duration,
+          status: i % 3 === 0 ? 'PAID' : (i % 3 === 1 ? 'PARTIAL' : 'UNPAID'),
+          createdAt: billingDateStr
         });
 
-        if (isComp) {
-          consumableLogs.push({
-            id: `testdata-cl-${i}`,
-            consumableId: con.id,
-            type: 'INBOUND',
-            quantity: 10,
-            unitPrice: con.unitPrice,
-            supplier: '가나상사',
-            userId: 'sys-admin',
-            actionDate: reqDateStr,
-            description: '모의 테스트 입고',
-            createdAt: new Date(reqDateStr).toISOString()
+        billingDetails.push({
+          id: `testdata-billdtl-${i}`,
+          billingId: `testdata-bill-${i}`,
+          contractAssetId: `testdata-ctrasst-${i}`,
+          startDate: startD.toISOString().split('T')[0],
+          endDate: endDateStr,
+          days: duration,
+          unitPrice: 20000,
+          amountNet: 20000 * duration,
+          amountVat: 2000 * duration,
+          amountTotal: 22000 * duration,
+          createdAt: startD.toISOString()
+        });
+
+        if (i % 3 === 0 || i % 3 === 1) {
+          const payDate = new Date(endD);
+          payDate.setDate(payDate.getDate() + 1);
+          const payDateStr = new Date(Math.min(payDate.getTime(), new Date('2026-07-20').getTime())).toISOString().split('T')[0];
+
+          payments.push({
+            id: `testdata-pay-${i}`,
+            customerId: `testdata-cust-${custIdx}`,
+            billingId: `testdata-bill-${i}`,
+            paymentDate: payDateStr,
+            amount: i % 3 === 0 ? 22000 * duration : 11000 * duration,
+            paymentMethod: 'BANK_TRANSFER',
+            createdAt: payDateStr
+          });
+
+          bankTransactions.push({
+            id: `testdata-banktx-${i}`,
+            transactionDate: payDateStr,
+            senderName: `(주)기연테스트건설 ${custIdx}호점`,
+            amount: i % 3 === 0 ? 22000 * duration : 11000 * duration,
+            bankName: '국민은행',
+            accountNumber: `999-88-77777-${i.toString().padStart(3, '0')}`,
+            status: 'MATCHED',
+            paymentId: `testdata-pay-${i}`,
+            createdAt: payDateStr
           });
         }
       }
 
-      addLog(`소모품 및 자재 구매이력 200건 매핑 성공.`, "success");
-      // 8. 정비 내역 & 외주정비비
-      setGenerationProgress("7. 정비 보고서 및 외주 정비 내역 200건 생성 중...");
-      addLog("7단계: 내수/외주 자산 정비 보고서(Repair) 150건 결합 중...", "info");
+      // 7. 소모품 & 정비 이력
+      const consumables: any[] = [];
       const repairs: any[] = [];
       const repairConsumables: any[] = [];
 
-      for (let i = 1; i <= 150; i++) {
-        const assetIdx = i * 6;
-        if (assetIdx > 1000) break;
-        const asset = assets[assetIdx - 1];
-
-        const reqDateStr = new Date(startTs + Math.random() * (endTs - startTs)).toISOString().split('T')[0];
-        const isCompleted = i % 5 !== 0;
-        const isExt = i % 3 === 0;
-
-        repairs.push({
-          id: `testdata-rep-${i}`,
-          assetId: asset.id,
-          mechanicId: 'sys-admin',
-          repairType: isExt ? 'EXTERNAL' : 'INTERNAL',
-          vendorId: isExt ? 'V-001' : undefined,
-          requestDate: reqDateStr,
-          repairDate: isCompleted ? reqDateStr : undefined,
-          completedDate: isCompleted ? reqDateStr : undefined,
-          status: isCompleted ? 'COMPLETED' : 'IN_PROGRESS',
-          details: isExt ? '외주 유압 실린더 재생 수리' : '상부 컨트롤러 배선 접점 정비',
-          totalCost: isExt ? 350000 : 30000,
-          billableToCustomer: false,
-          createdAt: new Date(reqDateStr).toISOString(),
-          updatedAt: new Date(reqDateStr).toISOString()
+      for (let i = 1; i <= 50; i++) {
+        consumables.push({
+          id: `testdata-consumable-${i}`,
+          name: `테스트 소모품 ${i}`,
+          spec: `Spec ${i}`,
+          unit: 'EA',
+          currentStock: 100,
+          safetyStock: 10,
+          createdAt: '2025-01-01'
         });
 
-        if (!isExt) {
-          const con = consumables[i % consumables.length];
-          repairConsumables.push({
-            id: `testdata-rc-${i}`,
-            repairId: `testdata-rep-${i}`,
-            consumableId: con.id,
-            quantity: 1,
-            unitPrice: con.unitPrice,
-            cost: con.unitPrice
-          });
-        }
+        const repairDate = new Date('2026-05-01');
+        repairDate.setDate(repairDate.getDate() + i);
+        const repairDateStr = repairDate.toISOString().split('T')[0];
+
+        repairs.push({
+          id: `testdata-repair-${i}`,
+          assetId: `testdata-asset-${i}`,
+          repairDate: repairDateStr,
+          description: '정기 구동부 점검 및 부품 교체',
+          totalCost: 150000,
+          status: 'COMPLETED',
+          createdAt: repairDateStr
+        });
+
+        repairConsumables.push({
+          id: `testdata-repconsum-${i}`,
+          repairId: `testdata-repair-${i}`,
+          consumableId: `testdata-consumable-${i}`,
+          quantity: 2,
+          unitPrice: 25000,
+          amount: 50000,
+          createdAt: repairDateStr
+        });
       }
 
-      // 9. 로컬 저장 적용
-      setGenerationProgress("8. 로컬 스토리지 데이터 동기화 중...");
-      addLog("8단계: 로컬 스토리지(localStorage) 데이터 병합 반영 중...", "info");
-      db.products = [...db.products.filter(p => !p.id.startsWith('testdata-')), ...products];
-      db.assets = [...db.assets.filter(a => !a.id.startsWith('testdata-')), ...assets];
-      db.customers = [...db.customers.filter(c => !c.id.startsWith('testdata-')), ...customers];
-      db.contacts = [...db.contacts.filter(c => !c.id.startsWith('testdata-')), ...contacts];
-      db.sites = [...db.sites.filter(s => !s.id.startsWith('testdata-')), ...sites];
-      db.contracts = [...db.contracts.filter(c => !c.id.startsWith('testdata-')), ...contracts];
-      db.contractAssets = [...db.contractAssets.filter(ca => !ca.id.startsWith('testdata-')), ...contractAssets];
-      db.deliveries = [...db.deliveries.filter(d => !d.id.startsWith('testdata-')), ...deliveries];
-      db.billings = [...db.billings.filter(b => !b.id.startsWith('testdata-')), ...billings];
-      db.billingDetails = [...db.billingDetails.filter(bd => !bd.id.startsWith('testdata-')), ...billingDetails];
-      db.payments = [...db.payments.filter(p => !p.id.startsWith('testdata-')), ...payments];
-      db.bankTransactions = [...db.bankTransactions.filter(bt => !bt.id.startsWith('testdata-')), ...bankTransactions];
-      db.consumables = [...db.consumables.filter(c => !c.id.startsWith('testdata-')), ...consumables];
-      db.consumableLogs = [...db.consumableLogs.filter(cl => !cl.id.startsWith('testdata-')), ...consumableLogs];
-      db.consumablePurchases = [...db.consumablePurchases.filter(cp => !cp.id.startsWith('testdata-')), ...consumablePurchases];
-      db.repairs = [...db.repairs.filter(r => !r.id.startsWith('testdata-')), ...repairs];
-      db.repairConsumables = [...db.repairConsumables.filter(rc => !rc.id.startsWith('testdata-')), ...repairConsumables];
-      addLog("로컬 캐시 메모리 병합 및 디스크 쓰기 완료.", "success");
-
-      // 10. SQL 스크립트 빌드
-      addLog("9단계: DB 반영을 위한 일괄 SQL 스크립트 빌드 중...", "info");
-      const sql = generateSqlScript({
+      const generatedParts = generateSqlScript({
         products,
         assets,
         customers,
@@ -1607,89 +1371,104 @@ export const DevDataUploader: React.FC = () => {
         payments,
         bankTransactions,
         consumables,
-        consumableLogs,
-        consumablePurchases,
+        consumableLogs: [],
+        consumablePurchases: [],
         repairs,
         repairConsumables
       });
-      setGeneratedSqlParts(sql);
-      setSelectedSqlTab(0);
-      setSqlType('INSERT');
-      addLog("3개 파트로 분할된 SQL 인서트 스크립트 작성 성공!", "success");
 
-      addLog("🎉 통합 프로세스 데이터 시나리오 생성 완료! 아래 터미널 하단에서 SQL 스크립트를 복사하여 실행하십시오.", "success");
-      alert("로컬 캐시 데이터 시딩이 완료되었으며, 원격 DB 반영을 위한 10,000건 규모의 SQL 스크립트가 준비되었습니다!");
-    } catch (err: any) {
-      console.error(err);
-      addLog(`데이터 생성 오류 발생: ${err.message || err}`, "error");
-      if (err.stack) {
-        addLog(`스택 추적: ${err.stack}`, "error");
-      }
-      alert("데이터 생성 중 오류가 발생했습니다. 로그 콘솔 창을 확인해 주십시오.");
-    } finally {
-      setGeneratingTestData(false);
-      setGenerationProgress("");
+      setSqlType('INSERT');
+      setGeneratedSqlParts(generatedParts);
+      setSelectedSqlTab(0);
+      addLog("⚠️ [백업 로드] 로컬 SQL 생성 및 탭 적재 완료.", "info");
+    } catch (e) {
+      console.error("Local SQL generation failed:", e);
     }
   };
 
-  const handleDeleteTestData = async () => {
-    const confirmed = window.confirm("생성된 테스트용 모의 데이터(IDs가 testdata-로 시작하는 항목)를 삭제하기 위한 SQL 삭제 스크립트를 생성하고 로컬 캐시를 정리하시겠습니까? 데이터 실제 삭제는 SQL Editor에서 수동으로 실행하셔야 합니다.");
+  const handleGenerateTestData = async () => {
+    const confirmed = window.confirm("전체 통합 프로세스 테스트용 대규모 연관 모의 데이터를 생성하시겠습니까? 데이터 정합성과 외래키 제약조건이 실시간으로 확인 및 계산되어 Supabase DB 내부에서 초고속으로 생성됩니다.");
     if (!confirmed) return;
 
     setGeneratingTestData(true);
     setTestDataLogs([]);
-    setGeneratedSqlParts(['', '', '']);
-    setSelectedSqlTab(0);
-    setSqlType('');
-    addLog("데이터 삭제 프로세스 시작...", "info");
-
+    setExecutionHistory([]);
+    setDiagnosticsReport('');
+    addLog("⚡ Supabase 서버 네이티브 시딩(RPC) 실행 중...", "info");
+    
     try {
-      // 1. 로컬 데이터 삭제
-      addLog("1단계: 로컬 스토리지 캐시에서 testdata- 데이터 필터링 중...", "info");
-      db.products = db.products.filter(p => !p.id.startsWith('testdata-'));
-      db.assets = db.assets.filter(a => !a.id.startsWith('testdata-'));
-      db.customers = db.customers.filter(c => !c.id.startsWith('testdata-'));
-      db.contacts = db.contacts.filter(c => !c.id.startsWith('testdata-'));
-      db.sites = db.sites.filter(s => !s.id.startsWith('testdata-'));
-      db.contracts = db.contracts.filter(c => !c.id.startsWith('testdata-'));
-      db.contractAssets = db.contractAssets.filter(ca => !ca.id.startsWith('testdata-'));
-      db.deliveries = db.deliveries.filter(d => !d.id.startsWith('testdata-'));
-      db.billings = db.billings.filter(b => !b.id.startsWith('testdata-'));
-      db.billingDetails = db.billingDetails.filter(bd => !bd.id.startsWith('testdata-'));
-      db.payments = db.payments.filter(p => !p.id.startsWith('testdata-'));
-      db.bankTransactions = db.bankTransactions.filter(bt => !bt.id.startsWith('testdata-'));
-      db.consumables = db.consumables.filter(c => !c.id.startsWith('testdata-'));
-      db.consumableLogs = db.consumableLogs.filter(cl => !cl.id.startsWith('testdata-'));
-      db.consumablePurchases = db.consumablePurchases.filter(cp => !cp.id.startsWith('testdata-'));
-      db.repairs = db.repairs.filter(r => !r.id.startsWith('testdata-'));
-      db.repairConsumables = db.repairConsumables.filter(rc => !rc.id.startsWith('testdata-'));
-      addLog("로컬 스토리지 캐시 정리 완료.", "success");
+      if (!supabase) throw new Error("Supabase가 연결되어 있지 않습니다.");
 
-      // 2. SQL 삭제 스크립트 빌드
-      addLog("2단계: 원격 DB 삭제를 위한 SQL 트랜잭션 스크립트 작성 중...", "info");
-      const TABLE_DELETE_ORDER = [
-        'repair_consumables', 'repairs', 'consumable_purchases', 'consumable_logs', 'consumables',
-        'bank_transactions', 'payments', 'billing_details', 'billings', 'deliveries',
-        'contract_assets', 'contracts', 'customer_sites', 'customer_contacts', 'customers', 'assets', 'products'
-      ];
-      let sql = `BEGIN;\n\n`;
-      sql += `-- Delete all test data with 'testdata-' prefix\n`;
-      TABLE_DELETE_ORDER.forEach(tbl => {
-        sql += `DELETE FROM ${tbl} WHERE id LIKE 'testdata-%';\n`;
-      });
-      sql += `\nCOMMIT;\n`;
+      const { data, error } = await supabase.rpc('generate_test_data');
       
-      setGeneratedSqlParts([sql]);
-      setSelectedSqlTab(0);
-      setSqlType('DELETE');
-      addLog("삭제 SQL 스크립트 준비 완료! 아래 콘솔에서 복사 또는 다운로드하여 Supabase SQL Editor에서 실행하십시오.", "success");
-      alert("로컬 캐시가 성공적으로 비워졌으며, 원격 DB 삭제를 위한 SQL 스크립트가 준비되었습니다.");
+      if (error) {
+        if (error.code === '42883') {
+          addLog("❌ 서버 네이티브 시더(RPC) 함수가 DB에 등록되어 있지 않습니다.", "error");
+          addLog("👉 해결법: scripts/setup_seed_rpc.sql 파일 내용을 복사하여 Supabase SQL Editor에서 한번만 실행해 주십시오.", "info");
+          
+          setDiagnosticsReport(
+            `▶️ 서버 네이티브 함수가 아직 Supabase DB에 설치되지 않았습니다.\n` +
+            `   - 원인: SQL Editor에서 'generate_test_data' 및 'clear_test_data' 함수를 등록하지 않았습니다.\n` +
+            `   - 해결 조치: 프로젝트 내 [scripts/setup_seed_rpc.sql](file:///d:/GoogleDrive/RPA%20개발/01.AntiGravity/Kiyuen_Lift/scripts/setup_seed_rpc.sql) 파일의 전체 SQL 스크립트를 복사하여 Supabase SQL Editor에서 최초 1회 실행(Run)한 후 다시 생성 버튼을 클릭하십시오.\n\n` +
+            `⚠️ [알림] 현재 프론트엔드 단에서 다운로드할 수 있는 임시 SQL 스크립트 파일을 빌드하여 탭에 적재합니다. 수동 실행을 원하는 경우 탭의 다운로드를 활용할 수 있습니다.`
+          );
+
+          runLocalSqlGenerationFallback();
+        } else {
+          addLog(`❌ 서버 네이티브 시딩 실패: ${error.message}`, "error");
+          const diag = runDiagnostics('generate_test_data_rpc', error, []);
+          setDiagnosticsReport(diag);
+        }
+        setGeneratingTestData(false);
+        return;
+      }
+
+      addLog(`✅ 성공: ${data}`, "success");
+      setGenerationProgress("완료! 데이터가 DB에 직접 적재되었습니다.");
+      alert("서버 네이티브 시딩 성공! 10,000건 이상의 테스트 데이터가 Supabase DB 내부에 즉시 적재되었습니다.");
+      setGeneratedSqlParts([]);
     } catch (err: any) {
-      console.error(err);
-      addLog(`삭제 스크립트 생성 오류 발생: ${err.message || err}`, "error");
+      addLog(`❌ 예외 발생: ${err.message || err}`, "error");
+      setDiagnosticsReport(`에러 상세: ${err.message || err}`);
     } finally {
       setGeneratingTestData(false);
-      setGenerationProgress("");
+    }
+  };
+
+  const handleDeleteTestData = async () => {
+    const confirmed = window.confirm("생성된 테스트 데이터(testdata- 접두사 보유 레코드 전체)를 일괄 삭제하시겠습니까? Supabase DB 내부에서 초고속으로 수행됩니다.");
+    if (!confirmed) return;
+
+    setGeneratingTestData(true);
+    setTestDataLogs([]);
+    addLog("🗑️ Supabase 서버 네이티브 데이터 삭제(RPC) 실행 중...", "info");
+    
+    try {
+      if (!supabase) throw new Error("Supabase가 연결되어 있지 않습니다.");
+
+      const { data, error } = await supabase.rpc('clear_test_data');
+      if (error) {
+        if (error.code === '42883') {
+          addLog("❌ 서버 네이티브 삭제(RPC) 함수가 DB에 등록되어 있지 않습니다.", "error");
+          addLog("👉 해결법: scripts/setup_seed_rpc.sql 내 clear_test_data 함수를 SQL Editor에서 실행해 주십시오.", "info");
+          
+          setDiagnosticsReport(
+            `▶️ 서버 네이티브 삭제 함수가 아직 Supabase DB에 설치되지 않았습니다.\n` +
+            `   - 해결 조치: scripts/setup_seed_rpc.sql 내 SQL 스크립트를 SQL Editor에 복사 후 실행(Run)해 주십시오.`
+          );
+        } else {
+          addLog(`❌ 서버 네이티브 삭제 실패: ${error.message}`, "error");
+        }
+        setGeneratingTestData(false);
+        return;
+      }
+
+      addLog(`✅ 성공: ${data}`, "success");
+      alert("삭제 성공! testdata- 접두사를 가진 모든 모의 데이터가 일괄 영구 삭제되었습니다.");
+    } catch (err: any) {
+      addLog(`❌ 예외 발생: ${err.message || err}`, "error");
+    } finally {
+      setGeneratingTestData(false);
     }
   };
 
