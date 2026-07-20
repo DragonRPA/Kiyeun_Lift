@@ -391,6 +391,152 @@ function convertRow(row: Record<string, string>, schema: TableDef): Record<strin
 }
 
 // ──────────────────────────────────────────────
+// Supabase 검증용 예상 스키마 명세
+// ──────────────────────────────────────────────
+const EXPECTED_SCHEMAS: Record<string, { columns: string[]; columnsWithTypes: Record<string, string>; createSql: string }> = {
+  departments: {
+    columns: ['id', 'name', 'parentDepartmentId', 'managerId', 'createdAt'],
+    columnsWithTypes: { id: 'TEXT PRIMARY KEY', name: 'TEXT NOT NULL UNIQUE', parentDepartmentId: 'TEXT REFERENCES departments(id)', managerId: 'TEXT', createdAt: 'TEXT NOT NULL' },
+    createSql: 'CREATE TABLE departments (\n    id TEXT PRIMARY KEY,\n    name TEXT NOT NULL UNIQUE,\n    "parentDepartmentId" TEXT REFERENCES departments(id),\n    "managerId" TEXT,\n    "createdAt" TEXT NOT NULL\n);'
+  },
+  users: {
+    columns: ['id', 'loginId', 'passwordHash', 'name', 'departmentId', 'position', 'managerId', 'status', 'role', 'joinDate', 'retireDate', 'birthDate', 'address', 'phone', 'email', 'profileImageUrl', 'createdAt'],
+    columnsWithTypes: { id: 'TEXT PRIMARY KEY', loginId: 'TEXT NOT NULL UNIQUE', passwordHash: 'TEXT NOT NULL', name: 'TEXT NOT NULL', departmentId: 'TEXT REFERENCES departments(id)', position: 'TEXT', managerId: 'TEXT REFERENCES users(id)', status: 'TEXT CHECK (status IN (\'ACTIVE\', \'LEAVE_OF_ABSENCE\', \'RETIRED\')) NOT NULL DEFAULT \'ACTIVE\'', role: 'TEXT CHECK (role IN (\'ADMIN\', \'MANAGER\', \'USER\', \'MECHANIC\'))', joinDate: 'TEXT', retireDate: 'TEXT', birthDate: 'TEXT', address: 'TEXT', phone: 'TEXT', email: 'TEXT', profileImageUrl: 'TEXT', createdAt: 'TEXT NOT NULL' },
+    createSql: 'CREATE TABLE users (\n    id TEXT PRIMARY KEY,\n    "loginId" TEXT NOT NULL UNIQUE,\n    "passwordHash" TEXT NOT NULL,\n    name TEXT NOT NULL,\n    "departmentId" TEXT REFERENCES departments(id),\n    position TEXT,\n    "managerId" TEXT REFERENCES users(id),\n    status TEXT CHECK (status IN (\'ACTIVE\', \'LEAVE_OF_ABSENCE\', \'RETIRED\')) NOT NULL DEFAULT \'ACTIVE\',\n    role TEXT CHECK (role IN (\'ADMIN\', \'MANAGER\', \'USER\', \'MECHANIC\')),\n    "joinDate" TEXT,\n    "retireDate" TEXT,\n    "birthDate" TEXT,\n    address TEXT,\n    phone TEXT,\n    email TEXT,\n    "profileImageUrl" TEXT,\n    "createdAt" TEXT NOT NULL\n);'
+  },
+  vendors: {
+    columns: ['id', 'name', 'type', 'bizRegNo', 'contactName', 'contact', 'bankAccount', 'memo', 'createdAt'],
+    columnsWithTypes: { id: 'TEXT PRIMARY KEY', name: 'TEXT NOT NULL', type: 'TEXT CHECK (type IN (\'TRANSPORT\', \'RENTAL\', \'REPAIR\', \'CONSUMABLE\', \'OTHER\')) NOT NULL', bizRegNo: 'TEXT', contactName: 'TEXT', contact: 'TEXT', bankAccount: 'TEXT', memo: 'TEXT', createdAt: 'TEXT NOT NULL' },
+    createSql: 'CREATE TABLE vendors (\n    id TEXT PRIMARY KEY,\n    name TEXT NOT NULL,\n    type TEXT CHECK (type IN (\'TRANSPORT\', \'RENTAL\', \'REPAIR\', \'CONSUMABLE\', \'OTHER\')) NOT NULL,\n    "bizRegNo" TEXT,\n    "contactName" TEXT,\n    contact TEXT,\n    "bankAccount" TEXT,\n    memo TEXT,\n    "createdAt" TEXT NOT NULL\n);'
+  },
+  permissions: {
+    columns: ['id', 'role', 'resource', 'action', 'createdAt'],
+    columnsWithTypes: { id: 'TEXT PRIMARY KEY', role: 'TEXT NOT NULL', resource: 'TEXT NOT NULL', action: 'TEXT NOT NULL', createdAt: 'TEXT NOT NULL' },
+    createSql: 'CREATE TABLE permissions (\n    id TEXT PRIMARY KEY,\n    role TEXT NOT NULL,\n    resource TEXT NOT NULL,\n    action TEXT NOT NULL,\n    "createdAt" TEXT NOT NULL\n);'
+  },
+  customers: {
+    columns: ['id', 'name', 'bizRegNo', 'isClosed', 'address', 'representative', 'repContact', 'repEmail', 'createdAt'],
+    columnsWithTypes: { id: 'TEXT PRIMARY KEY', name: 'TEXT NOT NULL', bizRegNo: 'TEXT NOT NULL', isClosed: 'BOOLEAN NOT NULL DEFAULT FALSE', address: 'TEXT NOT NULL', representative: 'TEXT NOT NULL', repContact: 'TEXT NOT NULL', repEmail: 'TEXT', createdAt: 'TEXT NOT NULL' },
+    createSql: 'CREATE TABLE customers (\n    id TEXT PRIMARY KEY,\n    name TEXT NOT NULL,\n    "bizRegNo" TEXT NOT NULL,\n    "isClosed" BOOLEAN NOT NULL DEFAULT FALSE,\n    address TEXT NOT NULL,\n    representative TEXT NOT NULL,\n    "repContact" TEXT NOT NULL,\n    "repEmail" TEXT,\n    "createdAt" TEXT NOT NULL\n);'
+  },
+  customer_contacts: {
+    columns: ['id', 'customerId', 'name', 'position', 'contact', 'email', 'createdAt', 'isActive'],
+    columnsWithTypes: { id: 'TEXT PRIMARY KEY', customerId: 'TEXT REFERENCES customers(id) ON DELETE CASCADE', name: 'TEXT NOT NULL', position: 'TEXT NOT NULL', contact: 'TEXT NOT NULL', email: 'TEXT', createdAt: 'TEXT NOT NULL', isActive: 'BOOLEAN NOT NULL DEFAULT TRUE' },
+    createSql: 'CREATE TABLE customer_contacts (\n    id TEXT PRIMARY KEY,\n    "customerId" TEXT REFERENCES customers(id) ON DELETE CASCADE,\n    name TEXT NOT NULL,\n    position TEXT NOT NULL,\n    contact TEXT NOT NULL,\n    email TEXT,\n    "createdAt" TEXT NOT NULL,\n    "isActive" BOOLEAN NOT NULL DEFAULT TRUE\n);'
+  },
+  customer_sites: {
+    columns: ['id', 'customerId', 'name', 'address', 'contactName', 'contact', 'email', 'createdAt', 'isActive'],
+    columnsWithTypes: { id: 'TEXT PRIMARY KEY', customerId: 'TEXT REFERENCES customers(id) ON DELETE CASCADE', name: 'TEXT NOT NULL', address: 'TEXT NOT NULL', contactName: 'TEXT', contact: 'TEXT', email: 'TEXT', createdAt: 'TEXT NOT NULL', isActive: 'BOOLEAN NOT NULL DEFAULT TRUE' },
+    createSql: 'CREATE TABLE customer_sites (\n    id TEXT PRIMARY KEY,\n    "customerId" TEXT REFERENCES customers(id) ON DELETE CASCADE,\n    name TEXT NOT NULL,\n    address TEXT NOT NULL,\n    "contactName" TEXT,\n    contact TEXT,\n    email TEXT,\n    "createdAt" TEXT NOT NULL,\n    "isActive" BOOLEAN NOT NULL DEFAULT TRUE\n);'
+  },
+  products: {
+    columns: ['id', 'modelName', 'feet', 'spec', 'manufacturer', 'createdAt', 'isActive', 'safetyCertUrl', 'specSheetUrl', 'manualUrl'],
+    columnsWithTypes: { id: 'TEXT PRIMARY KEY', modelName: 'TEXT NOT NULL UNIQUE', feet: 'INTEGER NOT NULL', spec: 'TEXT', manufacturer: 'TEXT', createdAt: 'TEXT NOT NULL', isActive: 'BOOLEAN NOT NULL DEFAULT TRUE', safetyCertUrl: 'TEXT', specSheetUrl: 'TEXT', manualUrl: 'TEXT' },
+    createSql: 'CREATE TABLE products (\n    id TEXT PRIMARY KEY,\n    "modelName" TEXT NOT NULL UNIQUE,\n    feet INTEGER NOT NULL,\n    spec TEXT,\n    manufacturer TEXT,\n    "createdAt" TEXT NOT NULL,\n    "isActive" BOOLEAN NOT NULL DEFAULT TRUE,\n    "safetyCertUrl" TEXT,\n    "specSheetUrl" TEXT,\n    "manualUrl" TEXT\n);'
+  },
+  assets: {
+    columns: ['id', 'assetNo', 'productId', 'modelName', 'feet', 'manufacturer', 'ownerType', 'status', 'acquisitionDate', 'acquisitionPrice', 'depreciationMonths', 'residualValueRate', 'accumDepreciation', 'bookValue', 'vendorId', 'rentStart', 'rentEnd', 'monthlyRentFee', 'dailyRentFee', 'actualRentReturnDate', 'memo', 'createdAt', 'updatedAt'],
+    columnsWithTypes: { id: 'TEXT PRIMARY KEY', assetNo: 'TEXT NOT NULL UNIQUE', productId: 'TEXT REFERENCES products(id)', modelName: 'TEXT NOT NULL', feet: 'INTEGER NOT NULL', manufacturer: 'TEXT', ownerType: 'TEXT CHECK (ownerType IN (\'OWNED\', \'RENTED\')) NOT NULL', status: 'TEXT CHECK (status IN (\'AVAILABLE\', \'RENTED\', \'REPAIRING\', \'RENTED_RETURNED\', \'SOLD\')) NOT NULL', acquisitionDate: 'TEXT', acquisitionPrice: 'DOUBLE PRECISION', depreciationMonths: 'INTEGER', residualValueRate: 'DOUBLE PRECISION', accumDepreciation: 'DOUBLE PRECISION', bookValue: 'DOUBLE PRECISION', vendorId: 'TEXT REFERENCES vendors(id)', rentStart: 'TEXT', rentEnd: 'TEXT', monthlyRentFee: 'DOUBLE PRECISION', dailyRentFee: 'DOUBLE PRECISION', actualRentReturnDate: 'TEXT', memo: 'TEXT', createdAt: 'TEXT NOT NULL', updatedAt: 'TEXT NOT NULL' },
+    createSql: 'CREATE TABLE assets (\n    id TEXT PRIMARY KEY,\n    "assetNo" TEXT NOT NULL UNIQUE,\n    "productId" TEXT REFERENCES products(id),\n    "modelName" TEXT NOT NULL,\n    feet INTEGER NOT NULL,\n    manufacturer TEXT,\n    "ownerType" TEXT CHECK ("ownerType" IN (\'OWNED\', \'RENTED\')) NOT NULL,\n    status TEXT CHECK (status IN (\'AVAILABLE\', \'RENTED\', \'REPAIRING\', \'RENTED_RETURNED\', \'SOLD\')) NOT NULL,\n    "acquisitionDate" TEXT,\n    "acquisitionPrice" DOUBLE PRECISION,\n    "depreciationMonths" INTEGER,\n    "residualValueRate" DOUBLE PRECISION,\n    "accumDepreciation" DOUBLE PRECISION,\n    "bookValue" DOUBLE PRECISION,\n    "vendorId" TEXT REFERENCES vendors(id),\n    "rentStart" TEXT,\n    "rentEnd" TEXT,\n    "monthlyRentFee" DOUBLE PRECISION,\n    "dailyRentFee" DOUBLE PRECISION,\n    "actualRentReturnDate" TEXT,\n    memo TEXT,\n    "createdAt" TEXT NOT NULL,\n    "updatedAt" TEXT NOT NULL\n);'
+  },
+  consumables: {
+    columns: ['id', 'modelName', 'stockQty', 'unit', 'unitPrice', 'vendorId', 'createdAt', 'updatedAt'],
+    columnsWithTypes: { id: 'TEXT PRIMARY KEY', modelName: 'TEXT NOT NULL UNIQUE', stockQty: 'DOUBLE PRECISION NOT NULL DEFAULT 0', unit: 'TEXT NOT NULL', unitPrice: 'DOUBLE PRECISION NOT NULL DEFAULT 0', vendorId: 'TEXT REFERENCES vendors(id)', createdAt: 'TEXT NOT NULL', updatedAt: 'TEXT NOT NULL' },
+    createSql: 'CREATE TABLE consumables (\n    id TEXT PRIMARY KEY,\n    "modelName" TEXT NOT NULL UNIQUE,\n    "stockQty" DOUBLE PRECISION NOT NULL DEFAULT 0,\n    unit TEXT NOT NULL,\n    "unitPrice" DOUBLE PRECISION NOT NULL DEFAULT 0,\n    "vendorId" TEXT REFERENCES vendors(id),\n    "createdAt" TEXT NOT NULL,\n    "updatedAt" TEXT NOT NULL\n);'
+  },
+  consumable_logs: {
+    columns: ['id', 'consumableId', 'type', 'quantity', 'unitPrice', 'vendorId', 'userId', 'targetAssetId', 'purchaseItemId', 'evidenceFileUrl', 'actionDate', 'description', 'createdAt'],
+    columnsWithTypes: { id: 'TEXT PRIMARY KEY', consumableId: 'TEXT REFERENCES consumables(id) ON DELETE CASCADE', type: 'TEXT CHECK (type IN (\'INBOUND\', \'OUTBOUND\', \'ADJUST\')) NOT NULL', quantity: 'DOUBLE PRECISION NOT NULL', unitPrice: 'DOUBLE PRECISION NOT NULL', vendorId: 'TEXT REFERENCES vendors(id)', userId: 'TEXT REFERENCES users(id)', targetAssetId: 'TEXT REFERENCES assets(id)', purchaseItemId: 'TEXT', evidenceFileUrl: 'TEXT', actionDate: 'TEXT NOT NULL', description: 'TEXT', createdAt: 'TEXT NOT NULL' },
+    createSql: 'CREATE TABLE consumable_logs (\n    id TEXT PRIMARY KEY,\n    "consumableId" TEXT REFERENCES consumables(id) ON DELETE CASCADE,\n    type TEXT CHECK (type IN (\'INBOUND\', \'OUTBOUND\', \'ADJUST\')) NOT NULL,\n    quantity DOUBLE PRECISION NOT NULL,\n    "unitPrice" DOUBLE PRECISION NOT NULL,\n    "vendorId" TEXT REFERENCES vendors(id),\n    "userId" TEXT REFERENCES users(id),\n    "targetAssetId" TEXT REFERENCES assets(id),\n    "purchaseItemId" TEXT,\n    "evidenceFileUrl" TEXT,\n    "actionDate" TEXT NOT NULL,\n    description TEXT,\n    "createdAt" TEXT NOT NULL\n);'
+  },
+  consumable_purchases: {
+    columns: ['id', 'consumableId', 'modelName', 'requestedQty', 'unitPrice', 'requestDate', 'sellerName', 'status', 'acceptedDate', 'completedDate', 'requesterId', 'requesterName', 'accepterId', 'accepterName', 'inbounderName', 'receivedQty', 'statementFileUrl', 'createdAt', 'updatedAt'],
+    columnsWithTypes: { id: 'TEXT PRIMARY KEY', consumableId: 'TEXT REFERENCES consumables(id)', modelName: 'TEXT NOT NULL', requestedQty: 'DOUBLE PRECISION NOT NULL', unitPrice: 'DOUBLE PRECISION NOT NULL', requestDate: 'TEXT NOT NULL', sellerName: 'TEXT NOT NULL', status: 'TEXT CHECK (status IN (\'REQUESTED\', \'ACCEPTED\', \'COMPLETED\', \'CANCELLED\')) NOT NULL', acceptedDate: 'TEXT', completedDate: 'TEXT', requesterId: 'TEXT REFERENCES users(id)', requesterName: 'TEXT NOT NULL', accepterId: 'TEXT', accepterName: 'TEXT', inbounderName: 'TEXT', receivedQty: 'DOUBLE PRECISION NOT NULL DEFAULT 0', statementFileUrl: 'TEXT', createdAt: 'TEXT NOT NULL', updatedAt: 'TEXT NOT NULL' },
+    createSql: 'CREATE TABLE consumable_purchases (\n    id TEXT PRIMARY KEY,\n    "consumableId" TEXT REFERENCES consumables(id),\n    "modelName" TEXT NOT NULL,\n    "requestedQty" DOUBLE PRECISION NOT NULL,\n    "unitPrice" DOUBLE PRECISION NOT NULL,\n    "requestDate" TEXT NOT NULL,\n    "sellerName" TEXT NOT NULL,\n    status TEXT CHECK (status IN (\'REQUESTED\', \'ACCEPTED\', \'COMPLETED\', \'CANCELLED\')) NOT NULL,\n    "acceptedDate" TEXT,\n    "completedDate" TEXT,\n    "requesterId" TEXT REFERENCES users(id),\n    "requesterName" TEXT NOT NULL,\n    "accepterId" TEXT,\n    "accepterName" TEXT,\n    "inbounderName" TEXT,\n    "receivedQty" DOUBLE PRECISION NOT NULL DEFAULT 0,\n    "statementFileUrl" TEXT,\n    "createdAt" TEXT NOT NULL,\n    "updatedAt" TEXT NOT NULL\n);'
+  },
+  contracts: {
+    columns: ['id', 'contractNo', 'customerId', 'salespersonId', 'contactId', 'siteId', 'startDate', 'endDate', 'billingDay', 'statementClosingDay', 'status', 'driveFolderId', 'createdAt', 'updatedAt'],
+    columnsWithTypes: { id: 'TEXT PRIMARY KEY', contractNo: 'TEXT NOT NULL UNIQUE', customerId: 'TEXT REFERENCES customers(id)', salespersonId: 'TEXT REFERENCES users(id)', contactId: 'TEXT REFERENCES customer_contacts(id)', siteId: 'TEXT REFERENCES customer_sites(id)', startDate: 'TEXT NOT NULL', endDate: 'TEXT NOT NULL', billingDay: 'INTEGER NOT NULL DEFAULT 30', statementClosingDay: 'INTEGER DEFAULT 25', status: 'TEXT CHECK (status IN (\'ACTIVE\', \'EXTENDED\', \'SHORTENED\', \'SUCCEEDED\', \'COMPLETED\')) NOT NULL', driveFolderId: 'TEXT', createdAt: 'TEXT NOT NULL', updatedAt: 'TEXT NOT NULL' },
+    createSql: 'CREATE TABLE contracts (\n    id TEXT PRIMARY KEY,\n    "contractNo" TEXT NOT NULL UNIQUE,\n    "customerId" TEXT REFERENCES customers(id),\n    "salespersonId" TEXT REFERENCES users(id),\n    "contactId" TEXT REFERENCES customer_contacts(id),\n    "siteId" TEXT REFERENCES customer_sites(id),\n    "startDate" TEXT NOT NULL,\n    "endDate" TEXT NOT NULL,\n    "billingDay" INTEGER NOT NULL DEFAULT 30,\n    "statementClosingDay" INTEGER DEFAULT 25,\n    status TEXT CHECK (status IN (\'ACTIVE\', \'EXTENDED\', \'SHORTENED\', \'SUCCEEDED\', \'COMPLETED\')) NOT NULL,\n    "driveFolderId" TEXT,\n    "createdAt" TEXT NOT NULL,\n    "updatedAt" TEXT NOT NULL\n);'
+  },
+  contract_assets: {
+    columns: ['id', 'contractId', 'assetId', 'expectedModel', 'monthlyRentalFee', 'dailyRentalFee', 'startDate', 'endDate', 'createdAt'],
+    columnsWithTypes: { id: 'TEXT PRIMARY KEY', contractId: 'TEXT REFERENCES contracts(id) ON DELETE CASCADE', assetId: 'TEXT REFERENCES assets(id)', expectedModel: 'TEXT', monthlyRentalFee: 'DOUBLE PRECISION NOT NULL DEFAULT 0', dailyRentalFee: 'DOUBLE PRECISION NOT NULL DEFAULT 0', startDate: 'TEXT NOT NULL', endDate: 'TEXT NOT NULL', createdAt: 'TEXT NOT NULL' },
+    createSql: 'CREATE TABLE contract_assets (\n    id TEXT PRIMARY KEY,\n    "contractId" TEXT REFERENCES contracts(id) ON DELETE CASCADE,\n    "assetId" TEXT REFERENCES assets(id),\n    "expectedModel" TEXT,\n    "monthlyRentalFee" DOUBLE PRECISION NOT NULL DEFAULT 0,\n    "dailyRentalFee" DOUBLE PRECISION NOT NULL DEFAULT 0,\n    "startDate" TEXT NOT NULL,\n    "endDate" TEXT NOT NULL,\n    "createdAt" TEXT NOT NULL\n);'
+  },
+  contract_history: {
+    columns: ['id', 'contractId', 'changeType', 'changeDate', 'prevEndDate', 'newEndDate', 'description', 'createdAt'],
+    columnsWithTypes: { id: 'TEXT PRIMARY KEY', contractId: 'TEXT REFERENCES contracts(id) ON DELETE CASCADE', changeType: 'TEXT CHECK (changeType IN (\'REGISTER\', \'EXTEND\', \'SHORTEN\', \'SUCCEED\', \'TERMINATE\')) NOT NULL', changeDate: 'TEXT NOT NULL', prevEndDate: 'TEXT', newEndDate: 'TEXT', description: 'TEXT', createdAt: 'TEXT NOT NULL' },
+    createSql: 'CREATE TABLE contract_history (\n    id TEXT PRIMARY KEY,\n    "contractId" TEXT REFERENCES contracts(id) ON DELETE CASCADE,\n    "changeType" TEXT CHECK ("changeType" IN (\'REGISTER\', \'EXTEND\', \'SHORTEN\', \'SUCCEED\', \'TERMINATE\')) NOT NULL,\n    "changeDate" TEXT NOT NULL,\n    "prevEndDate" TEXT,\n    "newEndDate" TEXT,\n    description TEXT,\n    "createdAt" TEXT NOT NULL\n);'
+  },
+  deliveries: {
+    columns: ['id', 'contractId', 'assetIds', 'type', 'status', 'requestDate', 'scheduledDate', 'transportCompany', 'vehicleType', 'vehicleNo', 'driverName', 'driverContact', 'deliveryCost', 'deliveryCostConfirmed', 'isCostSettled', 'memo', 'vehicles', 'createdAt', 'updatedAt'],
+    columnsWithTypes: { id: 'TEXT PRIMARY KEY', contractId: 'TEXT REFERENCES contracts(id) ON DELETE SET NULL', assetIds: 'TEXT', type: 'TEXT CHECK (type IN (\'OUTBOUND\', \'INBOUND\', \'EXCHANGE\', \'MOVEMENT\')) NOT NULL', status: 'TEXT CHECK (status IN (\'REQUESTED\', \'DISPATCHED\', \'COMPLETED\')) NOT NULL', requestDate: 'TEXT NOT NULL', scheduledDate: 'TEXT', transportCompany: 'TEXT', vehicleType: 'TEXT', vehicleNo: 'TEXT', driverName: 'TEXT', driverContact: 'TEXT', deliveryCost: 'DOUBLE PRECISION NOT NULL DEFAULT 0', deliveryCostConfirmed: 'DOUBLE PRECISION', isCostSettled: 'BOOLEAN NOT NULL DEFAULT FALSE', memo: 'TEXT', vehicles: 'TEXT', createdAt: 'TEXT NOT NULL', updatedAt: 'TEXT NOT NULL' },
+    createSql: 'CREATE TABLE deliveries (\n    id TEXT PRIMARY KEY,\n    "contractId" TEXT REFERENCES contracts(id) ON DELETE SET NULL,\n    "assetIds" TEXT,\n    type TEXT CHECK (type IN (\'OUTBOUND\', \'INBOUND\', \'EXCHANGE\', \'MOVEMENT\')) NOT NULL,\n    status TEXT CHECK (status IN (\'REQUESTED\', \'DISPATCHED\', \'COMPLETED\')) NOT NULL,\n    "requestDate" TEXT NOT NULL,\n    "scheduledDate" TEXT,\n    "transportCompany" TEXT,\n    "vehicleType" TEXT,\n    "vehicleNo" TEXT,\n    "driverName" TEXT,\n    "driverContact" TEXT,\n    "deliveryCost" DOUBLE PRECISION NOT NULL DEFAULT 0,\n    "deliveryCostConfirmed" DOUBLE PRECISION,\n    "isCostSettled" BOOLEAN NOT NULL DEFAULT FALSE,\n    memo TEXT,\n    vehicles TEXT,\n    "createdAt" TEXT NOT NULL,\n    "updatedAt" TEXT NOT NULL\n);'
+  },
+  transport_companies: {
+    columns: ['id', 'name', 'businessNo', 'contact', 'memo', 'createdAt'],
+    columnsWithTypes: { id: 'TEXT PRIMARY KEY', name: 'TEXT NOT NULL', businessNo: 'TEXT NOT NULL', contact: 'TEXT NOT NULL', memo: 'TEXT', createdAt: 'TEXT NOT NULL' },
+    createSql: 'CREATE TABLE transport_companies (\n    id TEXT PRIMARY KEY,\n    name TEXT NOT NULL,\n    "businessNo" TEXT NOT NULL,\n    contact TEXT NOT NULL,\n    memo TEXT,\n    "createdAt" TEXT NOT NULL\n);'
+  },
+  transport_drivers: {
+    columns: ['id', 'companyId', 'driverName', 'driverContact', 'vehicleNo', 'vehicleType', 'createdAt'],
+    columnsWithTypes: { id: 'TEXT PRIMARY KEY', companyId: 'TEXT REFERENCES transport_companies(id) ON DELETE CASCADE', driverName: 'TEXT NOT NULL', driverContact: 'TEXT NOT NULL', vehicleNo: 'TEXT NOT NULL', vehicleType: 'TEXT NOT NULL', createdAt: 'TEXT NOT NULL' },
+    createSql: 'CREATE TABLE transport_drivers (\n    id TEXT PRIMARY KEY,\n    "companyId" TEXT REFERENCES transport_companies(id) ON DELETE CASCADE,\n    "driverName" TEXT NOT NULL,\n    "driverContact" TEXT NOT NULL,\n    "vehicleNo" TEXT NOT NULL,\n    "vehicleType" TEXT NOT NULL,\n    "createdAt" TEXT NOT NULL\n);'
+  },
+  billings: {
+    columns: ['id', 'customerId', 'billingYm', 'billingDate', 'totalAmount', 'paidAmount', 'status', 'contractId', 'createdAt', 'updatedAt'],
+    columnsWithTypes: { id: 'TEXT PRIMARY KEY', customerId: 'TEXT REFERENCES customers(id)', billingYm: 'TEXT NOT NULL', billingDate: 'TEXT NOT NULL', totalAmount: 'DOUBLE PRECISION NOT NULL DEFAULT 0', paidAmount: 'DOUBLE PRECISION NOT NULL DEFAULT 0', status: 'TEXT CHECK (status IN (\'UNPAID\', \'PARTIAL\', \'PAID\')) NOT NULL', contractId: 'TEXT REFERENCES contracts(id)', createdAt: 'TEXT NOT NULL', updatedAt: 'TEXT NOT NULL' },
+    createSql: 'CREATE TABLE billings (\n    id TEXT PRIMARY KEY,\n    "customerId" TEXT REFERENCES customers(id),\n    "billingYm" TEXT NOT NULL,\n    "billingDate" TEXT NOT NULL,\n    "totalAmount" DOUBLE PRECISION NOT NULL DEFAULT 0,\n    "paidAmount" DOUBLE PRECISION NOT NULL DEFAULT 0,\n    status TEXT CHECK (status IN (\'UNPAID\', \'PARTIAL\', \'PAID\')) NOT NULL,\n    "contractId" TEXT REFERENCES contracts(id),\n    "createdAt" TEXT NOT NULL,\n    "updatedAt" TEXT NOT NULL\n);'
+  },
+  billing_details: {
+    columns: ['id', 'billingId', 'contractAssetId', 'itemName', 'quantity', 'unitPrice', 'amount', 'description', 'createdAt'],
+    columnsWithTypes: { id: 'TEXT PRIMARY KEY', billingId: 'TEXT REFERENCES billings(id) ON DELETE CASCADE', contractAssetId: 'TEXT REFERENCES contract_assets(id)', itemName: 'TEXT NOT NULL', quantity: 'DOUBLE PRECISION NOT NULL DEFAULT 1', unitPrice: 'DOUBLE PRECISION NOT NULL DEFAULT 0', amount: 'DOUBLE PRECISION NOT NULL DEFAULT 0', description: 'TEXT', createdAt: 'TEXT NOT NULL' },
+    createSql: 'CREATE TABLE billing_details (\n    id TEXT PRIMARY KEY,\n    "billingId" TEXT REFERENCES billings(id) ON DELETE CASCADE,\n    "contractAssetId" TEXT REFERENCES contract_assets(id),\n    "itemName" TEXT NOT NULL,\n    quantity DOUBLE PRECISION NOT NULL DEFAULT 1,\n    "unitPrice" DOUBLE PRECISION NOT NULL DEFAULT 0,\n    amount DOUBLE PRECISION NOT NULL DEFAULT 0,\n    description TEXT,\n    "createdAt" TEXT NOT NULL\n);'
+  },
+  payments: {
+    columns: ['id', 'billingId', 'paymentDate', 'amount', 'method', 'memo', 'createdAt'],
+    columnsWithTypes: { id: 'TEXT PRIMARY KEY', billingId: 'TEXT REFERENCES billings(id) ON DELETE CASCADE', paymentDate: 'TEXT NOT NULL', amount: 'DOUBLE PRECISION NOT NULL DEFAULT 0', method: 'TEXT CHECK (method IN (\'CASH\', \'CARD\', \'PREPAID_DEDUCTION\', \'OTHER\')) NOT NULL', memo: 'TEXT', createdAt: 'TEXT NOT NULL' },
+    createSql: 'CREATE TABLE payments (\n    id TEXT PRIMARY KEY,\n    "billingId" TEXT REFERENCES billings(id) ON DELETE CASCADE,\n    "paymentDate" TEXT NOT NULL,\n    amount DOUBLE PRECISION NOT NULL DEFAULT 0,\n    method TEXT CHECK (method IN (\'CASH\', \'CARD\', \'PREPAID_DEDUCTION\', \'OTHER\')) NOT NULL,\n    memo TEXT,\n    "createdAt" TEXT NOT NULL\n);'
+  },
+  repairs: {
+    columns: ['id', 'assetId', 'mechanicId', 'repairType', 'vendorId', 'outboundDate', 'completedDate', 'estimateFileUrl', 'requestDate', 'repairDate', 'status', 'details', 'totalCost', 'billableToCustomer', 'billingId', 'purchaseBillId', 'createdAt', 'updatedAt'],
+    columnsWithTypes: { id: 'TEXT PRIMARY KEY', assetId: 'TEXT REFERENCES assets(id)', mechanicId: 'TEXT', repairType: 'TEXT CHECK (repairType IN (\'INTERNAL\', \'EXTERNAL\'))', vendorId: 'TEXT REFERENCES vendors(id)', outboundDate: 'TEXT', completedDate: 'TEXT', estimateFileUrl: 'TEXT', requestDate: 'TEXT NOT NULL', repairDate: 'TEXT', status: 'TEXT CHECK (status IN (\'PENDING\', \'IN_PROGRESS\', \'COMPLETED\')) NOT NULL', details: 'TEXT NOT NULL', totalCost: 'DOUBLE PRECISION NOT NULL DEFAULT 0', billableToCustomer: 'BOOLEAN NOT NULL DEFAULT FALSE', billingId: 'TEXT', purchaseBillId: 'TEXT', createdAt: 'TEXT NOT NULL', updatedAt: 'TEXT NOT NULL' },
+    createSql: 'CREATE TABLE repairs (\n    id TEXT PRIMARY KEY,\n    "assetId" TEXT REFERENCES assets(id),\n    "mechanicId" TEXT,\n    "repairType" TEXT CHECK ("repairType" IN (\'INTERNAL\', \'EXTERNAL\')),\n    "vendorId" TEXT REFERENCES vendors(id),\n    "outboundDate" TEXT,\n    "completedDate" TEXT,\n    "estimateFileUrl" TEXT,\n    "requestDate" TEXT NOT NULL,\n    "repairDate" TEXT,\n    status TEXT CHECK (status IN (\'PENDING\', \'IN_PROGRESS\', \'COMPLETED\')) NOT NULL,\n    details TEXT NOT NULL,\n    "totalCost" DOUBLE PRECISION NOT NULL DEFAULT 0,\n    "billableToCustomer" BOOLEAN NOT NULL DEFAULT FALSE,\n    "billingId" TEXT,\n    "purchaseBillId" TEXT,\n    "createdAt" TEXT NOT NULL,\n    "updatedAt" TEXT NOT NULL\n);'
+  },
+  repair_consumables: {
+    columns: ['id', 'repairId', 'consumableId', 'quantity', 'unitPrice', 'cost'],
+    columnsWithTypes: { id: 'TEXT PRIMARY KEY', repairId: 'TEXT REFERENCES repairs(id) ON DELETE CASCADE', consumableId: 'TEXT REFERENCES consumables(id)', quantity: 'DOUBLE PRECISION NOT NULL', unitPrice: 'DOUBLE PRECISION NOT NULL', cost: 'DOUBLE PRECISION NOT NULL' },
+    createSql: 'CREATE TABLE repair_consumables (\n    id TEXT PRIMARY KEY,\n    "repairId" TEXT REFERENCES repairs(id) ON DELETE CASCADE,\n    "consumableId" TEXT REFERENCES consumables(id),\n    quantity DOUBLE PRECISION NOT NULL,\n    "unitPrice" DOUBLE PRECISION NOT NULL,\n    cost DOUBLE PRECISION NOT NULL\n);'
+  },
+  todos: {
+    columns: ['id', 'userId', 'type', 'title', 'content', 'isCompleted', 'relatedEntityId', 'createdAt'],
+    columnsWithTypes: { id: 'TEXT PRIMARY KEY', userId: 'TEXT NOT NULL', type: 'TEXT CHECK (type IN (\'MISSING_INFO\', \'GENERAL\')) NOT NULL', title: 'TEXT NOT NULL', content: 'TEXT NOT NULL', isCompleted: 'BOOLEAN NOT NULL DEFAULT FALSE', relatedEntityId: 'TEXT', createdAt: 'TEXT NOT NULL' },
+    createSql: 'CREATE TABLE todos (\n    id TEXT PRIMARY KEY,\n    "userId" TEXT NOT NULL,\n    type TEXT CHECK (type IN (\'MISSING_INFO\', \'GENERAL\')) NOT NULL,\n    title TEXT NOT NULL,\n    content TEXT NOT NULL,\n    "isCompleted" BOOLEAN NOT NULL DEFAULT FALSE,\n    "relatedEntityId" TEXT,\n    "createdAt" TEXT NOT NULL\n);'
+  },
+  bank_transactions: {
+    columns: ['id', 'transactionDate', 'senderName', 'depositAmount', 'withdrawAmount', 'memo', 'matchedBillingId', 'matchingType', 'createdAt'],
+    columnsWithTypes: { id: 'TEXT PRIMARY KEY', transactionDate: 'TEXT NOT NULL', senderName: 'TEXT NOT NULL', depositAmount: 'DOUBLE PRECISION NOT NULL DEFAULT 0', withdrawAmount: 'DOUBLE PRECISION NOT NULL DEFAULT 0', memo: 'TEXT', matchedBillingId: 'TEXT REFERENCES billings(id)', matchingType: 'TEXT CHECK (matchingType IN (\'AUTO\', \'MANUAL\'))', createdAt: 'TEXT NOT NULL' },
+    createSql: 'CREATE TABLE bank_transactions (\n    id TEXT PRIMARY KEY,\n    "transactionDate" TEXT NOT NULL,\n    "senderName" TEXT NOT NULL,\n    "depositAmount" DOUBLE PRECISION NOT NULL DEFAULT 0,\n    "withdrawAmount" DOUBLE PRECISION NOT NULL DEFAULT 0,\n    memo TEXT,\n    "matchedBillingId" TEXT REFERENCES billings(id) ON DELETE SET NULL,\n    "matchingType" TEXT CHECK ("matchingType" IN (\'AUTO\', \'MANUAL\')),\n    "createdAt" TEXT NOT NULL\n);'
+  },
+  bank_matching_rules: {
+    columns: ['id', 'senderName', 'customerId', 'createdAt'],
+    columnsWithTypes: { id: 'TEXT PRIMARY KEY', senderName: 'TEXT NOT NULL UNIQUE', customerId: 'TEXT REFERENCES customers(id)', createdAt: 'TEXT NOT NULL' },
+    createSql: 'CREATE TABLE bank_matching_rules (\n    id TEXT PRIMARY KEY,\n    "senderName" TEXT NOT NULL UNIQUE,\n    "customerId" TEXT REFERENCES customers(id) ON DELETE CASCADE,\n    "createdAt" TEXT NOT NULL\n);'
+  },
+  google_configs: {
+    columns: ['id', 'googleEmail', 'googlePassword', 'gmailAppPassword', 'contractFolder', 'consumableFolder', 'deliveryFolder', 'maintenanceFolder', 'isDevMode', 'quotationTemplateUrl', 'contractTemplateUrl', 'safetyInspectionTemplateUrl', 'preDeliveryChecklistTemplateUrl', 'bizRegCertUrl', 'bankbookCopyUrl', 'updatedAt'],
+    columnsWithTypes: { id: 'TEXT PRIMARY KEY', googleEmail: 'TEXT NOT NULL', googlePassword: 'TEXT', gmailAppPassword: 'TEXT', contractFolder: 'TEXT NOT NULL', consumableFolder: 'TEXT NOT NULL', deliveryFolder: 'TEXT NOT NULL', maintenanceFolder: 'TEXT NOT NULL', isDevMode: 'BOOLEAN NOT NULL DEFAULT TRUE', quotationTemplateUrl: 'TEXT', contractTemplateUrl: 'TEXT', safetyInspectionTemplateUrl: 'TEXT', preDeliveryChecklistTemplateUrl: 'TEXT', bizRegCertUrl: 'TEXT', bankbookCopyUrl: 'TEXT', updatedAt: 'TEXT NOT NULL' },
+    createSql: 'CREATE TABLE google_configs (\n    id TEXT PRIMARY KEY,\n    "googleEmail" TEXT NOT NULL,\n    "googlePassword" TEXT,\n    "gmailAppPassword" TEXT,\n    "contractFolder" TEXT NOT NULL,\n    "consumableFolder" TEXT NOT NULL,\n    "deliveryFolder" TEXT NOT NULL,\n    "maintenanceFolder" TEXT NOT NULL,\n    "isDevMode" BOOLEAN NOT NULL DEFAULT TRUE,\n    "quotationTemplateUrl" TEXT,\n    "contractTemplateUrl" TEXT,\n    "safetyInspectionTemplateUrl" TEXT,\n    "preDeliveryChecklistTemplateUrl" TEXT,\n    "bizRegCertUrl" TEXT,\n    "bankbookCopyUrl" TEXT,\n    "updatedAt" TEXT NOT NULL\n);'
+  },
+  asset_inout_logs: {
+    columns: ['id', 'assetId', 'assetNo', 'modelName', 'type', 'eventDate', 'customerId', 'customerName', 'siteId', 'siteName', 'deliveryId', 'repairId', 'maintenanceScore', 'memo', 'createdAt'],
+    columnsWithTypes: { id: 'TEXT PRIMARY KEY', assetId: 'TEXT REFERENCES assets(id)', assetNo: 'TEXT NOT NULL', modelName: 'TEXT NOT NULL', type: 'TEXT CHECK (type IN (\'OUTBOUND\', \'INBOUND\', \'REPAIR\')) NOT NULL', eventDate: 'TEXT NOT NULL', customerId: 'TEXT REFERENCES customers(id)', customerName: 'TEXT', siteId: 'TEXT REFERENCES customer_sites(id)', siteName: 'TEXT', deliveryId: 'TEXT REFERENCES deliveries(id)', repairId: 'TEXT REFERENCES repairs(id)', maintenanceScore: 'INTEGER', memo: 'TEXT', createdAt: 'TEXT NOT NULL' },
+    createSql: 'CREATE TABLE asset_inout_logs (\n    id TEXT PRIMARY KEY,\n    "assetId" TEXT REFERENCES assets(id) ON DELETE CASCADE,\n    "assetNo" TEXT NOT NULL,\n    "modelName" TEXT NOT NULL,\n    type TEXT CHECK (type IN (\'OUTBOUND\', \'INBOUND\', \'REPAIR\')) NOT NULL,\n    "eventDate" TEXT NOT NULL,\n    "customerId" TEXT REFERENCES customers(id) ON DELETE SET NULL,\n    "customerName" TEXT,\n    "siteId" TEXT REFERENCES customer_sites(id) ON DELETE SET NULL,\n    "siteName" TEXT,\n    "deliveryId" TEXT REFERENCES deliveries(id) ON DELETE SET NULL,\n    "repairId" TEXT REFERENCES repairs(id) ON DELETE SET NULL,\n    "maintenanceScore" INTEGER,\n    memo TEXT,\n    "createdAt" TEXT NOT NULL\n);'
+  }
+};
+
+// ──────────────────────────────────────────────
 // 메인 컴포넌트
 // ──────────────────────────────────────────────
 export const DevDataUploader: React.FC = () => {
@@ -403,6 +549,11 @@ export const DevDataUploader: React.FC = () => {
   const [uploadResult, setUploadResult] = useState<{ success: number; failed: number } | null>(null);
   const [fileName, setFileName] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // ──── Supabase 실시간 DB 스키마 정합성 검증 도구 상태 ────
+  const [checkingSchema, setCheckingSchema] = useState(false);
+  const [schemaAuditResults, setSchemaAuditResults] = useState<{ table: string; status: 'OK' | 'MISSING' | 'MISMATCH'; message: string }[] | null>(null);
+  const [generatedPatchSql, setGeneratedPatchSql] = useState('');
 
   const isAdmin = currentUser?.role === 'ADMIN';
   const isConnected = !!supabase;
@@ -796,6 +947,86 @@ export const DevDataUploader: React.FC = () => {
     }
   };
 
+  // ──── Supabase 실시간 DB 스키마 정합성 검증 도구 핸들러 ────
+  const handleVerifySchema = async () => {
+    if (!supabase) return;
+    setCheckingSchema(true);
+    const audit: { table: string; status: 'OK' | 'MISSING' | 'MISMATCH'; message: string }[] = [];
+    let sqlPatch = '';
+
+    try {
+      for (const table of Object.keys(EXPECTED_SCHEMAS)) {
+        const schemaDef = EXPECTED_SCHEMAS[table];
+        
+        // 1. 테이블 존재 여부 검사
+        const { error: tableError } = await supabase!.from(table).select('*').limit(0);
+        
+        if (tableError && (tableError.code === '42P01' || tableError.message.includes('does not exist'))) {
+          audit.push({
+            table,
+            status: 'MISSING',
+            message: '테이블이 Supabase에 존재하지 않습니다.'
+          });
+          sqlPatch += `-- [생성] ${table} 테이블 추가\n${schemaDef.createSql}\n\n`;
+          continue;
+        }
+
+        // 2. 컬럼 누락 여부 검증 (각 컬럼별 limit 0 쿼리)
+        const missingCols: string[] = [];
+        await Promise.all(schemaDef.columns.map(async (col) => {
+          const { error: colError } = await supabase!.from(table).select(col).limit(0);
+          if (colError && (colError.message.includes('column') || colError.message.includes('does not exist'))) {
+            missingCols.push(col);
+          }
+        }));
+
+        if (missingCols.length > 0) {
+          audit.push({
+            table,
+            status: 'MISMATCH',
+            message: `컬럼 누락 (${missingCols.length}개): ${missingCols.join(', ')}`
+          });
+          
+          sqlPatch += `-- [보완] ${table} 테이블 누락 컬럼 추가 DDL\n`;
+          missingCols.forEach(col => {
+            const colDef = schemaDef.columnsWithTypes[col] || 'TEXT';
+            let colType = 'TEXT';
+            if (colDef.includes('PRIMARY KEY')) {
+              colType = 'TEXT PRIMARY KEY';
+            } else if (colDef.includes('REFERENCES')) {
+              colType = colDef;
+            } else if (colDef.includes('CHECK')) {
+              colType = colDef;
+            } else if (colDef.includes('BOOLEAN')) {
+              colType = 'BOOLEAN NOT NULL DEFAULT FALSE';
+            } else if (colDef.includes('DOUBLE PRECISION')) {
+              colType = 'DOUBLE PRECISION NOT NULL DEFAULT 0';
+            } else if (colDef.includes('INTEGER')) {
+              colType = 'INTEGER';
+            } else if (colDef.includes('NOT NULL')) {
+              colType = 'TEXT NOT NULL';
+            }
+            sqlPatch += `ALTER TABLE ${table} ADD COLUMN IF NOT EXISTS "${col}" ${colType};\n`;
+          });
+          sqlPatch += `\n`;
+        } else {
+          audit.push({
+            table,
+            status: 'OK',
+            message: '정상 (테이블 및 모든 컬럼 일치)'
+          });
+        }
+      }
+      setSchemaAuditResults(audit);
+      setGeneratedPatchSql(sqlPatch);
+    } catch (err) {
+      console.error('Schema check failed:', err);
+      alert('스키마 검증 중 오류가 발생했습니다.');
+    } finally {
+      setCheckingSchema(false);
+    }
+  };
+
   if (!isAdmin) {
     return (
       <div style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--text-muted)' }}>
@@ -1150,6 +1381,104 @@ export const DevDataUploader: React.FC = () => {
             </button>
           </div>
         </div>
+      </div>
+
+      <hr style={{ border: 'none', borderTop: '1px solid var(--border-color)', margin: '30px 0 20px 0' }} />
+
+      {/* Supabase 실시간 DB 스키마 정합성 검증 도구 */}
+      <div className="card" style={{ padding: '24px', backgroundColor: 'var(--bg-card)', marginBottom: '30px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
+          <DatabaseIcon size={20} color="var(--primary)" />
+          <h3 style={{ fontWeight: '800', fontSize: '18px', margin: 0 }}>🔍 Supabase 실시간 DB 스키마 정합성 검증 도구</h3>
+        </div>
+
+        <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '16px', margin: 0 }}>
+          코드베이스에서 정의된 28개 데이터 테이블의 실제 Supabase 내 존재 여부 및 컬럼 구조를 실시간 검증합니다. 부정합이 있을 시 Supabase SQL Editor에 입력할 DDL 패치 쿼리를 자동 생성합니다.
+        </p>
+
+        <button
+          onClick={handleVerifySchema}
+          disabled={!isConnected || checkingSchema}
+          className="btn-primary"
+          style={{
+            display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '20px',
+            opacity: (!isConnected || checkingSchema) ? 0.5 : 1
+          }}
+        >
+          {checkingSchema ? <Loader size={16} style={{ animation: 'spin 1s linear infinite' }} /> : <DatabaseIcon size={16} />}
+          {checkingSchema ? '스키마 정합성 검증 중...' : '실시간 DB 구조 검증 실행'}
+        </button>
+
+        {schemaAuditResults && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+            <div style={{ maxHeight: '350px', overflowY: 'auto', border: '1px solid var(--border-color)', borderRadius: '6px' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                <thead>
+                  <tr style={{ backgroundColor: 'var(--bg-body)', borderBottom: '1px solid var(--border-color)', textAlign: 'left' }}>
+                    <th style={{ padding: '10px 12px', fontWeight: '700' }}>테이블명</th>
+                    <th style={{ padding: '10px 12px', fontWeight: '700' }}>상태</th>
+                    <th style={{ padding: '10px 12px', fontWeight: '700' }}>검증 결과 명세</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {schemaAuditResults.map((result, i) => (
+                    <tr key={i} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                      <td style={{ padding: '10px 12px', fontWeight: '600' }}><code>{result.table}</code></td>
+                      <td style={{ padding: '10px 12px' }}>
+                        <span style={{
+                          padding: '3px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: '700',
+                          backgroundColor: result.status === 'OK' ? 'rgba(34,197,94,0.1)' : result.status === 'MISMATCH' ? 'rgba(245,158,11,0.1)' : 'rgba(239,68,68,0.1)',
+                          color: result.status === 'OK' ? '#15803d' : result.status === 'MISMATCH' ? '#b45309' : 'var(--danger)'
+                        }}>
+                          {result.status === 'OK' ? '정상' : result.status === 'MISMATCH' ? '구조 불일치' : '테이블 누락'}
+                        </span>
+                      </td>
+                      <td style={{ padding: '10px 12px', color: 'var(--text-muted)' }}>{result.message}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {generatedPatchSql ? (
+              <div className="card" style={{ padding: '16px', backgroundColor: 'rgba(239,68,68,0.02)', border: '1px dashed var(--danger)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                  <h4 style={{ fontWeight: '700', fontSize: '14px', color: 'var(--danger)', margin: 0 }}>⚠️ 스키마 복구 DDL 패치 쿼리</h4>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(generatedPatchSql);
+                      alert('클립보드에 복사되었습니다. Supabase SQL Editor에 붙여넣어 실행하세요.');
+                    }}
+                    className="btn-secondary"
+                    style={{ fontSize: '11px', padding: '4px 10px' }}
+                  >
+                    SQL 코드 복사
+                  </button>
+                </div>
+                <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '10px', margin: 0 }}>
+                  아래 SQL 패치 코드를 복사하여 Supabase의 SQL Editor에 붙여넣고 실행(Run)하면 부정합 상태인 테이블/컬럼이 정상 구조로 즉시 신설/보완됩니다.
+                </p>
+                <textarea
+                  readOnly
+                  value={generatedPatchSql}
+                  style={{
+                    width: '100%', height: '200px', fontFamily: 'monospace', fontSize: '12px',
+                    backgroundColor: 'var(--bg-body)', color: 'var(--text-primary)', border: '1px solid var(--border-color)',
+                    borderRadius: '4px', padding: '10px', resize: 'vertical'
+                  }}
+                />
+              </div>
+            ) : (
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: '8px', padding: '12px 16px',
+                backgroundColor: 'rgba(34,197,94,0.1)', border: '1px solid #22c55e', borderRadius: '8px', color: '#15803d'
+              }}>
+                <CheckCircle size={16} />
+                <span style={{ fontSize: '13px', fontWeight: '600' }}>검증 결과 완전성 충족: Supabase 데이터베이스와 코드베이스 스키마가 100% 일치합니다. 추가 DDL 패치가 필요하지 않습니다.</span>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

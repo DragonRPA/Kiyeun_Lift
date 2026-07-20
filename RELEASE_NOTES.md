@@ -1,3 +1,12 @@
+# Release Notes (v2.4.2)
+
+## 🛠️ 실시간 DB 스키마 정합성 검증 도구 개발 및 누락 스키마 전수 패치
+- **실시간 DB 스키마 검증 도구 신설 (`DevDataUploader.tsx`)**: 개발자 도구 메뉴 하단에 28개 데이터 테이블의 존재 여부 및 모든 컬럼 구성을 Supabase와 실시간 대조하는 검증 패널을 구축했습니다.
+- **자동 DDL 패치 생성기**: 테이블이 누락되었거나 특정 컬럼이 원격 DB에 없을 경우, Supabase SQL Editor에 복사하여 즉시 실행할 수 있는 `CREATE TABLE` / `ALTER TABLE` DDL 스크립트를 동적으로 자동 빌드·복사할 수 있는 강력한 기능이 장착되었습니다.
+- **누락된 5대 테이블 스키마 정의 통합 (`schema.sql` / DB 완료)**: `consumable_purchases`, `transport_companies`, `transport_drivers`, `todos`, `google_configs` 5개 테이블을 DB에 정상적으로 모두 반영 및 스키마 파일에 구조를 백업 완료했습니다.
+
+---
+
 # Release Notes (v2.4.1)
 
 ## 🛠️ DB 업서트/초기화 대상 누락 테이블 보완 및 실제 스키마 테이블명 매핑 정상화

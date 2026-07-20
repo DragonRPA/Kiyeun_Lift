@@ -2,6 +2,11 @@
 -- 최종 합의된 프로젝트 요구사항 적용 (인사/조직도, 매입 이원화, 협업 3대 테이블, 외주/배차 등 확장)
 
 -- 기존 테이블 삭제 (순서 주의: 자식 테이블 먼저)
+DROP TABLE IF EXISTS consumable_purchases CASCADE;
+DROP TABLE IF EXISTS transport_drivers CASCADE;
+DROP TABLE IF EXISTS transport_companies CASCADE;
+DROP TABLE IF EXISTS todos CASCADE;
+DROP TABLE IF EXISTS google_configs CASCADE;
 DROP TABLE IF EXISTS collaboration_request_history CASCADE;
 DROP TABLE IF EXISTS collaboration_requests CASCADE;
 DROP TABLE IF EXISTS work_instructions CASCADE;
@@ -463,6 +468,82 @@ CREATE TABLE asset_inout_logs (
     "maintenanceScore" INTEGER,
     memo TEXT,
     "createdAt" TEXT NOT NULL
+);
+
+-- 33. 소모품 구매 신청서 테이블 (consumable_purchases) - 통합 규격
+CREATE TABLE consumable_purchases (
+    id TEXT PRIMARY KEY,
+    "consumableId" TEXT REFERENCES consumables(id),
+    "modelName" TEXT NOT NULL,
+    "requestedQty" DOUBLE PRECISION NOT NULL,
+    "unitPrice" DOUBLE PRECISION NOT NULL,
+    "requestDate" TEXT NOT NULL,
+    "sellerName" TEXT NOT NULL,
+    status TEXT CHECK (status IN ('REQUESTED', 'ACCEPTED', 'COMPLETED', 'CANCELLED')) NOT NULL,
+    "acceptedDate" TEXT,
+    "completedDate" TEXT,
+    "requesterId" TEXT REFERENCES users(id),
+    "requesterName" TEXT NOT NULL,
+    "accepterId" TEXT,
+    "accepterName" TEXT,
+    "inbounderName" TEXT,
+    "receivedQty" DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "statementFileUrl" TEXT,
+    "createdAt" TEXT NOT NULL,
+    "updatedAt" TEXT NOT NULL
+);
+
+-- 34. 운송 거래처 테이블 (transport_companies)
+CREATE TABLE transport_companies (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    "businessNo" TEXT NOT NULL,
+    contact TEXT NOT NULL,
+    memo TEXT,
+    "createdAt" TEXT NOT NULL
+);
+
+-- 35. 운송 차량/기사 테이블 (transport_drivers)
+CREATE TABLE transport_drivers (
+    id TEXT PRIMARY KEY,
+    "companyId" TEXT REFERENCES transport_companies(id) ON DELETE CASCADE,
+    "driverName" TEXT NOT NULL,
+    "driverContact" TEXT NOT NULL,
+    "vehicleNo" TEXT NOT NULL,
+    "vehicleType" TEXT NOT NULL,
+    "createdAt" TEXT NOT NULL
+);
+
+-- 36. 미완료 업무/할 일 테이블 (todos)
+CREATE TABLE todos (
+    id TEXT PRIMARY KEY,
+    "userId" TEXT NOT NULL,
+    type TEXT CHECK (type IN ('MISSING_INFO', 'GENERAL')) NOT NULL,
+    title TEXT NOT NULL,
+    content TEXT NOT NULL,
+    "isCompleted" BOOLEAN NOT NULL DEFAULT FALSE,
+    "relatedEntityId" TEXT,
+    "createdAt" TEXT NOT NULL
+);
+
+-- 37. 구글 드라이브 및 API 설정 테이블 (google_configs)
+CREATE TABLE google_configs (
+    id TEXT PRIMARY KEY,
+    "googleEmail" TEXT NOT NULL,
+    "googlePassword" TEXT,
+    "gmailAppPassword" TEXT,
+    "contractFolder" TEXT NOT NULL,
+    "consumableFolder" TEXT NOT NULL,
+    "deliveryFolder" TEXT NOT NULL,
+    "maintenanceFolder" TEXT NOT NULL,
+    "isDevMode" BOOLEAN NOT NULL DEFAULT TRUE,
+    "quotationTemplateUrl" TEXT,
+    "contractTemplateUrl" TEXT,
+    "safetyInspectionTemplateUrl" TEXT,
+    "preDeliveryChecklistTemplateUrl" TEXT,
+    "bizRegCertUrl" TEXT,
+    "bankbookCopyUrl" TEXT,
+    "updatedAt" TEXT NOT NULL
 );
 
 
