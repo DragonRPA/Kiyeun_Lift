@@ -15,7 +15,7 @@ export const Consumables: React.FC = () => {
 
   const canSave = hasPermission('consumable', 'save');
   // 탭 구성: STOCK (보유 재고), REQ_LIST (신청 내역 조회), REQ_WRITE (구매신청 작성), REQ_INBOUND (구매물품 입고처리), USE (소모품 사용), LOGS (입출고 로그)
-  const [activeTab, setActiveTab] = useState<'STOCK' | 'REQ_LIST' | 'REQ_WRITE' | 'REQ_INBOUND' | 'PURCHASE' | 'USE' | 'LOGS'>('STOCK');
+  const [activeTab, setActiveTab] = useState<'STOCK' | 'REQ_LIST' | 'REQ_WRITE' | 'REQ_INBOUND' | 'USE' | 'LOGS'>('STOCK');
 
   // --- [1] 구매신청 조회용 필터 상태 ---
   const [reqSearchTerm, setReqSearchTerm] = useState('');
@@ -51,13 +51,6 @@ export const Consumables: React.FC = () => {
   const [useQty, setUseQty] = useState(1);
   const [useAssetId, setUseAssetId] = useState('');
   const [useDesc, setUseDesc] = useState('');
-
-  // --- [5] 입고 폼 상태 (전고 이월용 / 직접 구매입고) ---
-  const [inModel, setInModel] = useState('');
-  const [inQty, setInQty] = useState(1);
-  const [inUnit, setInUnit] = useState('개');
-  const [inPrice, setInPrice] = useState(0);
-  const [inSupplier, setInSupplier] = useState('');
 
   const getUserName = (id?: string) => {
     if (!id) return '시스템';
@@ -231,30 +224,7 @@ export const Consumables: React.FC = () => {
     setActiveTab('STOCK');
   };
 
-  // --- 기존의 간이 구입입고 제출 ---
-  const handlePurchaseSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!canSave) return;
-    if (!inModel || inQty <= 0 || inPrice <= 0) {
-      alert('필수 값을 정확하게 입력해 주세요.');
-      return;
-    }
 
-    purchaseConsumable({
-      modelName: inModel,
-      qty: inQty,
-      unit: inUnit,
-      unitPrice: inPrice,
-      supplier: inSupplier
-    });
-
-    alert('소모품 직접 구입 입고가 완료되었습니다.');
-    setInModel('');
-    setInQty(1);
-    setInPrice(0);
-    setInSupplier('');
-    setActiveTab('STOCK');
-  };
 
   const handleUseSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -343,13 +313,7 @@ export const Consumables: React.FC = () => {
             >
               <PackagePlus size={14} /> 구매품 입고 처리 (증빙 필수)
             </button>
-            <button
-              className={activeTab === 'PURCHASE' ? 'btn-primary' : 'btn-secondary'}
-              onClick={() => setActiveTab('PURCHASE')}
-              style={{ padding: '8px 14px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '4px' }}
-            >
-              <ShoppingCart size={14} /> 직접 구입입고 (이월분)
-            </button>
+
             <button
               className={activeTab === 'USE' ? 'btn-primary' : 'btn-secondary'}
               onClick={() => setActiveTab('USE')}
@@ -835,73 +799,7 @@ export const Consumables: React.FC = () => {
         </div>
       )}
 
-      {/* [TAB 5] 간이 직접 구입입고 (이월 등록용) */}
-      {activeTab === 'PURCHASE' && (
-        <div className="card" style={{ maxWidth: '600px', margin: 0 }}>
-          <h3 className="card-title" style={{ marginBottom: '20px' }}>소모품 신규 직접 입고 (전고 이월분 등록)</h3>
-          <form onSubmit={handlePurchaseSubmit}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '20px' }}>
-              <div>
-                <label>소모품 모델명 *</label>
-                <input
-                  type="text"
-                  value={inModel}
-                  onChange={e => setInModel(e.target.value)}
-                  placeholder="예:USUS-2200 딥사이클 배터리"
-                  required
-                />
-              </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                <div>
-                  <label>입고 수량 *</label>
-                  <input
-                    type="number"
-                    value={inQty || ''}
-                    onChange={e => setInQty(parseInt(e.target.value) || 1)}
-                    min={1}
-                    required
-                  />
-                </div>
-                <div>
-                  <label>단위 *</label>
-                  <select value={inUnit} onChange={e => setInUnit(e.target.value)}>
-                    <option value="개">개 (ea)</option>
-                    <option value="박스">박스 (box)</option>
-                    <option value="드럼">드럼 (drum)</option>
-                    <option value="세트">세트 (set)</option>
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label>매입 단가 (원) *</label>
-                <input
-                  type="number"
-                  value={inPrice || ''}
-                  onChange={e => setInPrice(parseInt(e.target.value) || 0)}
-                  placeholder="개당 단가 입력"
-                  required
-                />
-              </div>
-
-              <div>
-                <label>구입처 (자재상사)</label>
-                <input
-                  type="text"
-                  value={inSupplier}
-                  onChange={e => setInSupplier(e.target.value)}
-                  placeholder="예: 세방전지 경기총판"
-                />
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-              <button type="submit" className="btn-primary">입고 처리</button>
-            </div>
-          </form>
-        </div>
-      )}
 
       {/* [TAB 6] 소모품 사용 (출고) */}
       {activeTab === 'USE' && (
