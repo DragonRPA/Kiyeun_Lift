@@ -4,7 +4,7 @@ import { useApp } from './context/AppContext';
 import {
   LayoutDashboard, Users, UserCheck, Package, Layers, PlusCircle,
   Truck, Wrench, Shield, ShoppingBag, CreditCard, LogOut, Sun, Moon, Menu, X, Zap, Settings, Database as DatabaseIcon,
-  TrendingUp
+  TrendingUp, Clock
 } from 'lucide-react';
 
 // 페이지 컴포넌트 임포트
@@ -24,6 +24,8 @@ import { TransportMaster } from './pages/TransportMaster';
 import { DevDataUploader } from './pages/DevDataUploader';
 import { Repairs } from './pages/Repairs';
 import { SmartDispatch } from './pages/SmartDispatch';
+import { SmartReturn } from './pages/SmartReturn';
+import { AssetHistory } from './pages/AssetHistory';
 import { AssetAssignment } from './pages/AssetAssignment';
 import { OrganizationSettings } from './pages/OrganizationSettings';
 
@@ -106,6 +108,8 @@ const App: React.FC = () => {
     { id: 'delivery', name: '배차/운송 관리', icon: <Truck size={18} />, component: <TruckDispatch /> },
     { id: 'transport_master', name: '운송 거래처/기사 관리', icon: <Settings size={18} />, component: <TransportMaster /> },
     { id: 'smart_dispatch', name: '스마트 출고 요청', icon: <Zap size={18} />, component: <SmartDispatch /> },
+    { id: 'smart_return', name: '스마트 회수 요청', icon: <Zap size={18} />, component: <SmartReturn /> },
+    { id: 'asset_inout_history', name: '자산 입출고/정비 이력', icon: <Clock size={18} />, component: <AssetHistory /> },
     { id: 'dispatch_assign', name: '장비 할당 (매핑)', icon: <Layers size={18} />, component: <AssetAssignment /> },
     { id: 'repair', name: '자산 정비수리', icon: <Wrench size={18} />, component: <Repairs /> },
     { id: 'organization', name: '조직/인사 관리', icon: <Users size={18} />, component: <OrganizationSettings /> },

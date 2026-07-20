@@ -142,10 +142,28 @@ export const Contracts: React.FC = () => {
     e.preventDefault();
     if (!canSave || !modContractId) return;
 
+    const contract = contracts.find(c => c.id === modContractId);
+    if (!contract) {
+      alert('선택한 계약을 찾을 수 없습니다.');
+      return;
+    }
+
     if (modType === 'EXTEND') {
+      if (new Date(newEndDate) <= new Date(contract.endDate)) {
+        alert(`연장 만료일은 기존 만료일(${contract.endDate})보다 늦어야 합니다.`);
+        return;
+      }
       extendContract(modContractId, newEndDate, modDesc);
       alert('계약 기간 연장 처리가 완료되었습니다.');
     } else {
+      if (new Date(newEndDate) >= new Date(contract.endDate)) {
+        alert(`단축 만료일은 기존 만료일(${contract.endDate})보다 빨라야 합니다.`);
+        return;
+      }
+      if (new Date(newEndDate) < new Date(contract.startDate)) {
+        alert(`단축 만료일은 계약 개시일(${contract.startDate})보다 같거나 늦어야 합니다.`);
+        return;
+      }
       shortenContract(modContractId, newEndDate, modDesc);
       alert('계약 기간 단축 처리 및 회수 의뢰가 자동 등록되었습니다.');
     }

@@ -6,7 +6,7 @@ import { exportToExcel } from '../services/excel';
 import { Asset } from '../services/db';
 
 export const Assets: React.FC = () => {
-  const { assets, customers, sites } = useApp();
+  const { assets, customers, sites, setActiveTab, setNavigationPayload } = useApp();
 
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
@@ -201,11 +201,24 @@ export const Assets: React.FC = () => {
           backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000
         }}>
           <div className="card" style={{ width: '90%', maxWidth: '800px', maxHeight: '90vh', overflowY: 'auto', backgroundColor: 'var(--bg-card)' }}>
-            <div className="card-header" style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '12px' }}>
-              <h3 className="card-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div className="card-header" style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h3 className="card-title" style={{ display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}>
                 <Layers className="text-primary" /> 자산 상세 명세서 - {selectedAsset.assetNo}
               </h3>
-              <button className="btn-secondary" onClick={() => setSelectedAsset(null)} style={{ padding: '4px 10px' }}>닫기</button>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                  className="btn-primary"
+                  onClick={() => {
+                    setActiveTab('asset_inout_history');
+                    setNavigationPayload({ assetId: selectedAsset.id });
+                    setSelectedAsset(null);
+                  }}
+                  style={{ padding: '4px 10px', fontSize: '12.5px', backgroundColor: 'var(--primary)', border: 'none', color: '#fff', cursor: 'pointer', borderRadius: '4px' }}
+                >
+                  📈 이력/정비 타임라인 보기
+                </button>
+                <button className="btn-secondary" onClick={() => setSelectedAsset(null)} style={{ padding: '4px 10px', fontSize: '12.5px' }}>닫기</button>
+              </div>
             </div>
 
             <div style={{ padding: '16px 0', display: 'flex', flexDirection: 'column', gap: '20px' }}>

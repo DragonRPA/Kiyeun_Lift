@@ -242,6 +242,7 @@ export interface Payment {
 export interface Delivery {
   id: string;
   contractId?: string;
+  assetIds?: string; // 대상 장비 ID 목록 (콤마 구분)
   type: 'OUTBOUND' | 'INBOUND' | 'EXCHANGE' | 'MOVEMENT';
   status: 'REQUESTED' | 'DISPATCHED' | 'COMPLETED';
   requestDate: string;
@@ -330,6 +331,24 @@ export interface BankMatchingRule {
   id: string;
   senderName: string; // 이체자명
   customerId: string; // 매핑된 고객사 ID
+  createdAt: string;
+}
+
+export interface AssetInOutLog {
+  id: string;
+  assetId: string;
+  assetNo: string;
+  modelName: string;
+  type: 'OUTBOUND' | 'INBOUND' | 'REPAIR'; // 출고, 입고, 정비
+  eventDate: string; // YYYY-MM-DD
+  customerId?: string;
+  customerName?: string;
+  siteId?: string;
+  siteName?: string;
+  deliveryId?: string;
+  repairId?: string;
+  maintenanceScore?: number;
+  memo?: string;
   createdAt: string;
 }
 
@@ -736,6 +755,9 @@ class LocalDB {
   get bankMatchingRules() { return this.get<BankMatchingRule>('bankMatchingRules', SEED_BANK_MATCHING_RULES); }
   set bankMatchingRules(val: BankMatchingRule[]) { this.set('bankMatchingRules', val); }
 
+  get assetInOutLogs() { return this.get<AssetInOutLog>('assetInOutLogs', []); }
+  set assetInOutLogs(val: AssetInOutLog[]) { this.set('assetInOutLogs', val); }
+
   // Supabase 테이블 맵핑
   private mapToSupabaseTable(key: string): string {
     const mapping: Record<string, string> = {
@@ -761,7 +783,8 @@ class LocalDB {
       repairs: 'repairs',
       repairConsumables: 'repair_consumables',
       bankTransactions: 'bank_transactions',
-      bankMatchingRules: 'bank_matching_rules'
+      bankMatchingRules: 'bank_matching_rules',
+      assetInOutLogs: 'asset_inout_logs'
     };
     return mapping[key] || key;
   }

@@ -1,6 +1,6 @@
 // d:\Kiyeun_Lift\src\context\AppContext.tsx
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { db, User, MenuPermission, Customer, CustomerContact, CustomerSite, Product, Asset, Consumable, ConsumableLog, Contract, ContractAsset, ContractHistory, Billing, BillingDetail, Payment, Delivery, TransportCompany, TransportDriver, Repair, RepairConsumable, Todo, BankTransaction, BankMatchingRule } from '../services/db';
+import { db, User, MenuPermission, Customer, CustomerContact, CustomerSite, Product, Asset, Consumable, ConsumableLog, Contract, ContractAsset, ContractHistory, Billing, BillingDetail, Payment, Delivery, TransportCompany, TransportDriver, Repair, RepairConsumable, Todo, BankTransaction, BankMatchingRule, AssetInOutLog } from '../services/db';
 
 export interface SmartDispatchData {
   customerName: string;
@@ -17,6 +17,15 @@ export interface SmartDispatchData {
   unloadingTime: string;
   equipments: { modelName: string, qty: number }[];
   note: string;
+}
+
+export interface SmartReturnData {
+  contractId: string;
+  returnDate: string;
+  assetIds: string[];
+  loadingTime?: string;
+  unloadingTime?: string;
+  note?: string;
 }
 
 interface AppContextType {
@@ -51,6 +60,7 @@ interface AppContextType {
   todos: Todo[];
   bankTransactions: BankTransaction[];
   bankMatchingRules: BankMatchingRule[];
+  assetInOutLogs: AssetInOutLog[];
 
   // Mutators
   refreshAllData: () => void;
@@ -81,6 +91,7 @@ interface AppContextType {
   // 장비 할당
   assignAssetToContract: (contractAssetId: string, assetId: string) => void;
   saveSmartDispatch: (data: SmartDispatchData, autoRegister: boolean) => Promise<{ success: boolean; requiresConfirm?: boolean; missingFields?: string[] }>;
+  saveSmartReturn: (data: SmartReturnData) => void;
   
   // Todos
   completeTodo: (todoId: string) => void;
@@ -98,6 +109,8 @@ interface AppContextType {
   // Deliveries
   dispatchDelivery: (deliveryId: string, dispatchData: { scheduledDate: string; vehicleType: string; driverName: string; driverContact: string; deliveryCost: number }) => void;
   settleDeliveryCost: (deliveryId: string) => void;
+  completeDelivery: (deliveryId: string) => void;
+  completeInboundDelivery: (deliveryId: string, actualReturnDate: string, reviews: { assetId: string; status: 'AVAILABLE' | 'REPAIRING'; maintenanceScore: number; memo: string }[]) => void;
   
   // Repairs
   registerRepair: (repairData: Partial<Repair>, usedConsumables: { consumableId: string; quantity: number }[]) => void;
@@ -142,6 +155,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [todos, setTodos] = useState<Todo[]>([]);
   const [bankTransactions, setBankTransactions] = useState<BankTransaction[]>([]);
   const [bankMatchingRules, setBankMatchingRules] = useState<BankMatchingRule[]>([]);
+  const [assetInOutLogs, setAssetInOutLogs] = useState<AssetInOutLog[]>([]);
 
   // Navigation / Routing states
   const [activeTab, setActiveTab] = useState<string>('dashboard');
@@ -178,6 +192,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setTodos(db.todos);
     setBankTransactions(db.bankTransactions);
     setBankMatchingRules(db.bankMatchingRules);
+    setAssetInOutLogs(db.assetInOutLogs);
   };
 
   useEffect(() => {
@@ -434,6 +449,61 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     refreshAllData();
     return { success: true };
+  };
+
+  const saveSmartReturn = (data: SmartReturnData) => {
+    const contract = db.contracts.find(c => c.id === data.contractId);
+    if (!contract) return;
+
+    db.updateRow<Contract>('contracts', data.contractId, {
+      endDate: data.returnDate,
+      status: 'SHORTENED',
+      updatedAt: new Date().toISOString()
+    });
+
+    data.assetIds.forEach(assetId => {
+      const ca = db.contractAssets.find(c => c.contractId === data.contractId && c.assetId === assetId);
+      if (ca) {
+        db.updateRow<ContractAsset>('contractAssets', ca.id, {
+          endDate: data.returnDate
+        });
+      }
+      db.updateRow<Asset>('assets', assetId, {
+        contractEnd: data.returnDate,
+        updatedAt: new Date().toISOString()
+      });
+    });
+
+    db.insertRow<ContractHistory>('contractHistory', {
+      contractId: data.contractId,
+      changeType: 'SHORTEN',
+      changeDate: new Date().toISOString().split('T')[0],
+      prevEndDate: contract.endDate,
+      newEndDate: data.returnDate,
+      description: `스마트 회수 등록 (회수 자산: ${data.assetIds.length}대)`,
+      createdAt: new Date().toISOString()
+    });
+
+    db.insertRow<Delivery>('deliveries', {
+      contractId: data.contractId,
+      assetIds: data.assetIds.join(','),
+      type: 'INBOUND',
+      status: 'REQUESTED',
+      requestDate: data.returnDate,
+      scheduledDate: data.loadingTime || data.returnDate,
+      transportCompany: '',
+      vehicleType: '',
+      vehicleNo: '',
+      driverName: '',
+      driverContact: '',
+      deliveryCost: 0,
+      isCostSettled: false,
+      memo: data.note || '',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    });
+
+    refreshAllData();
   };
 
   const completeTodo = (todoId: string) => {
@@ -1415,6 +1485,170 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     refreshAllData();
   };
 
+  const completeDelivery = (deliveryId: string) => {
+    const delivery = db.deliveries.find(d => d.id === deliveryId);
+    if (!delivery) return;
+
+    db.updateRow<Delivery>('deliveries', deliveryId, {
+      status: 'COMPLETED',
+      updatedAt: new Date().toISOString()
+    });
+
+    const contract = delivery.contractId ? db.contracts.find(c => c.id === delivery.contractId) : null;
+    const customer = contract ? db.customers.find(c => c.id === contract.customerId) : null;
+    const site = contract ? db.sites.find(s => s.id === contract.siteId) : null;
+
+    // INBOUND (회수) 완료 시 장비를 대기중(AVAILABLE)으로 복원 및 계약 완료 처리
+    if (delivery.type === 'INBOUND' && delivery.contractId) {
+      const cAssets = db.contractAssets.filter(ca => ca.contractId === delivery.contractId);
+      cAssets.forEach(ca => {
+        if (ca.assetId) {
+          const asset = db.assets.find(a => a.id === ca.assetId);
+          db.updateRow<Asset>('assets', ca.assetId, {
+            status: 'AVAILABLE',
+            currentCustomerId: '',
+            currentSiteId: '',
+            contractStart: '',
+            contractEnd: '',
+            monthlyRentalFee: 0,
+            dailyRentalFee: 0,
+            updatedAt: new Date().toISOString()
+          });
+
+          if (asset) {
+            // 입고 이력 추가 (기본 점수 0, 특이사항 없음)
+            db.insertRow<AssetInOutLog>('assetInOutLogs', {
+              assetId: asset.id,
+              assetNo: asset.assetNo,
+              modelName: asset.modelName,
+              type: 'INBOUND',
+              eventDate: new Date().toISOString().split('T')[0],
+              customerId: contract?.customerId,
+              customerName: customer?.name || '',
+              siteId: contract?.siteId,
+              siteName: site?.name || '',
+              deliveryId: deliveryId,
+              maintenanceScore: asset.maintenanceScore || 0,
+              memo: '일반 배차 반납 입고',
+              createdAt: new Date().toISOString()
+            });
+          }
+        }
+      });
+
+      db.updateRow<Contract>('contracts', delivery.contractId, {
+        status: 'COMPLETED',
+        updatedAt: new Date().toISOString()
+      });
+    }
+
+    // OUTBOUND (출고) 완료 시 계약 활성화 및 출고 이력 생성
+    if (delivery.type === 'OUTBOUND' && delivery.contractId) {
+      if (contract && contract.status !== 'COMPLETED') {
+        db.updateRow<Contract>('contracts', delivery.contractId, {
+          status: 'ACTIVE',
+          updatedAt: new Date().toISOString()
+        });
+
+        // OUTBOUND 로그 추가
+        const cAssets = db.contractAssets.filter(ca => ca.contractId === delivery.contractId);
+        cAssets.forEach(ca => {
+          if (ca.assetId) {
+            const asset = db.assets.find(a => a.id === ca.assetId);
+            if (asset) {
+              db.insertRow<AssetInOutLog>('assetInOutLogs', {
+                assetId: asset.id,
+                assetNo: asset.assetNo,
+                modelName: asset.modelName,
+                type: 'OUTBOUND',
+                eventDate: delivery.scheduledDate || new Date().toISOString().split('T')[0],
+                customerId: contract.customerId,
+                customerName: customer?.name || '',
+                siteId: contract.siteId,
+                siteName: site?.name || '',
+                deliveryId: deliveryId,
+                createdAt: new Date().toISOString()
+              });
+            }
+          }
+        });
+      }
+    }
+
+    refreshAllData();
+  };
+
+  const completeInboundDelivery = (
+    deliveryId: string,
+    actualReturnDate: string,
+    reviews: { assetId: string; status: 'AVAILABLE' | 'REPAIRING'; maintenanceScore: number; memo: string }[]
+  ) => {
+    const delivery = db.deliveries.find(d => d.id === deliveryId);
+    if (!delivery) return;
+
+    db.updateRow<Delivery>('deliveries', deliveryId, {
+      status: 'COMPLETED',
+      updatedAt: new Date().toISOString()
+    });
+
+    const contract = delivery.contractId ? db.contracts.find(c => c.id === delivery.contractId) : null;
+    const customer = contract ? db.customers.find(c => c.id === contract.customerId) : null;
+    const site = contract ? db.sites.find(s => s.id === contract.siteId) : null;
+
+    reviews.forEach(review => {
+      const asset = db.assets.find(a => a.id === review.assetId);
+      if (!asset) return;
+
+      db.updateRow<Asset>('assets', review.assetId, {
+        status: review.status,
+        maintenanceScore: review.maintenanceScore,
+        currentCustomerId: '',
+        currentSiteId: '',
+        contractStart: '',
+        contractEnd: '',
+        updatedAt: new Date().toISOString()
+      });
+
+      db.insertRow<AssetInOutLog>('assetInOutLogs', {
+        assetId: asset.id,
+        assetNo: asset.assetNo,
+        modelName: asset.modelName,
+        type: 'INBOUND',
+        eventDate: actualReturnDate,
+        customerId: contract?.customerId || '',
+        customerName: customer?.name || '',
+        siteId: contract?.siteId || '',
+        siteName: site?.name || '',
+        deliveryId: deliveryId,
+        maintenanceScore: review.maintenanceScore,
+        memo: review.memo,
+        createdAt: new Date().toISOString()
+      });
+
+      if (review.status === 'REPAIRING') {
+        db.insertRow<Repair>('repairs', {
+          assetId: asset.id,
+          details: `스마트 입고 검수 시 등록됨: ${review.memo}`,
+          status: 'PENDING',
+          requestDate: actualReturnDate,
+          totalCost: 0,
+          billableToCustomer: false,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        });
+      }
+    });
+
+    if (delivery.contractId) {
+      db.updateRow<Contract>('contracts', delivery.contractId, {
+        status: 'COMPLETED',
+        updatedAt: new Date().toISOString()
+      });
+    }
+
+    refreshAllData();
+  };
+
   const registerRepair = (repairData: Partial<Repair>, usedConsumables: { consumableId: string; quantity: number }[]) => {
     const repairId = repairData.id || `rep-${Math.random().toString(36).substr(2, 9)}`;
     const totalRepairCost = repairData.totalCost ?? 0;
@@ -1475,9 +1709,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const nextStatus = repairData.status === 'COMPLETED' ? 'AVAILABLE' : 'REPAIRING';
       db.updateRow<Asset>('assets', asset.id, {
         status: nextStatus,
+        maintenanceScore: repairData.status === 'COMPLETED' ? 0 : asset.maintenanceScore,
         cumRepairCost: (asset.cumRepairCost || 0) + totalRepairCost,
         updatedAt: new Date().toISOString()
       });
+
+      // 정비 완료 시 정비 이력 로그 추가
+      if (repairData.status === 'COMPLETED') {
+        db.insertRow<AssetInOutLog>('assetInOutLogs', {
+          assetId: asset.id,
+          assetNo: asset.assetNo,
+          modelName: asset.modelName,
+          type: 'REPAIR',
+          eventDate: repairData.repairDate || new Date().toISOString().split('T')[0],
+          repairId: repairId,
+          maintenanceScore: 0,
+          memo: `정비 완료: ${repairData.details || ''}`,
+          createdAt: new Date().toISOString()
+        });
+      }
     }
 
     refreshAllData();
@@ -1529,17 +1779,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     <AppContext.Provider value={{
       currentUser, theme, toggleTheme, login, logout, hasPermission,
       users, permissions, customers, contacts, sites, products, assets, consumables, consumableLogs, contracts, contractAssets, contractHistory, deliveries, billings, billingDetails, payments, repairs, repairConsumables, transportCompanies, transportDrivers, todos,
-      bankTransactions, bankMatchingRules,
+      bankTransactions, bankMatchingRules, assetInOutLogs,
       refreshAllData, updatePermissions, saveUser, saveCustomer, saveContact, saveSite, saveProduct,
       acquireAsset, disposeAsset, registerRentedAsset, returnRentedAsset,
       purchaseConsumable, useConsumable,
       createContract, extendContract, shortenContract, succeedContract, exchangeAsset,
       assignAssetToContract,
-      saveSmartDispatch,
+      saveSmartDispatch, saveSmartReturn,
       completeTodo,
       generateBillingsForMonth, approveBilling, cancelBilling, receivePayment,
       uploadBankTransactions, matchTransactionManual, unmatchTransaction, deleteMatchingRule,
-      dispatchDelivery, settleDeliveryCost,
+      dispatchDelivery, settleDeliveryCost, completeDelivery, completeInboundDelivery,
       registerRepair,
       saveTransportDataOnFly,
       activeTab,

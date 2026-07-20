@@ -253,6 +253,7 @@ CREATE TABLE contract_history (
 CREATE TABLE deliveries (
     id TEXT PRIMARY KEY,
     "contractId" TEXT REFERENCES contracts(id) ON DELETE SET NULL,
+    "assetIds" TEXT,
     "transportVendorId" TEXT REFERENCES vendors(id), -- 운송 거래처
     type TEXT CHECK (type IN ('OUTBOUND', 'INBOUND')) NOT NULL,
     status TEXT CHECK (status IN ('REQUESTED', 'DISPATCHED', 'COMPLETED', 'CANCELLED')) NOT NULL,
@@ -442,6 +443,25 @@ CREATE TABLE bank_matching_rules (
     id TEXT PRIMARY KEY,
     "senderName" TEXT NOT NULL UNIQUE,
     "customerId" TEXT REFERENCES customers(id) ON DELETE CASCADE,
+    "createdAt" TEXT NOT NULL
+);
+
+-- 28. 자산 입출고/정비 이력 테이블 (asset_inout_logs) - 신설
+CREATE TABLE asset_inout_logs (
+    id TEXT PRIMARY KEY,
+    "assetId" TEXT REFERENCES assets(id) ON DELETE CASCADE,
+    "assetNo" TEXT NOT NULL,
+    "modelName" TEXT NOT NULL,
+    type TEXT CHECK (type IN ('OUTBOUND', 'INBOUND', 'REPAIR')) NOT NULL,
+    "eventDate" TEXT NOT NULL,
+    "customerId" TEXT REFERENCES customers(id) ON DELETE SET NULL,
+    "customerName" TEXT,
+    "siteId" TEXT REFERENCES customer_sites(id) ON DELETE SET NULL,
+    "siteName" TEXT,
+    "deliveryId" TEXT REFERENCES deliveries(id) ON DELETE SET NULL,
+    "repairId" TEXT REFERENCES repairs(id) ON DELETE SET NULL,
+    "maintenanceScore" INTEGER,
+    memo TEXT,
     "createdAt" TEXT NOT NULL
 );
 

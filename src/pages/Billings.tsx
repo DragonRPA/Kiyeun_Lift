@@ -228,7 +228,12 @@ export const Billings: React.FC = () => {
     
     setWizardStartDate(calcStart);
     setWizardEndDate(calcEnd);
-    setCalcMethod('MONTHLY');
+    
+    if (calcStart > startStr || (c.endDate && c.endDate < endStr)) {
+      setCalcMethod('PRORATED');
+    } else {
+      setCalcMethod('MONTHLY');
+    }
   };
 
   const selectedContractForWizard = contracts.find(c => c.id === selectedContractIdForWizard);
