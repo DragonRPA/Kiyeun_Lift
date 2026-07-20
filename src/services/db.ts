@@ -349,6 +349,8 @@ export interface Repair {
   billableToCustomer: boolean;
   billingId?: string;
   purchaseBillId?: string;
+  isCustomerFault?: boolean;
+  faultImageUrl?: string;
   createdAt: string;
   updatedAt: string;
   // 가상필드

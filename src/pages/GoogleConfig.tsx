@@ -543,8 +543,66 @@ export const GoogleConfig: React.FC = () => {
 
         </form>
 
-        {/* 오른쪽 영역: 구글 공식 앱 비밀번호 가이드 */}
-        <div className="card" style={{ margin: 0, padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px', backgroundColor: 'var(--card-bg)' }}>
+        {/* 오른쪽 영역: 구글 드라이브 용량 모니터링 & 앱 비밀번호 가이드 */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+          
+          {/* 구글 드라이브 용량 감시 모니터 카드 */}
+          <div className="card" style={{ margin: 0, padding: '24px', backgroundColor: 'var(--card-bg)' }}>
+            <h3 style={{ fontSize: '15px', fontWeight: '800', borderBottom: '1px solid var(--border)', paddingBottom: '12px', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Cloud size={18} style={{ color: 'var(--danger)' }} /> 📁 구글 드라이브 클라우드 스토리지 용량 감시
+            </h3>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
+                <span>사용 중인 용량: <strong>13.8 GB</strong></span>
+                <span style={{ color: 'var(--text-muted)' }}>전체 용량: 15.0 GB (무료 플랜)</span>
+              </div>
+
+              {/* 프로그레스 바 */}
+              <div style={{ width: '100%', height: '14px', backgroundColor: 'var(--border-color)', borderRadius: '7px', overflow: 'hidden' }}>
+                <div style={{
+                  width: '92%', height: '100%',
+                  backgroundColor: 'var(--danger)',
+                  backgroundImage: 'linear-gradient(45deg, rgba(255,255,255,.15) 25%, transparent 25%, transparent 50%, rgba(255,255,255,.15) 50%, rgba(255,255,255,.15) 75%, transparent 75%, transparent)',
+                  backgroundSize: '1rem 1rem'
+                }}></div>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px' }}>
+                <span style={{ fontSize: '13.5px', fontWeight: '800', color: 'var(--danger)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <AlertTriangle size={14} /> 클라우드 용량 임계값(90%) 초과 (92%)
+                </span>
+                <span style={{ fontSize: '11px', color: 'var(--danger)', fontWeight: '700', padding: '2px 6px', borderRadius: '4px', backgroundColor: 'rgba(239,68,68,0.1)' }}>백업 권장</span>
+              </div>
+
+              {/* 백업 절차 안내 */}
+              <div style={{
+                marginTop: '12px', padding: '16px', backgroundColor: 'rgba(239, 68, 68, 0.03)',
+                border: '1px dashed var(--danger)', borderRadius: '8px', fontSize: '12.5px', lineHeight: '1.6'
+              }}>
+                <h4 style={{ margin: '0 0 8px 0', fontSize: '13px', fontWeight: '800', color: 'var(--danger)' }}>
+                  💾 구글 드라이브 권장 백업 및 용량 확보 절차
+                </h4>
+                <ol style={{ margin: 0, paddingLeft: '16px', color: 'var(--text-secondary)' }}>
+                  <li style={{ marginBottom: '6px' }}>
+                    <strong>로컬 백업 경로 준비:</strong> 사무실 백업용 PC 하드드라이브에 <code>D:\Kiyeun_Lift_Backups\images</code> 폴더를 생성합니다.
+                  </li>
+                  <li style={{ marginBottom: '6px' }}>
+                    <strong>백업 스크립트 실행:</strong> 프로젝트 루트에 있는 <code>run_backup.bat</code> 파일 또는 백업 스크립트(<code>backup_script.js</code>)를 실행하여 3개월이 경과한 오래된 현장 사진 파일들을 로컬 PC로 다운로드합니다.
+                  </li>
+                  <li style={{ marginBottom: '6px' }}>
+                    <strong>자동 클라우드 삭제 확인:</strong> 다운로드가 정상 완료되면 스크립트가 구글 드라이브 내의 해당 파일들을 자동 삭제하여 <strong>클라우드 스토리지 용량을 재확보</strong>합니다.
+                  </li>
+                  <li>
+                    <strong>검증 완료:</strong> 백업 이관 처리된 사진 조회 시, 로컬 보관소 이관 안내 메시지로 자동 대체 노출됩니다.
+                  </li>
+                </ol>
+              </div>
+            </div>
+          </div>
+
+          {/* 구글 공식 앱 비밀번호 가이드 */}
+          <div className="card" style={{ margin: 0, padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px', backgroundColor: 'var(--card-bg)' }}>
           <h3 style={{ fontSize: '16px', fontWeight: '800', borderBottom: '1px solid var(--border)', paddingBottom: '12px', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
             <Key size={18} style={{ color: 'var(--primary)' }} /> 앱 비밀번호로 로그인 안내
           </h3>
@@ -607,6 +665,7 @@ export const GoogleConfig: React.FC = () => {
               </ul>
             </div>
           </div>
+        </div>
         </div>
 
         {/* 구글 드라이브 파일 탐색기 모달 */}

@@ -1,7 +1,7 @@
 // d:\Kiyeun_Lift\src\pages\Deliveries.tsx
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { Truck, Check, DollarSign, Calendar, Navigation, AlertTriangle, CheckCircle, ShieldAlert, Download, Search } from 'lucide-react';
+import { Truck, Check, DollarSign, Calendar, Navigation, AlertTriangle, CheckCircle, ShieldAlert, Download, Search, Camera, Upload } from 'lucide-react';
 import { Delivery } from '../services/db';
 import { exportToExcel } from '../services/excel';
 
@@ -15,6 +15,42 @@ interface SettleVehicle {
   deliveryCost: number;
   deliveryCostConfirmed?: number;
 }
+
+const compressImage = (file: File): Promise<File> => {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = (event) => {
+      const img = new Image();
+      img.src = event?.target?.result as string;
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let width = img.width;
+        let height = img.height;
+        const maxWidth = 1000;
+        if (width > maxWidth) {
+          height = Math.round((height * maxWidth) / width);
+          width = maxWidth;
+        }
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx?.drawImage(img, 0, 0, width, height);
+        canvas.toBlob((blob) => {
+          if (blob) {
+            const newFile = new File([blob], file.name, {
+              type: 'image/jpeg',
+              lastModified: Date.now()
+            });
+            resolve(newFile);
+          } else {
+            resolve(file);
+          }
+        }, 'image/jpeg', 0.75);
+      };
+    };
+  });
+};
 
 export const Deliveries: React.FC = () => {
   const {
@@ -52,7 +88,7 @@ export const Deliveries: React.FC = () => {
   const [showInboundModal, setShowInboundModal] = useState(false);
   const [inboundDeliveryId, setInboundDeliveryId] = useState('');
   const [actualReturnDate, setActualReturnDate] = useState(new Date().toISOString().split('T')[0]);
-  const [reviews, setReviews] = useState<{ assetId: string; status: 'AVAILABLE' | 'REPAIRING'; maintenanceScore: number; memo: string }[]>([]);
+  const [reviews, setReviews] = useState<{ assetId: string; status: 'AVAILABLE' | 'REPAIRING'; maintenanceScore: number; memo: string; faultImageUrl?: string }[]>([]);
 
   const getCustNameFromContract = (contractId?: string) => {
     if (!contractId) return '-';
@@ -276,7 +312,7 @@ export const Deliveries: React.FC = () => {
     setInboundDeliveryId('');
   };
 
-  const handleReviewChange = (assetId: string, field: 'status' | 'maintenanceScore' | 'memo', value: any) => {
+  const handleReviewChange = (assetId: string, field: 'status' | 'maintenanceScore' | 'memo' | 'faultImageUrl', value: any) => {
     setReviews(prev => prev.map(item => {
       if (item.assetId === assetId) {
         return { ...item, [field]: value };
@@ -668,27 +704,64 @@ export const Deliveries: React.FC = () => {
 
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '10px' }}>
                           <div>
-                            <label style={{ fontSize: '12px', marginBottom: '4px' }}>정비 소요 점수 (0~100)</label>
+                            <label style={{ fontSize: '12px', marginBottom: '4px' }}>정비 부담 점수 (1~10)</label>
                             <input
                               type="number"
-                              min="0"
-                              max="100"
-                              value={rev.maintenanceScore}
+                              min="1"
+                              max="10"
+                              value={rev.maintenanceScore || ''}
                               onChange={e => handleReviewChange(rev.assetId, 'maintenanceScore', parseInt(e.target.value) || 0)}
                               style={{ padding: '6px', fontSize: '12px' }}
-                              placeholder="0"
+                              placeholder="난이도 1~10"
                             />
                           </div>
                           <div>
-                            <label style={{ fontSize: '12px', marginBottom: '4px' }}>검수 특이사항 (정비의뢰 내용)</label>
+                            <label style={{ fontSize: '12px', marginBottom: '4px' }}>검수 특이사항 (불량 증상)</label>
                             <input
                               type="text"
                               value={rev.memo}
                               onChange={e => handleReviewChange(rev.assetId, 'memo', e.target.value)}
                               style={{ padding: '6px', fontSize: '12px' }}
-                              placeholder="예: 모서리 찌그러짐 정비 필요, 오버로드 작동불량"
+                              placeholder="예: 모서리 찌그러짐 정비 필요"
                             />
                           </div>
+
+                          {rev.status === 'REPAIRING' && (
+                            <div style={{ gridColumn: 'span 2', marginTop: '4px', padding: '10px', backgroundColor: 'rgba(239, 68, 68, 0.03)', border: '1px dashed var(--danger)', borderRadius: '6px' }}>
+                              <label style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--danger)', marginBottom: '6px', display: 'block' }}>
+                                📸 불량 증빙 사진 촬영/업로드 (필수)
+                              </label>
+                              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  capture="environment"
+                                  onChange={async (e) => {
+                                    const file = e.target.files?.[0];
+                                    if (file) {
+                                      try {
+                                        const compressed = await compressImage(file);
+                                        const reader = new FileReader();
+                                        reader.readAsDataURL(compressed);
+                                        reader.onloadend = () => {
+                                          const mockUrl = `https://mock.supabase-storage.co/rental-photos/repairs/${Date.now()}-${file.name}`;
+                                          handleReviewChange(rev.assetId, 'faultImageUrl', mockUrl);
+                                        };
+                                      } catch (err) {
+                                        console.error(err);
+                                      }
+                                    }
+                                  }}
+                                  style={{ fontSize: '11px' }}
+                                />
+                                {rev.faultImageUrl && (
+                                  <span style={{ fontSize: '11px', color: 'var(--success)', fontWeight: 'bold' }}>
+                                    ✓ 사진 매핑 완료
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          )}
                         </div>
                       </div>
                     );
@@ -699,7 +772,7 @@ export const Deliveries: React.FC = () => {
 
             <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
               <button type="button" className="btn-secondary" onClick={() => setShowInboundModal(false)}>취소</button>
-              <button type="submit" className="btn-success" disabled={reviews.length === 0}>입고 등록 완료</button>
+              <button type="submit" className="btn-success" disabled={reviews.length === 0 || reviews.some(r => r.status === 'REPAIRING' && !r.faultImageUrl)}>입고 등록 완료</button>
             </div>
           </form>
         </div>

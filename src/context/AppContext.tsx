@@ -125,7 +125,7 @@ interface AppContextType {
   dispatchDelivery: (deliveryId: string, dispatchData: { scheduledDate: string; transportCompany: string; vehicleType: string; vehicleNo: string; driverName: string; driverContact: string; deliveryCost: number; vehiclesJson?: string }) => void;
   settleDeliveryCost: (deliveryId: string, deliveryCostConfirmed: number, vehiclesJson?: string) => void;
   completeDelivery: (deliveryId: string) => void;
-  completeInboundDelivery: (deliveryId: string, actualReturnDate: string, reviews: { assetId: string; status: 'AVAILABLE' | 'REPAIRING'; maintenanceScore: number; memo: string }[]) => void;
+  completeInboundDelivery: (deliveryId: string, actualReturnDate: string, reviews: { assetId: string; status: 'AVAILABLE' | 'REPAIRING'; maintenanceScore: number; memo: string; faultImageUrl?: string }[]) => void;
   
   // Repairs
   registerRepair: (repairData: Partial<Repair>, usedConsumables: { consumableId: string; quantity: number }[]) => void;
@@ -1855,7 +1855,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const completeInboundDelivery = (
     deliveryId: string,
     actualReturnDate: string,
-    reviews: { assetId: string; status: 'AVAILABLE' | 'REPAIRING'; maintenanceScore: number; memo: string }[]
+    reviews: { assetId: string; status: 'AVAILABLE' | 'REPAIRING'; maintenanceScore: number; memo: string; faultImageUrl?: string }[]
   ) => {
     const delivery = db.deliveries.find(d => d.id === deliveryId);
     if (!delivery) return;
@@ -1907,6 +1907,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           requestDate: actualReturnDate,
           totalCost: 0,
           billableToCustomer: false,
+          isCustomerFault: true,
+          faultImageUrl: review.faultImageUrl || '',
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString()
         });

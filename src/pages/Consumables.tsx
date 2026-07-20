@@ -99,6 +99,7 @@ export const Consumables: React.FC = () => {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploadedFileUrl, setUploadedFileUrl] = useState('');
   const [isUploading, setIsUploading] = useState(false);
+  const [noInvoice, setNoInvoice] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
@@ -274,7 +275,8 @@ export const Consumables: React.FC = () => {
 
     const dateStr = new Date().toISOString().split('T')[0];
     const seq = String(consumableLogs.filter(l => l.actionDate === dateStr && l.type === 'INBOUND').length + 1).padStart(3, '0');
-    const newFileName = `INB-${dateStr}-${seq}.${ext}`;
+    const prefix = noInvoice ? 'INB-PHOTO-' : 'INB-';
+    const newFileName = `${prefix}${dateStr}-${seq}.${ext}`;
 
     let base64Url = '';
     try {
@@ -304,12 +306,14 @@ export const Consumables: React.FC = () => {
 
       inboundConsumablePurchase(selectedReqId, inboundQty, mockFile.webViewLink);
       setIsUploading(false);
-      alert(`소모품 입고 처리가 완료되었습니다.\n거래명세서가 구글드라이브 [${targetFolderName}] 폴더에 안전하게 보존되었습니다.\n저장된 파일명: ${newFileName}`);
+      const docTypeText = noInvoice ? '실물 납품 증빙 사진이' : '거래명세서가';
+      alert(`소모품 입고 처리가 완료되었습니다.\n${docTypeText} 구글드라이브 [${targetFolderName}] 폴더에 안전하게 보존되었습니다.\n저장된 파일명: ${newFileName}`);
       
       // 리셋
       setSelectedReqId('');
       setInboundQty(1);
       setSelectedFile(null);
+      setNoInvoice(false);
       setActiveTab('STOCK');
     }, 1000);
   };
@@ -816,7 +820,7 @@ export const Consumables: React.FC = () => {
                   {/* 공급자 거래명세서 업로드 제어부 */}
                   <div style={{ border: '1px solid var(--border)', borderRadius: '8px', padding: '16px' }}>
                     <label style={{ fontWeight: '700', fontSize: '13px', marginBottom: '10px', display: 'block' }}>
-                      공급자 거래명세서 증빙 업로드 (필수)
+                      {noInvoice ? '📸 공급 물품 실물 사진 업로드 (대체 증빙)' : '📄 공급자 거래명세서 증빙 업로드 (필수)'}
                     </label>
 
                     <div style={{ display: 'flex', gap: '16px', marginBottom: '12px', fontSize: '13px' }}>
@@ -830,6 +834,11 @@ export const Consumables: React.FC = () => {
                       </label>
                     </div>
 
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12.5px', marginBottom: '14px', color: 'var(--text-secondary)', cursor: 'pointer', fontWeight: '600' }}>
+                      <input type="checkbox" checked={noInvoice} onChange={(e) => setNoInvoice(e.target.checked)} />
+                      <span>거래명세서 분실/미발급 (물품 촬영본으로 대체 증빙)</span>
+                    </label>
+
                     <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                       {uploadMethod === 'PC' ? (
                         <div>
@@ -839,7 +848,7 @@ export const Consumables: React.FC = () => {
                             onClick={() => fileInputRef.current?.click()}
                             style={{ display: 'flex', alignItems: 'center', gap: '6px', height: '38px' }}
                           >
-                            <Upload size={14} /> 거래명세서 파일 선택 (PDF/이미지)
+                            <Upload size={14} /> {noInvoice ? '물품 사진 파일 선택 (이미지)' : '거래명세서 파일 선택 (PDF/이미지)'}
                           </button>
                           <input
                             type="file"
@@ -880,11 +889,11 @@ export const Consumables: React.FC = () => {
                     <div style={{ marginTop: '10px', display: 'flex', alignItems: 'center', gap: '6px', color: selectedFile ? 'var(--success)' : 'var(--danger)', fontSize: '12.5px', fontWeight: '600' }}>
                       {selectedFile ? (
                         <>
-                          <CheckCircle2 size={16} /> 증빙이 선택되었습니다. [입고완료] 클릭 시 소모품입고번호 형식으로 변환하여 구글 드라이브에 자동 업로드됩니다.
+                          <CheckCircle2 size={16} /> {noInvoice ? '물품 실물사진 대체 증빙이 선택되었습니다. [입고완료] 클릭 시 소모품입고사진 형식으로 변환하여 구글 드라이브에 자동 업로드됩니다.' : '거래명세서 증빙이 선택되었습니다. [입고완료] 클릭 시 소모품입고번호 형식으로 변환하여 구글 드라이브에 자동 업로드됩니다.'}
                         </>
                       ) : (
                         <>
-                          <XCircle size={14} /> 거래명세서 증빙 업로드가 필수입니다. 파일을 지정해 주세요.
+                          <XCircle size={14} /> {noInvoice ? '물품 실물사진 촬영 및 업로드가 필수입니다. 촬영 후 사진을 지정해 주세요.' : '거래명세서 증빙 업로드가 필수입니다. 파일을 지정해 주세요.'}
                         </>
                       )}
                     </div>
