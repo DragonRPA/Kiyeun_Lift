@@ -1,8 +1,9 @@
 // d:\Kiyeun_Lift\src\pages\Customers.tsx
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
-import { Plus, Search, MapPin, Phone, User, Mail, PlusCircle, Building } from 'lucide-react';
+import { Plus, Search, MapPin, Phone, User, Mail, PlusCircle, Building, Download } from 'lucide-react';
 import { Customer, CustomerContact, CustomerSite } from '../services/db';
+import { exportToExcel } from '../services/excel';
 
 export const Customers: React.FC = () => {
   const {
@@ -14,6 +15,7 @@ export const Customers: React.FC = () => {
 
   // 검색 상태
   const [searchTerm, setSearchTerm] = useState('');
+  const [showOnlyIncomplete, setShowOnlyIncomplete] = useState(false);
 
   // 선택된 고객 상태 (담당자 및 현장 조회를 위함)
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(customers[0]?.id || null);
@@ -44,12 +46,72 @@ export const Customers: React.FC = () => {
     }
   }, [navigationPayload, customers, setNavigationPayload]);
 
+  const isIncompleteCustomer = (c: Customer) => {
+    return (
+      c.bizRegNo === '미상' || !c.bizRegNo ||
+      c.representative === '미상' || !c.representative ||
+      c.repContact === '미상' || !c.repContact ||
+      c.repEmail === '미상' || !c.repEmail ||
+      c.address === '미상' || !c.address
+    );
+  };
+
   // 검색 필터링된 고객 목록
-  const filteredCustomers = customers.filter(c => 
-    c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    c.bizRegNo.includes(searchTerm) ||
-    c.representative.includes(searchTerm)
-  );
+  const filteredCustomers = customers.filter(c => {
+    const matchesSearch = 
+      c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      c.bizRegNo.includes(searchTerm) ||
+      c.representative.includes(searchTerm);
+
+    const matchesCompleteness = !showOnlyIncomplete || isIncompleteCustomer(c);
+
+    return matchesSearch && matchesCompleteness;
+  });
+
+  // 엑셀 다운로드 핸들러
+  const handleExportAllCustomers = () => {
+    const excelData = customers.map((c, idx) => ({
+      'No': idx + 1,
+      '고객명': c.name,
+      '대표자': c.representative,
+      '대표 연락처': c.repContact || '-',
+      '대표 이메일': c.repEmail || '-',
+      '사업자등록번호': c.bizRegNo || '-',
+      '본사 주소': c.address || '-',
+      '영업 상태': c.isClosed ? '폐업' : '영업중',
+      '등록 일시': c.createdAt
+    }));
+    exportToExcel(excelData, `고객정보_전체목록_${new Date().toISOString().split('T')[0]}`, '고객사대장');
+  };
+
+  const handleExportContacts = () => {
+    if (!activeCustomer) return;
+    const excelData = customerContacts.map((cc, idx) => ({
+      'No': idx + 1,
+      '고객사명': activeCustomer.name,
+      '담당자명': cc.name,
+      '직급': cc.position || '-',
+      '연락처': cc.contact,
+      '이메일': cc.email || '-',
+      '등록 일시': cc.createdAt
+    }));
+    exportToExcel(excelData, `담당자목록_${activeCustomer.name}_${new Date().toISOString().split('T')[0]}`, '담당자리스트');
+  };
+
+  const handleExportSites = () => {
+    if (!activeCustomer) return;
+    const excelData = customerSites.map((cs, idx) => ({
+      'No': idx + 1,
+      '고객사명': activeCustomer.name,
+      '현장명': cs.name,
+      '현장 주소': cs.address || '-',
+      '현장 담당자': cs.contactName || '-',
+      '현장 연락처': cs.contact || '-',
+      '현장 이메일': cs.email || '-',
+      '등록 일시': cs.createdAt
+    }));
+    exportToExcel(excelData, `현장목록_${activeCustomer.name}_${new Date().toISOString().split('T')[0]}`, '현장리스트');
+  };
 
   const handleOpenAddCust = () => {
     setEditingCust({ name: '', bizRegNo: '', isClosed: false, address: '', representative: '', repContact: '', repEmail: '' });
@@ -115,7 +177,16 @@ export const Customers: React.FC = () => {
 
   return (
     <div>
-      <h2 style={{ marginBottom: '24px', fontWeight: '700' }}>고객 관리</h2>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+        <h2 style={{ margin: 0, fontWeight: '700' }}>고객 관리</h2>
+        <button 
+          className="btn-secondary" 
+          onClick={handleExportAllCustomers}
+          style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '13px', padding: '8px 14px' }}
+        >
+          <Download size={14} /> 고객정보 전체 엑셀 다운로드
+        </button>
+      </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '24px', alignItems: 'flex-start' }}>
         
@@ -124,11 +195,22 @@ export const Customers: React.FC = () => {
           <div className="card-header" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '12px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <h3 className="card-title">고객사 리스트</h3>
-              {canSave && (
-                <button className="btn-primary" onClick={handleOpenAddCust} style={{ padding: '6px 12px', fontSize: '13px' }}>
-                  <Plus size={16} /> 신규 고객
-                </button>
-              )}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11.5px', cursor: 'pointer', margin: 0, padding: '4px 8px', borderRadius: '4px', border: '1px solid var(--border)', backgroundColor: showOnlyIncomplete ? 'rgba(239, 68, 68, 0.08)' : 'var(--bg-secondary)', color: showOnlyIncomplete ? 'var(--danger)' : 'var(--text-secondary)', fontWeight: showOnlyIncomplete ? '600' : 'normal', transition: 'all 0.2s' }} title="사업자등록번호, 대표자, 연락처, 주소 등이 '미상'인 고객만 필터링합니다.">
+                  <input 
+                    type="checkbox" 
+                    checked={showOnlyIncomplete} 
+                    onChange={e => setShowOnlyIncomplete(e.target.checked)} 
+                    style={{ margin: 0, cursor: 'pointer' }}
+                  />
+                  ⚠️ 불완전 정보 고객만 보기
+                </label>
+                {canSave && (
+                  <button className="btn-primary" onClick={handleOpenAddCust} style={{ padding: '6px 12px', fontSize: '13px' }}>
+                    <Plus size={16} /> 신규 고객
+                  </button>
+                )}
+              </div>
             </div>
             <div style={{ position: 'relative' }}>
               <Search size={16} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
@@ -160,7 +242,14 @@ export const Customers: React.FC = () => {
                   }}
                 >
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                    <h4 style={{ fontWeight: '700', fontSize: '15px' }}>{cust.name}</h4>
+                    <h4 style={{ fontWeight: '700', fontSize: '15px', display: 'flex', alignItems: 'center', gap: '6px', margin: 0 }}>
+                      {cust.name}
+                      {isIncompleteCustomer(cust) && (
+                        <span style={{ color: 'var(--danger)', fontSize: '11px', display: 'inline-flex', alignItems: 'center', gap: '2px', fontWeight: 'normal', backgroundColor: 'rgba(239, 68, 68, 0.08)', padding: '2px 6px', borderRadius: '4px' }} title="필수 정보 중 미상인 항목이 있습니다.">
+                          ⚠️ 보완필요
+                        </span>
+                      )}
+                    </h4>
                     {cust.isClosed && <span className="badge badge-danger">폐업</span>}
                   </div>
                   <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>대표: {cust.representative}</div>
@@ -219,11 +308,16 @@ export const Customers: React.FC = () => {
                   <h3 className="card-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <User size={18} className="text-primary" /> 고객 담당자 목록
                   </h3>
-                  {canSave && (
-                    <button className="btn-secondary" onClick={handleOpenAddContact} style={{ padding: '6px 12px', fontSize: '13px' }}>
-                      <PlusCircle size={14} /> 담당자 추가
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button type="button" className="btn-secondary" onClick={handleExportContacts} style={{ padding: '6px 12px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <Download size={14} /> 엑셀 다운로드
                     </button>
-                  )}
+                    {canSave && (
+                      <button type="button" className="btn-primary" onClick={handleOpenAddContact} style={{ padding: '6px 12px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <PlusCircle size={14} /> 담당자 추가
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 <div className="table-container" style={{ border: 'none', boxShadow: 'none' }}>
@@ -268,11 +362,16 @@ export const Customers: React.FC = () => {
                   <h3 className="card-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <MapPin size={18} className="text-success" /> 고객 현장 목록
                   </h3>
-                  {canSave && (
-                    <button className="btn-secondary" onClick={handleOpenAddSite} style={{ padding: '6px 12px', fontSize: '13px' }}>
-                      <PlusCircle size={14} /> 현장 추가
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button type="button" className="btn-secondary" onClick={handleExportSites} style={{ padding: '6px 12px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <Download size={14} /> 엑셀 다운로드
                     </button>
-                  )}
+                    {canSave && (
+                      <button type="button" className="btn-success" onClick={handleOpenAddSite} style={{ padding: '6px 12px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <PlusCircle size={14} /> 현장 추가
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 <div className="table-container" style={{ border: 'none', boxShadow: 'none' }}>
