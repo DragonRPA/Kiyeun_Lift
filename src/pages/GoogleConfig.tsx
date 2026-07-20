@@ -19,6 +19,15 @@ export const GoogleConfig: React.FC = () => {
   const [deliveryFolder, setDeliveryFolder] = useState('');
   const [maintenanceFolder, setMaintenanceFolder] = useState('');
 
+  // 신설 필드 상태
+  const [isDevMode, setIsDevMode] = useState(true);
+  const [quotationTemplateUrl, setQuotationTemplateUrl] = useState('');
+  const [contractTemplateUrl, setContractTemplateUrl] = useState('');
+  const [safetyInspectionTemplateUrl, setSafetyInspectionTemplateUrl] = useState('');
+  const [preDeliveryChecklistTemplateUrl, setPreDeliveryChecklistTemplateUrl] = useState('');
+  const [bizRegCertUrl, setBizRegCertUrl] = useState('');
+  const [bankbookCopyUrl, setBankbookCopyUrl] = useState('');
+
   // 패스워드 표시 토글
   const [showPassword, setShowPassword] = useState(false);
   const [showAppPassword, setShowAppPassword] = useState(false);
@@ -39,6 +48,13 @@ export const GoogleConfig: React.FC = () => {
       setConsumableFolder(currentConfig.consumableFolder || '');
       setDeliveryFolder(currentConfig.deliveryFolder || '');
       setMaintenanceFolder(currentConfig.maintenanceFolder || '');
+      setIsDevMode(currentConfig.isDevMode !== undefined ? currentConfig.isDevMode : true);
+      setQuotationTemplateUrl(currentConfig.quotationTemplateUrl || '');
+      setContractTemplateUrl(currentConfig.contractTemplateUrl || '');
+      setSafetyInspectionTemplateUrl(currentConfig.safetyInspectionTemplateUrl || '');
+      setPreDeliveryChecklistTemplateUrl(currentConfig.preDeliveryChecklistTemplateUrl || '');
+      setBizRegCertUrl(currentConfig.bizRegCertUrl || '');
+      setBankbookCopyUrl(currentConfig.bankbookCopyUrl || '');
     }
   }, [currentConfig]);
 
@@ -73,6 +89,13 @@ export const GoogleConfig: React.FC = () => {
       consumableFolder,
       deliveryFolder,
       maintenanceFolder,
+      isDevMode,
+      quotationTemplateUrl,
+      contractTemplateUrl,
+      safetyInspectionTemplateUrl,
+      preDeliveryChecklistTemplateUrl,
+      bizRegCertUrl,
+      bankbookCopyUrl,
       updatedAt: new Date().toISOString()
     };
 
@@ -191,6 +214,122 @@ export const GoogleConfig: React.FC = () => {
                 <small style={{ display: 'block', marginTop: '4px', color: 'var(--text-muted)', fontSize: '11px' }}>
                   ※ 구글 계정 2단계 인증 설정 후 발급받은 16자리 SMTP 전용 보안 키값을 입력하세요.
                 </small>
+              </div>
+            </div>
+          </div>
+
+          {/* 개발모드 / 실무모드 제어 스위치 */}
+          <div className="card" style={{ margin: 0, padding: '24px', border: isDevMode ? '1px solid var(--warning)' : '1px solid var(--border)' }}>
+            <h3 style={{ fontSize: '15px', fontWeight: '700', borderBottom: '1px solid var(--border)', paddingBottom: '12px', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <ShieldCheck size={16} style={{ color: isDevMode ? 'var(--warning)' : 'var(--primary)' }} /> 시스템 이메일 발송 실행 모드 제어
+            </h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <strong style={{ fontSize: '13px', color: 'var(--text-primary)' }}>
+                    현재 실행 모드: <span style={{ color: isDevMode ? 'var(--warning)' : 'var(--success)', fontWeight: 'bold' }}>{isDevMode ? '개발 모드 (TEST)' : '실무 모드 (LIVE)'}</span>
+                  </strong>
+                  <p style={{ fontSize: '11px', color: 'var(--text-secondary)', margin: '4px 0 0 0', lineHeight: '1.4' }}>
+                    * 개발 모드에서는 모든 메일 수신처가 <strong>77.victor.lee@gmail.com</strong>으로 강제 우회 발송되며, 발송 시 사전 알림 경고가 출력됩니다.<br />
+                    * <strong>개발 완료 시까지는 개발 모드로 고정됩니다.</strong>
+                  </p>
+                </div>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsDevMode(true);
+                    }}
+                    className={isDevMode ? "btn-danger" : "btn-secondary"}
+                    style={{ padding: '6px 12px', fontSize: '12px', fontWeight: 'bold' }}
+                  >
+                    개발모드 고정
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      alert('현재 시스템 구축 및 검증 단계이므로 안전을 위해 실무 모드로 전환할 수 없으며, 개발 모드로 고정 유지됩니다.');
+                    }}
+                    className="btn-secondary"
+                    style={{ padding: '6px 12px', fontSize: '12px', color: '#888', cursor: 'not-allowed' }}
+                  >
+                    실무모드
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* 이메일 발송 첨부 서류 절대경로 설정 */}
+          <div className="card" style={{ margin: 0, padding: '24px' }}>
+            <h3 style={{ fontSize: '15px', fontWeight: '700', borderBottom: '1px solid var(--border)', paddingBottom: '12px', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <FolderOpen size={16} style={{ color: 'var(--primary)' }} /> 이메일 자동 첨부 서류 로컬 절대경로 설정
+            </h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <div>
+                <label style={{ fontSize: '12px', fontWeight: 'bold', marginBottom: '6px', display: 'block' }}>1. 견적서 양식 로컬 절대경로 (.html) *</label>
+                <input
+                  type="text"
+                  value={quotationTemplateUrl}
+                  onChange={e => setQuotationTemplateUrl(e.target.value)}
+                  placeholder="예: d:/GoogleDrive/RPA 개발/01.AntiGravity/Kiyuen_Lift/templates/렌탈견적서_양식.html"
+                  required
+                />
+              </div>
+
+              <div>
+                <label style={{ fontSize: '12px', fontWeight: 'bold', marginBottom: '6px', display: 'block' }}>2. 계약서 양식 로컬 절대경로 (.html) *</label>
+                <input
+                  type="text"
+                  value={contractTemplateUrl}
+                  onChange={e => setContractTemplateUrl(e.target.value)}
+                  placeholder="예: d:/GoogleDrive/RPA 개발/01.AntiGravity/Kiyuen_Lift/templates/고소작업대_임대차계약서_양식.html"
+                  required
+                />
+              </div>
+
+              <div>
+                <label style={{ fontSize: '12px', fontWeight: 'bold', marginBottom: '6px', display: 'block' }}>3. 안전점검결과서 양식 로컬 절대경로 (.html) *</label>
+                <input
+                  type="text"
+                  value={safetyInspectionTemplateUrl}
+                  onChange={e => setSafetyInspectionTemplateUrl(e.target.value)}
+                  placeholder="예: d:/GoogleDrive/RPA 개발/01.AntiGravity/Kiyuen_Lift/templates/고소작업대_안전점검결과서_양식.html"
+                  required
+                />
+              </div>
+
+              <div>
+                <label style={{ fontSize: '12px', fontWeight: 'bold', marginBottom: '6px', display: 'block' }}>4. 반입전 체크리스트 양식 로컬 절대경로 (.html) *</label>
+                <input
+                  type="text"
+                  value={preDeliveryChecklistTemplateUrl}
+                  onChange={e => setPreDeliveryChecklistTemplateUrl(e.target.value)}
+                  placeholder="예: d:/GoogleDrive/RPA 개발/01.AntiGravity/Kiyuen_Lift/templates/반입전_CHECK_LIST_양식.html"
+                  required
+                />
+              </div>
+
+              <div>
+                <label style={{ fontSize: '12px', fontWeight: 'bold', marginBottom: '6px', display: 'block' }}>5. 사업자등록증 파일 로컬 절대경로 (.pdf) *</label>
+                <input
+                  type="text"
+                  value={bizRegCertUrl}
+                  onChange={e => setBizRegCertUrl(e.target.value)}
+                  placeholder="예: d:/GoogleDrive/RPA 개발/01.AntiGravity/Kiyuen_Lift/templates/사업자등록증.pdf"
+                  required
+                />
+              </div>
+
+              <div>
+                <label style={{ fontSize: '12px', fontWeight: 'bold', marginBottom: '6px', display: 'block' }}>6. 통장사본 파일 로컬 절대경로 (.pdf) *</label>
+                <input
+                  type="text"
+                  value={bankbookCopyUrl}
+                  onChange={e => setBankbookCopyUrl(e.target.value)}
+                  placeholder="예: d:/GoogleDrive/RPA 개발/01.AntiGravity/Kiyuen_Lift/templates/통장사본.pdf"
+                  required
+                />
               </div>
             </div>
           </div>

@@ -33,12 +33,20 @@ class MockEmailService {
         const allFiles = drive.listAllFiles();
         const attachments = allFiles.filter(f => attachmentIds.includes(f.id));
 
+        // 개발모드 강제 리디렉션 확인
+        const configsVal = localStorage.getItem('erp_googleConfigs');
+        const configs = configsVal ? JSON.parse(configsVal) : [];
+        const isDev = configs[0]?.isDevMode !== false;
+
+        const finalTo = isDev ? '77.victor.lee@gmail.com' : to;
+        const finalCc = isDev ? undefined : cc;
+
         const newEmail: SentEmail = {
           id: `mail-${Math.random().toString(36).substr(2, 9)}`,
-          to,
-          cc,
-          subject,
-          body,
+          to: finalTo,
+          cc: finalCc,
+          subject: isDev ? `[DEV-우회] ${subject}` : subject,
+          body: isDev ? `[★개발모드 우회 메일★ 원래 수신처: ${to}${cc ? `, 참조: ${cc}` : ''}]\n\n${body}` : body,
           attachments,
           sentAt: new Date().toISOString()
         };

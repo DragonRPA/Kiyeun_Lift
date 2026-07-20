@@ -4,6 +4,7 @@ import { useApp } from '../context/AppContext';
 import { Plus, Mail, Calendar, ArrowRight, FileText, Check, Send, Download, Search } from 'lucide-react';
 import { drive } from '../services/drive';
 import { emailService } from '../services/email';
+import { documentBuilder } from '../services/templates';
 import { Contract, db, Customer, CustomerContact, CustomerSite, Todo } from '../services/db';
 import { exportToExcel } from '../services/excel';
 
@@ -11,7 +12,7 @@ export const Contracts: React.FC = () => {
   const {
     contracts, contractAssets, contractHistory, customers, contacts, sites, assets, users, currentUser,
     createContract, extendContract, shortenContract, succeedContract, exchangeAsset, hasPermission,
-    products, refreshAllData
+    products, googleConfigs, refreshAllData
   } = useApp();
 
   const canSave = hasPermission('contract', 'save');
@@ -387,6 +388,11 @@ export const Contracts: React.FC = () => {
     // 수신 이메일 디폴트 설정 (고객 담당자 및 현장 담당자)
     const cc = contacts.find(contact => contact.id === contract.contactId);
     const site = sites.find(s => s.id === contract.siteId);
+    const customer = customers.find(c => c.id === contract.customerId);
+    const salesperson = users.find(u => u.id === contract.salespersonId);
+
+    // 1. 자동으로 이메일에 필요한 견적서/계약서/회사증빙/장비별점검표를 빌드하고 구글드라이브에 업로드
+    documentBuilder.generateAndUploadAllDocs(contract, customer, cc, site, salesperson);
     
     setMailTo(cc?.email || '');
     setMailCc(site?.email || '');
@@ -415,6 +421,15 @@ export const Contracts: React.FC = () => {
       return;
     }
     
+    const config = googleConfigs[0];
+    const isDev = config?.isDevMode !== false;
+    if (isDev) {
+      const confirmSend = window.confirm(
+        "현재 시스템이 개발 모드입니다. 메일은 실제 수신인이 아닌 개발용 주소(77.victor.lee@gmail.com)로 우회되어 안전하게 발송됩니다. 발송하시겠습니까?"
+      );
+      if (!confirmSend) return;
+    }
+
     setIsSendingMail(true);
     try {
       await emailService.sendEmail(mailTo, mailSubject, mailBody, mailAttachmentIds, mailCc);

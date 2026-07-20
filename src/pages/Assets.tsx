@@ -6,7 +6,7 @@ import { exportToExcel } from '../services/excel';
 import { Asset } from '../services/db';
 
 export const Assets: React.FC = () => {
-  const { assets, customers, sites, setActiveTab, setNavigationPayload } = useApp();
+  const { assets, customers, sites, setActiveTab, setNavigationPayload, saveAsset } = useApp();
 
   // 임시 필터 입력 상태 (조회 버튼을 누르기 전까지 홀드)
   const [tempSearchTerm, setTempSearchTerm] = useState('');
@@ -24,6 +24,16 @@ export const Assets: React.FC = () => {
   
   // 상세조회 모달 상태
   const [selectedAsset, setSelectedAsset] = useState<Asset | null>(null);
+
+  // 문서 지정용 편집 상태
+  const [editInspectionUrl, setEditInspectionUrl] = useState('');
+  const [editChecklistUrl, setEditChecklistUrl] = useState('');
+
+  const handleSelectAsset = (asset: Asset) => {
+    setSelectedAsset(asset);
+    setEditInspectionUrl(asset.safetyInspectionUrl || '');
+    setEditChecklistUrl(asset.preDeliveryChecklistUrl || '');
+  };
 
   // 고유 제조사 목록 추출
   const uniqueManufacturers = Array.from(new Set(assets.map(a => a.manufacturer).filter(Boolean))) as string[];
@@ -49,6 +59,17 @@ export const Assets: React.FC = () => {
     setOwnerFilter(tempOwnerFilter);
     setManufacturerFilter(tempManufacturerFilter);
     setCustomerFilter(tempCustomerFilter);
+  };
+
+  const handleSaveDocs = () => {
+    if (!selectedAsset) return;
+    saveAsset({
+      ...selectedAsset,
+      safetyInspectionUrl: editInspectionUrl,
+      preDeliveryChecklistUrl: editChecklistUrl
+    });
+    alert('장비의 안전점검결과서 및 반입전체크리스트 경로가 성공적으로 저장되었습니다.');
+    setSelectedAsset(null);
   };
 
   const getCustomerName = (id?: string) => {
@@ -232,7 +253,7 @@ export const Assets: React.FC = () => {
                   <td>
                     <button
                       className="btn-secondary"
-                      onClick={() => setSelectedAsset(a)}
+                      onClick={() => handleSelectAsset(a)}
                       style={{ padding: '6px', borderRadius: '50%' }}
                       title="상세내역 전체보기"
                     >
@@ -258,6 +279,13 @@ export const Assets: React.FC = () => {
                 <Layers className="text-primary" /> 자산 상세 명세서 - {selectedAsset.assetNo}
               </h3>
               <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                  className="btn-success"
+                  onClick={handleSaveDocs}
+                  style={{ padding: '4px 10px', fontSize: '12.5px', border: 'none', cursor: 'pointer', borderRadius: '4px' }}
+                >
+                  💾 점검서류 저장
+                </button>
                 <button
                   className="btn-primary"
                   onClick={() => {
@@ -285,6 +313,33 @@ export const Assets: React.FC = () => {
                   <div><label>제조사</label>{selectedAsset.manufacturer || '-'}</div>
                   <div><label>자산유형</label>{selectedAsset.ownerType === 'OWNED' ? '당사자산' : '임차자산'}</div>
                   <div><label>현재상태</label>{selectedAsset.status}</div>
+                </div>
+
+                {/* 점검 서류 지정 */}
+                <div style={{ marginTop: '16px', padding: '14px', border: '1px dashed var(--border-color)', borderRadius: '8px', backgroundColor: 'var(--bg-app)' }}>
+                  <h5 style={{ margin: '0 0 10px 0', fontSize: '13px', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '6px' }}>📋 호기별 구글 드라이브 점검 서류 파일 경로 지정</h5>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                    <div>
+                      <label style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>안전점검결과서 파일 경로 (절대경로 또는 구글드라이브 링크)</label>
+                      <input
+                        type="text"
+                        value={editInspectionUrl}
+                        onChange={e => setEditInspectionUrl(e.target.value)}
+                        placeholder="예: d:/GoogleDrive/안전점검결과서_G06004.pdf"
+                        style={{ width: '100%', padding: '6px', fontSize: '12.5px', marginTop: '4px' }}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>반입전체크리스트 파일 경로 (절대경로 또는 구글드라이브 링크)</label>
+                      <input
+                        type="text"
+                        value={editChecklistUrl}
+                        onChange={e => setEditChecklistUrl(e.target.value)}
+                        placeholder="예: d:/GoogleDrive/반입전체크리스트_G06004.pdf"
+                        style={{ width: '100%', padding: '6px', fontSize: '12.5px', marginTop: '4px' }}
+                      />
+                    </div>
+                  </div>
                 </div>
               </div>
 

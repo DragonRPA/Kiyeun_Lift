@@ -27,7 +27,7 @@ export const Products: React.FC = () => {
     });
 
   const handleOpenAdd = () => {
-    setEditingProduct({ modelName: '', feet: 19, spec: '', manufacturer: '', isActive: true });
+    setEditingProduct({ modelName: '', feet: 19, spec: '', manufacturer: '', isActive: true, safetyCertUrl: '', specSheetUrl: '', emergencyGuideUrl: '' });
     setShowModal(true);
   };
 
@@ -193,6 +193,33 @@ export const Products: React.FC = () => {
                   onChange={e => setEditingProduct({ ...editingProduct, spec: e.target.value })}
                   placeholder="작업 높이, 적재 용량 등 제원 기재"
                   rows={3}
+                />
+              </div>
+              <div>
+                <label>안전인증서 구글드라이브 파일 링크</label>
+                <input
+                  type="text"
+                  value={editingProduct.safetyCertUrl || ''}
+                  onChange={e => setEditingProduct({ ...editingProduct, safetyCertUrl: e.target.value })}
+                  placeholder="예: https://drive.google.com/file/d/..."
+                />
+              </div>
+              <div>
+                <label>제원표 구글드라이브 파일 링크</label>
+                <input
+                  type="text"
+                  value={editingProduct.specSheetUrl || ''}
+                  onChange={e => setEditingProduct({ ...editingProduct, specSheetUrl: e.target.value })}
+                  placeholder="예: https://drive.google.com/file/d/..."
+                />
+              </div>
+              <div>
+                <label>비상조작방법 구글드라이브 파일 링크</label>
+                <input
+                  type="text"
+                  value={editingProduct.emergencyGuideUrl || ''}
+                  onChange={e => setEditingProduct({ ...editingProduct, emergencyGuideUrl: e.target.value })}
+                  placeholder="예: https://drive.google.com/file/d/..."
                 />
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '16px', padding: '10px 14px', backgroundColor: 'var(--bg-app)', borderRadius: '8px', border: '1px solid var(--border)', width: 'fit-content' }}>

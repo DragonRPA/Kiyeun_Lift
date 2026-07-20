@@ -79,6 +79,7 @@ interface AppContextType {
   saveContact: (contact: Omit<CustomerContact, 'id' | 'createdAt'> & { id?: string }) => void;
   saveSite: (site: Omit<CustomerSite, 'id' | 'createdAt'> & { id?: string }) => void;
   saveProduct: (prod: Omit<Product, 'id' | 'createdAt'> & { id?: string }) => void;
+  saveAsset: (asset: Omit<Asset, 'id' | 'createdAt' | 'updatedAt'> & { id?: string }) => void;
   updateGoogleConfig: (config: GoogleConfig) => void;
   
   // Asset Mutators
@@ -220,6 +221,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       localStorage.removeItem('erp_contracts');
       localStorage.removeItem('erp_contractAssets');
       localStorage.setItem('seed_v1_8_dummy_contracts_v2', 'true');
+    }
+    if (!localStorage.getItem('seed_v2_2_google_config_v2')) {
+      localStorage.removeItem('erp_googleConfigs');
+      localStorage.setItem('seed_v2_2_google_config_v2', 'true');
     }
 
     const savedTheme = localStorage.getItem('theme') as 'light' | 'dark';
@@ -374,6 +379,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         isActive: prod.isActive !== undefined ? prod.isActive : true,
         createdAt: new Date().toISOString()
       } as Omit<Product, 'id'>);
+    }
+    refreshAllData();
+  };
+
+  const saveAsset = (asset: Omit<Asset, 'id' | 'createdAt' | 'updatedAt'> & { id?: string }) => {
+    if (asset.id) {
+      db.updateRow<Asset>('assets', asset.id, asset as Asset);
+    } else {
+      db.insertRow<Asset>('assets', {
+        ...asset,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      } as Omit<Asset, 'id'>);
     }
     refreshAllData();
   };
@@ -1998,7 +2016,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       currentUser, theme, toggleTheme, login, logout, hasPermission,
       users, permissions, customers, contacts, sites, products, assets, consumables, consumableLogs, consumablePurchases, contracts, contractAssets, contractHistory, deliveries, billings, billingDetails, payments, repairs, repairConsumables, transportCompanies, transportDrivers, todos,
       bankTransactions, bankMatchingRules, assetInOutLogs, vendors, googleConfigs,
-      refreshAllData, updatePermissions, saveUser, saveCustomer, saveContact, saveSite, saveProduct, updateGoogleConfig,
+      refreshAllData, updatePermissions, saveUser, saveCustomer, saveContact, saveSite, saveProduct, saveAsset, updateGoogleConfig,
       acquireAsset, disposeAsset, registerRentedAsset, returnRentedAsset,
       purchaseConsumable, useConsumable,
       requestConsumablePurchase, acceptConsumablePurchase, completeConsumablePurchase, inboundConsumablePurchase,

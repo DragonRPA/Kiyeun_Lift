@@ -8,7 +8,7 @@ import { exportToExcel } from '../services/excel';
 
 export const Billings: React.FC = () => {
   const {
-    billings, billingDetails, customers, contracts, contractAssets, assets, sites,
+    billings, billingDetails, customers, contracts, contractAssets, assets, sites, googleConfigs,
     generateBillingsForMonth, receivePayment, hasPermission, currentUser, approveBilling, cancelBilling, refreshAllData
   } = useApp();
 
@@ -169,6 +169,15 @@ export const Billings: React.FC = () => {
     if (!mailTo) {
       alert('수신인 메일을 지정해 주세요.');
       return;
+    }
+
+    const config = googleConfigs[0];
+    const isDev = config?.isDevMode !== false;
+    if (isDev) {
+      const confirmSend = window.confirm(
+        "현재 시스템이 개발 모드입니다. 메일은 실제 수신인이 아닌 개발용 주소(77.victor.lee@gmail.com)로 우회되어 안전하게 발송됩니다. 발송하시겠습니까?"
+      );
+      if (!confirmSend) return;
     }
 
     setIsSending(true);

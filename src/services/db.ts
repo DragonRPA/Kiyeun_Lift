@@ -84,6 +84,9 @@ export interface Product {
   spec: string;
   manufacturer: string;
   isActive?: boolean; // 사용/미사용 (단종/매각 등)
+  safetyCertUrl?: string;
+  specSheetUrl?: string;
+  emergencyGuideUrl?: string;
   createdAt: string;
 }
 
@@ -133,6 +136,8 @@ export interface Asset {
   supplier?: string; // 구입처
   memo1?: string;
   memo2?: string;
+  safetyInspectionUrl?: string;
+  preDeliveryChecklistUrl?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -389,6 +394,13 @@ export interface GoogleConfig {
   consumableFolder: string;
   deliveryFolder: string;
   maintenanceFolder: string;
+  isDevMode: boolean;
+  quotationTemplateUrl?: string;
+  contractTemplateUrl?: string;
+  safetyInspectionTemplateUrl?: string;
+  preDeliveryChecklistTemplateUrl?: string;
+  bizRegCertUrl?: string;
+  bankbookCopyUrl?: string;
   updatedAt: string;
 }
 
@@ -771,6 +783,13 @@ const SEED_GOOGLE_CONFIG: GoogleConfig[] = [
     consumableFolder: '소모품납품증빙',
     deliveryFolder: '출고의뢰_증빙',
     maintenanceFolder: '정비보고서_증빙',
+    isDevMode: true,
+    quotationTemplateUrl: 'd:/GoogleDrive/RPA 개발/01.AntiGravity/Kiyuen_Lift/templates/렌탈견적서_양식.html',
+    contractTemplateUrl: 'd:/GoogleDrive/RPA 개발/01.AntiGravity/Kiyuen_Lift/templates/고소작업대_임대차계약서_양식.html',
+    safetyInspectionTemplateUrl: 'd:/GoogleDrive/RPA 개발/01.AntiGravity/Kiyuen_Lift/templates/고소작업대_안전점검결과서_양식.html',
+    preDeliveryChecklistTemplateUrl: 'd:/GoogleDrive/RPA 개발/01.AntiGravity/Kiyuen_Lift/templates/반입전_CHECK_LIST_양식.html',
+    bizRegCertUrl: 'd:/GoogleDrive/RPA 개발/01.AntiGravity/Kiyuen_Lift/templates/사업자등록증.pdf',
+    bankbookCopyUrl: 'd:/GoogleDrive/RPA 개발/01.AntiGravity/Kiyuen_Lift/templates/통장사본.pdf',
     updatedAt: new Date().toISOString()
   }
 ];
