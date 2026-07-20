@@ -6,6 +6,52 @@ import { exportToExcel } from '../services/excel';
 import { drive } from '../services/drive';
 import { Consumable } from '../services/db';
 
+const compressImage = (file: File): Promise<File> => {
+  return new Promise((resolve) => {
+    if (!file.type.startsWith('image/')) {
+      resolve(file);
+      return;
+    }
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = (event) => {
+      const img = new Image();
+      img.src = event.target?.result as string;
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let width = img.width;
+        let height = img.height;
+        const MAX_WIDTH = 1200;
+        if (width > MAX_WIDTH) {
+          height = Math.round((height * MAX_WIDTH) / width);
+          width = MAX_WIDTH;
+        }
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx?.drawImage(img, 0, 0, width, height);
+        canvas.toBlob((blob) => {
+          if (blob) {
+            const compressedFile = new File([blob], file.name, {
+              type: 'image/jpeg',
+              lastModified: Date.now(),
+            });
+            resolve(compressedFile);
+          } else {
+            resolve(file);
+          }
+        }, 'image/jpeg', 0.7);
+      };
+      img.onerror = () => {
+        resolve(file);
+      };
+    };
+    reader.onerror = () => {
+      resolve(file);
+    };
+  });
+};
+
 export const Consumables: React.FC = () => {
   const {
     consumables, consumableLogs, consumablePurchases, assets, purchaseConsumable, useConsumable,
@@ -175,12 +221,19 @@ export const Consumables: React.FC = () => {
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
-      setSelectedFile(e.target.files[0]);
+      const file = e.target.files[0];
+      const ext = file.name.split('.').pop()?.toLowerCase() || '';
+      if (!['pdf', 'jpg', 'jpeg', 'png'].includes(ext)) {
+        alert('허용되는 파일 형식이 아닙니다 (PDF, JPG, JPEG, PNG만 가능).');
+        if (e.target) e.target.value = '';
+        return;
+      }
+      setSelectedFile(file);
     }
   };
 
   // --- 입고 확정 처리 (제출 시 업로드 수행) ---
-  const handleInboundConfirmSubmit = (e: React.FormEvent) => {
+  const handleInboundConfirmSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!canSave) return;
     if (!selectedReqId || inboundQty <= 0) {
@@ -194,10 +247,22 @@ export const Consumables: React.FC = () => {
 
     setIsUploading(true);
 
-    const inboundNo = `INB-${new Date().toISOString().split('T')[0].replace(/-/g, '')}-${Math.floor(100 + Math.random() * 900)}`;
-    const originalName = selectedFile.name;
-    const ext = originalName.split('.').pop() || 'pdf';
-    const newFileName = `소모품입고_${inboundNo}_${new Date().toISOString().split('T')[0]}.${ext}`;
+    // 1. 이미지 압축 처리 (JPEG/JPG/PNG 이미지 대상)
+    let fileToUpload = selectedFile;
+    const ext = selectedFile.name.split('.').pop()?.toLowerCase() || 'pdf';
+    const isImage = ['jpg', 'jpeg', 'png'].includes(ext) || selectedFile.type.startsWith('image/');
+    
+    if (isImage) {
+      try {
+        fileToUpload = await compressImage(selectedFile);
+      } catch (err) {
+        console.error("Image compression failed, using original file:", err);
+      }
+    }
+
+    const dateStr = new Date().toISOString().split('T')[0];
+    const seq = String(consumableLogs.filter(l => l.actionDate === dateStr && l.type === 'INBOUND').length + 1).padStart(3, '0');
+    const newFileName = `INB-${dateStr}-${seq}.${ext}`;
 
     setTimeout(() => {
       // 1. 소모품납품증빙 폴더가 있는지 체크하고 없으면 생성
@@ -209,8 +274,8 @@ export const Consumables: React.FC = () => {
       // 2. 구글드라이브에 가상 파일 업로드
       const mockFile = drive.uploadFile(
         newFileName,
-        selectedFile.type || (ext.toLowerCase() === 'pdf' ? 'application/pdf' : 'image/jpeg'),
-        `${(selectedFile.size / 1024 / 1024).toFixed(2)}MB`,
+        fileToUpload.type || (ext.toLowerCase() === 'pdf' ? 'application/pdf' : 'image/jpeg'),
+        `${(fileToUpload.size / 1024 / 1024).toFixed(2)}MB`,
         folder.id
       );
 
