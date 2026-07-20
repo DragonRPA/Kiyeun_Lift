@@ -155,6 +155,7 @@ CREATE TABLE assets (
     "rentEnd" TEXT, -- 실제 반납 시 지연 정산 기준
     "monthlyRentFee" DOUBLE PRECISION,
     "dailyRentFee" DOUBLE PRECISION,
+    "actualRentReturnDate" TEXT,
 
     memo TEXT,
     "createdAt" TEXT NOT NULL,

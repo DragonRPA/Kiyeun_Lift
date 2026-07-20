@@ -568,7 +568,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const returnRentedAsset = (assetId: string, returnDate: string) => {
     db.updateRow<Asset>('assets', assetId, {
       status: 'RENTED_RETURNED',
-      rentEnd: returnDate,
+      actualRentReturnDate: returnDate,
       updatedAt: new Date().toISOString()
     });
     refreshAllData();

@@ -21,6 +21,34 @@ export const Dashboard: React.FC = () => {
   const unpaidBillings = billings.filter(b => b.status !== 'PAID');
   const totalUnpaidAmount = unpaidBillings.reduce((sum, b) => sum + (b.totalAmount - b.paidAmount), 0);
 
+  // 임차 자산 반납 지연 및 전대 계약 미스매치 계산
+  const allRentedAssets = assets.filter(a => a.ownerType === 'RENTED');
+
+  const checkRentedDelayDays = (asset: any): number => {
+    if (!asset.rentEnd) return 0;
+    const plannedEnd = new Date(asset.rentEnd);
+    const actualEnd = asset.actualRentReturnDate 
+      ? new Date(asset.actualRentReturnDate) 
+      : new Date();
+    plannedEnd.setHours(0,0,0,0);
+    actualEnd.setHours(0,0,0,0);
+    const diffTime = actualEnd.getTime() - plannedEnd.getTime();
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    return diffDays > 0 ? diffDays : 0;
+  };
+
+  const isSubleaseMismatch = (asset: any): boolean => {
+    if (!asset.rentEnd || !asset.contractEnd) return false;
+    const leaseEnd = new Date(asset.rentEnd);
+    const subleaseEnd = new Date(asset.contractEnd);
+    leaseEnd.setHours(0,0,0,0);
+    subleaseEnd.setHours(0,0,0,0);
+    return subleaseEnd.getTime() > leaseEnd.getTime();
+  };
+
+  const overdueRentedCount = allRentedAssets.filter(a => a.status !== 'RENTED_RETURNED' && checkRentedDelayDays(a) > 0).length;
+  const mismatchRentedCount = allRentedAssets.filter(a => isSubleaseMismatch(a)).length;
+
   // 최근 활동 내역 합성
   const activities: { id: string; type: string; text: string; date: string; icon: React.ReactNode }[] = [];
   
@@ -77,6 +105,33 @@ export const Dashboard: React.FC = () => {
           🔄 테스트 데이터 강제 리셋 (100대/13건 주입)
         </button>
       </div>
+
+      {/* 임차 자산 지연 및 기간 불일치 경보 */}
+      {(overdueRentedCount > 0 || mismatchRentedCount > 0) && (
+        <div style={{ backgroundColor: '#fef2f2', border: '1px solid #fee2e2', borderRadius: '8px', padding: '16px', marginBottom: '24px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#b91c1c', fontWeight: 'bold' }}>
+            <ShieldAlert size={18} />
+            <span>⚠️ 임차 자산 반납 지연 및 정산 위험 알림</span>
+          </div>
+          <div style={{ fontSize: '13.5px', color: '#7f1d1d', lineHeight: '1.5', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            {overdueRentedCount > 0 && (
+              <span>• 소유사에 아직 반납되지 않은 채 임차 만료일이 도래한 자산이 <strong>{overdueRentedCount}건</strong> 있습니다. (일할 매입 연장료 누적 중)</span>
+            )}
+            {mismatchRentedCount > 0 && (
+              <span>• 우리 고객사 매출 대여만료일이 소유사 매입 종료일보다 늦게 체결된 정산 불일치(손실 위험) 자산이 <strong>{mismatchRentedCount}건</strong> 있습니다.</span>
+            )}
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '4px' }}>
+            <button 
+              className="btn-primary" 
+              onClick={() => setActiveTab('rent_asset')} 
+              style={{ backgroundColor: '#b91c1c', border: 'none', padding: '6px 12px', fontSize: '12px', borderRadius: '6px' }}
+            >
+              임차자산 정산하러 가기
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* 나의 할 일 (Todo) 알림 패널 */}
       {myTodos.length > 0 && (

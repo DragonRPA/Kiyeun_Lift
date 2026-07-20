@@ -120,6 +120,7 @@ export interface Asset {
   rentEnd?: string;
   monthlyRentFee?: number;
   dailyRentFee?: number;
+  actualRentReturnDate?: string; // 실제 소유원사 반납 처리일
 
   // 매각 상세
   disposalDate?: string;
@@ -437,6 +438,69 @@ const generateMockAssets = (products: Product[]): Asset[] => {
       updatedAt: new Date().toISOString()
     });
   }
+
+  // 임차 자산(RENTED) 테스트용 모의 데이터 3건 주입
+  assets.push({
+    id: 'asset-rent-1',
+    modelName: 'GS3246',
+    assetNo: 'RENT-0001',
+    ownerType: 'RENTED',
+    status: 'RENTED',
+    renter: 'AJ네트웍스',
+    rentStart: '2026-05-01',
+    rentEnd: '2026-07-10',
+    monthlyRentFee: 350000,
+    dailyRentFee: 15000,
+    currentCustomerId: 'cust-1',
+    currentSiteId: 'site-1-1',
+    contractStart: '2026-05-05',
+    contractEnd: '2026-07-20',
+    billingDay: 30,
+    monthlyRentalFee: 500000,
+    dailyRentalFee: 20000,
+    cumRentalFee: 1000000,
+    cumRepairCost: 0,
+    maintenanceScore: 0,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  });
+
+  assets.push({
+    id: 'asset-rent-2',
+    modelName: '1012E',
+    assetNo: 'RENT-0002',
+    ownerType: 'RENTED',
+    status: 'RENTED_RETURNED',
+    renter: '한국종합렌탈',
+    rentStart: '2026-06-01',
+    rentEnd: '2026-07-12',
+    actualRentReturnDate: '2026-07-18',
+    monthlyRentFee: 400000,
+    dailyRentFee: 18000,
+    cumRentalFee: 0,
+    cumRepairCost: 0,
+    maintenanceScore: 0,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  });
+
+  assets.push({
+    id: 'asset-rent-3',
+    modelName: 'GS3246',
+    assetNo: 'RENT-0003',
+    ownerType: 'RENTED',
+    status: 'AVAILABLE',
+    renter: 'AJ네트웍스',
+    rentStart: '2026-06-10',
+    rentEnd: '2026-08-30',
+    monthlyRentFee: 300000,
+    dailyRentFee: 12000,
+    cumRentalFee: 0,
+    cumRepairCost: 0,
+    maintenanceScore: 0,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  });
 
   return assets;
 };
