@@ -609,7 +609,8 @@ export const DevDataUploader: React.FC = () => {
   const [testDataLogs, setTestDataLogs] = useState<string[]>([]);
   const [executionHistory, setExecutionHistory] = useState<ExecutionHistoryEntry[]>([]);
   const [diagnosticsReport, setDiagnosticsReport] = useState<string>('');
-  const [generatedSql, setGeneratedSql] = useState<string>('');
+  const [generatedSqlParts, setGeneratedSqlParts] = useState<string[]>(['', '', '']);
+  const [selectedSqlTab, setSelectedSqlTab] = useState<number>(0);
   const [sqlType, setSqlType] = useState<'INSERT' | 'DELETE' | ''>('');
   const bulkFileInputRef = useRef<HTMLInputElement>(null);
 
@@ -990,8 +991,6 @@ export const DevDataUploader: React.FC = () => {
     repairs: any[];
     repairConsumables: any[];
   }) => {
-    let sql = `BEGIN;\n\n`;
-    
     const toSqlInsert = (tableName: string, rows: any[]) => {
       const allowed = TABLE_COLUMNS[tableName];
       if (!allowed || rows.length === 0) return '';
@@ -1034,27 +1033,45 @@ export const DevDataUploader: React.FC = () => {
       return query + '\n';
     };
 
-    // FK order constraints
-    sql += toSqlInsert('products', data.products);
-    sql += toSqlInsert('assets', data.assets);
-    sql += toSqlInsert('customers', data.customers);
-    sql += toSqlInsert('customer_contacts', data.contacts);
-    sql += toSqlInsert('customer_sites', data.sites);
-    sql += toSqlInsert('contracts', data.contracts);
-    sql += toSqlInsert('contract_assets', data.contractAssets);
-    sql += toSqlInsert('deliveries', data.deliveries);
-    sql += toSqlInsert('billings', data.billings);
-    sql += toSqlInsert('billing_details', data.billingDetails);
-    sql += toSqlInsert('payments', data.payments);
-    sql += toSqlInsert('bank_transactions', data.bankTransactions);
-    sql += toSqlInsert('consumables', data.consumables);
-    sql += toSqlInsert('consumable_logs', data.consumableLogs);
-    sql += toSqlInsert('consumable_purchases', data.consumablePurchases);
-    sql += toSqlInsert('repairs', data.repairs);
-    sql += toSqlInsert('repair_consumables', data.repairConsumables);
+    // Part 1: 기초 기준 마스터 정보 (제품, 자산, 고객사, 담당자, 현장, 소모품 기준정보)
+    let part1 = `BEGIN;\n\n`;
+    part1 += `-- ==================================================\n`;
+    part1 += `-- [1/3] Part 1: 기초 기준 마스터 정보 (제품, 자산, 고객사, 담당자, 현장, 소모품 등)\n`;
+    part1 += `-- ==================================================\n\n`;
+    part1 += toSqlInsert('products', data.products);
+    part1 += toSqlInsert('assets', data.assets);
+    part1 += toSqlInsert('customers', data.customers);
+    part1 += toSqlInsert('customer_contacts', data.contacts);
+    part1 += toSqlInsert('customer_sites', data.sites);
+    part1 += toSqlInsert('consumables', data.consumables);
+    part1 += toSqlInsert('consumable_logs', data.consumableLogs);
+    part1 += toSqlInsert('consumable_purchases', data.consumablePurchases);
+    part1 += `COMMIT;\n`;
 
-    sql += `COMMIT;\n`;
-    return sql;
+    // Part 2: 핵심 비즈니스 계약 및 물류 입출고 이력
+    let part2 = `BEGIN;\n\n`;
+    part2 += `-- ==================================================\n`;
+    part2 += `-- [2/3] Part 2: 핵심 비즈니스 계약 및 물류 입출고 이력 (계약, 계약자산, 배차이력)\n`;
+    part2 += `-- ==================================================\n\n`;
+    part2 += toSqlInsert('contracts', data.contracts);
+    part2 += toSqlInsert('contract_assets', data.contractAssets);
+    part2 += toSqlInsert('deliveries', data.deliveries);
+    part2 += `COMMIT;\n`;
+
+    // Part 3: 기성 정산 청구, 결제 수납 거래 및 유지보수 정비 이력
+    let part3 = `BEGIN;\n\n`;
+    part3 += `-- ==================================================\n`;
+    part3 += `-- [3/3] Part 3: 기성 정산 청구, 결제 수납 거래 및 유지보수 정비 이력\n`;
+    part3 += `-- ==================================================\n\n`;
+    part3 += toSqlInsert('billings', data.billings);
+    part3 += toSqlInsert('billing_details', data.billingDetails);
+    part3 += toSqlInsert('payments', data.payments);
+    part3 += toSqlInsert('bank_transactions', data.bankTransactions);
+    part3 += toSqlInsert('repairs', data.repairs);
+    part3 += toSqlInsert('repair_consumables', data.repairConsumables);
+    part3 += `COMMIT;\n`;
+
+    return [part1, part2, part3];
   };
 
   const getSupabaseSqlEditorUrl = () => {
@@ -1576,9 +1593,10 @@ export const DevDataUploader: React.FC = () => {
         repairs,
         repairConsumables
       });
-      setGeneratedSql(sql);
+      setGeneratedSqlParts(sql);
+      setSelectedSqlTab(0);
       setSqlType('INSERT');
-      addLog("일괄 SQL 인서트 스크립트 작성 성공!", "success");
+      addLog("3개 파트로 분할된 SQL 인서트 스크립트 작성 성공!", "success");
 
       addLog("🎉 통합 프로세스 데이터 시나리오 생성 완료! 아래 터미널 하단에서 SQL 스크립트를 복사하여 실행하십시오.", "success");
       alert("로컬 캐시 데이터 시딩이 완료되었으며, 원격 DB 반영을 위한 10,000건 규모의 SQL 스크립트가 준비되었습니다!");
@@ -1601,7 +1619,8 @@ export const DevDataUploader: React.FC = () => {
 
     setGeneratingTestData(true);
     setTestDataLogs([]);
-    setGeneratedSql('');
+    setGeneratedSqlParts(['', '', '']);
+    setSelectedSqlTab(0);
     setSqlType('');
     addLog("데이터 삭제 프로세스 시작...", "info");
 
@@ -1641,7 +1660,8 @@ export const DevDataUploader: React.FC = () => {
       });
       sql += `\nCOMMIT;\n`;
       
-      setGeneratedSql(sql);
+      setGeneratedSqlParts([sql]);
+      setSelectedSqlTab(0);
       setSqlType('DELETE');
       addLog("삭제 SQL 스크립트 준비 완료! 아래 콘솔에서 복사 또는 다운로드하여 Supabase SQL Editor에서 실행하십시오.", "success");
       alert("로컬 캐시가 성공적으로 비워졌으며, 원격 DB 삭제를 위한 SQL 스크립트가 준비되었습니다.");
@@ -2205,17 +2225,19 @@ export const DevDataUploader: React.FC = () => {
                 </div>
               </div>
             )}
-            {generatedSql && (
+            {generatedSqlParts.some(p => p !== '') && (
               <div style={{ marginTop: '12px', borderTop: '1px dashed var(--border-color)', paddingTop: '12px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                   <span style={{ fontSize: '11.5px', fontWeight: '700', color: 'var(--primary)' }}>
-                    {sqlType === 'INSERT' ? '💾 생성용 SQL 스크립트' : '🗑️ 삭제용 SQL 스크립트'} ({generatedSql.split('\n').length - 1}줄)
+                    {sqlType === 'INSERT' ? '💾 파트별 SQL 생성 스크립트' : '🗑️ 삭제용 SQL 스크립트'}
                   </span>
+                  
                   <div style={{ display: 'flex', gap: '6px' }}>
                     <button
                       onClick={() => {
-                        navigator.clipboard.writeText(generatedSql);
-                        alert("SQL 스크립트가 클립보드에 복사되었습니다!");
+                        const activeSql = generatedSqlParts[selectedSqlTab] || '';
+                        navigator.clipboard.writeText(activeSql);
+                        alert(`Part ${selectedSqlTab + 1} SQL 스크립트가 클립보드에 복사되었습니다!`);
                       }}
                       style={{ fontSize: '10px', padding: '2px 8px', backgroundColor: 'var(--primary)', border: 'none', borderRadius: '4px', color: '#fff', cursor: 'pointer' }}
                     >
@@ -2223,11 +2245,14 @@ export const DevDataUploader: React.FC = () => {
                     </button>
                     <button
                       onClick={() => {
-                        const blob = new Blob([generatedSql], { type: 'text/plain;charset=utf-8' });
+                        const activeSql = generatedSqlParts[selectedSqlTab] || '';
+                        const blob = new Blob([activeSql], { type: 'text/plain;charset=utf-8' });
                         const url = URL.createObjectURL(blob);
                         const a = document.createElement('a');
                         a.href = url;
-                        a.download = sqlType === 'INSERT' ? 'kiyeun_testdata_insert.sql' : 'kiyeun_testdata_delete.sql';
+                        a.download = sqlType === 'INSERT' 
+                          ? `kiyeun_testdata_part${selectedSqlTab + 1}.sql` 
+                          : 'kiyeun_testdata_delete.sql';
                         a.click();
                         URL.revokeObjectURL(url);
                       }}
@@ -2237,7 +2262,31 @@ export const DevDataUploader: React.FC = () => {
                     </button>
                   </div>
                 </div>
-                
+
+                {sqlType === 'INSERT' && (
+                  <div style={{ display: 'flex', borderBottom: '1px solid var(--border-color)', marginBottom: '8px', gap: '2px' }}>
+                    {['1. 기준정보 설정', '2. 계약/배차 거래', '3. 청구/수납/정비'].map((label, idx) => (
+                      <button
+                        key={idx}
+                        onClick={() => setSelectedSqlTab(idx)}
+                        style={{
+                          flex: 1,
+                          padding: '6px 4px',
+                          fontSize: '11px',
+                          fontWeight: selectedSqlTab === idx ? '700' : '400',
+                          border: 'none',
+                          borderBottom: selectedSqlTab === idx ? '2px solid var(--primary)' : 'none',
+                          backgroundColor: selectedSqlTab === idx ? 'var(--primary-light)' : 'transparent',
+                          color: selectedSqlTab === idx ? 'var(--primary)' : 'var(--text-secondary)',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
                 <div style={{ marginBottom: '8px' }}>
                   <a 
                     href={getSupabaseSqlEditorUrl()} 
@@ -2259,7 +2308,7 @@ export const DevDataUploader: React.FC = () => {
                       boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
                     }}
                   >
-                    🔗 Supabase SQL Editor 열기 (바로 붙여넣기)
+                    🔗 Supabase SQL Editor 열기 (Part {selectedSqlTab + 1} 붙여넣기)
                   </a>
                 </div>
 
@@ -2277,8 +2326,8 @@ export const DevDataUploader: React.FC = () => {
                   textAlign: 'left'
                 }}>
                   <pre style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-all', color: '#cbd5e1' }}>
-                    {generatedSql.substring(0, 1000)}
-                    {generatedSql.length > 1000 ? '\n... (이하 중략: 다운로드 또는 복사하여 전문을 확인하십시오)' : ''}
+                    {(generatedSqlParts[selectedSqlTab] || '').substring(0, 1000)}
+                    {(generatedSqlParts[selectedSqlTab] || '').length > 1000 ? '\n... (이하 중략: 다운로드 또는 복사하여 전문을 확인하십시오)' : ''}
                   </pre>
                 </div>
               </div>
