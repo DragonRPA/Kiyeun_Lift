@@ -907,11 +907,11 @@ class LocalDB {
       consumableLogs: 'consumable_logs',
       consumablePurchases: 'consumable_purchases',
       contracts: 'contracts',
-      contractAssets: 'contractAssets',
-      contractHistory: 'contractHistory',
+      contractAssets: 'contract_assets',
+      contractHistory: 'contract_history',
       deliveries: 'deliveries',
-      transportCompanies: 'transportCompanies',
-      transportDrivers: 'transportDrivers',
+      transportCompanies: 'transport_companies',
+      transportDrivers: 'transport_drivers',
       billings: 'billings',
       billingDetails: 'billing_details',
       payments: 'payments',
@@ -951,7 +951,7 @@ class LocalDB {
       'products', 'assets', 'consumables', 'consumableLogs', 'consumablePurchases',
       'contracts', 'contractAssets', 'contractHistory', 'deliveries', 
       'transportCompanies', 'transportDrivers', 'vendors',
-      'billings', 'billingDetails', 'payments', 'repairs', 'repairConsumables', 'todos', 'bankTransactions', 'bankMatchingRules', 'googleConfigs'
+      'billings', 'billingDetails', 'payments', 'repairs', 'repairConsumables', 'todos', 'bankTransactions', 'bankMatchingRules', 'googleConfigs', 'assetInOutLogs'
     ];
 
     try {
@@ -1066,9 +1066,9 @@ class LocalDB {
     if (!supabase) return;
     const tables = [
       'users','departments','permissions','customers','contacts','sites',
-      'products','assets','consumables','consumableLogs','contracts','contractAssets',
-      'contractHistory','deliveries','transportCompanies','transportDrivers',
-      'billings','billingDetails','payments','repairs','repairConsumables','todos','googleConfigs'
+      'products','assets','consumables','consumableLogs','consumablePurchases','contracts','contractAssets',
+      'contractHistory','deliveries','transportCompanies','transportDrivers','vendors',
+      'billings','billingDetails','payments','repairs','repairConsumables','todos','bankTransactions','bankMatchingRules','googleConfigs','assetInOutLogs'
     ];
     await Promise.all(tables.map(async (key) => {
       const data = (this as any)[key] as any[];
@@ -1082,9 +1082,9 @@ class LocalDB {
   async clearAllTables(): Promise<void> {
     const tables = [
       'users','departments','permissions','customers','contacts','sites',
-      'products','assets','consumables','consumableLogs','contracts','contractAssets',
-      'contractHistory','deliveries','transportCompanies','transportDrivers',
-      'billings','billingDetails','payments','repairs','repairConsumables','todos','googleConfigs'
+      'products','assets','consumables','consumableLogs','consumablePurchases','contracts','contractAssets',
+      'contractHistory','deliveries','transportCompanies','transportDrivers','vendors',
+      'billings','billingDetails','payments','repairs','repairConsumables','todos','bankTransactions','bankMatchingRules','googleConfigs','assetInOutLogs'
     ];
     // Clear local storage first
     tables.forEach(key => {

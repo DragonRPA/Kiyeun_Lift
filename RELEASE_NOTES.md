@@ -1,3 +1,11 @@
+# Release Notes (v2.4.1)
+
+## 🛠️ DB 업서트/초기화 대상 누락 테이블 보완 및 실제 스키마 테이블명 매핑 정상화
+- **누락된 5대 테이블 편입**: 전체 DB 업서트(`uploadAllTables`), 전체 초기화(`clearAllTables`), 데이터 동기화(`pullFromSupabase`) 대상에서 누락되었던 5대 테이블(`consumablePurchases` 소모품 구매신청, `vendors` 매입 거래처, `bankTransactions` 은행 거래내역, `bankMatchingRules` 은행 매칭 규칙, `assetInOutLogs` 자산 입출고 이력)을 누락 없이 전면 보완하였습니다.
+- **Supabase 실제 테이블명 매핑 정상화**: 기존에 `contractAssets` (계약 자산), `contractHistory` (계약 변경 이력), `transportCompanies` (운송 거래처), `transportDrivers` (운송 차량/기사) 등이 카멜케이스로 잘못 매핑되어 Supabase 연동 에러가 발생하던 문제를 실제 스키마 구조인 스네이크케이스(`contract_assets`, `contract_history`, `transport_companies`, `transport_drivers`)로 정확하게 매핑 정상화했습니다.
+
+---
+
 # Release Notes (v2.4.0)
 
 ## 🛠️ 인사/조직도 데이터 롤백 해결, 최고관리자 계정 절대 보호 및 패스워드 마스킹 버그 수정
