@@ -109,7 +109,7 @@ class MockGoogleDrive {
   }
 
   // 파일 업로드
-  uploadFile(name: string, mimeType: string, size: string, folderId: string): DriveFile {
+  uploadFile(name: string, mimeType: string, size: string, folderId: string, customLink?: string): DriveFile {
     const files = this.getFiles();
     const id = `file-${Math.random().toString(36).substr(2, 9)}`;
     const newFile: DriveFile = {
@@ -118,7 +118,7 @@ class MockGoogleDrive {
       mimeType,
       size,
       folderId,
-      webViewLink: `https://drive.google.com/mock/file/${id}`,
+      webViewLink: customLink || `https://drive.google.com/mock/file/${id}`,
       createdAt: new Date().toISOString()
     };
     files.push(newFile);

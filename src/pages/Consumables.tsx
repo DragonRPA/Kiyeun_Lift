@@ -52,6 +52,15 @@ const compressImage = (file: File): Promise<File> => {
   });
 };
 
+const fileToBase64 = (file: File): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = error => reject(error);
+  });
+};
+
 export const Consumables: React.FC = () => {
   const {
     consumables, consumableLogs, consumablePurchases, assets, purchaseConsumable, useConsumable,
@@ -99,6 +108,9 @@ export const Consumables: React.FC = () => {
   const [useQty, setUseQty] = useState(1);
   const [useAssetId, setUseAssetId] = useState('');
   const [useDesc, setUseDesc] = useState('');
+
+  // --- [5] 증빙 미리보기 상태 ---
+  const [previewRequest, setPreviewRequest] = useState<any | null>(null);
 
   const getUserName = (id?: string) => {
     if (!id) return '시스템';
@@ -264,6 +276,13 @@ export const Consumables: React.FC = () => {
     const seq = String(consumableLogs.filter(l => l.actionDate === dateStr && l.type === 'INBOUND').length + 1).padStart(3, '0');
     const newFileName = `INB-${dateStr}-${seq}.${ext}`;
 
+    let base64Url = '';
+    try {
+      base64Url = await fileToBase64(fileToUpload);
+    } catch (err) {
+      console.error("FileReader failed:", err);
+    }
+
     setTimeout(() => {
       // 1. 소모품납품증빙 폴더가 있는지 체크하고 없으면 생성
       let folder = drive.listFolders().find(f => f.name === '소모품납품증빙');
@@ -276,7 +295,8 @@ export const Consumables: React.FC = () => {
         newFileName,
         fileToUpload.type || (ext.toLowerCase() === 'pdf' ? 'application/pdf' : 'image/jpeg'),
         `${(fileToUpload.size / 1024 / 1024).toFixed(2)}MB`,
-        folder.id
+        folder.id,
+        base64Url
       );
 
       inboundConsumablePurchase(selectedReqId, inboundQty, mockFile.webViewLink);
@@ -587,9 +607,14 @@ export const Consumables: React.FC = () => {
                           </td>
                           <td>
                             {p.statementFileUrl ? (
-                              <a href={p.statementFileUrl} target="_blank" rel="noopener noreferrer" className="btn-secondary" style={{ padding: '2px 6px', fontSize: '11px', display: 'inline-flex', alignItems: 'center', gap: '2px' }}>
+                              <button
+                                type="button"
+                                className="btn-secondary"
+                                onClick={() => setPreviewRequest(p)}
+                                style={{ padding: '2px 6px', fontSize: '11px', display: 'inline-flex', alignItems: 'center', gap: '2px', cursor: 'pointer' }}
+                              >
                                 <FileText size={10} /> 명세서 열기
-                              </a>
+                              </button>
                             ) : (
                               <span style={{ color: 'var(--text-muted)', fontSize: '12px' }}>미제출</span>
                             )}
@@ -985,6 +1010,145 @@ export const Consumables: React.FC = () => {
                 })}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {/* [MODAL] 증빙 거래명세서 미리보기 모달 */}
+      {previewRequest && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+          <div style={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '12px', width: '100%', maxWidth: '650px', display: 'flex', flexDirection: 'column', maxHeight: '90vh', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.15)' }}>
+            
+            {/* 모달 헤더 */}
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h3 style={{ margin: 0, fontSize: '15px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <FileText size={16} style={{ color: 'var(--primary)' }} /> 거래명세서 증빙 미리보기
+              </h3>
+              <button 
+                type="button" 
+                onClick={() => setPreviewRequest(null)}
+                style={{ background: 'none', border: 'none', fontSize: '18px', color: 'var(--text-secondary)', cursor: 'pointer', fontWeight: '700' }}
+              >
+                &times;
+              </button>
+            </div>
+
+            {/* 모달 바디 */}
+            <div style={{ padding: '20px', overflowY: 'auto', flex: 1 }}>
+              {previewRequest.statementFileUrl.startsWith('data:') ? (
+                // 실제 업로드된 파일 (Data URL)
+                previewRequest.statementFileUrl.startsWith('data:image/') ? (
+                  <div style={{ textAlign: 'center' }}>
+                    <img 
+                      src={previewRequest.statementFileUrl} 
+                      alt="거래명세서 증빙 이미지" 
+                      style={{ maxWidth: '100%', maxHeight: '550px', borderRadius: '6px', border: '1px solid var(--border)', boxShadow: 'var(--shadow-sm)' }} 
+                    />
+                  </div>
+                ) : (
+                  // PDF 또는 기타 문서형식의 Data URL
+                  <div style={{ textAlign: 'center', padding: '40px 20px' }}>
+                    <FileText size={56} style={{ color: 'var(--primary)', marginBottom: '16px' }} />
+                    <h4 style={{ fontSize: '15px', fontWeight: '700', marginBottom: '8px' }}>PDF 증빙 문서가 안전하게 보관되어 있습니다.</h4>
+                    <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '20px', lineHeight: '1.4' }}>
+                      브라우저 보안 보안 정책에 따라, 파일 다운로드를 통해 원본 거래명세서를 안전하게 열람하실 수 있습니다.
+                    </p>
+                    <a 
+                      href={previewRequest.statementFileUrl} 
+                      download={`INB-${previewRequest.completedDate || previewRequest.requestDate || '증빙'}.pdf`}
+                      className="btn-primary" 
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '10px 16px', borderRadius: '6px', textDecoration: 'none' }}
+                    >
+                      <Download size={14} /> PDF 다운로드 및 열기
+                    </a>
+                  </div>
+                )
+              ) : (
+                // 모의(Seed) 데이터용 거래명세서 템플릿
+                <div style={{ border: '2px solid #333', padding: '24px', fontFamily: 'monospace', color: '#000', backgroundColor: '#fff', borderRadius: '4px', lineHeight: '1.5', boxShadow: 'inset 0 0 10px rgba(0,0,0,0.05)' }}>
+                  <h2 style={{ textAlign: 'center', letterSpacing: '8px', textDecoration: 'underline', marginBottom: '24px', fontWeight: 'bold', fontSize: '20px', color: '#000' }}>거 래 명 세 서</h2>
+                  
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', border: '1px solid #333', marginBottom: '16px', color: '#000' }}>
+                    <tbody>
+                      <tr>
+                        <td style={{ border: '1px solid #333', padding: '6px', fontWeight: 'bold', width: '15%', backgroundColor: '#f2f2f2' }}>거래일자</td>
+                        <td style={{ border: '1px solid #333', padding: '6px' }}>{previewRequest.completedDate || previewRequest.requestDate}</td>
+                        <td style={{ border: '1px solid #333', padding: '6px', fontWeight: 'bold', width: '15%', backgroundColor: '#f2f2f2' }}>증빙코드</td>
+                        <td style={{ border: '1px solid #333', padding: '6px' }}>{previewRequest.statementFileUrl.split('/').pop()}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '16px' }}>
+                    <div style={{ border: '1px solid #333', padding: '10px', fontSize: '12px', color: '#000' }}>
+                      <div style={{ fontWeight: 'bold', borderBottom: '1px solid #333', paddingBottom: '4px', marginBottom: '6px' }}>■ 공급자 (Supplier)</div>
+                      <div><strong>상호:</strong> {previewRequest.sellerName}</div>
+                      <div><strong>대표자:</strong> 김협력 (인)</div>
+                      <div><strong>소재지:</strong> 서울시 영등포구 경인로 12</div>
+                    </div>
+                    <div style={{ border: '1px solid #333', padding: '10px', fontSize: '12px', color: '#000' }}>
+                      <div style={{ fontWeight: 'bold', borderBottom: '1px solid #333', paddingBottom: '4px', marginBottom: '6px' }}>■ 공급받는자 (Receiver)</div>
+                      <div><strong>상호:</strong> (주)기윤리프트</div>
+                      <div><strong>대표자:</strong> 이정용 (인)</div>
+                      <div><strong>소재지:</strong> 경기도 시흥시 번영로 123</div>
+                    </div>
+                  </div>
+
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', border: '1px solid #333', marginBottom: '16px', color: '#000' }}>
+                    <thead>
+                      <tr style={{ backgroundColor: '#f2f2f2' }}>
+                        <th style={{ border: '1px solid #333', padding: '6px' }}>품목명 / 규격</th>
+                        <th style={{ border: '1px solid #333', padding: '6px', width: '12%', textAlign: 'center' }}>수량</th>
+                        <th style={{ border: '1px solid #333', padding: '6px', width: '22%', textAlign: 'right' }}>단가</th>
+                        <th style={{ border: '1px solid #333', padding: '6px', width: '25%', textAlign: 'right' }}>공급가액</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td style={{ border: '1px solid #333', padding: '6px' }}>{previewRequest.modelName}</td>
+                        <td style={{ border: '1px solid #333', padding: '6px', textAlign: 'center' }}>{previewRequest.requestedQty}개</td>
+                        <td style={{ border: '1px solid #333', padding: '6px', textAlign: 'right' }}>{previewRequest.unitPrice.toLocaleString()}원</td>
+                        <td style={{ border: '1px solid #333', padding: '6px', textAlign: 'right', fontWeight: 'bold' }}>{(previewRequest.requestedQty * previewRequest.unitPrice).toLocaleString()}원</td>
+                      </tr>
+                      <tr>
+                        <td colSpan={3} style={{ border: '1px solid #333', padding: '6px', fontWeight: 'bold', backgroundColor: '#f2f2f2', textAlign: 'right' }}>공급가액 소계</td>
+                        <td style={{ border: '1px solid #333', padding: '6px', textAlign: 'right', fontWeight: 'bold' }}>{(previewRequest.requestedQty * previewRequest.unitPrice).toLocaleString()}원</td>
+                      </tr>
+                      <tr>
+                        <td colSpan={3} style={{ border: '1px solid #333', padding: '6px', fontWeight: 'bold', backgroundColor: '#f2f2f2', textAlign: 'right' }}>부가가치세 (10%)</td>
+                        <td style={{ border: '1px solid #333', padding: '6px', textAlign: 'right' }}>{(previewRequest.requestedQty * previewRequest.unitPrice * 0.1).toLocaleString()}원</td>
+                      </tr>
+                      <tr style={{ backgroundColor: '#f9f9f9' }}>
+                        <td colSpan={3} style={{ border: '1px solid #333', padding: '6px', fontWeight: 'bold', textAlign: 'right' }}>총 합계금액 (V.A.T 포함)</td>
+                        <td style={{ border: '1px solid #333', padding: '6px', textAlign: 'right', fontWeight: 'bold', fontSize: '13px' }}>{(previewRequest.requestedQty * previewRequest.unitPrice * 1.1).toLocaleString()}원</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                  
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '24px' }}>
+                    <div style={{ fontSize: '10px', color: '#666' }}>
+                      ※ 본 명세서는 시스템 내부 모의 증빙 데이터이며, 실제 세무 용도로는 세금계산서를 참조해 주십시오.
+                    </div>
+                    <div style={{ border: '2px solid red', padding: '4px 8px', color: 'red', borderRadius: '4px', transform: 'rotate(-5deg)', fontWeight: 'bold', fontSize: '11px', display: 'inline-block' }}>
+                      (주)기윤리프트 영수/인
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* 모달 푸터 */}
+            <div style={{ padding: '12px 20px', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'flex-end', backgroundColor: 'var(--bg-app)' }}>
+              <button 
+                type="button" 
+                className="btn-secondary" 
+                onClick={() => setPreviewRequest(null)}
+                style={{ padding: '6px 14px', fontSize: '13px' }}
+              >
+                닫기
+              </button>
+            </div>
+
           </div>
         </div>
       )}
