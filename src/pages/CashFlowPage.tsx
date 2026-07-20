@@ -978,7 +978,11 @@ export const CashFlowPage: React.FC = () => {
               {/* 1. 시작고 세부 내역 */}
               {activeDetailModal === 'STARTING' && (
                 <div style={{ fontSize: '13.5px', lineHeight: '1.6' }}>
-                  <table style={{ width: '100%', marginBottom: '16px' }}>
+                  <table style={{ width: '100%', marginBottom: '16px', tableLayout: 'fixed' }}>
+                    <colgroup>
+                      <col style={{ width: '60%' }} />
+                      <col style={{ width: '40%' }} />
+                    </colgroup>
                     <thead>
                       <tr>
                         <th>통장 및 계좌 구분</th>
@@ -1018,7 +1022,12 @@ export const CashFlowPage: React.FC = () => {
 
               {/* 2. Inflow 세부 테이블 */}
               {activeDetailModal === 'INFLOW' && (
-                <table style={{ width: '100%', fontSize: '12.5px' }}>
+                <table style={{ width: '100%', fontSize: '12.5px', tableLayout: 'fixed' }}>
+                  <colgroup>
+                    <col style={{ width: '22%' }} />
+                    <col style={{ width: '53%' }} />
+                    <col style={{ width: '25%' }} />
+                  </colgroup>
                   <thead>
                     <tr>
                       <th>예정 일자</th>
@@ -1037,7 +1046,7 @@ export const CashFlowPage: React.FC = () => {
                       forecastList.filter(item => item.inflow > 0).map(item => (
                         <tr key={item.date}>
                           <td>{item.date}</td>
-                          <td>{item.inflowDetail}</td>
+                          <td style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.inflowDetail}</td>
                           <td style={{ textAlign: 'right', fontWeight: 'bold', color: 'var(--success)' }}>+{item.inflow.toLocaleString()}원</td>
                         </tr>
                       ))
@@ -1052,7 +1061,12 @@ export const CashFlowPage: React.FC = () => {
 
               {/* 3. OPEX 세부 테이블 */}
               {activeDetailModal === 'OPEX' && (
-                <table style={{ width: '100%', fontSize: '12.5px' }}>
+                <table style={{ width: '100%', fontSize: '12.5px', tableLayout: 'fixed' }}>
+                  <colgroup>
+                    <col style={{ width: '22%' }} />
+                    <col style={{ width: '53%' }} />
+                    <col style={{ width: '25%' }} />
+                  </colgroup>
                   <thead>
                     <tr>
                       <th>예정 일자</th>
@@ -1071,7 +1085,7 @@ export const CashFlowPage: React.FC = () => {
                       forecastList.filter(item => item.opex > 0).map(item => (
                         <tr key={item.date}>
                           <td>{item.date}</td>
-                          <td>{item.opexDetail}</td>
+                          <td style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.opexDetail}</td>
                           <td style={{ textAlign: 'right', fontWeight: 'bold', color: 'var(--warning)' }}>-{item.opex.toLocaleString()}원</td>
                         </tr>
                       ))
@@ -1086,7 +1100,12 @@ export const CashFlowPage: React.FC = () => {
 
               {/* 4. CAPEX 세부 테이블 */}
               {activeDetailModal === 'CAPEX' && (
-                <table style={{ width: '100%', fontSize: '12.5px' }}>
+                <table style={{ width: '100%', fontSize: '12.5px', tableLayout: 'fixed' }}>
+                  <colgroup>
+                    <col style={{ width: '22%' }} />
+                    <col style={{ width: '53%' }} />
+                    <col style={{ width: '25%' }} />
+                  </colgroup>
                   <thead>
                     <tr>
                       <th>예정 일자</th>
@@ -1105,7 +1124,7 @@ export const CashFlowPage: React.FC = () => {
                       forecastList.filter(item => item.capex > 0).map(item => (
                         <tr key={item.date}>
                           <td>{item.date}</td>
-                          <td>{item.capexDetail}</td>
+                          <td style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.capexDetail}</td>
                           <td style={{ textAlign: 'right', fontWeight: 'bold', color: 'var(--danger)' }}>-{item.capex.toLocaleString()}원</td>
                         </tr>
                       ))
@@ -1121,7 +1140,12 @@ export const CashFlowPage: React.FC = () => {
               {/* 5. 종합 대조 대조표 */}
               {activeDetailModal === 'FINAL' && (
                 <div style={{ fontSize: '13px' }}>
-                  <table style={{ width: '100%', marginBottom: '16px' }}>
+                  <table style={{ width: '100%', marginBottom: '16px', tableLayout: 'fixed' }}>
+                    <colgroup>
+                      <col style={{ width: '45%' }} />
+                      <col style={{ width: '25%' }} />
+                      <col style={{ width: '30%' }} />
+                    </colgroup>
                     <thead>
                       <tr>
                         <th>유동성 가감 항목</th>
