@@ -39,7 +39,16 @@ DECLARE
   
   v_created_at TIMESTAMP := '2025-01-01 00:00:00'::TIMESTAMP;
   v_now TIMESTAMP := NOW();
+  v_triggers TEXT;
 BEGIN
+  -- 디버그용 트리거 목록 조회 및 강제 예외 반환
+  SELECT COALESCE(string_agg(t.tgname || ' (' || p.proname || ')', ', '), 'None') INTO v_triggers
+  FROM pg_trigger t
+  JOIN pg_proc p ON t.tgfoid = p.oid
+  WHERE t.tgrelid = 'assets'::regclass AND NOT t.tgisinternal;
+  
+  RAISE EXCEPTION 'DEBUG_INFO: Active triggers on assets table: %', v_triggers;
+
   -- 1. 기존 테스트 데이터 일괄 정리 (순서 보장)
   PERFORM clear_test_data();
 
