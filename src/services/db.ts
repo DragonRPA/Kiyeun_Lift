@@ -961,7 +961,7 @@ class LocalDB {
   }
 
   // 비동기 쓰기 큐
-  private pendingWrites: any[] = [];
+  public pendingWrites: any[] = [];
 
   isSupabaseConnected(): boolean {
     return !!supabase;
@@ -1037,8 +1037,12 @@ class LocalDB {
       const promise = supabase
         .from(tableName)
         .insert([newRow])
-        .then(({ error }) => {
-          if (error) console.error(`Supabase insert failed for ${tableName}:`, error);
+        .then(({ data, error }) => {
+          if (error) {
+            console.error(`Supabase insert failed for ${tableName}:`, error);
+            throw error;
+          }
+          return data;
         });
       this.pendingWrites.push(promise);
     }
@@ -1060,8 +1064,12 @@ class LocalDB {
         .from(tableName)
         .update(updates as any)
         .eq('id', id)
-        .then(({ error }) => {
-          if (error) console.error(`Supabase update failed for ${tableName}:`, error);
+        .then(({ data, error }) => {
+          if (error) {
+            console.error(`Supabase update failed for ${tableName}:`, error);
+            throw error;
+          }
+          return data;
         });
       this.pendingWrites.push(promise);
     }

@@ -413,17 +413,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     refreshAllData();
   };
 
-  const saveProduct = (prod: Omit<Product, 'id' | 'createdAt'> & { id?: string }) => {
+  const saveProduct = async (prod: Omit<Product, 'id' | 'createdAt'> & { id?: string }) => {
+    let result;
     if (prod.id) {
-      db.updateRow<Product>('products', prod.id, prod as Product);
+      result = db.updateRow<Product>('products', prod.id, prod as Product);
     } else {
-      db.insertRow<Product>('products', {
+      result = db.insertRow<Product>('products', {
         ...prod,
         isActive: prod.isActive !== undefined ? prod.isActive : true,
         createdAt: new Date().toISOString()
       } as Omit<Product, 'id'>);
     }
+    
+    // Supabase 비동기 적재 완료까지 수동 대기하여 성공/실패 값을 동기식으로 반환받기 위함
+    if (db.isSupabaseConnected() && db.pendingWrites.length > 0) {
+      try {
+        await db.pendingWrites[db.pendingWrites.length - 1];
+      } catch (err) {
+        console.error("Supabase write await error:", err);
+      }
+    }
+    
     refreshAllData();
+    return result;
   };
 
   const saveAsset = (asset: Omit<Asset, 'id' | 'createdAt' | 'updatedAt'> & { id?: string }) => {

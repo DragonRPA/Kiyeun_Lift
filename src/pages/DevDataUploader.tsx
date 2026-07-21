@@ -39,218 +39,305 @@ interface TableDef {
   sampleRows: Record<string, string>[]; // 양식에 포함될 샘플 데이터 2~3행
 }
 
-const TABLE_SCHEMAS: TableDef[] = [
-  {
-    key: 'customers',
-    label: '고객사',
-    supabaseTable: 'customers',
-    fields: [
-      { key: 'id', label: 'ID', type: 'string', required: true, example: 'CUST-001', description: '고유 식별자 (임의 문자열)' },
-      { key: 'name', label: '고객사명', type: 'string', required: true, example: '(주)한국건설' },
-      { key: 'bizRegNo', label: '사업자번호', type: 'string', required: true, example: '123-45-67890' },
-      { key: 'isClosed', label: '폐업여부', type: 'boolean', required: true, example: 'false', description: 'true 또는 false' },
-      { key: 'address', label: '주소', type: 'string', required: true, example: '서울시 강남구 테헤란로 123' },
-      { key: 'representative', label: '대표자', type: 'string', required: true, example: '홍길동' },
-      { key: 'repContact', label: '대표연락처', type: 'string', required: true, example: '02-1234-5678' },
-      { key: 'repEmail', label: '대표이메일', type: 'string', required: false, example: 'ceo@company.com' },
-      { key: 'createdAt', label: '생성일시', type: 'date', required: true, example: '2024-01-01T00:00:00.000Z' },
-    ],
-    sampleRows: [
-      { id: 'CUST-001', name: '(주)한국건설', bizRegNo: '123-45-67890', isClosed: 'false', address: '서울시 강남구 테헤란로 123', representative: '홍길동', repContact: '02-1234-5678', repEmail: 'ceo@hankook.com', createdAt: '2024-01-15T09:00:00.000Z' },
-      { id: 'CUST-002', name: '대우시스템즈(주)', bizRegNo: '234-56-78901', isClosed: 'false', address: '서울시 서초구 서초대로 456', representative: '이영희', repContact: '02-2345-6789', repEmail: 'ceo@daewoo.com', createdAt: '2024-02-10T09:00:00.000Z' },
-      { id: 'CUST-003', name: '(주)삼성엔지니어링', bizRegNo: '345-67-89012', isClosed: 'false', address: '경기도 수원시 영통대로 789', representative: '김철수', repContact: '031-345-6789', repEmail: '', createdAt: '2024-03-05T09:00:00.000Z' },
-    ],
-  },
-  {
-    key: 'contacts',
-    label: '고객 담당자',
-    supabaseTable: 'customer_contacts',
-    fields: [
-      { key: 'id', label: 'ID', type: 'string', required: true, example: 'CONT-001' },
-      { key: 'customerId', label: '고객사 ID', type: 'string', required: true, example: 'CUST-001', description: 'customers.id 참조' },
-      { key: 'name', label: '담당자명', type: 'string', required: true, example: '김담당' },
-      { key: 'position', label: '직책', type: 'string', required: true, example: '과장' },
-      { key: 'contact', label: '연락처', type: 'string', required: true, example: '010-1234-5678' },
-      { key: 'email', label: '이메일', type: 'string', required: false, example: 'manager@company.com' },
-      { key: 'createdAt', label: '생성일시', type: 'date', required: true, example: '2024-01-01T00:00:00.000Z' },
-    ],
-    sampleRows: [
-      { id: 'CONT-001', customerId: 'CUST-001', name: '김담당', position: '과장', contact: '010-1234-5678', email: 'kim@hankook.com', createdAt: '2024-01-15T09:00:00.000Z' },
-      { id: 'CONT-002', customerId: 'CUST-001', name: '이부장', position: '부장', contact: '010-2345-6789', email: 'lee@hankook.com', createdAt: '2024-01-15T09:00:00.000Z' },
-      { id: 'CONT-003', customerId: 'CUST-002', name: '박팀장', position: '팀장', contact: '010-3456-7890', email: '', createdAt: '2024-02-10T09:00:00.000Z' },
-    ],
-  },
-  {
-    key: 'sites',
-    label: '현장',
-    supabaseTable: 'customer_sites',
-    fields: [
-      { key: 'id', label: 'ID', type: 'string', required: true, example: 'SITE-001' },
-      { key: 'customerId', label: '고객사 ID', type: 'string', required: true, example: 'CUST-001' },
-      { key: 'name', label: '현장명', type: 'string', required: true, example: '강남 본사 신축공사' },
-      { key: 'address', label: '현장주소', type: 'string', required: true, example: '서울시 강남구 역삼동 100' },
-      { key: 'contactName', label: '현장담당자', type: 'string', required: false, example: '이현장' },
-      { key: 'contact', label: '현장연락처', type: 'string', required: false, example: '010-9876-5432' },
-      { key: 'email', label: '현장이메일', type: 'string', required: false, example: 'site@company.com' },
-      { key: 'createdAt', label: '생성일시', type: 'date', required: true, example: '2024-01-01T00:00:00.000Z' },
-    ],
-    sampleRows: [
-      { id: 'SITE-001', customerId: 'CUST-001', name: '강남 본사 신축공사', address: '서울시 강남구 역삼동 100', contactName: '이현장', contact: '010-9876-5432', email: 'site1@hankook.com', createdAt: '2024-01-16T09:00:00.000Z' },
-      { id: 'SITE-002', customerId: 'CUST-001', name: '영등포IFC 실내공사', address: '서울시 영등포구 국제금융로 10', contactName: '권현장', contact: '010-8765-4321', email: '', createdAt: '2024-02-01T09:00:00.000Z' },
-      { id: 'SITE-003', customerId: 'CUST-002', name: '수원 공장 증축', address: '경기도 수원시 영통구 제조로 55', contactName: '미상', contact: '031-111-2222', email: '', createdAt: '2024-02-12T09:00:00.000Z' },
-    ],
-  },
-  {
-    key: 'products',
-    label: '제품 (모델)',
-    supabaseTable: 'products',
-    fields: [
-      { key: 'id', label: 'ID', type: 'string', required: true, example: 'PROD-001' },
-      { key: 'modelName', label: '모델명', type: 'string', required: true, example: 'HY-15S' },
-      { key: 'feet', label: '피트수', type: 'number', required: true, example: '15' },
-      { key: 'spec', label: '규격/스펙', type: 'string', required: false, example: '전기식, 최대하중 2000kg' },
-      { key: 'manufacturer', label: '제조사', type: 'string', required: false, example: '현대로지스틱스' },
-      { key: 'createdAt', label: '생성일시', type: 'date', required: true, example: '2024-01-01T00:00:00.000Z' },
-    ],
-    sampleRows: [
-      { id: 'PROD-001', modelName: 'HY-15S', feet: '15', spec: '전기식, 최대하중 2000kg', manufacturer: '현대로지스틱스', createdAt: '2024-01-01T09:00:00.000Z' },
-      { id: 'PROD-002', modelName: 'HY-20E', feet: '20', spec: '전기식 관절, 최대하중 1500kg', manufacturer: '현대로지스틱스', createdAt: '2024-01-01T09:00:00.000Z' },
-      { id: 'PROD-003', modelName: 'SL-30D', feet: '30', spec: '디젤, 최대하중 2500kg', manufacturer: '시리우스코리아', createdAt: '2024-01-01T09:00:00.000Z' },
-    ],
-  },
-  {
-    key: 'assets',
-    label: '자산 (장비)',
-    supabaseTable: 'assets',
-    fields: [
-      { key: 'id', label: 'ID', type: 'string', required: true, example: 'ASSET-001' },
-      { key: 'modelName', label: '모델명', type: 'string', required: true, example: 'HY-15S' },
-      { key: 'assetNo', label: '관리번호', type: 'string', required: true, example: 'KL-2024-001' },
-      { key: 'serialNo', label: '제조번호', type: 'string', required: false, example: 'SN20240001' },
-      { key: 'manufacturer', label: '제조사', type: 'string', required: false, example: '현대로지스틱스' },
-      { key: 'ownerType', label: '소유유형', type: 'enum', required: true, example: 'OWNED', enumValues: ['OWNED', 'RENTED'], description: 'OWNED=당사자산, RENTED=임차자산' },
-      { key: 'status', label: '상태', type: 'enum', required: true, example: 'AVAILABLE', enumValues: ['AVAILABLE', 'RENTED', 'REPAIRING', 'RENTED_RETURNED', 'SOLD'] },
-      { key: 'acquisitionDate', label: '취득일', type: 'date', required: false, example: '2024-01-15' },
-      { key: 'acquisitionPrice', label: '취득가(원)', type: 'number', required: false, example: '15000000' },
-      { key: 'createdAt', label: '생성일시', type: 'date', required: true, example: '2024-01-01T00:00:00.000Z' },
-      { key: 'updatedAt', label: '수정일시', type: 'date', required: true, example: '2024-01-01T00:00:00.000Z' },
-    ],
-    sampleRows: [
-      { id: 'ASSET-001', modelName: 'HY-15S', assetNo: 'KL-2024-001', serialNo: 'SN20240001', manufacturer: '현대로지스틱스', ownerType: 'OWNED', status: 'RENTED', acquisitionDate: '2024-01-10', acquisitionPrice: '15000000', createdAt: '2024-01-10T09:00:00.000Z', updatedAt: '2024-06-01T09:00:00.000Z' },
-      { id: 'ASSET-002', modelName: 'HY-15S', assetNo: 'KL-2024-002', serialNo: 'SN20240002', manufacturer: '현대로지스틱스', ownerType: 'OWNED', status: 'AVAILABLE', acquisitionDate: '2024-01-10', acquisitionPrice: '15000000', createdAt: '2024-01-10T09:00:00.000Z', updatedAt: '2024-01-10T09:00:00.000Z' },
-      { id: 'ASSET-003', modelName: 'SL-30D', assetNo: 'KL-2024-003', serialNo: '', manufacturer: '시리우스코리아', ownerType: 'RENTED', status: 'RENTED', acquisitionDate: '', acquisitionPrice: '', createdAt: '2024-02-01T09:00:00.000Z', updatedAt: '2024-02-01T09:00:00.000Z' },
-    ],
-  },
-  {
-    key: 'contracts',
-    label: '계약',
-    supabaseTable: 'contracts',
-    fields: [
-      { key: 'id', label: 'ID', type: 'string', required: true, example: 'CT-001' },
-      { key: 'contractNo', label: '계약번호', type: 'string', required: true, example: 'CT-2024-001' },
-      { key: 'customerId', label: '고객사 ID', type: 'string', required: true, example: 'CUST-001' },
-      { key: 'contactId', label: '담당자 ID', type: 'string', required: false, example: 'CONT-001' },
-      { key: 'siteId', label: '현장 ID', type: 'string', required: false, example: 'SITE-001' },
-      { key: 'startDate', label: '계약시작일', type: 'date', required: true, example: '2024-01-01' },
-      { key: 'endDate', label: '계약종료일', type: 'date', required: true, example: '2024-12-31' },
-      { key: 'billingDay', label: '청구마감일', type: 'number', required: true, example: '30' },
-      { key: 'statementClosingDay', label: '명세서마감일', type: 'number', required: false, example: '25' },
-      { key: 'status', label: '상태', type: 'enum', required: true, example: 'ACTIVE', enumValues: ['ACTIVE', 'EXTENDED', 'SHORTENED', 'SUCCEEDED', 'COMPLETED'] },
-      { key: 'createdAt', label: '생성일시', type: 'date', required: true, example: '2024-01-01T00:00:00.000Z' },
-      { key: 'updatedAt', label: '수정일시', type: 'date', required: true, example: '2024-01-01T00:00:00.000Z' },
-    ],
-    sampleRows: [
-      { id: 'CT-001', contractNo: 'CT-2024-001', customerId: 'CUST-001', contactId: 'CONT-001', siteId: 'SITE-001', startDate: '2024-01-01', endDate: '2024-12-31', billingDay: '30', statementClosingDay: '25', status: 'ACTIVE', createdAt: '2024-01-01T09:00:00.000Z', updatedAt: '2024-01-01T09:00:00.000Z' },
-      { id: 'CT-002', contractNo: 'CT-2024-002', customerId: 'CUST-002', contactId: 'CONT-003', siteId: 'SITE-003', startDate: '2024-02-15', endDate: '2025-02-14', billingDay: '25', statementClosingDay: '20', status: 'ACTIVE', createdAt: '2024-02-15T09:00:00.000Z', updatedAt: '2024-02-15T09:00:00.000Z' },
-      { id: 'CT-003', contractNo: 'CT-2023-099', customerId: 'CUST-001', contactId: '', siteId: 'SITE-002', startDate: '2023-06-01', endDate: '2024-05-31', billingDay: '30', statementClosingDay: '25', status: 'COMPLETED', createdAt: '2023-06-01T09:00:00.000Z', updatedAt: '2024-05-31T09:00:00.000Z' },
-    ],
-  },
-  {
-    key: 'contractAssets',
-    label: '계약 장비',
-    supabaseTable: 'contractAssets',
-    fields: [
-      { key: 'id', label: 'ID', type: 'string', required: true, example: 'CA-001' },
-      { key: 'contractId', label: '계약 ID', type: 'string', required: true, example: 'CT-001' },
-      { key: 'assetId', label: '자산 ID', type: 'string', required: false, example: 'ASSET-001' },
-      { key: 'expectedModel', label: '요청 모델명', type: 'string', required: false, example: 'HY-15S' },
-      { key: 'monthlyRentalFee', label: '월렌탈료(원)', type: 'number', required: true, example: '800000' },
-      { key: 'dailyRentalFee', label: '일렌탈료(원)', type: 'number', required: true, example: '30000' },
-      { key: 'startDate', label: '시작일', type: 'date', required: true, example: '2024-01-01' },
-      { key: 'endDate', label: '종료일', type: 'date', required: true, example: '2024-12-31' },
-      { key: 'createdAt', label: '생성일시', type: 'date', required: true, example: '2024-01-01T00:00:00.000Z' },
-    ],
-    sampleRows: [
-      { id: 'CA-001', contractId: 'CT-001', assetId: 'ASSET-001', expectedModel: 'HY-15S', monthlyRentalFee: '800000', dailyRentalFee: '30000', startDate: '2024-01-01', endDate: '2024-12-31', createdAt: '2024-01-01T09:00:00.000Z' },
-      { id: 'CA-002', contractId: 'CT-001', assetId: 'ASSET-002', expectedModel: 'HY-15S', monthlyRentalFee: '800000', dailyRentalFee: '30000', startDate: '2024-01-01', endDate: '2024-12-31', createdAt: '2024-01-01T09:00:00.000Z' },
-      { id: 'CA-003', contractId: 'CT-002', assetId: '', expectedModel: 'SL-30D', monthlyRentalFee: '1200000', dailyRentalFee: '45000', startDate: '2024-02-15', endDate: '2025-02-14', createdAt: '2024-02-15T09:00:00.000Z' },
-    ],
-  },
-  {
-    key: 'deliveries',
-    label: '배차/출고',
-    supabaseTable: 'deliveries',
-    fields: [
-      { key: 'id', label: 'ID', type: 'string', required: true, example: 'DEL-001' },
-      { key: 'contractId', label: '계약 ID', type: 'string', required: false, example: 'CT-001' },
-      { key: 'type', label: '배차유형', type: 'enum', required: true, example: 'OUTBOUND', enumValues: ['OUTBOUND', 'INBOUND', 'EXCHANGE', 'MOVEMENT'] },
-      { key: 'status', label: '상태', type: 'enum', required: true, example: 'REQUESTED', enumValues: ['REQUESTED', 'DISPATCHED', 'COMPLETED'] },
-      { key: 'requestDate', label: '요청일', type: 'date', required: true, example: '2024-01-10' },
-      { key: 'scheduledDate', label: '예정일', type: 'date', required: false, example: '2024-01-12' },
-      { key: 'transportCompany', label: '운송거래처', type: 'string', required: false, example: '대한물류' },
-      { key: 'vehicleNo', label: '차량번호', type: 'string', required: false, example: '서울82가 1234' },
-      { key: 'driverName', label: '기사명', type: 'string', required: false, example: '홍길동' },
-      { key: 'driverContact', label: '기사연락처', type: 'string', required: false, example: '010-1111-2222' },
-      { key: 'deliveryCost', label: '운송비(원)', type: 'number', required: true, example: '250000' },
-      { key: 'isCostSettled', label: '정산완료여부', type: 'boolean', required: true, example: 'false' },
-      { key: 'memo', label: '메모', type: 'string', required: false, example: '신규 출고' },
-      { key: 'createdAt', label: '생성일시', type: 'date', required: true, example: '2024-01-01T00:00:00.000Z' },
-      { key: 'updatedAt', label: '수정일시', type: 'date', required: true, example: '2024-01-01T00:00:00.000Z' },
-    ],
-    sampleRows: [
-      { id: 'DEL-001', contractId: 'CT-001', type: 'OUTBOUND', status: 'COMPLETED', requestDate: '2024-01-10', scheduledDate: '2024-01-12', transportCompany: '대한물류', vehicleNo: '서울82가 1234', driverName: '홍길동', driverContact: '010-1111-2222', deliveryCost: '250000', isCostSettled: 'true', memo: '신규 출고', createdAt: '2024-01-10T09:00:00.000Z', updatedAt: '2024-01-12T18:00:00.000Z' },
-      { id: 'DEL-002', contractId: 'CT-002', type: 'OUTBOUND', status: 'DISPATCHED', requestDate: '2024-02-20', scheduledDate: '2024-02-22', transportCompany: '민국운수', vehicleNo: '경기99바 5678', driverName: '이김담', driverContact: '010-3333-4444', deliveryCost: '300000', isCostSettled: 'false', memo: '', createdAt: '2024-02-20T09:00:00.000Z', updatedAt: '2024-02-20T09:00:00.000Z' },
-      { id: 'DEL-003', contractId: 'CT-003', type: 'INBOUND', status: 'REQUESTED', requestDate: '2024-05-25', scheduledDate: '2024-05-31', transportCompany: '', vehicleNo: '', driverName: '', driverContact: '', deliveryCost: '0', isCostSettled: 'false', memo: '계약 만료 회수', createdAt: '2024-05-25T09:00:00.000Z', updatedAt: '2024-05-25T09:00:00.000Z' },
-    ],
-  },
-  {
-    key: 'transportCompanies',
-    label: '운송 거래처',
-    supabaseTable: 'transportCompanies',
-    fields: [
-      { key: 'id', label: 'ID', type: 'string', required: true, example: 'TC-001' },
-      { key: 'name', label: '거래처명', type: 'string', required: true, example: '대한물류' },
-      { key: 'businessNo', label: '사업자번호', type: 'string', required: false, example: '123-45-67890' },
-      { key: 'contact', label: '연락처', type: 'string', required: false, example: '1588-0001' },
-      { key: 'memo', label: '비고', type: 'string', required: false, example: '주요 파트너' },
-      { key: 'createdAt', label: '생성일시', type: 'date', required: true, example: '2024-01-01T00:00:00.000Z' },
-    ],
-    sampleRows: [
-      { id: 'TC-001', name: '대한물류', businessNo: '123-45-67890', contact: '1588-0001', memo: '주요 파트너', createdAt: '2024-01-01T09:00:00.000Z' },
-      { id: 'TC-002', name: '민국운수', businessNo: '234-56-78901', contact: '1588-0002', memo: '', createdAt: '2024-01-01T09:00:00.000Z' },
-      { id: 'TC-003', name: '코리아트랜스', businessNo: '345-67-89012', contact: '02-9999-8888', memo: '대형 화물 전문', createdAt: '2024-03-01T09:00:00.000Z' },
-    ],
-  },
-  {
-    key: 'transportDrivers',
-    label: '운송 기사',
-    supabaseTable: 'transportDrivers',
-    fields: [
-      { key: 'id', label: 'ID', type: 'string', required: true, example: 'TD-001' },
-      { key: 'companyId', label: '운송거래처 ID', type: 'string', required: true, example: 'TC-001', description: 'transportCompanies.id 참조' },
-      { key: 'driverName', label: '기사명', type: 'string', required: true, example: '홍길동' },
-      { key: 'driverContact', label: '연락처', type: 'string', required: false, example: '010-1111-2222' },
-      { key: 'vehicleNo', label: '차량번호', type: 'string', required: false, example: '서울82가 1234' },
-      { key: 'vehicleType', label: '차량종류', type: 'string', required: false, example: '5톤 셀프로더' },
-      { key: 'createdAt', label: '생성일시', type: 'date', required: true, example: '2024-01-01T00:00:00.000Z' },
-    ],
-    sampleRows: [
-      { id: 'TD-001', companyId: 'TC-001', driverName: '홍길동', driverContact: '010-1111-1111', vehicleNo: '서울82가 1111', vehicleType: '5톤 셀프로더', createdAt: '2024-01-01T09:00:00.000Z' },
-      { id: 'TD-002', companyId: 'TC-002', driverName: '홍길동', driverContact: '010-2222-2222', vehicleNo: '경기99바 2222', vehicleType: '1톤 화물차', createdAt: '2024-01-01T09:00:00.000Z' },
-      { id: 'TD-003', companyId: 'TC-001', driverName: '김기사', driverContact: '010-3333-3333', vehicleNo: '서울82가 3333', vehicleType: '2.5톤', createdAt: '2024-01-01T09:00:00.000Z' },
-    ],
-  },
-];
+import schemaSql from '../../schema.sql?raw';
+
+// Supabase 검증용 동적 SQL 스키마 파서
+function parseSqlSchema(sql: string) {
+  const tables: Record<string, { columns: string[]; columnsWithTypes: Record<string, string>; createSql: string }> = {};
+  
+  // 주석 제거
+  const cleanSql = sql.replace(/--.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
+  
+  // CREATE TABLE 매칭 regex
+  const createTableRegex = /CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(\w+)\s*\(([\s\S]*?)\);/gi;
+  let match;
+  while ((match = createTableRegex.exec(cleanSql)) !== null) {
+    const tableName = match[1].toLowerCase().trim();
+    const body = match[2];
+    const createSql = match[0].trim();
+    
+    const lines = body.split('\n');
+    const columns: string[] = [];
+    const columnsWithTypes: Record<string, string> = {};
+    
+    lines.forEach(line => {
+      const cleanLine = line.trim();
+      if (!cleanLine) return;
+      
+      const colMatch = cleanLine.match(/^(?:"([^"]+)"|(\w+))\s+([\s\S]+)$/);
+      if (colMatch) {
+        const colName = colMatch[1] || colMatch[2];
+        let colDef = colMatch[3].trim();
+        if (colDef.endsWith(',')) {
+          colDef = colDef.slice(0, -1).trim();
+        }
+        
+        const upperCol = colName.toUpperCase();
+        if (['CONSTRAINT', 'PRIMARY', 'FOREIGN', 'UNIQUE', 'CHECK'].includes(upperCol)) {
+          return;
+        }
+        
+        columns.push(colName);
+        columnsWithTypes[colName] = colDef;
+      }
+    });
+    
+    tables[tableName] = {
+      columns,
+      columnsWithTypes,
+      createSql
+    };
+  }
+  return tables;
+}
+
+const TABLE_LABEL_MAP: Record<string, string> = {
+  departments: '부서',
+  users: '사용자 (임직원)',
+  vendors: '거래처 (매입처/임대처)',
+  permissions: '권한 설정',
+  customers: '고객사',
+  customer_contacts: '고객 담당자',
+  customer_sites: '고객 현장',
+  products: '제품 (모델)',
+  assets: '자산 (장비)',
+  consumables: '소모품 마스터',
+  consumable_purchase_requests: '소모품 구매 신청',
+  consumable_purchase_items: '소모품 구매 신청 상세',
+  consumable_logs: '소모품 입출고 로그',
+  contracts: '렌탈 계약',
+  contract_assets: '계약 투입 장비',
+  contract_history: '계약 변경 이력',
+  deliveries: '운송/출고 관리',
+  billings: '매출 청구',
+  billing_details: '매출 청구 상세',
+  purchase_billings: '매입 청구',
+  purchase_billing_details: '매입 청구 상세',
+  payments: '수금/지급 정보',
+  repairs: '수리/정비 마스터',
+  repair_consumables: '수리 사용 소모품',
+  announcements: '공지사항',
+  announcement_reads: '공지사항 조회 이력',
+  work_instructions: '작업 지시서',
+  collaboration_requests: '협업 요청',
+  collaboration_request_history: '협업 요청 이력',
+  bank_transactions: '은행 계좌 거래 내역',
+  bank_matching_rules: '계좌 내역 매칭 규칙',
+  asset_inout_logs: '장비 입출고 일지',
+  consumable_purchases: '소모품 매입 내역',
+  transport_companies: '운송 업체',
+  transport_drivers: '운송 기사',
+  todos: 'ToDo 할일',
+  google_configs: '구글 드라이브 연동 정보',
+  cash_flow_snapshots: '캐시플로우 스냅샷',
+};
+
+const COLUMN_LABEL_MAP: Record<string, string> = {
+  id: 'ID',
+  name: '이름/명칭',
+  bizRegNo: '사업자등록번호',
+  isClosed: '폐업여부',
+  address: '주소',
+  representative: '대표자명',
+  repContact: '대표연락처',
+  repEmail: '대표이메일',
+  createdAt: '생성일시',
+  updatedAt: '수정일시',
+  customerId: '고객사 ID',
+  position: '직급/직책',
+  contact: '연락처',
+  email: '이메일',
+  contactName: '담당자명',
+  modelName: '모델명',
+  feet: '피트수',
+  spec: '규격/스펙/제원',
+  manufacturer: '제조사',
+  safetyCertUrl: '안전인증서링크',
+  specSheetUrl: '제원표링크',
+  emergencyGuideUrl: '비상조작방법링크',
+  isActive: '사용여부',
+  assetNo: '관리번호(자산번호)',
+  serialNo: '제조번호(시리얼)',
+  ownerType: '소유유형(OWNED/RENTED)',
+  status: '상태',
+  acquisitionDate: '취득일자',
+  acquisitionPrice: '취득금액(원)',
+  depreciationMonths: '감가상각상태(월)',
+  residualValueRate: '잔존가치율',
+  accumDepreciation: '누적감가상각액',
+  bookValue: '장부가치',
+  vendorId: '거래처(매입/임차) ID',
+  rentStart: '임차시작일',
+  rentEnd: '임차종료일',
+  monthlyRentFee: '월임차료',
+  dailyRentFee: '일임차료',
+  actualRentReturnDate: '실제임차반납일',
+  memo: '메모/비고',
+  stockQty: '재고수량',
+  unit: '단위',
+  unitPrice: '기준매입단가',
+  contractNo: '계약번호',
+  contactId: '담당자 ID',
+  siteId: '현장 ID',
+  startDate: '시작일자',
+  endDate: '종료일자',
+  billingDay: '청구마감일(일)',
+  statementClosingDay: '명세서마감일(일)',
+  contractAssetId: '계약장비 ID',
+  deliveryDate: '운송일자',
+  deliveryType: '출고구분(DELIVERY/RETURN)',
+  transportDriverId: '운송기사 ID',
+  freightFee: '운임비(원)',
+  billNo: '청구번호',
+  billingDate: '청구발행일자',
+  totalAmount: '총금액(원)',
+  vat: '부가세(원)',
+  billingId: '청구 ID',
+  amount: '금액(원)',
+  paymentDate: '수납/지급일자',
+  paymentType: '구분(RECEIPT/DISBURSEMENT)',
+  paymentMethod: '결제수단',
+  bankTransactionId: '은행거래 ID',
+  repairDate: '수리정비일자',
+  repairType: '구분(PREVENTIVE/BREAKDOWN)',
+  description: '정비내용설명',
+  cost: '정비비용(원)',
+  repairedBy: '정비담당자명',
+  repairId: '수리정비 ID',
+  consumableId: '소모품 ID',
+  quantity: '수량',
+  title: '제목',
+  content: '내용',
+  authorId: '작성자 ID',
+  announcementId: '공지사항 ID',
+  userId: '사용자 ID',
+  readAt: '조회일시',
+  assignedUserId: '담당자 ID',
+  deadline: '마감기한',
+  requestType: '요청구분',
+  refTable: '참조테이블',
+  refId: '참조레코드 ID',
+  requestId: '요청 ID',
+  statusBefore: '이전상태',
+  statusAfter: '변경상태',
+  transactionDate: '거래일자',
+  withdrawal: '출금액(원)',
+  deposit: '입금액(원)',
+  balance: '잔액(원)',
+  summary: '적요/거래내용',
+  branch: '거래점명',
+  ruleName: '규칙명',
+  keyword: '키워드',
+  targetType: '대상구분',
+  targetId: '대상코드 ID',
+  logType: '구분(IN/OUT)',
+  logDate: '입출고일자',
+  driverName: '기사명',
+  driverContact: '기사연락처',
+  licenseNo: '면허번호',
+  carNo: '차량번호',
+  isPartner: '협력업체여부',
+  task: '할일내용',
+  isCompleted: '완료여부',
+  completedAt: '완료일시',
+  folderId: '구글드라이브 폴더 ID',
+  snapshotDate: '스냅샷기준일',
+  startingBalance: '기초잔액',
+  projectedInflow: '예상매출수금',
+  projectedOpex: '예상운영지출',
+  projectedCapex: '예상투자지출',
+  projectedFinalBalance: '예상기말잔액',
+  notes: '비고/참고사항',
+};
+
+function getDynamicTableSchemas(): TableDef[] {
+  const currentSchemas = parseSqlSchema(schemaSql);
+  return Object.keys(currentSchemas).map(tableName => {
+    const schemaDef = currentSchemas[tableName];
+    
+    const fields: FieldDef[] = schemaDef.columns.map(col => {
+      const colDef = schemaDef.columnsWithTypes[col] || '';
+      
+      let type: FieldType = 'string';
+      if (colDef.includes('BOOLEAN')) {
+        type = 'boolean';
+      } else if (colDef.includes('INTEGER') || colDef.includes('DOUBLE PRECISION') || colDef.includes('BIGINT') || colDef.includes('REAL') || colDef.includes('NUMERIC')) {
+        type = 'number';
+      } else if (col === 'createdAt' || col === 'updatedAt' || col.endsWith('Date') || col.endsWith('At') || colDef.includes('DATE') || colDef.includes('TIMESTAMP')) {
+        type = 'date';
+      } else if (colDef.includes('CHECK')) {
+        type = 'enum';
+      }
+      
+      let enumValues: string[] | undefined = undefined;
+      let enumKorean: string[] | undefined = undefined;
+      if (type === 'enum') {
+        const inMatch = colDef.match(/IN\s*\(([^)]+)\)/i);
+        if (inMatch) {
+          enumValues = inMatch[1].split(',').map(s => s.replace(/['"\s]/g, ''));
+          enumKorean = enumValues.map(v => v);
+        }
+      }
+      
+      const required = colDef.includes('NOT NULL') && !colDef.includes('DEFAULT');
+      
+      let example = 'sample';
+      if (col === 'id') {
+        example = `${tableName.slice(0, 4).toUpperCase()}-001`;
+      } else if (type === 'number') {
+        example = '100';
+      } else if (type === 'boolean') {
+        example = 'true';
+      } else if (type === 'date') {
+        example = new Date().toISOString().slice(0, 10);
+      } else if (enumValues && enumValues.length > 0) {
+        example = enumValues[0];
+      }
+      
+      return {
+        key: col,
+        label: COLUMN_LABEL_MAP[col] || col,
+        type,
+        required,
+        enumValues,
+        enumKorean,
+        example,
+        description: colDef
+      };
+    });
+    
+    const sampleRows: Record<string, string>[] = [];
+    for (let i = 1; i <= 2; i++) {
+      const row: Record<string, string> = {};
+      fields.forEach(f => {
+        if (f.key === 'id') {
+          row[f.key] = `${tableName.slice(0, 4).toUpperCase()}-00${i}`;
+        } else if (f.type === 'number') {
+          row[f.key] = String(10 * i);
+        } else if (f.type === 'boolean') {
+          row[f.key] = 'true';
+        } else if (f.type === 'date') {
+          row[f.key] = new Date().toISOString();
+        } else if (f.enumValues && f.enumValues.length > 0) {
+          row[f.key] = f.enumValues[(i - 1) % f.enumValues.length];
+        } else {
+          row[f.key] = `샘플_${f.label}_${i}`;
+        }
+      });
+      sampleRows.push(row);
+    }
+    
+    return {
+      key: tableName,
+      label: `${TABLE_LABEL_MAP[tableName] || tableName} (${tableName})`,
+      supabaseTable: tableName,
+      fields,
+      sampleRows
+    };
+  });
+}
+
+const TABLE_SCHEMAS: TableDef[] = getDynamicTableSchemas();
 
 function mapKoreanRowToEnglish(row: Record<string, string>, schema: TableDef): Record<string, string> {
   const mapped: Record<string, string> = {};
@@ -390,63 +477,6 @@ function convertRow(row: Record<string, string>, schema: TableDef): Record<strin
   return result;
 }
 
-import schemaSql from '../../schema.sql?raw';
-
-// ──────────────────────────────────────────────
-// Supabase 검증용 동적 SQL 스키마 파서
-// ──────────────────────────────────────────────
-function parseSqlSchema(sql: string) {
-  const tables: Record<string, { columns: string[]; columnsWithTypes: Record<string, string>; createSql: string }> = {};
-  
-  // 주석 제거
-  const cleanSql = sql.replace(/--.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
-  
-  // CREATE TABLE 매칭 regex
-  const createTableRegex = /CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(\w+)\s*\(([\s\S]*?)\);/gi;
-  let match;
-  while ((match = createTableRegex.exec(cleanSql)) !== null) {
-    const tableName = match[1].toLowerCase().trim();
-    const body = match[2];
-    const createSql = match[0].trim();
-    
-    const lines = body.split('\n');
-    const columns: string[] = [];
-    const columnsWithTypes: Record<string, string> = {};
-    
-    lines.forEach(line => {
-      const cleanLine = line.trim();
-      if (!cleanLine) return;
-      
-      const colMatch = cleanLine.match(/^(?:"([^"]+)"|(\w+))\s+([\s\S]+)$/);
-      if (colMatch) {
-        const colName = colMatch[1] || colMatch[2];
-        let colDef = colMatch[3].trim();
-        if (colDef.endsWith(',')) {
-          colDef = colDef.slice(0, -1).trim();
-        }
-        
-        const upperCol = colName.toUpperCase();
-        if (['CONSTRAINT', 'PRIMARY', 'FOREIGN', 'UNIQUE', 'CHECK'].includes(upperCol)) {
-          return;
-        }
-        
-        columns.push(colName);
-        columnsWithTypes[colName] = colDef;
-      }
-    });
-    
-    tables[tableName] = {
-      columns,
-      columnsWithTypes,
-      createSql
-    };
-  }
-  return tables;
-}
-
-// ──────────────────────────────────────────────
-// 메인 컴포넌트
-// ──────────────────────────────────────────────
 export const DevDataUploader: React.FC = () => {
   const { currentUser } = useApp();
   const [selectedTableKey, setSelectedTableKey] = useState<string>('customers');
@@ -869,11 +899,25 @@ export const DevDataUploader: React.FC = () => {
   };
 
   // ──── Supabase 실시간 DB 스키마 정합성 검증 도구 핸들러 ────
+  // ──── Supabase 실시간 DB 스키마 정합성 검증 도구 핸들러 ────
   const handleVerifySchema = async () => {
     if (!supabase) return;
     setCheckingSchema(true);
     const audit: { table: string; status: 'OK' | 'MISSING' | 'MISMATCH'; message: string }[] = [];
     let sqlPatch = '';
+
+    // PostgREST 에러 메시지로부터 누락된 칼럼명을 안전하게 파싱하는 헬퍼
+    const extractColumnName = (errMsg: string): string | null => {
+      const cleanMsg = errMsg.replace(/\\"/g, '"');
+      const quoteMatch = cleanMsg.match(/column "([^"]+)"/i);
+      if (quoteMatch) return quoteMatch[1];
+      const columnWordMatch = cleanMsg.match(/column\s+([^\s]+)\s+does\s+not\s+exist/i);
+      if (columnWordMatch) {
+        const word = columnWordMatch[1];
+        return word.includes('.') ? (word.split('.').pop() || word) : word;
+      }
+      return null;
+    };
 
     try {
       const currentSchemas = parseSqlSchema(schemaSql);
@@ -881,7 +925,7 @@ export const DevDataUploader: React.FC = () => {
         const schemaDef = currentSchemas[table];
         
         // 1. 테이블 존재 여부 검사
-        const { error: tableError } = await supabase!.from(table).select('*').limit(0);
+        const { error: tableError } = await supabase!.from(table).select('id').limit(0);
         
         if (tableError && (tableError.code === '42P01' || tableError.message.includes('does not exist'))) {
           audit.push({
@@ -893,14 +937,34 @@ export const DevDataUploader: React.FC = () => {
           continue;
         }
 
-        // 2. 컬럼 누락 여부 검증 (각 컬럼별 limit 0 쿼리)
+        // 2. 컬럼 누락 여부 검증 (일괄 Select 및 에러 메시지 기반 점진적 누락 색출 - 초고속 최적화)
+        let activeCols = [...schemaDef.columns];
         const missingCols: string[] = [];
-        await Promise.all(schemaDef.columns.map(async (col) => {
-          const { error: colError } = await supabase!.from(table).select(col).limit(0);
-          if (colError && (colError.message.includes('column') || colError.message.includes('does not exist'))) {
-            missingCols.push(col);
+        let success = false;
+
+        for (let attempt = 0; attempt < 20; attempt++) {
+          if (activeCols.length === 0) {
+            success = true;
+            break;
           }
-        }));
+          
+          const selectStr = activeCols.map(c => `"${c}"`).join(',');
+          const { error: colError } = await supabase!.from(table).select(selectStr).limit(0);
+          
+          if (!colError) {
+            success = true;
+            break;
+          }
+
+          const missingColName = extractColumnName(colError.message);
+          if (missingColName && activeCols.includes(missingColName)) {
+            missingCols.push(missingColName);
+            activeCols = activeCols.filter(c => c !== missingColName);
+          } else {
+            // 파싱 불가능한 에러는 컬럼 누락이 아니므로 중단
+            break;
+          }
+        }
 
         if (missingCols.length > 0) {
           audit.push({
@@ -912,30 +976,22 @@ export const DevDataUploader: React.FC = () => {
           sqlPatch += `-- [보완] ${table} 테이블 누락 컬럼 추가 DDL\n`;
           missingCols.forEach(col => {
             const colDef = schemaDef.columnsWithTypes[col] || 'TEXT';
-            let colType = 'TEXT';
-            if (colDef.includes('PRIMARY KEY')) {
-              colType = 'TEXT PRIMARY KEY';
-            } else if (colDef.includes('REFERENCES')) {
-              colType = colDef;
-            } else if (colDef.includes('CHECK')) {
-              colType = colDef;
-            } else if (colDef.includes('BOOLEAN')) {
-              colType = 'BOOLEAN NOT NULL DEFAULT FALSE';
-            } else if (colDef.includes('DOUBLE PRECISION')) {
-              colType = 'DOUBLE PRECISION NOT NULL DEFAULT 0';
-            } else if (colDef.includes('INTEGER')) {
-              colType = 'INTEGER';
-            } else if (colDef.includes('NOT NULL')) {
-              colType = 'TEXT NOT NULL';
-            }
+            // 기존 데이터가 있는 상태에서도 성공적으로 칼럼이 추가될 수 있도록 NOT NULL 제약조건 제거 및 기본값 확보
+            let colType = colDef.replace(/NOT NULL/gi, '').trim();
             sqlPatch += `ALTER TABLE ${table} ADD COLUMN IF NOT EXISTS "${col}" ${colType};\n`;
           });
           sqlPatch += `\n`;
-        } else {
+        } else if (success) {
           audit.push({
             table,
             status: 'OK',
             message: '정상 (테이블 및 모든 컬럼 일치)'
+          });
+        } else {
+          audit.push({
+            table,
+            status: 'MISMATCH',
+            message: '검증 도중 예기치 못한 스키마 조회가 실패했습니다.'
           });
         }
       }

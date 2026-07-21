@@ -35,7 +35,7 @@ export const Products: React.FC = () => {
     setEditingProduct(p);
     setShowModal(true);
   };
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingProduct || !editingProduct.modelName) return;
 
@@ -46,9 +46,31 @@ export const Products: React.FC = () => {
       return;
     }
 
-    saveProduct(editingProduct as Omit<Product, 'id' | 'createdAt'>);
-    setShowModal(false);
-    setEditingProduct(null);
+    // 1. 송신 예정 쿼리 시뮬레이션 생성 및 팝업 안내
+    const isEdit = !!editingProduct.id;
+    const finalProduct = {
+      ...editingProduct,
+      isActive: editingProduct.isActive !== false,
+    };
+    
+    let simulatedQuery = "";
+    if (isEdit) {
+      simulatedQuery = `UPDATE products \nSET "modelName" = '${finalProduct.modelName}', feet = ${finalProduct.feet}, manufacturer = '${finalProduct.manufacturer || ''}', spec = '${finalProduct.spec || ''}' \nWHERE id = '${finalProduct.id}';`;
+    } else {
+      simulatedQuery = `INSERT INTO products (id, "modelName", feet, spec, manufacturer, "createdAt") \nVALUES ('[AUTO_GENERATED_ID]', '${finalProduct.modelName}', ${finalProduct.feet}, '${finalProduct.spec || ''}', '${finalProduct.manufacturer || ''}', '${new Date().toISOString()}');`;
+    }
+
+    alert(`[DB 전송 예정 SQL 쿼리 안내]\n\n${simulatedQuery}\n\n확인을 누르면 Supabase에 전송됩니다.`);
+
+    try {
+      await saveProduct(editingProduct as Omit<Product, 'id' | 'createdAt'>);
+      alert("🎉 데이터 저장 및 Supabase 동기화 성공!");
+      setShowModal(false);
+      setEditingProduct(null);
+    } catch (err: any) {
+      const errMsg = err?.message || JSON.stringify(err);
+      alert(`❌ Supabase 동기화 실패!\n\n에러 메시지: ${errMsg}`);
+    }
   };
 
   const handleExport = () => {

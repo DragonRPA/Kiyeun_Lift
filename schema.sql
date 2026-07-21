@@ -133,6 +133,10 @@ CREATE TABLE products (
     feet DOUBLE PRECISION NOT NULL,
     spec TEXT,
     manufacturer TEXT,
+    "safetyCertUrl" TEXT,
+    "specSheetUrl" TEXT,
+    "emergencyGuideUrl" TEXT,
+    "isActive" BOOLEAN DEFAULT TRUE NOT NULL,
     "createdAt" TEXT NOT NULL
 );
 
