@@ -115,3 +115,6 @@
 
 ## [2026-07-21] 자산 UPDATE 구문 내 updatedAt 명시를 통한 NOT NULL 오류 해결
 - **요구사항**: PL/pgSQL 함수 `generate_test_data` 및 `clear_test_data` 안에서 `UPDATE assets` 실행 시 `"updatedAt"`을 명시적으로 세팅하여 `23502` 예외를 근본 차단하도록 `setup_seed_rpc.sql` 코드를 전면 갱신합니다.
+
+## [2026-07-21] DB 스키마 트리거 미존재 확인 완료 및 진단 코드 제거
+- **요구사항**: 원격 DB의 `assets` 테이블과 타 연관 테이블에 custom trigger가 전혀 존재하지 않음을 확인하고, 디버깅을 위해 추가했던 `RAISE EXCEPTION` 자가 진단 코드를 최종 제거하여 논스톱 실행이 가능하도록 갱신합니다.
