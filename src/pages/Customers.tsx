@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { Plus, Search, MapPin, Phone, User, Mail, PlusCircle, Building, Download } from 'lucide-react';
-import { Customer, CustomerContact, CustomerSite } from '../services/db';
+import { db, Customer, CustomerContact, CustomerSite } from '../services/db';
 import { exportToExcel } from '../services/excel';
 
 export const Customers: React.FC = () => {
@@ -148,15 +148,33 @@ export const Customers: React.FC = () => {
     setShowCustModal(true);
   };
 
-  const handleSaveCustSubmit = (e: React.FormEvent) => {
+  const handleSaveCustSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingCust || !editingCust.name) return;
     
-    const saved = saveCustomer(editingCust as Omit<Customer, 'id' | 'createdAt'>);
-    setShowCustModal(false);
-    setEditingCust(null);
-    if (!selectedCustomerId) {
-      setSelectedCustomerId(saved.id);
+    const isEdit = !!editingCust.id;
+    const nextId = editingCust.id || db.generateNextId('customers', customers);
+    
+    let simulatedQuery = "";
+    if (isEdit) {
+      simulatedQuery = `UPDATE customers \nSET name = '${editingCust.name}', "bizRegNo" = '${editingCust.bizRegNo || ''}', "isClosed" = ${editingCust.isClosed}, address = '${editingCust.address || ''}', representative = '${editingCust.representative || ''}', "repContact" = '${editingCust.repContact || ''}', "repEmail" = '${editingCust.repEmail || ''}' \nWHERE id = '${editingCust.id}';`;
+    } else {
+      simulatedQuery = `INSERT INTO customers (id, name, "bizRegNo", "isClosed", address, representative, "repContact", "repEmail", "createdAt") \nVALUES ('${nextId}', '${editingCust.name}', '${editingCust.bizRegNo || ''}', ${editingCust.isClosed}, '${editingCust.address || ''}', '${editingCust.representative || ''}', '${editingCust.repContact || ''}', '${editingCust.repEmail || ''}', '${new Date().toISOString()}');`;
+    }
+    
+    alert(`[DB 전송 예정 SQL 쿼리 안내]\n\n${simulatedQuery}\n\n확인을 누르면 Supabase에 전송됩니다.`);
+
+    try {
+      const saved = await saveCustomer(editingCust as Omit<Customer, 'id' | 'createdAt'>);
+      alert("🎉 고객 정보 저장 및 Supabase 동기화 성공!");
+      setShowCustModal(false);
+      setEditingCust(null);
+      if (!selectedCustomerId) {
+        setSelectedCustomerId(saved.id);
+      }
+    } catch (err: any) {
+      const errMsg = err?.message || JSON.stringify(err);
+      alert(`❌ Supabase 동기화 실패!\n\n에러 메시지: ${errMsg}`);
     }
   };
 
@@ -172,12 +190,31 @@ export const Customers: React.FC = () => {
     setShowContactModal(true);
   };
 
-  const handleSaveContactSubmit = (e: React.FormEvent) => {
+  const handleSaveContactSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingContact || !editingContact.name || !editingContact.customerId) return;
-    saveContact(editingContact as Omit<CustomerContact, 'id' | 'createdAt'>);
-    setShowContactModal(false);
-    setEditingContact(null);
+
+    const isEdit = !!editingContact.id;
+    const nextId = editingContact.id || db.generateNextId('contacts', contacts);
+    
+    let simulatedQuery = "";
+    if (isEdit) {
+      simulatedQuery = `UPDATE customer_contacts \nSET name = '${editingContact.name}', position = '${editingContact.position || ''}', contact = '${editingContact.contact || ''}', email = '${editingContact.email || ''}' \nWHERE id = '${editingContact.id}';`;
+    } else {
+      simulatedQuery = `INSERT INTO customer_contacts (id, "customerId", name, position, contact, email, "isActive", "createdAt") \nVALUES ('${nextId}', '${editingContact.customerId}', '${editingContact.name}', '${editingContact.position || ''}', '${editingContact.contact || ''}', '${editingContact.email || ''}', true, '${new Date().toISOString()}');`;
+    }
+    
+    alert(`[DB 전송 예정 SQL 쿼리 안내]\n\n${simulatedQuery}\n\n확인을 누르면 Supabase에 전송됩니다.`);
+
+    try {
+      await saveContact(editingContact as Omit<CustomerContact, 'id' | 'createdAt'>);
+      alert("🎉 담당자 정보 저장 및 Supabase 동기화 성공!");
+      setShowContactModal(false);
+      setEditingContact(null);
+    } catch (err: any) {
+      const errMsg = err?.message || JSON.stringify(err);
+      alert(`❌ Supabase 동기화 실패!\n\n에러 메시지: ${errMsg}`);
+    }
   };
 
   // 현장 폼
@@ -192,12 +229,31 @@ export const Customers: React.FC = () => {
     setShowSiteModal(true);
   };
 
-  const handleSaveSiteSubmit = (e: React.FormEvent) => {
+  const handleSaveSiteSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingSite || !editingSite.name || !editingSite.customerId) return;
-    saveSite(editingSite as Omit<CustomerSite, 'id' | 'createdAt'>);
-    setShowSiteModal(false);
-    setEditingSite(null);
+
+    const isEdit = !!editingSite.id;
+    const nextId = editingSite.id || db.generateNextId('sites', sites);
+    
+    let simulatedQuery = "";
+    if (isEdit) {
+      simulatedQuery = `UPDATE customer_sites \nSET name = '${editingSite.name}', address = '${editingSite.address || ''}', "contactName" = '${editingSite.contactName || ''}', contact = '${editingSite.contact || ''}', email = '${editingSite.email || ''}' \nWHERE id = '${editingSite.id}';`;
+    } else {
+      simulatedQuery = `INSERT INTO customer_sites (id, "customerId", name, address, "contactName", contact, email, "isActive", "createdAt") \nVALUES ('${nextId}', '${editingSite.customerId}', '${editingSite.name}', '${editingSite.address || ''}', '${editingSite.contactName || ''}', '${editingSite.contact || ''}', '${editingSite.email || ''}', true, '${new Date().toISOString()}');`;
+    }
+    
+    alert(`[DB 전송 예정 SQL 쿼리 안내]\n\n${simulatedQuery}\n\n확인을 누르면 Supabase에 전송됩니다.`);
+
+    try {
+      await saveSite(editingSite as Omit<CustomerSite, 'id' | 'createdAt'>);
+      alert("🎉 현장 정보 저장 및 Supabase 동기화 성공!");
+      setShowSiteModal(false);
+      setEditingSite(null);
+    } catch (err: any) {
+      const errMsg = err?.message || JSON.stringify(err);
+      alert(`❌ Supabase 동기화 실패!\n\n에러 메시지: ${errMsg}`);
+    }
   };
 
   return (

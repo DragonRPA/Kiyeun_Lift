@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { Plus, Download, Search, RefreshCw } from 'lucide-react';
 import { exportToExcel } from '../services/excel';
-import { Product } from '../services/db';
+import { db, Product } from '../services/db';
 
 export const Products: React.FC = () => {
   const { products, saveProduct, hasPermission, assets, refreshAllData } = useApp();
@@ -71,7 +71,8 @@ export const Products: React.FC = () => {
     if (isEdit) {
       simulatedQuery = `UPDATE products \nSET "modelName" = '${finalProduct.modelName}', feet = ${finalProduct.feet}, manufacturer = '${finalProduct.manufacturer || ''}', spec = '${finalProduct.spec || ''}' \nWHERE id = '${finalProduct.id}';`;
     } else {
-      simulatedQuery = `INSERT INTO products (id, "modelName", feet, spec, manufacturer, "createdAt") \nVALUES ('[AUTO_GENERATED_ID]', '${finalProduct.modelName}', ${finalProduct.feet}, '${finalProduct.spec || ''}', '${finalProduct.manufacturer || ''}', '${new Date().toISOString()}');`;
+      const nextId = db.generateNextId('products', products);
+      simulatedQuery = `INSERT INTO products (id, "modelName", feet, spec, manufacturer, "createdAt") \nVALUES ('${nextId}', '${finalProduct.modelName}', ${finalProduct.feet}, '${finalProduct.spec || ''}', '${finalProduct.manufacturer || ''}', '${new Date().toISOString()}');`;
     }
 
     alert(`[DB 전송 예정 SQL 쿼리 안내]\n\n${simulatedQuery}\n\n확인을 누르면 Supabase에 전송됩니다.`);

@@ -76,9 +76,9 @@ interface AppContextType {
   refreshAllData: () => void;
   updatePermissions: (updated: MenuPermission[]) => void;
   saveUser: (user: Omit<User, 'id' | 'createdAt'> & { id?: string }) => void;
-  saveCustomer: (cust: Omit<Customer, 'id' | 'createdAt'> & { id?: string }) => Customer;
-  saveContact: (contact: Omit<CustomerContact, 'id' | 'createdAt'> & { id?: string }) => void;
-  saveSite: (site: Omit<CustomerSite, 'id' | 'createdAt'> & { id?: string }) => void;
+  saveCustomer: (cust: Omit<Customer, 'id' | 'createdAt'> & { id?: string }) => Promise<Customer>;
+  saveContact: (contact: Omit<CustomerContact, 'id' | 'createdAt'> & { id?: string }) => Promise<void>;
+  saveSite: (site: Omit<CustomerSite, 'id' | 'createdAt'> & { id?: string }) => Promise<void>;
   saveProduct: (prod: Omit<Product, 'id' | 'createdAt'> & { id?: string }) => void;
   saveAsset: (asset: Omit<Asset, 'id' | 'createdAt' | 'updatedAt'> & { id?: string }) => void;
   updateGoogleConfig: (config: GoogleConfig) => void;
@@ -357,7 +357,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     refreshAllData();
   };
 
-  const saveCustomer = (cust: Omit<Customer, 'id' | 'createdAt'> & { id?: string }): Customer => {
+  const saveCustomer = async (cust: Omit<Customer, 'id' | 'createdAt'> & { id?: string }): Promise<Customer> => {
     let res: Customer;
     if (cust.id) {
       res = db.updateRow<Customer>('customers', cust.id, cust) as Customer;
@@ -383,11 +383,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } else {
       res = db.insertRow<Customer>('customers', { ...cust, createdAt: new Date().toISOString() }) as Customer;
     }
+
+    if (db.isSupabaseConnected() && db.pendingWrites.length > 0) {
+      try {
+        await db.pendingWrites[db.pendingWrites.length - 1];
+      } catch (err) {
+        console.error("Supabase write await error:", err);
+        throw err;
+      }
+    }
+
     refreshAllData();
     return res;
   };
 
-  const saveContact = (contact: Omit<CustomerContact, 'id' | 'createdAt'> & { id?: string }) => {
+  const saveContact = async (contact: Omit<CustomerContact, 'id' | 'createdAt'> & { id?: string }) => {
     if (contact.id) {
       db.updateRow<CustomerContact>('contacts', contact.id, contact as CustomerContact);
     } else {
@@ -397,10 +407,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         createdAt: new Date().toISOString()
       } as Omit<CustomerContact, 'id'>);
     }
+
+    if (db.isSupabaseConnected() && db.pendingWrites.length > 0) {
+      try {
+        await db.pendingWrites[db.pendingWrites.length - 1];
+      } catch (err) {
+        console.error("Supabase write await error:", err);
+        throw err;
+      }
+    }
+
     refreshAllData();
   };
 
-  const saveSite = (site: Omit<CustomerSite, 'id' | 'createdAt'> & { id?: string }) => {
+  const saveSite = async (site: Omit<CustomerSite, 'id' | 'createdAt'> & { id?: string }) => {
     if (site.id) {
       db.updateRow<CustomerSite>('sites', site.id, site as CustomerSite);
     } else {
@@ -410,6 +430,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         createdAt: new Date().toISOString()
       } as Omit<CustomerSite, 'id'>);
     }
+
+    if (db.isSupabaseConnected() && db.pendingWrites.length > 0) {
+      try {
+        await db.pendingWrites[db.pendingWrites.length - 1];
+      } catch (err) {
+        console.error("Supabase write await error:", err);
+        throw err;
+      }
+    }
+
     refreshAllData();
   };
 
@@ -1947,7 +1977,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const registerRepair = (repairData: Partial<Repair>, usedConsumables: { consumableId: string; quantity: number }[]) => {
-    const repairId = repairData.id || `rep-${Math.random().toString(36).substr(2, 9)}`;
+    const repairId = repairData.id || db.generateNextId('repairs', db.repairs);
     const totalRepairCost = repairData.totalCost ?? 0;
 
     if (repairData.id) {
@@ -1958,6 +1988,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       });
     } else {
       db.insertRow<Repair>('repairs', {
+        id: repairId,
         assetId: repairData.assetId || '',
         mechanicId: currentUser?.id || 'u-4',
         requestDate: repairData.requestDate || new Date().toISOString().split('T')[0],

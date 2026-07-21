@@ -1024,10 +1024,47 @@ class LocalDB {
     }
   }
 
+  generateNextId(key: string, list: { id: string }[]): string {
+    let prefix = '';
+    switch (key) {
+      case 'products': prefix = 'PROD-'; break;
+      case 'customers': prefix = 'CUST-'; break;
+      case 'assets': prefix = 'ASSET-'; break;
+      case 'sites': prefix = 'SITE-'; break;
+      case 'contacts': prefix = 'CONT-'; break;
+      case 'contracts': prefix = 'CONTR-'; break;
+      case 'vendors': prefix = 'VND-'; break;
+      default:
+        prefix = key.slice(0, 4).toUpperCase() + '-';
+    }
+
+    let maxNum = 0;
+    const regex = new RegExp(`^${prefix}(\\d+)`, 'i');
+    const fallbackRegex = new RegExp(`^${key.slice(0, 4)}-(\\d+)`, 'i');
+
+    list.forEach(item => {
+      if (!item || !item.id) return;
+      let match = item.id.match(regex);
+      if (!match) {
+        match = item.id.match(fallbackRegex);
+      }
+      if (match) {
+        const num = parseInt(match[1], 10);
+        if (!isNaN(num) && num > maxNum) {
+          maxNum = num;
+        }
+      }
+    });
+
+    const nextNum = maxNum + 1;
+    const paddedNum = String(nextNum).padStart(7, '0');
+    return `${prefix}${paddedNum}`;
+  }
+
   // 헬퍼 메소드들 - CRUD 시뮬레이션 및 백그라운드 Supabase 업로드
   insertRow<T extends { id: string }>(key: keyof LocalDB, row: Omit<T, 'id'> & { id?: string }): T {
     const list = (this[key] as unknown) as T[];
-    const newId = row.id || Math.random().toString(36).substr(2, 9);
+    const newId = row.id || this.generateNextId(key as string, list as any);
     const newRow = { ...row, id: newId } as unknown as T;
     list.push(newRow);
     this.set(key, list);

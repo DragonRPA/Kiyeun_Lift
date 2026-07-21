@@ -283,7 +283,19 @@ function getDynamicTableSchemas(): TableDef[] {
       
       let example = 'sample';
       if (col === 'id') {
-        example = `${tableName.slice(0, 4).toUpperCase()}-001`;
+        let prefix = '';
+        switch (tableName) {
+          case 'products': prefix = 'PROD-'; break;
+          case 'customers': prefix = 'CUST-'; break;
+          case 'assets': prefix = 'ASSET-'; break;
+          case 'customer_sites': prefix = 'SITE-'; break;
+          case 'customer_contacts': prefix = 'CONT-'; break;
+          case 'contracts': prefix = 'CONTR-'; break;
+          case 'vendors': prefix = 'VND-'; break;
+          default:
+            prefix = tableName.slice(0, 4).toUpperCase() + '-';
+        }
+        example = `${prefix}0000001`;
       } else if (type === 'number') {
         example = '100';
       } else if (type === 'boolean') {
@@ -311,7 +323,19 @@ function getDynamicTableSchemas(): TableDef[] {
       const row: Record<string, string> = {};
       fields.forEach(f => {
         if (f.key === 'id') {
-          row[f.key] = `${tableName.slice(0, 4).toUpperCase()}-00${i}`;
+          let prefix = '';
+          switch (tableName) {
+            case 'products': prefix = 'PROD-'; break;
+            case 'customers': prefix = 'CUST-'; break;
+            case 'assets': prefix = 'ASSET-'; break;
+            case 'customer_sites': prefix = 'SITE-'; break;
+            case 'customer_contacts': prefix = 'CONT-'; break;
+            case 'contracts': prefix = 'CONTR-'; break;
+            case 'vendors': prefix = 'VND-'; break;
+            default:
+              prefix = tableName.slice(0, 4).toUpperCase() + '-';
+          }
+          row[f.key] = `${prefix}${String(i).padStart(7, '0')}`;
         } else if (f.type === 'number') {
           row[f.key] = String(10 * i);
         } else if (f.type === 'boolean') {
