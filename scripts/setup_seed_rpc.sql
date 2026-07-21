@@ -1,18 +1,20 @@
 -- Supabase DB-Native 고속 데이터 시딩용 PL/pgSQL 스토어드 프로시저 설치 스크립트
 -- 이 스크립트를 Supabase SQL Editor에 단 한 번 복사하여 실행(Run)하십시오.
--- RLS 정책을 우회하여 0.2초 만에 10,000건 이상의 모의 데이터를 무결하게 원격 적재합니다.
+-- RLS 정책을 우회하여 0.2초 만에 모의 데이터를 무결하게 원격 적재합니다.
 
 CREATE OR REPLACE FUNCTION generate_test_data()
 RETURNS text
 SECURITY DEFINER -- RLS 정책을 무시하고 postgres 권한으로 실행
 AS $$
 DECLARE
-  v_prod_count INT := 90;
-  v_asset_count INT := 1000;
-  v_cust_count INT := 200;
-  v_contact_count INT := 1000;
-  v_site_count INT := 1000;
-  v_contract_count INT := 600;
+  -- 안전한 소규모 단계적 검증을 위해 기본 행 수량을 모두 1개로 설정
+  v_prod_count INT := 1;
+  v_asset_count INT := 1;
+  v_cust_count INT := 1;
+  v_contact_count INT := 1;
+  v_site_count INT := 1;
+  v_contract_count INT := 1;
+  v_repair_count INT := 1;
   
   i INT;
   v_start_ts TIMESTAMP;
@@ -43,7 +45,7 @@ BEGIN
   -- 1. 기존 테스트 데이터 일괄 정리 (순서 보장)
   PERFORM clear_test_data();
 
-  -- 2. 제품군 생성 (90종류)
+  -- 2. 제품군 생성
   FOR i IN 1..v_prod_count LOOP
     v_current_model := 'MODEL-' || chr(65 + (i % 26)) || '-' || (100 + i);
     INSERT INTO products (
@@ -63,9 +65,9 @@ BEGIN
     ) ON CONFLICT (id) DO NOTHING;
   END LOOP;
 
-  -- 3. 자산 대장 생성 (1,000개)
+  -- 3. 자산 대장 생성
   FOR i IN 1..v_asset_count LOOP
-    v_current_model := 'MODEL-' || chr(65 + ((i % v_prod_count) % 26)) || '-' || (100 + (i % v_prod_count));
+    v_current_model := 'MODEL-' || chr(65 + (((i - 1) % v_prod_count) % 26)) || '-' || (100 + ((i - 1) % v_prod_count));
     v_asset_no := 'TST-EQ-' || LPAD(i::text, 4, '0');
     v_serial_no := 'SN-TST-' || LPAD(i::text, 4, '0');
     INSERT INTO assets (
@@ -103,7 +105,7 @@ BEGIN
     ) ON CONFLICT (id) DO NOTHING;
   END LOOP;
 
-  -- 4. 고객사 생성 (200개)
+  -- 4. 고객사 생성
   FOR i IN 1..v_cust_count LOOP
     INSERT INTO customers (
       id,
@@ -128,9 +130,9 @@ BEGIN
     ) ON CONFLICT (id) DO NOTHING;
   END LOOP;
 
-  -- 5. 담당자 (1,000명) 및 현장 (1,000개) 생성
+  -- 5. 담당자 및 현장 생성
   FOR i IN 1..v_contact_count LOOP
-    v_current_cust_id := 'testdata-cust-' || ((i % v_cust_count) + 1);
+    v_current_cust_id := 'testdata-cust-' || (1 + ((i - 1) % v_cust_count));
     
     INSERT INTO customer_contacts (
       id,
@@ -171,15 +173,15 @@ BEGIN
     ) ON CONFLICT (id) DO NOTHING;
   END LOOP;
 
-  -- 6. 임대 계약 (600개) & 계약 자산 & 물류 입출고 연동
+  -- 6. 임대 계약 & 계약 자산 & 물류 입출고 연동
   v_start_ts := '2026-01-01 00:00:00'::TIMESTAMP;
   v_end_ts := '2026-07-19 23:59:59'::TIMESTAMP;
-  v_step_interval := (v_end_ts - v_start_ts) / 599;
+  v_step_interval := (v_end_ts - v_start_ts) / CASE WHEN v_contract_count > 1 THEN (v_contract_count - 1) ELSE 1 END;
 
   FOR i IN 1..v_contract_count LOOP
-    v_current_cust_id := 'testdata-cust-' || ((i % v_cust_count) + 1);
-    v_current_site_id := 'testdata-site-' || (((i % v_cust_count) * 5) + (i % 5) + 1);
-    v_current_contact_id := 'testdata-contact-' || (((i % v_cust_count) * 5) + (i % 5) + 1);
+    v_current_cust_id := 'testdata-cust-' || (1 + ((i - 1) % v_cust_count));
+    v_current_site_id := 'testdata-site-' || (1 + ((i - 1) % v_site_count));
+    v_current_contact_id := 'testdata-contact-' || (1 + ((i - 1) % v_contact_count));
     
     v_start_date := (v_start_ts + (i - 1) * v_step_interval)::DATE;
     v_duration := 10 + (i % 9) * 10;
@@ -228,7 +230,7 @@ BEGIN
     ) VALUES (
       'testdata-ctrasst-' || i,
       v_current_contract_id,
-      'testdata-asset-' || (1 + (i % v_asset_count)),
+      'testdata-asset-' || (1 + ((i - 1) % v_asset_count)),
       20000,
       600000,
       v_start_date::TEXT,
@@ -240,7 +242,7 @@ BEGIN
     UPDATE assets 
     SET status = CASE WHEN v_end_date < '2026-07-21'::DATE THEN 'AVAILABLE' ELSE 'RENTED' END,
         "updatedAt" = NOW()::TEXT
-    WHERE id = 'testdata-asset-' || (1 + (i % v_asset_count));
+    WHERE id = 'testdata-asset-' || (1 + ((i - 1) % v_asset_count));
 
     -- 물류 배차 (출고)
     INSERT INTO deliveries (
@@ -256,7 +258,7 @@ BEGIN
     ) VALUES (
       'testdata-deliv-out-' || i,
       v_current_contract_id,
-      'testdata-asset-' || (1 + (i % v_asset_count)),
+      'testdata-asset-' || (1 + ((i - 1) % v_asset_count)),
       'OUTBOUND',
       v_start_date::TEXT,
       'COMPLETED',
@@ -280,7 +282,7 @@ BEGIN
       ) VALUES (
         'testdata-deliv-in-' || i,
         v_current_contract_id,
-        'testdata-asset-' || (1 + (i % v_asset_count)),
+        'testdata-asset-' || (1 + ((i - 1) % v_asset_count)),
         'INBOUND',
         v_end_date::TEXT,
         'COMPLETED',
@@ -297,7 +299,7 @@ BEGIN
     v_start_date := (v_start_ts + (i - 1) * v_step_interval)::DATE;
     v_duration := 10 + (i % 9) * 10;
     v_end_date := v_start_date + v_duration;
-    v_current_cust_id := 'testdata-cust-' || ((i % v_cust_count) + 1);
+    v_current_cust_id := 'testdata-cust-' || (1 + ((i - 1) % v_cust_count));
 
     -- 청구서 생성
     INSERT INTO billings (
@@ -338,7 +340,7 @@ BEGIN
       'testdata-billdtl-' || i,
       'testdata-bill-' || i,
       'testdata-ctrasst-' || i,
-      'testdata-asset-' || (1 + (i % v_asset_count)),
+      'testdata-asset-' || (1 + ((i - 1) % v_asset_count)),
       '장비 임대료',
       v_duration,
       20000,
@@ -380,7 +382,7 @@ BEGIN
       ) VALUES (
         'testdata-banktx-' || i,
         LEAST(v_end_date + 1, '2026-07-20'::DATE)::TEXT,
-        '(주)' || v_customer_prefixes[1 + (i % 10)] || ' ' || ((i % v_cust_count) + 1) || '호점',
+        '(주)' || v_customer_prefixes[1 + (i % 10)] || ' ' || (1 + ((i - 1) % v_cust_count)) || '호점',
         CASE WHEN i % 3 = 0 THEN 22000 * v_duration ELSE 11000 * v_duration END,
         0,
         '테스트 자동 입금',
@@ -391,8 +393,8 @@ BEGIN
     END IF;
   END LOOP;
 
-  -- 8. 소모품 & 정비 이력 (각 50건)
-  FOR i IN 1..50 LOOP
+  -- 8. 소모품 & 정비 이력
+  FOR i IN 1..v_repair_count LOOP
     INSERT INTO consumables (
       id,
       "modelName",
@@ -422,7 +424,7 @@ BEGIN
       "updatedAt"
     ) VALUES (
       'testdata-repair-' || i,
-      'testdata-asset-' || i,
+      'testdata-asset-' || (1 + ((i - 1) % v_asset_count)),
       ('2026-05-01'::DATE + i)::TEXT,
       '정기 모터 오일 교체 및 구동 밸브 실링 보강작업',
       120000,
@@ -441,14 +443,14 @@ BEGIN
     ) VALUES (
       'testdata-repconsum-' || i,
       'testdata-repair-' || i,
-      'testdata-consumable-' || i,
+      'testdata-consumable-' || (1 + ((i - 1) % v_repair_count)),
       2,
       25000,
       50000
     ) ON CONFLICT (id) DO NOTHING;
   END LOOP;
 
-  RETURN 'SUCCESS: Supabase Stored DB-Native Seeder executed successfully. 10,000+ rows generated.';
+  RETURN 'SUCCESS: Supabase Stored DB-Native Seeder executed successfully. ' || (v_prod_count + v_asset_count + v_cust_count + v_contact_count + v_site_count + v_contract_count + v_repair_count) || ' rows generated.';
 END;
 $$ LANGUAGE plpgsql;
 

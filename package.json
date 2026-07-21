@@ -7,13 +7,11 @@
     "dev": "vite --port 5174",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
-    "preview": "vite preview",
-    "db:seed": "node scripts/seed-db.js"
+    "preview": "vite preview"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.110.7",
     "lucide-react": "^1.24.0",
-    "pg": "^8.22.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "xlsx": "^0.18.5"
