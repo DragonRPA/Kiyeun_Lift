@@ -1,3 +1,11 @@
+# Release Notes (v2.6.10 - 2026-07-21 12:28)
+
+## 🩺 자산 업데이트 DML 구문 내 "updatedAt" 컬럼 강제 갱신 적용 (23502 예외 근본적 진압)
+- **자산(assets) UPDATE 구문 updatedAt 명시**: `assets` 테이블의 `"updatedAt"` Not-Null 제약조건으로 인해, `generate_test_data` 및 `clear_test_data` 내의 `UPDATE assets SET status = ...` 연산 실행 시 `"updatedAt"` 컬럼을 명시하지 않아 발생하던 `23502 (Not-Null Violation)` 예외를 완전히 수정하였습니다.
+- **SQL 함수 갱신 제공**: [setup_seed_rpc.sql](file:///d:/GoogleDrive/RPA%20개발/01.AntiGravity/Kiyuen_Lift/scripts/setup_seed_rpc.sql) 스크립트를 재조정하여 데이터베이스 단에서 안전하게 실행되도록 함수 구조를 전면 동기화했습니다.
+
+---
+
 # Release Notes (v2.6.9 - 2026-07-21 06:50)
 
 ## 🩺 DB 스키마 정합성에 맞춘 PL/pgSQL RPC 프로시저 칼럼 패치 적용 (23502 예외 해결)

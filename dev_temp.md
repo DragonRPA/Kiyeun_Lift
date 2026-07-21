@@ -112,3 +112,6 @@
 
 ## [2026-07-21] DB 스키마 정합성에 맞춘 PL/pgSQL RPC 프로시저 칼럼 패치 적용
 - **요구사항**: `assets` 테이블의 `"updatedAt"` Not-Null 제약조건 위반 에러(`23502`)를 해결하기 위해, 원격 DB 테이블 스키마에 정의된 모든 컬럼과 매핑 형식을 프로시저 설치 스크립트(`setup_seed_rpc.sql`)에 맞춰 전면 재동기화 및 패치합니다.
+
+## [2026-07-21] 자산 UPDATE 구문 내 updatedAt 명시를 통한 NOT NULL 오류 해결
+- **요구사항**: PL/pgSQL 함수 `generate_test_data` 및 `clear_test_data` 안에서 `UPDATE assets` 실행 시 `"updatedAt"`을 명시적으로 세팅하여 `23502` 예외를 근본 차단하도록 `setup_seed_rpc.sql` 코드를 전면 갱신합니다.

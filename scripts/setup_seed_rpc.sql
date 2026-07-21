@@ -238,7 +238,8 @@ BEGIN
 
     -- 자산 상태 업데이트
     UPDATE assets 
-    SET status = CASE WHEN v_end_date < '2026-07-21'::DATE THEN 'AVAILABLE' ELSE 'RENTED' END
+    SET status = CASE WHEN v_end_date < '2026-07-21'::DATE THEN 'AVAILABLE' ELSE 'RENTED' END,
+        "updatedAt" = NOW()::TEXT
     WHERE id = 'testdata-asset-' || (1 + (i % v_asset_count));
 
     -- 물류 배차 (출고)
@@ -474,7 +475,10 @@ BEGIN
   DELETE FROM customers WHERE id LIKE 'testdata-%';
   
   -- 자산의 대여 상태 초기화
-  UPDATE assets SET status = 'AVAILABLE' WHERE id LIKE 'testdata-%';
+  UPDATE assets 
+  SET status = 'AVAILABLE',
+      "updatedAt" = NOW()::TEXT
+  WHERE id LIKE 'testdata-%';
 
   RETURN 'SUCCESS: All test data with testdata- prefix cleared successfully.';
 END;
