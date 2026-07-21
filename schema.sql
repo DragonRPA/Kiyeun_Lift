@@ -130,7 +130,7 @@ CREATE TABLE customer_sites (
 CREATE TABLE products (
     id TEXT PRIMARY KEY,
     "modelName" TEXT NOT NULL UNIQUE,
-    feet INTEGER NOT NULL,
+    feet DOUBLE PRECISION NOT NULL,
     spec TEXT,
     manufacturer TEXT,
     "createdAt" TEXT NOT NULL

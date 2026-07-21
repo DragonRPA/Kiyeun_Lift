@@ -35,10 +35,17 @@ export const Products: React.FC = () => {
     setEditingProduct(p);
     setShowModal(true);
   };
-
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingProduct || !editingProduct.modelName) return;
+
+    // 피트(Feet) 실수 제약 조건 검증
+    const feetValue = Number(editingProduct.feet);
+    if (isNaN(feetValue) || feetValue <= 0) {
+      alert("피트 규격은 0보다 큰 숫자(실수 가능, 예: 3.6, 12, 19 등)로 입력해야 합니다.");
+      return;
+    }
+
     saveProduct(editingProduct as Omit<Product, 'id' | 'createdAt'>);
     setShowModal(false);
     setEditingProduct(null);
@@ -171,9 +178,10 @@ export const Products: React.FC = () => {
                 <label>피트 규격 (Feet) *</label>
                 <input
                   type="number"
-                  value={editingProduct.feet || 0}
+                  step="any"
+                  value={editingProduct.feet || ''}
                   onChange={e => setEditingProduct({ ...editingProduct, feet: parseFloat(e.target.value) })}
-                  placeholder="예: 19"
+                  placeholder="예: 3.6, 12, 19"
                   required
                 />
               </div>

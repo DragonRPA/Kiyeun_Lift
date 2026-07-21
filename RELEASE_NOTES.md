@@ -1,3 +1,11 @@
+# Release Notes (v2.7.1 - 2026-07-21 13:43)
+
+## 🩺 피트(Feet) 컬럼 자료형 실수(DOUBLE PRECISION) 변경 및 소수점 등록 허용
+- **데이터베이스 컬럼 자료형 실수화**: 제품(`products`) 테이블의 피트(`feet`) 규격 컬럼을 정수형(`INTEGER`)에서 실수형(`DOUBLE PRECISION`)으로 개편하여, 3.6피트와 같은 소수점 규격을 원격 DB와 로컬 스키마([schema.sql](file:///d:/GoogleDrive/RPA%20개발/01.AntiGravity/Kiyuen_Lift/schema.sql)) 모두에서 정식 지원하도록 변경했습니다.
+- **클라이언트 검증 및 UI 보강**: 실수형 입력을 제한 없이 허용하도록 `Products.tsx` 내의 정수 체크를 해제하고, 모달 입력 컴포넌트의 `step` 속성을 `any`로 수정하여 `3.6` 피트와 같은 실수 값이 자유롭게 입력 및 저장되도록 조치했습니다.
+
+---
+
 # Release Notes (v2.7.0 - 2026-07-21 13:25)
 
 ## 🗑️ 통합 테스트 시나리오 데이터 관리 기능 및 UI 제거
