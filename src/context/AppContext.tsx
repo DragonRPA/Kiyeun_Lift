@@ -431,6 +431,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         await db.pendingWrites[db.pendingWrites.length - 1];
       } catch (err) {
         console.error("Supabase write await error:", err);
+        throw err;
       }
     }
     

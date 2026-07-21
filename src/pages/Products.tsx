@@ -1,23 +1,37 @@
 // d:\Kiyeun_Lift\src\pages\Products.tsx
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { Plus, Download, Search } from 'lucide-react';
+import { Plus, Download, Search, RefreshCw } from 'lucide-react';
 import { exportToExcel } from '../services/excel';
 import { Product } from '../services/db';
 
 export const Products: React.FC = () => {
-  const { products, saveProduct, hasPermission, assets } = useApp();
+  const { products, saveProduct, hasPermission, assets, refreshAllData } = useApp();
   const canSave = hasPermission('product', 'save');
 
   const [searchTerm, setSearchTerm] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Partial<Product> | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await refreshAllData();
+      alert("✨ 최신 데이터를 성공적으로 불러왔습니다.");
+    } catch (err: any) {
+      console.error("Failed to sync from Supabase:", err);
+      alert("❌ 최신 데이터를 가져오는 데 실패했습니다.");
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   const filtered = products
     .filter(p => 
-      p.modelName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      p.manufacturer.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      p.spec.toLowerCase().includes(searchTerm.toLowerCase())
+      (p.modelName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (p.manufacturer || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (p.spec || '').toLowerCase().includes(searchTerm.toLowerCase())
     )
     .sort((a, b) => {
       const aActive = a.isActive !== false;
@@ -97,6 +111,9 @@ export const Products: React.FC = () => {
       <div className="card-header" style={{ marginBottom: '24px' }}>
         <h2 style={{ fontWeight: '700' }}>제품 모델 관리</h2>
         <div style={{ display: 'flex', gap: '10px' }}>
+          <button className="btn-secondary" onClick={handleRefresh} disabled={refreshing} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <RefreshCw size={16} style={{ animation: refreshing ? 'spin 1s linear infinite' : 'none' }} /> 조회
+          </button>
           <button className="btn-secondary" onClick={handleExport}>
             <Download size={16} /> 엑셀 다운로드
           </button>
