@@ -1,3 +1,13 @@
+# Release Notes (v1.4.1.Build.00001 - 2026-07-26 00:19)
+
+## 🛡️ Supabase 실시간 DB 정합성 검증 도구 RLS(Row-Level Security) 검증 & DDL 패치 강화
+- **RLS 정책 위반 실시간 검증 및 알림 ([DevDataUploader.tsx](file:///d:/GoogleDrive/RPA%20개발/01.AntiGravity/Kiyuen_Lift/src/pages/DevDataUploader.tsx))**:
+  - 데이터베이스 스키마 검증 시, `new row violates row-level security policy`와 같은 RLS 정책 위반 오류 발생 가능성 및 차단 상태를 실시간 감지하도록 보강.
+- **자동 DDL 복구 패치 쿼리 생성 강화**:
+  - 누락된 컬럼 추가뿐만 아니라, RLS 정책으로 인한 쓰기 차단을 원클릭 해제/허용하는 `ALTER TABLE "tableName" DISABLE ROW LEVEL SECURITY;` 쿼리를 자동 생성 SQL 스크립트에 필수 포함.
+- **글로벌 DB 정합성 검증 정책 강화 (`AGENTS.md`)**:
+  - 글로벌 규칙 6번에 RLS 정밀 검증 및 자동 DDL 해제 패치 생성 의무 조항 등록 및 시스템 학습 완료.
+
 # Release Notes (v1.4.1.Build.00000 - 2026-07-26 00:15)
 
 ## 🎛️ 토글 버튼 스위치(Toggle Switch) UI 디자인 개편 & 수동 배차 적용

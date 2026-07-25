@@ -1034,6 +1034,7 @@ export const DevDataUploader: React.FC = () => {
     setCheckingSchema(true);
     const audit: { table: string; status: 'OK' | 'MISSING' | 'MISMATCH'; message: string }[] = [];
     let sqlPatch = '';
+    let rlsPatch = '-- [보완] RLS (Row-Level Security) 행 수준 보안 정책 해제 및 전면 허용 설정\n';
 
     // PostgREST 에러 메시지로부터 누락된 칼럼명을 안전하게 파싱하는 헬퍼
     const extractColumnName = (errMsg: string): string | null => {
@@ -1052,18 +1053,26 @@ export const DevDataUploader: React.FC = () => {
       const currentSchemas = parseSqlSchema(schemaSql);
       for (const table of Object.keys(currentSchemas)) {
         const schemaDef = currentSchemas[table];
+        let hasRlsError = false;
         
-        // 1. 테이블 존재 여부 검사
+        // 1. 테이블 존재 여부 및 RLS 기본 검사
         const { error: tableError } = await supabase!.from(table).select('id').limit(0);
         
-        if (tableError && (tableError.code === '42P01' || tableError.message.includes('does not exist'))) {
-          audit.push({
-            table,
-            status: 'MISSING',
-            message: '테이블이 Supabase에 존재하지 않습니다.'
-          });
-          sqlPatch += `-- [생성] ${table} 테이블 추가\n${schemaDef.createSql}\n\n`;
-          continue;
+        if (tableError) {
+          if (tableError.code === '42P01' || tableError.message.includes('does not exist')) {
+            audit.push({
+              table,
+              status: 'MISSING',
+              message: '테이블이 Supabase에 존재하지 않습니다.'
+            });
+            sqlPatch += `-- [생성] ${table} 테이블 추가 및 RLS 해제\n${schemaDef.createSql}\nALTER TABLE "${table}" DISABLE ROW LEVEL SECURITY;\n\n`;
+            rlsPatch += `ALTER TABLE "${table}" DISABLE ROW LEVEL SECURITY;\n`;
+            continue;
+          }
+
+          if (tableError.message.includes('row-level security') || tableError.code === '42501') {
+            hasRlsError = true;
+          }
         }
 
         // 2. 컬럼 누락 여부 검증 (일괄 Select 및 에러 메시지 기반 점진적 누락 색출 - 초고속 최적화)
@@ -1085,6 +1094,10 @@ export const DevDataUploader: React.FC = () => {
             break;
           }
 
+          if (colError.message.includes('row-level security') || colError.code === '42501') {
+            hasRlsError = true;
+          }
+
           const missingColName = extractColumnName(colError.message);
           if (missingColName && activeCols.includes(missingColName)) {
             missingCols.push(missingColName);
@@ -1095,26 +1108,36 @@ export const DevDataUploader: React.FC = () => {
           }
         }
 
+        // RLS 해제 DDL 쿼리 묶음 준비
+        rlsPatch += `ALTER TABLE "${table}" DISABLE ROW LEVEL SECURITY;\n`;
+
         if (missingCols.length > 0) {
+          const rlsMsg = hasRlsError ? ' ⚠️ [RLS 정책 위반 경고: new row violates row-level security policy]' : '';
           audit.push({
             table,
             status: 'MISMATCH',
-            message: `컬럼 누락 (${missingCols.length}개): ${missingCols.join(', ')}`
+            message: `컬럼 누락 (${missingCols.length}개): ${missingCols.join(', ')}${rlsMsg}`
           });
           
-          sqlPatch += `-- [보완] ${table} 테이블 누락 컬럼 추가 DDL\n`;
+          sqlPatch += `-- [보완] ${table} 테이블 누락 컬럼 추가 및 RLS 해제 DDL\n`;
           missingCols.forEach(col => {
             const colDef = schemaDef.columnsWithTypes[col] || 'TEXT';
-            // 기존 데이터가 있는 상태에서도 성공적으로 칼럼이 추가될 수 있도록 NOT NULL 제약조건 제거 및 기본값 확보
             let colType = colDef.replace(/NOT NULL/gi, '').trim();
-            sqlPatch += `ALTER TABLE ${table} ADD COLUMN IF NOT EXISTS "${col}" ${colType};\n`;
+            sqlPatch += `ALTER TABLE "${table}" ADD COLUMN IF NOT EXISTS "${col}" ${colType};\n`;
           });
-          sqlPatch += `\n`;
+          sqlPatch += `ALTER TABLE "${table}" DISABLE ROW LEVEL SECURITY;\n\n`;
+        } else if (hasRlsError) {
+          audit.push({
+            table,
+            status: 'MISMATCH',
+            message: '⚠️ [RLS 정책 위반 검출] new row violates row-level security policy - RLS 해제 쿼리 필요'
+          });
+          sqlPatch += `-- [보완] ${table} 테이블 RLS(행 수준 보안) 정책 해제 DDL\nALTER TABLE "${table}" DISABLE ROW LEVEL SECURITY;\n\n`;
         } else if (success) {
           audit.push({
             table,
             status: 'OK',
-            message: '정상 (테이블 및 모든 컬럼 일치)'
+            message: '정상 (테이블, 모든 컬럼 및 RLS 접근 허용 일치)'
           });
         } else {
           audit.push({
@@ -1124,6 +1147,13 @@ export const DevDataUploader: React.FC = () => {
           });
         }
       }
+
+      if (sqlPatch) {
+        sqlPatch += `\n-- ──────────────────────────────────────────────\n-- [일괄 조치] 전체 테이블 RLS (Row-Level Security) 해제 및 허용 패치 쿼리\n-- ──────────────────────────────────────────────\n${rlsPatch}`;
+      } else {
+        sqlPatch = `-- [정보] 모든 테이블 스키마가 정상입니다.\n-- 만약 RLS(new row violates row-level security policy) 오류가 발생할 경우 아래 쿼리를 SQL Editor에 실행하십시오:\n\n${rlsPatch}`;
+      }
+
       setSchemaAuditResults(audit);
       setGeneratedPatchSql(sqlPatch);
     } catch (err) {

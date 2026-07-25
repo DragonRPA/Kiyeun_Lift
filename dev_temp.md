@@ -4,8 +4,9 @@
 (현재 대기 중인 요구사항 없음 - 전원 구현 및 배포 완료)
 
 ---
-[반영완료 - v1.4.1.Build.00000 / 2026-07-26 00:15]
-1. v1.4.1: 프로젝트 전반 체크박스 형태 입력 요소를 세련된 토글 버튼(Toggle Switch) 디자인으로 전면 개편 (`index.css`, `ToggleSwitch.tsx`)
+[반영완료 - v1.4.1.Build.00001 / 2026-07-26 00:19]
+1. v1.4.1.Build.00001: Supabase DB 스키마 정합성 검증 도구 내 RLS(new row violates row-level security policy) 위반 검증 및 자동 DDL 해제 쿼리 생성 보강 (`DevDataUploader.tsx`, `AGENTS.md`)
+2. v1.4.1: 프로젝트 전반 체크박스 형태 입력 요소를 세련된 토글 버튼(Toggle Switch) 디자인으로 전면 개편 (`index.css`, `ToggleSwitch.tsx`)
 2. v1.4.1: `TruckDispatch.tsx` [신규 수동 배차 요청 생성] 모달 및 배차 수정 모달 내 '고객 청구 여부 (billableToCustomer)' 체크박스를 토글 스위치 UI로 전환 개편.
 3. v1.4.0.Build.00001: 소모품 구매신청 저장 오류 수정 및 전 스토리지/DB 데이터 저장 성공 검증 & 무음 실패 방지 정책 수립 (`AGENTS.md`, `Consumables.tsx`, `AppContext.tsx`)
 4. v1.4.0: 배차 상하차지 입력, 공급가액 기준 월말 운송료 정산 대사, 최종 운송료 재수정/사유 기록, 지급 추적 및 PAID 마감 Lock / 지급요청 회수(재정산) 지원 (`TruckDispatch.tsx`)
