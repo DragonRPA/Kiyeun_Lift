@@ -92,7 +92,7 @@ CREATE TABLE vendors (
 CREATE TABLE permissions (
     id TEXT PRIMARY KEY,
     "userId" TEXT NOT NULL,
-    role TEXT,
+    role TEXT DEFAULT 'USER',
     "menuId" TEXT NOT NULL,
     "canView" BOOLEAN NOT NULL DEFAULT FALSE,
     "canSave" BOOLEAN NOT NULL DEFAULT FALSE,

@@ -1,3 +1,12 @@
+# Release Notes (v1.3.4.Build.00003 - 2026-07-25 21:21)
+
+## 🐛 permissions 테이블 role NOT NULL 레거시 제약 조건 우회 패치
+### AppContext.tsx — updatePermissions 내 role 기본값 더미 바인딩
+- Supabase 원격 DB의 `permissions` 테이블에 `role` 컬럼이 `NOT NULL`로 구성되어 있는 구버전 스펙 환경에서 저장 시 발생하는 `null value in column "role" of relation "permissions" violates not-null constraint` 에러를 방지하도록 `role: (p as any).role || 'USER'` 기본값 더미 데이터를 자동 주입합니다.
+
+### schema.sql — role 컬럼 DEFAULT 'USER' 적용
+- 로컬 DDL의 `permissions` 테이블 정의에서 `role TEXT DEFAULT 'USER'`로 명시하여 DB 정합성을 확보했습니다.
+
 # Release Notes (v1.3.4.Build.00002 - 2026-07-25 21:16)
 
 ## 🐛 permissions 테이블 userId DDL 스키마 정합성 보정 및 schema cache 저장 오류 패치

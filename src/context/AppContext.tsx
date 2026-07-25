@@ -362,11 +362,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     try {
       db.permissions = updated;
       if (supabase) {
-        // Supabase DB 스키마 컬럼명 불일치(userId vs user_id) 호환성을 위해 양쪽 모두 부여
+        // Supabase DB 스키마 컬럼명 불일치(userId vs user_id) 및 레거시 role NOT NULL 제약 조건 우회를 위해 기본값 부여
         const payload = updated.map(p => ({
           ...p,
           userId: p.userId,
-          user_id: p.userId
+          user_id: p.userId,
+          role: (p as any).role || 'USER'
         }));
         const { error } = await supabase.from('permissions').upsert(payload as any[], { onConflict: 'id' });
         if (error) {

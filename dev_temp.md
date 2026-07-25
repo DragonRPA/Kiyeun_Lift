@@ -517,4 +517,14 @@
   - `AppContext.tsx`: `updatePermissions` 시 Supabase에 데이터 저장 전 `userId` 객체 맵핑 및 DDL 불일치 시 직관적 패치 SQL 안내 또는 증분 복구 지원.
   - **버전 산정**: DB 스키마 정합성 DDL 보정 & Hotfix ➔ **`v1.3.4.Build.00002`** (Build 1 증가)
 
+## [2026-07-25] [반영완료] permissions 테이블 role NOT NULL 제약조건 호환성 주입 및 저장 패치 (v1.3.4.Build.00003)
+- **요구사항**: 
+  1. 권한 저장 시 `null value in column "role" of relation "permissions" violates not-null constraint` 예외 발생 차단.
+  2. 원격 Supabase DB의 구 스펙 레거시 `role` NOT NULL 제약 조건 대응.
+- **해결 설계**:
+  - `AppContext.tsx`: Supabase upsert 전 객체 payload에 `role: (p as any).role || 'USER'` 기본값 더미 바인딩을 추가하여 NOT NULL 제약조건을 원천 우회.
+  - `schema.sql`: `permissions` 테이블 DDL의 `role` 컬럼 제약조건을 `role TEXT DEFAULT 'USER'`로 변경하여 스키마 정합성 보장.
+  - **버전 산정**: 레거시 DB 제약조건 우회 & Hotfix ➔ **`v1.3.4.Build.00003`** (Build 1 증가)
+
+
 
