@@ -508,3 +508,13 @@
   - 하위 메뉴 행 렌더링에서도 `isAdmin` → `isSuperAdminUser` 기준 Lock/체크박스 분기 교체하여 일반 ADMIN 임직원의 권한도 체크박스 토글 가능.
   - **버전 산정**: ADMIN 생성 시 권한 자동 초기화 + UI 회수 가능화 ➔ **`v1.3.4.Build.00001`** (Build 1 증가)
 
+## [2026-07-25] [반영완료] permissions 테이블 userId 누락 DDL 보정 및 권한 저장 schema cache 오류 패치 (v1.3.4.Build.00002)
+- **요구사항**: 
+  1. 권한 저장 시 `Could not find the 'userId' column of 'permissions' in the schema cache` 예외 발생 원인 차단.
+  2. 로컬 `schema.sql`과 Supabase 원격 DB간 `permissions` 테이블 스키마 정합성 보장 (`"userId" TEXT` 컬럼 추가).
+- **해결 설계**:
+  - `schema.sql`: `permissions` 테이블 DDL 정의에 `"userId" TEXT` 컬럼 추가 및 기존 `role` 컬럼 호환성 보장.
+  - `AppContext.tsx`: `updatePermissions` 시 Supabase에 데이터 저장 전 `userId` 객체 맵핑 및 DDL 불일치 시 직관적 패치 SQL 안내 또는 증분 복구 지원.
+  - **버전 산정**: DB 스키마 정합성 DDL 보정 & Hotfix ➔ **`v1.3.4.Build.00002`** (Build 1 증가)
+
+

@@ -362,8 +362,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     try {
       db.permissions = updated;
       if (supabase) {
-        const { error } = await supabase.from('permissions').upsert(updated as any[], { onConflict: 'id' });
-        if (error) throw error;
+        // Supabase DB 스키마 컬럼명 불일치(userId vs user_id) 호환성을 위해 양쪽 모두 부여
+        const payload = updated.map(p => ({
+          ...p,
+          userId: p.userId,
+          user_id: p.userId
+        }));
+        const { error } = await supabase.from('permissions').upsert(payload as any[], { onConflict: 'id' });
+        if (error) {
+          if (error.message?.includes("userId") || error.message?.includes("user_id") || error.code === 'PGRST204') {
+            throw new Error(
+              `Supabase 'permissions' 테이블에 'userId' 또는 'user_id' 컬럼이 누락되어 있습니다.\n\n` +
+              `[해결 DDL 쿼리문 (Supabase SQL Editor에서 실행)]:\n` +
+              `ALTER TABLE permissions ADD COLUMN IF NOT EXISTS "userId" TEXT;\n` +
+              `ALTER TABLE permissions ADD COLUMN IF NOT EXISTS "user_id" TEXT;\n\n` +
+              `원래 오류: ${error.message}`
+            );
+          }
+          throw error;
+        }
       }
       refreshAllData();
     } catch (err: any) {

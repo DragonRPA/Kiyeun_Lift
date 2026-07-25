@@ -91,12 +91,13 @@ CREATE TABLE vendors (
 -- 4. 메뉴 권한 테이블 (permissions)
 CREATE TABLE permissions (
     id TEXT PRIMARY KEY,
-    role TEXT NOT NULL,
+    "userId" TEXT NOT NULL,
+    role TEXT,
     "menuId" TEXT NOT NULL,
     "canView" BOOLEAN NOT NULL DEFAULT FALSE,
     "canSave" BOOLEAN NOT NULL DEFAULT FALSE,
-    "createdAt" TEXT NOT NULL,
-    "updatedAt" TEXT NOT NULL
+    "createdAt" TEXT,
+    "updatedAt" TEXT
 );
 
 -- 5. 고객 테이블 (customers)

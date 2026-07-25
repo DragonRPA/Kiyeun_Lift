@@ -1,3 +1,13 @@
+# Release Notes (v1.3.4.Build.00002 - 2026-07-25 21:16)
+
+## 🐛 permissions 테이블 userId DDL 스키마 정합성 보정 및 schema cache 저장 오류 패치
+### schema.sql — permissions 테이블 DDL 보정
+- `permissions` 테이블 스키마 정의에 누락되었던 `"userId" TEXT NOT NULL` 컬럼을 명시하고 기존 `role` 컬럼과의 호환성을 갖추도록 교정했습니다.
+
+### AppContext.tsx — updatePermissions 이중 컬럼 매핑 & DDL 복구 가이드 연동
+- Supabase 원격 DB 저장 시 `userId` 및 `user_id` 컬럼을 이중 바인딩하여 컬럼명 불일치로 인한 schema cache 저장 오류를 원천 차단했습니다.
+- 원격 DB에 해당 컬럼이 아직 준비되지 않은 경우 명확한 DDL 해결 쿼리문(`ALTER TABLE permissions ADD COLUMN IF NOT EXISTS "userId" TEXT;`)을 포함한 대화형 가이드를 에러 팝업 모달로 안내합니다.
+
 # Release Notes (v1.3.4.Build.00001 - 2026-07-25 21:11)
 
 ## ✨ ADMIN 신규 임직원 생성 시 전체 메뉴 권한 자동 초기화 & 권한 관리 UI 회수 가능화
