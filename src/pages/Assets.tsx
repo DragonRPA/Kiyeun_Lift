@@ -1,9 +1,8 @@
-// d:\Kiyeun_Lift\src\pages\Assets.tsx
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { Search, Download, Eye, Layers } from 'lucide-react';
 import { exportToExcel } from '../services/excel';
-import { Asset } from '../services/db';
+import { Asset, calculateAssetDepreciation } from '../services/db';
 
 export const Assets: React.FC = () => {
   const { assets, customers, sites, setActiveTab, setNavigationPayload, saveAsset } = useApp();
@@ -115,19 +114,27 @@ export const Assets: React.FC = () => {
   };
 
   const handleExport = () => {
-    const data = filtered.map(a => ({
-      '관리번호': a.assetNo,
-      '모델명': a.modelName,
-      '소유유형': a.ownerType === 'OWNED' ? '당사' : '임차',
-      '상태': a.status === 'AVAILABLE' ? '임대가능' : a.status === 'RENTED' ? '임대중' : a.status === 'REPAIRING' ? '정비중' : '외주정비중',
-      '제조사': a.manufacturer || '-',
-      '시리얼번호': a.serialNo || '-',
-      '현재고객사': getCustomerName(a.currentCustomerId),
-      '현재현장': getSiteName(a.currentSiteId),
-      '월렌탈료': a.monthlyRentalFee || 0,
-      '취득금액': a.acquisitionPrice || 0,
-      '취득일자': a.acquisitionDate ? a.acquisitionDate.slice(0, 10) : '-'
-    }));
+    const data = filtered.map(a => {
+      const depn = calculateAssetDepreciation(a);
+      return {
+        '관리번호': a.assetNo,
+        '모델명': a.modelName,
+        '소유유형': a.ownerType === 'OWNED' ? '당사' : '임차',
+        '상태': a.status === 'AVAILABLE' ? '임대가능' : a.status === 'RENTED' ? '임대중' : a.status === 'REPAIRING' ? '정비중' : a.status === 'RENTED_RETURNED' ? '외주정비중' : '매각',
+        '제조사': a.manufacturer || '-',
+        '제조년도': a.manufactureYear || '-',
+        '시리얼번호': a.serialNo || '-',
+        '현재고객사': getCustomerName(a.currentCustomerId),
+        '현재현장': getSiteName(a.currentSiteId),
+        '월렌탈료': a.monthlyRentalFee || 0,
+        '취득금액': a.acquisitionPrice || 0,
+        '취득일자': a.acquisitionDate ? a.acquisitionDate.slice(0, 10) : '-',
+        '감가상각개월수': a.depreciationMonths || 0,
+        '상각경과월수': depn.elapsedMonths,
+        '감가상각누계액(IFRS)': depn.accumDepreciation,
+        '미상각잔액(장부가치)': depn.bookValue,
+      };
+    });
 
     exportToExcel(data, `자산장비목록_${new Date().toISOString().split('T')[0]}`, '자산목록');
   };
@@ -272,7 +279,7 @@ export const Assets: React.FC = () => {
                   </td>
                   <td>{getCustomerName(a.currentCustomerId)}</td>
                   <td>{a.monthlyRentalFee ? `${a.monthlyRentalFee.toLocaleString()}원` : '0원'}</td>
-                  <td>{a.ownerType === 'OWNED' ? `${(a.bookValue || 0).toLocaleString()}원` : '-'}</td>
+                  <td>{a.ownerType === 'OWNED' ? `${calculateAssetDepreciation(a).bookValue.toLocaleString()}원` : '-'}</td>
                   <td style={{ fontSize: '13px' }}>
                     <span className="text-primary">{(a.cumRentalFee || 0).toLocaleString()}원</span>
                     <span style={{ margin: '0 4px', color: 'var(--border-color)' }}>/</span>
@@ -339,6 +346,7 @@ export const Assets: React.FC = () => {
                   <div><label>모델명</label><strong>{selectedAsset.modelName}</strong></div>
                   <div><label>제조번호 (Serial)</label>{selectedAsset.serialNo || '-'}</div>
                   <div><label>제조사</label>{selectedAsset.manufacturer || '-'}</div>
+                  <div><label>제조년도</label>{selectedAsset.manufactureYear || '-'}</div>
                   <div><label>자산유형</label>{selectedAsset.ownerType === 'OWNED' ? '당사자산' : '임차자산'}</div>
                   <div><label>현재상태</label>{selectedAsset.status}</div>
                 </div>
@@ -389,20 +397,23 @@ export const Assets: React.FC = () => {
               <hr style={{ border: 'none', borderTop: '1px solid var(--border-color)' }} />
 
               {/* 당사자산 재무정보 */}
-              {selectedAsset.ownerType === 'OWNED' && (
-                <div>
-                  <h4 style={{ fontWeight: '600', marginBottom: '10px', color: 'var(--success)' }}>3. 당사자산 감가상각 및 재무 가치</h4>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px', fontSize: '14px' }}>
-                    <div><label>취득일자</label>{selectedAsset.acquisitionDate || '-'}</div>
-                    <div><label>취득가액</label>{(selectedAsset.acquisitionPrice || 0).toLocaleString()}원</div>
-                    <div><label>구입처</label>{selectedAsset.supplier || '-'}</div>
-                    <div><label>내용수명(상각개월)</label>{selectedAsset.depreciationMonths}개월</div>
-                    <div><label>잔존가치율 (%)</label>{selectedAsset.residualValueRate}%</div>
-                    <div><label>감가상각누계액</label>{(selectedAsset.accumDepreciation || 0).toLocaleString()}원</div>
-                    <div><label>현재 장부가치</label><strong style={{ color: 'var(--success)' }}>{(selectedAsset.bookValue || 0).toLocaleString()}원</strong></div>
+              {selectedAsset.ownerType === 'OWNED' && (() => {
+                const depn = calculateAssetDepreciation(selectedAsset);
+                return (
+                  <div>
+                    <h4 style={{ fontWeight: '600', marginBottom: '10px', color: 'var(--success)' }}>3. 당사자산 IFRS 감가상각 및 재무 가치</h4>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px', fontSize: '14px' }}>
+                      <div><label>취득일자</label>{selectedAsset.acquisitionDate || '-'}</div>
+                      <div><label>취득원가</label>{(selectedAsset.acquisitionPrice || 0).toLocaleString()}원</div>
+                      <div><label>구입처 (매입처)</label>{selectedAsset.supplier || '-'}</div>
+                      <div><label>감가상각개월수</label>{selectedAsset.depreciationMonths ? `${selectedAsset.depreciationMonths}개월 (경과: ${depn.elapsedMonths}개월)` : '-'}</div>
+                      <div><label>잔존가치율 (%)</label>{selectedAsset.residualValueRate ?? 0}%</div>
+                      <div><label>감가상각누계액 (IFRS)</label><span style={{ color: 'var(--danger)', fontWeight: 'bold' }}>{depn.accumDepreciation.toLocaleString()}원</span></div>
+                      <div><label>미상각 잔액 (장부가치)</label><strong style={{ color: 'var(--success)' }}>{depn.bookValue.toLocaleString()}원</strong></div>
+                    </div>
                   </div>
-                </div>
-              )}
+                );
+              })()}
 
               {/* 임차자산 정보 */}
               {selectedAsset.ownerType === 'RENTED' && (

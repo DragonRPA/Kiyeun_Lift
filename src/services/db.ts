@@ -116,6 +116,7 @@ export interface Asset {
   assetNo: string; // 관리번호
   serialNo?: string; // 제조번호
   manufacturer?: string;
+  manufactureYear?: string; // 제조년도 (예: 2023)
   ownerType: 'OWNED' | 'RENTED'; // 당사자산 / 임차자산
   status: 'AVAILABLE' | 'RENTED' | 'REPAIRING' | 'RENTED_RETURNED' | 'SOLD';
   
@@ -133,14 +134,12 @@ export interface Asset {
   // 당사자산 상세
   acquisitionDate?: string;
   acquisitionPrice?: number;
-  depreciationMonths?: number;
+  depreciationMonths?: number; // 감가상각개월수 (내용월수)
   residualValueRate?: number; // % (예: 10)
   accumDepreciation?: number; // 감가상각누계액
-  bookValue?: number; // 장부가
+  bookValue?: number; // 장부가 (미상각 잔액)
   cumRentalFee?: number; // 누적렌탈료
   cumRepairCost?: number; // 누적수리비
-
-  // 임차자산 상세
   renter?: string; // 임차처
   rentStart?: string;
   rentEnd?: string;
@@ -160,6 +159,84 @@ export interface Asset {
   preDeliveryChecklistUrl?: string;
   createdAt: string;
   updatedAt: string;
+}
+
+/**
+ * IFRS 회계기준 자산 월별 자동 감가상각 계산 함수
+ * - 매월 말일 기준으로 상각경과 월수를 계산하여 감가상각누계액 및 미상각 잔액(장부가치) 산출
+ * - 매각된 자산 (status === 'SOLD')은 매각일(disposalDate) 시점까지만 감가상각 적용 (매각 이후 상각 정지)
+ * - 감가상각누계액: 1원 단위 반올림 처리 (Math.round)
+ * - 미상각 잔액 (장부가치) = 취득원가 - 감가상각누계액
+ */
+export function calculateAssetDepreciation(asset: Asset, asOfDate: Date = new Date()): {
+  accumDepreciation: number;
+  bookValue: number;
+  elapsedMonths: number;
+  monthlyDepreciation: number;
+} {
+  const cost = asset.acquisitionPrice || 0;
+  if (cost <= 0 || !asset.acquisitionDate || !asset.depreciationMonths || asset.depreciationMonths <= 0) {
+    return {
+      accumDepreciation: asset.accumDepreciation || 0,
+      bookValue: asset.bookValue ?? cost,
+      elapsedMonths: 0,
+      monthlyDepreciation: 0,
+    };
+  }
+
+  // 잔존가치율 (기본값 0%) 및 잔존가액
+  const residualRate = asset.residualValueRate ?? 0;
+  const residualValue = Math.round(cost * (residualRate / 100));
+  const depreciableAmount = cost - residualValue; // 상각 대상 총액
+
+  // 월 감가상각비 (정액법)
+  const monthlyDepn = depreciableAmount / asset.depreciationMonths;
+
+  // 기준 상각 종료일 결정 (매각된 자산은 매각일자 시점 고정, 아니면 현재/지정일)
+  let targetDate = asOfDate;
+  if (asset.status === 'SOLD' && asset.disposalDate) {
+    const parsedDisposal = new Date(asset.disposalDate);
+    if (!isNaN(parsedDisposal.getTime())) {
+      targetDate = parsedDisposal;
+    }
+  }
+
+  // 취득일자 Date 객체
+  const acqDate = new Date(asset.acquisitionDate);
+  if (isNaN(acqDate.getTime())) {
+    return {
+      accumDepreciation: asset.accumDepreciation || 0,
+      bookValue: asset.bookValue ?? cost,
+      elapsedMonths: 0,
+      monthlyDepreciation: 0,
+    };
+  }
+
+  // 경과 월수 계산 (IFRS 기준: 매월 말일 1개월 경과)
+  let yearsDiff = targetDate.getFullYear() - acqDate.getFullYear();
+  let monthsDiff = targetDate.getMonth() - acqDate.getMonth();
+  let totalElapsed = yearsDiff * 12 + monthsDiff;
+
+  if (targetDate.getDate() < acqDate.getDate() && totalElapsed > 0) {
+    totalElapsed -= 1;
+  }
+
+  if (totalElapsed < 0) totalElapsed = 0;
+
+  // 상각 개월수 캡 제한 (내용월수 초과 불가능)
+  const effectiveElapsed = Math.min(totalElapsed, asset.depreciationMonths);
+
+  // 감가상각누계액 (1원 단위 반올림)
+  const accumDepn = Math.min(cost - residualValue, Math.round(monthlyDepn * effectiveElapsed));
+  // 미상각 잔액 (장부가치)
+  const bookVal = Math.max(residualValue, cost - accumDepn);
+
+  return {
+    accumDepreciation: accumDepn,
+    bookValue: bookVal,
+    elapsedMonths: effectiveElapsed,
+    monthlyDepreciation: Math.round(monthlyDepn),
+  };
 }
 
 export interface Consumable {
