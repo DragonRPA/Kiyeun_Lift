@@ -1,3 +1,15 @@
+# Release Notes (v1.3.4.Build.00001 - 2026-07-25 21:11)
+
+## ✨ ADMIN 신규 임직원 생성 시 전체 메뉴 권한 자동 초기화 & 권한 관리 UI 회수 가능화
+### AppContext.tsx — saveUser 내 ADMIN 권한 자동 삽입
+- 신규 임직원 생성 시 `role === 'ADMIN'`이면 전체 27개 메뉴에 대해 `canView=true, canSave=true` 권한 레코드를 `permissions` 테이블에 자동 일괄 삽입합니다.
+- 기존 ADMIN 임직원에게 권한 레코드가 없는 경우 `hasPermission`이 폴백(true)으로 처리되던 방식과 일관성 있게 동작합니다.
+
+### UsersPermissions.tsx — ADMIN 임직원 권한 체크박스 활성화
+- 기존: `ADMIN` 역할이면 모든 메뉴에 Lock 아이콘(🔒 허용) 고정 표시, 권한 수정 불가.
+- 변경: 절대 슈퍼관리자(`u-1 / sys-admin / loginId=admin`)만 Lock 표시 유지하고 나머지 ADMIN 임직원(이수용 사장 등)은 체크박스로 메뉴별 권한 선택적 회수/부여 가능.
+- `handlePermissionToggle` / `handleToggleCategoryGroup` 양쪽 모두 ADMIN 차단 블록 제거 → `isSuperAdminUser` 판별로 교체.
+
 # Release Notes (v1.3.4.Build.00000 - 2026-07-25 21:04)
 
 ## ✨ ADMIN 역할 임직원의 개별 메뉴별 권한 선택적 부여 및 회수 정밀 지원

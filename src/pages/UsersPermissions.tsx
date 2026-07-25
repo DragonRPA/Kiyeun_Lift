@@ -166,8 +166,9 @@ export const UsersPermissions: React.FC = () => {
     if (!canSave || !selectedUserId) return;
     
     const targetUser = localUsers.find(u => u.id === selectedUserId);
-    if (targetUser?.role === 'ADMIN') {
-      alert('ADMIN 등급은 모든 메뉴에 대한 권한을 강제로 갖습니다.');
+    // 절대 슈퍼 관리자 계정은 권한 회수 불가
+    if (targetUser?.id === 'u-1' || targetUser?.id === 'sys-admin' || targetUser?.loginId === 'admin') {
+      alert('시스템 최고관리자 계정의 메뉴 권한은 변경할 수 없습니다.');
       return;
     }
 
@@ -224,8 +225,9 @@ export const UsersPermissions: React.FC = () => {
   const handleToggleCategoryGroup = (grp: MenuCategoryGroup, type: 'view' | 'save') => {
     if (!canSave || !selectedUserId) return;
     const targetUser = localUsers.find(u => u.id === selectedUserId);
-    if (targetUser?.role === 'ADMIN') {
-      alert('ADMIN 등급은 모든 권한을 강제로 보유합니다.');
+    // 절대 슈퍼 관리자 계정은 권한 회수 불가
+    if (targetUser?.id === 'u-1' || targetUser?.id === 'sys-admin' || targetUser?.loginId === 'admin') {
+      alert('시스템 최고관리자 계정의 메뉴 권한은 변경할 수 없습니다.');
       return;
     }
 
@@ -406,15 +408,16 @@ export const UsersPermissions: React.FC = () => {
                 {MENU_CATEGORIES.map(grp => {
                   const isCollapsed = collapsedGroups[grp.id] === true;
                   const isAdmin = selectedUser?.role === 'ADMIN';
+                  const isSuperAdminUser = selectedUser?.id === 'u-1' || selectedUser?.id === 'sys-admin' || selectedUser?.loginId === 'admin';
 
                   // 상위 그룹의 전체 선택 상태 파악
                   const allViewChecked = grp.items.every(item => {
                     const p = localPermissions.find(x => x.userId === selectedUserId && x.menuId === item.id);
-                    return p?.canView;
+                    return isSuperAdminUser ? true : (p?.canView ?? false);
                   });
                   const allSaveChecked = grp.items.every(item => {
                     const p = localPermissions.find(x => x.userId === selectedUserId && x.menuId === item.id);
-                    return p?.canSave;
+                    return isSuperAdminUser ? true : (p?.canSave ?? false);
                   });
 
                   return (
@@ -434,7 +437,7 @@ export const UsersPermissions: React.FC = () => {
                         <td style={{ textAlign: 'center', padding: '6px' }}>
                           <button
                             type="button"
-                            disabled={!canSave || isAdmin}
+                            disabled={!canSave || isSuperAdminUser}
                             onClick={() => handleToggleCategoryGroup(grp, 'view')}
                             style={{
                               fontSize: '11px',
@@ -443,7 +446,7 @@ export const UsersPermissions: React.FC = () => {
                               border: '1px solid var(--border-color)',
                               backgroundColor: allViewChecked ? 'var(--primary)' : 'var(--bg-card)',
                               color: allViewChecked ? '#fff' : 'var(--text-secondary)',
-                              cursor: canSave && !isAdmin ? 'pointer' : 'default',
+                              cursor: canSave && !isSuperAdminUser ? 'pointer' : 'default',
                               fontWeight: '600'
                             }}
                           >
@@ -453,7 +456,7 @@ export const UsersPermissions: React.FC = () => {
                         <td style={{ textAlign: 'center', padding: '6px' }}>
                           <button
                             type="button"
-                            disabled={!canSave || isAdmin}
+                            disabled={!canSave || isSuperAdminUser}
                             onClick={() => handleToggleCategoryGroup(grp, 'save')}
                             style={{
                               fontSize: '11px',
@@ -462,7 +465,7 @@ export const UsersPermissions: React.FC = () => {
                               border: '1px solid var(--border-color)',
                               backgroundColor: allSaveChecked ? 'var(--success)' : 'var(--bg-card)',
                               color: allSaveChecked ? '#fff' : 'var(--text-secondary)',
-                              cursor: canSave && !isAdmin ? 'pointer' : 'default',
+                           cursor: canSave && !isSuperAdminUser ? 'pointer' : 'default',
                               fontWeight: '600'
                             }}
                           >
@@ -473,9 +476,9 @@ export const UsersPermissions: React.FC = () => {
 
                       {/* 하위 메뉴 행들 */}
                       {!isCollapsed && grp.items.map(menu => {
-                        const perm = localPermissions.find(p => p.userId === selectedUserId && p.menuId === menu.id) || { canView: false, canSave: false };
-                        const canView = isAdmin || perm.canView;
-                        const canSaveVal = isAdmin || perm.canSave;
+                        const perm = localPermissions.find(p => p.userId === selectedUserId && p.menuId === menu.id) || { canView: isSuperAdminUser, canSave: isSuperAdminUser };
+                        const canView = isSuperAdminUser || perm.canView;
+                        const canSaveVal = isSuperAdminUser || perm.canSave;
 
                         return (
                           <tr key={menu.id} style={{ borderBottom: '1px dashed var(--border-color)' }}>
@@ -485,7 +488,7 @@ export const UsersPermissions: React.FC = () => {
 
                             {/* 조회 권한 */}
                             <td style={{ textAlign: 'center' }}>
-                              {isAdmin ? (
+                              {isSuperAdminUser ? (
                                 <span style={{ color: 'var(--text-muted)', fontSize: '12px' }}><Lock size={12} /> 허용</span>
                               ) : (
                                 <input
@@ -500,7 +503,7 @@ export const UsersPermissions: React.FC = () => {
 
                             {/* 저장 권한 */}
                             <td style={{ textAlign: 'center' }}>
-                              {isAdmin ? (
+                              {isSuperAdminUser ? (
                                 <span style={{ color: 'var(--text-muted)', fontSize: '12px' }}><Lock size={12} /> 허용</span>
                               ) : (
                                 <input

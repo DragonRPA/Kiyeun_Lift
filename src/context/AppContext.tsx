@@ -386,7 +386,36 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (userData.id) {
       db.updateRow<User>('users', userData.id, userData);
     } else {
-      db.insertRow<User>('users', { ...userData, createdAt: new Date().toISOString() });
+      // 신규 임직원 생성
+      const newUser = db.insertRow<User>('users', { ...userData, createdAt: new Date().toISOString() });
+      
+      // ADMIN 역할 신규 임직원은 모든 메뉴에 대해 기본 전체 권한(canView+canSave=true) 레코드 자동 생성
+      if (userData.role === 'ADMIN' && newUser?.id) {
+        const ALL_MENU_IDS = [
+          'dashboard',
+          'customer', 'contract', 'billing', 'smart_dispatch', 'smart_return',
+          'product', 'asset', 'acquisition_disposal', 'rent_asset',
+          'delivery', 'transport_master',
+          'asset_inout_history', 'dispatch_assign',
+          'consumable', 'repair',
+          'vendors', 'bank_matching', 'corporate_card', 'cash_flow', 'delinquency',
+          'organization', 'permission', 'payroll',
+          'google_config', 'dev_uploader'
+        ];
+        ALL_MENU_IDS.forEach(menuId => {
+          const exists = db.permissions.some(p => p.userId === newUser.id && p.menuId === menuId);
+          if (!exists) {
+            db.insertRow<MenuPermission>('permissions', {
+              id: `perm-${newUser.id}-${menuId}`,
+              userId: newUser.id,
+              menuId,
+              canView: true,
+              canSave: true,
+              createdAt: new Date().toISOString()
+            });
+          }
+        });
+      }
     }
     refreshAllData();
   };

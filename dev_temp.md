@@ -497,3 +497,14 @@
   - `AppContext.tsx`: `hasPermission` 검사 시 하드코딩되어 있던 `currentUser.role === 'ADMIN'` 전체 무조건 허용 구문을 통과하지 않고, 절대 슈퍼 관리자(`admin` 계정)만 예외 허용하도록 수정.
   - `ADMIN` 역할을 가진 사용자라도 `permissions` 테이블에 설정된 메뉴별 `canView`, `canSave` 값을 우선 적용하여 메뉴 권한 부여/회수를 선택적으로 완벽 제어.
   - **버전 산정**: 권한 정밀 통제 정책 전면 개편 ➔ **`v1.3.4.Build.00000`** (Z 증가: Feature 개편)
+
+## [2026-07-25] [반영완료] ADMIN 신규 임직원 생성 시 전체 메뉴 권한 자동 초기화 및 UI 회수 가능화 (v1.3.4.Build.00001)
+- **요구사항**: 
+  1. `ADMIN` 역할을 가진 임직원이 새로 생성될 때 모든 메뉴에 대한 `canView=true, canSave=true` 권한 레코드를 자동으로 `permissions` 테이블에 삽입.
+  2. `사용자 및 권한 통합 관리` 메뉴에서 `ADMIN` 임직원도 체크박스로 권한 회수 가능(절대 최고관리자 sys-admin/u-1/admin 계정만 Lock 표시 유지).
+- **해결 설계**:
+  - `AppContext.tsx`: `saveUser` 함수 내 신규 임직원 생성 분기에서 `userData.role === 'ADMIN'` 조건 시 전체 27개 menuId에 대해 `permissions` 레코드 자동 일괄 삽입.
+  - `UsersPermissions.tsx`: `handlePermissionToggle` 및 `handleToggleCategoryGroup`에서 ADMIN 차단 로직 제거 → `isSuperAdminUser` 판별로 교체.
+  - 하위 메뉴 행 렌더링에서도 `isAdmin` → `isSuperAdminUser` 기준 Lock/체크박스 분기 교체하여 일반 ADMIN 임직원의 권한도 체크박스 토글 가능.
+  - **버전 산정**: ADMIN 생성 시 권한 자동 초기화 + UI 회수 가능화 ➔ **`v1.3.4.Build.00001`** (Build 1 증가)
+
