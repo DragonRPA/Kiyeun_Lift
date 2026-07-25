@@ -68,6 +68,15 @@ const App: React.FC = () => {
     }
   }, []);
 
+  // 메뉴(activeTab) 전환 시 화면 스크롤 최상단(Top = 0) 자동 리셋
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: 'instant' });
+    const mainArea = document.querySelector('.main-content-area');
+    if (mainArea) {
+      mainArea.scrollTop = 0;
+    }
+  }, [activeTab]);
+
   const handleLoginSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const success = login(loginId, password, autoLogin);

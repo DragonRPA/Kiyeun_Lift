@@ -255,3 +255,20 @@
 - **해결 설계**:
   1. `handleAddUser`에서 생성되는 신규 유저 객체의 `name`과 `position`을 빈 문자열(`''`)로 설정.
   2. 상세 프로필 슬라이드 폼 내 이름 및 직급 `<input>` 요소에 각각 `placeholder="이름 입력 (예: 홍길동)"`, `placeholder="직급 입력 (예: 사원/대리)"` 힌트문자 적용.
+
+## [2026-07-25] [반영완료] 메뉴 이동 시 화면 스크롤 최상단(Top) 자동 리셋 파이프라인 구축
+- **요구사항**: 사용자가 좌측 메뉴 사이드바 또는 상단 탭을 통해 다른 메뉴 페이지로 이동할 때마다 이전 스크롤 위치가 유지되는 불편함을 해소하고, 항상 이동한 새 메뉴 화면의 최상단(Top = 0)이 자동으로 표출되도록 구현.
+- **해결 설계**:
+  - `App.tsx` 내에서 `activeTab` 상태 변경 시 `window.scrollTo({ top: 0, behavior: 'instant' })` 및 메인 컨테이너 요소(`.main-content-area`)의 `scrollTop = 0` 스크롤을 즉시 0으로 자동 이동시키는 `useEffect([activeTab])` 전역 파이프라인 탑재.
+
+## [2026-07-25] [반영완료] 새 부서(조직) 생성 시 부서명 힌트문자(Placeholder) 처리 개편
+- **요구사항**: 인사 및 조직도 마스터 설정(`OrganizationSettings.tsx`)에서 새 부서 추가(`+`) 클릭 시 '새 부서' 기본 텍스트 대신 빈 칸(`''`)으로 초기화하고, `placeholder="부서명 입력 (예: 영남영업소)"` 힌트문자로 표시하여 백스페이스 조작 없이 즉시 부서명을 입력할 수 있도록 보완.
+- **해결 설계**:
+  1. `handleAddDept` 시 신규 부서 객체의 `name`을 빈 문자열(`''`)로 설정하고, 편집 문자열(`editingDeptName`)도 `''`로 초기화.
+  2. 조직 트리 내 부서 편집 인풋 박스에 `placeholder="부서명 입력 (예: 영남영업소)"` 지정 및 부서명 미입력 시 `새 부서(명칭 미입력)` 보조 텍스트 렌더링.
+
+## [2026-07-25] [반영완료] departments 테이블 createdAt/updatedAt 필수값 누락 방어 및 조직도 동기화 개편
+- **요구사항**: 조직도 저장 시 `departments` 테이블의 `createdAt` 컬럼 NOT NULL 제약조건 위반 에러(`null value in column "createdAt" of relation "departments" violates not-null constraint`) 원천 차단.
+- **해결 설계**:
+  1. `OrganizationSettings.tsx` 및 `db.ts` 내 `saveOrganizationBatch`에서 부서(Department) 객체를 Supabase로 동기화하기 전 `createdAt` 및 `updatedAt` 속성이 누락되어 있으면 `new Date().toISOString()` 타임스탬프를 자동 채워주도록 방어 파이프라인 구축.
+  2. `Department` 인터페이스에 `createdAt?: string; updatedAt?: string;` 명시 반영.

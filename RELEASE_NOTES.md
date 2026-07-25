@@ -1,3 +1,12 @@
+# Release Notes (v1.1.2.Build.00001 - 2026-07-25 17:12)
+
+## 🩺 부서 NOT NULL 제약조건 패치, 메뉴 스크롤 자동 리셋 및 힌트문자 개편
+- **부서 생성일자(`createdAt`) 필수값 누락 방어 패치**: `departments` 부서 데이터 저장 시 `createdAt` / `updatedAt` 타임스탬프가 누락되어 발생하던 Supabase NOT NULL 제약조건 위반 에러(`null value in column "createdAt" of relation "departments" violates not-null constraint`)를 원천 차단했습니다.
+- **메뉴 이동 시 스크롤 최상단(Top) 자동 리셋**: 유저가 사이드바/상단 탭을 통해 다른 메뉴 페이지로 이동할 때마다 화면 스크롤이 즉시 최상단(`Top = 0`)으로 복구되도록 자동화했습니다.
+- **새 부서 추가 힌트문자(Placeholder) 적용**: `+` 새 부서 추가 시 부서명 텍스트를 비우고 `placeholder="부서명 입력 (예: 영남영업소)"` 힌트문자로 제공하여 편집 편의성을 한 단계 높였습니다.
+
+---
+
 # Release Notes (v1.1.2.Build.00000 - 2026-07-25 17:07)
 
 ## 🩺 신규 직원 등록 시 이름 및 직급 힌트문자(Placeholder) 개편

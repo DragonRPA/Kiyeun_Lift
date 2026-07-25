@@ -45,6 +45,8 @@ export interface Department {
   id: string;
   name: string;
   parentDepartmentId: string | null;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface MenuPermission {
@@ -1241,7 +1243,13 @@ class LocalDB {
           }
         }
         if (departments.length > 0) {
-          const { error: deptErr } = await supabase.from('departments').upsert(departments, { onConflict: 'id' });
+          const nowIso = new Date().toISOString();
+          const sanitizedDepts = departments.map(d => ({
+            ...d,
+            createdAt: d.createdAt || nowIso,
+            updatedAt: nowIso
+          }));
+          const { error: deptErr } = await supabase.from('departments').upsert(sanitizedDepts, { onConflict: 'id' });
           if (deptErr) {
             console.error('Supabase batch upsert departments failed:', deptErr);
             throw deptErr;

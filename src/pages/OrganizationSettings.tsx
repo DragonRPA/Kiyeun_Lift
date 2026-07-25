@@ -12,6 +12,8 @@ interface Department {
   id: string;
   name: string;
   parentDepartmentId: string | null;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 interface UserNode {
@@ -174,14 +176,17 @@ const enforceManagerPolicies = (usersList: UserNode[], deptList: Department[]) =
   // --- Action Handlers ---
   const handleAddDept = () => {
     if (!canEdit) return;
+    const nowIso = new Date().toISOString();
     const newDept: Department = {
       id: `dept-${Date.now()}`,
-      name: '새 부서',
-      parentDepartmentId: selectedDeptId || null
+      name: '',
+      parentDepartmentId: selectedDeptId || null,
+      createdAt: nowIso,
+      updatedAt: nowIso
     };
     setDepartments([...departments, newDept]);
     setEditingDeptId(newDept.id);
-    setEditingDeptName(newDept.name);
+    setEditingDeptName('');
   };
 
   const handleDeleteDept = (e: React.MouseEvent, deptId: string) => {
@@ -380,6 +385,7 @@ const enforceManagerPolicies = (usersList: UserNode[], deptList: Department[]) =
                 {editingDeptId === dept.id ? (
                   <input 
                     type="text"
+                    placeholder="부서명 입력 (예: 영남영업소)"
                     value={editingDeptName}
                     onChange={(e) => setEditingDeptName(e.target.value)}
                     onBlur={commitEditDept}
@@ -390,7 +396,9 @@ const enforceManagerPolicies = (usersList: UserNode[], deptList: Department[]) =
                   />
                 ) : (
                   <>
-                    <span style={{ fontWeight: isSelected ? '600' : '400', flex: 1 }}>{dept.name}</span>
+                    <span style={{ fontWeight: isSelected ? '600' : '400', flex: 1, color: dept.name ? 'inherit' : 'var(--text-muted)' }}>
+                      {dept.name || '새 부서(명칭 미입력)'}
+                    </span>
                     <span style={{ fontSize: '11px', padding: '2px 6px', backgroundColor: 'var(--bg-card)', borderRadius: '10px', color: 'var(--text-secondary)' }}>
                       {userCount}명
                     </span>
