@@ -482,3 +482,10 @@
   - `AppContext.tsx`: `updatePermissions`를 비동기 `async` 함수로 전환하고 Supabase `permissions` 테이블 upsert 및 로컬 storage 동기화 처리 후 오류 시 throw하도록 수정.
   - `UsersPermissions.tsx`: `handleSavePermissions`를 `async/await` 및 `try/catch` 구문으로 보정하고 예외 발생 시 `showErrorModal` 에러 팝업 모달 연동.
   - **버전 산정**: 버그 수정 및 예외 처리 강화 ➔ **`v1.3.3.Build.00002`** (Build 1 증가)
+
+## [2026-07-25] [반영완료] 인사 및 조직도 메뉴 임직원 역할(role) 저장 미반영 버그 수정 (v1.3.3.Build.00003)
+- **요구사항**: 
+  1. `인사 및 조직도 (OrganizationSettings.tsx)` 메뉴에서 임직원의 역할(role - ADMIN / MANAGER / USER) 수정 후 저장 시 실제 데이터베이스에 저장이 반영되지 않는 문제 해결.
+- **해결 설계**:
+  - `OrganizationSettings.tsx`: 프로필 변경 적용 함수(`applyProfileChanges`) 내에서 `saveUser` 및 `db` 영구 저장 핸들러를 바인딩하여 선택된 임직원의 `role` 및 `enforceManagerPolicies`로 변경된 직원의 역할 정보가 DB에 실시간 저장 전파되도록 보정.
+  - **버전 산정**: 프로필 저장 버그 수정 ➔ **`v1.3.3.Build.00003`** (Build 1 증가)

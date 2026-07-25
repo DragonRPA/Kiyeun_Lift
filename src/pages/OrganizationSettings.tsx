@@ -39,7 +39,7 @@ const INITIAL_DEPTS: Department[] = [];
 const INITIAL_USERS: UserNode[] = [];
 
 export const OrganizationSettings: React.FC = () => {
-  const { currentUser, refreshAllData, showErrorModal } = useApp();
+  const { currentUser, saveUser, refreshAllData, showErrorModal } = useApp();
   const isSuperAdmin = currentUser?.loginId === 'admin';
   const canEdit = currentUser?.role === 'ADMIN' || currentUser?.role === 'MANAGER';
   
@@ -344,8 +344,15 @@ const enforceManagerPolicies = (usersList: UserNode[], deptList: Department[]) =
       }
       let updated = users.map(u => u.id === selectedProfile.id ? selectedProfile : u);
       updated = enforceManagerPolicies(updated, departments);
+      
+      // DB 및 AppContext 데이터 저장 전파
+      updated.forEach(u => {
+        saveUser(u);
+      });
+      
       setUsers(updated);
       setSelectedProfile(null);
+      alert('임직원 프로필 및 시스템 역할(role) 설정이 성공적으로 저장되었습니다.');
     }
   };
 

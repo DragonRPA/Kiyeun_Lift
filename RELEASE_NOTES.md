@@ -1,3 +1,12 @@
+# Release Notes (v1.3.3.Build.00003 - 2026-07-25 20:59)
+
+## 🩺 인사 및 조직도 메뉴 임직원 역할(role) 저장 미반영 버그 수정
+- **임직원 시스템 역할(role) 및 프로필 변경사항 실시간 DB 저장 연동 (`OrganizationSettings.tsx`)**:
+  - 기존 `applyProfileChanges`에서 프로필 수정 및 역할(ADMIN / MANAGER / USER) 변경 시 화면 local state만 변경되고 DB 영구 저장(`saveUser`)이 실행되지 않던 현상을 근본 수정했습니다.
+  - 임직원의 `role` 및 `enforceManagerPolicies`로 변경되는 부서장 직책 역할 등이 데이터베이스 및 Supabase에 실시간 및 영구적으로 저장되도록 연동 완료했습니다.
+
+---
+
 # Release Notes (v1.3.3.Build.00002 - 2026-07-25 20:42)
 
 ## 🩺 권한 저장 비동기 Supabase 연동 & 에러 모달 탑재, 카드사 템플릿 UTF-8 BOM 다운로드 및 학습형 매칭 룰 검색/등록 개편
