@@ -472,22 +472,23 @@ function validateRows(rows: Record<string, string>[], schema: TableDef): Validat
     const rowNum = idx + 2; // 헤더가 1행, 데이터는 2행부터
     schema.fields.forEach((field) => {
       const val = row[field.key];
+      const fieldDisplayName = `${field.label} (${field.key})`;
       // 필수 필드 누락 (id 제외 - id는 비어있으면 자동 채번)
       if (field.required && field.key !== 'id' && (val === undefined || val === null || val.trim() === '')) {
-        errors.push({ row: rowNum, field: field.label, message: '필수값이 비어 있습니다.' });
+        errors.push({ row: rowNum, field: fieldDisplayName, message: '필수값이 비어 있습니다.' });
         return;
       }
       if (val === undefined || val === null || val.trim() === '') return; // 선택 필드, 비어있으면 통과
 
       // 타입 검사
       if (field.type === 'number' && isNaN(Number(val))) {
-        errors.push({ row: rowNum, field: field.label, message: `숫자여야 합니다. (입력값: "${val}")` });
+        errors.push({ row: rowNum, field: fieldDisplayName, message: `숫자여야 합니다. (입력값: "${val}")` });
       }
       if (field.type === 'boolean' && val !== 'true' && val !== 'false') {
-        errors.push({ row: rowNum, field: field.label, message: `true 또는 false 여야 합니다. (입력값: "${val}")` });
+        errors.push({ row: rowNum, field: fieldDisplayName, message: `true 또는 false 여야 합니다. (입력값: "${val}")` });
       }
       if (field.type === 'enum' && field.enumValues && !field.enumValues.includes(val.trim())) {
-        errors.push({ row: rowNum, field: field.label, message: `허용값: [${field.enumValues.join(', ')}]. (입력값: "${val}")` });
+        errors.push({ row: rowNum, field: fieldDisplayName, message: `허용값: [${field.enumValues.join(', ')}]. (입력값: "${val}")` });
       }
     });
   });
