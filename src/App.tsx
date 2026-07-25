@@ -4,7 +4,7 @@ import { useApp } from './context/AppContext';
 import {
   LayoutDashboard, Users, UserCheck, Package, Layers, PlusCircle,
   Truck, Wrench, Shield, ShoppingBag, CreditCard, LogOut, Sun, Moon, Menu, X, Zap, Settings, Database as DatabaseIcon,
-  TrendingUp, Clock, AlertTriangle
+  TrendingUp, Clock, AlertTriangle, Building2
 } from 'lucide-react';
 
 // 페이지 컴포넌트 임포트
@@ -28,6 +28,7 @@ import { SmartReturn } from './pages/SmartReturn';
 import { AssetHistory } from './pages/AssetHistory';
 import { AssetAssignment } from './pages/AssetAssignment';
 import { OrganizationSettings } from './pages/OrganizationSettings';
+import { Vendors } from './pages/Vendors';
 import { GoogleConfig } from './pages/GoogleConfig';
 import { PayrollPage } from './pages/PayrollPage';
 import { CorporateCardPage } from './pages/CorporateCardPage';
@@ -111,6 +112,7 @@ const App: React.FC = () => {
   const sidebarMenus = [
     { id: 'dashboard', name: 'ERP 대시보드', icon: <LayoutDashboard size={18} />, component: <Dashboard /> },
     { id: 'customer', name: '고객 관리', icon: <Users size={18} />, component: <Customers /> },
+    { id: 'vendors', name: '매입처 (공급자) 관리', icon: <Building2 size={18} />, component: <Vendors /> },
     { id: 'product', name: '제품 관리', icon: <Package size={18} />, component: <Products /> },
     { id: 'asset', name: '자산 관리 (대장)', icon: <Layers size={18} />, component: <Assets /> },
     { id: 'acquisition_disposal', name: '당사자산 취득/매각', icon: <PlusCircle size={18} />, component: <AssetAcquisitionDisposal /> },

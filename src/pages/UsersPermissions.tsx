@@ -82,6 +82,7 @@ export const UsersPermissions: React.FC = () => {
     { id: 'cash_flow', name: '자금 흐름 분석' },
     { id: 'delinquency', name: '미수 채권 연체 관리' },
     { id: 'customer', name: '고객 관리 (담당자/현장)' },
+    { id: 'vendors', name: '매입처 (공급자) 관리' },
     { id: 'product', name: '제품 관리' },
     { id: 'asset', name: '자산 관리' },
     { id: 'acquisition_disposal', name: '당사자산 취득/매각' },

@@ -14,6 +14,7 @@ export const AssetAcquisitionDisposal: React.FC = () => {
   const [assetNo, setAssetNo] = useState('');
   const [serialNo, setSerialNo] = useState('');
   const [manufacturer, setManufacturer] = useState('');
+  const [manufactureYear, setManufactureYear] = useState('');
   const [acquisitionDate, setAcquisitionDate] = useState(new Date().toISOString().split('T')[0]);
   const [acquisitionPrice, setAcquisitionPrice] = useState(0);
   const [depreciationMonths, setDepreciationMonths] = useState(60);
@@ -54,6 +55,7 @@ export const AssetAcquisitionDisposal: React.FC = () => {
       assetNo,
       serialNo,
       manufacturer,
+      manufactureYear,
       acquisitionDate,
       acquisitionPrice,
       depreciationMonths,
@@ -169,6 +171,17 @@ export const AssetAcquisitionDisposal: React.FC = () => {
                   value={manufacturer}
                   onChange={e => setManufacturer(e.target.value)}
                   placeholder="예: Skyjack (미입력시 제품기본값)"
+                  disabled={!canSave}
+                />
+              </div>
+
+              <div>
+                <label>제조년도</label>
+                <input
+                  type="text"
+                  value={manufactureYear}
+                  onChange={e => setManufactureYear(e.target.value)}
+                  placeholder="예: 2023"
                   disabled={!canSave}
                 />
               </div>

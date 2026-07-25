@@ -86,6 +86,8 @@ interface AppContextType {
   updateGoogleConfig: (config: GoogleConfig) => void;
   saveCashFlowSnapshot: (snap: Omit<CashFlowSnapshot, 'id' | 'createdAt'>) => void;
   deleteCashFlowSnapshot: (snapId: string) => void;
+  saveVendor: (vendor: Vendor) => void;
+  deleteVendor: (id: string) => void;
   
   // Asset Mutators
   acquireAsset: (assetData: Partial<Asset>) => void;
@@ -2161,13 +2163,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     refreshAllData();
   };
 
+  const saveVendor = (vendor: Vendor) => {
+    const existing = db.vendors.find(v => v.id === vendor.id);
+    if (existing) {
+      db.updateRow('vendors', vendor.id, vendor);
+    } else {
+      db.insertRow('vendors', vendor);
+    }
+    refreshAllData();
+  };
+
+  const deleteVendor = (id: string) => {
+    db.deleteRow('vendors', id);
+    refreshAllData();
+  };
+
   return (
     <AppContext.Provider value={{
       currentUser, theme, toggleTheme, login, logout, hasPermission, showErrorModal,
       users, permissions, customers, contacts, sites, products, assets, consumables, consumableLogs, consumablePurchases, contracts, contractAssets, contractHistory, deliveries, billings, billingDetails, payments, repairs, repairConsumables, transportCompanies, transportDrivers, todos,
       bankTransactions, bankMatchingRules, assetInOutLogs, vendors, googleConfigs, cashFlowSnapshots,
       refreshAllData, updatePermissions, saveUser, saveCustomer, saveContact, saveSite, saveProduct, saveAsset, updateGoogleConfig,
-      saveCashFlowSnapshot, deleteCashFlowSnapshot,
+      saveCashFlowSnapshot, deleteCashFlowSnapshot, saveVendor, deleteVendor,
       acquireAsset, disposeAsset, registerRentedAsset, returnRentedAsset,
       purchaseConsumable, useConsumable,
       requestConsumablePurchase, acceptConsumablePurchase, completeConsumablePurchase, inboundConsumablePurchase,

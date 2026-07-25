@@ -345,3 +345,19 @@
   3. `DevDataUploader.tsx`: `COLUMN_LABEL_MAP`에 `manufactureYear: '제조년도'`, `depreciationMonths: '감가상각개월수'` 반영 및 CSV/엑셀 템플릿 양식 연동.
   4. `Assets.tsx`: 목록 테이블, 취득/등록 폼, 상세 모달, 엑셀 익스포트에 "제조년도" 및 IFRS 감가상각누계액/미상각잔액 실시간 렌더링.
   5. **버전 산정**: DB 스키마 및 컬럼 변경 규칙 적용 ➔ **`v1.2.0.Build.00000`**
+
+## [2026-07-25] [반영완료] 당사자산 취득/매각 메뉴 폼 내 제조년도(`manufactureYear`) 필드 배치, 매입처 관리 메뉴 신설, 자산 엑셀 일괄 업로드 파이프라인 개편 및 자산 컬럼 전체 순서 표준 정돈 (v1.3.0.Build.00000)
+- **요구사항**: 
+  1. **자산 컬럼 순서 및 엑셀 일괄 업로드 전면 완벽 개편 (`DevDataUploader.tsx`)**:
+     - 새롭게 확정된 자산 필드 표준 순서(`id` ➔ `assetNo` ➔ `modelName` ➔ `serialNo` ➔ `manufacturer` ➔ `manufactureYear` ➔ `ownerType` ➔ `status` ➔ `acquisitionDate` ➔ `acquisitionPrice` ➔ `supplier` ➔ `depreciationMonths` ➔ `residualValueRate` ➔ ...)에 맞추어 CSV/엑셀 템플릿 양식을 재배치하고 한글 라벨, 샘플 데이터 생성, 유효성 검사 및 Supabase 업로드 파서를 100% 동기화 개편.
+  2. **당사자산 취득 메뉴(`AssetAcquisitionDisposal.tsx`)**: 신규 자산 취득 등록 폼 내 제조사(`manufacturer`) 아래에 **"제조년도 (예: 2023)"** 입력 필드를 노출하고 저장 연동.
+  3. **매입처 관리 메뉴 신설 (`Vendors.tsx`)**: `vendors` (공급자/매입처/외주처) 독립 라우팅 UI 생성 및 사이드바 탑재.
+  4. **자산 전체 메뉴 논리적 교차 점검 및 정합성 보장**:
+     - 당사자산(`OWNED`) vs 임차자산(`RENTED`) 상각 처리 격리 (임차자산은 감가상각 대상에서 제외).
+     - 매각 자산(`SOLD`)은 매각일자 이후 감가상각 자동 고정 및 신규 계약/출고 할당 완전 차단.
+     - `supplier` (구입처 텍스트)와 `vendorId` (매입처 DB 연동)의 상호 참조 정합성 보장.
+- **해결 설계**:
+  1. **DevDataUploader.tsx**: `schema.sql` 정돈 스키마 기반 동적 템플릿 생성 및 한글 파싱 매핑(`supplier`, `manufactureYear`, `depreciationMonths` 등) 정밀 동기화.
+  2. `AssetAcquisitionDisposal.tsx`: `manufactureYear` 입력 폼 state 추가 및 제조사와 취득일자 사이에 배치.
+  3. `Vendors.tsx` 신규 생성 및 `App.tsx` 사이드바 등록.
+  4. **버전 산정**: 신규 기능/폼/컬럼 구조 개편 규칙 적용 ➔ **`v1.3.0.Build.00000`**

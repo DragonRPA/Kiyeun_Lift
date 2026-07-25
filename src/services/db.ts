@@ -403,11 +403,16 @@ export interface Vendor {
   name: string;
   type: 'TRANSPORT' | 'RENTAL' | 'REPAIR' | 'CONSUMABLE' | 'OTHER';
   bizRegNo?: string;
+  representative?: string;
   contactName?: string;
   contact?: string;
+  email?: string;
+  address?: string;
   bankAccount?: string;
+  isActive?: boolean;
   memo?: string;
   createdAt: string;
+  updatedAt?: string;
 }
 
 export interface TransportDriver {
