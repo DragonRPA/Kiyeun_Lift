@@ -206,9 +206,9 @@ const enforceManagerPolicies = (usersList: UserNode[], deptList: Department[]) =
     if (!canEdit) return;
     const newUser: UserNode = {
       id: `u-${Date.now()}`,
-      name: '신규직원',
+      name: '',
       departmentId: null, // 무조건 미배정으로 생성
-      position: '사원',
+      position: '',
       status: 'ACTIVE',
       role: 'USER',
       loginId: '',
@@ -444,12 +444,14 @@ const enforceManagerPolicies = (usersList: UserNode[], deptList: Department[]) =
           backgroundImage: user.profileImageUrl ? `url(${user.profileImageUrl})` : 'none',
           backgroundSize: 'cover', backgroundPosition: 'center', flexShrink: 0
         }}>
-          {!user.profileImageUrl && user.name.substring(0, 1)}
+          {!user.profileImageUrl && (user.name ? user.name.substring(0, 1) : '신')}
         </div>
 
         <div style={{ flex: 1 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div style={{ fontWeight: '700', fontSize: '15px', color: 'var(--text-main)' }}>{user.name}</div>
+            <div style={{ fontWeight: '700', fontSize: '15px', color: user.name ? 'var(--text-main)' : 'var(--text-muted)' }}>
+              {user.name || '신규직원(이름 미입력)'}
+            </div>
             <span style={{ 
               fontSize: '11px', padding: '2px 8px', borderRadius: '12px', fontWeight: '600',
               backgroundColor: user.status === 'ACTIVE' ? 'var(--success-light)' : user.status === 'RETIRED' ? 'var(--danger-light)' : 'var(--warning-light)',
@@ -459,7 +461,7 @@ const enforceManagerPolicies = (usersList: UserNode[], deptList: Department[]) =
             </span>
           </div>
           <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '4px' }}>
-            {user.position} | {user.role}
+            {user.position || '직급 미지정'} | {user.role}
           </div>
           {user.phone && <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>📞 {user.phone}</div>}
         </div>
@@ -646,7 +648,14 @@ const enforceManagerPolicies = (usersList: UserNode[], deptList: Department[]) =
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
                   <div>
                     <label style={{ marginBottom: '4px' }}>이름</label>
-                    <input type="text" style={{ padding: '6px 10px', fontSize: '13px' }} value={selectedProfile.name} onChange={e => setSelectedProfile({...selectedProfile, name: e.target.value})} disabled={!canEdit} />
+                    <input 
+                      type="text" 
+                      style={{ padding: '6px 10px', fontSize: '13px' }} 
+                      placeholder="이름 입력 (예: 홍길동)"
+                      value={selectedProfile.name} 
+                      onChange={e => setSelectedProfile({...selectedProfile, name: e.target.value})} 
+                      disabled={!canEdit} 
+                    />
                   </div>
                   <div>
                     <label style={{ marginBottom: '4px' }}>상태</label>
@@ -670,7 +679,14 @@ const enforceManagerPolicies = (usersList: UserNode[], deptList: Department[]) =
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
                   <div>
                     <label style={{ marginBottom: '4px' }}>직급</label>
-                    <input type="text" style={{ padding: '6px 10px', fontSize: '13px' }} value={selectedProfile.position} onChange={e => setSelectedProfile({...selectedProfile, position: e.target.value})} disabled={!canEdit} />
+                    <input 
+                      type="text" 
+                      style={{ padding: '6px 10px', fontSize: '13px' }} 
+                      placeholder="직급 입력 (예: 사원/대리)"
+                      value={selectedProfile.position} 
+                      onChange={e => setSelectedProfile({...selectedProfile, position: e.target.value})} 
+                      disabled={!canEdit} 
+                    />
                   </div>
                   <div>
                     <label style={{ marginBottom: '4px' }}>시스템 역할</label>
