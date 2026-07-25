@@ -93,7 +93,13 @@ export const Vendors: React.FC = () => {
     const payloadTypes = selectedTypes.length > 0 ? selectedTypes : ['RENTAL' as VendorTypeOption];
 
     const payload: Vendor = {
-      id: editingVendor.id || `VND-${Date.now().toString().slice(-6)}`,
+      id: editingVendor.id || (() => {
+        const maxNum = vendors.reduce((max, v) => {
+          const match = v.id.match(/VND-(\d+)/);
+          return match ? Math.max(max, parseInt(match[1])) : max;
+        }, 0);
+        return `VND-${String(maxNum + 1).padStart(7, '0')}`;
+      })(),
       name: editingVendor.name,
       bizRegNo: editingVendor.bizRegNo || '',
       representative: editingVendor.representative || '',
