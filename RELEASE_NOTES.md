@@ -1,3 +1,14 @@
+# Release Notes (v3.5.0 - 2026-07-25 15:02)
+
+## 🩺 contract_assets 테이블 내 expectedModel 컬럼 추가 및 스키마 싱크
+- **expectedModel 필드 수용**: 스마트 출고 요청 시 계약 희망 자산 모델(`expectedModel`) 저장을 지원하기 위해 `schema.sql` 및 시스템 데이터베이스 정의에 `"expectedModel" TEXT` 컬럼을 정식 추가하여, Supabase DB 동기화 시 스키마 미존재 오류(`Could not find column expectedModel`)를 완벽 해결했습니다.
+
+## 🩺 원클릭 텍스트 복사 기능 내장 커스텀 예외 팝업 모달 (CopyableErrorModal) 구축
+- **브라우저 기본 alert 대체 및 원클릭 복사 시스템**: 텍스트 선택/복사가 불가능한 브라우저의 기본 `alert()` 창 대신, 다크 테마 글래스모피즘 기반의 커스텀 에러 모달 UI 컴포넌트(`ErrorModal.tsx`)를 신설했습니다.
+- **오류 내용 복사 버튼 탑재**: 에러 텍스트 박스와 **`[📋 오류 내용 전체 복사]`** 버튼을 주입하여, 시스템 예외 발생 시 사용자가 클릭 한 번으로 에러 메시지 전문을 복사하여 손쉽게 원인을 공유 및 제보할 수 있도록 UX를 개편했습니다.
+
+---
+
 # Release Notes (v3.4.0 - 2026-07-25 14:57)
 
 ## 🩺 Supabase DB 및 엑셀 일괄 업로드 양식 내 입력/생성 날짜 컬럼 후방 배치 개편

@@ -242,6 +242,7 @@ CREATE TABLE contract_assets (
     id TEXT PRIMARY KEY,
     "contractId" TEXT REFERENCES contracts(id) ON DELETE CASCADE,
     "assetId" TEXT REFERENCES assets(id),
+    "expectedModel" TEXT,
     "monthlyRentalFee" DOUBLE PRECISION NOT NULL DEFAULT 0,
     "dailyRentalFee" DOUBLE PRECISION NOT NULL DEFAULT 0,
     "startDate" TEXT NOT NULL,

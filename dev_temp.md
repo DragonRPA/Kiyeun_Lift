@@ -160,3 +160,9 @@
 
 ## [2026-07-25] [반영완료] 스마트 출고 요청 동기식 Supabase 쓰기 예외 전파 및 에러 즉시 피드백 팝업 개편
 - **요구사항**: `SmartDispatch.tsx`에서 출고 요청 저장 시, 백그라운드 비동기 Supabase 쓰기 큐(`pendingWrites`)에서 DB Constraint 오류, 컬럼 미존재, RLS 차단 예외 발생 시 에러가 조용히 삼켜지고 화면에는 성공 팝업만 출력되어 실제 데이터가 누락되는 현상이 발생함. 이에 따라 `saveSmartDispatch` 저장 시 Supabase 데이터베이스 연동 완료를 동기식으로 대기(`await Promise.all(db.pendingWrites)`)하고, 예외 발생 시 구체적인 에러 메시지를 팝업 모달로 즉시 노출하도록 보완합니다.
+
+## [2026-07-25] [반영완료] contract_assets 테이블 내 expectedModel 컬럼 누락 수정 및 Supabase 스키마 싱크
+- **요구사항**: 스마트 출고 등록 시 `contract_assets` 테이블에 희망 모델명(`expectedModel`) 컬럼이 스키마 상 누락되어 `Could not find the 'expectedModel' column of 'contract_assets' in the schema cache` 오류가 발생하는 결함 보완. `schema.sql` 및 원격 Supabase DB에 `"expectedModel" TEXT` 컬럼을 신규 추가하여 정상 수용되도록 수정.
+
+## [2026-07-25] [반영완료] 원클릭 텍스트 복사 기능 내장 커스텀 예외 팝업 모달 (CopyableErrorModal) 시스템 구축
+- **요구사항**: 시스템 예외 및 오류 발생 시 단순 브라우저 `alert()` 사용 시 텍스트 복사가 불가능하여 원인 파악 및 제보가 불편함. 이에 따라 에러 내용 텍스트 박스 및 **[오류 내용 복사]** 버튼이 탑재된 원클릭 커스텀 에러 모달 UI 컴포넌트를 신설하여 모든 예외 처리 구문(에러 피드백)에 단순 `alert` 대신 대체 적용.

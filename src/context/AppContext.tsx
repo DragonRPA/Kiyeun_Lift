@@ -1,6 +1,7 @@
 // d:\Kiyeun_Lift\src\context\AppContext.tsx
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { db, User, MenuPermission, Customer, CustomerContact, CustomerSite, Product, Asset, Consumable, ConsumableLog, ConsumablePurchaseRequest, Contract, ContractAsset, ContractHistory, Billing, BillingDetail, Payment, Delivery, TransportCompany, TransportDriver, Repair, RepairConsumable, Todo, BankTransaction, BankMatchingRule, AssetInOutLog, Vendor, GoogleConfig, CashFlowSnapshot } from '../services/db';
+import { ErrorModal } from '../components/ErrorModal';
 
 export interface SmartDispatchData {
   customerName: string;
@@ -41,6 +42,7 @@ interface AppContextType {
   login: (loginId: string, passwordHash: string, keepLoggedIn?: boolean) => boolean;
   logout: () => void;
   hasPermission: (menuId: string, action: 'view' | 'save') => boolean;
+  showErrorModal: (message: string, title?: string) => void;
   
   // Data States
   users: User[];
@@ -182,6 +184,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Navigation / Routing states
   const [activeTab, setActiveTab] = useState<string>('dashboard');
   const [navigationPayload, setNavigationPayload] = useState<any>(null);
+
+  // 글로벌 커스텀 에러 모달 상태
+  const [errorModal, setErrorModal] = useState<{ isOpen: boolean; title?: string; message: string }>({
+    isOpen: false,
+    title: '시스템 오류 발생',
+    message: ''
+  });
+
+  const showErrorModal = (message: string, title: string = '시스템 오류 발생') => {
+    setErrorModal({
+      isOpen: true,
+      title,
+      message
+    });
+  };
 
   const refreshAllData = async () => {
     if (db.isSupabaseConnected()) {
@@ -621,9 +638,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } catch (err: any) {
       console.error('Supabase sync error during saveSmartDispatch:', err);
       db.pendingWrites = [];
+      const errorMsg = `⚠️ Supabase 데이터베이스 동기화 중 오류가 발생했습니다:\n${err.message || err.details || JSON.stringify(err)}`;
+      showErrorModal(errorMsg, '스마트 출고 DB 동기화 오류');
       return { 
         success: false, 
-        errorMessage: `⚠️ Supabase 데이터베이스 동기화 중 오류가 발생했습니다:\n${err.message || err.details || JSON.stringify(err)}` 
+        errorMessage: errorMsg
       };
     }
 
@@ -2132,7 +2151,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   return (
     <AppContext.Provider value={{
-      currentUser, theme, toggleTheme, login, logout, hasPermission,
+      currentUser, theme, toggleTheme, login, logout, hasPermission, showErrorModal,
       users, permissions, customers, contacts, sites, products, assets, consumables, consumableLogs, consumablePurchases, contracts, contractAssets, contractHistory, deliveries, billings, billingDetails, payments, repairs, repairConsumables, transportCompanies, transportDrivers, todos,
       bankTransactions, bankMatchingRules, assetInOutLogs, vendors, googleConfigs, cashFlowSnapshots,
       refreshAllData, updatePermissions, saveUser, saveCustomer, saveContact, saveSite, saveProduct, saveAsset, updateGoogleConfig,
@@ -2155,6 +2174,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setNavigationPayload
     }}>
       {children}
+      <ErrorModal
+        isOpen={errorModal.isOpen}
+        title={errorModal.title}
+        message={errorModal.message}
+        onClose={() => setErrorModal(prev => ({ ...prev, isOpen: false }))}
+      />
     </AppContext.Provider>
   );
 };
