@@ -1142,13 +1142,33 @@ class LocalDB {
   generateNextId(key: string, list: { id: string }[]): string {
     let prefix = '';
     switch (key) {
-      case 'products': prefix = 'PROD-'; break;
-      case 'customers': prefix = 'CUST-'; break;
-      case 'assets': prefix = 'ASSET-'; break;
-      case 'sites': prefix = 'SITE-'; break;
-      case 'contacts': prefix = 'CONT-'; break;
-      case 'contracts': prefix = 'CONTR-'; break;
-      case 'vendors': prefix = 'VND-'; break;
+      case 'products':           prefix = 'PROD-';   break;
+      case 'customers':          prefix = 'CUST-';   break;
+      case 'assets':             prefix = 'ASSET-';  break;
+      case 'sites':              prefix = 'SITE-';   break;
+      case 'contacts':           prefix = 'CONT-';   break;
+      case 'contracts':          prefix = 'CONTR-';  break;
+      case 'vendors':            prefix = 'VND-';    break;
+      case 'deliveries':         prefix = 'DLV-';    break;
+      case 'repairs':            prefix = 'REP-';    break;
+      case 'billings':           prefix = 'BILL-';   break;
+      case 'billingDetails':     prefix = 'BDET-';   break;
+      case 'payments':           prefix = 'PAY-';    break;
+      case 'todos':              prefix = 'TODO-';   break;
+      case 'bankMatchingRules':  prefix = 'RULE-';   break;
+      case 'bankTransactions':   prefix = 'TXN-';    break;
+      case 'departments':        prefix = 'DEPT-';   break;
+      case 'users':              prefix = 'USR-';    break;
+      case 'permissions':        prefix = 'PERM-';   break;
+      case 'consumables':        prefix = 'CSM-';    break;
+      case 'consumableLogs':     prefix = 'CLOG-';   break;
+      case 'consumablePurchases':prefix = 'CPRC-';   break;
+      case 'contractAssets':     prefix = 'CAST-';   break;
+      case 'contractHistory':    prefix = 'CHST-';   break;
+      case 'assetInOutLogs':     prefix = 'AIOG-';   break;
+      case 'cashFlowSnapshots':  prefix = 'CFSN-';   break;
+      case 'transportCompanies': prefix = 'TCOM-';   break;
+      case 'transportDrivers':   prefix = 'TDRV-';   break;
       default:
         prefix = key.slice(0, 4).toUpperCase() + '-';
     }

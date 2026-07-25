@@ -180,7 +180,7 @@ const enforceManagerPolicies = (usersList: UserNode[], deptList: Department[]) =
     if (!canEdit) return;
     const nowIso = new Date().toISOString();
     const newDept: Department = {
-      id: `dept-${Date.now()}`,
+      id: db.generateNextId('departments', departments),
       name: '',
       parentDepartmentId: selectedDeptId || null,
       createdAt: nowIso,
@@ -213,7 +213,7 @@ const enforceManagerPolicies = (usersList: UserNode[], deptList: Department[]) =
     if (!canEdit) return;
     const nowIso = new Date().toISOString();
     const newUser: UserNode = {
-      id: `u-${Date.now()}`,
+      id: db.generateNextId('users', users.map(u => ({ id: u.id }))),
       name: '',
       departmentId: null, // 무조건 미배정으로 생성
       position: '',

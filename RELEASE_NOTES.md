@@ -1,3 +1,22 @@
+# Release Notes (v1.3.5.Build.00004 - 2026-07-25 22:07)
+
+## 🐛 전체 프로젝트 ID 생성 규칙 통일 — Date.now() 타임스탬프 방식 전면 폐기
+### 공통 원칙
+- 전체 프로젝트에서 `Date.now()` 타임스탬프 기반 ID를 `generateNextId()` 기반 순번형 7자리 패딩 ID(`PREFIX-0000001`)로 전면 통일.
+- ID가 시각적으로 순번을 나타내어 데이터 관리 및 감사 추적에 유리.
+
+### db.ts — generateNextId() prefix 매핑 전체 테이블로 확장
+- 기존 6개 테이블(`products, customers, assets, sites, contacts, contracts, vendors`)에서 전체 22개 테이블로 prefix 매핑 대폭 확장.
+- 신규 prefix: `DLV-(배송)`, `REP-(수리)`, `BILL-(청구)`, `BDET-(청구명세)`, `PAY-(납부)`, `TODO-(할일)`, `RULE-(매칭규칙)`, `TXN-(거래내역)`, `DEPT-(부서)`, `USR-(사용자)`, `PERM-(권한)`, `CSM-(소모품)`, `CLOG-(소모품로그)`, `CPRC-(소모품구매)`, `CAST-(계약자산)`, `CHST-(계약이력)`, `AIOG-(자산입출고)`, `CFSN-(현금흐름스냅샷)`, `TCOM-(운송사)`, `TDRV-(기사)`.
+
+### AppContext.tsx — 계약번호/매칭규칙 ID 교정
+- `contractNo`: `S-CTR-${Date.now()}` → 기존 계약 목록 최대 순번 추출 후 `S-CTR-0000001` 형식 채번.
+- `bankMatchingRules` 신규 규칙 ID: 수동 `RULE-xxxxxx` 생성 제거 → `db.insertRow()` 내부 `generateNextId()` 자동 채번으로 위임.
+
+### OrganizationSettings.tsx — 부서/사용자 ID 교정
+- `departments` 신규 ID: `dept-${Date.now()}` → `db.generateNextId('departments', departments)` (`DEPT-0000001`).
+- `users` 신규 ID: `u-${Date.now()}` → `db.generateNextId('users', users)` (`USR-0000001`).
+
 # Release Notes (v1.3.5.Build.00003 - 2026-07-25 22:03)
 
 ## 🐛 공급자 ID 생성 방식 교정 — 타임스탬프 끝자리 → 순번형 7자리 패딩 넘버

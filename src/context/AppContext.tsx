@@ -668,8 +668,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const isSalespersonValid = currentUser?.id && existingUsers.some(u => u.id === currentUser.id);
     const validSalespersonId = isSalespersonValid ? currentUser.id : (existingUsers.find(u => u.id === 'u-1')?.id || existingUsers[0]?.id || undefined);
 
+    const nextContractNum = String(db.contracts.reduce((max, c) => {
+      const m = c.contractNo?.match(/S-CTR-(\d+)/);
+      return m ? Math.max(max, parseInt(m[1])) : max;
+    }, 0) + 1).padStart(7, '0');
     const contract = db.insertRow<Contract>('contracts', {
-      contractNo: `S-CTR-${Date.now()}`,
+      contractNo: `S-CTR-${nextContractNum}`,
       customerId: finalCustomer.id,
       siteId: finalSite.id,
       startDate: new Date().toISOString().split('T')[0],
@@ -1889,14 +1893,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updatedAt: new Date().toISOString()
       } as any);
     } else {
-      const newRule: BankMatchingRule = {
-        id: `RULE-${Date.now().toString().slice(-6)}`,
+      db.insertRow<BankMatchingRule>('bankMatchingRules', {
         senderName,
         customerId,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
-      };
-      db.insertRow<BankMatchingRule>('bankMatchingRules', newRule);
+      } as any);
     }
     refreshAllData();
   };
