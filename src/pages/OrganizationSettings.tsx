@@ -611,11 +611,23 @@ const enforceManagerPolicies = (usersList: UserNode[], deptList: Department[]) =
             boxShadow: '-4px 0 15px rgba(0,0,0,0.1)', zIndex: 50, display: 'flex', flexDirection: 'column',
             borderLeft: '1px solid var(--border-color)', padding: '16px'
           }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', borderBottom: '1px solid var(--border-color)', paddingBottom: '12px' }}>
-              <h3 style={{ fontSize: '16px', fontWeight: '700' }}>상세 프로필</h3>
-              <button onClick={() => setSelectedProfile(null)} style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)' }}>
-                <X size={18} />
-              </button>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', borderBottom: '1px solid var(--border-color)', paddingBottom: '8px' }}>
+              <h3 style={{ fontSize: '15px', fontWeight: '700' }}>상세 프로필</h3>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                {canEdit && (
+                  <>
+                    <button className="btn-secondary" style={{ padding: '4px 8px', fontSize: '12px' }} onClick={() => setSelectedProfile(null)}>
+                      취소
+                    </button>
+                    <button className="btn-primary" style={{ padding: '4px 10px', fontSize: '12px' }} onClick={applyProfileChanges}>
+                      <CheckCircle size={13} style={{ marginRight: '3px' }} /> 저장 (적용)
+                    </button>
+                  </>
+                )}
+                <button onClick={() => setSelectedProfile(null)} style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', padding: '4px', cursor: 'pointer' }} title="닫기">
+                  <X size={18} />
+                </button>
+              </div>
             </div>
 
             <div style={{ flex: 1, overflowY: 'auto', paddingRight: '4px' }}>
@@ -737,15 +749,6 @@ const enforceManagerPolicies = (usersList: UserNode[], deptList: Department[]) =
                 </div>
               </div>
             </div>
-
-            {canEdit && (
-              <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '8px', marginTop: '8px', display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
-                <button className="btn-secondary" style={{ padding: '6px 12px', fontSize: '13px' }} onClick={() => setSelectedProfile(null)}>취소 (닫기)</button>
-                <button className="btn-primary" style={{ padding: '6px 12px', fontSize: '13px' }} onClick={applyProfileChanges}>
-                  <CheckCircle size={14} style={{ marginRight: '4px' }} /> 적용
-                </button>
-              </div>
-            )}
           </div>
         </>
       )}
