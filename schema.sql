@@ -620,3 +620,15 @@ INSERT INTO products (id, "modelName", feet, spec, manufacturer, "createdAt") VA
 INSERT INTO customers (id, name, "bizRegNo", "isClosed", address, representative, "repContact", "createdAt") VALUES
 ('cust-1', '현대건설(주)', '101-81-12345', false, '서울시 종로구', '윤영준', '02-746-1114', TO_CHAR(NOW(), 'YYYY-MM-DD"T"HH24:MI:SS"Z"')),
 ('cust-2', '삼성물산(주)', '202-81-54321', false, '서울시 강동구', '오세철', '02-2145-5114', TO_CHAR(NOW(), 'YYYY-MM-DD"T"HH24:MI:SS"Z"'));
+
+-- ==========================================
+-- 전 테이블 RLS(Row Level Security) 비활성화 및 허용 정책 일괄 보완
+-- ==========================================
+DO $$
+DECLARE
+    r RECORD;
+BEGIN
+    FOR r IN (SELECT tablename FROM pg_tables WHERE schemaname = 'public') LOOP
+        EXECUTE format('ALTER TABLE public.%I DISABLE ROW LEVEL SECURITY;', r.tablename);
+    END LOOP;
+END $$;

@@ -149,102 +149,105 @@ export const Dashboard: React.FC = () => {
       {/* ──────────────────────────────────────────────────────── */}
       {/* CASE A: 최고관리자(ADMIN) 및 부서관리자(MANAGER) 대시보드 */}
       {/* ──────────────────────────────────────────────────────── */}
-      {(role === 'ADMIN' || role === 'MANAGER') && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-          
-          {/* 구글 드라이브 용량 초과 경보 카드 (90% 돌파 시 노출) */}
-          <div style={{
-            backgroundColor: 'var(--bg-card)', borderRadius: '12px', padding: '20px 24px',
-            borderLeft: '5px solid #ef4444', border: '1px solid var(--border-color)', borderLeftWidth: '5px'
-          }}>
-            <div style={{ display: 'flex', justifyItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-              <span style={{ fontSize: '12px', fontWeight: '800', color: '#ef4444', backgroundColor: 'rgba(239,68,68,0.1)', padding: '2px 8px', borderRadius: '4px' }}>[클라우드 경보]</span>
-              <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>스토리지 용량 92%</span>
-            </div>
-            <h4 style={{ margin: '0 0 8px 0', fontSize: '16px', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Cloud size={18} color="#ef4444" /> 구글 드라이브 클라우드 용량 한도 도래 (백업 필요)
-            </h4>
-            <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: '0 0 14px 0', lineHeight: '1.5' }}>
-              무료 제공량 15.0 GB 중 <strong>13.8 GB(92%)</strong>를 사용하고 있어 사진 업로드가 조만간 제한될 수 있습니다. 
-              구글 설정 화면에 안내된 로컬 PC 백업 절차를 즉시 이행해 주세요.
-            </p>
-            <button className="btn-primary" onClick={() => setActiveTab('google_config')} style={{ backgroundColor: '#ef4444', border: 'none', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-              백업 절차 보기 및 설정으로 이동 <ArrowRight size={12} />
-            </button>
-          </div>
+      {(role === 'ADMIN' || role === 'MANAGER') && (() => {
+        const hasUnpaid = unpaidBillings.length > 0;
+        const hasOverdueRent = overdueRentedCount > 0 || mismatchRentedCount > 0;
+        const hasMaintenanceIssue = pendingRepairs > 0 || lowStockConsumables > 0;
+        const hasAnyCards = hasUnpaid || hasOverdueRent || hasMaintenanceIssue;
 
-          {/* 미수금 회수 독촉 카드 */}
-          <div style={{
-            backgroundColor: 'var(--bg-card)', borderRadius: '12px', padding: '20px 24px',
-            borderLeft: '5px solid #ef4444', border: '1px solid var(--border-color)', borderLeftWidth: '5px'
-          }}>
-            <div style={{ display: 'flex', justifyItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-              <span style={{ fontSize: '12px', fontWeight: '800', color: '#ef4444', backgroundColor: 'rgba(239,68,68,0.1)', padding: '2px 8px', borderRadius: '4px' }}>[재무 위기 관리]</span>
-              <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>수납 미완료 {unpaidBillings.length}건</span>
-            </div>
-            <h4 style={{ margin: '0 0 8px 0', fontSize: '16px', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <CreditCard size={18} color="#ef4444" /> 전사 렌탈 매출 미수금 누적 알림
-            </h4>
-            <p style={{ fontSize: '13.5px', color: 'var(--text-secondary)', margin: '0 0 14px 0', lineHeight: '1.5' }}>
-              현재 수납 처리되지 않은 연체/미수 대금이 총 <strong style={{ color: '#ef4444', fontSize: '15px' }}>{totalUnpaidAmount.toLocaleString()}원</strong>에 달합니다. 
-              미수 거래처 목록과 발행 명세서를 전수 점검하여 즉시 수납 처리를 진행하십시오.
-            </p>
-            <button className="btn-primary" onClick={() => setActiveTab('billings')} style={{ backgroundColor: '#ef4444', border: 'none', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-              연체 및 미수금 현황 수납 마감 <ArrowRight size={12} />
-            </button>
-          </div>
-
-          {/* 임차 자산 반납 지연 카드 */}
-          {(overdueRentedCount > 0 || mismatchRentedCount > 0) && (
-            <div style={{
-              backgroundColor: 'var(--bg-card)', borderRadius: '12px', padding: '20px 24px',
-              borderLeft: '5px solid #f59e0b', border: '1px solid var(--border-color)', borderLeftWidth: '5px'
-            }}>
-              <div style={{ display: 'flex', justifyItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-                <span style={{ fontSize: '12px', fontWeight: '800', color: '#f59e0b', backgroundColor: 'rgba(245,158,11,0.1)', padding: '2px 8px', borderRadius: '4px' }}>[정산 위험]</span>
-                <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>경보 {overdueRentedCount + mismatchRentedCount}건</span>
+        return (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+            
+            {/* 미수금 회수 독촉 카드 (실제 미수금이 있을 때만 표출) */}
+            {hasUnpaid && (
+              <div style={{
+                backgroundColor: 'var(--bg-card)', borderRadius: '12px', padding: '20px 24px',
+                borderLeft: '5px solid #ef4444', border: '1px solid var(--border-color)', borderLeftWidth: '5px'
+              }}>
+                <div style={{ display: 'flex', justifyItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                  <span style={{ fontSize: '12px', fontWeight: '800', color: '#ef4444', backgroundColor: 'rgba(239,68,68,0.1)', padding: '2px 8px', borderRadius: '4px' }}>[재무 위기 관리]</span>
+                  <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>수납 미완료 {unpaidBillings.length}건</span>
+                </div>
+                <h4 style={{ margin: '0 0 8px 0', fontSize: '16px', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <CreditCard size={18} color="#ef4444" /> 전사 렌탈 매출 미수금 누적 알림
+                </h4>
+                <p style={{ fontSize: '13.5px', color: 'var(--text-secondary)', margin: '0 0 14px 0', lineHeight: '1.5' }}>
+                  현재 수납 처리되지 않은 연체/미수 대금이 총 <strong style={{ color: '#ef4444', fontSize: '15px' }}>{totalUnpaidAmount.toLocaleString()}원</strong>에 달합니다. 
+                  미수 거래처 목록과 발행 명세서를 전수 점검하여 즉시 수납 처리를 진행하십시오.
+                </p>
+                <button className="btn-primary" onClick={() => setActiveTab('billings')} style={{ backgroundColor: '#ef4444', border: 'none', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  연체 및 미수금 현황 수납 마감 <ArrowRight size={12} />
+                </button>
               </div>
-              <h4 style={{ margin: '0 0 8px 0', fontSize: '16px', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <ShieldAlert size={18} color="#f59e0b" /> 소유사(임차) 자산 반납 지연 및 매칭 만기 미스매치
-              </h4>
-              <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: '0 0 14px 0', lineHeight: '1.5' }}>
-                {overdueRentedCount > 0 && `• 반납 기한을 넘겨 매입 연장 비용이 청구되고 있는 임차 장비가 ${overdueRentedCount}대 있습니다. `}
-                {mismatchRentedCount > 0 && `• 고객 매출 종료일보다 소유사 매입 기한이 짧아 손실이 우려되는 정산 계약이 ${mismatchRentedCount}건 검출되었습니다.`}
-              </p>
-              <button className="btn-primary" onClick={() => setActiveTab('rent_asset')} style={{ backgroundColor: '#f59e0b', border: 'none', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                임차 자산 회수 정산 관리 <ArrowRight size={12} />
-              </button>
-            </div>
-          )}
+            )}
 
-          {/* 대기 중인 정비 및 소모품 자재 부족 종합 */}
-          <div style={{
-            backgroundColor: 'var(--bg-card)', borderRadius: '12px', padding: '20px 24px',
-            borderLeft: '5px solid #3b82f6', border: '1px solid var(--border-color)', borderLeftWidth: '5px'
-          }}>
-            <div style={{ display: 'flex', justifyItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-              <span style={{ fontSize: '12px', fontWeight: '800', color: '#3b82f6', backgroundColor: 'rgba(59,130,246,0.1)', padding: '2px 8px', borderRadius: '4px' }}>[정비/자산 관리]</span>
-              <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>정비대기 {pendingRepairs}건 / 자재부족 {lowStockConsumables}건</span>
-            </div>
-            <h4 style={{ margin: '0 0 8px 0', fontSize: '16px', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Wrench size={18} color="#3b82f6" /> 현장 안전 관리를 위한 정비 및 소모품 자재 모니터링
-            </h4>
-            <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: '0 0 14px 0', lineHeight: '1.5' }}>
-              현재 대기 중인 장비 수리 건수는 총 <strong>{pendingRepairs}건</strong>이며, 안전 마진 재고(5개 미만) 이하로 떨어진 소모품 자재 품목이 <strong>{lowStockConsumables}종</strong> 있습니다. 
-              정비 담당자와 소모품 공급 현황을 실시간 감독하십시오.
-            </p>
-            <div style={{ display: 'flex', gap: '10px' }}>
-              <button className="btn-primary" onClick={() => setActiveTab('repairs')} style={{ fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                정비 관리 이동 <ArrowRight size={12} />
-              </button>
-              <button className="btn-secondary" onClick={() => setActiveTab('consumable')} style={{ fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px', height: '32px' }}>
-                소모품 현황 보기 <ArrowRight size={12} />
-              </button>
-            </div>
+            {/* 임차 자산 반납 지연 카드 */}
+            {hasOverdueRent && (
+              <div style={{
+                backgroundColor: 'var(--bg-card)', borderRadius: '12px', padding: '20px 24px',
+                borderLeft: '5px solid #f59e0b', border: '1px solid var(--border-color)', borderLeftWidth: '5px'
+              }}>
+                <div style={{ display: 'flex', justifyItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                  <span style={{ fontSize: '12px', fontWeight: '800', color: '#f59e0b', backgroundColor: 'rgba(245,158,11,0.1)', padding: '2px 8px', borderRadius: '4px' }}>[정산 위험]</span>
+                  <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>경보 {overdueRentedCount + mismatchRentedCount}건</span>
+                </div>
+                <h4 style={{ margin: '0 0 8px 0', fontSize: '16px', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <ShieldAlert size={18} color="#f59e0b" /> 소유사(임차) 자산 반납 지연 및 매칭 만기 미스매치
+                </h4>
+                <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: '0 0 14px 0', lineHeight: '1.5' }}>
+                  {overdueRentedCount > 0 && `• 반납 기한을 넘겨 매입 연장 비용이 청구되고 있는 임차 장비가 ${overdueRentedCount}대 있습니다. `}
+                  {mismatchRentedCount > 0 && `• 고객 매출 종료일보다 소유사 매입 기한이 짧아 손실이 우려되는 정산 계약이 ${mismatchRentedCount}건 검출되었습니다.`}
+                </p>
+                <button className="btn-primary" onClick={() => setActiveTab('rent_asset')} style={{ backgroundColor: '#f59e0b', border: 'none', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  임차 자산 회수 정산 관리 <ArrowRight size={12} />
+                </button>
+              </div>
+            )}
+
+            {/* 대기 중인 정비 및 소모품 자재 부족 종합 (실제 대기건 또는 부족품목이 있을 때만 표출) */}
+            {hasMaintenanceIssue && (
+              <div style={{
+                backgroundColor: 'var(--bg-card)', borderRadius: '12px', padding: '20px 24px',
+                borderLeft: '5px solid #3b82f6', border: '1px solid var(--border-color)', borderLeftWidth: '5px'
+              }}>
+                <div style={{ display: 'flex', justifyItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                  <span style={{ fontSize: '12px', fontWeight: '800', color: '#3b82f6', backgroundColor: 'rgba(59,130,246,0.1)', padding: '2px 8px', borderRadius: '4px' }}>[정비/자산 관리]</span>
+                  <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>정비대기 {pendingRepairs}건 / 자재부족 {lowStockConsumables}건</span>
+                </div>
+                <h4 style={{ margin: '0 0 8px 0', fontSize: '16px', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Wrench size={18} color="#3b82f6" /> 현장 안전 관리를 위한 정비 및 소모품 자재 모니터링
+                </h4>
+                <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: '0 0 14px 0', lineHeight: '1.5' }}>
+                  현재 대기 중인 장비 수리 건수는 총 <strong>{pendingRepairs}건</strong>이며, 안전 마진 재고(5개 미만) 이하로 떨어진 소모품 자재 품목이 <strong>{lowStockConsumables}종</strong> 있습니다. 
+                  정비 담당자와 소모품 공급 현황을 실시간 감독하십시오.
+                </p>
+                <div style={{ display: 'flex', gap: '10px' }}>
+                  <button className="btn-primary" onClick={() => setActiveTab('repairs')} style={{ fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    정비 관리 이동 <ArrowRight size={12} />
+                  </button>
+                  <button className="btn-secondary" onClick={() => setActiveTab('consumable')} style={{ fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px', height: '32px' }}>
+                    소모품 현황 보기 <ArrowRight size={12} />
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* 모든 당면 과제가 0건일 때 표출되는 정돈 카드 */}
+            {!hasAnyCards && (
+              <div className="card" style={{ padding: '32px', textAlign: 'center', borderRadius: '12px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-card)' }}>
+                <div style={{ display: 'inline-flex', padding: '12px', borderRadius: '50%', backgroundColor: 'rgba(34,197,94,0.1)', color: '#22c55e', marginBottom: '12px' }}>
+                  <CheckCircle size={32} />
+                </div>
+                <h3 style={{ fontSize: '18px', fontWeight: '800', margin: '0 0 8px 0' }}>🎉 현재 즉시 처리해야 할 당면 과제가 없습니다!</h3>
+                <p style={{ fontSize: '13px', color: 'var(--text-muted)', margin: 0 }}>
+                  모든 연체 미수금, 정비 대기, 소모품 자재 부족 요소가 완벽하게 관리되고 있습니다.
+                </p>
+              </div>
+            )}
+
           </div>
-
-        </div>
-      )}
+        );
+      })()}
 
       {/* ──────────────────────────────────────────────────────── */}
       {/* CASE B: 정비담당자(MECHANIC / REPAIR) 대시보드 */}

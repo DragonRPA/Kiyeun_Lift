@@ -1,5 +1,5 @@
 // d:\Kiyeun_Lift\src\pages\SmartDispatch.tsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useApp } from '../context/AppContext';
 import { Zap, Clipboard, FileText, Copy, Printer, Braces, Plus, Trash2 } from 'lucide-react';
 
@@ -43,56 +43,25 @@ export const SmartDispatch: React.FC = () => {
   const { hasPermission, saveSmartDispatch, assets, showErrorModal } = useApp();
   const canSave = hasPermission('delivery', 'save');
 
-  // 원본 텍스트 입력 상태
-  const [rawText, setRawText] = useState<string>(
-`* 출고 *
+  // 원본 텍스트 입력 상태 (초기값 빈 문자열)
+  const [rawText, setRawText] = useState<string>('');
+  const txtFileInputRef = useRef<HTMLInputElement>(null);
 
-고객명 : 세보엠이씨
-현장명 : 용인 SK하이닉스 / 비보안동 2공구
-현장담당자 : 강민혁선임 010-9032-5031
-담당자 메일 : jjk0191@naver.com / gadius200@nate.com
-강경현책임 : gadius200@nate.com
-
-현장 상세 주소 : 경기도 용인시 처인구 원삼면 독성리 산135 4번게이트
-
-배송스케줄
-상차시간 : 07.18(토) 오전 8시 상차
-하차시간 : 07.18(토) 오전 하차
-모델명 : GS3246 * 3 / 1012E * 1
-
-유상옵션 : 협착*4,확장대 고정 와이어*4(1개설치/U볼트 4개 체결/앞2뒤2)
-보양:임대료에 포함(모서리8면,감지봉,사다리 타이거 보양)
-: 감지봉 4개(보양) / 모서리보양 라인테이프 X
-
-옵션 : 4면 철망 , 확장대 철망, 확장대 옆면 철망, 원판설치
-배터리 단자 풀림 확인 마킹
-배터리 단자 커버설치
-트레이 내부 볼트류 풀림 확인마킹
-주행속도 고속 60,저속 45 셋팅
-오버로드 셋팅
-조이스틱 커버 연장
-탑승구 사다리 보양
-미끄럼방지 패드부착,상,하부 모서리 8개소 보양,전면부 2개소 보양
-(모서리보양 3T 이상)
-소화기함 설치,작동설명 및 기타 스티커물 부착,탑승구 손잡이 설치
-타이어 A급
-점멸등, 비상하강장치, 비상정지장치 청결
-작업높이 80프로 셋팅(발판높이기준),
-0~80%,80~100% 초록, 빨강으로 라인구분
-하부상승제한, 확장대 50%지점 표식만 부착
-비상정지스위치 부착, 비상하강꼬리표 부착,
-시저구간 접촉금지 협착위험 스티커 부착
-
-* 부착물 : 제원표, 비상하강사용법, 보험증권,인증서
-
-청구담당자 : 김서현 선임 010-5302-6245
-거래명세서 : rlatj1346@sebomec.com
-계산서메일 : 계산서 역발행건
-
-마감일 : 20일
-결제일 : 익월 말일
-특이사항 :`
-  );
+  // 텍스트 파일 불러오기 핸들러
+  const handleTextFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const text = ev.target?.result as string;
+      if (text !== undefined && text !== null) {
+        setRawText(text);
+        alert(`📂 파일 "${file.name}"의 텍스트 내용을 입력창에 불러왔습니다.`);
+      }
+    };
+    reader.readAsText(file, 'utf-8');
+    e.target.value = '';
+  };
 
   // 구조화된 폼 데이터 상태
   const [customerName, setCustomerName] = useState('');
@@ -610,18 +579,35 @@ ${activeSpecs.map((s, idx) => `  ${idx + 1}. [적용] ${s.label}`).join('\n') ||
         
         {/* 1단계: 레거시 통텍스트 입력 및 스마트 변환 */}
         <div className="card" style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-          <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', minHeight: '62px' }}>
+          <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', minHeight: '62px', flexWrap: 'wrap', gap: '8px' }}>
             <h3 className="card-title" style={{ display: 'flex', alignItems: 'center', gap: '6px', margin: 0 }}>
               <Clipboard size={16} className="text-primary" /> 1단계: 메신저 줄글 텍스트 복사/붙여넣기
             </h3>
-            <button
-              type="button"
-              className="btn-primary"
-              onClick={handleParse}
-              style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '6px 12px', fontSize: '13px', fontWeight: 'bold' }}
-            >
-              <Zap size={14} /> 스마트 폼 데이터로 즉시 변환 (추출)
-            </button>
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+              <input
+                type="file"
+                ref={txtFileInputRef}
+                style={{ display: 'none' }}
+                accept=".txt,.log,.csv"
+                onChange={handleTextFileChange}
+              />
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => txtFileInputRef.current?.click()}
+                style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '6px 12px', fontSize: '12.5px' }}
+              >
+                📂 텍스트 파일 불러오기
+              </button>
+              <button
+                type="button"
+                className="btn-primary"
+                onClick={handleParse}
+                style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '6px 12px', fontSize: '13px', fontWeight: 'bold' }}
+              >
+                <Zap size={14} /> 스마트 폼 데이터로 즉시 변환 (추출)
+              </button>
+            </div>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', flex: 1, gap: '12px' }}>
             <textarea
