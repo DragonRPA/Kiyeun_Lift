@@ -588,6 +588,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const finalSite = site!;
 
+    const existingUsers = db.users;
+    const isSalespersonValid = currentUser?.id && existingUsers.some(u => u.id === currentUser.id);
+    const validSalespersonId = isSalespersonValid ? currentUser.id : (existingUsers.find(u => u.id === 'u-1')?.id || existingUsers[0]?.id || undefined);
+
     const contract = db.insertRow<Contract>('contracts', {
       contractNo: `S-CTR-${Date.now()}`,
       customerId: finalCustomer.id,
@@ -595,7 +599,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       startDate: new Date().toISOString().split('T')[0],
       endDate: '', 
       billingDay: 30,
-      salespersonId: currentUser?.id,
+      salespersonId: validSalespersonId,
       status: 'ACTIVE',
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()

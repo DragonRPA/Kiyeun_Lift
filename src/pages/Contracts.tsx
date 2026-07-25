@@ -290,6 +290,9 @@ export const Contracts: React.FC = () => {
       finalSiteId = newSite.id;
     }
 
+    const isSalespersonValid = salespersonSelect && users.some(u => u.id === salespersonSelect);
+    const finalSalespersonId = isSalespersonValid ? salespersonSelect : (users.find(u => u.id === 'u-1')?.id || users[0]?.id || undefined);
+
     createContract({
       customerId: finalCustomerId,
       contactId: finalContactId && finalContactId !== 'NEW' ? finalContactId : undefined,
@@ -298,7 +301,7 @@ export const Contracts: React.FC = () => {
       endDate,
       billingDay,
       statementClosingDay,
-      salespersonId: salespersonSelect || undefined,
+      salespersonId: finalSalespersonId,
       status: 'ACTIVE'
     }, basket);
 

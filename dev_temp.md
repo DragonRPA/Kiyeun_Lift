@@ -225,3 +225,9 @@
 - **요구사항**: 스마트 출고 등록 및 배차 처리 시 `deliveries` 테이블 대상 데이터에 운송비 정산 여부 플래그(`isCostSettled`)가 전송되나, 스키마 정의상 컬럼이 누락되어 `Could not find the 'isCostSettled' column of 'deliveries' in the schema cache` 오류가 발생하는 결함 보완.
 - **해결 설계**:
   - `schema.sql` 내 `deliveries` 테이블 정의에 `"isCostSettled" BOOLEAN DEFAULT FALSE` 컬럼을 정식 추가.
+
+## [2026-07-25] [반영완료] contracts 테이블 salespersonId 외래키(FK) 참조 무결성 방어 및 예외 차단 개편
+- **요구사항**: 스마트 출고 또는 신규 계약 저장 시 `contracts` 테이블의 담당 영업사원 컬럼(`salespersonId`)에 대입되는 사용자 ID가 DB `users` 테이블 PK로 등록되어 있지 않을 때 발생하는 외래키 제약조건 위반 오류(`23503 contracts_salespersonId_fkey`) 원천 방어.
+- **해결 설계**:
+  - `AppContext.tsx` 내 `saveSmartDispatch` 및 `Contracts.tsx` 계약 저장 핸들러에서 `salespersonId`를 대입하기 전에 현재 유저 ID(`currentUser.id`)가 DB `users` 목록에 실제 존재하는지 검증.
+  - 존재하지 않거나 유효하지 않은 계정일 경우 `null` (또는 유효한 기본 관리자 ID `'u-1'`)로 안전하게 교체 대입하여 Supabase FK 제약 조건 위반 에러를 완벽 차단.

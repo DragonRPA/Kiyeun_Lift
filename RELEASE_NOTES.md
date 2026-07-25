@@ -1,3 +1,11 @@
+# Release Notes (v3.12.0 - 2026-07-25 16:28)
+
+## 🩺 contracts 테이블 salespersonId 외래키(FK) 참조 무결성 방어 구축
+- **FK 예외 방어 파이프라인**: 스마트 출고 및 계약 등록 시 담당 영업사원(`salespersonId`)에 대입되는 사용자 ID가 DB `users` 테이블 PK 목록에 실제 존재하는지 사전 검증합니다.
+- **Null-Safe 자동 대체 방어**: 유효하지 않은 임시 계정이거나 존재하지 않는 영업사원 ID일 경우, 에러(`23503 contracts_salespersonId_fkey`)로 차단되지 않고 안전하게 `null` 또는 기본 관리자 계정(`u-1`)으로 대체 대입하여 100% 끊김 없는 저장을 보장합니다.
+
+---
+
 # Release Notes (v3.11.0 - 2026-07-25 16:23)
 
 ## 🩺 deliveries (배차/운송) 테이블 내 isCostSettled 컬럼 추가 및 DDL 싱크 보완
