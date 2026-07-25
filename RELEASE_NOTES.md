@@ -1,3 +1,11 @@
+# Release Notes (v1.4.1.Build.00000 - 2026-07-26 00:15)
+
+## 🎛️ 토글 버튼 스위치(Toggle Switch) UI 디자인 개편 & 수동 배차 적용
+- **공통 토글 스위치 디자인 시스템 구축 ([ToggleSwitch.tsx](file:///d:/GoogleDrive/RPA%20개발/01.AntiGravity/Kiyuen_Lift/src/components/ToggleSwitch.tsx), [index.css](file:///d:/GoogleDrive/RPA%20개발/01.AntiGravity/Kiyuen_Lift/src/index.css))**:
+  - 기존 일반 체크박스 형태의 입력 요소를 모던하고 시각적 직관성이 뛰어난 애니메이션 토글 스위치(Toggle Switch) 디자인으로 모듈화.
+- **배차 관리 폼 적용 ([TruckDispatch.tsx](file:///d:/GoogleDrive/RPA%20개발/01.AntiGravity/Kiyuen_Lift/src/pages/TruckDispatch.tsx))**:
+  - `[+ 신규 수동 배차 요청 생성]` 모달 및 기존 배차 정보 수정 모달 내의 `'고객 청구 여부 (billableToCustomer)'` 입력 폼을 토글 스위치 컴포넌트로 전면 전환.
+
 # Release Notes (v1.4.0.Build.00001 - 2026-07-26 00:03)
 
 ## 🐛 전 스토리지/DB 데이터 저장 성공 검증 및 무음 실패 방지(Zero Silent Failures) 개편

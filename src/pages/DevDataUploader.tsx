@@ -394,7 +394,13 @@ function mapKoreanRowToEnglish(row: Record<string, string>, schema: TableDef): R
     }
     if (val === undefined || val === null) {
       const keys = Object.keys(row);
-      const foundKey = keys.find(k => k.toLowerCase() === field.key.toLowerCase() || k.trim() === field.label.trim());
+      const foundKey = keys.find(k => {
+        const cleanK = k.replace(/\s/g, '').toLowerCase();
+        const cleanKey = field.key.replace(/\s/g, '').toLowerCase();
+        const cleanLabel = field.label.replace(/\s/g, '').toLowerCase();
+        const shortLabel = field.label.split('(')[0].replace(/\s/g, '').toLowerCase();
+        return cleanK === cleanKey || cleanK === cleanLabel || (shortLabel && cleanK.includes(shortLabel));
+      });
       if (foundKey) val = row[foundKey];
     }
     
@@ -500,8 +506,11 @@ function validateRows(rows: Record<string, string>[], schema: TableDef): Validat
       if (val === undefined || val === null || val.trim() === '') return; // 선택 필드, 비어있으면 통과
 
       // 타입 검사
-      if (field.type === 'number' && isNaN(Number(val))) {
-        errors.push({ row: rowNum, field: fieldDisplayName, message: `숫자여야 합니다. (입력값: "${val}")` });
+      if (field.type === 'number') {
+        const cleanVal = val.replace(/,/g, '');
+        if (isNaN(Number(cleanVal))) {
+          errors.push({ row: rowNum, field: fieldDisplayName, message: `숫자여야 합니다. (입력값: "${val}")` });
+        }
       }
       if (field.type === 'boolean' && val !== 'true' && val !== 'false') {
         errors.push({ row: rowNum, field: fieldDisplayName, message: `true 또는 false 여야 합니다. (입력값: "${val}")` });
@@ -514,12 +523,37 @@ function validateRows(rows: Record<string, string>[], schema: TableDef): Validat
   return errors;
 }
 
+function parseCSVLine(line: string): string[] {
+  const result: string[] = [];
+  let current = '';
+  let inQuotes = false;
+
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i];
+    if (char === '"') {
+      if (inQuotes && line[i + 1] === '"') {
+        current += '"';
+        i++;
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if (char === ',' && !inQuotes) {
+      result.push(current.trim().replace(/^"|"$/g, ''));
+      current = '';
+    } else {
+      current += char;
+    }
+  }
+  result.push(current.trim().replace(/^"|"$/g, ''));
+  return result;
+}
+
 function parseCSV(text: string): { headers: string[]; rows: Record<string, string>[] } {
-  const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+  const lines = text.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
   if (lines.length < 2) return { headers: [], rows: [] };
-  const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+  const headers = parseCSVLine(lines[0]);
   const rows = lines.slice(1).map(line => {
-    const values = line.split(',').map(v => v.trim().replace(/^"|"$/g, ''));
+    const values = parseCSVLine(line);
     const row: Record<string, string> = {};
     headers.forEach((h, i) => { row[h] = values[i] ?? ''; });
     return row;
@@ -535,7 +569,7 @@ function convertRow(row: Record<string, string>, schema: TableDef, index: number
       result[field.key] = null;
       return;
     }
-    if (field.type === 'number') result[field.key] = Number(val);
+    if (field.type === 'number') result[field.key] = Number(val.replace(/,/g, ''));
     else if (field.type === 'boolean') result[field.key] = val === 'true';
     else result[field.key] = val.trim();
   });

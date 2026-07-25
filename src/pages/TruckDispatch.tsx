@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
+import { ToggleSwitch } from '../components/ToggleSwitch';
 import { 
   Truck, Check, AlertCircle, Plus, Trash2, Clock, Layers, 
   FileText, Copy, Lock, CreditCard, CheckCircle, RefreshCw, X
@@ -498,11 +499,13 @@ export const TruckDispatch: React.FC = () => {
                       <input type="date" value={scheduledDate} onChange={e => setScheduledDate(e.target.value)} disabled={selectedDelivery.reconciliationStatus === 'PAID'} required />
                     </div>
                     <div>
-                      <label>비용 부담 주체 (고객 청구 여부)</label>
-                      <label style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '8px', cursor: 'pointer' }}>
-                        <input type="checkbox" checked={billableToCust} onChange={e => setBillableToCust(e.target.checked)} disabled={selectedDelivery.reconciliationStatus === 'PAID'} />
-                        <span>고객사 청구 대상 (billableToCustomer)</span>
-                      </label>
+                      <label style={{ display: 'block', marginBottom: '8px', fontSize: '13px', fontWeight: '600' }}>비용 부담 주체 (고객 청구 여부)</label>
+                      <ToggleSwitch 
+                        checked={billableToCust} 
+                        onChange={setBillableToCust} 
+                        disabled={selectedDelivery.reconciliationStatus === 'PAID'} 
+                        label="고객사 청구 대상 (billableToCustomer)" 
+                      />
                     </div>
                   </div>
 
@@ -830,11 +833,12 @@ export const TruckDispatch: React.FC = () => {
                   <input type="number" value={manualExpectedCost} onChange={e => setManualExpectedCost(parseInt(e.target.value) || 0)} />
                 </div>
                 <div>
-                  <label>고객 청구 여부</label>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '8px' }}>
-                    <input type="checkbox" checked={manualBillable} onChange={e => setManualBillable(e.target.checked)} />
-                    <span>고객 청구 대상</span>
-                  </label>
+                  <label style={{ display: 'block', marginBottom: '8px', fontSize: '13px', fontWeight: '600' }}>고객 청구 여부</label>
+                  <ToggleSwitch 
+                    checked={manualBillable} 
+                    onChange={setManualBillable} 
+                    label="고객 청구 대상" 
+                  />
                 </div>
               </div>
 
