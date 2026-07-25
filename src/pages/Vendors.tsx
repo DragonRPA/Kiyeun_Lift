@@ -299,17 +299,16 @@ export const Vendors: React.FC = () => {
         <div className="table-container" style={{ maxHeight: 'calc(850px - 260px)', overflowY: 'auto', overscrollBehavior: 'contain' }}>
           <table className="table" style={{ width: '100%', margin: 0, tableLayout: 'fixed' }}>
             <colgroup>
-              <col style={{ width: '160px' }} />
-              <col style={{ width: '160px' }} />
-              <col style={{ width: '110px' }} />
-              <col style={{ width: '80px' }} />
-              <col style={{ width: '110px' }} />
-              <col style={{ width: '160px' }} />
-              <col style={{ width: '140px' }} />
-              <col style={{ width: '60px' }} />
-              <col style={{ width: '100px' }} />
-              <col style={{ width: '100px' }} />
-              {canSave && <col style={{ width: '72px' }} />}
+              <col style={{ width: '145px' }} />{/* 상호명 */}
+              <col style={{ width: '150px' }} />{/* 매입/거래 속성 */}
+              <col style={{ width: '105px' }} />{/* 사업자등록번호 */}
+              <col style={{ width: '72px' }} /> {/* 대표자명 */}
+              <col style={{ width: '80px' }} /> {/* 담당자 */}
+              <col style={{ width: '100px' }} />{/* 연락처 */}
+              <col style={{ width: '130px' }} />{/* 주소 */}
+              <col style={{ width: '140px' }} />{/* 이메일 */}
+              <col style={{ width: '52px' }} /> {/* 상태 */}
+              {canSave && <col style={{ width: '62px' }} />}{/* 관리 */}
             </colgroup>
             <thead>
               <tr>
