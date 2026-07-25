@@ -526,5 +526,26 @@
   - `schema.sql`: `permissions` 테이블 DDL의 `role` 컬럼 제약조건을 `role TEXT DEFAULT 'USER'`로 변경하여 스키마 정합성 보장.
   - **버전 산정**: 레거시 DB 제약조건 우회 & Hotfix ➔ **`v1.3.4.Build.00003`** (Build 1 증가)
 
+## [2026-07-25] [반영완료] 사용자 및 메뉴 권한 통합 관리 테이블 헤더 전체선택/전체해제 일괄 버튼 추가 (v1.3.5.Build.00000)
+- **요구사항**: 
+  1. `사용자 및 메뉴 권한 통합 관리 (UsersPermissions.tsx)` 메뉴의 `상위-하위 계층 메뉴 권한 매트릭스` 테이블 컬럼 헤더(`조회 (View)`, `저장 (Save)`)에 모든 카테고리 전체 메뉴 권한을 한 번에 선택/해제할 수 있는 최상위 `전체선택` / `전체해제` 버튼 추가.
+- **해결 설계**:
+  - `UsersPermissions.tsx`: 
+    - `handleToggleAllMenus(type: 'view' | 'save')` 일괄 권한 토글 핸들러 구현 (급여정산 단 1명 소유 정책 자동 검증 연동).
+    - 테이블 `<thead>`의 `조회 (View)` 및 `저장 (Save)` 컬럼 헤더 셀에 최상위 일괄 `전체선택` / `전체해제` 버튼 UI 배치.
+    - 선택된 임직원의 전체 메뉴 조회/저장 권한 동시 충족 여부를 판단하여 `전체선택` <-> `전체해제` 버튼 텍스트 및 토글 색상 동적 반전 적용.
+  - **버전 산정**: 메뉴 권한 일괄 토글 편의 기능 확장 ➔ **`v1.3.5.Build.00000`** (Z 증가: Feature 확장)
+
+## [2026-07-25] [반영완료] permissions 테이블 updatedAt NOT NULL 제약조건 타임스탬프 자동주입 패치 (v1.3.5.Build.00001)
+- **요구사항**: 
+  1. 권한 저장 시 `null value in column "updatedAt" of relation "permissions" violates not-null constraint` 예외 발생 차단.
+  2. 원격 Supabase DB의 구 스펙 레거시 `"updatedAt"` NOT NULL 제약 조건 대응.
+- **해결 설계**:
+  - `AppContext.tsx`: `updatePermissions` 및 `saveUser` 내 Supabase upsert payload에 `updatedAt: new Date().toISOString()`, `createdAt: p.createdAt || new Date().toISOString()` 타임스탬프 자동 주입하여 제약조건 완벽 우회.
+  - `schema.sql`: `permissions` 테이블 DDL의 `"updatedAt"` 컬럼 정의를 `TEXT` (NULL 허용)으로 유지 및 보정.
+  - **버전 산정**: 레거시 DB 타임스탬프 제약조건 우회 & Hotfix ➔ **`v1.3.5.Build.00001`** (Build 1 증가)
+
+
+
 
 

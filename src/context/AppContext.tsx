@@ -362,12 +362,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     try {
       db.permissions = updated;
       if (supabase) {
-        // Supabase DB 스키마 컬럼명 불일치(userId vs user_id) 및 레거시 role NOT NULL 제약 조건 우회를 위해 기본값 부여
+        // Supabase DB 스키마 컬럼명 불일치 및 레거시 role/updatedAt NOT NULL 제약 조건 우회를 위해 타임스탬프 & 기본값 부여
+        const nowStr = new Date().toISOString();
         const payload = updated.map(p => ({
           ...p,
           userId: p.userId,
           user_id: p.userId,
-          role: (p as any).role || 'USER'
+          role: (p as any).role || 'USER',
+          createdAt: p.createdAt || nowStr,
+          updatedAt: nowStr
         }));
         const { error } = await supabase.from('permissions').upsert(payload as any[], { onConflict: 'id' });
         if (error) {
@@ -423,14 +426,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         ALL_MENU_IDS.forEach(menuId => {
           const exists = db.permissions.some(p => p.userId === newUser.id && p.menuId === menuId);
           if (!exists) {
+            const now = new Date().toISOString();
             db.insertRow<MenuPermission>('permissions', {
               id: `perm-${newUser.id}-${menuId}`,
               userId: newUser.id,
               menuId,
               canView: true,
               canSave: true,
-              createdAt: new Date().toISOString()
-            });
+              createdAt: now,
+              updatedAt: now
+            } as any);
           }
         });
       }

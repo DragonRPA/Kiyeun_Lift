@@ -282,6 +282,65 @@ export const UsersPermissions: React.FC = () => {
     });
   };
 
+  // 모든 카테고리 전체 메뉴 최상위 일괄 권한 설정 (조회/저장)
+  const handleToggleAllMenus = (type: 'view' | 'save') => {
+    if (!canSave || !selectedUserId) return;
+    const targetUser = localUsers.find(u => u.id === selectedUserId);
+    if (targetUser?.id === 'u-1' || targetUser?.id === 'sys-admin' || targetUser?.loginId === 'admin') {
+      alert('시스템 최고관리자 계정의 메뉴 권한은 변경할 수 없습니다.');
+      return;
+    }
+
+    const allItems = MENU_CATEGORIES.flatMap(grp => grp.items);
+    const allChecked = allItems.every(item => {
+      const perm = localPermissions.find(p => p.userId === selectedUserId && p.menuId === item.id);
+      return type === 'view' ? perm?.canView : perm?.canSave;
+    });
+
+    const targetVal = !allChecked;
+
+    setLocalPermissions(prev => {
+      let updatedList = [...prev];
+
+      allItems.forEach(item => {
+        if (item.id === 'payroll' && targetVal) {
+          const existingPayrollHolder = updatedList.find(p => {
+            if (p.menuId !== 'payroll' || p.userId === selectedUserId) return false;
+            const u = localUsers.find(user => user.id === p.userId);
+            return u && u.role !== 'ADMIN' && (p.canView || p.canSave);
+          });
+          if (existingPayrollHolder) return;
+        }
+
+        const idx = updatedList.findIndex(p => p.userId === selectedUserId && p.menuId === item.id);
+        if (idx > -1) {
+          const cur = updatedList[idx];
+          if (type === 'view') {
+            const nextView = targetVal;
+            const nextSave = nextView ? cur.canSave : false;
+            updatedList[idx] = { ...cur, canView: nextView, canSave: nextSave };
+          } else {
+            const nextSave = targetVal;
+            const nextView = nextSave ? true : cur.canView;
+            updatedList[idx] = { ...cur, canView: nextView, canSave: nextSave };
+          }
+        } else {
+          updatedList.push({
+            id: `perm-${selectedUserId}-${item.id}`,
+            userId: selectedUserId,
+            menuId: item.id,
+            canView: type === 'view' ? targetVal : targetVal,
+            canSave: type === 'save' ? targetVal : false,
+            createdAt: new Date().toISOString()
+          });
+        }
+      });
+
+      setIsDirty(true);
+      return updatedList;
+    });
+  };
+
   const handleSavePermissions = async () => {
     if (!canSave) return;
     try {
@@ -399,9 +458,71 @@ export const UsersPermissions: React.FC = () => {
             <table style={{ width: '100%', margin: 0 }}>
               <thead>
                 <tr style={{ backgroundColor: 'var(--bg-app)' }}>
-                  <th style={{ padding: '10px 14px' }}>상위 카테고리 및 하위 메뉴명</th>
-                  <th style={{ width: '120px', textAlign: 'center' }}>조회 (View)</th>
-                  <th style={{ width: '120px', textAlign: 'center' }}>저장 (Save)</th>
+                  <th style={{ padding: '10px 14px', verticalAlign: 'middle' }}>상위 카테고리 및 하위 메뉴명</th>
+                  <th style={{ width: '135px', textAlign: 'center', padding: '8px 4px' }}>
+                    {(() => {
+                      const isSuperAdminUser = selectedUser?.id === 'u-1' || selectedUser?.id === 'sys-admin' || selectedUser?.loginId === 'admin';
+                      const allItems = MENU_CATEGORIES.flatMap(g => g.items);
+                      const isAllGlobalViewChecked = allItems.length > 0 && allItems.every(item => {
+                        const p = localPermissions.find(x => x.userId === selectedUserId && x.menuId === item.id);
+                        return isSuperAdminUser ? true : (p?.canView ?? false);
+                      });
+                      return (
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+                          <span style={{ fontSize: '13px' }}>조회 (VIEW)</span>
+                          <button
+                            type="button"
+                            disabled={!canSave || isSuperAdminUser}
+                            onClick={() => handleToggleAllMenus('view')}
+                            style={{
+                              fontSize: '11px',
+                              padding: '2px 8px',
+                              borderRadius: '4px',
+                              border: '1px solid var(--border-color)',
+                              backgroundColor: isAllGlobalViewChecked ? 'var(--primary)' : 'var(--bg-card)',
+                              color: isAllGlobalViewChecked ? '#fff' : 'var(--text-secondary)',
+                              cursor: canSave && !isSuperAdminUser ? 'pointer' : 'default',
+                              fontWeight: '700'
+                            }}
+                          >
+                            {isAllGlobalViewChecked ? '전체해제' : '전체선택'}
+                          </button>
+                        </div>
+                      );
+                    })()}
+                  </th>
+                  <th style={{ width: '135px', textAlign: 'center', padding: '8px 4px' }}>
+                    {(() => {
+                      const isSuperAdminUser = selectedUser?.id === 'u-1' || selectedUser?.id === 'sys-admin' || selectedUser?.loginId === 'admin';
+                      const allItems = MENU_CATEGORIES.flatMap(g => g.items);
+                      const isAllGlobalSaveChecked = allItems.length > 0 && allItems.every(item => {
+                        const p = localPermissions.find(x => x.userId === selectedUserId && x.menuId === item.id);
+                        return isSuperAdminUser ? true : (p?.canSave ?? false);
+                      });
+                      return (
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+                          <span style={{ fontSize: '13px' }}>저장 (SAVE)</span>
+                          <button
+                            type="button"
+                            disabled={!canSave || isSuperAdminUser}
+                            onClick={() => handleToggleAllMenus('save')}
+                            style={{
+                              fontSize: '11px',
+                              padding: '2px 8px',
+                              borderRadius: '4px',
+                              border: '1px solid var(--border-color)',
+                              backgroundColor: isAllGlobalSaveChecked ? 'var(--success)' : 'var(--bg-card)',
+                              color: isAllGlobalSaveChecked ? '#fff' : 'var(--text-secondary)',
+                              cursor: canSave && !isSuperAdminUser ? 'pointer' : 'default',
+                              fontWeight: '700'
+                            }}
+                          >
+                            {isAllGlobalSaveChecked ? '전체해제' : '전체선택'}
+                          </button>
+                        </div>
+                      );
+                    })()}
+                  </th>
                 </tr>
               </thead>
               <tbody>

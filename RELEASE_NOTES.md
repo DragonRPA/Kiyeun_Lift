@@ -1,3 +1,13 @@
+# Release Notes (v1.3.5.Build.00001 - 2026-07-25 21:26)
+
+## ✨ 권한 관리 테이블 헤더 최상위 전체선택/전체해제 버튼 추가 & updatedAt 타임스탬프 자동주입
+### UsersPermissions.tsx — 최상위 일괄 전체선택/전체해제 버튼 구현
+- `상위-하위 계층 메뉴 권한 매트릭스` 테이블 컬럼 헤더(`조회 (VIEW)`, `저장 (SAVE)`)에 모든 카테고리의 전체 메뉴를 한 번에 일괄 지정/회수 가능한 최상위 `전체선택` / `전체해제` 버튼을 추가했습니다.
+- 선택한 직원의 전체 권한 충족 여부에 따라 버튼의 Label과 색상(`전체선택` <-> `전체해제`)이 유기적으로 동적 전환됩니다.
+
+### AppContext.tsx — permissions upsert 시 updatedAt/createdAt 자동 바인딩
+- Supabase 원격 DB의 `permissions` 테이블에 `"updatedAt"` 컬럼이 `NOT NULL` 제약조건으로 구성된 경우 발생하던 `null value in column "updatedAt" ... violates not-null constraint` 에러를 방지하기 위해 payload에 ISO 타임스탬프를 명시적으로 주입하도록 개편했습니다.
+
 # Release Notes (v1.3.4.Build.00003 - 2026-07-25 21:21)
 
 ## 🐛 permissions 테이블 role NOT NULL 레거시 제약 조건 우회 패치
