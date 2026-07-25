@@ -135,17 +135,21 @@ export const RentAssets: React.FC = () => {
     setShowReturnModal(true);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!canSave || !editingAsset || !editingAsset.assetNo || !editingAsset.modelName) {
       alert('필수 입력을 확인해 주세요.');
       return;
     }
 
-    registerRentedAsset(editingAsset);
-    alert(`임차 자산(${editingAsset.assetNo}) 등록/수정이 완료되었습니다.`);
-    setShowModal(false);
-    setEditingAsset(null);
+    try {
+      await registerRentedAsset(editingAsset);
+      alert(`임차 자산(${editingAsset.assetNo}) 등록/수정이 성공적으로 완료되었습니다.`);
+      setShowModal(false);
+      setEditingAsset(null);
+    } catch (err: any) {
+      console.error('RentAsset save failed:', err);
+    }
   };
 
   const handleReturnSubmit = (e: React.FormEvent) => {

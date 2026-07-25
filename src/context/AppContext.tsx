@@ -92,7 +92,7 @@ interface AppContextType {
   // Asset Mutators
   acquireAsset: (assetData: Partial<Asset>) => void;
   disposeAsset: (assetId: string, disposalData: { disposalDate: string; disposalPrice: number; buyer: string; billingYm?: string }) => void;
-  registerRentedAsset: (assetData: Partial<Asset>) => void;
+  registerRentedAsset: (assetData: Partial<Asset>) => Promise<any>;
   returnRentedAsset: (assetId: string, returnDate: string) => void;
   
   // Consumables Mutators
@@ -940,16 +940,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     refreshAllData();
   };
 
-  const registerRentedAsset = (assetData: Partial<Asset>) => {
+  const registerRentedAsset = async (assetData: Partial<Asset>) => {
+    let result;
     const existing = db.assets.find(a => a.assetNo === assetData.assetNo);
     if (existing) {
-      db.updateRow<Asset>('assets', existing.id, {
+      result = db.updateRow<Asset>('assets', existing.id, {
         ...assetData,
         ownerType: 'RENTED',
         updatedAt: new Date().toISOString()
       });
     } else {
-      db.insertRow<Asset>('assets', {
+      result = db.insertRow<Asset>('assets', {
         modelName: assetData.modelName || '',
         assetNo: assetData.assetNo || '',
         serialNo: assetData.serialNo || '',
@@ -977,7 +978,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updatedAt: new Date().toISOString()
       });
     }
+    try {
+      await db.awaitPendingWrites();
+    } catch (err: any) {
+      console.error('registerRentedAsset Supabase sync error:', err);
+      showErrorModal(`⚠️ 임차 자산 저장 중 원격 DB 동기화 오류가 발생했습니다:\n${err.message || err.details || JSON.stringify(err)}`, 'DB 동기화 오류');
+      throw err;
+    }
     refreshAllData();
+    return result;
   };
 
   const returnRentedAsset = (assetId: string, returnDate: string) => {

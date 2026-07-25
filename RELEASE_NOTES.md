@@ -1,3 +1,9 @@
+# Release Notes (v1.4.2.Build.00002 - 2026-07-26 01:20)
+
+## 🔐 임차 자산 등록 저장 동기화 & Zero Silent Failures 검증 강화
+- **`AppContext.tsx` (`registerRentedAsset`)**: `async` 함수로 전환 및 `await db.awaitPendingWrites()` 동기 검증 추가. 원격 DB 저장 중 오류(RLS 정책 위반 등) 발생 시 `showErrorModal`로 원인 즉시 표출.
+- **`RentAssets.tsx` (`handleSubmit`)**: `async/await` 처리 추가. DB 저장이 완전 검증된 후에만 성공 팝업 표출 및 모달이 닫히도록 개선.
+
 # Release Notes (v1.4.2.Build.00001 - 2026-07-26 01:10)
 
 ## 🔍 전체 페이지 빈 조회 결과 UX 개선 — 조건 분기 명시적 안내
