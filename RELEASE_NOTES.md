@@ -1,3 +1,10 @@
+# Release Notes (v1.4.2.Build.00003 - 2026-07-26 01:30)
+
+## 🛡️ DDL 패치 생성기 42710 오류 수정 — DROP IF EXISTS 패턴 적용
+- **문제**: DB 스키마 정합성 검증 도구의 RLS Policy DDL 패치 생성 시, 이미 정책이 존재하는 테이블에 `CREATE POLICY`를 재실행하면 `ERROR: 42710: policy "allow_anon_select" already exists` 오류 발생.
+- **해결**: 3개 위치의 DDL 생성 코드 모두 `DROP POLICY IF EXISTS` → `CREATE POLICY` 순서로 변경하여, 기존 정책 존재 유무와 무관하게 항상 idempotent(멱등)하게 실행되도록 수정.
+- **수정 파일**: `DevDataUploader.tsx` (`generateRlsPolicyDDL` 헬퍼 및 단일 테이블 에러 안내 문구), `ErrorModal.tsx` (인라인 DDL 패치 생성)
+
 # Release Notes (v1.4.2.Build.00002 - 2026-07-26 01:20)
 
 ## 🔐 임차 자산 등록 저장 동기화 & Zero Silent Failures 검증 강화

@@ -920,7 +920,7 @@ export const DevDataUploader: React.FC = () => {
             totalFailed += batch.length;
             console.error(`Bulk upsert error for ${schema.supabaseTable}:`, error);
             const isRlsError = error.code === '42501' || error.message.includes('row-level security');
-            const rlsSolution = isRlsError ? `\n💡 [원인 및 복구 가이드] ${schema.supabaseTable} 테이블의 RLS(행 수준 보안) 정책이 쓰기를 차단하고 있습니다.\n아래 Policy DDL을 Supabase SQL Editor에서 실행하세요 (RLS는 유지됨):\n\nCREATE POLICY "allow_anon_select" ON "${schema.supabaseTable}" FOR SELECT TO anon USING (true);\nCREATE POLICY "allow_anon_insert" ON "${schema.supabaseTable}" FOR INSERT TO anon WITH CHECK (true);\nCREATE POLICY "allow_anon_update" ON "${schema.supabaseTable}" FOR UPDATE TO anon USING (true) WITH CHECK (true);\nCREATE POLICY "allow_authenticated_select" ON "${schema.supabaseTable}" FOR SELECT TO authenticated USING (true);\nCREATE POLICY "allow_authenticated_insert" ON "${schema.supabaseTable}" FOR INSERT TO authenticated WITH CHECK (true);\nCREATE POLICY "allow_authenticated_update" ON "${schema.supabaseTable}" FOR UPDATE TO authenticated USING (true) WITH CHECK (true);\n\n(상단 'DB 스키마 정합성 검증 실행' 버튼을 누르시면 전체 테이블 Policy DDL이 자동 생성됩니다.)\n` : '';
+            const rlsSolution = isRlsError ? `\n💡 [원인 및 복구 가이드] ${schema.supabaseTable} 테이블의 RLS(행 수준 보안) 정책이 쓰기를 차단하고 있습니다.\n아래 Policy DDL을 Supabase SQL Editor에서 실행하세요 (RLS는 유지됨):\n\nDROP POLICY IF EXISTS "allow_anon_select" ON "${schema.supabaseTable}";\nDROP POLICY IF EXISTS "allow_anon_insert" ON "${schema.supabaseTable}";\nDROP POLICY IF EXISTS "allow_anon_update" ON "${schema.supabaseTable}";\nDROP POLICY IF EXISTS "allow_authenticated_select" ON "${schema.supabaseTable}";\nDROP POLICY IF EXISTS "allow_authenticated_insert" ON "${schema.supabaseTable}";\nDROP POLICY IF EXISTS "allow_authenticated_update" ON "${schema.supabaseTable}";\nCREATE POLICY "allow_anon_select" ON "${schema.supabaseTable}" FOR SELECT TO anon USING (true);\nCREATE POLICY "allow_anon_insert" ON "${schema.supabaseTable}" FOR INSERT TO anon WITH CHECK (true);\nCREATE POLICY "allow_anon_update" ON "${schema.supabaseTable}" FOR UPDATE TO anon USING (true) WITH CHECK (true);\nCREATE POLICY "allow_authenticated_select" ON "${schema.supabaseTable}" FOR SELECT TO authenticated USING (true);\nCREATE POLICY "allow_authenticated_insert" ON "${schema.supabaseTable}" FOR INSERT TO authenticated WITH CHECK (true);\nCREATE POLICY "allow_authenticated_update" ON "${schema.supabaseTable}" FOR UPDATE TO authenticated USING (true) WITH CHECK (true);\n\n(상단 'DB 스키마 정합성 검증 실행' 버튼을 누르시면 전체 테이블 Policy DDL이 자동 생성됩니다.)\n` : '';
             errDetailsMsg += `[시트/테이블: ${schema.supabaseTable}]\n[Supabase 에러 코드: ${error.code || '미지정'}]\n[메시지: ${error.message}]${rlsSolution}\n[상세 내역: ${error.details || '없음'}]\n\n`;
           } else {
             totalSuccess += batch.length;
@@ -1056,6 +1056,12 @@ export const DevDataUploader: React.FC = () => {
     const generateRlsPolicyDDL = (tableName: string): string => {
       const t = tableName;
       return [
+        `DROP POLICY IF EXISTS "allow_anon_select" ON "${t}";`,
+        `DROP POLICY IF EXISTS "allow_anon_insert" ON "${t}";`,
+        `DROP POLICY IF EXISTS "allow_anon_update" ON "${t}";`,
+        `DROP POLICY IF EXISTS "allow_authenticated_select" ON "${t}";`,
+        `DROP POLICY IF EXISTS "allow_authenticated_insert" ON "${t}";`,
+        `DROP POLICY IF EXISTS "allow_authenticated_update" ON "${t}";`,
         `CREATE POLICY "allow_anon_select" ON "${t}" FOR SELECT TO anon USING (true);`,
         `CREATE POLICY "allow_anon_insert" ON "${t}" FOR INSERT TO anon WITH CHECK (true);`,
         `CREATE POLICY "allow_anon_update" ON "${t}" FOR UPDATE TO anon USING (true) WITH CHECK (true);`,

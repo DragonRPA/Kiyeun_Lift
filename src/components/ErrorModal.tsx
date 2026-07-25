@@ -57,6 +57,12 @@ export const ErrorModal: React.FC<ErrorModalProps> = ({
     return tableList
       .map(t => [
         `-- RLS 유지 상태에서 ${t} 테이블 anon/authenticated 롤 허용`,
+        `DROP POLICY IF EXISTS "allow_anon_select" ON "${t}";`,
+        `DROP POLICY IF EXISTS "allow_anon_insert" ON "${t}";`,
+        `DROP POLICY IF EXISTS "allow_anon_update" ON "${t}";`,
+        `DROP POLICY IF EXISTS "allow_authenticated_select" ON "${t}";`,
+        `DROP POLICY IF EXISTS "allow_authenticated_insert" ON "${t}";`,
+        `DROP POLICY IF EXISTS "allow_authenticated_update" ON "${t}";`,
         `CREATE POLICY "allow_anon_select" ON "${t}" FOR SELECT TO anon USING (true);`,
         `CREATE POLICY "allow_anon_insert" ON "${t}" FOR INSERT TO anon WITH CHECK (true);`,
         `CREATE POLICY "allow_anon_update" ON "${t}" FOR UPDATE TO anon USING (true) WITH CHECK (true);`,
