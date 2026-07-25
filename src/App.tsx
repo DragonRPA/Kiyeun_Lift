@@ -132,6 +132,8 @@ const App: React.FC = () => {
         { id: 'customer', name: '고객 관리', icon: <Users size={16} />, component: <Customers /> },
         { id: 'contract', name: '계약 관리', icon: <UserCheck size={16} />, component: <Contracts /> },
         { id: 'billing', name: '청구 / 수납 관리', icon: <CreditCard size={16} />, component: <Billings /> },
+        { id: 'smart_dispatch', name: '스마트 출고 요청', icon: <Zap size={16} />, component: <SmartDispatch /> },
+        { id: 'smart_return', name: '스마트 회수 요청', icon: <Zap size={16} />, component: <SmartReturn /> },
       ]
     },
     {
@@ -152,8 +154,6 @@ const App: React.FC = () => {
       items: [
         { id: 'delivery', name: '배차 / 운송 관리', icon: <Truck size={16} />, component: <TruckDispatch /> },
         { id: 'transport_master', name: '운송 거래처 / 기사 관리', icon: <Settings size={16} />, component: <TransportMaster /> },
-        { id: 'smart_dispatch', name: '스마트 출고 요청', icon: <Zap size={16} />, component: <SmartDispatch /> },
-        { id: 'smart_return', name: '스마트 회수 요청', icon: <Zap size={16} />, component: <SmartReturn /> },
       ]
     },
     {
@@ -499,16 +499,16 @@ const App: React.FC = () => {
                   {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                 </button>
 
-                {/* 하위 메뉴 서브 항목 그룹 */}
+                {/* 하위 메뉴 서브 항목 그룹 (슬림하고 일정한 들여쓰기) */}
                 {isExpanded && (
                   <div style={{
                     display: 'flex',
                     flexDirection: 'column',
                     gap: '2px',
                     marginTop: '2px',
-                    paddingLeft: '10px',
-                    borderLeft: '2px solid var(--border-color)',
-                    marginLeft: '12px'
+                    paddingLeft: '6px',
+                    borderLeft: '2px solid rgba(59, 130, 246, 0.2)',
+                    marginLeft: '14px'
                   }}>
                     {visibleItems.map(item => {
                       const isItemActive = activeTab === item.id;

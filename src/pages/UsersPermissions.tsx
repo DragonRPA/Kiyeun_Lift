@@ -24,7 +24,9 @@ export const MENU_CATEGORIES: MenuCategoryGroup[] = [
     items: [
       { id: 'customer', name: '고객 관리 (담당자/현장)' },
       { id: 'contract', name: '계약 관리' },
-      { id: 'billing', name: '청구/수납 관리' }
+      { id: 'billing', name: '청구/수납 관리' },
+      { id: 'smart_dispatch', name: '스마트 출고 요청' },
+      { id: 'smart_return', name: '스마트 회수 요청' }
     ]
   },
   {
@@ -42,9 +44,7 @@ export const MENU_CATEGORIES: MenuCategoryGroup[] = [
     name: '배차 / 운송관리',
     items: [
       { id: 'delivery', name: '배차/운송 관리 (비용정산)' },
-      { id: 'transport_master', name: '운송 거래처/기사 관리' },
-      { id: 'smart_dispatch', name: '스마트 출고 요청' },
-      { id: 'smart_return', name: '스마트 회수 요청' }
+      { id: 'transport_master', name: '운송 거래처/기사 관리' }
     ]
   },
   {
