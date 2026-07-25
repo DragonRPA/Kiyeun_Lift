@@ -43,7 +43,8 @@ CREATE TABLE departments (
     name TEXT NOT NULL UNIQUE,
     "parentDepartmentId" TEXT REFERENCES departments(id),
     "managerId" TEXT, -- users.id 참조 (순환 참조 문제로 추후 ALTER 처리하거나 논리적 유지)
-    "createdAt" TEXT NOT NULL
+    "createdAt" TEXT NOT NULL,
+    "updatedAt" TEXT NOT NULL
 );
 
 -- 2. 사용자 테이블 (users) - 확장(인사노무)
@@ -64,7 +65,8 @@ CREATE TABLE users (
     phone TEXT,
     email TEXT,
     "profileImageUrl" TEXT,
-    "createdAt" TEXT NOT NULL
+    "createdAt" TEXT NOT NULL,
+    "updatedAt" TEXT NOT NULL
 );
 
 -- 3. 매입 거래처 테이블 (vendors) - 신설
@@ -77,7 +79,8 @@ CREATE TABLE vendors (
     contact TEXT,
     "bankAccount" TEXT,
     memo TEXT,
-    "createdAt" TEXT NOT NULL
+    "createdAt" TEXT NOT NULL,
+    "updatedAt" TEXT NOT NULL
 );
 
 -- 4. 메뉴 권한 테이블 (permissions)
@@ -86,7 +89,9 @@ CREATE TABLE permissions (
     role TEXT NOT NULL,
     "menuId" TEXT NOT NULL,
     "canView" BOOLEAN NOT NULL DEFAULT FALSE,
-    "canSave" BOOLEAN NOT NULL DEFAULT FALSE
+    "canSave" BOOLEAN NOT NULL DEFAULT FALSE,
+    "createdAt" TEXT NOT NULL,
+    "updatedAt" TEXT NOT NULL
 );
 
 -- 5. 고객 테이블 (customers)
@@ -101,7 +106,8 @@ CREATE TABLE customers (
     "repEmail" TEXT,
     "driveFolderId" TEXT,
     "prepaidBalance" DOUBLE PRECISION NOT NULL DEFAULT 0,
-    "createdAt" TEXT NOT NULL
+    "createdAt" TEXT NOT NULL,
+    "updatedAt" TEXT NOT NULL
 );
 
 -- 6. 고객 담당자 및 현장 (customer_contacts, customer_sites)
@@ -112,7 +118,8 @@ CREATE TABLE customer_contacts (
     position TEXT,
     contact TEXT,
     email TEXT,
-    "createdAt" TEXT NOT NULL
+    "createdAt" TEXT NOT NULL,
+    "updatedAt" TEXT NOT NULL
 );
 
 CREATE TABLE customer_sites (
@@ -123,7 +130,8 @@ CREATE TABLE customer_sites (
     "contactName" TEXT,
     contact TEXT,
     email TEXT,
-    "createdAt" TEXT NOT NULL
+    "createdAt" TEXT NOT NULL,
+    "updatedAt" TEXT NOT NULL
 );
 
 -- 7. 제품 마스터 테이블 (products)
@@ -137,7 +145,8 @@ CREATE TABLE products (
     "specSheetUrl" TEXT,
     "emergencyGuideUrl" TEXT,
     "isActive" BOOLEAN DEFAULT TRUE NOT NULL,
-    "createdAt" TEXT NOT NULL
+    "createdAt" TEXT NOT NULL,
+    "updatedAt" TEXT NOT NULL
 );
 
 -- 8. 자산 대장 테이블 (assets)
@@ -200,7 +209,9 @@ CREATE TABLE consumable_purchase_items (
     "requestId" TEXT REFERENCES consumable_purchase_requests(id) ON DELETE CASCADE,
     "consumableId" TEXT REFERENCES consumables(id),
     "requestQty" DOUBLE PRECISION NOT NULL,
-    "inboundQty" DOUBLE PRECISION NOT NULL DEFAULT 0 -- 누적 입고 수량
+    "inboundQty" DOUBLE PRECISION NOT NULL DEFAULT 0, -- 누적 입고 수량
+    "createdAt" TEXT NOT NULL,
+    "updatedAt" TEXT NOT NULL
 );
 
 -- 12. 소모품 입출고 로그 (consumable_logs) - 증빙 확장
@@ -217,7 +228,8 @@ CREATE TABLE consumable_logs (
     "evidenceFileUrl" TEXT, -- 거래명세서 등 매입 증빙 파일
     description TEXT,
     "actionDate" TEXT NOT NULL,
-    "createdAt" TEXT NOT NULL
+    "createdAt" TEXT NOT NULL,
+    "updatedAt" TEXT NOT NULL
 );
 
 -- 13. 계약 테이블 (contracts) - 영업사원 추가
@@ -247,7 +259,8 @@ CREATE TABLE contract_assets (
     "dailyRentalFee" DOUBLE PRECISION NOT NULL DEFAULT 0,
     "startDate" TEXT NOT NULL,
     "endDate" TEXT NOT NULL,
-    "createdAt" TEXT NOT NULL
+    "createdAt" TEXT NOT NULL,
+    "updatedAt" TEXT NOT NULL
 );
 
 CREATE TABLE contract_history (
@@ -256,7 +269,8 @@ CREATE TABLE contract_history (
     "changeType" TEXT CHECK ("changeType" IN ('REGISTER', 'EXTEND', 'SHORTEN', 'SUCCEED', 'TERMINATE')) NOT NULL,
     "description" TEXT,
     "changeDate" TEXT NOT NULL,
-    "createdAt" TEXT NOT NULL
+    "createdAt" TEXT NOT NULL,
+    "updatedAt" TEXT NOT NULL
 );
 
 -- 15. 배차 및 운송 테이블 (deliveries) - 운송사 및 상하차 일시 확장
@@ -304,7 +318,8 @@ CREATE TABLE billing_details (
     "unitPrice" DOUBLE PRECISION NOT NULL DEFAULT 0,
     amount DOUBLE PRECISION NOT NULL DEFAULT 0,
     description TEXT,
-    "createdAt" TEXT NOT NULL
+    "createdAt" TEXT NOT NULL,
+    "updatedAt" TEXT NOT NULL
 );
 
 -- 18. 매입 청구 마스터 (purchase_billings) - 신설
@@ -328,7 +343,8 @@ CREATE TABLE purchase_billing_details (
     "expenseType" TEXT CHECK ("expenseType" IN ('TRANSPORT', 'REPAIR', 'RENTAL_FEE', 'CONSUMABLE', 'OTHER')) NOT NULL,
     "itemName" TEXT NOT NULL,
     amount DOUBLE PRECISION NOT NULL DEFAULT 0,
-    "createdAt" TEXT NOT NULL
+    "createdAt" TEXT NOT NULL,
+    "updatedAt" TEXT NOT NULL
 );
 
 -- 20. 매출 수납 테이블 (payments)
@@ -339,7 +355,8 @@ CREATE TABLE payments (
     method TEXT NOT NULL,
     memo TEXT,
     "paymentDate" TEXT NOT NULL,
-    "createdAt" TEXT NOT NULL
+    "createdAt" TEXT NOT NULL,
+    "updatedAt" TEXT NOT NULL
 );
 
 -- 21. 자산 수리 테이블 (repairs) - 외주 정비 및 영업 청구 판단 이원화
@@ -378,7 +395,9 @@ CREATE TABLE repair_consumables (
     "consumableId" TEXT REFERENCES consumables(id),
     quantity DOUBLE PRECISION NOT NULL DEFAULT 1,
     "unitPrice" DOUBLE PRECISION NOT NULL DEFAULT 0,
-    cost DOUBLE PRECISION NOT NULL DEFAULT 0
+    cost DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "createdAt" TEXT NOT NULL,
+    "updatedAt" TEXT NOT NULL
 );
 
 -- 23. 공지사항 (announcements & announcement_reads) - 신설
@@ -387,14 +406,17 @@ CREATE TABLE announcements (
     "authorId" TEXT REFERENCES users(id),
     title TEXT NOT NULL,
     content TEXT NOT NULL,
-    "createdAt" TEXT NOT NULL
+    "createdAt" TEXT NOT NULL,
+    "updatedAt" TEXT NOT NULL
 );
 
 CREATE TABLE announcement_reads (
     id TEXT PRIMARY KEY,
     "announcementId" TEXT REFERENCES announcements(id) ON DELETE CASCADE,
     "userId" TEXT REFERENCES users(id) ON DELETE CASCADE,
-    "readAt" TEXT NOT NULL
+    "readAt" TEXT NOT NULL,
+    "createdAt" TEXT NOT NULL,
+    "updatedAt" TEXT NOT NULL
 );
 
 -- 24. 업무 지시 (work_instructions) - 3대 보고유형 - 신설
@@ -431,9 +453,9 @@ CREATE TABLE collaboration_request_history (
     "writerId" TEXT REFERENCES users(id),
     content TEXT NOT NULL,
     action TEXT CHECK (action IN ('NEGOTIATE', 'AGREE', 'REJECT', 'ESCALATE')) NOT NULL,
-    "createdAt" TEXT NOT NULL
+    "createdAt" TEXT NOT NULL,
+    "updatedAt" TEXT NOT NULL
 );
-
 
 -- 26. 은행 입출금 거래 내역 (bank_transactions) - 신설
 CREATE TABLE bank_transactions (
@@ -445,7 +467,8 @@ CREATE TABLE bank_transactions (
     "matchedBillingId" TEXT REFERENCES billings(id) ON DELETE SET NULL,
     "matchingType" TEXT CHECK ("matchingType" IN ('AUTO', 'MANUAL')),
     "transactionDate" TEXT NOT NULL,
-    "createdAt" TEXT NOT NULL
+    "createdAt" TEXT NOT NULL,
+    "updatedAt" TEXT NOT NULL
 );
 
 -- 27. 은행 입금 대조 학습 매핑 룰 (bank_matching_rules) - 신설
@@ -453,7 +476,8 @@ CREATE TABLE bank_matching_rules (
     id TEXT PRIMARY KEY,
     "senderName" TEXT NOT NULL UNIQUE,
     "customerId" TEXT REFERENCES customers(id) ON DELETE CASCADE,
-    "createdAt" TEXT NOT NULL
+    "createdAt" TEXT NOT NULL,
+    "updatedAt" TEXT NOT NULL
 );
 
 -- 28. 자산 입출고/정비 이력 테이블 (asset_inout_logs) - 신설
@@ -472,7 +496,8 @@ CREATE TABLE asset_inout_logs (
     "maintenanceScore" INTEGER,
     memo TEXT,
     "eventDate" TEXT NOT NULL,
-    "createdAt" TEXT NOT NULL
+    "createdAt" TEXT NOT NULL,
+    "updatedAt" TEXT NOT NULL
 );
 
 -- 33. 소모품 구매 신청서 테이블 (consumable_purchases) - 통합 규격
@@ -505,7 +530,8 @@ CREATE TABLE transport_companies (
     "businessNo" TEXT NOT NULL,
     contact TEXT NOT NULL,
     memo TEXT,
-    "createdAt" TEXT NOT NULL
+    "createdAt" TEXT NOT NULL,
+    "updatedAt" TEXT NOT NULL
 );
 
 -- 35. 운송 차량/기사 테이블 (transport_drivers)
@@ -516,7 +542,8 @@ CREATE TABLE transport_drivers (
     "driverContact" TEXT NOT NULL,
     "vehicleNo" TEXT NOT NULL,
     "vehicleType" TEXT NOT NULL,
-    "createdAt" TEXT NOT NULL
+    "createdAt" TEXT NOT NULL,
+    "updatedAt" TEXT NOT NULL
 );
 
 -- 36. 미완료 업무/할 일 테이블 (todos)
@@ -528,7 +555,8 @@ CREATE TABLE todos (
     content TEXT NOT NULL,
     "isCompleted" BOOLEAN NOT NULL DEFAULT FALSE,
     "relatedEntityId" TEXT,
-    "createdAt" TEXT NOT NULL
+    "createdAt" TEXT NOT NULL,
+    "updatedAt" TEXT NOT NULL
 );
 
 -- 37. 구글 드라이브 및 API 설정 테이블 (google_configs)
@@ -548,6 +576,7 @@ CREATE TABLE google_configs (
     "preDeliveryChecklistTemplateUrl" TEXT,
     "bizRegCertUrl" TEXT,
     "bankbookCopyUrl" TEXT,
+    "createdAt" TEXT NOT NULL,
     "updatedAt" TEXT NOT NULL
 );
 
@@ -561,7 +590,8 @@ CREATE TABLE cash_flow_snapshots (
     "projectedCapex" BIGINT NOT NULL,
     "projectedFinalBalance" BIGINT NOT NULL,
     notes TEXT,
-    "createdAt" TEXT NOT NULL
+    "createdAt" TEXT NOT NULL,
+    "updatedAt" TEXT NOT NULL
 );
 
 

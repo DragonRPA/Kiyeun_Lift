@@ -7,6 +7,22 @@ export const supabase = supabaseUrl && supabaseAnonKey
   ? createClient(supabaseUrl, supabaseAnonKey)
   : null;
 
+// 법인 표기어 및 공백 제거 정규화 파서
+export function normalizeCustomerName(name: string): string {
+  if (!name) return '';
+  return name
+    .replace(/주식회사|\(주\)|\(주\)|㈜|\(유\)|유한회사|\(합\)|합자회사|사단법인|재단법인/gi, '')
+    .replace(/[\s\(\)\[\]._\-]/g, '')
+    .toLowerCase();
+}
+
+export function findCustomerByNormalizedName(customers: Customer[], targetName: string): Customer | undefined {
+  if (!targetName) return undefined;
+  const targetKey = normalizeCustomerName(targetName);
+  if (!targetKey) return undefined;
+  return customers.find(c => normalizeCustomerName(c.name) === targetKey);
+}
+
 export interface User {
   id: string;
   loginId?: string;
@@ -1065,7 +1081,14 @@ class LocalDB {
   insertRow<T extends { id: string }>(key: keyof LocalDB, row: Omit<T, 'id'> & { id?: string }): T {
     const list = (this[key] as unknown) as T[];
     const newId = row.id || this.generateNextId(key as string, list as any);
-    const newRow = { ...row, id: newId } as unknown as T;
+    const nowIso = new Date().toISOString();
+    const formattedRow = {
+      createdAt: nowIso,
+      updatedAt: nowIso,
+      ...(row as any),
+      id: newId
+    };
+    const newRow = formattedRow as unknown as T;
     list.push(newRow);
     this.set(key, list);
 
@@ -1091,7 +1114,12 @@ class LocalDB {
     const list = (this[key] as unknown) as T[];
     const index = list.findIndex(item => item.id === id);
     if (index === -1) return null;
-    const updated = { ...list[index], ...updates };
+    const nowIso = new Date().toISOString();
+    const updatedPayload = {
+      ...updates,
+      updatedAt: nowIso
+    };
+    const updated = { ...list[index], ...updatedPayload } as unknown as T;
     list[index] = updated;
     this.set(key, list);
 
@@ -1099,7 +1127,7 @@ class LocalDB {
       const tableName = this.mapToSupabaseTable(key as string);
       const promise = supabase
         .from(tableName)
-        .update(updates as any)
+        .update(updatedPayload as any)
         .eq('id', id)
         .then(({ data, error }) => {
           if (error) {

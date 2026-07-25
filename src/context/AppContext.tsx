@@ -1,6 +1,6 @@
 // d:\Kiyeun_Lift\src\context\AppContext.tsx
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { db, User, MenuPermission, Customer, CustomerContact, CustomerSite, Product, Asset, Consumable, ConsumableLog, ConsumablePurchaseRequest, Contract, ContractAsset, ContractHistory, Billing, BillingDetail, Payment, Delivery, TransportCompany, TransportDriver, Repair, RepairConsumable, Todo, BankTransaction, BankMatchingRule, AssetInOutLog, Vendor, GoogleConfig, CashFlowSnapshot } from '../services/db';
+import { db, User, MenuPermission, Customer, CustomerContact, CustomerSite, Product, Asset, Consumable, ConsumableLog, ConsumablePurchaseRequest, Contract, ContractAsset, ContractHistory, Billing, BillingDetail, Payment, Delivery, TransportCompany, TransportDriver, Repair, RepairConsumable, Todo, BankTransaction, BankMatchingRule, AssetInOutLog, Vendor, GoogleConfig, CashFlowSnapshot, findCustomerByNormalizedName } from '../services/db';
 import { ErrorModal } from '../components/ErrorModal';
 
 export interface SmartDispatchData {
@@ -500,7 +500,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const saveSmartDispatch = async (data: SmartDispatchData, autoRegister: boolean) => {
-    let customer = db.customers.find(c => c.name.replace(/\s/g, '') === data.customerName.replace(/\s/g, ''));
+    // 약칭("세보엠이씨") 또는 표기 형태(" (주) 세보엠이씨 ") 검색 시 기존 정식 법인명("주식회사 세보엠이씨") 자동 탐색 & 보정
+    let customer = findCustomerByNormalizedName(db.customers, data.customerName);
+    if (customer) {
+      // 약칭 입력을 정식 등록 명칭으로 자동 치환/보정!
+      data.customerName = customer.name;
+    }
     if (customer && customer.transactionStatus === 'BLOCKED') {
       return { success: false, errorMessage: '⚠️ 해당 고객사는 [거래불가] 상태로 설정되어 있어 신규 출고 및 계약 등록이 원천 차단됩니다.' };
     }
