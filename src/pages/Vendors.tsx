@@ -1,21 +1,32 @@
 // d:\Kiyeun_Lift\src\pages\Vendors.tsx
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { Search, Plus, Edit2, Trash2, Download, Building2 } from 'lucide-react';
+import { Search, Plus, Edit2, Trash2, Download, Building2, Check } from 'lucide-react';
 import { exportToExcel } from '../services/excel';
 import { Vendor } from '../services/db';
+
+type VendorTypeOption = 'RENTAL' | 'PURCHASE' | 'TRANSPORT' | 'REPAIR' | 'OTHER';
+
+const VENDOR_TYPE_CONFIG: Record<VendorTypeOption, { label: string; icon: string; badgeClass: string }> = {
+  RENTAL: { label: '임차거래처', icon: '🏢', badgeClass: 'badge-info' },
+  PURCHASE: { label: '구매처', icon: '🛒', badgeClass: 'badge-success' },
+  TRANSPORT: { label: '운송거래처', icon: '🚚', badgeClass: 'badge-warning' },
+  REPAIR: { label: '외주정비처', icon: '🔧', badgeClass: 'badge-danger' },
+  OTHER: { label: '기타', icon: '📌', badgeClass: '' }
+};
 
 export const Vendors: React.FC = () => {
   const { vendors, saveVendor, deleteVendor, hasPermission } = useApp();
 
   const [searchTerm, setSearchTerm] = useState('');
-  const [typeFilter, setTypeFilter] = useState('ALL');
+  const [typeFilter, setTypeFilter] = useState<string>('ALL');
   
   // 등록/수정 모달 상태
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingVendor, setEditingVendor] = useState<Partial<Vendor> | null>(null);
+  const [selectedTypes, setSelectedTypes] = useState<VendorTypeOption[]>(['RENTAL']);
 
-  type VendorSortField = 'name' | 'bizRegNo' | 'representative' | 'type' | 'contactName' | 'createdAt';
+  type VendorSortField = 'name' | 'bizRegNo' | 'representative' | 'contactName' | 'createdAt';
   const [sortField, setSortField] = useState<VendorSortField>('name');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
 
@@ -45,15 +56,31 @@ export const Vendors: React.FC = () => {
       email: '',
       address: '',
       type: 'RENTAL',
+      types: ['RENTAL'],
       isActive: true,
       memo: ''
     });
+    setSelectedTypes(['RENTAL']);
     setIsModalOpen(true);
   };
 
   const handleOpenEditModal = (v: Vendor) => {
     setEditingVendor({ ...v });
+    const currentTypes = v.types && v.types.length > 0 ? v.types : [v.type || 'RENTAL'];
+    setSelectedTypes(currentTypes as VendorTypeOption[]);
     setIsModalOpen(true);
+  };
+
+  const toggleVendorType = (type: VendorTypeOption) => {
+    setSelectedTypes(prev => {
+      if (prev.includes(type)) {
+        // 최소 1개는 선택 유지
+        if (prev.length === 1) return prev;
+        return prev.filter(t => t !== type);
+      } else {
+        return [...prev, type];
+      }
+    });
   };
 
   const handleSaveSubmit = (e: React.FormEvent) => {
@@ -62,6 +89,8 @@ export const Vendors: React.FC = () => {
       alert('상호명(매입처명)은 필수 입력 항목입니다.');
       return;
     }
+
+    const payloadTypes = selectedTypes.length > 0 ? selectedTypes : ['RENTAL' as VendorTypeOption];
 
     const payload: Vendor = {
       id: editingVendor.id || `VND-${Date.now().toString().slice(-6)}`,
@@ -72,7 +101,8 @@ export const Vendors: React.FC = () => {
       contact: editingVendor.contact || '',
       email: editingVendor.email || '',
       address: editingVendor.address || '',
-      type: editingVendor.type || 'RENTAL',
+      type: payloadTypes[0], // 하위 호환 primary type
+      types: payloadTypes, // 복수 선택 속성
       isActive: editingVendor.isActive ?? true,
       memo: editingVendor.memo || '',
       createdAt: editingVendor.createdAt || new Date().toISOString(),
@@ -91,6 +121,12 @@ export const Vendors: React.FC = () => {
     }
   };
 
+  const getVendorTypes = (v: Vendor): VendorTypeOption[] => {
+    if (v.types && v.types.length > 0) return v.types as VendorTypeOption[];
+    if (v.type) return [v.type as VendorTypeOption];
+    return ['RENTAL'];
+  };
+
   const filtered = vendors.filter(v => {
     const matchesSearch = 
       v.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -98,7 +134,8 @@ export const Vendors: React.FC = () => {
       (v.representative && v.representative.toLowerCase().includes(searchTerm.toLowerCase())) ||
       (v.contactName && v.contactName.toLowerCase().includes(searchTerm.toLowerCase()));
 
-    const matchesType = typeFilter === 'ALL' || v.type === typeFilter;
+    const vTypes = getVendorTypes(v);
+    const matchesType = typeFilter === 'ALL' || vTypes.includes(typeFilter as VendorTypeOption);
     return matchesSearch && matchesType;
   }).sort((a, b) => {
     let aVal = a[sortField as keyof Vendor] || '';
@@ -109,30 +146,25 @@ export const Vendors: React.FC = () => {
   });
 
   const handleExport = () => {
-    const data = filtered.map(v => ({
-      '매입처ID': v.id,
-      '상호명': v.name,
-      '사업자등록번호': v.bizRegNo || '-',
-      '대표자명': v.representative || '-',
-      '담당자명': v.contactName || '-',
-      '연락처': v.contact || '-',
-      '이메일': v.email || '-',
-      '주소': v.address || '-',
-      '매입구분': v.type === 'RENTAL' ? '장비임대 원사' : v.type === 'CONSUMABLE' ? '소모품 공급사' : v.type === 'REPAIR' ? '외주 수리정비사' : '기타',
-      '사용여부': v.isActive ? '사용중' : '미사용',
-      '등록일': v.createdAt.slice(0, 10)
-    }));
+    const data = filtered.map(v => {
+      const vTypes = getVendorTypes(v);
+      const typeLabels = vTypes.map(t => VENDOR_TYPE_CONFIG[t]?.label || t).join(', ');
+      return {
+        '매입처ID': v.id,
+        '상호명': v.name,
+        '사업자등록번호': v.bizRegNo || '-',
+        '대표자명': v.representative || '-',
+        '담당자명': v.contactName || '-',
+        '연락처': v.contact || '-',
+        '이메일': v.email || '-',
+        '주소': v.address || '-',
+        '매입/거래구분': typeLabels,
+        '사용여부': v.isActive ? '사용중' : '미사용',
+        '등록일': v.createdAt.slice(0, 10)
+      };
+    });
 
     exportToExcel(data, `매입처공급자목록_${new Date().toISOString().split('T')[0]}`, '매입처목록');
-  };
-
-  const getTypeBadge = (type?: string) => {
-    switch (type) {
-      case 'RENTAL': return <span className="badge badge-info">장비임대 원사</span>;
-      case 'CONSUMABLE': return <span className="badge badge-success">소모품 공급사</span>;
-      case 'REPAIR': return <span className="badge badge-warning">외주 수리정비사</span>;
-      default: return <span className="badge">기타</span>;
-    }
   };
 
   return (
@@ -143,7 +175,7 @@ export const Vendors: React.FC = () => {
             <Building2 className="text-primary" /> 매입처 (공급자 / 외주처) 관리
           </h2>
           <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '4px' }}>
-            장비 재임차 원사, 소모품 구매처 및 외주 정비 수리 업체의 마스터 정보를 통합 관리합니다.
+            장비 재임차 원사, 소모품/장비 구매처, 운송 협력사 및 외주 수리정비 업체의 마스터 정보를 통합 관리합니다.
           </p>
         </div>
         {canSave && (
@@ -167,12 +199,13 @@ export const Vendors: React.FC = () => {
                 style={{ paddingLeft: '32px', width: '100%' }}
               />
             </div>
-            <select value={typeFilter} onChange={e => setTypeFilter(e.target.value)} style={{ width: '160px' }}>
-              <option value="ALL">전체 매입구분</option>
-              <option value="RENTAL">장비임대 원사</option>
-              <option value="CONSUMABLE">소모품 공급사</option>
-              <option value="REPAIR">외주 수리정비사</option>
-              <option value="OTHER">기타</option>
+            <select value={typeFilter} onChange={e => setTypeFilter(e.target.value)} style={{ width: '170px' }}>
+              <option value="ALL">전체 거래구분</option>
+              <option value="RENTAL">🏢 임차거래처</option>
+              <option value="PURCHASE">🛒 구매처</option>
+              <option value="TRANSPORT">🚚 운송거래처</option>
+              <option value="REPAIR">🔧 외주정비처</option>
+              <option value="OTHER">📌 기타</option>
             </select>
           </div>
 
@@ -196,9 +229,7 @@ export const Vendors: React.FC = () => {
                 <th onClick={() => handleSort('name')} style={{ cursor: 'pointer' }}>
                   상호명 (매입처명) {renderSortArrow('name')}
                 </th>
-                <th onClick={() => handleSort('type')} style={{ cursor: 'pointer' }}>
-                  매입구분 {renderSortArrow('type')}
-                </th>
+                <th>매입/거래 속성 (다중)</th>
                 <th onClick={() => handleSort('bizRegNo')} style={{ cursor: 'pointer' }}>
                   사업자등록번호 {renderSortArrow('bizRegNo')}
                 </th>
@@ -221,42 +252,56 @@ export const Vendors: React.FC = () => {
                   </td>
                 </tr>
               ) : (
-                filtered.map(v => (
-                  <tr key={v.id}>
-                    <td>
-                      <strong style={{ color: 'var(--primary)', display: 'block' }}>{v.name}</strong>
-                      <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{v.id}</span>
-                    </td>
-                    <td>{getTypeBadge(v.type)}</td>
-                    <td>{v.bizRegNo || '-'}</td>
-                    <td>{v.representative || '-'}</td>
-                    <td>
-                      <div><strong>{v.contactName || '-'}</strong></div>
-                      <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{v.contact || '-'}</div>
-                    </td>
-                    <td style={{ fontSize: '12.5px' }}>
-                      <div>{v.address || '-'}</div>
-                      <div style={{ fontSize: '11.5px', color: 'var(--text-muted)' }}>{v.email}</div>
-                    </td>
-                    <td>
-                      <span className={`badge ${v.isActive !== false ? 'badge-success' : 'badge-danger'}`}>
-                        {v.isActive !== false ? '거래중' : '중단'}
-                      </span>
-                    </td>
-                    {canSave && (
-                      <td style={{ textAlign: 'center' }}>
-                        <div style={{ display: 'flex', gap: '4px', justifyContent: 'center' }}>
-                          <button className="btn-secondary" onClick={() => handleOpenEditModal(v)} style={{ padding: '4px 6px' }} title="수정">
-                            <Edit2 size={13} />
-                          </button>
-                          <button className="btn-danger" onClick={() => handleDelete(v.id, v.name)} style={{ padding: '4px 6px' }} title="삭제">
-                            <Trash2 size={13} />
-                          </button>
+                filtered.map(v => {
+                  const vTypes = getVendorTypes(v);
+                  return (
+                    <tr key={v.id}>
+                      <td>
+                        <strong style={{ color: 'var(--primary)', display: 'block' }}>{v.name}</strong>
+                        <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{v.id}</span>
+                      </td>
+                      <td>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                          {vTypes.map(t => {
+                            const cfg = VENDOR_TYPE_CONFIG[t] || { label: t, icon: '', badgeClass: '' };
+                            return (
+                              <span key={t} className={`badge ${cfg.badgeClass}`} style={{ fontSize: '11.5px', padding: '3px 8px' }}>
+                                {cfg.icon} {cfg.label}
+                              </span>
+                            );
+                          })}
                         </div>
                       </td>
-                    )}
-                  </tr>
-                ))
+                      <td>{v.bizRegNo || '-'}</td>
+                      <td>{v.representative || '-'}</td>
+                      <td>
+                        <div><strong>{v.contactName || '-'}</strong></div>
+                        <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{v.contact || '-'}</div>
+                      </td>
+                      <td style={{ fontSize: '12.5px' }}>
+                        <div>{v.address || '-'}</div>
+                        <div style={{ fontSize: '11.5px', color: 'var(--text-muted)' }}>{v.email}</div>
+                      </td>
+                      <td>
+                        <span className={`badge ${v.isActive !== false ? 'badge-success' : 'badge-danger'}`}>
+                          {v.isActive !== false ? '거래중' : '중단'}
+                        </span>
+                      </td>
+                      {canSave && (
+                        <td style={{ textAlign: 'center' }}>
+                          <div style={{ display: 'flex', gap: '4px', justifyContent: 'center' }}>
+                            <button className="btn-secondary" onClick={() => handleOpenEditModal(v)} style={{ padding: '4px 6px' }} title="수정">
+                              <Edit2 size={13} />
+                            </button>
+                            <button className="btn-danger" onClick={() => handleDelete(v.id, v.name)} style={{ padding: '4px 6px' }} title="삭제">
+                              <Trash2 size={13} />
+                            </button>
+                          </div>
+                        </td>
+                      )}
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
@@ -269,37 +314,78 @@ export const Vendors: React.FC = () => {
           position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
           backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000
         }}>
-          <div className="card" style={{ width: '90%', maxWidth: '600px', backgroundColor: 'var(--bg-card)', padding: '24px' }}>
+          <div className="card" style={{ width: '90%', maxWidth: '640px', backgroundColor: 'var(--bg-card)', padding: '24px' }}>
             <h3 style={{ margin: '0 0 16px 0', fontWeight: '700', borderBottom: '1px solid var(--border-color)', paddingBottom: '12px' }}>
               {editingVendor.id ? '매입처(공급자) 정보 수정' : '신규 매입처(공급자) 등록'}
             </h3>
 
             <form onSubmit={handleSaveSubmit}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '16px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '16px' }}>
+                
+                {/* 상호명 */}
                 <div style={{ gridColumn: 'span 2' }}>
                   <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', marginBottom: '4px' }}>상호명 (매입처명) *</label>
                   <input
                     type="text"
                     value={editingVendor.name || ''}
                     onChange={e => setEditingVendor({ ...editingVendor, name: e.target.value })}
-                    placeholder="예: (주)한국크레인엔지니어링"
+                    placeholder="예: (주)한국중장비렌탈"
                     required
                     style={{ width: '100%', padding: '8px' }}
                   />
                 </div>
 
-                <div>
-                  <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', marginBottom: '4px' }}>매입 구분 *</label>
-                  <select
-                    value={editingVendor.type || 'EQUIPMENT_RENTAL'}
-                    onChange={e => setEditingVendor({ ...editingVendor, type: e.target.value as any })}
-                    style={{ width: '100%', padding: '8px' }}
-                  >
-                    <option value="RENTAL">장비임대 원사</option>
-                    <option value="CONSUMABLE">소모품 공급사</option>
-                    <option value="REPAIR">외주 수리정비사</option>
-                    <option value="OTHER">기타</option>
-                  </select>
+                {/* 🌟 인터랙티브 세그먼트 멀티 토글 버튼 그룹 🌟 */}
+                <div style={{ gridColumn: 'span 2' }}>
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', marginBottom: '6px' }}>
+                    매입 / 거래 속성 (복수 토글 선택 가능) *
+                  </label>
+                  <div style={{
+                    display: 'flex',
+                    gap: '6px',
+                    backgroundColor: 'var(--bg-app)',
+                    padding: '6px',
+                    borderRadius: '8px',
+                    border: '1px solid var(--border-color)',
+                    flexWrap: 'wrap'
+                  }}>
+                    {(Object.keys(VENDOR_TYPE_CONFIG) as VendorTypeOption[]).map(typeKey => {
+                      const cfg = VENDOR_TYPE_CONFIG[typeKey];
+                      const isSelected = selectedTypes.includes(typeKey);
+                      return (
+                        <button
+                          key={typeKey}
+                          type="button"
+                          onClick={() => toggleVendorType(typeKey)}
+                          style={{
+                            flex: '1 1 auto',
+                            minWidth: '100px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '6px',
+                            padding: '8px 12px',
+                            fontSize: '12.5px',
+                            fontWeight: isSelected ? '700' : '500',
+                            borderRadius: '6px',
+                            border: isSelected ? '1px solid var(--primary)' : '1px solid var(--border-color)',
+                            background: isSelected ? 'linear-gradient(135deg, var(--primary) 0%, #3b82f6 100%)' : 'var(--bg-card)',
+                            color: isSelected ? '#ffffff' : 'var(--text-main)',
+                            boxShadow: isSelected ? '0 2px 8px rgba(59, 130, 246, 0.35)' : 'none',
+                            cursor: 'pointer',
+                            transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)'
+                          }}
+                        >
+                          {isSelected && <Check size={14} style={{ color: '#fff', strokeWidth: 3 }} />}
+                          <span>{cfg.icon}</span>
+                          <span>{cfg.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <span style={{ fontSize: '11.5px', color: 'var(--text-muted)', marginTop: '4px', display: 'block' }}>
+                    💡 한 거래처가 임차 및 구매를 동시 수행할 경우, 관련 버튼들을 함께 눌러 복수로 활성화할 수 있습니다.
+                  </span>
                 </div>
 
                 <div>
@@ -355,6 +441,18 @@ export const Vendors: React.FC = () => {
                     placeholder="예: vendor@example.com"
                     style={{ width: '100%', padding: '8px' }}
                   />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', marginBottom: '4px' }}>거래 상태</label>
+                  <select
+                    value={editingVendor.isActive !== false ? 'ACTIVE' : 'INACTIVE'}
+                    onChange={e => setEditingVendor({ ...editingVendor, isActive: e.target.value === 'ACTIVE' })}
+                    style={{ width: '100%', padding: '8px' }}
+                  >
+                    <option value="ACTIVE">거래중 (정상)</option>
+                    <option value="INACTIVE">거래중단 (보류)</option>
+                  </select>
                 </div>
 
                 <div style={{ gridColumn: 'span 2' }}>

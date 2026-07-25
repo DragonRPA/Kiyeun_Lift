@@ -401,7 +401,8 @@ export interface TransportCompany {
 export interface Vendor {
   id: string;
   name: string;
-  type: 'TRANSPORT' | 'RENTAL' | 'REPAIR' | 'CONSUMABLE' | 'OTHER';
+  type: 'TRANSPORT' | 'RENTAL' | 'REPAIR' | 'PURCHASE' | 'CONSUMABLE' | 'OTHER';
+  types?: ('TRANSPORT' | 'RENTAL' | 'REPAIR' | 'PURCHASE' | 'CONSUMABLE' | 'OTHER')[];
   bizRegNo?: string;
   representative?: string;
   contactName?: string;
