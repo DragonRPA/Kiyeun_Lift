@@ -4,7 +4,7 @@ import { useApp } from './context/AppContext';
 import {
   LayoutDashboard, Users, UserCheck, Package, Layers, PlusCircle,
   Truck, Wrench, Shield, ShoppingBag, CreditCard, LogOut, Sun, Moon, Menu, X, Zap, Settings, Database as DatabaseIcon,
-  TrendingUp, Clock, AlertTriangle, Building2
+  TrendingUp, Clock, AlertTriangle, Building2, ChevronDown, ChevronRight, Briefcase, Box, FolderKanban, ShieldAlert, Terminal, ArrowLeftRight
 } from 'lucide-react';
 
 // 페이지 컴포넌트 임포트
@@ -34,6 +34,20 @@ import { PayrollPage } from './pages/PayrollPage';
 import { CorporateCardPage } from './pages/CorporateCardPage';
 import { CashFlowPage } from './pages/CashFlowPage';
 import { DelinquencyPage } from './pages/DelinquencyPage';
+
+export interface SubMenuItem {
+  id: string;
+  name: string;
+  icon: React.ReactNode;
+  component: React.ReactNode;
+}
+
+export interface MenuGroup {
+  id: string;
+  name: string;
+  icon: React.ReactNode;
+  items: SubMenuItem[];
+}
 
 const App: React.FC = () => {
   const { currentUser, login, logout, theme, toggleTheme, hasPermission, activeTab, setActiveTab } = useApp();
@@ -108,36 +122,128 @@ const App: React.FC = () => {
     }
   };
 
-  // 전체 메뉴 구조 정의
-  const sidebarMenus = [
-    { id: 'dashboard', name: 'ERP 대시보드', icon: <LayoutDashboard size={18} />, component: <Dashboard /> },
-    { id: 'customer', name: '고객 관리', icon: <Users size={18} />, component: <Customers /> },
-    { id: 'vendors', name: '매입처 (공급자) 관리', icon: <Building2 size={18} />, component: <Vendors /> },
-    { id: 'product', name: '제품 관리', icon: <Package size={18} />, component: <Products /> },
-    { id: 'asset', name: '자산 관리 (대장)', icon: <Layers size={18} />, component: <Assets /> },
-    { id: 'acquisition_disposal', name: '당사자산 취득/매각', icon: <PlusCircle size={18} />, component: <AssetAcquisitionDisposal /> },
-    { id: 'rent_asset', name: '임차자산 관리', icon: <ShoppingBag size={18} />, component: <RentAssets /> },
-    { id: 'consumable', name: '소모품 관리', icon: <ShoppingBag size={18} />, component: <Consumables /> },
-    { id: 'contract', name: '계약 관리', icon: <UserCheck size={18} />, component: <Contracts /> },
-    { id: 'billing', name: '청구/수납 관리', icon: <CreditCard size={18} />, component: <Billings /> },
-    { id: 'bank_matching', name: '은행 입출금 매칭', icon: <TrendingUp size={18} />, component: <BankMatching /> },
-    { id: 'delivery', name: '배차/운송 관리', icon: <Truck size={18} />, component: <TruckDispatch /> },
-    { id: 'transport_master', name: '운송 거래처/기사 관리', icon: <Settings size={18} />, component: <TransportMaster /> },
-    { id: 'smart_dispatch', name: '스마트 출고 요청', icon: <Zap size={18} />, component: <SmartDispatch /> },
-    { id: 'smart_return', name: '스마트 회수 요청', icon: <Zap size={18} />, component: <SmartReturn /> },
-    { id: 'asset_inout_history', name: '자산 입출고/정비 이력', icon: <Clock size={18} />, component: <AssetHistory /> },
-    { id: 'dispatch_assign', name: '장비 할당 (매핑)', icon: <Layers size={18} />, component: <AssetAssignment /> },
-    { id: 'repair', name: '자산 정비수리', icon: <Wrench size={18} />, component: <Repairs /> },
-    { id: 'organization', name: '조직/인사 관리', icon: <Users size={18} />, component: <OrganizationSettings /> },
-    { id: 'payroll', name: '급여 정산', icon: <CreditCard size={18} />, component: <PayrollPage /> },
-    { id: 'corporate_card', name: '법인카드 매입정산', icon: <CreditCard size={18} />, component: <CorporateCardPage /> },
-    { id: 'cash_flow', name: '자금 흐름 분석', icon: <TrendingUp size={18} />, component: <CashFlowPage /> },
-    { id: 'delinquency', name: '미수 채권 연체 관리', icon: <AlertTriangle size={18} />, component: <DelinquencyPage /> },
-    { id: 'permission', name: '사용자 및 권한', icon: <Shield size={18} />, component: <UsersPermissions /> },
-    { id: 'google_config', name: '구글 관리자 설정', icon: <Settings size={18} />, component: <GoogleConfig /> },
-    // 개발자 도구 (ADMIN 전용)
-    { id: 'dev_uploader', name: '[개발] DB 데이터 업로더', icon: <DatabaseIcon size={18} />, component: <DevDataUploader /> },
+  // 계층형 상위-하위 아코디언 메뉴 구조 정의 (유저 지정 규격)
+  const menuGroups: MenuGroup[] = [
+    {
+      id: 'grp_sales',
+      name: '영업관리',
+      icon: <Briefcase size={17} />,
+      items: [
+        { id: 'customer', name: '고객 관리', icon: <Users size={16} />, component: <Customers /> },
+        { id: 'contract', name: '계약 관리', icon: <UserCheck size={16} />, component: <Contracts /> },
+        { id: 'billing', name: '청구 / 수납 관리', icon: <CreditCard size={16} />, component: <Billings /> },
+      ]
+    },
+    {
+      id: 'grp_product_asset',
+      name: '제품 / 자산관리',
+      icon: <Box size={17} />,
+      items: [
+        { id: 'product', name: '제품 관리', icon: <Package size={16} />, component: <Products /> },
+        { id: 'asset', name: '자산 관리 (대장)', icon: <Layers size={16} />, component: <Assets /> },
+        { id: 'acquisition_disposal', name: '당사자산 취득 / 매각', icon: <PlusCircle size={16} />, component: <AssetAcquisitionDisposal /> },
+        { id: 'rent_asset', name: '임차자산 관리', icon: <ShoppingBag size={16} />, component: <RentAssets /> },
+      ]
+    },
+    {
+      id: 'grp_logistics',
+      name: '배차 / 운송관리',
+      icon: <Truck size={17} />,
+      items: [
+        { id: 'delivery', name: '배차 / 운송 관리', icon: <Truck size={16} />, component: <TruckDispatch /> },
+        { id: 'transport_master', name: '운송 거래처 / 기사 관리', icon: <Settings size={16} />, component: <TransportMaster /> },
+        { id: 'smart_dispatch', name: '스마트 출고 요청', icon: <Zap size={16} />, component: <SmartDispatch /> },
+        { id: 'smart_return', name: '스마트 회수 요청', icon: <Zap size={16} />, component: <SmartReturn /> },
+      ]
+    },
+    {
+      id: 'grp_inout',
+      name: '입출고관리',
+      icon: <ArrowLeftRight size={17} />,
+      items: [
+        { id: 'asset_inout_history', name: '자산 입출고 / 정비 이력', icon: <Clock size={16} />, component: <AssetHistory /> },
+        { id: 'dispatch_assign', name: '장비 할당 / 매핑', icon: <Layers size={16} />, component: <AssetAssignment /> },
+      ]
+    },
+    {
+      id: 'grp_maintenance',
+      name: '정비 / 소모품관리',
+      icon: <Wrench size={17} />,
+      items: [
+        { id: 'consumable', name: '소모품 관리', icon: <ShoppingBag size={16} />, component: <Consumables /> },
+        { id: 'repair', name: '자산 정비 수리', icon: <Wrench size={16} />, component: <Repairs /> },
+      ]
+    },
+    {
+      id: 'grp_management',
+      name: '경영관리',
+      icon: <FolderKanban size={17} />,
+      items: [
+        { id: 'vendors', name: '매입처 (공급자 / 외주처) 관리', icon: <Building2 size={16} />, component: <Vendors /> },
+        { id: 'bank_matching', name: '은행 입출금 대장', icon: <TrendingUp size={16} />, component: <BankMatching /> },
+        { id: 'corporate_card', name: '법인카드 매입정산', icon: <CreditCard size={16} />, component: <CorporateCardPage /> },
+        { id: 'cash_flow', name: '자금 흐름 분석', icon: <TrendingUp size={16} />, component: <CashFlowPage /> },
+        { id: 'delinquency', name: '미수 채권 연체 관리', icon: <AlertTriangle size={16} />, component: <DelinquencyPage /> },
+      ]
+    },
+    {
+      id: 'grp_management_special',
+      name: '경영관리 - 특수',
+      icon: <ShieldAlert size={17} />,
+      items: [
+        { id: 'organization', name: '조직 / 인사 관리', icon: <Users size={16} />, component: <OrganizationSettings /> },
+        { id: 'permission', name: '사용자 및 권한', icon: <Shield size={16} />, component: <UsersPermissions /> },
+        { id: 'payroll', name: '급여 정산', icon: <CreditCard size={16} />, component: <PayrollPage /> },
+      ]
+    },
+    {
+      id: 'grp_system_dev',
+      name: '시스템관리 - 개발자',
+      icon: <Terminal size={17} />,
+      items: [
+        { id: 'google_config', name: '구글 관리자 설정', icon: <Settings size={16} />, component: <GoogleConfig /> },
+        { id: 'dev_uploader', name: '[개발] DB 데이터 업로더', icon: <DatabaseIcon size={16} />, component: <DevDataUploader /> },
+      ]
+    }
   ];
+
+  // 상위 그룹 아코디언 접힘/펼침 상태
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({
+    grp_sales: true,
+    grp_product_asset: true,
+    grp_logistics: true,
+    grp_inout: true,
+    grp_maintenance: true,
+    grp_management: true,
+    grp_management_special: true,
+    grp_system_dev: true
+  });
+
+  const toggleGroup = (groupId: string) => {
+    setExpandedGroups(prev => ({
+      ...prev,
+      [groupId]: !prev[groupId]
+    }));
+  };
+
+  // activeTab이 활성화될 때 속한 상위 그룹 자동 펼침
+  useEffect(() => {
+    menuGroups.forEach(grp => {
+      if (grp.items.some(item => item.id === activeTab)) {
+        setExpandedGroups(prev => ({ ...prev, [grp.id]: true }));
+      }
+    });
+  }, [activeTab]);
+
+  // 활성 페이지 컴포넌트 탐색
+  const getActiveComponent = () => {
+    if (activeTab === 'dashboard') return <Dashboard />;
+    for (const grp of menuGroups) {
+      const found = grp.items.find(item => item.id === activeTab);
+      if (found) return found.component;
+    }
+    return <Dashboard />;
+  };
 
   // 1. 비로그인 상태: 로그인 화면 렌더링
   if (!currentUser) {
@@ -237,8 +343,7 @@ const App: React.FC = () => {
   }
 
   // 2. 로그인 상태: 메인 ERP 대시보드 렌더링
-  const activeMenu = sidebarMenus.find(m => m.id === activeTab);
-  const userHasViewPerm = activeMenu ? hasPermission(activeMenu.id, 'view') : false;
+  const userHasViewPerm = hasPermission(activeTab, 'view');
 
   return (
     <div style={{ display: 'flex', height: '850px', maxHeight: '850px', flexDirection: 'column', overflow: 'hidden' }}>
@@ -312,7 +417,7 @@ const App: React.FC = () => {
       {/* 메인 레이아웃 본문 (850px 헤더 제외 수직 프레임) */}
       <div style={{ display: 'flex', flex: 1, height: 'calc(850px - 64px)', overflow: 'hidden', position: 'relative' }}>
         
-        {/* 데스크탑 사이드바 (독자 스크롤) */}
+        {/* 데스크탑 계층형 아코디언 사이드바 (독자 스크롤) */}
         <aside
           className={`sidebar-nav ${mobileMenuOpen ? 'mobile-open' : ''}`}
           style={{
@@ -322,56 +427,136 @@ const App: React.FC = () => {
             borderRight: '1px solid var(--border-color)',
             display: 'flex',
             flexDirection: 'column',
-            padding: '20px 12px',
-            gap: '6px',
+            padding: '16px 10px',
+            gap: '4px',
             overflowY: 'auto',
             overscrollBehavior: 'contain'
           }}
         >
-          {sidebarMenus.map(menu => {
-            const hasView = hasPermission(menu.id, 'view');
-            if (!hasView) return null; // 조회 권한이 없는 메뉴는 노출 자체를 차단
+          {/* 최상단 독립 ERP 대시보드 버튼 */}
+          {hasPermission('dashboard', 'view') && (
+            <button
+              onClick={() => {
+                setActiveTab('dashboard');
+                setMobileMenuOpen(false);
+              }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px',
+                padding: '10px 12px',
+                borderRadius: 'var(--radius-md)',
+                border: 'none',
+                fontSize: '13.5px',
+                fontWeight: activeTab === 'dashboard' ? '700' : '500',
+                color: activeTab === 'dashboard' ? '#ffffff' : 'var(--text-main)',
+                background: activeTab === 'dashboard' ? 'linear-gradient(135deg, var(--primary) 0%, #3b82f6 100%)' : 'transparent',
+                boxShadow: activeTab === 'dashboard' ? '0 4px 12px rgba(59, 130, 246, 0.3)' : 'none',
+                cursor: 'pointer',
+                marginBottom: '8px',
+                transition: 'all 0.2s ease'
+              }}
+            >
+              <LayoutDashboard size={17} />
+              <span>ERP 대시보드</span>
+            </button>
+          )}
+
+          {/* 계층형 접이식 상위-하위 아코디언 그룹 메뉴 */}
+          {menuGroups.map(grp => {
+            // 권한이 있는 하위 메뉴가 1개 이상 존재하는지 확인
+            const visibleItems = grp.items.filter(item => hasPermission(item.id, 'view'));
+            if (visibleItems.length === 0) return null;
+
+            const isExpanded = expandedGroups[grp.id] !== false;
+            const hasActiveChild = grp.items.some(item => item.id === activeTab);
 
             return (
-              <button
-                key={menu.id}
-                onClick={() => {
-                  setActiveTab(menu.id);
-                  setMobileMenuOpen(false);
-                }}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '12px',
-                  padding: '12px 16px',
-                  borderRadius: 'var(--radius-md)',
-                  border: 'none',
-                  fontSize: '14px',
-                  fontWeight: activeTab === menu.id ? '600' : '400',
-                  color: activeTab === menu.id ? 'var(--primary)' : 'var(--text-secondary)',
-                  backgroundColor: activeTab === menu.id ? 'var(--primary-light)' : 'transparent',
-                  textAlign: 'left',
-                  cursor: 'pointer',
-                  width: '100%',
-                  transition: 'all var(--transition-fast)'
-                }}
-              >
-                {menu.icon}
-                <span>{menu.name}</span>
-              </button>
+              <div key={grp.id} style={{ marginBottom: '4px' }}>
+                {/* 상위 메뉴 헤더 버튼 (아코디언 토글) */}
+                <button
+                  onClick={() => toggleGroup(grp.id)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    width: '100%',
+                    padding: '8px 10px',
+                    borderRadius: 'var(--radius-sm)',
+                    border: 'none',
+                    backgroundColor: hasActiveChild ? 'rgba(59, 130, 246, 0.08)' : 'transparent',
+                    color: hasActiveChild ? 'var(--primary)' : 'var(--text-secondary)',
+                    fontWeight: '700',
+                    fontSize: '12.5px',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    {grp.icon}
+                    <span>{grp.name}</span>
+                  </div>
+                  {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                </button>
+
+                {/* 하위 메뉴 서브 항목 그룹 */}
+                {isExpanded && (
+                  <div style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '2px',
+                    marginTop: '2px',
+                    paddingLeft: '10px',
+                    borderLeft: '2px solid var(--border-color)',
+                    marginLeft: '12px'
+                  }}>
+                    {visibleItems.map(item => {
+                      const isItemActive = activeTab === item.id;
+                      return (
+                        <button
+                          key={item.id}
+                          onClick={() => {
+                            setActiveTab(item.id);
+                            setMobileMenuOpen(false);
+                          }}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '8px',
+                            padding: '7px 10px',
+                            borderRadius: 'var(--radius-sm)',
+                            border: 'none',
+                            fontSize: '12px',
+                            fontWeight: isItemActive ? '700' : '400',
+                            color: isItemActive ? 'var(--primary)' : 'var(--text-secondary)',
+                            backgroundColor: isItemActive ? 'var(--primary-light)' : 'transparent',
+                            textAlign: 'left',
+                            cursor: 'pointer',
+                            width: '100%',
+                            transition: 'all var(--transition-fast)'
+                          }}
+                        >
+                          {item.icon}
+                          <span>{item.name}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             );
           })}
         </aside>
 
         {/* 메인 콘텐츠 영역 (독자 스크롤) */}
         <main style={{ flex: 1, height: '100%', padding: '30px', overflowY: 'auto', overscrollBehavior: 'contain', backgroundColor: 'var(--bg-app)' }} className="main-content-area">
-          {userHasViewPerm && activeMenu ? (
-            activeMenu.component
+          {userHasViewPerm ? (
+            getActiveComponent()
           ) : (
             <div className="card" style={{ textAlign: 'center', padding: '80px 0', color: 'var(--danger)', backgroundColor: 'var(--danger-light)' }}>
               <h3>접근 권한 제한 알림</h3>
               <p style={{ marginTop: '8px', color: 'var(--text-secondary)' }}>
-                선택하신 [{activeMenu?.name}] 메뉴에 대한 조회 권한이 비활성화되어 있습니다.<br />
+                선택하신 메뉴에 대한 조회 권한이 비활성화되어 있습니다.<br />
                 권한이 필요할 경우 최고관리자에게 문의하시기 바랍니다.
               </p>
             </div>
