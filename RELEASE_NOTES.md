@@ -1,3 +1,10 @@
+# Release Notes (v1.4.1.Build.00003 - 2026-07-26 00:29)
+
+## 🔓 에러 모달 RLS 즉시 복구 DDL 패치 생성 & 복사 기능 추가
+- **`ErrorModal.tsx` 개편**: RLS(`42501` / `row-level security`) 오류 발생 시 모달 내부에서 영향받은 테이블명을 자동으로 파싱하여 해당 테이블 전용 `ALTER TABLE "tableName" DISABLE ROW LEVEL SECURITY;` DDL 패치를 즉시 생성하고 복사할 수 있는 **[🔓 RLS 해제 DDL 복사]** 버튼 UI를 본문 하단에 동적으로 표출하도록 개편.
+- **자동 테이블명 감지 3중 패턴 파싱**: `row-level security policy for table "tableName"` / `[테이블: tableName]` / `policy for table "tableName"` 세 가지 에러 메시지 포맷에서 모두 테이블명을 추출.
+- **DDL 텍스트박스 인라인 표시**: 황색 경고 영역에 녹색 텍스트로 SQL을 코드박스로 노출하여 시각적으로 즉시 인지 가능.
+
 # Release Notes (v1.4.1.Build.00002 - 2026-07-26 00:22)
 
 ## 🛡️ Supabase RLS 쓰기 권한 실시간 테스트 & 엑셀 업로드 원클릭 복구 가이드 강화

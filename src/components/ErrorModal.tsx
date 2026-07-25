@@ -1,11 +1,37 @@
-import React, { useState } from 'react';
-import { AlertTriangle, Copy, Check, X } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { AlertTriangle, Copy, Check, X, ShieldOff } from 'lucide-react';
 
 interface ErrorModalProps {
   isOpen: boolean;
   title?: string;
   message: string;
   onClose: () => void;
+}
+
+/** 메시지에서 RLS 위반 테이블명을 추출하는 헬퍼 */
+function extractRlsTableNames(message: string): string[] {
+  const tables = new Set<string>();
+
+  // 패턴1: "row-level security policy for table "tableName""
+  const pattern1 = /row-level security policy(?:\s+for\s+table\s+["']?(\w+)["']?)?/gi;
+  let m: RegExpExecArray | null;
+  while ((m = pattern1.exec(message)) !== null) {
+    if (m[1]) tables.add(m[1]);
+  }
+
+  // 패턴2: "[테이블: tableName]" 형식 (DevDataUploader 에러 포맷)
+  const pattern2 = /\[(?:테이블|시트\/테이블|table):\s*(\w+)\]/gi;
+  while ((m = pattern2.exec(message)) !== null) {
+    tables.add(m[1]);
+  }
+
+  // 패턴3: "policy for table "tableName"" (Supabase 에러 메시지 직접 패턴)
+  const pattern3 = /policy for table "(\w+)"/gi;
+  while ((m = pattern3.exec(message)) !== null) {
+    tables.add(m[1]);
+  }
+
+  return Array.from(tables);
 }
 
 export const ErrorModal: React.FC<ErrorModalProps> = ({
@@ -15,6 +41,23 @@ export const ErrorModal: React.FC<ErrorModalProps> = ({
   onClose
 }) => {
   const [copied, setCopied] = useState(false);
+  const [ddlCopied, setDdlCopied] = useState(false);
+
+  const isRlsError = useMemo(() =>
+    message.includes('row-level security') || message.includes('42501'),
+    [message]
+  );
+
+  const rlsTables = useMemo(() => extractRlsTableNames(message), [message]);
+
+  const ddlPatch = useMemo(() => {
+    if (!isRlsError) return '';
+    const tableList = rlsTables.length > 0 ? rlsTables : [];
+    if (tableList.length === 0) return '';
+    return tableList
+      .map(t => `-- RLS 해제: ${t}\nALTER TABLE "${t}" DISABLE ROW LEVEL SECURITY;`)
+      .join('\n\n');
+  }, [isRlsError, rlsTables]);
 
   if (!isOpen) return null;
 
@@ -22,6 +65,12 @@ export const ErrorModal: React.FC<ErrorModalProps> = ({
     navigator.clipboard.writeText(message);
     setCopied(true);
     setTimeout(() => setCopied(false), 2500);
+  };
+
+  const handleDdlCopy = () => {
+    navigator.clipboard.writeText(ddlPatch);
+    setDdlCopied(true);
+    setTimeout(() => setDdlCopied(false), 2500);
   };
 
   return (
@@ -117,10 +166,75 @@ export const ErrorModal: React.FC<ErrorModalProps> = ({
                 fontSize: '13px',
                 lineHeight: '1.5',
                 resize: 'vertical',
-                outline: 'none'
+                outline: 'none',
+                boxSizing: 'border-box'
               }}
             />
           </div>
+
+          {/* RLS DDL 패치 섹션 (RLS 오류 감지 시에만 표시) */}
+          {isRlsError && ddlPatch && (
+            <div style={{
+              marginTop: '14px',
+              backgroundColor: 'rgba(234, 179, 8, 0.07)',
+              border: '1px solid rgba(234, 179, 8, 0.35)',
+              borderRadius: '10px',
+              padding: '14px',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                <ShieldOff size={16} color="#facc15" />
+                <span style={{ fontSize: '13px', fontWeight: 700, color: '#facc15' }}>
+                  🛡️ RLS 차단 감지 — 즉시 복구 DDL 패치
+                </span>
+              </div>
+              <p style={{ fontSize: '12px', color: '#94a3b8', margin: '0 0 8px', lineHeight: 1.5 }}>
+                아래 SQL을 <b>Supabase SQL Editor</b>에서 실행하면 해당 테이블의 RLS가 해제되어 쓰기가 가능해집니다:
+              </p>
+              <textarea
+                readOnly
+                value={ddlPatch}
+                onClick={(e) => (e.target as HTMLTextAreaElement).select()}
+                style={{
+                  width: '100%',
+                  minHeight: '70px',
+                  backgroundColor: '#0c1426',
+                  color: '#4ade80',
+                  border: '1px solid rgba(234, 179, 8, 0.3)',
+                  borderRadius: '8px',
+                  padding: '12px',
+                  fontFamily: 'Consolas, Monaco, monospace',
+                  fontSize: '13px',
+                  lineHeight: '1.6',
+                  resize: 'vertical',
+                  outline: 'none',
+                  boxSizing: 'border-box'
+                }}
+              />
+              <div style={{ marginTop: '10px', display: 'flex', justifyContent: 'flex-end' }}>
+                <button
+                  type="button"
+                  onClick={handleDdlCopy}
+                  style={{
+                    backgroundColor: ddlCopied ? '#059669' : '#d97706',
+                    color: '#ffffff',
+                    border: 'none',
+                    borderRadius: '8px',
+                    padding: '8px 16px',
+                    fontSize: '13px',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    transition: 'all 0.2s ease'
+                  }}
+                >
+                  {ddlCopied ? <Check size={15} /> : <Copy size={15} />}
+                  {ddlCopied ? 'DDL 복사 완료!' : '🔓 RLS 해제 DDL 복사'}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* 모달 푸터 / 액션 버튼 */}
