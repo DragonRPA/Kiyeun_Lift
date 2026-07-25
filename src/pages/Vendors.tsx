@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { Search, Plus, Edit2, Trash2, Download, Building2, Check, RefreshCw, MapPin, Mail } from 'lucide-react';
+import { Search, Plus, Edit2, Trash2, Download, Building2, Check, RefreshCw } from 'lucide-react';
 import { exportToExcel } from '../services/excel';
 import { Vendor } from '../services/db';
 
@@ -66,8 +66,11 @@ export const Vendors: React.FC = () => {
 
   const handleOpenEditModal = (v: Vendor) => {
     setEditingVendor({ ...v });
-    const currentTypes = v.types && v.types.length > 0 ? v.types : [v.type || 'RENTAL'];
-    setSelectedTypes(currentTypes as VendorTypeOption[]);
+    // v.types가 문자열/배열/PG배열 등 어떤 형식이든 키워드 스캔으로 안전하게 파싱
+    const TYPE_KEYS: VendorTypeOption[] = ['RENTAL', 'PURCHASE', 'TRANSPORT', 'REPAIR', 'OTHER'];
+    const raw = JSON.stringify(v.types ?? v.type ?? '');
+    const parsedTypes = TYPE_KEYS.filter(k => raw.includes(k));
+    setSelectedTypes(parsedTypes.length > 0 ? parsedTypes : [(v.type as VendorTypeOption) || 'RENTAL']);
     setIsModalOpen(true);
   };
 
@@ -304,6 +307,8 @@ export const Vendors: React.FC = () => {
               <col style={{ width: '160px' }} />
               <col style={{ width: '140px' }} />
               <col style={{ width: '60px' }} />
+              <col style={{ width: '100px' }} />
+              <col style={{ width: '100px' }} />
               {canSave && <col style={{ width: '72px' }} />}
             </colgroup>
             <thead>
@@ -319,8 +324,9 @@ export const Vendors: React.FC = () => {
                   대표자명 {renderSortArrow('representative')}
                 </th>
                 <th onClick={() => handleSort('contactName')} style={{ cursor: 'pointer', padding: '8px 6px' }}>
-                  담당자 및 연락처 {renderSortArrow('contactName')}
+                  담당자 {renderSortArrow('contactName')}
                 </th>
+                <th style={{ padding: '8px 6px' }}>연락처</th>
                 <th style={{ padding: '8px 6px' }}>주소</th>
                 <th style={{ padding: '8px 6px' }}>이메일</th>
                 <th style={{ padding: '8px 6px' }}>상태</th>
@@ -330,7 +336,7 @@ export const Vendors: React.FC = () => {
             <tbody>
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={9} style={{ textAlign: 'center', padding: '32px', color: 'var(--text-muted)' }}>
+                  <td colSpan={10} style={{ textAlign: 'center', padding: '32px', color: 'var(--text-muted)' }}>
                     {vendors.length === 0 ? '📭 등록된 매입처(공급자)가 없습니다.' : '🔍 조회 조건에 맞는 매입처가 없습니다. 검색 조건을 변경해 보세요.'}
                   </td>
                 </tr>
@@ -349,27 +355,16 @@ export const Vendors: React.FC = () => {
                       </td>
                       <td style={{ fontSize: '12px', padding: '6px 6px' }}>{v.bizRegNo || '-'}</td>
                       <td style={{ fontSize: '12px', padding: '6px 6px' }}>{v.representative || '-'}</td>
-                      <td style={{ fontSize: '12px', padding: '6px 6px' }}>
-                        <div style={{ fontWeight: '600', color: 'var(--text-main)' }}>{v.contactName || '-'}</div>
-                        <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>{v.contact || ''}</div>
-                      </td>
+                      <td style={{ fontSize: '12px', padding: '6px 6px', fontWeight: '600', color: 'var(--text-main)' }}>{v.contactName || '-'}</td>
+                      <td style={{ fontSize: '12px', padding: '6px 6px', color: 'var(--text-secondary)' }}>{v.contact || '-'}</td>
                       <td style={{ fontSize: '11.5px', padding: '6px 6px', color: 'var(--text-secondary)' }}>
                         {v.address
-                          ? <div style={{ display: 'flex', alignItems: 'flex-start', gap: '3px' }}>
-                              <MapPin size={10} style={{ marginTop: '2px', flexShrink: 0, color: '#9ca3af' }} />
-                              <span style={{ lineHeight: '1.3', overflow: 'hidden', textOverflow: 'ellipsis' }}>{v.address}</span>
-                            </div>
+                          ? <span style={{ lineHeight: '1.3' }}>{v.address}</span>
                           : <span style={{ color: 'var(--text-muted)' }}>-</span>
                         }
                       </td>
                       <td style={{ fontSize: '11.5px', padding: '6px 6px', color: 'var(--text-muted)' }}>
-                        {v.email
-                          ? <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
-                              <Mail size={10} style={{ flexShrink: 0, color: '#9ca3af' }} />
-                              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{v.email}</span>
-                            </div>
-                          : <span>-</span>
-                        }
+                        {v.email || '-'}
                       </td>
                       <td style={{ padding: '6px 6px' }}>
                         <span className={`badge ${v.isActive !== false ? 'badge-success' : 'badge-danger'}`}>

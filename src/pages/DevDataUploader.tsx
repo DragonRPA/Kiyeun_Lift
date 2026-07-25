@@ -1144,8 +1144,7 @@ export const DevDataUploader: React.FC = () => {
           }
         }
 
-        // RLS 해제 DDL 쿼리 묶음 준비
-        rlsPatch += generateRlsPolicyDDL(table) + '\n';
+        // RLS 해제 DDL 쿼리 묶음 준비 (이슈 있는 테이블은 아래 if-else에서 sqlPatch에 추가 후 rlsPatch 별도 관리)
 
         if (missingCols.length > 0) {
           const rlsMsg = hasRlsError ? ' ⚠️ [RLS 정책 위반 경고: new row violates row-level security policy]' : '';
@@ -1175,6 +1174,8 @@ export const DevDataUploader: React.FC = () => {
             status: 'OK',
             message: '정상 (테이블, 모든 컬럼 및 RLS 접근 허용 일치)'
           });
+          // OK 테이블만 rlsPatch에 추가 (이슈 테이블은 sqlPatch에 이미 포함됨 → 중복 방지)
+          rlsPatch += generateRlsPolicyDDL(table) + '\n';
         } else {
           audit.push({
             table,
