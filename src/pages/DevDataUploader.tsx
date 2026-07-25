@@ -448,14 +448,32 @@ interface ValidationError {
   message: string;
 }
 
+function generateNextIdForUpload(tableName: string, index: number): string {
+  let prefix = '';
+  switch (tableName) {
+    case 'products': prefix = 'PROD-'; break;
+    case 'customers': prefix = 'CUST-'; break;
+    case 'assets': prefix = 'ASSET-'; break;
+    case 'customer_sites': prefix = 'SITE-'; break;
+    case 'customer_contacts': prefix = 'CONT-'; break;
+    case 'contracts': prefix = 'CONTR-'; break;
+    case 'vendors': prefix = 'VND-'; break;
+    default:
+      prefix = tableName.slice(0, 4).toUpperCase() + '-';
+  }
+  const timestamp = Date.now().toString().slice(-4);
+  const seq = String(index + 1).padStart(4, '0');
+  return `${prefix}${timestamp}${seq}`;
+}
+
 function validateRows(rows: Record<string, string>[], schema: TableDef): ValidationError[] {
   const errors: ValidationError[] = [];
   rows.forEach((row, idx) => {
     const rowNum = idx + 2; // 헤더가 1행, 데이터는 2행부터
     schema.fields.forEach((field) => {
       const val = row[field.key];
-      // 필수 필드 누락
-      if (field.required && (val === undefined || val === null || val.trim() === '')) {
+      // 필수 필드 누락 (id 제외 - id는 비어있으면 자동 채번)
+      if (field.required && field.key !== 'id' && (val === undefined || val === null || val.trim() === '')) {
         errors.push({ row: rowNum, field: field.label, message: '필수값이 비어 있습니다.' });
         return;
       }
@@ -489,7 +507,7 @@ function parseCSV(text: string): { headers: string[]; rows: Record<string, strin
   return { headers, rows };
 }
 
-function convertRow(row: Record<string, string>, schema: TableDef): Record<string, unknown> {
+function convertRow(row: Record<string, string>, schema: TableDef, index: number): Record<string, unknown> {
   const result: Record<string, unknown> = {};
   schema.fields.forEach(field => {
     const val = row[field.key];
@@ -501,6 +519,11 @@ function convertRow(row: Record<string, string>, schema: TableDef): Record<strin
     else if (field.type === 'boolean') result[field.key] = val === 'true';
     else result[field.key] = val.trim();
   });
+
+  if (!result.id) {
+    result.id = generateNextIdForUpload(schema.key, index);
+  }
+
   const nowIso = new Date().toISOString();
   if (!result.createdAt) result.createdAt = nowIso;
   if (!result.updatedAt) result.updatedAt = nowIso;
@@ -508,13 +531,15 @@ function convertRow(row: Record<string, string>, schema: TableDef): Record<strin
 }
 
 export const DevDataUploader: React.FC = () => {
-  const { currentUser } = useApp();
+  const { currentUser, showErrorModal } = useApp();
   const [selectedTableKey, setSelectedTableKey] = useState<string>('customers');
   const [parsedRows, setParsedRows] = useState<Record<string, string>[]>([]);
   const [validationErrors, setValidationErrors] = useState<ValidationError[]>([]);
   const [validationDone, setValidationDone] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadResult, setUploadResult] = useState<{ success: number; failed: number } | null>(null);
+  const [lastUploadErrorDetails, setLastUploadErrorDetails] = useState<string | null>(null);
+  const [lastBulkUploadErrorDetails, setLastBulkUploadErrorDetails] = useState<string | null>(null);
   const [fileName, setFileName] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -589,6 +614,7 @@ export const DevDataUploader: React.FC = () => {
     setValidationDone(false);
     setValidationErrors([]);
     setUploadResult(null);
+    setLastUploadErrorDetails(null);
     const reader = new FileReader();
     reader.onload = (ev) => {
       const text = ev.target?.result as string;
@@ -612,9 +638,12 @@ export const DevDataUploader: React.FC = () => {
     if (!supabase || validationErrors.length > 0) return;
     setUploading(true);
     setUploadResult(null);
+    setLastUploadErrorDetails(null);
     let successCount = 0;
     let failedCount = 0;
-    const converted = parsedRows.map(row => convertRow(row, schema));
+    let errDetailsMsg = '';
+
+    const converted = parsedRows.map((row, idx) => convertRow(row, schema, idx));
 
     // Update local DB cache too
     const currentLocalData = (db as any)[selectedTableKey] || [];
@@ -639,11 +668,15 @@ export const DevDataUploader: React.FC = () => {
       if (error) {
         failedCount += batch.length;
         console.error('Upsert error:', error);
+        errDetailsMsg = `[테이블: ${schema.supabaseTable}]\n[Supabase 에러 코드: ${error.code || '미지정'}]\n[메시지: ${error.message}]\n[상세 내역: ${error.details || '없음'}]\n[도움말 힌트: ${error.hint || '없음'}]`;
       } else {
         successCount += batch.length;
       }
     }
     setUploadResult({ success: successCount, failed: failedCount });
+    if (errDetailsMsg) {
+      setLastUploadErrorDetails(errDetailsMsg);
+    }
     setUploading(false);
   };
 
@@ -731,6 +764,7 @@ export const DevDataUploader: React.FC = () => {
     setBulkValidationDone(false);
     setBulkValidationErrors([]);
     setBulkUploadResult(null);
+    setLastBulkUploadErrorDetails(null);
     
     const reader = new FileReader();
     reader.onload = (ev) => {
@@ -792,15 +826,17 @@ export const DevDataUploader: React.FC = () => {
     if (!supabase || bulkValidationErrors.length > 0) return;
     setBulkUploading(true);
     setBulkUploadResult(null);
+    setLastBulkUploadErrorDetails(null);
     
     let totalSuccess = 0;
     let totalFailed = 0;
+    let errDetailsMsg = '';
     
     try {
       for (const sheetName of Object.keys(bulkParsedData)) {
         const schema = TABLE_SCHEMAS.find(t => t.key === sheetName)!;
         const sheetRows = bulkParsedData[sheetName];
-        const converted = sheetRows.map(row => convertRow(row, schema));
+        const converted = sheetRows.map((row, idx) => convertRow(row, schema, idx));
         
         // Update local DB cache for this sheet
         const currentLocalData = (db as any)[sheetName] || [];
@@ -824,15 +860,19 @@ export const DevDataUploader: React.FC = () => {
           if (error) {
             totalFailed += batch.length;
             console.error(`Bulk upsert error for ${schema.supabaseTable}:`, error);
+            errDetailsMsg += `[시트/테이블: ${schema.supabaseTable}]\n[Supabase 에러 코드: ${error.code || '미지정'}]\n[메시지: ${error.message}]\n[상세 내역: ${error.details || '없음'}]\n\n`;
           } else {
             totalSuccess += batch.length;
           }
         }
       }
       setBulkUploadResult({ success: totalSuccess, failed: totalFailed });
-    } catch (err) {
+      if (errDetailsMsg) {
+        setLastBulkUploadErrorDetails(errDetailsMsg);
+      }
+    } catch (err: any) {
       console.error("Bulk upload failed:", err);
-      alert("업로드 중 오류가 발생했습니다.");
+      showErrorModal(`⚠️ 일괄 업로드 처리 중 예외 발생:\n\n${err?.message || err}`);
     } finally {
       setBulkUploading(false);
     }
@@ -1239,22 +1279,37 @@ export const DevDataUploader: React.FC = () => {
             </button>
 
             {uploadResult && (
-              <div style={{ marginTop: '14px', display: 'flex', gap: '12px' }}>
-                <div style={{
-                  flex: 1, padding: '14px', borderRadius: '8px', textAlign: 'center',
-                  backgroundColor: 'rgba(34,197,94,0.1)', border: '1px solid #22c55e'
-                }}>
-                  <div style={{ fontSize: '28px', fontWeight: '800', color: '#15803d' }}>{uploadResult.success}</div>
-                  <div style={{ fontSize: '12px', color: '#15803d' }}>성공</div>
+              <div style={{ marginTop: '14px' }}>
+                <div style={{ display: 'flex', gap: '12px' }}>
+                  <div style={{
+                    flex: 1, padding: '14px', borderRadius: '8px', textAlign: 'center',
+                    backgroundColor: 'rgba(34,197,94,0.1)', border: '1px solid #22c55e'
+                  }}>
+                    <div style={{ fontSize: '28px', fontWeight: '800', color: '#15803d' }}>{uploadResult.success}</div>
+                    <div style={{ fontSize: '12px', color: '#15803d' }}>성공</div>
+                  </div>
+                  <div style={{
+                    flex: 1, padding: '14px', borderRadius: '8px', textAlign: 'center',
+                    backgroundColor: uploadResult.failed > 0 ? 'rgba(239,68,68,0.1)' : 'var(--bg-body)',
+                    border: uploadResult.failed > 0 ? '1px solid var(--danger)' : '1px solid var(--border-color)'
+                  }}>
+                    <div style={{ fontSize: '28px', fontWeight: '800', color: uploadResult.failed > 0 ? 'var(--danger)' : 'var(--text-muted)' }}>{uploadResult.failed}</div>
+                    <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>실패</div>
+                  </div>
                 </div>
-                <div style={{
-                  flex: 1, padding: '14px', borderRadius: '8px', textAlign: 'center',
-                  backgroundColor: uploadResult.failed > 0 ? 'rgba(239,68,68,0.1)' : 'var(--bg-body)',
-                  border: uploadResult.failed > 0 ? '1px solid var(--danger)' : '1px solid var(--border-color)'
-                }}>
-                  <div style={{ fontSize: '28px', fontWeight: '800', color: uploadResult.failed > 0 ? 'var(--danger)' : 'var(--text-muted)' }}>{uploadResult.failed}</div>
-                  <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>실패 (콘솔 확인)</div>
-                </div>
+
+                {uploadResult.failed > 0 && lastUploadErrorDetails && (
+                  <button
+                    onClick={() => showErrorModal(`⚠️ 엑셀 데이터 업로드 실패 원인 상세 분석:\n\n${lastUploadErrorDetails}`)}
+                    className="btn-danger"
+                    style={{
+                      width: '100%', marginTop: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      gap: '6px', fontSize: '12px', padding: '8px 12px'
+                    }}
+                  >
+                    🔍 실패 원인 자세히 보기 (오류 복사)
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -1367,13 +1422,28 @@ export const DevDataUploader: React.FC = () => {
             )}
 
             {bulkUploadResult && (
-              <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
-                <div style={{ flex: 1, backgroundColor: 'rgba(34,197,94,0.1)', padding: '6px', borderRadius: '4px', textAlign: 'center', fontSize: '11px', color: '#15803d' }}>
-                  성공: <strong>{bulkUploadResult.success}</strong> 건
+              <div style={{ marginTop: '8px' }}>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <div style={{ flex: 1, backgroundColor: 'rgba(34,197,94,0.1)', padding: '6px', borderRadius: '4px', textAlign: 'center', fontSize: '11px', color: '#15803d' }}>
+                    성공: <strong>{bulkUploadResult.success}</strong> 건
+                  </div>
+                  <div style={{ flex: 1, backgroundColor: bulkUploadResult.failed > 0 ? 'rgba(239,68,68,0.1)' : 'var(--bg-body)', padding: '6px', borderRadius: '4px', textAlign: 'center', fontSize: '11px', color: bulkUploadResult.failed > 0 ? 'var(--danger)' : 'var(--text-muted)' }}>
+                    실패: <strong>{bulkUploadResult.failed}</strong> 건
+                  </div>
                 </div>
-                <div style={{ flex: 1, backgroundColor: bulkUploadResult.failed > 0 ? 'rgba(239,68,68,0.1)' : 'var(--bg-body)', padding: '6px', borderRadius: '4px', textAlign: 'center', fontSize: '11px', color: bulkUploadResult.failed > 0 ? 'var(--danger)' : 'var(--text-muted)' }}>
-                  실패: <strong>{bulkUploadResult.failed}</strong> 건
-                </div>
+
+                {bulkUploadResult.failed > 0 && lastBulkUploadErrorDetails && (
+                  <button
+                    onClick={() => showErrorModal(`⚠️ 엑셀 일괄 업로드 실패 원인 상세 분석:\n\n${lastBulkUploadErrorDetails}`)}
+                    className="btn-danger"
+                    style={{
+                      width: '100%', marginTop: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      gap: '4px', fontSize: '11px', padding: '6px 10px'
+                    }}
+                  >
+                    🔍 실패 원인 자세히 보기 (오류 복사)
+                  </button>
+                )}
               </div>
             )}
           </div>
