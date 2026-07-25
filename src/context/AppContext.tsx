@@ -1,6 +1,6 @@
 // d:\Kiyeun_Lift\src\context\AppContext.tsx
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { db, User, MenuPermission, Customer, CustomerContact, CustomerSite, Product, Asset, Consumable, ConsumableLog, ConsumablePurchaseRequest, Contract, ContractAsset, ContractHistory, Billing, BillingDetail, Payment, Delivery, TransportCompany, TransportDriver, Repair, RepairConsumable, Todo, BankTransaction, BankMatchingRule, AssetInOutLog, Vendor, GoogleConfig, CashFlowSnapshot, findCustomerByNormalizedName } from '../services/db';
+import { db, supabase, User, MenuPermission, Customer, CustomerContact, CustomerSite, Product, Asset, Consumable, ConsumableLog, ConsumablePurchaseRequest, Contract, ContractAsset, ContractHistory, Billing, BillingDetail, Payment, Delivery, TransportCompany, TransportDriver, Repair, RepairConsumable, Todo, BankTransaction, BankMatchingRule, AssetInOutLog, Vendor, GoogleConfig, CashFlowSnapshot, findCustomerByNormalizedName } from '../services/db';
 import { ErrorModal } from '../components/ErrorModal';
 
 export interface SmartDispatchData {
@@ -126,6 +126,7 @@ interface AppContextType {
   uploadBankTransactions: (txs: Omit<BankTransaction, 'id' | 'createdAt'>[]) => void;
   matchTransactionManual: (txId: string, billingId: string, learnRule: boolean) => void;
   unmatchTransaction: (txId: string) => void;
+  saveMatchingRule: (senderName: string, customerId: string) => void;
   deleteMatchingRule: (ruleId: string) => void;
   
   // Deliveries
@@ -352,9 +353,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return action === 'view' ? perm.canView : perm.canSave;
   };
 
-  const updatePermissions = (updated: MenuPermission[]) => {
-    db.permissions = updated;
-    refreshAllData();
+  const updatePermissions = async (updated: MenuPermission[]) => {
+    try {
+      db.permissions = updated;
+      if (supabase) {
+        const { error } = await supabase.from('permissions').upsert(updated as any[], { onConflict: 'id' });
+        if (error) throw error;
+      }
+      refreshAllData();
+    } catch (err: any) {
+      console.error('Update permissions error:', err);
+      throw err;
+    }
   };
 
   const updateGoogleConfig = (configData: GoogleConfig) => {
@@ -1814,6 +1824,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     refreshAllData();
   };
 
+  const saveMatchingRule = (senderName: string, customerId: string) => {
+    const existing = db.bankMatchingRules.find(r => r.senderName.toLowerCase() === senderName.toLowerCase());
+    if (existing) {
+      db.updateRow<BankMatchingRule>('bankMatchingRules', existing.id, {
+        customerId,
+        updatedAt: new Date().toISOString()
+      } as any);
+    } else {
+      const newRule: BankMatchingRule = {
+        id: `RULE-${Date.now().toString().slice(-6)}`,
+        senderName,
+        customerId,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+      db.insertRow<BankMatchingRule>('bankMatchingRules', newRule);
+    }
+    refreshAllData();
+  };
+
   const deleteMatchingRule = (ruleId: string) => {
     db.deleteRow('bankMatchingRules', ruleId);
     refreshAllData();
@@ -2193,7 +2223,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       saveSmartDispatch, saveSmartReturn,
       completeTodo,
       generateBillingsForMonth, approveBilling, cancelBilling, receivePayment,
-      uploadBankTransactions, matchTransactionManual, unmatchTransaction, deleteMatchingRule,
+      uploadBankTransactions, matchTransactionManual, unmatchTransaction, saveMatchingRule, deleteMatchingRule,
       dispatchDelivery, settleDeliveryCost, completeDelivery, completeInboundDelivery,
       registerRepair,
       saveTransportDataOnFly,

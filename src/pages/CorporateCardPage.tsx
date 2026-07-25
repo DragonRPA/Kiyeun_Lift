@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { 
-  CreditCard, Upload, CheckCircle2, AlertTriangle, ArrowRight, 
+  CreditCard, Upload, Download, CheckCircle2, AlertTriangle, ArrowRight, 
   HelpCircle, RefreshCw, FileText, Settings, Plus, Trash2, Edit3, Save, X, Lightbulb
 } from 'lucide-react';
 
@@ -144,6 +144,24 @@ export const CorporateCardPage: React.FC = () => {
     setTransactions(mockTx);
     setIsUploaded(true);
     alert('카드사 거래내역 파일 업로드 완료!\n등록된 지출 카테고리 기준의 누락 방지 모니터링이 자동 연동됩니다.');
+  };
+
+  // 템플릿 다운로드 (UTF-8 BOM 지원)
+  const handleDownloadTemplate = () => {
+    const headers = '승인일시,카드번호,가맹점명,승인금액,부가세,승인번호,매입유형분류\n';
+    const sampleRows = [
+      '2026-07-20 12:30:00,1234-****-****-5678,SK에너지 화성주유소,85000,7727,84910294,유류비',
+      '2026-07-21 19:15:00,1234-****-****-5678,한일식당,45000,4091,91823019,복리후생비',
+      '2026-07-22 14:00:00,1234-****-****-5678,(주)한국엔지니어링,330000,30000,12938402,외주정비비'
+    ].join('\n');
+
+    const blob = new Blob(['\uFEFF' + headers + sampleRows], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `법인카드_이용내역_템플릿_${selectedMonth}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
   };
 
   // 1차 자동 매표 매핑 대출 실행
@@ -319,10 +337,21 @@ export const CorporateCardPage: React.FC = () => {
                   <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)', marginBottom: '8px' }}>
                     {isUploaded ? '신한법인카드이용명세서.csv' : '카드사 이용내역(CSV/Excel)'}
                   </div>
-                  <input type="file" onChange={handleFileUpload} style={{ display: 'none' }} id="card-upload-file" />
-                  <label htmlFor="card-upload-file" className="btn-secondary" style={{ padding: '4px 10px', fontSize: '11px', cursor: 'pointer', display: 'inline-block' }}>
-                    파일 업로드
-                  </label>
+                  <div style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
+                    <input type="file" onChange={handleFileUpload} style={{ display: 'none' }} id="card-upload-file" />
+                    <label htmlFor="card-upload-file" className="btn-secondary" style={{ padding: '5px 10px', fontSize: '11px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                      <Upload size={12} /> 파일 업로드
+                    </label>
+                    <button
+                      type="button"
+                      className="btn-secondary"
+                      onClick={handleDownloadTemplate}
+                      style={{ padding: '5px 10px', fontSize: '11px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                      title="유니코드 UTF-8 BOM 지원 템플릿 다운로드"
+                    >
+                      <Download size={12} /> 템플릿 받기
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>

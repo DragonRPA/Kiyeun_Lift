@@ -1,3 +1,22 @@
+# Release Notes (v1.3.3.Build.00002 - 2026-07-25 20:42)
+
+## 🩺 권한 저장 비동기 Supabase 연동 & 에러 모달 탑재, 카드사 템플릿 UTF-8 BOM 다운로드 및 학습형 매칭 룰 검색/등록 개편
+- **사용자 및 메뉴 권한 통합 관리 권한 저장 보정 (`UsersPermissions.tsx` & `AppContext.tsx`)**:
+  - `updatePermissions`를 비동기 `async` 함수로 전환하고 Supabase `permissions` 테이블과 로컬 DB의 권한 상태를 완벽하게 동기화했습니다.
+  - 권한 저장 중 예외 발생 시 `showErrorModal` 팝업 에러 모달이 즉시 출력되도록 `try/catch` 구문을 보정했습니다.
+- **법인카드 매입정산 카드사 이용내역 템플릿 다운로드 추가 (`CorporateCardPage.tsx`)**:
+  - 이용대금 파일 로드 카드 영역에 `📥 템플릿 받기` 버튼을 추가했습니다.
+  - `\uFEFF` UTF-8 Byte Order Mark 유니코드가 적용된 CSV 템플릿을 생성하여 엑셀(Excel)에서 한글 깨짐이 발생하지 않도록 조치했습니다.
+- **학습형 매칭 룰 관리 검색/조회 필터 & 신규 룰 모달 탑재 (`BankMatching.tsx`)**:
+  - 매칭 룰 탭 상단에 이체자명/고객사명 검색어 입력창, `🔍 조회` 버튼, `↺ 초기화` 버튼 및 `Enter` 키 바인딩을 주입했습니다.
+  - 수동 대조를 수행하지 않고도 사전에 통장 적요 키워드와 ERP 고객사를 직접 매핑할 수 있는 `+ 신규 매칭 룰 등록` 팝업 모달을 추가했습니다.
+- **은행 입출금 대장 CSV 템플릿 UTF-8 BOM 보정 (`BankMatching.tsx`)**:
+  - CSV 템플릿 파일 생성 시 UTF-8 BOM(`\uFEFF`)을 적용하여 엑셀에서 파일 오픈 시 유니코드로 정상 호환되도록 교정했습니다.
+- **개발자 도구 DB 업로더 테이블 선택 드롭다운 오름차순 정렬 (`DevDataUploader.tsx`)**:
+  - `① 테이블 선택` 드롭다운 목록 아이템들을 한글 표기명 기준 가나다 오름차순으로 정렬하고, 중복 표시되던 `(customers) (customers)` 괄호 수식을 정리했습니다.
+
+---
+
 # Release Notes (v1.3.2.Build.00000 - 2026-07-25 19:36)
 
 ## ✨ 공급자(Vendors) 관리 메뉴 조회 버튼 추가 & DB 일괄 업로더 vendors 완전 지원

@@ -19,6 +19,7 @@ export const BankMatching: React.FC = () => {
     uploadBankTransactions,
     matchTransactionManual,
     unmatchTransaction,
+    saveMatchingRule,
     deleteMatchingRule,
     hasPermission,
     currentUser
@@ -30,6 +31,13 @@ export const BankMatching: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'MATCHING' | 'RULES'>('MATCHING');
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'UNMATCHED' | 'MATCHED'>('ALL');
+  
+  // 학습형 매칭 룰 검색 및 등록 상태
+  const [ruleSearchInput, setRuleSearchInput] = useState('');
+  const [ruleSearchTerm, setRuleSearchTerm] = useState('');
+  const [isRuleModalOpen, setIsRuleModalOpen] = useState(false);
+  const [newRuleSenderName, setNewRuleSenderName] = useState('');
+  const [newRuleCustomerId, setNewRuleCustomerId] = useState('');
   
   // 수동 매칭 모달 상태
   const [selectedTx, setSelectedTx] = useState<BankTransaction | null>(null);
@@ -112,7 +120,7 @@ export const BankMatching: React.FC = () => {
       '2026-07-20 14:00:00,홍길동,300000,0,렌탈료송금'
     ].join('\n');
     
-    const blob = new Blob([headers + rows], { type: 'text/csv;charset=utf-8;' });
+    const blob = new Blob(['\uFEFF' + headers + rows], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.setAttribute('href', url);
@@ -506,11 +514,66 @@ export const BankMatching: React.FC = () => {
       ) : (
         /* 학습형 매칭 룰 탭 */
         <div className="card" style={{ padding: '24px' }}>
-          <div style={{ marginBottom: '16px' }}>
-            <h3 className="card-title">학습형 매칭 규칙 목록</h3>
-            <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '4px' }}>
-              수동 매칭 시 등록한 이체자명과 고객사의 연결 고리를 보여줍니다. 통장 내역 업로드 시 본 규칙을 조회하여 우선적으로 자동 대조 수납을 처리합니다.
-            </p>
+          <div style={{ marginBottom: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+            <div>
+              <h3 className="card-title">학습형 매칭 규칙 목록</h3>
+              <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+                수동 매칭 시 등록한 이체자명과 고객사의 연결 고리를 보여줍니다. 통장 내역 업로드 시 본 규칙을 조회하여 우선적으로 자동 대조 수납을 처리합니다.
+              </p>
+            </div>
+            {canSave && (
+              <button 
+                className="btn-primary" 
+                onClick={() => {
+                  setNewRuleSenderName('');
+                  setNewRuleCustomerId(customers.length > 0 ? customers[0].id : '');
+                  setIsRuleModalOpen(true);
+                }}
+                style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12.5px' }}
+              >
+                <Plus size={15} /> 신규 매칭 룰 등록
+              </button>
+            )}
+          </div>
+
+          {/* 🔍 매칭 룰 전용 검색 및 필터 바 */}
+          <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', alignItems: 'center' }}>
+            <div style={{ position: 'relative', flex: 1, maxWidth: '400px' }}>
+              <Search size={15} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+              <input
+                type="text"
+                placeholder="통장 적요(입금자명), 고객사명 검색..."
+                value={ruleSearchInput}
+                onChange={e => setRuleSearchInput(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') setRuleSearchTerm(ruleSearchInput); }}
+                style={{ paddingLeft: '32px', width: '100%', fontSize: '13px' }}
+              />
+            </div>
+            <button
+              className="btn-primary"
+              onClick={() => setRuleSearchTerm(ruleSearchInput)}
+              style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '7px 14px', fontSize: '12.5px', fontWeight: '600' }}
+            >
+              <Search size={14} /> 조회
+            </button>
+            <button
+              className="btn-secondary"
+              onClick={() => { setRuleSearchInput(''); setRuleSearchTerm(''); }}
+              style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '7px 10px', fontSize: '12px' }}
+              title="검색 초기화"
+            >
+              <RefreshCw size={13} />
+            </button>
+            <span style={{ fontSize: '12.5px', color: 'var(--text-muted)', marginLeft: 'auto' }}>
+              전체 <strong>{bankMatchingRules.length}</strong>건 (조회: {
+                bankMatchingRules.filter(r => {
+                  const custName = getCustName(r.customerId).toLowerCase();
+                  const sender = r.senderName.toLowerCase();
+                  const term = ruleSearchTerm.toLowerCase();
+                  return sender.includes(term) || custName.includes(term);
+                }).length
+              }건)
+            </span>
           </div>
 
           <div className="table-container">
@@ -525,14 +588,25 @@ export const BankMatching: React.FC = () => {
                 </tr>
               </thead>
               <tbody>
-                {bankMatchingRules.length === 0 ? (
-                  <tr>
-                    <td colSpan={canSave ? 5 : 4} style={{ textAlign: 'center', padding: '30px 0', color: 'var(--text-muted)' }}>
-                      등록된 학습형 매칭 룰이 없습니다. 수동 대조 매칭을 진행할 때 '매핑 관계 기억' 체크박스를 켜서 규칙을 추가해 보세요.
-                    </td>
-                  </tr>
-                ) : (
-                  bankMatchingRules.map((rule, idx) => (
+                {(() => {
+                  const filteredRules = bankMatchingRules.filter(r => {
+                    const custName = getCustName(r.customerId).toLowerCase();
+                    const sender = r.senderName.toLowerCase();
+                    const term = ruleSearchTerm.toLowerCase();
+                    return sender.includes(term) || custName.includes(term);
+                  });
+
+                  if (filteredRules.length === 0) {
+                    return (
+                      <tr>
+                        <td colSpan={canSave ? 5 : 4} style={{ textAlign: 'center', padding: '30px 0', color: 'var(--text-muted)' }}>
+                          {ruleSearchTerm ? '조회 검색 조건에 부합하는 매칭 룰이 없습니다.' : '등록된 학습형 매칭 룰이 없습니다.'}
+                        </td>
+                      </tr>
+                    );
+                  }
+
+                  return filteredRules.map((rule, idx) => (
                     <tr key={rule.id}>
                       <td>{idx + 1}</td>
                       <td>
@@ -545,7 +619,7 @@ export const BankMatching: React.FC = () => {
                           <button 
                             className="btn-danger" 
                             onClick={() => {
-                              if (confirm('이 매핑 매칭 규칙을 삭제하시겠습니까?\n삭제 후에는 해당 입금자명으로 들어오는 거래가 자동으로 대조되지 않습니다.')) {
+                              if (confirm(`'${rule.senderName}' 매핑 매칭 규칙을 삭제하시겠습니까?`)) {
                                 deleteMatchingRule(rule.id);
                                 alert('매핑 규칙이 제거되었습니다.');
                               }
@@ -557,10 +631,80 @@ export const BankMatching: React.FC = () => {
                         </td>
                       )}
                     </tr>
-                  ))
-                )}
+                  ));
+                })()}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {/* 🆕 신규 매칭 룰 직접 등록 모달 */}
+      {isRuleModalOpen && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000
+        }}>
+          <div className="card" style={{ width: '90%', maxWidth: '480px', backgroundColor: 'var(--bg-card)', padding: '24px' }}>
+            <h3 style={{ margin: '0 0 16px 0', fontWeight: '700', borderBottom: '1px solid var(--border-color)', paddingBottom: '12px' }}>
+              신규 학습형 매칭 룰 수동 등록
+            </h3>
+
+            <form onSubmit={(e) => {
+              e.preventDefault();
+              if (!newRuleSenderName.trim()) {
+                alert('은행 이체자/입금자명을 입력해주세요.');
+                return;
+              }
+              if (!newRuleCustomerId) {
+                alert('연결할 ERP 고객사를 선택해주세요.');
+                return;
+              }
+              saveMatchingRule(newRuleSenderName.trim(), newRuleCustomerId);
+              alert('매칭 룰이 성공적으로 등록/업데이트되었습니다.');
+              setIsRuleModalOpen(false);
+            }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', marginBottom: '20px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', marginBottom: '4px' }}>
+                    은행 이체자/입금자명 (통장 적요 키워드) *
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="예: 주식회사 기연, 홍길동, 대현테크"
+                    value={newRuleSenderName}
+                    onChange={e => setNewRuleSenderName(e.target.value)}
+                    required
+                    style={{ width: '100%', padding: '8px', fontSize: '13px' }}
+                  />
+                  <span style={{ fontSize: '11.5px', color: 'var(--text-muted)', marginTop: '4px', display: 'block' }}>
+                    💡 통장 입금 내역의 이체자명과 완벽히 동일하거나 주요 키워드를 입력합니다.
+                  </span>
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', marginBottom: '4px' }}>
+                    연결할 ERP 고객사 선택 *
+                  </label>
+                  <select
+                    value={newRuleCustomerId}
+                    onChange={e => setNewRuleCustomerId(e.target.value)}
+                    required
+                    style={{ width: '100%', padding: '8px', fontSize: '13px' }}
+                  >
+                    <option value="">고객사 선택...</option>
+                    {customers.map(c => (
+                      <option key={c.id} value={c.id}>{c.name} ({c.id})</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', borderTop: '1px solid var(--border-color)', paddingTop: '12px' }}>
+                <button type="button" className="btn-secondary" onClick={() => setIsRuleModalOpen(false)}>취소</button>
+                <button type="submit" className="btn-primary">룰 등록 (기억)</button>
+              </div>
+            </form>
           </div>
         </div>
       )}

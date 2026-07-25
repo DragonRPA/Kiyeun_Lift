@@ -439,3 +439,46 @@
   - `schema.sql`: vendors 테이블 DDL에 `representative`, `email`, `address`, `types TEXT`, `isActive BOOLEAN DEFAULT TRUE` 컬럼 추가 및 type 허용값 `PURCHASE` 추가(기존 `CONSUMABLE` → `PURCHASE` 교정).
   - `DevDataUploader.tsx`: `COLUMN_LABEL_MAP`에 `type`, `types`, `bankAccount`, `isActive` 한글 라벨 추가 → 업로더가 공급자 전체 컬럼 지원.
   - **버전 산정**: 기존 메뉴(공급자 관리) 기능 추가 + DB 업로더 기능 보강 ➔ **`v1.3.2.Build.00000`** (Z 증가: Feature 추가)
+
+## [2026-07-25] [반영완료] 개발자 도구 DB 업로더 테이블 선택 드롭다운 오름차순 정렬 및 라벨 중복 제거 (v1.3.2.Build.00001)
+- **요구사항**: 
+  1. 개발자 도구 - Supabase 데이터 업로더의 `① 테이블 선택` 드롭다운 목록 아이템들을 한글 이름 기준 가나다 오름차순 정렬.
+  2. `고객사 (customers) (customers)` 처럼 괄호 라벨이 두 번 중복 표시되던 라벨 가공 방식 깔끔하게 교정.
+- **해결 설계**:
+  - `DevDataUploader.tsx`: `getDynamicTableSchemas` 결과를 한글 표기명(`label`) 기준 `localeCompare('ko')` 오름차순으로 정렬.
+  - `<option>` 태그에서 중복 표시되던 `({t.supabaseTable})` 라벨 조합 수식 정리.
+  - **버전 산정**: UI 및 드롭다운 정렬 단순 개선/Hotfix ➔ **`v1.3.2.Build.00001`** (Build 1 증가)
+
+## [2026-07-25] [반영완료] 은행 입출금 내역 CSV 템플릿 UTF-8 BOM 유니코드 한글 깨짐 방지 패치 (v1.3.2.Build.00002)
+- **요구사항**: 
+  1. `은행 입출금 대장 (BankMatching.tsx)` 메뉴의 `템플릿 받기` 버튼으로 다운로드한 CSV 파일 오픈 시 엑셀(Excel)에서 한글이 깨지는 현상 수정.
+- **해결 설계**:
+  - `BankMatching.tsx`: Blob 생성 시 UTF-8 Byte Order Mark인 `\uFEFF`를 CSV 헤더 맨 앞에 적용하여 엑셀 자동 유니코드 인식 및 한글 깨짐 원천 차단.
+  - **버전 산정**: 한글 인코딩 오타/버그 패치 ➔ **`v1.3.2.Build.00002`** (Build 1 증가)
+
+## [2026-07-25] [반영완료] 학습형 매칭 룰 관리 조회/검색 필터 및 신규 룰 등록 기능 주입 (v1.3.3.Build.00000)
+- **요구사항**: 
+  1. `은행 입출금 대장 (BankMatching.tsx)`의 `학습형 매칭 룰 관리` 탭에 조회/검색 필터 바(이체자명/고객사명 검색, `🔍 조회` 버튼, `↺ 초기화` 버튼) 추가.
+  2. 수동 대조를 거치지 않고도 매칭 룰을 사전에 직접 추가할 수 있는 `+ 신규 매칭 룰 등록` 버튼 및 모달 창 탑재.
+- **해결 설계**:
+  - `BankMatching.tsx`: `ruleSearchInput`, `ruleSearchTerm` 검색 필터 state 주입 및 필터링된 룰 목록 테이블 렌더링.
+  - 신규 매칭 룰 등록 모달(`isRuleModalOpen`) 생성 (입금/이체자명 키워드 + ERP 고객사 선택 드롭다운).
+  - **버전 산정**: 매칭 룰 메뉴 기능 확장 ➔ **`v1.3.3.Build.00000`** (Z 증가: Feature 확장)
+
+## [2026-07-25] [반영완료] 법인카드 매입정산 메뉴 카드사 이용내역 UTF-8 BOM 템플릿 다운로드 추가 (v1.3.3.Build.00001)
+- **요구사항**: 
+  1. `법인카드 매입정산 (CorporateCardPage.tsx)` 메뉴에 `카드사 이용내역 템플릿 다운로드` 기능 추가.
+  2. 엑셀(Excel) 오픈 시 한글 깨짐이 발생하지 않도록 UTF-8 BOM 유니코드 적용.
+- **해결 설계**:
+  - `CorporateCardPage.tsx`: 이용대금 파일 로드 카드에 `📥 템플릿 다운로드` 버튼 추가.
+  - `\uFEFF` UTF-8 Byte Order Mark가 탑재된 샘플 거래내역 CSV(승인일시, 카드번호, 가맹점명, 승인금액, 부가세, 승인번호, 매입유형분류) 다운로드 핸들러 구현.
+  - **버전 산정**: 템플릿 다운로드 기능 추가 ➔ **`v1.3.3.Build.00001`** (Build 1 증가)
+
+## [2026-07-25] [반영완료] 사용자 및 메뉴 권한 통합 관리 권한 저장 비동기 보정 및 예외 에러 모달 연동 (v1.3.3.Build.00002)
+- **요구사항**: 
+  1. `사용자 및 권한 (UsersPermissions.tsx)` 메뉴에서 메뉴 권한 저장 시 저장 반영이 안 되는 문제 해결.
+  2. 권한 저장 과정에서 예외/오류 발생 시 에러 모달(`showErrorModal`)을 연동하여 명확한 오류 원인 안내.
+- **해결 설계**:
+  - `AppContext.tsx`: `updatePermissions`를 비동기 `async` 함수로 전환하고 Supabase `permissions` 테이블 upsert 및 로컬 storage 동기화 처리 후 오류 시 throw하도록 수정.
+  - `UsersPermissions.tsx`: `handleSavePermissions`를 `async/await` 및 `try/catch` 구문으로 보정하고 예외 발생 시 `showErrorModal` 에러 팝업 모달 연동.
+  - **버전 산정**: 버그 수정 및 예외 처리 강화 ➔ **`v1.3.3.Build.00002`** (Build 1 증가)

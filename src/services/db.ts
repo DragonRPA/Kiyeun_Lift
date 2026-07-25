@@ -488,6 +488,7 @@ export interface BankMatchingRule {
   senderName: string; // 이체자명
   customerId: string; // 매핑된 고객사 ID
   createdAt: string;
+  updatedAt?: string;
 }
 
 export interface GoogleConfig {

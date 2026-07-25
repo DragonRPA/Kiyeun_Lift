@@ -552,7 +552,10 @@ function convertRow(row: Record<string, string>, schema: TableDef, index: number
 
 export const DevDataUploader: React.FC = () => {
   const { currentUser, showErrorModal, products } = useApp();
-  const tableSchemas = React.useMemo(() => getDynamicTableSchemas(products), [products]);
+  const tableSchemas = React.useMemo(() => 
+    getDynamicTableSchemas(products).sort((a, b) => a.label.localeCompare(b.label, 'ko', { numeric: true })), 
+    [products]
+  );
   
   const [selectedTableKey, setSelectedTableKey] = useState<string>('customers');
   const [parsedRows, setParsedRows] = useState<Record<string, string>[]>([]);
@@ -1155,8 +1158,8 @@ export const DevDataUploader: React.FC = () => {
             }}
             style={{ width: '100%', padding: '8px', marginBottom: '20px' }}
           >
-            {TABLE_SCHEMAS.map(t => (
-              <option key={t.key} value={t.key}>{t.label} ({t.supabaseTable})</option>
+            {tableSchemas.map(t => (
+              <option key={t.key} value={t.key}>{t.label}</option>
             ))}
           </select>
 

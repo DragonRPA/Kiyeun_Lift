@@ -94,7 +94,7 @@ export const MENU_CATEGORIES: MenuCategoryGroup[] = [
 ];
 
 export const UsersPermissions: React.FC = () => {
-  const { users, permissions, updatePermissions, saveUser, currentUser, hasPermission } = useApp();
+  const { users, permissions, updatePermissions, saveUser, currentUser, hasPermission, showErrorModal } = useApp();
 
   const isSuperAdmin = currentUser?.id === 'u-1' || currentUser?.id === 'sys-admin';
   const canSave = hasPermission('permission', 'save');
@@ -280,11 +280,16 @@ export const UsersPermissions: React.FC = () => {
     });
   };
 
-  const handleSavePermissions = () => {
+  const handleSavePermissions = async () => {
     if (!canSave) return;
-    updatePermissions(localPermissions);
-    setIsDirty(false);
-    alert('메뉴 권한 설정이 성공적으로 저장되었습니다.');
+    try {
+      await updatePermissions(localPermissions);
+      setIsDirty(false);
+      alert('메뉴 권한 설정이 성공적으로 저장되었습니다.');
+    } catch (err: any) {
+      console.error('Save permissions error:', err);
+      showErrorModal(`⚠️ 메뉴 권한 설정 저장 중 오류가 발생했습니다:\n\n${err?.message || err}`);
+    }
   };
 
   return (
