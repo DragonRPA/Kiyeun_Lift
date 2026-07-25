@@ -237,3 +237,15 @@
 - **해결 설계**:
   1. `OrganizationSettings.tsx` 전체 컨테이너의 불필요한 고정 높이 `minHeight: 600px`를 제거하고 내용물에 맞춘 컴팩트 높이로 축소.
   2. 좌측 조직 구조도 리스트 영역의 높이 여백 및 마진을 축소하고, 부서 트리 하단에 '미배정 인력 풀 (Pool)' 박스가 즉시 노출되도록 레이아웃 재배치.
+
+## [2026-07-25] [반영완료] 전사 DB 저장/업서트 전수 동기화 검증 파이프라인 및 에러 모달 팝업 출력 보완
+- **요구사항**: 시스템 내 모든 데이터베이스 저장/수정/삭제(DB 업서트) 처리 시, Supabase 원격 DB 및 로컬 DB에 올바르게 적재되었는지 실시간으로 정밀 검증하고, 오류(SQL error, RLS error, FK error 등) 발생 시 누락 없이 에러 모달(`showErrorModal`)을 통해 구체적 원인 메시지를 사용자에게 팝업 표출하도록 보완.
+- **해결 설계**:
+  1. `db.ts` 내에 Supabase 비동기 쓰기 큐(`pendingWrites`)를 안전하게 대기하고 오류를 포착하는 통합 헬퍼 `awaitPendingWrites()` 구현.
+  2. `AppContext.tsx` 내 모든 CUD 저장 함수(`saveProduct`, `saveAsset`, `saveCustomer`, `saveContact`, `saveSite`, `saveContract`, `saveRepair`, `saveBilling`, `saveConsumable`, `saveVendor`, `saveSmartDispatch`, `saveSmartReturn`, `saveOrganization` 등)에 `await db.awaitPendingWrites()`를 적용.
+  3. 저장/업서트 실패 시 예외를 포착하여 상세 에러 내역 및 복구 힌트와 함께 `showErrorModal`을 전수 호출하도록 파이프라인 강화.
+
+## [2026-07-25] [반영완료] 인사 및 조직도 관리 화면 컨테이너 세로 높이(height) 900px 명시 지정
+- **요구사항**: 인사 및 조직도 마스터 설정 화면(`OrganizationSettings.tsx`)의 컨테이너 세로 높이를 사용자 지정 사양인 `900px` (`minHeight: 900px`)로 정확하게 명시 설정.
+- **해결 설계**:
+  - `OrganizationSettings.tsx` 뷰포트 컨테이너 및 좌우 카드 박스의 높이를 `minHeight: '900px'`로 설정하여 시원하고 쾌적한 900px 수직 작업 영역을 제공.

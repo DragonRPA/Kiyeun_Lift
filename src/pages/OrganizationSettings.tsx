@@ -35,7 +35,7 @@ const INITIAL_DEPTS: Department[] = [];
 const INITIAL_USERS: UserNode[] = [];
 
 export const OrganizationSettings: React.FC = () => {
-  const { currentUser, refreshAllData } = useApp();
+  const { currentUser, refreshAllData, showErrorModal } = useApp();
   const isSuperAdmin = currentUser?.loginId === 'admin';
   const canEdit = currentUser?.role === 'ADMIN' || currentUser?.role === 'MANAGER';
   
@@ -148,21 +148,27 @@ const enforceManagerPolicies = (usersList: UserNode[], deptList: Department[]) =
 
   // --- Manual Save (Batch to Supabase/DB) ---
   const handleSaveAll = async () => {
-    // 실제 DB (또는 로컬 백그라운드 큐)에 일괄 업데이트
-    db.saveOrganizationBatch(departments, users as any);
-    
-    // 상태 초기화
-    setIsDirty(false);
-    
-    // 혹시 모를 로컬스토리지 찌꺼기 덮어쓰기 (강제 동기화)
-    localStorage.setItem('erp_departments', JSON.stringify(departments));
-    localStorage.setItem('erp_users', JSON.stringify(users));
-    
-    if (refreshAllData) {
-      await refreshAllData();
+    try {
+      // 실제 DB (또는 로컬 백그라운드 큐)에 일괄 업데이트
+      await db.saveOrganizationBatch(departments, users as any);
+      await db.awaitPendingWrites();
+      
+      // 상태 초기화
+      setIsDirty(false);
+      
+      // 혹시 모를 로컬스토리지 찌꺼기 덮어쓰기 (강제 동기화)
+      localStorage.setItem('erp_departments', JSON.stringify(departments));
+      localStorage.setItem('erp_users', JSON.stringify(users));
+      
+      if (refreshAllData) {
+        await refreshAllData();
+      }
+      
+      alert('조직도 및 구성원 마스터 데이터가 데이터베이스에 성공적으로 저장되었습니다.');
+    } catch (err: any) {
+      console.error('Organization batch save error:', err);
+      showErrorModal(`⚠️ 조직도 및 구성원 저장 중 DB 동기화 오류가 발생했습니다:\n${err.message || err.details || JSON.stringify(err)}`, '조직도 DB 저장 오류');
     }
-    
-    alert('조직도 및 구성원 마스터 데이터가 안전하게 저장되었습니다.');
   };
 
   // --- Action Handlers ---
@@ -468,7 +474,7 @@ const enforceManagerPolicies = (usersList: UserNode[], deptList: Department[]) =
   const unassignedCount = users.filter(u => u.departmentId === null).length;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', position: 'relative' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', position: 'relative', minHeight: '900px' }}>
       
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>

@@ -472,31 +472,38 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       } as Omit<Product, 'id'>);
     }
     
-    // Supabase 비동기 적재 완료까지 수동 대기하여 성공/실패 값을 동기식으로 반환받기 위함
-    if (db.isSupabaseConnected() && db.pendingWrites.length > 0) {
-      try {
-        await db.pendingWrites[db.pendingWrites.length - 1];
-      } catch (err) {
-        console.error("Supabase write await error:", err);
-        throw err;
-      }
+    try {
+      await db.awaitPendingWrites();
+    } catch (err: any) {
+      console.error("Supabase write await error:", err);
+      showErrorModal(`⚠️ 제품 카탈로그 저장 중 DB 동기화 오류가 발생했습니다:\n${err.message || err.details || JSON.stringify(err)}`, 'DB 동기화 오류');
+      throw err;
     }
     
     refreshAllData();
     return result;
   };
 
-  const saveAsset = (asset: Omit<Asset, 'id' | 'createdAt' | 'updatedAt'> & { id?: string }) => {
+  const saveAsset = async (asset: Omit<Asset, 'id' | 'createdAt' | 'updatedAt'> & { id?: string }) => {
+    let result;
     if (asset.id) {
-      db.updateRow<Asset>('assets', asset.id, asset as Asset);
+      result = db.updateRow<Asset>('assets', asset.id, asset as Asset);
     } else {
-      db.insertRow<Asset>('assets', {
+      result = db.insertRow<Asset>('assets', {
         ...asset,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       } as Omit<Asset, 'id'>);
     }
+    try {
+      await db.awaitPendingWrites();
+    } catch (err: any) {
+      console.error('saveAsset Supabase sync error:', err);
+      showErrorModal(`⚠️ 장비 자산 저장 중 DB 동기화 오류가 발생했습니다:\n${err.message || err.details || JSON.stringify(err)}`, 'DB 동기화 오류');
+      throw err;
+    }
     refreshAllData();
+    return result;
   };
 
   const saveSmartDispatch = async (data: SmartDispatchData, autoRegister: boolean) => {
@@ -640,13 +647,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
 
     try {
-      if (db.pendingWrites.length > 0) {
-        await Promise.all(db.pendingWrites);
-        db.pendingWrites = [];
-      }
+      await db.awaitPendingWrites();
     } catch (err: any) {
       console.error('Supabase sync error during saveSmartDispatch:', err);
-      db.pendingWrites = [];
       const errorMsg = `⚠️ Supabase 데이터베이스 동기화 중 오류가 발생했습니다:\n${err.message || err.details || JSON.stringify(err)}`;
       showErrorModal(errorMsg, '스마트 출고 DB 동기화 오류');
       return { 

@@ -979,6 +979,18 @@ class LocalDB {
   // 비동기 쓰기 큐
   public pendingWrites: any[] = [];
 
+  async awaitPendingWrites(): Promise<void> {
+    if (!this.pendingWrites || this.pendingWrites.length === 0) return;
+    try {
+      await Promise.all(this.pendingWrites);
+    } catch (err) {
+      console.error("Supabase pending write error:", err);
+      throw err;
+    } finally {
+      this.pendingWrites = [];
+    }
+  }
+
   isSupabaseConnected(): boolean {
     return !!supabase;
   }
@@ -1208,50 +1220,59 @@ class LocalDB {
 
 
   // 조직도 및 구성원 일괄 저장 (Batch) - 기존 데이터를 전부 덮어씌움
-  saveOrganizationBatch(departments: Department[], users: User[]): void {
+  async saveOrganizationBatch(departments: Department[], users: User[]): Promise<void> {
     this.set('departments', departments);
     this.set('users', users);
     
     if (supabase) {
       const promise = (async () => {
-        try {
-          // 1. Departments Sync (삭제된 부서 식별 후 삭제, 신규/수정 부서 upsert)
-          const currentDepts = await supabase.from('departments').select('id');
-          if (currentDepts.data) {
-            const deptsToDelete = currentDepts.data
-              .map(d => d.id)
-              .filter(id => !departments.some(d => d.id === id));
-            if (deptsToDelete.length > 0) {
-              const { error: delErr } = await supabase.from('departments').delete().in('id', deptsToDelete);
-              if (delErr) console.error('Supabase delete departments failed:', delErr);
+        // 1. Departments Sync (삭제된 부서 식별 후 삭제, 신규/수정 부서 upsert)
+        const currentDepts = await supabase.from('departments').select('id');
+        if (currentDepts.data) {
+          const deptsToDelete = currentDepts.data
+            .map(d => d.id)
+            .filter(id => !departments.some(d => d.id === id));
+          if (deptsToDelete.length > 0) {
+            const { error: delErr } = await supabase.from('departments').delete().in('id', deptsToDelete);
+            if (delErr) {
+              console.error('Supabase delete departments failed:', delErr);
+              throw delErr;
             }
           }
-          if (departments.length > 0) {
-            const { error: deptErr } = await supabase.from('departments').upsert(departments, { onConflict: 'id' });
-            if (deptErr) console.error('Supabase batch upsert departments failed:', deptErr);
+        }
+        if (departments.length > 0) {
+          const { error: deptErr } = await supabase.from('departments').upsert(departments, { onConflict: 'id' });
+          if (deptErr) {
+            console.error('Supabase batch upsert departments failed:', deptErr);
+            throw deptErr;
           }
+        }
 
-          // 2. Users Sync (삭제된 직원 식별 후 삭제, 신규/수정 직원 upsert)
-          const currentUsers = await supabase.from('users').select('id');
-          if (currentUsers.data) {
-            const usersToDelete = currentUsers.data
-              .map(u => u.id)
-              // admin 계정은 절대 삭제 리스트에서 제외
-              .filter(id => id !== 'u-1' && id !== 'sys-admin' && !users.some(u => u.id === id));
-            if (usersToDelete.length > 0) {
-              const { error: delErr } = await supabase.from('users').delete().in('id', usersToDelete);
-              if (delErr) console.error('Supabase delete users failed:', delErr);
+        // 2. Users Sync (삭제된 직원 식별 후 삭제, 신규/수정 직원 upsert)
+        const currentUsers = await supabase.from('users').select('id');
+        if (currentUsers.data) {
+          const usersToDelete = currentUsers.data
+            .map(u => u.id)
+            // admin 계정은 절대 삭제 리스트에서 제외
+            .filter(id => id !== 'u-1' && id !== 'sys-admin' && !users.some(u => u.id === id));
+          if (usersToDelete.length > 0) {
+            const { error: delErr } = await supabase.from('users').delete().in('id', usersToDelete);
+            if (delErr) {
+              console.error('Supabase delete users failed:', delErr);
+              throw delErr;
             }
           }
-          if (users.length > 0) {
-            const { error: userErr } = await supabase.from('users').upsert(users, { onConflict: 'id' });
-            if (userErr) console.error('Supabase batch upsert users failed:', userErr);
+        }
+        if (users.length > 0) {
+          const { error: userErr } = await supabase.from('users').upsert(users, { onConflict: 'id' });
+          if (userErr) {
+            console.error('Supabase batch upsert users failed:', userErr);
+            throw userErr;
           }
-        } catch (e) {
-          console.error('Failed to sync organization batch to Supabase:', e);
         }
       })();
       this.pendingWrites.push(promise);
+      await promise;
     }
   }
 }
