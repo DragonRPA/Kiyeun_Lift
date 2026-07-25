@@ -429,3 +429,13 @@
   - 1열(16×16px 고정 박스)에 모든 아이콘을 클리핑하여 SVG 크기와 무관하게 동일한 공간 점유.
   - 2열(1fr)에 텍스트를 배치해 모든 하위 메뉴의 텍스트 시작 X가 수직 일직선으로 완벽 고정.
   - **버전 산정**: 레이아웃 근본 구조 교정 ➔ **`v1.4.5.Build.00000`**
+
+## [2026-07-25] [반영완료] 공급자 관리 조회 버튼 추가 & DB 일괄 업로더 vendors 컬럼 완전 지원 (v1.3.2.Build.00000)
+- **요구사항**: 
+  1. 공급자(Vendors) 관리 메뉴에 명시적 `조회` 버튼 추가 (현재 실시간 필터만 존재).
+  2. DB 일괄 업로드 기능(DevDataUploader)에서 공급자 데이터(`vendors` 테이블)의 신규 컬럼(`representative`, `email`, `address`, `types`, `isActive`)이 지원되지 않는 문제 해결.
+- **해결 설계**:
+  - `Vendors.tsx`: 검색 입력값(`searchInput`)과 실제 조회 트리거값(`searchTerm`)을 분리, **`🔍 조회` 버튼** 클릭 또는 `Enter` 키로 조회 실행. **초기화(↺)** 버튼으로 검색어 및 필터 전체 리셋.
+  - `schema.sql`: vendors 테이블 DDL에 `representative`, `email`, `address`, `types TEXT`, `isActive BOOLEAN DEFAULT TRUE` 컬럼 추가 및 type 허용값 `PURCHASE` 추가(기존 `CONSUMABLE` → `PURCHASE` 교정).
+  - `DevDataUploader.tsx`: `COLUMN_LABEL_MAP`에 `type`, `types`, `bankAccount`, `isActive` 한글 라벨 추가 → 업로더가 공급자 전체 컬럼 지원.
+  - **버전 산정**: 기존 메뉴(공급자 관리) 기능 추가 + DB 업로더 기능 보강 ➔ **`v1.3.2.Build.00000`** (Z 증가: Feature 추가)

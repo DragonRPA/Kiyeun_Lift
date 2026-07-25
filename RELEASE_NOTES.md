@@ -1,3 +1,20 @@
+# Release Notes (v1.3.2.Build.00000 - 2026-07-25 19:36)
+
+## ✨ 공급자(Vendors) 관리 메뉴 조회 버튼 추가 & DB 일괄 업로더 vendors 완전 지원
+### Vendors.tsx — 검색 조회 버튼 및 초기화 버튼 추가
+- 기존 실시간 자동 필터 방식에 더해 **명시적 `🔍 조회` 버튼**을 추가했습니다 (클릭 또는 Enter 키로 실행).
+- 검색어 입력창(`searchInput`)과 실제 조회 트리거값(`searchTerm`)을 분리하여 의도치 않은 즉시 필터링을 방지.
+- **`↺ 초기화` 버튼**을 추가하여 검색어 및 거래구분 필터를 한 번에 리셋할 수 있습니다.
+
+### schema.sql — vendors 테이블 DDL 컬럼 완전 최신화
+- 누락되었던 `representative`(대표자명), `email`(이메일), `address`(주소), `types`(복수 거래구분, TEXT), `isActive`(거래중여부, BOOLEAN) 컬럼을 추가했습니다.
+- `type` 허용값에 `PURCHASE`(구매처) 추가, 구버전 `CONSUMABLE` 값 교정.
+
+### DevDataUploader.tsx — vendors 컬럼 한글 라벨 맵 보강
+- `COLUMN_LABEL_MAP`에 `type`, `types`, `bankAccount`, `isActive` 라벨 추가로 DB 일괄 업로드 템플릿에서 공급자 전체 컬럼이 정상 지원됩니다.
+
+---
+
 # Release Notes (v1.4.5.Build.00000 - 2026-07-25 19:31)
 
 ## 🩺 하위 메뉴 아이콘-텍스트 완전 수직 정렬 — CSS Grid 2컬럼 고정 레이아웃 적용

@@ -1,7 +1,6 @@
-// d:\Kiyeun_Lift\src\pages\Vendors.tsx
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { Search, Plus, Edit2, Trash2, Download, Building2, Check } from 'lucide-react';
+import { Search, Plus, Edit2, Trash2, Download, Building2, Check, RefreshCw } from 'lucide-react';
 import { exportToExcel } from '../services/excel';
 import { Vendor } from '../services/db';
 
@@ -18,7 +17,8 @@ const VENDOR_TYPE_CONFIG: Record<VendorTypeOption, { label: string; icon: string
 export const Vendors: React.FC = () => {
   const { vendors, saveVendor, deleteVendor, hasPermission } = useApp();
 
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchInput, setSearchInput] = useState('');   // 입력 중인 값
+  const [searchTerm, setSearchTerm] = useState('');      // 실제 조회에 사용되는 값
   const [typeFilter, setTypeFilter] = useState<string>('ALL');
   
   // 등록/수정 모달 상태
@@ -188,18 +188,21 @@ export const Vendors: React.FC = () => {
       {/* 검색 및 필터 바 */}
       <div className="card" style={{ padding: '16px', marginBottom: '16px' }}>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div style={{ display: 'flex', gap: '12px', flex: 1, minWidth: '300px' }}>
+          <div style={{ display: 'flex', gap: '8px', flex: 1, minWidth: '320px', alignItems: 'center' }}>
+            {/* 검색어 입력 */}
             <div style={{ position: 'relative', flex: 1 }}>
               <Search size={16} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
               <input
                 type="text"
                 placeholder="상호명, 사업자번호, 대표자, 담당자 검색..."
-                value={searchTerm}
-                onChange={e => setSearchTerm(e.target.value)}
+                value={searchInput}
+                onChange={e => setSearchInput(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') setSearchTerm(searchInput); }}
                 style={{ paddingLeft: '32px', width: '100%' }}
               />
             </div>
-            <select value={typeFilter} onChange={e => setTypeFilter(e.target.value)} style={{ width: '170px' }}>
+            {/* 거래구분 필터 드롭다운 */}
+            <select value={typeFilter} onChange={e => setTypeFilter(e.target.value)} style={{ width: '160px', flexShrink: 0 }}>
               <option value="ALL">전체 거래구분</option>
               <option value="RENTAL">🏢 임차거래처</option>
               <option value="PURCHASE">🛒 구매처</option>
@@ -207,6 +210,23 @@ export const Vendors: React.FC = () => {
               <option value="REPAIR">🔧 외주정비처</option>
               <option value="OTHER">📌 기타</option>
             </select>
+            {/* 🔍 조회 버튼 */}
+            <button
+              className="btn-primary"
+              onClick={() => setSearchTerm(searchInput)}
+              style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0, padding: '8px 16px', fontWeight: '600' }}
+            >
+              <Search size={14} /> 조회
+            </button>
+            {/* 초기화 버튼 */}
+            <button
+              className="btn-secondary"
+              onClick={() => { setSearchInput(''); setSearchTerm(''); setTypeFilter('ALL'); }}
+              style={{ display: 'flex', alignItems: 'center', gap: '5px', flexShrink: 0, padding: '8px 10px' }}
+              title="검색 초기화"
+            >
+              <RefreshCw size={13} />
+            </button>
           </div>
 
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
