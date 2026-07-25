@@ -503,13 +503,17 @@ const App: React.FC = () => {
                   {isExpanded ? <ChevronDown size={14} style={{ flexShrink: 0 }} /> : <ChevronRight size={14} style={{ flexShrink: 0 }} />}
                 </button>
 
-                {/* 하위 메뉴 서브 항목 그룹 (상위대비 아이콘 및 텍스트 X좌표 모두 정확히 +15px 오프셋 고정) */}
+                {/* 하위 메뉴 서브 항목 그룹 (유저 지시 붉은펜 수직 라인 기준 정확히 15px 수평 마진 오프셋 적용) */}
                 {isExpanded && (
                   <div style={{
                     display: 'flex',
                     flexDirection: 'column',
-                    gap: '2px',
-                    marginTop: '2px'
+                    gap: '3px',
+                    marginTop: '3px',
+                    marginLeft: '15px', // 상위 아이콘(10px) 대비 정확히 15px 오른쪽으로 하위 블록 전체 이동
+                    paddingLeft: '6px',
+                    borderLeft: '2px solid rgba(59, 130, 246, 0.25)', // 상위 아이콘 축 기준 수직 연결 가이드라인
+                    width: 'calc(100% - 15px)'
                   }}>
                     {visibleItems.map(item => {
                       const isItemActive = activeTab === item.id;
@@ -524,7 +528,7 @@ const App: React.FC = () => {
                             display: 'flex',
                             alignItems: 'center',
                             width: '100%',
-                            padding: '7px 10px 7px 25px', // 하위 아이콘 시작 X = 25px (+15px), 텍스트 시작 X = 53px (+15px)
+                            padding: '7px 10px', // 상위 버튼 패딩과 동일 (상위 10px + 마진 15px = 하위 25px 완벽 고정)
                             borderRadius: 'var(--radius-sm)',
                             border: 'none',
                             fontSize: '12px',
