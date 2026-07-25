@@ -344,7 +344,13 @@ function getDynamicTableSchemas(): TableDef[] {
         } else if (f.type === 'boolean') {
           row[f.key] = 'true';
         } else if (f.type === 'date') {
-          row[f.key] = new Date().toISOString();
+          row[f.key] = new Date().toISOString().slice(0, 10);
+        } else if (tableName === 'assets' && f.key === 'modelName') {
+          row[f.key] = i === 1 ? 'KY-0801' : 'SJB-1200';
+        } else if (tableName === 'assets' && f.key === 'ownerType') {
+          row[f.key] = i === 1 ? '당사' : '임차';
+        } else if (tableName === 'assets' && f.key === 'status') {
+          row[f.key] = i === 1 ? '임대가능' : '임대중';
         } else if (f.enumValues && f.enumValues.length > 0) {
           row[f.key] = f.enumValues[(i - 1) % f.enumValues.length];
         } else {
@@ -407,10 +413,10 @@ function mapKoreanRowToEnglish(row: Record<string, string>, schema: TableDef): R
           if (val === '임차자산' || val === '임차' || val === 'RENTED') val = 'RENTED';
         }
         if (field.key === 'status' && schema.key === 'assets') {
-          if (val === '대기중' || val === '대기' || val === 'AVAILABLE') val = 'AVAILABLE';
-          if (val === '렌트중' || val === '임대중' || val === 'RENTED') val = 'RENTED';
+          if (val === '임대가능' || val === '대기중' || val === '대기' || val === 'AVAILABLE') val = 'AVAILABLE';
+          if (val === '임대중' || val === '렌트중' || val === 'RENTED') val = 'RENTED';
           if (val === '정비중' || val === 'REPAIRING') val = 'REPAIRING';
-          if (val === '반납완료' || val === 'RENTED_RETURNED') val = 'RENTED_RETURNED';
+          if (val === '외주정비중' || val === '반납완료' || val === 'RENTED_RETURNED') val = 'RENTED_RETURNED';
           if (val === '매각' || val === 'SOLD') val = 'SOLD';
         }
         if (field.key === 'type' && schema.key === 'deliveries') {
