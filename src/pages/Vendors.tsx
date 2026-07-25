@@ -132,7 +132,22 @@ export const Vendors: React.FC = () => {
   };
 
   const getVendorTypes = (v: Vendor): VendorTypeOption[] => {
-    if (v.types && v.types.length > 0) return v.types as VendorTypeOption[];
+    // Supabase PostgreSQL 배열이 문자열("{RENTAL,REPAIR}")로 반환되는 경우 방어 파싱
+    const rawTypes = v.types;
+    if (rawTypes) {
+      if (Array.isArray(rawTypes) && rawTypes.length > 0) {
+        return rawTypes as VendorTypeOption[];
+      }
+      // 문자열 형태로 넘어온 경우: "{RENTAL,REPAIR}" → ['RENTAL','REPAIR']
+      if (typeof rawTypes === 'string') {
+        const parsed = (rawTypes as string)
+          .replace(/[{}]/g, '')
+          .split(',')
+          .map(s => s.trim())
+          .filter(Boolean);
+        if (parsed.length > 0) return parsed as VendorTypeOption[];
+      }
+    }
     if (v.type) return [v.type as VendorTypeOption];
     return ['RENTAL'];
   };

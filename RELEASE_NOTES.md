@@ -1,3 +1,10 @@
+# Release Notes (v1.4.2.Build.00004 - 2026-07-26 01:43)
+
+## 🐛 Vendors.tsx 흰 페이지(White Screen) 버그 수정
+- **문제**: 매입처 관리 메뉴 진입 시 `Uncaught TypeError: t.map is not a function` 발생 → 흰 페이지.
+- **원인**: `getVendorTypes()` 함수가 `Array.isArray()` 검사 없이 `v.types`를 직접 반환. Supabase PostgreSQL에서 배열 컬럼(`types`)이 문자열(`"{RENTAL,REPAIR}"`) 형태로 반환될 경우 문자열에 `.map()`을 호출하여 크래시 발생.
+- **해결**: `Array.isArray()` 방어 체크 추가 + PostgreSQL 배열 문자열(`{VAL1,VAL2}`) 자동 파싱 로직 삽입.
+
 # Release Notes (v1.4.2.Build.00003 - 2026-07-26 01:30)
 
 ## 🛡️ DDL 패치 생성기 42710 오류 수정 — DROP IF EXISTS 패턴 적용
