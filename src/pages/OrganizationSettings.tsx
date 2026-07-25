@@ -468,7 +468,7 @@ const enforceManagerPolicies = (usersList: UserNode[], deptList: Department[]) =
   const unassignedCount = users.filter(u => u.departmentId === null).length;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', height: '100%', position: 'relative', overflow: 'hidden' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', position: 'relative' }}>
       
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -513,19 +513,19 @@ const enforceManagerPolicies = (usersList: UserNode[], deptList: Department[]) =
         )}
       </div>
 
-      <div style={{ display: 'flex', gap: '20px', flex: 1, minHeight: '600px' }}>
+      <div style={{ display: 'flex', gap: '20px', alignItems: 'flex-start', flexWrap: 'wrap' }}>
         
         {/* 좌측: 조직 트리 */}
         <div className="card" style={{ width: '280px', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', borderBottom: '1px solid var(--border-color)', paddingBottom: '12px' }}>
-            <h3 style={{ fontSize: '16px', fontWeight: '700' }}>조직 구조도</h3>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', borderBottom: '1px solid var(--border-color)', paddingBottom: '8px' }}>
+            <h3 style={{ fontSize: '15px', fontWeight: '700' }}>조직 구조도</h3>
             {canEdit && (
               <button onClick={handleAddDept} style={{ background: 'transparent', padding: '4px', color: 'var(--primary)' }} title="선택된 부서 아래에 하위 부서 추가">
                 <Plus size={18} />
               </button>
             )}
           </div>
-          <div style={{ flex: 1, overflowY: 'auto' }}>
+          <div style={{ maxHeight: '380px', overflowY: 'auto' }}>
             {renderDeptTree(null)}
           </div>
           
@@ -535,16 +535,16 @@ const enforceManagerPolicies = (usersList: UserNode[], deptList: Department[]) =
             onDragOver={handleDragOver}
             onDrop={handleDropToPool}
             style={{
-              marginTop: '16px', padding: '12px', border: '1px dashed var(--border-color)', borderRadius: 'var(--radius-md)',
+              marginTop: '12px', padding: '10px 12px', border: '1px dashed var(--border-color)', borderRadius: 'var(--radius-md)',
               backgroundColor: activeTab === 'UNASSIGNED' ? 'var(--primary-light)' : 'var(--bg-app)',
               color: activeTab === 'UNASSIGNED' ? 'var(--primary)' : 'var(--text-secondary)',
-              cursor: 'pointer', textAlign: 'center', fontWeight: '600', fontSize: '14px',
+              cursor: 'pointer', textAlign: 'center', fontWeight: '600', fontSize: '13.5px',
               transition: 'all 0.2s ease', borderStyle: draggedUserId ? 'solid' : 'dashed', borderColor: draggedUserId ? 'var(--primary)' : 'var(--border-color)'
             }}
             className={draggedUserId ? 'drop-target-active' : ''}
           >
             미배정 인력 풀 (Pool)
-            <div style={{ fontSize: '12px', color: 'var(--danger)', marginTop: '4px' }}>{unassignedCount}명 대기 중</div>
+            <div style={{ fontSize: '11.5px', color: 'var(--danger)', marginTop: '2px' }}>{unassignedCount}명 대기 중</div>
           </div>
         </div>
 
