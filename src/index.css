@@ -88,11 +88,53 @@
   padding: 0;
 }
 
+html, body, #root {
+  height: 100%;
+  max-height: 100vh;
+  overflow: hidden !important;
+}
+
+/* 사이드바 독자 스크롤 영역 */
+.sidebar-nav {
+  overflow-y: auto !important;
+  overscroll-behavior: contain !important;
+}
+
+/* 메인 작업 화면 독자 스크롤 영역 */
+.main-content-area {
+  overflow-y: auto !important;
+  overscroll-behavior: contain !important;
+}
+
+/* 표(테이블) 및 모달 독자 스크롤 - 스크롤 체이닝 차단 */
+table, .table-container, .table-wrapper, .modal-content, .card {
+  overscroll-behavior: contain !important;
+}
+
+/* 커스텀 모던 슬림 스크롤바 */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}
+
 body {
   font-family: var(--font-sans);
   background-color: var(--bg-app);
   color: var(--text-main);
-  min-height: 100vh;
+  height: 100vh;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   transition: background-color var(--transition-normal), color var(--transition-normal);

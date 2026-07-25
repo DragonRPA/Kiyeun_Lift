@@ -239,19 +239,18 @@ const App: React.FC = () => {
   const userHasViewPerm = activeMenu ? hasPermission(activeMenu.id, 'view') : false;
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', flexDirection: 'column' }}>
+    <div style={{ display: 'flex', height: '850px', maxHeight: '850px', flexDirection: 'column', overflow: 'hidden' }}>
       
       {/* 상단 네비게이션 헤더 */}
       <header style={{
         height: '64px',
+        flexShrink: 0,
         backgroundColor: 'var(--bg-header)',
         borderBottom: '1px solid var(--border-color)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
         padding: '0 24px',
-        position: 'sticky',
-        top: 0,
         zIndex: 50
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -308,21 +307,23 @@ const App: React.FC = () => {
         </div>
       </header>
 
-      {/* 메인 레이아웃 본문 */}
-      <div style={{ display: 'flex', flex: 1, position: 'relative' }}>
+      {/* 메인 레이아웃 본문 (850px 헤더 제외 수직 프레임) */}
+      <div style={{ display: 'flex', flex: 1, height: 'calc(850px - 64px)', overflow: 'hidden', position: 'relative' }}>
         
-        {/* 데스크탑 사이드바 (모바일에서는 화면 크기에 따라 제어) */}
+        {/* 데스크탑 사이드바 (독자 스크롤) */}
         <aside
           className={`sidebar-nav ${mobileMenuOpen ? 'mobile-open' : ''}`}
           style={{
             width: '260px',
+            height: '100%',
             backgroundColor: 'var(--bg-sidebar)',
             borderRight: '1px solid var(--border-color)',
             display: 'flex',
             flexDirection: 'column',
             padding: '20px 12px',
             gap: '6px',
-            overflowY: 'auto'
+            overflowY: 'auto',
+            overscrollBehavior: 'contain'
           }}
         >
           {sidebarMenus.map(menu => {
@@ -360,8 +361,8 @@ const App: React.FC = () => {
           })}
         </aside>
 
-        {/* 메인 콘텐츠 영역 */}
-        <main style={{ flex: 1, padding: '30px', overflowY: 'auto', backgroundColor: 'var(--bg-app)' }} className="main-content-area">
+        {/* 메인 콘텐츠 영역 (독자 스크롤) */}
+        <main style={{ flex: 1, height: '100%', padding: '30px', overflowY: 'auto', overscrollBehavior: 'contain', backgroundColor: 'var(--bg-app)' }} className="main-content-area">
           {userHasViewPerm && activeMenu ? (
             activeMenu.component
           ) : (

@@ -278,3 +278,15 @@
 - **해결 설계**:
   1. `OrganizationSettings.tsx` 및 `db.ts` 내 `saveOrganizationBatch`에서 사용자(User/UserNode) 객체를 Supabase로 동기화하기 전 `createdAt` 및 `updatedAt` 속성이 누락되어 있으면 `new Date().toISOString()` 타임스탬프를 자동 채워주도록 방어 파이프라인 구축.
   2. `UserNode` 및 `User` 인터페이스에 `createdAt?: string; updatedAt?: string;` 명시 반영 및 `handleAddUser` 시 기본 타임스탬프 부여.
+
+## [2026-07-25] [반영완료] 마우스 커서 위치 기반 독립 영역(메뉴/작업화면/테이블) 독자 스크롤 시스템 구축
+- **요구사항**: 전체 브라우저 창 스크롤을 억제하고, 마우스 위치에 따라 좌측 메뉴(사이드바) 위에서는 메뉴만 독자 스크롤, 우측 메인 작업 화면 위에서는 메인 작업 화면만 독자 스크롤, 화면 내 표(테이블)/모달 위에서는 표만 독자 스크롤(`overscroll-behavior: contain`)되도록 스크롤 영역 분리 및 체이닝 방지 개편.
+- **해결 설계**:
+  1. `index.css`: `html, body, #root`에 `height: 100%; max-height: 100vh; overflow: hidden;` 처리하여 바디 전체 스크롤 원천 차단.
+  2. `App.tsx` & `index.css`: 좌측 메뉴 사이드바(`.sidebar-nav`) 및 우측 메인 작업 영역(`.main-content-area`)에 각각 `height: 100%; overflow-y: auto; overscroll-behavior: contain;` 독립 뷰포트 스크롤 적용.
+  3. 표/테이블 래퍼 및 모달 컨테이너(`table`, `.table-container`, `.modal-content`)에 `overscroll-behavior: contain` 및 `overflow: auto`를 적용하여 마우스가 표 위에 있을 때는 표만 부드럽게 스크롤되고 바깥 영역으로 스크롤이 전파되지 않도록 완벽 차단.
+
+## [2026-07-25] [반영완료] 화면 전체 Height 850px 고정 프레임 레이아웃 적용
+- **요구사항**: 전체 메인 애플리케이션 화면 높이 사양을 `850px` (`height: 850px`, `maxHeight: 850px`)로 명시 설정하고, 850px 고정 높이 내부에서 좌측 메뉴 및 우측 작업 화면이 독자 스크롤되도록 보완.
+- **해결 설계**:
+  - `App.tsx` 메인 뷰포트 컨테이너 래퍼의 높이를 `height: '850px'`, `maxHeight: '850px'`로 지정하고, 내부 `sidebar-nav` 및 `main-content-area`가 850px 수직 프레임 내에서 100% 핏(Fit)되어 개별 스크롤되도록 구축.
