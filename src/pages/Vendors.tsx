@@ -132,18 +132,26 @@ export const Vendors: React.FC = () => {
   };
 
   const getVendorTypes = (v: Vendor): VendorTypeOption[] => {
-    // Supabase PostgreSQL 배열이 문자열("{RENTAL,REPAIR}")로 반환되는 경우 방어 파싱
     const rawTypes = v.types;
     if (rawTypes) {
+      // Case 1: 이미 정상 JS 배열
       if (Array.isArray(rawTypes) && rawTypes.length > 0) {
-        return rawTypes as VendorTypeOption[];
+        // 배열 내 원소에 따옴표가 붙어있을 수 있으므로 제거
+        return rawTypes.map(s => String(s).replace(/^"|"$/g, '').trim()) as VendorTypeOption[];
       }
-      // 문자열 형태로 넘어온 경우: "{RENTAL,REPAIR}" → ['RENTAL','REPAIR']
       if (typeof rawTypes === 'string') {
-        const parsed = (rawTypes as string)
-          .replace(/[{}]/g, '')
+        // Case 2: JSON 배열 문자열 '["RENTAL","PURCHASE"]'
+        try {
+          const json = JSON.parse(rawTypes as string);
+          if (Array.isArray(json) && json.length > 0) {
+            return json.map((s: string) => String(s).replace(/^"|"$/g, '').trim()) as VendorTypeOption[];
+          }
+        } catch {}
+        // Case 3: PostgreSQL 배열 문자열 '{RENTAL,PURCHASE}' 또는 '{"RENTAL","PURCHASE"}'
+        const inner = (rawTypes as string).replace(/^\{|\}$/g, '');
+        const parsed = inner
           .split(',')
-          .map(s => s.trim())
+          .map(s => s.trim().replace(/^"|"$/g, ''))
           .filter(Boolean);
         if (parsed.length > 0) return parsed as VendorTypeOption[];
       }
