@@ -96,12 +96,12 @@ interface AppContextType {
   returnRentedAsset: (assetId: string, returnDate: string) => void;
   
   // Consumables Mutators
-  purchaseConsumable: (data: { modelName: string; qty: number; unit: string; unitPrice: number; supplier: string }) => void;
-  useConsumable: (data: { consumableId: string; quantity: number; targetAssetId: string; description: string }) => void;
-  requestConsumablePurchase: (data: { consumableId?: string; modelName: string; qty: number; unitPrice: number; requestDate: string; sellerName: string }) => void;
-  acceptConsumablePurchase: (id: string) => void;
-  completeConsumablePurchase: (id: string) => void;
-  inboundConsumablePurchase: (id: string, qty: number, statementFileUrl: string) => void;
+  purchaseConsumable: (data: { modelName: string; qty: number; unit: string; unitPrice: number; supplier: string }) => Promise<void>;
+  useConsumable: (data: { consumableId: string; quantity: number; targetAssetId: string; description: string }) => Promise<void>;
+  requestConsumablePurchase: (data: { consumableId?: string; modelName: string; qty: number; unitPrice: number; requestDate: string; sellerName: string }) => Promise<void>;
+  acceptConsumablePurchase: (id: string) => Promise<void>;
+  completeConsumablePurchase: (id: string) => Promise<void>;
+  inboundConsumablePurchase: (id: string, qty: number, statementFileUrl: string) => Promise<void>;
   
   // Contract Mutators
   createContract: (contractData: Omit<Contract, 'id' | 'createdAt' | 'updatedAt' | 'contractNo'>, assetsList: { assetId?: string; expectedModel?: string; monthlyRentalFee: number; dailyRentalFee: number }[]) => void;
@@ -989,14 +989,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     refreshAllData();
   };
 
-  const purchaseConsumable = (data: { modelName: string; qty: number; unit: string; unitPrice: number; supplier: string }) => {
-    let consumable = db.consumables.find(c => c.modelName === data.modelName);
+  const purchaseConsumable = async (data: { modelName: string; qty: number; unit: string; unitPrice: number; supplier: string }) => {
+    let consumable = db.consumables.find(c => c.modelName.replace(/\s/g, '') === data.modelName.replace(/\s/g, ''));
     
     if (consumable) {
-      const nextQty = consumable.stockQty + data.qty;
       db.updateRow<Consumable>('consumables', consumable.id, {
-        stockQty: nextQty,
-        unit: data.unit,
+        stockQty: consumable.stockQty + data.qty,
         unitPrice: data.unitPrice,
         supplier: data.supplier,
         updatedAt: new Date().toISOString()
@@ -1005,7 +1003,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       consumable = db.insertRow<Consumable>('consumables', {
         modelName: data.modelName,
         stockQty: data.qty,
-        unit: data.unit,
+        unit: data.unit || '개',
         unitPrice: data.unitPrice,
         supplier: data.supplier,
         createdAt: new Date().toISOString(),
@@ -1025,10 +1023,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       createdAt: new Date().toISOString()
     });
 
+    await db.awaitPendingWrites();
     refreshAllData();
   };
 
-  const useConsumable = (data: { consumableId: string; quantity: number; targetAssetId: string; description: string }) => {
+  const useConsumable = async (data: { consumableId: string; quantity: number; targetAssetId: string; description: string }) => {
     const consumable = db.consumables.find(c => c.id === data.consumableId);
     if (!consumable || consumable.stockQty < data.quantity) return;
 
@@ -1061,7 +1060,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     refreshAllData();
   };
 
-  const requestConsumablePurchase = (data: { consumableId?: string; modelName: string; qty: number; unitPrice: number; requestDate: string; sellerName: string }) => {
+  const requestConsumablePurchase = async (data: { consumableId?: string; modelName: string; qty: number; unitPrice: number; requestDate: string; sellerName: string }) => {
     db.insertRow<ConsumablePurchaseRequest>('consumablePurchases', {
       consumableId: data.consumableId || undefined,
       modelName: data.modelName,
@@ -1076,10 +1075,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     });
+    await db.awaitPendingWrites();
     refreshAllData();
   };
 
-  const acceptConsumablePurchase = (id: string) => {
+  const acceptConsumablePurchase = async (id: string) => {
     db.updateRow<ConsumablePurchaseRequest>('consumablePurchases', id, {
       status: 'ACCEPTED',
       acceptedDate: new Date().toISOString().split('T')[0],
@@ -1087,10 +1087,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       accepterName: currentUser?.name || '시스템',
       updatedAt: new Date().toISOString()
     });
+    await db.awaitPendingWrites();
     refreshAllData();
   };
 
-  const completeConsumablePurchase = (id: string) => {
+  const completeConsumablePurchase = async (id: string) => {
     db.updateRow<ConsumablePurchaseRequest>('consumablePurchases', id, {
       status: 'COMPLETED',
       completedDate: new Date().toISOString().split('T')[0],
@@ -1098,10 +1099,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       accepterName: currentUser?.name || '시스템',
       updatedAt: new Date().toISOString()
     });
+    await db.awaitPendingWrites();
     refreshAllData();
   };
 
-  const inboundConsumablePurchase = (id: string, qty: number, statementFileUrl: string) => {
+  const inboundConsumablePurchase = async (id: string, qty: number, statementFileUrl: string) => {
     const req = db.consumablePurchases.find(p => p.id === id);
     if (!req) return;
 
@@ -1152,6 +1154,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       createdAt: new Date().toISOString()
     });
 
+    await db.awaitPendingWrites();
     refreshAllData();
   };
 

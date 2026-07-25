@@ -1,3 +1,11 @@
+# Release Notes (v1.4.0.Build.00001 - 2026-07-26 00:03)
+
+## 🐛 전 스토리지/DB 데이터 저장 성공 검증 및 무음 실패 방지(Zero Silent Failures) 개편
+- **소모품 및 자재 구매신청 저장 오류 수정 ([Consumables.tsx](file:///d:/GoogleDrive/RPA%20개발/01.AntiGravity/Kiyuen_Lift/src/pages/Consumables.tsx))**:
+  - 구매신청 제출(`requestConsumablePurchase`), 입고 처리(`inboundConsumablePurchase`), 소모품 출고/사용(`useConsumable`), 접수 및 구매완료 처리 등 소모품 관리 내 모든 저장 액션에 비동기 `awaitPendingWrites` 동기화 및 `try/catch` 에러 모달(`showErrorModal`) 연동.
+- **글로벌 저장 안정성 검증 정책 추가 (`AGENTS.md`)**:
+  - 규칙 8번: 모든 데이터 저장/수정/삭제 시 `await db.awaitPendingWrites()`를 동기로 수행하여 실시간 성공 검증을 강제하고, 저장이 무음으로 실패하지 않도록 UI 에러 모달 노출 원칙을 시스템 글로벌 정책으로 확정.
+
 # Release Notes (v1.4.0.Build.00000 - 2026-07-25 23:45)
 
 ## 🚀 배차/운송 관리, 월말 정산 대사, 운송 마스터, 반납 배차 및 귀속월 개편

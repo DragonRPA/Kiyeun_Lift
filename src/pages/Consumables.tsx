@@ -65,7 +65,7 @@ export const Consumables: React.FC = () => {
   const {
     consumables, consumableLogs, consumablePurchases, assets, purchaseConsumable, useConsumable,
     requestConsumablePurchase, acceptConsumablePurchase, completeConsumablePurchase, inboundConsumablePurchase,
-    hasPermission, users, currentUser, googleConfigs
+    hasPermission, users, currentUser, googleConfigs, showErrorModal
   } = useApp();
 
   const canSave = hasPermission('consumable', 'save');
@@ -202,7 +202,7 @@ export const Consumables: React.FC = () => {
   };
 
   // --- 구매신청서 작성 제출 ---
-  const handleRequestSubmit = (e: React.FormEvent) => {
+  const handleRequestSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!canSave) return;
     
@@ -212,24 +212,28 @@ export const Consumables: React.FC = () => {
       return;
     }
 
-    requestConsumablePurchase({
-      consumableId: reqConsumableId !== 'NEW' ? reqConsumableId : undefined,
-      modelName: finalModelName,
-      qty: reqQty,
-      unitPrice: reqUnitPrice,
-      requestDate: reqDate,
-      sellerName: reqSellerName
-    });
+    try {
+      await requestConsumablePurchase({
+        consumableId: reqConsumableId !== 'NEW' ? reqConsumableId : undefined,
+        modelName: finalModelName,
+        qty: reqQty,
+        unitPrice: reqUnitPrice,
+        requestDate: reqDate,
+        sellerName: reqSellerName
+      });
 
-    alert('소모품 구매 신청서가 성공적으로 제출되었습니다.');
-    
-    // 초기화 및 탭 전환
-    setReqConsumableId('');
-    setReqModelName('');
-    setReqQty(1);
-    setReqUnitPrice(0);
-    setReqSellerName('');
-    setActiveTab('REQ_LIST');
+      alert('소모품 구매 신청서가 성공적으로 제출 및 저장되었습니다.');
+      
+      // 초기화 및 탭 전환
+      setReqConsumableId('');
+      setReqModelName('');
+      setReqQty(1);
+      setReqUnitPrice(0);
+      setReqSellerName('');
+      setActiveTab('REQ_LIST');
+    } catch (err: any) {
+      showErrorModal(`⚠️ 소모품 구매신청 저장 중 오류가 발생했습니다:\n\n${err?.message || err}`, '구매신청 저장 오류');
+    }
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -288,7 +292,7 @@ export const Consumables: React.FC = () => {
     const config = googleConfigs[0];
     const targetFolderName = config?.consumableFolder || '소모품납품증빙';
 
-    setTimeout(() => {
+    setTimeout(async () => {
       // 1. 구글 드라이브 관리 폴더가 있는지 체크하고 없으면 생성
       let folder = drive.listFolders().find(f => f.name === targetFolderName);
       if (!folder) {
@@ -304,23 +308,26 @@ export const Consumables: React.FC = () => {
         base64Url
       );
 
-      inboundConsumablePurchase(selectedReqId, inboundQty, mockFile.webViewLink);
-      setIsUploading(false);
-      const docTypeText = noInvoice ? '실물 납품 증빙 사진이' : '거래명세서가';
-      alert(`소모품 입고 처리가 완료되었습니다.\n${docTypeText} 구글드라이브 [${targetFolderName}] 폴더에 안전하게 보존되었습니다.\n저장된 파일명: ${newFileName}`);
-      
-      // 리셋
-      setSelectedReqId('');
-      setInboundQty(1);
-      setSelectedFile(null);
-      setNoInvoice(false);
-      setActiveTab('STOCK');
+      try {
+        await inboundConsumablePurchase(selectedReqId, inboundQty, mockFile.webViewLink);
+        setIsUploading(false);
+        const docTypeText = noInvoice ? '실물 납품 증빙 사진이' : '거래명세서가';
+        alert(`소모품 입고 처리가 완료되었습니다.\n${docTypeText} 구글드라이브 [${targetFolderName}] 폴더에 안전하게 보존되었습니다.\n저장된 파일명: ${newFileName}`);
+        
+        // 리셋
+        setSelectedReqId('');
+        setInboundQty(1);
+        setSelectedFile(null);
+        setNoInvoice(false);
+        setActiveTab('STOCK');
+      } catch (err: any) {
+        setIsUploading(false);
+        showErrorModal(`⚠️ 입고 처리 중 오류가 발생했습니다:\n\n${err?.message || err}`, '소모품 입고 오류');
+      }
     }, 1000);
   };
 
-
-
-  const handleUseSubmit = (e: React.FormEvent) => {
+  const handleUseSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!canSave) return;
     if (!useConsumableId || useQty <= 0 || !useAssetId) {
@@ -334,19 +341,23 @@ export const Consumables: React.FC = () => {
       return;
     }
 
-    useConsumable({
-      consumableId: useConsumableId,
-      quantity: useQty,
-      targetAssetId: useAssetId,
-      description: useDesc || '정비 소모품 수동 등록 사용'
-    });
+    try {
+      await useConsumable({
+        consumableId: useConsumableId,
+        quantity: useQty,
+        targetAssetId: useAssetId,
+        description: useDesc || '정비 소모품 출고'
+      });
 
-    alert('소모품 사용 등록이 완료되었습니다. 재고가 차감되고 자산 정비 누적비용이 반영되었습니다.');
-    setUseConsumableId('');
-    setUseQty(1);
-    setUseAssetId('');
-    setUseDesc('');
-    setActiveTab('STOCK');
+      alert('소모품 출고 및 수리 자재 등록이 완료되었습니다.');
+      setUseConsumableId('');
+      setUseQty(1);
+      setUseAssetId('');
+      setUseDesc('');
+      setActiveTab('STOCK');
+    } catch (err: any) {
+      showErrorModal(`⚠️ 소모품 사용 처리 중 오류가 발생했습니다:\n\n${err?.message || err}`, '소모품 출고 오류');
+    }
   };
 
   // 입고 대상 선택 가능한 구매완료 건 목록
@@ -632,7 +643,13 @@ export const Consumables: React.FC = () => {
                                 {p.status === 'REQUESTED' && (
                                   <button
                                     className="btn-primary"
-                                    onClick={() => acceptConsumablePurchase(p.id)}
+                                    onClick={async () => {
+                                      try {
+                                        await acceptConsumablePurchase(p.id);
+                                      } catch (err: any) {
+                                        showErrorModal(`⚠️ 접수 처리 실패:\n\n${err?.message || err}`, '접수 오류');
+                                      }
+                                    }}
                                     style={{ padding: '2px 6px', fontSize: '11px', backgroundColor: 'var(--info)' }}
                                   >
                                     접수
@@ -641,7 +658,13 @@ export const Consumables: React.FC = () => {
                                 {(p.status === 'REQUESTED' || p.status === 'ACCEPTED') && (
                                   <button
                                     className="btn-primary"
-                                    onClick={() => completeConsumablePurchase(p.id)}
+                                    onClick={async () => {
+                                      try {
+                                        await completeConsumablePurchase(p.id);
+                                      } catch (err: any) {
+                                        showErrorModal(`⚠️ 구매완료 처리 실패:\n\n${err?.message || err}`, '구매완료 오류');
+                                      }
+                                    }}
                                     style={{ padding: '2px 6px', fontSize: '11px' }}
                                   >
                                     구매완료
@@ -1160,7 +1183,6 @@ export const Consumables: React.FC = () => {
                 닫기
               </button>
             </div>
-
           </div>
         </div>
       )}

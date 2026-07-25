@@ -1,5 +1,10 @@
 # 개발 요청 사항 (dev_temp.md)
 
+[대기 중 요구사항 - v1.4.1]
+1. 프로젝트 전체 체크박스 형태 입력 요소를 세련된 토글 버튼(Toggle Switch) 디자인으로 전면 개편.
+2. 우선적으로 `TruckDispatch.tsx` [신규 수동 배차 요청 생성] 모달 내 '고객 청구 여부 (billableToCustomer)' 체크박스를 토글 버튼 UI로 변경.
+
+---
 [반영완료 - v1.4.0.Build.00000 / 2026-07-25 23:45]
 1. v1.3.6: 청구 매출 귀속월(billingYm) 기본값 YYYY-MM 동적 할당 및 수정 가능 개편 (Billings.tsx, AssetAcquisitionDisposal.tsx)
 2. v1.3.7: 임차 자산 반납 및 회수/반납 배차 통합 동시 신청 지원 (RentAssets.tsx)
