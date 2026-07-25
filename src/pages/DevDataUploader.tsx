@@ -919,7 +919,9 @@ export const DevDataUploader: React.FC = () => {
           if (error) {
             totalFailed += batch.length;
             console.error(`Bulk upsert error for ${schema.supabaseTable}:`, error);
-            errDetailsMsg += `[시트/테이블: ${schema.supabaseTable}]\n[Supabase 에러 코드: ${error.code || '미지정'}]\n[메시지: ${error.message}]\n[상세 내역: ${error.details || '없음'}]\n\n`;
+            const isRlsError = error.code === '42501' || error.message.includes('row-level security');
+            const rlsSolution = isRlsError ? `\n💡 [원인 및 복구 가이드] ${schema.supabaseTable} 테이블의 RLS(행 수준 보안)가 켜져 있어 쓰기가 금지되었습니다.\n해결 DDL 쿼리: ALTER TABLE "${schema.supabaseTable}" DISABLE ROW LEVEL SECURITY;\n(상단 'DB 스키마 정합성 검증 실행' 버튼을 누르시면 RLS 해제 복구 패치 SQL이 자동 생성됩니다.)\n` : '';
+            errDetailsMsg += `[시트/테이블: ${schema.supabaseTable}]\n[Supabase 에러 코드: ${error.code || '미지정'}]\n[메시지: ${error.message}]${rlsSolution}\n[상세 내역: ${error.details || '없음'}]\n\n`;
           } else {
             totalSuccess += batch.length;
           }
@@ -1055,7 +1057,7 @@ export const DevDataUploader: React.FC = () => {
         const schemaDef = currentSchemas[table];
         let hasRlsError = false;
         
-        // 1. 테이블 존재 여부 및 RLS 기본 검사
+        // 1. 테이블 존재 여부 및 RLS 기본 읽기 검사
         const { error: tableError } = await supabase!.from(table).select('id').limit(0);
         
         if (tableError) {
@@ -1072,6 +1074,20 @@ export const DevDataUploader: React.FC = () => {
 
           if (tableError.message.includes('row-level security') || tableError.code === '42501') {
             hasRlsError = true;
+          }
+        }
+
+        // 1-2. RLS 쓰기(INSERT/UPSERT) 권한 정밀 실시간 테스트 (SELECT는 성공하나 쓰기가 차단된 케이스 색출)
+        if (!hasRlsError) {
+          const testId = `__RLS_TEST_${Date.now()}`;
+          const { error: writeError } = await supabase!.from(table).upsert({ id: testId } as any, { onConflict: 'id' });
+          if (writeError) {
+            if (writeError.message.includes('row-level security') || writeError.code === '42501') {
+              hasRlsError = true;
+            }
+          } else {
+            // 테스트 성공 시 임시 덤미 행 즉시 삭제
+            await supabase!.from(table).delete().eq('id', testId);
           }
         }
 

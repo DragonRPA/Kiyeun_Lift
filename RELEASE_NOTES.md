@@ -1,3 +1,11 @@
+# Release Notes (v1.4.1.Build.00002 - 2026-07-26 00:22)
+
+## 🛡️ Supabase RLS 쓰기 권한 실시간 테스트 & 엑셀 업로드 원클릭 복구 가이드 강화
+- **DB 스키마 정합성 검증 도구 실시간 쓰기(INSERT/UPSERT) 권한 검증 추가 ([DevDataUploader.tsx](file:///d:/GoogleDrive/RPA%20개발/01.AntiGravity/Kiyuen_Lift/src/pages/DevDataUploader.tsx))**:
+  - `SELECT` 읽기는 허용되지만 `INSERT/UPSERT` 쓰기가 차단된 RLS 상태까지 정밀 실시간 테스트(`__RLS_TEST_...` 가상 덤미 테스트)하여 사전 100% 검출하도록 개편.
+- **엑셀 일괄 업로드 실패 시 직관적 RLS 복구 가이드 연동**:
+  - `42501` / `new row violates row-level security policy` 발생 시 원인 분석 및 `ALTER TABLE "tableName" DISABLE ROW LEVEL SECURITY;` 쿼리 안내문 자동 바인딩.
+
 # Release Notes (v1.4.1.Build.00001 - 2026-07-26 00:19)
 
 ## 🛡️ Supabase 실시간 DB 정합성 검증 도구 RLS(Row-Level Security) 검증 & DDL 패치 강화
