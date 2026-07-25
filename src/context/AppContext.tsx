@@ -613,6 +613,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       updatedAt: new Date().toISOString()
     });
 
+    try {
+      if (db.pendingWrites.length > 0) {
+        await Promise.all(db.pendingWrites);
+        db.pendingWrites = [];
+      }
+    } catch (err: any) {
+      console.error('Supabase sync error during saveSmartDispatch:', err);
+      db.pendingWrites = [];
+      return { 
+        success: false, 
+        errorMessage: `⚠️ Supabase 데이터베이스 동기화 중 오류가 발생했습니다:\n${err.message || err.details || JSON.stringify(err)}` 
+      };
+    }
+
     refreshAllData();
     return { success: true };
   };

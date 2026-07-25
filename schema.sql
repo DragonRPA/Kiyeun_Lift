@@ -215,8 +215,8 @@ CREATE TABLE consumable_logs (
     "targetAssetId" TEXT REFERENCES assets(id),
     "purchaseItemId" TEXT REFERENCES consumable_purchase_items(id), -- 구매신청 입고 매칭
     "evidenceFileUrl" TEXT, -- 거래명세서 등 매입 증빙 파일
-    "actionDate" TEXT NOT NULL,
     description TEXT,
+    "actionDate" TEXT NOT NULL,
     "createdAt" TEXT NOT NULL
 );
 
@@ -228,11 +228,11 @@ CREATE TABLE contracts (
     "salespersonId" TEXT REFERENCES users(id), -- 담당 영업사원
     "contactId" TEXT REFERENCES customer_contacts(id),
     "siteId" TEXT REFERENCES customer_sites(id),
-    "startDate" TEXT NOT NULL,
-    "endDate" TEXT NOT NULL,
     "billingDay" INTEGER NOT NULL DEFAULT 30,
     status TEXT CHECK (status IN ('ACTIVE', 'EXTENDED', 'SHORTENED', 'SUCCEEDED', 'COMPLETED')) NOT NULL,
     "driveFolderId" TEXT,
+    "startDate" TEXT NOT NULL,
+    "endDate" TEXT NOT NULL,
     "createdAt" TEXT NOT NULL,
     "updatedAt" TEXT NOT NULL
 );
@@ -253,8 +253,8 @@ CREATE TABLE contract_history (
     id TEXT PRIMARY KEY,
     "contractId" TEXT REFERENCES contracts(id) ON DELETE CASCADE,
     "changeType" TEXT CHECK ("changeType" IN ('REGISTER', 'EXTEND', 'SHORTEN', 'SUCCEED', 'TERMINATE')) NOT NULL,
-    "changeDate" TEXT NOT NULL,
     "description" TEXT,
+    "changeDate" TEXT NOT NULL,
     "createdAt" TEXT NOT NULL
 );
 
@@ -266,15 +266,15 @@ CREATE TABLE deliveries (
     "transportVendorId" TEXT REFERENCES vendors(id), -- 운송 거래처
     type TEXT CHECK (type IN ('OUTBOUND', 'INBOUND')) NOT NULL,
     status TEXT CHECK (status IN ('REQUESTED', 'DISPATCHED', 'COMPLETED', 'CANCELLED')) NOT NULL,
-    "requestDate" TEXT NOT NULL,
-    "loadingTime" TEXT, -- 상차 예정 일시
-    "unloadingTime" TEXT, -- 하차 예정 일시
     "vehicleType" TEXT,
     "driverName" TEXT,
     "driverContact" TEXT,
     "deliveryCost" DOUBLE PRECISION NOT NULL DEFAULT 0,
     "purchaseBillId" TEXT, -- 매입 마감 연동
     memo TEXT,
+    "requestDate" TEXT NOT NULL,
+    "loadingTime" TEXT, -- 상차 예정 일시
+    "unloadingTime" TEXT, -- 하차 예정 일시
     "createdAt" TEXT NOT NULL,
     "updatedAt" TEXT NOT NULL
 );
@@ -284,10 +284,10 @@ CREATE TABLE billings (
     id TEXT PRIMARY KEY,
     "customerId" TEXT REFERENCES customers(id),
     "billingYm" TEXT NOT NULL,
-    "billingDate" TEXT NOT NULL,
     "totalAmount" DOUBLE PRECISION NOT NULL DEFAULT 0,
     "paidAmount" DOUBLE PRECISION NOT NULL DEFAULT 0,
     status TEXT CHECK (status IN ('UNPAID', 'PARTIAL', 'PAID')) NOT NULL,
+    "billingDate" TEXT NOT NULL,
     "createdAt" TEXT NOT NULL,
     "updatedAt" TEXT NOT NULL
 );
@@ -334,10 +334,10 @@ CREATE TABLE purchase_billing_details (
 CREATE TABLE payments (
     id TEXT PRIMARY KEY,
     "billingId" TEXT REFERENCES billings(id) ON DELETE CASCADE,
-    "paymentDate" TEXT NOT NULL,
     amount DOUBLE PRECISION NOT NULL,
     method TEXT NOT NULL,
     memo TEXT,
+    "paymentDate" TEXT NOT NULL,
     "createdAt" TEXT NOT NULL
 );
 
@@ -348,10 +348,7 @@ CREATE TABLE repairs (
     "mechanicId" TEXT REFERENCES users(id),
     "repairType" TEXT CHECK ("repairType" IN ('INTERNAL', 'EXTERNAL')) NOT NULL DEFAULT 'INTERNAL',
     "vendorId" TEXT REFERENCES vendors(id), -- 외주업체
-    "outboundDate" TEXT, -- 반출일자
-    "completedDate" TEXT, -- 정비완료일자
     "estimateFileUrl" TEXT, -- 견적서 첨부
-    "requestDate" TEXT NOT NULL,
     status TEXT CHECK (status IN ('PENDING', 'IN_PROGRESS', 'COMPLETED')) NOT NULL,
     details TEXT,
     "isCustomerFault" BOOLEAN NOT NULL DEFAULT FALSE, -- 입고 시 고객 파손 의심 통지
@@ -366,6 +363,9 @@ CREATE TABLE repairs (
     "billingId" TEXT REFERENCES billings(id), -- 매출(고객) 전표
     "purchaseBillId" TEXT REFERENCES purchase_billings(id), -- 매입(외주) 전표
     
+    "requestDate" TEXT NOT NULL,
+    "outboundDate" TEXT, -- 반출일자
+    "completedDate" TEXT, -- 정비완료일자
     "createdAt" TEXT NOT NULL,
     "updatedAt" TEXT NOT NULL
 );
@@ -437,13 +437,13 @@ CREATE TABLE collaboration_request_history (
 -- 26. 은행 입출금 거래 내역 (bank_transactions) - 신설
 CREATE TABLE bank_transactions (
     id TEXT PRIMARY KEY,
-    "transactionDate" TEXT NOT NULL,
     "senderName" TEXT NOT NULL,
     "depositAmount" DOUBLE PRECISION NOT NULL DEFAULT 0,
     "withdrawAmount" DOUBLE PRECISION NOT NULL DEFAULT 0,
     memo TEXT,
     "matchedBillingId" TEXT REFERENCES billings(id) ON DELETE SET NULL,
     "matchingType" TEXT CHECK ("matchingType" IN ('AUTO', 'MANUAL')),
+    "transactionDate" TEXT NOT NULL,
     "createdAt" TEXT NOT NULL
 );
 
@@ -462,7 +462,6 @@ CREATE TABLE asset_inout_logs (
     "assetNo" TEXT NOT NULL,
     "modelName" TEXT NOT NULL,
     type TEXT CHECK (type IN ('OUTBOUND', 'INBOUND', 'REPAIR')) NOT NULL,
-    "eventDate" TEXT NOT NULL,
     "customerId" TEXT REFERENCES customers(id) ON DELETE SET NULL,
     "customerName" TEXT,
     "siteId" TEXT REFERENCES customer_sites(id) ON DELETE SET NULL,
@@ -471,6 +470,7 @@ CREATE TABLE asset_inout_logs (
     "repairId" TEXT REFERENCES repairs(id) ON DELETE SET NULL,
     "maintenanceScore" INTEGER,
     memo TEXT,
+    "eventDate" TEXT NOT NULL,
     "createdAt" TEXT NOT NULL
 );
 
@@ -481,11 +481,8 @@ CREATE TABLE consumable_purchases (
     "modelName" TEXT NOT NULL,
     "requestedQty" DOUBLE PRECISION NOT NULL,
     "unitPrice" DOUBLE PRECISION NOT NULL,
-    "requestDate" TEXT NOT NULL,
     "sellerName" TEXT NOT NULL,
     status TEXT CHECK (status IN ('REQUESTED', 'ACCEPTED', 'COMPLETED', 'CANCELLED')) NOT NULL,
-    "acceptedDate" TEXT,
-    "completedDate" TEXT,
     "requesterId" TEXT REFERENCES users(id),
     "requesterName" TEXT NOT NULL,
     "accepterId" TEXT,
@@ -493,6 +490,9 @@ CREATE TABLE consumable_purchases (
     "inbounderName" TEXT,
     "receivedQty" DOUBLE PRECISION NOT NULL DEFAULT 0,
     "statementFileUrl" TEXT,
+    "requestDate" TEXT NOT NULL,
+    "acceptedDate" TEXT,
+    "completedDate" TEXT,
     "createdAt" TEXT NOT NULL,
     "updatedAt" TEXT NOT NULL
 );
