@@ -294,31 +294,43 @@ export const Vendors: React.FC = () => {
       {/* 매입처 목록 테이블 */}
       <div className="card" style={{ padding: 0 }}>
         <div className="table-container" style={{ maxHeight: 'calc(850px - 260px)', overflowY: 'auto', overscrollBehavior: 'contain' }}>
-          <table className="table" style={{ width: '100%', margin: 0 }}>
+          <table className="table" style={{ width: '100%', margin: 0, tableLayout: 'fixed' }}>
+            <colgroup>
+              <col style={{ width: '160px' }} />
+              <col style={{ width: '160px' }} />
+              <col style={{ width: '110px' }} />
+              <col style={{ width: '80px' }} />
+              <col style={{ width: '110px' }} />
+              <col style={{ width: '160px' }} />
+              <col style={{ width: '140px' }} />
+              <col style={{ width: '60px' }} />
+              {canSave && <col style={{ width: '72px' }} />}
+            </colgroup>
             <thead>
               <tr>
-                <th onClick={() => handleSort('name')} style={{ cursor: 'pointer' }}>
+                <th onClick={() => handleSort('name')} style={{ cursor: 'pointer', padding: '8px 10px' }}>
                   상호명 (매입처명) {renderSortArrow('name')}
                 </th>
-                <th>매입/거래 속성 (다중)</th>
-                <th onClick={() => handleSort('bizRegNo')} style={{ cursor: 'pointer' }}>
+                <th style={{ padding: '8px 6px' }}>매입/거래 속성 (다중)</th>
+                <th onClick={() => handleSort('bizRegNo')} style={{ cursor: 'pointer', padding: '8px 6px' }}>
                   사업자등록번호 {renderSortArrow('bizRegNo')}
                 </th>
-                <th onClick={() => handleSort('representative')} style={{ cursor: 'pointer' }}>
+                <th onClick={() => handleSort('representative')} style={{ cursor: 'pointer', padding: '8px 6px' }}>
                   대표자명 {renderSortArrow('representative')}
                 </th>
-                <th onClick={() => handleSort('contactName')} style={{ cursor: 'pointer' }}>
+                <th onClick={() => handleSort('contactName')} style={{ cursor: 'pointer', padding: '8px 6px' }}>
                   담당자 및 연락처 {renderSortArrow('contactName')}
                 </th>
-                <th>주소 및 이메일</th>
-                <th>상태</th>
-                {canSave && <th style={{ width: '90px', textAlign: 'center' }}>관리</th>}
+                <th style={{ padding: '8px 6px' }}>주소</th>
+                <th style={{ padding: '8px 6px' }}>이메일</th>
+                <th style={{ padding: '8px 6px' }}>상태</th>
+                {canSave && <th style={{ width: '72px', textAlign: 'center', padding: '8px 6px' }}>관리</th>}
               </tr>
             </thead>
             <tbody>
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={8} style={{ textAlign: 'center', padding: '32px', color: 'var(--text-muted)' }}>
+                  <td colSpan={9} style={{ textAlign: 'center', padding: '32px', color: 'var(--text-muted)' }}>
                     {vendors.length === 0 ? '📭 등록된 매입처(공급자)가 없습니다.' : '🔍 조회 조건에 맞는 매입처가 없습니다. 검색 조건을 변경해 보세요.'}
                   </td>
                 </tr>
@@ -326,49 +338,52 @@ export const Vendors: React.FC = () => {
                 filtered.map(v => {
                   return (
                     <tr key={v.id}>
-                      <td>
-                        <strong style={{ color: 'var(--primary)', display: 'block' }}>{v.name}</strong>
-                        <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{v.id}</span>
+                      <td style={{ padding: '6px 10px' }}>
+                        <strong style={{ color: 'var(--primary)', display: 'block', fontSize: '13px' }}>{v.name}</strong>
+                        <span style={{ fontSize: '10.5px', color: 'var(--text-muted)' }}>{v.id}</span>
                       </td>
-                      <td>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px' }}>
+                      <td style={{ padding: '6px 6px' }}>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2px' }}>
                           {renderTypePills(v)}
                         </div>
                       </td>
-                      <td style={{ fontSize: '12.5px' }}>{v.bizRegNo || '-'}</td>
-                      <td style={{ fontSize: '12.5px' }}>{v.representative || '-'}</td>
-                      <td style={{ fontSize: '12.5px' }}>
-                        <div style={{ fontWeight: '600', color: 'var(--text-main)', marginBottom: '1px' }}>{v.contactName || '-'}</div>
-                        <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)' }}>{v.contact || ''}</div>
+                      <td style={{ fontSize: '12px', padding: '6px 6px' }}>{v.bizRegNo || '-'}</td>
+                      <td style={{ fontSize: '12px', padding: '6px 6px' }}>{v.representative || '-'}</td>
+                      <td style={{ fontSize: '12px', padding: '6px 6px' }}>
+                        <div style={{ fontWeight: '600', color: 'var(--text-main)' }}>{v.contactName || '-'}</div>
+                        <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>{v.contact || ''}</div>
                       </td>
-                      <td style={{ fontSize: '12px', minWidth: '140px' }}>
-                        {v.address && (
-                          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '4px', marginBottom: '3px', color: 'var(--text-secondary)' }}>
-                            <MapPin size={11} style={{ marginTop: '2px', flexShrink: 0, color: '#6b7280' }} />
-                            <span style={{ lineHeight: '1.3' }}>{v.address}</span>
-                          </div>
-                        )}
-                        {v.email && (
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--text-muted)' }}>
-                            <Mail size={11} style={{ flexShrink: 0, color: '#6b7280' }} />
-                            <span style={{ fontSize: '11.5px' }}>{v.email}</span>
-                          </div>
-                        )}
-                        {!v.address && !v.email && <span style={{ color: 'var(--text-muted)' }}>-</span>}
+                      <td style={{ fontSize: '11.5px', padding: '6px 6px', color: 'var(--text-secondary)' }}>
+                        {v.address
+                          ? <div style={{ display: 'flex', alignItems: 'flex-start', gap: '3px' }}>
+                              <MapPin size={10} style={{ marginTop: '2px', flexShrink: 0, color: '#9ca3af' }} />
+                              <span style={{ lineHeight: '1.3', overflow: 'hidden', textOverflow: 'ellipsis' }}>{v.address}</span>
+                            </div>
+                          : <span style={{ color: 'var(--text-muted)' }}>-</span>
+                        }
                       </td>
-                      <td>
+                      <td style={{ fontSize: '11.5px', padding: '6px 6px', color: 'var(--text-muted)' }}>
+                        {v.email
+                          ? <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+                              <Mail size={10} style={{ flexShrink: 0, color: '#9ca3af' }} />
+                              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{v.email}</span>
+                            </div>
+                          : <span>-</span>
+                        }
+                      </td>
+                      <td style={{ padding: '6px 6px' }}>
                         <span className={`badge ${v.isActive !== false ? 'badge-success' : 'badge-danger'}`}>
                           {v.isActive !== false ? '거래중' : '중단'}
                         </span>
                       </td>
                       {canSave && (
-                        <td style={{ textAlign: 'center' }}>
-                          <div style={{ display: 'flex', gap: '4px', justifyContent: 'center' }}>
-                            <button className="btn-secondary" onClick={() => handleOpenEditModal(v)} style={{ padding: '4px 6px' }} title="수정">
-                              <Edit2 size={13} />
+                        <td style={{ textAlign: 'center', padding: '6px 4px' }}>
+                          <div style={{ display: 'flex', gap: '3px', justifyContent: 'center' }}>
+                            <button className="btn-secondary" onClick={() => handleOpenEditModal(v)} style={{ padding: '3px 5px' }} title="수정">
+                              <Edit2 size={12} />
                             </button>
-                            <button className="btn-danger" onClick={() => handleDelete(v.id, v.name)} style={{ padding: '4px 6px' }} title="삭제">
-                              <Trash2 size={13} />
+                            <button className="btn-danger" onClick={() => handleDelete(v.id, v.name)} style={{ padding: '3px 5px' }} title="삭제">
+                              <Trash2 size={12} />
                             </button>
                           </div>
                         </td>
