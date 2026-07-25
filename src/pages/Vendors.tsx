@@ -1,17 +1,17 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { Search, Plus, Edit2, Trash2, Download, Building2, Check, RefreshCw } from 'lucide-react';
+import { Search, Plus, Edit2, Trash2, Download, Building2, Check, RefreshCw, MapPin, Mail } from 'lucide-react';
 import { exportToExcel } from '../services/excel';
 import { Vendor } from '../services/db';
 
 type VendorTypeOption = 'RENTAL' | 'PURCHASE' | 'TRANSPORT' | 'REPAIR' | 'OTHER';
 
-const VENDOR_TYPE_CONFIG: Record<VendorTypeOption, { label: string; icon: string; badgeClass: string }> = {
-  RENTAL: { label: '임차거래처', icon: '🏢', badgeClass: 'badge-info' },
-  PURCHASE: { label: '구매처', icon: '🛒', badgeClass: 'badge-success' },
-  TRANSPORT: { label: '운송거래처', icon: '🚚', badgeClass: 'badge-warning' },
-  REPAIR: { label: '외주정비처', icon: '🔧', badgeClass: 'badge-danger' },
-  OTHER: { label: '기타', icon: '📌', badgeClass: '' }
+const VENDOR_TYPE_CONFIG: Record<VendorTypeOption, { label: string; color: string; bg: string }> = {
+  RENTAL: { label: '임차', color: '#2563eb', bg: '#dbeafe' },
+  PURCHASE: { label: '구매', color: '#16a34a', bg: '#dcfce7' },
+  TRANSPORT: { label: '운송', color: '#d97706', bg: '#fef3c7' },
+  REPAIR: { label: '정비', color: '#dc2626', bg: '#fee2e2' },
+  OTHER: { label: '기타', color: '#6b7280', bg: '#f3f4f6' }
 };
 
 export const Vendors: React.FC = () => {
@@ -306,26 +306,47 @@ export const Vendors: React.FC = () => {
                         <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{v.id}</span>
                       </td>
                       <td>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px' }}>
                           {vTypes.map(t => {
-                            const cfg = VENDOR_TYPE_CONFIG[t] || { label: t, icon: '', badgeClass: '' };
+                            const cfg = VENDOR_TYPE_CONFIG[t] || { label: t, color: '#6b7280', bg: '#f3f4f6' };
                             return (
-                              <span key={t} className={`badge ${cfg.badgeClass}`} style={{ fontSize: '11.5px', padding: '3px 8px' }}>
-                                {cfg.icon} {cfg.label}
+                              <span key={t} style={{
+                                display: 'inline-block',
+                                fontSize: '11px',
+                                fontWeight: '600',
+                                padding: '2px 7px',
+                                borderRadius: '999px',
+                                color: cfg.color,
+                                background: cfg.bg,
+                                border: `1px solid ${cfg.color}30`,
+                                letterSpacing: '0.02em'
+                              }}>
+                                {cfg.label}
                               </span>
                             );
                           })}
                         </div>
                       </td>
-                      <td>{v.bizRegNo || '-'}</td>
-                      <td>{v.representative || '-'}</td>
-                      <td>
-                        <div><strong>{v.contactName || '-'}</strong></div>
-                        <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{v.contact || '-'}</div>
-                      </td>
+                      <td style={{ fontSize: '12.5px' }}>{v.bizRegNo || '-'}</td>
+                      <td style={{ fontSize: '12.5px' }}>{v.representative || '-'}</td>
                       <td style={{ fontSize: '12.5px' }}>
-                        <div>{v.address || '-'}</div>
-                        <div style={{ fontSize: '11.5px', color: 'var(--text-muted)' }}>{v.email}</div>
+                        <div style={{ fontWeight: '600', color: 'var(--text-main)', marginBottom: '1px' }}>{v.contactName || '-'}</div>
+                        <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)' }}>{v.contact || ''}</div>
+                      </td>
+                      <td style={{ fontSize: '12px', minWidth: '140px' }}>
+                        {v.address && (
+                          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '4px', marginBottom: '3px', color: 'var(--text-secondary)' }}>
+                            <MapPin size={11} style={{ marginTop: '2px', flexShrink: 0, color: '#6b7280' }} />
+                            <span style={{ lineHeight: '1.3' }}>{v.address}</span>
+                          </div>
+                        )}
+                        {v.email && (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--text-muted)' }}>
+                            <Mail size={11} style={{ flexShrink: 0, color: '#6b7280' }} />
+                            <span style={{ fontSize: '11.5px' }}>{v.email}</span>
+                          </div>
+                        )}
+                        {!v.address && !v.email && <span style={{ color: 'var(--text-muted)' }}>-</span>}
                       </td>
                       <td>
                         <span className={`badge ${v.isActive !== false ? 'badge-success' : 'badge-danger'}`}>
@@ -422,7 +443,6 @@ export const Vendors: React.FC = () => {
                           }}
                         >
                           {isSelected && <Check size={14} style={{ color: '#fff', strokeWidth: 3 }} />}
-                          <span>{cfg.icon}</span>
                           <span>{cfg.label}</span>
                         </button>
                       );
