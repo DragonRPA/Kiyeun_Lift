@@ -347,9 +347,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const hasPermission = (menuId: string, action: 'view' | 'save'): boolean => {
     if (!currentUser) return false;
-    if (currentUser.role === 'ADMIN') return true;
+    // 시스템 절대 최고관리자(admin/sys-admin/u-1 계정)만 예외적으로 전체 100% 무조건 허용
+    if (currentUser.loginId === 'admin' || currentUser.id === 'sys-admin' || currentUser.id === 'u-1') return true;
+
     const perm = permissions.find(p => p.userId === currentUser.id && p.menuId === menuId);
-    if (!perm) return false;
+    if (!perm) {
+      // 권한 레코드가 없는 초기 상태 시 ADMIN은 기본 true, 일반 유저는 false
+      return currentUser.role === 'ADMIN';
+    }
     return action === 'view' ? perm.canView : perm.canSave;
   };
 
