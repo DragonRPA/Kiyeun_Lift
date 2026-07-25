@@ -620,14 +620,14 @@ const enforceManagerPolicies = (usersList: UserNode[], deptList: Department[]) =
 
             <div style={{ flex: 1, overflowY: 'auto', paddingRight: '4px' }}>
               {/* Profile Image Upload Area */}
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '16px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '8px' }}>
                 <div style={{
-                  width: '80px', height: '80px', borderRadius: '50%', backgroundColor: 'var(--primary-light)',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '28px', color: 'var(--primary)',
+                  width: '56px', height: '56px', borderRadius: '50%', backgroundColor: 'var(--primary-light)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px', color: 'var(--primary)',
                   backgroundImage: selectedProfile.profileImageUrl ? `url(${selectedProfile.profileImageUrl})` : 'none',
-                  backgroundSize: 'cover', backgroundPosition: 'center', marginBottom: '8px', border: '2px solid var(--border-color)'
+                  backgroundSize: 'cover', backgroundPosition: 'center', marginBottom: '4px', border: '2px solid var(--border-color)'
                 }}>
-                  {!selectedProfile.profileImageUrl && selectedProfile.name.substring(0, 1)}
+                  {!selectedProfile.profileImageUrl && (selectedProfile.name ? selectedProfile.name.substring(0, 1) : '신')}
                 </div>
                 {canEdit && (
                   <>
@@ -638,32 +638,32 @@ const enforceManagerPolicies = (usersList: UserNode[], deptList: Department[]) =
                       onChange={handlePhotoUpload} 
                       style={{ display: 'none' }} 
                     />
-                    <button className="btn-secondary" onClick={() => fileInputRef.current?.click()} style={{ fontSize: '12px', padding: '6px 12px' }}>
-                      <Upload size={14} style={{ marginRight: '6px' }} /> 사진 변경
+                    <button className="btn-secondary" onClick={() => fileInputRef.current?.click()} style={{ fontSize: '11px', padding: '3px 8px' }}>
+                      <Upload size={12} style={{ marginRight: '4px' }} /> 사진 변경
                     </button>
                   </>
                 )}
               </div>
 
               {/* Form Fields */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
                   <div>
-                    <label style={{ marginBottom: '4px', color: 'var(--primary)', fontWeight: 'bold' }}>로그인 아이디 (ID)</label>
-                    <input type="text" style={{ padding: '6px 10px', fontSize: '13px' }} placeholder="시스템 로그인 ID" value={selectedProfile.loginId || ''} onChange={e => setSelectedProfile({...selectedProfile, loginId: e.target.value})} disabled={!canEdit} />
+                    <label style={{ marginBottom: '2px', color: 'var(--primary)', fontWeight: 'bold', fontSize: '12px' }}>로그인 아이디 (ID)</label>
+                    <input type="text" style={{ padding: '4px 8px', fontSize: '12px' }} placeholder="시스템 로그인 ID" value={selectedProfile.loginId || ''} onChange={e => setSelectedProfile({...selectedProfile, loginId: e.target.value})} disabled={!canEdit} />
                   </div>
                   <div>
-                    <label style={{ marginBottom: '4px', color: 'var(--primary)', fontWeight: 'bold' }}>초기 비밀번호</label>
-                    <input type="password" style={{ padding: '6px 10px', fontSize: '13px' }} placeholder="비밀번호" value={selectedProfile.passwordHash || ''} onChange={e => setSelectedProfile({...selectedProfile, passwordHash: e.target.value})} disabled={!canEdit} />
+                    <label style={{ marginBottom: '2px', color: 'var(--primary)', fontWeight: 'bold', fontSize: '12px' }}>초기 비밀번호</label>
+                    <input type="password" style={{ padding: '4px 8px', fontSize: '12px' }} placeholder="비밀번호" value={selectedProfile.passwordHash || ''} onChange={e => setSelectedProfile({...selectedProfile, passwordHash: e.target.value})} disabled={!canEdit} />
                   </div>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
                   <div>
-                    <label style={{ marginBottom: '4px' }}>이름</label>
+                    <label style={{ marginBottom: '2px', fontSize: '12px' }}>이름</label>
                     <input 
                       type="text" 
-                      style={{ padding: '6px 10px', fontSize: '13px' }} 
+                      style={{ padding: '4px 8px', fontSize: '12px' }} 
                       placeholder="이름 입력 (예: 홍길동)"
                       value={selectedProfile.name} 
                       onChange={e => setSelectedProfile({...selectedProfile, name: e.target.value})} 
@@ -671,13 +671,13 @@ const enforceManagerPolicies = (usersList: UserNode[], deptList: Department[]) =
                     />
                   </div>
                   <div>
-                    <label style={{ marginBottom: '4px' }}>상태</label>
+                    <label style={{ marginBottom: '2px', fontSize: '12px' }}>상태</label>
                     <select 
                       value={selectedProfile.status} 
                       onChange={e => handleStatusChange(selectedProfile.id, e.target.value as UserNode['status'])}
                       disabled={!canEdit}
                       style={{ 
-                        padding: '6px 10px', fontSize: '13px',
+                        padding: '4px 8px', fontSize: '12px',
                         color: selectedProfile.status === 'ACTIVE' ? 'var(--success)' : selectedProfile.status === 'RETIRED' ? 'var(--danger)' : 'var(--warning)',
                         fontWeight: 'bold'
                       }}
@@ -689,12 +689,12 @@ const enforceManagerPolicies = (usersList: UserNode[], deptList: Department[]) =
                   </div>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
                   <div>
-                    <label style={{ marginBottom: '4px' }}>직급</label>
+                    <label style={{ marginBottom: '2px', fontSize: '12px' }}>직급</label>
                     <input 
                       type="text" 
-                      style={{ padding: '6px 10px', fontSize: '13px' }} 
+                      style={{ padding: '4px 8px', fontSize: '12px' }} 
                       placeholder="직급 입력 (예: 사원/대리)"
                       value={selectedProfile.position} 
                       onChange={e => setSelectedProfile({...selectedProfile, position: e.target.value})} 
@@ -702,10 +702,10 @@ const enforceManagerPolicies = (usersList: UserNode[], deptList: Department[]) =
                     />
                   </div>
                   <div>
-                    <label style={{ marginBottom: '4px' }}>시스템 역할</label>
+                    <label style={{ marginBottom: '2px', fontSize: '12px' }}>시스템 역할</label>
                     <select 
                       value={selectedProfile.role} 
-                      style={{ padding: '6px 10px', fontSize: '13px' }} 
+                      style={{ padding: '4px 8px', fontSize: '12px' }} 
                       onChange={e => setSelectedProfile({...selectedProfile, role: e.target.value})} 
                       disabled={!canEdit || selectedProfile.id === 'sys-admin'}
                     >
@@ -717,29 +717,29 @@ const enforceManagerPolicies = (usersList: UserNode[], deptList: Department[]) =
                 </div>
 
                 <div>
-                  <label style={{ marginBottom: '4px' }}><Phone size={13} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: '4px' }}/> 휴대전화</label>
-                  <input type="text" style={{ padding: '6px 10px', fontSize: '13px' }} placeholder="010-0000-0000" value={selectedProfile.phone || ''} onChange={e => setSelectedProfile({...selectedProfile, phone: e.target.value})} disabled={!canEdit} />
+                  <label style={{ marginBottom: '2px', fontSize: '12px' }}><Phone size={12} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: '4px' }}/> 휴대전화</label>
+                  <input type="text" style={{ padding: '4px 8px', fontSize: '12px' }} placeholder="010-0000-0000" value={selectedProfile.phone || ''} onChange={e => setSelectedProfile({...selectedProfile, phone: e.target.value})} disabled={!canEdit} />
                 </div>
                 
                 <div>
-                  <label style={{ marginBottom: '4px' }}><Mail size={13} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: '4px' }}/> 이메일</label>
-                  <input type="email" style={{ padding: '6px 10px', fontSize: '13px' }} placeholder="example@kiyeun.com" value={selectedProfile.email || ''} onChange={e => setSelectedProfile({...selectedProfile, email: e.target.value})} disabled={!canEdit} />
+                  <label style={{ marginBottom: '2px', fontSize: '12px' }}><Mail size={12} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: '4px' }}/> 이메일</label>
+                  <input type="email" style={{ padding: '4px 8px', fontSize: '12px' }} placeholder="example@kiyeun.com" value={selectedProfile.email || ''} onChange={e => setSelectedProfile({...selectedProfile, email: e.target.value})} disabled={!canEdit} />
                 </div>
 
                 <div>
-                  <label style={{ marginBottom: '4px' }}><Calendar size={13} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: '4px' }}/> 생년월일</label>
-                  <input type="date" style={{ padding: '6px 10px', fontSize: '13px' }} value={selectedProfile.birthDate || ''} onChange={e => setSelectedProfile({...selectedProfile, birthDate: e.target.value})} disabled={!canEdit} />
+                  <label style={{ marginBottom: '2px', fontSize: '12px' }}><Calendar size={12} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: '4px' }}/> 생년월일</label>
+                  <input type="date" style={{ padding: '4px 8px', fontSize: '12px' }} value={selectedProfile.birthDate || ''} onChange={e => setSelectedProfile({...selectedProfile, birthDate: e.target.value})} disabled={!canEdit} />
                 </div>
 
                 <div>
-                  <label style={{ marginBottom: '4px' }}><MapPin size={13} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: '4px' }}/> 자택 주소</label>
-                  <textarea rows={2} value={selectedProfile.address || ''} onChange={e => setSelectedProfile({...selectedProfile, address: e.target.value})} disabled={!canEdit} style={{ resize: 'none', padding: '6px 10px', fontSize: '13px' }} />
+                  <label style={{ marginBottom: '2px', fontSize: '12px' }}><MapPin size={12} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: '4px' }}/> 자택 주소</label>
+                  <input type="text" style={{ padding: '4px 8px', fontSize: '12px' }} placeholder="자택 주소 입력" value={selectedProfile.address || ''} onChange={e => setSelectedProfile({...selectedProfile, address: e.target.value})} disabled={!canEdit} />
                 </div>
               </div>
             </div>
 
             {canEdit && (
-              <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '12px', marginTop: '12px', display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+              <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '8px', marginTop: '8px', display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
                 <button className="btn-secondary" style={{ padding: '6px 12px', fontSize: '13px' }} onClick={() => setSelectedProfile(null)}>취소 (닫기)</button>
                 <button className="btn-primary" style={{ padding: '6px 12px', fontSize: '13px' }} onClick={applyProfileChanges}>
                   <CheckCircle size={14} style={{ marginRight: '4px' }} /> 적용
