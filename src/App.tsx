@@ -499,16 +499,13 @@ const App: React.FC = () => {
                   {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                 </button>
 
-                {/* 하위 메뉴 서브 항목 그룹 (슬림하고 일정한 들여쓰기) */}
+                {/* 하위 메뉴 서브 항목 그룹 (모든 하위메뉴 X좌표 동일 & 상위대비 +15px 고정) */}
                 {isExpanded && (
                   <div style={{
                     display: 'flex',
                     flexDirection: 'column',
                     gap: '2px',
-                    marginTop: '2px',
-                    paddingLeft: '6px',
-                    borderLeft: '2px solid rgba(59, 130, 246, 0.2)',
-                    marginLeft: '14px'
+                    marginTop: '2px'
                   }}>
                     {visibleItems.map(item => {
                       const isItemActive = activeTab === item.id;
@@ -523,7 +520,7 @@ const App: React.FC = () => {
                             display: 'flex',
                             alignItems: 'center',
                             gap: '8px',
-                            padding: '7px 10px',
+                            padding: '7px 10px 7px 25px', // 상위 패딩 10px 대비 정확히 +15px 오프셋 (25px)
                             borderRadius: 'var(--radius-sm)',
                             border: 'none',
                             fontSize: '12px',
