@@ -178,3 +178,9 @@
   1. `createdAt` 또는 `updatedAt`이 없는 모든 테이블에 두 날짜 필드를 전면 표준 추가하고, 데이터 등록(Insert) 시 `createdAt` 및 `updatedAt`을, 데이터 수정(Update) 시 `updatedAt`이 실시간 갱신되도록 CRUD 핸들러(`db.ts`) 및 스키마(`schema.sql`)를 전면 리팩토링.
   2. `products` 테이블 등 `createdAt`이 중간에 껴 있던 컬럼들의 위치를 테이블의 가장 우측(맨 뒤)으로 이동하고 `updatedAt` 컬럼을 신규 추가.
   3. 스키마 개편 결과에 맞춰 엑셀 업로더(`DevDataUploader.tsx`)의 템플릿 생성 및 일괄 업로드 파서 구조를 동기화하여 구조 충돌 문제를 완벽 해결.
+
+## [2026-07-25] [반영완료] 엑셀 업로드 시 createdAt/updatedAt 수동 입력 제외 및 업로드 실행시점 시각 자동 주입 시스템 구축
+- **요구사항**: 엑셀 일괄 업로드 시 사용자가 `createdAt`(생성일시) 및 `updatedAt`(수정일시)를 엑셀 파일에 수동으로 입력해야 하는 불편함을 제거하고, 엑셀 데이터 업로드 실행 시점의 현재 시각을 시스템이 자동으로 `createdAt`과 `updatedAt` 필드에 주입하도록 업로더(`DevDataUploader.tsx`)를 개편.
+- **해결 설계**:
+  - 엑셀 양식/템플릿 다운로드 시 `createdAt`, `updatedAt` 컬럼은 필수 입력 대상에서 제외(옵션/자동채움 표시).
+  - 엑셀 업로드 파싱 및 DB 적재 시 `createdAt` 또는 `updatedAt`이 누락되거나 비어 있으면, **업로드가 수행되는 실시간 현재 시각(Current ISO Timestamp)**을 시스템이 자동으로 채워 적재함.

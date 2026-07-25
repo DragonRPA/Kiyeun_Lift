@@ -255,7 +255,10 @@ function getDynamicTableSchemas(): TableDef[] {
   return Object.keys(currentSchemas).map(tableName => {
     const schemaDef = currentSchemas[tableName];
     
-    const fields: FieldDef[] = schemaDef.columns.map(col => {
+    // 엑셀 템플릿 양식 작성 시 createdAt, updatedAt 수동 입력 제외 (시스템 자동 주입)
+    const columnsToUse = schemaDef.columns.filter(col => col !== 'createdAt' && col !== 'updatedAt');
+
+    const fields: FieldDef[] = columnsToUse.map(col => {
       const colDef = schemaDef.columnsWithTypes[col] || '';
       
       let type: FieldType = 'string';
@@ -498,6 +501,9 @@ function convertRow(row: Record<string, string>, schema: TableDef): Record<strin
     else if (field.type === 'boolean') result[field.key] = val === 'true';
     else result[field.key] = val.trim();
   });
+  const nowIso = new Date().toISOString();
+  if (!result.createdAt) result.createdAt = nowIso;
+  if (!result.updatedAt) result.updatedAt = nowIso;
   return result;
 }
 
