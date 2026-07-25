@@ -250,7 +250,7 @@ const COLUMN_LABEL_MAP: Record<string, string> = {
   notes: '비고/참고사항',
 };
 
-function getDynamicTableSchemas(): TableDef[] {
+function getDynamicTableSchemas(productsList: any[] = []): TableDef[] {
   const currentSchemas = parseSqlSchema(schemaSql);
   return Object.keys(currentSchemas).map(tableName => {
     const schemaDef = currentSchemas[tableName];
@@ -262,7 +262,9 @@ function getDynamicTableSchemas(): TableDef[] {
       const colDef = schemaDef.columnsWithTypes[col] || '';
       
       let type: FieldType = 'string';
-      if (colDef.includes('BOOLEAN')) {
+      if (col === 'modelName') {
+        type = 'string';
+      } else if (colDef.includes('BOOLEAN')) {
         type = 'boolean';
       } else if (colDef.includes('INTEGER') || colDef.includes('DOUBLE PRECISION') || colDef.includes('BIGINT') || colDef.includes('REAL') || colDef.includes('NUMERIC')) {
         type = 'number';
@@ -285,7 +287,9 @@ function getDynamicTableSchemas(): TableDef[] {
       const required = colDef.includes('NOT NULL') && !colDef.includes('DEFAULT');
       
       let example = 'sample';
-      if (col === 'id') {
+      if (col === 'modelName') {
+        example = productsList && productsList.length > 0 ? productsList[0].modelName : '테스트모델명';
+      } else if (col === 'id') {
         let prefix = '';
         switch (tableName) {
           case 'products': prefix = 'PROD-'; break;
@@ -325,7 +329,13 @@ function getDynamicTableSchemas(): TableDef[] {
     for (let i = 1; i <= 2; i++) {
       const row: Record<string, string> = {};
       fields.forEach(f => {
-        if (f.key === 'id') {
+        if (f.key === 'modelName') {
+          if (productsList && productsList.length > 0) {
+            row[f.key] = productsList[(i - 1) % productsList.length].modelName || '테스트모델명';
+          } else {
+            row[f.key] = i === 1 ? '테스트모델명' : '테스트모델명_2';
+          }
+        } else if (f.key === 'id') {
           let prefix = '';
           switch (tableName) {
             case 'products': prefix = 'PROD-'; break;
@@ -339,18 +349,16 @@ function getDynamicTableSchemas(): TableDef[] {
               prefix = tableName.slice(0, 4).toUpperCase() + '-';
           }
           row[f.key] = `${prefix}${String(i).padStart(7, '0')}`;
+        } else if (tableName === 'assets' && f.key === 'ownerType') {
+          row[f.key] = i === 1 ? '당사' : '임차';
+        } else if (tableName === 'assets' && f.key === 'status') {
+          row[f.key] = i === 1 ? '임대가능' : '임대중';
         } else if (f.type === 'number') {
           row[f.key] = String(10 * i);
         } else if (f.type === 'boolean') {
           row[f.key] = 'true';
         } else if (f.type === 'date') {
           row[f.key] = new Date().toISOString().slice(0, 10);
-        } else if (tableName === 'assets' && f.key === 'modelName') {
-          row[f.key] = i === 1 ? 'KY-0801' : 'SJB-1200';
-        } else if (tableName === 'assets' && f.key === 'ownerType') {
-          row[f.key] = i === 1 ? '당사' : '임차';
-        } else if (tableName === 'assets' && f.key === 'status') {
-          row[f.key] = i === 1 ? '임대가능' : '임대중';
         } else if (f.enumValues && f.enumValues.length > 0) {
           row[f.key] = f.enumValues[(i - 1) % f.enumValues.length];
         } else {
@@ -538,7 +546,9 @@ function convertRow(row: Record<string, string>, schema: TableDef, index: number
 }
 
 export const DevDataUploader: React.FC = () => {
-  const { currentUser, showErrorModal } = useApp();
+  const { currentUser, showErrorModal, products } = useApp();
+  const tableSchemas = React.useMemo(() => getDynamicTableSchemas(products), [products]);
+  
   const [selectedTableKey, setSelectedTableKey] = useState<string>('customers');
   const [parsedRows, setParsedRows] = useState<Record<string, string>[]>([]);
   const [validationErrors, setValidationErrors] = useState<ValidationError[]>([]);
@@ -565,7 +575,7 @@ export const DevDataUploader: React.FC = () => {
 
   const isAdmin = currentUser?.role === 'ADMIN';
   const isConnected = !!supabase;
-  const schema = TABLE_SCHEMAS.find(t => t.key === selectedTableKey)!;
+  const schema = tableSchemas.find(t => t.key === selectedTableKey) || tableSchemas[0];
 
   // ──── CSV 양식 다운로드 ────
   // ----- CSV 한글 헤더·값 변환 유틸 -----
