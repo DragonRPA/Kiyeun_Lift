@@ -41,8 +41,8 @@ export const Billings: React.FC = () => {
   const [extraCharges, setExtraCharges] = useState<{ id: string; category: string; customName: string; quantity: number; unitPrice: number }[]>([]);
 
   // 청구 생성 입력
-  const [billingYm, setBillingYm] = useState('2026-07');
-  const [billingDate, setBillingDate] = useState('2026-07-30');
+  const [billingYm, setBillingYm] = useState(() => new Date().toISOString().slice(0, 7));
+  const [billingDate, setBillingDate] = useState(() => new Date().toISOString().split('T')[0]);
 
   // 선택된 청구서 상세
   const [selectedBillingId, setSelectedBillingId] = useState<string | null>(null);

@@ -371,17 +371,31 @@ export interface Delivery {
   id: string;
   contractId?: string;
   assetIds?: string; // 대상 장비 ID 목록 (콤마 구분)
-  type: 'OUTBOUND' | 'INBOUND' | 'EXCHANGE' | 'MOVEMENT';
+  type: 'OUTBOUND' | 'INBOUND' | 'EXCHANGE' | 'MOVEMENT' | 'RETURN';
   status: 'REQUESTED' | 'DISPATCHED' | 'COMPLETED';
   requestDate: string;
   scheduledDate?: string;
+  originAddress?: string; // 상차지
+  destinationAddress?: string; // 하차지
   transportCompany?: string; // 운송 거래처 (월 마감 및 정산용)
   vehicleType?: string; // 예: 1톤, 2.5톤 등
   vehicleNo?: string; // 차량 번호
   driverName?: string;
   driverContact?: string;
-  deliveryCost: number; // 임시/최초 등록 운송비
-  deliveryCostConfirmed?: number; // 확정 운송비 (필드 신설)
+  deliveryCost: number; // 최초 예상 운송비
+  expectedCost?: number; // 최초 예상 운송비 별칭
+  deliveryCostConfirmed?: number; // 최종 확정 운송비
+  finalCost?: number; // 최종 확정 운송비 별칭
+  costAdjustmentReason?: string; // 운송비 조정/할증/할인 사유
+  reconciliationStatus?: 'PENDING' | 'RECONCILED' | 'PAYMENT_REQUESTED' | 'PAID'; // 대사 및 지급 상태
+  reconciledAt?: string;
+  paymentRequestedAt?: string;
+  paymentCompletedAt?: string;
+  statementFileUrl?: string; // 거래명세서 증빙 파일 URL
+  billableToCustomer?: boolean; // 고객 청구 여부
+  billableCustomerId?: string; // 청구 대상 고객사 ID
+  vehicleRequirements?: string; // 차량 종류별 대수 지정 JSON: [{ vehicleType: string, count: number }]
+  cargoItems?: string; // 운반 장비 명세 JSON: [{ modelName: string, count: number }]
   isCostSettled: boolean;
   memo: string;
   vehicles?: string; // 여러 차량 배차 정보를 위한 JSON 문자열 필드
@@ -394,8 +408,12 @@ export interface TransportCompany {
   name: string;
   businessNo: string;
   contact: string;
+  bankName?: string; // 계좌 은행
+  bankAccount?: string; // 계좌 번호
+  bankHolder?: string; // 예금주
   memo: string;
   createdAt: string;
+  updatedAt?: string;
 }
 
 export interface Vendor {
@@ -421,9 +439,13 @@ export interface TransportDriver {
   companyId: string; // TransportCompany.id
   driverName: string;
   driverContact: string;
+  idNo?: string; // 주민등록번호 (000000-0* 7자리 규격)
+  address?: string; // 기사 주소
   vehicleNo: string;
   vehicleType: string;
+  vehicleColor?: string; // 차량 색상
   createdAt: string;
+  updatedAt?: string;
 }
 
 export interface RepairConsumable {

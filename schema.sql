@@ -629,6 +629,72 @@ INSERT INTO customers (id, name, "bizRegNo", "isClosed", address, representative
 ('cust-1', '현대건설(주)', '101-81-12345', false, '서울시 종로구', '윤영준', '02-746-1114', TO_CHAR(NOW(), 'YYYY-MM-DD"T"HH24:MI:SS"Z"')),
 ('cust-2', '삼성물산(주)', '202-81-54321', false, '서울시 강동구', '오세철', '02-2145-5114', TO_CHAR(NOW(), 'YYYY-MM-DD"T"HH24:MI:SS"Z"'));
 
+-- 23. 운송 거래처 마스터 (transport_companies)
+CREATE TABLE IF NOT EXISTS transport_companies (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    "businessNo" TEXT,
+    contact TEXT,
+    "bankName" TEXT,
+    "bankAccount" TEXT,
+    "bankHolder" TEXT,
+    memo TEXT,
+    "createdAt" TEXT NOT NULL,
+    "updatedAt" TEXT
+);
+
+-- 24. 운송 기사 마스터 (transport_drivers)
+CREATE TABLE IF NOT EXISTS transport_drivers (
+    id TEXT PRIMARY KEY,
+    "companyId" TEXT REFERENCES transport_companies(id) ON DELETE SET NULL,
+    "driverName" TEXT NOT NULL,
+    "driverContact" TEXT,
+    "idNo" TEXT,
+    address TEXT,
+    "vehicleNo" TEXT,
+    "vehicleType" TEXT,
+    "vehicleColor" TEXT,
+    "createdAt" TEXT NOT NULL,
+    "updatedAt" TEXT
+);
+
+-- 25. 배차 및 운송 테이블 (deliveries)
+CREATE TABLE IF NOT EXISTS deliveries (
+    id TEXT PRIMARY KEY,
+    "contractId" TEXT REFERENCES contracts(id),
+    "assetIds" TEXT,
+    type TEXT NOT NULL,
+    status TEXT NOT NULL,
+    "requestDate" TEXT NOT NULL,
+    "scheduledDate" TEXT,
+    "originAddress" TEXT,
+    "destinationAddress" TEXT,
+    "transportCompany" TEXT,
+    "vehicleType" TEXT,
+    "vehicleNo" TEXT,
+    "driverName" TEXT,
+    "driverContact" TEXT,
+    "deliveryCost" DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "expectedCost" DOUBLE PRECISION,
+    "deliveryCostConfirmed" DOUBLE PRECISION,
+    "finalCost" DOUBLE PRECISION,
+    "costAdjustmentReason" TEXT,
+    "reconciliationStatus" TEXT DEFAULT 'PENDING',
+    "reconciledAt" TEXT,
+    "paymentRequestedAt" TEXT,
+    "paymentCompletedAt" TEXT,
+    "statementFileUrl" TEXT,
+    "billableToCustomer" BOOLEAN DEFAULT FALSE,
+    "billableCustomerId" TEXT,
+    "vehicleRequirements" TEXT,
+    "cargoItems" TEXT,
+    "isCostSettled" BOOLEAN DEFAULT FALSE,
+    memo TEXT,
+    vehicles TEXT,
+    "createdAt" TEXT NOT NULL,
+    "updatedAt" TEXT NOT NULL
+);
+
 -- ==========================================
 -- 전 테이블 RLS(Row Level Security) 비활성화 및 허용 정책 일괄 보완
 -- ==========================================

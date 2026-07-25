@@ -1,8 +1,7 @@
-// d:\Kiyeun_Lift\src\pages\RentAssets.tsx
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { Plus, CheckCircle, Search, AlertTriangle, Download, Clock, Layers, ShieldAlert } from 'lucide-react';
-import { Asset } from '../services/db';
+import { Asset, db } from '../services/db';
 import { exportToExcel } from '../services/excel';
 
 export const RentAssets: React.FC = () => {
@@ -33,6 +32,13 @@ export const RentAssets: React.FC = () => {
   const [showReturnModal, setShowReturnModal] = useState(false);
   const [returnAssetId, setReturnAssetId] = useState('');
   const [returnDate, setReturnDate] = useState(new Date().toISOString().split('T')[0]);
+
+  // 반납 배차 옵션 상태
+  const [isDispatchRequested, setIsDispatchRequested] = useState(false);
+  const [returnOrigin, setReturnOrigin] = useState('');
+  const [returnDestination, setReturnDestination] = useState('');
+  const [returnVehicleType, setReturnVehicleType] = useState('3.5T');
+  const [returnCost, setReturnCost] = useState(70000);
 
   // 임차자산 리스트 추출
   const rentedAssets = assets.filter(a => a.ownerType === 'RENTED');
@@ -117,9 +123,15 @@ export const RentAssets: React.FC = () => {
     setShowModal(true);
   };
 
-  const handleOpenReturn = (id: string) => {
-    setReturnAssetId(id);
+  const handleOpenReturn = (asset: Asset) => {
+    setReturnAssetId(asset.id);
     setReturnDate(new Date().toISOString().split('T')[0]);
+    
+    // 기본 상/하차지 세팅: 현장/보관소 -> 임차처 주소
+    const cust = customers.find(c => c.id === asset.currentCustomerId);
+    setReturnOrigin(cust ? `${cust.name} 현장` : '당사 보관소');
+    setReturnDestination(asset.renter ? `${asset.renter} (소유원사)` : '원사 보관소');
+    setIsDispatchRequested(false);
     setShowReturnModal(true);
   };
 
@@ -140,8 +152,39 @@ export const RentAssets: React.FC = () => {
     e.preventDefault();
     if (!canSave || !returnAssetId) return;
 
+    const targetAsset = rentedAssets.find(a => a.id === returnAssetId);
+
+    // 1. 임차 자산 반납 상태 갱신
     returnRentedAsset(returnAssetId, returnDate);
-    alert('임차 장비의 반납 처리가 완료되었습니다.');
+
+    // 2. 반납 배차 옵션 선택 시 배차 레코드 자동 생성
+    if (isDispatchRequested && targetAsset) {
+      db.insertRow('deliveries', {
+        type: 'RETURN',
+        status: 'REQUESTED',
+        requestDate: new Date().toISOString().split('T')[0],
+        scheduledDate: returnDate,
+        assetIds: targetAsset.id,
+        originAddress: returnOrigin,
+        destinationAddress: returnDestination,
+        transportCompany: targetAsset.renter || '',
+        vehicleType: returnVehicleType,
+        deliveryCost: returnCost,
+        expectedCost: returnCost,
+        finalCost: returnCost,
+        reconciliationStatus: 'PENDING',
+        cargoItems: JSON.stringify([{ modelName: targetAsset.modelName, count: 1 }]),
+        vehicleRequirements: JSON.stringify([{ vehicleType: returnVehicleType, count: 1 }]),
+        isCostSettled: false,
+        memo: `[임차 자산 반납 배차] 관리번호: ${targetAsset.assetNo}, 임차처: ${targetAsset.renter || '미상'}`,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      } as any);
+      alert('임차 장비 반납 처리 및 반납 회수 배차가 배차 관리 메뉴에 자동 등록되었습니다.');
+    } else {
+      alert('임차 장비의 반납 처리가 완료되었습니다.');
+    }
+
     setShowReturnModal(false);
     setReturnAssetId('');
   };
@@ -423,7 +466,7 @@ export const RentAssets: React.FC = () => {
                           </button>
                         )}
                         {canSave && a.status !== 'RENTED_RETURNED' && (
-                          <button className="btn-danger" onClick={() => handleOpenReturn(a.id)} style={{ padding: '4px 8px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '2px' }}>
+                          <button className="btn-danger" onClick={() => handleOpenReturn(a)} style={{ padding: '4px 8px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '2px' }}>
                             <CheckCircle size={12} /> 반납처리
                           </button>
                         )}
@@ -666,13 +709,13 @@ export const RentAssets: React.FC = () => {
           position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
           backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000
         }}>
-          <form onSubmit={handleReturnSubmit} className="card" style={{ width: '100%', maxWidth: '400px', backgroundColor: 'var(--bg-card)' }}>
-            <h3 className="card-title" style={{ marginBottom: '16px' }}>임차 장비 반납 확정</h3>
-            <p style={{ fontSize: '14px', color: 'var(--text-secondary)', marginBottom: '16px' }}>
-              선택하신 장비를 소유원사에 최종 반납 처리하고, 장비 상태를 반납 완료로 업데이트합니다.
+          <form onSubmit={handleReturnSubmit} className="card" style={{ width: '100%', maxWidth: '500px', backgroundColor: 'var(--bg-card)' }}>
+            <h3 className="card-title" style={{ marginBottom: '16px' }}>임차 장비 반납 확정 & 회수 배차 신청</h3>
+            <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '16px' }}>
+              선택하신 장비를 소유원사에 최종 반납 처리하고, 필요 시 회수/반납 배차를 동시에 신청합니다.
             </p>
-            <div style={{ marginBottom: '20px' }}>
-              <label>반납 처리일자</label>
+            <div style={{ marginBottom: '16px' }}>
+              <label>반납 처리일자 *</label>
               <input
                 type="date"
                 value={returnDate}
@@ -680,9 +723,59 @@ export const RentAssets: React.FC = () => {
                 required
               />
             </div>
+
+            {/* 반납 배차 통합 신청 옵션 */}
+            <div style={{ padding: '14px', backgroundColor: 'var(--bg-active)', borderRadius: '8px', border: '1px solid var(--border)', marginBottom: '20px' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: '700', cursor: 'pointer', color: 'var(--primary)' }}>
+                <input
+                  type="checkbox"
+                  checked={isDispatchRequested}
+                  onChange={e => setIsDispatchRequested(e.target.checked)}
+                />
+                🚚 회수 / 반납 배차 동시 신청하기
+              </label>
+
+              {isDispatchRequested && (
+                <div style={{ marginTop: '12px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                    <div>
+                      <label style={{ fontSize: '12px' }}>상차지 (출발지)</label>
+                      <input type="text" value={returnOrigin} onChange={e => setReturnOrigin(e.target.value)} placeholder="현장주소 또는 보관소" />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: '12px' }}>하차지 (도착지)</label>
+                      <input type="text" value={returnDestination} onChange={e => setReturnDestination(e.target.value)} placeholder="임차처/소유원사 주소" />
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                    <div>
+                      <label style={{ fontSize: '12px' }}>필요 차종 / 톤수</label>
+                      <select value={returnVehicleType} onChange={e => setReturnVehicleType(e.target.value)}>
+                        <option value="1.4T">1.4T</option>
+                        <option value="2.5T">2.5T</option>
+                        <option value="3.5T">3.5T</option>
+                        <option value="5T">5T</option>
+                        <option value="5T장축">5T장축</option>
+                        <option value="8.5T">8.5T</option>
+                        <option value="11T">11T</option>
+                        <option value="노배드">노배드</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label style={{ fontSize: '12px' }}>예상 운송료 (원)</label>
+                      <input type="number" value={returnCost} onChange={e => setReturnCost(parseInt(e.target.value) || 0)} />
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
             <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
               <button type="button" className="btn-secondary" onClick={() => setShowReturnModal(false)}>취소</button>
-              <button type="submit" className="btn-danger">반납 확정</button>
+              <button type="submit" className="btn-danger">
+                {isDispatchRequested ? '반납 & 배차신청 완료' : '반납 확정'}
+              </button>
             </div>
           </form>
         </div>

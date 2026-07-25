@@ -72,6 +72,8 @@ export const AssetAcquisitionDisposal: React.FC = () => {
     setAcquisitionPrice(0);
   };
 
+  const [disposalBillingYm, setDisposalBillingYm] = useState(() => new Date().toISOString().slice(0, 7));
+
   const handleDisposeSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!canSave) {
@@ -86,7 +88,8 @@ export const AssetAcquisitionDisposal: React.FC = () => {
     disposeAsset(selectedAssetId, {
       disposalDate,
       disposalPrice,
-      buyer
+      buyer,
+      billingYm: disposalBillingYm
     });
 
     alert(`자산 매각 및 매각처(${buyer}) 청구 생성 처리가 완료되었습니다.`);

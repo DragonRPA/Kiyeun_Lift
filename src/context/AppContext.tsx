@@ -91,7 +91,7 @@ interface AppContextType {
   
   // Asset Mutators
   acquireAsset: (assetData: Partial<Asset>) => void;
-  disposeAsset: (assetId: string, disposalData: { disposalDate: string; disposalPrice: number; buyer: string }) => void;
+  disposeAsset: (assetId: string, disposalData: { disposalDate: string; disposalPrice: number; buyer: string; billingYm?: string }) => void;
   registerRentedAsset: (assetData: Partial<Asset>) => void;
   returnRentedAsset: (assetId: string, returnDate: string) => void;
   
@@ -701,18 +701,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
 
     // 신규 배차(Delivery) - 출고 대기 건 자동 생성
+    const cargoItems = JSON.stringify(data.equipments.map(e => ({ modelName: e.modelName, count: e.qty })));
     db.insertRow<Delivery>('deliveries', {
       contractId: contract.id,
       type: 'OUTBOUND',
       status: 'REQUESTED',
       requestDate: contract.startDate,
       scheduledDate: data.loadingTime || contract.startDate,
+      originAddress: '당사 보관소',
+      destinationAddress: `${finalCustomer.name} (${finalSite.name} - ${finalSite.address || ''})`,
       transportCompany: '',
       vehicleType: '',
       vehicleNo: '',
       driverName: '',
       driverContact: '',
-      deliveryCost: 0,
+      deliveryCost: 70000,
+      expectedCost: 70000,
+      finalCost: 70000,
+      reconciliationStatus: 'PENDING',
+      cargoItems,
       isCostSettled: false,
       memo: data.note || '',
       createdAt: new Date().toISOString(),
@@ -787,6 +794,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const contactInfoMemo = data.contactName || data.contactPhone
         ? `[고객담당자: ${data.contactName || '-'} (${data.contactPhone || '-'})] `
         : '';
+      const cust = db.customers.find(c => c.id === contract.customerId);
+      const site = db.sites.find(s => s.id === contract.siteId);
+      const returnAssets = db.assets.filter(a => data.assetIds.includes(a.id));
+      const modelCountsMap: Record<string, number> = {};
+      returnAssets.forEach(a => {
+        modelCountsMap[a.modelName] = (modelCountsMap[a.modelName] || 0) + 1;
+      });
+      const cargoItems = JSON.stringify(Object.entries(modelCountsMap).map(([modelName, count]) => ({ modelName, count })));
+
       db.insertRow<Delivery>('deliveries', {
         contractId: data.contractId,
         assetIds: data.assetIds.join(','),
@@ -794,12 +810,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         status: 'REQUESTED',
         requestDate: data.returnDate,
         scheduledDate: data.loadingTime || data.returnDate,
+        originAddress: `${cust?.name || '고객사'} (${site?.name || '현장'})`,
+        destinationAddress: '당사 보관소',
         transportCompany: '',
         vehicleType: '',
         vehicleNo: '',
         driverName: '',
         driverContact: '',
-        deliveryCost: 0,
+        deliveryCost: 70000,
+        expectedCost: 70000,
+        finalCost: 70000,
+        reconciliationStatus: 'PENDING',
+        cargoItems,
         isCostSettled: false,
         memo: `${contactInfoMemo}${data.note || ''}`,
         createdAt: new Date().toISOString(),

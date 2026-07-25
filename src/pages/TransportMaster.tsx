@@ -1,32 +1,157 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { Settings, Users, Truck, Plus, Trash2, Edit2, Save, X } from 'lucide-react';
+import { Settings, Users, Truck, Plus, Trash2, Edit2, Copy, Check, X, CreditCard, Building } from 'lucide-react';
 import { TransportCompany, TransportDriver, db } from '../services/db';
 
 export const TransportMaster: React.FC = () => {
-  const { transportCompanies, transportDrivers, hasPermission, refreshAllData } = useApp();
+  const { transportCompanies, transportDrivers, hasPermission, refreshAllData, showErrorModal } = useApp();
   const canSave = hasPermission('delivery', 'save');
 
   const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(null);
 
-  // 업체가 선택되지 않으면 전체, 선택되면 해당 업체 기사만
+  // 운송사 모달
+  const [showCompanyModal, setShowCompanyModal] = useState(false);
+  const [editingCompany, setEditingCompany] = useState<Partial<TransportCompany> | null>(null);
+
+  // 기사 모달
+  const [showDriverModal, setShowDriverModal] = useState(false);
+  const [editingDriver, setEditingDriver] = useState<Partial<TransportDriver> | null>(null);
+
+  // 복사 완료 피드백 상태
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+
   const filteredDrivers = selectedCompanyId 
     ? transportDrivers.filter(d => d.companyId === selectedCompanyId)
     : transportDrivers;
 
+  // 운송사 삭제
   const handleDeleteCompany = (id: string) => {
     if (!canSave || !window.confirm('운송사를 삭제하시겠습니까? 연관된 기사 정보는 유지되나 소속이 해제될 수 있습니다.')) return;
-    const list = transportCompanies.filter(c => c.id !== id);
-    localStorage.setItem('erp_transportCompanies', JSON.stringify(list));
+    db.deleteRow('transportCompanies', id);
     refreshAllData();
     if (selectedCompanyId === id) setSelectedCompanyId(null);
   };
 
+  // 기사 삭제
   const handleDeleteDriver = (id: string) => {
     if (!canSave || !window.confirm('이 기사 정보를 삭제하시겠습니까?')) return;
-    const list = transportDrivers.filter(d => d.id !== id);
-    localStorage.setItem('erp_transportDrivers', JSON.stringify(list));
+    db.deleteRow('transportDrivers', id);
     refreshAllData();
+  };
+
+  // 운송사 추가/수정 모달 열기
+  const handleOpenCompanyModal = (company?: TransportCompany) => {
+    if (company) {
+      setEditingCompany({ ...company });
+    } else {
+      setEditingCompany({
+        name: '',
+        businessNo: '',
+        contact: '',
+        bankName: '',
+        bankAccount: '',
+        bankHolder: '',
+        memo: ''
+      });
+    }
+    setShowCompanyModal(true);
+  };
+
+  // 기사 추가/수정 모달 열기
+  const handleOpenDriverModal = (driver?: TransportDriver) => {
+    if (driver) {
+      setEditingDriver({ ...driver });
+    } else {
+      setEditingDriver({
+        companyId: selectedCompanyId || (transportCompanies[0]?.id || ''),
+        driverName: '',
+        driverContact: '',
+        idNo: '',
+        address: '',
+        vehicleNo: '',
+        vehicleType: '3.5T',
+        vehicleColor: ''
+      });
+    }
+    setShowDriverModal(true);
+  };
+
+  // 운송사 저장
+  const handleSaveCompany = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingCompany || !editingCompany.name) {
+      alert('운송사 상호명은 필수 입력 항목입니다.');
+      return;
+    }
+
+    try {
+      if (editingCompany.id) {
+        db.updateRow<TransportCompany>('transportCompanies', editingCompany.id, {
+          ...editingCompany,
+          updatedAt: new Date().toISOString()
+        } as any);
+      } else {
+        db.insertRow<TransportCompany>('transportCompanies', {
+          ...editingCompany,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        } as any);
+      }
+      refreshAllData();
+      setShowCompanyModal(false);
+      setEditingCompany(null);
+    } catch (err: any) {
+      showErrorModal(`⚠️ 운송사 정보 저장 실패:\n\n${err?.message || err}`);
+    }
+  };
+
+  // 주민등록번호 마스킹 자동 포맷팅 (000000-0*)
+  const handleIdNoChange = (val: string) => {
+    const raw = val.replace(/[^0-9]/g, '');
+    let formatted = raw;
+    if (raw.length > 6) {
+      formatted = `${raw.slice(0, 6)}-${raw.slice(6, 7)}`;
+    }
+    if (editingDriver) {
+      setEditingDriver({ ...editingDriver, idNo: formatted.slice(0, 8) });
+    }
+  };
+
+  // 기사 저장
+  const handleSaveDriver = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingDriver || !editingDriver.driverName) {
+      alert('기사 성명은 필수 입력 항목입니다.');
+      return;
+    }
+
+    try {
+      if (editingDriver.id) {
+        db.updateRow<TransportDriver>('transportDrivers', editingDriver.id, {
+          ...editingDriver,
+          updatedAt: new Date().toISOString()
+        } as any);
+      } else {
+        db.insertRow<TransportDriver>('transportDrivers', {
+          ...editingDriver,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        } as any);
+      }
+      refreshAllData();
+      setShowDriverModal(false);
+      setEditingDriver(null);
+    } catch (err: any) {
+      showErrorModal(`⚠️ 기사 정보 저장 실패:\n\n${err?.message || err}`);
+    }
+  };
+
+  // 계좌 정보 1-Click 복사
+  const handleCopyAccount = (company: TransportCompany) => {
+    const text = `${company.name} | ${company.bankName || ''} ${company.bankAccount || ''} (${company.bankHolder || ''})`;
+    navigator.clipboard.writeText(text);
+    setCopiedId(company.id);
+    setTimeout(() => setCopiedId(null), 2000);
   };
 
   return (
@@ -46,8 +171,8 @@ export const TransportMaster: React.FC = () => {
               <Truck size={16} /> 운송 거래처 (물류사)
             </h3>
             {canSave && (
-              <button className="btn-primary" style={{ padding: '4px 8px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <Plus size={14} /> 신규 추가
+              <button className="btn-primary" onClick={() => handleOpenCompanyModal()} style={{ padding: '4px 8px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <Plus size={14} /> 신규 등록
               </button>
             )}
           </div>
@@ -64,8 +189,9 @@ export const TransportMaster: React.FC = () => {
                 fontWeight: selectedCompanyId === null ? '700' : '500'
               }}
             >
-              전체 기사 보기
+              전체 기사 보기 ({transportDrivers.length}명)
             </div>
+
             {transportCompanies.map(comp => (
               <div 
                 key={comp.id}
@@ -80,13 +206,37 @@ export const TransportMaster: React.FC = () => {
                 }}
               >
                 <div>
-                  <div style={{ fontWeight: '700', fontSize: '14px', marginBottom: '4px' }}>{comp.name}</div>
-                  <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{comp.contact || '연락처 없음'}</div>
+                  <div style={{ fontWeight: '700', fontSize: '14px', marginBottom: '2px' }}>{comp.name}</div>
+                  <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '4px' }}>{comp.contact || '연락처 없음'}</div>
+                  
+                  {/* 입금 계좌정보 및 1-Click 복사 버튼 */}
+                  {comp.bankAccount ? (
+                    <div style={{ fontSize: '11px', color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <CreditCard size={12} />
+                      <span>{comp.bankName} {comp.bankAccount} ({comp.bankHolder})</span>
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); handleCopyAccount(comp); }}
+                        style={{ background: 'none', border: 'none', color: 'var(--primary)', cursor: 'pointer', padding: '0 2px' }}
+                        title="계좌정보 복사"
+                      >
+                        {copiedId === comp.id ? <Check size={12} color="var(--success)" /> : <Copy size={12} />}
+                      </button>
+                    </div>
+                  ) : (
+                    <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>계좌 미등록</div>
+                  )}
                 </div>
+
                 {canSave && (
-                  <button onClick={(e) => { e.stopPropagation(); handleDeleteCompany(comp.id); }} style={{ background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer' }}>
-                    <Trash2 size={14} />
-                  </button>
+                  <div style={{ display: 'flex', gap: '6px' }}>
+                    <button onClick={(e) => { e.stopPropagation(); handleOpenCompanyModal(comp); }} style={{ background: 'none', border: 'none', color: 'var(--primary)', cursor: 'pointer' }}>
+                      <Edit2 size={14} />
+                    </button>
+                    <button onClick={(e) => { e.stopPropagation(); handleDeleteCompany(comp.id); }} style={{ background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer' }}>
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
                 )}
               </div>
             ))}
@@ -97,11 +247,11 @@ export const TransportMaster: React.FC = () => {
         <div className="card">
           <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <h3 className="card-title" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <Users size={16} /> 소속 운송 기사 및 차량 정보
+              <Users size={16} /> 소속 운송 기사 및 차량 정보 (주민번호 / 주소 / 색상)
             </h3>
-            {canSave && selectedCompanyId && (
-              <button className="btn-primary" style={{ padding: '4px 8px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <Plus size={14} /> 기사 추가
+            {canSave && (
+              <button className="btn-primary" onClick={() => handleOpenDriverModal()} style={{ padding: '4px 8px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <Plus size={14} /> 기사 신규 등록
               </button>
             )}
           </div>
@@ -111,17 +261,20 @@ export const TransportMaster: React.FC = () => {
               <thead>
                 <tr>
                   <th>기사명</th>
-                  <th>소속 업체</th>
-                  <th>차량 종류</th>
-                  <th>차량 번호</th>
+                  <th>소속 운송사</th>
+                  <th>주민번호</th>
                   <th>연락처</th>
+                  <th>차종/톤수</th>
+                  <th>차량번호</th>
+                  <th>색상</th>
+                  <th>주소</th>
                   {canSave && <th style={{ width: '80px', textAlign: 'center' }}>관리</th>}
                 </tr>
               </thead>
               <tbody>
                 {filteredDrivers.length === 0 ? (
                   <tr>
-                    <td colSpan={6} style={{ textAlign: 'center', padding: '30px', color: 'var(--text-muted)' }}>
+                    <td colSpan={9} style={{ textAlign: 'center', padding: '30px', color: 'var(--text-muted)' }}>
                       등록된 기사 정보가 없습니다.
                     </td>
                   </tr>
@@ -132,14 +285,21 @@ export const TransportMaster: React.FC = () => {
                       <tr key={d.id}>
                         <td style={{ fontWeight: '700' }}>{d.driverName}</td>
                         <td><span className="badge badge-secondary">{comp?.name || '미상'}</span></td>
-                        <td>{d.vehicleType || '-'}</td>
-                        <td>{d.vehicleNo || '-'}</td>
+                        <td style={{ fontSize: '12px', fontFamily: 'monospace' }}>{d.idNo ? `${d.idNo}******` : '-'}</td>
                         <td>{d.driverContact || '-'}</td>
+                        <td><span className="badge badge-info">{d.vehicleType || '-'}</span></td>
+                        <td style={{ fontWeight: '600' }}>{d.vehicleNo || '-'}</td>
+                        <td>{d.vehicleColor || '-'}</td>
+                        <td style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{d.address || '-'}</td>
                         {canSave && (
                           <td style={{ textAlign: 'center' }}>
-                            <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
-                              <button style={{ background: 'none', border: 'none', color: 'var(--primary)', cursor: 'pointer' }}><Edit2 size={14} /></button>
-                              <button onClick={() => handleDeleteDriver(d.id)} style={{ background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer' }}><Trash2 size={14} /></button>
+                            <div style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
+                              <button onClick={() => handleOpenDriverModal(d)} style={{ background: 'none', border: 'none', color: 'var(--primary)', cursor: 'pointer' }}>
+                                <Edit2 size={14} />
+                              </button>
+                              <button onClick={() => handleDeleteDriver(d.id)} style={{ background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer' }}>
+                                <Trash2 size={14} />
+                              </button>
                             </div>
                           </td>
                         )}
@@ -153,6 +313,135 @@ export const TransportMaster: React.FC = () => {
         </div>
 
       </div>
+
+      {/* 운송 거래처 등록/수정 모달 */}
+      {showCompanyModal && editingCompany && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+          <form onSubmit={handleSaveCompany} className="card" style={{ width: '100%', maxWidth: '450px', backgroundColor: 'var(--bg-card)' }}>
+            <h3 className="card-title" style={{ marginBottom: '16px' }}>{editingCompany.id ? '운송 거래처 정보 수정' : '신규 운송 거래처 등록'}</h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '20px' }}>
+              <div>
+                <label>운송사 상호명 *</label>
+                <input type="text" value={editingCompany.name || ''} onChange={e => setEditingCompany({ ...editingCompany, name: e.target.value })} required />
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                <div>
+                  <label>사업자등록번호</label>
+                  <input type="text" value={editingCompany.businessNo || ''} onChange={e => setEditingCompany({ ...editingCompany, businessNo: e.target.value })} placeholder="000-00-00000" />
+                </div>
+                <div>
+                  <label>대표 연락처</label>
+                  <input type="text" value={editingCompany.contact || ''} onChange={e => setEditingCompany({ ...editingCompany, contact: e.target.value })} placeholder="010-0000-0000" />
+                </div>
+              </div>
+
+              {/* 입금 계좌 정보 */}
+              <div style={{ padding: '12px', backgroundColor: 'var(--bg-active)', borderRadius: '8px', border: '1px solid var(--border)' }}>
+                <label style={{ fontWeight: '700', color: 'var(--primary)', marginBottom: '8px', display: 'block' }}>🏦 지급 입금 계좌 정보 (1-Click 연동)</label>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '8px' }}>
+                  <div>
+                    <label style={{ fontSize: '11px' }}>은행명</label>
+                    <input type="text" value={editingCompany.bankName || ''} onChange={e => setEditingCompany({ ...editingCompany, bankName: e.target.value })} placeholder="예: 기업은행" />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '11px' }}>예금주</label>
+                    <input type="text" value={editingCompany.bankHolder || ''} onChange={e => setEditingCompany({ ...editingCompany, bankHolder: e.target.value })} placeholder="예: (주)엠제이로지스" />
+                  </div>
+                </div>
+                <div>
+                  <label style={{ fontSize: '11px' }}>계좌번호</label>
+                  <input type="text" value={editingCompany.bankAccount || ''} onChange={e => setEditingCompany({ ...editingCompany, bankAccount: e.target.value })} placeholder="숫자 및 하이픈" />
+                </div>
+              </div>
+
+              <div>
+                <label>메모</label>
+                <textarea value={editingCompany.memo || ''} onChange={e => setEditingCompany({ ...editingCompany, memo: e.target.value })} rows={2} />
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+              <button type="button" className="btn-secondary" onClick={() => setShowCompanyModal(false)}>취소</button>
+              <button type="submit" className="btn-primary">저장</button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* 기사 등록/수정 모달 */}
+      {showDriverModal && editingDriver && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+          <form onSubmit={handleSaveDriver} className="card" style={{ width: '100%', maxWidth: '500px', backgroundColor: 'var(--bg-card)' }}>
+            <h3 className="card-title" style={{ marginBottom: '16px' }}>{editingDriver.id ? '운송 기사 정보 수정' : '신규 운송 기사 등록'}</h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '20px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                <div>
+                  <label>기사 성명 *</label>
+                  <input type="text" value={editingDriver.driverName || ''} onChange={e => setEditingDriver({ ...editingDriver, driverName: e.target.value })} required />
+                </div>
+                <div>
+                  <label>소속 운송사 *</label>
+                  <select value={editingDriver.companyId || ''} onChange={e => setEditingDriver({ ...editingDriver, companyId: e.target.value })} required>
+                    <option value="">-- 운송사 선택 --</option>
+                    {transportCompanies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                <div>
+                  <label>기사 연락처</label>
+                  <input type="text" value={editingDriver.driverContact || ''} onChange={e => setEditingDriver({ ...editingDriver, driverContact: e.target.value })} placeholder="010-0000-0000" />
+                </div>
+                <div>
+                  <label>주민등록번호 (OOOOOO-O*)</label>
+                  <input 
+                    type="text" 
+                    value={editingDriver.idNo || ''} 
+                    onChange={e => handleIdNoChange(e.target.value)} 
+                    placeholder="900101-1" 
+                    maxLength={8}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label>기사 주소</label>
+                <input type="text" value={editingDriver.address || ''} onChange={e => setEditingDriver({ ...editingDriver, address: e.target.value })} placeholder="도로명 주소" />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
+                <div>
+                  <label>차종 / 톤수</label>
+                  <select value={editingDriver.vehicleType || '3.5T'} onChange={e => setEditingDriver({ ...editingDriver, vehicleType: e.target.value })}>
+                    <option value="1.4T">1.4T</option>
+                    <option value="2.5T">2.5T</option>
+                    <option value="3.5T">3.5T</option>
+                    <option value="5T">5T</option>
+                    <option value="5T장축">5T장축</option>
+                    <option value="8.5T">8.5T</option>
+                    <option value="11T">11T</option>
+                    <option value="노배드">노배드</option>
+                  </select>
+                </div>
+                <div>
+                  <label>차량 번호</label>
+                  <input type="text" value={editingDriver.vehicleNo || ''} onChange={e => setEditingDriver({ ...editingDriver, vehicleNo: e.target.value })} placeholder="80가1234" />
+                </div>
+                <div>
+                  <label>차량 색상</label>
+                  <input type="text" value={editingDriver.vehicleColor || ''} onChange={e => setEditingDriver({ ...editingDriver, vehicleColor: e.target.value })} placeholder="흰색, 은색 등" />
+                </div>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+              <button type="button" className="btn-secondary" onClick={() => setShowDriverModal(false)}>취소</button>
+              <button type="submit" className="btn-primary">저장</button>
+            </div>
+          </form>
+        </div>
+      )}
     </div>
   );
 };
