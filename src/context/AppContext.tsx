@@ -86,7 +86,7 @@ interface AppContextType {
   updateGoogleConfig: (config: GoogleConfig) => void;
   saveCashFlowSnapshot: (snap: Omit<CashFlowSnapshot, 'id' | 'createdAt'>) => void;
   deleteCashFlowSnapshot: (snapId: string) => void;
-  saveVendor: (vendor: Vendor) => void;
+  saveVendor: (vendor: Vendor) => Promise<void>;
   deleteVendor: (id: string) => void;
   
   // Asset Mutators
@@ -2250,14 +2250,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     refreshAllData();
   };
 
-  const saveVendor = (vendor: Vendor) => {
-    const existing = db.vendors.find(v => v.id === vendor.id);
-    if (existing) {
-      db.updateRow('vendors', vendor.id, vendor);
-    } else {
-      db.insertRow('vendors', vendor);
+  const saveVendor = async (vendor: Vendor): Promise<void> => {
+    try {
+      const existing = db.vendors.find(v => v.id === vendor.id);
+      if (existing) {
+        db.updateRow('vendors', vendor.id, vendor);
+      } else {
+        db.insertRow('vendors', vendor);
+      }
+      // Supabase 비동기 쓰기 큐 완료 대기 및 에러 전파
+      if (db.pendingWrites.length > 0) {
+        await db.awaitPendingWrites();
+      }
+      refreshAllData();
+    } catch (err: any) {
+      console.error('saveVendor error:', err);
+      throw err;
     }
-    refreshAllData();
   };
 
   const deleteVendor = (id: string) => {

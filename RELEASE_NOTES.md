@@ -1,3 +1,14 @@
+# Release Notes (v1.3.5.Build.00002 - 2026-07-25 21:37)
+
+## 🐛 매입처(공급자) 저장 오류 無음소거 수정 — Supabase 비동기 쓰기 await + 에러 모달 연동
+### Vendors.tsx — handleSaveSubmit async/await + 에러 모달
+- 기존: `saveVendor()` 호출 직후 즉시 `alert('성공')` → Supabase 실제 저장 결과와 무관하게 성공 안내가 표시되어 **DB 저장 오류가 사용자에게 무음소거**되던 문제 수정.
+- 변경: `handleSaveSubmit`을 `async` 함수로 전환하고 `try/catch` 구문으로 `await saveVendor(payload)` 처리. 저장 중 예외 발생 시 `showErrorModal`로 오류 내용을 팝업 모달로 즉시 안내.
+
+### AppContext.tsx — saveVendor async + Supabase pendingWrites await
+- `saveVendor`를 `async` 함수로 전환하고 `db.insertRow/updateRow` 실행 후 **`db.awaitPendingWrites()`를 명시적으로 await**하여 Supabase 비동기 쓰기 큐가 완전히 완료된 뒤 결과를 반환하도록 보정.
+- Supabase 저장 실패 시 에러가 `throw`되어 호출부(`Vendors.tsx`)에서 `showErrorModal`로 수신됩니다.
+
 # Release Notes (v1.3.5.Build.00001 - 2026-07-25 21:26)
 
 ## ✨ 권한 관리 테이블 헤더 최상위 전체선택/전체해제 버튼 추가 & updatedAt 타임스탬프 자동주입

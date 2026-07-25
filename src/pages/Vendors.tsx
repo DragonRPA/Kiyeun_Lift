@@ -15,7 +15,7 @@ const VENDOR_TYPE_CONFIG: Record<VendorTypeOption, { label: string; icon: string
 };
 
 export const Vendors: React.FC = () => {
-  const { vendors, saveVendor, deleteVendor, hasPermission } = useApp();
+  const { vendors, saveVendor, deleteVendor, hasPermission, showErrorModal } = useApp();
 
   const [searchInput, setSearchInput] = useState('');   // 입력 중인 값
   const [searchTerm, setSearchTerm] = useState('');      // 실제 조회에 사용되는 값
@@ -83,7 +83,7 @@ export const Vendors: React.FC = () => {
     });
   };
 
-  const handleSaveSubmit = (e: React.FormEvent) => {
+  const handleSaveSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingVendor || !editingVendor.name) {
       alert('상호명(매입처명)은 필수 입력 항목입니다.');
@@ -109,10 +109,14 @@ export const Vendors: React.FC = () => {
       updatedAt: new Date().toISOString()
     };
 
-    saveVendor(payload);
-    alert('매입처(공급자) 정보가 성공적으로 저장되었습니다.');
-    setIsModalOpen(false);
-    setEditingVendor(null);
+    try {
+      await saveVendor(payload);
+      alert('매입처(공급자) 정보가 성공적으로 저장되었습니다.');
+      setIsModalOpen(false);
+      setEditingVendor(null);
+    } catch (err: any) {
+      showErrorModal(`⚠️ 매입처 저장 중 오류가 발생했습니다:\n\n${err?.message || err}`);
+    }
   };
 
   const handleDelete = (id: string, name: string) => {
