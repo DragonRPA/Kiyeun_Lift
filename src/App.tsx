@@ -481,7 +481,7 @@ const App: React.FC = () => {
                     alignItems: 'center',
                     justifyContent: 'space-between',
                     width: '100%',
-                    padding: '8px 10px',
+                    padding: '8px 10px', // 상위 아이콘 시작 X = 10px, 텍스트 시작 X = 38px
                     borderRadius: 'var(--radius-sm)',
                     border: 'none',
                     backgroundColor: hasActiveChild ? 'rgba(59, 130, 246, 0.08)' : 'transparent',
@@ -492,14 +492,18 @@ const App: React.FC = () => {
                     transition: 'all 0.2s ease'
                   }}
                 >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    {grp.icon}
-                    <span>{grp.name}</span>
+                  <div style={{ display: 'flex', alignItems: 'center', flex: 1, overflow: 'hidden' }}>
+                    <span style={{ width: '20px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      {grp.icon}
+                    </span>
+                    <span style={{ marginLeft: '8px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>
+                      {grp.name}
+                    </span>
                   </div>
-                  {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                  {isExpanded ? <ChevronDown size={14} style={{ flexShrink: 0 }} /> : <ChevronRight size={14} style={{ flexShrink: 0 }} />}
                 </button>
 
-                {/* 하위 메뉴 서브 항목 그룹 (모든 하위메뉴 X좌표 동일 & 상위대비 +15px 고정) */}
+                {/* 하위 메뉴 서브 항목 그룹 (상위대비 아이콘 및 텍스트 X좌표 모두 정확히 +15px 오프셋 고정) */}
                 {isExpanded && (
                   <div style={{
                     display: 'flex',
@@ -519,8 +523,8 @@ const App: React.FC = () => {
                           style={{
                             display: 'flex',
                             alignItems: 'center',
-                            gap: '8px',
-                            padding: '7px 10px 7px 25px', // 상위 패딩 10px 대비 정확히 +15px 오프셋 (25px)
+                            width: '100%',
+                            padding: '7px 10px 7px 25px', // 하위 아이콘 시작 X = 25px (+15px), 텍스트 시작 X = 53px (+15px)
                             borderRadius: 'var(--radius-sm)',
                             border: 'none',
                             fontSize: '12px',
@@ -529,12 +533,15 @@ const App: React.FC = () => {
                             backgroundColor: isItemActive ? 'var(--primary-light)' : 'transparent',
                             textAlign: 'left',
                             cursor: 'pointer',
-                            width: '100%',
                             transition: 'all var(--transition-fast)'
                           }}
                         >
-                          {item.icon}
-                          <span>{item.name}</span>
+                          <span style={{ width: '20px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                            {item.icon}
+                          </span>
+                          <span style={{ marginLeft: '8px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>
+                            {item.name}
+                          </span>
                         </button>
                       );
                     })}
