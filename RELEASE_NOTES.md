@@ -1,3 +1,10 @@
+# Release Notes (v3.11.0 - 2026-07-25 16:23)
+
+## 🩺 deliveries (배차/운송) 테이블 내 isCostSettled 컬럼 추가 및 DDL 싱크 보완
+- **`isCostSettled` 칼럼 정식 수용**: 스마트 출고 저장을 포함하여 배차 및 운송 정산 데이터 교환 시 발생하던 `Could not find column 'isCostSettled' of 'deliveries'` 스키마 캐시 오류를 해결하기 위해 `schema.sql` 내 `deliveries` 테이블 정의에 `"isCostSettled" BOOLEAN DEFAULT FALSE` 컬럼을 정식 수용하고 동기화했습니다.
+
+---
+
 # Release Notes (v3.10.0 - 2026-07-25 16:18)
 
 ## 🩺 스마트 출고 입력창 깨끗한 초기화 및 📂 텍스트 파일 불러오기 버튼 신설

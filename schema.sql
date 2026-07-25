@@ -286,6 +286,7 @@ CREATE TABLE deliveries (
     "driverContact" TEXT,
     "deliveryCost" DOUBLE PRECISION NOT NULL DEFAULT 0,
     "purchaseBillId" TEXT, -- 매입 마감 연동
+    "isCostSettled" BOOLEAN DEFAULT FALSE,
     memo TEXT,
     "requestDate" TEXT NOT NULL,
     "loadingTime" TEXT, -- 상차 예정 일시

@@ -220,3 +220,8 @@
 - **해결 설계**:
   - `SmartDispatch.tsx` 1단계 헤더 우측에 `[📂 텍스트 파일 불러오기]` 버튼 및 скрытый `<input type="file" accept=".txt,.log,.csv" />` 연동.
   - 파일 선택 즉시 `FileReader`가 파일 텍스트를 읽어 `rawText` 상태에 주입.
+
+## [2026-07-25] [반영완료] deliveries 테이블 내 누락 컬럼 isCostSettled 수용 및 schema.sql 싱크 보완
+- **요구사항**: 스마트 출고 등록 및 배차 처리 시 `deliveries` 테이블 대상 데이터에 운송비 정산 여부 플래그(`isCostSettled`)가 전송되나, 스키마 정의상 컬럼이 누락되어 `Could not find the 'isCostSettled' column of 'deliveries' in the schema cache` 오류가 발생하는 결함 보완.
+- **해결 설계**:
+  - `schema.sql` 내 `deliveries` 테이블 정의에 `"isCostSettled" BOOLEAN DEFAULT FALSE` 컬럼을 정식 추가.
