@@ -413,7 +413,7 @@ export const Deliveries: React.FC = () => {
             {filteredDeliveries.length === 0 ? (
               <tr>
                 <td colSpan={11} style={{ textAlign: 'center', padding: '30px 0', color: 'var(--text-muted)' }}>
-                  조회된 배송 및 회수 배차 의뢰가 없습니다.
+                  {deliveries.length === 0 ? '📭 등록된 배차 의뢰가 없습니다.' : '🔍 조회 조건에 맞는 배차 의뢰가 없습니다. 검색 조건을 변경해 보세요.'}
                 </td>
               </tr>
             ) : (

@@ -427,7 +427,7 @@ export const RentAssets: React.FC = () => {
               {filtered.length === 0 ? (
                 <tr>
                   <td colSpan={9} style={{ textAlign: 'center', padding: '30px 0', color: 'var(--text-muted)' }}>
-                    등록되었거나 검색 조건에 부합하는 임차 자산이 없습니다.
+                  {rentedAssets.length === 0 ? '📭 등록된 임차 자산이 없습니다.' : '🔍 조회 조건에 맞는 임차 자산이 없습니다. 검색 조건을 변경해 보세요.'}
                   </td>
                 </tr>
               ) : (
@@ -499,7 +499,7 @@ export const RentAssets: React.FC = () => {
               {filtered.length === 0 ? (
                 <tr>
                   <td colSpan={9} style={{ textAlign: 'center', padding: '30px 0', color: 'var(--text-muted)' }}>
-                    조회할 정산 대상 임차 자산이 없습니다.
+                    {rentedAssets.length === 0 ? '📭 등록된 임차 자산이 없습니다.' : '🔍 조회 조건에 해당하는 정산 대상 임차 자산이 없습니다.'}
                   </td>
                 </tr>
               ) : (

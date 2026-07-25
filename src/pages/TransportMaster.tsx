@@ -275,7 +275,11 @@ export const TransportMaster: React.FC = () => {
                 {filteredDrivers.length === 0 ? (
                   <tr>
                     <td colSpan={9} style={{ textAlign: 'center', padding: '30px', color: 'var(--text-muted)' }}>
-                      등록된 기사 정보가 없습니다.
+                      {transportDrivers.length === 0
+                        ? '📭 등록된 기사 정보가 없습니다.'
+                        : selectedCompanyId
+                          ? '🔍 선택한 운송사에 등록된 기사가 없습니다.'
+                          : '🔍 조회 조건에 맞는 기사 정보가 없습니다.'}
                     </td>
                   </tr>
                 ) : (

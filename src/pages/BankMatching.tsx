@@ -430,7 +430,9 @@ export const BankMatching: React.FC = () => {
                 {filteredTransactions.length === 0 ? (
                   <tr>
                     <td colSpan={canSave ? 9 : 8} style={{ textAlign: 'center', padding: '40px 0', color: 'var(--text-muted)' }}>
-                      해당하는 통장 거래 내역이 없습니다. (상단의 '모의 입출금 데이터 생성'을 눌러 테스트해 보세요)
+                      {bankTransactions.length === 0
+                        ? '📭 등록된 통장 거래 내역이 없습니다. (상단의 \'모의 입출금 데이터 생성\'을 눌러 테스트해 보세요)'
+                        : '🔍 조회 조건에 맞는 거래 내역이 없습니다. 필터 조건을 변경해 보세요.'}
                     </td>
                   </tr>
                 ) : (

@@ -562,7 +562,15 @@ export const Contracts: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredContracts.map(c => (
+                  {filteredContracts.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} style={{ textAlign: 'center', padding: '36px 0', color: 'var(--text-muted)' }}>
+                        {contracts.length === 0
+                          ? '📭 등록된 계약이 없습니다.'
+                          : '🔍 조회 조건에 맞는 계약이 없습니다. 검색 조건을 변경해 보세요.'}
+                      </td>
+                    </tr>
+                  ) : filteredContracts.map(c => (
                     <tr key={c.id}>
                       <td><strong>{c.contractNo}</strong></td>
                       <td>{getCustName(c.customerId)}</td>

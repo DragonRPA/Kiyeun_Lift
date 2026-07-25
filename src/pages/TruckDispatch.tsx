@@ -678,7 +678,7 @@ export const TruckDispatch: React.FC = () => {
                 {filteredReconDeliveries.length === 0 ? (
                   <tr>
                     <td colSpan={11} style={{ textAlign: 'center', padding: '30px', color: 'var(--text-muted)' }}>
-                      조회 조건에 해당하는 완료된 배차 내역이 없습니다.
+                      {deliveries.length === 0 ? '📭 등록된 배차 내역이 없습니다.' : '🔍 조회 조건에 맞는 완료된 배차 내역이 없습니다. 기간 또는 조건을 변경해 보세요.'}
                     </td>
                   </tr>
                 ) : (

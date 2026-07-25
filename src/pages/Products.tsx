@@ -215,7 +215,7 @@ export const Products: React.FC = () => {
             {filtered.length === 0 ? (
               <tr>
                 <td colSpan={canSave ? 9 : 8} style={{ textAlign: 'center', padding: '40px 0', color: 'var(--text-muted)' }}>
-                  등록되었거나 검색 조건에 부합하는 제품 모델이 없습니다.
+                  {products.length === 0 ? '📭 등록된 제품 모델이 없습니다.' : '🔍 조회 조건에 맞는 제품 모델이 없습니다. 검색어를 변경해 보세요.'}
                 </td>
               </tr>
             ) : (

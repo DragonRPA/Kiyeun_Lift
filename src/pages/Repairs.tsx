@@ -240,7 +240,7 @@ export const Repairs: React.FC = () => {
               {filteredRepairs.length === 0 ? (
                 <tr>
                   <td colSpan={8} style={{ textAlign: 'center', padding: '30px 0', color: 'var(--text-muted)' }}>
-                    조회된 정비이력이 없습니다.
+                    {repairs.length === 0 ? '📭 등록된 정비 이력이 없습니다.' : '🔍 조회 조건에 맞는 정비 이력이 없습니다. 검색 조건을 변경해 보세요.'}
                   </td>
                 </tr>
               ) : (

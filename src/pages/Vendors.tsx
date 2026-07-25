@@ -278,7 +278,7 @@ export const Vendors: React.FC = () => {
               {filtered.length === 0 ? (
                 <tr>
                   <td colSpan={8} style={{ textAlign: 'center', padding: '32px', color: 'var(--text-muted)' }}>
-                    등록된 매입처(공급자) 정보가 없습니다.
+                    {vendors.length === 0 ? '📭 등록된 매입처(공급자)가 없습니다.' : '🔍 조회 조건에 맞는 매입처가 없습니다. 검색 조건을 변경해 보세요.'}
                   </td>
                 </tr>
               ) : (

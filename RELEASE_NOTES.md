@@ -1,3 +1,12 @@
+# Release Notes (v1.4.2.Build.00001 - 2026-07-26 01:10)
+
+## 🔍 전체 페이지 빈 조회 결과 UX 개선 — 조건 분기 명시적 안내
+- **문제**: 일부 페이지(`Contracts.tsx`, `Billings.tsx`)는 빈 결과 처리 행 자체가 없어 조회결과 0건 시 빈 화면만 표시됨. 나머지 페이지들도 "데이터 없음"과 "검색 결과 없음"을 구분하지 않는 고정 문구 사용.
+- **해결**: 전체 11개 페이지에 아래 패턴 적용:
+  - `데이터 자체가 0건` → `📭 등록된 XXX이 없습니다.`
+  - `데이터는 있으나 필터 결과 0건` → `🔍 조회 조건에 맞는 XXX이 없습니다. 검색 조건을 변경해 보세요.`
+- **수정 파일**: `Contracts.tsx`(빈결과 행 신규 추가), `Billings.tsx`(빈결과 행 신규 추가), `Deliveries.tsx`, `Consumables.tsx`, `RentAssets.tsx`(2곳), `Repairs.tsx`, `TruckDispatch.tsx`, `TransportMaster.tsx`(3분기), `Vendors.tsx`, `Products.tsx`, `BankMatching.tsx`
+
 # Release Notes (v1.4.2 - 2026-07-26 00:43)
 
 ## 🗂️ 자산 (장비) 관리 대장 전면 개편

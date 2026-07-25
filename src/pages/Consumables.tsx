@@ -582,7 +582,7 @@ export const Consumables: React.FC = () => {
                   {getFilteredPurchases().length === 0 ? (
                     <tr>
                       <td colSpan={canSave ? 9 : 8} style={{ textAlign: 'center', padding: '40px 10px', color: 'var(--text-muted)' }}>
-                        조회 조건에 해당하는 구매신청 데이터가 없습니다.
+                        {consumablePurchases.length === 0 ? '📭 등록된 구매신청 데이터가 없습니다.' : '🔍 조회 조건에 맞는 구매신청 데이터가 없습니다. 검색 조건을 변경해 보세요.'}
                       </td>
                     </tr>
                   ) : (

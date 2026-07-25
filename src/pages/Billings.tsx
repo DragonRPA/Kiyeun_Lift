@@ -536,7 +536,15 @@ export const Billings: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredBillings.map(b => {
+                  {filteredBillings.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} style={{ textAlign: 'center', padding: '36px 0', color: 'var(--text-muted)' }}>
+                        {billings.length === 0
+                          ? '📭 등록된 청구 내역이 없습니다.'
+                          : '🔍 조회 조건에 맞는 청구 내역이 없습니다. 검색 조건을 변경해 보세요.'}
+                      </td>
+                    </tr>
+                  ) : filteredBillings.map(b => {
                     const unpaid = b.totalAmount - b.paidAmount;
                     return (
                       <tr key={b.id} style={{ cursor: 'pointer' }} onClick={() => setSelectedBillingId(b.id)}>
