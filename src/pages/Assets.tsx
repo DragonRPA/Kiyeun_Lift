@@ -1,11 +1,13 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
-import { Search, Download, Eye, Layers } from 'lucide-react';
+import { Search, Download, Eye, Layers, Edit2, Save, X } from 'lucide-react';
 import { exportToExcel } from '../services/excel';
 import { Asset, calculateAssetDepreciation } from '../services/db';
 
 export const Assets: React.FC = () => {
-  const { assets, customers, sites, setActiveTab, setNavigationPayload, saveAsset } = useApp();
+  const { assets, customers, sites, hasPermission, saveAsset, showErrorModal } = useApp();
+
+  const canEdit = hasPermission('asset', 'save');
 
   // 임시 필터 입력 상태 (조회 버튼을 누르기 전까지 홀드)
   const [tempSearchTerm, setTempSearchTerm] = useState('');
@@ -14,27 +16,54 @@ export const Assets: React.FC = () => {
   const [tempManufacturerFilter, setTempManufacturerFilter] = useState('ALL');
   const [tempCustomerFilter, setTempCustomerFilter] = useState('ALL');
 
-  // 확정 필터 상태
+  // 확정 필터 상태 (초기값: 전체 조회 상태)
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [ownerFilter, setOwnerFilter] = useState('ALL');
   const [manufacturerFilter, setManufacturerFilter] = useState('ALL');
   const [customerFilter, setCustomerFilter] = useState('ALL');
-  
-  // 상세조회 모달 상태
-  const [selectedAsset, setSelectedAsset] = useState<Asset | null>(null);
 
-  // 문서 지정용 편집 상태
-  const [editInspectionUrl, setEditInspectionUrl] = useState('');
-  const [editChecklistUrl, setEditChecklistUrl] = useState('');
+  // 상세조회 / 수정 모달 상태
+  const [selectedAsset, setSelectedAsset] = useState<Asset | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editForm, setEditForm] = useState<Partial<Asset>>({});
 
   const handleSelectAsset = (asset: Asset) => {
     setSelectedAsset(asset);
-    setEditInspectionUrl(asset.safetyInspectionUrl || '');
-    setEditChecklistUrl(asset.preDeliveryChecklistUrl || '');
+    setIsEditing(false);
+    setEditForm({ ...asset });
   };
 
-  type AssetSortField = 'assetNo' | 'modelName' | 'ownerType' | 'status' | 'currentCustomerId' | 'acquisitionDate';
+  const handleStartEdit = () => {
+    if (selectedAsset) {
+      setEditForm({ ...selectedAsset });
+      setIsEditing(true);
+    }
+  };
+
+  const handleCancelEdit = () => {
+    setIsEditing(false);
+    setEditForm(selectedAsset ? { ...selectedAsset } : {});
+  };
+
+  const handleSaveEdit = async () => {
+    if (!selectedAsset || !editForm) return;
+    try {
+      const updated: Asset = { ...selectedAsset, ...editForm };
+      await (saveAsset as any)(updated);
+      setSelectedAsset(updated);
+      setIsEditing(false);
+    } catch (err: any) {
+      showErrorModal(`⚠️ 자산 정보 저장 실패:\n\n${err?.message || err}`, '자산 저장 오류');
+    }
+  };
+
+  const ef = (field: keyof Asset) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
+    const val = e.target.type === 'number' ? (e.target.value === '' ? undefined : Number(e.target.value)) : e.target.value;
+    setEditForm(prev => ({ ...prev, [field]: val }));
+  };
+
+  type AssetSortField = 'assetNo' | 'modelName' | 'ownerType' | 'status' | 'currentCustomerId' | 'acquisitionDate' | 'manufacturer';
   const [sortField, setSortField] = useState<AssetSortField>('assetNo');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
 
@@ -48,60 +77,10 @@ export const Assets: React.FC = () => {
   };
 
   // 고유 제조사 목록 추출
-  const uniqueManufacturers = Array.from(new Set(assets.map(a => a.manufacturer).filter(Boolean))) as string[];
-
-  // 필터링 및 정렬 적용
-  const filtered = assets.filter(a => {
-    const matchesSearch = 
-      a.assetNo.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      a.modelName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (a.serialNo && a.serialNo.toLowerCase().includes(searchTerm.toLowerCase()));
-    
-    const matchesStatus = statusFilter === 'ALL' || a.status === statusFilter;
-    const matchesOwner = ownerFilter === 'ALL' || a.ownerType === ownerFilter;
-    const matchesManufacturer = manufacturerFilter === 'ALL' || a.manufacturer === manufacturerFilter;
-    const matchesCustomer = customerFilter === 'ALL' || a.currentCustomerId === customerFilter;
-
-    return matchesSearch && matchesStatus && matchesOwner && matchesManufacturer && matchesCustomer;
-  }).sort((a, b) => {
-    let aVal: any = a[sortField as keyof Asset];
-    let bVal: any = b[sortField as keyof Asset];
-
-    if (sortField === 'currentCustomerId') {
-      aVal = getCustomerName(a.currentCustomerId);
-      bVal = getCustomerName(b.currentCustomerId);
-    }
-
-    if (aVal === undefined || aVal === null) aVal = '';
-    if (bVal === undefined || bVal === null) bVal = '';
-
-    let cmp = String(aVal).localeCompare(String(bVal), 'ko', { numeric: true });
-    return sortDirection === 'asc' ? cmp : -cmp;
-  });
-
-  const renderSortArrow = (field: AssetSortField) => {
-    if (sortField !== field) return <span style={{ color: 'var(--text-muted)', fontSize: '11px', marginLeft: '4px' }}>↕</span>;
-    return <span style={{ color: 'var(--primary)', fontWeight: 'bold', fontSize: '12px', marginLeft: '4px' }}>{sortDirection === 'asc' ? '▲' : '▼'}</span>;
-  };
-
-  const handleSearchClick = () => {
-    setSearchTerm(tempSearchTerm);
-    setStatusFilter(tempStatusFilter);
-    setOwnerFilter(tempOwnerFilter);
-    setManufacturerFilter(tempManufacturerFilter);
-    setCustomerFilter(tempCustomerFilter);
-  };
-
-  const handleSaveDocs = () => {
-    if (!selectedAsset) return;
-    saveAsset({
-      ...selectedAsset,
-      safetyInspectionUrl: editInspectionUrl,
-      preDeliveryChecklistUrl: editChecklistUrl
-    });
-    alert('장비의 안전점검결과서 및 반입전체크리스트 경로가 성공적으로 저장되었습니다.');
-    setSelectedAsset(null);
-  };
+  const uniqueManufacturers = useMemo(
+    () => Array.from(new Set(assets.map(a => a.manufacturer).filter(Boolean))) as string[],
+    [assets]
+  );
 
   const getCustomerName = (id?: string) => {
     if (!id) return '-';
@@ -113,30 +92,101 @@ export const Assets: React.FC = () => {
     return sites.find(s => s.id === id)?.name || '-';
   };
 
+  const statusLabel = (s: string) => {
+    switch (s) {
+      case 'AVAILABLE': return '대기중';
+      case 'RENTED': return '대여중';
+      case 'REPAIRING': return '수리중';
+      case 'RENTED_RETURNED': return '임차반납';
+      case 'SOLD': return '매각완료';
+      default: return s;
+    }
+  };
+  const statusBadge = (s: string) => {
+    switch (s) {
+      case 'AVAILABLE': return 'badge-success';
+      case 'RENTED': return 'badge-info';
+      case 'REPAIRING': return 'badge-warning';
+      default: return 'badge-danger';
+    }
+  };
+
+  // 필터링 및 정렬
+  const filtered = useMemo(() => assets.filter(a => {
+    const matchesSearch =
+      !searchTerm ||
+      a.assetNo.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      a.modelName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (a.serialNo && a.serialNo.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (a.manufacturer && a.manufacturer.toLowerCase().includes(searchTerm.toLowerCase()));
+    const matchesStatus = statusFilter === 'ALL' || a.status === statusFilter;
+    const matchesOwner = ownerFilter === 'ALL' || a.ownerType === ownerFilter;
+    const matchesManufacturer = manufacturerFilter === 'ALL' || a.manufacturer === manufacturerFilter;
+    const matchesCustomer = customerFilter === 'ALL' || a.currentCustomerId === customerFilter;
+    return matchesSearch && matchesStatus && matchesOwner && matchesManufacturer && matchesCustomer;
+  }).sort((a, b) => {
+    let aVal: any = sortField === 'currentCustomerId' ? getCustomerName(a.currentCustomerId) : a[sortField as keyof Asset];
+    let bVal: any = sortField === 'currentCustomerId' ? getCustomerName(b.currentCustomerId) : b[sortField as keyof Asset];
+    if (aVal === undefined || aVal === null) aVal = '';
+    if (bVal === undefined || bVal === null) bVal = '';
+    const cmp = String(aVal).localeCompare(String(bVal), 'ko', { numeric: true });
+    return sortDirection === 'asc' ? cmp : -cmp;
+  }), [assets, searchTerm, statusFilter, ownerFilter, manufacturerFilter, customerFilter, sortField, sortDirection]);
+
+  const renderSortArrow = (field: AssetSortField) => {
+    if (sortField !== field) return <span style={{ color: 'var(--text-muted)', fontSize: '10px', marginLeft: '3px' }}>↕</span>;
+    return <span style={{ color: 'var(--primary)', fontWeight: 'bold', fontSize: '11px', marginLeft: '3px' }}>{sortDirection === 'asc' ? '▲' : '▼'}</span>;
+  };
+
+  const handleSearchClick = () => {
+    setSearchTerm(tempSearchTerm);
+    setStatusFilter(tempStatusFilter);
+    setOwnerFilter(tempOwnerFilter);
+    setManufacturerFilter(tempManufacturerFilter);
+    setCustomerFilter(tempCustomerFilter);
+  };
+
   const handleExport = () => {
     const data = filtered.map(a => {
       const depn = calculateAssetDepreciation(a);
       return {
         '관리번호': a.assetNo,
         '모델명': a.modelName,
-        '소유유형': a.ownerType === 'OWNED' ? '당사' : '임차',
-        '상태': a.status === 'AVAILABLE' ? '임대가능' : a.status === 'RENTED' ? '임대중' : a.status === 'REPAIRING' ? '정비중' : a.status === 'RENTED_RETURNED' ? '외주정비중' : '매각',
         '제조사': a.manufacturer || '-',
+        '제조번호(S/N)': a.serialNo || '-',
         '제조년도': a.manufactureYear || '-',
-        '시리얼번호': a.serialNo || '-',
+        '소유구분': a.ownerType === 'OWNED' ? '당사' : '임차',
+        '상태': statusLabel(a.status),
         '현재고객사': getCustomerName(a.currentCustomerId),
         '현재현장': getSiteName(a.currentSiteId),
         '월렌탈료': a.monthlyRentalFee || 0,
         '취득금액': a.acquisitionPrice || 0,
         '취득일자': a.acquisitionDate ? a.acquisitionDate.slice(0, 10) : '-',
         '감가상각개월수': a.depreciationMonths || 0,
-        '상각경과월수': depn.elapsedMonths,
-        '감가상각누계액(IFRS)': depn.accumDepreciation,
-        '미상각잔액(장부가치)': depn.bookValue,
+        '경과월수': depn.elapsedMonths,
+        '감가상각누계액': depn.accumDepreciation,
+        '장부가치': depn.bookValue,
+        '누적렌탈수익': a.cumRentalFee || 0,
+        '누적수리비': a.cumRepairCost || 0,
       };
     });
-
     exportToExcel(data, `자산장비목록_${new Date().toISOString().split('T')[0]}`, '자산목록');
+  };
+
+  // ─── 컬럼 width 설정 (픽셀, 화면에 최대한 많은 정보 표시)
+  const colWidths = {
+    assetNo: 90,
+    modelName: 130,
+    manufacturer: 80,
+    serialNo: 110,
+    manufactureYear: 60,
+    ownerType: 60,
+    status: 72,
+    currentCustomer: 120,
+    monthlyRentalFee: 90,
+    bookValue: 90,
+    cumStats: 140,
+    action: 56,
   };
 
   return (
@@ -146,6 +196,7 @@ export const Assets: React.FC = () => {
           <h2 style={{ fontWeight: '700' }}>자산 (장비) 관리 대장</h2>
           <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '4px' }}>
             전체 <strong>{assets.length}</strong>대 등록됨 (검색 결과: <strong>{filtered.length}</strong>대)
+            {assets.length === 0 && <span style={{ color: 'var(--warning)', marginLeft: '8px' }}>⚠️ Supabase 연결 후 자산 데이터를 업로드해 주세요.</span>}
           </p>
         </div>
         <div style={{ display: 'flex', gap: '10px' }}>
@@ -156,34 +207,34 @@ export const Assets: React.FC = () => {
       </div>
 
       {/* 필터 카드 */}
-      <div className="card" style={{ padding: '16px', marginBottom: '16px' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 1.5fr 1fr', gap: '12px', alignItems: 'end' }}>
+      <div className="card" style={{ padding: '14px 16px', marginBottom: '14px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '2fr 0.8fr 0.9fr 0.9fr 1.4fr 0.7fr', gap: '10px', alignItems: 'end' }}>
           <div>
-            <label style={{ fontSize: '12px', fontWeight: '600', marginBottom: '6px', display: 'block' }}>통합 검색</label>
+            <label style={{ fontSize: '12px', fontWeight: '600', marginBottom: '5px', display: 'block' }}>통합 검색</label>
             <div style={{ position: 'relative' }}>
-              <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+              <Search size={15} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
               <input
                 type="text"
                 value={tempSearchTerm}
                 onChange={e => setTempSearchTerm(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && handleSearchClick()}
-                placeholder="관리번호, 모델명, 일련번호..."
-                style={{ paddingLeft: '36px', height: '38px', width: '100%' }}
+                placeholder="관리번호, 모델명, 제조사, S/N..."
+                style={{ paddingLeft: '32px', height: '36px', width: '100%' }}
               />
             </div>
           </div>
           <div>
-            <label style={{ fontSize: '12px', fontWeight: '600', marginBottom: '6px', display: 'block' }}>자산 구분</label>
-            <select value={tempOwnerFilter} onChange={e => setTempOwnerFilter(e.target.value)} style={{ width: '100%', padding: '8px' }}>
-              <option value="ALL">전체 자산</option>
-              <option value="OWNED">당사 자산</option>
-              <option value="RENTED">임차 자산</option>
+            <label style={{ fontSize: '12px', fontWeight: '600', marginBottom: '5px', display: 'block' }}>소유구분</label>
+            <select value={tempOwnerFilter} onChange={e => setTempOwnerFilter(e.target.value)} style={{ width: '100%', padding: '7px', fontSize: '13px' }}>
+              <option value="ALL">전체</option>
+              <option value="OWNED">당사</option>
+              <option value="RENTED">임차</option>
             </select>
           </div>
           <div>
-            <label style={{ fontSize: '12px', fontWeight: '600', marginBottom: '6px', display: 'block' }}>장비 상태</label>
-            <select value={tempStatusFilter} onChange={e => setTempStatusFilter(e.target.value)} style={{ width: '100%', padding: '8px' }}>
-              <option value="ALL">전체 상태</option>
+            <label style={{ fontSize: '12px', fontWeight: '600', marginBottom: '5px', display: 'block' }}>장비 상태</label>
+            <select value={tempStatusFilter} onChange={e => setTempStatusFilter(e.target.value)} style={{ width: '100%', padding: '7px', fontSize: '13px' }}>
+              <option value="ALL">전체</option>
               <option value="AVAILABLE">대기중</option>
               <option value="RENTED">대여중</option>
               <option value="REPAIRING">수리중</option>
@@ -192,8 +243,8 @@ export const Assets: React.FC = () => {
             </select>
           </div>
           <div>
-            <label style={{ fontSize: '12px', fontWeight: '600', marginBottom: '6px', display: 'block' }}>제조사</label>
-            <select value={tempManufacturerFilter} onChange={e => setTempManufacturerFilter(e.target.value)} style={{ width: '100%', padding: '8px' }}>
+            <label style={{ fontSize: '12px', fontWeight: '600', marginBottom: '5px', display: 'block' }}>제조사</label>
+            <select value={tempManufacturerFilter} onChange={e => setTempManufacturerFilter(e.target.value)} style={{ width: '100%', padding: '7px', fontSize: '13px' }}>
               <option value="ALL">전체</option>
               {uniqueManufacturers.map(m => (
                 <option key={m} value={m}>{m}</option>
@@ -201,102 +252,127 @@ export const Assets: React.FC = () => {
             </select>
           </div>
           <div>
-            <label style={{ fontSize: '12px', fontWeight: '600', marginBottom: '6px', display: 'block' }}>현재 고객사</label>
-            <select value={tempCustomerFilter} onChange={e => setTempCustomerFilter(e.target.value)} style={{ width: '100%', padding: '8px' }}>
+            <label style={{ fontSize: '12px', fontWeight: '600', marginBottom: '5px', display: 'block' }}>현재 고객사</label>
+            <select value={tempCustomerFilter} onChange={e => setTempCustomerFilter(e.target.value)} style={{ width: '100%', padding: '7px', fontSize: '13px' }}>
               <option value="ALL">전체</option>
               {customers.map(c => (
                 <option key={c.id} value={c.id}>{c.name}</option>
               ))}
             </select>
           </div>
-          <div style={{ display: 'flex' }}>
-            <button 
-              type="button" 
-              className="btn-primary" 
+          <div>
+            <button
+              type="button"
+              className="btn-primary"
               onClick={handleSearchClick}
-              style={{ width: '100%', height: '38px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', fontWeight: 'bold' }}
+              style={{ width: '100%', height: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px', fontWeight: 'bold', fontSize: '13px' }}
             >
-              <Search size={16} /> 조회
+              <Search size={14} /> 조회
             </button>
           </div>
         </div>
       </div>
 
-      {/* 자산 목록 (독자 수직 스크롤 & 스티키 헤더) */}
-      <div className="table-container" style={{ maxHeight: 'calc(850px - 310px)', overflowY: 'auto', overscrollBehavior: 'contain' }}>
-        <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0 }}>
+      {/* 자산 목록 테이블 */}
+      <div className="table-container" style={{ overflowX: 'auto', overflowY: 'auto', maxHeight: 'calc(100vh - 340px)' }}>
+        <table style={{ width: '100%', minWidth: '900px', borderCollapse: 'separate', borderSpacing: 0, fontSize: '13px' }}>
+          <colgroup>
+            <col style={{ width: `${colWidths.assetNo}px` }} />
+            <col style={{ width: `${colWidths.modelName}px` }} />
+            <col style={{ width: `${colWidths.manufacturer}px` }} />
+            <col style={{ width: `${colWidths.serialNo}px` }} />
+            <col style={{ width: `${colWidths.manufactureYear}px` }} />
+            <col style={{ width: `${colWidths.ownerType}px` }} />
+            <col style={{ width: `${colWidths.status}px` }} />
+            <col style={{ width: `${colWidths.currentCustomer}px` }} />
+            <col style={{ width: `${colWidths.monthlyRentalFee}px` }} />
+            <col style={{ width: `${colWidths.bookValue}px` }} />
+            <col style={{ width: `${colWidths.cumStats}px` }} />
+            <col style={{ width: `${colWidths.action}px` }} />
+          </colgroup>
           <thead style={{ position: 'sticky', top: 0, zIndex: 10, backgroundColor: 'var(--bg-sidebar)' }}>
             <tr>
-              <th onClick={() => handleSort('assetNo')} style={{ cursor: 'pointer', userSelect: 'none' }}>
-                관리번호 {renderSortArrow('assetNo')}
+              <th onClick={() => handleSort('assetNo')} style={{ cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap', padding: '8px 6px', fontSize: '12px' }}>
+                관리번호{renderSortArrow('assetNo')}
               </th>
-              <th onClick={() => handleSort('modelName')} style={{ cursor: 'pointer', userSelect: 'none' }}>
-                모델명 {renderSortArrow('modelName')}
+              <th onClick={() => handleSort('modelName')} style={{ cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap', padding: '8px 6px', fontSize: '12px' }}>
+                모델명{renderSortArrow('modelName')}
               </th>
-              <th onClick={() => handleSort('ownerType')} style={{ cursor: 'pointer', userSelect: 'none' }}>
-                자산 구분 {renderSortArrow('ownerType')}
+              <th onClick={() => handleSort('manufacturer')} style={{ cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap', padding: '8px 6px', fontSize: '12px' }}>
+                제조사{renderSortArrow('manufacturer')}
               </th>
-              <th onClick={() => handleSort('status')} style={{ cursor: 'pointer', userSelect: 'none' }}>
-                상태 {renderSortArrow('status')}
+              <th style={{ whiteSpace: 'nowrap', padding: '8px 6px', fontSize: '12px' }}>제조번호(S/N)</th>
+              <th style={{ whiteSpace: 'nowrap', padding: '8px 6px', fontSize: '12px' }}>제조년도</th>
+              <th onClick={() => handleSort('ownerType')} style={{ cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap', padding: '8px 6px', fontSize: '12px', textAlign: 'center' }}>
+                소유{renderSortArrow('ownerType')}
               </th>
-              <th onClick={() => handleSort('currentCustomerId')} style={{ cursor: 'pointer', userSelect: 'none' }}>
-                현재 고객사 {renderSortArrow('currentCustomerId')}
+              <th onClick={() => handleSort('status')} style={{ cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap', padding: '8px 6px', fontSize: '12px', textAlign: 'center' }}>
+                상태{renderSortArrow('status')}
               </th>
-              <th>월 렌탈료</th>
-              <th>장부가치</th>
-              <th>누적렌탈 / 수리비</th>
-              <th style={{ width: '80px', textAlign: 'center' }}>조회</th>
+              <th onClick={() => handleSort('currentCustomerId')} style={{ cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap', padding: '8px 6px', fontSize: '12px' }}>
+                현재 고객사{renderSortArrow('currentCustomerId')}
+              </th>
+              <th style={{ whiteSpace: 'nowrap', padding: '8px 6px', fontSize: '12px', textAlign: 'right' }}>월렌탈료</th>
+              <th style={{ whiteSpace: 'nowrap', padding: '8px 6px', fontSize: '12px', textAlign: 'right' }}>장부가치</th>
+              <th style={{ whiteSpace: 'nowrap', padding: '8px 6px', fontSize: '12px', textAlign: 'center' }}>누적수익 / 수리비</th>
+              <th style={{ whiteSpace: 'nowrap', padding: '8px 6px', fontSize: '12px', textAlign: 'center' }}>상세</th>
             </tr>
           </thead>
           <tbody>
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={9} style={{ textAlign: 'center', padding: '30px 0', color: 'var(--text-muted)' }}>
-                  대장에 등록된 자산이 없거나 검색 결과가 존재하지 않습니다.
+                <td colSpan={12} style={{ textAlign: 'center', padding: '40px 0', color: 'var(--text-muted)' }}>
+                  {assets.length === 0
+                    ? '📭 등록된 자산이 없습니다. Supabase 연결 후 자산 데이터를 업로드해 주세요.'
+                    : '🔍 검색 조건에 맞는 자산이 없습니다.'}
                 </td>
               </tr>
             ) : (
-              filtered.map(a => (
-                <tr key={a.id}>
-                  <td><strong style={{ color: 'var(--primary)' }}>{a.assetNo}</strong></td>
-                  <td>{a.modelName}</td>
-                  <td>
-                    <span className={`badge ${a.ownerType === 'OWNED' ? 'badge-success' : 'badge-info'}`}>
-                      {a.ownerType === 'OWNED' ? '당사' : '임차'}
-                    </span>
-                  </td>
-                  <td>
-                    <span className={`badge ${
-                      a.status === 'AVAILABLE' ? 'badge-success' :
-                      a.status === 'RENTED' ? 'badge-info' :
-                      a.status === 'REPAIRING' ? 'badge-warning' : 'badge-danger'
-                    }`}>
-                      {a.status === 'AVAILABLE' ? '대기중' :
-                       a.status === 'RENTED' ? '대여중' :
-                       a.status === 'REPAIRING' ? '수리중' :
-                       a.status === 'RENTED_RETURNED' ? '임차반납' : '매각'}
-                    </span>
-                  </td>
-                  <td>{getCustomerName(a.currentCustomerId)}</td>
-                  <td>{a.monthlyRentalFee ? `${a.monthlyRentalFee.toLocaleString()}원` : '0원'}</td>
-                  <td>{a.ownerType === 'OWNED' ? `${calculateAssetDepreciation(a).bookValue.toLocaleString()}원` : '-'}</td>
-                  <td style={{ fontSize: '13px' }}>
-                    <span className="text-primary">{(a.cumRentalFee || 0).toLocaleString()}원</span>
-                    <span style={{ margin: '0 4px', color: 'var(--border-color)' }}>/</span>
-                    <span className="text-danger">{(a.cumRepairCost || 0).toLocaleString()}원</span>
-                  </td>
-                  <td>
-                    <button
-                      className="btn-secondary"
-                      onClick={() => handleSelectAsset(a)}
-                      style={{ padding: '6px', borderRadius: '50%' }}
-                      title="상세내역 전체보기"
-                    >
-                      <Eye size={14} />
-                    </button>
-                  </td>
-                </tr>
-              ))
+              filtered.map(a => {
+                const depn = a.ownerType === 'OWNED' ? calculateAssetDepreciation(a) : null;
+                return (
+                  <tr key={a.id} style={{ cursor: 'pointer' }} onClick={() => handleSelectAsset(a)}>
+                    <td style={{ padding: '7px 6px' }}>
+                      <strong style={{ color: 'var(--primary)', fontSize: '12px' }}>{a.assetNo}</strong>
+                    </td>
+                    <td style={{ padding: '7px 6px', fontSize: '12px' }}>{a.modelName}</td>
+                    <td style={{ padding: '7px 6px', fontSize: '12px', color: 'var(--text-secondary)' }}>{a.manufacturer || '-'}</td>
+                    <td style={{ padding: '7px 6px', fontSize: '11px', color: 'var(--text-muted)', fontFamily: 'monospace' }}>{a.serialNo || '-'}</td>
+                    <td style={{ padding: '7px 6px', fontSize: '12px', textAlign: 'center' }}>{a.manufactureYear || '-'}</td>
+                    <td style={{ padding: '7px 6px', textAlign: 'center' }}>
+                      <span className={`badge ${a.ownerType === 'OWNED' ? 'badge-success' : 'badge-info'}`} style={{ fontSize: '11px', padding: '2px 5px' }}>
+                        {a.ownerType === 'OWNED' ? '당사' : '임차'}
+                      </span>
+                    </td>
+                    <td style={{ padding: '7px 6px', textAlign: 'center' }}>
+                      <span className={`badge ${statusBadge(a.status)}`} style={{ fontSize: '11px', padding: '2px 5px' }}>
+                        {statusLabel(a.status)}
+                      </span>
+                    </td>
+                    <td style={{ padding: '7px 6px', fontSize: '12px' }}>{getCustomerName(a.currentCustomerId)}</td>
+                    <td style={{ padding: '7px 6px', fontSize: '12px', textAlign: 'right' }}>
+                      {a.monthlyRentalFee ? `${a.monthlyRentalFee.toLocaleString()}` : '-'}
+                    </td>
+                    <td style={{ padding: '7px 6px', fontSize: '12px', textAlign: 'right' }}>
+                      {depn ? `${depn.bookValue.toLocaleString()}` : '-'}
+                    </td>
+                    <td style={{ padding: '7px 6px', fontSize: '11px', textAlign: 'center' }}>
+                      <span style={{ color: 'var(--primary)' }}>{(a.cumRentalFee || 0).toLocaleString()}</span>
+                      <span style={{ margin: '0 3px', color: 'var(--border-color)' }}>/</span>
+                      <span style={{ color: 'var(--danger)' }}>{(a.cumRepairCost || 0).toLocaleString()}</span>
+                    </td>
+                    <td style={{ padding: '7px 6px', textAlign: 'center' }} onClick={e => { e.stopPropagation(); handleSelectAsset(a); }}>
+                      <button
+                        className="btn-secondary"
+                        style={{ padding: '4px', borderRadius: '50%' }}
+                        title="상세 조회"
+                      >
+                        <Eye size={13} />
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })
             )}
           </tbody>
         </table>
@@ -306,156 +382,259 @@ export const Assets: React.FC = () => {
       {selectedAsset && (
         <div style={{
           position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-          backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000
-        }}>
-          <div className="card" style={{ width: '90%', maxWidth: '800px', maxHeight: '90vh', overflowY: 'auto', backgroundColor: 'var(--bg-card)' }}>
-            <div className="card-header" style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          backgroundColor: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000
+        }} onClick={() => { if (!isEditing) setSelectedAsset(null); }}>
+          <div className="card" onClick={e => e.stopPropagation()} style={{ width: '92%', maxWidth: '860px', maxHeight: '92vh', overflowY: 'auto', backgroundColor: 'var(--bg-card)' }}>
+            {/* 모달 헤더 */}
+            <div className="card-header" style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'sticky', top: 0, backgroundColor: 'var(--bg-card)', zIndex: 5 }}>
               <h3 className="card-title" style={{ display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}>
-                <Layers className="text-primary" /> 자산 상세 명세서 - {selectedAsset.assetNo}
+                <Layers className="text-primary" />
+                {isEditing ? '✏️ 자산 정보 수정' : '자산 상세 명세서'} — {selectedAsset.assetNo}
               </h3>
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <button
-                  className="btn-success"
-                  onClick={handleSaveDocs}
-                  style={{ padding: '4px 10px', fontSize: '12.5px', border: 'none', cursor: 'pointer', borderRadius: '4px' }}
-                >
-                  💾 점검서류 저장
-                </button>
-                <button
-                  className="btn-primary"
-                  onClick={() => {
-                    setActiveTab('asset_inout_history');
-                    setNavigationPayload({ assetId: selectedAsset.id });
-                    setSelectedAsset(null);
-                  }}
-                  style={{ padding: '4px 10px', fontSize: '12.5px', backgroundColor: 'var(--primary)', border: 'none', color: '#fff', cursor: 'pointer', borderRadius: '4px' }}
-                >
-                  📈 이력/정비 타임라인 보기
-                </button>
-                <button className="btn-secondary" onClick={() => setSelectedAsset(null)} style={{ padding: '4px 10px', fontSize: '12.5px' }}>닫기</button>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                {canEdit && !isEditing && (
+                  <button className="btn-primary" onClick={handleStartEdit} style={{ padding: '5px 12px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                    <Edit2 size={14} /> 수정
+                  </button>
+                )}
+                {isEditing && (
+                  <>
+                    <button className="btn-success" onClick={handleSaveEdit} style={{ padding: '5px 14px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                      <Save size={14} /> 저장
+                    </button>
+                    <button className="btn-secondary" onClick={handleCancelEdit} style={{ padding: '5px 12px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                      <X size={14} /> 취소
+                    </button>
+                  </>
+                )}
+                <button className="btn-secondary" onClick={() => setSelectedAsset(null)} style={{ padding: '5px 12px', fontSize: '13px' }}>닫기</button>
               </div>
             </div>
 
-            <div style={{ padding: '16px 0', display: 'flex', flexDirection: 'column', gap: '20px' }}>
-              
-              {/* 기본 제원 */}
-              <div>
-                <h4 style={{ fontWeight: '600', marginBottom: '10px', color: 'var(--primary)' }}>1. 기본 장비 정보</h4>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px', fontSize: '14px' }}>
-                  <div><label>관리번호</label><strong>{selectedAsset.assetNo}</strong></div>
-                  <div><label>모델명</label><strong>{selectedAsset.modelName}</strong></div>
-                  <div><label>제조번호 (Serial)</label>{selectedAsset.serialNo || '-'}</div>
-                  <div><label>제조사</label>{selectedAsset.manufacturer || '-'}</div>
-                  <div><label>제조년도</label>{selectedAsset.manufactureYear || '-'}</div>
-                  <div><label>자산유형</label>{selectedAsset.ownerType === 'OWNED' ? '당사자산' : '임차자산'}</div>
-                  <div><label>현재상태</label>{selectedAsset.status}</div>
+            <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+
+              {/* 1. 기본 장비 정보 */}
+              <section>
+                <h4 style={{ fontWeight: '600', marginBottom: '12px', color: 'var(--primary)', fontSize: '14px' }}>1. 기본 장비 정보</h4>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '12px' }}>
+                  {isEditing ? (
+                    <>
+                      <div><label style={labelStyle}>관리번호</label><input style={inputStyle} value={editForm.assetNo || ''} onChange={ef('assetNo')} /></div>
+                      <div><label style={labelStyle}>모델명</label><input style={inputStyle} value={editForm.modelName || ''} onChange={ef('modelName')} /></div>
+                      <div><label style={labelStyle}>제조번호 (S/N)</label><input style={inputStyle} value={editForm.serialNo || ''} onChange={ef('serialNo')} /></div>
+                      <div><label style={labelStyle}>제조사</label><input style={inputStyle} value={editForm.manufacturer || ''} onChange={ef('manufacturer')} /></div>
+                      <div><label style={labelStyle}>제조년도</label><input style={inputStyle} value={editForm.manufactureYear || ''} onChange={ef('manufactureYear')} /></div>
+                      <div>
+                        <label style={labelStyle}>소유구분</label>
+                        <select style={inputStyle} value={editForm.ownerType || 'OWNED'} onChange={ef('ownerType')}>
+                          <option value="OWNED">당사자산</option>
+                          <option value="RENTED">임차자산</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label style={labelStyle}>상태</label>
+                        <select style={inputStyle} value={editForm.status || 'AVAILABLE'} onChange={ef('status')}>
+                          <option value="AVAILABLE">대기중</option>
+                          <option value="RENTED">대여중</option>
+                          <option value="REPAIRING">수리중</option>
+                          <option value="RENTED_RETURNED">임차반납</option>
+                          <option value="SOLD">매각완료</option>
+                        </select>
+                      </div>
+                      <div><label style={labelStyle}>비고1 (장비특기)</label><input style={inputStyle} value={editForm.memo1 || ''} onChange={ef('memo1')} /></div>
+                      <div><label style={labelStyle}>비고2 (작업지시)</label><input style={inputStyle} value={editForm.memo2 || ''} onChange={ef('memo2')} /></div>
+                    </>
+                  ) : (
+                    <>
+                      <InfoItem label="관리번호" value={<strong>{selectedAsset.assetNo}</strong>} />
+                      <InfoItem label="모델명" value={<strong>{selectedAsset.modelName}</strong>} />
+                      <InfoItem label="제조번호 (S/N)" value={selectedAsset.serialNo || '-'} />
+                      <InfoItem label="제조사" value={selectedAsset.manufacturer || '-'} />
+                      <InfoItem label="제조년도" value={selectedAsset.manufactureYear || '-'} />
+                      <InfoItem label="소유구분" value={selectedAsset.ownerType === 'OWNED' ? '당사자산' : '임차자산'} />
+                      <InfoItem label="현재상태" value={<span className={`badge ${statusBadge(selectedAsset.status)}`}>{statusLabel(selectedAsset.status)}</span>} />
+                      <InfoItem label="비고1 (장비특기)" value={selectedAsset.memo1 || '-'} />
+                      <InfoItem label="비고2 (작업지시)" value={selectedAsset.memo2 || '-'} />
+                    </>
+                  )}
                 </div>
+              </section>
 
-                {/* 점검 서류 지정 */}
-                <div style={{ marginTop: '16px', padding: '14px', border: '1px dashed var(--border-color)', borderRadius: '8px', backgroundColor: 'var(--bg-app)' }}>
-                  <h5 style={{ margin: '0 0 10px 0', fontSize: '13px', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '6px' }}>📋 호기별 구글 드라이브 점검 서류 파일 경로 지정</h5>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                    <div>
-                      <label style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>안전점검결과서 파일 경로 (절대경로 또는 구글드라이브 링크)</label>
-                      <input
-                        type="text"
-                        value={editInspectionUrl}
-                        onChange={e => setEditInspectionUrl(e.target.value)}
-                        placeholder="예: d:/GoogleDrive/안전점검결과서_G06004.pdf"
-                        style={{ width: '100%', padding: '6px', fontSize: '12.5px', marginTop: '4px' }}
-                      />
-                    </div>
-                    <div>
-                      <label style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>반입전체크리스트 파일 경로 (절대경로 또는 구글드라이브 링크)</label>
-                      <input
-                        type="text"
-                        value={editChecklistUrl}
-                        onChange={e => setEditChecklistUrl(e.target.value)}
-                        placeholder="예: d:/GoogleDrive/반입전체크리스트_G06004.pdf"
-                        style={{ width: '100%', padding: '6px', fontSize: '12.5px', marginTop: '4px' }}
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <hr style={{ border: 'none', borderTop: '1px solid var(--border-color)' }} />
-
-              {/* 현재 계약 상태 */}
-              <div>
-                <h4 style={{ fontWeight: '600', marginBottom: '10px', color: 'var(--info)' }}>2. 현재 운용 / 임대 현황</h4>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px', fontSize: '14px' }}>
-                  <div><label>현재 고객사</label>{getCustomerName(selectedAsset.currentCustomerId)}</div>
-                  <div><label>사용 현장</label>{getSiteName(selectedAsset.currentSiteId)}</div>
-                  <div><label>계약 기간</label>{selectedAsset.contractStart ? `${selectedAsset.contractStart} ~ ${selectedAsset.contractEnd}` : '-'}</div>
-                  <div><label>청구 마감일</label>매달 {selectedAsset.billingDay}일</div>
-                  <div><label>월 렌탈료</label>{(selectedAsset.monthlyRentalFee || 0).toLocaleString()}원</div>
-                  <div><label>일할 렌탈료</label>{(selectedAsset.dailyRentalFee || 0).toLocaleString()}원</div>
-                </div>
-              </div>
-
-              <hr style={{ border: 'none', borderTop: '1px solid var(--border-color)' }} />
-
-              {/* 당사자산 재무정보 */}
-              {selectedAsset.ownerType === 'OWNED' && (() => {
-                const depn = calculateAssetDepreciation(selectedAsset);
-                return (
+              {/* 점검 서류 경로 */}
+              <section style={{ padding: '14px', border: '1px dashed var(--border-color)', borderRadius: '8px', backgroundColor: 'var(--bg-app)' }}>
+                <h5 style={{ margin: '0 0 10px 0', fontSize: '13px', fontWeight: 'bold' }}>📋 점검 서류 파일 경로</h5>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                   <div>
-                    <h4 style={{ fontWeight: '600', marginBottom: '10px', color: 'var(--success)' }}>3. 당사자산 IFRS 감가상각 및 재무 가치</h4>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px', fontSize: '14px' }}>
-                      <div><label>취득일자</label>{selectedAsset.acquisitionDate || '-'}</div>
-                      <div><label>취득원가</label>{(selectedAsset.acquisitionPrice || 0).toLocaleString()}원</div>
-                      <div><label>구입처 (매입처)</label>{selectedAsset.supplier || '-'}</div>
-                      <div><label>감가상각개월수</label>{selectedAsset.depreciationMonths ? `${selectedAsset.depreciationMonths}개월 (경과: ${depn.elapsedMonths}개월)` : '-'}</div>
-                      <div><label>잔존가치율 (%)</label>{selectedAsset.residualValueRate ?? 0}%</div>
-                      <div><label>감가상각누계액 (IFRS)</label><span style={{ color: 'var(--danger)', fontWeight: 'bold' }}>{depn.accumDepreciation.toLocaleString()}원</span></div>
-                      <div><label>미상각 잔액 (장부가치)</label><strong style={{ color: 'var(--success)' }}>{depn.bookValue.toLocaleString()}원</strong></div>
-                    </div>
+                    <label style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>안전점검결과서 경로</label>
+                    <input
+                      type="text"
+                      value={isEditing ? (editForm.safetyInspectionUrl || '') : (selectedAsset.safetyInspectionUrl || '')}
+                      onChange={isEditing ? ef('safetyInspectionUrl') : undefined}
+                      readOnly={!isEditing}
+                      placeholder="예: https://drive.google.com/..."
+                      style={{ ...inputStyle, marginTop: '4px', backgroundColor: !isEditing ? 'var(--bg-app)' : undefined }}
+                    />
                   </div>
+                  <div>
+                    <label style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>반입전체크리스트 경로</label>
+                    <input
+                      type="text"
+                      value={isEditing ? (editForm.preDeliveryChecklistUrl || '') : (selectedAsset.preDeliveryChecklistUrl || '')}
+                      onChange={isEditing ? ef('preDeliveryChecklistUrl') : undefined}
+                      readOnly={!isEditing}
+                      placeholder="예: https://drive.google.com/..."
+                      style={{ ...inputStyle, marginTop: '4px', backgroundColor: !isEditing ? 'var(--bg-app)' : undefined }}
+                    />
+                  </div>
+                </div>
+              </section>
+
+              <hr style={{ border: 'none', borderTop: '1px solid var(--border-color)' }} />
+
+              {/* 2. 현재 운용/임대 현황 */}
+              <section>
+                <h4 style={{ fontWeight: '600', marginBottom: '12px', color: 'var(--info)', fontSize: '14px' }}>2. 현재 운용 / 임대 현황</h4>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '12px' }}>
+                  {isEditing ? (
+                    <>
+                      <div><label style={labelStyle}>월 렌탈료 (원)</label><input type="number" style={inputStyle} value={editForm.monthlyRentalFee ?? ''} onChange={ef('monthlyRentalFee')} /></div>
+                      <div><label style={labelStyle}>일 렌탈료 (원)</label><input type="number" style={inputStyle} value={editForm.dailyRentalFee ?? ''} onChange={ef('dailyRentalFee')} /></div>
+                      <div><label style={labelStyle}>청구 마감일 (일)</label><input type="number" style={inputStyle} value={editForm.billingDay ?? ''} onChange={ef('billingDay')} /></div>
+                      <div><label style={labelStyle}>계약 시작일</label><input type="date" style={inputStyle} value={editForm.contractStart || ''} onChange={ef('contractStart')} /></div>
+                      <div><label style={labelStyle}>계약 종료일</label><input type="date" style={inputStyle} value={editForm.contractEnd || ''} onChange={ef('contractEnd')} /></div>
+                    </>
+                  ) : (
+                    <>
+                      <InfoItem label="현재 고객사" value={getCustomerName(selectedAsset.currentCustomerId)} />
+                      <InfoItem label="사용 현장" value={getSiteName(selectedAsset.currentSiteId)} />
+                      <InfoItem label="계약 기간" value={selectedAsset.contractStart ? `${selectedAsset.contractStart} ~ ${selectedAsset.contractEnd}` : '-'} />
+                      <InfoItem label="청구 마감일" value={selectedAsset.billingDay ? `매달 ${selectedAsset.billingDay}일` : '-'} />
+                      <InfoItem label="월 렌탈료" value={`${(selectedAsset.monthlyRentalFee || 0).toLocaleString()}원`} />
+                      <InfoItem label="일 렌탈료" value={`${(selectedAsset.dailyRentalFee || 0).toLocaleString()}원`} />
+                    </>
+                  )}
+                </div>
+              </section>
+
+              <hr style={{ border: 'none', borderTop: '1px solid var(--border-color)' }} />
+
+              {/* 3. 당사자산 IFRS 재무정보 */}
+              {(isEditing ? editForm.ownerType === 'OWNED' : selectedAsset.ownerType === 'OWNED') && (() => {
+                const depn = calculateAssetDepreciation(isEditing ? { ...selectedAsset, ...editForm } as Asset : selectedAsset);
+                return (
+                  <section>
+                    <h4 style={{ fontWeight: '600', marginBottom: '12px', color: 'var(--success)', fontSize: '14px' }}>3. 당사자산 IFRS 감가상각 / 재무 가치</h4>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '12px' }}>
+                      {isEditing ? (
+                        <>
+                          <div><label style={labelStyle}>취득일자</label><input type="date" style={inputStyle} value={editForm.acquisitionDate || ''} onChange={ef('acquisitionDate')} /></div>
+                          <div><label style={labelStyle}>취득원가 (원)</label><input type="number" style={inputStyle} value={editForm.acquisitionPrice ?? ''} onChange={ef('acquisitionPrice')} /></div>
+                          <div><label style={labelStyle}>구입처 (매입처)</label><input style={inputStyle} value={editForm.supplier || ''} onChange={ef('supplier')} /></div>
+                          <div><label style={labelStyle}>감가상각 개월수</label><input type="number" style={inputStyle} value={editForm.depreciationMonths ?? ''} onChange={ef('depreciationMonths')} /></div>
+                          <div><label style={labelStyle}>잔존가치율 (%)</label><input type="number" style={inputStyle} value={editForm.residualValueRate ?? ''} onChange={ef('residualValueRate')} /></div>
+                        </>
+                      ) : (
+                        <>
+                          <InfoItem label="취득일자" value={selectedAsset.acquisitionDate || '-'} />
+                          <InfoItem label="취득원가" value={`${(selectedAsset.acquisitionPrice || 0).toLocaleString()}원`} />
+                          <InfoItem label="구입처 (매입처)" value={selectedAsset.supplier || '-'} />
+                          <InfoItem label="감가상각 개월수" value={selectedAsset.depreciationMonths ? `${selectedAsset.depreciationMonths}개월 (경과: ${depn.elapsedMonths}개월)` : '-'} />
+                          <InfoItem label="잔존가치율" value={`${selectedAsset.residualValueRate ?? 0}%`} />
+                          <InfoItem label="감가상각 누계액" value={<span style={{ color: 'var(--danger)', fontWeight: 'bold' }}>{depn.accumDepreciation.toLocaleString()}원</span>} />
+                          <InfoItem label="미상각 잔액 (장부가치)" value={<strong style={{ color: 'var(--success)' }}>{depn.bookValue.toLocaleString()}원</strong>} />
+                        </>
+                      )}
+                    </div>
+                  </section>
                 );
               })()}
 
-              {/* 임차자산 정보 */}
-              {selectedAsset.ownerType === 'RENTED' && (
-                <div>
-                  <h4 style={{ fontWeight: '600', marginBottom: '10px', color: 'var(--warning)' }}>3. 재임차 계약 정보</h4>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px', fontSize: '14px' }}>
-                    <div><label>임차처 (소유원사)</label>{selectedAsset.renter || '-'}</div>
-                    <div><label>임차 개시일</label>{selectedAsset.rentStart || '-'}</div>
-                    <div><label>임차 만료일</label>{selectedAsset.rentEnd || '-'}</div>
-                    <div><label>월 임차료 (지급)</label>{(selectedAsset.monthlyRentFee || 0).toLocaleString()}원</div>
-                    <div><label>일 임차료</label>{(selectedAsset.dailyRentFee || 0).toLocaleString()}원</div>
+              {/* 3. 임차자산 계약 정보 */}
+              {(isEditing ? editForm.ownerType === 'RENTED' : selectedAsset.ownerType === 'RENTED') && (
+                <section>
+                  <h4 style={{ fontWeight: '600', marginBottom: '12px', color: 'var(--warning)', fontSize: '14px' }}>3. 재임차 계약 정보</h4>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '12px' }}>
+                    {isEditing ? (
+                      <>
+                        <div><label style={labelStyle}>임차처 (소유원사)</label><input style={inputStyle} value={editForm.renter || ''} onChange={ef('renter')} /></div>
+                        <div><label style={labelStyle}>임차 개시일</label><input type="date" style={inputStyle} value={editForm.rentStart || ''} onChange={ef('rentStart')} /></div>
+                        <div><label style={labelStyle}>임차 만료일</label><input type="date" style={inputStyle} value={editForm.rentEnd || ''} onChange={ef('rentEnd')} /></div>
+                        <div><label style={labelStyle}>월 임차료 (원)</label><input type="number" style={inputStyle} value={editForm.monthlyRentFee ?? ''} onChange={ef('monthlyRentFee')} /></div>
+                        <div><label style={labelStyle}>일 임차료 (원)</label><input type="number" style={inputStyle} value={editForm.dailyRentFee ?? ''} onChange={ef('dailyRentFee')} /></div>
+                      </>
+                    ) : (
+                      <>
+                        <InfoItem label="임차처 (소유원사)" value={selectedAsset.renter || '-'} />
+                        <InfoItem label="임차 개시일" value={selectedAsset.rentStart || '-'} />
+                        <InfoItem label="임차 만료일" value={selectedAsset.rentEnd || '-'} />
+                        <InfoItem label="월 임차료" value={`${(selectedAsset.monthlyRentFee || 0).toLocaleString()}원`} />
+                        <InfoItem label="일 임차료" value={`${(selectedAsset.dailyRentFee || 0).toLocaleString()}원`} />
+                      </>
+                    )}
                   </div>
-                </div>
+                </section>
               )}
 
               <hr style={{ border: 'none', borderTop: '1px solid var(--border-color)' }} />
 
-              {/* 영업성과 및 관리 */}
-              <div>
-                <h4 style={{ fontWeight: '600', marginBottom: '10px', color: 'var(--text-main)' }}>4. 누적 손익 및 비고</h4>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px', fontSize: '14px' }}>
-                  <div><label>누적 렌탈 수익</label><span className="text-primary" style={{ fontWeight: '600' }}>{(selectedAsset.cumRentalFee || 0).toLocaleString()}원</span></div>
-                  <div><label>누적 정비 수리비</label><span className="text-danger" style={{ fontWeight: '600' }}>{(selectedAsset.cumRepairCost || 0).toLocaleString()}원</span></div>
-                  <div><label>누적 순익 (수익-수리비)</label><strong style={{ color: ((selectedAsset.cumRentalFee || 0) - (selectedAsset.cumRepairCost || 0)) >= 0 ? 'var(--success)' : 'var(--danger)' }}>{((selectedAsset.cumRentalFee || 0) - (selectedAsset.cumRepairCost || 0)).toLocaleString()}원</strong></div>
-                  <div><label>비고 1 (장비특기)</label>{selectedAsset.memo1 || '-'}</div>
-                  <div><label>비고 2 (작업지시등)</label>{selectedAsset.memo2 || '-'}</div>
+              {/* 4. 누적 손익 */}
+              <section>
+                <h4 style={{ fontWeight: '600', marginBottom: '12px', color: 'var(--text-main)', fontSize: '14px' }}>4. 누적 손익 현황</h4>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '12px' }}>
+                  {isEditing ? (
+                    <>
+                      <div><label style={labelStyle}>누적 렌탈 수익 (원)</label><input type="number" style={inputStyle} value={editForm.cumRentalFee ?? ''} onChange={ef('cumRentalFee')} /></div>
+                      <div><label style={labelStyle}>누적 수리비 (원)</label><input type="number" style={inputStyle} value={editForm.cumRepairCost ?? ''} onChange={ef('cumRepairCost')} /></div>
+                    </>
+                  ) : (
+                    <>
+                      <InfoItem label="누적 렌탈 수익" value={<span className="text-primary" style={{ fontWeight: '600' }}>{(selectedAsset.cumRentalFee || 0).toLocaleString()}원</span>} />
+                      <InfoItem label="누적 수리비" value={<span className="text-danger" style={{ fontWeight: '600' }}>{(selectedAsset.cumRepairCost || 0).toLocaleString()}원</span>} />
+                      <InfoItem
+                        label="누적 순익"
+                        value={<strong style={{ color: ((selectedAsset.cumRentalFee || 0) - (selectedAsset.cumRepairCost || 0)) >= 0 ? 'var(--success)' : 'var(--danger)' }}>
+                          {((selectedAsset.cumRentalFee || 0) - (selectedAsset.cumRepairCost || 0)).toLocaleString()}원
+                        </strong>}
+                      />
+                    </>
+                  )}
                 </div>
-              </div>
+              </section>
 
-              {/* 매각 처리된 경우 매각 정보 표시 */}
-              {selectedAsset.status === 'SOLD' && (
-                <div>
-                  <hr style={{ border: 'none', borderTop: '1px solid var(--border-color)', margin: '16px 0' }} />
-                  <h4 style={{ fontWeight: '600', marginBottom: '10px', color: 'var(--danger)' }}>5. 장비 매각 상세 내역</h4>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px', fontSize: '14px' }}>
-                    <div><label>매각일자</label>{selectedAsset.disposalDate}</div>
-                    <div><label>매각가격</label>{(selectedAsset.disposalPrice || 0).toLocaleString()}원</div>
-                    <div><label>매각인수처</label>{selectedAsset.buyer}</div>
+              {/* 5. 매각 정보 */}
+              {(isEditing ? editForm.status === 'SOLD' : selectedAsset.status === 'SOLD') && (
+                <section>
+                  <hr style={{ border: 'none', borderTop: '1px solid var(--border-color)', marginBottom: '16px' }} />
+                  <h4 style={{ fontWeight: '600', marginBottom: '12px', color: 'var(--danger)', fontSize: '14px' }}>5. 장비 매각 상세 내역</h4>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '12px' }}>
+                    {isEditing ? (
+                      <>
+                        <div><label style={labelStyle}>매각일자</label><input type="date" style={inputStyle} value={editForm.disposalDate || ''} onChange={ef('disposalDate')} /></div>
+                        <div><label style={labelStyle}>매각가격 (원)</label><input type="number" style={inputStyle} value={editForm.disposalPrice ?? ''} onChange={ef('disposalPrice')} /></div>
+                        <div><label style={labelStyle}>매각인수처</label><input style={inputStyle} value={editForm.buyer || ''} onChange={ef('buyer')} /></div>
+                      </>
+                    ) : (
+                      <>
+                        <InfoItem label="매각일자" value={selectedAsset.disposalDate || '-'} />
+                        <InfoItem label="매각가격" value={`${(selectedAsset.disposalPrice || 0).toLocaleString()}원`} />
+                        <InfoItem label="매각인수처" value={selectedAsset.buyer || '-'} />
+                      </>
+                    )}
                   </div>
-                </div>
+                </section>
               )}
 
+              {/* 수정 모드 하단 저장 버튼 */}
+              {isEditing && (
+                <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', paddingTop: '8px', borderTop: '1px solid var(--border-color)' }}>
+                  <button className="btn-success" onClick={handleSaveEdit} style={{ padding: '8px 20px', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <Save size={15} /> 변경 사항 저장
+                  </button>
+                  <button className="btn-secondary" onClick={handleCancelEdit} style={{ padding: '8px 16px', fontSize: '14px' }}>
+                    취소
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -463,3 +642,30 @@ export const Assets: React.FC = () => {
     </div>
   );
 };
+
+// ─── 헬퍼 스타일
+const labelStyle: React.CSSProperties = {
+  fontSize: '11px',
+  color: 'var(--text-muted)',
+  fontWeight: '600',
+  display: 'block',
+  marginBottom: '3px',
+};
+const inputStyle: React.CSSProperties = {
+  width: '100%',
+  padding: '6px 8px',
+  fontSize: '13px',
+  borderRadius: '6px',
+  border: '1px solid var(--border-color)',
+  backgroundColor: 'var(--bg-app)',
+  color: 'var(--text-main)',
+  boxSizing: 'border-box',
+};
+
+// ─── InfoItem 컴포넌트
+const InfoItem: React.FC<{ label: string; value: React.ReactNode }> = ({ label, value }) => (
+  <div>
+    <label style={labelStyle}>{label}</label>
+    <div style={{ fontSize: '13px', color: 'var(--text-main)' }}>{value}</div>
+  </div>
+);
