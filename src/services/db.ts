@@ -39,6 +39,7 @@ export interface User {
   email?: string;
   profileImageUrl?: string;
   createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface Department {
@@ -1272,7 +1273,13 @@ class LocalDB {
           }
         }
         if (users.length > 0) {
-          const { error: userErr } = await supabase.from('users').upsert(users, { onConflict: 'id' });
+          const nowIso = new Date().toISOString();
+          const sanitizedUsers = users.map(u => ({
+            ...u,
+            createdAt: u.createdAt || nowIso,
+            updatedAt: nowIso
+          }));
+          const { error: userErr } = await supabase.from('users').upsert(sanitizedUsers, { onConflict: 'id' });
           if (userErr) {
             console.error('Supabase batch upsert users failed:', userErr);
             throw userErr;

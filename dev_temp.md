@@ -272,3 +272,9 @@
 - **해결 설계**:
   1. `OrganizationSettings.tsx` 및 `db.ts` 내 `saveOrganizationBatch`에서 부서(Department) 객체를 Supabase로 동기화하기 전 `createdAt` 및 `updatedAt` 속성이 누락되어 있으면 `new Date().toISOString()` 타임스탬프를 자동 채워주도록 방어 파이프라인 구축.
   2. `Department` 인터페이스에 `createdAt?: string; updatedAt?: string;` 명시 반영.
+
+## [2026-07-25] [반영완료] users 테이블 createdAt/updatedAt 필수값 누락 방어 및 직원 저장 23502 에러 원천 패치
+- **요구사항**: 직원 등록 및 부서 배치 후 전체 저장 시 `users` 테이블의 `createdAt` 컬럼 NOT NULL 제약조건 위반 에러(`null value in column "createdAt" of relation "users" violates not-null constraint`) 원천 방어 및 해결.
+- **해결 설계**:
+  1. `OrganizationSettings.tsx` 및 `db.ts` 내 `saveOrganizationBatch`에서 사용자(User/UserNode) 객체를 Supabase로 동기화하기 전 `createdAt` 및 `updatedAt` 속성이 누락되어 있으면 `new Date().toISOString()` 타임스탬프를 자동 채워주도록 방어 파이프라인 구축.
+  2. `UserNode` 및 `User` 인터페이스에 `createdAt?: string; updatedAt?: string;` 명시 반영 및 `handleAddUser` 시 기본 타임스탬프 부여.

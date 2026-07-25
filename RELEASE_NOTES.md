@@ -1,3 +1,11 @@
+# Release Notes (v1.1.2.Build.00002 - 2026-07-25 17:18)
+
+## 🩺 임직원(users) NOT NULL 제약조건 패치 및 전사 타임스탬프 샌니타이저 탑재
+- **임직원 데이터 생성일자(`createdAt`) 필수값 누락 방어 패치**: 직원 등록 및 부서 배치 후 저장 시 `users` 테이블의 `createdAt` / `updatedAt` 속성이 누락되어 발생하던 Supabase NOT NULL 제약조건 위반 에러(`null value in column "createdAt" of relation "users" violates not-null constraint - 23502`)를 완벽히 해결했습니다.
+- **전사 DB CUD 헬퍼 타임스탬프 자동 보장**: `db.ts` 내 `saveOrganizationBatch` 및 CRUD 적재 함수에 Sanitizer를 구축하여, 모든 모델 동기화 전 `createdAt` 또는 `updatedAt`이 없으면 실시간 ISO 타임스탬프를 원천 보장하도록 강화했습니다.
+
+---
+
 # Release Notes (v1.1.2.Build.00001 - 2026-07-25 17:12)
 
 ## 🩺 부서 NOT NULL 제약조건 패치, 메뉴 스크롤 자동 리셋 및 힌트문자 개편

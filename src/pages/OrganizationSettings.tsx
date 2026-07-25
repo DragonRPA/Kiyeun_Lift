@@ -30,6 +30,8 @@ interface UserNode {
   phone?: string;
   email?: string;
   profileImageUrl?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 const INITIAL_DEPTS: Department[] = [];
@@ -209,6 +211,7 @@ const enforceManagerPolicies = (usersList: UserNode[], deptList: Department[]) =
 
   const handleAddUser = () => {
     if (!canEdit) return;
+    const nowIso = new Date().toISOString();
     const newUser: UserNode = {
       id: `u-${Date.now()}`,
       name: '',
@@ -217,7 +220,9 @@ const enforceManagerPolicies = (usersList: UserNode[], deptList: Department[]) =
       status: 'ACTIVE',
       role: 'USER',
       loginId: '',
-      passwordHash: ''
+      passwordHash: '',
+      createdAt: nowIso,
+      updatedAt: nowIso
     };
     let updated = [...users, newUser];
     updated = enforceManagerPolicies(updated, departments);
