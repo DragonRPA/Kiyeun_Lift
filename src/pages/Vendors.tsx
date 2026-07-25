@@ -131,28 +131,46 @@ export const Vendors: React.FC = () => {
     }
   };
 
+  // 어떤 형식의 Supabase 반환값이든 알려진 키워드를 스캔해 컬러 pill JSX 배열 반환
+  const renderTypePills = (v: Vendor): React.ReactNode[] => {
+    const TYPE_MAP: { key: string; label: string; color: string; bg: string }[] = [
+      { key: 'RENTAL',    label: '임차', color: '#2563eb', bg: '#dbeafe' },
+      { key: 'PURCHASE',  label: '구매', color: '#16a34a', bg: '#dcfce7' },
+      { key: 'TRANSPORT', label: '운송', color: '#d97706', bg: '#fef3c7' },
+      { key: 'REPAIR',    label: '정비', color: '#dc2626', bg: '#fee2e2' },
+      { key: 'OTHER',     label: '기타', color: '#6b7280', bg: '#f3f4f6' },
+    ];
+    // 원시 데이터를 문자열로 직렬화하여 키워드 존재 여부 스캔
+    const raw = JSON.stringify(v.types ?? v.type ?? '');
+    const found = TYPE_MAP.filter(({ key }) => raw.includes(key));
+    if (found.length === 0 && v.type) {
+      const m = TYPE_MAP.find(x => x.key === v.type) || { key: v.type, label: v.type, color: '#6b7280', bg: '#f3f4f6' };
+      found.push(m);
+    }
+    return found.map(({ key, label, color, bg }) => (
+      <span key={key} style={{
+        display: 'inline-block', fontSize: '11px', fontWeight: '600',
+        padding: '2px 7px', borderRadius: '999px',
+        color, background: bg, border: `1px solid ${color}30`,
+        letterSpacing: '0.02em'
+      }}>{label}</span>
+    ));
+  };
+
+  // 모달 거래유형 체크에서도 사용하는 기존 getVendorTypes 유지 (모달 내부 로직용)
   const getVendorTypes = (v: Vendor): VendorTypeOption[] => {
     const rawTypes = v.types;
     if (rawTypes) {
-      // Case 1: 이미 정상 JS 배열
-      if (Array.isArray(rawTypes) && rawTypes.length > 0) {
-        // 배열 내 원소에 따옴표가 붙어있을 수 있으므로 제거
+      if (Array.isArray(rawTypes) && rawTypes.length > 0)
         return rawTypes.map(s => String(s).replace(/^"|"$/g, '').trim()) as VendorTypeOption[];
-      }
       if (typeof rawTypes === 'string') {
-        // Case 2: JSON 배열 문자열 '["RENTAL","PURCHASE"]'
         try {
           const json = JSON.parse(rawTypes as string);
-          if (Array.isArray(json) && json.length > 0) {
+          if (Array.isArray(json) && json.length > 0)
             return json.map((s: string) => String(s).replace(/^"|"$/g, '').trim()) as VendorTypeOption[];
-          }
         } catch {}
-        // Case 3: PostgreSQL 배열 문자열 '{RENTAL,PURCHASE}' 또는 '{"RENTAL","PURCHASE"}'
         const inner = (rawTypes as string).replace(/^\{|\}$/g, '');
-        const parsed = inner
-          .split(',')
-          .map(s => s.trim().replace(/^"|"$/g, ''))
-          .filter(Boolean);
+        const parsed = inner.split(',').map(s => s.trim().replace(/^"|"$/g, '')).filter(Boolean);
         if (parsed.length > 0) return parsed as VendorTypeOption[];
       }
     }
@@ -306,7 +324,6 @@ export const Vendors: React.FC = () => {
                 </tr>
               ) : (
                 filtered.map(v => {
-                  const vTypes = getVendorTypes(v);
                   return (
                     <tr key={v.id}>
                       <td>
@@ -315,24 +332,7 @@ export const Vendors: React.FC = () => {
                       </td>
                       <td>
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px' }}>
-                          {vTypes.map(t => {
-                            const cfg = VENDOR_TYPE_CONFIG[t] || { label: t, color: '#6b7280', bg: '#f3f4f6' };
-                            return (
-                              <span key={t} style={{
-                                display: 'inline-block',
-                                fontSize: '11px',
-                                fontWeight: '600',
-                                padding: '2px 7px',
-                                borderRadius: '999px',
-                                color: cfg.color,
-                                background: cfg.bg,
-                                border: `1px solid ${cfg.color}30`,
-                                letterSpacing: '0.02em'
-                              }}>
-                                {cfg.label}
-                              </span>
-                            );
-                          })}
+                          {renderTypePills(v)}
                         </div>
                       </td>
                       <td style={{ fontSize: '12.5px' }}>{v.bizRegNo || '-'}</td>
