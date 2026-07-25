@@ -55,7 +55,15 @@ export const ErrorModal: React.FC<ErrorModalProps> = ({
     const tableList = rlsTables.length > 0 ? rlsTables : [];
     if (tableList.length === 0) return '';
     return tableList
-      .map(t => `-- RLS 해제: ${t}\nALTER TABLE "${t}" DISABLE ROW LEVEL SECURITY;`)
+      .map(t => [
+        `-- RLS 유지 상태에서 ${t} 테이블 anon/authenticated 롤 허용`,
+        `CREATE POLICY "allow_anon_select" ON "${t}" FOR SELECT TO anon USING (true);`,
+        `CREATE POLICY "allow_anon_insert" ON "${t}" FOR INSERT TO anon WITH CHECK (true);`,
+        `CREATE POLICY "allow_anon_update" ON "${t}" FOR UPDATE TO anon USING (true) WITH CHECK (true);`,
+        `CREATE POLICY "allow_authenticated_select" ON "${t}" FOR SELECT TO authenticated USING (true);`,
+        `CREATE POLICY "allow_authenticated_insert" ON "${t}" FOR INSERT TO authenticated WITH CHECK (true);`,
+        `CREATE POLICY "allow_authenticated_update" ON "${t}" FOR UPDATE TO authenticated USING (true) WITH CHECK (true);`,
+      ].join('\n'))
       .join('\n\n');
   }, [isRlsError, rlsTables]);
 
@@ -184,11 +192,11 @@ export const ErrorModal: React.FC<ErrorModalProps> = ({
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
                 <ShieldOff size={16} color="#facc15" />
                 <span style={{ fontSize: '13px', fontWeight: 700, color: '#facc15' }}>
-                  🛡️ RLS 차단 감지 — 즉시 복구 DDL 패치
+                  🛡️ RLS 쓰기 차단 감지 — 즉시 복구 Policy DDL
                 </span>
               </div>
               <p style={{ fontSize: '12px', color: '#94a3b8', margin: '0 0 8px', lineHeight: 1.5 }}>
-                아래 SQL을 <b>Supabase SQL Editor</b>에서 실행하면 해당 테이블의 RLS가 해제되어 쓰기가 가능해집니다:
+                아래 SQL을 <b>Supabase SQL Editor</b>에서 실행하면 <b>RLS를 유지한 채로</b> 해당 테이블의 anon/authenticated 롤 쓰기가 허용됩니다:
               </p>
               <textarea
                 readOnly
@@ -230,7 +238,7 @@ export const ErrorModal: React.FC<ErrorModalProps> = ({
                   }}
                 >
                   {ddlCopied ? <Check size={15} /> : <Copy size={15} />}
-                  {ddlCopied ? 'DDL 복사 완료!' : '🔓 RLS 해제 DDL 복사'}
+                  {ddlCopied ? 'Policy DDL 복사 완료!' : '🔓 RLS Policy DDL 복사'}
                 </button>
               </div>
             </div>

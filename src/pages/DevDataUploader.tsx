@@ -920,7 +920,7 @@ export const DevDataUploader: React.FC = () => {
             totalFailed += batch.length;
             console.error(`Bulk upsert error for ${schema.supabaseTable}:`, error);
             const isRlsError = error.code === '42501' || error.message.includes('row-level security');
-            const rlsSolution = isRlsError ? `\n💡 [원인 및 복구 가이드] ${schema.supabaseTable} 테이블의 RLS(행 수준 보안)가 켜져 있어 쓰기가 금지되었습니다.\n해결 DDL 쿼리: ALTER TABLE "${schema.supabaseTable}" DISABLE ROW LEVEL SECURITY;\n(상단 'DB 스키마 정합성 검증 실행' 버튼을 누르시면 RLS 해제 복구 패치 SQL이 자동 생성됩니다.)\n` : '';
+            const rlsSolution = isRlsError ? `\n💡 [원인 및 복구 가이드] ${schema.supabaseTable} 테이블의 RLS(행 수준 보안) 정책이 쓰기를 차단하고 있습니다.\n아래 Policy DDL을 Supabase SQL Editor에서 실행하세요 (RLS는 유지됨):\n\nCREATE POLICY "allow_anon_select" ON "${schema.supabaseTable}" FOR SELECT TO anon USING (true);\nCREATE POLICY "allow_anon_insert" ON "${schema.supabaseTable}" FOR INSERT TO anon WITH CHECK (true);\nCREATE POLICY "allow_anon_update" ON "${schema.supabaseTable}" FOR UPDATE TO anon USING (true) WITH CHECK (true);\nCREATE POLICY "allow_authenticated_select" ON "${schema.supabaseTable}" FOR SELECT TO authenticated USING (true);\nCREATE POLICY "allow_authenticated_insert" ON "${schema.supabaseTable}" FOR INSERT TO authenticated WITH CHECK (true);\nCREATE POLICY "allow_authenticated_update" ON "${schema.supabaseTable}" FOR UPDATE TO authenticated USING (true) WITH CHECK (true);\n\n(상단 'DB 스키마 정합성 검증 실행' 버튼을 누르시면 전체 테이블 Policy DDL이 자동 생성됩니다.)\n` : '';
             errDetailsMsg += `[시트/테이블: ${schema.supabaseTable}]\n[Supabase 에러 코드: ${error.code || '미지정'}]\n[메시지: ${error.message}]${rlsSolution}\n[상세 내역: ${error.details || '없음'}]\n\n`;
           } else {
             totalSuccess += batch.length;
@@ -1036,19 +1036,33 @@ export const DevDataUploader: React.FC = () => {
     setCheckingSchema(true);
     const audit: { table: string; status: 'OK' | 'MISSING' | 'MISMATCH'; message: string }[] = [];
     let sqlPatch = '';
-    let rlsPatch = '-- [보완] RLS (Row-Level Security) 행 수준 보안 정책 해제 및 전면 허용 설정\n';
+    let rlsPatch = '-- [보완] RLS (Row-Level Security) 유지 상태에서 anon/authenticated 롤 SELECT/INSERT/UPDATE 허용 Policy 설정\n';
 
     // PostgREST 에러 메시지로부터 누락된 칼럼명을 안전하게 파싱하는 헬퍼
     const extractColumnName = (errMsg: string): string | null => {
       const cleanMsg = errMsg.replace(/\\"/g, '"');
       const quoteMatch = cleanMsg.match(/column "([^"]+)"/i);
       if (quoteMatch) return quoteMatch[1];
-      const columnWordMatch = cleanMsg.match(/column\s+([^\s]+)\s+does\s+not\s+exist/i);
+      const columnWordMatch = cleanMsg.match(/column\s+(\S+)\s+does\s+not\s+exist/i);
       if (columnWordMatch) {
         const word = columnWordMatch[1];
         return word.includes('.') ? (word.split('.').pop() || word) : word;
       }
       return null;
+    };
+
+    // RLS를 유지하면서 anon/authenticated 롤의 SELECT/INSERT/UPDATE를 허용하는 표준 Policy DDL 생성 헬퍼
+    // upsert는 내부적으로 SELECT(존재 확인) → INSERT or UPDATE 3단계를 거치므로 세 가지 Policy 모두 필요
+    const generateRlsPolicyDDL = (tableName: string): string => {
+      const t = tableName;
+      return [
+        `CREATE POLICY "allow_anon_select" ON "${t}" FOR SELECT TO anon USING (true);`,
+        `CREATE POLICY "allow_anon_insert" ON "${t}" FOR INSERT TO anon WITH CHECK (true);`,
+        `CREATE POLICY "allow_anon_update" ON "${t}" FOR UPDATE TO anon USING (true) WITH CHECK (true);`,
+        `CREATE POLICY "allow_authenticated_select" ON "${t}" FOR SELECT TO authenticated USING (true);`,
+        `CREATE POLICY "allow_authenticated_insert" ON "${t}" FOR INSERT TO authenticated WITH CHECK (true);`,
+        `CREATE POLICY "allow_authenticated_update" ON "${t}" FOR UPDATE TO authenticated USING (true) WITH CHECK (true);`,
+      ].join('\n');
     };
 
     try {
@@ -1067,8 +1081,8 @@ export const DevDataUploader: React.FC = () => {
               status: 'MISSING',
               message: '테이블이 Supabase에 존재하지 않습니다.'
             });
-            sqlPatch += `-- [생성] ${table} 테이블 추가 및 RLS 해제\n${schemaDef.createSql}\nALTER TABLE "${table}" DISABLE ROW LEVEL SECURITY;\n\n`;
-            rlsPatch += `ALTER TABLE "${table}" DISABLE ROW LEVEL SECURITY;\n`;
+            sqlPatch += `-- [생성] ${table} 테이블 추가 및 RLS Policy 허용\n${schemaDef.createSql}\n${generateRlsPolicyDDL(table)}\n`;
+            rlsPatch += generateRlsPolicyDDL(table) + '\n';
             continue;
           }
 
@@ -1125,7 +1139,7 @@ export const DevDataUploader: React.FC = () => {
         }
 
         // RLS 해제 DDL 쿼리 묶음 준비
-        rlsPatch += `ALTER TABLE "${table}" DISABLE ROW LEVEL SECURITY;\n`;
+        rlsPatch += generateRlsPolicyDDL(table) + '\n';
 
         if (missingCols.length > 0) {
           const rlsMsg = hasRlsError ? ' ⚠️ [RLS 정책 위반 경고: new row violates row-level security policy]' : '';
@@ -1135,20 +1149,20 @@ export const DevDataUploader: React.FC = () => {
             message: `컬럼 누락 (${missingCols.length}개): ${missingCols.join(', ')}${rlsMsg}`
           });
           
-          sqlPatch += `-- [보완] ${table} 테이블 누락 컬럼 추가 및 RLS 해제 DDL\n`;
+          sqlPatch += `-- [보완] ${table} 테이블 누락 컬럼 추가 및 RLS Policy 허용 DDL\n`;
           missingCols.forEach(col => {
             const colDef = schemaDef.columnsWithTypes[col] || 'TEXT';
             let colType = colDef.replace(/NOT NULL/gi, '').trim();
             sqlPatch += `ALTER TABLE "${table}" ADD COLUMN IF NOT EXISTS "${col}" ${colType};\n`;
           });
-          sqlPatch += `ALTER TABLE "${table}" DISABLE ROW LEVEL SECURITY;\n\n`;
+          sqlPatch += generateRlsPolicyDDL(table) + '\n\n';
         } else if (hasRlsError) {
           audit.push({
             table,
             status: 'MISMATCH',
-            message: '⚠️ [RLS 정책 위반 검출] new row violates row-level security policy - RLS 해제 쿼리 필요'
+            message: '⚠️ [RLS 쓰기 차단 검출] anon/authenticated 롤 Policy 추가 필요 (upsert: SELECT+INSERT+UPDATE 모두 필요)'
           });
-          sqlPatch += `-- [보완] ${table} 테이블 RLS(행 수준 보안) 정책 해제 DDL\nALTER TABLE "${table}" DISABLE ROW LEVEL SECURITY;\n\n`;
+          sqlPatch += `-- [보완] ${table} 테이블 RLS Policy 허용 DDL (RLS 유지, anon+authenticated 롤 허용)\n${generateRlsPolicyDDL(table)}\n\n`;
         } else if (success) {
           audit.push({
             table,

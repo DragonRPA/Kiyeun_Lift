@@ -1,3 +1,11 @@
+# Release Notes (v1.4.1.Build.00004 - 2026-07-26 00:37)
+
+## 🔐 Supabase RLS 해결 방식 전환: DISABLE → anon/authenticated Policy 생성 방식
+- **핵심 지식 확정**: `upsert`는 내부적으로 SELECT(존재 확인) → INSERT or UPDATE 3단계를 거치므로 SELECT/INSERT/UPDATE 세 가지 Policy가 모두 필요. `authenticated` Policy만으로는 `anon` 키 클라이언트에서 여전히 차단되므로 `anon` 롤 Policy도 반드시 함께 생성해야 함.
+- **`DevDataUploader.tsx`**: `generateRlsPolicyDDL(table)` 헬퍼 함수 신규 추가 및 모든 RLS 패치 DDL을 `DISABLE ROW LEVEL SECURITY` 대신 `CREATE POLICY` 6구문(anon 3개 + authenticated 3개) 방식으로 전환.
+- **`ErrorModal.tsx`**: RLS 오류 감지 시 생성되는 인라인 DDL 박스도 동일하게 Policy 생성 방식으로 전환. 설명 문구도 "RLS를 유지한 채로 허용"으로 변경.
+- **`AGENTS.md` (글로벌 규칙 6번 갱신)**: RLS 조치 의무를 DISABLE 방식에서 Policy 추가 방식으로 영구 정정. 표준 Policy DDL 패턴 및 배경 지식(upsert 3단계 메커니즘) 추가.
+
 # Release Notes (v1.4.1.Build.00003 - 2026-07-26 00:29)
 
 ## 🔓 에러 모달 RLS 즉시 복구 DDL 패치 생성 & 복사 기능 추가
