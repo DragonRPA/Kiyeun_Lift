@@ -27,18 +27,18 @@ export const Products: React.FC = () => {
     }
   };
 
-  const filtered = products
-    .filter(p => 
-      (p.modelName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (p.manufacturer || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (p.spec || '').toLowerCase().includes(searchTerm.toLowerCase())
-    )
-    .sort((a, b) => {
-      const aActive = a.isActive !== false;
-      const bActive = b.isActive !== false;
-      if (aActive !== bActive) return aActive ? -1 : 1;
-      return a.modelName.localeCompare(b.modelName, 'ko');
-    });
+  type ProductSortField = 'modelName' | 'feet' | 'spec' | 'manufacturer' | 'isActive' | 'assetCount' | 'createdAt';
+  const [sortField, setSortField] = useState<ProductSortField>('modelName');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+
+  const handleSort = (field: ProductSortField) => {
+    if (sortField === field) {
+      setSortDirection(prev => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortField(field);
+      setSortDirection('asc');
+    }
+  };
 
   const handleOpenAdd = () => {
     setEditingProduct({ modelName: '', feet: 19, spec: '', manufacturer: '', isActive: true, safetyCertUrl: '', specSheetUrl: '', emergencyGuideUrl: '' });
@@ -49,6 +49,7 @@ export const Products: React.FC = () => {
     setEditingProduct(p);
     setShowModal(true);
   };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingProduct || !editingProduct.modelName) return;
@@ -107,10 +108,51 @@ export const Products: React.FC = () => {
     exportToExcel(excelData, `제품목록_${new Date().toISOString().split('T')[0]}`, '제품목록');
   };
 
+  const filtered = products
+    .filter(p => 
+      (p.modelName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (p.manufacturer || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (p.spec || '').toLowerCase().includes(searchTerm.toLowerCase())
+    )
+    .sort((a, b) => {
+      let aVal: any = a[sortField as keyof Product];
+      let bVal: any = b[sortField as keyof Product];
+
+      if (sortField === 'assetCount') {
+        aVal = assets.filter(x => x.modelName === a.modelName).length;
+        bVal = assets.filter(x => x.modelName === b.modelName).length;
+      } else if (sortField === 'isActive') {
+        aVal = a.isActive !== false ? 1 : 0;
+        bVal = b.isActive !== false ? 1 : 0;
+      }
+
+      if (aVal === undefined || aVal === null) aVal = '';
+      if (bVal === undefined || bVal === null) bVal = '';
+
+      let cmp = 0;
+      if (typeof aVal === 'number' && typeof bVal === 'number') {
+        cmp = aVal - bVal;
+      } else {
+        cmp = String(aVal).localeCompare(String(bVal), 'ko');
+      }
+
+      return sortDirection === 'asc' ? cmp : -cmp;
+    });
+
+  const renderSortArrow = (field: ProductSortField) => {
+    if (sortField !== field) return <span style={{ color: 'var(--text-muted)', fontSize: '11px', marginLeft: '4px' }}>↕</span>;
+    return <span style={{ color: 'var(--primary)', fontWeight: 'bold', fontSize: '12px', marginLeft: '4px' }}>{sortDirection === 'asc' ? '▲' : '▼'}</span>;
+  };
+
   return (
     <div>
-      <div className="card-header" style={{ marginBottom: '24px' }}>
-        <h2 style={{ fontWeight: '700' }}>제품 모델 관리</h2>
+      <div className="card-header" style={{ marginBottom: '16px' }}>
+        <div>
+          <h2 style={{ fontWeight: '700' }}>제품 모델 관리</h2>
+          <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '4px' }}>
+            전체 <strong>{products.length}</strong>개 제품 등록됨 (검색 결과: <strong>{filtered.length}</strong>건)
+          </p>
+        </div>
         <div style={{ display: 'flex', gap: '10px' }}>
           <button className="btn-secondary" onClick={handleRefresh} disabled={refreshing} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             <RefreshCw size={16} style={{ animation: refreshing ? 'spin 1s linear infinite' : 'none' }} /> 조회
@@ -126,7 +168,7 @@ export const Products: React.FC = () => {
         </div>
       </div>
 
-      <div className="card" style={{ padding: '16px', marginBottom: '20px' }}>
+      <div className="card" style={{ padding: '12px 16px', marginBottom: '16px' }}>
         <div style={{ position: 'relative' }}>
           <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
           <input
@@ -139,25 +181,40 @@ export const Products: React.FC = () => {
         </div>
       </div>
 
-      <div className="table-container">
-        <table>
-          <thead>
+      {/* 수직 전용 독립 스크롤 컨테이너 (고정 스티키 헤더 탑재) */}
+      <div className="table-container" style={{ maxHeight: 'calc(850px - 260px)', overflowY: 'auto', overscrollBehavior: 'contain' }}>
+        <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0 }}>
+          <thead style={{ position: 'sticky', top: 0, zIndex: 10, backgroundColor: 'var(--bg-sidebar)' }}>
             <tr>
-              <th style={{ width: '80px' }}>No</th>
-              <th>모델명</th>
-              <th>피트 (Feet)</th>
-              <th>제원 및 특징</th>
-              <th>제조사</th>
-              <th>사용 여부</th>
-              <th>보유 대수</th>
-              <th style={{ width: '120px' }}>등록일</th>
-              {canSave && <th style={{ width: '100px' }}>작업</th>}
+              <th style={{ width: '60px', textAlign: 'center' }}>NO</th>
+              <th onClick={() => handleSort('modelName')} style={{ cursor: 'pointer', userSelect: 'none' }}>
+                모델명 {renderSortArrow('modelName')}
+              </th>
+              <th onClick={() => handleSort('feet')} style={{ cursor: 'pointer', userSelect: 'none' }}>
+                피트 (FEET) {renderSortArrow('feet')}
+              </th>
+              <th onClick={() => handleSort('spec')} style={{ cursor: 'pointer', userSelect: 'none' }}>
+                제원 및 특징 {renderSortArrow('spec')}
+              </th>
+              <th onClick={() => handleSort('manufacturer')} style={{ cursor: 'pointer', userSelect: 'none' }}>
+                제조사 {renderSortArrow('manufacturer')}
+              </th>
+              <th onClick={() => handleSort('isActive')} style={{ cursor: 'pointer', userSelect: 'none' }}>
+                사용 여부 {renderSortArrow('isActive')}
+              </th>
+              <th onClick={() => handleSort('assetCount')} style={{ cursor: 'pointer', userSelect: 'none' }}>
+                보유 대수 {renderSortArrow('assetCount')}
+              </th>
+              <th onClick={() => handleSort('createdAt')} style={{ width: '120px', cursor: 'pointer', userSelect: 'none' }}>
+                등록일 {renderSortArrow('createdAt')}
+              </th>
+              {canSave && <th style={{ width: '80px', textAlign: 'center' }}>작업</th>}
             </tr>
           </thead>
           <tbody>
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={canSave ? 9 : 8} style={{ textAlign: 'center', padding: '30px 0', color: 'var(--text-muted)' }}>
+                <td colSpan={canSave ? 9 : 8} style={{ textAlign: 'center', padding: '40px 0', color: 'var(--text-muted)' }}>
                   등록되었거나 검색 조건에 부합하는 제품 모델이 없습니다.
                 </td>
               </tr>
@@ -166,7 +223,7 @@ export const Products: React.FC = () => {
                 const count = assets.filter(a => a.modelName === p.modelName).length;
                 return (
                   <tr key={p.id} style={{ opacity: p.isActive !== false ? 1 : 0.6 }}>
-                    <td>{idx + 1}</td>
+                    <td style={{ textAlign: 'center', fontWeight: 'bold' }}>{idx + 1}</td>
                     <td><strong style={{ color: 'var(--primary)' }}>{p.modelName}</strong></td>
                     <td>{p.feet} ft</td>
                     <td>{p.spec}</td>
@@ -181,7 +238,7 @@ export const Products: React.FC = () => {
                     </td>
                     <td>{p.createdAt.substring(0, 10)}</td>
                     {canSave && (
-                      <td>
+                      <td style={{ textAlign: 'center' }}>
                         <button className="btn-secondary" onClick={() => handleOpenEdit(p)} style={{ padding: '4px 8px', fontSize: '12px' }}>
                           수정
                         </button>

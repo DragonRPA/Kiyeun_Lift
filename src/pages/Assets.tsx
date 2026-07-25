@@ -35,10 +35,23 @@ export const Assets: React.FC = () => {
     setEditChecklistUrl(asset.preDeliveryChecklistUrl || '');
   };
 
+  type AssetSortField = 'assetNo' | 'modelName' | 'ownerType' | 'status' | 'currentCustomerId' | 'acquisitionDate';
+  const [sortField, setSortField] = useState<AssetSortField>('assetNo');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+
+  const handleSort = (field: AssetSortField) => {
+    if (sortField === field) {
+      setSortDirection(prev => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortField(field);
+      setSortDirection('asc');
+    }
+  };
+
   // 고유 제조사 목록 추출
   const uniqueManufacturers = Array.from(new Set(assets.map(a => a.manufacturer).filter(Boolean))) as string[];
 
-  // 필터링 적용
+  // 필터링 및 정렬 적용
   const filtered = assets.filter(a => {
     const matchesSearch = 
       a.assetNo.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -51,7 +64,26 @@ export const Assets: React.FC = () => {
     const matchesCustomer = customerFilter === 'ALL' || a.currentCustomerId === customerFilter;
 
     return matchesSearch && matchesStatus && matchesOwner && matchesManufacturer && matchesCustomer;
+  }).sort((a, b) => {
+    let aVal: any = a[sortField as keyof Asset];
+    let bVal: any = b[sortField as keyof Asset];
+
+    if (sortField === 'currentCustomerId') {
+      aVal = getCustomerName(a.currentCustomerId);
+      bVal = getCustomerName(b.currentCustomerId);
+    }
+
+    if (aVal === undefined || aVal === null) aVal = '';
+    if (bVal === undefined || bVal === null) bVal = '';
+
+    let cmp = String(aVal).localeCompare(String(bVal), 'ko', { numeric: true });
+    return sortDirection === 'asc' ? cmp : -cmp;
   });
+
+  const renderSortArrow = (field: AssetSortField) => {
+    if (sortField !== field) return <span style={{ color: 'var(--text-muted)', fontSize: '11px', marginLeft: '4px' }}>↕</span>;
+    return <span style={{ color: 'var(--primary)', fontWeight: 'bold', fontSize: '12px', marginLeft: '4px' }}>{sortDirection === 'asc' ? '▲' : '▼'}</span>;
+  };
 
   const handleSearchClick = () => {
     setSearchTerm(tempSearchTerm);
@@ -83,93 +115,79 @@ export const Assets: React.FC = () => {
   };
 
   const handleExport = () => {
-    const excelData = filtered.map((a, idx) => ({
-      '순번': idx + 1,
+    const data = filtered.map(a => ({
       '관리번호': a.assetNo,
       '모델명': a.modelName,
-      '제조번호': a.serialNo || '',
-      '제조사': a.manufacturer || '',
-      '자산구분': a.ownerType === 'OWNED' ? '당사자산' : '임차자산',
-      '상태': a.status === 'AVAILABLE' ? '대기중' :
-             a.status === 'RENTED' ? '대여중' :
-             a.status === 'REPAIRING' ? '수리중' :
-             a.status === 'RENTED_RETURNED' ? '임차반납' : '매각완료',
-      '현재고객': getCustomerName(a.currentCustomerId),
+      '소유유형': a.ownerType === 'OWNED' ? '당사' : '임차',
+      '상태': a.status === 'AVAILABLE' ? '임대가능' : a.status === 'RENTED' ? '임대중' : a.status === 'REPAIRING' ? '정비중' : '외주정비중',
+      '제조사': a.manufacturer || '-',
+      '시리얼번호': a.serialNo || '-',
+      '현재고객사': getCustomerName(a.currentCustomerId),
       '현재현장': getSiteName(a.currentSiteId),
-      '계약개시일': a.contractStart || '',
-      '계약만료일': a.contractEnd || '',
-      '청구마감일(일)': a.billingDay || '',
-      '월렌탈료(원)': a.monthlyRentalFee,
-      '일렌탈료(원)': a.dailyRentalFee,
-      '취득일': a.acquisitionDate || '',
-      '취득가(원)': a.acquisitionPrice,
-      '상각개월수': a.depreciationMonths || '',
-      '잔존가치율(%)': a.residualValueRate || '',
-      '감가상각누계액(원)': a.accumDepreciation,
-      '장부가치(원)': a.bookValue,
-      '누적렌탈수입(원)': a.cumRentalFee,
-      '누적수리비용(원)': a.cumRepairCost,
-      '매각일': a.disposalDate || '',
-      '매각가(원)': a.disposalPrice,
-      '구입처': a.supplier || '',
-      '임차처': a.renter || '',
-      '임차개시일': a.rentStart || '',
-      '임차만료일': a.rentEnd || '',
-      '월임차료(원)': a.monthlyRentFee,
-      '일임차료(원)': a.dailyRentFee,
-      '매각처': a.buyer || '',
-      '비고1': a.memo1 || '',
-      '비고2': a.memo2 || ''
+      '월렌탈료': a.monthlyRentalFee || 0,
+      '취득금액': a.acquisitionPrice || 0,
+      '취득일자': a.acquisitionDate ? a.acquisitionDate.slice(0, 10) : '-'
     }));
 
-    exportToExcel(excelData, `자산대장_${new Date().toISOString().split('T')[0]}`, '자산목록');
+    exportToExcel(data, `자산장비목록_${new Date().toISOString().split('T')[0]}`, '자산목록');
   };
 
   return (
     <div>
-      <div className="card-header" style={{ marginBottom: '24px' }}>
-        <h2 style={{ fontWeight: '700' }}>장비 자산 대장</h2>
-        <button className="btn-secondary" onClick={handleExport}>
-          <Download size={16} /> 자산대장 엑셀 다운로드
-        </button>
+      <div className="card-header" style={{ marginBottom: '16px' }}>
+        <div>
+          <h2 style={{ fontWeight: '700' }}>자산 (장비) 관리 대장</h2>
+          <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '4px' }}>
+            전체 <strong>{assets.length}</strong>대 등록됨 (검색 결과: <strong>{filtered.length}</strong>대)
+          </p>
+        </div>
+        <div style={{ display: 'flex', gap: '10px' }}>
+          <button className="btn-secondary" onClick={handleExport}>
+            <Download size={16} /> 엑셀 다운로드
+          </button>
+        </div>
       </div>
 
-      {/* 다차원 필터 제어부 */}
-      <div className="card" style={{ padding: '20px', marginBottom: '20px' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '16px', alignItems: 'end' }}>
+      {/* 필터 카드 */}
+      <div className="card" style={{ padding: '16px', marginBottom: '16px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 1.5fr 1fr', gap: '12px', alignItems: 'end' }}>
           <div>
-            <label style={{ fontSize: '12px', fontWeight: '600', marginBottom: '6px', display: 'block' }}>자산 검색</label>
-            <input
-              type="text"
-              value={tempSearchTerm}
-              onChange={e => setTempSearchTerm(e.target.value)}
-              placeholder="관리번호, 모델명, 제조번호 검색..."
-              style={{ width: '100%', padding: '8px' }}
-            />
+            <label style={{ fontSize: '12px', fontWeight: '600', marginBottom: '6px', display: 'block' }}>통합 검색</label>
+            <div style={{ position: 'relative' }}>
+              <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+              <input
+                type="text"
+                value={tempSearchTerm}
+                onChange={e => setTempSearchTerm(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && handleSearchClick()}
+                placeholder="관리번호, 모델명, 일련번호..."
+                style={{ paddingLeft: '36px', height: '38px', width: '100%' }}
+              />
+            </div>
           </div>
           <div>
             <label style={{ fontSize: '12px', fontWeight: '600', marginBottom: '6px', display: 'block' }}>자산 구분</label>
             <select value={tempOwnerFilter} onChange={e => setTempOwnerFilter(e.target.value)} style={{ width: '100%', padding: '8px' }}>
               <option value="ALL">전체 자산</option>
-              <option value="OWNED">당사 자산 (Owned)</option>
-              <option value="RENTED">임차 자산 (Rented)</option>
+              <option value="OWNED">당사 자산</option>
+              <option value="RENTED">임차 자산</option>
             </select>
           </div>
           <div>
             <label style={{ fontSize: '12px', fontWeight: '600', marginBottom: '6px', display: 'block' }}>장비 상태</label>
             <select value={tempStatusFilter} onChange={e => setTempStatusFilter(e.target.value)} style={{ width: '100%', padding: '8px' }}>
               <option value="ALL">전체 상태</option>
-              <option value="AVAILABLE">대기중 (AVAILABLE)</option>
-              <option value="RENTED">대여중 (RENTED)</option>
-              <option value="REPAIRING">수리중 (REPAIRING)</option>
-              <option value="RENTED_RETURNED">임차반납 (RENTED_RETURNED)</option>
-              <option value="SOLD">매각완료 (SOLD)</option>
+              <option value="AVAILABLE">대기중</option>
+              <option value="RENTED">대여중</option>
+              <option value="REPAIRING">수리중</option>
+              <option value="RENTED_RETURNED">임차반납</option>
+              <option value="SOLD">매각완료</option>
             </select>
           </div>
           <div>
             <label style={{ fontSize: '12px', fontWeight: '600', marginBottom: '6px', display: 'block' }}>제조사</label>
             <select value={tempManufacturerFilter} onChange={e => setTempManufacturerFilter(e.target.value)} style={{ width: '100%', padding: '8px' }}>
-              <option value="ALL">전체 제조사</option>
+              <option value="ALL">전체</option>
               {uniqueManufacturers.map(m => (
                 <option key={m} value={m}>{m}</option>
               ))}
@@ -178,7 +196,7 @@ export const Assets: React.FC = () => {
           <div>
             <label style={{ fontSize: '12px', fontWeight: '600', marginBottom: '6px', display: 'block' }}>현재 고객사</label>
             <select value={tempCustomerFilter} onChange={e => setTempCustomerFilter(e.target.value)} style={{ width: '100%', padding: '8px' }}>
-              <option value="ALL">전체 고객사</option>
+              <option value="ALL">전체</option>
               {customers.map(c => (
                 <option key={c.id} value={c.id}>{c.name}</option>
               ))}
@@ -197,20 +215,30 @@ export const Assets: React.FC = () => {
         </div>
       </div>
 
-      {/* 자산 목록 */}
-      <div className="table-container">
-        <table>
-          <thead>
+      {/* 자산 목록 (독자 수직 스크롤 & 스티키 헤더) */}
+      <div className="table-container" style={{ maxHeight: 'calc(850px - 310px)', overflowY: 'auto', overscrollBehavior: 'contain' }}>
+        <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0 }}>
+          <thead style={{ position: 'sticky', top: 0, zIndex: 10, backgroundColor: 'var(--bg-sidebar)' }}>
             <tr>
-              <th>관리번호</th>
-              <th>모델명</th>
-              <th>자산 구분</th>
-              <th>상태</th>
-              <th>현재 고객사</th>
+              <th onClick={() => handleSort('assetNo')} style={{ cursor: 'pointer', userSelect: 'none' }}>
+                관리번호 {renderSortArrow('assetNo')}
+              </th>
+              <th onClick={() => handleSort('modelName')} style={{ cursor: 'pointer', userSelect: 'none' }}>
+                모델명 {renderSortArrow('modelName')}
+              </th>
+              <th onClick={() => handleSort('ownerType')} style={{ cursor: 'pointer', userSelect: 'none' }}>
+                자산 구분 {renderSortArrow('ownerType')}
+              </th>
+              <th onClick={() => handleSort('status')} style={{ cursor: 'pointer', userSelect: 'none' }}>
+                상태 {renderSortArrow('status')}
+              </th>
+              <th onClick={() => handleSort('currentCustomerId')} style={{ cursor: 'pointer', userSelect: 'none' }}>
+                현재 고객사 {renderSortArrow('currentCustomerId')}
+              </th>
               <th>월 렌탈료</th>
               <th>장부가치</th>
               <th>누적렌탈 / 수리비</th>
-              <th style={{ width: '80px' }}>조회</th>
+              <th style={{ width: '80px', textAlign: 'center' }}>조회</th>
             </tr>
           </thead>
           <tbody>

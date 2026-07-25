@@ -394,3 +394,22 @@ tr:hover td {
 .slide-in-right {
   animation: slideInRight 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
+
+/* Table Container & Sticky Header Controls */
+.table-container {
+  overflow-y: auto !important;
+  overscroll-behavior: contain !important;
+}
+
+.table-container table thead th {
+  position: sticky !important;
+  top: 0 !important;
+  z-index: 10 !important;
+  background-color: var(--bg-card) !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+  transition: background-color 0.15s ease;
+}
+
+.table-container table thead th:hover {
+  background-color: var(--bg-app) !important;
+}
