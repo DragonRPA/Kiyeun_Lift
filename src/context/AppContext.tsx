@@ -1282,14 +1282,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       createdAt: new Date().toISOString()
     });
 
+    const today = new Date().toISOString().split('T')[0];
     db.insertRow<Delivery>('deliveries', {
       contractId: contract.id || '',
       type: 'OUTBOUND',
+      dispatchCategory: '출고',
       status: 'REQUESTED',
-      requestDate: new Date().toISOString().split('T')[0],
+      requestDate: today,
+      loadingDate: today,
+      loadingTimeSlot: '오전',
+      unloadingDate: today,
+      unloadingTimeSlot: '오전',
       deliveryCost: 0,
       isCostSettled: false,
-      memo: '신규 계약 체결에 따른 출고 의뢰',
+      memo: '신규 계약 체결에 따른 스마트 출고 의뢰',
+      closingMemo: '스마트 출고 파이프라인 자동 지시건',
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     });

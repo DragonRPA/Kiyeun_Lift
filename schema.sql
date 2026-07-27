@@ -280,7 +280,7 @@ CREATE TABLE contract_history (
     "updatedAt" TEXT NOT NULL
 );
 
--- 15. 배차 및 운송 테이블 (deliveries) - 운송사 및 상하차 일시 확장
+-- 15. 배차 및 운송 테이블 (deliveries) - 운송사, 상하차 일시 및 세부 유형 확장
 CREATE TABLE deliveries (
     id TEXT PRIMARY KEY,
     "contractId" TEXT REFERENCES contracts(id) ON DELETE SET NULL,
@@ -288,6 +288,11 @@ CREATE TABLE deliveries (
     "transportVendorId" TEXT REFERENCES vendors(id), -- 운송 거래처
     type TEXT CHECK (type IN ('OUTBOUND', 'INBOUND')) NOT NULL,
     status TEXT CHECK (status IN ('REQUESTED', 'DISPATCHED', 'COMPLETED', 'CANCELLED')) NOT NULL,
+    "dispatchCategory" TEXT CHECK ("dispatchCategory" IN ('출고', '입고', '반납', '정비', '이동')) DEFAULT '출고',
+    "loadingDate" TEXT, -- 상차일자 (YYYY-MM-DD)
+    "loadingTimeSlot" TEXT DEFAULT '오전', -- 상차시간 구분 (오전/오후/희망시간)
+    "unloadingDate" TEXT, -- 하차일자 (YYYY-MM-DD)
+    "unloadingTimeSlot" TEXT DEFAULT '오전', -- 하차시간 구분 (오전/오후/희망시간)
     "vehicleType" TEXT,
     "driverName" TEXT,
     "driverContact" TEXT,
@@ -295,9 +300,10 @@ CREATE TABLE deliveries (
     "purchaseBillId" TEXT, -- 매입 마감 연동
     "isCostSettled" BOOLEAN DEFAULT FALSE,
     memo TEXT,
+    "closingMemo" TEXT, -- 실무자 마감 비고
     "requestDate" TEXT NOT NULL,
-    "loadingTime" TEXT, -- 상차 예정 일시
-    "unloadingTime" TEXT, -- 하차 예정 일시
+    "loadingTime" TEXT, -- 상차 예정 일시 (구 버전 호환)
+    "unloadingTime" TEXT, -- 하차 예정 일시 (구 버전 호환)
     "createdAt" TEXT NOT NULL,
     "updatedAt" TEXT NOT NULL
 );

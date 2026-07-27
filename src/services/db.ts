@@ -372,9 +372,14 @@ export interface Delivery {
   contractId?: string;
   assetIds?: string; // 대상 장비 ID 목록 (콤마 구분)
   type: 'OUTBOUND' | 'INBOUND' | 'EXCHANGE' | 'MOVEMENT' | 'RETURN';
+  dispatchCategory?: '출고' | '입고' | '반납' | '정비' | '이동'; // 배차 세부 유형
   status: 'REQUESTED' | 'DISPATCHED' | 'COMPLETED';
   requestDate: string;
   scheduledDate?: string;
+  loadingDate?: string; // 상차 일자 (YYYY-MM-DD)
+  loadingTimeSlot?: string; // 상차 시간 구분 (오전/오후/희망시간)
+  unloadingDate?: string; // 하차 일자 (YYYY-MM-DD)
+  unloadingTimeSlot?: string; // 하차 시간 구분 (오전/오후/희망시간)
   originAddress?: string; // 상차지
   destinationAddress?: string; // 하차지
   transportCompany?: string; // 운송 거래처 (월 마감 및 정산용)
@@ -398,6 +403,7 @@ export interface Delivery {
   cargoItems?: string; // 운반 장비 명세 JSON: [{ modelName: string, count: number }]
   isCostSettled: boolean;
   memo: string;
+  closingMemo?: string; // 실무자 마감 비고
   vehicles?: string; // 여러 차량 배차 정보를 위한 JSON 문자열 필드
   createdAt: string;
   updatedAt: string;

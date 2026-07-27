@@ -41,6 +41,23 @@ export const TruckDispatch: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'DISPATCH' | 'RECONCILIATION'>('DISPATCH');
 
   const [selectedDelivery, setSelectedDelivery] = useState<Delivery | null>(null);
+  
+  // 배차 세부 유형 ('출고' | '입고' | '반납' | '정비' | '이동')
+  const [dispatchCategory, setDispatchCategory] = useState<'출고' | '입고' | '반납' | '정비' | '이동'>('출고');
+  
+  // 상차 일시 & 시간 지정 (기본값: 오늘 날짜 YYYY-MM-DD, '오전')
+  const [loadingDate, setLoadingDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [loadingTimeSlot, setLoadingTimeSlot] = useState('오전');
+  const [loadingCustomTime, setLoadingCustomTime] = useState('');
+
+  // 하차 일시 & 시간 지정 (기본값: 오늘 날짜 YYYY-MM-DD, '오전')
+  const [unloadingDate, setUnloadingDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [unloadingTimeSlot, setUnloadingTimeSlot] = useState('오전');
+  const [unloadingCustomTime, setUnloadingCustomTime] = useState('');
+
+  // 실무자 마감 비고
+  const [closingMemo, setClosingMemo] = useState('');
+
   const [scheduledDate, setScheduledDate] = useState('');
   const [originAddress, setOriginAddress] = useState('');
   const [destinationAddress, setDestinationAddress] = useState('');
@@ -48,15 +65,22 @@ export const TruckDispatch: React.FC = () => {
   const [billableCustId, setBillableCustId] = useState('');
   const [assignedVehicles, setAssignedVehicles] = useState<AssignedVehicleRow[]>([]);
 
+  // 수동 배차 모달 state
   const [showManualModal, setShowManualModal] = useState(false);
-  const [manualType, setManualType] = useState<'OUTBOUND' | 'INBOUND' | 'MOVEMENT' | 'RETURN'>('OUTBOUND');
+  const [manualCategory, setManualCategory] = useState<'출고' | '입고' | '반납' | '정비' | '이동'>('출고');
   const [manualCustomerId, setManualCustomerId] = useState('');
   const [manualOrigin, setManualOrigin] = useState('당사 보관소');
   const [manualDestination, setManualDestination] = useState('');
-  const [manualDate, setManualDate] = useState(new Date().toISOString().split('T')[0]);
+  const [manualLoadingDate, setManualLoadingDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [manualLoadingTimeSlot, setManualLoadingTimeSlot] = useState('오전');
+  const [manualLoadingCustomTime, setManualLoadingCustomTime] = useState('');
+  const [manualUnloadingDate, setManualUnloadingDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [manualUnloadingTimeSlot, setManualUnloadingTimeSlot] = useState('오전');
+  const [manualUnloadingCustomTime, setManualUnloadingCustomTime] = useState('');
   const [manualExpectedCost, setManualExpectedCost] = useState(70000);
   const [manualBillable, setManualBillable] = useState(false);
   const [manualMemo, setManualMemo] = useState('');
+  const [manualClosingMemo, setManualClosingMemo] = useState('');
 
   const [manualVehicles, setManualVehicles] = useState<VehicleReq[]>([{ vehicleType: '3.5T', count: 1 }]);
   const [manualCargos, setManualCargos] = useState<CargoItem[]>([{ modelName: products[0]?.modelName || 'Skyjack SJ3219', count: 1 }]);
@@ -84,8 +108,35 @@ export const TruckDispatch: React.FC = () => {
   };
 
   const handleSelectDelivery = (d: Delivery) => {
+    const todayStr = new Date().toISOString().split('T')[0];
     setSelectedDelivery(d);
-    setScheduledDate(d.scheduledDate || new Date().toISOString().split('T')[0]);
+
+    // 스마트 출고 ➔ '출고', 스마트 회수 ➔ '반납', 그 외 지정값 또는 '출고'
+    let defaultCat: '출고' | '입고' | '반납' | '정비' | '이동' = d.dispatchCategory || (d.type === 'OUTBOUND' ? '출고' : d.type === 'RETURN' || d.type === 'INBOUND' ? '반납' : '출고');
+    setDispatchCategory(defaultCat);
+
+    setLoadingDate(d.loadingDate || todayStr);
+    const lSlot = d.loadingTimeSlot || '오전';
+    if (lSlot !== '오전' && lSlot !== '오후') {
+      setLoadingTimeSlot('희망시간');
+      setLoadingCustomTime(lSlot);
+    } else {
+      setLoadingTimeSlot(lSlot);
+      setLoadingCustomTime('');
+    }
+
+    setUnloadingDate(d.unloadingDate || todayStr);
+    const uSlot = d.unloadingTimeSlot || '오전';
+    if (uSlot !== '오전' && uSlot !== '오후') {
+      setUnloadingTimeSlot('희망시간');
+      setUnloadingCustomTime(uSlot);
+    } else {
+      setUnloadingTimeSlot(uSlot);
+      setUnloadingCustomTime('');
+    }
+
+    setClosingMemo(d.closingMemo || d.memo || '');
+    setScheduledDate(d.scheduledDate || todayStr);
     setOriginAddress(d.originAddress || '당사 보관소');
 
     const contract = getContract(d.contractId);
@@ -182,8 +233,16 @@ export const TruckDispatch: React.FC = () => {
     const firstV = assignedVehicles[0];
     const totalCost = assignedVehicles.reduce((sum, v) => sum + (Number(v.deliveryCost) || 0), 0);
 
+    const finalLoadingSlot = loadingTimeSlot === '희망시간' ? (loadingCustomTime || '희망시간') : loadingTimeSlot;
+    const finalUnloadingSlot = unloadingTimeSlot === '희망시간' ? (unloadingCustomTime || '희망시간') : unloadingTimeSlot;
+
     const payload: Partial<Delivery> = {
-      scheduledDate,
+      dispatchCategory,
+      loadingDate,
+      loadingTimeSlot: finalLoadingSlot,
+      unloadingDate,
+      unloadingTimeSlot: finalUnloadingSlot,
+      scheduledDate: loadingDate || scheduledDate,
       originAddress,
       destinationAddress,
       transportCompany: firstV?.transportCompany || '',
@@ -197,7 +256,9 @@ export const TruckDispatch: React.FC = () => {
       vehicles: JSON.stringify(assignedVehicles),
       billableToCustomer: billableToCust,
       billableCustomerId: billableCustId,
-      status: 'DISPATCHED'
+      closingMemo,
+      status: 'DISPATCHED',
+      updatedAt: new Date().toISOString()
     };
 
     try {
@@ -226,12 +287,29 @@ export const TruckDispatch: React.FC = () => {
       return;
     }
 
+    const todayStr = new Date().toISOString().split('T')[0];
+    const finalManualLoadingSlot = manualLoadingTimeSlot === '희망시간' ? (manualLoadingCustomTime || '희망시간') : manualLoadingTimeSlot;
+    const finalManualUnloadingSlot = manualUnloadingTimeSlot === '희망시간' ? (manualUnloadingCustomTime || '희망시간') : manualUnloadingTimeSlot;
+
+    const typeMapping: Record<string, 'OUTBOUND' | 'INBOUND' | 'RETURN' | 'MOVEMENT'> = {
+      '출고': 'OUTBOUND',
+      '입고': 'INBOUND',
+      '반납': 'RETURN',
+      '정비': 'INBOUND',
+      '이동': 'MOVEMENT'
+    };
+
     try {
       db.insertRow<Delivery>('deliveries', {
-        type: manualType,
+        type: typeMapping[manualCategory] || 'OUTBOUND',
+        dispatchCategory: manualCategory,
         status: 'REQUESTED',
-        requestDate: new Date().toISOString().split('T')[0],
-        scheduledDate: manualDate,
+        requestDate: todayStr,
+        scheduledDate: manualLoadingDate || todayStr,
+        loadingDate: manualLoadingDate || todayStr,
+        loadingTimeSlot: finalManualLoadingSlot,
+        unloadingDate: manualUnloadingDate || todayStr,
+        unloadingTimeSlot: finalManualUnloadingSlot,
         originAddress: manualOrigin,
         destinationAddress: manualDestination,
         deliveryCost: manualExpectedCost,
@@ -244,13 +322,14 @@ export const TruckDispatch: React.FC = () => {
         billableCustomerId: manualCustomerId || undefined,
         isCostSettled: false,
         memo: manualMemo,
+        closingMemo: manualClosingMemo,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       } as any);
 
       await db.awaitPendingWrites();
       refreshAllData();
-      alert(`신규 수동 배차 요청 생성이 성공적으로 완료되었습니다.`);
+      alert(`신규 수동 배차(${manualCategory}) 요청 생성이 성공적으로 완료되었습니다.`);
       setShowManualModal(false);
     } catch (err: any) {
       showErrorModal(`⚠️ 수동 배차 생성 실패:\n\n${err?.message || err}`);
@@ -482,6 +561,37 @@ export const TruckDispatch: React.FC = () => {
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: '16px' }}>
+                  
+                  {/* 1. 배차 세부 유형 & 비용 부담 주체 */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                    <div>
+                      <label style={{ fontWeight: '700', fontSize: '13px' }}>📋 배차 유형 선택 *</label>
+                      <select 
+                        value={dispatchCategory} 
+                        onChange={e => setDispatchCategory(e.target.value as any)} 
+                        disabled={selectedDelivery.reconciliationStatus === 'PAID'}
+                        style={{ fontWeight: 'bold', color: 'var(--primary)' }}
+                      >
+                        <option value="출고">📦 출고 배차</option>
+                        <option value="입고">📥 입고 배차</option>
+                        <option value="반납">🔄 반납 배차</option>
+                        <option value="정비">🛠️ 정비 배차</option>
+                        <option value="이동">🚚 이동 배차</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label style={{ display: 'block', marginBottom: '8px', fontSize: '13px', fontWeight: '600' }}>비용 부담 주체 (고객 청구 여부)</label>
+                      <ToggleSwitch 
+                        checked={billableToCust} 
+                        onChange={setBillableToCust} 
+                        disabled={selectedDelivery.reconciliationStatus === 'PAID'} 
+                        label="고객사 청구 대상 (billableToCustomer)" 
+                      />
+                    </div>
+                  </div>
+
+                  {/* 2. 상차지 및 하차지 장소 지정 */}
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', padding: '12px', backgroundColor: 'var(--bg-active)', borderRadius: '8px' }}>
                     <div>
                       <label style={{ fontWeight: '700' }}>🚩 상차지 (출발 장소) *</label>
@@ -493,20 +603,96 @@ export const TruckDispatch: React.FC = () => {
                     </div>
                   </div>
 
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                  {/* 3. 상차일자/시간 & 하차일자/시간 각각 독립 지정 (사용자 이미지 개편 요청 부위!) */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', padding: '12px', border: '1px solid var(--border)', borderRadius: '8px', backgroundColor: 'var(--bg-card)' }}>
+                    {/* 상차 일정 */}
                     <div>
-                      <label>배차 예정일시 *</label>
-                      <input type="date" value={scheduledDate} onChange={e => setScheduledDate(e.target.value)} disabled={selectedDelivery.reconciliationStatus === 'PAID'} required />
+                      <label style={{ fontWeight: '700', fontSize: '13px', color: '#06b6d4' }}>
+                        📅 상차 예정일자 및 시간 *
+                      </label>
+                      <div style={{ display: 'flex', gap: '6px', marginTop: '6px' }}>
+                        <input 
+                          type="date" 
+                          value={loadingDate} 
+                          onChange={e => setLoadingDate(e.target.value)} 
+                          disabled={selectedDelivery.reconciliationStatus === 'PAID'} 
+                          required 
+                          style={{ flex: 1.3 }}
+                        />
+                        <select 
+                          value={loadingTimeSlot} 
+                          onChange={e => setLoadingTimeSlot(e.target.value)} 
+                          disabled={selectedDelivery.reconciliationStatus === 'PAID'}
+                          style={{ flex: 1, fontSize: '12.5px' }}
+                        >
+                          <option value="오전">오전</option>
+                          <option value="오후">오후</option>
+                          <option value="희망시간">희망시간 지정</option>
+                        </select>
+                      </div>
+                      {loadingTimeSlot === '희망시간' && (
+                        <input 
+                          type="text" 
+                          placeholder="예: 09:30 또는 14시 경" 
+                          value={loadingCustomTime} 
+                          onChange={e => setLoadingCustomTime(e.target.value)} 
+                          disabled={selectedDelivery.reconciliationStatus === 'PAID'} 
+                          style={{ marginTop: '6px', fontSize: '12px' }}
+                        />
+                      )}
                     </div>
+
+                    {/* 하차 일정 */}
                     <div>
-                      <label style={{ display: 'block', marginBottom: '8px', fontSize: '13px', fontWeight: '600' }}>비용 부담 주체 (고객 청구 여부)</label>
-                      <ToggleSwitch 
-                        checked={billableToCust} 
-                        onChange={setBillableToCust} 
-                        disabled={selectedDelivery.reconciliationStatus === 'PAID'} 
-                        label="고객사 청구 대상 (billableToCustomer)" 
-                      />
+                      <label style={{ fontWeight: '700', fontSize: '13px', color: '#3b82f6' }}>
+                        📅 하차 예정일자 및 시간 *
+                      </label>
+                      <div style={{ display: 'flex', gap: '6px', marginTop: '6px' }}>
+                        <input 
+                          type="date" 
+                          value={unloadingDate} 
+                          onChange={e => setUnloadingDate(e.target.value)} 
+                          disabled={selectedDelivery.reconciliationStatus === 'PAID'} 
+                          required 
+                          style={{ flex: 1.3 }}
+                        />
+                        <select 
+                          value={unloadingTimeSlot} 
+                          onChange={e => setUnloadingTimeSlot(e.target.value)} 
+                          disabled={selectedDelivery.reconciliationStatus === 'PAID'}
+                          style={{ flex: 1, fontSize: '12.5px' }}
+                        >
+                          <option value="오전">오전</option>
+                          <option value="오후">오후</option>
+                          <option value="희망시간">희망시간 지정</option>
+                        </select>
+                      </div>
+                      {unloadingTimeSlot === '희망시간' && (
+                        <input 
+                          type="text" 
+                          placeholder="예: 11:00 또는 17시 전까지" 
+                          value={unloadingCustomTime} 
+                          onChange={e => setUnloadingCustomTime(e.target.value)} 
+                          disabled={selectedDelivery.reconciliationStatus === 'PAID'} 
+                          style={{ marginTop: '6px', fontSize: '12px' }}
+                        />
+                      )}
                     </div>
+                  </div>
+
+                  {/* 4. 실무자 마감 비고 입력란 */}
+                  <div>
+                    <label style={{ fontWeight: '700', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      📝 실무자 마감 비고 및 운송 전달사항 (closingMemo)
+                    </label>
+                    <textarea 
+                      value={closingMemo} 
+                      onChange={e => setClosingMemo(e.target.value)} 
+                      disabled={selectedDelivery.reconciliationStatus === 'PAID'} 
+                      rows={2} 
+                      placeholder="실무자의 월말 마감 및 정산에 도움이 되는 마감 메모, 특이사항, 운송 기사 전달사항을 기록하세요." 
+                      style={{ width: '100%', marginTop: '4px', fontSize: '12.5px', padding: '8px', borderRadius: '6px', border: '1px solid var(--border)' }}
+                    />
                   </div>
 
                   <div>
@@ -741,40 +927,74 @@ export const TruckDispatch: React.FC = () => {
       {/* 수동 배차 생성 모달 */}
       {showManualModal && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-          <form onSubmit={handleCreateManualDelivery} className="card" style={{ width: '100%', maxWidth: '650px', backgroundColor: 'var(--bg-card)', maxHeight: '90vh', overflowY: 'auto' }}>
-            <h3 className="card-title" style={{ marginBottom: '16px' }}>신규 수동 배차 요청 생성</h3>
+          <form onSubmit={handleCreateManualDelivery} className="card" style={{ width: '100%', maxWidth: '680px', backgroundColor: 'var(--bg-card)', maxHeight: '90vh', overflowY: 'auto' }}>
+            <h3 className="card-title" style={{ marginBottom: '16px' }}>➕ 신규 수동 배차 지시 생성</h3>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', marginBottom: '20px' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                 <div>
-                  <label>배차 구분 *</label>
-                  <select value={manualType} onChange={e => setManualType(e.target.value as any)}>
-                    <option value="OUTBOUND">출고 배차</option>
-                    <option value="INBOUND">회수 배차</option>
-                    <option value="MOVEMENT">현장 이동</option>
-                    <option value="RETURN">임차 반납</option>
+                  <label style={{ fontWeight: '700', fontSize: '13px' }}>📋 배차 유형 선택 *</label>
+                  <select 
+                    value={manualCategory} 
+                    onChange={e => setManualCategory(e.target.value as any)}
+                    style={{ fontWeight: 'bold', color: 'var(--primary)' }}
+                  >
+                    <option value="출고">📦 출고 배차 (기본값)</option>
+                    <option value="입고">📥 입고 배차</option>
+                    <option value="반납">🔄 반납 배차</option>
+                    <option value="정비">🛠️ 정비 배차</option>
+                    <option value="이동">🚚 이동 배차</option>
                   </select>
                 </div>
                 <div>
-                  <label>고객사 선택</label>
+                  <label style={{ fontWeight: '700', fontSize: '13px' }}>🏢 관련 고객사 선택</label>
                   <select value={manualCustomerId} onChange={e => setManualCustomerId(e.target.value)}>
                     <option value="">-- 미지정 --</option>
                     {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                   </select>
                 </div>
+              </div>
+
+              {/* 상차일/시간 & 하차일/시간 분리 지정 */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', padding: '12px', border: '1px solid var(--border)', borderRadius: '8px', backgroundColor: 'var(--bg-active)' }}>
                 <div>
-                  <label>배차 희망일시 *</label>
-                  <input type="date" value={manualDate} onChange={e => setManualDate(e.target.value)} required />
+                  <label style={{ fontWeight: '700', fontSize: '12.5px', color: '#06b6d4' }}>📅 상차 예정일자 및 시간 *</label>
+                  <div style={{ display: 'flex', gap: '4px', marginTop: '4px' }}>
+                    <input type="date" value={manualLoadingDate} onChange={e => setManualLoadingDate(e.target.value)} required style={{ flex: 1.2 }} />
+                    <select value={manualLoadingTimeSlot} onChange={e => setManualLoadingTimeSlot(e.target.value)} style={{ flex: 1 }}>
+                      <option value="오전">오전</option>
+                      <option value="오후">오후</option>
+                      <option value="희망시간">희망시간</option>
+                    </select>
+                  </div>
+                  {manualLoadingTimeSlot === '희망시간' && (
+                    <input type="text" placeholder="예: 09:30" value={manualLoadingCustomTime} onChange={e => setManualLoadingCustomTime(e.target.value)} style={{ marginTop: '4px', fontSize: '12px' }} />
+                  )}
+                </div>
+
+                <div>
+                  <label style={{ fontWeight: '700', fontSize: '12.5px', color: '#3b82f6' }}>📅 하차 예정일자 및 시간 *</label>
+                  <div style={{ display: 'flex', gap: '4px', marginTop: '4px' }}>
+                    <input type="date" value={manualUnloadingDate} onChange={e => setManualUnloadingDate(e.target.value)} required style={{ flex: 1.2 }} />
+                    <select value={manualUnloadingTimeSlot} onChange={e => setManualUnloadingTimeSlot(e.target.value)} style={{ flex: 1 }}>
+                      <option value="오전">오전</option>
+                      <option value="오후">오후</option>
+                      <option value="희망시간">희망시간</option>
+                    </select>
+                  </div>
+                  {manualUnloadingTimeSlot === '희망시간' && (
+                    <input type="text" placeholder="예: 17시 전까지" value={manualUnloadingCustomTime} onChange={e => setManualUnloadingCustomTime(e.target.value)} style={{ marginTop: '4px', fontSize: '12px' }} />
+                  )}
                 </div>
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                 <div>
-                  <label>상차지 (출발 장소) *</label>
+                  <label style={{ fontWeight: '700' }}>🚩 상차지 (출발 장소) *</label>
                   <input type="text" value={manualOrigin} onChange={e => setManualOrigin(e.target.value)} required placeholder="예: 당사 용인보관소" />
                 </div>
                 <div>
-                  <label>하차지 (도착 장소) *</label>
+                  <label style={{ fontWeight: '700' }}>🏁 하차지 (도착 장소) *</label>
                   <input type="text" value={manualDestination} onChange={e => setManualDestination(e.target.value)} required placeholder="예: 평택 고덕 현장" />
                 </div>
               </div>
@@ -843,12 +1063,18 @@ export const TruckDispatch: React.FC = () => {
               </div>
 
               <div>
-                <label>특이사항 / 메모</label>
-                <textarea value={manualMemo} onChange={e => setManualMemo(e.target.value)} rows={2} />
+                <label style={{ fontWeight: '700', fontSize: '13px' }}>📝 실무자 마감 비고 (closingMemo)</label>
+                <textarea 
+                  value={manualClosingMemo} 
+                  onChange={e => setManualClosingMemo(e.target.value)} 
+                  rows={2} 
+                  placeholder="월말 마감에 참고할 추가 운송 비고를 적어주세요." 
+                  style={{ width: '100%', marginTop: '4px', fontSize: '12.5px', padding: '8px', borderRadius: '6px', border: '1px solid var(--border)' }}
+                />
               </div>
             </div>
 
-            <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
               <button type="button" className="btn-secondary" onClick={() => setShowManualModal(false)}>취소</button>
               <button type="submit" className="btn-primary">배차 생성</button>
             </div>
