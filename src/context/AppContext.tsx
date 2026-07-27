@@ -427,28 +427,40 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     try {
       db.permissions = updated;
       if (supabase) {
-        // Supabase DB 스키마 컬럼명 불일치 및 레거시 role/updatedAt NOT NULL 제약 조건 우회를 위해 타임스탬프 & 기본값 부여
+        // DB 스키마 및 레거시 role/updatedAt NOT NULL 제약 조건 우회를 위해 타임스탬프 & 기본값 부여 (userId camelCase 단일 표준 적용)
         const nowStr = new Date().toISOString();
         const payload = updated.map(p => ({
           ...p,
           userId: p.userId,
-          user_id: p.userId,
           role: (p as any).role || 'USER',
           createdAt: p.createdAt || nowStr,
           updatedAt: nowStr
         }));
+
+        const lastCommandInfo = `supabase.from('permissions').upsert(payload[${payload.length}건], { onConflict: 'id' })`;
+        const samplePayloadJson = JSON.stringify(payload.slice(0, 2), null, 2);
+
         const { error } = await supabase.from('permissions').upsert(payload as any[], { onConflict: 'id' });
         if (error) {
-          if (error.message?.includes("userId") || error.message?.includes("user_id") || error.code === 'PGRST204') {
-            throw new Error(
-              `Supabase 'permissions' 테이블에 'userId' 또는 'user_id' 컬럼이 누락되어 있습니다.\n\n` +
-              `[해결 DDL 쿼리문 (Supabase SQL Editor에서 실행)]:\n` +
-              `ALTER TABLE permissions ADD COLUMN IF NOT EXISTS "userId" TEXT;\n` +
-              `ALTER TABLE permissions ADD COLUMN IF NOT EXISTS "user_id" TEXT;\n\n` +
-              `원래 오류: ${error.message}`
-            );
-          }
-          throw error;
+          const isSchemaCacheOrColumnError = error.message?.includes("userId") || error.code === 'PGRST204' || error.code === 'PGRST200';
+          const rawErrorDetails = 
+            `■ [마지막 실행 시도 명령]: ${lastCommandInfo}\n` +
+            `■ [PostgREST Raw Error]:\n` +
+            `  - Code: ${error.code || 'N/A'}\n` +
+            `  - Message: ${error.message || 'N/A'}\n` +
+            `  - Details: ${error.details || 'N/A'}\n` +
+            `  - Hint: ${error.hint || 'N/A'}\n\n` +
+            `■ [시도된 페이로드 샘플 (최대 2건)]:\n${samplePayloadJson}\n\n` +
+            `■ [조치 안내 (개발자 도구 패치 적용 또는 Supabase SQL Editor 실행 DDL)]:\n` +
+            (isSchemaCacheOrColumnError
+              ? `💡 원인: Supabase DB의 permissions 테이블 컬럼 미비 또는 PostgREST 스키마 캐시 미갱신 현상입니다.\n` +
+                `1) [개발자 도구] ➔ [[개발] DB 데이터 업로더] 메뉴 하단의 [⚡ 패치 자동 적용 (DB 직접 실행)] 버튼 클릭\n` +
+                `2) 또는 Supabase SQL Editor에서 아래 DDL 직접 실행:\n` +
+                `   ALTER TABLE "permissions" ADD COLUMN IF NOT EXISTS "userId" TEXT;\n` +
+                `   NOTIFY pgrst, 'reload schema';`
+              : `ALTER TABLE "permissions" ADD COLUMN IF NOT EXISTS "userId" TEXT;\nNOTIFY pgrst, 'reload schema';`);
+
+          throw new Error(rawErrorDetails);
         }
       }
       refreshAllData();

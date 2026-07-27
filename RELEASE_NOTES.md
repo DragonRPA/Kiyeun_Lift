@@ -1,3 +1,16 @@
+# Release Notes (v1.8.0.Build.00001 - 2026-07-28 02:56)
+
+## 🛠️ [실시간 진단 파이프라인] 에러 모달 내 마지막 실행 시도 명령 & PostgREST Raw Error 추적기 탑재
+
+- **개편 목적**: DB 저장/수정 실패 시 사용자 및 개발자가 정확한 실패 원인을 한눈에 파악할 수 있도록, 에러 모달 팝업창 상에 **실제 실행 시도된 마지막 DB 명령**, **PostgREST Raw Error (`code`, `message`, `details`, `hint`)**, **시도된 페이로드 샘플**을 명확히 표출하도록 개편함.
+- **주요 개편 내역**:
+  1. **마지막 실행 명령 & Raw Error 명시 (`AppContext.tsx`)**:
+     - `updatePermissions` 내 `supabase.from('permissions').upsert(...)` 호출 시 실패하면 조작된 문구 대신 실제 실행 명령(`supabase.from('permissions').upsert(...)`)과 PostgREST raw error 객체를 100% 가감 없이 에러 모달에 기록함.
+  2. **`user_id` 레거시 키 제거 & `userId` (`camelCase`) 단일 표준 100% 정규화**:
+     - `AppContext.tsx` 및 `users_permissions.tsx` 에서 Supabase 전송 페이로드에 억지로 집어넣던 불필요한 `user_id` 속성을 완전히 제거하여 스키마 캐시 불일치 원천 차단.
+
+---
+
 # Release Notes (v1.8.0.Build.00000 - 2026-07-28 02:38)
 
 ## 📁 [글로벌 개발 정책 제10항 전면 반영] 파일명 언더바(`_`) 적극 활용 표준화 100% 적용 & Old 레거시 파일 정리 준비 완료
