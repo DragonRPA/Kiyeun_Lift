@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { useApp } from '../context/AppContext';
 import { supabase, db } from '../services/db';
-import { getAssetStatusFixDdlStatements } from '../config/assetStatusConfig';
+import { getAssetStatusFixDdlStatements } from '../config/asset_status_config';
 import * as XLSX from 'xlsx';
 import {
   DatabaseIcon,

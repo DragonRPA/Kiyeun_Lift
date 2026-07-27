@@ -1,3 +1,28 @@
+# Release Notes (v1.8.0.Build.00000 - 2026-07-28 02:38)
+
+## 📁 [글로벌 개발 정책 제10항 전면 반영] 파일명 언더바(`_`) 적극 활용 표준화 100% 적용 & Old 레거시 파일 정리 준비 완료
+
+- **개편 목적**: 개발 정책 제10항(`DB/변수명 언더바 절대 금지 & 파일명 언더바 적극 사용`) 표준에 의거하여, 프로젝트 전반의 10개 주요 파편화 파일(CamelCase/PascalCase)을 언더바(`_`) 기반 파일명으로 100% 복제 생성하고 앱 전체 연결 소스를 신규 언더바 파일 경로로 직결 교체함.
+- **주요 개편 및 조치 사항**:
+  1. **신규 언더바(`_`) 파일명 10종 복제 완료 & 연결 직결**:
+     - `src/config/menu_config.ts` (구 `menuConfig.ts`)
+     - `src/config/asset_status_config.ts` (구 `assetStatusConfig.ts`)
+     - `src/pages/users_permissions.tsx` (구 `UsersPermissions.tsx`)
+     - `src/pages/depreciation_execution.tsx` (구 `DepreciationExecution.tsx`)
+     - `src/pages/outbound_inspections.tsx` (구 `OutboundInspections.tsx`)
+     - `src/pages/smart_dispatch.tsx` (구 `SmartDispatch.tsx`)
+     - `src/pages/smart_return.tsx` (구 `SmartReturn.tsx`)
+     - `src/pages/rent_assets.tsx` (구 `RentAssets.tsx`)
+     - `src/pages/asset_history.tsx` (구 `AssetHistory.tsx`)
+     - `src/pages/asset_assignment.tsx` (구 `AssetAssignment.tsx`)
+  2. **프로젝트 연결 소스 전면 전환**: `App.tsx`, `Assets.tsx`, `DevDataUploader.tsx`, `AppContext.tsx` 내의 모든 임포트 경로를 신규 언더바 파일명으로 전면 교체 완료 (`npm run build` 100% 성공 검증).
+  3. **Old 레거시 파일 무손실 임시 보존 & 원클릭 정리 준비 완료**:
+     - 사용자의 지침에 따라 기존 10개 Old 파일은 테스트 및 안전 검증을 위해 즉시 삭제하지 않고 임시 유지.
+     - 정리 계획서 문서 `cleanup_old_files_plan.md` 작성 완비.
+     - 프로젝트 루트에 원클릭 Old 파일 제거 배치 파일 `clean_old_files.bat` 완비 (사용자 지시 1회만으로 즉각 100% 한 번에 정리 가능).
+
+---
+
 # Release Notes (v1.7.0.Build.00007 - 2026-07-28 02:28)
 
 ## 🐛 [Hotfix] Supabase DB `userId` / `user_id` 컬럼명 파편화 호환 보완 & 권한 누락 원천 해결

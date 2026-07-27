@@ -7,14 +7,14 @@ import {
   TrendingUp, Clock, AlertTriangle, Building2, ChevronDown, ChevronRight, Briefcase, Box, FolderKanban, ShieldAlert, Terminal, ArrowLeftRight, CheckSquare
 } from 'lucide-react';
 
-// 페이지 컴포넌트 임포트
+// 페이지 컴포넌트 임포트 (SSOT 언더바 파일명 통일)
 import { Dashboard } from './pages/Dashboard';
-import { UsersPermissions } from './pages/UsersPermissions';
+import { UsersPermissions } from './pages/users_permissions';
 import { Customers } from './pages/Customers';
 import { Products } from './pages/Products';
 import { Assets } from './pages/Assets';
 import { AssetAcquisitionDisposal } from './pages/AssetAcquisitionDisposal';
-import { RentAssets } from './pages/RentAssets';
+import { RentAssets } from './pages/rent_assets';
 import { Consumables } from './pages/Consumables';
 import { Contracts } from './pages/Contracts';
 import { Billings } from './pages/Billings';
@@ -23,10 +23,10 @@ import { TruckDispatch } from './pages/TruckDispatch';
 import { TransportMaster } from './pages/TransportMaster';
 import { DevDataUploader } from './pages/DevDataUploader';
 import { Repairs } from './pages/Repairs';
-import { SmartDispatch } from './pages/SmartDispatch';
-import { SmartReturn } from './pages/SmartReturn';
-import { AssetHistory } from './pages/AssetHistory';
-import { AssetAssignment } from './pages/AssetAssignment';
+import { SmartDispatch } from './pages/smart_dispatch';
+import { SmartReturn } from './pages/smart_return';
+import { AssetHistory } from './pages/asset_history';
+import { AssetAssignment } from './pages/asset_assignment';
 import { OrganizationSettings } from './pages/OrganizationSettings';
 import { Vendors } from './pages/Vendors';
 import { GoogleConfig } from './pages/GoogleConfig';
@@ -34,8 +34,8 @@ import { PayrollPage } from './pages/PayrollPage';
 import { CorporateCardPage } from './pages/CorporateCardPage';
 import { CashFlowPage } from './pages/CashFlowPage';
 import { DelinquencyPage } from './pages/DelinquencyPage';
-import { OutboundInspections } from './pages/OutboundInspections';
-import { DepreciationExecution } from './pages/DepreciationExecution';
+import { OutboundInspections } from './pages/outbound_inspections';
+import { DepreciationExecution } from './pages/depreciation_execution';
 
 export interface SubMenuItem {
   id: string;

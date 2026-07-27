@@ -3,7 +3,7 @@ import { useApp } from '../context/AppContext';
 import { Search, Download, Eye, Layers, Edit2, Save, X, FolderOpen } from 'lucide-react';
 import { exportToExcel } from '../services/excel';
 import { Asset, calculateAssetDepreciation } from '../services/db';
-import { ASSET_STATUS_SSOT, getAssetStatusLabel, getAssetStatusBadgeClass } from '../config/assetStatusConfig';
+import { ASSET_STATUS_SSOT, getAssetStatusLabel, getAssetStatusBadgeClass } from '../config/asset_status_config';
 import { GoogleDrivePickerModal } from '../components/GoogleDrivePickerModal';
 
 export const Assets: React.FC = () => {
