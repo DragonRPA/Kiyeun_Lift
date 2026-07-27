@@ -1,3 +1,18 @@
+# Release Notes (v1.8.0.Build.00002 - 2026-07-28 03:11)
+
+## 🏛️ [3대 원천적 대안 전면 수술] DB 스키마-게이트웨이-팩토리 객체 생성 3중 근본 원인 해결
+
+- **개편 목적**: 단순 임시방편(Fallback/방어적 null 연산)을 넘어, `userId: null` 유실 및 Supabase PostgREST Schema Cache 불일치 원인을 원천 수술함.
+- **주요 개편 내역**:
+  1. **[DB 레거시 이관 & DDL 자가복구 수술] (`DevDataUploader.tsx`)**:
+     - `permissions` 테이블의 `"userId"` (camelCase) 컬럼 생성 및 기존 `user_id` 레거시 데이터 이관 쿼리(`UPDATE "permissions" SET "userId" = user_id ...`), PostgREST 스키마 캐시 즉시 갱신(`NOTIFY pgrst, 'reload schema'`)을 1-Click 패치 구문에 완전 수록.
+  2. **[게이트웨이 파이프라인 수술] (`db.ts`)**:
+     - 최하단 수신/발신 래퍼에서 `user_id` 레거시 컬럼 수신 시 `userId`로 100% 흡수·변환하여 상위 레이어에서 `null`이나 언더바 오염이 일절 발생하지 않도록 완전 차단.
+  3. **[SSOT 팩토리 메소드 단일화] (`createMenuPermission`)**:
+     - `db.ts` 내에 `createMenuPermission(userId, menuId, canView, canSave)` 팩토리 메소드를 단일 원천으로 선언하고 `AppContext.tsx` & `users_permissions.tsx`에서 공통 호출하여 `userId` 유실을 100% 원천 차단.
+
+---
+
 # Release Notes (v1.8.0.Build.00001 - 2026-07-28 02:56)
 
 ## 🛠️ [실시간 진단 파이프라인] 에러 모달 내 마지막 실행 시도 명령 & PostgREST Raw Error 추적기 탑재

@@ -1,6 +1,6 @@
 // d:\Kiyeun_Lift\src\context\AppContext.tsx
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { db, supabase, User, MenuPermission, Customer, CustomerContact, CustomerSite, Product, Asset, Consumable, ConsumableLog, ConsumablePurchaseRequest, Contract, ContractAsset, ContractHistory, Billing, BillingDetail, Payment, Delivery, TransportCompany, TransportDriver, Repair, RepairConsumable, Todo, BankTransaction, BankMatchingRule, AssetInOutLog, Vendor, GoogleConfig, CashFlowSnapshot, OutboundInspection, DepreciationLog, findCustomerByNormalizedName } from '../services/db';
+import { db, supabase, User, MenuPermission, createMenuPermission, Customer, CustomerContact, CustomerSite, Product, Asset, Consumable, ConsumableLog, ConsumablePurchaseRequest, Contract, ContractAsset, ContractHistory, Billing, BillingDetail, Payment, Delivery, TransportCompany, TransportDriver, Repair, RepairConsumable, Todo, BankTransaction, BankMatchingRule, AssetInOutLog, Vendor, GoogleConfig, CashFlowSnapshot, OutboundInspection, DepreciationLog, findCustomerByNormalizedName } from '../services/db';
 import { ErrorModal } from '../components/ErrorModal';
 import { getAllSystemMenuIds } from '../config/menu_config';
 
@@ -518,16 +518,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         allMenuIds.forEach(menuId => {
           const exists = db.permissions.some(p => p.userId === newUser.id && p.menuId === menuId);
           if (!exists) {
-            const now = new Date().toISOString();
-            db.insertRow<MenuPermission>('permissions', {
-              id: `perm-${newUser.id}-${menuId}`,
-              userId: newUser.id,
-              menuId,
-              canView: true,
-              canSave: true,
-              createdAt: now,
-              updatedAt: now
-            } as any);
+            const perm = createMenuPermission(newUser.id, menuId, true, true);
+            db.insertRow<MenuPermission>('permissions', perm);
           }
         });
       }

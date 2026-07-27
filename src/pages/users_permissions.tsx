@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { Shield, Check, Lock, Save, FolderKanban, ChevronDown, ChevronRight } from 'lucide-react';
-import { MenuPermission, User } from '../services/db';
+import { MenuPermission, User, createMenuPermission } from '../services/db';
 
 import { SYSTEM_MENU_CONFIG, getAllSystemMenuIds, MenuGroupConfig } from '../config/menu_config';
 
@@ -44,15 +44,7 @@ export const UsersPermissions: React.FC = () => {
         const exists = merged.some(p => p.userId === u.id && p.menuId === menuId);
         if (!exists) {
           const isAdmin = u.role === 'ADMIN' || u.id === 'u-1' || u.id === 'sys-admin';
-          merged.push({
-            id: `perm-${u.id}-${menuId}`,
-            userId: u.id,
-            menuId: menuId,
-            canView: true,
-            canSave: isAdmin,
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString()
-          } as any);
+          merged.push(createMenuPermission(u.id, menuId, true, isAdmin));
           addedCount++;
         }
       });

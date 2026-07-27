@@ -60,6 +60,26 @@ export interface MenuPermission {
   updatedAt?: string;
 }
 
+/** MenuPermission 단일 진실의 원천(SSOT) 팩토리 생성 함수 */
+export function createMenuPermission(
+  userId: string,
+  menuId: string,
+  canView: boolean = true,
+  canSave: boolean = false
+): MenuPermission {
+  const cleanUserId = userId ? String(userId).trim() : '';
+  const nowIso = new Date().toISOString();
+  return {
+    id: `perm-${cleanUserId}-${menuId}`,
+    userId: cleanUserId,
+    menuId: menuId,
+    canView: canView,
+    canSave: canSave,
+    createdAt: nowIso,
+    updatedAt: nowIso
+  };
+}
+
 export interface Customer {
   id: string;
   name: string;
