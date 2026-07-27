@@ -1222,6 +1222,20 @@ class LocalDB {
     return `${prefix}${paddedNum}`;
   }
 
+  private sanitizeSupabasePayload(obj: any): any {
+    if (!obj || typeof obj !== 'object') return obj;
+    const sanitized: any = Array.isArray(obj) ? [] : {};
+    for (const key in obj) {
+      const val = obj[key];
+      if (typeof val === 'string' && val.trim() === '' && (key.endsWith('Id') || key === 'contractId' || key === 'assetId' || key === 'customerId' || key === 'siteId' || key === 'salespersonId' || key === 'vendorId')) {
+        sanitized[key] = null;
+      } else {
+        sanitized[key] = val;
+      }
+    }
+    return sanitized;
+  }
+
   // 헬퍼 메소드들 - CRUD 시뮬레이션 및 백그라운드 Supabase 업로드
   insertRow<T extends { id: string }>(key: keyof LocalDB, row: Omit<T, 'id'> & { id?: string }): T {
     const list = (this[key] as unknown) as T[];
@@ -1239,9 +1253,10 @@ class LocalDB {
 
     if (supabase) {
       const tableName = this.mapToSupabaseTable(key as string);
+      const payloadForSupabase = this.sanitizeSupabasePayload(newRow);
       const promise = supabase
         .from(tableName)
-        .insert([newRow])
+        .insert([payloadForSupabase])
         .then(({ data, error }) => {
           if (error) {
             console.error(`Supabase insert failed for ${tableName}:`, error);
@@ -1270,9 +1285,10 @@ class LocalDB {
 
     if (supabase) {
       const tableName = this.mapToSupabaseTable(key as string);
+      const payloadForSupabase = this.sanitizeSupabasePayload(updatedPayload);
       const promise = supabase
         .from(tableName)
-        .update(updatedPayload as any)
+        .update(payloadForSupabase as any)
         .eq('id', id)
         .then(({ data, error }) => {
           if (error) {

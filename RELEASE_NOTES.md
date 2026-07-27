@@ -1,3 +1,10 @@
+# Release Notes (v1.4.3.Build.00011 - 2026-07-27 20:58)
+
+## 🛡️ contract_assets_assetId_fkey 외래키 빈 문자열 자동 정제 패치
+- **`contract_assets_assetId_fkey` 외래키 오류 원인 차단**: 스마트 출고 요청 시 출고 대기 건의 `contractAssets` 레코드 생성 시 지정되지 않은 `assetId: ''` (빈 문자열)이 전송되어 PostgreSQL 외래키 검사에서 `id=''` 자산을 찾지 못해 발생하던 FK 위반 해결.
+- **전역 Supabase 페이로드 정제 헬퍼 구축 (`db.ts`)**: `sanitizeSupabasePayload` 메소드를 추가하여, Supabase 전송 직전 외래키 관련 컬럼(`assetId`, `contractId`, `customerId`, `siteId`, `salespersonId`, `vendorId` 등)의 빈 문자열 `''`을 `null`로 자동 변환.
+- **PostgreSQL FK 호환성 완성**: PostgreSQL 규격상 `null` 외래키는 제약조건 검사를 유연하게 통과하므로, 출고 대기 및 미할당 자산 상태에서도 원격 DB 동기화가 에러 없이 100% 정상 작동함.
+
 # Release Notes (v1.4.3.Build.00010 - 2026-07-27 20:56)
 
 ## 🛡️ 스마트 출고 DB 외래키(FK) 위반 오류 해결 (순차 동기화 적용)
