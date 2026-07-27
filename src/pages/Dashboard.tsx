@@ -147,6 +147,81 @@ export const Dashboard: React.FC = () => {
       </div>
 
       {/* ──────────────────────────────────────────────────────── */}
+      {/* GLOBAL FEED: 출고/회수 배차 대기 피드 (배차 대기건이 1건 이상 있을 때 항상 최상단 노출) */}
+      {/* ──────────────────────────────────────────────────────── */}
+      {(() => {
+        const requestedDeliveries = deliveries.filter(d => d.status === 'REQUESTED');
+        if (requestedDeliveries.length === 0) return null;
+
+        return (
+          <div style={{
+            backgroundColor: 'var(--bg-card)', borderRadius: '12px', padding: '20px 24px',
+            borderLeft: '5px solid #06b6d4', border: '1px solid var(--border-color)', borderLeftWidth: '5px',
+            marginBottom: '20px'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+              <span style={{ fontSize: '11.5px', fontWeight: '800', color: '#06b6d4', backgroundColor: 'rgba(6,182,212,0.12)', padding: '3px 9px', borderRadius: '4px', border: '1px solid rgba(6,182,212,0.3)' }}>
+                🚚 실시간 배차 처리 할일
+              </span>
+              <span style={{ fontSize: '12.5px', fontWeight: '700', color: '#06b6d4' }}>
+                배차 대기 목록 총 {requestedDeliveries.length}건
+              </span>
+            </div>
+            <h4 style={{ margin: '0 0 10px 0', fontSize: '16px', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Truck size={18} color="#06b6d4" /> 출고 및 회수 배차 대기 피드
+            </h4>
+            <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: '0 0 14px 0', lineHeight: '1.5' }}>
+              스마트 출고/회수 시스템을 통해 접수되었으나, 아직 차량 배차 및 장비 매핑이 완결되지 않은 <strong>{requestedDeliveries.length}건</strong>의 배차 지시가 있습니다. 
+              운송 기사 수배 및 차량 배차 처리를 완료해 주십시오.
+            </p>
+
+            {/* 배차 대기 목록 프리뷰 카드 피드 리스트 */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '16px' }}>
+              {requestedDeliveries.slice(0, 3).map((del, idx) => {
+                const contr = contracts.find(c => c.id === del.contractId);
+                const cust = contr ? customers.find(c => c.id === contr.customerId) : null;
+                let cargoSummary = '';
+                try {
+                  const items = JSON.parse(del.cargoItems || '[]');
+                  cargoSummary = items.map((it: any) => `${it.modelName} ${it.count}대`).join(', ');
+                } catch (e) {
+                  cargoSummary = '장비 배정 대기';
+                }
+
+                return (
+                  <div key={del.id} style={{
+                    backgroundColor: 'var(--bg-secondary)', padding: '12px 14px', borderRadius: '8px',
+                    border: '1px solid var(--border-color)', fontSize: '13px', display: 'flex', flexDirection: 'column', gap: '4px'
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontWeight: '800', color: 'var(--text-main)' }}>
+                        {idx + 1}. {cust?.name || del.destinationAddress || '고객사 미상'}
+                      </span>
+                      <span style={{
+                        fontSize: '11px', fontWeight: '800', padding: '2px 6px', borderRadius: '4px',
+                        backgroundColor: del.type === 'OUTBOUND' ? 'rgba(59,130,246,0.15)' : 'rgba(245,158,11,0.15)',
+                        color: del.type === 'OUTBOUND' ? '#3b82f6' : '#f59e0b'
+                      }}>
+                        {del.type === 'OUTBOUND' ? '출고 배차' : '회수 배차'} (요청: {del.requestDate || del.createdAt.substring(0, 10)})
+                      </span>
+                    </div>
+                    <div style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                      <span>🚩 <strong>하차지:</strong> {del.destinationAddress}</span>
+                      {cargoSummary && <span style={{ color: '#06b6d4', fontWeight: 'bold' }}>⚙️ {cargoSummary}</span>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <button className="btn-primary" onClick={() => setActiveTab('delivery')} style={{ backgroundColor: '#06b6d4', border: 'none', fontSize: '12.5px', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '4px' }}>
+              배차 / 운송 관리 메뉴로 이동하여 배차 처리하기 <ArrowRight size={13} />
+            </button>
+          </div>
+        );
+      })()}
+
+      {/* ──────────────────────────────────────────────────────── */}
       {/* CASE A: 최고관리자(ADMIN) 및 부서관리자(MANAGER) 대시보드 */}
       {/* ──────────────────────────────────────────────────────── */}
       {(role === 'ADMIN' || role === 'MANAGER') && (() => {
@@ -158,7 +233,7 @@ export const Dashboard: React.FC = () => {
         return (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
             
-            {/* 미수금 회수 독촉 카드 (실제 미수금이 있을 때만 표출) */}
+            {/* 미수금 회수 독촉 카드 */}
             {hasUnpaid && (
               <div style={{
                 backgroundColor: 'var(--bg-card)', borderRadius: '12px', padding: '20px 24px',
@@ -204,7 +279,7 @@ export const Dashboard: React.FC = () => {
               </div>
             )}
 
-            {/* 대기 중인 정비 및 소모품 자재 부족 종합 (실제 대기건 또는 부족품목이 있을 때만 표출) */}
+            {/* 대기 중인 정비 및 소모품 자재 부족 종합 */}
             {hasMaintenanceIssue && (
               <div style={{
                 backgroundColor: 'var(--bg-card)', borderRadius: '12px', padding: '20px 24px',
@@ -229,19 +304,6 @@ export const Dashboard: React.FC = () => {
                     소모품 현황 보기 <ArrowRight size={12} />
                   </button>
                 </div>
-              </div>
-            )}
-
-            {/* 모든 당면 과제가 0건일 때 표출되는 정돈 카드 */}
-            {!hasAnyCards && (
-              <div className="card" style={{ padding: '32px', textAlign: 'center', borderRadius: '12px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-card)' }}>
-                <div style={{ display: 'inline-flex', padding: '12px', borderRadius: '50%', backgroundColor: 'rgba(34,197,94,0.1)', color: '#22c55e', marginBottom: '12px' }}>
-                  <CheckCircle size={32} />
-                </div>
-                <h3 style={{ fontSize: '18px', fontWeight: '800', margin: '0 0 8px 0' }}>🎉 현재 즉시 처리해야 할 당면 과제가 없습니다!</h3>
-                <p style={{ fontSize: '13px', color: 'var(--text-muted)', margin: 0 }}>
-                  모든 연체 미수금, 정비 대기, 소모품 자재 부족 요소가 완벽하게 관리되고 있습니다.
-                </p>
               </div>
             )}
 
@@ -283,11 +345,6 @@ export const Dashboard: React.FC = () => {
                       <div style={{ marginTop: '6px', color: 'var(--text-secondary)' }}>
                         <strong>불량/의뢰 내용:</strong> {rep.details}
                       </div>
-                      {rep.faultImageUrl && (
-                        <div style={{ marginTop: '6px', fontSize: '11px', color: 'var(--success)', fontWeight: '600' }}>
-                          ✓ 증빙 사진 등록됨
-                        </div>
-                      )}
                     </div>
                   );
                 })}
@@ -326,9 +383,9 @@ export const Dashboard: React.FC = () => {
       )}
 
       {/* ──────────────────────────────────────────────────────── */}
-      {/* CASE C: 영업담당자(SALES) 대시보드 */}
+      {/* CASE C: 영업담당자(SALES) 또는 일반 임직원(USER) 대시보드 */}
       {/* ──────────────────────────────────────────────────────── */}
-      {role === 'SALES' && (
+      {(role === 'SALES' || role === 'USER') && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
           
           {/* 나의 활성 계약 목록 */}
@@ -337,14 +394,14 @@ export const Dashboard: React.FC = () => {
             borderLeft: '5px solid #3b82f6', border: '1px solid var(--border-color)', borderLeftWidth: '5px'
           }}>
             <div style={{ display: 'flex', justifyItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-              <span style={{ fontSize: '12px', fontWeight: '800', color: '#3b82f6', backgroundColor: 'rgba(59,130,246,0.1)', padding: '2px 8px', borderRadius: '4px' }}>[나의 영업 현황]</span>
+              <span style={{ fontSize: '12px', fontWeight: '800', color: '#3b82f6', backgroundColor: 'rgba(59,130,246,0.1)', padding: '2px 8px', borderRadius: '4px' }}>[영업/계약 관리]</span>
               <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>진행 중 계약 {activeContracts}건</span>
             </div>
             <h4 style={{ margin: '0 0 10px 0', fontSize: '16px', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '8px' }}>
               <Layers size={18} color="#3b82f6" /> 기연리프트 고객 대여 렌탈 계약 관리
             </h4>
             <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: '0 0 14px 0', lineHeight: '1.5' }}>
-              현재 본인이 담당하여 관리하는 활성/연장 계약은 총 <strong>{activeContracts}건</strong>입니다. 
+              현재 담당 관리하는 활성/연장 계약은 총 <strong>{activeContracts}건</strong>입니다. 
               계약 만기 연장 처리 또는 종료 예정 계약들의 회수 일정을 전수 확인하여 반납 입고 준비를 시작하십시오.
             </p>
             <button className="btn-primary" onClick={() => setActiveTab('contracts')} style={{ fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px' }}>
@@ -352,7 +409,7 @@ export const Dashboard: React.FC = () => {
             </button>
           </div>
 
-          {/* 대표이사 지시: 연체 채권 조치 ToDo 피드 (Role-based Card 뉴스) */}
+          {/* 대표이사 지시: 연체 채권 조치 ToDo 피드 */}
           {currentUser && (currentUser.role === 'ADMIN' || currentUser.id === 'manager' || currentUser.id === 'user') && (
             <div style={{
               backgroundColor: 'var(--bg-card)', borderRadius: '12px', padding: '20px 24px',
@@ -362,13 +419,13 @@ export const Dashboard: React.FC = () => {
                 <span style={{ fontSize: '11px', fontWeight: '800', color: '#ef4444', backgroundColor: 'rgba(239,68,68,0.08)', padding: '2px 8px', borderRadius: '4px', border: '1px solid rgba(239,68,68,0.2)' }}>
                   👑 대표이사 자동 명령 지령
                 </span>
-                <span style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: 'bold' }}>긴급 2건</span>
+                <span style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: 'bold' }}>긴급 미수금</span>
               </div>
               <h4 style={{ margin: '0 0 10px 0', fontSize: '16px', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '8px', color: '#ef4444' }}>
                 <AlertCircle size={18} color="#ef4444" /> 미수 채권 연체 조치 및 수납 증빙 보고 지시
               </h4>
               <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: '0 0 14px 0', lineHeight: '1.5' }}>
-                귀하가 담당한 거래처 중 납기일이 경과한 연체 채권이 감지되었습니다. 본 건은 대표이사(CEO) 직속 지시 속성으로 등록되어 
+                담당 거래처 중 납기일이 경과한 연체 채권이 감지되었습니다. 본 건은 대표이사(CEO) 직속 지시 속성으로 등록되어 
                 강제 조치 의무가 발생합니다. 유선 독촉, 공문 최고장 발송, 혹은 현장 실사 보고서를 즉시 작성해 주십시오.
               </p>
               <button className="btn-primary" onClick={() => setActiveTab('delinquency')} style={{ backgroundColor: '#ef4444', border: 'none', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px' }}>
@@ -399,27 +456,6 @@ export const Dashboard: React.FC = () => {
               </button>
             </div>
           )}
-
-          {/* 담당 장비 회수(INBOUND) 대기 */}
-          <div style={{
-            backgroundColor: 'var(--bg-card)', borderRadius: '12px', padding: '20px 24px',
-            borderLeft: '5px solid #06b6d4', border: '1px solid var(--border-color)', borderLeftWidth: '5px'
-          }}>
-            <div style={{ display: 'flex', justifyItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-              <span style={{ fontSize: '12px', fontWeight: '800', color: '#06b6d4', backgroundColor: 'rgba(6,182,212,0.1)', padding: '2px 8px', borderRadius: '4px' }}>[장비 회수]</span>
-              <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>진행 중 {activeDeliveries}건</span>
-            </div>
-            <h4 style={{ margin: '0 0 10px 0', fontSize: '16px', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Truck size={18} color="#06b6d4" /> 스마트 반납의뢰 접수 대기 현황
-            </h4>
-            <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: '0 0 14px 0', lineHeight: '1.5' }}>
-              현장 대여 종료 장비들의 반납/회수 예정 배차가 진행 중입니다. 
-              스마트 회수의뢰 시스템을 통해 장비 번호 매칭 및 상차 예정 시간을 입력하여 배차 관리부와 조율하십시오.
-            </p>
-            <button className="btn-primary" onClick={() => setActiveTab('smart_return')} style={{ backgroundColor: '#06b6d4', border: 'none', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-              스마트 회수의뢰 접수 바로가기 <ArrowRight size={12} />
-            </button>
-          </div>
 
         </div>
       )}
