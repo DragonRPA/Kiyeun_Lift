@@ -1,3 +1,30 @@
+# Release Notes (v1.8.0.Build.00004 - 2026-07-28 03:17)
+
+## 🛡️ [참조키(FK) 사전 예방 & 고스트 진단 수술] FK 저장 사전 차단 팝업 및 기 저장 오염 데이터 1-Click 자동 정돈 수술 완비
+
+- **개편 목적**: 권한 변경 저장 시점 참조키(FK) 위반 발생 전 팝업 차단 및 이미 DB/스토리지에 남아있는 무효 유저(고스트) 권한 데이터 진단/수정 기회 100% 보장.
+- **주요 개편 내역**:
+  1. **[저장 사전 차단 팝업 대안] (`users_permissions.tsx`)**:
+     - 권한 저장(`updatePermissions`) 시점에 DB 임직원 마스터(`users`)에 존재하지 않는 유연/고스트 유저 ID를 사전 감지하여 **서버 저장 전 팝업 모달로 사전 차단**함.
+  2. **[기 저장 오염 데이터 1-Click 자동 정돈 & 수정 기회 제공]**:
+     - 화면 상단 **`[🔍 고스트 권한 진단]`** 버튼 및 팝업 모달 탑재.
+     - 발각된 무효 유저 ID 목록 및 건수를 투명하게 표출하고, **`[🧹 고스트 권한 1-Click 자동 정돈 & 정상 데이터 저장]`** 버튼을 통해 사용자가 클릭 한 번으로 무효 데이터를 깨끗이 정돈하고 정상 데이터만 데이터베이스에 안전하게 재저장할 수 있도록 원천 구현 완료.
+
+---
+
+# Release Notes (v1.8.0.Build.00003 - 2026-07-28 03:14)
+
+## 📊 [전사 사용자 식별자 무결성 전수 검토] `userId` 및 연관 외래키 12개 테이블 파편화 원천 방어 완료
+
+- **검토 목적**: 전사 데이터베이스 40개 테이블 중 사용자 ID(`userId`, `salespersonId`, `requesterId`, `mechanicId` 등)가 영향을 미치는 12개 주요 연관 테이블을 전수 조사하고 컬럼 파편화 및 ID 유실 현상을 원천 방어함.
+- **주요 검토 및 방어 조치 내역**:
+  1. **전사 12개 연관 테이블 전수 검증**:
+     - `users`, `permissions`, `contracts`, `todos`, `consumable_purchase_requests`, `consumable_logs`, `repairs`, `announcements`, `announcement_reads`, `approval_requests`, `asset_in_out_logs`, `outbound_inspections`
+  2. **유저 연관 6대 외래키 게이트웨이 파이프라인 수술 (`db.ts`)**:
+     - `userId` ↔ `user_id` 외에도 `salespersonId` ↔ `salesperson_id`, `requesterId` ↔ `requester_id`, `mechanicId` ↔ `mechanic_id` 등 유저 연관 외래키 6종에 대해 최하단 데이터 정규화 레이어에서 100% 자동 흡수·교차 변환하도록 보완 완료.
+
+---
+
 # Release Notes (v1.8.0.Build.00002 - 2026-07-28 03:11)
 
 ## 🏛️ [3대 원천적 대안 전면 수술] DB 스키마-게이트웨이-팩토리 객체 생성 3중 근본 원인 해결

@@ -1,5 +1,5 @@
 // src/pages/users_permissions.tsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
 import { Shield, Check, Lock, Save, FolderKanban, ChevronDown, ChevronRight } from 'lucide-react';
 import { MenuPermission, User, createMenuPermission } from '../services/db';
@@ -273,8 +273,58 @@ export const UsersPermissions: React.FC = () => {
     });
   };
 
+  // 고스트/무효 권한 진단 모달 상태
+  const [showGhostModal, setShowGhostModal] = useState<boolean>(false);
+
+  // 🔍 기 저장된 무효(FK 위반) 권한 데이터 진단 헬퍼
+  const validUserIds = useMemo(() => new Set(localUsers.map(u => u.id)), [localUsers]);
+
+  const ghostPermissions = useMemo(() => {
+    return localPermissions.filter((p: MenuPermission) => !validUserIds.has(p.userId));
+  }, [localPermissions, validUserIds]);
+
+  const invalidUserIdsList = useMemo(() => {
+    return Array.from(new Set(ghostPermissions.map((p: MenuPermission) => p.userId)));
+  }, [ghostPermissions]);
+
+  // 1-Click 고스트 권한 자동 정돈 및 정상 데이터 재저장
+  const handleCleanGhostPermissions = async () => {
+    if (ghostPermissions.length === 0) {
+      alert('✅ 현재 무효(고스트) 권한 데이터가 없습니다. 모든 데이터가 정상입니다.');
+      setShowGhostModal(false);
+      return;
+    }
+
+    try {
+      const cleanList = localPermissions.filter(p => validUserIds.has(p.userId));
+      await updatePermissions(cleanList);
+      setLocalPermissions(cleanList);
+      setIsDirty(false);
+      setShowGhostModal(false);
+      alert(`✅ 총 ${ghostPermissions.length}건의 무효 고스트 권한 데이터가 성공적으로 정돈 제거되었으며, 정상 권한 ${cleanList.length}건이 데이터베이스에 업데이트되었습니다.`);
+    } catch (err: any) {
+      console.error('Clean ghost permissions error:', err);
+      showErrorModal(`⚠️ 고스트 권한 정돈 저장 중 오류가 발생했습니다:\n\n${err?.message || err}`);
+    }
+  };
+
   const handleSavePermissions = async () => {
     if (!canSave) return;
+
+    // 🛡️ [저장 전 예방 팝업] 참조키(FK) 위반 사전 실시간 파악 및 저장 차단
+    if (ghostPermissions.length > 0) {
+      const warningMsg = 
+        `⚠️ [참조키(FK) 위반 위험 감지 - 저장 사전 차단]\n\n` +
+        `현재 저장하려는 권한 목록에 DB 임직원 마스터(users)에 존재하지 않는 무효 유저 ID가 포함되어 있습니다.\n\n` +
+        `■ 발견된 무효 유저 ID 목록 (${invalidUserIdsList.length}개): [${invalidUserIdsList.join(', ')}]\n` +
+        `■ 무효 고스트 권한 데이터 건수: 총 ${ghostPermissions.length}건\n\n` +
+        `💡 원천 해결: 상단의 [🔍 고스트 권한 진단 및 1-Click 정돈] 버튼을 누르시면 무효 데이터만 자동으로 깔끔히 정리하여 안전하게 저장할 수 있습니다.`;
+      
+      showErrorModal(warningMsg, '저장 사전 차단 - 참조키(FK) 위반 방지');
+      setShowGhostModal(true); // 자동 팝업 가이드 오픈
+      return;
+    }
+
     try {
       await updatePermissions(localPermissions);
       setIsDirty(false);
@@ -296,21 +346,96 @@ export const UsersPermissions: React.FC = () => {
             사이드바 계층 구조(상위-하위)에 따라 직원별 조회 및 저장(수정/삭제) 권한을 정밀 통제합니다.
           </p>
         </div>
-        {canSave && (
-          <button 
-            className={`btn-${isDirty ? 'primary' : 'secondary'}`} 
-            onClick={handleSavePermissions}
-            disabled={!isDirty}
-            style={{ 
-              display: 'flex', alignItems: 'center', gap: '6px',
-              boxShadow: isDirty ? '0 0 12px rgba(59, 130, 246, 0.5)' : 'none',
-              transition: 'all 0.3s ease'
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          <button
+            type="button"
+            className={ghostPermissions.length > 0 ? 'btn-danger' : 'btn-secondary'}
+            onClick={() => setShowGhostModal(true)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px',
+              backgroundColor: ghostPermissions.length > 0 ? 'rgba(239, 68, 68, 0.15)' : undefined,
+              color: ghostPermissions.length > 0 ? '#ef4444' : undefined,
+              borderColor: ghostPermissions.length > 0 ? 'rgba(239, 68, 68, 0.4)' : undefined,
+              fontWeight: ghostPermissions.length > 0 ? 'bold' : 'normal'
             }}
           >
-            <Save size={16} /> {isDirty ? '변경사항 저장 적용' : '저장 완료'}
+            🔍 고스트 권한 진단 {ghostPermissions.length > 0 && `(${ghostPermissions.length}건 발각)`}
           </button>
-        )}
+          {canSave && (
+            <button 
+              className={`btn-${isDirty ? 'primary' : 'secondary'}`} 
+              onClick={handleSavePermissions}
+              disabled={!isDirty}
+              style={{ 
+                display: 'flex', alignItems: 'center', gap: '6px',
+                boxShadow: isDirty ? '0 0 12px rgba(59, 130, 246, 0.5)' : 'none',
+                transition: 'all 0.3s ease'
+              }}
+            >
+              <Save size={16} /> {isDirty ? '변경사항 저장 적용' : '저장 완료'}
+            </button>
+          )}
+        </div>
       </div>
+
+      {/* ⚠️ 고스트/무효 권한 진단 및 1-Click 자동 정돈 모달 팝업 */}
+      {showGhostModal && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.65)', backdropFilter: 'blur(4px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999
+        }}>
+          <div className="card" style={{
+            width: '100%', maxWidth: '560px', padding: '24px', backgroundColor: 'var(--bg-card)',
+            borderRadius: '12px', border: '1px solid var(--border-color)', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.3)'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', borderBottom: '1px solid var(--border-color)', paddingBottom: '10px' }}>
+              <h3 style={{ margin: 0, fontWeight: '800', fontSize: '16px', color: ghostPermissions.length > 0 ? 'var(--danger)' : 'var(--success)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Shield size={18} />
+                {ghostPermissions.length > 0 ? '기 저장된 무효(FK 위반) 고스트 권한 데이터 발각' : '권한 데이터 정합성 정상 검증 완료'}
+              </h3>
+              <button type="button" onClick={() => setShowGhostModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)' }}>✕</button>
+            </div>
+
+            {ghostPermissions.length > 0 ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                <div style={{ padding: '12px', backgroundColor: 'rgba(239, 68, 68, 0.08)', borderRadius: '8px', border: '1px solid rgba(239, 68, 68, 0.2)', fontSize: '13px', lineHeight: '1.6' }}>
+                  ⚠️ DB 임직원 마스터(`users`)에서 이미 삭제되었거나 존재하지 않는 무효 유저 ID의 권한 찌꺼기 레코드가 발각되었습니다. 이 데이터가 포함되어 있으면 저장 시 Supabase FK 참조키 오류(`23503`)가 발생할 수 있습니다.
+                </div>
+
+                <div style={{ fontSize: '13px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <div><strong>발각된 무효 유저 ID 목록 ({invalidUserIdsList.length}개):</strong></div>
+                  <div style={{ padding: '8px 12px', backgroundColor: 'var(--bg-app)', borderRadius: '6px', fontFamily: 'monospace', fontSize: '12px', color: 'var(--danger)', wordBreak: 'break-all' }}>
+                    {invalidUserIdsList.join(', ')}
+                  </div>
+                  <div><strong>무효 권한 데이터 총 건수:</strong> <span style={{ color: 'var(--danger)', fontWeight: 'bold' }}>{ghostPermissions.length} 건</span> (전체 {localPermissions.length}건 중)</div>
+                </div>
+
+                <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '10px' }}>
+                  <button type="button" className="btn-secondary" onClick={() => setShowGhostModal(false)} style={{ padding: '8px 14px', fontSize: '13px' }}>닫기</button>
+                  {canSave && (
+                    <button type="button" className="btn-danger" onClick={handleCleanGhostPermissions} style={{ padding: '8px 16px', fontSize: '13px', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <Check size={16} /> 🧹 고스트 권한 1-Click 자동 정돈 & 정상 데이터 저장
+                    </button>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', textAlign: 'center', padding: '16px 0' }}>
+                <div style={{ fontSize: '14px', color: 'var(--success)', fontWeight: 'bold' }}>
+                  ✅ 현재 권한 목록에 무효(고스트) 유저 데이터가 존재하지 않습니다!
+                </div>
+                <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: 0 }}>
+                  모든 권한 레코드({localPermissions.length}건)가 임직원 마스터(`users`)와 100% 안전하게 연결되어 있으며, 저장 시 FK 참조키 위반 오류가 발생하지 않습니다.
+                </p>
+                <div style={{ display: 'flex', justifyContent: 'center', marginTop: '10px' }}>
+                  <button type="button" className="btn-primary" onClick={() => setShowGhostModal(false)} style={{ padding: '8px 20px', fontSize: '13px', fontWeight: 'bold' }}>확인</button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       <div style={{ display: 'grid', gridTemplateColumns: '320px 1fr', gap: '20px' }}>
         

@@ -1180,6 +1180,18 @@ class LocalDB {
     if (normalized.user_id && !normalized.userId) normalized.userId = normalized.user_id;
     if (normalized.userId && !normalized.user_id) normalized.user_id = normalized.userId;
     
+    // salespersonId <-> salesperson_id 양방향 상호 호환 보장
+    if (normalized.salesperson_id && !normalized.salespersonId) normalized.salespersonId = normalized.salesperson_id;
+    if (normalized.salespersonId && !normalized.salesperson_id) normalized.salesperson_id = normalized.salespersonId;
+
+    // requesterId <-> requester_id 양방향 상호 호환 보장
+    if (normalized.requester_id && !normalized.requesterId) normalized.requesterId = normalized.requester_id;
+    if (normalized.requesterId && !normalized.requester_id) normalized.requester_id = normalized.requesterId;
+
+    // mechanicId <-> mechanic_id 양방향 상호 호환 보장
+    if (normalized.mechanic_id && !normalized.mechanicId) normalized.mechanicId = normalized.mechanic_id;
+    if (normalized.mechanicId && !normalized.mechanic_id) normalized.mechanic_id = normalized.mechanicId;
+
     // customerId <-> customer_id 양방향 상호 호환 보장
     if (normalized.customer_id && !normalized.customerId) normalized.customerId = normalized.customer_id;
     if (normalized.customerId && !normalized.customer_id) normalized.customer_id = normalized.customerId;
