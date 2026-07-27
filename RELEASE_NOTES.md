@@ -1,3 +1,15 @@
+# Release Notes (v1.6.0.Build.00001 - 2026-07-28 00:04)
+
+## 🐛 [Hotfix] assignAssetToContract 비동기 동기화 보완 & ASSIGNED 자산 상태 덮어쓰기 방지
+
+- **수정 이유**: `assignAssetToContract`가 동기 함수로 실행되어 Supabase 원격 DB와 `awaitPendingWrites()`를 거치지 않고 바로 `refreshAllData()`가 불려, 자산 상태 `ASSIGNED`(출고대기) 변경 건이 덮어씌워지는 문제 수정.
+- **수정 사항**:
+  - `assignAssetToContract`를 `async` 함수로 전환하고 `await db.awaitPendingWrites()` 동기 대기 추가.
+  - `AssetAssignment.tsx`에서 `handleAssign`을 `async/await`로 연동하여 할당 성공 안내 알림과 함께 `ASSIGNED` 자산 상태가 즉각 보장되도록 수정.
+  - `Assets.tsx` (자산 대장) 조회 폼 및 뱃지 렌더링에 `ASSIGNED` (`출고대기`) 명시적 UI 적용.
+
+---
+
 # Release Notes (v1.6.0.Build.00000 - 2026-07-27 23:55)
 
 ## 🛠️ 출고 검수/정비 의뢰 파이프라인 신설 & 자산 `ASSIGNED`(출고대기) 이중 할당 방지 개편

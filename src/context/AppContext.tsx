@@ -113,7 +113,7 @@ interface AppContextType {
   exchangeAsset: (contractId: string, oldAssetId: string, newAssetId: string, exchangeDate: string) => void;
   
   // 장비 할당
-  assignAssetToContract: (contractAssetId: string, assetId: string) => void;
+  assignAssetToContract: (contractAssetId: string, assetId: string) => Promise<void>;
   saveSmartDispatch: (data: SmartDispatchData, autoRegister: boolean, onProgress?: (log: string, percent: number) => void) => Promise<{ success: boolean; requiresConfirm?: boolean; missingFields?: string[]; errorMessage?: string }>;
   saveSmartReturn: (data: SmartReturnData) => void;
   
@@ -1560,7 +1560,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     refreshAllData();
   };
 
-  const assignAssetToContract = (contractAssetId: string, assetId: string) => {
+  const assignAssetToContract = async (contractAssetId: string, assetId: string) => {
     const ca = db.contractAssets.find(c => c.id === contractAssetId);
     if (!ca) return;
     const contract = db.contracts.find(c => c.id === ca.contractId);
@@ -1573,16 +1573,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
 
     // 2. Asset 상태 업데이트 (ASSIGNED 출고대기로 전환하여 타 계약 이중 할당 원천 차단!)
-    if (contract) {
-      db.updateRow<Asset>('assets', assetId, {
-        status: 'ASSIGNED',
-        currentCustomerId: contract.customerId,
-        currentSiteId: contract.siteId,
-        contractStart: contract.startDate,
-        contractEnd: contract.endDate,
-        updatedAt: new Date().toISOString()
-      });
-    }
+    db.updateRow<Asset>('assets', assetId, {
+      status: 'ASSIGNED',
+      currentCustomerId: contract?.customerId,
+      currentSiteId: contract?.siteId,
+      contractStart: contract?.startDate,
+      contractEnd: contract?.endDate,
+      updatedAt: new Date().toISOString()
+    });
 
     // 3. 출고 검수/정비 작업 의뢰 자동 발행 (status: PENDING 미접수)
     db.insertRow<OutboundInspection>('outboundInspections', {
@@ -1593,6 +1591,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     });
+
+    try {
+      await db.awaitPendingWrites();
+    } catch (err: any) {
+      console.error('Supabase sync error in assignAssetToContract:', err);
+    }
 
     refreshAllData();
   };

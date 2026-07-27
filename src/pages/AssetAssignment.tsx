@@ -21,7 +21,7 @@ export const AssetAssignment: React.FC = () => {
   const pendingContractIds = Array.from(new Set(pendingCaList.map(ca => ca.contractId)));
   const pendingContracts = contracts.filter(c => pendingContractIds.includes(c.id));
 
-  const handleAssign = () => {
+  const handleAssign = async () => {
     if (!canEdit) {
       alert('장비 할당 권한이 없습니다.');
       return;
@@ -31,9 +31,14 @@ export const AssetAssignment: React.FC = () => {
       return;
     }
 
-    assignAssetToContract(selectedCaId, selectedAssetId);
-    setSelectedCaId('');
-    setSelectedAssetId('');
+    try {
+      await assignAssetToContract(selectedCaId, selectedAssetId);
+      alert('✅ 장비 할당이 성공적으로 완결되었습니다!\n자산 상태가 [출고대기(ASSIGNED)]로 즉시 전환되어 타 계약 이중 할당이 차단되었으며, 출고 검수 의뢰가 발행되었습니다.');
+      setSelectedCaId('');
+      setSelectedAssetId('');
+    } catch (err: any) {
+      alert(`⚠️ 장비 할당 실패: ${err?.message || err}`);
+    }
   };
 
   // 선택된 계약의 하위 슬롯들 (미할당 + 기할당 모두 보여주기)
