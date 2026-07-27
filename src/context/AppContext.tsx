@@ -414,7 +414,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // 시스템 최고관리자 계정 및 ADMIN 역할 사용자는 모든 메뉴에 100% 무조건 권한 부여
     if (currentUser.role === 'ADMIN' || currentUser.loginId === 'admin' || currentUser.id === 'sys-admin' || currentUser.id === 'u-1') return true;
 
-    const perm = permissions.find(p => p.userId === currentUser.id && p.menuId === menuId);
+    // userId / user_id 양방향 호환 탐색 (파편화 방지)
+    const perm = permissions.find(p => (p.userId === currentUser.id || (p as any).user_id === currentUser.id) && p.menuId === menuId);
     if (!perm) {
       // 권한 레코드가 누락된 신규 메뉴의 경우 조회(view)는 기본 허용(true), 저장(save)은 false
       return action === 'view';

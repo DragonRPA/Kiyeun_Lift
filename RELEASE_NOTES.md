@@ -1,3 +1,14 @@
+# Release Notes (v1.7.0.Build.00007 - 2026-07-28 02:28)
+
+## 🐛 [Hotfix] Supabase DB `userId` / `user_id` 컬럼명 파편화 호환 보완 & 권한 누락 원천 해결
+
+- **원인 발각**: PostgreSQL / Supabase DB 응답 데이터의 컬럼명이 `user_id`(snake_case)로 올 경우, React 앱의 `permissions` 객체에서 `p.userId`(camelCase)가 `undefined`로 읽혀 DB에 권한 데이터가 상존함에도 권한이 없는 것으로 잘못 판단하던 문제 발각.
+- **수정 사항**:
+  1. `db.ts` 내 `normalizePayloadKeys`: Supabase 수신 데이터 정규화 시 `userId` ↔ `user_id`, `customerId` ↔ `customer_id`, `siteId` ↔ `site_id` 등 외래키 속성을 양방향 상호 교차 자동 바인딩.
+  2. `AppContext.tsx` (`hasPermission`) & `UsersPermissions.tsx`: 권한 조회 시 `(p.userId || p.user_id) === targetUserId` 방식으로 양방향 호환 검사 방어벽 강화.
+
+---
+
 # Release Notes (v1.7.0.Build.00006 - 2026-07-28 02:05)
 
 ## 💎 [전사 자산 상태 SSOT 전면 구축] `ASSET_STATUS_SSOT` 단일 마스터 장부 구축 & DB DDL 100% 동기화

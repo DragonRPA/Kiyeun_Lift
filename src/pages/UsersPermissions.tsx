@@ -41,18 +41,19 @@ export const UsersPermissions: React.FC = () => {
 
     users.forEach(u => {
       allMenuIds.forEach(menuId => {
-        const exists = merged.some(p => p.userId === u.id && p.menuId === menuId);
+        const exists = merged.some(p => (p.userId === u.id || (p as any).user_id === u.id) && p.menuId === menuId);
         if (!exists) {
           const isAdmin = u.role === 'ADMIN' || u.id === 'u-1' || u.id === 'sys-admin';
           merged.push({
             id: `perm-${u.id}-${menuId}`,
             userId: u.id,
+            user_id: u.id,
             menuId: menuId,
             canView: true,
             canSave: isAdmin,
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString()
-          });
+          } as any);
           addedCount++;
         }
       });
@@ -128,7 +129,7 @@ export const UsersPermissions: React.FC = () => {
     }
 
     setLocalPermissions(prev => {
-      const index = prev.findIndex(p => p.userId === selectedUserId && p.menuId === menuId);
+      const index = prev.findIndex(p => (p.userId === selectedUserId || (p as any).user_id === selectedUserId) && p.menuId === menuId);
       let updatedList = [...prev];
       
       if (index > -1) {
@@ -404,7 +405,7 @@ export const UsersPermissions: React.FC = () => {
                       const isSuperAdminUser = selectedUser?.id === 'u-1' || selectedUser?.id === 'sys-admin' || selectedUser?.loginId === 'admin';
                       const allItems = MENU_CATEGORIES.flatMap(g => g.items);
                       const isAllGlobalViewChecked = allItems.length > 0 && allItems.every(item => {
-                        const p = localPermissions.find(x => x.userId === selectedUserId && x.menuId === item.id);
+                        const p = localPermissions.find(x => (x.userId === selectedUserId || (x as any).user_id === selectedUserId) && x.menuId === item.id);
                         return isSuperAdminUser ? true : (p?.canView ?? false);
                       });
                       return (
@@ -436,7 +437,7 @@ export const UsersPermissions: React.FC = () => {
                       const isSuperAdminUser = selectedUser?.id === 'u-1' || selectedUser?.id === 'sys-admin' || selectedUser?.loginId === 'admin';
                       const allItems = MENU_CATEGORIES.flatMap(g => g.items);
                       const isAllGlobalSaveChecked = allItems.length > 0 && allItems.every(item => {
-                        const p = localPermissions.find(x => x.userId === selectedUserId && x.menuId === item.id);
+                        const p = localPermissions.find(x => (x.userId === selectedUserId || (x as any).user_id === selectedUserId) && x.menuId === item.id);
                         return isSuperAdminUser ? true : (p?.canSave ?? false);
                       });
                       return (
@@ -473,11 +474,11 @@ export const UsersPermissions: React.FC = () => {
 
                   // 상위 그룹의 전체 선택 상태 파악
                   const allViewChecked = grp.items.every(item => {
-                    const p = localPermissions.find(x => x.userId === selectedUserId && x.menuId === item.id);
+                    const p = localPermissions.find(x => (x.userId === selectedUserId || (x as any).user_id === selectedUserId) && x.menuId === item.id);
                     return isSuperAdminUser ? true : (p?.canView ?? false);
                   });
                   const allSaveChecked = grp.items.every(item => {
-                    const p = localPermissions.find(x => x.userId === selectedUserId && x.menuId === item.id);
+                    const p = localPermissions.find(x => (x.userId === selectedUserId || (x as any).user_id === selectedUserId) && x.menuId === item.id);
                     return isSuperAdminUser ? true : (p?.canSave ?? false);
                   });
 

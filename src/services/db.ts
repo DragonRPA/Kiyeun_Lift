@@ -1150,6 +1150,35 @@ class LocalDB {
     return !!supabase;
   }
 
+  private normalizePayloadKeys(item: any): any {
+    if (!item || typeof item !== 'object') return item;
+    if (Array.isArray(item)) {
+      return item.map(i => this.normalizePayloadKeys(i));
+    }
+    const normalized = { ...item };
+    // userId <-> user_id 양방향 상호 호환 보장
+    if (normalized.user_id && !normalized.userId) normalized.userId = normalized.user_id;
+    if (normalized.userId && !normalized.user_id) normalized.user_id = normalized.userId;
+    
+    // customerId <-> customer_id 양방향 상호 호환 보장
+    if (normalized.customer_id && !normalized.customerId) normalized.customerId = normalized.customer_id;
+    if (normalized.customerId && !normalized.customer_id) normalized.customer_id = normalized.customerId;
+
+    // siteId <-> site_id 양방향 상호 호환 보장
+    if (normalized.site_id && !normalized.siteId) normalized.siteId = normalized.site_id;
+    if (normalized.siteId && !normalized.site_id) normalized.site_id = normalized.siteId;
+
+    // contractId <-> contract_id 양방향 상호 호환 보장
+    if (normalized.contract_id && !normalized.contractId) normalized.contractId = normalized.contract_id;
+    if (normalized.contractId && !normalized.contract_id) normalized.contract_id = normalized.contractId;
+
+    // assetId <-> asset_id 양방향 상호 호환 보장
+    if (normalized.asset_id && !normalized.assetId) normalized.assetId = normalized.asset_id;
+    if (normalized.assetId && !normalized.asset_id) normalized.asset_id = normalized.assetId;
+
+    return normalized;
+  }
+
   // 단일 테이블만 Supabase에서 pull (메뉴 전환 시 관련 테이블만 선택적 로딩용)
   async pullTableFromSupabase(key: string): Promise<any[] | null> {
     if (!supabase) return null;
@@ -1161,7 +1190,9 @@ class LocalDB {
         return null;
       }
       if (data !== null) {
-        this.set(key as keyof LocalDB, data);
+        const normalizedData = this.normalizePayloadKeys(data);
+        this.set(key as keyof LocalDB, normalizedData);
+        return normalizedData;
       }
       return data;
     } catch (e) {
@@ -1207,7 +1238,7 @@ class LocalDB {
               console.warn(`Supabase pull failed for table ${tableName}:`, error);
               return { key, data: null };
             }
-            return { key, data };
+            return { key, data: this.normalizePayloadKeys(data) };
           } catch (e) {
             console.warn(`Supabase pull failed for key ${key}:`, e);
             return { key, data: null };
