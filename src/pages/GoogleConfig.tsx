@@ -63,11 +63,16 @@ export const GoogleConfig: React.FC = () => {
   }, [currentConfig]);
 
   // 구글 드라이브 탐색기 모달 상태
-  const [isDriveSelectorOpen, setIsDriveSelectorOpen] = useState(false);
-  const [selectorTargetField, setSelectorTargetField] = useState<'rootFolder' | 'quotation' | 'contract' | 'safety' | 'checklist' | 'bizCert' | 'bankbook' | null>(null);
+  type DriveFieldTarget = 'rootFolder' | 'quotation' | 'contract' | 'safety' | 'checklist' | 'bizCert' | 'bankbook' | 'contractFolder' | 'consumableFolder' | 'deliveryFolder' | 'maintenanceFolder';
 
-  const handleSelectDriveItem = (pathOrLink: string) => {
+  const [isDriveSelectorOpen, setIsDriveSelectorOpen] = useState(false);
+  const [selectorTargetField, setSelectorTargetField] = useState<DriveFieldTarget | null>(null);
+  const [pickerMode, setPickerMode] = useState<'file' | 'folder' | 'both'>('both');
+
+  const handleSelectDriveItem = (pathOrLink: string, item?: any) => {
     if (!selectorTargetField) return;
+    const folderNameOrUrl = item?.name || pathOrLink;
+
     if (selectorTargetField === 'rootFolder') setDefaultRootFolderId(pathOrLink);
     else if (selectorTargetField === 'quotation') setQuotationTemplateUrl(pathOrLink);
     else if (selectorTargetField === 'contract') setContractTemplateUrl(pathOrLink);
@@ -75,13 +80,22 @@ export const GoogleConfig: React.FC = () => {
     else if (selectorTargetField === 'checklist') setPreDeliveryChecklistTemplateUrl(pathOrLink);
     else if (selectorTargetField === 'bizCert') setBizRegCertUrl(pathOrLink);
     else if (selectorTargetField === 'bankbook') setBankbookCopyUrl(pathOrLink);
+    else if (selectorTargetField === 'contractFolder') setContractFolder(folderNameOrUrl);
+    else if (selectorTargetField === 'consumableFolder') setConsumableFolder(folderNameOrUrl);
+    else if (selectorTargetField === 'deliveryFolder') setDeliveryFolder(folderNameOrUrl);
+    else if (selectorTargetField === 'maintenanceFolder') setMaintenanceFolder(folderNameOrUrl);
     
     setIsDriveSelectorOpen(false);
     setSelectorTargetField(null);
   };
 
-  const openDriveSelector = (field: 'rootFolder' | 'quotation' | 'contract' | 'safety' | 'checklist' | 'bizCert' | 'bankbook') => {
+  const openDriveSelector = (field: DriveFieldTarget) => {
     setSelectorTargetField(field);
+    if (['rootFolder', 'contractFolder', 'consumableFolder', 'deliveryFolder', 'maintenanceFolder'].includes(field)) {
+      setPickerMode('folder');
+    } else {
+      setPickerMode('both');
+    }
     setIsDriveSelectorOpen(true);
   };
 
@@ -477,47 +491,91 @@ export const GoogleConfig: React.FC = () => {
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
               <div>
-                <label>렌탈계약서 보존 폴더명 *</label>
-                <input
-                  type="text"
-                  value={contractFolder}
-                  onChange={e => setContractFolder(e.target.value)}
-                  placeholder="예: 렌탈계약서_증빙"
-                  required
-                />
+                <label style={{ fontSize: '12px', fontWeight: 'bold', marginBottom: '6px', display: 'block' }}>렌탈계약서 보존 폴더명 *</label>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <input
+                    type="text"
+                    value={contractFolder}
+                    onChange={e => setContractFolder(e.target.value)}
+                    placeholder="예: 렌탈계약서_증빙"
+                    style={{ flex: 1 }}
+                    required
+                  />
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    onClick={() => openDriveSelector('contractFolder')}
+                    style={{ padding: '0 12px', display: 'flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap' }}
+                  >
+                    <Cloud size={14} /> 드라이브 탐색
+                  </button>
+                </div>
               </div>
 
               <div>
-                <label>소모품납품증빙 보존 폴더명 *</label>
-                <input
-                  type="text"
-                  value={consumableFolder}
-                  onChange={e => setConsumableFolder(e.target.value)}
-                  placeholder="예: 소모품납품증빙"
-                  required
-                />
+                <label style={{ fontSize: '12px', fontWeight: 'bold', marginBottom: '6px', display: 'block' }}>소모품납품증빙 보존 폴더명 *</label>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <input
+                    type="text"
+                    value={consumableFolder}
+                    onChange={e => setConsumableFolder(e.target.value)}
+                    placeholder="예: 소모품납품증빙"
+                    style={{ flex: 1 }}
+                    required
+                  />
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    onClick={() => openDriveSelector('consumableFolder')}
+                    style={{ padding: '0 12px', display: 'flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap' }}
+                  >
+                    <Cloud size={14} /> 드라이브 탐색
+                  </button>
+                </div>
               </div>
 
               <div>
-                <label>출고의뢰/배차 증빙 보존 폴더명 *</label>
-                <input
-                  type="text"
-                  value={deliveryFolder}
-                  onChange={e => setDeliveryFolder(e.target.value)}
-                  placeholder="예: 출고의뢰_증빙"
-                  required
-                />
+                <label style={{ fontSize: '12px', fontWeight: 'bold', marginBottom: '6px', display: 'block' }}>출고의뢰/배차 증빙 보존 폴더명 *</label>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <input
+                    type="text"
+                    value={deliveryFolder}
+                    onChange={e => setDeliveryFolder(e.target.value)}
+                    placeholder="예: 출고의뢰_증빙"
+                    style={{ flex: 1 }}
+                    required
+                  />
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    onClick={() => openDriveSelector('deliveryFolder')}
+                    style={{ padding: '0 12px', display: 'flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap' }}
+                  >
+                    <Cloud size={14} /> 드라이브 탐색
+                  </button>
+                </div>
               </div>
 
               <div>
-                <label>정비보고서 보존 폴더명 *</label>
-                <input
-                  type="text"
-                  value={maintenanceFolder}
-                  onChange={e => setMaintenanceFolder(e.target.value)}
-                  placeholder="예: 정비보고서_증빙"
-                  required
-                />
+                <label style={{ fontSize: '12px', fontWeight: 'bold', marginBottom: '6px', display: 'block' }}>정비보고서 보존 폴더명 *</label>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <input
+                    type="text"
+                    value={maintenanceFolder}
+                    onChange={e => setMaintenanceFolder(e.target.value)}
+                    placeholder="예: 정비보고서_증빙"
+                    style={{ flex: 1 }}
+                    required
+                  />
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    onClick={() => openDriveSelector('maintenanceFolder')}
+                    style={{ padding: '0 12px', display: 'flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap' }}
+                  >
+                    <Cloud size={14} /> 드라이브 탐색
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -696,8 +754,8 @@ export const GoogleConfig: React.FC = () => {
             setSelectorTargetField(null);
           }}
           onSelect={handleSelectDriveItem}
-          mode="both"
-          title="구글 드라이브 스마트 탐색기 (서류 템플릿 선택)"
+          mode={pickerMode}
+          title={selectorTargetField === 'rootFolder' ? '🏢 회사 전용 최상위 구글 드라이브 폴더 선택' : '📄 구글 드라이브 서류 템플릿 파일 선택'}
         />
 
       </div>
