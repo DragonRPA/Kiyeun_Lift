@@ -1,7 +1,7 @@
 // d:\Kiyeun_Lift\src\pages\SmartDispatch.tsx
 import React, { useState, useEffect, useRef } from 'react';
 import { useApp } from '../context/AppContext';
-import { Zap, Clipboard, FileText, Copy, Printer, Braces, Plus, Trash2 } from 'lucide-react';
+import { Zap, Clipboard, FileText, Copy, Printer, Braces, Plus, Trash2, RefreshCw } from 'lucide-react';
 
 interface EquipmentItem {
   modelName: string;
@@ -42,6 +42,13 @@ const STANDARD_SPECS: SpecItem[] = [
 export const SmartDispatch: React.FC = () => {
   const { hasPermission, saveSmartDispatch, assets, showErrorModal } = useApp();
   const canSave = hasPermission('delivery', 'save');
+
+  // 실시간 프로세스 진행 릴레이 모달 상태
+  const [isProcessingModalOpen, setIsProcessingModalOpen] = useState(false);
+  const [progressPercent, setProgressPercent] = useState(0);
+  const [currentStepText, setCurrentStepText] = useState('');
+  const [progressLogs, setProgressLogs] = useState<string[]>([]);
+  const [isProcessCompleted, setIsProcessCompleted] = useState(false);
 
   // 원본 텍스트 입력 상태 (초기값 빈 문자열)
   const [rawText, setRawText] = useState<string>('');
@@ -536,25 +543,44 @@ ${activeSpecs.map((s, idx) => `  ${idx + 1}. [적용] ${s.label}`).join('\n') ||
       loadingTime, unloadingTime, equipments, note
     };
 
-    let result = await saveSmartDispatch(data, false);
-    if (result.errorMessage) {
-      showErrorModal(result.errorMessage, '스마트 출고 요청 저장 오류');
-      return;
-    }
+    // 프로세스 진행 모달 초기화
+    setProgressLogs([]);
+    setProgressPercent(0);
+    setCurrentStepText('🚀 스마트 출고 파이프라인 가동 준비 중...');
+    setIsProcessCompleted(false);
+    setIsProcessingModalOpen(true);
+
+    const onProgress = (logText: string, pct: number) => {
+      setProgressPercent(pct);
+      setCurrentStepText(logText);
+      setProgressLogs(prev => [...prev, logText]);
+    };
+
+    let result = await saveSmartDispatch(data, false, onProgress);
+
     if (result.requiresConfirm) {
+      setIsProcessingModalOpen(false);
       if (confirm(`다음 정보가 데이터베이스에 없습니다.\n${result.missingFields?.join('\n')}\n\n※안내: 배차(물류 배송) 지시와 장비 할당(고유 장비 매핑)은 별개의 권한으로 독립적으로 작동합니다.\n\n신규로 자동 등록하고 출고 지시를 저장하시겠습니까?`)) {
-        result = await saveSmartDispatch(data, true);
-        if (result.errorMessage) {
-          showErrorModal(result.errorMessage, '스마트 출고 요청 저장 오류');
-          return;
-        }
+        setProgressLogs([]);
+        setProgressPercent(0);
+        setCurrentStepText('🚀 신규 고객/현장 등록 & 출고 프로세스 재가동 중...');
+        setIsProcessCompleted(false);
+        setIsProcessingModalOpen(true);
+
+        result = await saveSmartDispatch(data, true, onProgress);
       } else {
         return;
       }
     }
 
+    if (result.errorMessage) {
+      setIsProcessingModalOpen(false);
+      showErrorModal(result.errorMessage, '스마트 출고 요청 저장 오류');
+      return;
+    }
+
     if (result.success) {
-      alert('출고 지시 1건이 생성되었습니다.\n[배차 관리] 담당자가 빈칸에 구체적인 장비 번호를 할당할 예정입니다.');
+      setIsProcessCompleted(true);
       setRawText('');
     }
   };
@@ -961,6 +987,79 @@ ${activeSpecs.map((s, idx) => `  ${idx + 1}. [적용] ${s.label}`).join('\n') ||
 
         </div>
       </div>
+
+      {/* 실시간 프로세스 진행 릴레이 팝업 모달 */}
+      {isProcessingModalOpen && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(15, 23, 42, 0.75)', backdropFilter: 'blur(6px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999
+        }}>
+          <div className="card" style={{
+            width: '100%', maxWidth: '520px', padding: '28px', backgroundColor: '#0f172a',
+            color: '#f8fafc', borderRadius: '16px', border: '1px solid #334155', boxSizing: 'border-box',
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+              <h3 style={{ fontSize: '16px', fontWeight: '800', margin: 0, display: 'flex', alignItems: 'center', gap: '8px', color: '#38bdf8' }}>
+                <RefreshCw size={18} className={isProcessCompleted ? '' : 'animate-spin'} style={{ color: isProcessCompleted ? '#10b981' : '#38bdf8' }} />
+                {isProcessCompleted ? '스마트 출고 요청 생성 완료' : '스마트 출고 프로세스 실시간 릴레이'}
+              </h3>
+              <span style={{ fontSize: '13px', fontWeight: '700', color: isProcessCompleted ? '#10b981' : '#38bdf8', padding: '2px 10px', borderRadius: '12px', backgroundColor: isProcessCompleted ? 'rgba(16,185,129,0.15)' : 'rgba(56,189,248,0.15)' }}>
+                {progressPercent}%
+              </span>
+            </div>
+
+            {/* 프로그레스 바 */}
+            <div style={{ width: '100%', height: '10px', backgroundColor: '#1e293b', borderRadius: '5px', overflow: 'hidden', marginBottom: '20px' }}>
+              <div style={{
+                width: `${progressPercent}%`, height: '100%',
+                backgroundColor: isProcessCompleted ? '#10b981' : '#3b82f6',
+                backgroundImage: 'linear-gradient(45deg, rgba(255,255,255,.2) 25%, transparent 25%, transparent 50%, rgba(255,255,255,.2) 50%, rgba(255,255,255,.2) 75%, transparent 75%, transparent)',
+                backgroundSize: '1rem 1rem',
+                transition: 'width 0.3s ease-in-out'
+              }}></div>
+            </div>
+
+            {/* 현재 진행 단계 가이드 메인 박스 */}
+            <div style={{ backgroundColor: '#1e293b', padding: '14px', borderRadius: '10px', fontSize: '13.5px', fontWeight: '700', color: '#f1f5f9', borderLeft: isProcessCompleted ? '4px solid #10b981' : '4px solid #3b82f6', marginBottom: '16px' }}>
+              {currentStepText}
+            </div>
+
+            {/* 단계별 로그 기록 콘솔 타임라인 */}
+            <div style={{
+              backgroundColor: '#020617', padding: '12px 14px', borderRadius: '8px',
+              fontSize: '12px', fontFamily: 'monospace', color: '#94a3b8', maxHeight: '160px',
+              overflowY: 'auto', border: '1px solid #1e293b', display: 'flex', flexDirection: 'column', gap: '6px'
+            }}>
+              {progressLogs.map((log, idx) => (
+                <div key={idx} style={{ color: idx === progressLogs.length - 1 ? '#38bdf8' : '#64748b' }}>
+                  {log}
+                </div>
+              ))}
+            </div>
+
+            {isProcessCompleted && (
+              <div style={{ marginTop: '20px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <div style={{ fontSize: '12.5px', color: '#94a3b8', backgroundColor: 'rgba(16, 185, 129, 0.1)', padding: '10px', borderRadius: '8px', border: '1px solid rgba(16, 185, 129, 0.3)' }}>
+                  ✅ 출고 지시 1건이 데이터베이스에 안전하게 등록되었습니다.<br />
+                  [배차 관리] 담당자가 배차 차량 및 고유 장비 번호를 매핑할 예정입니다.
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                  <button
+                    type="button"
+                    className="btn-primary"
+                    onClick={() => setIsProcessingModalOpen(false)}
+                    style={{ padding: '10px 24px', backgroundColor: '#10b981', borderColor: '#10b981', fontWeight: '800' }}
+                  >
+                    확인 (출고 지시 완료)
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
     </div>
   );

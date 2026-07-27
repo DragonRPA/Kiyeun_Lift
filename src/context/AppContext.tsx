@@ -112,7 +112,7 @@ interface AppContextType {
   
   // 장비 할당
   assignAssetToContract: (contractAssetId: string, assetId: string) => void;
-  saveSmartDispatch: (data: SmartDispatchData, autoRegister: boolean) => Promise<{ success: boolean; requiresConfirm?: boolean; missingFields?: string[]; errorMessage?: string }>;
+  saveSmartDispatch: (data: SmartDispatchData, autoRegister: boolean, onProgress?: (log: string, percent: number) => void) => Promise<{ success: boolean; requiresConfirm?: boolean; missingFields?: string[]; errorMessage?: string }>;
   saveSmartReturn: (data: SmartReturnData) => void;
   
   // Todos
@@ -600,7 +600,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return result;
   };
 
-  const saveSmartDispatch = async (data: SmartDispatchData, autoRegister: boolean) => {
+  const saveSmartDispatch = async (data: SmartDispatchData, autoRegister: boolean, onProgress?: (log: string, percent: number) => void) => {
+    const notify = async (msg: string, pct: number, delayMs = 180) => {
+      if (onProgress) {
+        onProgress(msg, pct);
+        await new Promise(r => setTimeout(r, delayMs));
+      }
+    };
+
+    await notify('🔍 [1/5] 고객사 명칭 정규화 및 거래 상태 확인 중...', 10);
+
     // 약칭("세보엠이씨") 또는 표기 형태(" (주) 세보엠이씨 ") 검색 시 기존 정식 법인명("주식회사 세보엠이씨") 자동 탐색 & 보정
     let customer = findCustomerByNormalizedName(db.customers, data.customerName);
     if (customer) {
@@ -622,6 +631,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     if (!customer) {
+      await notify(`🏢 [신규 고객] DB에 없는 고객사 '${data.customerName}' 자동 신규 생성 중...`, 20);
       customer = db.insertRow<Customer>('customers', {
         name: data.customerName,
         bizRegNo: '미상',
@@ -644,11 +654,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         });
       }
     } else {
-      // 기존 고객사가 존재하는 경우에도, 새로운 고객담당자(처음 등장하는 사람)라면 자동 등록!
+      await notify(`✅ [고객 확인] 기존 등록 고객사 '${customer.name}' 매핑 완료`, 25);
       if (data.siteContactName) {
         const targetCustomerId = customer.id;
         const existingContact = db.contacts.find(ct => ct.customerId === targetCustomerId && ct.name.replace(/\s/g, '') === data.siteContactName.replace(/\s/g, ''));
         if (!existingContact) {
+          await notify(`👤 [담당자 신규] 현장 담당자 '${data.siteContactName}' 등록 중...`, 30);
           db.insertRow<CustomerContact>('contacts', {
             customerId: targetCustomerId,
             name: data.siteContactName,
@@ -664,6 +675,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const finalCustomer = customer;
 
     if (!site) {
+      await notify(`📍 [2/5 현장 등록] 신규 현장 '${data.siteName}' 자동 등록 중...`, 40);
       site = db.insertRow<CustomerSite>('sites', {
         customerId: finalCustomer.id,
         name: data.siteName,
@@ -673,6 +685,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         email: data.siteContactEmail || '미상',
         createdAt: new Date().toISOString()
       });
+    } else {
+      await notify(`📍 [2/5 현장 매핑] 기존 현장 '${site.name}' 매핑 완료`, 45);
     }
 
     if (autoRegister && currentUser) {
@@ -697,6 +711,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const m = c.contractNo?.match(/S-CTR-(\d+)/);
       return m ? Math.max(max, parseInt(m[1])) : max;
     }, 0) + 1).padStart(7, '0');
+
+    await notify(`📄 [3/5 계약 생성] 스마트 임대차 계약서 작성 중 (S-CTR-${nextContractNum})...`, 55);
+
     const contract = db.insertRow<Contract>('contracts', {
       contractNo: `S-CTR-${nextContractNum}`,
       customerId: finalCustomer.id,
@@ -710,6 +727,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       updatedAt: new Date().toISOString()
     });
 
+    await notify('☁️ 부모 계약 레코드 Supabase 원격 DB 1차 동기화 대기 중...', 68);
+
     // ⚠️ 외래키(Foreign Key) 제약조건 위반 방지: 부모 contract 레코드가 Supabase 원격 DB에 먼저 100% 생성되도록 1차 동기 대기!
     try {
       await db.awaitPendingWrites();
@@ -718,6 +737,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       showErrorModal(`⚠️ 스마트 출고 계약 생성 중 DB 동기화 오류가 발생했습니다:\n${err.message || err.details || JSON.stringify(err)}`, '스마트 출고 DB 동기화 오류');
       return { success: false, errorMessage: err.message || err.details };
     }
+
+    await notify('🏗️ [4/5 장비 매핑] 계약 투입 장비 모델 및 수량 매핑 중...', 80);
 
     data.equipments.forEach((eq) => {
       for(let i=0; i<eq.qty; i++) {
@@ -733,6 +754,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         });
       }
     });
+
+    await notify('🚚 [5/5 배차 생성] 배차/운송 관리 출고대기 지시건 생성 중...', 90);
 
     // 신규 배차(Delivery) - 출고 대기 건 자동 생성
     const cargoItems = JSON.stringify(data.equipments.map(e => ({ modelName: e.modelName, count: e.qty })));
@@ -760,6 +783,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       updatedAt: new Date().toISOString()
     });
 
+    await notify('🌐 Supabase 원격 DB 최종 2차 동기화 완료 중...', 96);
+
     try {
       await db.awaitPendingWrites();
     } catch (err: any) {
@@ -771,6 +796,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         errorMessage: errorMsg
       };
     }
+
+    await notify('🎉 [완료] 출고의뢰 생성을 성공적으로 완료하였습니다!', 100, 300);
 
     refreshAllData();
     return { success: true };
