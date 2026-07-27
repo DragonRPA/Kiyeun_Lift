@@ -4,7 +4,15 @@ import { useApp } from '../context/AppContext';
 import { Activity, ShieldAlert, Users, Layers, ShieldCheck, Wrench, Truck, CreditCard, ShoppingBag, CheckCircle, Bell, AlertTriangle, ArrowRight, Cloud, AlertCircle } from 'lucide-react';
 
 export const Dashboard: React.FC = () => {
-  const { currentUser, assets, contracts, consumables, repairs, deliveries, billings, customers, todos, completeTodo, setActiveTab, setNavigationPayload } = useApp();
+  const { currentUser, hasPermission, assets, contracts, consumables, repairs, deliveries, billings, customers, todos, completeTodo, setActiveTab, setNavigationPayload } = useApp();
+
+  // 사용자 메뉴 권한 기반 카드 노출 판단 플래그 (메뉴 저장/조회 권한 보유 여부)
+  const canSaveDelivery = hasPermission('delivery', 'save') || hasPermission('delivery', 'view');
+  const canSaveRepair = hasPermission('repairs', 'save') || hasPermission('repair', 'save') || hasPermission('repairs', 'view') || hasPermission('repair', 'view');
+  const canSaveBilling = hasPermission('billings', 'save') || hasPermission('billing', 'save') || hasPermission('billings', 'view') || hasPermission('billing', 'view');
+  const canSaveContract = hasPermission('contracts', 'save') || hasPermission('contract', 'save') || hasPermission('contracts', 'view') || hasPermission('contract', 'view');
+  const canSaveConsumable = hasPermission('consumables', 'save') || hasPermission('consumable', 'save') || hasPermission('consumables', 'view') || hasPermission('consumable', 'view');
+  const canSaveRentAsset = hasPermission('rent_asset', 'save') || hasPermission('rent_asset', 'view');
 
   const myTodos = todos.filter(t => t.userId === currentUser?.id && !t.isCompleted);
 
@@ -147,94 +155,92 @@ export const Dashboard: React.FC = () => {
       </div>
 
       {/* ──────────────────────────────────────────────────────── */}
-      {/* GLOBAL FEED: 출고/회수 배차 대기 피드 (배차 대기건이 1건 이상 있을 때 항상 최상단 노출) */}
+      {/* 권한(Permission) 기반 스마트 카드 피드 렌더링 섹션 */}
       {/* ──────────────────────────────────────────────────────── */}
       {(() => {
         const requestedDeliveries = deliveries.filter(d => d.status === 'REQUESTED');
-        if (requestedDeliveries.length === 0) return null;
+        const showDeliveryFeed = requestedDeliveries.length > 0 && canSaveDelivery;
+        const showBillingFeed = unpaidBillings.length > 0 && (canSaveBilling || role === 'ADMIN' || role === 'MANAGER');
+        const showRentAssetFeed = (overdueRentedCount > 0 || mismatchRentedCount > 0) && (canSaveRentAsset || role === 'ADMIN' || role === 'MANAGER');
+        const showRepairFeed = pendingRepairs > 0 && (canSaveRepair || role === 'ADMIN' || role === 'MANAGER');
+        const showConsumableFeed = lowStockConsumables > 0 && (canSaveConsumable || canSaveRepair || role === 'ADMIN' || role === 'MANAGER');
+        const showContractFeed = canSaveContract;
+        const showTodoFeed = myTodos.length > 0;
 
-        return (
-          <div style={{
-            backgroundColor: 'var(--bg-card)', borderRadius: '12px', padding: '20px 24px',
-            borderLeft: '5px solid #06b6d4', border: '1px solid var(--border-color)', borderLeftWidth: '5px',
-            marginBottom: '20px'
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-              <span style={{ fontSize: '11.5px', fontWeight: '800', color: '#06b6d4', backgroundColor: 'rgba(6,182,212,0.12)', padding: '3px 9px', borderRadius: '4px', border: '1px solid rgba(6,182,212,0.3)' }}>
-                🚚 실시간 배차 처리 할일
-              </span>
-              <span style={{ fontSize: '12.5px', fontWeight: '700', color: '#06b6d4' }}>
-                배차 대기 목록 총 {requestedDeliveries.length}건
-              </span>
-            </div>
-            <h4 style={{ margin: '0 0 10px 0', fontSize: '16px', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Truck size={18} color="#06b6d4" /> 출고 및 회수 배차 대기 피드
-            </h4>
-            <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: '0 0 14px 0', lineHeight: '1.5' }}>
-              스마트 출고/회수 시스템을 통해 접수되었으나, 아직 차량 배차 및 장비 매핑이 완결되지 않은 <strong>{requestedDeliveries.length}건</strong>의 배차 지시가 있습니다. 
-              운송 기사 수배 및 차량 배차 처리를 완료해 주십시오.
-            </p>
-
-            {/* 배차 대기 목록 프리뷰 카드 피드 리스트 */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '16px' }}>
-              {requestedDeliveries.slice(0, 3).map((del, idx) => {
-                const contr = contracts.find(c => c.id === del.contractId);
-                const cust = contr ? customers.find(c => c.id === contr.customerId) : null;
-                let cargoSummary = '';
-                try {
-                  const items = JSON.parse(del.cargoItems || '[]');
-                  cargoSummary = items.map((it: any) => `${it.modelName} ${it.count}대`).join(', ');
-                } catch (e) {
-                  cargoSummary = '장비 배정 대기';
-                }
-
-                return (
-                  <div key={del.id} style={{
-                    backgroundColor: 'var(--bg-secondary)', padding: '12px 14px', borderRadius: '8px',
-                    border: '1px solid var(--border-color)', fontSize: '13px', display: 'flex', flexDirection: 'column', gap: '4px'
-                  }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ fontWeight: '800', color: 'var(--text-main)' }}>
-                        {idx + 1}. {cust?.name || del.destinationAddress || '고객사 미상'}
-                      </span>
-                      <span style={{
-                        fontSize: '11px', fontWeight: '800', padding: '2px 6px', borderRadius: '4px',
-                        backgroundColor: del.type === 'OUTBOUND' ? 'rgba(59,130,246,0.15)' : 'rgba(245,158,11,0.15)',
-                        color: del.type === 'OUTBOUND' ? '#3b82f6' : '#f59e0b'
-                      }}>
-                        {del.type === 'OUTBOUND' ? '출고 배차' : '회수 배차'} (요청: {del.requestDate || del.createdAt.substring(0, 10)})
-                      </span>
-                    </div>
-                    <div style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-                      <span>🚩 <strong>하차지:</strong> {del.destinationAddress}</span>
-                      {cargoSummary && <span style={{ color: '#06b6d4', fontWeight: 'bold' }}>⚙️ {cargoSummary}</span>}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
-            <button className="btn-primary" onClick={() => setActiveTab('delivery')} style={{ backgroundColor: '#06b6d4', border: 'none', fontSize: '12.5px', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '4px' }}>
-              배차 / 운송 관리 메뉴로 이동하여 배차 처리하기 <ArrowRight size={13} />
-            </button>
-          </div>
-        );
-      })()}
-
-      {/* ──────────────────────────────────────────────────────── */}
-      {/* CASE A: 최고관리자(ADMIN) 및 부서관리자(MANAGER) 대시보드 */}
-      {/* ──────────────────────────────────────────────────────── */}
-      {(role === 'ADMIN' || role === 'MANAGER') && (() => {
-        const hasUnpaid = unpaidBillings.length > 0;
-        const hasOverdueRent = overdueRentedCount > 0 || mismatchRentedCount > 0;
-        const hasMaintenanceIssue = pendingRepairs > 0 || lowStockConsumables > 0;
-        const hasAnyCards = hasUnpaid || hasOverdueRent || hasMaintenanceIssue;
+        const visibleCount = [showDeliveryFeed, showBillingFeed, showRentAssetFeed, showRepairFeed, showConsumableFeed, showContractFeed, showTodoFeed].filter(Boolean).length;
 
         return (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-            
-            {/* 미수금 회수 독촉 카드 */}
-            {hasUnpaid && (
+
+            {/* 1. 출고/회수 배차 대기 피드 카드 (배차 메뉴 권한이 있는 사용자에게 표출) */}
+            {showDeliveryFeed && (
+              <div style={{
+                backgroundColor: 'var(--bg-card)', borderRadius: '12px', padding: '20px 24px',
+                borderLeft: '5px solid #06b6d4', border: '1px solid var(--border-color)', borderLeftWidth: '5px'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                  <span style={{ fontSize: '11.5px', fontWeight: '800', color: '#06b6d4', backgroundColor: 'rgba(6,182,212,0.12)', padding: '3px 9px', borderRadius: '4px', border: '1px solid rgba(6,182,212,0.3)' }}>
+                    🚚 배차 권한 실시간 할일
+                  </span>
+                  <span style={{ fontSize: '12.5px', fontWeight: '700', color: '#06b6d4' }}>
+                    배차 대기 목록 총 {requestedDeliveries.length}건
+                  </span>
+                </div>
+                <h4 style={{ margin: '0 0 10px 0', fontSize: '16px', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Truck size={18} color="#06b6d4" /> 출고 및 회수 배차 대기 피드
+                </h4>
+                <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: '0 0 14px 0', lineHeight: '1.5' }}>
+                  스마트 출고/회수 시스템을 통해 접수되었으나, 아직 차량 배차 및 장비 매핑이 완결되지 않은 <strong>{requestedDeliveries.length}건</strong>의 배차 지시가 있습니다. 
+                  운송 기사 수배 및 차량 배차 처리를 완료해 주십시오.
+                </p>
+
+                {/* 배차 대기 목록 프리뷰 카드 피드 리스트 */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '16px' }}>
+                  {requestedDeliveries.slice(0, 3).map((del, idx) => {
+                    const contr = contracts.find(c => c.id === del.contractId);
+                    const cust = contr ? customers.find(c => c.id === contr.customerId) : null;
+                    let cargoSummary = '';
+                    try {
+                      const items = JSON.parse(del.cargoItems || '[]');
+                      cargoSummary = items.map((it: any) => `${it.modelName} ${it.count}대`).join(', ');
+                    } catch (e) {
+                      cargoSummary = '장비 배정 대기';
+                    }
+
+                    return (
+                      <div key={del.id} style={{
+                        backgroundColor: 'var(--bg-secondary)', padding: '12px 14px', borderRadius: '8px',
+                        border: '1px solid var(--border-color)', fontSize: '13px', display: 'flex', flexDirection: 'column', gap: '4px'
+                      }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ fontWeight: '800', color: 'var(--text-main)' }}>
+                            {idx + 1}. {cust?.name || del.destinationAddress || '고객사 미상'}
+                          </span>
+                          <span style={{
+                            fontSize: '11px', fontWeight: '800', padding: '2px 6px', borderRadius: '4px',
+                            backgroundColor: del.type === 'OUTBOUND' ? 'rgba(59,130,246,0.15)' : 'rgba(245,158,11,0.15)',
+                            color: del.type === 'OUTBOUND' ? '#3b82f6' : '#f59e0b'
+                          }}>
+                            {del.type === 'OUTBOUND' ? '출고 배차' : '회수 배차'} (요청: {del.requestDate || del.createdAt.substring(0, 10)})
+                          </span>
+                        </div>
+                        <div style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                          <span>🚩 <strong>하차지:</strong> {del.destinationAddress}</span>
+                          {cargoSummary && <span style={{ color: '#06b6d4', fontWeight: 'bold' }}>⚙️ {cargoSummary}</span>}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <button className="btn-primary" onClick={() => setActiveTab('delivery')} style={{ backgroundColor: '#06b6d4', border: 'none', fontSize: '12.5px', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  배차 / 운송 관리 메뉴로 이동하여 배차 처리하기 <ArrowRight size={13} />
+                </button>
+              </div>
+            )}
+
+            {/* 2. 전사 미수금 회수 독촉 카드 (수납/청구 권한 보유 시 노출) */}
+            {showBillingFeed && (
               <div style={{
                 backgroundColor: 'var(--bg-card)', borderRadius: '12px', padding: '20px 24px',
                 borderLeft: '5px solid #ef4444', border: '1px solid var(--border-color)', borderLeftWidth: '5px'
@@ -256,8 +262,8 @@ export const Dashboard: React.FC = () => {
               </div>
             )}
 
-            {/* 임차 자산 반납 지연 카드 */}
-            {hasOverdueRent && (
+            {/* 3. 소유사(임차) 자산 반납 지연 카드 */}
+            {showRentAssetFeed && (
               <div style={{
                 backgroundColor: 'var(--bg-card)', borderRadius: '12px', padding: '20px 24px',
                 borderLeft: '5px solid #f59e0b', border: '1px solid var(--border-color)', borderLeftWidth: '5px'
@@ -279,237 +285,128 @@ export const Dashboard: React.FC = () => {
               </div>
             )}
 
-            {/* 대기 중인 정비 및 소모품 자재 부족 종합 */}
-            {hasMaintenanceIssue && (
+            {/* 4. 장비 정비 대기열 카드 (정비 권한 보유 시 노출) */}
+            {showRepairFeed && (
+              <div style={{
+                backgroundColor: 'var(--bg-card)', borderRadius: '12px', padding: '20px 24px',
+                borderLeft: '5px solid #f59e0b', border: '1px solid var(--border-color)', borderLeftWidth: '5px'
+              }}>
+                <div style={{ display: 'flex', justifyItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                  <span style={{ fontSize: '12px', fontWeight: '800', color: '#f59e0b', backgroundColor: 'rgba(245,158,11,0.1)', padding: '2px 8px', borderRadius: '4px' }}>[정비 할일]</span>
+                  <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>미완료 {pendingRepairs}건</span>
+                </div>
+                <h4 style={{ margin: '0 0 12px 0', fontSize: '16px', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Wrench size={18} color="#f59e0b" /> 실시간 장비 정비 대기열 및 입고 불량 상태
+                </h4>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '16px' }}>
+                  {repairs.filter(r => r.status !== 'COMPLETED').slice(0, 3).map((rep, idx) => {
+                    const asset = assets.find(a => a.id === rep.assetId);
+                    return (
+                      <div key={rep.id} style={{ backgroundColor: 'var(--bg-secondary)', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-color)', fontSize: '13px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold' }}>
+                          <span>{idx + 1}. 장비번호: <strong style={{ color: 'var(--primary)' }}>{asset?.assetNo || '미정'}</strong> ({asset?.modelName || '미정'})</span>
+                          <span style={{ color: 'var(--danger)', fontSize: '11px' }}>정비부담점수: {asset?.maintenanceScore || 0}점</span>
+                        </div>
+                        <div style={{ marginTop: '6px', color: 'var(--text-secondary)' }}>
+                          <strong>불량/의뢰 내용:</strong> {rep.details}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <button className="btn-primary" onClick={() => setActiveTab('repairs')} style={{ backgroundColor: '#f59e0b', border: 'none', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  전체 정비 의뢰 등록 및 자재 투입 <ArrowRight size={12} />
+                </button>
+              </div>
+            )}
+
+            {/* 5. 소모품 재고 부족 경보 카드 */}
+            {showConsumableFeed && (
+              <div style={{
+                backgroundColor: 'var(--bg-card)', borderRadius: '12px', padding: '20px 24px',
+                borderLeft: '5px solid #ef4444', border: '1px solid var(--border-color)', borderLeftWidth: '5px'
+              }}>
+                <div style={{ display: 'flex', justifyItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                  <span style={{ fontSize: '12px', fontWeight: '800', color: '#ef4444', backgroundColor: 'rgba(239,68,68,0.1)', padding: '2px 8px', borderRadius: '4px' }}>[자재 부족]</span>
+                  <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>부족 품목수 {lowStockConsumables}종</span>
+                </div>
+                <h4 style={{ margin: '0 0 10px 0', fontSize: '16px', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <ShoppingBag size={18} color="#ef4444" /> 메카닉 정비 소모품 안전 마진 임계값 초과
+                </h4>
+                <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: '0 0 14px 0', lineHeight: '1.5' }}>
+                  고소작업대 정비 및 출고 인도에 필요한 소모품 품목 중 재고량이 5개 미만인 자재가 <strong>{lowStockConsumables}종</strong> 있습니다. 
+                  신속히 재고 구매 보완 신청을 진행하십시오.
+                </p>
+                <button className="btn-primary" onClick={() => setActiveTab('consumable')} style={{ backgroundColor: '#ef4444', border: 'none', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  소모품 재고 확인 및 구매 신청 <ArrowRight size={12} />
+                </button>
+              </div>
+            )}
+
+            {/* 6. 영업 및 임대차 계약 관리 카드 (계약 권한 보유 시 노출) */}
+            {showContractFeed && (
               <div style={{
                 backgroundColor: 'var(--bg-card)', borderRadius: '12px', padding: '20px 24px',
                 borderLeft: '5px solid #3b82f6', border: '1px solid var(--border-color)', borderLeftWidth: '5px'
               }}>
                 <div style={{ display: 'flex', justifyItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-                  <span style={{ fontSize: '12px', fontWeight: '800', color: '#3b82f6', backgroundColor: 'rgba(59,130,246,0.1)', padding: '2px 8px', borderRadius: '4px' }}>[정비/자산 관리]</span>
-                  <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>정비대기 {pendingRepairs}건 / 자재부족 {lowStockConsumables}건</span>
+                  <span style={{ fontSize: '12px', fontWeight: '800', color: '#3b82f6', backgroundColor: 'rgba(59,130,246,0.1)', padding: '2px 8px', borderRadius: '4px' }}>[영업/계약 관리]</span>
+                  <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>진행 중 계약 {activeContracts}건</span>
                 </div>
-                <h4 style={{ margin: '0 0 8px 0', fontSize: '16px', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <Wrench size={18} color="#3b82f6" /> 현장 안전 관리를 위한 정비 및 소모품 자재 모니터링
+                <h4 style={{ margin: '0 0 10px 0', fontSize: '16px', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Layers size={18} color="#3b82f6" /> 기연리프트 고객 대여 렌탈 계약 관리
                 </h4>
                 <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: '0 0 14px 0', lineHeight: '1.5' }}>
-                  현재 대기 중인 장비 수리 건수는 총 <strong>{pendingRepairs}건</strong>이며, 안전 마진 재고(5개 미만) 이하로 떨어진 소모품 자재 품목이 <strong>{lowStockConsumables}종</strong> 있습니다. 
-                  정비 담당자와 소모품 공급 현황을 실시간 감독하십시오.
+                  현재 담당 관리하는 활성/연장 계약은 총 <strong>{activeContracts}건</strong>입니다. 
+                  계약 만기 연장 처리 또는 종료 예정 계약들의 회수 일정을 전수 확인하여 반납 입고 준비를 시작하십시오.
                 </p>
-                <div style={{ display: 'flex', gap: '10px' }}>
-                  <button className="btn-primary" onClick={() => setActiveTab('repairs')} style={{ fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    정비 관리 이동 <ArrowRight size={12} />
-                  </button>
-                  <button className="btn-secondary" onClick={() => setActiveTab('consumable')} style={{ fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px', height: '32px' }}>
-                    소모품 현황 보기 <ArrowRight size={12} />
-                  </button>
+                <button className="btn-primary" onClick={() => setActiveTab('contracts')} style={{ fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  계약 관리 대장으로 이동 <ArrowRight size={12} />
+                </button>
+              </div>
+            )}
+
+            {/* 7. 고객 정보 미비 보완 카드 */}
+            {showTodoFeed && (
+              <div style={{
+                backgroundColor: 'var(--bg-card)', borderRadius: '12px', padding: '20px 24px',
+                borderLeft: '5px solid #f59e0b', border: '1px solid var(--border-color)', borderLeftWidth: '5px'
+              }}>
+                <div style={{ display: 'flex', justifyItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                  <span style={{ fontSize: '12px', fontWeight: '800', color: '#f59e0b', backgroundColor: 'rgba(245,158,11,0.1)', padding: '2px 8px', borderRadius: '4px' }}>[정보 미비]</span>
+                  <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>보완 {myTodos.length}건</span>
                 </div>
+                <h4 style={{ margin: '0 0 10px 0', fontSize: '16px', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <AlertCircle size={18} color="#f59e0b" /> 신규 고객사 및 현장 세부 정보 보완 요망
+                </h4>
+                <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: '0 0 14px 0', lineHeight: '1.5' }}>
+                  최근 신설되었으나 연락처, 현장 상세 주소, 정산 조건 등 필수 인적 사항 정보가 누락되어 정산에 위험이 되는 고객이 있습니다. 
+                  신속히 거래처 정보를 보완해 주세요.
+                </p>
+                <button className="btn-primary" onClick={() => setActiveTab('customers')} style={{ backgroundColor: '#f59e0b', border: 'none', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  고객 및 현장 마스터 정보 보완 <ArrowRight size={12} />
+                </button>
+              </div>
+            )}
+
+            {/* 8. 나의 권한 범위 내 당면 과제가 0건일 때 완료 안내 카드 */}
+            {visibleCount === 0 && (
+              <div className="card" style={{ padding: '36px 24px', textAlign: 'center', borderRadius: '12px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-card)' }}>
+                <div style={{ display: 'inline-flex', padding: '12px', borderRadius: '50%', backgroundColor: 'rgba(34,197,94,0.1)', color: '#22c55e', marginBottom: '12px' }}>
+                  <CheckCircle size={36} />
+                </div>
+                <h3 style={{ fontSize: '18px', fontWeight: '800', margin: '0 0 8px 0' }}>🎉 현재 즉시 처리해야 할 당면 과제가 없습니다!</h3>
+                <p style={{ fontSize: '13px', color: 'var(--text-muted)', margin: 0 }}>
+                  귀하에게 할당된 메뉴 권한 범위 내의 모든 실시간 업무가 완벽하게 완료되었습니다.
+                </p>
               </div>
             )}
 
           </div>
         );
       })()}
-
-      {/* ──────────────────────────────────────────────────────── */}
-      {/* CASE B: 정비담당자(MECHANIC / REPAIR) 대시보드 */}
-      {/* ──────────────────────────────────────────────────────── */}
-      {(role === 'REPAIR' || role === 'MECHANIC') && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-          
-          {/* 실시간 정비 의뢰 목록 피드 */}
-          <div style={{
-            backgroundColor: 'var(--bg-card)', borderRadius: '12px', padding: '20px 24px',
-            borderLeft: '5px solid #f59e0b', border: '1px solid var(--border-color)', borderLeftWidth: '5px'
-          }}>
-            <div style={{ display: 'flex', justifyItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-              <span style={{ fontSize: '12px', fontWeight: '800', color: '#f59e0b', backgroundColor: 'rgba(245,158,11,0.1)', padding: '2px 8px', borderRadius: '4px' }}>[정비 할일]</span>
-              <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>미완료 {pendingRepairs}건</span>
-            </div>
-            <h4 style={{ margin: '0 0 12px 0', fontSize: '16px', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Wrench size={18} color="#f59e0b" /> 실시간 장비 정비 대기열 및 입고 불량 상태
-            </h4>
-
-            {repairs.filter(r => r.status !== 'COMPLETED').length === 0 ? (
-              <p style={{ fontSize: '13px', color: 'var(--text-muted)', margin: 0 }}>현재 대기 중인 정비 요청 건이 없습니다. 모든 장비가 양호합니다.</p>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '16px' }}>
-                {repairs.filter(r => r.status !== 'COMPLETED').slice(0, 3).map((rep, idx) => {
-                  const asset = assets.find(a => a.id === rep.assetId);
-                  return (
-                    <div key={rep.id} style={{ backgroundColor: 'var(--bg-secondary)', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-color)', fontSize: '13px' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold' }}>
-                        <span>{idx + 1}. 장비번호: <strong style={{ color: 'var(--primary)' }}>{asset?.assetNo || '미정'}</strong> ({asset?.modelName || '미정'})</span>
-                        <span style={{ color: 'var(--danger)', fontSize: '11px' }}>정비부담점수: {asset?.maintenanceScore || 0}점</span>
-                      </div>
-                      <div style={{ marginTop: '6px', color: 'var(--text-secondary)' }}>
-                        <strong>불량/의뢰 내용:</strong> {rep.details}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-
-            <button className="btn-primary" onClick={() => setActiveTab('repairs')} style={{ backgroundColor: '#f59e0b', border: 'none', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-              전체 정비 의뢰 등록 및 자재 투입 <ArrowRight size={12} />
-            </button>
-          </div>
-
-          {/* 소모품 재고 부족 경보 */}
-          {lowStockConsumables > 0 && (
-            <div style={{
-              backgroundColor: 'var(--bg-card)', borderRadius: '12px', padding: '20px 24px',
-              borderLeft: '5px solid #ef4444', border: '1px solid var(--border-color)', borderLeftWidth: '5px'
-            }}>
-              <div style={{ display: 'flex', justifyItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-                <span style={{ fontSize: '12px', fontWeight: '800', color: '#ef4444', backgroundColor: 'rgba(239,68,68,0.1)', padding: '2px 8px', borderRadius: '4px' }}>[자재 부족]</span>
-                <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>품목수 {lowStockConsumables}종</span>
-              </div>
-              <h4 style={{ margin: '0 0 10px 0', fontSize: '16px', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <ShoppingBag size={18} color="#ef4444" /> 메카닉 정비 소모품 안전 마진 임계값 초과
-              </h4>
-              <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: '0 0 14px 0', lineHeight: '1.5' }}>
-                고소작업대 정비 및 출고 인도에 필요한 소모품 품목 중 재고량이 5개 미만인 자재가 <strong>{lowStockConsumables}종</strong> 있습니다. 
-                신속히 재고 구매 보완 신청을 진행하십시오.
-              </p>
-              <button className="btn-primary" onClick={() => setActiveTab('consumable')} style={{ backgroundColor: '#ef4444', border: 'none', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                소모품 재고 확인 및 구매 신청 <ArrowRight size={12} />
-              </button>
-            </div>
-          )}
-
-        </div>
-      )}
-
-      {/* ──────────────────────────────────────────────────────── */}
-      {/* CASE C: 영업담당자(SALES) 또는 일반 임직원(USER) 대시보드 */}
-      {/* ──────────────────────────────────────────────────────── */}
-      {(role === 'SALES' || role === 'USER') && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-          
-          {/* 나의 활성 계약 목록 */}
-          <div style={{
-            backgroundColor: 'var(--bg-card)', borderRadius: '12px', padding: '20px 24px',
-            borderLeft: '5px solid #3b82f6', border: '1px solid var(--border-color)', borderLeftWidth: '5px'
-          }}>
-            <div style={{ display: 'flex', justifyItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-              <span style={{ fontSize: '12px', fontWeight: '800', color: '#3b82f6', backgroundColor: 'rgba(59,130,246,0.1)', padding: '2px 8px', borderRadius: '4px' }}>[영업/계약 관리]</span>
-              <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>진행 중 계약 {activeContracts}건</span>
-            </div>
-            <h4 style={{ margin: '0 0 10px 0', fontSize: '16px', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Layers size={18} color="#3b82f6" /> 기연리프트 고객 대여 렌탈 계약 관리
-            </h4>
-            <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: '0 0 14px 0', lineHeight: '1.5' }}>
-              현재 담당 관리하는 활성/연장 계약은 총 <strong>{activeContracts}건</strong>입니다. 
-              계약 만기 연장 처리 또는 종료 예정 계약들의 회수 일정을 전수 확인하여 반납 입고 준비를 시작하십시오.
-            </p>
-            <button className="btn-primary" onClick={() => setActiveTab('contracts')} style={{ fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-              계약 관리 대장으로 이동 <ArrowRight size={12} />
-            </button>
-          </div>
-
-          {/* 대표이사 지시: 연체 채권 조치 ToDo 피드 */}
-          {currentUser && (currentUser.role === 'ADMIN' || currentUser.id === 'manager' || currentUser.id === 'user') && (
-            <div style={{
-              backgroundColor: 'var(--bg-card)', borderRadius: '12px', padding: '20px 24px',
-              borderLeft: '5px solid #ef4444', border: '1px solid var(--border-color)', borderLeftWidth: '5px'
-            }}>
-              <div style={{ display: 'flex', justifyItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-                <span style={{ fontSize: '11px', fontWeight: '800', color: '#ef4444', backgroundColor: 'rgba(239,68,68,0.08)', padding: '2px 8px', borderRadius: '4px', border: '1px solid rgba(239,68,68,0.2)' }}>
-                  👑 대표이사 자동 명령 지령
-                </span>
-                <span style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: 'bold' }}>긴급 미수금</span>
-              </div>
-              <h4 style={{ margin: '0 0 10px 0', fontSize: '16px', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '8px', color: '#ef4444' }}>
-                <AlertCircle size={18} color="#ef4444" /> 미수 채권 연체 조치 및 수납 증빙 보고 지시
-              </h4>
-              <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: '0 0 14px 0', lineHeight: '1.5' }}>
-                담당 거래처 중 납기일이 경과한 연체 채권이 감지되었습니다. 본 건은 대표이사(CEO) 직속 지시 속성으로 등록되어 
-                강제 조치 의무가 발생합니다. 유선 독촉, 공문 최고장 발송, 혹은 현장 실사 보고서를 즉시 작성해 주십시오.
-              </p>
-              <button className="btn-primary" onClick={() => setActiveTab('delinquency')} style={{ backgroundColor: '#ef4444', border: 'none', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                연체 채권 조치 보고서 작성 <ArrowRight size={12} />
-              </button>
-            </div>
-          )}
-
-          {/* 고객 정보 미비 보완 (ToDo) */}
-          {myTodos.length > 0 && (
-            <div style={{
-              backgroundColor: 'var(--bg-card)', borderRadius: '12px', padding: '20px 24px',
-              borderLeft: '5px solid #f59e0b', border: '1px solid var(--border-color)', borderLeftWidth: '5px'
-            }}>
-              <div style={{ display: 'flex', justifyItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-                <span style={{ fontSize: '12px', fontWeight: '800', color: '#f59e0b', backgroundColor: 'rgba(245,158,11,0.1)', padding: '2px 8px', borderRadius: '4px' }}>[정보 미비]</span>
-                <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>보완 {myTodos.length}건</span>
-              </div>
-              <h4 style={{ margin: '0 0 10px 0', fontSize: '16px', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <AlertCircle size={18} color="#f59e0b" /> 신규 고객사 및 현장 세부 정보 보완 요망
-              </h4>
-              <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: '0 0 14px 0', lineHeight: '1.5' }}>
-                최근 신설되었으나 연락처, 현장 상세 주소, 정산 조건 등 필수 인적 사항 정보가 누락되어 정산에 위험이 되는 고객이 있습니다. 
-                신속히 거래처 정보를 보완해 주세요.
-              </p>
-              <button className="btn-primary" onClick={() => setActiveTab('customers')} style={{ backgroundColor: '#f59e0b', border: 'none', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                고객 및 현장 마스터 정보 보완 <ArrowRight size={12} />
-              </button>
-            </div>
-          )}
-
-        </div>
-      )}
-
-      {/* ──────────────────────────────────────────────────────── */}
-      {/* CASE D: 배차물류담당자(LOGISTICS / DELIVERY) 대시보드 */}
-      {/* ──────────────────────────────────────────────────────── */}
-      {(role === 'LOGISTICS' || role === 'DELIVERY') && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-          
-          {/* 출고/회수 배차 의뢰 대기 */}
-          <div style={{
-            backgroundColor: 'var(--bg-card)', borderRadius: '12px', padding: '20px 24px',
-            borderLeft: '5px solid #06b6d4', border: '1px solid var(--border-color)', borderLeftWidth: '5px'
-          }}>
-            <div style={{ display: 'flex', justifyItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-              <span style={{ fontSize: '12px', fontWeight: '800', color: '#06b6d4', backgroundColor: 'rgba(6,182,212,0.1)', padding: '2px 8px', borderRadius: '4px' }}>[물류 배차]</span>
-              <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>배차 진행 중 {activeDeliveries}건</span>
-            </div>
-            <h4 style={{ margin: '0 0 10px 0', fontSize: '16px', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Truck size={18} color="#06b6d4" /> 실시간 출고 배차 및 장비 반납 입고 대기 목록
-            </h4>
-            <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: '0 0 14px 0', lineHeight: '1.5' }}>
-              현장 계약에 의해 출고 및 회수가 지시되었으나 아직 물류차량 수배 및 정산 처리가 마감되지 않은 배차 의뢰가 <strong>{activeDeliveries}건</strong> 있습니다. 
-              기사 연락처와 운송비 확정 작업을 조속히 마감하여 주십시오.
-            </p>
-            <button className="btn-primary" onClick={() => setActiveTab('delivery')} style={{ backgroundColor: '#06b6d4', border: 'none', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-              물류차량 배차관리 가기 <ArrowRight size={12} />
-            </button>
-          </div>
-
-          {/* 운송비 차량 정산 대기 */}
-          <div style={{
-            backgroundColor: 'var(--bg-card)', borderRadius: '12px', padding: '20px 24px',
-            borderLeft: '5px solid #ef4444', border: '1px solid var(--border-color)', borderLeftWidth: '5px'
-          }}>
-            <div style={{ display: 'flex', justifyItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-              <span style={{ fontSize: '12px', fontWeight: '800', color: '#ef4444', backgroundColor: 'rgba(239,68,68,0.1)', padding: '2px 8px', borderRadius: '4px' }}>[운송비 마감]</span>
-              <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>미확정 운송비 대기</span>
-            </div>
-            <h4 style={{ margin: '0 0 10px 0', fontSize: '16px', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <CreditCard size={18} color="#ef4444" /> 물류사 차량별 운송비 정산 마감 및 품질 검수
-            </h4>
-            <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: '0 0 14px 0', lineHeight: '1.5' }}>
-              운송 기사와 협의된 물류 대금(임시)과 최종 실제 청구액(확정) 간의 편차를 조정하고, 
-              입고 완료된 장비에 대한 품질 검수 상태 마킹을 신속하게 완료해 주시기 바랍니다.
-            </p>
-            <button className="btn-primary" onClick={() => setActiveTab('delivery')} style={{ backgroundColor: '#ef4444', border: 'none', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-              운송 차량별 비용 정산 마감 <ArrowRight size={12} />
-            </button>
-          </div>
-
-        </div>
-      )}
 
     </div>
   );
