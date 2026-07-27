@@ -530,6 +530,7 @@ export interface GoogleConfig {
   bizRegCertUrl?: string;
   bankbookCopyUrl?: string;
   defaultRootFolderId?: string;
+  createdAt?: string;
   updatedAt: string;
 }
 

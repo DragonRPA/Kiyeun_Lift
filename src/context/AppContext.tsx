@@ -395,13 +395,31 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const updateGoogleConfig = async (configData: GoogleConfig) => {
     try {
-      const exists = db.googleConfigs.some(cfg => cfg.id === configData.id);
-      if (exists) {
-        db.updateRow<GoogleConfig>('googleConfigs', configData.id, configData);
+      const nowIso = new Date().toISOString();
+      const payload: GoogleConfig = { ...configData, updatedAt: nowIso };
+
+      // 1. 로컬 스토리지 즉시 반영
+      const currentList = [...db.googleConfigs];
+      const localIndex = currentList.findIndex(cfg => cfg.id === configData.id);
+      if (localIndex >= 0) {
+        currentList[localIndex] = payload;
       } else {
-        db.insertRow<GoogleConfig>('googleConfigs', configData);
+        currentList.push({ ...payload, createdAt: nowIso });
       }
-      await db.awaitPendingWrites();
+      db.googleConfigs = currentList;
+
+      // 2. Supabase UPSERT — 행 존재 여부와 관계없이 반드시 반영
+      if (supabase) {
+        const upsertPayload = { ...payload, createdAt: (payload as any).createdAt || nowIso };
+        const { error } = await supabase
+          .from('google_configs')
+          .upsert([upsertPayload], { onConflict: 'id' });
+        if (error) {
+          console.error('Supabase upsert failed for google_configs:', error);
+          throw error;
+        }
+      }
+
       refreshAllData();
     } catch (err: any) {
       console.error('updateGoogleConfig Error:', err);

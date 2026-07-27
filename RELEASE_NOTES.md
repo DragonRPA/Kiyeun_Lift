@@ -1,3 +1,11 @@
+# Release Notes (v1.4.3.Build.00008 - 2026-07-27 20:40)
+
+## 🔥 구글 설정 Supabase UPSERT 전환 — 원격 DB 미저장 버그 근본 수정
+- **버그 원인 분석**: 기존 `updateGoogleConfig`는 로컬 배열(SEED 데이터)에서 존재 여부를 체크한 후 Supabase에 `UPDATE`를 시도했으나, 원격 DB에 해당 행이 없을 경우 Supabase가 `0행 업데이트`로 조용히 통과시켜(Silent Success) **원격 DB에는 아무것도 저장되지 않는** 근본적 구조 결함이 있었음.
+- **UPSERT 방식으로 전환**: 로컬/원격 행 존재 여부에 무관하게 `supabase.from('google_configs').upsert([payload], { onConflict: 'id' })`를 직접 호출하여 **항상 원격 DB에 반드시 INSERT-or-UPDATE**가 보장되도록 수정.
+- **`GoogleConfig` 인터페이스 확장**: `createdAt?: string` 필드 추가하여 UPSERT payload 완전성 확보.
+- **오류 즉시 팝업**: UPSERT 실패 시 `showErrorModal`로 구체적 오류 원인 즉시 표출.
+
 # Release Notes (v1.4.3.Build.00007 - 2026-07-27 20:34)
 
 ## 📁 보존 폴더 4종 [☁️ 드라이브 탐색] 버튼 확대 신설 (최소 입력/최대 효과 완비)
