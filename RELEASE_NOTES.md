@@ -1,3 +1,14 @@
+# Release Notes (v1.7.0.Build.00003 - 2026-07-28 01:40)
+
+## 🎯 [근본 해결] DB `assets` 테이블 `CHECK` 제약조건 `ASSIGNED` 누락 100% 수정 & DDL 자동 패치
+
+- **근본 원인 발각**: Supabase PostgreSQL 원격 DB의 `assets` 테이블 DDL 정의 중 `status` CHECK 제약조건(`assets_status_check`)에 신규 상태값인 **`'ASSIGNED'`가 누락**되어 있어, 장비 할당 시 PostgreSQL DB가 `new row violates check constraint "assets_status_check"` 에러(Code `23514`)를 발생시키며 UPDATE 쿼리를 전면 거부(Reject)하고 있던 문제 발각!
+- **조치 사항**:
+  1. `schema.sql`: `assets.status` CHECK 제약조건에 `'ASSIGNED'` 포함 수정 (`CHECK (status IN ('AVAILABLE', 'ASSIGNED', 'RENTED', 'REPAIRING', 'RENTED_RETURNED', 'SOLD'))`).
+  2. `DevDataUploader.tsx`: 개발자 도구 (DB 스키마 정합성 검증 도구) 실행 시 `assets` 테이블 CHECK 제약조건 보완 DDL(`ALTER TABLE assets DROP CONSTRAINT IF EXISTS assets_status_check; ...`)을 자동 생성 및 실행하도록 반영.
+
+---
+
 # Release Notes (v1.7.0.Build.00002 - 2026-07-28 01:33)
 
 ## 🐛 [Hotfix] 장비 할당 시 자산 상태 `ASSIGNED`(출고대기) 변경 쿼리거부 해결 & Payload 정화

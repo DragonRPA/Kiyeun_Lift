@@ -1150,6 +1150,12 @@ export const DevDataUploader: React.FC = () => {
         }
       }
 
+      // 3. assets 테이블 status CHECK 제약조건에 ASSIGNED 포함 보완 DDL 무조건 포함
+      const fixCheckConstraintDdl = `ALTER TABLE assets DROP CONSTRAINT IF EXISTS assets_status_check;\nALTER TABLE assets ADD CONSTRAINT assets_status_check CHECK (status IN ('AVAILABLE', 'ASSIGNED', 'RENTED', 'REPAIRING', 'RENTED_RETURNED', 'SOLD'));`;
+      stmts.push("ALTER TABLE assets DROP CONSTRAINT IF EXISTS assets_status_check;");
+      stmts.push("ALTER TABLE assets ADD CONSTRAINT assets_status_check CHECK (status IN ('AVAILABLE', 'ASSIGNED', 'RENTED', 'REPAIRING', 'RENTED_RETURNED', 'SOLD'));");
+      sqlPatchDisplay += `-- [보완] assets status CHECK 제약조건 ASSIGNED 추가 패치\n${fixCheckConstraintDdl}\n\n`;
+
       if (stmts.length > 0) {
         sqlPatchDisplay += `\n-- ✅ PostgREST 스키마 캐시 즉시 갱신 (dev_exec_ddl 자동 실행)\nNOTIFY pgrst, 'reload schema';\n`;
       }

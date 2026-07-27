@@ -164,7 +164,7 @@ CREATE TABLE assets (
     manufacturer TEXT,
     "manufactureYear" TEXT,
     "ownerType" TEXT CHECK ("ownerType" IN ('OWNED', 'RENTED')) NOT NULL,
-    status TEXT CHECK (status IN ('AVAILABLE', 'RENTED', 'REPAIRING', 'RENTED_RETURNED', 'SOLD')) NOT NULL,
+    status TEXT CHECK (status IN ('AVAILABLE', 'ASSIGNED', 'RENTED', 'REPAIRING', 'RENTED_RETURNED', 'SOLD')) NOT NULL,
     
     -- 당사자산 상세
     "acquisitionDate" TEXT,
