@@ -1,3 +1,25 @@
+# Release Notes (v1.6.0.Build.00000 - 2026-07-27 23:55)
+
+## 🛠️ 출고 검수/정비 의뢰 파이프라인 신설 & 자산 `ASSIGNED`(출고대기) 이중 할당 방지 개편
+
+### 1. 자산 상태 `ASSIGNED` (출고대기) 신설 — 이중 할당(Double Booking) 원천 차단 (`db.ts` & `AppContext.tsx`)
+- **개편 배경**: 장비 할당 보드에서 장비 매핑 시 자산 상태를 그대로 `AVAILABLE`(가용)로 두면 타 계약에서 동일 장비가 이중 할당되는 치명적 정산/배차 사고 위험이 존재함.
+- **상태 라이프사이클**: `AVAILABLE` ➔ **`ASSIGNED` (출고대기)** ➔ `RENTED` (대여 중) ➔ `AVAILABLE` (반납 및 정비 완료)
+- **이중 할당 차단**: `AssetAssignment`에서 장비 할당 즉시 자산 상태가 `ASSIGNED`로 변경되어 가용 장비 리스트에서 자동 제거됨.
+
+### 2. 신규 DB 테이블 `outbound_inspections` 신설 (`schema.sql` & `db.ts`)
+- 출고 검수 및 21대 정비 스펙 관리 전용 테이블 DDL 구축 (`outbound_inspections`).
+- `id`, `contractId`, `contractAssetId`, `assetId`, `status` (`PENDING`/`IN_PROGRESS`/`COMPLETED`/`REJECTED`), `specsJson`, `inspectorId`, `inspectedAt`, `note`.
+- Supabase RLS 6종 허용 Policy (`allow_anon_*` / `allow_authenticated_*`) 자동 포함 DDL 탑재.
+
+### 3. 신규 메뉴 구축 — `[출고 검수 및 작업 의뢰 관리]` (`OutboundInspections.tsx` & `App.tsx`)
+- **자동 의뢰 트리거**: 장비 할당 완료 시 `outbound_inspections`에 신규 의뢰 레코드 자동 발행 (`status: 'PENDING'`).
+- **21대 기술 스펙 실시간 검수 시트**: 최초 출고 요청 시 설정된 21가지 정비/기술 스펙(철망, 원판, 단자 마킹, 오버로드 셋팅, 보양 등)을 실시간 체크 완료 후 마감.
+- **승인 마감 시**: 자산 상태 `ASSIGNED` ➔ **`RENTED` (대여 중)** 최종 전환 & 차량 배차 기사 출고 인도 완성.
+- **반려 처리 시**: 사유 입력 후 자산 상태 `ASSIGNED` ➔ **`AVAILABLE` (가용 원복)** 및 타 계약 재할당 전환.
+
+---
+
 # Release Notes (v1.5.3.Build.00000 - 2026-07-27 23:40)
 
 ## 🚀 스마트 출고 비표준 모델명 정식 승인 검증 & 계약번호 전사 통일 개편

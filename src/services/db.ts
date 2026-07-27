@@ -118,7 +118,7 @@ export interface Asset {
   manufacturer?: string;
   manufactureYear?: string; // 제조년도 (예: 2023)
   ownerType: 'OWNED' | 'RENTED'; // 당사자산 / 임차자산
-  status: 'AVAILABLE' | 'RENTED' | 'REPAIRING' | 'RENTED_RETURNED' | 'SOLD';
+  status: 'AVAILABLE' | 'ASSIGNED' | 'RENTED' | 'REPAIRING' | 'RENTED_RETURNED' | 'SOLD';
   
   maintenanceScore?: number; // 정비 소요 점수 (0이 최상 상태)
 
@@ -568,6 +568,22 @@ export interface AssetInOutLog {
   maintenanceScore?: number;
   memo?: string;
   createdAt: string;
+}
+
+export type OutboundInspectionStatus = 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'REJECTED';
+
+export interface OutboundInspection {
+  id: string;
+  contractId?: string;
+  contractAssetId?: string;
+  assetId?: string;
+  status: OutboundInspectionStatus;
+  specsJson?: string;
+  inspectorId?: string;
+  inspectedAt?: string;
+  note?: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 // 초기 로컬 스토리지 데이터 생성
@@ -1059,6 +1075,9 @@ class LocalDB {
   get cashFlowSnapshots() { return this.get<CashFlowSnapshot>('cashFlowSnapshots', SEED_CASH_FLOW_SNAPSHOTS); }
   set cashFlowSnapshots(val: CashFlowSnapshot[]) { this.set('cashFlowSnapshots', val); }
 
+  get outboundInspections() { return this.get<OutboundInspection>('outboundInspections', []); }
+  set outboundInspections(val: OutboundInspection[]) { this.set('outboundInspections', val); }
+
   // Supabase 테이블 맵핑
   private mapToSupabaseTable(key: string): string {
     const mapping: Record<string, string> = {
@@ -1089,7 +1108,8 @@ class LocalDB {
       assetInOutLogs: 'asset_inout_logs',
       googleConfigs: 'google_configs',
       vendors: 'vendors',
-      cashFlowSnapshots: 'cash_flow_snapshots'
+      cashFlowSnapshots: 'cash_flow_snapshots',
+      outboundInspections: 'outbound_inspections'
     };
     return mapping[key] || key;
   }
@@ -1221,6 +1241,7 @@ class LocalDB {
       case 'cashFlowSnapshots':  prefix = 'CFSN-';   break;
       case 'transportCompanies': prefix = 'TCOM-';   break;
       case 'transportDrivers':   prefix = 'TDRV-';   break;
+      case 'outboundInspections':prefix = 'OIN-';    break;
       default:
         prefix = key.slice(0, 4).toUpperCase() + '-';
     }

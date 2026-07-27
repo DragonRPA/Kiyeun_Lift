@@ -615,6 +615,35 @@ CREATE TABLE cash_flow_snapshots (
     "updatedAt" TEXT NOT NULL
 );
 
+-- 40. 출고 검수/정비 의뢰 테이블 (outbound_inspections)
+CREATE TABLE outbound_inspections (
+    id TEXT PRIMARY KEY,
+    "contractId" TEXT,
+    "contractAssetId" TEXT,
+    "assetId" TEXT,
+    status TEXT NOT NULL DEFAULT 'PENDING',
+    "specsJson" TEXT,
+    "inspectorId" TEXT,
+    "inspectedAt" TEXT,
+    note TEXT,
+    "createdAt" TEXT NOT NULL,
+    "updatedAt" TEXT NOT NULL
+);
+
+ALTER TABLE outbound_inspections ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "allow_anon_select" ON outbound_inspections;
+DROP POLICY IF EXISTS "allow_anon_insert" ON outbound_inspections;
+DROP POLICY IF EXISTS "allow_anon_update" ON outbound_inspections;
+DROP POLICY IF EXISTS "allow_authenticated_select" ON outbound_inspections;
+DROP POLICY IF EXISTS "allow_authenticated_insert" ON outbound_inspections;
+DROP POLICY IF EXISTS "allow_authenticated_update" ON outbound_inspections;
+CREATE POLICY "allow_anon_select" ON outbound_inspections FOR SELECT TO anon USING (true);
+CREATE POLICY "allow_anon_insert" ON outbound_inspections FOR INSERT TO anon WITH CHECK (true);
+CREATE POLICY "allow_anon_update" ON outbound_inspections FOR UPDATE TO anon USING (true) WITH CHECK (true);
+CREATE POLICY "allow_authenticated_select" ON outbound_inspections FOR SELECT TO authenticated USING (true);
+CREATE POLICY "allow_authenticated_insert" ON outbound_inspections FOR INSERT TO authenticated WITH CHECK (true);
+CREATE POLICY "allow_authenticated_update" ON outbound_inspections FOR UPDATE TO authenticated USING (true) WITH CHECK (true);
+
 
 -- ==========================================
 -- 초기 기초 데이터 시딩 (Seed Data)

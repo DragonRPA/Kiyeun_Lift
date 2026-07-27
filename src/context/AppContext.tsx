@@ -1,6 +1,6 @@
 // d:\Kiyeun_Lift\src\context\AppContext.tsx
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { db, supabase, User, MenuPermission, Customer, CustomerContact, CustomerSite, Product, Asset, Consumable, ConsumableLog, ConsumablePurchaseRequest, Contract, ContractAsset, ContractHistory, Billing, BillingDetail, Payment, Delivery, TransportCompany, TransportDriver, Repair, RepairConsumable, Todo, BankTransaction, BankMatchingRule, AssetInOutLog, Vendor, GoogleConfig, CashFlowSnapshot, findCustomerByNormalizedName } from '../services/db';
+import { db, supabase, User, MenuPermission, Customer, CustomerContact, CustomerSite, Product, Asset, Consumable, ConsumableLog, ConsumablePurchaseRequest, Contract, ContractAsset, ContractHistory, Billing, BillingDetail, Payment, Delivery, TransportCompany, TransportDriver, Repair, RepairConsumable, Todo, BankTransaction, BankMatchingRule, AssetInOutLog, Vendor, GoogleConfig, CashFlowSnapshot, OutboundInspection, findCustomerByNormalizedName } from '../services/db';
 import { ErrorModal } from '../components/ErrorModal';
 
 export interface SmartDispatchData {
@@ -73,6 +73,7 @@ interface AppContextType {
   vendors: Vendor[];
   googleConfigs: GoogleConfig[];
   cashFlowSnapshots: CashFlowSnapshot[];
+  outboundInspections: OutboundInspection[];
 
   // Mutators
   refreshAllData: () => void;
@@ -184,6 +185,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [googleConfigs, setGoogleConfigs] = useState<GoogleConfig[]>([]);
   const [cashFlowSnapshots, setCashFlowSnapshots] = useState<CashFlowSnapshot[]>([]);
+  const [outboundInspections, setOutboundInspections] = useState<OutboundInspection[]>([]);
 
   // Navigation / Routing states
   const [activeTab, setActiveTab] = useState<string>('dashboard');
@@ -235,6 +237,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setVendors([...db.vendors]);
     setGoogleConfigs([...db.googleConfigs]);
     setCashFlowSnapshots([...db.cashFlowSnapshots]);
+    setOutboundInspections([...db.outboundInspections]);
   };
 
   // 전체 28개 테이블 Supabase pull 후 state 동기화 (초기 로딩 전용)
@@ -251,31 +254,32 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // 메뉴별 관련 테이블만 Supabase pull (메뉴 전환 시 호출 — 최신 데이터 보장)
   const MENU_TABLE_MAP: Record<string, string[]> = {
-    'dashboard':           ['deliveries', 'contracts', 'billings', 'todos', 'assets'],
-    'delivery':            ['deliveries', 'transportCompanies', 'transportDrivers', 'contracts', 'assets'],
-    'transport_master':    ['transportCompanies', 'transportDrivers'],
-    'contract':            ['contracts', 'contractAssets', 'contractHistory', 'customers', 'assets'],
-    'billing':             ['billings', 'billingDetails', 'payments', 'contracts', 'customers'],
-    'customer':            ['customers', 'contacts', 'sites'],
-    'product':             ['products'],
-    'asset':               ['assets', 'products', 'vendors', 'contracts'],
-    'acquisition_disposal':['assets', 'products', 'vendors'],
-    'rent_asset':          ['assets', 'vendors'],
-    'consumable':          ['consumables', 'consumableLogs', 'consumablePurchases', 'vendors'],
-    'repair':              ['repairs', 'repairConsumables', 'assets', 'consumables', 'vendors'],
-    'smart_dispatch':      ['deliveries', 'contracts', 'assets', 'transportCompanies', 'transportDrivers'],
-    'smart_return':        ['deliveries', 'contracts', 'assets', 'transportCompanies', 'transportDrivers'],
-    'asset_inout_history': ['assetInOutLogs', 'assets', 'customers'],
-    'dispatch_assign':     ['contracts', 'contractAssets', 'assets'],
-    'bank_matching':       ['bankTransactions', 'bankMatchingRules', 'billings', 'customers'],
-    'vendors':             ['vendors'],
-    'organization':        ['users', 'departments'],
-    'permission':          ['users', 'permissions'],
-    'payroll':             ['users', 'departments'],
-    'corporate_card':      ['vendors', 'billings'],
-    'cash_flow':           ['billings', 'payments', 'contracts', 'assets'],
-    'delinquency':         ['billings', 'customers', 'contracts'],
-    'google_config':       ['googleConfigs'],
+    'dashboard':            ['deliveries', 'contracts', 'billings', 'todos', 'assets'],
+    'delivery':             ['deliveries', 'transportCompanies', 'transportDrivers', 'contracts', 'assets'],
+    'transport_master':     ['transportCompanies', 'transportDrivers'],
+    'contract':             ['contracts', 'contractAssets', 'contractHistory', 'customers', 'assets'],
+    'billing':              ['billings', 'billingDetails', 'payments', 'contracts', 'customers'],
+    'customer':             ['customers', 'contacts', 'sites'],
+    'product':              ['products'],
+    'asset':                ['assets', 'products', 'vendors', 'contracts'],
+    'acquisition_disposal': ['assets', 'products', 'vendors'],
+    'rent_asset':           ['assets', 'vendors'],
+    'consumable':           ['consumables', 'consumableLogs', 'consumablePurchases', 'vendors'],
+    'repair':               ['repairs', 'repairConsumables', 'assets', 'consumables', 'vendors'],
+    'smart_dispatch':       ['deliveries', 'contracts', 'assets', 'transportCompanies', 'transportDrivers'],
+    'smart_return':         ['deliveries', 'contracts', 'assets', 'transportCompanies', 'transportDrivers'],
+    'asset_inout_history':  ['assetInOutLogs', 'assets', 'customers'],
+    'dispatch_assign':      ['contracts', 'contractAssets', 'assets', 'outboundInspections'],
+    'outbound_inspections': ['outboundInspections', 'contracts', 'contractAssets', 'assets', 'customers'],
+    'bank_matching':        ['bankTransactions', 'bankMatchingRules', 'billings', 'customers'],
+    'vendors':              ['vendors'],
+    'organization':         ['users', 'departments'],
+    'permission':           ['users', 'permissions'],
+    'payroll':              ['users', 'departments'],
+    'corporate_card':       ['vendors', 'billings'],
+    'cash_flow':            ['billings', 'payments', 'contracts', 'assets'],
+    'delinquency':          ['billings', 'customers', 'contracts'],
+    'google_config':        ['googleConfigs'],
   };
 
   const loadTablesForMenu = async (menuId: string) => {
@@ -1568,10 +1572,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       ...(targetAsset?.modelName ? { expectedModel: targetAsset.modelName } : {})
     });
 
-    // 2. Asset 상태 업데이트
+    // 2. Asset 상태 업데이트 (ASSIGNED 출고대기로 전환하여 타 계약 이중 할당 원천 차단!)
     if (contract) {
       db.updateRow<Asset>('assets', assetId, {
-        status: 'RENTED',
+        status: 'ASSIGNED',
         currentCustomerId: contract.customerId,
         currentSiteId: contract.siteId,
         contractStart: contract.startDate,
@@ -1579,6 +1583,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updatedAt: new Date().toISOString()
       });
     }
+
+    // 3. 출고 검수/정비 작업 의뢰 자동 발행 (status: PENDING 미접수)
+    db.insertRow<OutboundInspection>('outboundInspections', {
+      contractId: ca.contractId,
+      contractAssetId: ca.id,
+      assetId: assetId,
+      status: 'PENDING',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    });
 
     refreshAllData();
   };
@@ -2475,7 +2489,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     <AppContext.Provider value={{
       currentUser, theme, toggleTheme, login, logout, hasPermission, showErrorModal,
       users, permissions, customers, contacts, sites, products, assets, consumables, consumableLogs, consumablePurchases, contracts, contractAssets, contractHistory, deliveries, billings, billingDetails, payments, repairs, repairConsumables, transportCompanies, transportDrivers, todos,
-      bankTransactions, bankMatchingRules, assetInOutLogs, vendors, googleConfigs, cashFlowSnapshots,
+      bankTransactions, bankMatchingRules, assetInOutLogs, vendors, googleConfigs, cashFlowSnapshots, outboundInspections,
       refreshAllData, loadTablesForMenu, updatePermissions, saveUser, saveCustomer, saveContact, saveSite, saveProduct, saveAsset, updateGoogleConfig,
       saveCashFlowSnapshot, deleteCashFlowSnapshot, saveVendor, deleteVendor,
       acquireAsset, disposeAsset, registerRentedAsset, returnRentedAsset,
