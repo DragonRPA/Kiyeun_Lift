@@ -50,7 +50,7 @@ export interface MenuGroup {
 }
 
 const App: React.FC = () => {
-  const { currentUser, login, logout, theme, toggleTheme, hasPermission, activeTab, setActiveTab } = useApp();
+  const { currentUser, login, logout, theme, toggleTheme, hasPermission, activeTab, setActiveTab, loadTablesForMenu } = useApp();
 
   // 로그인 폼 상태
   const [loginId, setLoginId] = useState('');
@@ -83,13 +83,14 @@ const App: React.FC = () => {
     }
   }, []);
 
-  // 메뉴(activeTab) 전환 시 화면 스크롤 최상단(Top = 0) 자동 리셋
+  // 메뉴(activeTab) 전환 시 스크롤 최상단 리셋 + 해당 메뉴 관련 테이블만 Supabase pull (최신 데이터 보장)
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'instant' });
     const mainArea = document.querySelector('.main-content-area');
     if (mainArea) {
       mainArea.scrollTop = 0;
     }
+    loadTablesForMenu(activeTab);
   }, [activeTab]);
 
   const handleLoginSubmit = (e: React.FormEvent) => {

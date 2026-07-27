@@ -1113,6 +1113,26 @@ class LocalDB {
     return !!supabase;
   }
 
+  // 단일 테이블만 Supabase에서 pull (메뉴 전환 시 관련 테이블만 선택적 로딩용)
+  async pullTableFromSupabase(key: string): Promise<any[] | null> {
+    if (!supabase) return null;
+    try {
+      const tableName = this.mapToSupabaseTable(key);
+      const { data, error } = await supabase.from(tableName).select('*');
+      if (error) {
+        console.warn(`pullTableFromSupabase failed for ${tableName}:`, error);
+        return null;
+      }
+      if (data !== null) {
+        this.set(key as keyof LocalDB, data);
+      }
+      return data;
+    } catch (e) {
+      console.warn(`pullTableFromSupabase exception for ${key}:`, e);
+      return null;
+    }
+  }
+
   async pullFromSupabase(): Promise<void> {
     if (!supabase) return;
 

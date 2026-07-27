@@ -76,6 +76,7 @@ interface AppContextType {
 
   // Mutators
   refreshAllData: () => void;
+  loadTablesForMenu: (menuId: string) => Promise<void>;
   updatePermissions: (updated: MenuPermission[]) => void;
   saveUser: (user: Omit<User, 'id' | 'createdAt'> & { id?: string }) => void;
   saveCustomer: (cust: Omit<Customer, 'id' | 'createdAt'> & { id?: string }) => Promise<Customer>;
@@ -203,7 +204,41 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
   };
 
-  const refreshAllData = async () => {
+  // ─────────────────────────────────────────────────────────
+  // 로컬 db 인메모리 스토어 → React state 즉시 동기화 (Supabase pull 없음 — 저장 후 즉각 화면 반영용)
+  const syncLocalToState = () => {
+    setUsers([...db.users]);
+    setPermissions([...db.permissions]);
+    setCustomers([...db.customers]);
+    setContacts([...db.contacts]);
+    setSites([...db.sites]);
+    setProducts([...db.products]);
+    setAssets([...db.assets]);
+    setConsumables([...db.consumables]);
+    setConsumableLogs([...db.consumableLogs]);
+    setConsumablePurchases([...db.consumablePurchases]);
+    setContracts([...db.contracts]);
+    setContractAssets([...db.contractAssets]);
+    setContractHistory([...db.contractHistory]);
+    setDeliveries([...db.deliveries]);
+    setTransportCompanies([...db.transportCompanies]);
+    setTransportDrivers([...db.transportDrivers]);
+    setBillings([...db.billings]);
+    setBillingDetails([...db.billingDetails]);
+    setPayments([...db.payments]);
+    setRepairs([...db.repairs]);
+    setRepairConsumables([...db.repairConsumables]);
+    setTodos([...db.todos]);
+    setBankTransactions([...db.bankTransactions]);
+    setBankMatchingRules([...db.bankMatchingRules]);
+    setAssetInOutLogs([...db.assetInOutLogs]);
+    setVendors([...db.vendors]);
+    setGoogleConfigs([...db.googleConfigs]);
+    setCashFlowSnapshots([...db.cashFlowSnapshots]);
+  };
+
+  // 전체 28개 테이블 Supabase pull 후 state 동기화 (초기 로딩 전용)
+  const fullRefreshFromServer = async () => {
     if (db.isSupabaseConnected()) {
       try {
         await db.pullFromSupabase();
@@ -211,35 +246,53 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         console.error("Failed to sync from Supabase:", err);
       }
     }
-    setUsers(db.users);
-    setPermissions(db.permissions);
-    setCustomers(db.customers);
-    setContacts(db.contacts);
-    setSites(db.sites);
-    setProducts(db.products);
-    setAssets(db.assets);
-    setConsumables(db.consumables);
-    setConsumableLogs(db.consumableLogs);
-    setConsumablePurchases(db.consumablePurchases);
-    setContracts(db.contracts);
-    setContractAssets(db.contractAssets);
-    setContractHistory(db.contractHistory);
-    setDeliveries(db.deliveries);
-    setTransportCompanies(db.transportCompanies);
-    setTransportDrivers(db.transportDrivers);
-    setBillings(db.billings);
-    setBillingDetails(db.billingDetails);
-    setPayments(db.payments);
-    setRepairs(db.repairs);
-    setRepairConsumables(db.repairConsumables);
-    setTodos(db.todos);
-    setBankTransactions(db.bankTransactions);
-    setBankMatchingRules(db.bankMatchingRules);
-    setAssetInOutLogs(db.assetInOutLogs);
-    setVendors(db.vendors);
-    setGoogleConfigs(db.googleConfigs);
-    setCashFlowSnapshots(db.cashFlowSnapshots);
+    syncLocalToState();
   };
+
+  // 메뉴별 관련 테이블만 Supabase pull (메뉴 전환 시 호출 — 최신 데이터 보장)
+  const MENU_TABLE_MAP: Record<string, string[]> = {
+    'dashboard':           ['deliveries', 'contracts', 'billings', 'todos', 'assets'],
+    'delivery':            ['deliveries', 'transportCompanies', 'transportDrivers', 'contracts', 'assets'],
+    'transport_master':    ['transportCompanies', 'transportDrivers'],
+    'contract':            ['contracts', 'contractAssets', 'contractHistory', 'customers', 'assets'],
+    'billing':             ['billings', 'billingDetails', 'payments', 'contracts', 'customers'],
+    'customer':            ['customers', 'contacts', 'sites'],
+    'product':             ['products'],
+    'asset':               ['assets', 'products', 'vendors', 'contracts'],
+    'acquisition_disposal':['assets', 'products', 'vendors'],
+    'rent_asset':          ['assets', 'vendors'],
+    'consumable':          ['consumables', 'consumableLogs', 'consumablePurchases', 'vendors'],
+    'repair':              ['repairs', 'repairConsumables', 'assets', 'consumables', 'vendors'],
+    'smart_dispatch':      ['deliveries', 'contracts', 'assets', 'transportCompanies', 'transportDrivers'],
+    'smart_return':        ['deliveries', 'contracts', 'assets', 'transportCompanies', 'transportDrivers'],
+    'asset_inout_history': ['assetInOutLogs', 'assets', 'customers'],
+    'dispatch_assign':     ['contracts', 'contractAssets', 'assets'],
+    'bank_matching':       ['bankTransactions', 'bankMatchingRules', 'billings', 'customers'],
+    'vendors':             ['vendors'],
+    'organization':        ['users', 'departments'],
+    'permission':          ['users', 'permissions'],
+    'payroll':             ['users', 'departments'],
+    'corporate_card':      ['vendors', 'billings'],
+    'cash_flow':           ['billings', 'payments', 'contracts', 'assets'],
+    'delinquency':         ['billings', 'customers', 'contracts'],
+    'google_config':       ['googleConfigs'],
+  };
+
+  const loadTablesForMenu = async (menuId: string) => {
+    if (!db.isSupabaseConnected()) return;
+    const keys = MENU_TABLE_MAP[menuId];
+    if (!keys || keys.length === 0) return;
+    try {
+      await Promise.all(keys.map(key => db.pullTableFromSupabase(key)));
+      syncLocalToState();
+    } catch (err) {
+      console.warn('loadTablesForMenu error:', err);
+    }
+  };
+
+  // 하위 호환 유지용 alias — 저장 후 즉각 화면 반영 (Supabase pull 없음, 순수 로컬 동기화)
+  const refreshAllData = syncLocalToState;
+
 
   useEffect(() => {
     if (!localStorage.getItem('seed_v1_8_dummy_contracts_v2')) {
@@ -299,7 +352,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setCurrentUser(JSON.parse(autoUser));
     }
     
-    refreshAllData();
+    // 초기 로딩: 전체 28개 테이블 Supabase pull (앱 최초 진입 1회만)
+    fullRefreshFromServer();
   }, []);
 
   const toggleTheme = () => {
@@ -2390,7 +2444,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       currentUser, theme, toggleTheme, login, logout, hasPermission, showErrorModal,
       users, permissions, customers, contacts, sites, products, assets, consumables, consumableLogs, consumablePurchases, contracts, contractAssets, contractHistory, deliveries, billings, billingDetails, payments, repairs, repairConsumables, transportCompanies, transportDrivers, todos,
       bankTransactions, bankMatchingRules, assetInOutLogs, vendors, googleConfigs, cashFlowSnapshots,
-      refreshAllData, updatePermissions, saveUser, saveCustomer, saveContact, saveSite, saveProduct, saveAsset, updateGoogleConfig,
+      refreshAllData, loadTablesForMenu, updatePermissions, saveUser, saveCustomer, saveContact, saveSite, saveProduct, saveAsset, updateGoogleConfig,
       saveCashFlowSnapshot, deleteCashFlowSnapshot, saveVendor, deleteVendor,
       acquireAsset, disposeAsset, registerRentedAsset, returnRentedAsset,
       purchaseConsumable, useConsumable,
