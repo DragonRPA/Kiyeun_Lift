@@ -1,3 +1,3 @@
 git add .
-git commit -m "fix: update table missing check condition for dev_get_columns empty array v1.6.0.Build.00003"
+git commit -m "feat: add immediate focus blur & double submission lock to prevent duplicate requests on enter key v1.6.0.Build.00004"
 git push origin main

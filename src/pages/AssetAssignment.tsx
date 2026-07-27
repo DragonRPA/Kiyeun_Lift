@@ -21,7 +21,16 @@ export const AssetAssignment: React.FC = () => {
   const pendingContractIds = Array.from(new Set(pendingCaList.map(ca => ca.contractId)));
   const pendingContracts = contracts.filter(c => pendingContractIds.includes(c.id));
 
+  const [isAssigning, setIsAssigning] = useState(false);
+
   const handleAssign = async () => {
+    // 1. 클릭 즉시 브라우저 포커스 탈출! (Enter 연타에 의한 중복 클릭 차단)
+    if (document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur();
+    }
+
+    if (isAssigning) return; // 2. 이미 처리 중이면 원천 거부!
+
     if (!canEdit) {
       alert('장비 할당 권한이 없습니다.');
       return;
@@ -31,6 +40,7 @@ export const AssetAssignment: React.FC = () => {
       return;
     }
 
+    setIsAssigning(true);
     try {
       await assignAssetToContract(selectedCaId, selectedAssetId);
       alert('✅ 장비 할당이 성공적으로 완결되었습니다!\n자산 상태가 [출고대기(ASSIGNED)]로 즉시 전환되어 타 계약 이중 할당이 차단되었으며, 출고 검수 의뢰가 발행되었습니다.');
@@ -38,6 +48,8 @@ export const AssetAssignment: React.FC = () => {
       setSelectedAssetId('');
     } catch (err: any) {
       alert(`⚠️ 장비 할당 실패: ${err?.message || err}`);
+    } finally {
+      setIsAssigning(false);
     }
   };
 
@@ -262,7 +274,7 @@ export const AssetAssignment: React.FC = () => {
                 <button 
                   className="btn-primary" 
                   onClick={handleAssign} 
-                  disabled={!selectedCaId || !selectedAssetId} 
+                  disabled={!selectedCaId || !selectedAssetId || isAssigning} 
                   style={{ padding: '6px 12px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 'bold', borderRadius: '6px' }}
                 >
                   <Wrench size={12} /> 슬롯 연결

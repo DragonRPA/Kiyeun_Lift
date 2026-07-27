@@ -81,8 +81,16 @@ export const OutboundInspections: React.FC = () => {
     setInspectionNote(item.note || '');
   };
 
+  const [isProcessing, setIsProcessing] = useState(false);
+
   // 접수 처리 (PENDING -> IN_PROGRESS)
   const handleAcceptInspection = async (item: OutboundInspection) => {
+    if (document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur();
+    }
+    if (isProcessing) return;
+
+    setIsProcessing(true);
     try {
       db.updateRow<OutboundInspection>('outboundInspections', item.id, {
         status: 'IN_PROGRESS',
@@ -94,17 +102,24 @@ export const OutboundInspections: React.FC = () => {
       alert(`의뢰(${item.id})가 성공적으로 접수 처리되었습니다.`);
     } catch (err: any) {
       showErrorModal(`⚠️ 접수 처리 실패:\n${err.message || err}`);
+    } finally {
+      setIsProcessing(false);
     }
   };
 
   // 검수 완료 승인 (IN_PROGRESS/PENDING -> COMPLETED)
   const handleCompleteInspection = async () => {
+    if (document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur();
+    }
+    if (isProcessing) return;
     if (!selectedItem || !selectedAsset) return;
 
     if (!confirm(`선택된 자산 [${selectedAsset.assetNo} - ${selectedAsset.modelName}]의 출고 전 정비/검수를 완료하고 최종 출고 승인하시겠습니까?\n\n(※ 자산 상태가 '출고대기'에서 '대여중'으로 최종 전환됩니다.)`)) {
       return;
     }
 
+    setIsProcessing(true);
     try {
       const nowIso = new Date().toISOString();
       // 1. 의뢰 상태 완료 업데이트
@@ -129,16 +144,23 @@ export const OutboundInspections: React.FC = () => {
       setSelectedInspectionId(null);
     } catch (err: any) {
       showErrorModal(`⚠️ 출고 검수 마감 실패:\n${err.message || err}`);
+    } finally {
+      setIsProcessing(false);
     }
   };
 
   // 반려 처리 (REJECTED)
   const handleConfirmReject = async () => {
+    if (document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur();
+    }
+    if (isProcessing) return;
     if (!selectedItem || !selectedAsset || !rejectReason.trim()) {
       alert('반려 사유를 입력해주세요.');
       return;
     }
 
+    setIsProcessing(true);
     try {
       const nowIso = new Date().toISOString();
       // 1. 의뢰 상태 REJECTED 업데이트
@@ -176,6 +198,8 @@ export const OutboundInspections: React.FC = () => {
       setSelectedInspectionId(null);
     } catch (err: any) {
       showErrorModal(`⚠️ 반려 처리 실패:\n${err.message || err}`);
+    } finally {
+      setIsProcessing(false);
     }
   };
 
@@ -408,7 +432,11 @@ export const OutboundInspections: React.FC = () => {
                 <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '8px' }}>
                   <button
                     className="btn-danger"
-                    onClick={() => setShowRejectModal(true)}
+                    onClick={() => {
+                      if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+                      setShowRejectModal(true);
+                    }}
+                    disabled={isProcessing}
                     style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '8px 14px', fontSize: '12.5px' }}
                   >
                     <XCircle size={14} /> 불량 / 반려 처리
@@ -417,6 +445,7 @@ export const OutboundInspections: React.FC = () => {
                   <button
                     className="btn-primary"
                     onClick={handleCompleteInspection}
+                    disabled={isProcessing}
                     style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '8px 18px', fontSize: '12.5px', backgroundColor: 'var(--success)' }}
                   >
                     <CheckCircle size={14} /> 최종 출고 검수 승인 (대여중 전환)
@@ -443,6 +472,7 @@ export const OutboundInspections: React.FC = () => {
             <label style={{ fontWeight: 'bold', fontSize: '12.5px', display: 'block', marginBottom: '4px' }}>반려 사유 입력 *</label>
             <textarea
               rows={3}
+              autoFocus
               value={rejectReason}
               onChange={e => setRejectReason(e.target.value)}
               placeholder="예: 배터리 누액 발견, 오버로드 작동 불량, 사다리 찌그러짐 등"
@@ -451,8 +481,8 @@ export const OutboundInspections: React.FC = () => {
             />
 
             <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
-              <button className="btn-secondary" onClick={() => setShowRejectModal(false)}>취소</button>
-              <button className="btn-danger" onClick={handleConfirmReject}>반려 확정 처리</button>
+              <button className="btn-secondary" disabled={isProcessing} onClick={() => setShowRejectModal(false)}>취소</button>
+              <button className="btn-danger" disabled={isProcessing || !rejectReason.trim()} onClick={handleConfirmReject}>반려 확정 처리</button>
             </div>
           </div>
         </div>

@@ -549,7 +549,14 @@ ${activeSpecs.map((s, idx) => `  ${idx + 1}. [적용] ${s.label}`).join('\n') ||
     return null;
   };
 
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
   const handleSave = async () => {
+    if (document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur();
+    }
+    if (isSubmitting) return;
+
     if (!canSave) {
       alert('저장 권한이 없습니다.');
       return;
@@ -558,6 +565,9 @@ ${activeSpecs.map((s, idx) => `  ${idx + 1}. [적용] ${s.label}`).join('\n') ||
       alert('파싱된 결과에 고객사명과 현장명이 없습니다.');
       return;
     }
+
+    setIsSubmitting(true);
+    try {
 
     // 🔍 장비 모델명 정식 검증 & 인터랙티브 변경 승인 팝업
     const officialModels: string[] = uniqueModels.length > 0 ? uniqueModels : products.map((p: any) => p.modelName);
@@ -632,6 +642,11 @@ ${activeSpecs.map((s, idx) => `  ${idx + 1}. [적용] ${s.label}`).join('\n') ||
     if (result.success) {
       setIsProcessCompleted(true);
       setRawText('');
+    }
+    } catch (err: any) {
+      console.error('handleSave error:', err);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
