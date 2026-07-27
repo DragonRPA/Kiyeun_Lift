@@ -173,20 +173,43 @@ export const Assets: React.FC = () => {
     exportToExcel(data, `자산장비목록_${new Date().toISOString().split('T')[0]}`, '자산목록');
   };
 
-  // ─── 컬럼 width 설정 (픽셀, 화면에 최대한 많은 정보 표시)
+  // ─── 컬럼 width 설정 (픽셀, 모든 DB 컬럼 표시 - 횡스크롤 허용)
   const colWidths = {
-    assetNo: 90,
+    action: 52,           // 상세 (맨 앞)
+    assetNo: 88,
     modelName: 130,
     manufacturer: 80,
-    serialNo: 110,
-    manufactureYear: 60,
+    serialNo: 112,
+    manufactureYear: 78,
     ownerType: 60,
     status: 72,
     currentCustomer: 120,
+    currentSite: 100,
+    contractStart: 88,
+    contractEnd: 88,
+    billingDay: 70,
     monthlyRentalFee: 90,
+    dailyRentalFee: 80,
+    acquisitionDate: 88,
+    acquisitionPrice: 96,
+    supplier: 90,
+    depreciationMonths: 80,
+    residualValueRate: 70,
     bookValue: 90,
-    cumStats: 140,
-    action: 56,
+    cumRentalFee: 100,
+    cumRepairCost: 96,
+    renter: 90,
+    rentStart: 88,
+    rentEnd: 88,
+    monthlyRentFee: 90,
+    dailyRentFee: 80,
+    actualRentReturnDate: 88,
+    disposalDate: 88,
+    disposalPrice: 96,
+    buyer: 90,
+    maintenanceScore: 70,
+    memo1: 110,
+    memo2: 110,
   };
 
   return (
@@ -273,10 +296,11 @@ export const Assets: React.FC = () => {
         </div>
       </div>
 
-      {/* 자산 목록 테이블 */}
+      {/* 자산 목록 테이블 - 모든 DB 컬럼 표시, 횡스크롤 허용 */}
       <div className="table-container" style={{ overflowX: 'auto', overflowY: 'auto', maxHeight: 'calc(100vh - 340px)' }}>
-        <table style={{ width: '100%', minWidth: '900px', borderCollapse: 'separate', borderSpacing: 0, fontSize: '13px' }}>
+        <table style={{ width: 'max-content', minWidth: '100%', borderCollapse: 'separate', borderSpacing: 0, fontSize: '13px' }}>
           <colgroup>
+            <col style={{ width: `${colWidths.action}px` }} />
             <col style={{ width: `${colWidths.assetNo}px` }} />
             <col style={{ width: `${colWidths.modelName}px` }} />
             <col style={{ width: `${colWidths.manufacturer}px` }} />
@@ -285,13 +309,36 @@ export const Assets: React.FC = () => {
             <col style={{ width: `${colWidths.ownerType}px` }} />
             <col style={{ width: `${colWidths.status}px` }} />
             <col style={{ width: `${colWidths.currentCustomer}px` }} />
+            <col style={{ width: `${colWidths.currentSite}px` }} />
+            <col style={{ width: `${colWidths.contractStart}px` }} />
+            <col style={{ width: `${colWidths.contractEnd}px` }} />
+            <col style={{ width: `${colWidths.billingDay}px` }} />
             <col style={{ width: `${colWidths.monthlyRentalFee}px` }} />
+            <col style={{ width: `${colWidths.dailyRentalFee}px` }} />
+            <col style={{ width: `${colWidths.acquisitionDate}px` }} />
+            <col style={{ width: `${colWidths.acquisitionPrice}px` }} />
+            <col style={{ width: `${colWidths.supplier}px` }} />
+            <col style={{ width: `${colWidths.depreciationMonths}px` }} />
+            <col style={{ width: `${colWidths.residualValueRate}px` }} />
             <col style={{ width: `${colWidths.bookValue}px` }} />
-            <col style={{ width: `${colWidths.cumStats}px` }} />
-            <col style={{ width: `${colWidths.action}px` }} />
+            <col style={{ width: `${colWidths.cumRentalFee}px` }} />
+            <col style={{ width: `${colWidths.cumRepairCost}px` }} />
+            <col style={{ width: `${colWidths.renter}px` }} />
+            <col style={{ width: `${colWidths.rentStart}px` }} />
+            <col style={{ width: `${colWidths.rentEnd}px` }} />
+            <col style={{ width: `${colWidths.monthlyRentFee}px` }} />
+            <col style={{ width: `${colWidths.dailyRentFee}px` }} />
+            <col style={{ width: `${colWidths.actualRentReturnDate}px` }} />
+            <col style={{ width: `${colWidths.disposalDate}px` }} />
+            <col style={{ width: `${colWidths.disposalPrice}px` }} />
+            <col style={{ width: `${colWidths.buyer}px` }} />
+            <col style={{ width: `${colWidths.maintenanceScore}px` }} />
+            <col style={{ width: `${colWidths.memo1}px` }} />
+            <col style={{ width: `${colWidths.memo2}px` }} />
           </colgroup>
           <thead style={{ position: 'sticky', top: 0, zIndex: 10, backgroundColor: 'var(--bg-sidebar)' }}>
             <tr>
+              <th style={{ whiteSpace: 'nowrap', padding: '8px 6px', fontSize: '12px', textAlign: 'center' }}>상세</th>
               <th onClick={() => handleSort('assetNo')} style={{ cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap', padding: '8px 6px', fontSize: '12px' }}>
                 관리번호{renderSortArrow('assetNo')}
               </th>
@@ -302,7 +349,7 @@ export const Assets: React.FC = () => {
                 제조사{renderSortArrow('manufacturer')}
               </th>
               <th style={{ whiteSpace: 'nowrap', padding: '8px 6px', fontSize: '12px' }}>제조번호(S/N)</th>
-              <th style={{ whiteSpace: 'nowrap', padding: '8px 6px', fontSize: '12px' }}>제조년도</th>
+              <th style={{ whiteSpace: 'nowrap', padding: '8px 6px', fontSize: '12px', textAlign: 'center' }}>제조년도</th>
               <th onClick={() => handleSort('ownerType')} style={{ cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap', padding: '8px 6px', fontSize: '12px', textAlign: 'center' }}>
                 소유{renderSortArrow('ownerType')}
               </th>
@@ -312,16 +359,40 @@ export const Assets: React.FC = () => {
               <th onClick={() => handleSort('currentCustomerId')} style={{ cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap', padding: '8px 6px', fontSize: '12px' }}>
                 현재 고객사{renderSortArrow('currentCustomerId')}
               </th>
+              <th style={{ whiteSpace: 'nowrap', padding: '8px 6px', fontSize: '12px' }}>현재 현장</th>
+              <th style={{ whiteSpace: 'nowrap', padding: '8px 6px', fontSize: '12px', textAlign: 'center' }}>계약 시작일</th>
+              <th style={{ whiteSpace: 'nowrap', padding: '8px 6px', fontSize: '12px', textAlign: 'center' }}>계약 종료일</th>
+              <th style={{ whiteSpace: 'nowrap', padding: '8px 6px', fontSize: '12px', textAlign: 'center' }}>청구마감일</th>
               <th style={{ whiteSpace: 'nowrap', padding: '8px 6px', fontSize: '12px', textAlign: 'right' }}>월렌탈료</th>
+              <th style={{ whiteSpace: 'nowrap', padding: '8px 6px', fontSize: '12px', textAlign: 'right' }}>일렌탈료</th>
+              <th onClick={() => handleSort('acquisitionDate')} style={{ cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap', padding: '8px 6px', fontSize: '12px', textAlign: 'center' }}>
+                취득일자{renderSortArrow('acquisitionDate')}
+              </th>
+              <th style={{ whiteSpace: 'nowrap', padding: '8px 6px', fontSize: '12px', textAlign: 'right' }}>취득원가</th>
+              <th style={{ whiteSpace: 'nowrap', padding: '8px 6px', fontSize: '12px' }}>구입처</th>
+              <th style={{ whiteSpace: 'nowrap', padding: '8px 6px', fontSize: '12px', textAlign: 'center' }}>상각개월수</th>
+              <th style={{ whiteSpace: 'nowrap', padding: '8px 6px', fontSize: '12px', textAlign: 'center' }}>잔존가치율</th>
               <th style={{ whiteSpace: 'nowrap', padding: '8px 6px', fontSize: '12px', textAlign: 'right' }}>장부가치</th>
-              <th style={{ whiteSpace: 'nowrap', padding: '8px 6px', fontSize: '12px', textAlign: 'center' }}>누적수익 / 수리비</th>
-              <th style={{ whiteSpace: 'nowrap', padding: '8px 6px', fontSize: '12px', textAlign: 'center' }}>상세</th>
+              <th style={{ whiteSpace: 'nowrap', padding: '8px 6px', fontSize: '12px', textAlign: 'right' }}>누적렌탈수익</th>
+              <th style={{ whiteSpace: 'nowrap', padding: '8px 6px', fontSize: '12px', textAlign: 'right' }}>누적수리비</th>
+              <th style={{ whiteSpace: 'nowrap', padding: '8px 6px', fontSize: '12px' }}>임차처</th>
+              <th style={{ whiteSpace: 'nowrap', padding: '8px 6px', fontSize: '12px', textAlign: 'center' }}>임차개시일</th>
+              <th style={{ whiteSpace: 'nowrap', padding: '8px 6px', fontSize: '12px', textAlign: 'center' }}>임차만료일</th>
+              <th style={{ whiteSpace: 'nowrap', padding: '8px 6px', fontSize: '12px', textAlign: 'right' }}>월임차료</th>
+              <th style={{ whiteSpace: 'nowrap', padding: '8px 6px', fontSize: '12px', textAlign: 'right' }}>일임차료</th>
+              <th style={{ whiteSpace: 'nowrap', padding: '8px 6px', fontSize: '12px', textAlign: 'center' }}>실제반납일</th>
+              <th style={{ whiteSpace: 'nowrap', padding: '8px 6px', fontSize: '12px', textAlign: 'center' }}>매각일자</th>
+              <th style={{ whiteSpace: 'nowrap', padding: '8px 6px', fontSize: '12px', textAlign: 'right' }}>매각가격</th>
+              <th style={{ whiteSpace: 'nowrap', padding: '8px 6px', fontSize: '12px' }}>매각처</th>
+              <th style={{ whiteSpace: 'nowrap', padding: '8px 6px', fontSize: '12px', textAlign: 'center' }}>정비점수</th>
+              <th style={{ whiteSpace: 'nowrap', padding: '8px 6px', fontSize: '12px' }}>비고1</th>
+              <th style={{ whiteSpace: 'nowrap', padding: '8px 6px', fontSize: '12px' }}>비고2</th>
             </tr>
           </thead>
           <tbody>
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={12} style={{ textAlign: 'center', padding: '40px 0', color: 'var(--text-muted)' }}>
+                <td colSpan={35} style={{ textAlign: 'center', padding: '40px 0', color: 'var(--text-muted)' }}>
                   {assets.length === 0
                     ? '📭 등록된 자산이 없습니다. Supabase 연결 후 자산 데이터를 업로드해 주세요.'
                     : '🔍 검색 조건에 맞는 자산이 없습니다.'}
@@ -331,14 +402,25 @@ export const Assets: React.FC = () => {
               filtered.map(a => {
                 const depn = a.ownerType === 'OWNED' ? calculateAssetDepreciation(a) : null;
                 return (
-                  <tr key={a.id} style={{ cursor: 'pointer' }} onClick={() => handleSelectAsset(a)}>
+                  <tr key={a.id}>
+                    {/* 상세 버튼 - 맨 앞 */}
+                    <td style={{ padding: '7px 6px', textAlign: 'center' }}>
+                      <button
+                        className="btn-secondary"
+                        style={{ padding: '4px', borderRadius: '50%' }}
+                        title="상세 조회"
+                        onClick={() => handleSelectAsset(a)}
+                      >
+                        <Eye size={13} />
+                      </button>
+                    </td>
                     <td style={{ padding: '7px 6px' }}>
                       <strong style={{ color: 'var(--primary)', fontSize: '12px' }}>{a.assetNo}</strong>
                     </td>
                     <td style={{ padding: '7px 6px', fontSize: '12px' }}>{a.modelName}</td>
                     <td style={{ padding: '7px 6px', fontSize: '12px', color: 'var(--text-secondary)' }}>{a.manufacturer || '-'}</td>
                     <td style={{ padding: '7px 6px', fontSize: '11px', color: 'var(--text-muted)', fontFamily: 'monospace' }}>{a.serialNo || '-'}</td>
-                    <td style={{ padding: '7px 6px', fontSize: '12px', textAlign: 'center' }}>{a.manufactureYear || '-'}</td>
+                    <td style={{ padding: '7px 6px', fontSize: '12px', textAlign: 'center', whiteSpace: 'nowrap' }}>{a.manufactureYear || '-'}</td>
                     <td style={{ padding: '7px 6px', textAlign: 'center' }}>
                       <span className={`badge ${a.ownerType === 'OWNED' ? 'badge-success' : 'badge-info'}`} style={{ fontSize: '11px', padding: '2px 5px' }}>
                         {a.ownerType === 'OWNED' ? '당사' : '임차'}
@@ -350,26 +432,32 @@ export const Assets: React.FC = () => {
                       </span>
                     </td>
                     <td style={{ padding: '7px 6px', fontSize: '12px' }}>{getCustomerName(a.currentCustomerId)}</td>
-                    <td style={{ padding: '7px 6px', fontSize: '12px', textAlign: 'right' }}>
-                      {a.monthlyRentalFee ? `${a.monthlyRentalFee.toLocaleString()}` : '-'}
-                    </td>
-                    <td style={{ padding: '7px 6px', fontSize: '12px', textAlign: 'right' }}>
-                      {depn ? `${depn.bookValue.toLocaleString()}` : '-'}
-                    </td>
-                    <td style={{ padding: '7px 6px', fontSize: '11px', textAlign: 'center' }}>
-                      <span style={{ color: 'var(--primary)' }}>{(a.cumRentalFee || 0).toLocaleString()}</span>
-                      <span style={{ margin: '0 3px', color: 'var(--border-color)' }}>/</span>
-                      <span style={{ color: 'var(--danger)' }}>{(a.cumRepairCost || 0).toLocaleString()}</span>
-                    </td>
-                    <td style={{ padding: '7px 6px', textAlign: 'center' }} onClick={e => { e.stopPropagation(); handleSelectAsset(a); }}>
-                      <button
-                        className="btn-secondary"
-                        style={{ padding: '4px', borderRadius: '50%' }}
-                        title="상세 조회"
-                      >
-                        <Eye size={13} />
-                      </button>
-                    </td>
+                    <td style={{ padding: '7px 6px', fontSize: '12px', color: 'var(--text-secondary)' }}>{getSiteName(a.currentSiteId)}</td>
+                    <td style={{ padding: '7px 6px', fontSize: '11px', textAlign: 'center', color: 'var(--text-muted)' }}>{a.contractStart ? a.contractStart.slice(0, 10) : '-'}</td>
+                    <td style={{ padding: '7px 6px', fontSize: '11px', textAlign: 'center', color: 'var(--text-muted)' }}>{a.contractEnd ? a.contractEnd.slice(0, 10) : '-'}</td>
+                    <td style={{ padding: '7px 6px', fontSize: '12px', textAlign: 'center' }}>{a.billingDay ? `${a.billingDay}일` : '-'}</td>
+                    <td style={{ padding: '7px 6px', fontSize: '12px', textAlign: 'right' }}>{a.monthlyRentalFee ? a.monthlyRentalFee.toLocaleString() : '-'}</td>
+                    <td style={{ padding: '7px 6px', fontSize: '12px', textAlign: 'right' }}>{a.dailyRentalFee ? a.dailyRentalFee.toLocaleString() : '-'}</td>
+                    <td style={{ padding: '7px 6px', fontSize: '11px', textAlign: 'center', color: 'var(--text-muted)' }}>{a.acquisitionDate ? a.acquisitionDate.slice(0, 10) : '-'}</td>
+                    <td style={{ padding: '7px 6px', fontSize: '12px', textAlign: 'right' }}>{a.acquisitionPrice ? a.acquisitionPrice.toLocaleString() : '-'}</td>
+                    <td style={{ padding: '7px 6px', fontSize: '12px', color: 'var(--text-secondary)' }}>{a.supplier || '-'}</td>
+                    <td style={{ padding: '7px 6px', fontSize: '12px', textAlign: 'center' }}>{a.depreciationMonths ? `${a.depreciationMonths}M` : '-'}</td>
+                    <td style={{ padding: '7px 6px', fontSize: '12px', textAlign: 'center' }}>{a.residualValueRate != null ? `${a.residualValueRate}%` : '-'}</td>
+                    <td style={{ padding: '7px 6px', fontSize: '12px', textAlign: 'right' }}>{depn ? depn.bookValue.toLocaleString() : '-'}</td>
+                    <td style={{ padding: '7px 6px', fontSize: '12px', textAlign: 'right', color: 'var(--primary)' }}>{(a.cumRentalFee || 0).toLocaleString()}</td>
+                    <td style={{ padding: '7px 6px', fontSize: '12px', textAlign: 'right', color: 'var(--danger)' }}>{(a.cumRepairCost || 0).toLocaleString()}</td>
+                    <td style={{ padding: '7px 6px', fontSize: '12px', color: 'var(--text-secondary)' }}>{a.renter || '-'}</td>
+                    <td style={{ padding: '7px 6px', fontSize: '11px', textAlign: 'center', color: 'var(--text-muted)' }}>{a.rentStart ? a.rentStart.slice(0, 10) : '-'}</td>
+                    <td style={{ padding: '7px 6px', fontSize: '11px', textAlign: 'center', color: 'var(--text-muted)' }}>{a.rentEnd ? a.rentEnd.slice(0, 10) : '-'}</td>
+                    <td style={{ padding: '7px 6px', fontSize: '12px', textAlign: 'right' }}>{a.monthlyRentFee ? a.monthlyRentFee.toLocaleString() : '-'}</td>
+                    <td style={{ padding: '7px 6px', fontSize: '12px', textAlign: 'right' }}>{a.dailyRentFee ? a.dailyRentFee.toLocaleString() : '-'}</td>
+                    <td style={{ padding: '7px 6px', fontSize: '11px', textAlign: 'center', color: 'var(--text-muted)' }}>{a.actualRentReturnDate ? a.actualRentReturnDate.slice(0, 10) : '-'}</td>
+                    <td style={{ padding: '7px 6px', fontSize: '11px', textAlign: 'center', color: 'var(--danger)' }}>{a.disposalDate ? a.disposalDate.slice(0, 10) : '-'}</td>
+                    <td style={{ padding: '7px 6px', fontSize: '12px', textAlign: 'right' }}>{a.disposalPrice ? a.disposalPrice.toLocaleString() : '-'}</td>
+                    <td style={{ padding: '7px 6px', fontSize: '12px', color: 'var(--text-secondary)' }}>{a.buyer || '-'}</td>
+                    <td style={{ padding: '7px 6px', fontSize: '12px', textAlign: 'center' }}>{a.maintenanceScore != null ? a.maintenanceScore : '-'}</td>
+                    <td style={{ padding: '7px 6px', fontSize: '11px', color: 'var(--text-muted)', maxWidth: '110px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={a.memo1 || ''}>{a.memo1 || '-'}</td>
+                    <td style={{ padding: '7px 6px', fontSize: '11px', color: 'var(--text-muted)', maxWidth: '110px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={a.memo2 || ''}>{a.memo2 || '-'}</td>
                   </tr>
                 );
               })
