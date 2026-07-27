@@ -164,7 +164,7 @@ export const Dashboard: React.FC = () => {
         const showRentAssetFeed = (overdueRentedCount > 0 || mismatchRentedCount > 0) && (canSaveRentAsset || role === 'ADMIN' || role === 'MANAGER');
         const showRepairFeed = pendingRepairs > 0 && (canSaveRepair || role === 'ADMIN' || role === 'MANAGER');
         const showConsumableFeed = lowStockConsumables > 0 && (canSaveConsumable || canSaveRepair || role === 'ADMIN' || role === 'MANAGER');
-        const showContractFeed = canSaveContract;
+        const showContractFeed = activeContracts > 0 && canSaveContract;
         const showTodoFeed = myTodos.length > 0;
 
         const visibleCount = [showDeliveryFeed, showBillingFeed, showRentAssetFeed, showRepairFeed, showConsumableFeed, showContractFeed, showTodoFeed].filter(Boolean).length;
