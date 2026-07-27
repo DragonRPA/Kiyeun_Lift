@@ -83,7 +83,7 @@ interface AppContextType {
   saveSite: (site: Omit<CustomerSite, 'id' | 'createdAt'> & { id?: string }) => Promise<void>;
   saveProduct: (prod: Omit<Product, 'id' | 'createdAt'> & { id?: string }) => void;
   saveAsset: (asset: Omit<Asset, 'id' | 'createdAt' | 'updatedAt'> & { id?: string }) => void;
-  updateGoogleConfig: (config: GoogleConfig) => void;
+  updateGoogleConfig: (config: GoogleConfig) => Promise<void>;
   saveCashFlowSnapshot: (snap: Omit<CashFlowSnapshot, 'id' | 'createdAt'>) => void;
   deleteCashFlowSnapshot: (snapId: string) => void;
   saveVendor: (vendor: Vendor) => Promise<void>;
@@ -393,14 +393,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  const updateGoogleConfig = (configData: GoogleConfig) => {
-    const exists = db.googleConfigs.some(cfg => cfg.id === configData.id);
-    if (exists) {
-      db.updateRow<GoogleConfig>('googleConfigs', configData.id, configData);
-    } else {
-      db.insertRow<GoogleConfig>('googleConfigs', configData);
+  const updateGoogleConfig = async (configData: GoogleConfig) => {
+    try {
+      const exists = db.googleConfigs.some(cfg => cfg.id === configData.id);
+      if (exists) {
+        db.updateRow<GoogleConfig>('googleConfigs', configData.id, configData);
+      } else {
+        db.insertRow<GoogleConfig>('googleConfigs', configData);
+      }
+      await db.awaitPendingWrites();
+      refreshAllData();
+    } catch (err: any) {
+      console.error('updateGoogleConfig Error:', err);
+      showErrorModal(`⚠️ 구글 설정 원격 DB 저장 실패:\n\n${err?.message || err}`, '원격 DB 저장 오류');
+      throw err;
     }
-    refreshAllData();
   };
 
   const saveUser = (userData: Omit<User, 'id' | 'createdAt'> & { id?: string }) => {

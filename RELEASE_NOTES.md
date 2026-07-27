@@ -1,3 +1,10 @@
+# Release Notes (v1.4.3.Build.00004 - 2026-07-27 20:19)
+
+## 🛡️ 구글 연동 설정 동기 저장 및 Zero Silent Failures 방지 강화
+- **원격 DB 동기화 검증 강화**: `AppContext.tsx`의 `updateGoogleConfig`를 `async/await` 및 `await db.awaitPendingWrites()` 동기화 처리로 전환하여 Supabase 원격 DB 저장 실패 시 무음 swallow 방지.
+- **오류 모달 표출**: DB 저장 중 컬럼 누락이나 원격 서버 예외 발생 시 `showErrorModal`로 오류 원인을 즉시 팝업 안내하도록 수정.
+- **UI 알림 정상화**: 원격 DB 및 로컬 스토리지가 100% 동기화 저장 완료된 경우에만 성공 메세지 표출.
+
 # Release Notes (v1.4.3.Build.00003 - 2026-07-27 20:11)
 
 ## 🏢 회사 전용 최상위 구글 드라이브 루트 폴더 지정 기능 연동

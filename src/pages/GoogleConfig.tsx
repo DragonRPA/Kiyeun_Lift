@@ -7,7 +7,7 @@ import { drive, DriveFile, DriveFolder } from '../services/drive';
 import { GoogleDrivePickerModal } from '../components/GoogleDrivePickerModal';
 
 export const GoogleConfig: React.FC = () => {
-  const { googleConfigs, updateGoogleConfig, currentUser } = useApp();
+  const { googleConfigs, updateGoogleConfig, currentUser, showErrorModal } = useApp();
 
   const isAdmin = currentUser?.role === 'ADMIN';
 
@@ -102,44 +102,47 @@ export const GoogleConfig: React.FC = () => {
     );
   }
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    // 설정 레코드가 없거나 새로 생성해야 하는 경우를 대비해 ID 기본값 지정
-    const configId = currentConfig?.id || 'default-config';
+    try {
+      // 설정 레코드가 없거나 새로 생성해야 하는 경우를 대비해 ID 기본값 지정
+      const configId = currentConfig?.id || 'default-config';
 
-    // 사용자가 마스킹 값(••••••••••••) 또는 빈값을 입력했을 경우, 기존 저장되어 있던 실제 비밀번호 값을 보존
-    const finalPassword = (googlePassword === '••••••••••••' || !googlePassword) 
-      ? (currentConfig?.googlePassword || '') 
-      : googlePassword;
+      // 사용자가 마스킹 값(••••••••••••) 또는 빈값을 입력했을 경우, 기존 저장되어 있던 실제 비밀번호 값을 보존
+      const finalPassword = (googlePassword === '••••••••••••' || !googlePassword) 
+        ? (currentConfig?.googlePassword || '') 
+        : googlePassword;
 
-    const finalAppPassword = (gmailAppPassword === '••••••••••••' || !gmailAppPassword) 
-      ? (currentConfig?.gmailAppPassword || '') 
-      : gmailAppPassword;
+      const finalAppPassword = (gmailAppPassword === '••••••••••••' || !gmailAppPassword) 
+        ? (currentConfig?.gmailAppPassword || '') 
+        : gmailAppPassword;
 
-    const updated: GoogleConfigType = {
-      ...(currentConfig || {}),
-      id: configId,
-      googleEmail,
-      googlePassword: finalPassword,
-      gmailAppPassword: finalAppPassword,
-      contractFolder,
-      consumableFolder,
-      deliveryFolder,
-      maintenanceFolder,
-      isDevMode,
-      quotationTemplateUrl,
-      contractTemplateUrl,
-      safetyInspectionTemplateUrl,
-      preDeliveryChecklistTemplateUrl,
-      bizRegCertUrl,
-      bankbookCopyUrl,
-      defaultRootFolderId,
-      updatedAt: new Date().toISOString()
-    };
+      const updated: GoogleConfigType = {
+        ...(currentConfig || {}),
+        id: configId,
+        googleEmail,
+        googlePassword: finalPassword,
+        gmailAppPassword: finalAppPassword,
+        contractFolder,
+        consumableFolder,
+        deliveryFolder,
+        maintenanceFolder,
+        isDevMode,
+        quotationTemplateUrl,
+        contractTemplateUrl,
+        safetyInspectionTemplateUrl,
+        preDeliveryChecklistTemplateUrl,
+        bizRegCertUrl,
+        bankbookCopyUrl,
+        defaultRootFolderId,
+        updatedAt: new Date().toISOString()
+      };
 
-    updateGoogleConfig(updated);
-    alert('구글 연동 및 클라우드 설정 정보가 안전하게 변경되었습니다.');
+      await updateGoogleConfig(updated);
+      alert('구글 연동 및 클라우드 설정 정보가 안전하게 변경되었습니다.');
+    } catch (err: any) {
+      showErrorModal(`⚠️ 구글 설정 원격 DB 저장 실패:\n\n${err?.message || err}`, '구글 설정 저장 오류');
+    }
   };
 
   const handleTestConnection = () => {
