@@ -1,3 +1,14 @@
+# Release Notes (v1.7.0.Build.00002 - 2026-07-28 01:33)
+
+## 🐛 [Hotfix] 장비 할당 시 자산 상태 `ASSIGNED`(출고대기) 변경 쿼리거부 해결 & Payload 정화
+
+- **수정 이유**: 자산 상태를 `ASSIGNED`로 업데이트할 때, `contract` 객체의 미존재 속성(`undefined`)이 Supabase UPDATE Payload에 포함되어 PostgreSQL 쿼리가 거부되고 원격 DB에 상태 변경이 반영되지 않던 문제 해결.
+- **수정 사항**:
+  1. `db.ts` 내 `sanitizeSupabasePayload`: `undefined` 속성을 UPDATE/INSERT 쿼리 전송 전 100% 자동 제외 필터링.
+  2. `AppContext.tsx` 내 `assignAssetToContract`: `contract` 객체의 `customerId`/`siteId` 등이 유효할 때만 Payload에 안전 조인하고, `await db.awaitPendingWrites()` 실패 시 예외를 UI로 전파하여 100% 저장 상태 보장.
+
+---
+
 # Release Notes (v1.7.0.Build.00001 - 2026-07-28 01:26)
 
 ## 🏷️ 자산 상태 라벨 전사 통일 개편 (`AVAILABLE` ➔ "임대가능") & 장비 할당 자산 상태 100% 검증

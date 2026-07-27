@@ -1291,6 +1291,10 @@ class LocalDB {
     const sanitized: any = Array.isArray(obj) ? [] : {};
     for (const key in obj) {
       const val = obj[key];
+      // undefined 값은 제외 (PostgreSQL update/insert Payload 오염 및 쿼리 거부 방지)
+      if (val === undefined) {
+        continue;
+      }
       if (typeof val === 'string' && val.trim() === '' && (key.endsWith('Id') || key === 'contractId' || key === 'assetId' || key === 'customerId' || key === 'siteId' || key === 'salespersonId' || key === 'vendorId')) {
         sanitized[key] = null;
       } else {
