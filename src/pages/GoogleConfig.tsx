@@ -64,11 +64,12 @@ export const GoogleConfig: React.FC = () => {
 
   // 구글 드라이브 탐색기 모달 상태
   const [isDriveSelectorOpen, setIsDriveSelectorOpen] = useState(false);
-  const [selectorTargetField, setSelectorTargetField] = useState<'quotation' | 'contract' | 'safety' | 'checklist' | 'bizCert' | 'bankbook' | null>(null);
+  const [selectorTargetField, setSelectorTargetField] = useState<'rootFolder' | 'quotation' | 'contract' | 'safety' | 'checklist' | 'bizCert' | 'bankbook' | null>(null);
 
   const handleSelectDriveItem = (pathOrLink: string) => {
     if (!selectorTargetField) return;
-    if (selectorTargetField === 'quotation') setQuotationTemplateUrl(pathOrLink);
+    if (selectorTargetField === 'rootFolder') setDefaultRootFolderId(pathOrLink);
+    else if (selectorTargetField === 'quotation') setQuotationTemplateUrl(pathOrLink);
     else if (selectorTargetField === 'contract') setContractTemplateUrl(pathOrLink);
     else if (selectorTargetField === 'safety') setSafetyInspectionTemplateUrl(pathOrLink);
     else if (selectorTargetField === 'checklist') setPreDeliveryChecklistTemplateUrl(pathOrLink);
@@ -79,7 +80,7 @@ export const GoogleConfig: React.FC = () => {
     setSelectorTargetField(null);
   };
 
-  const openDriveSelector = (field: 'quotation' | 'contract' | 'safety' | 'checklist' | 'bizCert' | 'bankbook') => {
+  const openDriveSelector = (field: 'rootFolder' | 'quotation' | 'contract' | 'safety' | 'checklist' | 'bizCert' | 'bankbook') => {
     setSelectorTargetField(field);
     setIsDriveSelectorOpen(true);
   };
@@ -312,14 +313,24 @@ export const GoogleConfig: React.FC = () => {
                 <label style={{ fontSize: '12.5px', fontWeight: 'bold', marginBottom: '6px', display: 'block', color: 'var(--primary)' }}>
                   🏢 회사 전용 최상위 구글 드라이브 루트 폴더 (또는 URL)
                 </label>
-                <input
-                  type="text"
-                  value={defaultRootFolderId}
-                  onChange={e => setDefaultRootFolderId(e.target.value)}
-                  placeholder="예: https://drive.google.com/drive/folders/1abc... 또는 루트 폴더 ID (미지정 시 기본 루트 탐색)"
-                  style={{ width: '100%', padding: '8px 10px', fontSize: '13px', borderRadius: '6px', border: '1px solid var(--border-color)', boxSizing: 'border-box' }}
-                />
-                <span style={{ fontSize: '11.5px', color: 'var(--text-muted)', marginTop: '4px', display: 'block' }}>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <input
+                    type="text"
+                    value={defaultRootFolderId}
+                    onChange={e => setDefaultRootFolderId(e.target.value)}
+                    placeholder="예: https://drive.google.com/drive/folders/1abc... 또는 루트 폴더 ID (미지정 시 기본 루트 탐색)"
+                    style={{ flex: 1, padding: '8px 10px', fontSize: '13px', borderRadius: '6px', border: '1px solid var(--border-color)', boxSizing: 'border-box' }}
+                  />
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    onClick={() => openDriveSelector('rootFolder')}
+                    style={{ padding: '0 12px', display: 'flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap' }}
+                  >
+                    <Cloud size={14} /> 드라이브 탐색
+                  </button>
+                </div>
+                <span style={{ fontSize: '11.5px', color: 'var(--text-muted)', marginTop: '6px', display: 'block' }}>
                   💡 여기에 회사 드라이브 최상위 폴더를 지정해 두면, 계약 관리나 자산 대장 등 어떤 메뉴에서 탐색기를 열더라도 엉뚱한 폴더 대신 <strong>해당 회사 폴더에서부터 탐색이 시작</strong>됩니다.
                 </span>
               </div>

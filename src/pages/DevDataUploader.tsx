@@ -159,6 +159,7 @@ const COLUMN_LABEL_MAP: Record<string, string> = {
   safetyCertUrl: '안전인증서링크',
   specSheetUrl: '제원표링크',
   emergencyGuideUrl: '비상조작방법링크',
+  defaultRootFolderId: '회사최상위루트폴더',
   isActive: '사용여부(거래중)',
   assetNo: '관리번호(자산번호)',
   serialNo: '제조번호(시리얼)',

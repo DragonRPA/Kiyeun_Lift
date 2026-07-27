@@ -1,3 +1,10 @@
+# Release Notes (v1.4.3.Build.00005 - 2026-07-27 20:23)
+
+## ☁️ 최상위 루트 폴더 [드라이브 탐색] 버튼 추가 및 글로벌 비동기 DB 패치 정책 수립
+- **글로벌 DB 무음 실패 방지 정책 재확립 (RULE 8)**: 향후 모든 데이터 생성/수정/삭제 기능 구현 시 `async/await`, `await db.awaitPendingWrites()` 대기 수행 및 실패 시 `showErrorModal` 표출을 글로벌 핵심 원칙으로 강제 지정.
+- **최상위 루트 폴더 [드라이브 탐색] 버튼 동일 위치 신설**: [구글 연동 설정] (`GoogleConfig.tsx`) 메뉴의 "🏢 회사 전용 최상위 구글 드라이브 루트 폴더 (또는 URL)" 입력 필드 오른쪽 동일 위치에 하단 1~6번과 동일한 **[☁️ 드라이브 탐색]** 버튼 신설 및 `mode="folder"` 매핑.
+- **DB 정합성 파서 반영**: `DevDataUploader.tsx` `COLUMN_LABEL_MAP`에 `defaultRootFolderId` 등록.
+
 # Release Notes (v1.4.3.Build.00004 - 2026-07-27 20:19)
 
 ## 🛡️ 구글 연동 설정 동기 저장 및 Zero Silent Failures 방지 강화
