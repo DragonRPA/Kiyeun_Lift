@@ -586,6 +586,18 @@ export interface OutboundInspection {
   updatedAt: string;
 }
 
+export interface DepreciationLog {
+  id: string;
+  depreciationYm: string;
+  executedAt: string;
+  executedBy?: string;
+  targetAssetCount: number;
+  totalDepreciationAmount: number;
+  note?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 // 초기 로컬 스토리지 데이터 생성
 const generateMockProducts = (): Product[] => {
   return [
@@ -1078,6 +1090,9 @@ class LocalDB {
   get outboundInspections() { return this.get<OutboundInspection>('outboundInspections', []); }
   set outboundInspections(val: OutboundInspection[]) { this.set('outboundInspections', val); }
 
+  get depreciationLogs() { return this.get<DepreciationLog>('depreciationLogs', []); }
+  set depreciationLogs(val: DepreciationLog[]) { this.set('depreciationLogs', val); }
+
   // Supabase 테이블 맵핑
   private mapToSupabaseTable(key: string): string {
     const mapping: Record<string, string> = {
@@ -1109,7 +1124,8 @@ class LocalDB {
       googleConfigs: 'google_configs',
       vendors: 'vendors',
       cashFlowSnapshots: 'cash_flow_snapshots',
-      outboundInspections: 'outbound_inspections'
+      outboundInspections: 'outbound_inspections',
+      depreciationLogs: 'depreciation_logs'
     };
     return mapping[key] || key;
   }
@@ -1242,6 +1258,7 @@ class LocalDB {
       case 'transportCompanies': prefix = 'TCOM-';   break;
       case 'transportDrivers':   prefix = 'TDRV-';   break;
       case 'outboundInspections':prefix = 'OIN-';    break;
+      case 'depreciationLogs':   prefix = 'DEP-';    break;
       default:
         prefix = key.slice(0, 4).toUpperCase() + '-';
     }

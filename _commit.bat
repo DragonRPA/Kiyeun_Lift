@@ -1,3 +1,3 @@
 git add .
-git commit -m "feat: add immediate focus blur & double submission lock to prevent duplicate requests on enter key v1.6.0.Build.00004"
+git commit -m "feat: add depreciation_execution page, depreciation_logs table DDL & monthly depreciation closing workflow v1.7.0.Build.00000"
 git push origin main

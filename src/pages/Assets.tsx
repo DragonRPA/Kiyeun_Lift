@@ -6,9 +6,13 @@ import { Asset, calculateAssetDepreciation } from '../services/db';
 import { GoogleDrivePickerModal } from '../components/GoogleDrivePickerModal';
 
 export const Assets: React.FC = () => {
-  const { assets, customers, sites, hasPermission, saveAsset, showErrorModal } = useApp();
+  const { assets, customers, sites, hasPermission, saveAsset, showErrorModal, loadTablesForMenu } = useApp();
 
   const canEdit = hasPermission('asset', 'save');
+
+  // 수동 조회 실행 여부 (초기 진입 시 자동 조회 방지 & 메뉴 진입속도 0초 최적화!)
+  const [hasQueried, setHasQueried] = useState(false);
+  const [isLoadingData, setIsLoadingData] = useState(false);
 
   // 임시 필터 입력 상태 (조회 버튼을 누르기 전까지 홀드)
   const [tempSearchTerm, setTempSearchTerm] = useState('');
@@ -118,44 +122,60 @@ export const Assets: React.FC = () => {
     }
   };
 
-  // 필터링 및 정렬
-  const filtered = useMemo(() => assets.filter(a => {
-    const matchesSearch =
-      !searchTerm ||
-      a.assetNo.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      a.modelName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (a.serialNo && a.serialNo.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (a.manufacturer && a.manufacturer.toLowerCase().includes(searchTerm.toLowerCase()));
-    const matchesStatus = statusFilter === 'ALL' || a.status === statusFilter;
-    const matchesOwner = ownerFilter === 'ALL' || a.ownerType === ownerFilter;
-    const matchesManufacturer = manufacturerFilter === 'ALL' || a.manufacturer === manufacturerFilter;
-    const matchesCustomer = customerFilter === 'ALL' || a.currentCustomerId === customerFilter;
-    return matchesSearch && matchesStatus && matchesOwner && matchesManufacturer && matchesCustomer;
-  }).sort((a, b) => {
-    let aVal: any = sortField === 'currentCustomerId' ? getCustomerName(a.currentCustomerId) : a[sortField as keyof Asset];
-    let bVal: any = sortField === 'currentCustomerId' ? getCustomerName(b.currentCustomerId) : b[sortField as keyof Asset];
-    if (aVal === undefined || aVal === null) aVal = '';
-    if (bVal === undefined || bVal === null) bVal = '';
-    const cmp = String(aVal).localeCompare(String(bVal), 'ko', { numeric: true });
-    return sortDirection === 'asc' ? cmp : -cmp;
-  }), [assets, searchTerm, statusFilter, ownerFilter, manufacturerFilter, customerFilter, sortField, sortDirection]);
+  // 필터링 및 정렬 (수동 [조회] 실행 시에만 계산)
+  const filtered = useMemo(() => {
+    if (!hasQueried) return [];
+
+    return assets.filter(a => {
+      const matchesSearch =
+        !searchTerm ||
+        a.assetNo.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        a.modelName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (a.serialNo && a.serialNo.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        (a.manufacturer && a.manufacturer.toLowerCase().includes(searchTerm.toLowerCase()));
+      const matchesStatus = statusFilter === 'ALL' || a.status === statusFilter;
+      const matchesOwner = ownerFilter === 'ALL' || a.ownerType === ownerFilter;
+      const matchesManufacturer = manufacturerFilter === 'ALL' || a.manufacturer === manufacturerFilter;
+      const matchesCustomer = customerFilter === 'ALL' || a.currentCustomerId === customerFilter;
+      return matchesSearch && matchesStatus && matchesOwner && matchesManufacturer && matchesCustomer;
+    }).sort((a, b) => {
+      let aVal: any = sortField === 'currentCustomerId' ? getCustomerName(a.currentCustomerId) : a[sortField as keyof Asset];
+      let bVal: any = sortField === 'currentCustomerId' ? getCustomerName(b.currentCustomerId) : b[sortField as keyof Asset];
+      if (aVal === undefined || aVal === null) aVal = '';
+      if (bVal === undefined || bVal === null) bVal = '';
+      const cmp = String(aVal).localeCompare(String(bVal), 'ko', { numeric: true });
+      return sortDirection === 'asc' ? cmp : -cmp;
+    });
+  }, [hasQueried, assets, searchTerm, statusFilter, ownerFilter, manufacturerFilter, customerFilter, sortField, sortDirection]);
 
   const renderSortArrow = (field: AssetSortField) => {
     if (sortField !== field) return <span style={{ color: 'var(--text-muted)', fontSize: '10px', marginLeft: '3px' }}>↕</span>;
     return <span style={{ color: 'var(--primary)', fontWeight: 'bold', fontSize: '11px', marginLeft: '3px' }}>{sortDirection === 'asc' ? '▲' : '▼'}</span>;
   };
 
-  const handleSearchClick = () => {
+  const handleSearchClick = async () => {
+    if (document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur();
+    }
+    setIsLoadingData(true);
     setSearchTerm(tempSearchTerm);
     setStatusFilter(tempStatusFilter);
     setOwnerFilter(tempOwnerFilter);
     setManufacturerFilter(tempManufacturerFilter);
     setCustomerFilter(tempCustomerFilter);
+
+    try {
+      await loadTablesForMenu('asset');
+      setHasQueried(true);
+    } catch (e) {
+      console.error('Asset load error:', e);
+    } finally {
+      setIsLoadingData(false);
+    }
   };
 
   const handleExport = () => {
     const data = filtered.map(a => {
-      const depn = calculateAssetDepreciation(a);
       return {
         '관리번호': a.assetNo,
         '모델명': a.modelName,
@@ -166,13 +186,12 @@ export const Assets: React.FC = () => {
         '상태': statusLabel(a.status),
         '현재고객사': getCustomerName(a.currentCustomerId),
         '현재현장': getSiteName(a.currentSiteId),
-        '월렌탈료': a.monthlyRentalFee || 0,
+        '월대여료': a.monthlyRentalFee || 0,
         '취득금액': a.acquisitionPrice || 0,
         '취득일자': a.acquisitionDate ? a.acquisitionDate.slice(0, 10) : '-',
         '감가상각개월수': a.depreciationMonths || 0,
-        '경과월수': depn.elapsedMonths,
-        '감가상각누계액': depn.accumDepreciation,
-        '장부가치': depn.bookValue,
+        '감가상각누계액': a.accumDepreciation || 0,
+        '장부가치': a.bookValue ?? (a.acquisitionPrice || 0),
         '누적렌탈수익': a.cumRentalFee || 0,
         '누적수리비': a.cumRepairCost || 0,
       };
@@ -296,9 +315,10 @@ export const Assets: React.FC = () => {
               type="button"
               className="btn-primary"
               onClick={handleSearchClick}
+              disabled={isLoadingData}
               style={{ width: '100%', height: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px', fontWeight: 'bold', fontSize: '13px' }}
             >
-              <Search size={14} /> 조회
+              <Search size={14} /> {isLoadingData ? '조회 중...' : '조회'}
             </button>
           </div>
         </div>
@@ -368,15 +388,15 @@ export const Assets: React.FC = () => {
                 현재 고객사{renderSortArrow('currentCustomerId')}
               </th>
               <th style={{ whiteSpace: 'nowrap', padding: '8px 6px', fontSize: '12px' }}>현재 현장</th>
-              <th style={{ whiteSpace: 'nowrap', padding: '8px 6px', fontSize: '12px', textAlign: 'center' }}>계약 시작일</th>
-              <th style={{ whiteSpace: 'nowrap', padding: '8px 6px', fontSize: '12px', textAlign: 'center' }}>계약 종료일</th>
+              <th style={{ whiteSpace: 'nowrap', padding: '8px 6px', fontSize: '12px', textAlign: 'center' }}>계약시작일</th>
+              <th style={{ whiteSpace: 'nowrap', padding: '8px 6px', fontSize: '12px', textAlign: 'center' }}>계약종료일</th>
               <th style={{ whiteSpace: 'nowrap', padding: '8px 6px', fontSize: '12px', textAlign: 'center' }}>청구마감일</th>
-              <th style={{ whiteSpace: 'nowrap', padding: '8px 6px', fontSize: '12px', textAlign: 'right' }}>월렌탈료</th>
-              <th style={{ whiteSpace: 'nowrap', padding: '8px 6px', fontSize: '12px', textAlign: 'right' }}>일렌탈료</th>
+              <th style={{ whiteSpace: 'nowrap', padding: '8px 6px', fontSize: '12px', textAlign: 'right' }}>월대여료</th>
+              <th style={{ whiteSpace: 'nowrap', padding: '8px 6px', fontSize: '12px', textAlign: 'right' }}>일대여료</th>
               <th onClick={() => handleSort('acquisitionDate')} style={{ cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap', padding: '8px 6px', fontSize: '12px', textAlign: 'center' }}>
                 취득일자{renderSortArrow('acquisitionDate')}
               </th>
-              <th style={{ whiteSpace: 'nowrap', padding: '8px 6px', fontSize: '12px', textAlign: 'right' }}>취득원가</th>
+              <th style={{ whiteSpace: 'nowrap', padding: '8px 6px', fontSize: '12px', textAlign: 'right' }}>취득금액</th>
               <th style={{ whiteSpace: 'nowrap', padding: '8px 6px', fontSize: '12px' }}>구입처</th>
               <th style={{ whiteSpace: 'nowrap', padding: '8px 6px', fontSize: '12px', textAlign: 'center' }}>상각개월수</th>
               <th style={{ whiteSpace: 'nowrap', padding: '8px 6px', fontSize: '12px', textAlign: 'center' }}>잔존가치율</th>
@@ -398,17 +418,32 @@ export const Assets: React.FC = () => {
             </tr>
           </thead>
           <tbody>
-            {filtered.length === 0 ? (
+            {isLoadingData ? (
+              <tr>
+                <td colSpan={35} style={{ textAlign: 'center', padding: '60px 0', color: 'var(--primary)', fontWeight: 'bold' }}>
+                  ⏳ 자산 관리 데이터를 데이터베이스에서 불러오는 중입니다...
+                </td>
+              </tr>
+            ) : !hasQueried ? (
+              <tr>
+                <td colSpan={35} style={{ textAlign: 'center', padding: '60px 0', color: 'var(--text-muted)' }}>
+                  <div style={{ fontSize: '15px', fontWeight: '800', marginBottom: '8px', color: 'var(--primary)' }}>
+                    💡 자산 관리 메뉴 수동 조회 모드 (초기 진입속도 0초 최적화)
+                  </div>
+                  <div style={{ fontSize: '12.5px', lineHeight: '1.6' }}>
+                    업무시간 데이터 자동 로딩 부담을 방지하기 위해 <strong>메뉴 진입 시 자동 조회를 실행하지 않습니다.</strong><br />
+                    상단 검색 필터를 설정하신 후 <strong style={{ color: 'var(--primary)' }}>[🔍 조회]</strong> 버튼을 누르시면 자산 목록이 불려옵니다.
+                  </div>
+                </td>
+              </tr>
+            ) : filtered.length === 0 ? (
               <tr>
                 <td colSpan={35} style={{ textAlign: 'center', padding: '40px 0', color: 'var(--text-muted)' }}>
-                  {assets.length === 0
-                    ? '📭 등록된 자산이 없습니다. Supabase 연결 후 자산 데이터를 업로드해 주세요.'
-                    : '🔍 검색 조건에 맞는 자산이 없습니다.'}
+                    🔍 검색 조건에 맞는 자산이 없습니다.
                 </td>
               </tr>
             ) : (
               filtered.map(a => {
-                const depn = a.ownerType === 'OWNED' ? calculateAssetDepreciation(a) : null;
                 return (
                   <tr key={a.id}>
                     {/* 상세 버튼 - 맨 앞 */}
@@ -451,7 +486,7 @@ export const Assets: React.FC = () => {
                     <td style={{ padding: '7px 6px', fontSize: '12px', color: 'var(--text-secondary)' }}>{a.supplier || '-'}</td>
                     <td style={{ padding: '7px 6px', fontSize: '12px', textAlign: 'center' }}>{a.depreciationMonths ? `${a.depreciationMonths}M` : '-'}</td>
                     <td style={{ padding: '7px 6px', fontSize: '12px', textAlign: 'center' }}>{a.residualValueRate != null ? `${a.residualValueRate}%` : '-'}</td>
-                    <td style={{ padding: '7px 6px', fontSize: '12px', textAlign: 'right' }}>{depn ? depn.bookValue.toLocaleString() : '-'}</td>
+                    <td style={{ padding: '7px 6px', fontSize: '12px', textAlign: 'right', fontWeight: 'bold' }}>{(a.bookValue ?? (a.acquisitionPrice || 0)).toLocaleString()}</td>
                     <td style={{ padding: '7px 6px', fontSize: '12px', textAlign: 'right', color: 'var(--primary)' }}>{(a.cumRentalFee || 0).toLocaleString()}</td>
                     <td style={{ padding: '7px 6px', fontSize: '12px', textAlign: 'right', color: 'var(--danger)' }}>{(a.cumRepairCost || 0).toLocaleString()}</td>
                     <td style={{ padding: '7px 6px', fontSize: '12px', color: 'var(--text-secondary)' }}>{a.renter || '-'}</td>

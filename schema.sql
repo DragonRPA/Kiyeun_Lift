@@ -644,6 +644,33 @@ CREATE POLICY "allow_authenticated_select" ON outbound_inspections FOR SELECT TO
 CREATE POLICY "allow_authenticated_insert" ON outbound_inspections FOR INSERT TO authenticated WITH CHECK (true);
 CREATE POLICY "allow_authenticated_update" ON outbound_inspections FOR UPDATE TO authenticated USING (true) WITH CHECK (true);
 
+-- 41. 월별 감가상각 결산 마감 이력 테이블 (depreciation_logs)
+CREATE TABLE depreciation_logs (
+    id TEXT PRIMARY KEY,
+    "depreciationYm" TEXT NOT NULL,
+    "executedAt" TEXT NOT NULL,
+    "executedBy" TEXT,
+    "targetAssetCount" INTEGER NOT NULL DEFAULT 0,
+    "totalDepreciationAmount" NUMERIC NOT NULL DEFAULT 0,
+    note TEXT,
+    "createdAt" TEXT NOT NULL,
+    "updatedAt" TEXT NOT NULL
+);
+
+ALTER TABLE depreciation_logs ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "allow_anon_select" ON depreciation_logs;
+DROP POLICY IF EXISTS "allow_anon_insert" ON depreciation_logs;
+DROP POLICY IF EXISTS "allow_anon_update" ON depreciation_logs;
+DROP POLICY IF EXISTS "allow_authenticated_select" ON depreciation_logs;
+DROP POLICY IF EXISTS "allow_authenticated_insert" ON depreciation_logs;
+DROP POLICY IF EXISTS "allow_authenticated_update" ON depreciation_logs;
+CREATE POLICY "allow_anon_select" ON depreciation_logs FOR SELECT TO anon USING (true);
+CREATE POLICY "allow_anon_insert" ON depreciation_logs FOR INSERT TO anon WITH CHECK (true);
+CREATE POLICY "allow_anon_update" ON depreciation_logs FOR UPDATE TO anon USING (true) WITH CHECK (true);
+CREATE POLICY "allow_authenticated_select" ON depreciation_logs FOR SELECT TO authenticated USING (true);
+CREATE POLICY "allow_authenticated_insert" ON depreciation_logs FOR INSERT TO authenticated WITH CHECK (true);
+CREATE POLICY "allow_authenticated_update" ON depreciation_logs FOR UPDATE TO authenticated USING (true) WITH CHECK (true);
+
 
 -- ==========================================
 -- 초기 기초 데이터 시딩 (Seed Data)

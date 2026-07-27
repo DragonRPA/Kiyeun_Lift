@@ -1,6 +1,6 @@
 // d:\Kiyeun_Lift\src\context\AppContext.tsx
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { db, supabase, User, MenuPermission, Customer, CustomerContact, CustomerSite, Product, Asset, Consumable, ConsumableLog, ConsumablePurchaseRequest, Contract, ContractAsset, ContractHistory, Billing, BillingDetail, Payment, Delivery, TransportCompany, TransportDriver, Repair, RepairConsumable, Todo, BankTransaction, BankMatchingRule, AssetInOutLog, Vendor, GoogleConfig, CashFlowSnapshot, OutboundInspection, findCustomerByNormalizedName } from '../services/db';
+import { db, supabase, User, MenuPermission, Customer, CustomerContact, CustomerSite, Product, Asset, Consumable, ConsumableLog, ConsumablePurchaseRequest, Contract, ContractAsset, ContractHistory, Billing, BillingDetail, Payment, Delivery, TransportCompany, TransportDriver, Repair, RepairConsumable, Todo, BankTransaction, BankMatchingRule, AssetInOutLog, Vendor, GoogleConfig, CashFlowSnapshot, OutboundInspection, DepreciationLog, findCustomerByNormalizedName } from '../services/db';
 import { ErrorModal } from '../components/ErrorModal';
 
 export interface SmartDispatchData {
@@ -74,9 +74,11 @@ interface AppContextType {
   googleConfigs: GoogleConfig[];
   cashFlowSnapshots: CashFlowSnapshot[];
   outboundInspections: OutboundInspection[];
+  depreciationLogs: DepreciationLog[];
 
   // Mutators
   refreshAllData: () => void;
+  executeMonthlyDepreciation: (depreciationYm: string, note?: string) => Promise<{ count: number; totalAmount: number }>;
   loadTablesForMenu: (menuId: string) => Promise<void>;
   updatePermissions: (updated: MenuPermission[]) => void;
   saveUser: (user: Omit<User, 'id' | 'createdAt'> & { id?: string }) => void;
@@ -186,6 +188,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [googleConfigs, setGoogleConfigs] = useState<GoogleConfig[]>([]);
   const [cashFlowSnapshots, setCashFlowSnapshots] = useState<CashFlowSnapshot[]>([]);
   const [outboundInspections, setOutboundInspections] = useState<OutboundInspection[]>([]);
+  const [depreciationLogs, setDepreciationLogs] = useState<DepreciationLog[]>([]);
 
   // Navigation / Routing states
   const [activeTab, setActiveTab] = useState<string>('dashboard');
@@ -238,6 +241,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setGoogleConfigs([...db.googleConfigs]);
     setCashFlowSnapshots([...db.cashFlowSnapshots]);
     setOutboundInspections([...db.outboundInspections]);
+    setDepreciationLogs([...db.depreciationLogs]);
   };
 
   // 전체 28개 테이블 Supabase pull 후 state 동기화 (초기 로딩 전용)
@@ -280,6 +284,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     'cash_flow':            ['billings', 'payments', 'contracts', 'assets'],
     'delinquency':          ['billings', 'customers', 'contracts'],
     'google_config':        ['googleConfigs'],
+    'depreciation_execution': ['depreciationLogs', 'assets'],
   };
 
   const loadTablesForMenu = async (menuId: string) => {
@@ -2489,12 +2494,78 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     refreshAllData();
   };
 
+  // 월 1회 당사자산 감가상각 결산 마감 실행 (월말 의도적 실행)
+  const executeMonthlyDepreciation = async (depreciationYm: string, note?: string) => {
+    const existing = db.depreciationLogs.find(l => l.depreciationYm === depreciationYm);
+    if (existing) {
+      throw new Error(`이미 [${depreciationYm}] 연월의 감가상각 결산 마감이 완료되었습니다. (마감 처리일시: ${existing.executedAt.substring(0, 10)})`);
+    }
+
+    const ownedAssets = db.assets.filter(a => a.ownerType === 'OWNED');
+    let totalDepnSum = 0;
+    let updatedCount = 0;
+    const nowIso = new Date().toISOString();
+
+    for (const asset of ownedAssets) {
+      const cost = asset.acquisitionPrice || 0;
+      if (cost <= 0 || !asset.acquisitionDate || !asset.depreciationMonths || asset.depreciationMonths <= 0) {
+        continue;
+      }
+
+      const residualRate = asset.residualValueRate ?? 0;
+      const residualValue = Math.round(cost * (residualRate / 100));
+      const depreciableAmount = cost - residualValue;
+      if (depreciableAmount <= 0) continue;
+
+      const monthlyDepn = Math.round(depreciableAmount / asset.depreciationMonths);
+      if (monthlyDepn <= 0) continue;
+
+      const currentAccum = asset.accumDepreciation || 0;
+      const maxAccum = depreciableAmount;
+
+      if (currentAccum >= maxAccum) continue;
+
+      const actualDepn = Math.min(monthlyDepn, maxAccum - currentAccum);
+      const newAccum = currentAccum + actualDepn;
+      const newBookValue = Math.max(residualValue, cost - newAccum);
+
+      db.updateRow<Asset>('assets', asset.id, {
+        accumDepreciation: newAccum,
+        bookValue: newBookValue,
+        updatedAt: nowIso
+      });
+
+      totalDepnSum += actualDepn;
+      updatedCount++;
+    }
+
+    db.insertRow<DepreciationLog>('depreciationLogs', {
+      depreciationYm,
+      executedAt: nowIso,
+      executedBy: currentUser?.name || currentUser?.id,
+      targetAssetCount: updatedCount,
+      totalDepreciationAmount: totalDepnSum,
+      note: note || `[${depreciationYm}] 월말 당사자산 감가상각 결산 마감 완료`,
+      createdAt: nowIso,
+      updatedAt: nowIso
+    });
+
+    try {
+      await db.awaitPendingWrites();
+    } catch (err: any) {
+      console.error('executeMonthlyDepreciation sync error:', err);
+    }
+
+    refreshAllData();
+    return { count: updatedCount, totalAmount: totalDepnSum };
+  };
+
   return (
     <AppContext.Provider value={{
       currentUser, theme, toggleTheme, login, logout, hasPermission, showErrorModal,
       users, permissions, customers, contacts, sites, products, assets, consumables, consumableLogs, consumablePurchases, contracts, contractAssets, contractHistory, deliveries, billings, billingDetails, payments, repairs, repairConsumables, transportCompanies, transportDrivers, todos,
-      bankTransactions, bankMatchingRules, assetInOutLogs, vendors, googleConfigs, cashFlowSnapshots, outboundInspections,
-      refreshAllData, loadTablesForMenu, updatePermissions, saveUser, saveCustomer, saveContact, saveSite, saveProduct, saveAsset, updateGoogleConfig,
+      bankTransactions, bankMatchingRules, assetInOutLogs, vendors, googleConfigs, cashFlowSnapshots, outboundInspections, depreciationLogs,
+      refreshAllData, executeMonthlyDepreciation, loadTablesForMenu, updatePermissions, saveUser, saveCustomer, saveContact, saveSite, saveProduct, saveAsset, updateGoogleConfig,
       saveCashFlowSnapshot, deleteCashFlowSnapshot, saveVendor, deleteVendor,
       acquireAsset, disposeAsset, registerRentedAsset, returnRentedAsset,
       purchaseConsumable, useConsumable,

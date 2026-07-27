@@ -35,6 +35,7 @@ import { CorporateCardPage } from './pages/CorporateCardPage';
 import { CashFlowPage } from './pages/CashFlowPage';
 import { DelinquencyPage } from './pages/DelinquencyPage';
 import { OutboundInspections } from './pages/OutboundInspections';
+import { DepreciationExecution } from './pages/DepreciationExecution';
 
 export interface SubMenuItem {
   id: string;
@@ -187,6 +188,7 @@ const App: React.FC = () => {
         { id: 'corporate_card', name: '법인카드 매입정산', icon: <CreditCard size={16} />, component: <CorporateCardPage /> },
         { id: 'cash_flow', name: '자금 흐름 분석', icon: <TrendingUp size={16} />, component: <CashFlowPage /> },
         { id: 'delinquency', name: '미수 채권 연체 관리', icon: <AlertTriangle size={16} />, component: <DelinquencyPage /> },
+        { id: 'depreciation_execution', name: '감가상각 마감 실행', icon: <TrendingUp size={16} />, component: <DepreciationExecution /> },
       ]
     },
     {

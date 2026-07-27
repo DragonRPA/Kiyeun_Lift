@@ -1,3 +1,27 @@
+# Release Notes (v1.7.0.Build.00000 - 2026-07-28 01:20)
+
+## 🏛️ [ERP 회계 원칙 개편] `[감가상각 마감 실행]` 신규 메뉴 신설 & 월말 수동 결산 마감 체계 전환
+
+### 1. 회계 결산 마감 신규 메뉴 신설 (`DepreciationExecution.tsx` & `App.tsx`)
+- **위치**: `경영관리` ➔ **`감가상각 마감 실행`** (`depreciation_execution`)
+- **개편 목적**: 자산 대장에서 렌더링 시마다 수식처럼 동작하던 수시 감가상각 연산 로직을 전면 배제하여 자산 대장의 조회 성능을 극대화하고, 월 1회(월말) 의도적으로 결산 마감을 실행하여 회계 장부가치를 DB 실제 값으로 고정 갱신 관리.
+
+### 2. 신규 DB 테이블 `depreciation_logs` 생성 (`schema.sql` & `db.ts`)
+- 월별 감가상각 결산 이력 대장 DDL 탑재 (`id`, `depreciationYm`, `executedAt`, `executedBy`, `targetAssetCount`, `totalDepreciationAmount`, `note`).
+- Supabase RLS 6종 허용 Policy 동시 탑재 ➔ **개발자 도구 (DB 스키마 정합성 검증 도구)** 1회 클릭 시 원격 DB 자동 패치 및 PostgREST 스키마 캐시 자동 갱신 지원.
+
+### 3. 월말 감가상각 결산 마감 프로세스 구축 (`AppContext.tsx`)
+- **[🚀 당월 감가상각 결산 마감 실행]** 버튼 제공:
+  - 당사 소유 자산(`OWNED`)에 한해 정액법 기준 당월 상각액을 일괄 계산.
+  - `assets` 테이블의 `accumDepreciation` (누적상각액)과 `bookValue` (장부가치) 컬럼을 **실제 DB 레코드 값으로 업데이트 저장**.
+  - 중복 마감 실행 원천 방지 및 마감 결산 이력 대장 기록.
+
+### 4. 자산 관리 대장 성능 0초 초고속화 (`Assets.tsx`)
+- 실시간 감가상각 동적 계산 로직을 제거하고, DB에 실제 저장된 `accumDepreciation`과 `bookValue` 값을 직관 렌더링.
+- 진입 시 자동 조회 건너뛰기 수동 조회 모드와 조합하여 **자산 대장 메뉴진입 및 조회 성능 0초 완결**.
+
+---
+
 # Release Notes (v1.6.0.Build.00004 - 2026-07-28 00:12)
 
 ## 🛡️ [전사 UX 방어] 버튼 포커스 즉시 탈출(`blur()`) & Enter 연타 중복 생성 차단 락(Lock) 전면 도입
