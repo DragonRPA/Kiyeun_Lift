@@ -1,3 +1,3 @@
 git add .
-git commit -m "feat: add depreciation_execution page, depreciation_logs table DDL & monthly depreciation closing workflow v1.7.0.Build.00000"
+git commit -m "refactor: standardize asset status AVAILABLE label to 임대가능 v1.7.0.Build.00001"
 git push origin main

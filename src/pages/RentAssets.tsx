@@ -456,7 +456,8 @@ export const RentAssets: React.FC = () => {
                         a.status === 'RENTED' ? 'badge-info' :
                         a.status === 'REPAIRING' ? 'badge-warning' : 'badge-secondary'
                       }`}>
-                        {a.status === 'AVAILABLE' ? '대기중' :
+                        {a.status === 'AVAILABLE' ? '임대가능' :
+                         a.status === 'ASSIGNED' ? '출고대기' :
                          a.status === 'RENTED' ? '대여중' :
                          a.status === 'REPAIRING' ? '수리중' :
                          a.status === 'RENTED_RETURNED' ? '반납완료' : a.status}
@@ -541,7 +542,7 @@ export const RentAssets: React.FC = () => {
                             </div>
                           </div>
                         ) : (
-                          <span style={{ color: 'var(--text-muted)', fontSize: '12px' }}>대기중 (전대 없음)</span>
+                          <span style={{ color: 'var(--text-muted)', fontSize: '12px' }}>임대가능 (전대 없음)</span>
                         )}
                       </td>
                       <td>

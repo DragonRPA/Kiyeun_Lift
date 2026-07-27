@@ -103,7 +103,7 @@ export const Assets: React.FC = () => {
 
   const statusLabel = (s: string) => {
     switch (s) {
-      case 'AVAILABLE': return '가용';
+      case 'AVAILABLE': return '임대가능';
       case 'ASSIGNED': return '출고대기';
       case 'RENTED': return '대여중';
       case 'REPAIRING': return '수리중';
@@ -284,7 +284,7 @@ export const Assets: React.FC = () => {
             <label style={{ fontSize: '12px', fontWeight: '600', marginBottom: '5px', display: 'block' }}>장비 상태</label>
             <select value={tempStatusFilter} onChange={e => setTempStatusFilter(e.target.value)} style={{ width: '100%', padding: '7px', fontSize: '13px' }}>
               <option value="ALL">전체</option>
-              <option value="AVAILABLE">가용</option>
+              <option value="AVAILABLE">임대가능</option>
               <option value="ASSIGNED">출고대기</option>
               <option value="RENTED">대여중</option>
               <option value="REPAIRING">수리중</option>
@@ -565,7 +565,8 @@ export const Assets: React.FC = () => {
                       <div>
                         <label style={labelStyle}>상태</label>
                         <select style={inputStyle} value={editForm.status || 'AVAILABLE'} onChange={ef('status')}>
-                          <option value="AVAILABLE">대기중</option>
+                          <option value="AVAILABLE">임대가능</option>
+                          <option value="ASSIGNED">출고대기</option>
                           <option value="RENTED">대여중</option>
                           <option value="REPAIRING">수리중</option>
                           <option value="RENTED_RETURNED">임차반납</option>

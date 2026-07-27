@@ -1269,12 +1269,12 @@ export const Contracts: React.FC = () => {
                   required
                   style={{ width: '100%', padding: '8px' }}
                 >
-                  <option value="">-- 가용 장비 선택 --</option>
+                  <option value="">-- 임대가능 장비 선택 --</option>
                   {filteredAvailableAssets.map(a => (
                     <option key={a.id} value={a.id}>{a.modelName} (관리번호: {a.assetNo})</option>
                   ))}
                   {filteredAvailableAssets.length === 0 && (
-                    <option disabled style={{ color: 'var(--danger)' }}>교체 가능한 동일 모델 가용 재고 없음</option>
+                    <option disabled style={{ color: 'var(--danger)' }}>교체 가능한 동일 모델 임대가능 재고 없음</option>
                   )}
                 </select>
               </div>

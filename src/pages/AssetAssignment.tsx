@@ -105,7 +105,7 @@ export const AssetAssignment: React.FC = () => {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
           <h2 style={{ fontWeight: '800', marginBottom: '4px', fontSize: '18px', letterSpacing: '-0.5px' }}>장비 할당 보드 (고밀도 뷰)</h2>
-          <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>가용 장비를 바둑판 카드로 매핑합니다. (선택된 슬롯과 동일한 모델명만 노출 및 상태 점수순 정렬)</p>
+          <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>임대가능 장비를 바둑판 카드로 매핑합니다. (선택된 슬롯과 동일한 모델명만 노출 및 상태 점수순 정렬)</p>
         </div>
       </div>
 
@@ -259,7 +259,7 @@ export const AssetAssignment: React.FC = () => {
           <div className="card" style={{ height: '400px', display: 'flex', flexDirection: 'column', border: '2px solid var(--success-light)' }}>
             <div className="card-header" style={{ padding: '10px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'var(--success-light)' }}>
               <h3 className="card-title" style={{ display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--success)', fontSize: '13px' }}>
-                <CheckCircle size={14} /> 필터링된 가용 장비 ({availableAssets.length})
+                <CheckCircle size={14} /> 필터링된 임대가능 장비 ({availableAssets.length})
                 {selectedCaId && (() => {
                   const sel = slots.find(ca => ca.id === selectedCaId);
                   return sel?.expectedModel ? <span style={{ fontSize: '10px', fontWeight: '600', color: 'var(--text-muted)', marginLeft: '4px' }}>— {sel.expectedModel} 전용</span> : null;

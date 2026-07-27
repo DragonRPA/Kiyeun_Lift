@@ -185,7 +185,8 @@ export const AssetHistory: React.FC = () => {
               selectedAsset.status === 'RENTED' ? 'badge-info' : 'badge-danger'
             }`}>
               현재상태: {
-                selectedAsset.status === 'AVAILABLE' ? '대기중' :
+                selectedAsset.status === 'AVAILABLE' ? '임대가능' :
+                selectedAsset.status === 'ASSIGNED' ? '출고대기' :
                 selectedAsset.status === 'RENTED' ? '대여중' :
                 selectedAsset.status === 'REPAIRING' ? '정비중' :
                 selectedAsset.status === 'RENTED_RETURNED' ? '반납완료' : selectedAsset.status

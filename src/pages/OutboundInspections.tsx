@@ -192,7 +192,7 @@ export const OutboundInspections: React.FC = () => {
 
       await db.awaitPendingWrites();
       refreshAllData();
-      alert(`⚠️ 자산 [${selectedAsset.assetNo}] 출고 검수가 반려되었습니다.\n자산 상태가 '가용(AVAILABLE)'으로 원복되어 재할당이 가능합니다.`);
+      alert(`⚠️ 자산 [${selectedAsset.assetNo}] 출고 검수가 반려되었습니다.\n자산 상태가 '임대가능(AVAILABLE)'으로 원복되어 재할당이 가능합니다.`);
       setShowRejectModal(false);
       setRejectReason('');
       setSelectedInspectionId(null);
@@ -466,7 +466,7 @@ export const OutboundInspections: React.FC = () => {
               <AlertTriangle size={18} /> 출고 검수 불량 / 반려 처리
             </h3>
             <p style={{ fontSize: '12.5px', color: 'var(--text-secondary)', marginBottom: '12px' }}>
-              반려 시 해당 장비의 <strong>'출고대기(ASSIGNED)'</strong> 상태가 즉시 해제되어 <strong>'가용(AVAILABLE)'</strong>으로 원복되며 타 계약 재할당이 가능해집니다.
+              반려 시 해당 장비의 <strong>'출고대기(ASSIGNED)'</strong> 상태가 즉시 해제되어 <strong>'임대가능(AVAILABLE)'</strong>으로 원복되며 타 계약 재할당이 가능해집니다.
             </p>
 
             <label style={{ fontWeight: 'bold', fontSize: '12.5px', display: 'block', marginBottom: '4px' }}>반려 사유 입력 *</label>
