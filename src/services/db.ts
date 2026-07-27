@@ -1280,12 +1280,13 @@ class LocalDB {
     if (supabase) {
       const tableName = this.mapToSupabaseTable(key as string);
       const payloadForSupabase = this.sanitizeSupabasePayload(newRow);
+      // upsert(onConflict: 'id'): 동일 id가 이미 존재하면 update로 대체 — PK 중복 오류 방지
       const promise = supabase
         .from(tableName)
-        .insert([payloadForSupabase])
+        .upsert([payloadForSupabase], { onConflict: 'id' })
         .then(({ data, error }) => {
           if (error) {
-            console.error(`Supabase insert failed for ${tableName}:`, error);
+            console.error(`Supabase upsert failed for ${tableName}:`, error);
             throw error;
           }
           return data;
