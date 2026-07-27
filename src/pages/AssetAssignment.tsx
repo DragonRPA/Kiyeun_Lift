@@ -41,12 +41,19 @@ export const AssetAssignment: React.FC = () => {
 
   // 가용 장비 필터링 및 정렬 로직 (스마트 매핑 & Score 우선순위)
   let availableAssets = assets.filter(a => a.status === 'AVAILABLE');
-  
+
   if (selectedCaId) {
+    // [슬롯 선택 시] 해당 슬롯의 expectedModel 하나로 좁힘
     const selectedSlot = slots.find(ca => ca.id === selectedCaId);
-    if (selectedSlot && selectedSlot.expectedModel) {
-      // 선택된 슬롯의 모델명과 일치하는 장비만 필터링
+    if (selectedSlot?.expectedModel) {
       availableAssets = availableAssets.filter(a => a.modelName === selectedSlot.expectedModel);
+    }
+  } else if (selectedContractId) {
+    // [계약 선택 시] 미할당 슬롯들이 요구하는 모델 합집합으로 필터 (관련 없는 장비 제거)
+    const pendingSlots = slots.filter(ca => !ca.assetId);
+    const requiredModels = new Set(pendingSlots.map(ca => ca.expectedModel).filter(Boolean));
+    if (requiredModels.size > 0) {
+      availableAssets = availableAssets.filter(a => requiredModels.has(a.modelName));
     }
   }
 
@@ -220,6 +227,15 @@ export const AssetAssignment: React.FC = () => {
             <div className="card-header" style={{ padding: '10px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'var(--success-light)' }}>
               <h3 className="card-title" style={{ display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--success)', fontSize: '13px' }}>
                 <CheckCircle size={14} /> 필터링된 가용 장비 ({availableAssets.length})
+                {selectedCaId && (() => {
+                  const sel = slots.find(ca => ca.id === selectedCaId);
+                  return sel?.expectedModel ? <span style={{ fontSize: '10px', fontWeight: '600', color: 'var(--text-muted)', marginLeft: '4px' }}>— {sel.expectedModel} 전용</span> : null;
+                })()}
+                {!selectedCaId && selectedContractId && (() => {
+                  const pendingSlots = slots.filter(ca => !ca.assetId);
+                  const models = [...new Set(pendingSlots.map(ca => ca.expectedModel).filter(Boolean))];
+                  return models.length > 0 ? <span style={{ fontSize: '10px', fontWeight: '600', color: 'var(--text-muted)', marginLeft: '4px' }}>— {models.join(', ')} 모델만</span> : null;
+                })()}
               </h3>
               {canEdit && (
                 <button 
