@@ -1338,7 +1338,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const today = new Date().toISOString().split('T')[0];
     db.insertRow<Delivery>('deliveries', {
-      contractId: contract.id || '',
+      contractId: contract.id,
       type: 'OUTBOUND',
       dispatchCategory: '출고',
       status: 'REQUESTED',
@@ -1428,7 +1428,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
 
     db.insertRow<Delivery>('deliveries', {
-      contractId: contract.id || '',
+      contractId: contract.id,
       type: 'INBOUND',
       status: 'REQUESTED',
       requestDate: new Date().toISOString().split('T')[0],

@@ -69,6 +69,7 @@ export const TruckDispatch: React.FC = () => {
   const [showManualModal, setShowManualModal] = useState(false);
   const [manualCategory, setManualCategory] = useState<'출고' | '입고' | '반납' | '정비' | '이동'>('출고');
   const [manualCustomerId, setManualCustomerId] = useState('');
+  const [manualContractId, setManualContractId] = useState(''); // 연동 계약 ID
   const [manualOrigin, setManualOrigin] = useState('당사 보관소');
   const [manualDestination, setManualDestination] = useState('');
   const [manualLoadingDate, setManualLoadingDate] = useState(() => new Date().toISOString().split('T')[0]);
@@ -301,6 +302,7 @@ export const TruckDispatch: React.FC = () => {
 
     try {
       db.insertRow<Delivery>('deliveries', {
+        contractId: manualContractId || undefined,
         type: typeMapping[manualCategory] || 'OUTBOUND',
         dispatchCategory: manualCategory,
         status: 'REQUESTED',
@@ -1049,9 +1051,30 @@ export const TruckDispatch: React.FC = () => {
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                 <div>
-                  <label>최초 예상 운송료 (원)</label>
+                  <label style={{ fontWeight: '700', fontSize: '13px' }}>🔗 연동 계약 선택 (선택)</label>
+                  <select
+                    value={manualContractId}
+                    onChange={e => setManualContractId(e.target.value)}
+                    style={{ marginTop: '4px' }}
+                  >
+                    <option value="">-- 계약 없음 (독립 배차) --</option>
+                    {contracts.map(c => {
+                      const cust = customers.find(cu => cu.id === c.customerId);
+                      return (
+                        <option key={c.id} value={c.id}>
+                          {c.contractNo} / {cust?.name || '고객사 미상'}
+                        </option>
+                      );
+                    })}
+                  </select>
+                </div>
+                <div>
+                  <label><br/>최초 예상 운송료 (원)</label>
                   <input type="number" value={manualExpectedCost} onChange={e => setManualExpectedCost(parseInt(e.target.value) || 0)} />
                 </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                 <div>
                   <label style={{ display: 'block', marginBottom: '8px', fontSize: '13px', fontWeight: '600' }}>고객 청구 여부</label>
                   <ToggleSwitch 
