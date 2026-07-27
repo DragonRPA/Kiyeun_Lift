@@ -613,6 +613,7 @@ export const DevDataUploader: React.FC = () => {
   const [helperFunctionsExist, setHelperFunctionsExist] = useState<boolean | null>(null);
   // 선택적 테이블 검증을 위한 체크박스 상태
   const [selectedTables, setSelectedTables] = useState<string[]>([]);
+  const [tableSearchQuery, setTableSearchQuery] = useState('');
 
   const schemaTableCount = React.useMemo(() => {
     try {
@@ -1643,22 +1644,70 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;`}
           </div>
         )}
 
-        {/* 선택적 테이블 검증 UI */}
-        <div style={{ padding: '12px 14px', backgroundColor: 'var(--bg-active)', borderRadius: '8px', marginBottom: '14px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-            <span style={{ fontWeight: '700', fontSize: '13px' }}>🎯 검증 대상 테이블 선택 (선택 안 하면 전체 검증)</span>
-            <div style={{ display: 'flex', gap: '6px' }}>
-              <button onClick={() => setSelectedTables(allSchemaTableNames)} style={{ fontSize: '11px', padding: '2px 8px', border: '1px solid var(--border)', borderRadius: '4px', background: 'var(--bg-card)', cursor: 'pointer' }}>전체 선택</button>
-              <button onClick={() => setSelectedTables([])} style={{ fontSize: '11px', padding: '2px 8px', border: '1px solid var(--border)', borderRadius: '4px', background: 'var(--bg-card)', cursor: 'pointer' }}>전체 해제</button>
+        {/* 선택적 테이블 검증 UI — 검색 필터 + 체크박스 리스트 */}
+        <div style={{ border: '1px solid var(--border-color)', borderRadius: '8px', marginBottom: '14px', overflow: 'hidden' }}>
+          {/* 체크박스 헤더 */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', backgroundColor: 'var(--bg-active)', borderBottom: '1px solid var(--border-color)', gap: '10px', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontWeight: '700', fontSize: '13px' }}>🎯 테이블 선택 검증</span>
+              <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                {selectedTables.length === 0
+                  ? `선택 안 하면 전체 ${allSchemaTableNames.length}개 검증`
+                  : `${selectedTables.length}개 선택됨`}
+              </span>
+            </div>
+            <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
+              {/* 검색 입력란 */}
+              <input
+                type="text"
+                placeholder="테이블명 검색..."
+                value={tableSearchQuery}
+                onChange={e => setTableSearchQuery(e.target.value)}
+                style={{ padding: '4px 10px', fontSize: '12px', border: '1px solid var(--border-color)', borderRadius: '4px', backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)', width: '160px' }}
+              />
+              <button onClick={() => setSelectedTables(allSchemaTableNames.filter(t => t.toLowerCase().includes(tableSearchQuery.toLowerCase())))} style={{ fontSize: '11px', padding: '4px 8px', border: '1px solid var(--border)', borderRadius: '4px', background: 'var(--bg-card)', cursor: 'pointer', whiteSpace: 'nowrap' }}>필터된 전체 선택</button>
+              <button onClick={() => setSelectedTables(allSchemaTableNames)} style={{ fontSize: '11px', padding: '4px 8px', border: '1px solid var(--border)', borderRadius: '4px', background: 'var(--bg-card)', cursor: 'pointer' }}>전체 선택</button>
+              <button onClick={() => setSelectedTables([])} style={{ fontSize: '11px', padding: '4px 8px', border: '1px solid var(--border)', borderRadius: '4px', background: 'var(--bg-card)', cursor: 'pointer' }}>전체 해제</button>
             </div>
           </div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-            {allSchemaTableNames.map(t => (
-              <label key={t} style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px', cursor: 'pointer', padding: '3px 8px', backgroundColor: selectedTables.includes(t) ? 'var(--primary)' : 'var(--bg-card)', color: selectedTables.includes(t) ? '#fff' : 'var(--text-main)', borderRadius: '4px', border: '1px solid var(--border)', transition: 'all 0.15s' }}>
-                <input type="checkbox" checked={selectedTables.includes(t)} onChange={e => setSelectedTables(prev => e.target.checked ? [...prev, t] : prev.filter(x => x !== t))} style={{ display: 'none' }} />
-                <code style={{ fontSize: '11px' }}>{t}</code>
-              </label>
-            ))}
+
+          {/* 체크박스 리스트 - 그리드 레이아웃 */}
+          <div style={{ maxHeight: '220px', overflowY: 'auto', padding: '8px', backgroundColor: 'var(--bg-card)', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '2px' }}>
+            {allSchemaTableNames
+              .filter(t => t.toLowerCase().includes(tableSearchQuery.toLowerCase()) || (TABLE_LABEL_MAP[t] || '').includes(tableSearchQuery))
+              .map((t, i) => {
+                const isChecked = selectedTables.includes(t);
+                const label = TABLE_LABEL_MAP[t];
+                return (
+                  <label
+                    key={t}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 10px',
+                      borderRadius: '5px', cursor: 'pointer',
+                      backgroundColor: isChecked ? 'rgba(var(--primary-rgb, 99,102,241), 0.12)' : 'transparent',
+                      border: `1px solid ${isChecked ? 'var(--primary)' : 'transparent'}`,
+                      transition: 'all 0.1s',
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={isChecked}
+                      onChange={e => setSelectedTables(prev => e.target.checked ? [...prev, t] : prev.filter(x => x !== t))}
+                      style={{ width: '14px', height: '14px', accentColor: 'var(--primary)', cursor: 'pointer', flexShrink: 0 }}
+                    />
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontSize: '12px', fontWeight: '600', color: isChecked ? 'var(--primary)' : 'var(--text-primary)', fontFamily: 'monospace', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t}</div>
+                      {label && <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '1px' }}>{label}</div>}
+                    </div>
+                  </label>
+                );
+              })
+            }
+            {allSchemaTableNames.filter(t => t.toLowerCase().includes(tableSearchQuery.toLowerCase()) || (TABLE_LABEL_MAP[t] || '').includes(tableSearchQuery)).length === 0 && (
+              <div style={{ gridColumn: '1 / -1', padding: '20px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '13px' }}>
+                "검색 결과 없음"
+              </div>
+            )}
           </div>
         </div>
 
