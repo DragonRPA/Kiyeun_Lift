@@ -3,6 +3,7 @@ import { useApp } from '../context/AppContext';
 import { Search, Download, Eye, Layers, Edit2, Save, X, FolderOpen } from 'lucide-react';
 import { exportToExcel } from '../services/excel';
 import { Asset, calculateAssetDepreciation } from '../services/db';
+import { ASSET_STATUS_SSOT, getAssetStatusLabel, getAssetStatusBadgeClass } from '../config/assetStatusConfig';
 import { GoogleDrivePickerModal } from '../components/GoogleDrivePickerModal';
 
 export const Assets: React.FC = () => {
@@ -101,26 +102,8 @@ export const Assets: React.FC = () => {
     return sites.find(s => s.id === id)?.name || '-';
   };
 
-  const statusLabel = (s: string) => {
-    switch (s) {
-      case 'AVAILABLE': return '임대가능';
-      case 'ASSIGNED': return '출고대기';
-      case 'RENTED': return '대여중';
-      case 'REPAIRING': return '수리중';
-      case 'RENTED_RETURNED': return '임차반납';
-      case 'SOLD': return '매각완료';
-      default: return s;
-    }
-  };
-  const statusBadge = (s: string) => {
-    switch (s) {
-      case 'AVAILABLE': return 'badge-success';
-      case 'ASSIGNED': return 'badge-primary';
-      case 'RENTED': return 'badge-info';
-      case 'REPAIRING': return 'badge-warning';
-      default: return 'badge-danger';
-    }
-  };
+  const statusLabel = getAssetStatusLabel;
+  const statusBadge = getAssetStatusBadgeClass;
 
   // 필터링 및 정렬 (수동 [조회] 실행 시에만 계산)
   const filtered = useMemo(() => {
@@ -284,12 +267,9 @@ export const Assets: React.FC = () => {
             <label style={{ fontSize: '12px', fontWeight: '600', marginBottom: '5px', display: 'block' }}>장비 상태</label>
             <select value={tempStatusFilter} onChange={e => setTempStatusFilter(e.target.value)} style={{ width: '100%', padding: '7px', fontSize: '13px' }}>
               <option value="ALL">전체</option>
-              <option value="AVAILABLE">임대가능</option>
-              <option value="ASSIGNED">출고대기</option>
-              <option value="RENTED">대여중</option>
-              <option value="REPAIRING">수리중</option>
-              <option value="RENTED_RETURNED">임차반납</option>
-              <option value="SOLD">매각완료</option>
+              {Object.values(ASSET_STATUS_SSOT).map(st => (
+                <option key={st.code} value={st.code}>{st.label}</option>
+              ))}
             </select>
           </div>
           <div>
@@ -565,12 +545,9 @@ export const Assets: React.FC = () => {
                       <div>
                         <label style={labelStyle}>상태</label>
                         <select style={inputStyle} value={editForm.status || 'AVAILABLE'} onChange={ef('status')}>
-                          <option value="AVAILABLE">임대가능</option>
-                          <option value="ASSIGNED">출고대기</option>
-                          <option value="RENTED">대여중</option>
-                          <option value="REPAIRING">수리중</option>
-                          <option value="RENTED_RETURNED">임차반납</option>
-                          <option value="SOLD">매각완료</option>
+                          {Object.values(ASSET_STATUS_SSOT).map(st => (
+                            <option key={st.code} value={st.code}>{st.label}</option>
+                          ))}
                         </select>
                       </div>
                       <div><label style={labelStyle}>비고1 (장비특기)</label><input style={inputStyle} value={editForm.memo1 || ''} onChange={ef('memo1')} /></div>

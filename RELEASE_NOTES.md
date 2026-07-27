@@ -1,3 +1,15 @@
+# Release Notes (v1.7.0.Build.00006 - 2026-07-28 02:05)
+
+## 💎 [전사 자산 상태 SSOT 전면 구축] `ASSET_STATUS_SSOT` 단일 마스터 장부 구축 & DB DDL 100% 동기화
+
+- **개편 목적**: 자산 상태(`status`) 코드, 한글 라벨, 뱃지 색상, DB CHECK 제약조건을 오직 단 하나의 마스터 장부(`SSOT`)에서 통합 관리하여 상태 쿼리 거부 사고를 100% 예방하고 전사 표기를 완벽 일치시킴.
+- **개편 내역**:
+  1. **자산 상태 SSOT 구축 (`src/config/assetStatusConfig.ts`)**: `ASSET_STATUS_SSOT`에 전사 자산 상태 메타데이터(`AVAILABLE`, `ASSIGNED`, `RENTED`, `REPAIRING`, `RENTED_RETURNED`, `SOLD`) 일원화.
+  2. **DB CHECK 제약조건 DDL 동적 생성 연동 (`DevDataUploader.tsx`)**: `getAssetStatusFixDdlStatements()`를 통해 DB 스키마 정합성 검증 도구 실행 시 자산 상태 CHECK 제약조건 DDL을 자동 추출하여 100% 동기화.
+  3. **자산 대장 동적 렌더링 전환 (`Assets.tsx`)**: 하드코딩된 statusLabel, statusBadge, 선택 드롭다운 옵션을 SSOT 마스터 장부를 통해 동적으로 동기화 렌더링.
+
+---
+
 # Release Notes (v1.7.0.Build.00005 - 2026-07-28 01:47)
 
 ## 🔐 [전사 메뉴-권한 자동 연동 체계 구축] 신규/삭제 메뉴의 사용자 권한 자동 동기화 & 자가 복구(Auto-Heal)
