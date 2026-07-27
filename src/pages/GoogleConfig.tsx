@@ -4,6 +4,7 @@ import { useApp } from '../context/AppContext';
 import { Settings, Mail, FolderOpen, RefreshCw, CheckCircle2, Lock, Eye, EyeOff, ShieldCheck, HelpCircle, AlertTriangle, ExternalLink, Key, Search, Cloud, Folder, File, ArrowLeft } from 'lucide-react';
 import { GoogleConfig as GoogleConfigType } from '../services/db';
 import { drive, DriveFile, DriveFolder } from '../services/drive';
+import { GoogleDrivePickerModal } from '../components/GoogleDrivePickerModal';
 
 export const GoogleConfig: React.FC = () => {
   const { googleConfigs, updateGoogleConfig, currentUser } = useApp();
@@ -28,6 +29,7 @@ export const GoogleConfig: React.FC = () => {
   const [preDeliveryChecklistTemplateUrl, setPreDeliveryChecklistTemplateUrl] = useState('');
   const [bizRegCertUrl, setBizRegCertUrl] = useState('');
   const [bankbookCopyUrl, setBankbookCopyUrl] = useState('');
+  const [defaultRootFolderId, setDefaultRootFolderId] = useState('');
 
   // 패스워드 표시 토글
   const [showPassword, setShowPassword] = useState(false);
@@ -56,28 +58,16 @@ export const GoogleConfig: React.FC = () => {
       setPreDeliveryChecklistTemplateUrl(currentConfig.preDeliveryChecklistTemplateUrl || '');
       setBizRegCertUrl(currentConfig.bizRegCertUrl || '');
       setBankbookCopyUrl(currentConfig.bankbookCopyUrl || '');
+      setDefaultRootFolderId(currentConfig.defaultRootFolderId || '');
     }
   }, [currentConfig]);
 
   // 구글 드라이브 탐색기 모달 상태
   const [isDriveSelectorOpen, setIsDriveSelectorOpen] = useState(false);
-  const [currentFolderId, setCurrentFolderId] = useState('root');
-  const [driveFolders, setDriveFolders] = useState<DriveFolder[]>([]);
-  const [driveFiles, setDriveFiles] = useState<DriveFile[]>([]);
   const [selectorTargetField, setSelectorTargetField] = useState<'quotation' | 'contract' | 'safety' | 'checklist' | 'bizCert' | 'bankbook' | null>(null);
 
-  useEffect(() => {
-    if (isDriveSelectorOpen) {
-      const folders = drive.listFolders(currentFolderId);
-      const files = drive.listFiles(currentFolderId);
-      setDriveFolders(folders);
-      setDriveFiles(files);
-    }
-  }, [currentFolderId, isDriveSelectorOpen]);
-
-  const handleSelectFile = (file: DriveFile) => {
+  const handleSelectDriveItem = (pathOrLink: string) => {
     if (!selectorTargetField) return;
-    const pathOrLink = file.webViewLink;
     if (selectorTargetField === 'quotation') setQuotationTemplateUrl(pathOrLink);
     else if (selectorTargetField === 'contract') setContractTemplateUrl(pathOrLink);
     else if (selectorTargetField === 'safety') setSafetyInspectionTemplateUrl(pathOrLink);
@@ -91,7 +81,6 @@ export const GoogleConfig: React.FC = () => {
 
   const openDriveSelector = (field: 'quotation' | 'contract' | 'safety' | 'checklist' | 'bizCert' | 'bankbook') => {
     setSelectorTargetField(field);
-    setCurrentFolderId('root');
     setIsDriveSelectorOpen(true);
   };
 
@@ -145,6 +134,7 @@ export const GoogleConfig: React.FC = () => {
       preDeliveryChecklistTemplateUrl,
       bizRegCertUrl,
       bankbookCopyUrl,
+      defaultRootFolderId,
       updatedAt: new Date().toISOString()
     };
 
@@ -315,6 +305,22 @@ export const GoogleConfig: React.FC = () => {
               <FolderOpen size={16} style={{ color: 'var(--primary)' }} /> 이메일 자동 첨부 서류 로컬 절대경로 설정
             </h3>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <div style={{ backgroundColor: 'rgba(59, 130, 246, 0.08)', padding: '12px 14px', borderRadius: '8px', border: '1px solid rgba(59, 130, 246, 0.3)', marginBottom: '4px' }}>
+                <label style={{ fontSize: '12.5px', fontWeight: 'bold', marginBottom: '6px', display: 'block', color: 'var(--primary)' }}>
+                  🏢 회사 전용 최상위 구글 드라이브 루트 폴더 (또는 URL)
+                </label>
+                <input
+                  type="text"
+                  value={defaultRootFolderId}
+                  onChange={e => setDefaultRootFolderId(e.target.value)}
+                  placeholder="예: https://drive.google.com/drive/folders/1abc... 또는 루트 폴더 ID (미지정 시 기본 루트 탐색)"
+                  style={{ width: '100%', padding: '8px 10px', fontSize: '13px', borderRadius: '6px', border: '1px solid var(--border-color)', boxSizing: 'border-box' }}
+                />
+                <span style={{ fontSize: '11.5px', color: 'var(--text-muted)', marginTop: '4px', display: 'block' }}>
+                  💡 여기에 회사 드라이브 최상위 폴더를 지정해 두면, 계약 관리나 자산 대장 등 어떤 메뉴에서 탐색기를 열더라도 엉뚱한 폴더 대신 <strong>해당 회사 폴더에서부터 탐색이 시작</strong>됩니다.
+                </span>
+              </div>
+
               <div>
                 <label style={{ fontSize: '12px', fontWeight: 'bold', marginBottom: '6px', display: 'block' }}>1. 견적서 양식 경로 또는 클라우드 링크 *</label>
                 <div style={{ display: 'flex', gap: '8px' }}>
@@ -668,104 +674,17 @@ export const GoogleConfig: React.FC = () => {
         </div>
         </div>
 
-        {/* 구글 드라이브 파일 탐색기 모달 */}
-        {isDriveSelectorOpen && (
-          <div style={{
-            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-            backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100
-          }}>
-            <div className="card" style={{ width: '90%', maxWidth: '600px', maxHeight: '80vh', display: 'flex', flexDirection: 'column', padding: '24px', backgroundColor: 'var(--bg-card)' }}>
-              <div style={{ borderBottom: '1px solid var(--border)', paddingBottom: '12px', marginBottom: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <h3 style={{ fontSize: '16px', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}>
-                  <Cloud style={{ color: 'var(--primary)' }} /> 구글 드라이브 클라우드 파일 탐색기
-                </h3>
-                <button
-                  type="button"
-                  className="btn-secondary"
-                  onClick={() => {
-                    setIsDriveSelectorOpen(false);
-                    setSelectorTargetField(null);
-                  }}
-                  style={{ padding: '4px 10px', fontSize: '12px' }}
-                >
-                  닫기
-                </button>
-              </div>
-
-              {/* 경로 내비게이션 */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px', fontSize: '13px', backgroundColor: 'var(--bg-app)', padding: '10px', borderRadius: '6px' }}>
-                {currentFolderId !== 'root' && (
-                  <button
-                    type="button"
-                    className="btn-secondary"
-                    onClick={() => {
-                      const folders = drive.listFolders();
-                      const current = folders.find(f => f.id === currentFolderId);
-                      if (current?.parentId) {
-                        setCurrentFolderId(current.parentId);
-                      } else {
-                        setCurrentFolderId('root');
-                      }
-                    }}
-                    style={{ padding: '3px 8px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}
-                  >
-                    <ArrowLeft size={12} /> 상위폴더
-                  </button>
-                )}
-                <span style={{ fontWeight: 'bold', color: 'var(--text-secondary)' }}>현재 폴더:</span>
-                <span style={{ color: 'var(--primary)', fontWeight: '600' }}>
-                  {currentFolderId === 'root' ? '/ (루트)' : `/${drive.listFolders().find(f => f.id === currentFolderId)?.name || ''}`}
-                </span>
-              </div>
-
-              {/* 폴더 및 파일 리스트 */}
-              <div style={{ flex: 1, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: '8px', padding: '8px', display: 'flex', flexDirection: 'column', gap: '4px', minHeight: '250px' }}>
-                
-                {/* 폴더 리스트 */}
-                {driveFolders.length === 0 && driveFiles.length === 0 && (
-                  <div style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '40px 0', fontSize: '13px' }}>
-                    폴더가 비어 있습니다.
-                  </div>
-                )}
-                
-                {driveFolders.map(folder => (
-                  <div
-                    key={folder.id}
-                    onClick={() => setCurrentFolderId(folder.id)}
-                    style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 12px', borderRadius: '6px', cursor: 'pointer', borderBottom: '1px solid var(--border-light)', backgroundColor: 'var(--bg-app)', marginBottom: '4px' }}
-                  >
-                    <Folder size={18} style={{ color: '#eab308' }} />
-                    <span style={{ fontSize: '13.5px', fontWeight: '500', flex: 1 }}>{folder.name}</span>
-                    <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>폴더</span>
-                  </div>
-                ))}
-
-                {/* 파일 리스트 */}
-                {driveFiles.map(file => (
-                  <div
-                    key={file.id}
-                    style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 12px', borderRadius: '6px', borderBottom: '1px solid var(--border-light)', backgroundColor: 'var(--bg-card)', marginBottom: '4px' }}
-                  >
-                    <File size={18} style={{ color: 'var(--primary)' }} />
-                    <div style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
-                      <span style={{ fontSize: '13.5px', fontWeight: '500' }}>{file.name}</span>
-                      <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{file.mimeType} | {file.size}</span>
-                    </div>
-                    <button
-                      type="button"
-                      className="btn-primary"
-                      onClick={() => handleSelectFile(file)}
-                      style={{ padding: '4px 10px', fontSize: '12px' }}
-                    >
-                      선택
-                    </button>
-                  </div>
-                ))}
-
-              </div>
-            </div>
-          </div>
-        )}
+        {/* 구글 드라이브 스마트 탐색기 공용 모달 */}
+        <GoogleDrivePickerModal
+          isOpen={isDriveSelectorOpen}
+          onClose={() => {
+            setIsDriveSelectorOpen(false);
+            setSelectorTargetField(null);
+          }}
+          onSelect={handleSelectDriveItem}
+          mode="both"
+          title="구글 드라이브 스마트 탐색기 (서류 템플릿 선택)"
+        />
 
       </div>
     </div>

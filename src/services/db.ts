@@ -529,6 +529,7 @@ export interface GoogleConfig {
   preDeliveryChecklistTemplateUrl?: string;
   bizRegCertUrl?: string;
   bankbookCopyUrl?: string;
+  defaultRootFolderId?: string;
   updatedAt: string;
 }
 
@@ -931,6 +932,7 @@ const SEED_GOOGLE_CONFIG: GoogleConfig[] = [
     preDeliveryChecklistTemplateUrl: 'd:/GoogleDrive/RPA 개발/01.AntiGravity/Kiyuen_Lift/templates/반입전_CHECK_LIST_양식.html',
     bizRegCertUrl: 'd:/GoogleDrive/RPA 개발/01.AntiGravity/Kiyuen_Lift/templates/사업자등록증.pdf',
     bankbookCopyUrl: 'd:/GoogleDrive/RPA 개발/01.AntiGravity/Kiyuen_Lift/templates/통장사본.pdf',
+    defaultRootFolderId: 'root',
     updatedAt: new Date().toISOString()
   }
 ];

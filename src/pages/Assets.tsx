@@ -1,8 +1,9 @@
 import React, { useState, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
-import { Search, Download, Eye, Layers, Edit2, Save, X } from 'lucide-react';
+import { Search, Download, Eye, Layers, Edit2, Save, X, FolderOpen } from 'lucide-react';
 import { exportToExcel } from '../services/excel';
 import { Asset, calculateAssetDepreciation } from '../services/db';
+import { GoogleDrivePickerModal } from '../components/GoogleDrivePickerModal';
 
 export const Assets: React.FC = () => {
   const { assets, customers, sites, hasPermission, saveAsset, showErrorModal } = useApp();
@@ -27,6 +28,10 @@ export const Assets: React.FC = () => {
   const [selectedAsset, setSelectedAsset] = useState<Asset | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [editForm, setEditForm] = useState<Partial<Asset>>({});
+
+  // 구글 드라이브 탐색 모달 상태
+  const [isDrivePickerOpen, setIsDrivePickerOpen] = useState(false);
+  const [drivePickerTarget, setDrivePickerTarget] = useState<'safety' | 'checklist' | null>(null);
 
   const handleSelectAsset = (asset: Asset) => {
     setSelectedAsset(asset);
@@ -550,29 +555,61 @@ export const Assets: React.FC = () => {
 
               {/* 점검 서류 경로 */}
               <section style={{ padding: '14px', border: '1px dashed var(--border-color)', borderRadius: '8px', backgroundColor: 'var(--bg-app)' }}>
-                <h5 style={{ margin: '0 0 10px 0', fontSize: '13px', fontWeight: 'bold' }}>📋 점검 서류 파일 경로</h5>
+                <h5 style={{ margin: '0 0 10px 0', fontSize: '13px', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  📋 점검 서류 파일 경로 (구글 드라이브)
+                </h5>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                   <div>
                     <label style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>안전점검결과서 경로</label>
-                    <input
-                      type="text"
-                      value={isEditing ? (editForm.safetyInspectionUrl || '') : (selectedAsset.safetyInspectionUrl || '')}
-                      onChange={isEditing ? ef('safetyInspectionUrl') : undefined}
-                      readOnly={!isEditing}
-                      placeholder="예: https://drive.google.com/..."
-                      style={{ ...inputStyle, marginTop: '4px', backgroundColor: !isEditing ? 'var(--bg-app)' : undefined }}
-                    />
+                    <div style={{ display: 'flex', gap: '6px', marginTop: '4px' }}>
+                      <input
+                        type="text"
+                        value={isEditing ? (editForm.safetyInspectionUrl || '') : (selectedAsset.safetyInspectionUrl || '')}
+                        onChange={isEditing ? ef('safetyInspectionUrl') : undefined}
+                        readOnly={!isEditing}
+                        placeholder="예: https://drive.google.com/..."
+                        style={{ ...inputStyle, flex: 1, backgroundColor: !isEditing ? 'var(--bg-app)' : undefined }}
+                      />
+                      {isEditing && (
+                        <button
+                          type="button"
+                          className="btn-secondary"
+                          onClick={() => {
+                            setDrivePickerTarget('safety');
+                            setIsDrivePickerOpen(true);
+                          }}
+                          style={{ padding: '0 8px', fontSize: '11px', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '4px' }}
+                        >
+                          <FolderOpen size={12} /> 탐색
+                        </button>
+                      )}
+                    </div>
                   </div>
                   <div>
                     <label style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>반입전체크리스트 경로</label>
-                    <input
-                      type="text"
-                      value={isEditing ? (editForm.preDeliveryChecklistUrl || '') : (selectedAsset.preDeliveryChecklistUrl || '')}
-                      onChange={isEditing ? ef('preDeliveryChecklistUrl') : undefined}
-                      readOnly={!isEditing}
-                      placeholder="예: https://drive.google.com/..."
-                      style={{ ...inputStyle, marginTop: '4px', backgroundColor: !isEditing ? 'var(--bg-app)' : undefined }}
-                    />
+                    <div style={{ display: 'flex', gap: '6px', marginTop: '4px' }}>
+                      <input
+                        type="text"
+                        value={isEditing ? (editForm.preDeliveryChecklistUrl || '') : (selectedAsset.preDeliveryChecklistUrl || '')}
+                        onChange={isEditing ? ef('preDeliveryChecklistUrl') : undefined}
+                        readOnly={!isEditing}
+                        placeholder="예: https://drive.google.com/..."
+                        style={{ ...inputStyle, flex: 1, backgroundColor: !isEditing ? 'var(--bg-app)' : undefined }}
+                      />
+                      {isEditing && (
+                        <button
+                          type="button"
+                          className="btn-secondary"
+                          onClick={() => {
+                            setDrivePickerTarget('checklist');
+                            setIsDrivePickerOpen(true);
+                          }}
+                          style={{ padding: '0 8px', fontSize: '11px', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '4px' }}
+                        >
+                          <FolderOpen size={12} /> 탐색
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
               </section>
@@ -727,6 +764,26 @@ export const Assets: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* 구글 드라이브 탐색 모달 */}
+      <GoogleDrivePickerModal
+        isOpen={isDrivePickerOpen}
+        onClose={() => {
+          setIsDrivePickerOpen(false);
+          setDrivePickerTarget(null);
+        }}
+        onSelect={(pathOrLink) => {
+          if (drivePickerTarget === 'safety') {
+            setEditForm(prev => ({ ...prev, safetyInspectionUrl: pathOrLink }));
+          } else if (drivePickerTarget === 'checklist') {
+            setEditForm(prev => ({ ...prev, preDeliveryChecklistUrl: pathOrLink }));
+          }
+          setIsDrivePickerOpen(false);
+          setDrivePickerTarget(null);
+        }}
+        mode="file"
+        title="구글 드라이브 점검 서류 파일 탐색기"
+      />
     </div>
   );
 };

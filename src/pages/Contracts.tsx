@@ -7,6 +7,7 @@ import { emailService } from '../services/email';
 import { documentBuilder } from '../services/templates';
 import { Contract, db, Customer, CustomerContact, CustomerSite, Todo } from '../services/db';
 import { exportToExcel } from '../services/excel';
+import { GoogleDrivePickerModal } from '../components/GoogleDrivePickerModal';
 
 export const Contracts: React.FC = () => {
   const {
@@ -623,10 +624,29 @@ export const Contracts: React.FC = () => {
                     <div><label>계약시작일</label>{activeContract.startDate}</div>
                     <div><label>계약만료일</label>{activeContract.endDate}</div>
                     <div><label>청구 / 명세서 마감일</label>매월 {activeContract.billingDay}일 / {activeContract.statementClosingDay || '-'}일</div>
-                    <div><label>구글드라이브 폴더</label>
-                      <a href={`https://drive.google.com/drive/folders/${activeContract.driveFolderId}`} target="_blank" rel="noreferrer" style={{ color: 'var(--primary)', fontWeight: '600' }}>
-                        구글드라이브 열기 (링크)
-                      </a>
+                    <div>
+                      <label>구글드라이브 폴더</label>
+                      <button
+                        type="button"
+                        className="btn-secondary"
+                        onClick={() => {
+                          const targetUrl = activeContract.driveFolderId?.trim();
+                          if (!targetUrl) {
+                            alert('⚠️ 등록된 구글 드라이브 링크가 없습니다.');
+                            return;
+                          }
+                          if (targetUrl.startsWith('http://') || targetUrl.startsWith('https://')) {
+                            window.open(targetUrl, '_blank', 'noopener,noreferrer');
+                          } else if (targetUrl.toLowerCase().startsWith('d:/') || targetUrl.toLowerCase().startsWith('c:/')) {
+                            alert(`⚠️ 등록된 경로가 구글드라이브 웹 주소(https://...)가 아닌 PC 로컬 경로입니다.\n\n입력된 경로: ${targetUrl}\n\n[구글 연동 설정] 메뉴에서 구글 드라이브 웹 주소나 폴더 ID로 정제해 주세요.`);
+                          } else {
+                            window.open(`https://drive.google.com/drive/folders/${targetUrl}`, '_blank', 'noopener,noreferrer');
+                          }
+                        }}
+                        style={{ padding: '4px 10px', fontSize: '12px', color: 'var(--primary)', fontWeight: '600' }}
+                      >
+                        구글드라이브 열기 (링크) 🔗
+                      </button>
                     </div>
                   </div>
 

@@ -1,3 +1,19 @@
+# Release Notes (v1.4.3.Build.00003 - 2026-07-27 20:11)
+
+## 🏢 회사 전용 최상위 구글 드라이브 루트 폴더 지정 기능 연동
+- **구글 연동 설정에 루트 폴더 필드 추가**: [구글 연동 설정] (`GoogleConfig.tsx`) 메뉴에 "🏢 회사 전용 최상위 구글 드라이브 루트 폴더 (또는 URL)" 설정 항목 신설.
+- **스마트 피커 모달 루트 폴더 자동 연결**: `GoogleDrivePickerModal` 탐색기 열림 시 `defaultRootFolderId`를 감지하여 엉뚱한 폴더 대신 회사의 최상위 업무 폴더부터 탐색이 바로 시작되도록 자동 동기화.
+- **스키마 및 데이터 모델 확장**: `GoogleConfig` 인터페이스, `google_configs` DB 스키마(`schema.sql`), `SEED_GOOGLE_CONFIG`에 `defaultRootFolderId` 반영.
+
+# Release Notes (v1.4.3.Build.00002 - 2026-07-27 20:10)
+
+## 📁 구글 드라이브 스마트 통합 탐색기 (GoogleDrivePickerModal) 구축 & 전 메뉴 연결
+- **재사용 공용 컴포넌트 탑재**: `src/components/GoogleDrivePickerModal.tsx` 구축.
+- **듀얼 선택 모드 지원**: [폴더 선택]과 [파일 선택]을 동시/개별 지원하여 계약 폴더 링크와 개별 서류 템플릿 주소를 원클릭으로 선택 가능.
+- **스마트 URL 파서 (Clean URL)**: 외부 구글 드라이브 복사 링크(`https://docs.google.com/document/d/.../edit?usp=drive_link...`) 입력 시 지저분한 URL 파라미터(`?usp=drive_link...`)를 자동으로 깔끔하게 정제.
+- **클릭형 브레드크럼 & 실시간 검색**: `루트 > 폴더` 브레드크럼 클릭 이동 및 파일/폴더명 실시간 검색 지원.
+- **전 메뉴 확장 연결**: `GoogleConfig.tsx` (이메일 6개 서류), `Contracts.tsx` (계약 드라이브 폴더 열기 스마트화), `Assets.tsx` (안전점검결과서/반입전체크리스트 파일 경로 탐색) 전면 적용.
+
 # Release Notes (v1.4.3.Build.00001 - 2026-07-27 19:50)
 
 ## 📏 자산대장 제조년도 컬럼 너비 조정 & 감가상각 검토 완료
