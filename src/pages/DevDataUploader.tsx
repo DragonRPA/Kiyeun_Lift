@@ -1192,6 +1192,11 @@ export const DevDataUploader: React.FC = () => {
         sqlPatch = `-- [정보] 모든 테이블 스키마가 정상입니다.\n-- 만약 RLS(new row violates row-level security policy) 오류가 발생할 경우 아래 쿼리를 SQL Editor에 실행하십시오:\n\n${rlsPatch}`;
       }
 
+      // ✅ 스키마 캐시 강제 갱신 (PostgREST schema cache reload)
+      // 신규 컬럼 추가 직후 "Could not find column in schema cache" 오류 방지
+      // DDL 패치 SQL 마지막에 항상 포함하여 SQL Editor에서 일괄 실행 시 자동 해결
+      sqlPatch += `\n\n-- ──────────────────────────────────────────────\n-- ✅ [필수] PostgREST 스키마 캐시 즉시 갱신\n-- 신규 컬럼 추가 후 "Could not find column in schema cache" 오류를 방지합니다.\n-- 위 DDL 패치 실행 직후 반드시 이 구문도 함께 실행하세요.\n-- ──────────────────────────────────────────────\nNOTIFY pgrst, 'reload schema';\n`;
+
       setSchemaAuditResults(audit);
       setGeneratedPatchSql(sqlPatch);
     } catch (err) {

@@ -256,7 +256,7 @@ export const Dashboard: React.FC = () => {
                   현재 수납 처리되지 않은 연체/미수 대금이 총 <strong style={{ color: '#ef4444', fontSize: '15px' }}>{totalUnpaidAmount.toLocaleString()}원</strong>에 달합니다. 
                   미수 거래처 목록과 발행 명세서를 전수 점검하여 즉시 수납 처리를 진행하십시오.
                 </p>
-                <button className="btn-primary" onClick={() => setActiveTab('billings')} style={{ backgroundColor: '#ef4444', border: 'none', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <button className="btn-primary" onClick={() => setActiveTab('billing')} style={{ backgroundColor: '#ef4444', border: 'none', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px' }}>
                   연체 및 미수금 현황 수납 마감 <ArrowRight size={12} />
                 </button>
               </div>
@@ -316,7 +316,7 @@ export const Dashboard: React.FC = () => {
                   })}
                 </div>
 
-                <button className="btn-primary" onClick={() => setActiveTab('repairs')} style={{ backgroundColor: '#f59e0b', border: 'none', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <button className="btn-primary" onClick={() => setActiveTab('repair')} style={{ backgroundColor: '#f59e0b', border: 'none', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px' }}>
                   전체 정비 의뢰 등록 및 자재 투입 <ArrowRight size={12} />
                 </button>
               </div>
@@ -362,7 +362,7 @@ export const Dashboard: React.FC = () => {
                   현재 담당 관리하는 활성/연장 계약은 총 <strong>{activeContracts}건</strong>입니다. 
                   계약 만기 연장 처리 또는 종료 예정 계약들의 회수 일정을 전수 확인하여 반납 입고 준비를 시작하십시오.
                 </p>
-                <button className="btn-primary" onClick={() => setActiveTab('contracts')} style={{ fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <button className="btn-primary" onClick={() => setActiveTab('contract')} style={{ fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px' }}>
                   계약 관리 대장으로 이동 <ArrowRight size={12} />
                 </button>
               </div>
@@ -385,7 +385,7 @@ export const Dashboard: React.FC = () => {
                   최근 신설되었으나 연락처, 현장 상세 주소, 정산 조건 등 필수 인적 사항 정보가 누락되어 정산에 위험이 되는 고객이 있습니다. 
                   신속히 거래처 정보를 보완해 주세요.
                 </p>
-                <button className="btn-primary" onClick={() => setActiveTab('customers')} style={{ backgroundColor: '#f59e0b', border: 'none', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <button className="btn-primary" onClick={() => setActiveTab('customer')} style={{ backgroundColor: '#f59e0b', border: 'none', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px' }}>
                   고객 및 현장 마스터 정보 보완 <ArrowRight size={12} />
                 </button>
               </div>

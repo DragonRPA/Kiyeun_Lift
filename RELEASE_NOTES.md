@@ -1,3 +1,17 @@
+# Release Notes (v1.5.0.Build.00001 - 2026-07-27 21:47)
+
+## 🐛 대시보드 바로가기 버튼 메뉴 이동 불가 버그 수정
+- **원인**: `Dashboard.tsx` 내 피드 카드의 바로가기 버튼들이 `setActiveTab`에 복수형 ID(`'contracts'`, `'customers'`, `'billings'`, `'repairs'`)를 전달하고 있어, `App.tsx` 메뉴 마스터의 단수형 탭 ID(`'contract'`, `'customer'`, `'billing'`, `'repair'`)와 불일치하여 화면 이동이 되지 않던 버그.
+- **수정 내역**: 해당 버튼 4종의 탭 ID를 `App.tsx` 메뉴 마스터 ID 단수형과 100% 일치하도록 수정.
+  - `'billings'` → `'billing'`
+  - `'repairs'` → `'repair'`
+  - `'contracts'` → `'contract'`
+  - `'customers'` → `'customer'`
+
+## 🛠️ DevDataUploader DDL 패치 SQL에 PostgREST 스키마 캐시 갱신 명령 자동 포함
+- **원인**: 신규 컬럼 DDL 패치 후 Supabase PostgREST의 스키마 캐시가 자동 갱신되지 않아 `Could not find the 'closingMemo' column in the schema cache` 등의 오류가 발생.
+- **근본 해결**: `DevDataUploader.tsx`의 스키마 정합성 검증 및 DDL 패치 SQL 생성 로직 마지막에 `NOTIFY pgrst, 'reload schema';` 구문을 항상 자동으로 포함하도록 개선. SQL Editor에서 DDL 패치 쿼리를 일괄 실행하면 PostgREST 스키마 캐시가 즉시 갱신됩니다.
+
 # Release Notes (v1.5.0.Build.00000 - 2026-07-27 21:32)
 
 ## 🚚 배차 시스템 상하차 일시 분리, 5대 배차 유형 & 마감 비고 전면 개편
