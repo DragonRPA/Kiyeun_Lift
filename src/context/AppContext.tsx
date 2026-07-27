@@ -696,7 +696,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         repEmail: '미상',
         createdAt: new Date().toISOString()
       });
-      
+
+      // ⚠️ FK 제약 방지: 신규 고객이 Supabase에 완전히 저장된 후에만 contacts/sites 생성 가능
+      try {
+        await db.awaitPendingWrites();
+      } catch (err: any) {
+        console.error('Supabase new customer sync error:', err);
+        showErrorModal(`⚠️ 신규 고객 DB 저장 중 오류:\n${err.message || JSON.stringify(err)}`, '스마트 출고 오류');
+        return { success: false, errorMessage: err.message };
+      }
+
       if (data.siteContactName) {
         db.insertRow<CustomerContact>('contacts', {
           customerId: customer.id,
