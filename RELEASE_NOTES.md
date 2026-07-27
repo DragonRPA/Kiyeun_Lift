@@ -1,3 +1,13 @@
+# Release Notes (v1.4.3.Build.00010 - 2026-07-27 20:56)
+
+## 🛡️ 스마트 출고 DB 외래키(FK) 위반 오류 해결 (순차 동기화 적용)
+- **외래키(FK) 제약조건 위반 원인 해결**: `saveSmartDispatch` 및 `createContract` 실행 시 부모 테이블(`contracts`) 레코드가 Supabase 원격 DB에 100% 생성되기 전에 자식 테이블(`contract_assets`, `deliveries`) 레코드가 병렬로 삽입되어 발생하던 `contract_assets_contractId_fkey` 제약조건 위반을 해결.
+- **3단계 순차 동기 대기 적용**:
+  1. 1단계: 부모 고객/현장(`customers`, `sites`) DB 저장 ➔ `await db.awaitPendingWrites()`
+  2. 2단계: 계약(`contracts`) DB 저장 ➔ `await db.awaitPendingWrites()` 1차 동기 대기
+  3. 3단계: 계약 자산/배차(`contractAssets`, `deliveries`) DB 저장 ➔ `await db.awaitPendingWrites()` 2차 동기 대기
+- **원천 안정성 확보**: 부모 레코드가 Supabase 원격 DB에 안전하게 선(先)생성된 후 자식 레코드가 생성되므로 FK 오류가 원천 차단됨.
+
 # Release Notes (v1.4.3.Build.00009 - 2026-07-27 20:50)
 
 ## 🔥 구글 설정 SEED 데이터 제거 — 앱 시작 시 반드시 DB에서 읽기로 변경

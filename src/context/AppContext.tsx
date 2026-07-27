@@ -104,7 +104,7 @@ interface AppContextType {
   inboundConsumablePurchase: (id: string, qty: number, statementFileUrl: string) => Promise<void>;
   
   // Contract Mutators
-  createContract: (contractData: Omit<Contract, 'id' | 'createdAt' | 'updatedAt' | 'contractNo'>, assetsList: { assetId?: string; expectedModel?: string; monthlyRentalFee: number; dailyRentalFee: number }[]) => void;
+  createContract: (contractData: Omit<Contract, 'id' | 'createdAt' | 'updatedAt' | 'contractNo'>, assetsList: { assetId?: string; expectedModel?: string; monthlyRentalFee: number; dailyRentalFee: number }[]) => Promise<void>;
   extendContract: (contractId: string, newEndDate: string, description: string) => void;
   shortenContract: (contractId: string, newEndDate: string, description: string) => void;
   succeedContract: (contractId: string, successorCustomerId: string, successorContactId: string, successorSiteId: string, successionDate: string, description: string) => void;
@@ -710,6 +710,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       updatedAt: new Date().toISOString()
     });
 
+    // ⚠️ 외래키(Foreign Key) 제약조건 위반 방지: 부모 contract 레코드가 Supabase 원격 DB에 먼저 100% 생성되도록 1차 동기 대기!
+    try {
+      await db.awaitPendingWrites();
+    } catch (err: any) {
+      console.error('Supabase contract insert sync error:', err);
+      showErrorModal(`⚠️ 스마트 출고 계약 생성 중 DB 동기화 오류가 발생했습니다:\n${err.message || err.details || JSON.stringify(err)}`, '스마트 출고 DB 동기화 오류');
+      return { success: false, errorMessage: err.message || err.details };
+    }
+
     data.equipments.forEach((eq) => {
       for(let i=0; i<eq.qty; i++) {
         db.insertRow<ContractAsset>('contractAssets', {
@@ -1192,7 +1201,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     refreshAllData();
   };
 
-  const createContract = (contractData: Omit<Contract, 'id' | 'createdAt' | 'updatedAt' | 'contractNo'>, assetsList: { assetId?: string; expectedModel?: string; monthlyRentalFee: number; dailyRentalFee: number }[]) => {
+  const createContract = async (contractData: Omit<Contract, 'id' | 'createdAt' | 'updatedAt' | 'contractNo'>, assetsList: { assetId?: string; expectedModel?: string; monthlyRentalFee: number; dailyRentalFee: number }[]) => {
     const contractNo = `CT-${new Date().toISOString().split('T')[0].replace(/-/g, '').substring(2)}-${Math.floor(100 + Math.random() * 900)}`;
     
     const contract = db.insertRow<Contract>('contracts', {
@@ -1203,6 +1212,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     });
+
+    // ⚠️ 외래키(Foreign Key) 제약조건 위반 방지: contract가 Supabase 원격 DB에 먼저 100% 생성되도록 1차 동기 대기!
+    try {
+      await db.awaitPendingWrites();
+    } catch (err: any) {
+      console.error('Supabase contract insert sync error in saveContract:', err);
+    }
 
     assetsList.forEach(item => {
       db.insertRow<ContractAsset>('contractAssets', {
