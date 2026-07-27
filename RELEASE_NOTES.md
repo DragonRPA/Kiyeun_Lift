@@ -1,3 +1,27 @@
+# Release Notes (v1.5.1.Build.00000 - 2026-07-27 22:17)
+
+## 🔬 DB 스키마 정합성 검증 도구 — 근본 아키텍처 재설계 (수작업 ZERO화)
+
+### 기존 구조의 근본적 문제
+1. **검증이 PostgREST API(schema cache 의존)** → schema cache가 오염/지연되면 "정상"으로 오판
+2. **DDL 패치 SQL을 "생성만" 하고 "실행은 하지 않음"** → 개발자가 SQL 복사-붙여넣기-실행 수작업 필요
+3. **PostgREST schema cache 갱신도 수동** → 컬럼 추가 후 PostgREST가 모르는 상태 지속
+
+### 재설계 내용
+1. **검증 엔진 교체**: PostgREST API → `information_schema.columns` 직접 조회 (`dev_get_columns` RPC)
+   - PostgREST schema cache 영향 완전 배제, DB 원천 진실 직접 조회
+   - 컬럼 존재 여부가 항상 정확히 판단됨
+2. **DDL 자동 실행**: "패치 자동 적용" 버튼 → `dev_exec_ddl` RPC가 ALTER TABLE을 DB에 직접 실행
+   - 더 이상 개발자가 SQL을 복사해서 SQL Editor에서 수동 실행할 필요 없음
+3. **PostgREST schema cache 자동 갱신**: `dev_exec_ddl` RPC 내부에서 DDL 실행 후 자동으로 `NOTIFY pgrst, 'reload schema'` 실행
+4. **선택적 테이블 검증**: 체크박스 UI로 특정 테이블만 빠르게 검증 가능 (전체 검증 기능 유지)
+5. **1회 초기 셋업 안내**: helper RPC 함수(`dev_get_columns`, `dev_exec_ddl`) 미존재 시 생성 SQL을 자동으로 UI에 표시
+
+### 사용 방법 (최초 1회)
+1. 개발자 도구 → DB 스키마 정합성 검증 도구 접속
+2. "1회 초기 셋업 필요" 안내 SQL을 Supabase SQL Editor에서 실행
+3. 이후 `schema.sql` 변경 시: 검증 클릭 → MISMATCH 감지 → "패치 자동 적용" 클릭 → 완료
+
 # Release Notes (v1.5.0.Build.00002 - 2026-07-27 21:57)
 
 ## 🔬 DB 스키마 정합성 검증 도구 — 거짓 "정상" 오판 버그 근본 수정

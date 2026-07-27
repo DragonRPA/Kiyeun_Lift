@@ -607,6 +607,12 @@ export const DevDataUploader: React.FC = () => {
   const [checkingSchema, setCheckingSchema] = useState(false);
   const [schemaAuditResults, setSchemaAuditResults] = useState<{ table: string; status: 'OK' | 'MISSING' | 'MISMATCH'; message: string }[] | null>(null);
   const [generatedPatchSql, setGeneratedPatchSql] = useState('');
+  const [patchStatements, setPatchStatements] = useState<string[]>([]);
+  const [applyingPatch, setApplyingPatch] = useState(false);
+  const [applyResult, setApplyResult] = useState<{ ok: boolean; msg: string } | null>(null);
+  const [helperFunctionsExist, setHelperFunctionsExist] = useState<boolean | null>(null);
+  // 선택적 테이블 검증을 위한 체크박스 상태
+  const [selectedTables, setSelectedTables] = useState<string[]>([]);
 
   const schemaTableCount = React.useMemo(() => {
     try {
@@ -614,6 +620,11 @@ export const DevDataUploader: React.FC = () => {
     } catch (e) {
       return 0;
     }
+  }, []);
+
+  const allSchemaTableNames = React.useMemo(() => {
+    try { return Object.keys(parseSqlSchema(schemaSql)); }
+    catch { return []; }
   }, []);
 
   const isAdmin = currentUser?.role === 'ADMIN';
@@ -1030,205 +1041,127 @@ export const DevDataUploader: React.FC = () => {
     }
   };
 
-  // ──── Supabase 실시간 DB 스키마 정합성 검증 도구 핸들러 ────
-  // ──── Supabase 실시간 DB 스키마 정합성 검증 도구 핸들러 ────
-  const handleVerifySchema = async () => {
+  // ──────────────────────────────────────────────────────────────────────
+  // ✅ 재설계된 DB 스키마 정합성 검증 도구
+  // 본질 목적: 개발자가 schema.sql 변경 후 수동으로 SQL Editor에서 DDL 실행하는 수작업을 ZERO화
+  // 핵심 개선:
+  //   1. 검증: PostgREST API(schema cache 오염) 대신 information_schema 직접 조회 (dev_get_columns RPC)
+  //   2. 실행: DDL 패치 SQL 보여주기만 → "패치 자동 적용" 버튼으로 DB에 즉시 자동 실행 (dev_exec_ddl RPC)
+  //   3. 캐시: dev_exec_ddl 내부에서 NOTIFY pgrst 자동 실행 → 수동 갱신 불필요
+  //   4. 선택적 검증: 특정 테이블만 체크박스로 골라 빠르게 검증
+  // ──────────────────────────────────────────────────────────────────────
+
+  // Helper RPC 함수 존재 여부 확인
+  const checkHelperFunctions = async (): Promise<boolean> => {
+    if (!supabase) return false;
+    // dev_get_columns 함수 존재 여부 테스트
+    const { error } = await supabase.rpc('dev_get_columns', { p_table: 'users' });
+    // 함수 자체가 없으면 PGRST202 또는 42883 에러
+    if (error && (error.code === 'PGRST202' || error.code === '42883' || error.message.includes('function') || error.message.includes('does not exist'))) {
+      return false;
+    }
+    return true;
+  };
+
+  // information_schema 기반 컬럼 조회 (PostgREST schema cache 완전 우회)
+  const getActualColumns = async (tableName: string): Promise<string[] | null> => {
+    if (!supabase) return null;
+    const { data, error } = await supabase.rpc('dev_get_columns', { p_table: tableName });
+    if (error) return null;
+    if (!data || !Array.isArray(data)) return [];
+    return data.map((row: any) => row.column_name as string);
+  };
+
+  // RLS Policy DDL 생성 헬퍼
+  const generateRlsPolicyDDL = (t: string): string => [
+    `DROP POLICY IF EXISTS "allow_anon_select" ON "${t}";`,
+    `DROP POLICY IF EXISTS "allow_anon_insert" ON "${t}";`,
+    `DROP POLICY IF EXISTS "allow_anon_update" ON "${t}";`,
+    `DROP POLICY IF EXISTS "allow_authenticated_select" ON "${t}";`,
+    `DROP POLICY IF EXISTS "allow_authenticated_insert" ON "${t}";`,
+    `DROP POLICY IF EXISTS "allow_authenticated_update" ON "${t}";`,
+    `CREATE POLICY "allow_anon_select" ON "${t}" FOR SELECT TO anon USING (true);`,
+    `CREATE POLICY "allow_anon_insert" ON "${t}" FOR INSERT TO anon WITH CHECK (true);`,
+    `CREATE POLICY "allow_anon_update" ON "${t}" FOR UPDATE TO anon USING (true) WITH CHECK (true);`,
+    `CREATE POLICY "allow_authenticated_select" ON "${t}" FOR SELECT TO authenticated USING (true);`,
+    `CREATE POLICY "allow_authenticated_insert" ON "${t}" FOR INSERT TO authenticated WITH CHECK (true);`,
+    `CREATE POLICY "allow_authenticated_update" ON "${t}" FOR UPDATE TO authenticated USING (true) WITH CHECK (true);`,
+  ].join('\n');
+
+  // 핵심 검증 로직 (테이블 목록 파라미터로 받음 — 전체 or 선택)
+  const runSchemaVerification = async (tablesToCheck: string[]) => {
     if (!supabase) return;
     setCheckingSchema(true);
+    setApplyResult(null);
     const audit: { table: string; status: 'OK' | 'MISSING' | 'MISMATCH'; message: string }[] = [];
-    let sqlPatch = '';
-    let rlsPatch = '-- [보완] RLS (Row-Level Security) 유지 상태에서 anon/authenticated 롤 SELECT/INSERT/UPDATE 허용 Policy 설정\n';
+    const stmts: string[] = [];
+    let sqlPatchDisplay = '';
 
-    // PostgREST 에러 메시지로부터 누락된 칼럼명을 안전하게 파싱하는 헬퍼
-    // ✅ [버그수정] PostgREST 스키마 캐시 오류 패턴 추가
-    //   기존: column "X" / column X does not exist 패턴만 인식
-    //   추가: Could not find the 'X' column of 'Y' in the schema cache → 거짓 "정상" 오판 버그 근본 수정
-    const extractColumnName = (errMsg: string): string | null => {
-      const cleanMsg = errMsg.replace(/\\"/g, '"');
-      // 패턴 1 (PostgREST schema cache): Could not find the 'colName' column of 'tableName' in the schema cache
-      const schemaCacheMatch = cleanMsg.match(/could not find the '([^']+)' column of '[^']+' in the schema cache/i);
-      if (schemaCacheMatch) return schemaCacheMatch[1];
-      // 패턴 2: column "colName"
-      const quoteMatch = cleanMsg.match(/column "([^"]+)"/i);
-      if (quoteMatch) return quoteMatch[1];
-      // 패턴 3: column colName does not exist
-      const columnWordMatch = cleanMsg.match(/column\s+(\S+)\s+does\s+not\s+exist/i);
-      if (columnWordMatch) {
-        const word = columnWordMatch[1];
-        return word.includes('.') ? (word.split('.').pop() || word) : word;
-      }
-      return null;
-    };
+    // Helper 함수 존재 여부 1회 확인
+    const helpersOk = await checkHelperFunctions();
+    setHelperFunctionsExist(helpersOk);
 
-    // 컬럼 관련 오류(스키마 캐시 포함)인지 판별하는 헬퍼
-    const isColumnRelatedError = (errMsg: string): boolean => {
-      return (
-        /schema cache/i.test(errMsg) ||
-        /could not find/i.test(errMsg) ||
-        /does not exist/i.test(errMsg) ||
-        /column/i.test(errMsg)
-      );
-    };
+    if (!helpersOk) {
+      setCheckingSchema(false);
+      setSchemaAuditResults([]);
+      setGeneratedPatchSql('');
+      setPatchStatements([]);
+      return;
+    }
 
-    // RLS를 유지하면서 anon/authenticated 롤의 SELECT/INSERT/UPDATE를 허용하는 표준 Policy DDL 생성 헬퍼
-    // upsert는 내부적으로 SELECT(존재 확인) → INSERT or UPDATE 3단계를 거치므로 세 가지 Policy 모두 필요
-    const generateRlsPolicyDDL = (tableName: string): string => {
-      const t = tableName;
-      return [
-        `DROP POLICY IF EXISTS "allow_anon_select" ON "${t}";`,
-        `DROP POLICY IF EXISTS "allow_anon_insert" ON "${t}";`,
-        `DROP POLICY IF EXISTS "allow_anon_update" ON "${t}";`,
-        `DROP POLICY IF EXISTS "allow_authenticated_select" ON "${t}";`,
-        `DROP POLICY IF EXISTS "allow_authenticated_insert" ON "${t}";`,
-        `DROP POLICY IF EXISTS "allow_authenticated_update" ON "${t}";`,
-        `CREATE POLICY "allow_anon_select" ON "${t}" FOR SELECT TO anon USING (true);`,
-        `CREATE POLICY "allow_anon_insert" ON "${t}" FOR INSERT TO anon WITH CHECK (true);`,
-        `CREATE POLICY "allow_anon_update" ON "${t}" FOR UPDATE TO anon USING (true) WITH CHECK (true);`,
-        `CREATE POLICY "allow_authenticated_select" ON "${t}" FOR SELECT TO authenticated USING (true);`,
-        `CREATE POLICY "allow_authenticated_insert" ON "${t}" FOR INSERT TO authenticated WITH CHECK (true);`,
-        `CREATE POLICY "allow_authenticated_update" ON "${t}" FOR UPDATE TO authenticated USING (true) WITH CHECK (true);`,
-      ].join('\n');
-    };
+    const currentSchemas = parseSqlSchema(schemaSql);
 
     try {
-      const currentSchemas = parseSqlSchema(schemaSql);
-      for (const table of Object.keys(currentSchemas)) {
+      for (const table of tablesToCheck) {
         const schemaDef = currentSchemas[table];
-        let hasRlsError = false;
-        
-        // 1. 테이블 존재 여부 및 RLS 기본 읽기 검사
-        const { error: tableError } = await supabase!.from(table).select('id').limit(0);
-        
-        if (tableError) {
-          if (tableError.code === '42P01' || tableError.message.includes('does not exist')) {
-            audit.push({
-              table,
-              status: 'MISSING',
-              message: '테이블이 Supabase에 존재하지 않습니다.'
-            });
-            sqlPatch += `-- [생성] ${table} 테이블 추가 및 RLS Policy 허용\n${schemaDef.createSql}\n${generateRlsPolicyDDL(table)}\n`;
-            rlsPatch += generateRlsPolicyDDL(table) + '\n';
-            continue;
-          }
+        if (!schemaDef) continue;
 
-          if (tableError.message.includes('row-level security') || tableError.code === '42501') {
-            hasRlsError = true;
-          }
-        }
+        // 1. information_schema로 실제 컬럼 직접 조회 (PostgREST cache 완전 우회)
+        const actualCols = await getActualColumns(table);
 
-        // 1-2. RLS 쓰기(INSERT/UPSERT) 권한 정밀 실시간 테스트 (SELECT는 성공하나 쓰기가 차단된 케이스 색출)
-        if (!hasRlsError) {
-          const testId = `__RLS_TEST_${Date.now()}`;
-          const { error: writeError } = await supabase!.from(table).upsert({ id: testId } as any, { onConflict: 'id' });
-          if (writeError) {
-            if (writeError.message.includes('row-level security') || writeError.code === '42501') {
-              hasRlsError = true;
-            }
+        if (actualCols === null) {
+          // null → 테이블 자체가 없거나 RPC 오류
+          // PostgREST로 테이블 존재 재확인
+          const { error: tErr } = await supabase!.from(table).select('id').limit(0);
+          if (tErr && (tErr.code === '42P01' || tErr.message.includes('does not exist'))) {
+            audit.push({ table, status: 'MISSING', message: '테이블이 Supabase에 존재하지 않습니다.' });
+            const createStmt = schemaDef.createSql.trim();
+            stmts.push(createStmt);
+            stmts.push(...generateRlsPolicyDDL(table).split('\n').filter(s => s.trim()));
+            sqlPatchDisplay += `-- [생성] ${table}\n${createStmt}\n${generateRlsPolicyDDL(table)}\n\n`;
           } else {
-            // 테스트 성공 시 임시 덤미 행 즉시 삭제
-            await supabase!.from(table).delete().eq('id', testId);
+            audit.push({ table, status: 'MISMATCH', message: '컬럼 정보 조회 실패 (RPC 오류 — 재시도 필요)' });
           }
+          continue;
         }
 
-        // 2. 컬럼 누락 여부 검증 (일괄 Select 및 에러 메시지 기반 점진적 누락 색출 - 초고속 최적화)
-        let activeCols = [...schemaDef.columns];
-        const missingCols: string[] = [];
-        let success = false;
-
-        for (let attempt = 0; attempt < 20; attempt++) {
-          if (activeCols.length === 0) {
-            success = true;
-            break;
-          }
-          
-          const selectStr = activeCols.map(c => `"${c}"`).join(',');
-          const { error: colError } = await supabase!.from(table).select(selectStr).limit(0);
-          
-          if (!colError) {
-            success = true;
-            break;
-          }
-
-          if (colError.message.includes('row-level security') || colError.code === '42501') {
-            hasRlsError = true;
-          }
-
-          const missingColName = extractColumnName(colError.message);
-          if (missingColName && activeCols.includes(missingColName)) {
-            // 정상적으로 파싱된 컬럼 → 누락 목록에 추가 후 다음 컬럼 계속 검사
-            missingCols.push(missingColName);
-            activeCols = activeCols.filter(c => c !== missingColName);
-          } else if (isColumnRelatedError(colError.message)) {
-            // ✅ [버그수정] 파싱은 실패했지만 컬럼/스키마 관련 오류인 경우:
-            // 기존: break → 누락 컬럼 없음으로 오판 (거짓 "정상")
-            // 수정: 활성 컬럼 목록의 첫 번째 컬럼을 누락으로 추정 처리 후 계속 검사
-            // (PostgREST schema cache 오류 시 콤마 구분 select에서 첫 번째 미인식 컬럼이 원인)
-            if (activeCols.length > 0) {
-              missingCols.push(activeCols[0]);
-              activeCols = activeCols.slice(1);
-            } else {
-              break;
-            }
-          } else {
-            // 완전히 다른 종류의 에러 → 루프 종료
-            break;
-          }
-        }
-
-        // RLS 해제 DDL 쿼리 묶음 준비 (이슈 있는 테이블은 아래 if-else에서 sqlPatch에 추가 후 rlsPatch 별도 관리)
+        // 2. 실제 컬럼 vs 스키마 정의 컬럼 비교
+        const actualColSet = new Set(actualCols.map(c => c.toLowerCase()));
+        const missingCols = schemaDef.columns.filter(c => !actualColSet.has(c.toLowerCase()));
 
         if (missingCols.length > 0) {
-          const rlsMsg = hasRlsError ? ' ⚠️ [RLS 정책 위반 경고: new row violates row-level security policy]' : '';
-          audit.push({
-            table,
-            status: 'MISMATCH',
-            message: `컬럼 누락 (${missingCols.length}개): ${missingCols.join(', ')}${rlsMsg}`
-          });
-          
-          sqlPatch += `-- [보완] ${table} 테이블 누락 컬럼 추가 및 RLS Policy 허용 DDL\n`;
+          audit.push({ table, status: 'MISMATCH', message: `누락 컬럼 ${missingCols.length}개: ${missingCols.join(', ')}` });
+          sqlPatchDisplay += `-- [보완] ${table} 누락 컬럼 추가\n`;
           missingCols.forEach(col => {
-            const colDef = schemaDef.columnsWithTypes[col] || 'TEXT';
-            let colType = colDef.replace(/NOT NULL/gi, '').trim();
-            sqlPatch += `ALTER TABLE "${table}" ADD COLUMN IF NOT EXISTS "${col}" ${colType};\n`;
+            const colDef = (schemaDef.columnsWithTypes[col] || 'TEXT').replace(/NOT NULL/gi, '').trim();
+            const stmt = `ALTER TABLE "${table}" ADD COLUMN IF NOT EXISTS "${col}" ${colDef};`;
+            stmts.push(stmt);
+            sqlPatchDisplay += stmt + '\n';
           });
-          sqlPatch += generateRlsPolicyDDL(table) + '\n\n';
-        } else if (hasRlsError) {
-          audit.push({
-            table,
-            status: 'MISMATCH',
-            message: '⚠️ [RLS 쓰기 차단 검출] anon/authenticated 롤 Policy 추가 필요 (upsert: SELECT+INSERT+UPDATE 모두 필요)'
-          });
-          sqlPatch += `-- [보완] ${table} 테이블 RLS Policy 허용 DDL (RLS 유지, anon+authenticated 롤 허용)\n${generateRlsPolicyDDL(table)}\n\n`;
-        } else if (success) {
-          audit.push({
-            table,
-            status: 'OK',
-            message: '정상 (테이블, 모든 컬럼 및 RLS 접근 허용 일치)'
-          });
-          // OK 테이블만 rlsPatch에 추가 (이슈 테이블은 sqlPatch에 이미 포함됨 → 중복 방지)
-          rlsPatch += generateRlsPolicyDDL(table) + '\n';
+          stmts.push(...generateRlsPolicyDDL(table).split('\n').filter(s => s.trim()));
+          sqlPatchDisplay += generateRlsPolicyDDL(table) + '\n\n';
         } else {
-          audit.push({
-            table,
-            status: 'MISMATCH',
-            message: '검증 도중 예기치 못한 스키마 조회가 실패했습니다.'
-          });
+          audit.push({ table, status: 'OK', message: `정상 (실제 컬럼 ${actualCols.length}개 / 스키마 정의 ${schemaDef.columns.length}개 일치)` });
         }
       }
 
-      if (sqlPatch) {
-        sqlPatch += `\n-- ──────────────────────────────────────────────\n-- [일괄 조치] 전체 테이블 RLS (Row-Level Security) 해제 및 허용 패치 쿼리\n-- ──────────────────────────────────────────────\n${rlsPatch}`;
-      } else {
-        sqlPatch = `-- [정보] 모든 테이블 스키마가 정상입니다.\n-- 만약 RLS(new row violates row-level security policy) 오류가 발생할 경우 아래 쿼리를 SQL Editor에 실행하십시오:\n\n${rlsPatch}`;
+      if (stmts.length > 0) {
+        sqlPatchDisplay += `\n-- ✅ PostgREST 스키마 캐시 즉시 갱신 (dev_exec_ddl 자동 실행)\nNOTIFY pgrst, 'reload schema';\n`;
       }
 
-      // ✅ 스키마 캐시 강제 갱신 (PostgREST schema cache reload)
-      // 신규 컬럼 추가 직후 "Could not find column in schema cache" 오류 방지
-      // DDL 패치 SQL 마지막에 항상 포함하여 SQL Editor에서 일괄 실행 시 자동 해결
-      sqlPatch += `\n\n-- ──────────────────────────────────────────────\n-- ✅ [필수] PostgREST 스키마 캐시 즉시 갱신\n-- 신규 컬럼 추가 후 "Could not find column in schema cache" 오류를 방지합니다.\n-- 위 DDL 패치 실행 직후 반드시 이 구문도 함께 실행하세요.\n-- ──────────────────────────────────────────────\nNOTIFY pgrst, 'reload schema';\n`;
-
       setSchemaAuditResults(audit);
-      setGeneratedPatchSql(sqlPatch);
+      setGeneratedPatchSql(sqlPatchDisplay);
+      setPatchStatements(stmts);
     } catch (err) {
       console.error('Schema check failed:', err);
       alert('스키마 검증 중 오류가 발생했습니다.');
@@ -1236,6 +1169,44 @@ export const DevDataUploader: React.FC = () => {
       setCheckingSchema(false);
     }
   };
+
+  const handleVerifySchema = async () => {
+    await runSchemaVerification(allSchemaTableNames);
+  };
+
+  const handleVerifySelectedTables = async () => {
+    if (selectedTables.length === 0) { alert('검증할 테이블을 1개 이상 선택해주세요.'); return; }
+    await runSchemaVerification(selectedTables);
+  };
+
+  // 패치 자동 적용 (dev_exec_ddl RPC 호출 → DDL 실행 + NOTIFY pgrst 자동)
+  const handleApplyPatch = async () => {
+    if (!supabase || patchStatements.length === 0) return;
+    setApplyingPatch(true);
+    setApplyResult(null);
+    try {
+      const { data, error } = await supabase.rpc('dev_exec_ddl', { statements: patchStatements });
+      if (error) {
+        setApplyResult({ ok: false, msg: `RPC 호출 실패: ${error.message}` });
+      } else {
+        const results = Array.isArray(data) ? data : [];
+        const failed = results.filter((r: any) => !r.ok);
+        if (failed.length > 0) {
+          setApplyResult({ ok: false, msg: `일부 DDL 실패:\n${failed.map((r: any) => `• ${r.sql}\n  → ${r.err}`).join('\n')}` });
+        } else {
+          setApplyResult({ ok: true, msg: `✅ ${results.length}개 DDL 구문 실행 완료! PostgREST 스키마 캐시도 자동 갱신되었습니다.` });
+          // 패치 성공 후 자동 재검증
+          const tables = schemaAuditResults?.map(r => r.table) || allSchemaTableNames;
+          await runSchemaVerification(tables);
+        }
+      }
+    } catch (err: any) {
+      setApplyResult({ ok: false, msg: `예외 발생: ${err?.message || err}` });
+    } finally {
+      setApplyingPatch(false);
+    }
+  };
+
 
   if (!isAdmin) {
     return (
@@ -1625,98 +1596,182 @@ export const DevDataUploader: React.FC = () => {
 
       <hr style={{ border: 'none', borderTop: '1px solid var(--border-color)', margin: '30px 0 20px 0' }} />
 
-      {/* Supabase 실시간 DB 스키마 정합성 검증 도구 */}
+      {/* ✅ 재설계된 Supabase 실시간 DB 스키마 정합성 검증 도구 */}
       <div className="card" style={{ padding: '24px', backgroundColor: 'var(--bg-card)', marginBottom: '30px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
           <DatabaseIcon size={20} color="var(--primary)" />
-          <h3 style={{ fontWeight: '800', fontSize: '18px', margin: 0 }}>🔍 Supabase 실시간 DB 스키마 정합성 검증 도구</h3>
+          <h3 style={{ fontWeight: '800', fontSize: '18px', margin: 0 }}>🔍 Supabase 실시간 DB 스키마 정합성 자동화 도구</h3>
         </div>
-
-        <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '16px', margin: 0 }}>
-          코드베이스에서 정의된 {schemaTableCount}개 데이터 테이블의 실제 Supabase 내 존재 여부 및 컬럼 구조를 실시간 검증합니다. 부정합이 있을 시 Supabase SQL Editor에 입력할 DDL 패치 쿼리를 자동 생성합니다.
+        <p style={{ fontSize: '12.5px', color: 'var(--text-muted)', marginBottom: '16px' }}>
+          <code>schema.sql</code> 정의 기준으로 실제 Supabase DB의 {schemaTableCount}개 테이블 컬럼 구조를 <strong>information_schema 직접 조회</strong>로 검증합니다.
+          누락 컬럼 발견 시 <strong>"패치 자동 적용"</strong> 버튼 한 번으로 ALTER TABLE을 DB에 직접 실행하고 PostgREST 스키마 캐시도 자동 갱신합니다.
         </p>
 
-        <button
-          onClick={handleVerifySchema}
-          disabled={!isConnected || checkingSchema}
-          className="btn-primary"
-          style={{
-            display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '20px',
-            opacity: (!isConnected || checkingSchema) ? 0.5 : 1
-          }}
-        >
-          {checkingSchema ? <Loader size={16} style={{ animation: 'spin 1s linear infinite' }} /> : <DatabaseIcon size={16} />}
-          {checkingSchema ? '스키마 정합성 검증 중...' : '실시간 DB 구조 검증 실행'}
-        </button>
+        {/* 1회 초기 셋업 안내 */}
+        {helperFunctionsExist === false && (
+          <div style={{ padding: '14px 16px', backgroundColor: 'rgba(239,68,68,0.08)', border: '1px solid var(--danger)', borderRadius: '8px', marginBottom: '16px' }}>
+            <p style={{ fontWeight: '700', color: 'var(--danger)', margin: '0 0 8px 0', fontSize: '13px' }}>⚠️ [1회 초기 셋업 필요] Supabase SQL Editor에서 아래 SQL을 실행한 후 다시 검증하세요.</p>
+            <textarea readOnly value={`-- ✅ DB 스키마 자동화 도구 Helper 함수 (최초 1회만 실행)
+CREATE OR REPLACE FUNCTION dev_get_columns(p_table TEXT)
+RETURNS TABLE(column_name TEXT) AS $$
+  SELECT column_name::TEXT FROM information_schema.columns
+  WHERE table_schema = 'public' AND table_name = p_table
+  ORDER BY ordinal_position;
+$$ LANGUAGE sql SECURITY DEFINER;
+
+CREATE OR REPLACE FUNCTION dev_exec_ddl(statements TEXT[])
+RETURNS JSONB AS $$
+DECLARE
+  stmt TEXT;
+  results JSONB := '[]'::JSONB;
+BEGIN
+  FOREACH stmt IN ARRAY statements LOOP
+    BEGIN
+      EXECUTE stmt;
+      results := results || jsonb_build_array(jsonb_build_object('sql', stmt, 'ok', true));
+    EXCEPTION WHEN OTHERS THEN
+      results := results || jsonb_build_array(jsonb_build_object('sql', stmt, 'ok', false, 'err', SQLERRM));
+    END;
+  END LOOP;
+  NOTIFY pgrst, 'reload schema';
+  RETURN results;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;`}
+              style={{ width: '100%', height: '220px', fontFamily: 'monospace', fontSize: '11.5px', backgroundColor: 'var(--bg-body)', color: 'var(--text-primary)', border: '1px solid var(--border-color)', borderRadius: '4px', padding: '10px', resize: 'vertical', marginBottom: '8px' }}
+            />
+            <button onClick={() => navigator.clipboard.writeText(`CREATE OR REPLACE FUNCTION dev_get_columns(p_table TEXT) RETURNS TABLE(column_name TEXT) AS $$ SELECT column_name::TEXT FROM information_schema.columns WHERE table_schema = 'public' AND table_name = p_table ORDER BY ordinal_position; $$ LANGUAGE sql SECURITY DEFINER; CREATE OR REPLACE FUNCTION dev_exec_ddl(statements TEXT[]) RETURNS JSONB AS $$ DECLARE stmt TEXT; results JSONB := '[]'::JSONB; BEGIN FOREACH stmt IN ARRAY statements LOOP BEGIN EXECUTE stmt; results := results || jsonb_build_array(jsonb_build_object('sql', stmt, 'ok', true)); EXCEPTION WHEN OTHERS THEN results := results || jsonb_build_array(jsonb_build_object('sql', stmt, 'ok', false, 'err', SQLERRM)); END; END LOOP; NOTIFY pgrst, 'reload schema'; RETURN results; END; $$ LANGUAGE plpgsql SECURITY DEFINER;`)} className="btn-secondary" style={{ fontSize: '11px', padding: '4px 10px' }}>SQL 복사</button>
+          </div>
+        )}
+
+        {/* 선택적 테이블 검증 UI */}
+        <div style={{ padding: '12px 14px', backgroundColor: 'var(--bg-active)', borderRadius: '8px', marginBottom: '14px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+            <span style={{ fontWeight: '700', fontSize: '13px' }}>🎯 검증 대상 테이블 선택 (선택 안 하면 전체 검증)</span>
+            <div style={{ display: 'flex', gap: '6px' }}>
+              <button onClick={() => setSelectedTables(allSchemaTableNames)} style={{ fontSize: '11px', padding: '2px 8px', border: '1px solid var(--border)', borderRadius: '4px', background: 'var(--bg-card)', cursor: 'pointer' }}>전체 선택</button>
+              <button onClick={() => setSelectedTables([])} style={{ fontSize: '11px', padding: '2px 8px', border: '1px solid var(--border)', borderRadius: '4px', background: 'var(--bg-card)', cursor: 'pointer' }}>전체 해제</button>
+            </div>
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+            {allSchemaTableNames.map(t => (
+              <label key={t} style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px', cursor: 'pointer', padding: '3px 8px', backgroundColor: selectedTables.includes(t) ? 'var(--primary)' : 'var(--bg-card)', color: selectedTables.includes(t) ? '#fff' : 'var(--text-main)', borderRadius: '4px', border: '1px solid var(--border)', transition: 'all 0.15s' }}>
+                <input type="checkbox" checked={selectedTables.includes(t)} onChange={e => setSelectedTables(prev => e.target.checked ? [...prev, t] : prev.filter(x => x !== t))} style={{ display: 'none' }} />
+                <code style={{ fontSize: '11px' }}>{t}</code>
+              </label>
+            ))}
+          </div>
+        </div>
+
+        {/* 검증 실행 버튼 */}
+        <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', flexWrap: 'wrap' }}>
+          <button
+            onClick={handleVerifySchema}
+            disabled={!isConnected || checkingSchema || applyingPatch}
+            className="btn-primary"
+            style={{ display: 'flex', alignItems: 'center', gap: '8px', opacity: (!isConnected || checkingSchema) ? 0.5 : 1 }}
+          >
+            {checkingSchema ? <Loader size={16} style={{ animation: 'spin 1s linear infinite' }} /> : <DatabaseIcon size={16} />}
+            {checkingSchema ? '검증 중...' : `전체 ${schemaTableCount}개 테이블 검증`}
+          </button>
+          <button
+            onClick={handleVerifySelectedTables}
+            disabled={!isConnected || checkingSchema || applyingPatch || selectedTables.length === 0}
+            className="btn-secondary"
+            style={{ display: 'flex', alignItems: 'center', gap: '8px', opacity: (selectedTables.length === 0 || checkingSchema) ? 0.4 : 1 }}
+          >
+            {checkingSchema ? <Loader size={14} style={{ animation: 'spin 1s linear infinite' }} /> : <CheckCircle size={14} />}
+            선택 {selectedTables.length}개 테이블만 검증
+          </button>
+        </div>
 
         {schemaAuditResults && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-            <div style={{ maxHeight: '350px', overflowY: 'auto', border: '1px solid var(--border-color)', borderRadius: '6px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div style={{ maxHeight: '380px', overflowY: 'auto', border: '1px solid var(--border-color)', borderRadius: '6px' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
                 <thead>
                   <tr style={{ backgroundColor: 'var(--bg-body)', borderBottom: '1px solid var(--border-color)', textAlign: 'left' }}>
-                    <th style={{ padding: '10px 12px', fontWeight: '700', width: '60px' }}>번호</th>
+                    <th style={{ padding: '10px 12px', fontWeight: '700', width: '50px' }}>#</th>
                     <th style={{ padding: '10px 12px', fontWeight: '700' }}>테이블명</th>
-                    <th style={{ padding: '10px 12px', fontWeight: '700' }}>상태</th>
-                    <th style={{ padding: '10px 12px', fontWeight: '700' }}>검증 결과 명세</th>
+                    <th style={{ padding: '10px 12px', fontWeight: '700', width: '110px' }}>상태</th>
+                    <th style={{ padding: '10px 12px', fontWeight: '700' }}>검증 결과 (information_schema 기준)</th>
                   </tr>
                 </thead>
                 <tbody>
                   {schemaAuditResults.map((result, i) => (
-                    <tr key={i} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                    <tr key={i} style={{ borderBottom: '1px solid var(--border-color)', backgroundColor: result.status !== 'OK' ? 'rgba(245,158,11,0.04)' : 'transparent' }}>
                       <td style={{ padding: '10px 12px', color: 'var(--text-muted)' }}>{i + 1}</td>
                       <td style={{ padding: '10px 12px', fontWeight: '600' }}><code>{result.table}</code></td>
                       <td style={{ padding: '10px 12px' }}>
                         <span style={{
                           padding: '3px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: '700',
-                          backgroundColor: result.status === 'OK' ? 'rgba(34,197,94,0.1)' : result.status === 'MISMATCH' ? 'rgba(245,158,11,0.1)' : 'rgba(239,68,68,0.1)',
+                          backgroundColor: result.status === 'OK' ? 'rgba(34,197,94,0.1)' : result.status === 'MISMATCH' ? 'rgba(245,158,11,0.15)' : 'rgba(239,68,68,0.1)',
                           color: result.status === 'OK' ? '#15803d' : result.status === 'MISMATCH' ? '#b45309' : 'var(--danger)'
                         }}>
-                          {result.status === 'OK' ? '정상' : result.status === 'MISMATCH' ? '구조 불일치' : '테이블 누락'}
+                          {result.status === 'OK' ? '✅ 정상' : result.status === 'MISMATCH' ? '⚠️ 컬럼 누락' : '❌ 테이블 없음'}
                         </span>
                       </td>
-                      <td style={{ padding: '10px 12px', color: 'var(--text-muted)' }}>{result.message}</td>
+                      <td style={{ padding: '10px 12px', fontSize: '12px', color: 'var(--text-muted)' }}>{result.message}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
 
-            {generatedPatchSql ? (
-              <div className="card" style={{ padding: '16px', backgroundColor: 'rgba(239,68,68,0.02)', border: '1px dashed var(--danger)' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-                  <h4 style={{ fontWeight: '700', fontSize: '14px', color: 'var(--danger)', margin: 0 }}>⚠️ 스키마 복구 DDL 패치 쿼리</h4>
-                  <button
-                    onClick={() => {
-                      navigator.clipboard.writeText(generatedPatchSql);
-                      alert('클립보드에 복사되었습니다. Supabase SQL Editor에 붙여넣어 실행하세요.');
-                    }}
-                    className="btn-secondary"
-                    style={{ fontSize: '11px', padding: '4px 10px' }}
-                  >
-                    SQL 코드 복사
-                  </button>
+            {/* 패치 자동 적용 영역 */}
+            {patchStatements.length > 0 ? (
+              <div style={{ padding: '16px', backgroundColor: 'rgba(239,68,68,0.05)', border: '1.5px dashed var(--danger)', borderRadius: '8px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
+                  <h4 style={{ fontWeight: '700', fontSize: '14px', color: 'var(--danger)', margin: 0 }}>
+                    ⚠️ {patchStatements.length}개 DDL 구문 패치 필요 — 자동 적용 또는 수동 복사
+                  </h4>
+                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                    <button
+                      onClick={handleApplyPatch}
+                      disabled={applyingPatch}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 16px',
+                        backgroundColor: applyingPatch ? '#666' : '#dc2626', color: '#fff',
+                        border: 'none', borderRadius: '6px', fontWeight: '700', fontSize: '13px', cursor: 'pointer'
+                      }}
+                    >
+                      {applyingPatch ? <Loader size={14} style={{ animation: 'spin 1s linear infinite' }} /> : <DatabaseIcon size={14} />}
+                      {applyingPatch ? 'DDL 실행 중...' : '🚀 패치 자동 적용 (DB 직접 실행)'}
+                    </button>
+                    <button
+                      onClick={() => { navigator.clipboard.writeText(generatedPatchSql); alert('클립보드에 복사되었습니다.'); }}
+                      className="btn-secondary"
+                      style={{ fontSize: '12px', padding: '8px 12px' }}
+                    >
+                      SQL 복사 (수동 실행)
+                    </button>
+                  </div>
                 </div>
-                <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '10px', margin: 0 }}>
-                  아래 SQL 패치 코드를 복사하여 Supabase의 SQL Editor에 붙여넣고 실행(Run)하면 부정합 상태인 테이블/컬럼이 정상 구조로 즉시 신설/보완됩니다.
+
+                {applyResult && (
+                  <div style={{
+                    padding: '10px 14px', borderRadius: '6px', marginBottom: '10px', fontSize: '12.5px', whiteSpace: 'pre-wrap',
+                    backgroundColor: applyResult.ok ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)',
+                    border: `1px solid ${applyResult.ok ? '#22c55e' : 'var(--danger)'}`,
+                    color: applyResult.ok ? '#15803d' : 'var(--danger)', fontWeight: '600'
+                  }}>
+                    {applyResult.msg}
+                  </div>
+                )}
+
+                <p style={{ fontSize: '11.5px', color: 'var(--text-muted)', margin: '0 0 8px 0' }}>
+                  "패치 자동 적용" 버튼은 <code>dev_exec_ddl</code> RPC를 통해 아래 DDL을 DB에 직접 실행하고 PostgREST 스키마 캐시도 자동 갱신합니다.
                 </p>
                 <textarea
-                  readOnly
-                  value={generatedPatchSql}
-                  style={{
-                    width: '100%', height: '200px', fontFamily: 'monospace', fontSize: '12px',
-                    backgroundColor: 'var(--bg-body)', color: 'var(--text-primary)', border: '1px solid var(--border-color)',
-                    borderRadius: '4px', padding: '10px', resize: 'vertical'
-                  }}
+                  readOnly value={generatedPatchSql}
+                  style={{ width: '100%', height: '160px', fontFamily: 'monospace', fontSize: '11.5px', backgroundColor: 'var(--bg-body)', color: 'var(--text-primary)', border: '1px solid var(--border-color)', borderRadius: '4px', padding: '10px', resize: 'vertical' }}
                 />
               </div>
             ) : (
-              <div style={{
-                display: 'flex', alignItems: 'center', gap: '8px', padding: '12px 16px',
-                backgroundColor: 'rgba(34,197,94,0.1)', border: '1px solid #22c55e', borderRadius: '8px', color: '#15803d'
-              }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '14px 16px', backgroundColor: 'rgba(34,197,94,0.1)', border: '1px solid #22c55e', borderRadius: '8px', color: '#15803d' }}>
                 <CheckCircle size={16} />
-                <span style={{ fontSize: '13px', fontWeight: '600' }}>검증 결과 완전성 충족: Supabase 데이터베이스와 코드베이스 스키마가 100% 일치합니다. 추가 DDL 패치가 필요하지 않습니다.</span>
+                <span style={{ fontSize: '13px', fontWeight: '700' }}>
+                  ✅ 검증 완전 충족: information_schema 기준 DB 컬럼 구조가 schema.sql 정의와 100% 일치합니다.
+                </span>
               </div>
             )}
           </div>
