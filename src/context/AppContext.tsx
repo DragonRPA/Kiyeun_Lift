@@ -654,6 +654,30 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return result;
   };
 
+  // 전사 계약번호 통일 생성 헬퍼 (YYMM + 4자리 순차: 예 '26070001')
+  const generateNextContractNo = (): string => {
+    const prefix = new Date().toISOString().split('T')[0].replace(/-/g, '').substring(2, 6); // e.g. "2607"
+    let maxSeq = 0;
+    
+    db.contracts.forEach(c => {
+      if (!c || !c.contractNo) return;
+      const match = c.contractNo.match(new RegExp(`${prefix}(\\d{4})`)) || c.contractNo.match(/(\d{8})/);
+      if (match) {
+        const str = match[1] || match[0];
+        if (str.length === 8 && str.startsWith(prefix)) {
+          const seq = parseInt(str.substring(4), 10);
+          if (!isNaN(seq) && seq > maxSeq) maxSeq = seq;
+        } else if (str.length === 4) {
+          const seq = parseInt(str, 10);
+          if (!isNaN(seq) && seq > maxSeq) maxSeq = seq;
+        }
+      }
+    });
+
+    const nextSeq = String(maxSeq + 1).padStart(4, '0');
+    return `${prefix}${nextSeq}`;
+  };
+
   const saveSmartDispatch = async (data: SmartDispatchData, autoRegister: boolean, onProgress?: (log: string, percent: number) => void) => {
     const notify = async (msg: string, pct: number, delayMs = 180) => {
       if (onProgress) {
@@ -770,15 +794,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const isSalespersonValid = currentUser?.id && existingUsers.some(u => u.id === currentUser.id);
     const validSalespersonId = isSalespersonValid ? currentUser.id : (existingUsers.find(u => u.id === 'u-1')?.id || existingUsers[0]?.id || undefined);
 
-    const nextContractNum = String(db.contracts.reduce((max, c) => {
-      const m = c.contractNo?.match(/S-CTR-(\d+)/);
-      return m ? Math.max(max, parseInt(m[1])) : max;
-    }, 0) + 1).padStart(7, '0');
+    const nextContractNo = generateNextContractNo();
 
-    await notify(`📄 [3/5 계약 생성] 스마트 임대차 계약서 작성 중 (S-CTR-${nextContractNum})...`, 55);
+    await notify(`📄 [3/5 계약 생성] 스마트 임대차 계약서 작성 중 (${nextContractNo})...`, 55);
 
     const contract = db.insertRow<Contract>('contracts', {
-      contractNo: `S-CTR-${nextContractNum}`,
+      contractNo: nextContractNo,
       customerId: finalCustomer.id,
       siteId: finalSite.id,
       startDate: new Date().toISOString().split('T')[0],
@@ -789,8 +810,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     });
-
-    await notify('☁️ 부모 계약 레코드 Supabase 원격 DB 1차 동기화 대기 중...', 68);
 
     // ⚠️ 외래키(Foreign Key) 제약조건 위반 방지: 부모 contract 레코드가 Supabase 원격 DB에 먼저 100% 생성되도록 1차 동기 대기!
     try {
@@ -822,6 +841,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     // 신규 배차(Delivery) - 출고 대기 건 자동 생성
     const cargoItems = JSON.stringify(data.equipments.map(e => ({ modelName: e.modelName, count: e.qty })));
+    const dData = data as any;
     db.insertRow<Delivery>('deliveries', {
       contractId: contract.id,
       type: 'OUTBOUND',
@@ -841,7 +861,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       reconciliationStatus: 'PENDING',
       cargoItems,
       isCostSettled: false,
-      memo: data.note || '',
+      memo: `[스마트출고] 현장담당: ${data.siteContactName || '-'} (${data.siteContactPhone || '-'}) | 상차: ${data.loadingTime || '-'} / 하차: ${data.unloadingTime || '-'} | 청구담당: ${data.billingContactName || '-'} (${data.billingContactPhone || '-'}) | 계산서: ${data.taxBillEmail || '-'} | 특이사항: ${data.note || '없음'}`,
+      closingMemo: `[마감조건] 마감일: ${dData.closingDay || '-'} / 결제일: ${dData.paymentDay || '-'} | 유상옵션: ${dData.paidOptions || '없음'} | 보양: ${dData.protection || '없음'}`,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     });
@@ -1292,7 +1313,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const createContract = async (contractData: Omit<Contract, 'id' | 'createdAt' | 'updatedAt' | 'contractNo'>, assetsList: { assetId?: string; expectedModel?: string; monthlyRentalFee: number; dailyRentalFee: number }[]) => {
-    const contractNo = `CT-${new Date().toISOString().split('T')[0].replace(/-/g, '').substring(2)}-${Math.floor(100 + Math.random() * 900)}`;
+    const contractNo = generateNextContractNo();
     
     const contract = db.insertRow<Contract>('contracts', {
       ...contractData,
@@ -1540,9 +1561,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!ca) return;
     const contract = db.contracts.find(c => c.id === ca.contractId);
     
-    // 1. ContractAsset 업데이트
+    // 1. ContractAsset 업데이트 (실물 장비 ID 할당 + expectedModel을 장비 정식 모델명으로 자동 보정!)
+    const targetAsset = db.assets.find(a => a.id === assetId);
     db.updateRow<ContractAsset>('contractAssets', contractAssetId, {
-      assetId: assetId
+      assetId: assetId,
+      ...(targetAsset?.modelName ? { expectedModel: targetAsset.modelName } : {})
     });
 
     // 2. Asset 상태 업데이트

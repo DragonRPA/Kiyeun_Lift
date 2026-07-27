@@ -40,7 +40,7 @@ const STANDARD_SPECS: SpecItem[] = [
 ];
 
 export const SmartDispatch: React.FC = () => {
-  const { hasPermission, saveSmartDispatch, assets, showErrorModal } = useApp();
+  const { hasPermission, saveSmartDispatch, assets, products, showErrorModal } = useApp();
   const canSave = hasPermission('delivery', 'save');
 
   // 실시간 프로세스 진행 릴레이 모달 상태
@@ -527,6 +527,28 @@ ${activeSpecs.map((s, idx) => `  ${idx + 1}. [적용] ${s.label}`).join('\n') ||
     }
   }, []);
 
+  const findSuggestedModel = (inputModel: string, officialModels: string[]): string | null => {
+    if (!inputModel || !inputModel.trim()) return null;
+    const cleanedInput = inputModel.replace(/[\s\-_]/g, '').toLowerCase();
+
+    // 1. 공백/특수문자 제거 후 부분 문자열 매칭
+    let matched = officialModels.find(m => {
+      const cleanedM = m.replace(/[\s\-_]/g, '').toLowerCase();
+      return cleanedM.includes(cleanedInput) || cleanedInput.includes(cleanedM);
+    });
+    if (matched) return matched;
+
+    // 2. 3~4자리 연속 숫자 패턴 매칭 (예: "1212", "1930", "2646", "3219" 등)
+    const nums = inputModel.match(/\d{3,4}/);
+    if (nums) {
+      const targetNum = nums[0];
+      matched = officialModels.find(m => m.includes(targetNum));
+      if (matched) return matched;
+    }
+
+    return null;
+  };
+
   const handleSave = async () => {
     if (!canSave) {
       alert('저장 권한이 없습니다.');
@@ -537,10 +559,38 @@ ${activeSpecs.map((s, idx) => `  ${idx + 1}. [적용] ${s.label}`).join('\n') ||
       return;
     }
 
+    // 🔍 장비 모델명 정식 검증 & 인터랙티브 변경 승인 팝업
+    const officialModels: string[] = uniqueModels.length > 0 ? uniqueModels : products.map((p: any) => p.modelName);
+    const updatedEquipments = [...equipments];
+    for (let i = 0; i < updatedEquipments.length; i++) {
+      const eq = updatedEquipments[i];
+      const inputModel = eq.modelName?.trim();
+      if (!inputModel) continue;
+
+      const isExactOfficial = officialModels.some(m => m === inputModel);
+      if (!isExactOfficial) {
+        const suggestedModel = findSuggestedModel(inputModel, officialModels);
+        if (suggestedModel) {
+          const confirmChange = confirm(
+            `💡 [장비 모델명 검증 안내]\n\n입력하신 모델명 '${inputModel}'은(는) 자산 마스터의 정식 모델명이 아닙니다.\n\n시스템 등록 정식 모델명인 '${suggestedModel}'(으)로 변경하여 저장하시겠습니까?\n\n[확인]: 정식 모델명(${suggestedModel})으로 변경 후 저장 진행\n[취소]: 저장 중단 및 폼 재수정`
+          );
+          if (confirmChange) {
+            updatedEquipments[i].modelName = suggestedModel;
+            setEquipments(updatedEquipments);
+          } else {
+            return; // 저장 중단
+          }
+        } else {
+          alert(`⚠️ 입력하신 모델명 '${inputModel}'은(는) 시스템에 등록된 자산 모델이 아닙니다.\n\n정확한 정식 모델명을 선택하거나 등록 후 다시 시도해주세요.`);
+          return; // 저장 중단
+        }
+      }
+    }
+
     const data = {
       customerName, siteName, siteAddress, siteContactName, siteContactPhone, siteContactEmail,
       billingContactName, billingContactPhone, statementEmail, taxBillEmail,
-      loadingTime, unloadingTime, equipments, note
+      loadingTime, unloadingTime, equipments: updatedEquipments, note
     };
 
     // 프로세스 진행 모달 초기화

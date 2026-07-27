@@ -39,21 +39,37 @@ export const AssetAssignment: React.FC = () => {
   // 선택된 계약의 하위 슬롯들 (미할당 + 기할당 모두 보여주기)
   const slots = selectedContractId ? contractAssets.filter(ca => ca.contractId === selectedContractId) : [];
 
+  // 축약어(예: '1212') 지원용 유사 모델 매칭 헬퍼
+  const isModelMatch = (assetModel: string, expectedModel: string): boolean => {
+    if (!assetModel || !expectedModel) return false;
+    if (assetModel === expectedModel) return true;
+    
+    const cleanedA = assetModel.replace(/[\s\-_]/g, '').toLowerCase();
+    const cleanedE = expectedModel.replace(/[\s\-_]/g, '').toLowerCase();
+    if (cleanedA.includes(cleanedE) || cleanedE.includes(cleanedA)) return true;
+
+    const nums = expectedModel.match(/\d{3,4}/);
+    if (nums && assetModel.includes(nums[0])) return true;
+
+    return false;
+  };
+
   // 가용 장비 필터링 및 정렬 로직 (스마트 매핑 & Score 우선순위)
   let availableAssets = assets.filter(a => a.status === 'AVAILABLE');
 
   if (selectedCaId) {
-    // [슬롯 선택 시] 해당 슬롯의 expectedModel 하나로 좁힘
+    // [슬롯 선택 시] 해당 슬롯의 expectedModel로 좁힘 (완전일치 + 유사매칭 포함)
     const selectedSlot = slots.find(ca => ca.id === selectedCaId);
     if (selectedSlot?.expectedModel) {
-      availableAssets = availableAssets.filter(a => a.modelName === selectedSlot.expectedModel);
+      const expModel = selectedSlot.expectedModel;
+      availableAssets = availableAssets.filter(a => isModelMatch(a.modelName, expModel));
     }
   } else if (selectedContractId) {
-    // [계약 선택 시] 미할당 슬롯들이 요구하는 모델 합집합으로 필터 (관련 없는 장비 제거)
+    // [계약 선택 시] 미할당 슬롯들이 요구하는 모델 목록 기반 1차 필터
     const pendingSlots = slots.filter(ca => !ca.assetId);
-    const requiredModels = new Set(pendingSlots.map(ca => ca.expectedModel).filter(Boolean));
-    if (requiredModels.size > 0) {
-      availableAssets = availableAssets.filter(a => requiredModels.has(a.modelName));
+    const requiredModels = pendingSlots.map(ca => ca.expectedModel).filter((m): m is string => Boolean(m));
+    if (requiredModels.length > 0) {
+      availableAssets = availableAssets.filter(a => requiredModels.some(req => isModelMatch(a.modelName, req)));
     }
   }
 
