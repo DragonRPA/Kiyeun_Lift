@@ -1,3 +1,12 @@
+# Release Notes (v1.6.0.Build.00003 - 2026-07-28 00:09)
+
+## 🐛 [Hotfix] DB 검증 도구 신규 테이블 감지 조건 오류 수정 (`CREATE TABLE` 누락 방지)
+
+- **수정 이유**: `dev_get_columns` RPC가 원격 DB에 테이블 미존재 시 `null` 대신 빈 배열 `[]` (길이 0)을 반환하여, 신규 테이블(`outbound_inspections`)을 `CREATE TABLE` 대상이 아닌 "모든 컬럼이 누락된 기존 테이블"로 오판하고 `ALTER TABLE ... ADD COLUMN` 패치만 23건 생성하던 버그 수정.
+- **수정 사항**: `DevDataUploader.tsx`의 테이블 미존재 검출 조건을 `actualCols === null || actualCols.length === 0`으로 보완하여, 원격 DB에 테이블이 없는 경우 **`CREATE TABLE IF NOT EXISTS "outbound_inspections"` 생성 DDL이 최우선 실행**되도록 완벽히 수정.
+
+---
+
 # Release Notes (v1.6.0.Build.00002 - 2026-07-28 00:07)
 
 ## 🔬 [DB 정합성 도구] 신규 테이블 100% 자동 생성 DDL `CREATE TABLE IF NOT EXISTS` 강화
