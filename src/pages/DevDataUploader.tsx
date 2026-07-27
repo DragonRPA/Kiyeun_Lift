@@ -1126,10 +1126,10 @@ export const DevDataUploader: React.FC = () => {
           const { error: tErr } = await supabase!.from(table).select('id').limit(0);
           if (tErr && (tErr.code === '42P01' || tErr.message.includes('does not exist'))) {
             audit.push({ table, status: 'MISSING', message: '테이블이 Supabase에 존재하지 않습니다.' });
-            const createStmt = schemaDef.createSql.trim();
+            const createStmt = schemaDef.createSql.replace(/CREATE TABLE\s+("?\w+"?)/gi, 'CREATE TABLE IF NOT EXISTS $1').trim();
             stmts.push(createStmt);
             stmts.push(...generateRlsPolicyDDL(table).split('\n').filter(s => s.trim()));
-            sqlPatchDisplay += `-- [생성] ${table}\n${createStmt}\n${generateRlsPolicyDDL(table)}\n\n`;
+            sqlPatchDisplay += `-- [신규 테이블 생성] ${table}\n${createStmt}\n${generateRlsPolicyDDL(table)}\n\n`;
           } else {
             audit.push({ table, status: 'MISMATCH', message: '컬럼 정보 조회 실패 (RPC 오류 — 재시도 필요)' });
           }

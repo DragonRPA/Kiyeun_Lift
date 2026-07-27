@@ -1,3 +1,12 @@
+# Release Notes (v1.6.0.Build.00002 - 2026-07-28 00:07)
+
+## 🔬 [DB 정합성 도구] 신규 테이블 100% 자동 생성 DDL `CREATE TABLE IF NOT EXISTS` 강화
+
+- **개편 사항**: DB 스키마 정합성 검증 도구(`DevDataUploader.tsx`)에서 원격 DB에 테이블 자체가 아예 존재하지 않는 경우(예: 신규 `outbound_inspections` 테이블), DDL 패치 SQL 동적 생성 시 `CREATE TABLE IF NOT EXISTS` 멱등성 패턴으로 구문을 자동 치환하도록 강화.
+- **효과**: 개발자 도구의 **"패치 자동 적용"** 버튼 클릭 1회만으로 원격 Supabase DB에 신규 테이블 생성, 컬럼 보완, RLS 6종 허용 Policy 및 PostgREST 스키마 캐시 갱신(`NOTIFY pgrst, 'reload schema'`)까지 수작업 0건으로 100% 완전 자동 수행됨.
+
+---
+
 # Release Notes (v1.6.0.Build.00001 - 2026-07-28 00:04)
 
 ## 🐛 [Hotfix] assignAssetToContract 비동기 동기화 보완 & ASSIGNED 자산 상태 덮어쓰기 방지

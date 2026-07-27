@@ -1,3 +1,3 @@
 git add .
-git commit -m "fix: make assignAssetToContract async with awaitPendingWrites and update Assets status badge v1.6.0.Build.00001"
+git commit -m "feat: enhance DevDataUploader with CREATE TABLE IF NOT EXISTS idempotency v1.6.0.Build.00002"
 git push origin main
