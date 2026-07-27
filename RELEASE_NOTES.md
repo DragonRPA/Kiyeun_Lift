@@ -1,3 +1,20 @@
+# Release Notes (v1.5.0.Build.00002 - 2026-07-27 21:57)
+
+## 🔬 DB 스키마 정합성 검증 도구 — 거짓 "정상" 오판 버그 근본 수정
+
+### 문제 원인
+`DevDataUploader.tsx`의 스키마 검증 로직이 PostgREST의 스키마 캐시 오류 메시지 패턴을 파싱하지 못해, 실제로 컬럼이 DB에 없어도 "정상 (OK)"으로 오판하는 치명적 버그 존재.
+
+- **기존 파서가 인식한 패턴**:
+  - `column "X"` ← 정상 인식
+  - `column X does not exist` ← 정상 인식
+  - `Could not find the 'X' column of 'Y' in the schema cache` ← **❌ 인식 불가 → null → break → 거짓 "정상"**
+
+### 수정 내용
+1. **`extractColumnName()` 파서 강화**: PostgREST 스키마 캐시 오류 패턴 `Could not find the 'X' column of 'Y' in the schema cache`를 정규식으로 최우선 파싱하도록 추가.
+2. **`isColumnRelatedError()` 헬퍼 신설**: 파싱에 실패하더라도 컬럼/스키마 관련 오류인지 판별하여, 해당 경우 `break` 대신 첫 번째 활성 컬럼을 누락으로 추정 처리 후 루프를 계속 진행하도록 개선. 더 이상 거짓 "정상"으로 빠져나가지 않음.
+3. **DDL 패치 SQL에 `NOTIFY pgrst, 'reload schema';` 자동 포함** (v1.5.0.Build.00001에서 적용): SQL Editor에서 패치 실행 시 PostgREST 스키마 캐시가 즉시 갱신됨.
+
 # Release Notes (v1.5.0.Build.00001 - 2026-07-27 21:47)
 
 ## 🐛 대시보드 바로가기 버튼 메뉴 이동 불가 버그 수정

@@ -1040,16 +1040,34 @@ export const DevDataUploader: React.FC = () => {
     let rlsPatch = '-- [보완] RLS (Row-Level Security) 유지 상태에서 anon/authenticated 롤 SELECT/INSERT/UPDATE 허용 Policy 설정\n';
 
     // PostgREST 에러 메시지로부터 누락된 칼럼명을 안전하게 파싱하는 헬퍼
+    // ✅ [버그수정] PostgREST 스키마 캐시 오류 패턴 추가
+    //   기존: column "X" / column X does not exist 패턴만 인식
+    //   추가: Could not find the 'X' column of 'Y' in the schema cache → 거짓 "정상" 오판 버그 근본 수정
     const extractColumnName = (errMsg: string): string | null => {
       const cleanMsg = errMsg.replace(/\\"/g, '"');
+      // 패턴 1 (PostgREST schema cache): Could not find the 'colName' column of 'tableName' in the schema cache
+      const schemaCacheMatch = cleanMsg.match(/could not find the '([^']+)' column of '[^']+' in the schema cache/i);
+      if (schemaCacheMatch) return schemaCacheMatch[1];
+      // 패턴 2: column "colName"
       const quoteMatch = cleanMsg.match(/column "([^"]+)"/i);
       if (quoteMatch) return quoteMatch[1];
+      // 패턴 3: column colName does not exist
       const columnWordMatch = cleanMsg.match(/column\s+(\S+)\s+does\s+not\s+exist/i);
       if (columnWordMatch) {
         const word = columnWordMatch[1];
         return word.includes('.') ? (word.split('.').pop() || word) : word;
       }
       return null;
+    };
+
+    // 컬럼 관련 오류(스키마 캐시 포함)인지 판별하는 헬퍼
+    const isColumnRelatedError = (errMsg: string): boolean => {
+      return (
+        /schema cache/i.test(errMsg) ||
+        /could not find/i.test(errMsg) ||
+        /does not exist/i.test(errMsg) ||
+        /column/i.test(errMsg)
+      );
     };
 
     // RLS를 유지하면서 anon/authenticated 롤의 SELECT/INSERT/UPDATE를 허용하는 표준 Policy DDL 생성 헬퍼
@@ -1137,10 +1155,22 @@ export const DevDataUploader: React.FC = () => {
 
           const missingColName = extractColumnName(colError.message);
           if (missingColName && activeCols.includes(missingColName)) {
+            // 정상적으로 파싱된 컬럼 → 누락 목록에 추가 후 다음 컬럼 계속 검사
             missingCols.push(missingColName);
             activeCols = activeCols.filter(c => c !== missingColName);
+          } else if (isColumnRelatedError(colError.message)) {
+            // ✅ [버그수정] 파싱은 실패했지만 컬럼/스키마 관련 오류인 경우:
+            // 기존: break → 누락 컬럼 없음으로 오판 (거짓 "정상")
+            // 수정: 활성 컬럼 목록의 첫 번째 컬럼을 누락으로 추정 처리 후 계속 검사
+            // (PostgREST schema cache 오류 시 콤마 구분 select에서 첫 번째 미인식 컬럼이 원인)
+            if (activeCols.length > 0) {
+              missingCols.push(activeCols[0]);
+              activeCols = activeCols.slice(1);
+            } else {
+              break;
+            }
           } else {
-            // 파싱 불가능한 에러는 컬럼 누락이 아니므로 중단
+            // 완전히 다른 종류의 에러 → 루프 종료
             break;
           }
         }
