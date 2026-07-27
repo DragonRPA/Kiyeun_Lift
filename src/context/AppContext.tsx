@@ -2,6 +2,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { db, supabase, User, MenuPermission, Customer, CustomerContact, CustomerSite, Product, Asset, Consumable, ConsumableLog, ConsumablePurchaseRequest, Contract, ContractAsset, ContractHistory, Billing, BillingDetail, Payment, Delivery, TransportCompany, TransportDriver, Repair, RepairConsumable, Todo, BankTransaction, BankMatchingRule, AssetInOutLog, Vendor, GoogleConfig, CashFlowSnapshot, OutboundInspection, DepreciationLog, findCustomerByNormalizedName } from '../services/db';
 import { ErrorModal } from '../components/ErrorModal';
+import { getAllSystemMenuIds } from '../config/menuConfig';
 
 export interface SmartDispatchData {
   customerName: string;
@@ -410,13 +411,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const hasPermission = (menuId: string, action: 'view' | 'save'): boolean => {
     if (!currentUser) return false;
-    // 시스템 절대 최고관리자(admin/sys-admin/u-1 계정)만 예외적으로 전체 100% 무조건 허용
-    if (currentUser.loginId === 'admin' || currentUser.id === 'sys-admin' || currentUser.id === 'u-1') return true;
+    // 시스템 최고관리자 계정 및 ADMIN 역할 사용자는 모든 메뉴에 100% 무조건 권한 부여
+    if (currentUser.role === 'ADMIN' || currentUser.loginId === 'admin' || currentUser.id === 'sys-admin' || currentUser.id === 'u-1') return true;
 
     const perm = permissions.find(p => p.userId === currentUser.id && p.menuId === menuId);
     if (!perm) {
-      // 권한 레코드가 없는 초기 상태 시 ADMIN은 기본 true, 일반 유저는 false
-      return currentUser.role === 'ADMIN';
+      // 권한 레코드가 누락된 신규 메뉴의 경우 조회(view)는 기본 허용(true), 저장(save)은 false
+      return action === 'view';
     }
     return action === 'view' ? perm.canView : perm.canSave;
   };
@@ -500,18 +501,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       
       // ADMIN 역할 신규 임직원은 모든 메뉴에 대해 기본 전체 권한(canView+canSave=true) 레코드 자동 생성
       if (userData.role === 'ADMIN' && newUser?.id) {
-        const ALL_MENU_IDS = [
-          'dashboard',
-          'customer', 'contract', 'billing', 'smart_dispatch', 'smart_return',
-          'product', 'asset', 'acquisition_disposal', 'rent_asset',
-          'delivery', 'transport_master',
-          'asset_inout_history', 'dispatch_assign',
-          'consumable', 'repair',
-          'vendors', 'bank_matching', 'corporate_card', 'cash_flow', 'delinquency',
-          'organization', 'permission', 'payroll',
-          'google_config', 'dev_uploader'
-        ];
-        ALL_MENU_IDS.forEach(menuId => {
+        const allMenuIds = getAllSystemMenuIds();
+        allMenuIds.forEach(menuId => {
           const exists = db.permissions.some(p => p.userId === newUser.id && p.menuId === menuId);
           if (!exists) {
             const now = new Date().toISOString();

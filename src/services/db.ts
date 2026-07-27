@@ -57,6 +57,7 @@ export interface MenuPermission {
   canView: boolean;
   canSave: boolean;
   createdAt: string;
+  updatedAt?: string;
 }
 
 export interface Customer {

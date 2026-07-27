@@ -4,94 +4,10 @@ import { useApp } from '../context/AppContext';
 import { Shield, Check, Lock, Save, FolderKanban, ChevronDown, ChevronRight } from 'lucide-react';
 import { MenuPermission, User } from '../services/db';
 
-export interface MenuCategoryGroup {
-  id: string;
-  name: string;
-  items: { id: string; name: string }[];
-}
+import { SYSTEM_MENU_CONFIG, getAllSystemMenuIds, MenuGroupConfig } from '../config/menuConfig';
 
-export const MENU_CATEGORIES: MenuCategoryGroup[] = [
-  {
-    id: 'grp_dashboard',
-    name: 'ERP 대시보드',
-    items: [
-      { id: 'dashboard', name: 'ERP 대시보드 메인' }
-    ]
-  },
-  {
-    id: 'grp_sales',
-    name: '영업관리',
-    items: [
-      { id: 'customer', name: '고객 관리 (담당자/현장)' },
-      { id: 'contract', name: '계약 관리' },
-      { id: 'billing', name: '청구/수납 관리' },
-      { id: 'smart_dispatch', name: '스마트 출고 요청' },
-      { id: 'smart_return', name: '스마트 회수 요청' }
-    ]
-  },
-  {
-    id: 'grp_product_asset',
-    name: '제품 / 자산관리',
-    items: [
-      { id: 'product', name: '제품 관리' },
-      { id: 'asset', name: '자산 관리 (대장)' },
-      { id: 'acquisition_disposal', name: '당사자산 취득/매각' },
-      { id: 'rent_asset', name: '임차자산 관리' }
-    ]
-  },
-  {
-    id: 'grp_logistics',
-    name: '배차 / 운송관리',
-    items: [
-      { id: 'delivery', name: '배차/운송 관리 (비용정산)' },
-      { id: 'transport_master', name: '운송 거래처/기사 관리' }
-    ]
-  },
-  {
-    id: 'grp_inout',
-    name: '입출고관리',
-    items: [
-      { id: 'asset_inout_history', name: '자산 입출고/정비 이력' },
-      { id: 'dispatch_assign', name: '장비 할당 (매핑)' }
-    ]
-  },
-  {
-    id: 'grp_maintenance',
-    name: '정비 / 소모품관리',
-    items: [
-      { id: 'consumable', name: '소모품 관리' },
-      { id: 'repair', name: '자산 정비수리' }
-    ]
-  },
-  {
-    id: 'grp_management',
-    name: '경영관리',
-    items: [
-      { id: 'vendors', name: '매입처 (공급자/외주처) 관리' },
-      { id: 'bank_matching', name: '은행 입출금 대장' },
-      { id: 'corporate_card', name: '법인카드 매입정산' },
-      { id: 'cash_flow', name: '자금 흐름 분석' },
-      { id: 'delinquency', name: '미수 채권 연체 관리' }
-    ]
-  },
-  {
-    id: 'grp_management_special',
-    name: '경영관리 - 특수',
-    items: [
-      { id: 'organization', name: '조직/인사 관리' },
-      { id: 'permission', name: '사용자 및 권한 설정' },
-      { id: 'payroll', name: '급여 정산 (보안 강제)' }
-    ]
-  },
-  {
-    id: 'grp_system_dev',
-    name: '시스템관리 - 개발자',
-    items: [
-      { id: 'google_config', name: '구글 관리자 설정' },
-      { id: 'dev_uploader', name: '[개발] DB 데이터 업로더' }
-    ]
-  }
-];
+export type MenuCategoryGroup = MenuGroupConfig;
+export const MENU_CATEGORIES = SYSTEM_MENU_CONFIG;
 
 export const UsersPermissions: React.FC = () => {
   const { users, permissions, updatePermissions, saveUser, currentUser, hasPermission, showErrorModal } = useApp();
@@ -118,9 +34,33 @@ export const UsersPermissions: React.FC = () => {
   }, [users, selectedUserId]);
 
   useEffect(() => {
-    setLocalPermissions([...permissions]);
+    // 모든 시스템 메뉴 ID 스캔 및 누락된 권한 항목 자가 복구 (Auto Backfill)
+    const allMenuIds = getAllSystemMenuIds();
+    const merged = [...permissions];
+    let addedCount = 0;
+
+    users.forEach(u => {
+      allMenuIds.forEach(menuId => {
+        const exists = merged.some(p => p.userId === u.id && p.menuId === menuId);
+        if (!exists) {
+          const isAdmin = u.role === 'ADMIN' || u.id === 'u-1' || u.id === 'sys-admin';
+          merged.push({
+            id: `perm-${u.id}-${menuId}`,
+            userId: u.id,
+            menuId: menuId,
+            canView: true,
+            canSave: isAdmin,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+          });
+          addedCount++;
+        }
+      });
+    });
+
+    setLocalPermissions(merged);
     setIsDirty(false);
-  }, [permissions]);
+  }, [permissions, users]);
 
   const selectedUser = localUsers.find(u => u.id === selectedUserId);
 

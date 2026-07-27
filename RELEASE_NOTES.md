@@ -1,3 +1,16 @@
+# Release Notes (v1.7.0.Build.00005 - 2026-07-28 01:47)
+
+## 🔐 [전사 메뉴-권한 자동 연동 체계 구축] 신규/삭제 메뉴의 사용자 권한 자동 동기화 & 자가 복구(Auto-Heal)
+
+- **개편 배경**: `UsersPermissions.tsx` (사용자 및 메뉴 권한 통합 관리) 페이지에 메뉴 목록이 하드코딩되어 있어, 신규로 추가된 `outbound_inspections`("출고 검수 의뢰 관리") 및 `depreciation_execution`("감가상각 마감 실행") 등의 권한 항목이 권한 설정 화면에 노출되지 않던 현상 개선.
+- **개편 내역**:
+  1. **단일 원천 메뉴 구성 체계 구축 (`src/config/menuConfig.ts`)**: 전사 모든 메뉴 그룹과 항목을 단일 원천 파일로 일원화하고 도우미 메소드(`getAllSystemMenuIds`) 제공.
+  2. **권한 설정 화면 100% 자동 동기화 (`UsersPermissions.tsx`)**: 하드코딩 배열을 전면 제거하고 `menuConfig.ts`와 100% 동적 연동. 향후 메뉴가 추가/삭제되면 권한 관리 화면에 즉각 자동 수용.
+  3. **누락 메뉴 권한 자가 복구 (Self-Healing Auto-Backfill)**: 신규 메뉴 추가 시, 기존 사용자 및 신규 사용자의 권한 데이터에 누락된 메뉴 권한 항목을 자동으로 감지하여 기본 권한 레코드를 동적 자동 생성.
+  4. **최고관리자(`ADMIN`) 권한 보장 (`AppContext.tsx`)**: `ADMIN` 역할 사용자 및 시스템 최고관리자 계정은 신규 생성 메뉴에 대해서도 100% 실행/저장 권한이 무조건 보장되도록 `hasPermission` 보완.
+
+---
+
 # Release Notes (v1.7.0.Build.00003 - 2026-07-28 01:40)
 
 ## 🎯 [근본 해결] DB `assets` 테이블 `CHECK` 제약조건 `ASSIGNED` 누락 100% 수정 & DDL 자동 패치
