@@ -1044,7 +1044,7 @@ class LocalDB {
   get bankMatchingRules() { return this.get<BankMatchingRule>('bankMatchingRules', SEED_BANK_MATCHING_RULES); }
   set bankMatchingRules(val: BankMatchingRule[]) { this.set('bankMatchingRules', val); }
 
-  get googleConfigs() { return this.get<GoogleConfig>('googleConfigs', SEED_GOOGLE_CONFIG); }
+  get googleConfigs() { return this.get<GoogleConfig>('googleConfigs', []); }
   set googleConfigs(val: GoogleConfig[]) { this.set('googleConfigs', val); }
 
   get assetInOutLogs() { return this.get<AssetInOutLog>('assetInOutLogs', []); }
@@ -1120,6 +1120,10 @@ class LocalDB {
       this.pendingWrites = [];
     }
 
+    // googleConfigs는 SEED 오염 방지를 위해 Supabase pull 직전 로컬 캐시를 항상 비움
+    // (이전에 SEED 데이터가 localStorage에 캐싱된 경우도 완전히 초기화)
+    this.set('googleConfigs', []);
+
     const tables = [
       'users', 'departments', 'permissions', 'customers', 'contacts', 'sites', 
       'products', 'assets', 'consumables', 'consumableLogs', 'consumablePurchases',
@@ -1151,10 +1155,7 @@ class LocalDB {
       // 전체 로컬 스토리지 캐시 최신 DB 값으로 덮어쓰기 (성공한 데이터만)
       results.forEach(({ key, data }) => {
         if (data !== null) {
-          // googleConfigs의 경우 빈 데이터거나 에러이면 덮어쓰지 않음
-          if (key === 'googleConfigs' && (!data || data.length === 0)) {
-            return;
-          }
+          // DB에서 성공적으로 응답받은 경우 항상 덮어쓰기 (빈 배열도 포함 — DB 기준 신뢰)
           this.set(key, data);
         }
       });

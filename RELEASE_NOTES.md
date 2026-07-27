@@ -1,3 +1,11 @@
+# Release Notes (v1.4.3.Build.00009 - 2026-07-27 20:50)
+
+## 🔥 구글 설정 SEED 데이터 제거 — 앱 시작 시 반드시 DB에서 읽기로 변경
+- **SEED 오염 근본 차단**: `googleConfigs` getter의 기본값을 `SEED_GOOGLE_CONFIG`→ `[]`(빈 배열)로 변경하여, DB에 데이터가 없을 경우 모든 필드가 빈칸으로 올바르게 표시되도록 수정.
+- **로컬캐시 SEED 오염 초기화**: `pullFromSupabase()` 실행 직전 `googleConfigs` 로컬 캐시를 항상 먼저 비워, 이전 세션에서 SEED 데이터가 localStorage에 캐싱된 경우도 완전히 초기화.
+- **DB 기준 신뢰 강제**: `pullFromSupabase`에서 `googleConfigs` 빈 배열 응답을 특별 처리하던 로직을 제거하여 DB 응답값(빈 배열 포함)을 항상 최종 기준으로 신뢰하도록 수정.
+- **스키마 정합성 확인**: `schema.sql` `google_configs` 테이블의 모든 컬럼(`contractFolder`, `consumableFolder`, `deliveryFolder`, `maintenanceFolder`, `quotationTemplateUrl`, `contractTemplateUrl`, `safetyInspectionTemplateUrl`, `preDeliveryChecklistTemplateUrl`, `bizRegCertUrl`, `bankbookCopyUrl`, `defaultRootFolderId`)이 `GoogleConfig` 인터페이스와 100% 일치함을 재확인.
+
 # Release Notes (v1.4.3.Build.00008 - 2026-07-27 20:40)
 
 ## 🔥 구글 설정 Supabase UPSERT 전환 — 원격 DB 미저장 버그 근본 수정
