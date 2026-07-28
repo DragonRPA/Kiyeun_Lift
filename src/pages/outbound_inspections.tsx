@@ -1,6 +1,6 @@
-// src/pages/outbound_inspections.tsx
 import React, { useState, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
+import { ToggleSwitch } from '../components/ToggleSwitch';
 import { OutboundInspection, OutboundInspectionStatus, Asset, Contract, Customer, CustomerSite, db } from '../services/db';
 import {
   CheckSquare,
@@ -117,10 +117,14 @@ export const OutboundInspections: React.FC = () => {
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
 
+  // 반려 시 수리정비중 전환 선택 옵션 (기본값: true)
+  const [rejectToRepairing, setRejectToRepairing] = useState<boolean>(true);
+
   // 🔄 장비 교체 모달 상태
   const [exchangeModalAsset, setExchangeModalAsset] = useState<Asset | null>(null);
   const [targetNewAssetId, setTargetNewAssetId] = useState<string>('');
   const [exchangeReason, setExchangeReason] = useState<string>('');
+  const [exchangeToRepairing, setExchangeToRepairing] = useState<boolean>(true);
 
   // ──────────────────────────────────────────────────────────────────────────
   // 1. 개별 의뢰건들을 계약(contractId) 및 신청일자 기준 의뢰 1건 단위로 그룹핑
@@ -354,10 +358,11 @@ export const OutboundInspections: React.FC = () => {
           updatedAt: nowIso
         });
 
-        // 🔴 반려 시 해당 장비 status ➔ 'REPAIRING' (정비수리중) 으로 자동전환!
+        // 🔴 사용자 선택에 따라 수리정비중(REPAIRING) 또는 임대가능(AVAILABLE) 전환!
         if (item.assetId) {
+          const targetStatus = rejectToRepairing ? 'REPAIRING' : 'AVAILABLE';
           db.updateRow<Asset>('assets', item.assetId, {
-            status: 'REPAIRING',
+            status: targetStatus,
             updatedAt: nowIso
           });
         }
@@ -365,7 +370,8 @@ export const OutboundInspections: React.FC = () => {
 
       await db.awaitPendingWrites();
       refreshAllData();
-      alert(`🚫 [출고 의뢰 반려 완료]\n해당 의뢰건이 반려되었으며 장비 상태가 [수리정비중]으로 전환되었습니다.`);
+      const statusText = rejectToRepairing ? '[수리정비중]으로 전환되었습니다.' : '[임대가능] 재고로 복원되었습니다.';
+      alert(`🚫 [출고 의뢰 반려 완료]\n해당 의뢰건이 반려되었으며 장비 상태가 ${statusText}`);
       setShowRejectModal(false);
       setRejectReason('');
       setSelectedGroupId(null);
@@ -391,12 +397,14 @@ export const OutboundInspections: React.FC = () => {
         selectedGroup.contractId,
         exchangeModalAsset.id,
         targetNewAssetId,
-        exchangeReason
+        exchangeReason,
+        exchangeToRepairing // 사용자 선택 전송!
       );
 
       await db.awaitPendingWrites();
       refreshAllData();
-      alert(`🔄 [장비 교체 완료]\n장비가 대체 장비로 성공적으로 스왑되었습니다.`);
+      const statusText = exchangeToRepairing ? '[수리정비중]으로 전환되었습니다.' : '[임대가능] 재고로 유지되었습니다.';
+      alert(`🔄 [장비 교체 완료]\n장비가 대체 장비로 스왑되었으며 기존 장비는 ${statusText}`);
       setExchangeModalAsset(null);
       setTargetNewAssetId('');
       setExchangeReason('');
@@ -911,14 +919,30 @@ export const OutboundInspections: React.FC = () => {
               <ShieldAlert size={20} /> 출고 의뢰 반려 사유 작성
             </h3>
             <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '16px' }}>
-              의뢰를 반려하면 대상 장비의 상태가 [수리정비중]으로 자동 전환됩니다.
+              의뢰를 반려하면 대상 장비의 자산 상태 변경 여부를 직접 지정할 수 있습니다.
             </p>
+
+            {/* 수리정비중 전환 선택 토글 */}
+            <div style={{ marginBottom: '16px', padding: '10px 14px', backgroundColor: 'var(--bg-body)', borderRadius: '10px', border: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div>
+                <div style={{ fontSize: '13px', fontWeight: 800, color: 'var(--text-primary)' }}>
+                  🛠️ 반려 대상 장비를 [수리정비중 (REPAIRING)]으로 전환
+                </div>
+                <div style={{ fontSize: '11.5px', color: 'var(--text-muted)' }}>
+                  꺼짐(OFF) 선택 시 임대가능(AVAILABLE) 재고 상태로 원복됩니다.
+                </div>
+              </div>
+              <ToggleSwitch
+                checked={rejectToRepairing}
+                onChange={setRejectToRepairing}
+              />
+            </div>
 
             <textarea
               placeholder="반려 사유 입력 (예: 타이어 마모 심함, 배터리 충전 불량...)"
               value={rejectReason}
               onChange={e => setRejectReason(e.target.value)}
-              style={{ width: '100%', height: '100px', padding: '10px', borderRadius: '8px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-body)', color: 'var(--text-primary)', fontSize: '13px', outline: 'none', boxSizing: 'border-box', marginBottom: '20px' }}
+              style={{ width: '100%', height: '90px', padding: '10px', borderRadius: '8px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-body)', color: 'var(--text-primary)', fontSize: '13px', outline: 'none', boxSizing: 'border-box', marginBottom: '20px' }}
             />
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
@@ -941,6 +965,22 @@ export const OutboundInspections: React.FC = () => {
             <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '16px' }}>
               기존 장비 <strong style={{ color: 'var(--primary)' }}>[{exchangeModalAsset.assetNo}] ({exchangeModalAsset.modelName})</strong>를 대체 가능한 동급 장비로 교체합니다.
             </p>
+
+            {/* 기존 장비 수리정비중 전환 토글 */}
+            <div style={{ marginBottom: '16px', padding: '10px 14px', backgroundColor: 'var(--bg-body)', borderRadius: '10px', border: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div>
+                <div style={{ fontSize: '13px', fontWeight: 800, color: 'var(--text-primary)' }}>
+                  🛠️ 기존 교체 대상 장비 [{exchangeModalAsset.assetNo}]를 [수리정비중 (REPAIRING)]으로 전환
+                </div>
+                <div style={{ fontSize: '11.5px', color: 'var(--text-muted)' }}>
+                  꺼짐(OFF) 선택 시 임대가능(AVAILABLE) 재고 상태로 유지됩니다.
+                </div>
+              </div>
+              <ToggleSwitch
+                checked={exchangeToRepairing}
+                onChange={setExchangeToRepairing}
+              />
+            </div>
 
             {/* 교체사유 */}
             <div style={{ marginBottom: '16px' }}>
