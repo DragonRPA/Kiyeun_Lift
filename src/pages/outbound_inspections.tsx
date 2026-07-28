@@ -19,7 +19,9 @@ import {
   Sparkles,
   Check,
   RefreshCw,
-  ArrowRightLeft
+  ArrowRightLeft,
+  Star,
+  ShieldAlert
 } from 'lucide-react';
 
 // 21대 고소작업대 정비/스펙 체크리스트 마스터 정의
@@ -195,6 +197,14 @@ export const OutboundInspections: React.FC = () => {
     return inspectionGroups.find(g => g.groupId === selectedGroupId) || null;
   }, [inspectionGroups, selectedGroupId]);
 
+  // 💡 교체 모달용 동일 모델 임대가능(AVAILABLE) 자산 목록 (정비점수 순 정렬!)
+  const availableExchangeAssets = useMemo(() => {
+    if (!exchangeModalAsset) return [];
+    return assets
+      .filter(a => a.status === 'AVAILABLE' && a.id !== exchangeModalAsset.id && a.modelName === exchangeModalAsset.modelName)
+      .sort((a, b) => (a.maintenanceScore ?? 0) - (b.maintenanceScore ?? 0));
+  }, [assets, exchangeModalAsset]);
+
   // 의뢰 그룹 선택 시 초기 체크리스트 로드 (기본값: false 미체크 보장!)
   const handleSelectGroup = (group: InspectionGroup) => {
     setSelectedGroupId(group.groupId);
@@ -251,7 +261,7 @@ export const OutboundInspections: React.FC = () => {
     }
   };
 
-  // 최종 검수 승인 마감 (의뢰 1건에 속한 다수 장비 전체 일괄 승인 + RENTED 임대중 전환!)
+  // 최종 검수 승인 마감
   const handleApproveGroup = async () => {
     if (!selectedGroup || isProcessing) return;
 
@@ -299,7 +309,7 @@ export const OutboundInspections: React.FC = () => {
   // 🔄 출고 대기 장비 즉시 교체 및 수리전환 실행 핸들러
   const handleExecuteExchange = async () => {
     if (!exchangeModalAsset || !targetNewAssetId || !exchangeReason.trim() || !selectedGroup) {
-      alert('대체 장비와 교체 사유를 입력해 주세요.');
+      alert('대체 장비 카드와 교체 사유를 입력해 주세요.');
       return;
     }
 
@@ -588,7 +598,7 @@ export const OutboundInspections: React.FC = () => {
                               setTargetNewAssetId('');
                               setExchangeReason('');
                             }}
-                            title="출고 불가 사유 발생 시 다른 임대가능 장비로 즉시 교체"
+                            title="출고 불가 사유 발생 시 동일 모델의 다른 임대가능 장비로 즉시 교체"
                             style={{
                               padding: '5px 9px',
                               borderRadius: '6px',
@@ -761,68 +771,126 @@ export const OutboundInspections: React.FC = () => {
         </div>
       </div>
 
-      {/* 🔄 출고 대기 장비 즉시 교체 및 수리전환 모달 */}
+      {/* ────────────────────────────────────────────────────────────────────────── */}
+      {/* 🔄 출고 대기 장비 즉시 교체 및 수리전환 모달 (프리미엄 카드 그리드 UX 수술!) */}
+      {/* ────────────────────────────────────────────────────────────────────────── */}
       {exchangeModalAsset && selectedGroup && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 99999, padding: '20px' }}>
-          <div style={{ backgroundColor: 'var(--bg-card)', border: '1.5px solid #ef4444', borderRadius: '14px', padding: '24px', width: '100%', maxWidth: '480px', boxShadow: '0 20px 40px rgba(0,0,0,0.4)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px' }}>
-              <div style={{ padding: '8px', backgroundColor: 'rgba(239,68,68,0.15)', borderRadius: '8px', color: '#dc2626' }}>
-                <ArrowRightLeft size={20} />
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 99999, padding: '20px' }}>
+          <div style={{ backgroundColor: 'var(--bg-card)', border: '1.5px solid #ef4444', borderRadius: '16px', padding: '24px', width: '100%', maxWidth: '620px', maxHeight: '90vh', display: 'flex', flexDirection: 'column', boxShadow: '0 25px 50px rgba(0,0,0,0.5)' }}>
+            
+            {/* 모달 상단 헤더 */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '14px' }}>
+              <div style={{ padding: '10px', backgroundColor: 'rgba(239,68,68,0.15)', borderRadius: '10px', color: '#dc2626', display: 'flex' }}>
+                <ArrowRightLeft size={22} />
               </div>
               <div>
-                <h3 style={{ fontSize: '17px', fontWeight: 800, margin: 0, color: 'var(--text-primary)' }}>
+                <h3 style={{ fontSize: '18px', fontWeight: 800, margin: 0, color: 'var(--text-primary)' }}>
                   🔄 출고 대기 장비 즉시 교체 및 수리전환
                 </h3>
-                <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-                  교체 대상 장비: <strong>{exchangeModalAsset.assetNo}</strong> ({exchangeModalAsset.modelName})
+                <span style={{ fontSize: '12.5px', color: 'var(--text-muted)' }}>
+                  교체 대상 장비: <strong style={{ color: '#ef4444' }}>{exchangeModalAsset.assetNo}</strong> ({exchangeModalAsset.modelName})
                 </span>
               </div>
             </div>
 
-            <div style={{ padding: '12px', backgroundColor: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: '8px', marginBottom: '16px', fontSize: '12.5px', color: '#b91c1c' }}>
-              ⚠️ 기존 장비 <strong>{exchangeModalAsset.assetNo}</strong> 상태는 <strong>'수리정비중(REPAIRING)'</strong>으로 즉시 자동 전환되며, 자산 비고(Note)에 교체 사유가 영구 기록됩니다.
+            <div style={{ padding: '12px 14px', backgroundColor: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: '10px', marginBottom: '16px', fontSize: '12.5px', color: '#b91c1c' }}>
+              ⚠️ 기존 장비 <strong>{exchangeModalAsset.assetNo}</strong> 상태는 <strong>'수리정비중(REPAIRING)'</strong>으로 즉시 자동 전환되며, 아래 입력한 사유가 자산 비고(Note)에 영구 기록됩니다.
             </div>
 
             {/* 교체 사유 입력 */}
-            <div style={{ marginBottom: '14px' }}>
-              <label style={{ fontSize: '12.5px', fontWeight: 700, marginBottom: '6px', display: 'block' }}>
-                🛠️ 장비 불량 사유 / 수리전환 사유 (필수)
+            <div style={{ marginBottom: '16px' }}>
+              <label style={{ fontSize: '13px', fontWeight: 800, marginBottom: '6px', display: 'block', color: 'var(--text-primary)' }}>
+                🛠️ 장비 불량 / 수리전환 사유 (필수 입력)
               </label>
               <input
                 type="text"
                 placeholder="예: 출고전 검수 중 유압 호스 누유 발견, 배터리 충전 불량 등..."
                 value={exchangeReason}
                 onChange={e => setExchangeReason(e.target.value)}
-                style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-body)', color: 'var(--text-primary)', fontSize: '13px', outline: 'none', boxSizing: 'border-box' }}
+                style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-body)', color: 'var(--text-primary)', fontSize: '13px', outline: 'none', boxSizing: 'border-box' }}
               />
             </div>
 
-            {/* 대체 장비 선택 (동일/호환 모델 중 AVAILABLE 임대가능 장비) */}
-            <div style={{ marginBottom: '20px' }}>
-              <label style={{ fontSize: '12.5px', fontWeight: 700, marginBottom: '6px', display: 'block' }}>
-                🚜 대체 교체 출고할 장비 선택 (현재 '임대가능' 장비 목록)
-              </label>
-              <select
-                value={targetNewAssetId}
-                onChange={e => setTargetNewAssetId(e.target.value)}
-                style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-body)', color: 'var(--text-primary)', fontSize: '13px', outline: 'none', boxSizing: 'border-box' }}
-              >
-                <option value="">-- 대체 장비 선택 --</option>
-                {assets
-                  .filter(a => a.status === 'AVAILABLE' && a.id !== exchangeModalAsset.id)
-                  .map(a => (
-                    <option key={a.id} value={a.id}>
-                      [{a.assetNo}] {a.modelName} (시리얼: {a.serialNo || '-'})
-                    </option>
-                  ))}
-              </select>
+            {/* 🎯 동일 모델 엄격 스마트 카드 선택 목록 (정비소요 점수 표출!) */}
+            <div style={{ flex: 1, overflowY: 'auto', marginBottom: '20px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                <label style={{ fontSize: '13px', fontWeight: 800, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  🚜 대체할 동일 모델 장비 선택 (<span style={{ color: 'var(--primary)' }}>{exchangeModalAsset.modelName}</span> / 임대가능 {availableExchangeAssets.length}대)
+                </label>
+                <span style={{ fontSize: '11.5px', color: 'var(--text-muted)' }}>⭐ 정비점수 0점에 가까울수록 최상급 정비 상태</span>
+              </div>
+
+              {availableExchangeAssets.length === 0 ? (
+                <div style={{ padding: '30px 10px', textAlign: 'center', backgroundColor: 'var(--bg-body)', borderRadius: '10px', border: '1px solid var(--border-color)', color: 'var(--text-muted)', fontSize: '13px' }}>
+                  <ShieldAlert size={32} style={{ opacity: 0.3, marginBottom: '8px' }} />
+                  <p style={{ margin: 0 }}>현재 임대가능한 동일 모델(<strong>{exchangeModalAsset.modelName}</strong>) 자산이 없습니다.</p>
+                </div>
+              ) : (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: '10px', paddingRight: '4px' }}>
+                  {availableExchangeAssets.map(asset => {
+                    const isSelected = targetNewAssetId === asset.id;
+                    const score = asset.maintenanceScore ?? 0;
+                    const isTopClass = score === 0;
+
+                    return (
+                      <div
+                        key={asset.id}
+                        onClick={() => setTargetNewAssetId(asset.id)}
+                        style={{
+                          padding: '12px 14px',
+                          borderRadius: '10px',
+                          border: isSelected ? '2px solid #22c55e' : '1px solid var(--border-color)',
+                          backgroundColor: isSelected ? 'rgba(34,197,94,0.08)' : 'var(--bg-body)',
+                          cursor: 'pointer',
+                          transition: 'all 0.15s ease',
+                          boxShadow: isSelected ? '0 4px 12px rgba(34,197,94,0.15)' : 'none'
+                        }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                          <span style={{ fontSize: '14px', fontWeight: 800, color: isSelected ? '#15803d' : 'var(--text-primary)' }}>
+                            🏷️ {asset.assetNo}
+                          </span>
+                          <span style={{
+                            padding: '2px 8px',
+                            borderRadius: '12px',
+                            fontSize: '11px',
+                            fontWeight: 700,
+                            backgroundColor: isTopClass ? 'rgba(34,197,94,0.15)' : 'rgba(245,158,11,0.15)',
+                            color: isTopClass ? '#16a34a' : '#d97706',
+                            border: `1px solid ${isTopClass ? 'rgba(34,197,94,0.3)' : 'rgba(245,158,11,0.3)'}`,
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '3px'
+                          }}>
+                            <Star size={10} fill={isTopClass ? '#16a34a' : '#d97706'} /> 정비점수: {score}점
+                          </span>
+                        </div>
+
+                        <div style={{ fontSize: '12px', color: 'var(--text-secondary)', lineHeight: '1.5' }}>
+                          <div>제조년도: {asset.manufactureYear || '-'}년식 | S/N: {asset.serialNo || '-'}</div>
+                          <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                            구분: {asset.ownerType === 'OWNED' ? '당사자산' : `임차자산(${asset.renter || ''})`}
+                          </div>
+                        </div>
+
+                        {isSelected && (
+                          <div style={{ marginTop: '8px', fontSize: '11.5px', fontWeight: 800, color: '#16a34a', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <CheckCircle size={14} /> 대체 출고 장비로 선택됨
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+            {/* 하단 실행 및 취소 버튼 */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', paddingTop: '10px', borderTop: '1px solid var(--border-color)' }}>
               <button
                 onClick={() => { setExchangeModalAsset(null); setTargetNewAssetId(''); setExchangeReason(''); }}
                 className="btn-secondary"
-                style={{ fontSize: '12.5px', padding: '8px 14px' }}
+                style={{ fontSize: '13px', padding: '10px 18px' }}
               >
                 취소
               </button>
@@ -830,15 +898,16 @@ export const OutboundInspections: React.FC = () => {
                 onClick={handleExecuteExchange}
                 disabled={isProcessing || !targetNewAssetId || !exchangeReason.trim()}
                 style={{
-                  padding: '8px 18px',
+                  padding: '10px 22px',
                   borderRadius: '8px',
-                  backgroundColor: '#dc2626',
+                  backgroundColor: (isProcessing || !targetNewAssetId || !exchangeReason.trim()) ? '#94a3b8' : '#dc2626',
                   color: '#fff',
                   border: 'none',
                   fontWeight: 800,
-                  fontSize: '13px',
+                  fontSize: '13.5px',
                   cursor: (isProcessing || !targetNewAssetId || !exchangeReason.trim()) ? 'default' : 'pointer',
-                  opacity: (isProcessing || !targetNewAssetId || !exchangeReason.trim()) ? 0.5 : 1
+                  boxShadow: (isProcessing || !targetNewAssetId || !exchangeReason.trim()) ? 'none' : '0 4px 12px rgba(220,38,38,0.3)',
+                  transition: 'all 0.2s ease'
                 }}
               >
                 {isProcessing ? '교체 처리 중...' : '🔄 장비 교체 및 수리전환 실행'}
