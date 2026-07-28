@@ -1027,8 +1027,21 @@ class LocalDB {
   get departments() { return this.get<Department>('departments', SEED_DEPARTMENTS); }
   set departments(val: Department[]) { this.set('departments', val); }
 
-  get permissions() { return this.get<MenuPermission>('permissions', SEED_PERMISSIONS); }
-  set permissions(val: MenuPermission[]) { this.set('permissions', val); }
+  get permissions() { 
+    const raw = this.get<MenuPermission>('permissions', SEED_PERMISSIONS); 
+    const validUserIds = new Set(this.users.map(u => u.id));
+    // userId가 유실(null)되었거나, users 마스터 대장에 없는 유령/퇴사자 권한 찌꺼기 85건을 localStorage에서 즉각 100% 영구 물리 삭제!
+    const cleanPermissions = raw.filter(p => p && p.userId && validUserIds.has(p.userId));
+    if (cleanPermissions.length !== raw.length) {
+      this.set('permissions', cleanPermissions);
+    }
+    return cleanPermissions;
+  }
+  set permissions(val: MenuPermission[]) { 
+    const validUserIds = new Set(this.users.map(u => u.id));
+    const cleanVals = (val || []).filter(p => p && p.userId && validUserIds.has(p.userId));
+    this.set('permissions', cleanVals); 
+  }
 
   get customers() { return this.get<Customer>('customers', SEED_CUSTOMERS); }
   set customers(val: Customer[]) { this.set('customers', val); }
