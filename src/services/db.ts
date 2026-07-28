@@ -417,13 +417,14 @@ export interface Delivery {
   deliveryCostConfirmed?: number; // 최종 확정 운송비
   finalCost?: number; // 최종 확정 운송비 별칭
   costAdjustmentReason?: string; // 운송비 조정/할증/할인 사유
-  reconciliationStatus?: 'PENDING' | 'RECONCILED' | 'PAYMENT_REQUESTED' | 'PAID'; // 대사 및 지급 상태
+  reconciliationStatus?: 'PENDING' | 'MATCHED' | 'MISMATCH' | 'RECONCILED' | 'PAYMENT_REQUESTED' | 'PAID'; // 대사 및 지급 상태
   reconciledAt?: string;
   paymentRequestedAt?: string;
   paymentCompletedAt?: string;
   statementFileUrl?: string; // 거래명세서 증빙 파일 URL
   billableToCustomer?: boolean; // 고객 청구 여부
   billableCustomerId?: string; // 청구 대상 고객사 ID
+  assignedVehicles?: any[]; // 배정 차량 목록 배열
   vehicleRequirements?: string; // 차량 종류별 대수 지정 JSON: [{ vehicleType: string, count: number }]
   cargoItems?: string; // 운반 장비 명세 JSON: [{ modelName: string, count: number }]
   isCostSettled: boolean;
