@@ -1611,54 +1611,70 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const assignAssetToContract = async (contractAssetId: string, assetId: string) => {
-    const ca = db.contractAssets.find(c => c.id === contractAssetId);
-    if (!ca) throw new Error('해당 계약 슬롯(contractAsset)을 찾을 수 없습니다.');
+    try {
+      const ca = db.contractAssets.find(c => c.id === contractAssetId);
+      if (!ca) throw new Error('해당 계약 슬롯(contractAsset)을 찾을 수 없습니다.');
 
-    let contract = db.contracts.find(c => c.id === ca.contractId);
-    if (!contract && db.isSupabaseConnected()) {
-      try {
-        await db.pullTableFromSupabase('contracts');
-        contract = db.contracts.find(c => c.id === ca.contractId);
-      } catch (e) {}
+      let contract = db.contracts.find(c => c.id === ca.contractId);
+      if (!contract && db.isSupabaseConnected()) {
+        try {
+          await db.pullTableFromSupabase('contracts');
+          contract = db.contracts.find(c => c.id === ca.contractId);
+        } catch (e) {}
+      }
+
+      const targetAsset = db.assets.find(a => a.id === assetId);
+      if (!targetAsset) throw new Error('할당할 대상 장비를 찾을 수 없습니다.');
+
+      const nowIso = new Date().toISOString();
+
+      // 1. ContractAsset 업데이트 (실물 장비 ID 할당 + expectedModel을 장비 정식 모델명으로 자동 보정!)
+      db.updateRow<ContractAsset>('contractAssets', contractAssetId, {
+        assetId: assetId,
+        ...(targetAsset?.modelName ? { expectedModel: targetAsset.modelName } : {})
+      });
+
+      // 2. Asset 상태 업데이트 (ASSIGNED 출고대기로 전환하여 타 계약 이중 할당 원천 차단!)
+      const assetUpdatePayload: Partial<Asset> = {
+        status: 'ASSIGNED',
+        updatedAt: nowIso
+      };
+      if (contract?.customerId) assetUpdatePayload.currentCustomerId = contract.customerId;
+      if (contract?.siteId) assetUpdatePayload.currentSiteId = contract.siteId;
+      if (contract?.startDate) assetUpdatePayload.contractStart = contract.startDate;
+      if (contract?.endDate) assetUpdatePayload.contractEnd = contract.endDate;
+
+      db.updateRow<Asset>('assets', assetId, assetUpdatePayload);
+
+      // 3. 출고 검수/정비 작업 의뢰 자동 발행 (status: PENDING 미접수)
+      db.insertRow<OutboundInspection>('outboundInspections', {
+        contractId: ca.contractId,
+        contractAssetId: ca.id,
+        assetId: assetId,
+        status: 'PENDING',
+        createdAt: nowIso,
+        updatedAt: nowIso
+      });
+
+      // 4. Supabase 원격 DB 쓰기 100% 완결 동기 대기 (실패 시 에러 처리)
+      await db.awaitPendingWrites();
+      refreshAllData();
+    } catch (err: any) {
+      console.error('assignAssetToContract error:', err);
+      const errMsg = err?.message || err?.details || JSON.stringify(err);
+      showErrorModal(
+        `⚠️ 장비 할당 저장 중 DB 스키마 캐시 오류가 발생했습니다:\n\n` +
+        `■ [실패 원인]: ${errMsg}\n\n` +
+        `■ [조치 방법]: 메뉴 [개발자 도구 (DB관리)] -> [1-Click DB 정합성 복구 패치] 버튼을 클릭하거나 Supabase SQL Editor에서 아래 쿼리를 실행해 주십시오:\n\n` +
+        `ALTER TABLE "assets" ADD COLUMN IF NOT EXISTS "contractStart" TEXT;\n` +
+        `ALTER TABLE "assets" ADD COLUMN IF NOT EXISTS "contractEnd" TEXT;\n` +
+        `ALTER TABLE "assets" ADD COLUMN IF NOT EXISTS "currentCustomerId" TEXT;\n` +
+        `ALTER TABLE "assets" ADD COLUMN IF NOT EXISTS "currentSiteId" TEXT;\n` +
+        `NOTIFY pgrst, 'reload schema';`,
+        '장비 할당 DB 동기화 오류'
+      );
+      throw err;
     }
-
-    const targetAsset = db.assets.find(a => a.id === assetId);
-    if (!targetAsset) throw new Error('할당할 대상 장비를 찾을 수 없습니다.');
-
-    const nowIso = new Date().toISOString();
-
-    // 1. ContractAsset 업데이트 (실물 장비 ID 할당 + expectedModel을 장비 정식 모델명으로 자동 보정!)
-    db.updateRow<ContractAsset>('contractAssets', contractAssetId, {
-      assetId: assetId,
-      ...(targetAsset?.modelName ? { expectedModel: targetAsset.modelName } : {})
-    });
-
-    // 2. Asset 상태 업데이트 (ASSIGNED 출고대기로 전환하여 타 계약 이중 할당 원천 차단!)
-    const assetUpdatePayload: Partial<Asset> = {
-      status: 'ASSIGNED',
-      updatedAt: nowIso
-    };
-    if (contract?.customerId) assetUpdatePayload.currentCustomerId = contract.customerId;
-    if (contract?.siteId) assetUpdatePayload.currentSiteId = contract.siteId;
-    if (contract?.startDate) assetUpdatePayload.contractStart = contract.startDate;
-    if (contract?.endDate) assetUpdatePayload.contractEnd = contract.endDate;
-
-    db.updateRow<Asset>('assets', assetId, assetUpdatePayload);
-
-    // 3. 출고 검수/정비 작업 의뢰 자동 발행 (status: PENDING 미접수)
-    db.insertRow<OutboundInspection>('outboundInspections', {
-      contractId: ca.contractId,
-      contractAssetId: ca.id,
-      assetId: assetId,
-      status: 'PENDING',
-      createdAt: nowIso,
-      updatedAt: nowIso
-    });
-
-    // 4. Supabase 원격 DB 쓰기 100% 완결 동기 대기 (실패 시 에러 처리)
-    await db.awaitPendingWrites();
-
-    refreshAllData();
   };
 
   const exchangeAsset = (contractId: string, oldAssetId: string, newAssetId: string, exchangeDate: string) => {

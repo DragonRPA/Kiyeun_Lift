@@ -1,3 +1,18 @@
+# Release Notes (v1.9.0.Build.00001 - 2026-07-28 12:23)
+
+## 🛠️ [assets 테이블 contractStart DB 스키마 정합성 보완] 1-Click DDL 자동복구 연동 및 에러 진단 팝업 강화
+
+- **패치 목적**: Supabase 원격 DB의 `assets` 테이블에 `"contractStart"`, `"contractEnd"`, `"currentCustomerId"`, `"currentSiteId"` 컬럼이 신규 반영되지 않았을 때 발생하던 `PGRST204 (Could not find column in schema cache)` 오류를 근본 차단함.
+- **주요 조치 내역**:
+  1. **[1-Click DB 정합성 패처 연동] (`DevDataUploader.tsx`)**:
+     - `schema.sql` 과 원격 Supabase DB 간 컬럼 정합성을 비교하여 `assets` 테이블의 누락된 컬럼 4개(`"contractStart"`, `"contractEnd"`, `"currentCustomerId"`, `"currentSiteId"`)를 자동 감지하고 `ALTER TABLE` 및 `NOTIFY pgrst, 'reload schema'` DDL 쿼리를 1-Click 패치로 자동 생성.
+  2. **[PostgREST 키 흡수 및 정규화 강화] (`db.ts`)**:
+     - `contract_start`, `contract_end`, `current_customer_id`, `current_site_id` 레거시 snake_case 입력 키를 absorb 한 뒤 `delete` 처리하여 PostgREST API 오류 오염 차단.
+  3. **[장비 할당 진단 팝업 강화] (`AppContext.tsx`)**:
+     - `assignAssetToContract` 실행 시 DB 스키마 캐시 오류 발생 시 구체적인 원인 및 1-Click 해결 패치 SQL을 팝업 안내하도록 전면 강화.
+
+---
+
 # Release Notes (v1.9.0.Build.00000 - 2026-07-28 12:18)
 
 ## 🚚 [자산 상태 실시간 변동 파이프라인 수술] 계약 진행 프로세스별 자산 상태(`status`) 실시간 자동 전환 엔진 탑재

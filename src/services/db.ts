@@ -1232,6 +1232,30 @@ class LocalDB {
       delete normalized.contract_id;
     }
 
+    // contractStart (contract_start ➔ contractStart 변환 후 snake_case 전면 파기)
+    if (normalized.contract_start) {
+      if (!normalized.contractStart) normalized.contractStart = normalized.contract_start;
+      delete normalized.contract_start;
+    }
+
+    // contractEnd (contract_end ➔ contractEnd 변환 후 snake_case 전면 파기)
+    if (normalized.contract_end) {
+      if (!normalized.contractEnd) normalized.contractEnd = normalized.contract_end;
+      delete normalized.contract_end;
+    }
+
+    // currentCustomerId (current_customer_id ➔ currentCustomerId 변환 후 snake_case 전면 파기)
+    if (normalized.current_customer_id) {
+      if (!normalized.currentCustomerId) normalized.currentCustomerId = normalized.current_customer_id;
+      delete normalized.current_customer_id;
+    }
+
+    // currentSiteId (current_site_id ➔ currentSiteId 변환 후 snake_case 전면 파기)
+    if (normalized.current_site_id) {
+      if (!normalized.currentSiteId) normalized.currentSiteId = normalized.current_site_id;
+      delete normalized.current_site_id;
+    }
+
     // assetId (asset_id ➔ assetId 변환 후 snake_case 전면 파기)
     if (normalized.asset_id) {
       if (!normalized.assetId) normalized.assetId = normalized.asset_id;
