@@ -34,11 +34,49 @@ interface AssignedVehicleRow {
 export const TruckDispatch: React.FC = () => {
   const { 
     deliveries, contracts, customers, products, 
-    transportCompanies, transportDrivers, hasPermission, 
+    transportCompanies, transportDrivers, outboundInspections, hasPermission, 
     refreshAllData, showErrorModal 
   } = useApp();
 
   const canSave = hasPermission('delivery', 'save');
+
+  // 출고 검수 상태 파싱 헬퍼
+  const getOutboundInspectionStatus = (contractId?: string) => {
+    if (!contractId) return 'NONE';
+    const insps = outboundInspections.filter(i => i.contractId === contractId);
+    if (insps.length === 0) return 'NONE';
+    if (insps.some(i => i.status === 'REJECTED')) return 'REJECTED';
+    if (insps.every(i => i.status === 'COMPLETED')) return 'COMPLETED';
+    if (insps.some(i => i.status === 'IN_PROGRESS')) return 'IN_PROGRESS';
+    return 'PENDING';
+  };
+
+  const getOutboundInspectionBadge = (contractId?: string) => {
+    const status = getOutboundInspectionStatus(contractId);
+    switch (status) {
+      case 'REJECTED':
+        return (
+          <span style={{ padding: '3px 8px', borderRadius: '12px', fontSize: '11px', fontWeight: 800, backgroundColor: 'rgba(239,68,68,0.15)', color: '#dc2626', border: '1px solid rgba(239,68,68,0.3)', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+            <AlertCircle size={12} /> 🔴 출고의뢰 반려됨
+          </span>
+        );
+      case 'COMPLETED':
+        return (
+          <span style={{ padding: '3px 8px', borderRadius: '12px', fontSize: '11px', fontWeight: 800, backgroundColor: 'rgba(34,197,94,0.15)', color: '#16a34a', border: '1px solid rgba(34,197,94,0.3)', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+            <CheckCircle size={12} /> 🟢 출고승인 완료
+          </span>
+        );
+      case 'IN_PROGRESS':
+      case 'PENDING':
+        return (
+          <span style={{ padding: '3px 8px', borderRadius: '12px', fontSize: '11px', fontWeight: 800, backgroundColor: 'rgba(59,130,246,0.15)', color: '#2563eb', border: '1px solid rgba(59,130,246,0.3)', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+            <Clock size={12} /> 🔵 출고검수 진행중
+          </span>
+        );
+      default:
+        return null;
+    }
+  };
 
   const [activeTab, setActiveTab] = useState<'DISPATCH' | 'RECONCILIATION'>('DISPATCH');
 
@@ -271,6 +309,14 @@ export const TruckDispatch: React.FC = () => {
       return;
     }
 
+    // ⚠️ 출고 의뢰가 반려된 상태인지 검사 및 예방적 경고 알림!
+    const inspStatus = getOutboundInspectionStatus(selectedDelivery.contractId);
+    if (inspStatus === 'REJECTED') {
+      if (!window.confirm('⚠️ [경고: 출고 의뢰 반려건]\n\n해당 출고건은 출고 검수 단계에서 [🔴 의뢰 반려] 처리된 건입니다.\n\n정말로 의도를 가지고 배차 기사 배정을 진행하시겠습니까?')) {
+        return;
+      }
+    }
+
     try {
       const finalLoadingSlot = loadingTimeSlot === '희망시간' ? loadingCustomTime : loadingTimeSlot;
       const finalUnloadingSlot = unloadingTimeSlot === '희망시간' ? unloadingCustomTime : unloadingTimeSlot;
@@ -316,6 +362,17 @@ export const TruckDispatch: React.FC = () => {
   // 4. 운송 완료 처리 (status: 'DELIVERED')
   const handleCompleteDeliveryStatus = async (deliveryId: string) => {
     if (!canSave) return;
+
+    const targetDelivery = deliveries.find(d => d.id === deliveryId);
+    if (targetDelivery) {
+      const inspStatus = getOutboundInspectionStatus(targetDelivery.contractId);
+      if (inspStatus === 'REJECTED') {
+        if (!window.confirm('⚠️ [경고: 출고 의뢰 반려건]\n\n해당 출고건은 출고 검수 단계에서 [🔴 의뢰 반려] 처리된 건입니다.\n\n정말로 의도를 가지고 운송 완료 마감을 진행하시겠습니까?')) {
+          return;
+        }
+      }
+    }
+
     try {
       db.updateRow<Delivery>('deliveries', deliveryId, {
         status: 'DELIVERED',
@@ -654,11 +711,14 @@ export const TruckDispatch: React.FC = () => {
                           boxShadow: isSelected ? '0 4px 12px rgba(59,130,246,0.12)' : 'none'
                         }}
                       >
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px', flexWrap: 'wrap', gap: '4px' }}>
                           <span style={{ fontSize: '11.5px', fontWeight: 700, color: 'var(--primary)' }}>
                             [{d.dispatchCategory || '출고'}] {d.requestDate || d.loadingDate}
                           </span>
-                          {getDeliveryStatusBadge(normStatus)}
+                          <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                            {getOutboundInspectionBadge(d.contractId)}
+                            {getDeliveryStatusBadge(normStatus)}
+                          </div>
                         </div>
 
                         <div style={{ fontSize: '14px', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '4px' }}>
@@ -702,7 +762,8 @@ export const TruckDispatch: React.FC = () => {
                         배차 ID: {selectedDelivery.id} | 요청일: {selectedDelivery.requestDate}
                       </span>
                     </div>
-                    <div style={{ display: 'flex', gap: '6px' }}>
+                    <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                      {getOutboundInspectionBadge(selectedDelivery.contractId)}
                       {getDeliveryStatusBadge(getNormalizedDeliveryStatus(selectedDelivery))}
                       {canSave && (
                         <button

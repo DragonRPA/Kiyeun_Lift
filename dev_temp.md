@@ -1,5 +1,5 @@
 # 개발 지시 및 개편 완료 내역 (dev_temp.md)
 
-- [완료] 출고 검수 장비 교체 및 의뢰 반려 시 수리정비중(REPAIRING) 자산 상태 전환 여부 선택 토글 옵션 수술 (`outbound_inspections.tsx` & `AppContext.tsx`)
-  1. 장비 교체 모달 내 🛠️ 기존 교체 대상 장비를 수리정비중(REPAIRING)으로 전환할지 선택 토글(ToggleSwitch) 수술 완료 (ON: 수리정비중 전환 / OFF: 임대가능 재고 유지).
-  2. 의뢰 반려 모달 내 🛠️ 반려 대상 장비들을 수리정비중(REPAIRING)으로 전환할지 선택 토글(ToggleSwitch) 수술 완료 (ON: 수리정비중 전환 / OFF: 임대가능 재고 원복).
+- [완료] 배차 관리 (`TruckDispatch.tsx`) 연동 출고 검수 진행 상태 뱃지 표출 & 🔴 출고 반려건 배차/운송완료 예방적 경고 인터락 수술
+  1. 좌측 배차 카드리스트 및 우측 배차 상세 폼 상단에 연동된 출고 검수의 실시간 진행 상태 뱃지(🟢 출고승인 완료 / 🔵 출고검수 진행중 / 🔴 출고의뢰 반려됨) 표출.
+  2. 출고 의뢰가 반려된 건(REJECTED)의 배차 기사 배정(handleSaveDispatch) 및 운송 완료(handleCompleteDeliveryStatus) 시 ⚠️ 예방적 경고 confirm 안내 팝업을 제공하여 실수 방지 (의도를 가지고 진행 시 승인 진행 허용).
