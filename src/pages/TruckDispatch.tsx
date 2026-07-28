@@ -810,65 +810,6 @@ export const TruckDispatch: React.FC = () => {
 
                     return (
                       <div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', borderBottom: '1px solid var(--border-color)', paddingBottom: '12px' }}>
-                          <div>
-                            <h3 style={{ fontSize: '16px', fontWeight: 800, margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
-                              🚛 배차 운송 기사 배정 및 상하차 세부 설정
-                              {isDispatchedOrCompleted && !isEditUnlocked && (
-                                <span style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '12px', backgroundColor: 'rgba(100,116,139,0.15)', color: '#475569', fontWeight: 700 }}>
-                                  🔒 배차 완료 잠금 (읽기 전용)
-                                </span>
-                              )}
-                            </h3>
-                            <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-                              배차 ID: {selectedDelivery.id} | 요청일: {selectedDelivery.requestDate}
-                            </span>
-                          </div>
-                          <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
-                            {getOutboundInspectionBadge(selectedDelivery.contractId)}
-                            {getDeliveryStatusBadge(normStatus)}
-
-                            {isDispatchedOrCompleted && !isEditUnlocked && canSave && (
-                              <button
-                                onClick={() => setIsEditUnlocked(true)}
-                                title="배차 완료된 기사 정보 및 운송비를 다시 수정하거나 재배정합니다."
-                                style={{ padding: '6px 12px', backgroundColor: 'rgba(59,130,246,0.12)', color: 'var(--primary)', border: '1px solid rgba(59,130,246,0.3)', borderRadius: '7px', fontSize: '12px', fontWeight: 800, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
-                              >
-                                <Edit2 size={13} /> ✏️ 기사 정보 수정/재배정 허용
-                              </button>
-                            )}
-                            
-                            {canSave && (
-                              <>
-                                {(!isDispatchedOrCompleted || isEditUnlocked) && (
-                                  <button
-                                    onClick={handleSaveDispatch}
-                                    className="btn-primary"
-                                    style={{ padding: '6px 14px', fontWeight: 800, fontSize: '12.5px', borderRadius: '7px', display: 'inline-flex', alignItems: 'center', gap: '5px', boxShadow: '0 2px 6px rgba(59,130,246,0.25)' }}
-                                  >
-                                    <ShieldCheck size={14} /> [🔵 배차 기사 배정 완료]
-                                  </button>
-                                )}
-
-                                {normStatus === 'DISPATCHED' && (
-                                  <button
-                                    onClick={() => handleCompleteDeliveryStatus(selectedDelivery.id)}
-                                    style={{ padding: '6px 14px', backgroundColor: '#16a34a', color: '#fff', border: 'none', borderRadius: '7px', fontWeight: 800, fontSize: '12.5px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '5px', boxShadow: '0 2px 6px rgba(22,163,74,0.25)' }}
-                                  >
-                                    <CheckCircle size={14} /> [🟢 운송 완료 마감]
-                                  </button>
-                                )}
-
-                                <button
-                                  onClick={() => handleCancelDeliveryStatus(selectedDelivery.id)}
-                                  style={{ padding: '6px 10px', borderRadius: '7px', backgroundColor: 'rgba(239,68,68,0.1)', color: '#dc2626', border: '1px solid rgba(239,68,68,0.3)', fontSize: '11.5px', fontWeight: 700, cursor: 'pointer' }}
-                                >
-                                  🚫 배차 취소
-                                </button>
-                              </>
-                            )}
-                          </div>
-                        </div>
 
                         {/* 배차 세부 설정 폼 (isFormDisabled 시 비활성화 수정 불가!) */}
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '16px' }}>
