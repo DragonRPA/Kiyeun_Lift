@@ -1746,22 +1746,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       // 1. 기존 장비: 수리정비중(REPAIRING) 선택 시 REPAIRING 전환, 아니면 임대가능(AVAILABLE) 유지!
       const targetStatus = markOldAsRepairing ? 'REPAIRING' : 'AVAILABLE';
-      const oldNote = oldAssetOrig.memo1 || oldAssetOrig.note || oldAssetOrig.memo || '';
-      const appendedNote = oldNote
-        ? `${oldNote}\n[출고전 교체(${targetStatus})] ${today}: ${reason}`
-        : `[출고전 교체(${targetStatus})] ${today}: ${reason}`;
-
-      db.updateRow<Asset>('assets', oldAssetId, {
+      
+      const oldPayload: Partial<Asset> = {
         status: targetStatus,
-        memo1: appendedNote,
-        note: appendedNote,
-        memo: appendedNote,
         currentCustomerId: undefined,
         currentSiteId: undefined,
         contractStart: undefined,
         contractEnd: undefined,
         updatedAt: nowIso
-      });
+      };
+
+      // 💡 사유(reason)가 적혀 있을 때만 기존 비고에 업서트! 비고가 안 적혀 있으면 업서트하지 않음.
+      if (reason && reason.trim()) {
+        const oldNote = oldAssetOrig.memo1 || oldAssetOrig.note || oldAssetOrig.memo || '';
+        const appendedNote = oldNote
+          ? `${oldNote}\n[출고전 교체(${targetStatus})] ${today}: ${reason.trim()}`
+          : `[출고전 교체(${targetStatus})] ${today}: ${reason.trim()}`;
+        oldPayload.memo1 = appendedNote;
+        oldPayload.note = appendedNote;
+        oldPayload.memo = appendedNote;
+      }
+
+      db.updateRow<Asset>('assets', oldAssetId, oldPayload);
 
       // 2. 대체 장비: 배차지정(ASSIGNED)으로 전환 및 계약 정보 매핑
       db.updateRow<Asset>('assets', newAssetId, {

@@ -434,7 +434,7 @@ export const OutboundInspections: React.FC = () => {
       return;
     }
 
-    const finalReason = exchangeReason.trim() || '단순 장비 교체 (수리 미전환)';
+    const finalReason = exchangeReason.trim(); // 빈값이면 빈값 그대로 전달 (비고 업서트 생략!)
 
     setIsProcessing(true);
     try {
@@ -1091,7 +1091,7 @@ export const OutboundInspections: React.FC = () => {
               <button onClick={() => setExchangeModalAsset(null)} className="btn-secondary">취소</button>
               <button
                 onClick={handleConfirmExchangeAsset}
-                disabled={isProcessing || !targetNewAssetId || !exchangeReason.trim()}
+                disabled={isProcessing || !targetNewAssetId || (exchangeToRepairing && !exchangeReason.trim())}
                 className="btn-primary"
                 style={{ fontWeight: 800 }}
               >
