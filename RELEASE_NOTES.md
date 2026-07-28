@@ -1,3 +1,16 @@
+# Release Notes (v1.8.0.Build.00005 - 2026-07-28 11:35)
+
+## 🎯 [원천 수술] DB 통신 레이어 레거시 언더바(`user_id` 등) 키 전면 파기(delete) 적용
+
+- **수술 배경**: 최하단 데이터 정규화 레이어(`db.ts`)에서 레거시 호환성을 위해 `userId`가 존재할 때 `user_id` 키를 강제로 생성하던 코드가 남아있어, Supabase REST API 전송 페이로드에 `user_id` 키가 얹어져 PostgREST `schema cache` 에러를 일으키던 진원지를 수술함.
+- **주요 개편 내역**:
+  1. **[snake_case 키 완전 파기 수술] (`src/services/db.ts`)**:
+     - `user_id` ➔ `userId`, `salesperson_id` ➔ `salespersonId`, `requester_id` ➔ `requesterId` 등 8대 연관 식별자에 대해 snake_case 속성으로 오더라도 camelCase로 결합 변환 후 `delete normalized.user_id;` 구문을 적용하여 Supabase 전송 객체에서 언더바 키를 100% 완전 파기 정제함.
+  2. **`임직원[]` 명확화**:
+     - 시스템 임직원 마스터(`users`)에 등록된 실제 직원 데이터 대장과의 매칭을 통해 유령/퇴사자 권한 찌꺼기 85건 정돈 완료.
+
+---
+
 # Release Notes (v1.8.0.Build.00004 - 2026-07-28 03:17)
 
 ## 🛡️ [참조키(FK) 사전 예방 & 고스트 진단 수술] FK 저장 사전 차단 팝업 및 기 저장 오염 데이터 1-Click 자동 정돈 수술 완비

@@ -1176,37 +1176,54 @@ class LocalDB {
       return item.map(i => this.normalizePayloadKeys(i));
     }
     const normalized = { ...item };
-    // userId <-> user_id 양방향 상호 호환 보장
-    if (normalized.user_id && !normalized.userId) normalized.userId = normalized.user_id;
-    if (normalized.userId && !normalized.user_id) normalized.user_id = normalized.userId;
     
-    // salespersonId <-> salesperson_id 양방향 상호 호환 보장
-    if (normalized.salesperson_id && !normalized.salespersonId) normalized.salespersonId = normalized.salesperson_id;
-    if (normalized.salespersonId && !normalized.salesperson_id) normalized.salesperson_id = normalized.salespersonId;
+    // userId (user_id ➔ userId 변환 후 snake_case 전면 파기)
+    if (normalized.user_id) {
+      if (!normalized.userId) normalized.userId = normalized.user_id;
+      delete normalized.user_id;
+    }
+    
+    // salespersonId (salesperson_id ➔ salespersonId 변환 후 snake_case 전면 파기)
+    if (normalized.salesperson_id) {
+      if (!normalized.salespersonId) normalized.salespersonId = normalized.salesperson_id;
+      delete normalized.salesperson_id;
+    }
 
-    // requesterId <-> requester_id 양방향 상호 호환 보장
-    if (normalized.requester_id && !normalized.requesterId) normalized.requesterId = normalized.requester_id;
-    if (normalized.requesterId && !normalized.requester_id) normalized.requester_id = normalized.requesterId;
+    // requesterId (requester_id ➔ requesterId 변환 후 snake_case 전면 파기)
+    if (normalized.requester_id) {
+      if (!normalized.requesterId) normalized.requesterId = normalized.requester_id;
+      delete normalized.requester_id;
+    }
 
-    // mechanicId <-> mechanic_id 양방향 상호 호환 보장
-    if (normalized.mechanic_id && !normalized.mechanicId) normalized.mechanicId = normalized.mechanic_id;
-    if (normalized.mechanicId && !normalized.mechanic_id) normalized.mechanic_id = normalized.mechanicId;
+    // mechanicId (mechanic_id ➔ mechanicId 변환 후 snake_case 전면 파기)
+    if (normalized.mechanic_id) {
+      if (!normalized.mechanicId) normalized.mechanicId = normalized.mechanic_id;
+      delete normalized.mechanic_id;
+    }
 
-    // customerId <-> customer_id 양방향 상호 호환 보장
-    if (normalized.customer_id && !normalized.customerId) normalized.customerId = normalized.customer_id;
-    if (normalized.customerId && !normalized.customer_id) normalized.customer_id = normalized.customerId;
+    // customerId (customer_id ➔ customerId 변환 후 snake_case 전면 파기)
+    if (normalized.customer_id) {
+      if (!normalized.customerId) normalized.customerId = normalized.customer_id;
+      delete normalized.customer_id;
+    }
 
-    // siteId <-> site_id 양방향 상호 호환 보장
-    if (normalized.site_id && !normalized.siteId) normalized.siteId = normalized.site_id;
-    if (normalized.siteId && !normalized.site_id) normalized.site_id = normalized.siteId;
+    // siteId (site_id ➔ siteId 변환 후 snake_case 전면 파기)
+    if (normalized.site_id) {
+      if (!normalized.siteId) normalized.siteId = normalized.site_id;
+      delete normalized.site_id;
+    }
 
-    // contractId <-> contract_id 양방향 상호 호환 보장
-    if (normalized.contract_id && !normalized.contractId) normalized.contractId = normalized.contract_id;
-    if (normalized.contractId && !normalized.contract_id) normalized.contract_id = normalized.contractId;
+    // contractId (contract_id ➔ contractId 변환 후 snake_case 전면 파기)
+    if (normalized.contract_id) {
+      if (!normalized.contractId) normalized.contractId = normalized.contract_id;
+      delete normalized.contract_id;
+    }
 
-    // assetId <-> asset_id 양방향 상호 호환 보장
-    if (normalized.asset_id && !normalized.assetId) normalized.assetId = normalized.asset_id;
-    if (normalized.assetId && !normalized.asset_id) normalized.asset_id = normalized.assetId;
+    // assetId (asset_id ➔ assetId 변환 후 snake_case 전면 파기)
+    if (normalized.asset_id) {
+      if (!normalized.assetId) normalized.assetId = normalized.asset_id;
+      delete normalized.asset_id;
+    }
 
     return normalized;
   }
