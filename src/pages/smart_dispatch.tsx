@@ -14,29 +14,29 @@ interface SpecItem {
   keywords: string[];
 }
 
-// 고소작업대 필수 기술 요구사항 표준 체크리스트 정의
+// 고소작업대 필수 기술 요구사항 표준 체크리스트 정의 (스마트 자연어 파싱 키워드 매칭)
 const STANDARD_SPECS: SpecItem[] = [
-  { id: 'spec1', label: '4면 철망 설치', keywords: ['4면 철망', '사면철망', '철망'] },
-  { id: 'spec2', label: '확장대 철망 설치', keywords: ['확장대 철망', '확장대철망'] },
-  { id: 'spec3', label: '확장대 옆면 철망 설치', keywords: ['확장대 옆면 철망', '옆면 철망'] },
+  { id: 'spec1', label: '4면 철망 / 함석 설치', keywords: ['4면 철망', '사면철망', '철망', '함석', '3면 함석', '4면 함석', '3면함석', '4면함석'] },
+  { id: 'spec2', label: '확장대 철망 / 함석 설치', keywords: ['확장대 철망', '확장대철망', '확장대 함석', '확장대함석'] },
+  { id: 'spec3', label: '상단 감지봉 / 협착 센서 설치 (4EA)', keywords: ['감지봉', '감지봉 4ea', '상단감지', '협착', '센서', '4ea', '감지봉4ea'] },
   { id: 'spec4', label: '원판 설치', keywords: ['원판설치', '원판'] },
-  { id: 'spec5', label: '배터리 단자 풀림 확인 마킹', keywords: ['배터리 단자 풀림', '단자 풀림 확인 마킹', '배터리 단자 풀림 확인 마킹', '단자 풀림'] },
+  { id: 'spec5', label: '배터리 단자 풀림 확인 마킹', keywords: ['배터리 단자 풀림', '단자 풀림 확인 마킹', '단자 풀림', '배터리 마킹'] },
   { id: 'spec6', label: '배터리 단자 커버 설치', keywords: ['배터리 단자 커버', '커버설치', '단자 커버'] },
   { id: 'spec7', label: '트레이 내부 볼트류 풀림 확인 마킹', keywords: ['트레이 내부 볼트', '볼트류 풀림 확인마킹', '트레이 내부 볼트류 풀림'] },
-  { id: 'spec8', label: '주행속도 세팅 (고속 60 / 저속 45)', keywords: ['주행속도', '고속 60', '저속 45', '주행속도 고속'] },
-  { id: 'spec9', label: '오버로드 세팅', keywords: ['오버로드 셋팅', '오버로드', '오버로드 세팅'] },
+  { id: 'spec8', label: '주행속도 세팅 (고속 60 / 저속 45)', keywords: ['주행속도', '고속 60', '저속 45', '주행속도 고속', '속도 세팅'] },
+  { id: 'spec9', label: '오버로드 과적재 세팅', keywords: ['오버로드 셋팅', '오버로드', '오버로드 세팅', '과적'] },
   { id: 'spec10', label: '조이스틱 커버 연장', keywords: ['조이스틱 커버', '커버 연장', '조이스틱 커버 연장'] },
-  { id: 'spec11', label: '탑승구 사다리 보양', keywords: ['탑승구 사다리', '사다리 보양', '탑승구 사다리 보양'] },
-  { id: 'spec12', label: '모서리/전면부/미끄럼방지 보양', keywords: ['미끄럼방지', '모서리 8개소', '전면부 2개소', '모서리보양', '모서리 8면'] },
-  { id: 'spec13', label: '소화기함/손잡이 설치 및 안내스티커 부착', keywords: ['소화기함', '기타 스티커물', '탑승구 손잡이', '작동설명'] },
-  { id: 'spec14', label: '타이어 A급 장착', keywords: ['타이어 A급', '타이어A급'] },
-  { id: 'spec15', label: '점멸등, 비상하강장치, 비상정지장치 청결', keywords: ['점멸등', '비상하강장치', '비상정지장치', '비상하강장치 청결'] },
+  { id: 'spec11', label: '탑승구 사다리 보양', keywords: ['탑승구 사다리', '사다리 보양', '탑승구 사다리 보양', '사다리'] },
+  { id: 'spec12', label: '모서리/전면부/미끄럼방지 보양', keywords: ['미끄럼방지', '모서리 8개소', '전면부 2개소', '모서리보양', '모서리 8면', '보양'] },
+  { id: 'spec13', label: '소화기함/손잡이 설치 및 안내스티커 부착', keywords: ['소화기함', '기타 스티커물', '탑승구 손잡이', '작동설명', '소화기', '스티커'] },
+  { id: 'spec14', label: '타이어 A급 장착', keywords: ['타이어 A급', '타이어A급', '타이어 A급 상태', '타이어'] },
+  { id: 'spec15', label: '점멸등, 비상하강장치, 비상정지장치 청결', keywords: ['점멸등', '비상하강장치', '비상정지장치', '비상하강장치 청결', '정지장치'] },
   { id: 'spec16', label: '작업높이 80% 세팅', keywords: ['작업높이 80프로', '발판높이기준', '작업높이 80%', '작업높이 80'] },
   { id: 'spec17', label: '작업구간 색상 라인구분 (초록/빨강)', keywords: ['라인구분', '초록, 빨강', '라인 구분'] },
   { id: 'spec18', label: '하부상승제한, 확장대 50% 표식 부착', keywords: ['하부상승제한', '확장대 50%', '50%지점 표식'] },
   { id: 'spec19', label: '비상정지스위치 및 비상하강꼬리표 부착', keywords: ['비상정지스위치', '비상하강꼬리표', '비상정지스위치 부착'] },
   { id: 'spec20', label: '시저구간 협착위험 스티커 부착', keywords: ['협착위험 스티커', '시저구간', '접촉금지', '시저구간 접촉금지'] },
-  { id: 'spec21', label: '부착물 세트 (제원표, 비상하강법, 보험증권, 인증서)', keywords: ['부착물', '제원표', '비상하강사용법', '보험증권', '인증서'] }
+  { id: 'spec21', label: '부착물 세트 (인증서, 제원표, 보험증권, 반입전 체크리스트)', keywords: ['부착물', '제원표', '비상하강사용법', '보험증권', '인증서', '반입전', '체크리스트'] }
 ];
 
 export const SmartDispatch: React.FC = () => {
@@ -93,6 +93,7 @@ export const SmartDispatch: React.FC = () => {
 
   // 요구사항 필수 체크리스트 선택/해제 상태 (Record<specId, boolean>)
   const [checkedSpecs, setCheckedSpecs] = useState<Record<string, boolean>>({});
+  const [showAllSpecs, setShowAllSpecs] = useState<boolean>(false);
 
   const [closingDay, setClosingDay] = useState('');
   const [paymentDay, setPaymentDay] = useState('');
@@ -104,6 +105,24 @@ export const SmartDispatch: React.FC = () => {
 
   // 프리뷰 탭 관리
   const [previewTab, setPreviewTab] = useState<'SHEET' | 'TEXT' | 'JSON'>('SHEET');
+
+  // 💡 [실시간 자연어 텍스트 스캐너] rawText 가 변경될 때 텍스트 내 포함된 요구사항을 100% 동적으로 스캔하여 자동 체크!
+  useEffect(() => {
+    if (!rawText.trim()) return;
+
+    const cleanedText = rawText.toLowerCase().replace(/\s+/g, '');
+    const autoSpecs: Record<string, boolean> = {};
+
+    STANDARD_SPECS.forEach(spec => {
+      const isMatched = spec.keywords.some(kw => cleanedText.includes(kw.toLowerCase().replace(/\s+/g, '')));
+      autoSpecs[spec.id] = isMatched;
+    });
+
+    setCheckedSpecs(prev => ({
+      ...prev,
+      ...autoSpecs
+    }));
+  }, [rawText]);
 
   // 규칙 기반 지능형 텍스트 파서 함수 (AI-less)
   const handleParse = () => {
@@ -845,13 +864,16 @@ ${activeSpecs.map((s, idx) => `  ${idx + 1}. [적용] ${s.label}`).join('\n') ||
               </div>
             </div>
 
-            {/* 섹션 4: 필수 기술 요구사항 체크리스트 (핵심 요구사항 반영) */}
+            {/* 섹션 4: 필수 기술 요구사항 체크리스트 (자연어 원문 텍스트 동적 생성 반영) */}
             <div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', borderBottom: '1px solid var(--border-color)', paddingBottom: '4px' }}>
-                <h4 style={{ fontSize: '14px', fontWeight: '700', color: 'var(--primary)', margin: 0 }}>
-                  4. 필수 요구사항 체크리스트 (선택 적용)
+                <h4 style={{ fontSize: '14px', fontWeight: '700', color: 'var(--primary)', margin: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  4. 필수 요구사항 체크리스트 (요청 텍스트 분석 동적 생성)
                 </h4>
-                <div style={{ display: 'flex', gap: '4px' }}>
+                <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                  <button type="button" className="btn-secondary" onClick={() => setShowAllSpecs(!showAllSpecs)} style={{ padding: '3px 8px', fontSize: '11.5px', fontWeight: 700 }}>
+                    {showAllSpecs ? '▲ 추출 항목만 보기' : '▼ 전체 21개 스펙 펼치기'}
+                  </button>
                   <button type="button" className="btn-secondary" onClick={() => handleSetAllSpecs(true)} style={{ padding: '2px 6px', fontSize: '11px' }}>전체선택</button>
                   <button type="button" className="btn-secondary" onClick={() => handleSetAllSpecs(false)} style={{ padding: '2px 6px', fontSize: '11px' }}>전체해제</button>
                 </div>
@@ -860,27 +882,39 @@ ${activeSpecs.map((s, idx) => `  ${idx + 1}. [적용] ${s.label}`).join('\n') ||
               <div className="mobile-grid-1col" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '14px' }}>
                 <div>
                   <label>유상 옵션 내역</label>
-                  <input type="text" value={paidOptions} onChange={e => setPaidOptions(e.target.value)} />
+                  <input type="text" value={paidOptions} onChange={e => setPaidOptions(e.target.value)} placeholder="예: 3면 함석, 감지봉 4EA..." />
                 </div>
                 <div>
                   <label>보양작업 조건</label>
-                  <input type="text" value={protection} onChange={e => setProtection(e.target.value)} />
+                  <input type="text" value={protection} onChange={e => setProtection(e.target.value)} placeholder="예: 4면 망 포함 보양..." />
                 </div>
               </div>
 
-              {/* 21가지 표준 스펙 체크박스 선택 제어부 */}
+              {/* 💡 [텍스트 추출 감지 수량 안내 뱃지] */}
+              {(() => {
+                const detectedSpecs = STANDARD_SPECS.filter(s => !!checkedSpecs[s.id]);
+                return (
+                  <div style={{ marginBottom: '8px', fontSize: '12px', fontWeight: 800, color: detectedSpecs.length > 0 ? '#16a34a' : 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    ✨ 요청 텍스트 기반 감지 및 자동 동적 생성된 요구사항: <span style={{ color: 'var(--primary)', fontSize: '13px' }}>{detectedSpecs.length}개</span>
+                  </div>
+                );
+              })()}
+
+              {/* 21가지 표준 스펙 동적/전체 체크박스 선택 제어부 */}
               <div style={{ 
                 display: 'grid', 
-                gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', 
+                gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', 
                 gap: '8px', 
                 padding: '12px', 
-                maxHeight: '300px', 
+                maxHeight: '320px', 
                 overflowY: 'auto', 
                 border: '1px solid var(--border-color)', 
-                borderRadius: '6px', 
+                borderRadius: '8px', 
                 backgroundColor: 'var(--bg-app)' 
               }}>
-                {STANDARD_SPECS.map(spec => {
+                {STANDARD_SPECS
+                  .filter(spec => showAllSpecs || !!checkedSpecs[spec.id])
+                  .map(spec => {
                   const isChecked = !!checkedSpecs[spec.id];
                   return (
                     <label 
@@ -889,24 +923,25 @@ ${activeSpecs.map((s, idx) => `  ${idx + 1}. [적용] ${s.label}`).join('\n') ||
                         display: 'flex', 
                         alignItems: 'center', 
                         gap: '8px', 
-                        padding: '6px 8px', 
-                        borderRadius: '4px', 
+                        padding: '8px 10px', 
+                        borderRadius: '6px', 
                         cursor: 'pointer',
-                        fontSize: '12px',
-                        backgroundColor: isChecked ? 'rgba(16, 185, 129, 0.08)' : 'transparent',
-                        border: `1px solid ${isChecked ? 'var(--success)' : 'transparent'}`,
-                        transition: 'all 0.2s'
+                        fontSize: '12.5px',
+                        backgroundColor: isChecked ? 'rgba(34, 197, 94, 0.12)' : 'transparent',
+                        border: `1px solid ${isChecked ? '#16a34a' : 'var(--border-color)'}`,
+                        boxShadow: isChecked ? '0 2px 6px rgba(34, 197, 94, 0.15)' : 'none',
+                        transition: 'all 0.15s ease'
                       }}
                     >
                       <input 
                         type="checkbox" 
                         checked={isChecked} 
                         onChange={() => handleToggleSpec(spec.id)} 
-                        style={{ cursor: 'pointer', width: '15px', height: '15px' }}
+                        style={{ cursor: 'pointer', width: '16px', height: '16px', accentColor: '#16a34a' }}
                       />
                       <span style={{ 
-                        color: isChecked ? 'var(--success)' : 'var(--text-secondary)',
-                        fontWeight: isChecked ? '600' : 'normal' 
+                        color: isChecked ? '#15803d' : 'var(--text-secondary)',
+                        fontWeight: isChecked ? '800' : 'normal' 
                       }}>
                         {spec.label}
                       </span>
