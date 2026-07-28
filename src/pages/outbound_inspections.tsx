@@ -23,7 +23,8 @@ import {
   Star,
   ShieldAlert,
   Calendar,
-  RotateCcw
+  RotateCcw,
+  MessageSquare
 } from 'lucide-react';
 
 // 21대 고소작업대 정비/스펙 체크리스트 마스터 정의
@@ -64,6 +65,7 @@ interface InspectionGroup {
   assets: Asset[];
   equipmentsSummary: string;
   requestedSpecs: typeof ALL_SPECS;
+  rawText?: string; // 스마트 출고시 입력된 자연어 원문 텍스트
 }
 
 export const OutboundInspections: React.FC = () => {
@@ -164,7 +166,8 @@ export const OutboundInspections: React.FC = () => {
         .join(', ') || '장비 매핑 대기 중';
 
       const delivery = deliveries.find(d => d.contractId === firstItem.contractId && d.type === 'OUTBOUND');
-      const memoText = `${delivery?.memo || ''} ${delivery?.closingMemo || ''} ${firstItem.note || ''}`.toLowerCase();
+      const rawText = delivery?.rawText || delivery?.memo || (contract as any)?.memo || firstItem.note || '';
+      const memoText = `${rawText} ${delivery?.closingMemo || ''} ${firstItem.note || ''}`.toLowerCase();
 
       let reqSpecs = ALL_SPECS.filter((spec, idx) => {
         if ([0, 3, 4, 7, 8, 13, 14, 20].includes(idx)) return true;
@@ -199,7 +202,8 @@ export const OutboundInspections: React.FC = () => {
         items,
         assets: groupAssets,
         equipmentsSummary: summaryText,
-        requestedSpecs: reqSpecs
+        requestedSpecs: reqSpecs,
+        rawText
       });
     });
 
@@ -218,92 +222,89 @@ export const OutboundInspections: React.FC = () => {
       if (endDate && g.requestDate > endDate) return false;
 
       if (!searchQuery) return true;
-
       const q = searchQuery.toLowerCase();
       return (
-        g.contractNo.toLowerCase().includes(q) ||
         g.customerName.toLowerCase().includes(q) ||
         g.siteName.toLowerCase().includes(q) ||
-        g.assets.some(a => a.assetNo.toLowerCase().includes(q) || a.modelName.toLowerCase().includes(q))
+        g.contractNo.toLowerCase().includes(q) ||
+        g.equipmentsSummary.toLowerCase().includes(q) ||
+        (g.rawText && g.rawText.toLowerCase().includes(q)) ||
+        g.assets.some(a => a.assetNo.toLowerCase().includes(q))
       );
     });
   }, [inspectionGroups, activeTabStatus, startDate, endDate, searchQuery]);
 
   const selectedGroup = useMemo(() => {
+    if (!selectedGroupId) return null;
     return inspectionGroups.find(g => g.groupId === selectedGroupId) || null;
-  }, [inspectionGroups, selectedGroupId]);
+  }, [selectedGroupId, inspectionGroups]);
 
-  // 교체 모달용 동일 모델 임대가능(AVAILABLE) 자산 목록
-  const availableExchangeAssets = useMemo(() => {
-    if (!exchangeModalAsset) return [];
-    return assets
-      .filter(a => a.status === 'AVAILABLE' && a.id !== exchangeModalAsset.id && a.modelName === exchangeModalAsset.modelName)
-      .sort((a, b) => (a.maintenanceScore ?? 0) - (b.maintenanceScore ?? 0));
-  }, [assets, exchangeModalAsset]);
-
-  // 의뢰 그룹 선택 시 초기 체크리스트 로드
   const handleSelectGroup = (group: InspectionGroup) => {
     setSelectedGroupId(group.groupId);
 
-    const initialCheckMap: Record<string, boolean> = {};
-    group.requestedSpecs.forEach(s => {
-      initialCheckMap[s.id] = false;
+    // 초기 체크 상태 세팅 (기본값 false 미체크!)
+    const initialMap: Record<string, boolean> = {};
+    group.requestedSpecs.forEach(spec => {
+      initialMap[spec.id] = false;
     });
 
-    const firstItem = group.items[0];
-    if (firstItem && firstItem.specsJson) {
-      try {
-        const loaded = JSON.parse(firstItem.specsJson);
-        Object.assign(initialCheckMap, loaded);
-      } catch (e) {}
-    }
-
-    setCheckedItems(initialCheckMap);
-    setInspectionNote(firstItem?.note || '');
+    // 만약 이미 검수가 진행중이거나 완료된 경우 기존 note 파싱
+    const sampleNote = group.items[0]?.note || '';
+    setInspectionNote(sampleNote);
+    setCheckedItems(initialMap);
   };
 
-  // 1-Click 전체 항목 체크/해제 토글
+  // 1-Click 전체 선택 / 해제
   const handleToggleAllSpecs = () => {
     if (!selectedGroup) return;
-    const allChecked = selectedGroup.requestedSpecs.every(s => checkedItems[s.id]);
-    const nextMap: Record<string, boolean> = {};
-    selectedGroup.requestedSpecs.forEach(s => {
-      nextMap[s.id] = !allChecked;
+    const allChecked = selectedGroup.requestedSpecs.every(spec => !!checkedItems[spec.id]);
+    const updated: Record<string, boolean> = {};
+    selectedGroup.requestedSpecs.forEach(spec => {
+      updated[spec.id] = !allChecked;
     });
-    setCheckedItems(nextMap);
+    setCheckedItems(updated);
   };
 
-  // 접수 처리 (PENDING -> IN_PROGRESS)
+  // ──────────────────────────────────────────────────────────────────────────
+  // 3. 작업 접수 실행 (PENDING ➔ IN_PROGRESS)
+  // ──────────────────────────────────────────────────────────────────────────
   const handleAcceptGroup = async (group: InspectionGroup) => {
-    if (isProcessing) return;
+    if (!canEdit) return;
     setIsProcessing(true);
     try {
       const nowIso = new Date().toISOString();
+      const inspectorName = currentUser?.name || '담당엔지니어';
+
       group.items.forEach(item => {
         db.updateRow<OutboundInspection>('outboundInspections', item.id, {
           status: 'IN_PROGRESS',
-          inspectorId: currentUser?.id,
+          inspectorId: inspectorName,
           updatedAt: nowIso
         });
       });
 
       await db.awaitPendingWrites();
       refreshAllData();
-      setSelectedGroupId(group.groupId);
+      alert(`✅ [출고 의뢰 접수 완료]\n고객사 [${group.customerName}] 의뢰건 접수가 완료되었습니다.`);
+      handleSelectGroup(group);
     } catch (err: any) {
-      showErrorModal(`⚠️ 의뢰 접수 처리 중 DB 동기화 오류가 발생했습니다:\n${err.message || err}`);
+      showErrorModal(`⚠️ 의뢰 접수 실패: ${err?.message || err}`);
     } finally {
       setIsProcessing(false);
     }
   };
 
-  // 최종 검수 승인 마감
+  // ──────────────────────────────────────────────────────────────────────────
+  // 4. 최종 출고 승인 완료 (IN_PROGRESS ➔ COMPLETED & 자산 status ➔ ASSIGNED)
+  // ──────────────────────────────────────────────────────────────────────────
   const handleApproveGroup = async () => {
-    if (!selectedGroup || isProcessing) return;
+    if (!selectedGroup || !canEdit) return;
 
-    const uncheckedCount = selectedGroup.requestedSpecs.filter(s => !checkedItems[s.id]).length;
-    if (uncheckedCount > 0) {
-      if (!window.confirm(`⚠️ 아직 검수 완료되지 않은 항목이 ${uncheckedCount}개 있습니다.\n이대로 최종 출고 승인을 진행하시겠습니까?`)) {
+    const checkedCount = Object.values(checkedItems).filter(Boolean).length;
+    const totalCount = selectedGroup.requestedSpecs.length;
+
+    if (checkedCount < totalCount) {
+      if (!confirm(`⚠️ 의뢰 요구 항목 ${totalCount}개 중 ${checkedCount}개만 체크되었습니다.\n\n정말로 이대로 출고를 승인 마감하시겠습니까?`)) {
         return;
       }
     }
@@ -311,122 +312,126 @@ export const OutboundInspections: React.FC = () => {
     setIsProcessing(true);
     try {
       const nowIso = new Date().toISOString();
-      const specsJson = JSON.stringify(checkedItems);
+      const inspectorName = currentUser?.name || '담당엔지니어';
+      const resultNote = `[검수완료 ${checkedCount}/${totalCount}항목 합격] ${inspectionNote}`;
 
-      for (const item of selectedGroup.items) {
+      selectedGroup.items.forEach(item => {
         db.updateRow<OutboundInspection>('outboundInspections', item.id, {
           status: 'COMPLETED',
-          specsJson,
-          inspectorId: currentUser?.id,
+          inspectorId: inspectorName,
           inspectedAt: nowIso,
-          note: inspectionNote,
+          note: resultNote,
           updatedAt: nowIso
         });
 
+        // 🟢 출고 승인 마감 시 해당 고유 장비의 status ➔ 'ASSIGNED' (할당 완료) 로 실시간 변동!
         if (item.assetId) {
           db.updateRow<Asset>('assets', item.assetId, {
-            status: 'RENTED',
+            status: 'ASSIGNED',
             updatedAt: nowIso
           });
         }
-      }
+      });
 
       await db.awaitPendingWrites();
       refreshAllData();
-      alert(`✅ [의뢰 1건 마감 완료] 의뢰건(${selectedGroup.contractNo})에 속한 장비 ${selectedGroup.assets.length}대의 출고 정비/검수가 정상 마감 승인되었습니다!\n자산 상태가 '대여중(RENTED)'으로 전환되었습니다.`);
+      alert(`🎉 [출고 승인 마감 성공]\n[${selectedGroup.customerName}] 출고 검수가 최종 마감되었습니다.`);
       setSelectedGroupId(null);
     } catch (err: any) {
-      showErrorModal(`⚠️ 출고 검수 마감 처리 중 DB 동기화 오류가 발생했습니다:\n${err.message || err}`);
+      showErrorModal(`⚠️ 출고 승인 마감 실패: ${err?.message || err}`);
     } finally {
       setIsProcessing(false);
     }
   };
 
-  // 🔄 출고 대기 장비 즉시 교체 및 수리전환 실행 핸들러
-  const handleExecuteExchange = async () => {
-    if (!exchangeModalAsset || !targetNewAssetId || !exchangeReason.trim() || !selectedGroup) {
-      alert('대체 장비 카드와 교체 사유를 입력해 주세요.');
+  // ──────────────────────────────────────────────────────────────────────────
+  // 5. 출고 반려 처리 (REJECTED & 자산 status ➔ REPAIRING 로 불량 전환)
+  // ──────────────────────────────────────────────────────────────────────────
+  const handleConfirmReject = async () => {
+    if (!selectedGroup || !canEdit) return;
+    if (!rejectReason.trim()) {
+      showErrorModal('반려 사유를 입력해 주세요.');
       return;
     }
 
-    const ca = contractAssets.find(c => c.contractId === selectedGroup.contractId && c.assetId === exchangeModalAsset.id);
-    if (!ca) {
-      showErrorModal('해당 계약 슬롯(contractAsset) 정보를 찾을 수 없습니다.');
-      return;
-    }
-
-    setIsProcessing(true);
-    try {
-      await exchangeOutboundAsset(ca.id, exchangeModalAsset.id, targetNewAssetId, exchangeReason);
-      alert(`✅ [출고 장비 교체 성공]\n기존 장비 [${exchangeModalAsset.assetNo}] 상태가 '수리정비중(REPAIRING)'으로 전환되고 자산 비고에 사유가 명확히 기록되었습니다.\n새로운 장비로 교체되어 출고 검수를 이어가실 수 있습니다.`);
-      setExchangeModalAsset(null);
-      setTargetNewAssetId('');
-      setExchangeReason('');
-    } catch (err: any) {
-      showErrorModal(`⚠️ 장비 교체 실행 실패:\n${err.message || err}`);
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-
-  // 반려 처리 (REJECTED)
-  const handleConfirmRejectGroup = async () => {
-    if (!selectedGroup || !rejectReason.trim() || isProcessing) return;
     setIsProcessing(true);
     try {
       const nowIso = new Date().toISOString();
-      for (const item of selectedGroup.items) {
+      const inspectorName = currentUser?.name || '담당엔지니어';
+
+      selectedGroup.items.forEach(item => {
         db.updateRow<OutboundInspection>('outboundInspections', item.id, {
           status: 'REJECTED',
-          note: `[반려사유] ${rejectReason}`,
-          inspectorId: currentUser?.id,
-          inspectedAt: nowIso,
+          inspectorId: inspectorName,
+          note: `[출고반려] ${rejectReason}`,
           updatedAt: nowIso
         });
 
+        // 🔴 반려 시 해당 장비 status ➔ 'REPAIRING' (정비수리중) 으로 자동전환!
         if (item.assetId) {
           db.updateRow<Asset>('assets', item.assetId, {
-            status: 'AVAILABLE',
-            currentCustomerId: undefined,
-            currentSiteId: undefined,
-            contractStart: undefined,
-            contractEnd: undefined,
+            status: 'REPAIRING',
             updatedAt: nowIso
           });
         }
-
-        if (item.contractAssetId) {
-          db.updateRow<any>('contractAssets', item.contractAssetId, {
-            assetId: '',
-            updatedAt: nowIso
-          });
-        }
-      }
+      });
 
       await db.awaitPendingWrites();
       refreshAllData();
-      alert(`🔴 의뢰건이 반려 처리되어 포함된 장비 ${selectedGroup.assets.length}대의 할당이 해제되고 '임대가능'으로 복원되었습니다.`);
+      alert(`🚫 [출고 의뢰 반려 완료]\n해당 의뢰건이 반려되었으며 장비 상태가 [수리정비중]으로 전환되었습니다.`);
       setShowRejectModal(false);
       setRejectReason('');
       setSelectedGroupId(null);
     } catch (err: any) {
-      showErrorModal(`⚠️ 반려 처리 중 오류가 발생했습니다:\n${err.message || err}`);
+      showErrorModal(`⚠️ 반려 처리 실패: ${err?.message || err}`);
     } finally {
       setIsProcessing(false);
     }
   };
 
-  // 뱃지 스타일 헬퍼
+  // ──────────────────────────────────────────────────────────────────────────
+  // 6. 🔄 장비 교체 실행 (출고 검수 진행 중 장비 교체)
+  // ──────────────────────────────────────────────────────────────────────────
+  const handleConfirmExchangeAsset = async () => {
+    if (!exchangeModalAsset || !targetNewAssetId || !exchangeReason.trim() || !selectedGroup) {
+      showErrorModal('대체 장비와 교체 사유를 입력해 주세요.');
+      return;
+    }
+
+    setIsProcessing(true);
+    try {
+      await exchangeOutboundAsset(
+        selectedGroup.contractId,
+        exchangeModalAsset.id,
+        targetNewAssetId,
+        exchangeReason
+      );
+
+      await db.awaitPendingWrites();
+      refreshAllData();
+      alert(`🔄 [장비 교체 완료]\n장비가 대체 장비로 성공적으로 스왑되었습니다.`);
+      setExchangeModalAsset(null);
+      setTargetNewAssetId('');
+      setExchangeReason('');
+      setSelectedGroupId(null);
+    } catch (err: any) {
+      showErrorModal(`⚠️ 장비 교체 실패: ${err?.message || err}`);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  // 뱃지 표출 헬퍼
   const getStatusBadge = (status: OutboundInspectionStatus) => {
     switch (status) {
       case 'PENDING':
-        return <span style={{ padding: '4px 10px', borderRadius: '20px', fontSize: '11.5px', fontWeight: 700, backgroundColor: 'rgba(245,158,11,0.15)', color: '#d97706', border: '1px solid rgba(245,158,11,0.3)', display: 'inline-flex', alignItems: 'center', gap: '4px' }}><Clock size={12} /> 미접수 대기</span>;
+        return <span style={{ padding: '4px 10px', borderRadius: '20px', fontSize: '11.5px', fontWeight: 700, backgroundColor: 'rgba(245,158,11,0.15)', color: '#d97706', border: '1px solid rgba(245,158,11,0.3)', display: 'inline-flex', alignItems: 'center', gap: '4px' }}><Clock size={12} /> 접수 대기</span>;
       case 'IN_PROGRESS':
-        return <span style={{ padding: '4px 10px', borderRadius: '20px', fontSize: '11.5px', fontWeight: 700, backgroundColor: 'rgba(59,130,246,0.15)', color: '#2563eb', border: '1px solid rgba(59,130,246,0.3)', display: 'inline-flex', alignItems: 'center', gap: '4px' }}><Wrench size={12} /> 접수/검수 중</span>;
+        return <span style={{ padding: '4px 10px', borderRadius: '20px', fontSize: '11.5px', fontWeight: 700, backgroundColor: 'rgba(59,130,246,0.15)', color: '#2563eb', border: '1px solid rgba(59,130,246,0.3)', display: 'inline-flex', alignItems: 'center', gap: '4px' }}><Wrench size={12} /> 검수 진행중</span>;
       case 'COMPLETED':
-        return <span style={{ padding: '4px 10px', borderRadius: '20px', fontSize: '11.5px', fontWeight: 700, backgroundColor: 'rgba(34,197,94,0.15)', color: '#16a34a', border: '1px solid rgba(34,197,94,0.3)', display: 'inline-flex', alignItems: 'center', gap: '4px' }}><CheckCircle size={12} /> 검수완료 승인</span>;
+        return <span style={{ padding: '4px 10px', borderRadius: '20px', fontSize: '11.5px', fontWeight: 700, backgroundColor: 'rgba(34,197,94,0.15)', color: '#16a34a', border: '1px solid rgba(34,197,94,0.3)', display: 'inline-flex', alignItems: 'center', gap: '4px' }}><CheckCircle size={12} /> 출고 승인</span>;
       case 'REJECTED':
-        return <span style={{ padding: '4px 10px', borderRadius: '20px', fontSize: '11.5px', fontWeight: 700, backgroundColor: 'rgba(239,68,68,0.15)', color: '#dc2626', border: '1px solid rgba(239,68,68,0.3)', display: 'inline-flex', alignItems: 'center', gap: '4px' }}><XCircle size={12} /> 불량/반려</span>;
+        return <span style={{ padding: '4px 10px', borderRadius: '20px', fontSize: '11.5px', fontWeight: 700, backgroundColor: 'rgba(239,68,68,0.15)', color: '#dc2626', border: '1px solid rgba(239,68,68,0.3)', display: 'inline-flex', alignItems: 'center', gap: '4px' }}><XCircle size={12} /> 의뢰 반려</span>;
     }
   };
 
@@ -435,26 +440,23 @@ export const OutboundInspections: React.FC = () => {
       {/* 헤더 영역 */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
         <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <div style={{ backgroundColor: 'var(--primary)', padding: '8px', borderRadius: '10px', color: '#fff', display: 'flex' }}>
-              <PackageCheck size={22} />
-            </div>
-            <h1 style={{ fontSize: '22px', fontWeight: 800, margin: 0 }}>출고 검수 의뢰 관리 (의뢰 1건 단위 처리)</h1>
-          </div>
+          <h2 style={{ fontWeight: 800, fontSize: '22px', display: 'flex', alignItems: 'center', gap: '10px', margin: 0 }}>
+            <CheckSquare size={24} color="var(--primary)" /> 출고 검수 의뢰 관리 (의뢰 1건 단위)
+          </h2>
           <p style={{ margin: '6px 0 0 0', fontSize: '13px', color: 'var(--text-muted)' }}>
-            출고 의뢰 1건 단위(다수 장비 묶음)로 의뢰가 요구한 맞춤형 검수 항목을 체크하여 출고 승인을 마감합니다.
+            출고 의뢰 1건당 포함된 전체 장비를 그룹으로 묶어 요구된 기술 스펙 체크리스트를 검수합니다.
           </p>
         </div>
       </div>
 
-      {/* 상태별 카운트 탭 */}
+      {/* 상태 필터 카운트 탭 */}
       <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', flexWrap: 'wrap' }}>
         {[
-          { key: 'ALL', label: '전체 보기', count: inspectionGroups.length },
-          { key: 'PENDING', label: '🟡 미접수 대기', count: inspectionGroups.filter(g => g.status === 'PENDING').length },
-          { key: 'IN_PROGRESS', label: '🔵 접수/검수 중', count: inspectionGroups.filter(g => g.status === 'IN_PROGRESS').length },
-          { key: 'COMPLETED', label: '🟢 검수 완료 승인', count: inspectionGroups.filter(g => g.status === 'COMPLETED').length },
-          { key: 'REJECTED', label: '🔴 불량/반려', count: inspectionGroups.filter(g => g.status === 'REJECTED').length },
+          { key: 'ALL', label: '전체 의뢰 보기', count: inspectionGroups.length },
+          { key: 'PENDING', label: '🟡 접수 대기', count: inspectionGroups.filter(g => g.status === 'PENDING').length },
+          { key: 'IN_PROGRESS', label: '🔵 검수 진행중', count: inspectionGroups.filter(g => g.status === 'IN_PROGRESS').length },
+          { key: 'COMPLETED', label: '🟢 출고 승인 마감', count: inspectionGroups.filter(g => g.status === 'COMPLETED').length },
+          { key: 'REJECTED', label: '🔴 의뢰 반려', count: inspectionGroups.filter(g => g.status === 'REJECTED').length },
         ].map(tab => (
           <button
             key={tab.key}
@@ -490,17 +492,17 @@ export const OutboundInspections: React.FC = () => {
         ))}
       </div>
 
-      {/* 2열 메인 레이아웃 */}
+      {/* 2열 메인 레이아웃 (좌: 의뢰 묶음 카드리스트 + 📅 기간 선택 | 우: 상세 검수서) */}
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(340px, 420px) 1fr', gap: '20px' }}>
         
-        {/* [좌측] 의뢰 1건 단위 목록 카드리스트 + 📅 요청일 기간 조회 폼 */}
+        {/* [좌측] 의뢰 묶음 카드리스트 + 📅 요청일자 기간 지정 피커 */}
         <div style={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '12px', padding: '16px', display: 'flex', flexDirection: 'column', height: 'calc(100vh - 230px)', minHeight: '600px' }}>
           
-          {/* 📅 요청일(신청일) 기간 선택 폼 및 Quick 날짜 뱃지 */}
+          {/* 📅 의뢰 신청일자 기간 지정 피커 및 1-Click Quick 버튼 */}
           <div style={{ marginBottom: '12px', padding: '10px 12px', backgroundColor: 'var(--bg-body)', borderRadius: '10px', border: '1px solid var(--border-color)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
               <span style={{ fontSize: '12px', fontWeight: 800, color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <Calendar size={13} /> 의뢰 요청일 기간 조회
+                <Calendar size={13} /> 의뢰 신청일자 기간 조회
               </span>
               <div style={{ display: 'flex', gap: '4px' }}>
                 {[
@@ -586,7 +588,7 @@ export const OutboundInspections: React.FC = () => {
             <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
             <input
               type="text"
-              placeholder="고객사 / 현장 / 계약 / 장비 검색..."
+              placeholder="고객사 / 현장 / 계약 / 장비명 검색..."
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
               style={{
@@ -603,10 +605,11 @@ export const OutboundInspections: React.FC = () => {
             />
           </div>
 
+          {/* 카드리스트 */}
           <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '10px', paddingRight: '4px' }}>
             {filteredGroups.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '40px 10px', color: 'var(--text-muted)', fontSize: '13px' }}>
-                검색 및 기간 조건에 일치하는 출고 의뢰건이 없습니다.
+                조건에 해당하는 출고 의뢰건이 없습니다.
               </div>
             ) : (
               filteredGroups.map(group => {
@@ -625,9 +628,9 @@ export const OutboundInspections: React.FC = () => {
                       boxShadow: isSelected ? '0 4px 12px rgba(59,130,246,0.12)' : 'none'
                     }}
                   >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                      <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)' }}>
-                        📄 {group.contractNo} (신청: {group.requestDate})
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                      <span style={{ fontSize: '11.5px', fontWeight: 700, color: 'var(--primary)' }}>
+                        신청일: {group.requestDate}
                       </span>
                       {getStatusBadge(group.status)}
                     </div>
@@ -635,18 +638,22 @@ export const OutboundInspections: React.FC = () => {
                     <div style={{ fontSize: '14px', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '4px' }}>
                       🏢 {group.customerName}
                     </div>
-                    <div style={{ fontSize: '12.5px', color: 'var(--text-secondary)', marginBottom: '10px' }}>
+                    <div style={{ fontSize: '12.5px', color: 'var(--text-secondary)', marginBottom: '8px' }}>
                       📍 {group.siteName}
                     </div>
 
-                    <div style={{ padding: '8px 10px', backgroundColor: 'var(--bg-card)', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '12px' }}>
-                      <div style={{ fontWeight: 700, color: 'var(--primary)', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        <Layers size={13} /> 포함 장비 총 {group.assets.length}대 ({group.equipmentsSummary})
+                    <div style={{ padding: '8px', backgroundColor: 'var(--bg-card)', borderRadius: '6px', border: '1px solid var(--border-color)', marginBottom: '8px' }}>
+                      <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <Layers size={13} color="var(--primary)" /> 총 {group.assets.length}대 포함: {group.equipmentsSummary}
                       </div>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
-                        {group.assets.map(a => (
-                          <span key={a.id} style={{ padding: '2px 6px', borderRadius: '4px', backgroundColor: 'rgba(59,130,246,0.1)', color: 'var(--primary)', fontWeight: 600, fontSize: '11px' }}>
-                            {a.assetNo} ({a.modelName})
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11px', color: 'var(--text-muted)' }}>
+                      <span>요구 스펙: {group.requestedSpecs.length}개 항목</span>
+                      <div style={{ display: 'flex', gap: '4px' }}>
+                        {group.assets.slice(0, 3).map(a => (
+                          <span key={a.id} style={{ padding: '1px 5px', borderRadius: '4px', backgroundColor: 'rgba(59,130,246,0.1)', color: 'var(--primary)', fontWeight: 700 }}>
+                            {a.assetNo}
                           </span>
                         ))}
                       </div>
@@ -823,8 +830,8 @@ export const OutboundInspections: React.FC = () => {
               </div>
 
               {/* 특이사항 및 작업 메모 */}
-              <div style={{ marginBottom: '24px' }}>
-                <label style={{ fontSize: '13px', fontWeight: 700, marginBottom: '6px', display: 'block' }}>
+              <div style={{ marginBottom: '16px' }}>
+                <label style={{ fontSize: '13px', fontWeight: 700, marginBottom: '6px', display: 'block', color: 'var(--text-secondary)' }}>
                   📝 정비 특이사항 및 작업 결과 메모
                 </label>
                 <textarea
@@ -834,7 +841,7 @@ export const OutboundInspections: React.FC = () => {
                   disabled={!canEdit}
                   style={{
                     width: '100%',
-                    height: '80px',
+                    height: '75px',
                     borderRadius: '8px',
                     border: '1px solid var(--border-color)',
                     backgroundColor: 'var(--bg-body)',
@@ -848,6 +855,18 @@ export const OutboundInspections: React.FC = () => {
                 />
               </div>
 
+              {/* ────────────────────────────────────────────────────────────────── */}
+              {/* 💬 스마트 출고 요청 자연어 원본 텍스트 전용 박스 (배차와 동일 디자인) */}
+              {/* ────────────────────────────────────────────────────────────────── */}
+              <div style={{ marginBottom: '20px', padding: '14px 16px', backgroundColor: 'rgba(59,130,246,0.06)', border: '1.5px solid rgba(59,130,246,0.25)', borderRadius: '10px' }}>
+                <div style={{ fontSize: '13px', fontWeight: 800, color: 'var(--primary)', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <MessageSquare size={16} /> 💬 스마트 출고 요청 자연어 원본 텍스트 (검수 판단 참고용)
+                </div>
+                <div style={{ fontSize: '12.5px', color: 'var(--text-primary)', whiteSpace: 'pre-wrap', lineHeight: '1.6', fontFamily: 'Consolas, Monaco, monospace', backgroundColor: 'var(--bg-card)', padding: '10px 12px', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
+                  {selectedGroup.rawText || '요청된 자연어 원문이 없습니다.'}
+                </div>
+              </div>
+
               {/* 하단 최종 출고 승인 및 반려 버튼 */}
               {canEdit && (
                 <div style={{ display: 'flex', gap: '10px' }}>
@@ -858,35 +877,38 @@ export const OutboundInspections: React.FC = () => {
                     style={{
                       flex: 1,
                       padding: '12px 20px',
-                      fontSize: '14px',
                       fontWeight: 800,
-                      backgroundColor: '#16a34a',
-                      borderColor: '#16a34a',
+                      fontSize: '14px',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
                       gap: '8px'
                     }}
                   >
-                    <ShieldCheck size={18} /> 최종 출고 승인 (의뢰 1건에 포함된 장비 {selectedGroup.assets.length}대 일괄 대여중 전환)
+                    <ShieldCheck size={18} /> [🟢 최종 출고 승인 마감] (할당 완료)
                   </button>
 
-                  <button
-                    onClick={() => setShowRejectModal(true)}
-                    disabled={isProcessing}
-                    style={{
-                      padding: '12px 18px',
-                      fontSize: '13px',
-                      fontWeight: 700,
-                      backgroundColor: 'rgba(239,68,68,0.1)',
-                      color: '#dc2626',
-                      border: '1px solid rgba(239,68,68,0.3)',
-                      borderRadius: '8px',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    🚫 의뢰 반려
-                  </button>
+                  {selectedGroup.status !== 'COMPLETED' && (
+                    <button
+                      onClick={() => setShowRejectModal(true)}
+                      disabled={isProcessing}
+                      style={{
+                        padding: '12px 20px',
+                        borderRadius: '8px',
+                        backgroundColor: 'rgba(239,68,68,0.1)',
+                        color: '#dc2626',
+                        border: '1px solid rgba(239,68,68,0.3)',
+                        fontWeight: 800,
+                        fontSize: '13.5px',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px'
+                      }}
+                    >
+                      <XCircle size={16} /> 🚫 의뢰 반려 (수리정비중 전환)
+                    </button>
+                  )}
                 </div>
               )}
             </div>
@@ -894,108 +916,92 @@ export const OutboundInspections: React.FC = () => {
         </div>
       </div>
 
-      {/* 🔄 출고 대기 장비 즉시 교체 및 수리전환 모달 */}
-      {exchangeModalAsset && selectedGroup && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 99999, padding: '20px' }}>
-          <div style={{ backgroundColor: 'var(--bg-card)', border: '1.5px solid #ef4444', borderRadius: '16px', padding: '24px', width: '100%', maxWidth: '620px', maxHeight: '90vh', display: 'flex', flexDirection: 'column', boxShadow: '0 25px 50px rgba(0,0,0,0.5)' }}>
-            
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '14px' }}>
-              <div style={{ padding: '10px', backgroundColor: 'rgba(239,68,68,0.15)', borderRadius: '10px', color: '#dc2626', display: 'flex' }}>
-                <ArrowRightLeft size={22} />
-              </div>
-              <div>
-                <h3 style={{ fontSize: '18px', fontWeight: 800, margin: 0, color: 'var(--text-primary)' }}>
-                  🔄 출고 대기 장비 즉시 교체 및 수리전환
-                </h3>
-                <span style={{ fontSize: '12.5px', color: 'var(--text-muted)' }}>
-                  교체 대상 장비: <strong style={{ color: '#ef4444' }}>{exchangeModalAsset.assetNo}</strong> ({exchangeModalAsset.modelName})
-                </span>
-              </div>
-            </div>
+      {/* 반려 사유 입력 모달 */}
+      {showRejectModal && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 99999, padding: '20px' }}>
+          <div style={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '14px', padding: '24px', width: '100%', maxWidth: '480px' }}>
+            <h3 style={{ fontSize: '18px', fontWeight: 800, color: '#dc2626', margin: '0 0 12px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <ShieldAlert size={20} /> 출고 의뢰 반려 사유 작성
+            </h3>
+            <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '16px' }}>
+              의뢰를 반려하면 대상 장비의 상태가 [수리정비중]으로 자동 전환됩니다.
+            </p>
 
-            <div style={{ padding: '12px 14px', backgroundColor: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: '10px', marginBottom: '16px', fontSize: '12.5px', color: '#b91c1c' }}>
-              ⚠️ 기존 장비 <strong>{exchangeModalAsset.assetNo}</strong> 상태는 <strong>'수리정비중(REPAIRING)'</strong>으로 즉시 자동 전환되며, 아래 입력한 사유가 자산 비고(Note)에 영구 기록됩니다.
-            </div>
+            <textarea
+              placeholder="반려 사유 입력 (예: 타이어 마모 심함, 배터리 충전 불량...)"
+              value={rejectReason}
+              onChange={e => setRejectReason(e.target.value)}
+              style={{ width: '100%', height: '100px', padding: '10px', borderRadius: '8px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-body)', color: 'var(--text-primary)', fontSize: '13px', outline: 'none', boxSizing: 'border-box', marginBottom: '20px' }}
+            />
 
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+              <button onClick={() => setShowRejectModal(false)} className="btn-secondary">취소</button>
+              <button onClick={handleConfirmReject} style={{ padding: '8px 16px', borderRadius: '8px', backgroundColor: '#dc2626', color: '#fff', border: 'none', fontWeight: 700, cursor: 'pointer' }}>
+                반려 처리 실행
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 🔄 1-Click 장비 교체 모달 */}
+      {exchangeModalAsset && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 99999, padding: '20px' }}>
+          <div style={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '14px', padding: '24px', width: '100%', maxWidth: '640px', maxHeight: '90vh', overflowY: 'auto' }}>
+            <h3 style={{ fontSize: '18px', fontWeight: 800, margin: '0 0 8px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <ArrowRightLeft size={20} color="var(--primary)" /> 출고 의뢰 1-Click 장비 교체
+            </h3>
+            <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '16px' }}>
+              기존 장비 <strong style={{ color: 'var(--primary)' }}>[{exchangeModalAsset.assetNo}] ({exchangeModalAsset.modelName})</strong>를 대체 가능한 동급 장비로 교체합니다.
+            </p>
+
+            {/* 교체사유 */}
             <div style={{ marginBottom: '16px' }}>
-              <label style={{ fontSize: '13px', fontWeight: 800, marginBottom: '6px', display: 'block', color: 'var(--text-primary)' }}>
-                🛠️ 장비 불량 / 수리전환 사유 (필수 입력)
-              </label>
+              <label style={{ fontSize: '12.5px', fontWeight: 700, marginBottom: '6px', display: 'block' }}>교체 사유 (기존 장비 비고 및 이력에 영구 기록됨)</label>
               <input
                 type="text"
-                placeholder="예: 출고전 검수 중 유압 호스 누유 발견, 배터리 충전 불량 등..."
+                placeholder="예: 배터리 방전 발생, 조이스틱 모듈 작동 불량 등"
                 value={exchangeReason}
                 onChange={e => setExchangeReason(e.target.value)}
-                style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-body)', color: 'var(--text-primary)', fontSize: '13px', outline: 'none', boxSizing: 'border-box' }}
+                style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-body)', fontSize: '13px', color: 'var(--text-primary)', outline: 'none' }}
               />
             </div>
 
-            <div style={{ flex: 1, overflowY: 'auto', marginBottom: '20px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                <label style={{ fontSize: '13px', fontWeight: 800, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  🚜 대체할 동일 모델 장비 선택 (<span style={{ color: 'var(--primary)' }}>{exchangeModalAsset.modelName}</span> / 임대가능 {availableExchangeAssets.length}대)
-                </label>
-                <span style={{ fontSize: '11.5px', color: 'var(--text-muted)' }}>⭐ 정비점수 0점에 가까울수록 최상급 정비 상태</span>
-              </div>
+            {/* 대체 장비 셀렉터 */}
+            <div style={{ marginBottom: '20px' }}>
+              <label style={{ fontSize: '12.5px', fontWeight: 700, marginBottom: '6px', display: 'block' }}>
+                대체 장비 선택 (동일 모델 {exchangeModalAsset.modelName} 내 임대가능 장비만 노출)
+              </label>
 
-              {availableExchangeAssets.length === 0 ? (
-                <div style={{ padding: '30px 10px', textAlign: 'center', backgroundColor: 'var(--bg-body)', borderRadius: '10px', border: '1px solid var(--border-color)', color: 'var(--text-muted)', fontSize: '13px' }}>
-                  <ShieldAlert size={32} style={{ opacity: 0.3, marginBottom: '8px' }} />
-                  <p style={{ margin: 0 }}>현재 임대가능한 동일 모델(<strong>{exchangeModalAsset.modelName}</strong>) 자산이 없습니다.</p>
+              {assets.filter(a => a.status === 'AVAILABLE' && a.modelName === exchangeModalAsset.modelName && a.id !== exchangeModalAsset.id).length === 0 ? (
+                <div style={{ padding: '16px', textAlign: 'center', color: '#ef4444', backgroundColor: 'rgba(239,68,68,0.08)', borderRadius: '8px', fontSize: '13px', fontWeight: 600 }}>
+                  ⚠️ 교체 가능한 동일 모델({exchangeModalAsset.modelName})의 임대가능(AVAILABLE) 자산이 없습니다.
                 </div>
               ) : (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: '10px', paddingRight: '4px' }}>
-                  {availableExchangeAssets.map(asset => {
-                    const isSelected = targetNewAssetId === asset.id;
-                    const score = asset.maintenanceScore ?? 0;
-                    const isTopClass = score === 0;
-
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: '10px', maxHeight: '280px', overflowY: 'auto' }}>
+                  {assets.filter(a => a.status === 'AVAILABLE' && a.modelName === exchangeModalAsset.modelName && a.id !== exchangeModalAsset.id).map(a => {
+                    const isTarget = targetNewAssetId === a.id;
+                    const score = (a as any).maintenanceScore ?? 95;
                     return (
                       <div
-                        key={asset.id}
-                        onClick={() => setTargetNewAssetId(asset.id)}
+                        key={a.id}
+                        onClick={() => setTargetNewAssetId(a.id)}
                         style={{
-                          padding: '12px 14px',
-                          borderRadius: '10px',
-                          border: isSelected ? '2px solid #22c55e' : '1px solid var(--border-color)',
-                          backgroundColor: isSelected ? 'rgba(34,197,94,0.08)' : 'var(--bg-body)',
+                          padding: '12px',
+                          borderRadius: '8px',
+                          border: isTarget ? '2px solid var(--primary)' : '1px solid var(--border-color)',
+                          backgroundColor: isTarget ? 'rgba(59,130,246,0.08)' : 'var(--bg-body)',
                           cursor: 'pointer',
-                          transition: 'all 0.15s ease',
-                          boxShadow: isSelected ? '0 4px 12px rgba(34,197,94,0.15)' : 'none'
+                          transition: 'all 0.15s ease'
                         }}
                       >
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                          <span style={{ fontSize: '14px', fontWeight: 800, color: isSelected ? '#15803d' : 'var(--text-primary)' }}>
-                            🏷️ {asset.assetNo}
-                          </span>
-                          <span style={{
-                            padding: '2px 8px',
-                            borderRadius: '12px',
-                            fontSize: '11px',
-                            fontWeight: 700,
-                            backgroundColor: isTopClass ? 'rgba(34,197,94,0.15)' : 'rgba(245,158,11,0.15)',
-                            color: isTopClass ? '#16a34a' : '#d97706',
-                            border: `1px solid ${isTopClass ? 'rgba(34,197,94,0.3)' : 'rgba(245,158,11,0.3)'}`,
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '3px'
-                          }}>
-                            <Star size={10} fill={isTopClass ? '#16a34a' : '#d97706'} /> 정비점수: {score}점
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                          <span style={{ fontWeight: 800, fontSize: '14px', color: 'var(--text-primary)' }}>🏷️ {a.assetNo}</span>
+                          <span style={{ padding: '2px 8px', borderRadius: '12px', fontSize: '11px', fontWeight: 700, backgroundColor: score >= 80 ? 'rgba(34,197,94,0.15)' : 'rgba(245,158,11,0.15)', color: score >= 80 ? '#16a34a' : '#d97706' }}>
+                            정비점수: {score}점
                           </span>
                         </div>
-
-                        <div style={{ fontSize: '12px', color: 'var(--text-secondary)', lineHeight: '1.5' }}>
-                          <div>제조년도: {asset.manufactureYear || '-'}년식 | S/N: {asset.serialNo || '-'}</div>
-                          <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
-                            구분: {asset.ownerType === 'OWNED' ? '당사자산' : `임차자산(${asset.renter || ''})`}
-                          </div>
-                        </div>
-
-                        {isSelected && (
-                          <div style={{ marginTop: '8px', fontSize: '11.5px', fontWeight: 800, color: '#16a34a', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                            <CheckCircle size={14} /> 대체 출고 장비로 선택됨
-                          </div>
-                        )}
+                        <div style={{ fontSize: '11.5px', color: 'var(--text-muted)' }}>시리얼: {a.serialNo || '-'}</div>
                       </div>
                     );
                   })}
@@ -1003,56 +1009,16 @@ export const OutboundInspections: React.FC = () => {
               )}
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', paddingTop: '10px', borderTop: '1px solid var(--border-color)' }}>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+              <button onClick={() => setExchangeModalAsset(null)} className="btn-secondary">취소</button>
               <button
-                onClick={() => { setExchangeModalAsset(null); setTargetNewAssetId(''); setExchangeReason(''); }}
-                className="btn-secondary"
-                style={{ fontSize: '13px', padding: '10px 18px' }}
-              >
-                취소
-              </button>
-              <button
-                onClick={handleExecuteExchange}
+                onClick={handleConfirmExchangeAsset}
                 disabled={isProcessing || !targetNewAssetId || !exchangeReason.trim()}
-                style={{
-                  padding: '10px 22px',
-                  borderRadius: '8px',
-                  backgroundColor: (isProcessing || !targetNewAssetId || !exchangeReason.trim()) ? '#94a3b8' : '#dc2626',
-                  color: '#fff',
-                  border: 'none',
-                  fontWeight: 800,
-                  fontSize: '13.5px',
-                  cursor: (isProcessing || !targetNewAssetId || !exchangeReason.trim()) ? 'default' : 'pointer',
-                  boxShadow: (isProcessing || !targetNewAssetId || !exchangeReason.trim()) ? 'none' : '0 4px 12px rgba(220,38,38,0.3)',
-                  transition: 'all 0.2s ease'
-                }}
+                className="btn-primary"
+                style={{ fontWeight: 800 }}
               >
-                {isProcessing ? '교체 처리 중...' : '🔄 장비 교체 및 수리전환 실행'}
+                교체 실행
               </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 반려 사유 모달 */}
-      {showRejectModal && selectedGroup && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 99999 }}>
-          <div style={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '12px', padding: '24px', width: '100%', maxWidth: '440px' }}>
-            <h3 style={{ fontSize: '16px', fontWeight: 800, color: 'var(--danger)', margin: '0 0 12px 0' }}>
-              🚫 출고 의뢰 반려 사유 입력
-            </h3>
-            <p style={{ fontSize: '12.5px', color: 'var(--text-muted)', marginBottom: '12px' }}>
-              반려 시 해당 의뢰건에 속한 장비 {selectedGroup.assets.length}대의 할당이 해제되고 '임대가능' 상태로 원복됩니다.
-            </p>
-            <textarea
-              placeholder="반려 사유를 상세히 작성해 주세요..."
-              value={rejectReason}
-              onChange={e => setRejectReason(e.target.value)}
-              style={{ width: '100%', height: '90px', borderRadius: '8px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-body)', color: 'var(--text-primary)', padding: '10px', fontSize: '13px', marginBottom: '16px', boxSizing: 'border-box' }}
-            />
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
-              <button onClick={() => setShowRejectModal(false)} className="btn-secondary" style={{ fontSize: '12px' }}>취소</button>
-              <button onClick={handleConfirmRejectGroup} style={{ padding: '8px 16px', borderRadius: '6px', backgroundColor: '#dc2626', color: '#fff', border: 'none', fontWeight: 700, fontSize: '12px', cursor: 'pointer' }}>반려 확정</button>
             </div>
           </div>
         </div>
