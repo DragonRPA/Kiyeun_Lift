@@ -176,6 +176,8 @@ export interface Asset {
   supplier?: string; // 구입처
   memo1?: string;
   memo2?: string;
+  note?: string; // 자산 수리/비고 사유
+  memo?: string;
   safetyInspectionUrl?: string;
   preDeliveryChecklistUrl?: string;
   createdAt: string;

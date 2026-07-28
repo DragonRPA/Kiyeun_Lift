@@ -116,8 +116,9 @@ interface AppContextType {
   succeedContract: (contractId: string, successorCustomerId: string, successorContactId: string, successorSiteId: string, successionDate: string, description: string) => void;
   exchangeAsset: (contractId: string, oldAssetId: string, newAssetId: string, exchangeDate: string) => void;
   
-  // 장비 할당
+  // 장비 할당 및 출고전 교체
   assignAssetToContract: (contractAssetId: string, assetId: string) => Promise<void>;
+  exchangeOutboundAsset: (contractAssetId: string, oldAssetId: string, newAssetId: string, reason: string) => Promise<void>;
   saveSmartDispatch: (data: SmartDispatchData, autoRegister: boolean, onProgress?: (log: string, percent: number) => void) => Promise<{ success: boolean; requiresConfirm?: boolean; missingFields?: string[]; errorMessage?: string }>;
   saveSmartReturn: (data: SmartReturnData) => void;
   
@@ -1711,6 +1712,111 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
+  // 💡 출고 진행 중 장비 교체 및 수리전환 트랜잭션 메소드
+  const exchangeOutboundAsset = async (contractAssetId: string, oldAssetId: string, newAssetId: string, reason: string) => {
+    // 롤백용 스냅샷 준비
+    const oldAssetOrig = db.assets.find(a => a.id === oldAssetId);
+    const newAssetOrig = db.assets.find(a => a.id === newAssetId);
+    const caOrig = db.contractAssets.find(c => c.id === contractAssetId);
+    const inspOrig = db.outboundInspections.find(i => i.contractAssetId === contractAssetId && i.assetId === oldAssetId);
+
+    const oldSnapshot = oldAssetOrig ? { ...oldAssetOrig } : null;
+    const newSnapshot = newAssetOrig ? { ...newAssetOrig } : null;
+    const caSnapshot = caOrig ? { ...caOrig } : null;
+    const inspSnapshot = inspOrig ? { ...inspOrig } : null;
+
+    try {
+      if (!oldAssetOrig || !newAssetOrig || !caOrig) {
+        throw new Error('교체 대상 장비 또는 계약 슬롯을 찾을 수 없습니다.');
+      }
+
+      const today = new Date().toISOString().split('T')[0];
+      const nowIso = new Date().toISOString();
+
+      // 1. 기존 장비: 수리정비중(REPAIRING)으로 전환 및 자산 비고(memo1/note/memo)에 사유 명확 기록!
+      const oldNote = oldAssetOrig.memo1 || oldAssetOrig.note || oldAssetOrig.memo || '';
+      const appendedNote = oldNote
+        ? `${oldNote}\n[출고전 수리전환] ${today}: ${reason}`
+        : `[출고전 수리전환] ${today}: ${reason}`;
+
+      db.updateRow<Asset>('assets', oldAssetId, {
+        status: 'REPAIRING',
+        memo1: appendedNote,
+        note: appendedNote,
+        memo: appendedNote,
+        currentCustomerId: undefined,
+        currentSiteId: undefined,
+        contractStart: undefined,
+        contractEnd: undefined,
+        updatedAt: nowIso
+      });
+
+      // 2. 대체 장비: 배차지정(ASSIGNED)으로 전환 및 계약 정보 매핑
+      db.updateRow<Asset>('assets', newAssetId, {
+        status: 'ASSIGNED',
+        currentCustomerId: oldAssetOrig.currentCustomerId,
+        currentSiteId: oldAssetOrig.currentSiteId,
+        contractStart: oldAssetOrig.contractStart,
+        contractEnd: oldAssetOrig.contractEnd,
+        updatedAt: nowIso
+      });
+
+      // 3. 계약 슬롯(contractAssets) assetId 교체
+      db.updateRow<ContractAsset>('contractAssets', contractAssetId, {
+        assetId: newAssetId,
+        expectedModel: newAssetOrig.modelName
+      });
+
+      // 4. 출고 검수 의뢰건(outboundInspections) assetId 교체
+      if (inspOrig) {
+        db.updateRow<OutboundInspection>('outboundInspections', inspOrig.id, {
+          assetId: newAssetId,
+          note: `[장비교체] 기존(${oldAssetOrig.assetNo}) ➔ 대체(${newAssetOrig.assetNo}) | 사유: ${reason}`,
+          updatedAt: nowIso
+        });
+      }
+
+      // 5. 자산 입출고/수리 타임라인 로깅
+      db.insertRow<AssetInOutLog>('assetInOutLogs', {
+        assetId: oldAssetId,
+        assetNo: oldAssetOrig.assetNo,
+        modelName: oldAssetOrig.modelName,
+        type: 'REPAIR',
+        eventDate: today,
+        memo: `[출고불가 수리전환] 대체장비(${newAssetOrig.assetNo}) 교체출고 | 사유: ${reason}`,
+        createdAt: nowIso
+      });
+
+      db.insertRow<AssetInOutLog>('assetInOutLogs', {
+        assetId: newAssetId,
+        assetNo: newAssetOrig.assetNo,
+        modelName: newAssetOrig.modelName,
+        type: 'OUTBOUND',
+        eventDate: today,
+        memo: `[대체장비 출고할당] 기존장비(${oldAssetOrig.assetNo}) 교체대체 | 사유: ${reason}`,
+        createdAt: nowIso
+      });
+
+      // 6. DB 완결 동기 대기 (실패 시 catch 블록에서 자동 롤백!)
+      await db.awaitPendingWrites();
+      refreshAllData();
+    } catch (err: any) {
+      console.error('exchangeOutboundAsset error & Rollback:', err);
+
+      // 💥 DB 저장 실패 시 100% 스냅샷 롤백!
+      if (oldSnapshot) db.updateRow('assets', oldAssetId, oldSnapshot);
+      if (newSnapshot) db.updateRow('assets', newAssetId, newSnapshot);
+      if (caSnapshot) db.updateRow('contractAssets', contractAssetId, caSnapshot);
+      if (inspSnapshot && inspOrig) db.updateRow('outboundInspections', inspOrig.id, inspSnapshot);
+
+      refreshAllData();
+
+      const errorMsg = `⚠️ 출고 장비 교체 처리 중 DB 동기화 오류가 발생했습니다:\n\n■ [안내]: 저장 실패로 인해 장비 교체 작업이 안전하게 자동 롤백 원복되었습니다.\n\n${err.message || err.details || JSON.stringify(err)}`;
+      showErrorModal(errorMsg, '출고 장비 교체 DB 동기화 오류');
+      throw err;
+    }
+  };
+
   const exchangeAsset = (contractId: string, oldAssetId: string, newAssetId: string, exchangeDate: string) => {
     const contract = db.contracts.find(c => c.id === contractId);
     if (!contract) return;
@@ -2676,7 +2782,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       purchaseConsumable, useConsumable,
       requestConsumablePurchase, acceptConsumablePurchase, completeConsumablePurchase, inboundConsumablePurchase,
       createContract, extendContract, shortenContract, succeedContract, exchangeAsset,
-      assignAssetToContract,
+      assignAssetToContract, exchangeOutboundAsset,
       saveSmartDispatch, saveSmartReturn,
       completeTodo,
       generateBillingsForMonth, approveBilling, cancelBilling, receivePayment,

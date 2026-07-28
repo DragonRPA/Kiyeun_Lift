@@ -17,7 +17,9 @@ import {
   PackageCheck,
   Layers,
   Sparkles,
-  Check
+  Check,
+  RefreshCw,
+  ArrowRightLeft
 } from 'lucide-react';
 
 // 21대 고소작업대 정비/스펙 체크리스트 마스터 정의
@@ -57,13 +59,14 @@ interface InspectionGroup {
   items: OutboundInspection[];
   assets: Asset[];
   equipmentsSummary: string;
-  requestedSpecs: typeof ALL_SPECS; // 의뢰가 요구한 맞춤 정비 항목 목록
+  requestedSpecs: typeof ALL_SPECS;
 }
 
 export const OutboundInspections: React.FC = () => {
   const {
     outboundInspections,
     contracts,
+    contractAssets,
     assets,
     customers,
     sites,
@@ -71,7 +74,8 @@ export const OutboundInspections: React.FC = () => {
     currentUser,
     refreshAllData,
     hasPermission,
-    showErrorModal
+    showErrorModal,
+    exchangeOutboundAsset
   } = useApp();
 
   const canEdit = hasPermission('repair', 'save') || hasPermission('delivery', 'save') || hasPermission('contract', 'save');
@@ -85,8 +89,14 @@ export const OutboundInspections: React.FC = () => {
   const [inspectionNote, setInspectionNote] = useState<string>('');
   const [isProcessing, setIsProcessing] = useState(false);
 
+  // 반려 모달 상태
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
+
+  // 🔄 장비 교체 모달 상태
+  const [exchangeModalAsset, setExchangeModalAsset] = useState<Asset | null>(null);
+  const [targetNewAssetId, setTargetNewAssetId] = useState<string>('');
+  const [exchangeReason, setExchangeReason] = useState<string>('');
 
   // ──────────────────────────────────────────────────────────────────────────
   // 1. 개별 의뢰건들을 계약(contractId) 및 신청일자 기준 의뢰 1건 단위로 그룹핑
@@ -95,7 +105,6 @@ export const OutboundInspections: React.FC = () => {
     const groupMap = new Map<string, OutboundInspection[]>();
 
     outboundInspections.forEach(item => {
-      // 계약 ID 또는 신청일 기준 그룹핑 키 생성
       const key = `${item.contractId || 'NOCONTR'}_${item.createdAt ? item.createdAt.substring(0, 10) : 'NODATE'}`;
       if (!groupMap.has(key)) {
         groupMap.set(key, []);
@@ -111,12 +120,10 @@ export const OutboundInspections: React.FC = () => {
       const customer = contract ? customers.find(c => c.id === contract.customerId) : null;
       const site = contract ? sites.find(s => s.id === contract.siteId) : null;
 
-      // 그룹 내 포함된 자산 목록
       const groupAssets = items
         .map(i => assets.find(a => a.id === i.assetId))
         .filter((a): a is Asset => !!a);
 
-      // 모델별 수량 집계 요약문
       const modelCounts: Record<string, number> = {};
       groupAssets.forEach(a => {
         modelCounts[a.modelName] = (modelCounts[a.modelName] || 0) + 1;
@@ -125,15 +132,11 @@ export const OutboundInspections: React.FC = () => {
         .map(([m, c]) => `${m} ${c}대`)
         .join(', ') || '장비 매핑 대기 중';
 
-      // 의뢰 관련 배차(Delivery) 메모 분석하여 요구된 옵션/정비 항목 동적 선정
       const delivery = deliveries.find(d => d.contractId === firstItem.contractId && d.type === 'OUTBOUND');
       const memoText = `${delivery?.memo || ''} ${delivery?.closingMemo || ''} ${firstItem.note || ''}`.toLowerCase();
 
-      // 의뢰에 맞춘 정비 요구 항목 필터링 (기본 필수 8개 + 메모 연관 스펙)
       let reqSpecs = ALL_SPECS.filter((spec, idx) => {
-        // 필수 기본 검수 8개
         if ([0, 3, 4, 7, 8, 13, 14, 20].includes(idx)) return true;
-        // 메모에 철망, 타이어, 스티커, 보양, 소화기 등 언급 시 추가
         if (memoText.includes('망') && spec.label.includes('망')) return true;
         if (memoText.includes('보양') && spec.label.includes('보양')) return true;
         if (memoText.includes('스티커') && spec.label.includes('스티커')) return true;
@@ -145,7 +148,6 @@ export const OutboundInspections: React.FC = () => {
         reqSpecs = ALL_SPECS.slice(0, 10);
       }
 
-      // 대표 그룹 상태 판정 (하나라도 PENDING이면 PENDING, 전부 COMPLETED면 COMPLETED)
       let groupStatus: OutboundInspectionStatus = 'PENDING';
       if (items.every(i => i.status === 'COMPLETED')) {
         groupStatus = 'COMPLETED';
@@ -198,12 +200,10 @@ export const OutboundInspections: React.FC = () => {
     setSelectedGroupId(group.groupId);
 
     const initialCheckMap: Record<string, boolean> = {};
-    // 요구 항목들 모두 초기 상태 false (미체크) 보장!
     group.requestedSpecs.forEach(s => {
       initialCheckMap[s.id] = false;
     });
 
-    // 기존에 완료된 건이 있다면 저장된 스펙 로드
     const firstItem = group.items[0];
     if (firstItem && firstItem.specsJson) {
       try {
@@ -255,7 +255,6 @@ export const OutboundInspections: React.FC = () => {
   const handleApproveGroup = async () => {
     if (!selectedGroup || isProcessing) return;
 
-    // 검수 미체크 항목이 있는지 확인 안내
     const uncheckedCount = selectedGroup.requestedSpecs.filter(s => !checkedItems[s.id]).length;
     if (uncheckedCount > 0) {
       if (!window.confirm(`⚠️ 아직 검수 완료되지 않은 항목이 ${uncheckedCount}개 있습니다.\n이대로 최종 출고 승인을 진행하시겠습니까?`)) {
@@ -268,7 +267,6 @@ export const OutboundInspections: React.FC = () => {
       const nowIso = new Date().toISOString();
       const specsJson = JSON.stringify(checkedItems);
 
-      // 의뢰 1건에 속한 전체 장비건 일괄 완료 처리
       for (const item of selectedGroup.items) {
         db.updateRow<OutboundInspection>('outboundInspections', item.id, {
           status: 'COMPLETED',
@@ -279,7 +277,6 @@ export const OutboundInspections: React.FC = () => {
           updatedAt: nowIso
         });
 
-        // 장비 자산 상태 SSOT: ASSIGNED -> RENTED (임대중) 전환!
         if (item.assetId) {
           db.updateRow<Asset>('assets', item.assetId, {
             status: 'RENTED',
@@ -294,6 +291,33 @@ export const OutboundInspections: React.FC = () => {
       setSelectedGroupId(null);
     } catch (err: any) {
       showErrorModal(`⚠️ 출고 검수 마감 처리 중 DB 동기화 오류가 발생했습니다:\n${err.message || err}`);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  // 🔄 출고 대기 장비 즉시 교체 및 수리전환 실행 핸들러
+  const handleExecuteExchange = async () => {
+    if (!exchangeModalAsset || !targetNewAssetId || !exchangeReason.trim() || !selectedGroup) {
+      alert('대체 장비와 교체 사유를 입력해 주세요.');
+      return;
+    }
+
+    const ca = contractAssets.find(c => c.contractId === selectedGroup.contractId && c.assetId === exchangeModalAsset.id);
+    if (!ca) {
+      showErrorModal('해당 계약 슬롯(contractAsset) 정보를 찾을 수 없습니다.');
+      return;
+    }
+
+    setIsProcessing(true);
+    try {
+      await exchangeOutboundAsset(ca.id, exchangeModalAsset.id, targetNewAssetId, exchangeReason);
+      alert(`✅ [출고 장비 교체 성공]\n기존 장비 [${exchangeModalAsset.assetNo}] 상태가 '수리정비중(REPAIRING)'으로 전환되고 자산 비고에 사유가 명확히 기록되었습니다.\n새로운 장비로 교체되어 출고 검수를 이어가실 수 있습니다.`);
+      setExchangeModalAsset(null);
+      setTargetNewAssetId('');
+      setExchangeReason('');
+    } catch (err: any) {
+      showErrorModal(`⚠️ 장비 교체 실행 실패:\n${err.message || err}`);
     } finally {
       setIsProcessing(false);
     }
@@ -314,7 +338,6 @@ export const OutboundInspections: React.FC = () => {
           updatedAt: nowIso
         });
 
-        // 자산 상태: AVAILABLE 복원
         if (item.assetId) {
           db.updateRow<Asset>('assets', item.assetId, {
             status: 'AVAILABLE',
@@ -326,7 +349,6 @@ export const OutboundInspections: React.FC = () => {
           });
         }
 
-        // 계약 슬롯(contractAssets) 해제
         if (item.contractAssetId) {
           db.updateRow<any>('contractAssets', item.contractAssetId, {
             assetId: '',
@@ -364,9 +386,7 @@ export const OutboundInspections: React.FC = () => {
 
   return (
     <div style={{ padding: '24px', maxWidth: '1400px', margin: '0 auto', color: 'var(--text-primary)' }}>
-      {/* ────────────────────────────────────────────────────────────────────── */}
       {/* 헤더 영역 */}
-      {/* ────────────────────────────────────────────────────────────────────── */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -381,9 +401,7 @@ export const OutboundInspections: React.FC = () => {
         </div>
       </div>
 
-      {/* ────────────────────────────────────────────────────────────────────── */}
       {/* 상태별 카운트 탭 */}
-      {/* ────────────────────────────────────────────────────────────────────── */}
       <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', flexWrap: 'wrap' }}>
         {[
           { key: 'ALL', label: '전체 보기', count: inspectionGroups.length },
@@ -426,9 +444,7 @@ export const OutboundInspections: React.FC = () => {
         ))}
       </div>
 
-      {/* ────────────────────────────────────────────────────────────────────── */}
-      {/* 2열 메인 레이아웃 (좌: 의뢰 1건 단위 목록 | 우: 맞춤 검수서 작성) */}
-      {/* ────────────────────────────────────────────────────────────────────── */}
+      {/* 2열 메인 레이아웃 */}
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(340px, 420px) 1fr', gap: '20px' }}>
         
         {/* [좌측] 의뢰 1건 단위 목록 카드리스트 */}
@@ -490,7 +506,6 @@ export const OutboundInspections: React.FC = () => {
                       📍 {group.siteName}
                     </div>
 
-                    {/* 의뢰 포함 장비 묶음 태그 목록 */}
                     <div style={{ padding: '8px 10px', backgroundColor: 'var(--bg-card)', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '12px' }}>
                       <div style={{ fontWeight: 700, color: 'var(--primary)', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
                         <Layers size={13} /> 포함 장비 총 {group.assets.length}대 ({group.equipmentsSummary})
@@ -504,7 +519,6 @@ export const OutboundInspections: React.FC = () => {
                       </div>
                     </div>
 
-                    {/* 미접수 상태 시 바로 접수 버튼 */}
                     {group.status === 'PENDING' && canEdit && (
                       <div style={{ marginTop: '10px', textAlign: 'right' }}>
                         <button
@@ -555,25 +569,51 @@ export const OutboundInspections: React.FC = () => {
                   {getStatusBadge(selectedGroup.status)}
                 </div>
 
-                {/* 포함 장비 다수 묶음 상세 표출 */}
+                {/* 포함 장비 다수 묶음 상세 표출 + 🔄 [장비 교체] 버튼 장착! */}
                 <div style={{ marginTop: '12px', padding: '12px', backgroundColor: 'var(--bg-card)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
                   <div style={{ fontSize: '12.5px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <Wrench size={14} color="var(--primary)" /> 이번 의뢰에 동시 포함된 출고 대상 장비 ({selectedGroup.assets.length}대)
                   </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '8px' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '10px' }}>
                     {selectedGroup.assets.map(asset => (
-                      <div key={asset.id} style={{ padding: '8px 10px', borderRadius: '6px', backgroundColor: 'var(--bg-body)', border: '1px solid var(--border-color)', fontSize: '12px' }}>
-                        <div style={{ fontWeight: 800, color: 'var(--text-primary)' }}>🏷️ {asset.assetNo}</div>
-                        <div style={{ color: 'var(--text-muted)', fontSize: '11px' }}>모델: {asset.modelName} | 시리얼: {asset.serialNo || '-'}</div>
+                      <div key={asset.id} style={{ padding: '10px 12px', borderRadius: '8px', backgroundColor: 'var(--bg-body)', border: '1px solid var(--border-color)', fontSize: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div>
+                          <div style={{ fontWeight: 800, color: 'var(--text-primary)' }}>🏷️ {asset.assetNo}</div>
+                          <div style={{ color: 'var(--text-muted)', fontSize: '11px' }}>모델: {asset.modelName} | 시리얼: {asset.serialNo || '-'}</div>
+                        </div>
+                        {canEdit && selectedGroup.status !== 'COMPLETED' && (
+                          <button
+                            onClick={() => {
+                              setExchangeModalAsset(asset);
+                              setTargetNewAssetId('');
+                              setExchangeReason('');
+                            }}
+                            title="출고 불가 사유 발생 시 다른 임대가능 장비로 즉시 교체"
+                            style={{
+                              padding: '5px 9px',
+                              borderRadius: '6px',
+                              backgroundColor: 'rgba(239,68,68,0.1)',
+                              color: '#dc2626',
+                              border: '1px solid rgba(239,68,68,0.3)',
+                              fontSize: '11px',
+                              fontWeight: 700,
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              whiteSpace: 'nowrap'
+                            }}
+                          >
+                            <ArrowRightLeft size={12} /> 교체
+                          </button>
+                        )}
                       </div>
                     ))}
                   </div>
                 </div>
               </div>
 
-              {/* ────────────────────────────────────────────────────────────────── */}
               {/* 🎯 의뢰 요구 맞춤 정비 스펙 체크리스트 */}
-              {/* ────────────────────────────────────────────────────────────────── */}
               <div style={{ marginBottom: '20px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
                   <div>
@@ -595,10 +635,9 @@ export const OutboundInspections: React.FC = () => {
                   )}
                 </div>
 
-                {/* 개별 정비 항목 프리미엄 카드 디자인 (기본값 false 미체크) */}
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '10px' }}>
                   {selectedGroup.requestedSpecs.map((spec, index) => {
-                    const isChecked = !!checkedItems[spec.id]; // 기본값 false!
+                    const isChecked = !!checkedItems[spec.id];
                     return (
                       <div
                         key={spec.id}
@@ -619,7 +658,6 @@ export const OutboundInspections: React.FC = () => {
                           boxShadow: isChecked ? '0 2px 8px rgba(34,197,94,0.1)' : 'none'
                         }}
                       >
-                        {/* 스위치 체크박스 아이콘 */}
                         <div style={{
                           width: '20px',
                           height: '20px',
@@ -677,7 +715,7 @@ export const OutboundInspections: React.FC = () => {
                 />
               </div>
 
-              {/* 하단 최종 하차/출고 승인 버튼 (의뢰 1건 단위 마감!) */}
+              {/* 하단 최종 출고 승인 및 반려 버튼 */}
               {canEdit && (
                 <div style={{ display: 'flex', gap: '10px' }}>
                   <button
@@ -722,6 +760,93 @@ export const OutboundInspections: React.FC = () => {
           )}
         </div>
       </div>
+
+      {/* 🔄 출고 대기 장비 즉시 교체 및 수리전환 모달 */}
+      {exchangeModalAsset && selectedGroup && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 99999, padding: '20px' }}>
+          <div style={{ backgroundColor: 'var(--bg-card)', border: '1.5px solid #ef4444', borderRadius: '14px', padding: '24px', width: '100%', maxWidth: '480px', boxShadow: '0 20px 40px rgba(0,0,0,0.4)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px' }}>
+              <div style={{ padding: '8px', backgroundColor: 'rgba(239,68,68,0.15)', borderRadius: '8px', color: '#dc2626' }}>
+                <ArrowRightLeft size={20} />
+              </div>
+              <div>
+                <h3 style={{ fontSize: '17px', fontWeight: 800, margin: 0, color: 'var(--text-primary)' }}>
+                  🔄 출고 대기 장비 즉시 교체 및 수리전환
+                </h3>
+                <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                  교체 대상 장비: <strong>{exchangeModalAsset.assetNo}</strong> ({exchangeModalAsset.modelName})
+                </span>
+              </div>
+            </div>
+
+            <div style={{ padding: '12px', backgroundColor: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: '8px', marginBottom: '16px', fontSize: '12.5px', color: '#b91c1c' }}>
+              ⚠️ 기존 장비 <strong>{exchangeModalAsset.assetNo}</strong> 상태는 <strong>'수리정비중(REPAIRING)'</strong>으로 즉시 자동 전환되며, 자산 비고(Note)에 교체 사유가 영구 기록됩니다.
+            </div>
+
+            {/* 교체 사유 입력 */}
+            <div style={{ marginBottom: '14px' }}>
+              <label style={{ fontSize: '12.5px', fontWeight: 700, marginBottom: '6px', display: 'block' }}>
+                🛠️ 장비 불량 사유 / 수리전환 사유 (필수)
+              </label>
+              <input
+                type="text"
+                placeholder="예: 출고전 검수 중 유압 호스 누유 발견, 배터리 충전 불량 등..."
+                value={exchangeReason}
+                onChange={e => setExchangeReason(e.target.value)}
+                style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-body)', color: 'var(--text-primary)', fontSize: '13px', outline: 'none', boxSizing: 'border-box' }}
+              />
+            </div>
+
+            {/* 대체 장비 선택 (동일/호환 모델 중 AVAILABLE 임대가능 장비) */}
+            <div style={{ marginBottom: '20px' }}>
+              <label style={{ fontSize: '12.5px', fontWeight: 700, marginBottom: '6px', display: 'block' }}>
+                🚜 대체 교체 출고할 장비 선택 (현재 '임대가능' 장비 목록)
+              </label>
+              <select
+                value={targetNewAssetId}
+                onChange={e => setTargetNewAssetId(e.target.value)}
+                style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-body)', color: 'var(--text-primary)', fontSize: '13px', outline: 'none', boxSizing: 'border-box' }}
+              >
+                <option value="">-- 대체 장비 선택 --</option>
+                {assets
+                  .filter(a => a.status === 'AVAILABLE' && a.id !== exchangeModalAsset.id)
+                  .map(a => (
+                    <option key={a.id} value={a.id}>
+                      [{a.assetNo}] {a.modelName} (시리얼: {a.serialNo || '-'})
+                    </option>
+                  ))}
+              </select>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+              <button
+                onClick={() => { setExchangeModalAsset(null); setTargetNewAssetId(''); setExchangeReason(''); }}
+                className="btn-secondary"
+                style={{ fontSize: '12.5px', padding: '8px 14px' }}
+              >
+                취소
+              </button>
+              <button
+                onClick={handleExecuteExchange}
+                disabled={isProcessing || !targetNewAssetId || !exchangeReason.trim()}
+                style={{
+                  padding: '8px 18px',
+                  borderRadius: '8px',
+                  backgroundColor: '#dc2626',
+                  color: '#fff',
+                  border: 'none',
+                  fontWeight: 800,
+                  fontSize: '13px',
+                  cursor: (isProcessing || !targetNewAssetId || !exchangeReason.trim()) ? 'default' : 'pointer',
+                  opacity: (isProcessing || !targetNewAssetId || !exchangeReason.trim()) ? 0.5 : 1
+                }}
+              >
+                {isProcessing ? '교체 처리 중...' : '🔄 장비 교체 및 수리전환 실행'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 반려 사유 모달 */}
       {showRejectModal && selectedGroup && (
