@@ -161,7 +161,17 @@ export const OutboundInspections: React.FC = () => {
   const [exchangeModalAsset, setExchangeModalAsset] = useState<Asset | null>(null);
   const [targetNewAssetId, setTargetNewAssetId] = useState<string>('');
   const [exchangeReason, setExchangeReason] = useState<string>('');
-  const [exchangeToRepairing, setExchangeToRepairing] = useState<boolean>(true);
+  const [exchangeToRepairing, setExchangeToRepairing] = useState<boolean>(false); // 💡 기본값: false (수리 미전환)
+
+  // 💡 교체 모달 오픈 시 첫번째 임대가능 대체 장비 100% 자동선택!
+  React.useEffect(() => {
+    if (exchangeModalAsset) {
+      const availables = assets.filter(a => a.status === 'AVAILABLE' && a.modelName === exchangeModalAsset.modelName && a.id !== exchangeModalAsset.id);
+      if (availables.length > 0 && (!targetNewAssetId || !availables.some(a => a.id === targetNewAssetId))) {
+        setTargetNewAssetId(availables[0].id);
+      }
+    }
+  }, [exchangeModalAsset, assets, targetNewAssetId]);
 
   // ──────────────────────────────────────────────────────────────────────────
   // 1. 개별 의뢰건들을 계약(contractId) 및 신청일자 기준 의뢰 1건 단위로 그룹핑
@@ -1088,15 +1098,33 @@ export const OutboundInspections: React.FC = () => {
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
-              <button onClick={() => setExchangeModalAsset(null)} className="btn-secondary">취소</button>
-              <button
-                onClick={handleConfirmExchangeAsset}
-                disabled={isProcessing || !targetNewAssetId || (exchangeToRepairing && !exchangeReason.trim())}
-                className="btn-primary"
-                style={{ fontWeight: 800 }}
-              >
-                교체 실행
-              </button>
+              <button onClick={() => setExchangeModalAsset(null)} className="btn-secondary" style={{ padding: '8px 16px', borderRadius: '8px', fontSize: '13px' }}>취소</button>
+              {(() => {
+                const isBtnDisabled = isProcessing || !targetNewAssetId || (exchangeToRepairing && !exchangeReason.trim());
+                return (
+                  <button
+                    onClick={handleConfirmExchangeAsset}
+                    disabled={isBtnDisabled}
+                    style={{
+                      padding: '9px 22px',
+                      borderRadius: '8px',
+                      fontWeight: 800,
+                      fontSize: '13.5px',
+                      backgroundColor: isBtnDisabled ? 'var(--border-color, #cbd5e1)' : 'var(--primary, #3b82f6)',
+                      color: isBtnDisabled ? 'var(--text-muted, #64748b)' : '#ffffff',
+                      border: 'none',
+                      cursor: isBtnDisabled ? 'not-allowed' : 'pointer',
+                      boxShadow: isBtnDisabled ? 'none' : '0 4px 14px rgba(59,130,246,0.35)',
+                      transition: 'all 0.15s ease',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px'
+                    }}
+                  >
+                    <ArrowRightLeft size={15} /> 교체 실행
+                  </button>
+                );
+              })()}
             </div>
           </div>
         </div>
