@@ -1151,20 +1151,18 @@ export const DevDataUploader: React.FC = () => {
         }
       }
 
-      // 3. assets 테이블 status CHECK 제약조건 SSOT 기반 동적 DDL 패치 포함
-      const fixCheckStmts = getAssetStatusFixDdlStatements();
-      stmts.push(...fixCheckStmts);
-      sqlPatchDisplay += `-- [보완] assets status CHECK 제약조건 SSOT 동적 추가 패치\n${fixCheckStmts.join('\n')}\n\n`;
-
-      // 4. permissions 테이블 "userId" 컬럼 보완 및 user_id 레거시 데이터 100% 이관 쿼리 포함
-      const permMigrateStmts = [
-        `ALTER TABLE "permissions" ADD COLUMN IF NOT EXISTS "userId" TEXT;`,
-        `DO $$ BEGIN IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='permissions' AND column_name='user_id') THEN UPDATE "permissions" SET "userId" = user_id WHERE "userId" IS NULL AND user_id IS NOT NULL; END IF; END $$;`
-      ];
-      stmts.push(...permMigrateStmts);
-      sqlPatchDisplay += `-- [보완] permissions "userId" 컬럼 확보 & 레거시 user_id 데이터 이관\n${permMigrateStmts.join('\n')}\n\n`;
-
+      // 3. 만약 누락 컬럼이나 미존재 테이블이 발견되었을 때만 추가 보완 패치 포함
       if (stmts.length > 0) {
+        const fixCheckStmts = getAssetStatusFixDdlStatements();
+        stmts.push(...fixCheckStmts);
+        sqlPatchDisplay += `-- [보완] assets status CHECK 제약조건 SSOT 동적 추가 패치\n${fixCheckStmts.join('\n')}\n\n`;
+
+        const permMigrateStmts = [
+          `ALTER TABLE "permissions" ADD COLUMN IF NOT EXISTS "userId" TEXT;`,
+          `DO $$ BEGIN IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='permissions' AND column_name='user_id') THEN UPDATE "permissions" SET "userId" = user_id WHERE "userId" IS NULL AND user_id IS NOT NULL; END IF; END $$;`
+        ];
+        stmts.push(...permMigrateStmts);
+        sqlPatchDisplay += `-- [보완] permissions "userId" 컬럼 확보 & 레거시 user_id 데이터 이관\n${permMigrateStmts.join('\n')}\n\n`;
         sqlPatchDisplay += `\n-- ✅ PostgREST 스키마 캐시 즉시 갱신 (dev_exec_ddl 자동 실행)\nNOTIFY pgrst, 'reload schema';\n`;
       }
 
