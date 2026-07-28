@@ -24,7 +24,8 @@ import {
   ShieldAlert,
   Calendar,
   RotateCcw,
-  MessageSquare
+  MessageSquare,
+  X
 } from 'lucide-react';
 
 // 정비/기술 스펙 체크리스트 마스터 정의 (스마트 키워드 매칭 규격)
@@ -162,16 +163,22 @@ export const OutboundInspections: React.FC = () => {
   const [targetNewAssetId, setTargetNewAssetId] = useState<string>('');
   const [exchangeReason, setExchangeReason] = useState<string>('');
   const [exchangeToRepairing, setExchangeToRepairing] = useState<boolean>(false); // 💡 기본값: false (수리 미전환)
+  const [exchangeSearchQuery, setExchangeSearchQuery] = useState<string>(''); // 🔍 대체 장비 관리번호 검색어
 
-  // 💡 교체 모달 오픈 시 첫번째 임대가능 대체 장비 100% 자동선택!
+  // 💡 교체 모달 오픈 시 또는 검색 시 조건에 맞는 첫번째 대체 장비 100% 자동선택!
   React.useEffect(() => {
     if (exchangeModalAsset) {
-      const availables = assets.filter(a => a.status === 'AVAILABLE' && a.modelName === exchangeModalAsset.modelName && a.id !== exchangeModalAsset.id);
+      const q = exchangeSearchQuery.toLowerCase().trim();
+      const availables = assets.filter(a => {
+        if (a.status !== 'AVAILABLE' || a.modelName !== exchangeModalAsset.modelName || a.id === exchangeModalAsset.id) return false;
+        if (!q) return true;
+        return a.assetNo.toLowerCase().includes(q) || (a.serialNo && a.serialNo.toLowerCase().includes(q));
+      });
       if (availables.length > 0 && (!targetNewAssetId || !availables.some(a => a.id === targetNewAssetId))) {
         setTargetNewAssetId(availables[0].id);
       }
     }
-  }, [exchangeModalAsset, assets, targetNewAssetId]);
+  }, [exchangeModalAsset, assets, targetNewAssetId, exchangeSearchQuery]);
 
   // ──────────────────────────────────────────────────────────────────────────
   // 1. 개별 의뢰건들을 계약(contractId) 및 신청일자 기준 의뢰 1건 단위로 그룹핑
@@ -1055,46 +1062,105 @@ export const OutboundInspections: React.FC = () => {
               />
             </div>
 
+            {/* 🔍 [사장님 지시] 대체 장비 관리번호/시리얼 실시간 검색창 탑재 */}
+            <div style={{ marginBottom: '16px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                <label style={{ fontSize: '12.5px', fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                  <Search size={14} color="var(--primary)" /> 대체 장비 관리번호 실시간 검색
+                </label>
+                {exchangeSearchQuery && (
+                  <button
+                    onClick={() => setExchangeSearchQuery('')}
+                    style={{ background: 'none', border: 'none', color: 'var(--primary)', fontSize: '11.5px', fontWeight: 700, cursor: 'pointer', padding: 0 }}
+                  >
+                    🔄 전체 목록 보기
+                  </button>
+                )}
+              </div>
+              <div style={{ position: 'relative' }}>
+                <input
+                  type="text"
+                  placeholder="관리번호 (예: G19008) 또는 시리얼번호 입력시 1초 실시간 필터링..."
+                  value={exchangeSearchQuery}
+                  onChange={e => setExchangeSearchQuery(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '8px 34px 8px 34px',
+                    borderRadius: '8px',
+                    border: '1.5px solid var(--primary)',
+                    backgroundColor: 'var(--bg-body)',
+                    fontSize: '13px',
+                    fontWeight: 600,
+                    color: 'var(--text-primary)',
+                    outline: 'none',
+                    boxShadow: '0 2px 8px rgba(59,130,246,0.1)'
+                  }}
+                />
+                <Search size={16} color="var(--primary)" style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', opacity: 0.7 }} />
+                {exchangeSearchQuery && (
+                  <button
+                    onClick={() => setExchangeSearchQuery('')}
+                    style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', padding: '2px', color: 'var(--text-muted)' }}
+                  >
+                    <X size={15} />
+                  </button>
+                )}
+              </div>
+            </div>
+
             {/* 대체 장비 셀렉터 */}
             <div style={{ marginBottom: '20px' }}>
               <label style={{ fontSize: '12.5px', fontWeight: 700, marginBottom: '6px', display: 'block' }}>
                 대체 장비 선택 (동일 모델 {exchangeModalAsset.modelName} 내 임대가능 장비만 노출)
               </label>
 
-              {assets.filter(a => a.status === 'AVAILABLE' && a.modelName === exchangeModalAsset.modelName && a.id !== exchangeModalAsset.id).length === 0 ? (
-                <div style={{ padding: '16px', textAlign: 'center', color: '#ef4444', backgroundColor: 'rgba(239,68,68,0.08)', borderRadius: '8px', fontSize: '13px', fontWeight: 600 }}>
-                  ⚠️ 교체 가능한 동일 모델({exchangeModalAsset.modelName})의 임대가능(AVAILABLE) 자산이 없습니다.
-                </div>
-              ) : (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: '10px', maxHeight: '280px', overflowY: 'auto' }}>
-                  {assets.filter(a => a.status === 'AVAILABLE' && a.modelName === exchangeModalAsset.modelName && a.id !== exchangeModalAsset.id).map(a => {
-                    const isTarget = targetNewAssetId === a.id;
-                    const score = (a as any).maintenanceScore ?? 95;
-                    return (
-                      <div
-                        key={a.id}
-                        onClick={() => setTargetNewAssetId(a.id)}
-                        style={{
-                          padding: '12px',
-                          borderRadius: '8px',
-                          border: isTarget ? '2px solid var(--primary)' : '1px solid var(--border-color)',
-                          backgroundColor: isTarget ? 'rgba(59,130,246,0.08)' : 'var(--bg-body)',
-                          cursor: 'pointer',
-                          transition: 'all 0.15s ease'
-                        }}
-                      >
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                          <span style={{ fontWeight: 800, fontSize: '14px', color: 'var(--text-primary)' }}>🏷️ {a.assetNo}</span>
-                          <span style={{ padding: '2px 8px', borderRadius: '12px', fontSize: '11px', fontWeight: 700, backgroundColor: score >= 80 ? 'rgba(34,197,94,0.15)' : 'rgba(245,158,11,0.15)', color: score >= 80 ? '#16a34a' : '#d97706' }}>
-                            정비점수: {score}점
-                          </span>
+              {(() => {
+                const q = exchangeSearchQuery.toLowerCase().trim();
+                const filteredAssets = assets.filter(a => {
+                  if (a.status !== 'AVAILABLE' || a.modelName !== exchangeModalAsset.modelName || a.id === exchangeModalAsset.id) return false;
+                  if (!q) return true;
+                  return a.assetNo.toLowerCase().includes(q) || (a.serialNo && a.serialNo.toLowerCase().includes(q));
+                });
+
+                if (filteredAssets.length === 0) {
+                  return (
+                    <div style={{ padding: '16px', textAlign: 'center', color: '#ef4444', backgroundColor: 'rgba(239,68,68,0.08)', borderRadius: '8px', fontSize: '13px', fontWeight: 600 }}>
+                      {exchangeSearchQuery ? `⚠️ 검색어 [${exchangeSearchQuery}]에 해당되는 임대가능(${exchangeModalAsset.modelName}) 장비가 없습니다.` : `⚠️ 교체 가능한 동일 모델(${exchangeModalAsset.modelName})의 임대가능(AVAILABLE) 자산이 없습니다.`}
+                    </div>
+                  );
+                }
+
+                return (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: '10px', maxHeight: '260px', overflowY: 'auto' }}>
+                    {filteredAssets.map(a => {
+                      const isTarget = targetNewAssetId === a.id;
+                      const score = (a as any).maintenanceScore ?? 95;
+                      return (
+                        <div
+                          key={a.id}
+                          onClick={() => setTargetNewAssetId(a.id)}
+                          style={{
+                            padding: '12px',
+                            borderRadius: '8px',
+                            border: isTarget ? '2px solid var(--primary)' : '1px solid var(--border-color)',
+                            backgroundColor: isTarget ? 'rgba(59,130,246,0.08)' : 'var(--bg-body)',
+                            cursor: 'pointer',
+                            transition: 'all 0.15s ease'
+                          }}
+                        >
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                            <span style={{ fontWeight: 800, fontSize: '14px', color: 'var(--text-primary)' }}>🏷️ {a.assetNo}</span>
+                            <span style={{ padding: '2px 8px', borderRadius: '12px', fontSize: '11px', fontWeight: 700, backgroundColor: score >= 80 ? 'rgba(34,197,94,0.15)' : 'rgba(245,158,11,0.15)', color: score >= 80 ? '#16a34a' : '#d97706' }}>
+                              정비점수: {score}점
+                            </span>
+                          </div>
+                          <div style={{ fontSize: '11.5px', color: 'var(--text-muted)' }}>시리얼: {a.serialNo || '-'}</div>
                         </div>
-                        <div style={{ fontSize: '11.5px', color: 'var(--text-muted)' }}>시리얼: {a.serialNo || '-'}</div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
+                      );
+                    })}
+                  </div>
+                );
+              })()}
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
