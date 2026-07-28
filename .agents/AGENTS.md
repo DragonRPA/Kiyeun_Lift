@@ -19,6 +19,7 @@
 - **커밋 일괄 처리 원칙**: UI 미세 조정, 오타 수정 등 기능에 영향 없는 소규모 변경사항은 로컬(`npm run dev`)에서 먼저 테스트한 뒤, **여러 건을 묶어 1회 커밋/푸시**한다. 수정마다 즉시 푸시하지 않는다.
 - **push 명령 통일**: `git push origin feature/next-step:main` 방식으로 항상 `main`에 직접 반영하며, feature 브랜치 단독 push(`git push origin feature/next-step`)는 배포 한도를 낭비하므로 금지한다.
 - **배포 한도 소진 시**: `npx vercel --prod --token <TOKEN> --yes` 로 수동 배포 재시도하며, 한도 초과(`api-deployments-free-per-day`) 오류 시 롤링 24시간 윈도우 해소를 기다린다.
+- **최대 20개 배포 슬롯 자동 유지 규칙 (Auto-Purge Retention Policy)**: Vercel 배포의 총 개수는 항상 **최대 20개**를 초과하지 않도록 유지한다. 신규 배포가 갱신되어 배포 수가 20개를 초과할 경우, AI 가 스스로 Vercel API를 호출하여 **가장 오래된 옛날 배포 1개(또는 초과분)를 자동으로 삭제(Purge)**하여 상시 20개 이내로 정돈 유지한다.
 
 ## Supabase 배열 컬럼 파싱 안전 규칙 (Array Column Safety)
 - Supabase `text[]` 배열 컬럼은 클라이언트에서 JS 배열, JSON 문자열(`["A","B"]`), PostgreSQL 배열 문자열(`{"A","B"}`) 등 **다양한 형식으로 반환될 수 있다**.
