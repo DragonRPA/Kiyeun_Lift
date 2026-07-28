@@ -13,6 +13,33 @@ interface ErrorModalProps {
 function extractDdlStatements(message: string, ddlPatch: string): string[] {
   const stmts: string[] = [];
   const text = `${message}\n${ddlPatch}`;
+
+  // 💡 [지능형 누락 컬럼 동적 DDL 추론기] "Could not find the 'columnName' column of 'tableName'" 파싱
+  const missingColMatch = text.match(/Could not find the '(\w+)' column of '(\w+)'/i) || text.match(/column ["']?(\w+)["']? of relation ["']?(\w+)["']? does not exist/i);
+  if (missingColMatch) {
+    const colName = missingColMatch[1];
+    const tableName = missingColMatch[2];
+    const autoColDdl = [
+      `ALTER TABLE "${tableName}" ADD COLUMN IF NOT EXISTS "${colName}" TEXT;`,
+      `NOTIFY pgrst, 'reload schema';`
+    ];
+    autoColDdl.forEach(s => {
+      if (!stmts.includes(s)) stmts.push(s);
+    });
+  }
+
+  // 💡 [지능형 누락 테이블 동적 DDL 추론기] "relation 'tableName' does not exist" 파싱
+  const missingTableMatch = text.match(/relation ["']?(\w+)["']? does not exist/i);
+  if (missingTableMatch) {
+    const tableName = missingTableMatch[1];
+    const autoTableDdl = [
+      `CREATE TABLE IF NOT EXISTS "${tableName}" (id TEXT PRIMARY KEY, created_at TIMESTAMPTZ DEFAULT NOW());`,
+      `NOTIFY pgrst, 'reload schema';`
+    ];
+    autoTableDdl.forEach(s => {
+      if (!stmts.includes(s)) stmts.push(s);
+    });
+  }
   
   if (text.includes('deliveries_status_check') || text.includes('check constraint')) {
     const deliveryCheckDdl = [

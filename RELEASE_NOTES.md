@@ -1,3 +1,16 @@
+# Release Notes (v1.12.0.Build.00007 - 2026-07-28 15:18)
+
+## 🚀 [시스템 에러 모달 1-Click DB 패치 버튼 전역 고도화] `ErrorModal.tsx` 지능형 누락 컬럼/테이블 DDL 추론기 탑재
+
+- **개편 배경**: `Could not find the 'note' column of 'assets'` 와 같은 PostgREST 스키마 누락 에러 발생 시, 모달 하단에 🚀 **`[1-Click DB 스키마 패치 즉시 실행]`** 버튼이 생성되지 않고 텍스트만 출력되던 구버전 파서를 전면 고도화함.
+- **주요 구현 내역**:
+  1. **[지능형 DDL 자동 추론기 탑재 (`ErrorModal.tsx`)]**:
+     - `Could not find the 'columnName' column of 'tableName'` 메시지 감지 시 `ALTER TABLE "tableName" ADD COLUMN IF NOT EXISTS "columnName" TEXT;` 쿼리를 그 자리에서 동적 생성하여 **하단에 [🚀 1-Click DB 패치 즉시 실행] 버튼을 100% 자동 표출**.
+  2. **[원격 DB `assets.note` DDL 패치 즉시 집행]**:
+     - 원격 Supabase DB에 `assets` 테이블의 `note` 컬럼 추가 패치 완료 및 스키마 캐시 리로드 집행.
+
+---
+
 # Release Notes (v1.12.0.Build.00006 - 2026-07-28 15:15)
 
 ## 🛠️ [장비 교체 팝업 오류 완전 치유 수술] `AppContext.tsx` & `outbound_inspections.tsx` 2중 자가추적 엔진 탑재
