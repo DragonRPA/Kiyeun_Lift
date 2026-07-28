@@ -1,1 +1,1 @@
-fix: v1.12.0.Build.00004 (2026-07-28 15:01) - 배차 기사 지정 시 기사 마스터 등록 차종/톤수(vehicleType) 1초 자동 세팅 연동 수술 완비
+fix: v1.12.0.Build.00005 (2026-07-28 15:05) - 출고 검수(outbound_inspections.tsx) 스마트 출고 동적 파서(getDynamicSpecLabel) SSOT 연동 및 보양없음 오탐 제거 완비

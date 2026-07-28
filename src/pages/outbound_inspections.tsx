@@ -29,19 +29,56 @@ import {
 
 // 정비/기술 스펙 체크리스트 마스터 정의 (스마트 키워드 매칭 규격)
 const ALL_SPECS = [
-  { id: 'spec1', label: '4면 철망 / 함석 설치 검수', category: '보양/안전', keywords: ['망', '함석', '철망'] },
-  { id: 'spec2', label: '확장대 철망 / 함석 설치 검수', category: '보양/안전', keywords: ['확장대', '옆면'] },
-  { id: 'spec3', label: '상단 감지봉 / 협착 방지 센서 검수', category: '보양/안전', keywords: ['감지봉', '감지', '협착', '센서', '4ea'] },
-  { id: 'spec4', label: '원판 설치 상태 검수', category: '구조/설비', keywords: ['원판'] },
-  { id: 'spec5', label: '배터리 단자 풀림 확인 마킹', category: '전원/배터리', keywords: ['배터리', '단자'] },
-  { id: 'spec6', label: '주행속도 세팅 (고속60/저속45)', category: '주행/제어', keywords: ['속도', '주행'] },
-  { id: 'spec7', label: '오버로드 과적재 세팅 검수', category: '주행/제어', keywords: ['오버로드', '과적'] },
-  { id: 'spec8', label: '탑승구 사다리 및 모서리 보양', category: '보양/안전', keywords: ['보양', '사다리', '모서리'] },
-  { id: 'spec9', label: '소화기함/손잡이/안내스티커', category: '보양/안전', keywords: ['소화기', '스티커'] },
-  { id: 'spec10', label: '타이어 A급 상태 검수', category: '구조/설비', keywords: ['타이어'] },
-  { id: 'spec11', label: '점멸등/비상하강/정지장치 청결', category: '주행/제어', keywords: ['점멸등', '비상하강', '정지'] },
-  { id: 'spec12', label: '부착물 세트 (인증서/제원표/보험증권/체크리스트 등)', category: '서류/스티커', keywords: ['부착물', '인증서', '제원표', '보험증권', '체크리스트', '반입전'] }
+  { id: 'spec1', label: '철망 / 함석 설치 검수', category: '보양/안전', keywords: ['철망', '함석', '사면철망', '1면', '2면', '3면', '4면', '5면', '망'] },
+  { id: 'spec2', label: '확장대 철망 / 함석 설치 검수', category: '보양/안전', keywords: ['확장대 철망', '확장대 함석', '확장대철망', '확장대함석'] },
+  { id: 'spec3', label: '상단 감지봉 / 협착 방지 센서 검수', category: '보양/안전', keywords: ['감지봉', '감지봉 4ea', '상단감지', '협착', '센서', '4ea', '감지봉4ea'] },
+  { id: 'spec4', label: '원판 설치 상태 검수', category: '구조/설비', keywords: ['원판설치', '원판'] },
+  { id: 'spec5', label: '배터리 단자 풀림 확인 마킹', category: '전원/배터리', keywords: ['배터리 단자', '단자 풀림', '배터리 마킹'] },
+  { id: 'spec6', label: '주행속도 세팅 (고속60/저속45)', category: '주행/제어', keywords: ['주행속도', '고속 60', '저속 45', '속도 세팅'] },
+  { id: 'spec7', label: '오버로드 과적재 세팅 검수', category: '주행/제어', keywords: ['오버로드 셋팅', '오버로드', '과적'] },
+  { id: 'spec8', label: '탑승구 사다리 및 모서리 보양', category: '보양/안전', keywords: ['사다리 보양', '모서리 보양', '사다리보양', '모서리보양', '모서리 8개소', '미끄럼방지'] },
+  { id: 'spec9', label: '소화기함/손잡이/안내스티커', category: '보양/안전', keywords: ['소화기함', '기타 스티커물', '소화기', '안내스티커'] },
+  { id: 'spec10', label: '타이어 A급 상태 검수', category: '구조/설비', keywords: ['타이어 A급', '타이어A급', '타이어 A급 상태'] },
+  { id: 'spec11', label: '점멸등/비상하강/정지장치 청결', category: '주행/제어', keywords: ['점멸등', '비상하강장치', '비상정지장치'] },
+  { id: 'spec12', label: '부착물 세트 (인증서/제원표/보험증권/체크리스트 등)', category: '서류/스티커', keywords: ['부착물', '제원표', '보험증권', '인증서', '반입전', '체크리스트'] }
 ];
+
+// 💡 [동적 맞춤형 라벨 추출기] 원문 텍스트에서 '3면 함석', '4면 철망', '1면', '2면', '감지봉 4EA' 등 실감지 키워드로 100% 맞춰 동적 표출!
+const getDynamicSpecLabel = (spec: { id: string; label: string }, text: string): string => {
+  if (!text.trim()) return spec.label;
+  const lowerText = text.toLowerCase();
+
+  if (spec.id === 'spec1') {
+    const match = text.match(/(\d+)\s*면\s*(함석|철망|망)/i) || text.match(/(함석|철망|망)\s*(\d+)\s*면/i);
+    if (match) {
+      const sideNum = match[1] && !isNaN(Number(match[1])) ? match[1] : match[2];
+      const rawMat = (match[2] && (match[2].includes('함석') || match[2].includes('철망') || match[2].includes('망'))) ? match[2] : match[1];
+      const material = rawMat.includes('함석') ? '함석' : '철망';
+      return `${sideNum}면 ${material} 설치 검수`;
+    }
+    const sideOnlyMatch = text.match(/(\d+)\s*면/i);
+    if (sideOnlyMatch) {
+      const sideNum = sideOnlyMatch[1];
+      const material = lowerText.includes('함석') ? '함석' : '철망';
+      return `${sideNum}면 ${material} 설치 검수`;
+    }
+    if (lowerText.includes('함석')) return '함석 설치 검수';
+    if (lowerText.includes('철망') || lowerText.includes('사면철망')) return '철망 설치 검수';
+  }
+
+  if (spec.id === 'spec2') {
+    if (lowerText.includes('확장대 함석')) return '확장대 함석 설치 검수';
+    if (lowerText.includes('확장대 철망')) return '확장대 철망 설치 검수';
+  }
+
+  if (spec.id === 'spec3') {
+    const match = text.match(/감지봉\s*(\d+\s*EA|\d+\s*개)/i);
+    if (match) return `상단 감지봉 / 협착 방지 센서 (${match[1].replace(/\s+/g, '')}) 검수`;
+    if (lowerText.includes('감지봉')) return '상단 감지봉 / 협착 방지 센서 검수';
+  }
+
+  return spec.label;
+};
 
 // 의뢰 1건 그룹 단위 인터페이스
 interface InspectionGroup {
@@ -815,7 +852,7 @@ export const OutboundInspections: React.FC = () => {
                             [{spec.category}] {index + 1}.
                           </span>
                           <span style={{ fontSize: '13px', fontWeight: isChecked ? 700 : 500, color: isChecked ? '#15803d' : 'var(--text-primary)' }}>
-                            {spec.label}
+                            {getDynamicSpecLabel(spec, selectedGroup.rawText || '')}
                           </span>
                         </div>
                       </div>
