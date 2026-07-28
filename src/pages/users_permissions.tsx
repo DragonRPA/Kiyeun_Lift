@@ -104,20 +104,6 @@ export const UsersPermissions: React.FC = () => {
       return;
     }
 
-    // 급여 정산 (payroll) 보안 제한 검증 (ADMIN이 아닌 임직원 중 단 1명만 보유 가능)
-    if (menuId === 'payroll') {
-      const existingPayrollHolder = localPermissions.find(p => {
-        if (p.menuId !== 'payroll' || p.userId === selectedUserId) return false;
-        const u = localUsers.find(user => user.id === p.userId);
-        return u && u.role !== 'ADMIN' && (p.canView || p.canSave);
-      });
-
-      if (existingPayrollHolder) {
-        const holderUser = localUsers.find(u => u.id === existingPayrollHolder.userId);
-        alert(`급여 정산 메뉴 권한은 보안 정책상 관리자 외 임직원 중 단 1명만 소유할 수 있습니다.\n(현재 소유자: ${holderUser?.name || '타 임직원'})\n기존 소유자의 권한을 먼저 해제해 주세요.`);
-        return;
-      }
-    }
 
     setLocalPermissions(prev => {
       const index = prev.findIndex(p => p.userId === selectedUserId && p.menuId === menuId);
@@ -287,6 +273,16 @@ export const UsersPermissions: React.FC = () => {
     return Array.from(new Set(ghostPermissions.map((p: MenuPermission) => p.userId)));
   }, [ghostPermissions]);
 
+  // 💳 급여 관리 권한 소유 임직원 현황 (1인 강제 제한 제거 및 시각적 현황 노출)
+  const payrollHolders = useMemo(() => {
+    const holderUserIds = new Set(
+      localPermissions
+        .filter((p: MenuPermission) => (p.menuId === 'payroll' || p.menuId === 'payroll_settlements') && (p.canView || p.canSave))
+        .map((p: MenuPermission) => p.userId)
+    );
+    return localUsers.filter(u => holderUserIds.has(u.id));
+  }, [localPermissions, localUsers]);
+
   // 1-Click 고스트 권한 자동 정돈 및 정상 데이터 재저장
   const handleCleanGhostPermissions = async () => {
     if (ghostPermissions.length === 0) {
@@ -375,6 +371,25 @@ export const UsersPermissions: React.FC = () => {
               <Save size={16} /> {isDirty ? '변경사항 저장 적용' : '저장 완료'}
             </button>
           )}
+        </div>
+      </div>
+
+      {/* 💳 급여 관리 권한 소유 임직원 현황 시각화 배너 (1인 강제 제한 제거 & 현황 투명 노출) */}
+      <div style={{
+        marginBottom: '16px', padding: '10px 16px', backgroundColor: 'var(--bg-card)',
+        borderRadius: '8px', border: '1px solid var(--border-color)', display: 'flex',
+        alignItems: 'center', justifyContent: 'space-between', fontSize: '13px'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <span style={{ fontWeight: 'bold', color: 'var(--primary)' }}>💳 급여 관리 권한 소유 임직원:</span>
+          <span>
+            {payrollHolders.length > 0
+              ? payrollHolders.map(u => `${u.name}(${u.position || u.role})`).join(', ')
+              : '현재 권한 소유자 없음'}
+          </span>
+        </div>
+        <div style={{ color: 'var(--text-secondary)', fontSize: '12px' }}>
+          총 <strong style={{ color: 'var(--primary)' }}>{payrollHolders.length}</strong> 명 보유 중 (자유롭게 조정 가능)
         </div>
       </div>
 
