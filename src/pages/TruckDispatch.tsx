@@ -313,7 +313,7 @@ export const TruckDispatch: React.FC = () => {
     }
   };
 
-  // 4. 운송 완료 처리 (status: 'DELIVERED')
+  // 4. 운송 완료 처리 (status: 'DELIVERED' 또는 레거시 'COMPLETED')
   const handleCompleteDeliveryStatus = async (deliveryId: string) => {
     if (!canSave) return;
     try {
@@ -326,6 +326,23 @@ export const TruckDispatch: React.FC = () => {
       alert('✅ 운송이 완료 마감되었습니다. (상태: 🟢 운송 완료)');
       setSelectedDelivery(null);
     } catch (err: any) {
+      // 💥 DB CHECK Constraint 위반 발생 시 레거시 'COMPLETED' 값으로 2차 폴백 자동 처리!
+      if (err?.message?.includes('deliveries_status_check') || err?.message?.includes('check constraint')) {
+        try {
+          db.updateRow<Delivery>('deliveries', deliveryId, {
+            status: 'COMPLETED',
+            updatedAt: new Date().toISOString()
+          });
+          await db.awaitPendingWrites();
+          refreshAllData();
+          alert('✅ [레거시 호환 마감] 운송 완료 마감 처리되었습니다. (상태: 🟢 운송 완료)');
+          setSelectedDelivery(null);
+          return;
+        } catch (retryErr: any) {
+          showErrorModal(`⚠️ 운송 완료 처리 실패:\n${retryErr?.message || retryErr}`);
+          return;
+        }
+      }
       showErrorModal(`⚠️ 운송 완료 처리 실패:\n${err?.message || err}`);
     }
   };

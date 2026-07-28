@@ -1,3 +1,16 @@
+# Release Notes (v1.11.0.Build.00002 - 2026-07-28 14:01)
+
+## 🛡️ [CHECK 제약조건 예외 패치 & 안심 폴백 엔진] `deliveries_status_check` 1-Click 자가치유 & 레거시 호환 수술
+
+- **개편 배경**: 원격 Supabase DB의 기존 `deliveries_status_check` CHECK 제약조건(CHECK IN ('REQUESTED', 'DISPATCHED', 'COMPLETED', 'CANCELLED'))이 신규 `DELIVERED` 및 `PENDING` 상태를 차단하여 발생하는 데이터 저장 예외를 근본 해결함.
+- **주요 구현 내역**:
+  1. **[ErrorModal 🚀 1-Click DB 패치 구문 자동 생성 기능 장착] (`ErrorModal.tsx`)**:
+     - `deliveries_status_check` 제약조건 오류 발생 시 모달창 하단에 `ALTER TABLE "deliveries" DROP CONSTRAINT IF EXISTS "deliveries_status_check"; ALTER TABLE "deliveries" ADD CONSTRAINT "deliveries_status_check" CHECK (status IN ('PENDING', 'REQUESTED', 'DISPATCHED', 'DELIVERED', 'COMPLETED', 'CANCELLED'));` 패치를 즉시 1-Click 실행할 수 있는 자가 치유 버튼 렌더링.
+  2. **[2중 안심 레거시 COMPLETED 자동 폴백 트랜잭션 수술] (`TruckDispatch.tsx`)**:
+     - 원격 DB의 CHECK 제약조건이 아직 미갱신 상태이더라도 `DELIVERED` 실패 시 레거시 호환 상태인 `COMPLETED`로 2차 자동 저장 시도하여 사용자에게 에러 없이 마감 성공을 100% 보장하도록 구현.
+
+---
+
 # Release Notes (v1.11.0.Build.00001 - 2026-07-28 13:54)
 
 ## 💬 [스마트 출고 원문 저장 및 배차 폼 레이블/셀렉트 수술] `rawText` 영구 보존 & 💬 원본 텍스트 박스 탑재

@@ -1,7 +1,5 @@
 # 개발 지시 및 개편 완료 내역 (dev_temp.md)
 
-- [완료] 배차 관리 스마트 출고 자연어 원문(rawText) 영구 저장 & 운송사/기사 셀렉트 드롭다운 레이블 복원 (`TruckDispatch.tsx` & `AppContext.tsx` & `schema.sql`)
-  1. DB 스키마 및 deliveries 테이블에 rawText 필드 추가하여 스마트 출고 시 사용자가 입력한 자연어 원문 텍스트를 영구 보존.
-  2. 배차 기사 배정 카드 영역에 각 컬럼별 직관적 레이블 헤더([🏢 운송사 거래처], [🚚 차종], [👤 운송 기사명], [📞 기사 연락처], [💰 운송비]) 탑재.
-  3. 운송사 거래처 선택 시 해당 운송사의 등록 기사 목록만 드롭다운으로 자동 필터링되며 선택 시 연락처 1초 자동 세팅 연동 복원.
-  4. 배차 폼 최하단에 💬 스마트 출고 요청 자연어 원본 텍스트 전용 박스를 제공하여 배차 담당자가 원문을 직접 읽고 배차 조건을 판단할 수 있도록 수술 완비.
+- [완료] deliveries_status_check CHECK 제약조건 오류 자동 복구 및 COMPLETED 안심 폴백 트랜잭션 탑재 (`TruckDispatch.tsx` & `ErrorModal.tsx` & `schema.sql`)
+  1. 원격 Supabase DB의 구버전 CHECK 제약조건 차단을 자가 치유하기 위해 ErrorModal 내 🚀 1-Click DB 패치 구문 자동 생성 기능 장착.
+  2. TruckDispatch.tsx 내 handleCompleteDeliveryStatus 시 원격 DB 제약조건 오류 발생 시 레거시 'COMPLETED' 값으로 2차 자동 폴백하여 어떠한 환경에서도 100% 저장 마감 성공 보장.

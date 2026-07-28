@@ -14,6 +14,17 @@ function extractDdlStatements(message: string, ddlPatch: string): string[] {
   const stmts: string[] = [];
   const text = `${message}\n${ddlPatch}`;
   
+  if (text.includes('deliveries_status_check') || text.includes('check constraint')) {
+    const deliveryCheckDdl = [
+      `ALTER TABLE "deliveries" DROP CONSTRAINT IF EXISTS "deliveries_status_check";`,
+      `ALTER TABLE "deliveries" ADD CONSTRAINT "deliveries_status_check" CHECK (status IN ('PENDING', 'REQUESTED', 'DISPATCHED', 'DELIVERED', 'COMPLETED', 'CANCELLED'));`,
+      `NOTIFY pgrst, 'reload schema';`
+    ];
+    deliveryCheckDdl.forEach(s => {
+      if (!stmts.includes(s)) stmts.push(s);
+    });
+  }
+
   const lines = text.split('\n');
   lines.forEach(line => {
     const trimmed = line.trim();
