@@ -847,10 +847,10 @@ export const TruckDispatch: React.FC = () => {
                     </div>
 
                     {/* 각 필드가 무엇인지 명확히 알려주는 직관적 컬럼 레이블 헤더 */}
-                    <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr 1.3fr 1.3fr 1fr 30px', gap: '8px', padding: '6px 10px', backgroundColor: 'var(--bg-body)', borderRadius: '6px', fontSize: '11.5px', fontWeight: 800, color: 'var(--primary)', marginBottom: '6px', border: '1px solid var(--border-color)' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1.3fr 1fr 1.3fr 1fr 30px', gap: '8px', padding: '6px 10px', backgroundColor: 'var(--bg-body)', borderRadius: '6px', fontSize: '11.5px', fontWeight: 800, color: 'var(--primary)', marginBottom: '6px', border: '1px solid var(--border-color)' }}>
                       <div>🏢 운송사 거래처</div>
-                      <div>🚚 차종</div>
                       <div>👤 운송 기사명</div>
+                      <div>🚚 차종</div>
                       <div>📞 기사 연락처</div>
                       <div>💰 운송비 (원)</div>
                       <div></div>
@@ -865,7 +865,7 @@ export const TruckDispatch: React.FC = () => {
                           : transportDrivers;
 
                         return (
-                          <div key={veh.id || idx} style={{ padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-body)', display: 'grid', gridTemplateColumns: '1.4fr 1fr 1.3fr 1.3fr 1fr 30px', gap: '8px', alignItems: 'center' }}>
+                          <div key={veh.id || idx} style={{ padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-body)', display: 'grid', gridTemplateColumns: '1.4fr 1.3fr 1fr 1.3fr 1fr 30px', gap: '8px', alignItems: 'center' }}>
                             
                             {/* 1. 운송사 셀렉트 드롭다운 + 자유입력 */}
                             <select
@@ -879,16 +879,7 @@ export const TruckDispatch: React.FC = () => {
                               ))}
                             </select>
 
-                            {/* 2. 차종 셀렉트 */}
-                            <select
-                              value={veh.vehicleType}
-                              onChange={e => handleVehicleFieldChange(idx, 'vehicleType', e.target.value)}
-                              style={{ padding: '6px 8px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)', fontSize: '12px', outline: 'none' }}
-                            >
-                              {VEHICLE_TYPE_OPTIONS.map(v => <option key={v} value={v}>{v}</option>)}
-                            </select>
-
-                            {/* 3. 기사명 셀렉트 드롭다운 (선택 시 연락처/차량번호 1초 자동 세팅!) */}
+                            {/* 2. 기사명 셀렉트 드롭다운 (선택 시 연락처/차량번호 1초 자동 세팅!) */}
                             <select
                               value={veh.driverName}
                               onChange={e => {
@@ -903,6 +894,15 @@ export const TruckDispatch: React.FC = () => {
                                   {drv.driverName} ({drv.vehicleNo || '차량미상'})
                                 </option>
                               ))}
+                            </select>
+
+                            {/* 3. 차종 셀렉트 */}
+                            <select
+                              value={veh.vehicleType}
+                              onChange={e => handleVehicleFieldChange(idx, 'vehicleType', e.target.value)}
+                              style={{ padding: '6px 8px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)', fontSize: '12px', outline: 'none' }}
+                            >
+                              {VEHICLE_TYPE_OPTIONS.map(v => <option key={v} value={v}>{v}</option>)}
                             </select>
 
                             {/* 4. 연락처 (자동 세팅 + 자유 입력 수정 가능!) */}
@@ -928,6 +928,7 @@ export const TruckDispatch: React.FC = () => {
                             </button>
                           </div>
                         );
+
                       })}
                     </div>
                   </div>
