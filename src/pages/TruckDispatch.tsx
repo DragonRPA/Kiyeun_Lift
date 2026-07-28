@@ -763,16 +763,37 @@ export const TruckDispatch: React.FC = () => {
                         배차 ID: {selectedDelivery.id} | 요청일: {selectedDelivery.requestDate}
                       </span>
                     </div>
-                    <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
                       {getOutboundInspectionBadge(selectedDelivery.contractId)}
                       {getDeliveryStatusBadge(getNormalizedDeliveryStatus(selectedDelivery))}
+                      
+                      {/* 💡 [사장님 지시] 하단에 있던 배차/운송완료 액션 버튼을 상단 우측 헤더로 이동 배치! */}
                       {canSave && (
-                        <button
-                          onClick={() => handleCancelDeliveryStatus(selectedDelivery.id)}
-                          style={{ padding: '4px 10px', borderRadius: '6px', backgroundColor: 'rgba(239,68,68,0.1)', color: '#dc2626', border: '1px solid rgba(239,68,68,0.3)', fontSize: '11px', fontWeight: 700, cursor: 'pointer' }}
-                        >
-                          🚫 배차 취소
-                        </button>
+                        <>
+                          <button
+                            onClick={handleSaveDispatch}
+                            className="btn-primary"
+                            style={{ padding: '6px 14px', fontWeight: 800, fontSize: '12.5px', borderRadius: '7px', display: 'inline-flex', alignItems: 'center', gap: '5px', boxShadow: '0 2px 6px rgba(59,130,246,0.25)' }}
+                          >
+                            <ShieldCheck size={14} /> [🔵 배차 기사 배정 완료]
+                          </button>
+
+                          {getNormalizedDeliveryStatus(selectedDelivery) === 'DISPATCHED' && (
+                            <button
+                              onClick={() => handleCompleteDeliveryStatus(selectedDelivery.id)}
+                              style={{ padding: '6px 14px', backgroundColor: '#16a34a', color: '#fff', border: 'none', borderRadius: '7px', fontWeight: 800, fontSize: '12.5px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '5px', boxShadow: '0 2px 6px rgba(22,163,74,0.25)' }}
+                            >
+                              <CheckCircle size={14} /> [🟢 운송 완료 마감]
+                            </button>
+                          )}
+
+                          <button
+                            onClick={() => handleCancelDeliveryStatus(selectedDelivery.id)}
+                            style={{ padding: '6px 10px', borderRadius: '7px', backgroundColor: 'rgba(239,68,68,0.1)', color: '#dc2626', border: '1px solid rgba(239,68,68,0.3)', fontSize: '11.5px', fontWeight: 700, cursor: 'pointer' }}
+                          >
+                            🚫 배차 취소
+                          </button>
+                        </>
                       )}
                     </div>
                   </div>
@@ -957,27 +978,7 @@ export const TruckDispatch: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* 하단 배차 상태 변경 버튼 액션 */}
-                  {canSave && (
-                    <div style={{ display: 'flex', gap: '10px' }}>
-                      <button
-                        onClick={handleSaveDispatch}
-                        className="btn-primary"
-                        style={{ flex: 1, padding: '12px', fontWeight: 800, fontSize: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
-                      >
-                        <ShieldCheck size={18} /> [🔵 배차 기사 배정 완료] (배차완료 전환)
-                      </button>
 
-                      {getNormalizedDeliveryStatus(selectedDelivery) === 'DISPATCHED' && (
-                        <button
-                          onClick={() => handleCompleteDeliveryStatus(selectedDelivery.id)}
-                          style={{ padding: '12px 18px', backgroundColor: '#16a34a', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 800, fontSize: '13.5px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
-                        >
-                          <CheckCircle size={16} /> [🟢 운송 완료 마감]
-                        </button>
-                      )}
-                    </div>
-                  )}
                 </div>
               )}
             </div>
