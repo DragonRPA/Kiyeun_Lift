@@ -1,3 +1,17 @@
+# Release Notes (v1.9.0.Build.00003 - 2026-07-28 12:35)
+
+## 🚀 [시스템 에러 팝업 모달 자가치유 수술] `[🚀 1-Click DB 패치 즉시 실행]` 버튼 탑재
+
+- **개편 목적**: DB 스키마/RLS/컬럼 오류 팝업 윈도우 창 하단에 `[🚀 1-Click DB 패치 즉시 실행]` 버튼을 직접 내장하여, 사용자가 타 메뉴나 SQL Editor로 이동할 필요 없이 팝업 창 안에서 즉시 DB를 자가 복구(Self-Healing)할 수 있도록 혁신함.
+- **주요 구현 내역**:
+  1. **[에러 메시지 DDL 자동 감지 파서 탑재] (`ErrorModal.tsx`)**:
+     - 팝업창에 렌더링된 메시지에서 `ALTER TABLE`, `DROP POLICY`, `CREATE POLICY`, `NOTIFY` 등의 DDL 구문을 실시간 자동 추출.
+  2. **[1-Click DB 패치 버튼 및 결과 배너 장착]**:
+     - DDL 구문 감지 시 팝업 하단에 강렬한 로즈/레드 버튼(`🚀 1-Click DB 패치 즉시 실행`)을 동적 렌더링.
+     - 버튼 클릭 시 `dev_exec_ddl` RPC로 원격 DB에 DDL을 1초 만에 실행하고, 스키마 캐시(`NOTIFY pgrst, 'reload schema'`)까지 즉시 자가 갱신 완료.
+
+---
+
 # Release Notes (v1.9.0.Build.00002 - 2026-07-28 12:29)
 
 ## 🎨 [개발자 도구 DB 정합성 도구 수술] 정합성 100% 정상 시 붉은 패치 박스 노출 버그 전면 수술 완료

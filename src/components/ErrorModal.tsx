@@ -1,11 +1,37 @@
 import React, { useState, useMemo } from 'react';
-import { AlertTriangle, Copy, Check, X, ShieldOff } from 'lucide-react';
+import { AlertTriangle, Copy, Check, X, ShieldOff, Database, Loader } from 'lucide-react';
+import { supabase } from '../services/db';
 
 interface ErrorModalProps {
   isOpen: boolean;
   title?: string;
   message: string;
   onClose: () => void;
+}
+
+/** 메시지 및 패치 구문에서 실행 가능한 DDL 문장을 추출하는 헬퍼 */
+function extractDdlStatements(message: string, ddlPatch: string): string[] {
+  const stmts: string[] = [];
+  const text = `${message}\n${ddlPatch}`;
+  
+  const lines = text.split('\n');
+  lines.forEach(line => {
+    const trimmed = line.trim();
+    if (
+      trimmed.startsWith('ALTER TABLE') ||
+      trimmed.startsWith('DROP POLICY') ||
+      trimmed.startsWith('CREATE POLICY') ||
+      trimmed.startsWith('NOTIFY') ||
+      trimmed.startsWith('CREATE TABLE')
+    ) {
+      const cleanStmt = trimmed.endsWith(';') ? trimmed : `${trimmed};`;
+      if (!stmts.includes(cleanStmt)) {
+        stmts.push(cleanStmt);
+      }
+    }
+  });
+
+  return stmts;
 }
 
 /** 메시지에서 RLS 위반 테이블명을 추출하는 헬퍼 */
@@ -42,6 +68,9 @@ export const ErrorModal: React.FC<ErrorModalProps> = ({
 }) => {
   const [copied, setCopied] = useState(false);
   const [ddlCopied, setDdlCopied] = useState(false);
+  const [executingPatch, setExecutingPatch] = useState(false);
+  const [patchExecuted, setPatchExecuted] = useState(false);
+  const [patchResultMsg, setPatchResultMsg] = useState('');
 
   const isRlsError = useMemo(() =>
     message.includes('row-level security') || message.includes('42501'),
@@ -72,6 +101,33 @@ export const ErrorModal: React.FC<ErrorModalProps> = ({
       ].join('\n'))
       .join('\n\n');
   }, [isRlsError, rlsTables]);
+
+  const ddlStatements = useMemo(() => extractDdlStatements(message, ddlPatch), [message, ddlPatch]);
+
+  const handleExecutePatch = async () => {
+    if (ddlStatements.length === 0) return;
+    setExecutingPatch(true);
+    setPatchResultMsg('');
+
+    try {
+      if (!supabase) {
+        setPatchResultMsg('⚠️ Supabase 데이터베이스 연결이 설정되지 않았습니다.');
+        return;
+      }
+
+      const { data, error } = await supabase.rpc('dev_exec_ddl', { statements: ddlStatements });
+      if (error) {
+        setPatchResultMsg(`⚠️ DDL 패치 실행 실패: ${error.message}\n\n메뉴 [개발자 도구 (DB관리)] 의 [패치 자동 적용] 을 눌러 1회성 Helper 함수를 생성하거나 Supabase SQL Editor에서 실행해 주세요.`);
+      } else {
+        setPatchExecuted(true);
+        setPatchResultMsg('🎉 [완료] DB 스키마 패치가 원격 DB에 직접 실행되고 스키마 캐시가 리로드되었습니다!\n방금 실패했던 작업을 다시 시도해 주십시오.');
+      }
+    } catch (err: any) {
+      setPatchResultMsg(`⚠️ 패치 실행 중 예외 발생: ${err?.message || err}`);
+    } finally {
+      setExecutingPatch(false);
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -249,6 +305,22 @@ export const ErrorModal: React.FC<ErrorModalProps> = ({
               </div>
             </div>
           )}
+          {/* DDL 패치 실행 결과 안내 배너 */}
+          {patchResultMsg && (
+            <div style={{
+              marginTop: '12px',
+              padding: '10px 14px',
+              borderRadius: '8px',
+              fontSize: '12.5px',
+              fontWeight: 600,
+              whiteSpace: 'pre-wrap',
+              backgroundColor: patchExecuted ? 'rgba(34,197,94,0.12)' : 'rgba(239,68,68,0.12)',
+              border: `1px solid ${patchExecuted ? '#22c55e' : '#ef4444'}`,
+              color: patchExecuted ? '#4ade80' : '#fca5a5'
+            }}>
+              {patchResultMsg}
+            </div>
+          )}
         </div>
 
         {/* 모달 푸터 / 액션 버튼 */}
@@ -259,29 +331,62 @@ export const ErrorModal: React.FC<ErrorModalProps> = ({
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
-          gap: '12px'
+          gap: '10px',
+          flexWrap: 'wrap'
         }}>
-          <button
-            type="button"
-            onClick={handleCopy}
-            style={{
-              backgroundColor: copied ? '#059669' : '#3b82f6',
-              color: '#ffffff',
-              border: 'none',
-              borderRadius: '8px',
-              padding: '9px 18px',
-              fontSize: '13px',
-              fontWeight: 600,
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              transition: 'all 0.2s ease'
-            }}
-          >
-            {copied ? <Check size={16} /> : <Copy size={16} />}
-            {copied ? '복사되었습니다!' : '📋 오류 내용 전체 복사'}
-          </button>
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              onClick={handleCopy}
+              style={{
+                backgroundColor: copied ? '#059669' : '#3b82f6',
+                color: '#ffffff',
+                border: 'none',
+                borderRadius: '8px',
+                padding: '9px 16px',
+                fontSize: '13px',
+                fontWeight: 600,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                transition: 'all 0.2s ease'
+              }}
+            >
+              {copied ? <Check size={16} /> : <Copy size={16} />}
+              {copied ? '복사되었습니다!' : '📋 오류 내용 복사'}
+            </button>
+
+            {/* 🚀 1-Click DB 패치 즉시 실행 버튼 (DDL 구문 감지 시 동적 노출!) */}
+            {ddlStatements.length > 0 && (
+              <button
+                type="button"
+                onClick={handleExecutePatch}
+                disabled={executingPatch || patchExecuted}
+                style={{
+                  background: patchExecuted 
+                    ? '#059669' 
+                    : 'linear-gradient(135deg, #e11d48 0%, #be123c 100%)',
+                  color: '#ffffff',
+                  border: '1px solid #f43f5e',
+                  borderRadius: '8px',
+                  padding: '9px 18px',
+                  fontSize: '13px',
+                  fontWeight: 800,
+                  cursor: (executingPatch || patchExecuted) ? 'default' : 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  boxShadow: '0 4px 12px rgba(225, 29, 72, 0.35)',
+                  transition: 'all 0.2s ease',
+                  opacity: executingPatch ? 0.7 : 1
+                }}
+              >
+                {executingPatch ? <Loader size={16} style={{ animation: 'spin 1s linear infinite' }} /> : (patchExecuted ? <Check size={16} /> : <Database size={16} />)}
+                {executingPatch ? 'DB 패치 실행 중...' : (patchExecuted ? '✅ DB 패치 완결!' : '🚀 1-Click DB 패치 즉시 실행')}
+              </button>
+            )}
+          </div>
           
           <button
             type="button"
