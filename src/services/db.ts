@@ -390,13 +390,15 @@ export interface Payment {
   createdAt: string;
 }
 
+export type DeliveryStatus = 'PENDING' | 'DISPATCHED' | 'DELIVERED' | 'CANCELLED' | 'REQUESTED' | 'COMPLETED';
+
 export interface Delivery {
   id: string;
   contractId?: string;
   assetIds?: string; // 대상 장비 ID 목록 (콤마 구분)
   type: 'OUTBOUND' | 'INBOUND' | 'EXCHANGE' | 'MOVEMENT' | 'RETURN';
   dispatchCategory?: '출고' | '입고' | '반납' | '정비' | '이동'; // 배차 세부 유형
-  status: 'REQUESTED' | 'DISPATCHED' | 'COMPLETED';
+  status: DeliveryStatus; // 배차 4단계 진행상태 (PENDING: 배차전, DISPATCHED: 배차완료, DELIVERED: 운송완료, CANCELLED: 배차취소)
   requestDate: string;
   scheduledDate?: string;
   loadingDate?: string; // 상차 일자 (YYYY-MM-DD)
