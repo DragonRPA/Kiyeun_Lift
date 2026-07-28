@@ -1,3 +1,16 @@
+# Release Notes (v1.11.0.Build.00003 - 2026-07-28 14:04)
+
+## 🧹 [원격 DB 제약조건 원천 개편 & 클린 코드 정돈] `deliveries_status_check` DB 원천 패치 완료
+
+- **개편 작업**: 사장님의 원천 해결 지시에 의거하여, 원격 Supabase DB의 `deliveries_status_check` CHECK 제약조건 자체를 DDL로 직접 원천 개편하고, 클라이언트의 불필요한 2차 폴백 방어 코드를 100% 전면 삭제하여 깨끗한 구조로 원상 정돈함.
+- **주요 작업 내역**:
+  1. **[원격 Supabase DB 제약조건 DDL 원천 개편 완수]**:
+     - `ALTER TABLE "deliveries" DROP CONSTRAINT IF EXISTS "deliveries_status_check"; ALTER TABLE "deliveries" ADD CONSTRAINT "deliveries_status_check" CHECK (status IN ('PENDING', 'REQUESTED', 'DISPATCHED', 'DELIVERED', 'COMPLETED', 'CANCELLED'));` 구문을 원격 Supabase DB에 100% 직접 실행 적용 완수.
+  2. **[소스코드 군더더기 방어 코드 전면 삭제 (Clean Code)] (`TruckDispatch.tsx`)**:
+     - 클라이언트의 지저분했던 2차 try-catch 폴백 코드를 깨끗하게 제거하고, 명확하고 간결한 단일 `status: 'DELIVERED'` 코드로 원상 정돈.
+
+---
+
 # Release Notes (v1.11.0.Build.00002 - 2026-07-28 14:01)
 
 ## 🛡️ [CHECK 제약조건 예외 패치 & 안심 폴백 엔진] `deliveries_status_check` 1-Click 자가치유 & 레거시 호환 수술
