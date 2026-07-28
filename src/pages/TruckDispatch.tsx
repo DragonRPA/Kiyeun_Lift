@@ -5,7 +5,7 @@ import {
   Truck, Check, AlertCircle, Plus, Trash2, Clock, Layers, 
   FileText, Copy, Lock, CreditCard, CheckCircle, RefreshCw, X,
   Calendar, RotateCcw, ShieldCheck, CheckSquare, XCircle, Search,
-  MessageSquare, User
+  MessageSquare, User, Edit2
 } from 'lucide-react';
 import { Delivery, TransportCompany, TransportDriver, db, DeliveryStatus } from '../services/db';
 
@@ -205,9 +205,13 @@ export const TruckDispatch: React.FC = () => {
     });
   }, [deliveries, activeDispatchStatusTab, startDate, endDate, searchQuery, contracts, customers]);
 
+  // 💡 배차 완료 상태에서 수정을 위해 임시 잠금 해제(Unlock)하는 모드 state
+  const [isEditUnlocked, setIsEditUnlocked] = useState<boolean>(false);
+
   const handleSelectDelivery = (d: Delivery) => {
     const todayStr = new Date().toISOString().split('T')[0];
     setSelectedDelivery(d);
+    setIsEditUnlocked(false); // 💡 새로 선택 시 기본 잠금(readOnly) 적용!
 
     let defaultCat: '출고' | '입고' | '반납' | '정비' | '이동' = d.dispatchCategory || (d.type === 'OUTBOUND' ? '출고' : d.type === 'RETURN' || d.type === 'INBOUND' ? '반납' : '출고');
     setDispatchCategory(defaultCat);
@@ -798,173 +802,257 @@ export const TruckDispatch: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* 배차 세부 설정 폼 */}
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '16px' }}>
-                    <div>
-                      <label style={{ fontSize: '12px', fontWeight: 700, marginBottom: '4px', display: 'block', color: 'var(--text-secondary)' }}>배차 구분</label>
-                      <select
-                        value={dispatchCategory}
-                        onChange={e => setDispatchCategory(e.target.value as any)}
-                        style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-body)', fontSize: '12.5px', color: 'var(--text-primary)' }}
-                      >
-                        <option value="출고">출고</option>
-                        <option value="입고">입고</option>
-                        <option value="반납">반납</option>
-                        <option value="정비">정비</option>
-                        <option value="이동">이동</option>
-                      </select>
-                    </div>
+                  {(() => {
+                    const normStatus = getNormalizedDeliveryStatus(selectedDelivery);
+                    const isDispatchedOrCompleted = normStatus === 'DISPATCHED' || normStatus === 'DELIVERED' || normStatus === 'CANCELLED';
+                    // 💡 [사장님 지시] 배차가 이미 완료/마감된 건은 visible = true, enable = false (수정 불가 잠금!)
+                    const isFormDisabled = !canSave || (isDispatchedOrCompleted && !isEditUnlocked);
 
-                    <div>
-                      <label style={{ fontSize: '12px', fontWeight: 700, marginBottom: '4px', display: 'block', color: 'var(--text-secondary)' }}>상차일자 & 시간</label>
-                      <div style={{ display: 'flex', gap: '6px' }}>
-                        <input
-                          type="date"
-                          value={loadingDate}
-                          onChange={e => setLoadingDate(e.target.value)}
-                          style={{ flex: 1, padding: '7px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-body)', fontSize: '12.5px', color: 'var(--text-primary)' }}
-                        />
-                        <select
-                          value={loadingTimeSlot}
-                          onChange={e => setLoadingTimeSlot(e.target.value)}
-                          style={{ width: '80px', padding: '7px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-body)', fontSize: '12.5px', color: 'var(--text-primary)' }}
-                        >
-                          <option value="오전">오전</option>
-                          <option value="오후">오후</option>
-                        </select>
-                      </div>
-                    </div>
-                  </div>
+                    return (
+                      <div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', borderBottom: '1px solid var(--border-color)', paddingBottom: '12px' }}>
+                          <div>
+                            <h3 style={{ fontSize: '16px', fontWeight: 800, margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              🚛 배차 운송 기사 배정 및 상하차 세부 설정
+                              {isDispatchedOrCompleted && !isEditUnlocked && (
+                                <span style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '12px', backgroundColor: 'rgba(100,116,139,0.15)', color: '#475569', fontWeight: 700 }}>
+                                  🔒 배차 완료 잠금 (읽기 전용)
+                                </span>
+                              )}
+                            </h3>
+                            <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                              배차 ID: {selectedDelivery.id} | 요청일: {selectedDelivery.requestDate}
+                            </span>
+                          </div>
+                          <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                            {getOutboundInspectionBadge(selectedDelivery.contractId)}
+                            {getDeliveryStatusBadge(normStatus)}
 
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '16px' }}>
-                    <div>
-                      <label style={{ fontSize: '12px', fontWeight: 700, marginBottom: '4px', display: 'block', color: 'var(--text-secondary)' }}>상차지 (출발지)</label>
-                      <input
-                        type="text"
-                        value={originAddress}
-                        onChange={e => setOriginAddress(e.target.value)}
-                        style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-body)', fontSize: '12.5px', color: 'var(--text-primary)' }}
-                      />
-                    </div>
-                    <div>
-                      <label style={{ fontSize: '12px', fontWeight: 700, marginBottom: '4px', display: 'block', color: 'var(--text-secondary)' }}>하차지 (도착지)</label>
-                      <input
-                        type="text"
-                        value={destinationAddress}
-                        onChange={e => setDestinationAddress(e.target.value)}
-                        style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-body)', fontSize: '12.5px', color: 'var(--text-primary)' }}
-                      />
-                    </div>
-                  </div>
-
-                  {/* ────────────────────────────────────────────────────────────────── */}
-                  {/* 🚚 배정 운송 기사 및 운송 거래처 목록 (직관적 레이블 + 셀렉트 연동) */}
-                  {/* ────────────────────────────────────────────────────────────────── */}
-                  <div style={{ marginBottom: '20px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                      <label style={{ fontSize: '13px', fontWeight: 800, color: 'var(--text-primary)' }}>🚚 배정 운송 기사 목록</label>
-                      <button onClick={handleAddVehicleRow} style={{ padding: '4px 10px', fontSize: '11px', fontWeight: 700, borderRadius: '4px', border: '1px solid var(--primary)', color: 'var(--primary)', backgroundColor: 'transparent', cursor: 'pointer' }}>
-                        + 차량 추가
-                      </button>
-                    </div>
-
-                    {/* 각 필드가 무엇인지 명확히 알려주는 직관적 컬럼 레이블 헤더 */}
-                    <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1.3fr 1fr 1.3fr 1fr 30px', gap: '8px', padding: '6px 10px', backgroundColor: 'var(--bg-body)', borderRadius: '6px', fontSize: '11.5px', fontWeight: 800, color: 'var(--primary)', marginBottom: '6px', border: '1px solid var(--border-color)' }}>
-                      <div>🏢 운송사 거래처</div>
-                      <div>👤 운송 기사명</div>
-                      <div>🚚 차종</div>
-                      <div>📞 기사 연락처</div>
-                      <div>💰 운송비 (원)</div>
-                      <div></div>
-                    </div>
-
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                      {assignedVehicles.map((veh, idx) => {
-                        // 선택된 운송사에 속한 기사 목록 필터링
-                        const matchedComp = transportCompanies.find(c => c.name.trim() === veh.transportCompany.trim());
-                        const filteredDrivers = matchedComp
-                          ? transportDrivers.filter(d => d.companyId === matchedComp.id)
-                          : transportDrivers;
-
-                        return (
-                          <div key={veh.id || idx} style={{ padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-body)', display: 'grid', gridTemplateColumns: '1.4fr 1.3fr 1fr 1.3fr 1fr 30px', gap: '8px', alignItems: 'center' }}>
+                            {isDispatchedOrCompleted && !isEditUnlocked && canSave && (
+                              <button
+                                onClick={() => setIsEditUnlocked(true)}
+                                title="배차 완료된 기사 정보 및 운송비를 다시 수정하거나 재배정합니다."
+                                style={{ padding: '6px 12px', backgroundColor: 'rgba(59,130,246,0.12)', color: 'var(--primary)', border: '1px solid rgba(59,130,246,0.3)', borderRadius: '7px', fontSize: '12px', fontWeight: 800, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                              >
+                                <Edit2 size={13} /> ✏️ 기사 정보 수정/재배정 허용
+                              </button>
+                            )}
                             
-                            {/* 1. 운송사 셀렉트 드롭다운 + 자유입력 */}
-                            <select
-                              value={veh.transportCompany}
-                              onChange={e => handleVehicleFieldChange(idx, 'transportCompany', e.target.value)}
-                              style={{ padding: '6px 8px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)', fontSize: '12px', outline: 'none' }}
-                            >
-                              <option value="">-- 운송사 거래처 선택 --</option>
-                              {transportCompanies.map(c => (
-                                <option key={c.id} value={c.name}>{c.name}</option>
-                              ))}
-                            </select>
+                            {canSave && (
+                              <>
+                                {(!isDispatchedOrCompleted || isEditUnlocked) && (
+                                  <button
+                                    onClick={handleSaveDispatch}
+                                    className="btn-primary"
+                                    style={{ padding: '6px 14px', fontWeight: 800, fontSize: '12.5px', borderRadius: '7px', display: 'inline-flex', alignItems: 'center', gap: '5px', boxShadow: '0 2px 6px rgba(59,130,246,0.25)' }}
+                                  >
+                                    <ShieldCheck size={14} /> [🔵 배차 기사 배정 완료]
+                                  </button>
+                                )}
 
-                            {/* 2. 기사명 셀렉트 드롭다운 (선택 시 연락처/차량번호 1초 자동 세팅!) */}
-                            <select
-                              value={veh.driverName}
-                              onChange={e => {
-                                const selectedName = e.target.value;
-                                handleVehicleFieldChange(idx, 'driverName', selectedName);
-                              }}
-                              style={{ padding: '6px 8px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)', fontSize: '12px', outline: 'none' }}
-                            >
-                              <option value="">-- 기사 선택 --</option>
-                              {filteredDrivers.map(drv => (
-                                <option key={drv.id} value={drv.driverName}>
-                                  {drv.driverName} ({drv.vehicleNo || '차량미상'})
-                                </option>
-                              ))}
-                            </select>
+                                {normStatus === 'DISPATCHED' && (
+                                  <button
+                                    onClick={() => handleCompleteDeliveryStatus(selectedDelivery.id)}
+                                    style={{ padding: '6px 14px', backgroundColor: '#16a34a', color: '#fff', border: 'none', borderRadius: '7px', fontWeight: 800, fontSize: '12.5px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '5px', boxShadow: '0 2px 6px rgba(22,163,74,0.25)' }}
+                                  >
+                                    <CheckCircle size={14} /> [🟢 운송 완료 마감]
+                                  </button>
+                                )}
 
-                            {/* 3. 차종 셀렉트 */}
-                            <select
-                              value={veh.vehicleType}
-                              onChange={e => handleVehicleFieldChange(idx, 'vehicleType', e.target.value)}
-                              style={{ padding: '6px 8px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)', fontSize: '12px', outline: 'none' }}
-                            >
-                              {VEHICLE_TYPE_OPTIONS.map(v => <option key={v} value={v}>{v}</option>)}
-                            </select>
+                                <button
+                                  onClick={() => handleCancelDeliveryStatus(selectedDelivery.id)}
+                                  style={{ padding: '6px 10px', borderRadius: '7px', backgroundColor: 'rgba(239,68,68,0.1)', color: '#dc2626', border: '1px solid rgba(239,68,68,0.3)', fontSize: '11.5px', fontWeight: 700, cursor: 'pointer' }}
+                                >
+                                  🚫 배차 취소
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        </div>
 
-                            {/* 4. 연락처 (자동 세팅 + 자유 입력 수정 가능!) */}
+                        {/* 배차 세부 설정 폼 (isFormDisabled 시 비활성화 수정 불가!) */}
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '16px' }}>
+                          <div>
+                            <label style={{ fontSize: '12px', fontWeight: 700, marginBottom: '4px', display: 'block', color: 'var(--text-secondary)' }}>배차 구분</label>
+                            <select
+                              value={dispatchCategory}
+                              disabled={isFormDisabled}
+                              onChange={e => setDispatchCategory(e.target.value as any)}
+                              style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: isFormDisabled ? 'var(--bg-card)' : 'var(--bg-body)', fontSize: '12.5px', color: 'var(--text-primary)', opacity: isFormDisabled ? 0.75 : 1, cursor: isFormDisabled ? 'not-allowed' : 'default' }}
+                            >
+                              <option value="출고">출고</option>
+                              <option value="입고">입고</option>
+                              <option value="반납">반납</option>
+                              <option value="정비">정비</option>
+                              <option value="이동">이동</option>
+                            </select>
+                          </div>
+
+                          <div>
+                            <label style={{ fontSize: '12px', fontWeight: 700, marginBottom: '4px', display: 'block', color: 'var(--text-secondary)' }}>상차일자 & 시간</label>
+                            <div style={{ display: 'flex', gap: '6px' }}>
+                              <input
+                                type="date"
+                                value={loadingDate}
+                                disabled={isFormDisabled}
+                                onChange={e => setLoadingDate(e.target.value)}
+                                style={{ flex: 1, padding: '7px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: isFormDisabled ? 'var(--bg-card)' : 'var(--bg-body)', fontSize: '12.5px', color: 'var(--text-primary)', opacity: isFormDisabled ? 0.75 : 1, cursor: isFormDisabled ? 'not-allowed' : 'default' }}
+                              />
+                              <select
+                                value={loadingTimeSlot}
+                                disabled={isFormDisabled}
+                                onChange={e => setLoadingTimeSlot(e.target.value)}
+                                style={{ width: '80px', padding: '7px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: isFormDisabled ? 'var(--bg-card)' : 'var(--bg-body)', fontSize: '12.5px', color: 'var(--text-primary)', opacity: isFormDisabled ? 0.75 : 1, cursor: isFormDisabled ? 'not-allowed' : 'default' }}
+                              >
+                                <option value="오전">오전</option>
+                                <option value="오후">오후</option>
+                              </select>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '16px' }}>
+                          <div>
+                            <label style={{ fontSize: '12px', fontWeight: 700, marginBottom: '4px', display: 'block', color: 'var(--text-secondary)' }}>상차지 (출발지)</label>
                             <input
                               type="text"
-                              placeholder="기사 연락처"
-                              value={veh.driverContact}
-                              onChange={e => handleVehicleFieldChange(idx, 'driverContact', e.target.value)}
-                              style={{ padding: '6px 8px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)', fontSize: '12px', outline: 'none' }}
+                              value={originAddress}
+                              disabled={isFormDisabled}
+                              onChange={e => setOriginAddress(e.target.value)}
+                              style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: isFormDisabled ? 'var(--bg-card)' : 'var(--bg-body)', fontSize: '12.5px', color: 'var(--text-primary)', opacity: isFormDisabled ? 0.75 : 1, cursor: isFormDisabled ? 'not-allowed' : 'default' }}
                             />
-
-                            {/* 5. 운송비 (원) */}
-                            <input
-                              type="number"
-                              placeholder="운송비"
-                              value={veh.deliveryCost}
-                              onChange={e => handleVehicleFieldChange(idx, 'deliveryCost', Number(e.target.value))}
-                              style={{ padding: '6px 8px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)', fontSize: '12px', fontWeight: 800, textAlign: 'right', outline: 'none' }}
-                            />
-
-                            <button onClick={() => handleRemoveVehicleRow(idx)} style={{ color: '#ef4444', border: 'none', background: 'transparent', cursor: 'pointer' }}>
-                              <Trash2 size={16} />
-                            </button>
                           </div>
-                        );
+                          <div>
+                            <label style={{ fontSize: '12px', fontWeight: 700, marginBottom: '4px', display: 'block', color: 'var(--text-secondary)' }}>하차지 (도착지)</label>
+                            <input
+                              type="text"
+                              value={destinationAddress}
+                              disabled={isFormDisabled}
+                              onChange={e => setDestinationAddress(e.target.value)}
+                              style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: isFormDisabled ? 'var(--bg-card)' : 'var(--bg-body)', fontSize: '12.5px', color: 'var(--text-primary)', opacity: isFormDisabled ? 0.75 : 1, cursor: isFormDisabled ? 'not-allowed' : 'default' }}
+                            />
+                          </div>
+                        </div>
 
-                      })}
-                    </div>
-                  </div>
+                        {/* ────────────────────────────────────────────────────────────────── */}
+                        {/* 🚚 배정 운송 기사 및 운송 거래처 목록 (isFormDisabled 시 비활성화!) */}
+                        {/* ────────────────────────────────────────────────────────────────── */}
+                        <div style={{ marginBottom: '20px' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                            <label style={{ fontSize: '13px', fontWeight: 800, color: 'var(--text-primary)' }}>🚚 배정 운송 기사 목록</label>
+                            {!isFormDisabled && (
+                              <button onClick={handleAddVehicleRow} style={{ padding: '4px 10px', fontSize: '11px', fontWeight: 700, borderRadius: '4px', border: '1px solid var(--primary)', color: 'var(--primary)', backgroundColor: 'transparent', cursor: 'pointer' }}>
+                                + 차량 추가
+                              </button>
+                            )}
+                          </div>
 
-                  {/* 마감 비고 메모 */}
-                  <div style={{ marginBottom: '16px' }}>
-                    <label style={{ fontSize: '12px', fontWeight: 700, marginBottom: '4px', display: 'block', color: 'var(--text-secondary)' }}>📝 배차 특이사항 및 마감 메모</label>
-                    <textarea
-                      value={closingMemo}
-                      onChange={e => setClosingMemo(e.target.value)}
-                      placeholder="배차 기사 전달사항, 현장 특이사항 기록..."
-                      style={{ width: '100%', height: '65px', padding: '8px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-body)', color: 'var(--text-primary)', fontSize: '12.5px', boxSizing: 'border-box' }}
-                    />
-                  </div>
+                          {/* 컬럼 헤더 */}
+                          <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1.3fr 1fr 1.3fr 1fr 30px', gap: '8px', padding: '6px 10px', backgroundColor: 'var(--bg-body)', borderRadius: '6px', fontSize: '11.5px', fontWeight: 800, color: 'var(--primary)', marginBottom: '6px', border: '1px solid var(--border-color)' }}>
+                            <div>🏢 운송사 거래처</div>
+                            <div>👤 운송 기사명</div>
+                            <div>🚚 차종</div>
+                            <div>📞 기사 연락처</div>
+                            <div>💰 운송비 (원)</div>
+                            <div></div>
+                          </div>
+
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                            {assignedVehicles.map((veh, idx) => {
+                              const matchedComp = transportCompanies.find(c => c.name.trim() === veh.transportCompany.trim());
+                              const filteredDrivers = matchedComp
+                                ? transportDrivers.filter(d => d.companyId === matchedComp.id)
+                                : transportDrivers;
+
+                              return (
+                                <div key={veh.id || idx} style={{ padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-body)', display: 'grid', gridTemplateColumns: '1.4fr 1.3fr 1fr 1.3fr 1fr 30px', gap: '8px', alignItems: 'center' }}>
+                                  
+                                  {/* 1. 운송사 셀렉트 */}
+                                  <select
+                                    value={veh.transportCompany}
+                                    disabled={isFormDisabled}
+                                    onChange={e => handleVehicleFieldChange(idx, 'transportCompany', e.target.value)}
+                                    style={{ padding: '6px 8px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: isFormDisabled ? 'var(--bg-card)' : 'var(--bg-card)', color: 'var(--text-primary)', fontSize: '12px', outline: 'none', opacity: isFormDisabled ? 0.75 : 1, cursor: isFormDisabled ? 'not-allowed' : 'default' }}
+                                  >
+                                    <option value="">-- 운송사 거래처 선택 --</option>
+                                    {transportCompanies.map(c => (
+                                      <option key={c.id} value={c.name}>{c.name}</option>
+                                    ))}
+                                  </select>
+
+                                  {/* 2. 기사명 셀렉트 */}
+                                  <select
+                                    value={veh.driverName}
+                                    disabled={isFormDisabled}
+                                    onChange={e => {
+                                      const selectedName = e.target.value;
+                                      handleVehicleFieldChange(idx, 'driverName', selectedName);
+                                    }}
+                                    style={{ padding: '6px 8px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: isFormDisabled ? 'var(--bg-card)' : 'var(--bg-card)', color: 'var(--text-primary)', fontSize: '12px', outline: 'none', opacity: isFormDisabled ? 0.75 : 1, cursor: isFormDisabled ? 'not-allowed' : 'default' }}
+                                  >
+                                    <option value="">-- 기사 선택 --</option>
+                                    {filteredDrivers.map(drv => (
+                                      <option key={drv.id} value={drv.driverName}>
+                                        {drv.driverName} ({drv.vehicleNo || '차량미상'})
+                                      </option>
+                                    ))}
+                                  </select>
+
+                                  {/* 3. 차종 셀렉트 */}
+                                  <select
+                                    value={veh.vehicleType}
+                                    disabled={isFormDisabled}
+                                    onChange={e => handleVehicleFieldChange(idx, 'vehicleType', e.target.value)}
+                                    style={{ padding: '6px 8px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: isFormDisabled ? 'var(--bg-card)' : 'var(--bg-card)', color: 'var(--text-primary)', fontSize: '12px', outline: 'none', opacity: isFormDisabled ? 0.75 : 1, cursor: isFormDisabled ? 'not-allowed' : 'default' }}
+                                  >
+                                    {VEHICLE_TYPE_OPTIONS.map(v => <option key={v} value={v}>{v}</option>)}
+                                  </select>
+
+                                  {/* 4. 연락처 */}
+                                  <input
+                                    type="text"
+                                    placeholder="기사 연락처"
+                                    value={veh.driverContact}
+                                    disabled={isFormDisabled}
+                                    onChange={e => handleVehicleFieldChange(idx, 'driverContact', e.target.value)}
+                                    style={{ padding: '6px 8px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: isFormDisabled ? 'var(--bg-card)' : 'var(--bg-card)', color: 'var(--text-primary)', fontSize: '12px', outline: 'none', opacity: isFormDisabled ? 0.75 : 1, cursor: isFormDisabled ? 'not-allowed' : 'default' }}
+                                  />
+
+                                  {/* 5. 운송비 (원) */}
+                                  <input
+                                    type="number"
+                                    placeholder="운송비"
+                                    value={veh.deliveryCost}
+                                    disabled={isFormDisabled}
+                                    onChange={e => handleVehicleFieldChange(idx, 'deliveryCost', Number(e.target.value))}
+                                    style={{ padding: '6px 8px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: isFormDisabled ? 'var(--bg-card)' : 'var(--bg-card)', color: 'var(--text-primary)', fontSize: '12px', fontWeight: 800, textAlign: 'right', outline: 'none', opacity: isFormDisabled ? 0.75 : 1, cursor: isFormDisabled ? 'not-allowed' : 'default' }}
+                                  />
+
+                                  {!isFormDisabled && (
+                                    <button onClick={() => handleRemoveVehicleRow(idx)} style={{ color: '#ef4444', border: 'none', background: 'transparent', cursor: 'pointer' }}>
+                                      <Trash2 size={16} />
+                                    </button>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        {/* 마감 비고 메모 */}
+                        <div style={{ marginBottom: '16px' }}>
+                          <label style={{ fontSize: '12px', fontWeight: 700, marginBottom: '4px', display: 'block', color: 'var(--text-secondary)' }}>📝 배차 특이사항 및 마감 메모</label>
+                          <textarea
+                            value={closingMemo}
+                            disabled={isFormDisabled}
+                            onChange={e => setClosingMemo(e.target.value)}
+                            placeholder="배차 기사 전달사항, 현장 특이사항 기록..."
+                            style={{ width: '100%', height: '65px', padding: '8px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: isFormDisabled ? 'var(--bg-card)' : 'var(--bg-body)', color: 'var(--text-primary)', fontSize: '12.5px', boxSizing: 'border-box', opacity: isFormDisabled ? 0.75 : 1, cursor: isFormDisabled ? 'not-allowed' : 'default' }}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })()}
 
                   {/* ────────────────────────────────────────────────────────────────── */}
                   {/* 💬 최하단: 스마트 출고 요청 자연어 원본 텍스트 박스 */}
