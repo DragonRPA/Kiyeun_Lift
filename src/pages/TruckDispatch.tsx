@@ -268,12 +268,13 @@ export const TruckDispatch: React.FC = () => {
     const updated = [...assignedVehicles];
     updated[index] = { ...updated[index], [field]: value };
 
-    // 기사 선택 시 연락처 및 차량번호 자동 매핑
+    // 기사 선택 시 연락처, 차량번호, 차종(톤수) 및 운송사 자동 매핑
     if (field === 'driverName' && value) {
       const driverMatch = transportDrivers.find(d => d.driverName.trim() === value.trim());
       if (driverMatch) {
         if (driverMatch.driverContact) updated[index].driverContact = driverMatch.driverContact;
         if (driverMatch.vehicleNo) updated[index].vehicleNo = driverMatch.vehicleNo;
+        if (driverMatch.vehicleType) updated[index].vehicleType = driverMatch.vehicleType;
         const comp = transportCompanies.find(c => c.id === driverMatch.companyId);
         if (comp) updated[index].transportCompany = comp.name;
       }
