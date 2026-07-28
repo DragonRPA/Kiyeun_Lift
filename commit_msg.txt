@@ -1,1 +1,1 @@
-fix: v1.12.0.Build.00005 (2026-07-28 15:05) - 출고 검수(outbound_inspections.tsx) 스마트 출고 동적 파서(getDynamicSpecLabel) SSOT 연동 및 보양없음 오탐 제거 완비
+fix: v1.12.0.Build.00006 (2026-07-28 15:15) - 장비 교체 시 계약 슬롯 ID 미스매치 오류 수정 및 2중 자가추적 파이프라인(exchangeOutboundAsset) 수술 완비

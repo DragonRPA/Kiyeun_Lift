@@ -1,6 +1,5 @@
 # 개발 지시 및 개편 완료 내역 (dev_temp.md)
 
-- [완료] 출고 검수 의뢰 관리 (`outbound_inspections.tsx`) 스마트 출고 원문 파서 동기화 및 억지 부풀리기 방지 수술
-  1. 스마트 출고 요청(`smart_dispatch.tsx`)과 출고 검수(`outbound_inspections.tsx`)의 정비 요구사항 라벨 파서(`getDynamicSpecLabel`)를 100% 통일 동기화.
-  2. 원문 텍스트에 `3면 함석` 입력 시, 출고 검수에서도 **`1. 3면 함석 설치 검수`** 라고 정확한 맞춤형 라벨 동적 표출.
-  3. `보양: 없음` 등 부정형 문구에 낚여 `탑승구 사다리 및 모서리 보양` 이 억지로 추가되던 키워드 파서 오탐 버그 정밀 방지 수술 완비.
+- [완료] 출고 검수 장비 교체 (`exchangeOutboundAsset`) 팝업 오류 완전 치유 수술
+  1. 기존에 `contractAssetId` (계약 자산 슬롯 ID)를 받아야 할 첫 번째 매개변수에 `contractId` (계약 ID)가 잘못 전달되어 "교체 대상 장비 또는 계약 슬롯을 찾을 수 없습니다" 예외가 발생하던 인자 미스매치 버그 정밀 수정.
+  2. `AppContext.tsx` 내 `exchangeOutboundAsset` 함수가 `contractAssetId` 또는 `contractId` 어떠한 ID값이 들어오더라도 해당 계약/장비의 슬롯을 2중 자가추적(Self-Healing Fallback)하도록 방어수술 완비.

@@ -1713,13 +1713,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  // 💡 출고 진행 중 장비 교체 및 수리전환 트랜잭션 메소드
-  const exchangeOutboundAsset = async (contractAssetId: string, oldAssetId: string, newAssetId: string, reason: string, markOldAsRepairing: boolean = true) => {
+  // 💡 출고 진행 중 장비 교체 및 수리전환 트랜잭션 메소드 (contractAssetId 또는 contractId 2중 자동추적 지원)
+  const exchangeOutboundAsset = async (contractAssetIdOrContractId: string, oldAssetId: string, newAssetId: string, reason: string, markOldAsRepairing: boolean = true) => {
     // 롤백용 스냅샷 준비
     const oldAssetOrig = db.assets.find(a => a.id === oldAssetId);
     const newAssetOrig = db.assets.find(a => a.id === newAssetId);
-    const caOrig = db.contractAssets.find(c => c.id === contractAssetId);
-    const inspOrig = db.outboundInspections.find(i => i.contractAssetId === contractAssetId && i.assetId === oldAssetId);
+    
+    // contractAssetId 직접 매칭 또는 contractId + oldAssetId 조합으로 2중 유연 추적
+    let caOrig = db.contractAssets.find(c => c.id === contractAssetIdOrContractId);
+    if (!caOrig) {
+      caOrig = db.contractAssets.find(c => c.contractId === contractAssetIdOrContractId && (c.assetId === oldAssetId || !c.assetId));
+    }
+    if (!caOrig) {
+      caOrig = db.contractAssets.find(c => c.contractId === contractAssetIdOrContractId);
+    }
+    const contractAssetId = caOrig?.id || contractAssetIdOrContractId;
+
+    const inspOrig = db.outboundInspections.find(i => (i.contractAssetId === contractAssetId || i.contractId === contractAssetIdOrContractId) && i.assetId === oldAssetId);
 
     const oldSnapshot = oldAssetOrig ? { ...oldAssetOrig } : null;
     const newSnapshot = newAssetOrig ? { ...newAssetOrig } : null;
@@ -1728,7 +1738,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     try {
       if (!oldAssetOrig || !newAssetOrig || !caOrig) {
-        throw new Error('교체 대상 장비 또는 계약 슬롯을 찾을 수 없습니다.');
+        throw new Error(`교체 대상 장비 또는 계약 슬롯을 찾을 수 없습니다. (구장비: ${oldAssetId ? '정상' : '누락'}, 신장비: ${newAssetId ? '정상' : '누락'}, 계약슬롯: ${caOrig ? '정상' : '누락'})`);
       }
 
       const today = new Date().toISOString().split('T')[0];

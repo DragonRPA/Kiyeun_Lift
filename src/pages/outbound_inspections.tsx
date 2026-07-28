@@ -430,8 +430,12 @@ export const OutboundInspections: React.FC = () => {
 
     setIsProcessing(true);
     try {
+      // 💡 선택된 의뢰 그룹 및 장비에 정확히 매칭되는 contractAsset ID 탐색
+      const targetInsp = selectedGroup.items.find(i => i.assetId === exchangeModalAsset.id);
+      const targetCaId = targetInsp?.contractAssetId || selectedGroup.contractId;
+
       await exchangeOutboundAsset(
-        selectedGroup.contractId,
+        targetCaId,
         exchangeModalAsset.id,
         targetNewAssetId,
         exchangeReason,

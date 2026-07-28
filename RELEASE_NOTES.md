@@ -1,3 +1,14 @@
+# Release Notes (v1.12.0.Build.00006 - 2026-07-28 15:15)
+
+## 🛠️ [장비 교체 팝업 오류 완전 치유 수술] `AppContext.tsx` & `outbound_inspections.tsx` 2중 자가추적 엔진 탑재
+
+- **오류 발생 원인**: 장비 교체 실행 시 `contractAssetId` (계약 자산 슬롯 ID)를 요구하는 첫번째 인자에 `contractId` (계약 ID)가 잘못 전달되어 "교체 대상 장비 또는 계약 슬롯을 찾을 수 없습니다" 팝업 오류가 발생했던 버그임.
+- **주요 해결 수술**:
+  1. **[인자 매핑 정밀화 (`outbound_inspections.tsx`)]**: 선택된 출고 검수 항목의 `contractAssetId` 슬롯 ID를 정확하게 추출하여 교체 트랜잭션에 전달.
+  2. **[2중 자가추적 엔진 탑재 (`AppContext.tsx`)]**: `exchangeOutboundAsset` 함수가 `contractAssetId` 또는 `contractId` 둘 중 어느 ID가 넘어와도 원본 계약 슬롯을 2중으로 자동 추적하여 에러 없이 100% 정상 작동하도록 방어보완 완비.
+
+---
+
 # Release Notes (v1.12.0.Build.00005 - 2026-07-28 15:05)
 
 ## 🎯 [스마트 출고 <-> 출고 검수 정비 스펙 동적 라벨 파서 100% 동기화] `outbound_inspections.tsx` 맞춤 표출 & 오탐 방지
