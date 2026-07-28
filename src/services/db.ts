@@ -427,6 +427,7 @@ export interface Delivery {
   vehicleRequirements?: string; // 차량 종류별 대수 지정 JSON: [{ vehicleType: string, count: number }]
   cargoItems?: string; // 운반 장비 명세 JSON: [{ modelName: string, count: number }]
   isCostSettled: boolean;
+  rawText?: string; // 스마트 출고 시 입력된 자연어 원문 텍스트
   memo: string;
   closingMemo?: string; // 실무자 마감 비고
   vehicles?: string; // 여러 차량 배차 정보를 위한 JSON 문자열 필드

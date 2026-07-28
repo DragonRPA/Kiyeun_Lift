@@ -903,6 +903,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       reconciliationStatus: 'PENDING',
       cargoItems,
       isCostSettled: false,
+      rawText: (data as any).prompt || (data as any).rawText || data.note || '',
       memo: `[스마트출고] 현장담당: ${data.siteContactName || '-'} (${data.siteContactPhone || '-'}) | 상차: ${data.loadingTime || '-'} / 하차: ${data.unloadingTime || '-'} | 청구담당: ${data.billingContactName || '-'} (${data.billingContactPhone || '-'}) | 계산서: ${data.taxBillEmail || '-'} | 특이사항: ${data.note || '없음'}`,
       closingMemo: `[마감조건] 마감일: ${dData.closingDay || '-'} / 결제일: ${dData.paymentDay || '-'} | 유상옵션: ${dData.paidOptions || '없음'} | 보양: ${dData.protection || '없음'}`,
       createdAt: new Date().toISOString(),

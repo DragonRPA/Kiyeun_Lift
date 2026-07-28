@@ -4,7 +4,8 @@ import { ToggleSwitch } from '../components/ToggleSwitch';
 import { 
   Truck, Check, AlertCircle, Plus, Trash2, Clock, Layers, 
   FileText, Copy, Lock, CreditCard, CheckCircle, RefreshCw, X,
-  Calendar, RotateCcw, ShieldCheck, CheckSquare, XCircle, Search
+  Calendar, RotateCcw, ShieldCheck, CheckSquare, XCircle, Search,
+  MessageSquare, User
 } from 'lucide-react';
 import { Delivery, TransportCompany, TransportDriver, db, DeliveryStatus } from '../services/db';
 
@@ -133,9 +134,7 @@ export const TruckDispatch: React.FC = () => {
   const getContract = (contractId?: string) => contracts.find(c => c.id === contractId);
   const getCustomer = (customerId?: string) => customers.find(c => c.id === customerId);
 
-  // ──────────────────────────────────────────────────────────────────────────
   // 1. 배차 4단계 진행 상태 판정 헬퍼
-  // ──────────────────────────────────────────────────────────────────────────
   const getNormalizedDeliveryStatus = (d: Delivery): 'PENDING' | 'DISPATCHED' | 'DELIVERED' | 'CANCELLED' => {
     if (d.status === 'DISPATCHED') return 'DISPATCHED';
     if (d.status === 'DELIVERED' || d.status === 'COMPLETED') return 'DELIVERED';
@@ -143,15 +142,12 @@ export const TruckDispatch: React.FC = () => {
     return 'PENDING';
   };
 
-  // ──────────────────────────────────────────────────────────────────────────
   // 2. 배차건 정밀 필터링 (상태 4단계 + 요청/운송일 기간 피커 + 검색어)
-  // ──────────────────────────────────────────────────────────────────────────
   const filteredDeliveries = useMemo(() => {
     return deliveries.filter(d => {
       const dStatus = getNormalizedDeliveryStatus(d);
       if (activeDispatchStatusTab !== 'ALL' && dStatus !== activeDispatchStatusTab) return false;
 
-      // 날짜 범위 필터링 (loadingDate, requestDate, scheduledDate 기준)
       const dDate = d.loadingDate || d.requestDate || d.scheduledDate || d.createdAt?.substring(0, 10);
       if (startDate && dDate && dDate < startDate) return false;
       if (endDate && dDate && dDate > endDate) return false;
@@ -234,21 +230,10 @@ export const TruckDispatch: React.FC = () => {
     const updated = [...assignedVehicles];
     updated[index] = { ...updated[index], [field]: value };
 
+    // 기사 선택 시 연락처 및 차량번호 자동 매핑
     if (field === 'driverName' && value) {
-      let searchName = value;
-      let searchCompany = '';
-      const match = value.match(/^(.*?)\s*\((.*?)\)$/);
-      if (match) {
-        searchName = match[1].trim();
-        searchCompany = match[2].trim();
-      }
-
-      const driverMatch = transportDrivers.find(d => 
-        d.driverName.trim() === searchName
-      );
-
+      const driverMatch = transportDrivers.find(d => d.driverName.trim() === value.trim());
       if (driverMatch) {
-        updated[index].driverName = driverMatch.driverName;
         if (driverMatch.driverContact) updated[index].driverContact = driverMatch.driverContact;
         if (driverMatch.vehicleNo) updated[index].vehicleNo = driverMatch.vehicleNo;
         const comp = transportCompanies.find(c => c.id === driverMatch.companyId);
@@ -278,9 +263,7 @@ export const TruckDispatch: React.FC = () => {
     setAssignedVehicles(prev => prev.filter((_, i) => i !== index));
   };
 
-  // ──────────────────────────────────────────────────────────────────────────
   // 3. 배차 배정 저장 (status: 'DISPATCHED' 배차 완료 전환!)
-  // ──────────────────────────────────────────────────────────────────────────
   const handleSaveDispatch = async () => {
     if (!selectedDelivery) return;
     if (!canSave) {
@@ -295,7 +278,7 @@ export const TruckDispatch: React.FC = () => {
 
       const mainVeh = assignedVehicles[0] || {};
       const payload: Partial<Delivery> = {
-        status: 'DISPATCHED', // 🔵 배차 완료 상태로 전환!
+        status: 'DISPATCHED',
         dispatchCategory: dispatchCategory,
         loadingDate: loadingDate,
         loadingTimeSlot: finalLoadingSlot,
@@ -330,14 +313,12 @@ export const TruckDispatch: React.FC = () => {
     }
   };
 
-  // ──────────────────────────────────────────────────────────────────────────
-  // 4. 운송 완료 처리 (status: 'DELIVERED' 운송 완료 전환!)
-  // ──────────────────────────────────────────────────────────────────────────
+  // 4. 운송 완료 처리 (status: 'DELIVERED')
   const handleCompleteDeliveryStatus = async (deliveryId: string) => {
     if (!canSave) return;
     try {
       db.updateRow<Delivery>('deliveries', deliveryId, {
-        status: 'DELIVERED', // 🟢 운송 완료 전환!
+        status: 'DELIVERED',
         updatedAt: new Date().toISOString()
       });
       await db.awaitPendingWrites();
@@ -349,15 +330,13 @@ export const TruckDispatch: React.FC = () => {
     }
   };
 
-  // ──────────────────────────────────────────────────────────────────────────
-  // 5. 배차 취소 처리 (status: 'CANCELLED' 배차 취소 전환!)
-  // ──────────────────────────────────────────────────────────────────────────
+  // 5. 배차 취소 처리 (status: 'CANCELLED')
   const handleCancelDeliveryStatus = async (deliveryId: string) => {
     if (!canSave) return;
     if (!window.confirm('해당 배차를 취소 처리하시겠습니까?')) return;
     try {
       db.updateRow<Delivery>('deliveries', deliveryId, {
-        status: 'CANCELLED', // 🔴 배차 취소 전환!
+        status: 'CANCELLED',
         updatedAt: new Date().toISOString()
       });
       await db.awaitPendingWrites();
@@ -380,9 +359,9 @@ export const TruckDispatch: React.FC = () => {
       const finalUnloadingSlot = manualUnloadingTimeSlot === '희망시간' ? manualUnloadingCustomTime : manualUnloadingTimeSlot;
       const nowIso = new Date().toISOString();
 
-      const newDelivery = db.insertRow<Delivery>('deliveries', {
+      db.insertRow<Delivery>('deliveries', {
         type: manualCategory === '출고' ? 'OUTBOUND' : manualCategory === '반납' ? 'RETURN' : 'INBOUND',
-        status: 'PENDING', // 🟡 최초 상태: 배차 전
+        status: 'PENDING',
         dispatchCategory: manualCategory,
         contractId: manualContractId || undefined,
         requestDate: manualLoadingDate,
@@ -426,17 +405,6 @@ export const TruckDispatch: React.FC = () => {
     return [{ modelName: '고소작업대 (장비 미지정)', count: 1 }];
   };
 
-  const parseVehicleReqs = (d: Delivery): VehicleReq[] => {
-    if (d.vehicleRequirements) {
-      try {
-        const parsed = JSON.parse(d.vehicleRequirements);
-        if (Array.isArray(parsed)) return parsed;
-      } catch (e) {}
-    }
-    return [{ vehicleType: d.vehicleType || '3.5T', count: 1 }];
-  };
-
-  // 뱃지 헬퍼
   const getDeliveryStatusBadge = (status: string) => {
     switch (status) {
       case 'PENDING':
@@ -502,9 +470,7 @@ export const TruckDispatch: React.FC = () => {
       {/* 탭 1: 배차 관리 */}
       {activeTab === 'DISPATCH' && (
         <div>
-          {/* ────────────────────────────────────────────────────────────────── */}
-          {/* 4단계 배차 진행 상태 카운트 탭 (1번 이미지 디자인 완벽 이식!) */}
-          {/* ────────────────────────────────────────────────────────────────── */}
+          {/* 4단계 배차 진행 상태 카운트 탭 */}
           <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', flexWrap: 'wrap' }}>
             {[
               { key: 'ALL', label: '전체 보기', count: deliveries.length },
@@ -553,7 +519,7 @@ export const TruckDispatch: React.FC = () => {
             {/* [좌측] 배차 목록 카드 + 📅 요청/운송일 기간 선택 폼 */}
             <div style={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '12px', padding: '16px', display: 'flex', flexDirection: 'column', height: 'calc(100vh - 230px)', minHeight: '600px' }}>
               
-              {/* 📅 배차 요청/운송일 기간 선택 폼 (1번 이미지 디자인 완벽 반영!) */}
+              {/* 📅 배차 요청/운송일 기간 선택 폼 */}
               <div style={{ marginBottom: '12px', padding: '10px 12px', backgroundColor: 'var(--bg-body)', borderRadius: '10px', border: '1px solid var(--border-color)' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                   <span style={{ fontSize: '12px', fontWeight: 800, color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '4px' }}>
@@ -702,7 +668,6 @@ export const TruckDispatch: React.FC = () => {
                           📍 {d.destinationAddress || '목적지 미지정'}
                         </div>
 
-                        {/* 화물 / 배차요청 내역 요약 */}
                         <div style={{ padding: '6px 8px', backgroundColor: 'var(--bg-card)', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '11.5px', color: 'var(--text-muted)' }}>
                           📦 화물: {cargoItems.map(c => `${c.modelName} ${c.count}대`).join(', ')}
                         </div>
@@ -753,11 +718,11 @@ export const TruckDispatch: React.FC = () => {
                   {/* 배차 세부 설정 폼 */}
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '16px' }}>
                     <div>
-                      <label style={{ fontSize: '12px', fontWeight: 700, marginBottom: '4px', display: 'block' }}>배차 구분</label>
+                      <label style={{ fontSize: '12px', fontWeight: 700, marginBottom: '4px', display: 'block', color: 'var(--text-secondary)' }}>배차 구분</label>
                       <select
                         value={dispatchCategory}
                         onChange={e => setDispatchCategory(e.target.value as any)}
-                        style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-body)', fontSize: '12.5px' }}
+                        style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-body)', fontSize: '12.5px', color: 'var(--text-primary)' }}
                       >
                         <option value="출고">출고</option>
                         <option value="입고">입고</option>
@@ -768,18 +733,18 @@ export const TruckDispatch: React.FC = () => {
                     </div>
 
                     <div>
-                      <label style={{ fontSize: '12px', fontWeight: 700, marginBottom: '4px', display: 'block' }}>상차일자 & 시간</label>
+                      <label style={{ fontSize: '12px', fontWeight: 700, marginBottom: '4px', display: 'block', color: 'var(--text-secondary)' }}>상차일자 & 시간</label>
                       <div style={{ display: 'flex', gap: '6px' }}>
                         <input
                           type="date"
                           value={loadingDate}
                           onChange={e => setLoadingDate(e.target.value)}
-                          style={{ flex: 1, padding: '7px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-body)', fontSize: '12.5px' }}
+                          style={{ flex: 1, padding: '7px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-body)', fontSize: '12.5px', color: 'var(--text-primary)' }}
                         />
                         <select
                           value={loadingTimeSlot}
                           onChange={e => setLoadingTimeSlot(e.target.value)}
-                          style={{ width: '80px', padding: '7px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-body)', fontSize: '12.5px' }}
+                          style={{ width: '80px', padding: '7px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-body)', fontSize: '12.5px', color: 'var(--text-primary)' }}
                         >
                           <option value="오전">오전</option>
                           <option value="오후">오후</option>
@@ -790,89 +755,143 @@ export const TruckDispatch: React.FC = () => {
 
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '16px' }}>
                     <div>
-                      <label style={{ fontSize: '12px', fontWeight: 700, marginBottom: '4px', display: 'block' }}>상차지 (출발지)</label>
+                      <label style={{ fontSize: '12px', fontWeight: 700, marginBottom: '4px', display: 'block', color: 'var(--text-secondary)' }}>상차지 (출발지)</label>
                       <input
                         type="text"
                         value={originAddress}
                         onChange={e => setOriginAddress(e.target.value)}
-                        style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-body)', fontSize: '12.5px' }}
+                        style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-body)', fontSize: '12.5px', color: 'var(--text-primary)' }}
                       />
                     </div>
                     <div>
-                      <label style={{ fontSize: '12px', fontWeight: 700, marginBottom: '4px', display: 'block' }}>하차지 (도착지)</label>
+                      <label style={{ fontSize: '12px', fontWeight: 700, marginBottom: '4px', display: 'block', color: 'var(--text-secondary)' }}>하차지 (도착지)</label>
                       <input
                         type="text"
                         value={destinationAddress}
                         onChange={e => setDestinationAddress(e.target.value)}
-                        style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-body)', fontSize: '12.5px' }}
+                        style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-body)', fontSize: '12.5px', color: 'var(--text-primary)' }}
                       />
                     </div>
                   </div>
 
-                  {/* 🚚 기사 및 운송사 배정 테이블 */}
+                  {/* ────────────────────────────────────────────────────────────────── */}
+                  {/* 🚚 배정 운송 기사 및 운송 거래처 목록 (직관적 레이블 + 셀렉트 연동) */}
+                  {/* ────────────────────────────────────────────────────────────────── */}
                   <div style={{ marginBottom: '20px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                      <label style={{ fontSize: '13px', fontWeight: 800 }}>🚚 배정 운송 기사 목록</label>
+                      <label style={{ fontSize: '13px', fontWeight: 800, color: 'var(--text-primary)' }}>🚚 배정 운송 기사 목록</label>
                       <button onClick={handleAddVehicleRow} style={{ padding: '4px 10px', fontSize: '11px', fontWeight: 700, borderRadius: '4px', border: '1px solid var(--primary)', color: 'var(--primary)', backgroundColor: 'transparent', cursor: 'pointer' }}>
                         + 차량 추가
                       </button>
                     </div>
 
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                      {assignedVehicles.map((veh, idx) => (
-                        <div key={veh.id || idx} style={{ padding: '12px', borderRadius: '8px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-body)', display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr 1fr 1fr 30px', gap: '8px', alignItems: 'center' }}>
-                          <input
-                            type="text"
-                            placeholder="운송사 (예: 삼일운송)"
-                            value={veh.transportCompany}
-                            onChange={e => handleVehicleFieldChange(idx, 'transportCompany', e.target.value)}
-                            style={{ padding: '6px 8px', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '12px' }}
-                          />
-                          <select
-                            value={veh.vehicleType}
-                            onChange={e => handleVehicleFieldChange(idx, 'vehicleType', e.target.value)}
-                            style={{ padding: '6px 8px', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '12px' }}
-                          >
-                            {VEHICLE_TYPE_OPTIONS.map(v => <option key={v} value={v}>{v}</option>)}
-                          </select>
-                          <input
-                            type="text"
-                            placeholder="기사명"
-                            value={veh.driverName}
-                            onChange={e => handleVehicleFieldChange(idx, 'driverName', e.target.value)}
-                            style={{ padding: '6px 8px', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '12px' }}
-                          />
-                          <input
-                            type="text"
-                            placeholder="연락처"
-                            value={veh.driverContact}
-                            onChange={e => handleVehicleFieldChange(idx, 'driverContact', e.target.value)}
-                            style={{ padding: '6px 8px', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '12px' }}
-                          />
-                          <input
-                            type="number"
-                            placeholder="운송비(원)"
-                            value={veh.deliveryCost}
-                            onChange={e => handleVehicleFieldChange(idx, 'deliveryCost', Number(e.target.value))}
-                            style={{ padding: '6px 8px', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '12px', fontWeight: 700 }}
-                          />
-                          <button onClick={() => handleRemoveVehicleRow(idx)} style={{ color: '#ef4444', border: 'none', background: 'transparent', cursor: 'pointer' }}>
-                            <Trash2 size={16} />
-                          </button>
-                        </div>
-                      ))}
+                    {/* 각 필드가 무엇인지 명확히 알려주는 직관적 컬럼 레이블 헤더 */}
+                    <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr 1.3fr 1.3fr 1fr 30px', gap: '8px', padding: '6px 10px', backgroundColor: 'var(--bg-body)', borderRadius: '6px', fontSize: '11.5px', fontWeight: 800, color: 'var(--primary)', marginBottom: '6px', border: '1px solid var(--border-color)' }}>
+                      <div>🏢 운송사 거래처</div>
+                      <div>🚚 차종</div>
+                      <div>👤 운송 기사명</div>
+                      <div>📞 기사 연락처</div>
+                      <div>💰 운송비 (원)</div>
+                      <div></div>
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      {assignedVehicles.map((veh, idx) => {
+                        // 선택된 운송사에 속한 기사 목록 필터링
+                        const matchedComp = transportCompanies.find(c => c.name.trim() === veh.transportCompany.trim());
+                        const filteredDrivers = matchedComp
+                          ? transportDrivers.filter(d => d.companyId === matchedComp.id)
+                          : transportDrivers;
+
+                        return (
+                          <div key={veh.id || idx} style={{ padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-body)', display: 'grid', gridTemplateColumns: '1.4fr 1fr 1.3fr 1.3fr 1fr 30px', gap: '8px', alignItems: 'center' }}>
+                            
+                            {/* 1. 운송사 셀렉트 드롭다운 + 자유입력 */}
+                            <select
+                              value={veh.transportCompany}
+                              onChange={e => handleVehicleFieldChange(idx, 'transportCompany', e.target.value)}
+                              style={{ padding: '6px 8px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)', fontSize: '12px', outline: 'none' }}
+                            >
+                              <option value="">-- 운송사 거래처 선택 --</option>
+                              {transportCompanies.map(c => (
+                                <option key={c.id} value={c.name}>{c.name}</option>
+                              ))}
+                            </select>
+
+                            {/* 2. 차종 셀렉트 */}
+                            <select
+                              value={veh.vehicleType}
+                              onChange={e => handleVehicleFieldChange(idx, 'vehicleType', e.target.value)}
+                              style={{ padding: '6px 8px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)', fontSize: '12px', outline: 'none' }}
+                            >
+                              {VEHICLE_TYPE_OPTIONS.map(v => <option key={v} value={v}>{v}</option>)}
+                            </select>
+
+                            {/* 3. 기사명 셀렉트 드롭다운 (선택 시 연락처/차량번호 1초 자동 세팅!) */}
+                            <select
+                              value={veh.driverName}
+                              onChange={e => {
+                                const selectedName = e.target.value;
+                                handleVehicleFieldChange(idx, 'driverName', selectedName);
+                              }}
+                              style={{ padding: '6px 8px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)', fontSize: '12px', outline: 'none' }}
+                            >
+                              <option value="">-- 기사 선택 --</option>
+                              {filteredDrivers.map(drv => (
+                                <option key={drv.id} value={drv.driverName}>
+                                  {drv.driverName} ({drv.vehicleNo || '차량미상'})
+                                </option>
+                              ))}
+                            </select>
+
+                            {/* 4. 연락처 (자동 세팅 + 자유 입력 수정 가능!) */}
+                            <input
+                              type="text"
+                              placeholder="기사 연락처"
+                              value={veh.driverContact}
+                              onChange={e => handleVehicleFieldChange(idx, 'driverContact', e.target.value)}
+                              style={{ padding: '6px 8px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)', fontSize: '12px', outline: 'none' }}
+                            />
+
+                            {/* 5. 운송비 (원) */}
+                            <input
+                              type="number"
+                              placeholder="운송비"
+                              value={veh.deliveryCost}
+                              onChange={e => handleVehicleFieldChange(idx, 'deliveryCost', Number(e.target.value))}
+                              style={{ padding: '6px 8px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)', fontSize: '12px', fontWeight: 800, textAlign: 'right', outline: 'none' }}
+                            />
+
+                            <button onClick={() => handleRemoveVehicleRow(idx)} style={{ color: '#ef4444', border: 'none', background: 'transparent', cursor: 'pointer' }}>
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
 
                   {/* 마감 비고 메모 */}
-                  <div style={{ marginBottom: '20px' }}>
-                    <label style={{ fontSize: '12px', fontWeight: 700, marginBottom: '4px', display: 'block' }}>📝 배차 특이사항 및 마감 메모</label>
+                  <div style={{ marginBottom: '16px' }}>
+                    <label style={{ fontSize: '12px', fontWeight: 700, marginBottom: '4px', display: 'block', color: 'var(--text-secondary)' }}>📝 배차 특이사항 및 마감 메모</label>
                     <textarea
                       value={closingMemo}
                       onChange={e => setClosingMemo(e.target.value)}
                       placeholder="배차 기사 전달사항, 현장 특이사항 기록..."
-                      style={{ width: '100%', height: '70px', padding: '8px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-body)', fontSize: '12.5px', boxSizing: 'border-box' }}
+                      style={{ width: '100%', height: '65px', padding: '8px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-body)', color: 'var(--text-primary)', fontSize: '12.5px', boxSizing: 'border-box' }}
                     />
+                  </div>
+
+                  {/* ────────────────────────────────────────────────────────────────── */}
+                  {/* 💬 최하단: 스마트 출고 요청 자연어 원본 텍스트 박스 */}
+                  {/* ────────────────────────────────────────────────────────────────── */}
+                  <div style={{ marginBottom: '20px', padding: '14px 16px', backgroundColor: 'rgba(59,130,246,0.06)', border: '1.5px solid rgba(59,130,246,0.25)', borderRadius: '10px' }}>
+                    <div style={{ fontSize: '13px', fontWeight: 800, color: 'var(--primary)', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <MessageSquare size={16} /> 💬 스마트 출고 요청 자연어 원본 텍스트 (배차 판단 참고용)
+                    </div>
+                    <div style={{ fontSize: '12.5px', color: 'var(--text-primary)', whiteSpace: 'pre-wrap', lineHeight: '1.6', fontFamily: 'Consolas, Monaco, monospace', backgroundColor: 'var(--bg-card)', padding: '10px 12px', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
+                      {selectedDelivery.rawText || selectedDelivery.memo || '요청된 자연어 원문이 없습니다.'}
+                    </div>
                   </div>
 
                   {/* 하단 배차 상태 변경 버튼 액션 */}
@@ -911,7 +930,7 @@ export const TruckDispatch: React.FC = () => {
             
             <div style={{ marginBottom: '12px' }}>
               <label style={{ fontSize: '12.5px', fontWeight: 700, marginBottom: '4px', display: 'block' }}>배차 구분의 유형</label>
-              <select value={manualCategory} onChange={e => setManualCategory(e.target.value as any)} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
+              <select value={manualCategory} onChange={e => setManualCategory(e.target.value as any)} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-body)', color: 'var(--text-primary)' }}>
                 <option value="출고">출고</option>
                 <option value="입고">입고</option>
                 <option value="반납">반납</option>
@@ -923,11 +942,11 @@ export const TruckDispatch: React.FC = () => {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '12px' }}>
               <div>
                 <label style={{ fontSize: '12.5px', fontWeight: 700, marginBottom: '4px', display: 'block' }}>출발지 (상차지)</label>
-                <input type="text" value={manualOrigin} onChange={e => setManualOrigin(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid var(--border-color)' }} />
+                <input type="text" value={manualOrigin} onChange={e => setManualOrigin(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-body)', color: 'var(--text-primary)' }} />
               </div>
               <div>
                 <label style={{ fontSize: '12.5px', fontWeight: 700, marginBottom: '4px', display: 'block' }}>도착지 (하차지)</label>
-                <input type="text" value={manualDestination} onChange={e => setManualDestination(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid var(--border-color)' }} />
+                <input type="text" value={manualDestination} onChange={e => setManualDestination(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-body)', color: 'var(--text-primary)' }} />
               </div>
             </div>
 

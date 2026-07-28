@@ -299,6 +299,7 @@ CREATE TABLE deliveries (
     "deliveryCost" DOUBLE PRECISION NOT NULL DEFAULT 0,
     "purchaseBillId" TEXT, -- 매입 마감 연동
     "isCostSettled" BOOLEAN DEFAULT FALSE,
+    "rawText" TEXT, -- 스마트 출고시 입력된 사용자 요청 원문 텍스트
     memo TEXT,
     "closingMemo" TEXT, -- 실무자 마감 비고
     "requestDate" TEXT NOT NULL,

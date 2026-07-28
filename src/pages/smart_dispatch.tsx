@@ -600,7 +600,7 @@ ${activeSpecs.map((s, idx) => `  ${idx + 1}. [적용] ${s.label}`).join('\n') ||
     const data = {
       customerName, siteName, siteAddress, siteContactName, siteContactPhone, siteContactEmail,
       billingContactName, billingContactPhone, statementEmail, taxBillEmail,
-      loadingTime, unloadingTime, equipments: updatedEquipments, note
+      loadingTime, unloadingTime, equipments: updatedEquipments, note, rawText: rawText || note
     };
 
     // 프로세스 진행 모달 초기화
