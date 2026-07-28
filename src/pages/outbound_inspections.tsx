@@ -21,7 +21,9 @@ import {
   RefreshCw,
   ArrowRightLeft,
   Star,
-  ShieldAlert
+  ShieldAlert,
+  Calendar,
+  RotateCcw
 } from 'lucide-react';
 
 // 21대 고소작업대 정비/스펙 체크리스트 마스터 정의
@@ -85,6 +87,33 @@ export const OutboundInspections: React.FC = () => {
   const [activeTabStatus, setActiveTabStatus] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
+
+  // 📅 요청일(신청일) 기간 필터 state
+  const [startDate, setStartDate] = useState<string>('');
+  const [endDate, setEndDate] = useState<string>('');
+
+  // Quick 날짜 선택 헬퍼
+  const handleSetDateRange = (type: 'TODAY' | 'WEEK' | 'MONTH' | 'ALL') => {
+    const today = new Date();
+    const todayStr = today.toISOString().split('T')[0];
+    if (type === 'TODAY') {
+      setStartDate(todayStr);
+      setEndDate(todayStr);
+    } else if (type === 'WEEK') {
+      const past = new Date();
+      past.setDate(today.getDate() - 7);
+      setStartDate(past.toISOString().split('T')[0]);
+      setEndDate(todayStr);
+    } else if (type === 'MONTH') {
+      const past = new Date();
+      past.setMonth(today.getMonth() - 1);
+      setStartDate(past.toISOString().split('T')[0]);
+      setEndDate(todayStr);
+    } else {
+      setStartDate('');
+      setEndDate('');
+    }
+  };
 
   // 선택된 의뢰 그룹의 체크리스트 (기본값: false 미체크!)
   const [checkedItems, setCheckedItems] = useState<Record<string, boolean>>({});
@@ -177,10 +206,17 @@ export const OutboundInspections: React.FC = () => {
     return groups.sort((a, b) => b.requestDate.localeCompare(a.requestDate));
   }, [outboundInspections, contracts, customers, sites, assets, deliveries]);
 
-  // 검색 및 탭 필터링
+  // ──────────────────────────────────────────────────────────────────────────
+  // 2. 검색, 탭 및 📅 요청일자 기간 범위 필터링
+  // ──────────────────────────────────────────────────────────────────────────
   const filteredGroups = useMemo(() => {
     return inspectionGroups.filter(g => {
       if (activeTabStatus !== 'ALL' && g.status !== activeTabStatus) return false;
+
+      // 요청일 기간 범위 필터링 적용
+      if (startDate && g.requestDate < startDate) return false;
+      if (endDate && g.requestDate > endDate) return false;
+
       if (!searchQuery) return true;
 
       const q = searchQuery.toLowerCase();
@@ -191,13 +227,13 @@ export const OutboundInspections: React.FC = () => {
         g.assets.some(a => a.assetNo.toLowerCase().includes(q) || a.modelName.toLowerCase().includes(q))
       );
     });
-  }, [inspectionGroups, activeTabStatus, searchQuery]);
+  }, [inspectionGroups, activeTabStatus, startDate, endDate, searchQuery]);
 
   const selectedGroup = useMemo(() => {
     return inspectionGroups.find(g => g.groupId === selectedGroupId) || null;
   }, [inspectionGroups, selectedGroupId]);
 
-  // 💡 교체 모달용 동일 모델 임대가능(AVAILABLE) 자산 목록 (정비점수 순 정렬!)
+  // 교체 모달용 동일 모델 임대가능(AVAILABLE) 자산 목록
   const availableExchangeAssets = useMemo(() => {
     if (!exchangeModalAsset) return [];
     return assets
@@ -205,7 +241,7 @@ export const OutboundInspections: React.FC = () => {
       .sort((a, b) => (a.maintenanceScore ?? 0) - (b.maintenanceScore ?? 0));
   }, [assets, exchangeModalAsset]);
 
-  // 의뢰 그룹 선택 시 초기 체크리스트 로드 (기본값: false 미체크 보장!)
+  // 의뢰 그룹 선택 시 초기 체크리스트 로드
   const handleSelectGroup = (group: InspectionGroup) => {
     setSelectedGroupId(group.groupId);
 
@@ -457,8 +493,95 @@ export const OutboundInspections: React.FC = () => {
       {/* 2열 메인 레이아웃 */}
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(340px, 420px) 1fr', gap: '20px' }}>
         
-        {/* [좌측] 의뢰 1건 단위 목록 카드리스트 */}
+        {/* [좌측] 의뢰 1건 단위 목록 카드리스트 + 📅 요청일 기간 조회 폼 */}
         <div style={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '12px', padding: '16px', display: 'flex', flexDirection: 'column', height: 'calc(100vh - 230px)', minHeight: '600px' }}>
+          
+          {/* 📅 요청일(신청일) 기간 선택 폼 및 Quick 날짜 뱃지 */}
+          <div style={{ marginBottom: '12px', padding: '10px 12px', backgroundColor: 'var(--bg-body)', borderRadius: '10px', border: '1px solid var(--border-color)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+              <span style={{ fontSize: '12px', fontWeight: 800, color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <Calendar size={13} /> 의뢰 요청일 기간 조회
+              </span>
+              <div style={{ display: 'flex', gap: '4px' }}>
+                {[
+                  { label: '오늘', type: 'TODAY' },
+                  { label: '1주일', type: 'WEEK' },
+                  { label: '1개월', type: 'MONTH' },
+                  { label: '전체', type: 'ALL' }
+                ].map(b => (
+                  <button
+                    key={b.type}
+                    onClick={() => handleSetDateRange(b.type as any)}
+                    style={{
+                      padding: '2px 7px',
+                      borderRadius: '4px',
+                      border: '1px solid var(--border-color)',
+                      backgroundColor: 'var(--bg-card)',
+                      fontSize: '10.5px',
+                      fontWeight: 600,
+                      color: 'var(--text-secondary)',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    {b.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <input
+                type="date"
+                value={startDate}
+                onChange={e => setStartDate(e.target.value)}
+                style={{
+                  flex: 1,
+                  padding: '5px 8px',
+                  borderRadius: '6px',
+                  border: '1px solid var(--border-color)',
+                  backgroundColor: 'var(--bg-card)',
+                  color: 'var(--text-primary)',
+                  fontSize: '12px',
+                  outline: 'none'
+                }}
+              />
+              <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>~</span>
+              <input
+                type="date"
+                value={endDate}
+                onChange={e => setEndDate(e.target.value)}
+                style={{
+                  flex: 1,
+                  padding: '5px 8px',
+                  borderRadius: '6px',
+                  border: '1px solid var(--border-color)',
+                  backgroundColor: 'var(--bg-card)',
+                  color: 'var(--text-primary)',
+                  fontSize: '12px',
+                  outline: 'none'
+                }}
+              />
+              {(startDate || endDate) && (
+                <button
+                  onClick={() => handleSetDateRange('ALL')}
+                  title="기간 초기화"
+                  style={{
+                    padding: '5px',
+                    borderRadius: '6px',
+                    border: '1px solid var(--border-color)',
+                    backgroundColor: 'var(--bg-card)',
+                    color: 'var(--text-muted)',
+                    cursor: 'pointer',
+                    display: 'flex'
+                  }}
+                >
+                  <RotateCcw size={13} />
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* 검색창 */}
           <div style={{ marginBottom: '14px', position: 'relative' }}>
             <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
             <input
@@ -483,7 +606,7 @@ export const OutboundInspections: React.FC = () => {
           <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '10px', paddingRight: '4px' }}>
             {filteredGroups.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '40px 10px', color: 'var(--text-muted)', fontSize: '13px' }}>
-                검색 조건에 일치하는 출고 의뢰건이 없습니다.
+                검색 및 기간 조건에 일치하는 출고 의뢰건이 없습니다.
               </div>
             ) : (
               filteredGroups.map(group => {
@@ -771,14 +894,11 @@ export const OutboundInspections: React.FC = () => {
         </div>
       </div>
 
-      {/* ────────────────────────────────────────────────────────────────────────── */}
-      {/* 🔄 출고 대기 장비 즉시 교체 및 수리전환 모달 (프리미엄 카드 그리드 UX 수술!) */}
-      {/* ────────────────────────────────────────────────────────────────────────── */}
+      {/* 🔄 출고 대기 장비 즉시 교체 및 수리전환 모달 */}
       {exchangeModalAsset && selectedGroup && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 99999, padding: '20px' }}>
           <div style={{ backgroundColor: 'var(--bg-card)', border: '1.5px solid #ef4444', borderRadius: '16px', padding: '24px', width: '100%', maxWidth: '620px', maxHeight: '90vh', display: 'flex', flexDirection: 'column', boxShadow: '0 25px 50px rgba(0,0,0,0.5)' }}>
             
-            {/* 모달 상단 헤더 */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '14px' }}>
               <div style={{ padding: '10px', backgroundColor: 'rgba(239,68,68,0.15)', borderRadius: '10px', color: '#dc2626', display: 'flex' }}>
                 <ArrowRightLeft size={22} />
@@ -797,7 +917,6 @@ export const OutboundInspections: React.FC = () => {
               ⚠️ 기존 장비 <strong>{exchangeModalAsset.assetNo}</strong> 상태는 <strong>'수리정비중(REPAIRING)'</strong>으로 즉시 자동 전환되며, 아래 입력한 사유가 자산 비고(Note)에 영구 기록됩니다.
             </div>
 
-            {/* 교체 사유 입력 */}
             <div style={{ marginBottom: '16px' }}>
               <label style={{ fontSize: '13px', fontWeight: 800, marginBottom: '6px', display: 'block', color: 'var(--text-primary)' }}>
                 🛠️ 장비 불량 / 수리전환 사유 (필수 입력)
@@ -811,7 +930,6 @@ export const OutboundInspections: React.FC = () => {
               />
             </div>
 
-            {/* 🎯 동일 모델 엄격 스마트 카드 선택 목록 (정비소요 점수 표출!) */}
             <div style={{ flex: 1, overflowY: 'auto', marginBottom: '20px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                 <label style={{ fontSize: '13px', fontWeight: 800, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -885,7 +1003,6 @@ export const OutboundInspections: React.FC = () => {
               )}
             </div>
 
-            {/* 하단 실행 및 취소 버튼 */}
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', paddingTop: '10px', borderTop: '1px solid var(--border-color)' }}>
               <button
                 onClick={() => { setExchangeModalAsset(null); setTargetNewAssetId(''); setExchangeReason(''); }}
