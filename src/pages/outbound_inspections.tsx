@@ -423,10 +423,18 @@ export const OutboundInspections: React.FC = () => {
   // 6. 🔄 장비 교체 실행 (출고 검수 진행 중 장비 교체)
   // ──────────────────────────────────────────────────────────────────────────
   const handleConfirmExchangeAsset = async () => {
-    if (!exchangeModalAsset || !targetNewAssetId || !exchangeReason.trim() || !selectedGroup) {
-      showErrorModal('대체 장비와 교체 사유를 입력해 주세요.');
+    if (!exchangeModalAsset || !targetNewAssetId || !selectedGroup) {
+      showErrorModal('대체 장비를 선택해 주세요.');
       return;
     }
+
+    // 💡 수리정비중 전환 시에만 사유 입력 필수, 수리 미전환 시 사유 입력은 선택 사항 (빈값 허용!)
+    if (exchangeToRepairing && !exchangeReason.trim()) {
+      showErrorModal('기존 장비를 [수리정비중]으로 전환 시에는 사유를 입력해 주세요.');
+      return;
+    }
+
+    const finalReason = exchangeReason.trim() || '단순 장비 교체 (수리 미전환)';
 
     setIsProcessing(true);
     try {
@@ -438,7 +446,7 @@ export const OutboundInspections: React.FC = () => {
         targetCaId,
         exchangeModalAsset.id,
         targetNewAssetId,
-        exchangeReason,
+        finalReason,
         exchangeToRepairing // 사용자 선택 전송!
       );
 
@@ -1025,10 +1033,12 @@ export const OutboundInspections: React.FC = () => {
 
             {/* 교체사유 */}
             <div style={{ marginBottom: '16px' }}>
-              <label style={{ fontSize: '12.5px', fontWeight: 700, marginBottom: '6px', display: 'block' }}>교체 사유 (기존 장비 비고 및 이력에 영구 기록됨)</label>
+              <label style={{ fontSize: '12.5px', fontWeight: 700, marginBottom: '6px', display: 'block' }}>
+                교체 사유 {exchangeToRepairing ? <span style={{ color: '#ef4444' }}>(수리정비중 전환 시 필수)</span> : <span style={{ color: 'var(--text-muted)' }}>(수리 미전환 시 선택 사항 - 입력 생략 가능)</span>}
+              </label>
               <input
                 type="text"
-                placeholder="예: 배터리 방전 발생, 조이스틱 모듈 작동 불량 등"
+                placeholder={exchangeToRepairing ? "예: 배터리 방전 발생, 조이스틱 모듈 작동 불량 등" : "사유 미입력 시 '단순 장비 교체'로 등록됩니다 (입력 생략 가능)"}
                 value={exchangeReason}
                 onChange={e => setExchangeReason(e.target.value)}
                 style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-body)', fontSize: '13px', color: 'var(--text-primary)', outline: 'none' }}
