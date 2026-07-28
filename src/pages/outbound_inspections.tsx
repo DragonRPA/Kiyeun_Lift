@@ -27,29 +27,20 @@ import {
   MessageSquare
 } from 'lucide-react';
 
-// 21대 고소작업대 정비/스펙 체크리스트 마스터 정의
+// 정비/기술 스펙 체크리스트 마스터 정의 (스마트 키워드 매칭 규격)
 const ALL_SPECS = [
-  { id: 'spec1', label: '4면 철망 설치 확인', category: '보양/안전' },
-  { id: 'spec2', label: '확장대 철망 설치 확인', category: '보양/안전' },
-  { id: 'spec3', label: '확장대 옆면 철망 설치 확인', category: '보양/안전' },
-  { id: 'spec4', label: '원판 설치 상태 검수', category: '구조/설비' },
-  { id: 'spec5', label: '배터리 단자 풀림 확인 마킹', category: '전원/배터리' },
-  { id: 'spec6', label: '배터리 단자 커버 설치', category: '전원/배터리' },
-  { id: 'spec7', label: '트레이 내부 볼트류 풀림 마킹', category: '구조/설비' },
-  { id: 'spec8', label: '주행속도 세팅 (고속60/저속45)', category: '주행/제어' },
-  { id: 'spec9', label: '오버로드 세팅 검수', category: '주행/제어' },
-  { id: 'spec10', label: '조이스틱 커버 연장', category: '주행/제어' },
-  { id: 'spec11', label: '탑승구 사다리 보양', category: '보양/안전' },
-  { id: 'spec12', label: '모서리/전면부/미끄럼방지 보양', category: '보양/안전' },
-  { id: 'spec13', label: '소화기함/손잡이/안내스티커', category: '보양/안전' },
-  { id: 'spec14', label: '타이어 A급 상태 검수', category: '구조/설비' },
-  { id: 'spec15', label: '점멸등/비상하강/정지장치 청결', category: '주행/제어' },
-  { id: 'spec16', label: '작업높이 80% 세팅 확인', category: '주행/제어' },
-  { id: 'spec17', label: '작업구간 라인구분 (초록/빨강)', category: '보양/안전' },
-  { id: 'spec18', label: '하부상승제한/확장대50% 표식', category: '보양/안전' },
-  { id: 'spec19', label: '비상정지/꼬리표 부착', category: '보양/안전' },
-  { id: 'spec20', label: '협착위험 스티커 부착', category: '보양/안전' },
-  { id: 'spec21', label: '부착물 세트 (제원표/보험증권 등)', category: '서류/스티커' }
+  { id: 'spec1', label: '4면 철망 / 함석 설치 검수', category: '보양/안전', keywords: ['망', '함석', '철망'] },
+  { id: 'spec2', label: '확장대 철망 / 함석 설치 검수', category: '보양/안전', keywords: ['확장대', '옆면'] },
+  { id: 'spec3', label: '상단 감지봉 / 협착 방지 센서 검수', category: '보양/안전', keywords: ['감지봉', '감지', '협착', '센서', '4ea'] },
+  { id: 'spec4', label: '원판 설치 상태 검수', category: '구조/설비', keywords: ['원판'] },
+  { id: 'spec5', label: '배터리 단자 풀림 확인 마킹', category: '전원/배터리', keywords: ['배터리', '단자'] },
+  { id: 'spec6', label: '주행속도 세팅 (고속60/저속45)', category: '주행/제어', keywords: ['속도', '주행'] },
+  { id: 'spec7', label: '오버로드 과적재 세팅 검수', category: '주행/제어', keywords: ['오버로드', '과적'] },
+  { id: 'spec8', label: '탑승구 사다리 및 모서리 보양', category: '보양/안전', keywords: ['보양', '사다리', '모서리'] },
+  { id: 'spec9', label: '소화기함/손잡이/안내스티커', category: '보양/안전', keywords: ['소화기', '스티커'] },
+  { id: 'spec10', label: '타이어 A급 상태 검수', category: '구조/설비', keywords: ['타이어'] },
+  { id: 'spec11', label: '점멸등/비상하강/정지장치 청결', category: '주행/제어', keywords: ['점멸등', '비상하강', '정지'] },
+  { id: 'spec12', label: '부착물 세트 (인증서/제원표/보험증권/체크리스트 등)', category: '서류/스티커', keywords: ['부착물', '인증서', '제원표', '보험증권', '체크리스트', '반입전'] }
 ];
 
 // 의뢰 1건 그룹 단위 인터페이스
@@ -169,17 +160,13 @@ export const OutboundInspections: React.FC = () => {
       const rawText = delivery?.rawText || delivery?.memo || (contract as any)?.memo || firstItem.note || '';
       const memoText = `${rawText} ${delivery?.closingMemo || ''} ${firstItem.note || ''}`.toLowerCase();
 
-      let reqSpecs = ALL_SPECS.filter((spec, idx) => {
-        if ([0, 3, 4, 7, 8, 13, 14, 20].includes(idx)) return true;
-        if (memoText.includes('망') && spec.label.includes('망')) return true;
-        if (memoText.includes('보양') && spec.label.includes('보양')) return true;
-        if (memoText.includes('스티커') && spec.label.includes('스티커')) return true;
-        if (memoText.includes('소화기') && spec.label.includes('소화기')) return true;
-        return false;
+      let reqSpecs = ALL_SPECS.filter(spec => {
+        return spec.keywords.some(kw => memoText.includes(kw.toLowerCase()));
       });
 
-      if (reqSpecs.length < 5) {
-        reqSpecs = ALL_SPECS.slice(0, 10);
+      // 만약 원본 요청서에 아무런 특수 옵션 키워드가 없는 일반 기본 출고건인 경우 기본 필수 3종(배터리, 타이어, 부착물)만 표출
+      if (reqSpecs.length === 0) {
+        reqSpecs = ALL_SPECS.filter(s => ['spec5', 'spec10', 'spec12'].includes(s.id));
       }
 
       let groupStatus: OutboundInspectionStatus = 'PENDING';
