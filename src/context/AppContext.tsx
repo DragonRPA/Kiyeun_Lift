@@ -914,8 +914,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       await db.awaitPendingWrites();
     } catch (err: any) {
       console.error('Supabase sync error during saveSmartDispatch:', err);
-      const errorMsg = `⚠️ Supabase 데이터베이스 동기화 중 오류가 발생했습니다:\n${err.message || err.details || JSON.stringify(err)}`;
-      showErrorModal(errorMsg, '스마트 출고 DB 동기화 오류');
+      
+      // 💥 DB 저장 실패 시 생성되었던 임시 계약/배차/슬롯 레코드 롤백 삭제!
+      if (contract?.id) {
+        db.deleteRow('contracts', contract.id);
+        const addedCAssets = db.contractAssets.filter(ca => ca.contractId === contract.id);
+        addedCAssets.forEach(ca => db.deleteRow('contractAssets', ca.id));
+        const addedDeliveries = db.deliveries.filter(d => d.contractId === contract.id);
+        addedDeliveries.forEach(d => db.deleteRow('deliveries', d.id));
+      }
+      refreshAllData();
+
+      const errorMsg = `⚠️ Supabase 데이터베이스 동기화 중 오류가 발생했습니다:\n\n■ [안내]: 저장 실패로 인해 생성 시도했던 데이터가 안전하게 자동 롤백 원복되었습니다.\n\n${err.message || err.details || JSON.stringify(err)}`;
+      showErrorModal(errorMsg, '스마트 출고 DB 동기화 오류 (자동 원복 완료)');
       return { 
         success: false, 
         errorMessage: errorMsg
@@ -1611,30 +1622,37 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const assignAssetToContract = async (contractAssetId: string, assetId: string) => {
-    try {
-      const ca = db.contractAssets.find(c => c.id === contractAssetId);
-      if (!ca) throw new Error('해당 계약 슬롯(contractAsset)을 찾을 수 없습니다.');
+    // 💡 1. 롤백용 원본 스냅샷 백업
+    const origCa = db.contractAssets.find(c => c.id === contractAssetId);
+    const caSnapshot = origCa ? { ...origCa } : null;
 
-      let contract = db.contracts.find(c => c.id === ca.contractId);
+    const origAsset = db.assets.find(a => a.id === assetId);
+    const assetSnapshot = origAsset ? { ...origAsset } : null;
+
+    let createdInspectionId: string | null = null;
+
+    try {
+      if (!origCa) throw new Error('해당 계약 슬롯(contractAsset)을 찾을 수 없습니다.');
+
+      let contract = db.contracts.find(c => c.id === origCa.contractId);
       if (!contract && db.isSupabaseConnected()) {
         try {
           await db.pullTableFromSupabase('contracts');
-          contract = db.contracts.find(c => c.id === ca.contractId);
+          contract = db.contracts.find(c => c.id === origCa.contractId);
         } catch (e) {}
       }
 
-      const targetAsset = db.assets.find(a => a.id === assetId);
-      if (!targetAsset) throw new Error('할당할 대상 장비를 찾을 수 없습니다.');
+      if (!origAsset) throw new Error('할당할 대상 장비를 찾을 수 없습니다.');
 
       const nowIso = new Date().toISOString();
 
-      // 1. ContractAsset 업데이트 (실물 장비 ID 할당 + expectedModel을 장비 정식 모델명으로 자동 보정!)
+      // 1. ContractAsset 업데이트 (실물 장비 ID 할당)
       db.updateRow<ContractAsset>('contractAssets', contractAssetId, {
         assetId: assetId,
-        ...(targetAsset?.modelName ? { expectedModel: targetAsset.modelName } : {})
+        ...(origAsset?.modelName ? { expectedModel: origAsset.modelName } : {})
       });
 
-      // 2. Asset 상태 업데이트 (ASSIGNED 출고대기로 전환하여 타 계약 이중 할당 원천 차단!)
+      // 2. Asset 상태 업데이트 (ASSIGNED 출고대기로 전환)
       const assetUpdatePayload: Partial<Asset> = {
         status: 'ASSIGNED',
         updatedAt: nowIso
@@ -1646,32 +1664,48 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       db.updateRow<Asset>('assets', assetId, assetUpdatePayload);
 
-      // 3. 출고 검수/정비 작업 의뢰 자동 발행 (status: PENDING 미접수)
-      db.insertRow<OutboundInspection>('outboundInspections', {
-        contractId: ca.contractId,
-        contractAssetId: ca.id,
+      // 3. 출고 검수/정비 작업 의뢰 생성
+      const createdInsp = db.insertRow<OutboundInspection>('outboundInspections', {
+        contractId: origCa.contractId,
+        contractAssetId: origCa.id,
         assetId: assetId,
         status: 'PENDING',
         createdAt: nowIso,
         updatedAt: nowIso
       });
+      createdInspectionId = createdInsp.id;
 
-      // 4. Supabase 원격 DB 쓰기 100% 완결 동기 대기 (실패 시 에러 처리)
+      // 4. Supabase 원격 DB 쓰기 100% 완결 동기 대기 (실패 시 catch 블록에서 자동 롤백!)
       await db.awaitPendingWrites();
       refreshAllData();
     } catch (err: any) {
-      console.error('assignAssetToContract error:', err);
+      console.error('assignAssetToContract error & Rollback:', err);
+
+      // 💥 DB 저장 실패 시 로컬 DB 및 UI State를 100% 이전 상태로 자동 롤백 (Rollback Execution)!
+      if (caSnapshot) {
+        db.updateRow<ContractAsset>('contractAssets', contractAssetId, caSnapshot);
+      }
+      if (assetSnapshot) {
+        db.updateRow<Asset>('assets', assetId, assetSnapshot);
+      }
+      if (createdInspectionId) {
+        db.deleteRow('outboundInspections', createdInspectionId);
+      }
+
+      refreshAllData(); // 롤백된 원복 상태를 UI에 반영!
+
       const errMsg = err?.message || err?.details || JSON.stringify(err);
       showErrorModal(
-        `⚠️ 장비 할당 저장 중 DB 스키마 캐시 오류가 발생했습니다:\n\n` +
+        `⚠️ 장비 할당 저장 중 DB 동기화 오류가 발생했습니다:\n\n` +
+        `■ [안내]: 저장 실패로 인해 장비 할당 상태가 이전 미할당 상태로 안전하게 롤백(자동 원복)되었습니다. 할당 대상 목록에서 계속 작업하실 수 있습니다.\n\n` +
         `■ [실패 원인]: ${errMsg}\n\n` +
-        `■ [조치 방법]: 메뉴 [개발자 도구 (DB관리)] -> [1-Click DB 정합성 복구 패치] 버튼을 클릭하거나 Supabase SQL Editor에서 아래 쿼리를 실행해 주십시오:\n\n` +
+        `■ [조치 방법]: 아래 버튼 [🚀 1-Click DB 패치 즉시 실행] 을 누르시거나 개발자 도구에서 패치를 실행해 주십시오:\n\n` +
         `ALTER TABLE "assets" ADD COLUMN IF NOT EXISTS "contractStart" TEXT;\n` +
         `ALTER TABLE "assets" ADD COLUMN IF NOT EXISTS "contractEnd" TEXT;\n` +
         `ALTER TABLE "assets" ADD COLUMN IF NOT EXISTS "currentCustomerId" TEXT;\n` +
         `ALTER TABLE "assets" ADD COLUMN IF NOT EXISTS "currentSiteId" TEXT;\n` +
         `NOTIFY pgrst, 'reload schema';`,
-        '장비 할당 DB 동기화 오류'
+        '장비 할당 DB 동기화 오류 (자동 롤백 원복 완료)'
       );
       throw err;
     }

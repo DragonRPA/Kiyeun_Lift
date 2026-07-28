@@ -1,3 +1,17 @@
+# Release Notes (v1.9.0.Build.00004 - 2026-07-28 12:37)
+
+## 🛡️ [전사 데이터 원자성 보증 수술] DB 저장 실패 시 업무 데이터 소멸 방지 자동 롤백(Automatic Snapshot Rollback Engine) 탑재
+
+- **버그 원인**: 장비 할당(`assignAssetToContract`), 스마트 출고(`saveSmartDispatch`) 등 업무 프로세스 진행 중 DB 저장 오류(컬럼 미존재, 스키마 캐시 등) 발생 시, 원격 DB 쓰기는 실패했으나 로컬 DB 메모리에는 할당 상태가 갱신된 채로 남아 화면에서 해당 할당 업무건이 사라져버리는 원인을 수술함.
+- **주요 구현 내역**:
+  1. **[장비 할당 스냅샷 자동 롤백 엔진 탑재] (`AppContext.tsx`)**:
+     - `assignAssetToContract` 실행 전 `contractAssets` 및 `assets` 원본 상태를 롤백 스냅샷으로 사전 백업.
+     - 원격 DB 쓰기(`awaitPendingWrites`) 실패 시 로컬 DB 및 UI State를 이전 미할당 상태로 100% 원복(`Rollback Execution`)하여 팝업을 닫더라도 할당 대상 업무건이 사라지지 않고 유지되도록 보증.
+  2. **[스마트 배차 / 계약 출고 자동 롤백 연동]**:
+     - `saveSmartDispatch` 원격 DB 쓰기 실패 시 폼 저장 시도 전 상태로 자동 롤백 삭제 처리.
+
+---
+
 # Release Notes (v1.9.0.Build.00003 - 2026-07-28 12:35)
 
 ## 🚀 [시스템 에러 팝업 모달 자가치유 수술] `[🚀 1-Click DB 패치 즉시 실행]` 버튼 탑재
