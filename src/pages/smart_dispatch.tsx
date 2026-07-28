@@ -106,6 +106,37 @@ export const SmartDispatch: React.FC = () => {
   // 프리뷰 탭 관리
   const [previewTab, setPreviewTab] = useState<'SHEET' | 'TEXT' | 'JSON'>('SHEET');
 
+  // 💡 [동적 맞춤형 라벨 추출기] 원문 텍스트에서 '3면 함석', '4면 철망', '3면 철망' 등 실제로 감지된 구체적 키워드가 있다면 해당 명칭으로 동적 라벨명 렌더링!
+  const getDynamicSpecLabel = (spec: SpecItem, text: string): string => {
+    if (!text.trim()) return spec.label;
+    const lowerText = text.toLowerCase();
+
+    // spec1: 철망 / 함석 설치 면수 동적 매칭
+    if (spec.id === 'spec1') {
+      if (lowerText.includes('3면 함석') || lowerText.includes('3면함석')) return '3면 함석 설치';
+      if (lowerText.includes('4면 함석') || lowerText.includes('4면함석')) return '4면 함석 설치';
+      if (lowerText.includes('3면 철망') || lowerText.includes('3면철망')) return '3면 철망 설치';
+      if (lowerText.includes('4면 철망') || lowerText.includes('4면철망')) return '4면 철망 설치';
+      if (lowerText.includes('함석')) return '함석 설치';
+      if (lowerText.includes('철망')) return '철망 설치';
+    }
+
+    // spec2: 확장대 철망 / 함석
+    if (spec.id === 'spec2') {
+      if (lowerText.includes('확장대 함석')) return '확장대 함석 설치';
+      if (lowerText.includes('확장대 철망')) return '확장대 철망 설치';
+    }
+
+    // spec3: 감지봉 / 협착 센서 (수량 4EA 등 파싱)
+    if (spec.id === 'spec3') {
+      const match = text.match(/감지봉\s*(\d+\s*EA|\d+\s*개)/i);
+      if (match) return `상단 감지봉 (${match[1].replace(/\s+/g, '')}) 설치`;
+      if (lowerText.includes('감지봉')) return '상단 감지봉 설치';
+    }
+
+    return spec.label;
+  };
+
   // 💡 [실시간 자연어 텍스트 스캐너] rawText 가 변경될 때 텍스트 내 포함된 요구사항을 100% 동적으로 스캔하여 자동 체크!
   useEffect(() => {
     if (!rawText.trim()) return;
@@ -943,7 +974,7 @@ ${activeSpecs.map((s, idx) => `  ${idx + 1}. [적용] ${s.label}`).join('\n') ||
                         color: isChecked ? '#15803d' : 'var(--text-secondary)',
                         fontWeight: isChecked ? '800' : 'normal' 
                       }}>
-                        {spec.label}
+                        {getDynamicSpecLabel(spec, rawText)}
                       </span>
                     </label>
                   );
