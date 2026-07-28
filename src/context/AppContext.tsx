@@ -95,6 +95,7 @@ interface AppContextType {
   deleteVendor: (id: string) => void;
   
   // Asset Mutators
+  changeAssetStatus: (assetId: string, status: Asset['status'], extraData?: Partial<Asset>) => Promise<void>;
   acquireAsset: (assetData: Partial<Asset>) => void;
   disposeAsset: (assetId: string, disposalData: { disposalDate: string; disposalPrice: number; buyer: string; billingYm?: string }) => void;
   registerRentedAsset: (assetData: Partial<Asset>) => Promise<any>;
@@ -659,6 +660,41 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return result;
   };
 
+  // 💡 자산 상태 SSOT 실시간 자동 변동 헬퍼 메소드
+  const changeAssetStatus = async (assetId: string, newStatus: Asset['status'], extraData?: Partial<Asset>) => {
+    try {
+      const targetAsset = db.assets.find(a => a.id === assetId);
+      if (!targetAsset) return;
+
+      const updatedPayload: Partial<Asset> = {
+        status: newStatus,
+        ...extraData
+      };
+
+      db.updateRow<Asset>('assets', assetId, updatedPayload);
+
+      // 자산 입출고/상태 변동 이력(assetInOutLogs) 자동 타임라인 기록
+      db.insertRow<AssetInOutLog>('assetInOutLogs', {
+        assetId: assetId,
+        assetNo: targetAsset.assetNo || '',
+        modelName: targetAsset.modelName || '',
+        type: (newStatus === 'RENTED' || newStatus === 'ASSIGNED') ? 'OUTBOUND' : 'INBOUND',
+        eventDate: new Date().toISOString().split('T')[0],
+        memo: `[자산상태 실시간 변동] ${targetAsset.status || 'AVAILABLE'} ➔ ${newStatus}`,
+        createdAt: new Date().toISOString()
+      });
+
+      if (db.isSupabaseConnected() && db.pendingWrites.length > 0) {
+        await db.awaitPendingWrites();
+      }
+      refreshAllData();
+    } catch (err: any) {
+      console.error('changeAssetStatus error:', err);
+      showErrorModal(`⚠️ 자산 상태 변동 처리 중 오류가 발생했습니다:\n\n${err?.message || err}`);
+      throw err;
+    }
+  };
+
   // 전사 계약번호 통일 생성 헬퍼 (YYMM + 4자리 순차: 예 '26070001')
   const generateNextContractNo = (): string => {
     const prefix = new Date().toISOString().split('T')[0].replace(/-/g, '').substring(2, 6); // e.g. "2607"
@@ -926,8 +962,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           });
         }
         db.updateRow<Asset>('assets', assetId, {
+          status: 'RENTED_RETURNED',
           contractEnd: data.returnDate,
           updatedAt: new Date().toISOString()
+        });
+
+        const targetAsset = db.assets.find(a => a.id === assetId);
+        // 자산 입출고/반납 이력 자동 기록
+        db.insertRow<AssetInOutLog>('assetInOutLogs', {
+          assetId: assetId,
+          assetNo: targetAsset?.assetNo || '',
+          modelName: targetAsset?.modelName || '',
+          type: 'INBOUND',
+          eventDate: data.returnDate || new Date().toISOString().split('T')[0],
+          memo: `[스마트반납 완료] 계약번호(${contract.contractNo}) 현장 반납 입고 완료`,
+          createdAt: new Date().toISOString()
         });
       });
 
@@ -2573,7 +2622,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       bankTransactions, bankMatchingRules, assetInOutLogs, vendors, googleConfigs, cashFlowSnapshots, outboundInspections, depreciationLogs,
       refreshAllData, executeMonthlyDepreciation, loadTablesForMenu, updatePermissions, saveUser, saveCustomer, saveContact, saveSite, saveProduct, saveAsset, updateGoogleConfig,
       saveCashFlowSnapshot, deleteCashFlowSnapshot, saveVendor, deleteVendor,
-      acquireAsset, disposeAsset, registerRentedAsset, returnRentedAsset,
+      acquireAsset, disposeAsset, registerRentedAsset, returnRentedAsset, changeAssetStatus,
       purchaseConsumable, useConsumable,
       requestConsumablePurchase, acceptConsumablePurchase, completeConsumablePurchase, inboundConsumablePurchase,
       createContract, extendContract, shortenContract, succeedContract, exchangeAsset,

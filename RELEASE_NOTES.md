@@ -1,3 +1,21 @@
+# Release Notes (v1.9.0.Build.00000 - 2026-07-28 12:18)
+
+## 🚚 [자산 상태 실시간 변동 파이프라인 수술] 계약 진행 프로세스별 자산 상태(`status`) 실시간 자동 전환 엔진 탑재
+
+- **개편 목적**: 직원이 계약 진행에 따른 각 메뉴(스마트 배차, 출고 검수, 장비 출고/배차, 스마트 반납, 정비/매각)에서 프로세스를 실행했을 때 자산상태(`status`)가 변하지 않고 계속 '임대가능'(`AVAILABLE`)으로 멈춰있던 진원지를 수술함.
+- **주요 개편 내역**:
+  1. **[단일 진실의 원천 자산상태 자동변동 메소드 수술] (`AppContext.tsx`)**:
+     - `changeAssetStatus(assetId, newStatus, extraData)` 메소드 신설.
+     - `assets` 테이블의 `status`(`'AVAILABLE'`, `'ASSIGNED'`, `'RENTED'`, `'REPAIRING'`, `'RENTED_RETURNED'`, `'SOLD'`) 및 `currentCustomerId`, `currentSiteId`, `contractStart`, `contractEnd` 동기적 즉각 갱신.
+     - `assetInOutLogs` (자산 입출고/상태 변동 이력) 타임라인 자동 로깅 연동.
+  2. **[메뉴별 프로세스 실시간 직결 연동]**:
+     - **스마트 배차 / 장비 지정**: 배차 지시 등록 시 `'ASSIGNED'` (배차/지정완료) 자동 전환.
+     - **출고 검수 / 운송 상차**: 출고 검수 완료 및 상차 운송 시 `'RENTED'` (임대중/출고완료) 자동 전환.
+     - **스마트 반납 (`saveSmartReturn`)**: 반납 완료 시 `'RENTED_RETURNED'` (입고/반납완료) 자동 전환 및 반납 입고 타임라인 자동 로깅.
+     - **장비 입고 완료**: 입고 운송 완료 시 `'AVAILABLE'` (임대가능) 복원.
+
+---
+
 # Release Notes (v1.8.0.Build.00007 - 2026-07-28 11:47)
 
 ## 💳 [급여관리 권한 제약 개편] 1인 소유 강제 차단 제약 전면 폐지 & 실시간 권한 소유자 시각화 배너 도입
