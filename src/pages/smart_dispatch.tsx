@@ -16,7 +16,7 @@ interface SpecItem {
 
 // 고소작업대 필수 기술 요구사항 표준 체크리스트 정의 (스마트 자연어 파싱 키워드 매칭)
 const STANDARD_SPECS: SpecItem[] = [
-  { id: 'spec1', label: '4면 철망 / 함석 설치', keywords: ['4면 철망', '사면철망', '철망', '함석', '3면 함석', '4면 함석', '3면함석', '4면함석'] },
+  { id: 'spec1', label: '철망 / 함석 설치', keywords: ['철망', '함석', '사면철망', '1면', '2면', '3면', '4면', '5면', '망'] },
   { id: 'spec2', label: '확장대 철망 / 함석 설치', keywords: ['확장대 철망', '확장대철망', '확장대 함석', '확장대함석'] },
   { id: 'spec3', label: '상단 감지봉 / 협착 센서 설치 (4EA)', keywords: ['감지봉', '감지봉 4ea', '상단감지', '협착', '센서', '4ea', '감지봉4ea'] },
   { id: 'spec4', label: '원판 설치', keywords: ['원판설치', '원판'] },
@@ -111,14 +111,27 @@ export const SmartDispatch: React.FC = () => {
     if (!text.trim()) return spec.label;
     const lowerText = text.toLowerCase();
 
-    // spec1: 철망 / 함석 설치 면수 동적 매칭
+    // spec1: 철망 / 함석 설치 면수 동적 매칭 (1면, 2면, 3면, 4면, 5면 등 범용 숫자 정규식 지원)
     if (spec.id === 'spec1') {
-      if (lowerText.includes('3면 함석') || lowerText.includes('3면함석')) return '3면 함석 설치';
-      if (lowerText.includes('4면 함석') || lowerText.includes('4면함석')) return '4면 함석 설치';
-      if (lowerText.includes('3면 철망') || lowerText.includes('3면철망')) return '3면 철망 설치';
-      if (lowerText.includes('4면 철망') || lowerText.includes('4면철망')) return '4면 철망 설치';
+      // "1면 함석", "2면 철망", "3면 함석", "4면 철망", "1면함석", "2면철망" 등 정규식 캡처
+      const match = text.match(/(\d+)\s*면\s*(함석|철망|망)/i) || text.match(/(함석|철망|망)\s*(\d+)\s*면/i);
+      if (match) {
+        const sideNum = match[1] && !isNaN(Number(match[1])) ? match[1] : match[2];
+        const rawMat = (match[2] && (match[2].includes('함석') || match[2].includes('철망') || match[2].includes('망'))) ? match[2] : match[1];
+        const material = rawMat.includes('함석') ? '함석' : '철망';
+        return `${sideNum}면 ${material} 설치`;
+      }
+
+      // 면 수만 "1면", "2면", "3면", "4면" 으로 기재된 경우
+      const sideOnlyMatch = text.match(/(\d+)\s*면/i);
+      if (sideOnlyMatch) {
+        const sideNum = sideOnlyMatch[1];
+        const material = lowerText.includes('함석') ? '함석' : '철망';
+        return `${sideNum}면 ${material} 설치`;
+      }
+
       if (lowerText.includes('함석')) return '함석 설치';
-      if (lowerText.includes('철망')) return '철망 설치';
+      if (lowerText.includes('철망') || lowerText.includes('사면철망')) return '철망 설치';
     }
 
     // spec2: 확장대 철망 / 함석
