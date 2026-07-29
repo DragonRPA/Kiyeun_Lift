@@ -104,6 +104,46 @@ export const TruckDispatch: React.FC = () => {
     return 'PENDING';
   };
 
+  // 엑셀 날짜(시리얼 숫자 46174 등 또는 포맷팅 텍스트)를 YYYY-MM-DD로 변환하는 정규화 헬퍼
+  const formatExcelDateStr = (rawVal: any): string => {
+    if (!rawVal) return '-';
+    const str = String(rawVal).trim();
+    if (!str) return '-';
+
+    // 1. 엑셀 시리얼 숫자 (예: 46174)
+    if (!isNaN(Number(str)) && Number(str) > 30000 && Number(str) < 60000) {
+      const serial = Number(str);
+      const utcDays = Math.floor(serial - 25569);
+      const utcValue = utcDays * 86400;
+      const dateObj = new Date(utcValue * 1000);
+      const year = dateObj.getUTCFullYear();
+      const month = String(dateObj.getUTCMonth() + 1).padStart(2, '0');
+      const day = String(dateObj.getUTCDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    }
+
+    // 2. 06월 01일 포맷
+    const currentYear = new Date().getFullYear();
+    if (str.includes('월') && str.includes('일')) {
+      const mMatch = str.match(/(\d+)월\s*(\d+)일/);
+      if (mMatch) {
+        return `${currentYear}-${String(mMatch[1]).padStart(2, '0')}-${String(mMatch[2]).padStart(2, '0')}`;
+      }
+    }
+
+    // 3. 6/1 포맷
+    if (str.includes('/')) {
+      const parts = str.split('/');
+      if (parts.length === 2) {
+        return `${currentYear}-${String(parts[0]).padStart(2, '0')}-${String(parts[1]).padStart(2, '0')}`;
+      } else if (parts.length === 3) {
+        return `${parts[0]}-${String(parts[1]).padStart(2, '0')}-${String(parts[2]).padStart(2, '0')}`;
+      }
+    }
+
+    return str;
+  };
+
   const [activeTab, setActiveTab] = useState<'DISPATCH' | 'RECONCILIATION'>('DISPATCH');
 
   // 4단계 배차 진행 상태 탭 state ('ALL' | 'PENDING' | 'DISPATCHED' | 'DELIVERED' | 'CANCELLED')
@@ -2001,20 +2041,35 @@ export const TruckDispatch: React.FC = () => {
                           <span style={{ fontWeight: 800, color: 'var(--text-primary)', fontSize: '13px' }}>
                             📄 {row['배차ID'] || row['ID'] || `행 #${idx + 1}`}
                           </span>
-                          <span style={{ fontSize: '11.5px', color: 'var(--text-muted)' }}>
-                            📅 {row['운송일자'] || row['날짜'] || row['일자'] || '-'}
+                          <span style={{ fontSize: '11.5px', color: 'var(--primary)', fontWeight: 800, backgroundColor: 'rgba(59,130,246,0.1)', padding: '2px 6px', borderRadius: '4px' }}>
+                            📅 {formatExcelDateStr(row['운송일자'] || row['날짜'] || row['일자'])}
                           </span>
                         </div>
 
-                        <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-                          📍 {row['하차지'] || row['도착지'] || row['현장'] || '-'}
+                        {/* 💡 [사장님 지시] 엑셀 거래명세서에서 읽어온 모든 컬럼 정보 시각적 뱃지 그리드로 노출 */}
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', margin: '6px 0', padding: '6px', backgroundColor: 'var(--bg-card)', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
+                          {Object.entries(row).map(([k, v]) => {
+                            if (!v || v === '-' || v === "''") return null;
+                            const vStr = String(v);
+                            return (
+                              <span
+                                key={k}
+                                style={{
+                                  padding: '2px 7px',
+                                  borderRadius: '5px',
+                                  fontSize: '11px',
+                                  backgroundColor: 'rgba(59,130,246,0.06)',
+                                  border: '1px solid rgba(59,130,246,0.2)',
+                                  color: 'var(--text-primary)',
+                                  lineHeight: '1.4'
+                                }}
+                              >
+                                <strong style={{ color: 'var(--primary)', marginRight: '3px' }}>{k}:</strong>
+                                {k.toLowerCase().includes('일자') || k.toLowerCase().includes('날짜') ? formatExcelDateStr(vStr) : vStr}
+                              </span>
+                            );
+                          })}
                         </div>
-
-                        {row['비고'] && (
-                          <div style={{ fontSize: '11px', color: 'var(--primary)', backgroundColor: 'rgba(59,130,246,0.06)', padding: '3px 6px', borderRadius: '4px', border: '1px solid rgba(59,130,246,0.2)', marginTop: '4px', wordBreak: 'break-all' }}>
-                            📝 {row['비고']}
-                          </div>
-                        )}
 
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '6px', paddingTop: '6px', borderTop: '1px dashed var(--border-color)' }}>
                           <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
