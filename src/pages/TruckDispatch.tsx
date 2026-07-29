@@ -271,10 +271,8 @@ export const TruckDispatch: React.FC = () => {
         : [];
 
       const updateData: any = {
-        deliveryCost: newCost,
         finalCost: newCost,
-        expectedCost: newCost,
-        deliveryCostConfirmed: newCost
+        deliveryCost: newCost
       };
 
       if (updatedVehicles.length > 0) {
@@ -1124,7 +1122,7 @@ export const TruckDispatch: React.FC = () => {
       driverName: d.driverName || '',
       driverContact: d.driverContact || '',
       expectedCost: d.expectedCost || d.deliveryCost || 70000,
-      finalCost: d.finalCost !== undefined ? d.finalCost : undefined,
+      finalCost: d.finalCost !== undefined && d.finalCost !== null ? d.finalCost : 0,
       deliveryCost: d.finalCost || d.expectedCost || d.deliveryCost || 70000
     }]);
   };
@@ -1158,7 +1156,7 @@ export const TruckDispatch: React.FC = () => {
         driverName: '',
         driverContact: '',
         expectedCost: 70000,
-        finalCost: undefined,
+        finalCost: 0,
         deliveryCost: 70000
       }
     ]);
@@ -1189,10 +1187,7 @@ export const TruckDispatch: React.FC = () => {
       const finalLoadingSlot = loadingTimeSlot === '희망시간' ? loadingCustomTime : loadingTimeSlot;
       const finalUnloadingSlot = unloadingTimeSlot === '희망시간' ? unloadingCustomTime : unloadingTimeSlot;
       const totalExpectedCost = assignedVehicles.reduce((sum, v) => sum + (Number(v.expectedCost) || 0), 0);
-      const hasFinalCostInput = assignedVehicles.some(v => v.finalCost !== undefined && v.finalCost !== null && Number(v.finalCost) > 0);
-      const totalFinalCost = hasFinalCostInput 
-        ? assignedVehicles.reduce((sum, v) => sum + (Number(v.finalCost) || 0), 0)
-        : undefined;
+      const totalFinalCost = assignedVehicles.reduce((sum, v) => sum + (Number(v.finalCost) || 0), 0);
 
       const mainVeh = assignedVehicles[0] || {};
       const payload: Partial<Delivery> = {
@@ -2204,26 +2199,34 @@ export const TruckDispatch: React.FC = () => {
                             🚛 {d.driverName || '기사미지정'} ({d.vehicleType || '3.5T'})
                           </span>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <span style={{ fontSize: '13px', fontWeight: 900, color: 'var(--text-primary)' }}>
-                              ₩{cost.toLocaleString()}원
-                            </span>
-                            {/* 💡 [사장님 지시] 금액수정 버튼 추가 -> 클릭 시 DB에 즉시 반영 동기화 */}
+                            <div style={{ textAlign: 'right' }}>
+                              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+                                <span style={{ fontSize: '13px', fontWeight: 900, color: d.finalCost && d.finalCost > 0 ? '#16a34a' : '#d97706' }}>
+                                  💵 실제가(final): ₩{(d.finalCost ?? 0).toLocaleString()}원
+                                </span>
+                                <span style={{ fontSize: '10.5px', color: 'var(--text-muted)' }}>
+                                  (💰 예상가: ₩{(d.expectedCost || d.deliveryCost || 70000).toLocaleString()}원)
+                                </span>
+                              </div>
+                            </div>
+
+                            {/* 💡 [사장님 지시] finalCost 수정 버튼 (대사 정산 완료 시 엑셀 금액과 100% 일치) */}
                             <button
-                              onClick={(e) => handleOpenCostEdit(d, cost, e)}
-                              title="배차 운송료 수정 (DB 즉시 반영)"
+                              onClick={(e) => handleOpenCostEdit(d, d.finalCost ?? 0, e)}
+                              title="실제 운송료(finalCost) 수정 (DB finalCost 및 deliveryCost 즉시 반영)"
                               style={{
-                                padding: '2px 7px',
+                                padding: '3px 8px',
                                 fontSize: '11px',
                                 fontWeight: 800,
-                                borderRadius: '4px',
-                                border: '1px solid var(--primary)',
+                                borderRadius: '5px',
+                                border: '1px solid #2563eb',
                                 backgroundColor: 'rgba(59,130,246,0.1)',
-                                color: 'var(--primary)',
+                                color: '#2563eb',
                                 cursor: 'pointer',
                                 transition: 'all 0.15s ease'
                               }}
                             >
-                              ✏️ 금액 수정
+                              ✏️ finalCost 수정
                             </button>
                           </div>
                         </div>
