@@ -1626,17 +1626,19 @@ export const TruckDispatch: React.FC = () => {
 
       {/* 탭 2: 월말 운송료 대사 및 매입 지급 요청 (좌우 분할 1:1 대사 스튜디오) */}
       {activeTab === 'RECONCILIATION' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           
-          {/* 1. 상단 컨트롤 바 (기간/거래처/검색어 + 엑셀 파이프라인 버튼들) */}
-          <div style={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '12px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+          {/* 1. 상단 컨트롤 바 (기간/거래처/조회버튼 + 컴팩트 요약 4종 + 엑셀 파이프라인) */}
+          <div style={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '12px', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            
+            {/* Row 1: 기간 피커 + 거래처 드롭다운 + [🔍 조회] 버튼 + 엑셀 파이프라인 버튼군 */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
               
-              {/* 📅 기간 선택 및 거래처 필터 */}
+              {/* 📅 기간 및 거래처 선택 & [🔍 조회] 버튼 */}
               <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: 'var(--bg-body)', padding: '6px 10px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: 'var(--bg-body)', padding: '5px 10px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
                   <Calendar size={14} style={{ color: 'var(--primary)' }} />
-                  <span style={{ fontSize: '12px', fontWeight: 800 }}>운송 기간:</span>
+                  <span style={{ fontSize: '12px', fontWeight: 800, whiteSpace: 'nowrap' }}>운송 기간:</span>
                   <input
                     type="date"
                     value={reconStartDate}
@@ -1673,11 +1675,11 @@ export const TruckDispatch: React.FC = () => {
 
                 {/* 🏢 운송 거래처 선택 드롭다운 */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <span style={{ fontSize: '12px', fontWeight: 800, color: 'var(--text-secondary)' }}>🏢 운송 거래처:</span>
+                  <span style={{ fontSize: '12px', fontWeight: 800, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>🏢 운송 거래처:</span>
                   <select
                     value={selectedReconCompany}
                     onChange={e => setSelectedReconCompany(e.target.value)}
-                    style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-body)', color: 'var(--text-primary)', fontSize: '12.5px', fontWeight: 700 }}
+                    style={{ padding: '5px 10px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-body)', color: 'var(--text-primary)', fontSize: '12px', fontWeight: 700 }}
                   >
                     <option value="ALL">전체 거래처</option>
                     {transportCompanies.map(c => (
@@ -1685,6 +1687,15 @@ export const TruckDispatch: React.FC = () => {
                     ))}
                   </select>
                 </div>
+
+                {/* 💡 [사장님 지시] 🔍 조회 버튼 추가 */}
+                <button
+                  onClick={() => setReconNotificationMsg(`🔍 [${selectedReconCompany === 'ALL' ? '전체 거래처' : selectedReconCompany}] (${reconStartDate} ~ ${reconEndDate}) 기간 조회가 갱신되었습니다.`)}
+                  className="btn-primary"
+                  style={{ padding: '6px 14px', fontSize: '12.5px', fontWeight: 800, borderRadius: '6px', display: 'inline-flex', alignItems: 'center', gap: '4px', cursor: 'pointer', boxShadow: '0 2px 6px rgba(59,130,246,0.3)' }}
+                >
+                  <Search size={14} /> 조회
+                </button>
               </div>
 
               {/* 📂 엑셀 파이프라인 버튼군 */}
@@ -1694,29 +1705,64 @@ export const TruckDispatch: React.FC = () => {
                 <button
                   onClick={() => fileInputRef.current?.click()}
                   className="btn-primary"
-                  style={{ padding: '8px 14px', fontSize: '12.5px', fontWeight: 800, borderRadius: '8px', display: 'inline-flex', alignItems: 'center', gap: '6px', boxShadow: '0 2px 8px rgba(59,130,246,0.25)' }}
+                  style={{ padding: '7px 13px', fontSize: '12px', fontWeight: 800, borderRadius: '7px', display: 'inline-flex', alignItems: 'center', gap: '5px', boxShadow: '0 2px 8px rgba(59,130,246,0.25)' }}
                 >
-                  <Upload size={15} /> 📄 엑셀 거래명세서 업로드 & 자동대사
+                  <Upload size={14} /> 📄 엑셀 거래명세서 업로드 & 자동대사
                 </button>
 
                 <button
                   onClick={handleDownloadExcelTemplate}
-                  style={{ padding: '8px 12px', fontSize: '12px', fontWeight: 700, borderRadius: '8px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-body)', color: 'var(--text-primary)', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                  style={{ padding: '7px 11px', fontSize: '12px', fontWeight: 700, borderRadius: '7px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-body)', color: 'var(--text-primary)', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
                 >
-                  <FileSpreadsheet size={14} /> 양식 다운로드
+                  <FileSpreadsheet size={13} /> 양식 다운로드
                 </button>
 
                 <button
                   onClick={handleExportReconciliationReport}
-                  style={{ padding: '8px 12px', fontSize: '12px', fontWeight: 700, borderRadius: '8px', border: '1px solid #16a34a', backgroundColor: 'rgba(22,163,74,0.1)', color: '#16a34a', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                  style={{ padding: '7px 11px', fontSize: '12px', fontWeight: 700, borderRadius: '7px', border: '1px solid #16a34a', backgroundColor: 'rgba(22,163,74,0.1)', color: '#16a34a', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
                 >
-                  <Download size={14} /> 📊 대사 리포트 엑셀 다운로드
+                  <Download size={13} /> 📊 대사 리포트 엑셀 다운로드
                 </button>
               </div>
             </div>
 
-            {/* 검색어 입력 및 대사 상태 탭 필터 */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+            {/* 💡 [사장님 지시] Row 2: 각 유형 집계를 컴팩트 소형 카드로 축소하여 상단으로 배치 */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px', paddingTop: '4px', borderTop: '1px dashed var(--border-color)' }}>
+              <div style={{ backgroundColor: 'var(--bg-body)', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '8px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: '11.5px', fontWeight: 700, color: 'var(--text-muted)' }}>📦 총 운송 완료</span>
+                <div style={{ textAlign: 'right' }}>
+                  <span style={{ fontSize: '14px', fontWeight: 900, color: 'var(--text-primary)', marginRight: '6px' }}>{reconStats.totalCount}건</span>
+                  <span style={{ fontSize: '12px', fontWeight: 800, color: 'var(--primary)' }}>₩{reconStats.totalCost.toLocaleString()}원</span>
+                </div>
+              </div>
+
+              <div style={{ backgroundColor: 'rgba(34,197,94,0.05)', border: '1px solid rgba(34,197,94,0.25)', borderRadius: '8px', padding: '8px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: '11.5px', fontWeight: 700, color: '#16a34a' }}>🟢 대사 일치/완료</span>
+                <div style={{ textAlign: 'right' }}>
+                  <span style={{ fontSize: '14px', fontWeight: 900, color: '#16a34a', marginRight: '6px' }}>{reconStats.matchedCount}건</span>
+                  <span style={{ fontSize: '12px', fontWeight: 800, color: '#16a34a' }}>₩{reconStats.matchedCost.toLocaleString()}원</span>
+                </div>
+              </div>
+
+              <div style={{ backgroundColor: 'rgba(234,179,8,0.05)', border: '1px solid rgba(234,179,8,0.25)', borderRadius: '8px', padding: '8px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: '11.5px', fontWeight: 700, color: '#ca8a04' }}>🟡 금액 불일치</span>
+                <div style={{ textAlign: 'right' }}>
+                  <span style={{ fontSize: '14px', fontWeight: 900, color: '#ca8a04', marginRight: '6px' }}>{reconStats.mismatchCount}건</span>
+                  <span style={{ fontSize: '12px', fontWeight: 800, color: '#ca8a04' }}>₩{reconStats.mismatchCost.toLocaleString()}원</span>
+                </div>
+              </div>
+
+              <div style={{ backgroundColor: 'rgba(59,130,246,0.05)', border: '1px solid rgba(59,130,246,0.3)', borderRadius: '8px', padding: '8px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: '11.5px', fontWeight: 700, color: '#2563eb' }}>💳 매입 지급 요청</span>
+                <div style={{ textAlign: 'right' }}>
+                  <span style={{ fontSize: '14px', fontWeight: 900, color: '#2563eb', marginRight: '6px' }}>{reconStats.paymentRequestedCount}건</span>
+                  <span style={{ fontSize: '12px', fontWeight: 800, color: '#2563eb' }}>₩{reconStats.paymentRequestedCost.toLocaleString()}원</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Row 3: 대사 상태 탭 필터 및 검색어 입력 */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px', flexWrap: 'wrap', paddingTop: '4px' }}>
               <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
                 {[
                   { key: 'ALL', label: '전체 대사 내역' },
@@ -1745,51 +1791,16 @@ export const TruckDispatch: React.FC = () => {
                 ))}
               </div>
 
-              <div style={{ position: 'relative', width: '280px' }}>
-                <Search size={15} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+              <div style={{ position: 'relative', width: '260px' }}>
+                <Search size={14} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
                 <input
                   type="text"
                   placeholder="배차ID / 기사명 / 거래처 검색..."
                   value={reconSearchQuery}
                   onChange={e => setReconSearchQuery(e.target.value)}
-                  style={{ width: '100%', padding: '6px 10px 6px 32px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-body)', color: 'var(--text-primary)', fontSize: '12px', outline: 'none', boxSizing: 'border-box' }}
+                  style={{ width: '100%', padding: '5px 10px 5px 30px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-body)', color: 'var(--text-primary)', fontSize: '12px', outline: 'none', boxSizing: 'border-box' }}
                 />
               </div>
-            </div>
-          </div>
-
-          {/* 알림 메시지 바너 */}
-          {reconNotificationMsg && (
-            <div style={{ padding: '12px 16px', backgroundColor: 'rgba(59,130,246,0.1)', border: '1px solid rgba(59,130,246,0.3)', borderRadius: '10px', fontSize: '13px', fontWeight: 800, color: 'var(--primary)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span>{reconNotificationMsg}</span>
-              <button onClick={() => setReconNotificationMsg('')} style={{ background: 'none', border: 'none', color: 'var(--primary)', cursor: 'pointer' }}><X size={16} /></button>
-            </div>
-          )}
-
-          {/* 2. 핵심 요약 카드 4종 */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '14px' }}>
-            <div style={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '12px', padding: '16px' }}>
-              <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '4px' }}>📦 총 운송 완료 내역</div>
-              <div style={{ fontSize: '20px', fontWeight: 900, color: 'var(--text-primary)' }}>{reconStats.totalCount}건</div>
-              <div style={{ fontSize: '13px', fontWeight: 800, color: 'var(--primary)', marginTop: '2px' }}>₩{reconStats.totalCost.toLocaleString()}원</div>
-            </div>
-
-            <div style={{ backgroundColor: 'var(--bg-card)', border: '1px solid rgba(34,197,94,0.3)', borderRadius: '12px', padding: '16px' }}>
-              <div style={{ fontSize: '12px', fontWeight: 700, color: '#16a34a', marginBottom: '4px' }}>🟢 대사 일치 / 완료</div>
-              <div style={{ fontSize: '20px', fontWeight: 900, color: '#16a34a' }}>{reconStats.matchedCount}건</div>
-              <div style={{ fontSize: '13px', fontWeight: 800, color: '#16a34a', marginTop: '2px' }}>₩{reconStats.matchedCost.toLocaleString()}원</div>
-            </div>
-
-            <div style={{ backgroundColor: 'var(--bg-card)', border: '1px solid rgba(234,179,8,0.3)', borderRadius: '12px', padding: '16px' }}>
-              <div style={{ fontSize: '12px', fontWeight: 700, color: '#ca8a04', marginBottom: '4px' }}>🟡 금액 불일치 (청구차액)</div>
-              <div style={{ fontSize: '20px', fontWeight: 900, color: '#ca8a04' }}>{reconStats.mismatchCount}건</div>
-              <div style={{ fontSize: '13px', fontWeight: 800, color: '#ca8a04', marginTop: '2px' }}>₩{reconStats.mismatchCost.toLocaleString()}원</div>
-            </div>
-
-            <div style={{ backgroundColor: 'var(--bg-card)', border: '1px solid rgba(59,130,246,0.4)', borderRadius: '12px', padding: '16px' }}>
-              <div style={{ fontSize: '12px', fontWeight: 700, color: '#2563eb', marginBottom: '4px' }}>💳 매입 지급 요청 완료</div>
-              <div style={{ fontSize: '20px', fontWeight: 900, color: '#2563eb' }}>{reconStats.paymentRequestedCount}건</div>
-              <div style={{ fontSize: '13px', fontWeight: 800, color: '#2563eb', marginTop: '2px' }}>₩{reconStats.paymentRequestedCost.toLocaleString()}원</div>
             </div>
           </div>
 
