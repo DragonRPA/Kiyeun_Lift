@@ -333,47 +333,9 @@ export const AssetAssignment: React.FC = () => {
           {/* 2-B: 가용 장비 선택 풀 */}
           <div className="card" style={{ height: '400px', display: 'flex', flexDirection: 'column', border: '2px solid var(--success-light)' }}>
             
-            {/* 💡 [사장님 지시] 표시 위치에 관리번호/모델명 조회 필터 추가 */}
-            <div style={{ padding: '8px 12px', backgroundColor: 'var(--bg-body)', borderBottom: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Search size={14} color="var(--primary)" />
-              <input
-                type="text"
-                placeholder="🔍 장비 관리번호 / 모델명 빠른 검색 (예: G15140, GS-1930...)"
-                value={searchAssetNo}
-                onChange={e => setSearchAssetNo(e.target.value)}
-                style={{
-                  flex: 1,
-                  padding: '6px 10px',
-                  borderRadius: '6px',
-                  border: '1px solid var(--border-color)',
-                  fontSize: '12px',
-                  fontWeight: 700,
-                  outline: 'none',
-                  color: 'var(--text-primary)',
-                  backgroundColor: 'var(--bg-card)'
-                }}
-              />
-              {searchAssetNo && (
-                <button
-                  onClick={() => setSearchAssetNo('')}
-                  style={{
-                    padding: '2px 8px',
-                    fontSize: '11px',
-                    borderRadius: '4px',
-                    border: 'none',
-                    backgroundColor: '#ef4444',
-                    color: '#fff',
-                    cursor: 'pointer',
-                    fontWeight: 700
-                  }}
-                >
-                  초기화
-                </button>
-              )}
-            </div>
-
-            <div className="card-header" style={{ padding: '10px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'var(--success-light)' }}>
-              <h3 className="card-title" style={{ display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--success)', fontSize: '13px' }}>
+            {/* 💡 [사장님 지시] 표시 위치(그린 헤더 바 내부)에 관리번호/모델명 조회 필터 일체형 탑재 */}
+            <div className="card-header" style={{ padding: '8px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'var(--success-light)', gap: '10px', flexWrap: 'wrap' }}>
+              <h3 className="card-title" style={{ display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--success)', fontSize: '13px', margin: 0, whiteSpace: 'nowrap' }}>
                 <CheckCircle size={14} /> 필터링된 임대가능 장비 ({availableAssets.length})
                 {selectedCaId && (() => {
                   const sel = slots.find(ca => ca.id === selectedCaId);
@@ -385,12 +347,50 @@ export const AssetAssignment: React.FC = () => {
                   return models.length > 0 ? <span style={{ fontSize: '10px', fontWeight: '600', color: 'var(--text-muted)', marginLeft: '4px' }}>— {models.join(', ')} 모델만</span> : null;
                 })()}
               </h3>
+
+              {/* 💡 [사장님 지시] 그린 헤더 바 내부에도 100% 즉시 눈에 띄는 검색 필터 바 일체형 탑재 */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: '#fff', padding: '4px 10px', borderRadius: '6px', border: '1.5px solid var(--success)', minWidth: '200px', flex: 1 }}>
+                <Search size={14} color="var(--success)" />
+                <input
+                  type="text"
+                  placeholder="🔍 장비 관리번호 / 모델명 검색 (G15140...)"
+                  value={searchAssetNo}
+                  onChange={e => setSearchAssetNo(e.target.value)}
+                  style={{
+                    flex: 1,
+                    border: 'none',
+                    backgroundColor: 'transparent',
+                    fontSize: '11.5px',
+                    fontWeight: 800,
+                    outline: 'none',
+                    color: 'var(--text-primary)'
+                  }}
+                />
+                {searchAssetNo && (
+                  <button
+                    onClick={() => setSearchAssetNo('')}
+                    style={{
+                      padding: '1px 6px',
+                      fontSize: '10px',
+                      borderRadius: '3px',
+                      border: 'none',
+                      backgroundColor: '#ef4444',
+                      color: '#fff',
+                      cursor: 'pointer',
+                      fontWeight: 700
+                    }}
+                  >
+                    X
+                  </button>
+                )}
+              </div>
+
               {canEdit && (
                 <button 
                   className="btn-primary" 
                   onClick={handleAssign} 
                   disabled={!selectedCaId || !selectedAssetId || isAssigning} 
-                  style={{ padding: '6px 12px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 'bold', borderRadius: '6px' }}
+                  style={{ padding: '6px 12px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 'bold', borderRadius: '6px', whiteSpace: 'nowrap' }}
                 >
                   <Wrench size={12} /> 슬롯 연결
                 </button>
