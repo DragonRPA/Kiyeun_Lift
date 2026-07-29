@@ -242,6 +242,62 @@ export const TruckDispatch: React.FC = () => {
   const [selectedSystemDeliveryId, setSelectedSystemDeliveryId] = useState<string | null>(null);
   const [selectedExcelRowIndex, setSelectedExcelRowIndex] = useState<number | null>(null);
 
+  // 💡 [사장님 지시] 금액 수정 모달 state & DB 반영 핸들러
+  const [showCostEditModal, setShowCostEditModal] = useState<boolean>(false);
+  const [editingDelivery, setEditingDelivery] = useState<Delivery | null>(null);
+  const [editingCostInput, setEditingCostInput] = useState<number>(0);
+
+  const handleOpenCostEdit = (d: Delivery, currentCost: number, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setEditingDelivery(d);
+    setEditingCostInput(currentCost);
+    setShowCostEditModal(true);
+  };
+
+  const handleSaveDeliveryCost = async () => {
+    if (!editingDelivery) return;
+    const newCost = Number(editingCostInput);
+    if (isNaN(newCost) || newCost < 0) {
+      showErrorModal('유효한 금액을 입력해 주세요.');
+      return;
+    }
+
+    try {
+      // 1. DB 동기 업데이트 수행 (Zero Silent Failures)
+      await db.updateRow('deliveries', editingDelivery.id, {
+        deliveryCost: newCost
+      } as any);
+
+      // 2. 전체 데이터 및 state 갱신
+      await refreshAllData();
+
+      // 3. 1:1 대사 reconPairs 실시간 차액 및 자동 짝짓기 재계산
+      setReconPairs(prev => prev.map(p => {
+        if (p.systemDelivery?.id === editingDelivery.id) {
+          const excelCost = p.excelCost || 0;
+          const newDiff = excelCost > 0 ? (excelCost - newCost) : 0;
+          const isMatchedNow = p.excelRow ? (newDiff === 0 && excelCost > 0) : false;
+
+          return {
+            ...p,
+            systemCost: newCost,
+            diffCost: newDiff,
+            matchStatus: isMatchedNow ? 'MATCHED' : (newDiff !== 0 && excelCost > 0 ? 'MISMATCH' : p.matchStatus),
+            isReconciled: isMatchedNow,
+            memo: isMatchedNow ? '금액 수정 후 100% 일치 대사 완료' : `금액 수정 반영됨 (시스템 ₩${newCost.toLocaleString()}원)`
+          };
+        }
+        return p;
+      }));
+
+      setShowCostEditModal(false);
+      setEditingDelivery(null);
+      setReconNotificationMsg(`💰 [${editingDelivery.id}] 배차 운송료가 ₩${newCost.toLocaleString()}원으로 수정되어 DB에 반영되었습니다.`);
+    } catch (err: any) {
+      showErrorModal('금액 수정 중 오류가 발생하였습니다: ' + err.message);
+    }
+  };
+
   // 💡 [사장님 지시] 좌측 1개 행 + 우측 1개 행 수동 선택 1:1 대사완료 매칭
   const handleManualPairMatch = () => {
     if (!selectedSystemDeliveryId || selectedExcelRowIndex === null) {
@@ -2041,9 +2097,29 @@ export const TruckDispatch: React.FC = () => {
                           <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
                             🚛 {d.driverName || '기사미지정'} ({d.vehicleType || '3.5T'})
                           </span>
-                          <span style={{ fontSize: '13px', fontWeight: 900, color: 'var(--text-primary)' }}>
-                            ₩{cost.toLocaleString()}원
-                          </span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <span style={{ fontSize: '13px', fontWeight: 900, color: 'var(--text-primary)' }}>
+                              ₩{cost.toLocaleString()}원
+                            </span>
+                            {/* 💡 [사장님 지시] 금액수정 버튼 추가 -> 클릭 시 DB에 즉시 반영 동기화 */}
+                            <button
+                              onClick={(e) => handleOpenCostEdit(d, cost, e)}
+                              title="배차 운송료 수정 (DB 즉시 반영)"
+                              style={{
+                                padding: '2px 7px',
+                                fontSize: '11px',
+                                fontWeight: 800,
+                                borderRadius: '4px',
+                                border: '1px solid var(--primary)',
+                                backgroundColor: 'rgba(59,130,246,0.1)',
+                                color: 'var(--primary)',
+                                cursor: 'pointer',
+                                transition: 'all 0.15s ease'
+                              }}
+                            >
+                              ✏️ 금액 수정
+                            </button>
+                          </div>
                         </div>
 
                         {/* 상태 및 대사 취소 버튼 */}
@@ -2243,6 +2319,71 @@ export const TruckDispatch: React.FC = () => {
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '20px' }}>
               <button onClick={() => setShowManualModal(false)} className="btn-secondary">취소</button>
               <button onClick={handleSaveManualDispatch} className="btn-primary" style={{ fontWeight: 800 }}>배차 생성 저장</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 💡 [사장님 지시] 배차 운송료 금액 수정 모달 (DB 실시간 동기화) */}
+      {showCostEditModal && editingDelivery && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 99999, padding: '20px' }}>
+          <div style={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '14px', padding: '24px', width: '100%', maxWidth: '420px', boxShadow: '0 10px 30px rgba(0,0,0,0.3)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <h3 style={{ fontSize: '17px', fontWeight: 900, margin: 0, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                💰 배차 운송료 금액 수정
+              </h3>
+              <button onClick={() => setShowCostEditModal(false)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: '18px', cursor: 'pointer' }}>✕</button>
+            </div>
+
+            <div style={{ backgroundColor: 'var(--bg-body)', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-color)', marginBottom: '16px', fontSize: '12.5px' }}>
+              <div style={{ fontWeight: 800, color: 'var(--primary)', marginBottom: '4px' }}>📌 배차ID: {editingDelivery.id}</div>
+              <div>📍 하차지: {editingDelivery.destinationAddress || '미지정'}</div>
+              <div>🚛 기사명: {editingDelivery.driverName || '미지정'}</div>
+            </div>
+
+            <div style={{ marginBottom: '20px' }}>
+              <label style={{ fontSize: '13px', fontWeight: 800, marginBottom: '6px', display: 'block', color: 'var(--text-primary)' }}>
+                변경할 운송료 금액 (원)
+              </label>
+              <div style={{ position: 'relative' }}>
+                <input
+                  type="number"
+                  value={editingCostInput}
+                  onChange={e => setEditingCostInput(Number(e.target.value))}
+                  placeholder="예: 70000"
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px 10px 30px',
+                    borderRadius: '8px',
+                    border: '2px solid var(--primary)',
+                    backgroundColor: 'var(--bg-body)',
+                    color: 'var(--text-primary)',
+                    fontSize: '15px',
+                    fontWeight: 900,
+                    outline: 'none',
+                    boxSizing: 'border-box'
+                  }}
+                />
+                <span style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', fontWeight: 900, color: 'var(--primary)' }}>₩</span>
+              </div>
+              <div style={{ fontSize: '11.5px', color: 'var(--text-muted)', marginTop: '6px' }}>
+                💡 변경 즉시 원격 DB(Supabase) `deliveries` 테이블의 `deliveryCost`에 저장되고 실시간 반영됩니다.
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+              <button
+                onClick={() => setShowCostEditModal(false)}
+                style={{ padding: '8px 14px', borderRadius: '7px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-body)', color: 'var(--text-secondary)', cursor: 'pointer', fontWeight: 700, fontSize: '12.5px' }}
+              >
+                취소
+              </button>
+              <button
+                onClick={handleSaveDeliveryCost}
+                style={{ padding: '8px 18px', borderRadius: '7px', border: 'none', backgroundColor: '#2563eb', color: '#fff', cursor: 'pointer', fontWeight: 900, fontSize: '13px', boxShadow: '0 2px 8px rgba(37,99,235,0.3)' }}
+              >
+                💾 DB 금액 수정 저장
+              </button>
             </div>
           </div>
         </div>
