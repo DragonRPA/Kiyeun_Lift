@@ -374,61 +374,74 @@ export const TruckDispatch: React.FC = () => {
           return;
         }
 
-        // 2. 동적 헤더 행 감지 (Known Header Keywords)
-        const headerKeywords = ['일자', '날짜', '상차지', '하차지', '톤수', '차종', '운송비', '금액', '청구금액', '합계', '현장명', '업체명', '기사명', '비고', 'no', '노'];
+        // 2. 동적 헤더 행 감지 (핵심 버그 수정: 셀 단위 정확 매칭)
+        // ⚠️ 이전 방식(rowText.includes)은 "합계금액"에서 '합계'+'금액' 두 키워드가 동시에 매칭되어
+        //    11행(합계금액 7,304,000)을 잘못 헤더로 인식하는 심각한 버그가 있었음.
+        // → 수정: 각 셀을 개별 비교하여 키워드가 셀 자체에 있는지 체크하는 정밀 감지 방식으로 전면 교체.
+        const headerKeywords = ['일자', '날짜', '상차지', '하차지', '톤수', '차종', '운송비', '현장명', '업체명', '기사명', '비고', 'no'];
         let headerRowIndex = -1;
 
-        for (let r = 0; r < Math.min(25, rawRows.length); r++) {
-          const rowText = rawRows[r].map(c => String(c).trim().toLowerCase()).join(' ');
-          const matchCount = headerKeywords.filter(kw => rowText.includes(kw)).length;
-          if (matchCount >= 2) {
+        for (let r = 0; r < Math.min(30, rawRows.length); r++) {
+          // 셀 단위로 정확히 비교: 각 셀의 trim().toLowerCase() 값이 키워드와 일치하거나 키워드를 포함하는지 체크
+          const cells = rawRows[r].map((c: any) => String(c).trim().toLowerCase());
+          const matchCount = headerKeywords.filter(kw =>
+            cells.some((cell: string) => cell === kw || (cell.length <= 10 && cell.includes(kw)))
+          ).length;
+          if (matchCount >= 3) {
             headerRowIndex = r;
             break;
           }
         }
 
         if (headerRowIndex === -1) {
-          headerRowIndex = 0; // Fallback to 1st row
+          headerRowIndex = 0; // Fallback
         }
 
-        // 3. 헤더 컬럼 파싱 및 데이터 행 정규화 (제목 없는 컬럼은 비고로 자동 할당)
+        // 3. 헤더 컬럼명 추출 (빈 헤더 셀 → 위치 기반 자동명 부여)
         const rawHeaderRow = rawRows[headerRowIndex] || [];
         const headerNames: string[] = rawHeaderRow.map((col: any, cIdx: number) => {
           const title = String(col).trim();
           if (title) return title;
-          // 헤더명이 없는 6번째 이상의 열은 비고/메모 컬럼으로 자동 부여
-          return cIdx >= 6 ? (cIdx === 8 ? '비고' : `비고_${cIdx + 1}`) : `COL_${cIdx + 1}`;
+          // 헤더명이 없는 열: 인접한 오른쪽 비고형 열은 자동으로 '비고_N' 명칭 부여
+          return `비고_${cIdx + 1}`;
         });
 
-        // 4. 데이터 행 구성 (상단/하단 표 자동 걸러내기, 디토 상속 & 다중 비고 병합 적용)
+        // 비고형으로 판단할 컬럼인지 확인하는 헬퍼
+        const isMemoKey = (k: string) => {
+          const kl = k.toLowerCase();
+          return kl.includes('현장') || kl.includes('업체') || kl.includes('비고') ||
+                 kl.includes('메모') || kl.includes('특이') || kl.includes('참고');
+        };
+
+        // 4. 데이터 행 구성 (디토 상속 & 다중 비고 병합)
         const parsedRows: any[] = [];
         let lastDate = '';
         let lastOrigin = '';
         let lastDest = '';
 
+        // 디토 기호 감지 헬퍼
+        const isDitto = (val: string) =>
+          !val || val === '"' || val === '·' || val === '〃' || val === "''";
+
         for (let r = headerRowIndex + 1; r < rawRows.length; r++) {
           const rowArr = rawRows[r];
-          if (!rowArr || rowArr.every((cell: any) => String(cell).trim() === '')) continue; // 빈 행 패스
+          if (!rowArr || rowArr.every((cell: any) => String(cell).trim() === '')) continue;
 
-          const fullRowText = rowArr.map((cell: any) => String(cell).trim()).join(' ');
-
-          // 상단 공급자 정보 표 및 하단 합계/소계 행 자동 예외 처리
-          if (fullRowText.includes('공급가액') || fullRowText.includes('합계금액') || fullRowText.includes('부가세') || fullRowText.includes('운송비거래명세표') || fullRowText.includes('사업장주소') || fullRowText.includes('등록번호')) {
-            continue;
-          }
-
+          // 하단 합계/소계 행 감지: NO 컬럼 또는 첫 두 셀에 집계 키워드가 있으면 스킵
           const firstCell = String(rowArr[0] || '').trim();
           const secondCell = String(rowArr[1] || '').trim();
-          if (firstCell.includes('합계') || firstCell.includes('소계') || secondCell.includes('합계') || secondCell.includes('소계')) {
-            continue;
-          }
+          const isFooterRow =
+            firstCell === '합계' || firstCell === '소계' || firstCell === '계' ||
+            secondCell === '합계' || secondCell === '소계' ||
+            (firstCell === '' && secondCell === '' && String(rowArr[2] || '').trim() === '합계');
+          if (isFooterRow) continue;
 
           const rowObj: any = {};
           headerNames.forEach((hName, cIdx) => {
             rowObj[hName] = String(rowArr[cIdx] !== undefined ? rowArr[cIdx] : '').trim();
           });
 
-          // 디토( ", ·, 〃, - ) 상속 및 날짜/장소 처리
+          // 디토 상속 및 날짜/장소 처리
           const keys = Object.keys(rowObj);
           const dateKey = keys.find(k => k.includes('일자') || k.includes('날짜') || k.includes('운송일'));
           const originKey = keys.find(k => k.includes('상차지') || k.includes('출발지'));
@@ -437,9 +450,6 @@ export const TruckDispatch: React.FC = () => {
           let rawDate = dateKey ? rowObj[dateKey] : '';
           let rawOrigin = originKey ? rowObj[originKey] : '';
           let rawDest = destKey ? rowObj[destKey] : '';
-
-          // 디토 기사/기호 검사
-          const isDitto = (val: string) => !val || val === '"' || val === '·' || val === '〃' || val === '-' || val === "''";
 
           if (isDitto(rawDate) && lastDate) rawDate = lastDate;
           else if (rawDate && !isDitto(rawDate)) lastDate = rawDate;
@@ -450,20 +460,23 @@ export const TruckDispatch: React.FC = () => {
           if (isDitto(rawDest) && lastDest) rawDest = lastDest;
           else if (rawDest && !isDitto(rawDest)) lastDest = rawDest;
 
-          // 날짜 정규화 (06월 01일 -> 2026-06-01, 6/1 -> 2026-06-01)
-          let normDate = rawDate;
+          // 날짜 정규화: "6/1" → "2026-06-01", "06월 01일" → "2026-06-01", 엑셀 시리얼 숫자 처리
           const currentYear = new Date().getFullYear();
-          if (rawDate.includes('월') && rawDate.includes('일')) {
-            const mMatch = rawDate.match(/(\d+)월\s*(\d+)일/);
-            if (mMatch) {
-              normDate = `${currentYear}-${String(mMatch[1]).padStart(2, '0')}-${String(mMatch[2]).padStart(2, '0')}`;
-            }
-          } else if (rawDate.includes('/')) {
-            const parts = rawDate.split('/');
-            if (parts.length === 2) {
-              normDate = `${currentYear}-${String(parts[0]).padStart(2, '0')}-${String(parts[1]).padStart(2, '0')}`;
-            } else if (parts.length === 3) {
-              normDate = `${parts[0]}-${String(parts[1]).padStart(2, '0')}-${String(parts[2]).padStart(2, '0')}`;
+          let normDate = rawDate;
+          if (rawDate) {
+            const numVal = Number(rawDate);
+            if (!isNaN(numVal) && numVal > 30000 && numVal < 60000) {
+              // 엑셀 시리얼 날짜
+              const utcDays = Math.floor(numVal - 25569);
+              const d = new Date(utcDays * 86400 * 1000);
+              normDate = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+            } else if (rawDate.includes('월') && rawDate.includes('일')) {
+              const mMatch = rawDate.match(/(\d+)월\s*(\d+)일/);
+              if (mMatch) normDate = `${currentYear}-${String(mMatch[1]).padStart(2, '0')}-${String(mMatch[2]).padStart(2, '0')}`;
+            } else if (rawDate.includes('/')) {
+              const parts = rawDate.split('/');
+              if (parts.length === 2) normDate = `${currentYear}-${String(parts[0]).padStart(2, '0')}-${String(parts[1]).padStart(2, '0')}`;
+              else if (parts.length === 3) normDate = `${parts[0]}-${String(parts[1]).padStart(2, '0')}-${String(parts[2]).padStart(2, '0')}`;
             }
           }
 
@@ -471,31 +484,22 @@ export const TruckDispatch: React.FC = () => {
           if (originKey) rowObj[originKey] = rawOrigin;
           if (destKey) rowObj[destKey] = rawDest;
 
-          // 💡 [사장님 지시] 비고에 해당하는 컬럼이 여러 개(예: 현장명, 업체명, 무제목I열 현장대기 등)이면 텍스트를 병합!
-          const memoCandidateKeys = keys.filter(k => {
-            const kLower = k.toLowerCase();
-            return kLower.includes('현장') || kLower.includes('업체') || kLower.includes('비고') || 
-                   kLower.includes('메모') || kLower.includes('특이') || kLower.includes('참고') || kLower.includes('col_');
-          });
-
+          // 비고형 컬럼 자동 병합: 현장명, 업체명, 비고_N 등을 하나의 '비고' 값으로 통합
           const memoParts: string[] = [];
-          memoCandidateKeys.forEach(k => {
+          keys.forEach(k => {
+            if (!isMemoKey(k)) return;
             let val = String(rowObj[k] || '').trim();
-            if (val && !isDitto(val)) {
-              if (k.trim().includes('비고') && val.startsWith('비고')) {
-                val = val.replace(/^비고[:\s]*/, '').trim();
-              }
-              if (val) {
-                memoParts.push(k.trim().includes('비고') || k.trim().includes('COL_') ? val : `${k}: ${val}`);
-              }
-            }
+            if (!val || isDitto(val)) return;
+            // "비고: ..." 와 같이 컬럼명이 값 앞에 중복된 경우 제거
+            const kBase = k.replace(/_\d+$/, '').trim();
+            if (val.startsWith(kBase)) val = val.slice(kBase.length).replace(/^[:\s]+/, '').trim();
+            if (!val) return;
+            // 순수 비고/무헤더 컬럼은 값만, 나머지(현장명/업체명 등)는 "컬럼명: 값" 형태
+            const isRawMemo = k.startsWith('비고');
+            memoParts.push(isRawMemo ? val : `${kBase}: ${val}`);
           });
 
-          // 병합된 비고 텍스트 생성
-          const combinedMemo = memoParts.length > 0 ? memoParts.join(' | ') : (rowObj['비고'] || '');
-          if (combinedMemo) {
-            rowObj['비고'] = combinedMemo;
-          }
+          if (memoParts.length > 0) rowObj['비고'] = memoParts.join(' | ');
 
           parsedRows.push(rowObj);
         }
