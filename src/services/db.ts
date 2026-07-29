@@ -344,7 +344,7 @@ export interface Contract {
 export interface ContractHistory {
   id: string;
   contractId: string;
-  changeType: 'REGISTER' | 'EXTEND' | 'SHORTEN' | 'SUCCEED' | 'TERMINATE';
+  changeType: 'REGISTER' | 'EXTEND' | 'SHORTEN' | 'SUCCEED' | 'TERMINATE' | 'EXCHANGE';
   changeDate: string;
   prevEndDate?: string;
   newEndDate?: string;

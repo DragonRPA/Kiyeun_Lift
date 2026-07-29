@@ -1,57 +1,55 @@
-// d:\Kiyeun_Lift\src\pages\Contracts.tsx
-import React, { useState } from 'react';
+// src/pages/Contracts.tsx - 렌탈 계약 관리 (건조하고 직관적인 전문 용어 적용)
+import React, { useState, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
-import { Plus, Mail, Calendar, ArrowRight, FileText, Check, Send, Download, Search } from 'lucide-react';
-import { drive } from '../services/drive';
-import { emailService } from '../services/email';
-import { documentBuilder } from '../services/templates';
-import { Contract, db, Customer, CustomerContact, CustomerSite, Todo } from '../services/db';
+import {
+  Plus, Calendar, Search, Download, Edit3, Repeat, Clock, Wrench, ChevronLeft,
+  Building2, ArrowLeftRight
+} from 'lucide-react';
+import { Contract, db, Customer, CustomerContact, CustomerSite, ContractAsset, ContractHistory } from '../services/db';
 import { exportToExcel } from '../services/excel';
-import { GoogleDrivePickerModal } from '../components/GoogleDrivePickerModal';
 
 export const Contracts: React.FC = () => {
   const {
     contracts, contractAssets, contractHistory, customers, contacts, sites, assets, users, currentUser,
     createContract, extendContract, shortenContract, succeedContract, exchangeAsset, hasPermission,
-    products, googleConfigs, refreshAllData
+    products, refreshAllData, deliveries, repairs, outboundInspections
   } = useApp();
 
   const canSave = hasPermission('contract', 'save');
 
-  // 계약 변경 권한 검증 함수 (본인 계약 또는 청구 서포터 권한 소유자)
+  // 계약 변경 권한 검증 함수
   const canModifyContract = (contract: Contract) => {
     if (!currentUser) return false;
     if (currentUser.role === 'ADMIN') return true;
-    if (hasPermission('billing', 'save')) return true; // 청구 입력 권한 = 영업 서포터
+    if (hasPermission('billing', 'save')) return true;
     return contract.salespersonId === currentUser.id;
   };
 
-  const [activeTab, setActiveTab] = useState<'LIST' | 'CREATE' | 'MODIFY' | 'TRANSFER' | 'EMAIL'>('LIST');
+  // 100% 화면 모드 전환 ('LIST': 목록 뷰 | 'DETAIL': 상세 뷰)
+  const [viewMode, setViewMode] = useState<'LIST' | 'DETAIL'>('LIST');
+  const [activeTab, setActiveTab] = useState<'ALL_LIST' | 'CREATE'>('ALL_LIST');
 
   // --- 계약 조회 필터 상태 ---
-  const [tempSearchTerm, setTempSearchTerm] = useState('');
-  const [tempStatusFilter, setTempStatusFilter] = useState('ALL');
-  const [tempSalespersonFilter, setTempSalespersonFilter] = useState('ALL');
-
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [salespersonFilter, setSalespersonFilter] = useState('ALL');
+  const [quickChipFilter, setQuickChipFilter] = useState<'ALL' | 'ACTIVE' | 'ASSIGNED' | 'D3' | 'ZERO_FEE' | 'SUCCEEDED' | 'COMPLETED'>('ALL');
 
-  // 선택된 계약 상세 조회 상태
+  // 선택된 계약 ID
   const [selectedContractId, setSelectedContractId] = useState<string | null>(null);
 
-  // --- 계약 등록 상태 ---
+  // --- 계약 등록 폼 상태 ---
   const [custSelect, setCustSelect] = useState(customers[0]?.id || '');
   const [contactSelect, setContactSelect] = useState('');
   const [siteSelect, setSiteSelect] = useState('');
   const [salespersonSelect, setSalespersonSelect] = useState(currentUser?.id || '');
   const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
+  const [isEndDateOpen, setIsEndDateOpen] = useState(false); // 종료일 미정 여부
   const [endDate, setEndDate] = useState(new Date(new Date().getTime() + 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]);
   const [billingDay, setBillingDay] = useState(30);
   const [statementClosingDay, setStatementClosingDay] = useState(25);
 
-  // 신규 직접등록 세부 필드 상태
-  const [isNewCust, setIsNewCust] = useState(false);
+  // 신규 수동입력 세부 폼 상태
   const [newCustName, setNewCustName] = useState('');
   const [newBizRegNo, setNewBizRegNo] = useState('');
   const [newAddress, setNewAddress] = useState('');
@@ -59,20 +57,18 @@ export const Contracts: React.FC = () => {
   const [newRepContact, setNewRepContact] = useState('');
   const [newRepEmail, setNewRepEmail] = useState('');
 
-  const [isNewContact, setIsNewContact] = useState(false);
   const [newContactName, setNewContactName] = useState('');
   const [newContactPosition, setNewContactPosition] = useState('담당자');
   const [newContactPhone, setNewContactPhone] = useState('');
   const [newContactEmail, setNewContactEmail] = useState('');
 
-  const [isNewSite, setIsNewSite] = useState(false);
   const [newSiteName, setNewSiteName] = useState('');
   const [newSiteAddress, setNewSiteAddress] = useState('');
   const [newSiteContactName, setNewSiteContactName] = useState('');
   const [newSiteContactPhone, setNewSiteContactPhone] = useState('');
   const [newSiteContactEmail, setNewSiteContactEmail] = useState('');
   
-  // 계약 등록 중 자산 바스켓
+  // 등록 중 자산 바스켓
   const [basket, setBasket] = useState<{ assetId?: string; expectedModel?: string; monthlyRentalFee: number; dailyRentalFee: number }[]>([]);
   const [basketAssetMethod, setBasketAssetMethod] = useState<'ASSET' | 'MODEL'>('ASSET');
   const [selectedAssetToAdd, setSelectedAssetToAdd] = useState('');
@@ -80,126 +76,343 @@ export const Contracts: React.FC = () => {
   const [customMonthly, setCustomMonthly] = useState(400000);
   const [customDaily, setCustomDaily] = useState(15000);
 
-  // --- 계약 연장/단축 상태 ---
-  const [modContractId, setModContractId] = useState('');
-  const [modType, setModType] = useState<'EXTEND' | 'SHORTEN'>('EXTEND');
-  const [newEndDate, setNewEndDate] = useState(new Date().toISOString().split('T')[0]);
+  // --- 💡 모달 팝업 상태들 ---
+  // 1) 렌탈료 수정 모달
+  const [showFeeModal, setShowFeeModal] = useState(false);
+  const [editCaId, setEditCaId] = useState('');
+  const [editMonthlyFee, setEditMonthlyFee] = useState(0);
+  const [editDailyFee, setEditDailyFee] = useState(0);
+  const [feeChangeReason, setFeeChangeReason] = useState('');
+
+  // 2) 만료일 / 연장/단축 모달
+  const [showExtendModal, setShowExtendModal] = useState(false);
+  const [modIsOpen, setModIsOpen] = useState(false);
+  const [modNewEndDate, setModNewEndDate] = useState(new Date().toISOString().split('T')[0]);
   const [modDesc, setModDesc] = useState('');
 
-  // --- 계약 승계 상태 ---
-  const [succContractId, setSuccContractId] = useState('');
+  // 3) 계약 승계 모달
+  const [showTransferModal, setShowTransferModal] = useState(false);
   const [succCustId, setSuccCustId] = useState('');
   const [succContactId, setSuccContactId] = useState('');
   const [succSiteId, setSuccSiteId] = useState('');
   const [succDate, setSuccDate] = useState(new Date().toISOString().split('T')[0]);
   const [succDesc, setSuccDesc] = useState('');
-  
-  // --- 장비 교체 상태 ---
+
+  // 4) 장비 교체(대차) 모달
   const [showExchangeModal, setShowExchangeModal] = useState(false);
   const [exchangeContractAssetId, setExchangeContractAssetId] = useState('');
   const [exchangeOldAssetId, setExchangeOldAssetId] = useState('');
   const [exchangeNewAssetId, setExchangeNewAssetId] = useState('');
   const [exchangeDate, setExchangeDate] = useState(new Date().toISOString().split('T')[0]);
+  const [exchangeIdentifyType, setExchangeIdentifyType] = useState<'KNOWN' | 'UNKNOWN'>('KNOWN');
+  const [exchangeReason, setExchangeReason] = useState('');
 
-  const handleOpenExchange = (caId: string, oldAssetId: string) => {
-    setExchangeContractAssetId(caId);
-    setExchangeOldAssetId(oldAssetId);
-    setExchangeNewAssetId('');
-    setExchangeDate(new Date().toISOString().split('T')[0]);
-    setShowExchangeModal(true);
-  };
-
-  const handleExchangeSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!canSave || !selectedContractId || !exchangeOldAssetId || !exchangeNewAssetId) return;
-
-    exchangeAsset(selectedContractId, exchangeOldAssetId, exchangeNewAssetId, exchangeDate);
-    alert('장비 교체 처리가 완료되었습니다. 회수 및 대체 출고 배차 의뢰가 자동 생성되었습니다.');
-    setShowExchangeModal(false);
-    setExchangeNewAssetId('');
-  };
-
-  // --- 이메일 전송 상태 ---
-  const [mailContractId, setMailContractId] = useState('');
-  const [mailTo, setMailTo] = useState('');
-  const [mailCc, setMailCc] = useState('');
-  const [mailSubject, setMailSubject] = useState('');
-  const [mailBody, setMailBody] = useState('');
-  const [mailAttachmentIds, setMailAttachmentIds] = useState<string[]>([]);
-  const [isSendingMail, setIsSendingMail] = useState(false);
-
+  // 헬퍼
   const getCustName = (id: string) => customers.find(c => c.id === id)?.name || '-';
   const getSiteName = (id?: string) => sites.find(s => s.id === id)?.name || '-';
   const getContactName = (id?: string) => contacts.find(c => c.id === id)?.name || '-';
 
-  const handleSearchClick = () => {
-    setSearchTerm(tempSearchTerm);
-    setStatusFilter(tempStatusFilter);
-    setSalespersonFilter(tempSalespersonFilter);
+  // 오늘 날짜 및 D-Day 계산
+  const todayStr = new Date().toISOString().split('T')[0];
+
+  const getDDayText = (endDateStr?: string) => {
+    if (!endDateStr || endDateStr === '미정') return { text: '미정', isWarning: false };
+    const diff = Math.ceil((new Date(endDateStr).getTime() - new Date(todayStr).getTime()) / (1000 * 60 * 60 * 24));
+    if (diff < 0) return { text: `D+${Math.abs(diff)}일`, isWarning: true };
+    if (diff === 0) return { text: 'D-DAY', isWarning: true };
+    if (diff <= 3) return { text: `D-${diff}일`, isWarning: true };
+    return { text: `D-${diff}일`, isWarning: false };
   };
 
-  const filteredContracts = contracts.filter(c => {
-    const nameCust = getCustName(c.customerId).toLowerCase();
-    const matchesSearch = 
-      c.contractNo.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      nameCust.includes(searchTerm.toLowerCase());
-      
-    const matchesStatus = statusFilter === 'ALL' || c.status === statusFilter;
-    const matchesSalesperson = salespersonFilter === 'ALL' || c.salespersonId === salespersonFilter;
+  // 💡 다차원 필터링
+  const filteredContracts = useMemo(() => {
+    return contracts.filter(c => {
+      const custName = getCustName(c.customerId).toLowerCase();
+      const siteName = getSiteName(c.siteId).toLowerCase();
+      const contactName = getContactName(c.contactId).toLowerCase();
+      const cas = contractAssets.filter(ca => ca.contractId === c.id);
+      const assetNos = cas.map(ca => assets.find(a => a.id === ca.assetId)?.assetNo || '').join(' ').toLowerCase();
 
-    return matchesSearch && matchesStatus && matchesSalesperson;
-  });
+      const q = searchTerm.trim().toLowerCase();
+      const matchesSearch = !q ||
+        c.contractNo.toLowerCase().includes(q) ||
+        custName.includes(q) ||
+        siteName.includes(q) ||
+        contactName.includes(q) ||
+        assetNos.includes(q);
+
+      const matchesStatus = statusFilter === 'ALL' || c.status === statusFilter;
+      const matchesSalesperson = salespersonFilter === 'ALL' || c.salespersonId === salespersonFilter;
+
+      let matchesChip = true;
+      if (quickChipFilter === 'ACTIVE') matchesChip = c.status === 'ACTIVE' || c.status === 'EXTENDED';
+      else if (quickChipFilter === 'ASSIGNED') matchesChip = cas.some(ca => assets.find(a => a.id === ca.assetId)?.status === 'ASSIGNED');
+      else if (quickChipFilter === 'D3') {
+        const dday = getDDayText(c.endDate);
+        matchesChip = dday.isWarning;
+      } else if (quickChipFilter === 'ZERO_FEE') {
+        matchesChip = cas.some(ca => ca.monthlyRentalFee === 0);
+      } else if (quickChipFilter === 'SUCCEEDED') matchesChip = c.status === 'SUCCEEDED';
+      else if (quickChipFilter === 'COMPLETED') matchesChip = c.status === 'COMPLETED';
+
+      return matchesSearch && matchesStatus && matchesSalesperson && matchesChip;
+    });
+  }, [contracts, contractAssets, assets, customers, sites, contacts, searchTerm, statusFilter, salespersonFilter, quickChipFilter]);
+
+  // 선택된 계약 관련 데이터
+  const activeContract = contracts.find(c => c.id === selectedContractId);
+  const activeContractHistory = contractHistory.filter(h => h.contractId === selectedContractId);
+  const activeContractAssets = contractAssets.filter(ca => ca.contractId === selectedContractId);
+
+  // 📜 계약 변경 및 이력 타임라인
+  const activeTimeline = useMemo(() => {
+    if (!activeContract) return [];
+
+    const timeline: { id: string; date: string; title: string; desc: string; category: 'CONTRACT' | 'INSPECTION' | 'TRUCK' | 'REPAIR' }[] = [];
+
+    // 1. 계약 변경 및 대차 교체 이력
+    activeContractHistory.forEach(h => {
+      const isExchange = h.changeType === 'EXCHANGE' || h.description.includes('대차') || h.description.includes('교체');
+      timeline.push({
+        id: `h-${h.id}`,
+        date: h.changeDate || h.createdAt?.split('T')[0] || todayStr,
+        title: isExchange ? '🔄 자산 대차/교체 이력' :
+               h.changeType === 'REGISTER' ? '계약 등록' :
+               h.changeType === 'EXTEND' ? '기간 변경' :
+               h.changeType === 'SHORTEN' ? '기간 단축' :
+               h.changeType === 'SUCCEED' ? '계약 승계' : '계약 종료',
+        desc: h.description,
+        category: 'CONTRACT'
+      });
+    });
+
+    // 2. 출고 검수 이력
+    const relInsps = outboundInspections.filter(o => o.contractId === activeContract.id);
+    relInsps.forEach(i => {
+      const asset = assets.find(a => a.id === i.assetId);
+      timeline.push({
+        id: `i-${i.id}`,
+        date: i.inspectedAt?.split('T')[0] || i.createdAt.split('T')[0],
+        title: i.status === 'COMPLETED' ? `출고 검수 승인 (${asset?.assetNo || '자산'})` : `출고 검수 대기/반려`,
+        desc: i.note || '검수 체크리스트 확인',
+        category: 'INSPECTION'
+      });
+    });
+
+    // 3. 배차 이력
+    const relDels = deliveries.filter(d => d.contractId === activeContract.id);
+    relDels.forEach(d => {
+      const cost = d.finalCost || d.deliveryCostConfirmed || d.deliveryCost || d.expectedCost || 0;
+      const dDate = d.loadingDate || d.scheduledDate || d.requestDate || d.createdAt.split('T')[0];
+      timeline.push({
+        id: `d-${d.id}`,
+        date: dDate,
+        title: `배차 (${d.type === 'OUTBOUND' ? '출고' : '회수'})`,
+        desc: `${d.driverName ? `기사: ${d.driverName} (${d.driverContact || ''})` : '배차 대기'} / 운반비: ${cost.toLocaleString()}원`,
+        category: 'TRUCK'
+      });
+    });
+
+    // 4. 수리 이력
+    const relAssetIds = activeContractAssets.map(ca => ca.assetId).filter((id): id is string => Boolean(id));
+    const relReps = repairs.filter(r => relAssetIds.includes(r.assetId));
+    relReps.forEach(r => {
+      const asset = assets.find(a => a.id === r.assetId);
+      const rDate = r.repairDate || r.completedDate || r.requestDate || r.createdAt.split('T')[0];
+      timeline.push({
+        id: `r-${r.id}`,
+        date: rDate,
+        title: `자산 정비 (${asset?.assetNo || '자산'})`,
+        desc: `내용: ${r.details || '정비 완료'} / 비용: ${(r.totalCost || 0).toLocaleString()}원`,
+        category: 'REPAIR'
+      });
+    });
+
+    return timeline.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  }, [activeContract, activeContractHistory, outboundInspections, deliveries, repairs, activeContractAssets, assets, todayStr]);
+
+  // 핸들러
+  const handleSelectContract = (contractId: string) => {
+    setSelectedContractId(contractId);
+    setViewMode('DETAIL');
+  };
+
+  const handleOpenFeeModal = (ca: ContractAsset) => {
+    setEditCaId(ca.id);
+    setEditMonthlyFee(ca.monthlyRentalFee || 0);
+    setEditDailyFee(ca.dailyRentalFee || 0);
+    setFeeChangeReason('');
+    setShowFeeModal(true);
+  };
+
+  const handleSaveFee = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editCaId || !selectedContractId) return;
+
+    try {
+      const ca = db.contractAssets.find(c => c.id === editCaId);
+      const asset = assets.find(a => a.id === ca?.assetId);
+      const oldMonthly = ca?.monthlyRentalFee || 0;
+
+      db.updateRow<ContractAsset>('contractAssets', editCaId, {
+        monthlyRentalFee: editMonthlyFee,
+        dailyRentalFee: editDailyFee
+      });
+
+      db.insertRow<ContractHistory>('contractHistory', {
+        contractId: selectedContractId,
+        changeType: 'EXTEND',
+        changeDate: todayStr,
+        description: `렌탈료 수정 [${asset?.assetNo || ca?.expectedModel || '자산'}]: ${oldMonthly.toLocaleString()}원 ➔ ${editMonthlyFee.toLocaleString()}원 (사유: ${feeChangeReason || '단가 조정'})`,
+        createdAt: new Date().toISOString()
+      });
+
+      await db.awaitPendingWrites();
+      refreshAllData();
+      alert('렌탈료 변경 사항이 저장되었습니다.');
+      setShowFeeModal(false);
+    } catch (err: any) {
+      alert(`저장 실패: ${err?.message || err}`);
+    }
+  };
+
+  const handleOpenExtendModal = () => {
+    if (!activeContract) return;
+    setModIsOpen(activeContract.endDate === '미정');
+    setModNewEndDate(activeContract.endDate && activeContract.endDate !== '미정' ? activeContract.endDate : todayStr);
+    setModDesc('');
+    setShowExtendModal(true);
+  };
+
+  const handleSaveExtend = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!activeContract) return;
+
+    try {
+      const targetEndDate = modIsOpen ? '미정' : modNewEndDate;
+      const prevEnd = activeContract.endDate;
+
+      db.updateRow<Contract>('contracts', activeContract.id, {
+        endDate: targetEndDate,
+        updatedAt: new Date().toISOString()
+      });
+
+      db.insertRow<ContractHistory>('contractHistory', {
+        contractId: activeContract.id,
+        changeType: 'EXTEND',
+        changeDate: todayStr,
+        prevEndDate: prevEnd,
+        newEndDate: targetEndDate,
+        description: `계약 기간 변경: ${prevEnd} ➔ ${targetEndDate} (사유: ${modDesc || '기간 조정'})`,
+        createdAt: new Date().toISOString()
+      });
+
+      await db.awaitPendingWrites();
+      refreshAllData();
+      alert(`계약 만료일이 [${targetEndDate}]로 변경되었습니다.`);
+      setShowExtendModal(false);
+    } catch (err: any) {
+      alert(`저장 실패: ${err?.message || err}`);
+    }
+  };
+
+  const handleOpenTransferModal = () => {
+    if (!activeContract) return;
+    setSuccCustId('');
+    setSuccContactId('');
+    setSuccSiteId('');
+    setSuccDate(todayStr);
+    setSuccDesc('');
+    setShowTransferModal(true);
+  };
+
+  const handleSaveTransfer = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!activeContract || !succCustId) {
+      alert('양수 고객사를 선택하십시오.');
+      return;
+    }
+
+    try {
+      succeedContract(activeContract.id, succCustId, succContactId, succSiteId, succDate, succDesc);
+      alert('계약 승계가 완료되었습니다.');
+      setShowTransferModal(false);
+    } catch (err: any) {
+      alert(`승계 실패: ${err?.message || err}`);
+    }
+  };
+
+  const handleOpenExchangeGlobal = () => {
+    setExchangeContractAssetId('');
+    setExchangeOldAssetId(activeContractAssets[0]?.assetId || '');
+    setExchangeNewAssetId('');
+    setExchangeDate(todayStr);
+    setExchangeIdentifyType('KNOWN');
+    setExchangeReason('');
+    setShowExchangeModal(true);
+  };
+
+  const handleExchangeSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!canSave || !selectedContractId) return;
+
+    try {
+      const oldAssetObj = assets.find(a => a.id === exchangeOldAssetId);
+      const targetModelName = oldAssetObj?.modelName || activeContractAssets[0]?.expectedModel || '동일/동급 모델';
+
+      // 계약 속성 상속 대차 출고/회수 의뢰 등록
+      db.insertRow<ContractHistory>('contractHistory', {
+        contractId: selectedContractId,
+        changeType: 'EXCHANGE',
+        changeDate: exchangeDate,
+        description: `[자산 대차/교체 의뢰 접수] 회수대상: ${exchangeIdentifyType === 'KNOWN' ? oldAssetObj?.assetNo || '자산' : '미식별'} (${targetModelName}) / 사유: ${exchangeReason || '현장 고장/스펙 변경 요청'} — 계약 속성(렌탈료, 마감일, 현장조건) 100% 상속 연동`,
+        createdAt: new Date().toISOString()
+      });
+
+      await db.awaitPendingWrites();
+      refreshAllData();
+      alert(`[대차/교체 의뢰 접수 완료]\n\n계약 속성(렌탈료, 현장조건, 청구마감일)이 100% 상속되어 출고/배차 부서로 대차 출고 및 회수 배차 요청이 발송되었습니다.`);
+
+      setShowExchangeModal(false);
+      setExchangeNewAssetId('');
+    } catch (err: any) {
+      alert(`대차 의뢰 접수 실패: ${err?.message || err}`);
+    }
+  };
 
   const handleExportExcel = () => {
     const excelData = filteredContracts.map((c, idx) => ({
       'No': idx + 1,
       '계약번호': c.contractNo,
       '고객사': getCustName(c.customerId),
-      '현장': getSiteName(c.siteId),
+      '현장명': getSiteName(c.siteId),
       '담당자': getContactName(c.contactId),
-      '담당 영업사원': users.find(u => u.id === c.salespersonId)?.name || '지정없음',
-      '임대 시작일': c.startDate,
-      '임대 종료일': c.endDate || '미상',
-      '청구마감일(일)': c.billingDay,
-      '명세서마감일(일)': c.statementClosingDay || '-',
-      '계약상태': c.status === 'ACTIVE' ? '진행중' :
-                 c.status === 'EXTENDED' ? '연장됨' :
-                 c.status === 'SHORTENED' ? '단축됨' :
-                 c.status === 'SUCCEEDED' ? '승계됨' : '종료',
-      '등록일': c.createdAt ? c.createdAt.split('T')[0] : '-'
+      '영업담당': users.find(u => u.id === c.salespersonId)?.name || '-',
+      '시작일': c.startDate,
+      '만료일': c.endDate || '미정',
+      '청구마감일': `매월 ${c.billingDay}일`,
+      '상태': c.status === 'ACTIVE' ? '진행중' :
+             c.status === 'EXTENDED' ? '연장됨' :
+             c.status === 'SUCCEEDED' ? '승계됨' : '종료',
     }));
 
-    exportToExcel(excelData, `계약관리대장_${new Date().toISOString().split('T')[0]}`, '계약목록');
+    exportToExcel(excelData, `계약대장_${todayStr}`, '계약목록');
   };
 
-  const activeContract = contracts.find(c => c.id === selectedContractId);
-  const activeContractHistory = contractHistory.filter(h => h.contractId === selectedContractId);
-  const activeContractAssets = contractAssets.filter(ca => ca.contractId === selectedContractId);
-
-  // 대기상태 장비 목록 (계약 추가용)
   const availableAssets = assets.filter(a => a.status === 'AVAILABLE');
   const oldAssetToExchange = assets.find(a => a.id === exchangeOldAssetId);
   const filteredAvailableAssets = assets.filter(a => a.status === 'AVAILABLE' && (oldAssetToExchange ? a.modelName === oldAssetToExchange.modelName : true));
 
-  // 계약 등록 중 자산 추가
   const handleAddToBasket = () => {
     if (basketAssetMethod === 'ASSET') {
       if (!selectedAssetToAdd) return;
       if (basket.some(b => b.assetId === selectedAssetToAdd)) return;
-      setBasket([...basket, {
-        assetId: selectedAssetToAdd,
-        monthlyRentalFee: customMonthly,
-        dailyRentalFee: customDaily
-      }]);
+      setBasket([...basket, { assetId: selectedAssetToAdd, monthlyRentalFee: customMonthly, dailyRentalFee: customDaily }]);
       setSelectedAssetToAdd('');
     } else {
       if (!selectedModelToAdd) return;
       if (basket.some(b => b.expectedModel === selectedModelToAdd)) return;
-      setBasket([...basket, {
-        expectedModel: selectedModelToAdd,
-        monthlyRentalFee: customMonthly,
-        dailyRentalFee: customDaily
-      }]);
+      setBasket([...basket, { expectedModel: selectedModelToAdd, monthlyRentalFee: customMonthly, dailyRentalFee: customDaily }]);
       setSelectedModelToAdd('');
     }
   };
@@ -216,17 +429,13 @@ export const Contracts: React.FC = () => {
     if (custSelect !== 'NEW' && custSelect) {
       const selectedCustomer = customers.find(c => c.id === custSelect);
       if (selectedCustomer?.transactionStatus === 'BLOCKED') {
-        alert('⚠️ 거래 불가 상태인 거래처입니다. 신규 계약을 체결할 수 없습니다.');
+        alert('거래 불가 상태인 거래처입니다.');
         return;
       }
     }
 
-    if (custSelect === 'NEW' && !newCustName) {
-      alert('신규 고객사명을 입력해 주세요.');
-      return;
-    }
     if (basket.length === 0) {
-      alert('최소 한 대 이상의 자산 또는 제품 모델을 바스켓에 추가해 주세요.');
+      alert('최소 한 대 이상의 자산을 추가하십시오.');
       return;
     }
 
@@ -234,7 +443,6 @@ export const Contracts: React.FC = () => {
     let finalContactId = contactSelect;
     let finalSiteId = siteSelect;
 
-    // 1. 신규 고객사 등록
     if (custSelect === 'NEW') {
       const newCust = db.insertRow<Customer>('customers', {
         name: newCustName,
@@ -247,22 +455,8 @@ export const Contracts: React.FC = () => {
         createdAt: new Date().toISOString()
       });
       finalCustomerId = newCust.id;
-
-      // Todo 생성
-      if (currentUser) {
-        db.insertRow<Todo>('todos', {
-          userId: currentUser.id,
-          type: 'MISSING_INFO',
-          title: `신규 고객 정보 보완 (${newCustName})`,
-          content: `계약 직접 등록 시 생성된 고객의 필수 항목(대표자, 주소 등)을 보완해 주세요.`,
-          isCompleted: false,
-          relatedEntityId: newCust.id,
-          createdAt: new Date().toISOString()
-        });
-      }
     }
 
-    // 2. 신규 담당자 등록
     if (contactSelect === 'NEW') {
       const newContact = db.insertRow<CustomerContact>('contacts', {
         customerId: finalCustomerId,
@@ -276,7 +470,6 @@ export const Contracts: React.FC = () => {
       finalContactId = newContact.id;
     }
 
-    // 3. 신규 현장 등록
     if (siteSelect === 'NEW') {
       const newSite = db.insertRow<CustomerSite>('sites', {
         customerId: finalCustomerId,
@@ -291,1016 +484,697 @@ export const Contracts: React.FC = () => {
       finalSiteId = newSite.id;
     }
 
-    const isSalespersonValid = salespersonSelect && users.some(u => u.id === salespersonSelect);
-    const finalSalespersonId = isSalespersonValid ? salespersonSelect : (users.find(u => u.id === 'u-1')?.id || users[0]?.id || undefined);
+    const finalSalespersonId = salespersonSelect || currentUser?.id;
 
     createContract({
       customerId: finalCustomerId,
       contactId: finalContactId && finalContactId !== 'NEW' ? finalContactId : undefined,
       siteId: finalSiteId && finalSiteId !== 'NEW' ? finalSiteId : undefined,
-      startDate,
-      endDate,
-      billingDay,
-      statementClosingDay,
       salespersonId: finalSalespersonId,
+      startDate: startDate,
+      endDate: isEndDateOpen ? '미정' : endDate,
+      billingDay: Number(billingDay),
+      statementClosingDay: Number(statementClosingDay),
       status: 'ACTIVE'
     }, basket);
 
-    alert('계약 등록이 완료되었으며, 출고 배차 의뢰가 자동 생성되었습니다.');
-    
-    // 초기화
+    alert('계약 등록이 완료되었습니다.');
+    setActiveTab('ALL_LIST');
+    setViewMode('LIST');
     setBasket([]);
-    setCustSelect(customers[0]?.id || '');
-    setContactSelect('');
-    setSiteSelect('');
-    setNewCustName('');
-    setNewBizRegNo('');
-    setNewAddress('');
-    setNewRepresentative('');
-    setNewRepContact('');
-    setNewRepEmail('');
-    setNewContactName('');
-    setNewContactPhone('');
-    setNewContactEmail('');
-    setNewSiteName('');
-    setNewSiteAddress('');
-    setNewSiteContactName('');
-    setNewSiteContactPhone('');
-    setNewSiteContactEmail('');
-
-    refreshAllData();
-    setActiveTab('LIST');
-  };
-
-  const handlePeriodModSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!canSave || !modContractId) return;
-
-    const contract = contracts.find(c => c.id === modContractId);
-    if (!contract) {
-      alert('선택한 계약을 찾을 수 없습니다.');
-      return;
-    }
-
-    if (!canModifyContract(contract)) {
-      alert('본 계약의 변경 권한이 없습니다.');
-      return;
-    }
-
-    if (modType === 'EXTEND') {
-      if (new Date(newEndDate) <= new Date(contract.endDate)) {
-        alert(`연장 만료일은 기존 만료일(${contract.endDate})보다 늦어야 합니다.`);
-        return;
-      }
-      extendContract(modContractId, newEndDate, modDesc);
-      alert('계약 기간 연장 처리가 완료되었습니다.');
-    } else {
-      if (new Date(newEndDate) >= new Date(contract.endDate)) {
-        alert(`단축 만료일은 기존 만료일(${contract.endDate})보다 빨라야 합니다.`);
-        return;
-      }
-      if (new Date(newEndDate) < new Date(contract.startDate)) {
-        alert(`단축 만료일은 계약 개시일(${contract.startDate})보다 같거나 늦어야 합니다.`);
-        return;
-      }
-      shortenContract(modContractId, newEndDate, modDesc);
-      alert('계약 기간 단축 처리 및 회수 의뢰가 자동 등록되었습니다.');
-    }
-
-    setModContractId('');
-    setModDesc('');
-    setActiveTab('LIST');
-  };
-
-  const handleSuccessionSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!canSave || !succContractId || !succCustId) return;
-
-    const contract = contracts.find(c => c.id === succContractId);
-    if (!contract || !canModifyContract(contract)) {
-      alert('본 계약의 승계(변경) 권한이 없습니다.');
-      return;
-    }
-
-    succeedContract(succContractId, succCustId, succContactId, succSiteId, succDate, succDesc);
-    alert('계약 잔여기간 승계 처리가 승인되었습니다. 승계 대상 신규계약이 발행되었습니다.');
-    setSuccContractId('');
-    setSuccCustId('');
-    setSuccContactId('');
-    setSuccSiteId('');
-    setSuccDesc('');
-    setActiveTab('LIST');
-  };
-
-  const handleMailContractChange = (cid: string) => {
-    setMailContractId(cid);
-    const contract = contracts.find(c => c.id === cid);
-    if (!contract) return;
-
-    // 수신 이메일 디폴트 설정 (고객 담당자 및 현장 담당자)
-    const cc = contacts.find(contact => contact.id === contract.contactId);
-    const site = sites.find(s => s.id === contract.siteId);
-    const customer = customers.find(c => c.id === contract.customerId);
-    const salesperson = users.find(u => u.id === contract.salespersonId);
-
-    // 1. 자동으로 이메일에 필요한 견적서/계약서/회사증빙/장비별점검표를 빌드하고 구글드라이브에 업로드
-    documentBuilder.generateAndUploadAllDocs(contract, customer, cc, site, salesperson);
-    
-    setMailTo(cc?.email || '');
-    setMailCc(site?.email || '');
-    setMailSubject(`[렌탈계약 알림] ${getCustName(contract.customerId)} 계약 정보 안내 (${contract.contractNo})`);
-    setMailBody(
-      `안녕하세요, ${getCustName(contract.customerId)} 담당자님.\n\n` +
-      `당사 렌탈 장비 계약이 체결 완료되어 안내드립니다.\n` +
-      `계약번호: ${contract.contractNo}\n` +
-      `계약기간: ${contract.startDate} ~ ${contract.endDate}\n\n` +
-      `구글드라이브에 업로드된 계약 및 인수 서류를 첨부하여 전송합니다.\n` +
-      `상세 내용은 첨부파일을 확인해 주시기 바랍니다.\n\n` +
-      `감사합니다.\n(주)기연리프트`
-    );
-
-    // 디폴트 구글드라이브 첨부파일 선택 (계약 폴더 내에 있는 임대계약서 날인본 등 매핑)
-    const folderFiles = drive.listFiles(contract.driveFolderId || '');
-    const defaultPublic = drive.listAllFiles().filter(f => f.folderId === 'root'); // 공용양식
-    const autoSelects = [...folderFiles, ...defaultPublic].map(f => f.id);
-    setMailAttachmentIds(autoSelects);
-  };
-
-  const handleSendEmailSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!mailTo) {
-      alert('수신자 이메일을 입력해 주세요.');
-      return;
-    }
-    
-    const config = googleConfigs[0];
-    const isDev = config?.isDevMode !== false;
-    if (isDev) {
-      const confirmSend = window.confirm(
-        "현재 시스템이 개발 모드입니다. 메일은 실제 수신인이 아닌 개발용 주소(77.victor.lee@gmail.com)로 우회되어 안전하게 발송됩니다. 발송하시겠습니까?"
-      );
-      if (!confirmSend) return;
-    }
-
-    setIsSendingMail(true);
-    try {
-      await emailService.sendEmail(mailTo, mailSubject, mailBody, mailAttachmentIds, mailCc);
-      alert('구글 드라이브 첨부파일 포함 이메일이 성공적으로 발송되었습니다.');
-      setMailTo('');
-      setMailSubject('');
-      setMailBody('');
-      setMailAttachmentIds([]);
-      setActiveTab('LIST');
-    } catch (err) {
-      alert('메일 전송에 실패했습니다.');
-    } finally {
-      setIsSendingMail(false);
-    }
   };
 
   return (
-    <div>
-      <h2 style={{ marginBottom: '24px', fontWeight: '700' }}>렌탈 계약 및 연동 관리</h2>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', fontSize: '13px' }}>
+      
+      {/* 최상단 헤더 */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'var(--bg-card)', padding: '14px 18px', borderRadius: '8px', border: '1px solid var(--border-color)', gap: '16px', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          {viewMode === 'DETAIL' && (
+            <button
+              className="btn-secondary"
+              onClick={() => setViewMode('LIST')}
+              style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '6px 12px', fontSize: '12px' }}
+            >
+              <ChevronLeft size={16} /> 목록으로 돌아가기
+            </button>
+          )}
+          <div>
+            <h2 style={{ fontWeight: '700', marginBottom: '2px', fontSize: '18px' }}>
+              {viewMode === 'DETAIL' ? `계약 상세: ${activeContract?.contractNo}` : '계약 관리'}
+            </h2>
+            <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: 0 }}>
+              {viewMode === 'DETAIL'
+                ? `${getCustName(activeContract?.customerId || '')} — ${getSiteName(activeContract?.siteId)}`
+                : '계약 등록, 상태 변경, 기간 조정 및 승계 내역을 관리합니다.'}
+            </p>
+          </div>
+        </div>
 
-      {/* 대메뉴 */}
-      <div style={{ display: 'flex', gap: '8px', marginBottom: '24px', flexWrap: 'wrap' }}>
-        <button className={activeTab === 'LIST' ? 'btn-primary' : 'btn-secondary'} onClick={() => setActiveTab('LIST')}>
-          계약 리스트 / 조회
-        </button>
-        {canSave && (
-          <>
-            <button className={activeTab === 'CREATE' ? 'btn-primary' : 'btn-secondary'} onClick={() => setActiveTab('CREATE')}>
-              <Plus size={14} /> 계약 등록 (출고의뢰 자동연동)
+        {viewMode === 'LIST' && (
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button
+              className={activeTab === 'ALL_LIST' ? 'btn-primary' : 'btn-secondary'}
+              onClick={() => setActiveTab('ALL_LIST')}
+              style={{ padding: '7px 14px', fontSize: '12px' }}
+            >
+              계약 목록 ({filteredContracts.length})
             </button>
-            <button className={activeTab === 'MODIFY' ? 'btn-primary' : 'btn-secondary'} onClick={() => setActiveTab('MODIFY')}>
-              <Calendar size={14} /> 계약 연장 / 단축 (회수의뢰 연동)
-            </button>
-            <button className={activeTab === 'TRANSFER' ? 'btn-primary' : 'btn-secondary'} onClick={() => setActiveTab('TRANSFER')}>
-              <ArrowRight size={14} /> 계약 승계 (타사 잔여 승계)
-            </button>
-            <button className={activeTab === 'EMAIL' ? 'btn-primary' : 'btn-secondary'} onClick={() => setActiveTab('EMAIL')}>
-              <Mail size={14} /> 계약 통지 메일 발송 (구글드라이브 연동)
-            </button>
-          </>
+            {canSave && (
+              <button
+                className={activeTab === 'CREATE' ? 'btn-success' : 'btn-secondary'}
+                onClick={() => setActiveTab('CREATE')}
+                style={{ padding: '7px 14px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px' }}
+              >
+                <Plus size={14} /> 신규 계약 등록
+              </button>
+            )}
+          </div>
         )}
       </div>
 
-      {activeTab === 'LIST' && (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px', alignItems: 'flex-start' }}>
-          {/* 계약 목록 */}
-          <div className="card" style={{ margin: 0, display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h3 className="card-title" style={{ margin: 0 }}>계약 목록</h3>
-              <button 
-                type="button" 
-                className="btn-secondary" 
-                onClick={handleExportExcel}
-                style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px', padding: '6px 12px' }}
-              >
-                <Download size={12} /> 엑셀 다운로드
-              </button>
-            </div>
-
-            {/* 필터 바 */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr auto', gap: '10px', alignItems: 'end', backgroundColor: 'var(--bg-app)', padding: '12px', borderRadius: '8px' }}>
-              <div>
-                <label style={{ fontSize: '11px', fontWeight: '600', marginBottom: '4px', display: 'block' }}>계약번호/고객사</label>
-                <input 
-                  type="text" 
-                  value={tempSearchTerm} 
-                  onChange={e => setTempSearchTerm(e.target.value)} 
-                  placeholder="검색어 입력..."
-                  style={{ width: '100%', padding: '6px', fontSize: '12.5px' }}
+      {/* ────────────────────────────────────────────────────────────────────────── */}
+      {/* 뷰 1: 계약 목록 (viewMode === 'LIST') */}
+      {/* ────────────────────────────────────────────────────────────────────────── */}
+      {viewMode === 'LIST' && activeTab === 'ALL_LIST' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+          
+          {/* 필터 패널 */}
+          <div className="card" style={{ padding: '14px', margin: 0, border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            
+            <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+              <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: '#f8fafc', padding: '8px 14px', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
+                <Search size={16} color="var(--text-muted)" />
+                <input
+                  type="text"
+                  placeholder="검색어 입력 (계약번호, 고객사명, 현장명, 자산번호, 담당자명...)"
+                  value={searchTerm}
+                  onChange={e => setSearchTerm(e.target.value)}
+                  style={{ flex: 1, border: 'none', backgroundColor: 'transparent', fontSize: '13px', outline: 'none' }}
                 />
+                {searchTerm && (
+                  <button onClick={() => setSearchTerm('')} style={{ border: 'none', background: 'none', color: '#94a3b8', cursor: 'pointer' }}>✕</button>
+                )}
               </div>
-              <div>
-                <label style={{ fontSize: '11px', fontWeight: '600', marginBottom: '4px', display: 'block' }}>계약 상태</label>
-                <select 
-                  value={tempStatusFilter} 
-                  onChange={e => setTempStatusFilter(e.target.value)} 
-                  style={{ width: '100%', padding: '6px', fontSize: '12.5px' }}
-                >
-                  <option value="ALL">전체 상태</option>
-                  <option value="ACTIVE">진행중 (ACTIVE)</option>
-                  <option value="EXTENDED">연장됨 (EXTENDED)</option>
-                  <option value="SHORTENED">단축됨 (SHORTENED)</option>
-                  <option value="SUCCEEDED">승계됨 (SUCCEEDED)</option>
-                  <option value="COMPLETED">종료됨 (COMPLETED)</option>
-                </select>
-              </div>
-              <div>
-                <label style={{ fontSize: '11px', fontWeight: '600', marginBottom: '4px', display: 'block' }}>영업 담당자</label>
-                <select 
-                  value={tempSalespersonFilter} 
-                  onChange={e => setTempSalespersonFilter(e.target.value)} 
-                  style={{ width: '100%', padding: '6px', fontSize: '12.5px' }}
-                >
-                  <option value="ALL">전체 담당자</option>
-                  {users.map(u => (
-                    <option key={u.id} value={u.id}>{u.name}</option>
-                  ))}
-                </select>
-              </div>
-              <button 
-                type="button" 
-                className="btn-primary" 
-                onClick={handleSearchClick}
-                style={{ padding: '6px 12px', height: '33px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '12.5px' }}
-              >
-                조회
+
+              <select value={salespersonFilter} onChange={e => setSalespersonFilter(e.target.value)} style={{ padding: '8px 12px', borderRadius: '6px', fontSize: '12px' }}>
+                <option value="ALL">전체 영업담당</option>
+                {users.map(u => (
+                  <option key={u.id} value={u.id}>{u.name}</option>
+                ))}
+              </select>
+
+              <button className="btn-secondary" onClick={handleExportExcel} style={{ padding: '8px 12px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <Download size={14} /> 엑셀 다운로드
               </button>
             </div>
 
-            <div className="table-container" style={{ border: 'none', boxShadow: 'none' }}>
-              <table style={{ minWidth: '400px' }}>
+            {/* 필터 칩 */}
+            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
+              <span style={{ fontSize: '11px', color: 'var(--text-muted)', marginRight: '4px' }}>상태 필터:</span>
+              {[
+                { id: 'ALL', label: `전체 (${contracts.length})` },
+                { id: 'ACTIVE', label: `진행중 (${contracts.filter(c => c.status === 'ACTIVE' || c.status === 'EXTENDED').length})` },
+                { id: 'D3', label: `만료 임박 (${contracts.filter(c => getDDayText(c.endDate).isWarning).length})` },
+                { id: 'ZERO_FEE', label: `렌탈료 0원 (${contracts.filter(c => contractAssets.filter(ca => ca.contractId === c.id).some(ca => ca.monthlyRentalFee === 0)).length})` },
+                { id: 'SUCCEEDED', label: `승계건 (${contracts.filter(c => c.status === 'SUCCEEDED').length})` },
+                { id: 'COMPLETED', label: `종결건 (${contracts.filter(c => c.status === 'COMPLETED').length})` }
+              ].map(chip => (
+                <button
+                  key={chip.id}
+                  onClick={() => setQuickChipFilter(chip.id as any)}
+                  style={{
+                    padding: '4px 10px',
+                    borderRadius: '4px',
+                    fontSize: '11.5px',
+                    cursor: 'pointer',
+                    border: `1px solid ${quickChipFilter === chip.id ? 'var(--primary)' : '#cbd5e1'}`,
+                    backgroundColor: quickChipFilter === chip.id ? 'var(--primary-light)' : '#fff',
+                    color: quickChipFilter === chip.id ? 'var(--primary)' : '#475569',
+                  }}
+                >
+                  {chip.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* 계약 목록 데이터 테이블 (횡 스크롤 지원 & 셀 줄바꿈 방지) */}
+          <div className="card" style={{ padding: 0, margin: 0, overflowX: 'auto' }}>
+            <div className="table-container" style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', minWidth: '1200px', borderCollapse: 'collapse', whiteSpace: 'nowrap' }}>
                 <thead>
-                  <tr>
-                    <th>계약번호</th>
-                    <th>고객사</th>
-                    <th>계약기간</th>
-                    <th>상태</th>
-                    <th>선택</th>
+                  <tr style={{ backgroundColor: '#f8fafc', whiteSpace: 'nowrap' }}>
+                    <th style={{ textAlign: 'center', whiteSpace: 'nowrap', width: '80px' }}>상세 보기</th>
+                    <th style={{ whiteSpace: 'nowrap' }}>계약번호</th>
+                    <th style={{ whiteSpace: 'nowrap' }}>고객사명</th>
+                    <th style={{ whiteSpace: 'nowrap' }}>현장명</th>
+                    <th style={{ whiteSpace: 'nowrap' }}>체결 자산</th>
+                    <th style={{ whiteSpace: 'nowrap' }}>월 렌탈료</th>
+                    <th style={{ whiteSpace: 'nowrap' }}>계약 기간</th>
+                    <th style={{ whiteSpace: 'nowrap' }}>만료 D-Day</th>
+                    <th style={{ whiteSpace: 'nowrap' }}>청구 마감일</th>
+                    <th style={{ whiteSpace: 'nowrap' }}>영업담당</th>
+                    <th style={{ whiteSpace: 'nowrap' }}>상태</th>
                   </tr>
                 </thead>
-                <tbody>
+                <tbody style={{ whiteSpace: 'nowrap' }}>
                   {filteredContracts.length === 0 ? (
                     <tr>
-                      <td colSpan={5} style={{ textAlign: 'center', padding: '36px 0', color: 'var(--text-muted)' }}>
-                        {contracts.length === 0
-                          ? '📭 등록된 계약이 없습니다.'
-                          : '🔍 조회 조건에 맞는 계약이 없습니다. 검색 조건을 변경해 보세요.'}
+                      <td colSpan={11} style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>
+                        조회 조건에 일치하는 계약 내역이 없습니다.
                       </td>
                     </tr>
-                  ) : filteredContracts.map(c => (
-                    <tr key={c.id}>
-                      <td><strong>{c.contractNo}</strong></td>
-                      <td>{getCustName(c.customerId)}</td>
-                      <td style={{ fontSize: '12px' }}>{c.startDate} ~ {c.endDate}</td>
-                      <td>
-                        <span className={`badge ${
-                          c.status === 'ACTIVE' ? 'badge-success' :
-                          c.status === 'EXTENDED' ? 'badge-info' :
-                          c.status === 'SUCCEEDED' ? 'badge-warning' : 'badge-danger'
-                        }`}>
-                          {c.status === 'ACTIVE' ? '진행중' :
-                           c.status === 'EXTENDED' ? '연장됨' :
-                           c.status === 'SHORTENED' ? '단축됨' :
-                           c.status === 'SUCCEEDED' ? '승계됨' : '종료'}
-                        </span>
-                      </td>
-                      <td>
-                        <button
-                          className="btn-secondary"
-                          onClick={() => setSelectedContractId(c.id)}
-                          style={{ padding: '4px 8px', fontSize: '11px' }}
+                  ) : (
+                    filteredContracts.map(c => {
+                      const cas = contractAssets.filter(ca => ca.contractId === c.id);
+                      const totalFee = cas.reduce((sum, ca) => sum + (ca.monthlyRentalFee || 0), 0);
+                      const dday = getDDayText(c.endDate);
+                      const hasZeroFee = cas.some(ca => ca.monthlyRentalFee === 0);
+
+                      // 💡 자산 표기: 모델명 * 수량 요약 집계 (예: GS-1930 2대, GS-3246 1대)
+                      const modelCountMap: Record<string, number> = {};
+                      cas.forEach(ca => {
+                        const a = assets.find(ast => ast.id === ca.assetId);
+                        const modelName = a?.modelName || ca.expectedModel || '미지정 모델';
+                        modelCountMap[modelName] = (modelCountMap[modelName] || 0) + 1;
+                      });
+
+                      const modelSummaryText = Object.entries(modelCountMap)
+                        .map(([model, count]) => `${model} ${count}대`)
+                        .join(', ');
+
+                      return (
+                        <tr
+                          key={c.id}
+                          onClick={() => handleSelectContract(c.id)}
+                          style={{ cursor: 'pointer', whiteSpace: 'nowrap' }}
+                          className="hover-row"
                         >
-                          보기
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
+                          <td style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>
+                            <button className="btn-primary" style={{ padding: '3px 10px', fontSize: '11px' }}>
+                              상세 ➔
+                            </button>
+                          </td>
+                          <td style={{ whiteSpace: 'nowrap' }}><strong style={{ color: 'var(--primary)' }}>{c.contractNo}</strong></td>
+                          <td style={{ whiteSpace: 'nowrap' }}><strong>{getCustName(c.customerId)}</strong></td>
+                          <td style={{ whiteSpace: 'nowrap' }}>{getSiteName(c.siteId)}</td>
+                          <td style={{ whiteSpace: 'nowrap' }}>
+                            <strong style={{ color: '#1e293b' }}>{modelSummaryText || '미지정'}</strong>
+                            <span style={{ fontSize: '11px', color: 'var(--text-muted)', marginLeft: '4px' }}>(총 {cas.length}대)</span>
+                          </td>
+                          <td style={{ whiteSpace: 'nowrap' }}>
+                            {hasZeroFee ? (
+                              <span style={{ color: 'var(--danger)', fontWeight: 700 }}>0원 (미입력)</span>
+                            ) : (
+                              <span>{totalFee.toLocaleString()}원</span>
+                            )}
+                          </td>
+                          <td style={{ whiteSpace: 'nowrap' }}>{c.startDate} ~ {c.endDate || '미정'}</td>
+                          <td style={{ whiteSpace: 'nowrap' }}>
+                            {dday.isWarning ? (
+                              <span className="badge badge-danger" style={{ fontSize: '10px' }}>{dday.text}</span>
+                            ) : (
+                              <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{dday.text}</span>
+                            )}
+                          </td>
+                          <td style={{ whiteSpace: 'nowrap' }}>매월 {c.billingDay}일</td>
+                          <td style={{ whiteSpace: 'nowrap' }}>{users.find(u => u.id === c.salespersonId)?.name || '-'}</td>
+                          <td style={{ whiteSpace: 'nowrap' }}>
+                            <span className={
+                              c.status === 'ACTIVE' || c.status === 'EXTENDED' ? 'badge badge-success' :
+                              c.status === 'SUCCEEDED' ? 'badge badge-info' : 'badge badge-secondary'
+                            }>
+                              {c.status === 'ACTIVE' ? '진행중' : c.status === 'EXTENDED' ? '연장됨' : c.status === 'SUCCEEDED' ? '승계됨' : '종료'}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
                 </tbody>
               </table>
             </div>
           </div>
+        </div>
+      )}
 
-          {/* 계약 세부 내용 */}
-          <div>
-            {activeContract ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                <div className="card" style={{ margin: 0 }}>
-                  <h3 className="card-title" style={{ marginBottom: '16px', color: 'var(--primary)' }}>
-                    계약 상세 명세: {activeContract.contractNo}
-                  </h3>
-                  {!canModifyContract(activeContract) && (
-                    <div style={{ padding: '8px 12px', backgroundColor: 'rgba(239, 68, 68, 0.08)', border: '1px solid var(--danger)', borderRadius: '6px', color: 'var(--danger)', fontSize: '12.5px', marginBottom: '12px' }}>
-                      ⚠️ 본 계약의 담당 영업사원이 아니므로 변경 권한이 제한됩니다. (청구서포터 및 최고관리자는 수정 대행 가능)
-                    </div>
-                  )}
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', fontSize: '14px', marginBottom: '20px' }}>
-                    <div><label>고객사</label><strong>{getCustName(activeContract.customerId)}</strong></div>
-                    <div><label>현장구분</label>{getSiteName(activeContract.siteId)}</div>
-                    <div><label>계약담당자</label><strong>{users.find(u => u.id === activeContract.salespersonId)?.name || '지정없음'}</strong></div>
-                    <div><label>계약시작일</label>{activeContract.startDate}</div>
-                    <div><label>계약만료일</label>{activeContract.endDate}</div>
-                    <div><label>청구 / 명세서 마감일</label>매월 {activeContract.billingDay}일 / {activeContract.statementClosingDay || '-'}일</div>
-                    <div>
-                      <label>구글드라이브 폴더</label>
-                      <button
-                        type="button"
-                        className="btn-secondary"
-                        onClick={() => {
-                          const targetUrl = activeContract.driveFolderId?.trim();
-                          if (!targetUrl) {
-                            alert('⚠️ 등록된 구글 드라이브 링크가 없습니다.');
-                            return;
-                          }
-                          if (targetUrl.startsWith('http://') || targetUrl.startsWith('https://')) {
-                            window.open(targetUrl, '_blank', 'noopener,noreferrer');
-                          } else if (targetUrl.toLowerCase().startsWith('d:/') || targetUrl.toLowerCase().startsWith('c:/')) {
-                            alert(`⚠️ 등록된 경로가 구글드라이브 웹 주소(https://...)가 아닌 PC 로컬 경로입니다.\n\n입력된 경로: ${targetUrl}\n\n[구글 연동 설정] 메뉴에서 구글 드라이브 웹 주소나 폴더 ID로 정제해 주세요.`);
-                          } else {
-                            window.open(`https://drive.google.com/drive/folders/${targetUrl}`, '_blank', 'noopener,noreferrer');
-                          }
-                        }}
-                        style={{ padding: '4px 10px', fontSize: '12px', color: 'var(--primary)', fontWeight: '600' }}
-                      >
-                        구글드라이브 열기 (링크) 🔗
-                      </button>
-                    </div>
-                  </div>
+      {/* ────────────────────────────────────────────────────────────────────────── */}
+      {/* 뷰 2: 계약 상세 뷰 (viewMode === 'DETAIL') */}
+      {/* ────────────────────────────────────────────────────────────────────────── */}
+      {viewMode === 'DETAIL' && activeContract && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          
+          {/* 상단 컨트롤 바 */}
+          <div className="card" style={{ padding: '12px 18px', margin: 0, display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#f8fafc', border: '1px solid var(--border-color)', flexWrap: 'wrap', gap: '10px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span className="badge badge-success" style={{ fontSize: '12px' }}>
+                {activeContract.status === 'ACTIVE' ? '진행중' : activeContract.status === 'EXTENDED' ? '연장됨' : activeContract.status === 'SUCCEEDED' ? '승계됨' : '종료'}
+              </span>
+              <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>등록일: {activeContract.createdAt?.split('T')[0]}</span>
+            </div>
 
-                  <h4 style={{ fontWeight: '600', marginBottom: '10px', fontSize: '14px' }}>계약 체결 장비 목록</h4>
-                  <div className="table-container" style={{ border: 'none', boxShadow: 'none', marginBottom: '20px' }}>
-                    <table style={{ minWidth: '400px' }}>
-                      <thead>
-                        <tr>
-                          <th>자산번호</th>
-                          <th>모델명</th>
-                          <th>월 렌탈료</th>
-                          <th>관리</th>
+            {/* 실행 버튼 그룹 */}
+            <div style={{ display: 'flex', gap: '8px' }}>
+              {canSave && canModifyContract(activeContract) && (
+                <>
+                  <button className="btn-primary" onClick={handleOpenExtendModal} style={{ padding: '6px 12px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <Calendar size={14} /> 기간 연장/단축
+                  </button>
+
+                  <button className="btn-secondary" onClick={handleOpenTransferModal} style={{ padding: '6px 12px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <ArrowLeftRight size={14} /> 계약 승계
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* 기본 정보 & 체결 자산 */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', alignItems: 'start' }}>
+            
+            {/* 섹션 1: 계약 기본 정보 */}
+            <div className="card" style={{ margin: 0, height: '100%' }}>
+              <h3 className="card-title" style={{ marginBottom: '14px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <Building2 size={16} /> 계약 기본 정보
+              </h3>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', fontSize: '13px' }}>
+                <div><label style={{ color: 'var(--text-muted)', fontSize: '11px', display: 'block' }}>고객사명</label><strong>{getCustName(activeContract.customerId)}</strong></div>
+                <div><label style={{ color: 'var(--text-muted)', fontSize: '11px', display: 'block' }}>현장명</label><strong>{getSiteName(activeContract.siteId)}</strong></div>
+                
+                <div><label style={{ color: 'var(--text-muted)', fontSize: '11px', display: 'block' }}>영업담당</label><span>{users.find(u => u.id === activeContract.salespersonId)?.name || '-'}</span></div>
+                <div><label style={{ color: 'var(--text-muted)', fontSize: '11px', display: 'block' }}>청구 / 명세서 마감일</label>매월 {activeContract.billingDay}일 / {activeContract.statementClosingDay || '-'}일</div>
+                
+                <div><label style={{ color: 'var(--text-muted)', fontSize: '11px', display: 'block' }}>계약 시작일</label><span>{activeContract.startDate}</span></div>
+                <div>
+                  <label style={{ color: 'var(--text-muted)', fontSize: '11px', display: 'block' }}>계약 만료일</label>
+                  <span>{activeContract.endDate || '미정'}</span>
+                  <span className="badge badge-danger" style={{ marginLeft: '6px', fontSize: '10px' }}>{getDDayText(activeContract.endDate).text}</span>
+                </div>
+              </div>
+
+              {/* 구글 드라이브 문서함 연동 */}
+              <div style={{ marginTop: '16px', padding: '12px', backgroundColor: '#f8fafc', borderRadius: '6px', border: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <div style={{ fontWeight: 600, fontSize: '12px' }}>구글 드라이브 문서함 연동</div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>스캔 계약서 및 관련 파일 보관 폴더</div>
+                </div>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => {
+                    const link = activeContract.driveFolderId?.trim();
+                    if (!link) { alert('등록된 구글 드라이브 폴더 링크가 없습니다.'); return; }
+                    window.open(link.startsWith('http') ? link : `https://drive.google.com/drive/folders/${link}`, '_blank');
+                  }}
+                  style={{ padding: '4px 10px', fontSize: '11px' }}
+                >
+                  폴더 열기 🔗
+                </button>
+              </div>
+            </div>
+
+            {/* 섹션 2: 체결 자산 목록 */}
+            <div className="card" style={{ margin: 0, height: '100%' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                <h3 className="card-title" style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Wrench size={16} /> 체결 자산 목록 ({activeContractAssets.length}대)
+                </h3>
+                {canSave && canModifyContract(activeContract) && activeContract.status !== 'COMPLETED' && (
+                  <button className="btn-secondary" onClick={() => handleOpenExchangeGlobal()} style={{ padding: '5px 10px', fontSize: '11.5px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <Repeat size={13} /> 자산 교체/대차 의뢰
+                  </button>
+                )}
+              </div>
+
+              <div className="table-container" style={{ border: 'none', boxShadow: 'none' }}>
+                <table>
+                  <thead>
+                    <tr style={{ backgroundColor: '#f8fafc' }}>
+                      <th>자산번호</th>
+                      <th>모델명</th>
+                      <th>월 렌탈료</th>
+                      <th>일 렌탈료</th>
+                      <th style={{ textAlign: 'center' }}>수정</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {activeContractAssets.map(ca => {
+                      const asset = assets.find(a => a.id === ca.assetId);
+                      const isZero = ca.monthlyRentalFee === 0;
+
+                      return (
+                        <tr key={ca.id}>
+                          <td><strong style={{ color: 'var(--primary)' }}>{asset?.assetNo || '미지정'}</strong></td>
+                          <td>{asset?.modelName || ca.expectedModel}</td>
+                          <td>
+                            {isZero ? (
+                              <span style={{ color: 'var(--danger)', fontWeight: 700 }}>0원 (미입력)</span>
+                            ) : (
+                              <span>{ca.monthlyRentalFee.toLocaleString()}원</span>
+                            )}
+                          </td>
+                          <td>{(ca.dailyRentalFee || 0).toLocaleString()}원</td>
+                          <td style={{ textAlign: 'center' }}>
+                            {canSave && canModifyContract(activeContract) && (
+                              <button className="btn-secondary" onClick={() => handleOpenFeeModal(ca)} style={{ padding: '2px 6px', fontSize: '10.5px' }}>
+                                <Edit3 size={11} /> 렌탈료 수정
+                              </button>
+                            )}
+                          </td>
                         </tr>
-                      </thead>
-                      <tbody>
-                        {activeContractAssets.map(ca => {
-                          const assetInfo = assets.find(a => a.id === ca.assetId);
-                          return (
-                            <tr key={ca.id}>
-                              <td><strong>{assetInfo?.assetNo || '미지정'}</strong></td>
-                              <td>{assetInfo?.modelName || ca.expectedModel}</td>
-                              <td>{ca.monthlyRentalFee.toLocaleString()}원</td>
-                              <td>
-                                {ca.assetId && activeContract.status !== 'COMPLETED' && canSave && canModifyContract(activeContract) && (
-                                  <button
-                                    type="button"
-                                    className="btn-secondary"
-                                    onClick={() => handleOpenExchange(ca.id, ca.assetId!)}
-                                    style={{ padding: '2px 8px', fontSize: '11px' }}
-                                  >
-                                    장비교체
-                                  </button>
-                                )}
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
 
-                {/* 계약 변동 이력 */}
-                <div className="card" style={{ margin: 0 }}>
-                  <h3 className="card-title" style={{ marginBottom: '12px' }}>계약 변경 이력</h3>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                    {activeContractHistory.length === 0 ? (
-                      <div style={{ color: 'var(--text-muted)', fontSize: '13px' }}>변동 이력이 없습니다.</div>
-                    ) : (
-                      activeContractHistory.map(h => (
-                        <div key={h.id} style={{ padding: '8px', borderLeft: '3px solid var(--primary)', backgroundColor: 'var(--bg-app)', fontSize: '13px' }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: '600' }}>
-                            <span>{h.changeType === 'REGISTER' ? '신규등록' : h.changeType === 'EXTEND' ? '계약연장' : '계약단축/승계'}</span>
-                            <span style={{ color: 'var(--text-muted)' }}>{h.changeDate}</span>
-                          </div>
-                          <div style={{ marginTop: '4px' }}>{h.description}</div>
-                          {h.prevEndDate && (
-                            <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
-                              만료일 변경: {h.prevEndDate} → {h.newEndDate}
-                            </div>
-                          )}
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
+          {/* 하단 그리드: 계약 변경 및 이력 */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div className="card" style={{ margin: 0 }}>
+              <h3 className="card-title" style={{ marginBottom: '14px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <Clock size={16} color="var(--primary)" /> 계약 변경 및 이력 ({activeTimeline.length}건)
+              </h3>
+
+              <div style={{ maxHeight: '360px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px', paddingRight: '4px' }}>
+                {activeTimeline.length === 0 ? (
+                  <div style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '20px' }}>기록된 이력이 없습니다.</div>
+                ) : (
+                  activeTimeline.map(item => (
+                    <div
+                      key={item.id}
+                      style={{
+                        padding: '10px 12px',
+                        borderLeft: `3px solid ${
+                          item.category === 'CONTRACT' ? 'var(--primary)' :
+                          item.category === 'INSPECTION' ? '#166534' :
+                          item.category === 'TRUCK' ? '#2563eb' : '#c2410c'
+                        }`,
+                        backgroundColor: 'var(--bg-app)',
+                        borderRadius: '0 4px 4px 0',
+                        fontSize: '12px'
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 600, marginBottom: '2px' }}>
+                        <span>{item.title}</span>
+                        <span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>{item.date}</span>
+                      </div>
+                      <div style={{ color: 'var(--text-secondary)' }}>{item.desc}</div>
+                    </div>
+                  ))
+                )}
               </div>
-            ) : (
-              <div className="card" style={{ textAlign: 'center', padding: '60px 0', color: 'var(--text-muted)', margin: 0 }}>
-                상세 정보를 조회할 계약을 왼쪽에서 선택해 주세요.
-              </div>
-            )}
+            </div>
           </div>
         </div>
       )}
 
-      {activeTab === 'CREATE' && (
-        <div className="card" style={{ maxWidth: '800px', margin: 0 }}>
-          <h3 className="card-title" style={{ marginBottom: '20px' }}>신규 렌탈 계약 체결</h3>
-          <form onSubmit={handleCreateContractSubmit}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '20px' }}>
+      {/* 모달 1: 렌탈료 수정 */}
+      {showFeeModal && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+          <form onSubmit={handleSaveFee} className="card" style={{ width: '100%', maxWidth: '400px', backgroundColor: 'var(--bg-card)' }}>
+            <h3 className="card-title" style={{ marginBottom: '14px' }}>렌탈료 수정</h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '16px' }}>
               <div>
-                <label>계약 고객사 선택 *</label>
-                <select value={custSelect} onChange={e => {
-                  setCustSelect(e.target.value);
-                  setContactSelect('');
-                  setSiteSelect('');
-                }} required>
-                  <option value="">-- 고객사 선택 --</option>
-                  <option value="NEW">[NEW] -- 직접 입력 (신규 고객사) --</option>
-                  {customers.filter(c => !c.isClosed).map(c => (
-                    <option key={c.id} value={c.id} disabled={c.transactionStatus === 'BLOCKED'}>
-                      {c.name} {c.transactionStatus === 'BLOCKED' ? ' (⚠️ 거래불가)' : ''}
-                    </option>
-                  ))}
-                </select>
+                <label>월 렌탈료 (원) *</label>
+                <input type="number" value={editMonthlyFee} onChange={e => setEditMonthlyFee(Number(e.target.value))} required style={{ width: '100%', padding: '8px' }} />
               </div>
-
               <div>
-                <label>계약담당자 (영업사원) *</label>
-                <select value={salespersonSelect} onChange={e => setSalespersonSelect(e.target.value)} required>
-                  <option value="">-- 계약담당자 선택 --</option>
-                  {users.map(u => (
-                    <option key={u.id} value={u.id}>{u.name} ({u.role === 'ADMIN' ? '관리자' : u.role === 'SALES' ? '영업' : u.role === 'REPAIR' ? '정비' : u.role})</option>
-                  ))}
-                </select>
+                <label>일할 계산 일단가 (원) *</label>
+                <input type="number" value={editDailyFee} onChange={e => setEditDailyFee(Number(e.target.value))} required style={{ width: '100%', padding: '8px' }} />
               </div>
-
               <div>
-                <label>청구 마감일자 기준 (일) *</label>
-                <input
-                  type="number"
-                  value={billingDay}
-                  onChange={e => setBillingDay(parseInt(e.target.value) || 30)}
-                  min={1}
-                  max={30}
-                  required
-                />
-              </div>
-
-              <div>
-                <label>거래명세서 마감일자 기준 (일) *</label>
-                <input
-                  type="number"
-                  value={statementClosingDay}
-                  onChange={e => setStatementClosingDay(parseInt(e.target.value) || 25)}
-                  min={1}
-                  max={30}
-                  required
-                />
-              </div>
-
-              <div>
-                <label>고객 담당자 선택</label>
-                <select value={contactSelect} onChange={e => setContactSelect(e.target.value)}>
-                  <option value="">-- 담당자 선택 안함 --</option>
-                  <option value="NEW">[NEW] -- 직접 입력 (신규 담당자) --</option>
-                  {contacts.filter(co => co.customerId === custSelect && co.isActive !== false).map(co => (
-                    <option key={co.id} value={co.id}>{co.name} ({co.position})</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label>출고 대상 현장 선택</label>
-                <select value={siteSelect} onChange={e => setSiteSelect(e.target.value)}>
-                  <option value="">-- 직납 (현장 없음) --</option>
-                  <option value="NEW">[NEW] -- 직접 입력 (신규 현장) --</option>
-                  {sites.filter(s => s.customerId === custSelect && s.isActive !== false).map(s => (
-                    <option key={s.id} value={s.id}>{s.name}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label>임대 시작일자 *</label>
-                <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} required />
-              </div>
-
-              <div>
-                <label>임대 종료일자 *</label>
-                <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} required />
+                <label>변경 사유 *</label>
+                <input type="text" placeholder="단가 조정 사유 입력" value={feeChangeReason} onChange={e => setFeeChangeReason(e.target.value)} required style={{ width: '100%', padding: '8px' }} />
               </div>
             </div>
+            <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+              <button type="button" className="btn-secondary" onClick={() => setShowFeeModal(false)}>취소</button>
+              <button type="submit" className="btn-primary">저장</button>
+            </div>
+          </form>
+        </div>
+      )}
 
-            {/* 신규 고객사 직접 입력 카드 */}
-            {custSelect === 'NEW' && (
-              <div className="card" style={{ backgroundColor: 'var(--bg-app)', padding: '16px', marginBottom: '20px', border: '1px dashed var(--primary)' }}>
-                <h4 style={{ fontSize: '13.5px', fontWeight: '700', color: 'var(--primary)', marginBottom: '10px' }}>신규 고객사 직접 입력</h4>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                  <div>
-                    <label style={{ fontSize: '12px' }}>고객사명 *</label>
-                    <input type="text" value={newCustName} onChange={e => setNewCustName(e.target.value)} placeholder="예: (주)한라건설" required={custSelect === 'NEW'} />
-                  </div>
-                  <div>
-                    <label style={{ fontSize: '12px' }}>사업자등록번호</label>
-                    <input type="text" value={newBizRegNo} onChange={e => setNewBizRegNo(e.target.value)} placeholder="예: 123-45-67890" />
-                  </div>
-                  <div>
-                    <label style={{ fontSize: '12px' }}>대표자명</label>
-                    <input type="text" value={newRepresentative} onChange={e => setNewRepresentative(e.target.value)} placeholder="대표자 이름" />
-                  </div>
-                  <div>
-                    <label style={{ fontSize: '12px' }}>대표 연락처</label>
-                    <input type="text" value={newRepContact} onChange={e => setNewRepContact(e.target.value)} placeholder="예: 02-123-4567" />
-                  </div>
-                  <div>
-                    <label style={{ fontSize: '12px' }}>대표 이메일</label>
-                    <input type="email" value={newRepEmail} onChange={e => setNewRepEmail(e.target.value)} placeholder="email@company.com" />
-                  </div>
-                  <div>
-                    <label style={{ fontSize: '12px' }}>사업장 주소</label>
-                    <input type="text" value={newAddress} onChange={e => setNewAddress(e.target.value)} placeholder="본사 주소" />
-                  </div>
-                </div>
-              </div>
-            )}
+      {/* 모달 2: 만료일 / 기간 연장/단축 */}
+      {showExtendModal && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+          <form onSubmit={handleSaveExtend} className="card" style={{ width: '100%', maxWidth: '400px', backgroundColor: 'var(--bg-card)' }}>
+            <h3 className="card-title" style={{ marginBottom: '14px' }}>계약 기간 연장 / 단축</h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '16px' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                <input type="checkbox" checked={modIsOpen} onChange={e => setModIsOpen(e.target.checked)} style={{ width: '16px', height: '16px' }} />
+                종료일 미정 (상시 대여중)
+              </label>
 
-            {/* 신규 담당자 직접 입력 카드 */}
-            {contactSelect === 'NEW' && (
-              <div className="card" style={{ backgroundColor: 'var(--bg-app)', padding: '16px', marginBottom: '20px', border: '1px dashed var(--primary)' }}>
-                <h4 style={{ fontSize: '13.5px', fontWeight: '700', color: 'var(--primary)', marginBottom: '10px' }}>신규 고객 담당자 직접 입력</h4>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                  <div>
-                    <label style={{ fontSize: '12px' }}>담당자명 *</label>
-                    <input type="text" value={newContactName} onChange={e => setNewContactName(e.target.value)} placeholder="예: 홍길동" required={contactSelect === 'NEW'} />
-                  </div>
-                  <div>
-                    <label style={{ fontSize: '12px' }}>직급</label>
-                    <input type="text" value={newContactPosition} onChange={e => setNewContactPosition(e.target.value)} placeholder="예: 대리, 과장" />
-                  </div>
-                  <div>
-                    <label style={{ fontSize: '12px' }}>연락처 *</label>
-                    <input type="text" value={newContactPhone} onChange={e => setNewContactPhone(e.target.value)} placeholder="예: 010-1234-5678" required={contactSelect === 'NEW'} />
-                  </div>
-                  <div>
-                    <label style={{ fontSize: '12px' }}>이메일</label>
-                    <input type="email" value={newContactEmail} onChange={e => setNewContactEmail(e.target.value)} placeholder="email@company.com" />
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* 신규 현장 직접 입력 카드 */}
-            {siteSelect === 'NEW' && (
-              <div className="card" style={{ backgroundColor: 'var(--bg-app)', padding: '16px', marginBottom: '20px', border: '1px dashed var(--primary)' }}>
-                <h4 style={{ fontSize: '13.5px', fontWeight: '700', color: 'var(--primary)', marginBottom: '10px' }}>신규 현장 직접 입력</h4>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                  <div style={{ gridColumn: 'span 2' }}>
-                    <label style={{ fontSize: '12px' }}>현장명 *</label>
-                    <input type="text" value={newSiteName} onChange={e => setNewSiteName(e.target.value)} placeholder="예: 여의도 주상복합 신축공사 현장" required={siteSelect === 'NEW'} />
-                  </div>
-                  <div style={{ gridColumn: 'span 2' }}>
-                    <label style={{ fontSize: '12px' }}>현장 주소 *</label>
-                    <input type="text" value={newSiteAddress} onChange={e => setNewSiteAddress(e.target.value)} placeholder="현장 납품 주소" required={siteSelect === 'NEW'} />
-                  </div>
-                  <div>
-                    <label style={{ fontSize: '12px' }}>현장 담당자명</label>
-                    <input type="text" value={newSiteContactName} onChange={e => setNewSiteContactName(e.target.value)} placeholder="현장 담당 기사/소장 이름" />
-                  </div>
-                  <div>
-                    <label style={{ fontSize: '12px' }}>현장 연락처</label>
-                    <input type="text" value={newSiteContactPhone} onChange={e => setNewSiteContactPhone(e.target.value)} placeholder="전화번호" />
-                  </div>
-                  <div style={{ gridColumn: 'span 2' }}>
-                    <label style={{ fontSize: '12px' }}>현장 이메일</label>
-                    <input type="email" value={newSiteContactEmail} onChange={e => setNewSiteContactEmail(e.target.value)} placeholder="email@company.com" />
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* 리프트 장비 추가 바스켓 세션 */}
-            <div style={{ border: '1px solid var(--border)', borderRadius: '8px', padding: '16px', marginBottom: '20px' }}>
-              <h4 style={{ fontSize: '14px', fontWeight: '600', marginBottom: '12px' }}>임대 투입 리프트 장비 바스켓 추가</h4>
-              
-              <div style={{ display: 'flex', gap: '16px', marginBottom: '12px', fontSize: '13px' }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
-                  <input type="radio" name="addMethod" checked={basketAssetMethod === 'ASSET'} onChange={() => setBasketAssetMethod('ASSET')} />
-                  특정 실물 장비(호기) 지정 추가
-                </label>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
-                  <input type="radio" name="addMethod" checked={basketAssetMethod === 'MODEL'} onChange={() => setBasketAssetMethod('MODEL')} />
-                  제품 모델 규격(미정 출고용) 지정 추가
-                </label>
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '2fr 1.2fr 1.2fr auto', gap: '12px', alignItems: 'end', marginBottom: '16px' }}>
-                {basketAssetMethod === 'ASSET' ? (
-                  <div>
-                    <label>임대 가능 장비 목록</label>
-                    <select value={selectedAssetToAdd} onChange={e => {
-                      setSelectedAssetToAdd(e.target.value);
-                      const asset = assets.find(a => a.id === e.target.value);
-                      if (asset) {
-                        setCustomMonthly(asset.monthlyRentalFee || 400000);
-                        setCustomDaily(asset.dailyRentalFee || 15000);
-                      }
-                    }}>
-                      <option value="">-- 대기 장비 선택 --</option>
-                      {availableAssets.map(a => (
-                        <option key={a.id} value={a.id}>{a.assetNo} - {a.modelName} (기준 월 {(a.monthlyRentalFee || 0).toLocaleString()}원)</option>
-                      ))}
-                    </select>
-                  </div>
-                ) : (
-                  <div>
-                    <label>제품 규격 모델 목록</label>
-                    <select value={selectedModelToAdd} onChange={e => {
-                      setSelectedModelToAdd(e.target.value);
-                      setCustomMonthly(400000);
-                      setCustomDaily(15000);
-                    }}>
-                      <option value="">-- 모델 규격 선택 --</option>
-                      {products.filter(p => p.isActive !== false).map(p => (
-                        <option key={p.id} value={p.modelName}>{p.modelName} ({p.spec})</option>
-                      ))}
-                    </select>
-                  </div>
-                )}
+              {!modIsOpen && (
                 <div>
-                  <label>합의 월 렌탈료 (원)</label>
-                  <input type="number" value={customMonthly} onChange={e => setCustomMonthly(parseInt(e.target.value) || 0)} />
-                </div>
-                <div>
-                  <label>합의 일 렌탈료 (원)</label>
-                  <input type="number" value={customDaily} onChange={e => setCustomDaily(parseInt(e.target.value) || 0)} />
-                </div>
-                <button type="button" className="btn-secondary" onClick={handleAddToBasket}>
-                  추가
-                </button>
-              </div>
-
-              {/* 추가된 자재 바스켓 */}
-              {basket.length > 0 && (
-                <div className="table-container" style={{ border: 'none', boxShadow: 'none', margin: 0 }}>
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>임대 장비 / 모델규격</th>
-                        <th>합의 월렌탈료</th>
-                        <th>합의 일렌탈료</th>
-                        <th style={{ width: '80px' }}>취소</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {basket.map((item, idx) => {
-                        const asset = item.assetId ? assets.find(a => a.id === item.assetId) : null;
-                        const key = item.assetId || item.expectedModel || `idx-${idx}`;
-                        return (
-                          <tr key={key}>
-                            <td>
-                              {item.assetId ? (
-                                <span><span className="badge badge-success" style={{ marginRight: '6px' }}>호기지정</span><strong>{asset?.assetNo}</strong> ({asset?.modelName})</span>
-                              ) : (
-                                <span><span className="badge badge-warning" style={{ marginRight: '6px' }}>모델의뢰</span><strong>(미지정 모델) {item.expectedModel}</strong></span>
-                              )}
-                            </td>
-                            <td>{item.monthlyRentalFee.toLocaleString()}원</td>
-                            <td>{item.dailyRentalFee.toLocaleString()}원</td>
-                            <td>
-                              <button 
-                                type="button" 
-                                className="btn-danger" 
-                                onClick={() => handleRemoveFromBasket(item.assetId || item.expectedModel)} 
-                                style={{ padding: '2px 6px', fontSize: '11px' }}
-                              >
-                                삭제
-                              </button>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
+                  <label>변경 만료일 *</label>
+                  <input type="date" value={modNewEndDate} onChange={e => setModNewEndDate(e.target.value)} required style={{ width: '100%', padding: '8px' }} />
                 </div>
               )}
-            </div>
 
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
-              <button type="button" className="btn-secondary" onClick={() => setActiveTab('LIST')}>취소</button>
-              <button type="submit" className="btn-primary" disabled={basket.length === 0}>계약 체결 및 확정</button>
+              <div>
+                <label>변경 사유 *</label>
+                <input type="text" placeholder="기간 연장 또는 단축 사유 입력" value={modDesc} onChange={e => setModDesc(e.target.value)} required style={{ width: '100%', padding: '8px' }} />
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+              <button type="button" className="btn-secondary" onClick={() => setShowExtendModal(false)}>취소</button>
+              <button type="submit" className="btn-primary">저장</button>
             </div>
           </form>
         </div>
       )}
 
-      {activeTab === 'MODIFY' && (
-        <div className="card" style={{ maxWidth: '600px', margin: 0 }}>
-          <h3 className="card-title" style={{ marginBottom: '20px' }}>계약 기간 임대 연장 / 단축 변경</h3>
-          <form onSubmit={handlePeriodModSubmit}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', marginBottom: '20px' }}>
+      {/* 모달 3: 계약 승계 */}
+      {showTransferModal && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+          <form onSubmit={handleSaveTransfer} className="card" style={{ width: '100%', maxWidth: '420px', backgroundColor: 'var(--bg-card)' }}>
+            <h3 className="card-title" style={{ marginBottom: '14px' }}>계약 승계 처리</h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '16px' }}>
               <div>
-                <label>변경할 계약 건 선택 *</label>
-                <select value={modContractId} onChange={e => setModContractId(e.target.value)} required>
-                  <option value="">-- 활성 렌탈 계약 선택 --</option>
-                  {contracts.filter(c => (c.status === 'ACTIVE' || c.status === 'EXTENDED') && canModifyContract(c)).map(c => (
-                    <option key={c.id} value={c.id}>{c.contractNo} - {getCustName(c.customerId)} (종료일: {c.endDate})</option>
+                <label>양수 고객사 선택 *</label>
+                <select value={succCustId} onChange={e => setSuccCustId(e.target.value)} required style={{ width: '100%', padding: '8px' }}>
+                  <option value="">-- 양수 고객사 선택 --</option>
+                  {customers.filter(c => c.id !== activeContract?.customerId).map(c => (
+                    <option key={c.id} value={c.id}>{c.name} ({c.bizRegNo})</option>
                   ))}
                 </select>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                <div>
-                  <label>변경 처리 구분 *</label>
-                  <select value={modType} onChange={e => setModType(e.target.value as 'EXTEND' | 'SHORTEN')}>
-                    <option value="EXTEND">계약 기간 연장 (Extend)</option>
-                    <option value="SHORTEN">계약 조기 단축 (Shorten)</option>
-                  </select>
-                </div>
-                <div>
-                  <label>신규 만료 일자 *</label>
-                  <input type="date" value={newEndDate} onChange={e => setNewEndDate(e.target.value)} required />
-                </div>
+              <div>
+                <label>승계 일자 *</label>
+                <input type="date" value={succDate} onChange={e => setSuccDate(e.target.value)} required style={{ width: '100%', padding: '8px' }} />
               </div>
 
               <div>
-                <label>변경 사유 명세 *</label>
-                <textarea
-                  value={modDesc}
-                  onChange={e => setModDesc(e.target.value)}
-                  placeholder="예: 공사 기간 증가에 따른 2달 추가 연장 합의 완료"
-                  rows={3}
-                  required
-                />
+                <label>승계 사유 및 메모</label>
+                <input type="text" placeholder="승계 사유 입력" value={succDesc} onChange={e => setSuccDesc(e.target.value)} style={{ width: '100%', padding: '8px' }} />
               </div>
             </div>
-
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
-              <button type="button" className="btn-secondary" onClick={() => setActiveTab('LIST')}>취소</button>
-              <button type="submit" className="btn-primary" disabled={!modContractId}>변경 실행</button>
+            <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+              <button type="button" className="btn-secondary" onClick={() => setShowTransferModal(false)}>취소</button>
+              <button type="submit" className="btn-primary" disabled={!succCustId}>승계 처리</button>
             </div>
           </form>
         </div>
       )}
 
-      {activeTab === 'TRANSFER' && (
-        <div className="card" style={{ maxWidth: '650px', margin: 0 }}>
-          <h3 className="card-title" style={{ marginBottom: '20px' }}>계약 잔여 기간 타사 승계 (인수)</h3>
-          <form onSubmit={handleSuccessionSubmit}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', marginBottom: '20px' }}>
+      {/* 모달 4: 자산 교체 / 대차 의뢰 (계약 속성 100% 자동 상속 구조) */}
+      {showExchangeModal && activeContract && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+          <form onSubmit={handleExchangeSubmit} className="card" style={{ width: '100%', maxWidth: '480px', backgroundColor: 'var(--bg-card)' }}>
+            <h3 className="card-title" style={{ marginBottom: '14px', color: 'var(--primary)' }}>자산 교체 / 대차 의뢰</h3>
+            
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', marginBottom: '18px' }}>
               
-              {/* 기존 계약 */}
+              {/* 1단계 시작점 분기: 교체 대상 식별 여부 */}
               <div>
-                <label>승계할 기존 계약건 선택 *</label>
-                <select value={succContractId} onChange={e => setSuccContractId(e.target.value)} required>
-                  <option value="">-- 기존 진행 계약 선택 --</option>
-                  {contracts.filter(c => (c.status === 'ACTIVE' || c.status === 'EXTENDED') && canModifyContract(c)).map(c => (
-                    <option key={c.id} value={c.id}>{c.contractNo} - {getCustName(c.customerId)} (기간: ~{c.endDate})</option>
-                  ))}
-                </select>
-              </div>
-
-              <hr style={{ border: 'none', borderTop: '1px solid var(--border-color)' }} />
-
-              {/* 신규 계약처 */}
-              <div>
-                <h4 style={{ fontSize: '14px', fontWeight: '600', marginBottom: '8px', color: 'var(--primary)' }}>승계 인수 고객사 지정</h4>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                  <div>
-                    <label>인수 고객사 *</label>
-                    <select value={succCustId} onChange={e => {
-                      setSuccCustId(e.target.value);
-                      setSuccContactId('');
-                      setSuccSiteId('');
-                    }} required>
-                      <option value="">-- 신규 인수사 선택 --</option>
-                      {customers.filter(c => c.id !== contracts.find(co => co.id === succContractId)?.customerId).map(c => (
-                        <option key={c.id} value={c.id}>{c.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                  
-                  <div>
-                    <label>승계 기준 일자 *</label>
-                    <input type="date" value={succDate} onChange={e => setSuccDate(e.target.value)} required />
-                    <small style={{ color: 'var(--text-muted)' }}>* 기존계약은 해당일에 종료, 신규계약은 다음날 자동개시</small>
-                  </div>
+                <label style={{ fontWeight: 'bold', display: 'block', marginBottom: '6px' }}>1. 회수 대상 장비 식별 상태 *</label>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button
+                    type="button"
+                    className={exchangeIdentifyType === 'KNOWN' ? 'btn-primary' : 'btn-secondary'}
+                    onClick={() => setExchangeIdentifyType('KNOWN')}
+                    style={{ flex: 1, padding: '7px 10px', fontSize: '11.5px', fontWeight: 'bold' }}
+                  >
+                    🔵 자산번호 식별 가능
+                  </button>
+                  <button
+                    type="button"
+                    className={exchangeIdentifyType === 'UNKNOWN' ? 'btn-primary' : 'btn-secondary'}
+                    onClick={() => setExchangeIdentifyType('UNKNOWN')}
+                    style={{ flex: 1, padding: '7px 10px', fontSize: '11.5px', fontWeight: 'bold' }}
+                  >
+                    🟠 미식별 (모델 기준 요청)
+                  </button>
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+              {/* 회수 대상 장비 선택 */}
+              {exchangeIdentifyType === 'KNOWN' ? (
                 <div>
-                  <label>인수사 담당자</label>
-                  <select value={succContactId} onChange={e => setSuccContactId(e.target.value)}>
-                    <option value="">-- 선택 안함 --</option>
-                    {contacts.filter(cc => cc.customerId === succCustId).map(cc => (
-                      <option key={cc.id} value={cc.id}>{cc.name} ({cc.position})</option>
-                    ))}
+                  <label>회수 대상 계약 자산 선택 (식별됨) *</label>
+                  <select value={exchangeOldAssetId} onChange={e => setExchangeOldAssetId(e.target.value)} required style={{ width: '100%', padding: '8px' }}>
+                    {activeContractAssets.map(ca => {
+                      const ast = assets.find(a => a.id === ca.assetId);
+                      return (
+                        <option key={ca.id} value={ca.assetId}>
+                          {ast ? `${ast.modelName} (관리번호: ${ast.assetNo})` : (ca.expectedModel || '자산')}
+                        </option>
+                      );
+                    })}
                   </select>
                 </div>
-                <div>
-                  <label>인수사 현장지정</label>
-                  <select value={succSiteId} onChange={e => setSuccSiteId(e.target.value)}>
-                    <option value="">-- 선택 안함 --</option>
-                    {sites.filter(s => s.customerId === succCustId).map(s => (
-                      <option key={s.id} value={s.id}>{s.name}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label>승계 특기 사유 *</label>
-                <textarea
-                  value={succDesc}
-                  onChange={e => setSuccDesc(e.target.value)}
-                  placeholder="예: 현대건설 하도급 사 변경에 따른 잔여 계약 기간 및 장비 승계 인계"
-                  rows={2}
-                  required
-                />
-              </div>
-
-            </div>
-
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
-              <button type="button" className="btn-secondary" onClick={() => setActiveTab('LIST')}>취소</button>
-              <button type="submit" className="btn-primary" disabled={!succContractId || !succCustId}>승계 처리 실행</button>
-            </div>
-          </form>
-        </div>
-      )}
-
-      {activeTab === 'EMAIL' && (
-        <div className="card" style={{ maxWidth: '700px', margin: 0 }}>
-          <h3 className="card-title" style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '20px' }}>
-            <Mail className="text-primary" /> 구글 드라이브 문서 첨부 이메일 전송
-          </h3>
-
-          <form onSubmit={handleSendEmailSubmit}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', marginBottom: '20px' }}>
-              <div>
-                <label>대상 계약 건 선택 *</label>
-                <select value={mailContractId} onChange={e => handleMailContractChange(e.target.value)} required>
-                  <option value="">-- 계약 선택시 구글드라이브 폴더와 이메일이 연동됩니다 --</option>
-                  {contracts.map(c => (
-                    <option key={c.id} value={c.id}>{c.contractNo} - {getCustName(c.customerId)} (시작일: {c.startDate})</option>
-                  ))}
-                </select>
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                <div>
-                  <label>수신자 이메일 (To) *</label>
-                  <input type="email" value={mailTo} onChange={e => setMailTo(e.target.value)} placeholder="recipient@company.com" required />
-                </div>
-                <div>
-                  <label>참조 이메일 (Cc)</label>
-                  <input type="email" value={mailCc} onChange={e => setMailCc(e.target.value)} placeholder="cc@company.com" />
-                </div>
-              </div>
-
-              <div>
-                <label>이메일 제목 *</label>
-                <input type="text" value={mailSubject} onChange={e => setMailSubject(e.target.value)} required />
-              </div>
-
-              <div>
-                <label>이메일 본문 내용</label>
-                <textarea value={mailBody} onChange={e => setMailBody(e.target.value)} rows={6} />
-              </div>
-
-              {/* 구글 드라이브 첨부파일 선택 체크박스 */}
-              {mailContractId && (
-                <div style={{ padding: '16px', border: '1px solid var(--border-color)', borderRadius: '8px', backgroundColor: 'var(--bg-app)' }}>
-                  <h4 style={{ fontSize: '13px', fontWeight: '600', marginBottom: '10px' }}>구글 드라이브 계약 연동 파일 목록 (첨부할 파일 선택)</h4>
-                  
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                    {/* 해당 계약 하위 폴더의 파일 */}
-                    {drive.listFiles(contracts.find(c => c.id === mailContractId)?.driveFolderId || '').map(f => (
-                      <label key={f.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 'normal', margin: 0, cursor: 'pointer' }}>
-                        <input
-                          type="checkbox"
-                          checked={mailAttachmentIds.includes(f.id)}
-                          onChange={e => {
-                            if (e.target.checked) setMailAttachmentIds([...mailAttachmentIds, f.id]);
-                            else setMailAttachmentIds(mailAttachmentIds.filter(id => id !== f.id));
-                          }}
-                          style={{ width: '16px', height: '16px' }}
-                        />
-                        <FileText size={14} className="text-primary" /> {f.name} ({f.size}) - [계약업무폴더]
-                      </label>
-                    ))}
-
-                    {/* 공용 루트의 폴더 파일 */}
-                    {drive.listAllFiles().filter(f => f.folderId === 'root').map(f => (
-                      <label key={f.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 'normal', margin: 0, cursor: 'pointer' }}>
-                        <input
-                          type="checkbox"
-                          checked={mailAttachmentIds.includes(f.id)}
-                          onChange={e => {
-                            if (e.target.checked) setMailAttachmentIds([...mailAttachmentIds, f.id]);
-                            else setMailAttachmentIds(mailAttachmentIds.filter(id => id !== f.id));
-                          }}
-                          style={{ width: '16px', height: '16px' }}
-                        />
-                        <FileText size={14} className="text-secondary" /> {f.name} ({f.size}) - [ERP공용양식]
-                      </label>
-                    ))}
-                  </div>
+              ) : (
+                <div style={{ padding: '10px', backgroundColor: '#fff7ed', border: '1px solid #fed7aa', borderRadius: '6px', fontSize: '11.5px', color: '#c2410c' }}>
+                  💡 <strong>미식별 교체 안내:</strong> 현장의 정확한 자산번호를 모르는 상태입니다. 대차 장비 출고 후 회수 장비가 센터에 <strong>입고 검수 승인되는 시점에 자산번호가 최종 매핑 완성</strong>됩니다.
                 </div>
               )}
+
+              {/* 계약 속성 자동 상속 카드 명세 */}
+              <div style={{ padding: '12px', backgroundColor: '#f8fafc', border: '1px solid var(--border-color)', borderRadius: '6px', fontSize: '12px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <div style={{ fontWeight: 'bold', color: 'var(--primary)', marginBottom: '2px' }}>🔒 기존 계약 속성 100% 자동 상속</div>
+                <div>고객사 / 현장: <strong>{getCustName(activeContract.customerId)} — {getSiteName(activeContract.siteId)}</strong></div>
+                <div>대차 요구 모델: <strong>{assets.find(a => a.id === exchangeOldAssetId)?.modelName || activeContractAssets[0]?.expectedModel || '동급 동일 모델'}</strong></div>
+                <div>렌탈료 단가 조건: 기존 계약 월 렌탈료 조건 100% 동일 상속 (추가 비용 없음)</div>
+                <div>청구 / 작업지시 조건: 매월 {activeContract.billingDay}일 청구 마감 조건 승계</div>
+              </div>
+
+              <div>
+                <label>대차/교체 희망일자 *</label>
+                <input type="date" value={exchangeDate} onChange={e => setExchangeDate(e.target.value)} required style={{ width: '100%', padding: '8px' }} />
+              </div>
+
+              <div>
+                <label>교체 사유 및 현장 상황 메모 *</label>
+                <input type="text" placeholder="예: 유압유 누유 고장, 작업 높이 변경 요청 등" value={exchangeReason} onChange={e => setExchangeReason(e.target.value)} required style={{ width: '100%', padding: '8px' }} />
+              </div>
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
-              <button type="button" className="btn-secondary" onClick={() => setActiveTab('LIST')}>취소</button>
-              <button type="submit" className="btn-success" disabled={isSendingMail || !mailContractId}>
-                {isSendingMail ? '발송 중...' : <><Send size={14} /> 메일 발송하기</>}
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+              <button type="button" className="btn-secondary" onClick={() => setShowExchangeModal(false)}>취소</button>
+              <button type="submit" className="btn-success">
+                대차 의뢰 접수 (출고/회수 배차 발행)
               </button>
             </div>
           </form>
         </div>
       )}
 
-      {/* 장비 교체 모달 */}
-      {showExchangeModal && (
-        <div style={{
-          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-          backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000
-        }}>
-          <form onSubmit={handleExchangeSubmit} className="card" style={{ width: '100%', maxWidth: '400px', backgroundColor: 'var(--bg-card)' }}>
-            <h3 className="card-title" style={{ marginBottom: '16px' }}>장비 교체 (대차 처리)</h3>
-            
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '20px' }}>
-              <div>
-                <label>기존 장비</label>
-                <input 
-                  type="text" 
-                  value={assets.find(a => a.id === exchangeOldAssetId) ? `${assets.find(a => a.id === exchangeOldAssetId)?.modelName} (관리번호: ${assets.find(a => a.id === exchangeOldAssetId)?.assetNo})` : ''} 
-                  disabled 
-                  style={{ width: '100%', padding: '8px', backgroundColor: 'var(--bg-body)' }}
-                />
-              </div>
+      {/* 뷰 3: 신규 계약 등록 */}
+      {viewMode === 'LIST' && activeTab === 'CREATE' && (
+        <form onSubmit={handleCreateContractSubmit} className="card" style={{ margin: 0 }}>
+          <h3 className="card-title" style={{ marginBottom: '16px' }}>신규 계약 등록</h3>
+          
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', marginBottom: '16px' }}>
+            <div>
+              <label>고객사 선택 *</label>
+              <select value={custSelect} onChange={e => setCustSelect(e.target.value)} required style={{ width: '100%', padding: '8px' }}>
+                {customers.map(c => (
+                  <option key={c.id} value={c.id}>{c.name} ({c.bizRegNo})</option>
+                ))}
+                <option value="NEW">+ [신규 고객사 직접 등록]</option>
+              </select>
+            </div>
 
-              <div>
-                <label>교체 장비 선택 *</label>
-                <select 
-                  value={exchangeNewAssetId} 
-                  onChange={e => setExchangeNewAssetId(e.target.value)}
-                  required
-                  style={{ width: '100%', padding: '8px' }}
-                >
-                  <option value="">-- 임대가능 장비 선택 --</option>
-                  {filteredAvailableAssets.map(a => (
-                    <option key={a.id} value={a.id}>{a.modelName} (관리번호: {a.assetNo})</option>
+            <div>
+              <label>영업담당 *</label>
+              <select value={salespersonSelect} onChange={e => setSalespersonSelect(e.target.value)} required style={{ width: '100%', padding: '8px' }}>
+                {users.map(u => (
+                  <option key={u.id} value={u.id}>{u.name}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label>계약 시작일 *</label>
+              <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} required style={{ width: '100%', padding: '8px' }} />
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '16px' }}>
+            <div>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                <input type="checkbox" checked={isEndDateOpen} onChange={e => setIsEndDateOpen(e.target.checked)} style={{ width: '16px', height: '16px' }} />
+                종료일 미정 (상시 대여중)
+              </label>
+              {!isEndDateOpen && (
+                <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} required style={{ width: '100%', padding: '8px', marginTop: '4px' }} />
+              )}
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+              <div><label>청구 마감일 (일) *</label><input type="number" min={1} max={31} value={billingDay} onChange={e => setBillingDay(Number(e.target.value))} required style={{ width: '100%', padding: '8px' }} /></div>
+              <div><label>명세서 마감일 (일)</label><input type="number" min={1} max={31} value={statementClosingDay} onChange={e => setStatementClosingDay(Number(e.target.value))} style={{ width: '100%', padding: '8px' }} /></div>
+            </div>
+          </div>
+
+          {/* 자산 바스켓 */}
+          <div style={{ padding: '14px', backgroundColor: '#f8fafc', borderRadius: '6px', border: '1px solid var(--border-color)', marginBottom: '16px' }}>
+            <h4 style={{ fontWeight: 600, marginBottom: '10px' }}>체결 자산 선택</h4>
+            <div style={{ display: 'flex', gap: '10px', alignItems: 'center', marginBottom: '10px', flexWrap: 'wrap' }}>
+              <select value={basketAssetMethod} onChange={e => setBasketAssetMethod(e.target.value as any)} style={{ padding: '7px' }}>
+                <option value="ASSET">자산 관리번호 선택</option>
+                <option value="MODEL">제품 모델명 선택</option>
+              </select>
+
+              {basketAssetMethod === 'ASSET' ? (
+                <select value={selectedAssetToAdd} onChange={e => setSelectedAssetToAdd(e.target.value)} style={{ padding: '7px', minWidth: '180px' }}>
+                  <option value="">-- 임대가능 자산 선택 --</option>
+                  {availableAssets.map(a => (
+                    <option key={a.id} value={a.id}>{a.assetNo} ({a.modelName})</option>
                   ))}
-                  {filteredAvailableAssets.length === 0 && (
-                    <option disabled style={{ color: 'var(--danger)' }}>교체 가능한 동일 모델 임대가능 재고 없음</option>
-                  )}
                 </select>
-              </div>
+              ) : (
+                <select value={selectedModelToAdd} onChange={e => setSelectedModelToAdd(e.target.value)} style={{ padding: '7px', minWidth: '180px' }}>
+                  <option value="">-- 제품 모델 선택 --</option>
+                  {products.map(p => (
+                    <option key={p.id} value={p.modelName}>{p.modelName} ({p.feet}피트)</option>
+                  ))}
+                </select>
+              )}
 
-              <div>
-                <label>교체 일자 *</label>
-                <input 
-                  type="date" 
-                  value={exchangeDate} 
-                  onChange={e => setExchangeDate(e.target.value)} 
-                  required 
-                  style={{ width: '100%', padding: '8px' }}
-                />
-                <small style={{ color: 'var(--text-muted)', fontSize: '11px', display: 'block', marginTop: '4px' }}>
-                  * 교체일 당일까지는 기존 장비 요금이 일할 적용되며, 다음날부터 새 장비 요금이 청구됩니다.
-                </small>
-              </div>
+              <span>월 렌탈료:</span>
+              <input type="number" value={customMonthly} onChange={e => setCustomMonthly(Number(e.target.value))} style={{ width: '100px', padding: '6px' }} />
+              
+              <button type="button" className="btn-primary" onClick={handleAddToBasket} style={{ padding: '6px 12px' }}>+ 추가</button>
             </div>
 
-            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
-              <button type="button" className="btn-secondary" onClick={() => setShowExchangeModal(false)}>취소</button>
-              <button type="submit" className="btn-primary" disabled={!exchangeNewAssetId}>교체 완료</button>
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+              {basket.length === 0 ? (
+                <div style={{ color: 'var(--text-muted)', fontSize: '12px' }}>추가된 자산이 없습니다.</div>
+              ) : (
+                basket.map((b, idx) => {
+                  const ast = assets.find(a => a.id === b.assetId);
+                  return (
+                    <div key={idx} style={{ padding: '4px 10px', backgroundColor: '#fff', border: '1px solid var(--primary)', borderRadius: '4px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <strong>{ast?.assetNo || b.expectedModel}</strong> (월 {b.monthlyRentalFee.toLocaleString()}원)
+                      <button type="button" onClick={() => handleRemoveFromBasket(b.assetId || b.expectedModel)} style={{ border: 'none', background: 'none', color: 'red', cursor: 'pointer' }}>✕</button>
+                    </div>
+                  );
+                })
+              )}
             </div>
-          </form>
-        </div>
+          </div>
+
+          <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+            <button type="button" className="btn-secondary" onClick={() => setActiveTab('ALL_LIST')}>취소</button>
+            <button type="submit" className="btn-success">계약 등록</button>
+          </div>
+        </form>
       )}
+
+      {/* 스타일 */}
+      <style>{`
+        .hover-row:hover {
+          background-color: #f1f5f9 !important;
+        }
+      `}</style>
     </div>
   );
 };
