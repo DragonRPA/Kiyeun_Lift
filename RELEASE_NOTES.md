@@ -1,3 +1,16 @@
+# Release Notes (v1.14.1.Build.00004 - 2026-07-29 15:44)
+
+## 💾 [수정 금액 `deliveries` 테이블 & `assignedVehicles` 차량 운송비 이중 완벽 동기화] `TruckDispatch.tsx` 패치 완료
+
+- **개편 배경**: 사장님 질문("이 수정된 금액은 어디에 저장되는거지? deliveries 테이블이 아니야?")에 명확히 답변드리고, 수정된 금액이 Supabase 원격 DB의 **`deliveries` 테이블의 `deliveryCost` 컬럼 및 `assignedVehicles` 차량 배열 내부 운송비 필드**까지 100% 이중 완벽 동기화되어 영구 저장되도록 보완 수술함.
+- **주요 구현 내역**:
+  1. **[수정 금액의 `deliveries` 테이블 저장 보장]**:
+     - `await db.updateRow('deliveries', id, updateData)` 를 호출하여 Supabase 원격 DB `deliveries` 테이블에 정확히 저장됨을 명시.
+  2. **[`assignedVehicles` 차량 배열 내부 운송비 동시 동기화]**:
+     - `deliveries` 테이블 내 차량 배차 배열(`assignedVehicles`)이 존속하는 건의 경우, `deliveryCost` 컬럼과 `assignedVehicles` 내부 운송비를 함께 업데이트하여 데이터 재로드 후에도 정정된 금액이 100% 유지되도록 보장함.
+
+---
+
 # Release Notes (v1.14.1.Build.00003 - 2026-07-29 15:02)
 
 ## 📊 [상단 요약 뱃지 1번 카드 엑셀 청구 건수(33건) 직관 연동 개편] `TruckDispatch.tsx` 패치 완료

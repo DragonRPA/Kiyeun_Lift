@@ -263,10 +263,20 @@ export const TruckDispatch: React.FC = () => {
     }
 
     try {
-      // 1. DB 동기 업데이트 수행 (Zero Silent Failures)
-      await db.updateRow('deliveries', editingDelivery.id, {
+      // 1. DB (deliveries 테이블) 동기 업데이트 수행 (deliveryCost 및 assignedVehicles 차량 운송비 동시 동기화)
+      const updatedVehicles = editingDelivery.assignedVehicles && editingDelivery.assignedVehicles.length > 0
+        ? editingDelivery.assignedVehicles.map((v, i) => i === 0 ? { ...v, deliveryCost: newCost } : { ...v, deliveryCost: 0 })
+        : [];
+
+      const updateData: any = {
         deliveryCost: newCost
-      } as any);
+      };
+
+      if (updatedVehicles.length > 0) {
+        updateData.assignedVehicles = updatedVehicles;
+      }
+
+      await db.updateRow('deliveries', editingDelivery.id, updateData);
 
       // 2. 전체 데이터 및 state 갱신
       await refreshAllData();
