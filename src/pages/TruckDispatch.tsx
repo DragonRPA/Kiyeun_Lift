@@ -33,6 +33,18 @@ interface AssignedVehicleRow {
   deliveryCost: number;
 }
 
+export interface ReconPairRow {
+  pairId: string;
+  systemDelivery?: Delivery;
+  excelRow?: any;
+  matchStatus: 'MATCHED' | 'MISMATCH' | 'SYSTEM_ONLY' | 'EXCEL_ONLY' | 'PENDING' | 'PAYMENT_REQUESTED';
+  systemCost: number;
+  excelCost: number;
+  diffCost: number;
+  memo?: string;
+  isReconciled: boolean;
+}
+
 export const TruckDispatch: React.FC = () => {
   const { 
     deliveries, contracts, customers, products, 
@@ -171,7 +183,7 @@ export const TruckDispatch: React.FC = () => {
   const [manualVehicles, setManualVehicles] = useState<VehicleReq[]>([{ vehicleType: '3.5T', count: 1 }]);
   const [manualCargos, setManualCargos] = useState<CargoItem[]>([{ modelName: products[0]?.modelName || 'Skyjack SJ3219', count: 1 }]);
 
-  // 📄 [월말 운송료 대사 탭 state & 파이프라인]
+  // 📄 [월말 운송료 대사 탭 state & 1:1 Split Pair 파이프라인]
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [reconStartDate, setReconStartDate] = useState<string>(() => {
     const d = new Date();
@@ -182,16 +194,10 @@ export const TruckDispatch: React.FC = () => {
   const [reconStatusFilter, setReconStatusFilter] = useState<'ALL' | 'PENDING' | 'MATCHED' | 'MISMATCH' | 'PAYMENT_REQUESTED'>('ALL');
   const [reconSearchQuery, setReconSearchQuery] = useState<string>('');
 
-  const [manualReconMap, setManualReconMap] = useState<Record<string, { 
-    status: 'MATCHED' | 'MISMATCH' | 'PENDING' | 'PAYMENT_REQUESTED'; 
-    excelCost?: number; 
-    diffCost?: number; 
-    excelDriverName?: string;
-    memo?: string;
-  }>>({});
-
-  const [selectedReconIds, setSelectedReconIds] = useState<Set<string>>(new Set());
-  const [unmatchedExcelRows, setUnmatchedExcelRows] = useState<any[]>([]);
+  // 1:1 Pair 행 배열 state
+  const [reconPairs, setReconPairs] = useState<ReconPairRow[]>([]);
+  const [uploadedFileName, setUploadedFileName] = useState<string>('');
+  const [selectedPairIds, setSelectedPairIds] = useState<Set<string>>(new Set());
   const [reconNotificationMsg, setReconNotificationMsg] = useState<string>('');
 
   // 📅 기간 선택 피커 헬퍼
@@ -237,15 +243,10 @@ export const TruckDispatch: React.FC = () => {
 
       // 3. 운송 거래처 필터
       if (selectedReconCompany !== 'ALL') {
-        const matchComp = d.assignedVehicles?.some(v => v.transportCompany.trim() === selectedReconCompany.trim()) || 
+        const matchComp = d.assignedVehicles?.some((v: any) => v.transportCompany.trim() === selectedReconCompany.trim()) || 
                           (d.transportCompany && d.transportCompany.trim() === selectedReconCompany.trim());
         if (!matchComp) return false;
       }
-
-      // 4. 대사 상태 필터
-      const localState = manualReconMap[d.id];
-      const currentStatus = localState?.status || (d as any).reconciliationStatus || 'PENDING';
-      if (reconStatusFilter !== 'ALL' && currentStatus !== reconStatusFilter) return false;
 
       // 5. 검색어 (배차ID, 기사명, 거래처, 고객사명)
       if (reconSearchQuery) {
@@ -262,10 +263,264 @@ export const TruckDispatch: React.FC = () => {
 
       return true;
     });
-  }, [deliveries, reconStartDate, reconEndDate, selectedReconCompany, reconStatusFilter, reconSearchQuery, manualReconMap, contracts, customers]);
+  }, [deliveries, reconStartDate, reconEndDate, selectedReconCompany, reconSearchQuery, contracts, customers]);
+
+  // 📄 엑셀 업로드 시 [날짜 + 하차지 + 금액] 정밀 스마트 1:1 Pair 짝짓기 엔진
+  const handleExcelFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    const file = files[0];
+    setUploadedFileName(file.name);
+    const reader = new FileReader();
+
+    reader.onload = (evt) => {
+      try {
+        const bstr = evt.target?.result;
+        const workbook = XLSX.read(bstr, { type: 'binary' });
+        const sheetName = workbook.SheetNames[0];
+        const sheet = workbook.Sheets[sheetName];
+        const jsonRows: any[] = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+
+        if (!jsonRows || jsonRows.length === 0) {
+          showErrorModal('업로드한 엑셀 파일에 데이터가 없습니다.');
+          return;
+        }
+
+        const remainingSystemDeliveries = [...completedDeliveriesForRecon];
+        const pairs: ReconPairRow[] = [];
+        let autoMatchedCount = 0;
+        let mismatchCount = 0;
+
+        jsonRows.forEach((row, rIdx) => {
+          const keys = Object.keys(row);
+          const idKey = keys.find(k => k.includes('배차ID') || k.includes('배차번호') || k.includes('ID') || k.includes('운송ID'));
+          const costKey = keys.find(k => k.includes('운송비') || k.includes('청구금액') || k.includes('금액') || k.includes('운임'));
+          const driverKey = keys.find(k => k.includes('기사명') || k.includes('운송기사') || k.includes('기사'));
+          const dateKey = keys.find(k => k.includes('날짜') || k.includes('일자') || k.includes('운송일'));
+          const destKey = keys.find(k => k.includes('하차지') || k.includes('도착지') || k.includes('현장'));
+
+          const excelId = idKey ? String(row[idKey]).trim() : '';
+          const excelCost = costKey ? Number(String(row[costKey]).replace(/[^0-9.-]+/g, '')) : 0;
+          const excelDriver = driverKey ? String(row[driverKey]).trim() : '';
+          const excelDate = dateKey ? String(row[dateKey]).trim() : '';
+          const excelDest = destKey ? String(row[destKey]).trim() : '';
+
+          // 1차 매칭: 배차ID 정확 일치
+          let matchIdx = -1;
+          if (excelId) {
+            matchIdx = remainingSystemDeliveries.findIndex(d => d.id.toLowerCase() === excelId.toLowerCase());
+          }
+
+          // 2차 매칭: 날짜 + 하차지 + 금액 일치
+          if (matchIdx === -1) {
+            matchIdx = remainingSystemDeliveries.findIndex(d => {
+              const sysDate = d.loadingDate || d.requestDate;
+              const sysCost = d.deliveryCost || d.assignedVehicles?.reduce((acc: number, v: any) => acc + (v.deliveryCost || 0), 0) || 70000;
+              const sysDest = d.destinationAddress || '';
+
+              const dateMatch = !excelDate || !sysDate || sysDate === excelDate;
+              const destMatch = !excelDest || !sysDest || sysDest.includes(excelDest) || excelDest.includes(sysDest);
+              const costMatch = excelCost > 0 && sysCost === excelCost;
+
+              return dateMatch && destMatch && costMatch;
+            });
+          }
+
+          // 3차 매칭: 날짜 + 기사명 일치
+          if (matchIdx === -1 && excelDriver) {
+            matchIdx = remainingSystemDeliveries.findIndex(d => {
+              const sysDate = d.loadingDate || d.requestDate;
+              const sysDriver = d.driverName || '';
+              const dateMatch = !excelDate || !sysDate || sysDate === excelDate;
+              const driverMatch = sysDriver && sysDriver.trim() === excelDriver;
+              return dateMatch && driverMatch;
+            });
+          }
+
+          if (matchIdx !== -1) {
+            const matchedDelivery = remainingSystemDeliveries.splice(matchIdx, 1)[0];
+            const sysCost = matchedDelivery.deliveryCost || matchedDelivery.assignedVehicles?.reduce((acc: number, v: any) => acc + (v.deliveryCost || 0), 0) || 70000;
+            const diff = excelCost - sysCost;
+
+            if (excelCost > 0 && Math.abs(diff) > 0) {
+              mismatchCount++;
+              pairs.push({
+                pairId: `PAIR-${matchedDelivery.id}-${rIdx}`,
+                systemDelivery: matchedDelivery,
+                excelRow: row,
+                matchStatus: 'MISMATCH',
+                systemCost: sysCost,
+                excelCost,
+                diffCost: diff,
+                memo: `시스템 ₩${sysCost.toLocaleString()}원 vs 엑셀 ₩${excelCost.toLocaleString()}원 (차액 ₩${diff.toLocaleString()}원)`,
+                isReconciled: false
+              });
+            } else {
+              autoMatchedCount++;
+              pairs.push({
+                pairId: `PAIR-${matchedDelivery.id}-${rIdx}`,
+                systemDelivery: matchedDelivery,
+                excelRow: row,
+                matchStatus: 'MATCHED',
+                systemCost: sysCost,
+                excelCost: sysCost,
+                diffCost: 0,
+                memo: '날짜/하차지/금액 100% 일치 (자동 매칭)',
+                isReconciled: true
+              });
+            }
+          } else {
+            pairs.push({
+              pairId: `EXCEL-ONLY-${rIdx}`,
+              excelRow: row,
+              matchStatus: 'EXCEL_ONLY',
+              systemCost: 0,
+              excelCost,
+              diffCost: excelCost,
+              memo: '시스템 배차 내역 미존재 (엑셀 단독 항목)',
+              isReconciled: false
+            });
+          }
+        });
+
+        // 남은 시스템 운송완료건들 (시스템 단독)
+        remainingSystemDeliveries.forEach((sysD, sIdx) => {
+          const sysCost = sysD.deliveryCost || sysD.assignedVehicles?.reduce((acc: number, v: any) => acc + (v.deliveryCost || 0), 0) || 70000;
+          pairs.push({
+            pairId: `SYS-ONLY-${sysD.id}-${sIdx}`,
+            systemDelivery: sysD,
+            matchStatus: 'SYSTEM_ONLY',
+            systemCost: sysCost,
+            excelCost: 0,
+            diffCost: -sysCost,
+            memo: '거래명세서 엑셀 누락건 (시스템 단독)',
+            isReconciled: false
+          });
+        });
+
+        setReconPairs(pairs);
+        const msg = `🎉 1:1 스마트 짝짓기 완료! [🟢 대사일치 ${autoMatchedCount}건] | [🟡 금액불일치 ${mismatchCount}건] | [🔴 엑셀단독 ${pairs.filter(p => p.matchStatus === 'EXCEL_ONLY').length}건] | [⚪ 시스템단독 ${remainingSystemDeliveries.length}건]`;
+        setReconNotificationMsg(msg);
+      } catch (err: any) {
+        showErrorModal('엑셀 파싱 중 오류가 발생하였습니다: ' + err.message);
+      }
+    };
+
+    reader.readAsBinaryString(file);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  // 💡 [사장님 지시] 건별 대사 완료 토글 및 [↩️ 대사 취소 (대기 원복)] 기능
+  const handleTogglePairReconciled = (pairId: string) => {
+    setReconPairs(prev => prev.map(p => {
+      if (p.pairId === pairId) {
+        const nextReconciled = !p.isReconciled;
+        return {
+          ...p,
+          isReconciled: nextReconciled,
+          matchStatus: nextReconciled ? 'MATCHED' : (p.diffCost !== 0 ? 'MISMATCH' : 'PENDING'),
+          memo: nextReconciled ? '담당자 수동 대사 완료' : '대사 취소됨 (대기 원복)'
+        };
+      }
+      return p;
+    }));
+  };
+
+  // 선택건 일괄 대사 완료
+  const handleBatchReconcilePairs = () => {
+    if (selectedPairIds.size === 0) {
+      showErrorModal('대사 완료 처리할 항목을 1건 이상 체크해 주세요.');
+      return;
+    }
+    setReconPairs(prev => prev.map(p => {
+      if (selectedPairIds.has(p.pairId)) {
+        return { ...p, isReconciled: true, matchStatus: 'MATCHED', memo: '선택 항목 일괄 대사 완료' };
+      }
+      return p;
+    }));
+    setSelectedPairIds(new Set());
+    setReconNotificationMsg(`✅ 선택한 Pair 항목들이 대사 완료(MATCHED)로 전환되었습니다.`);
+  };
+
+  // 💡 [사장님 지시] 선택건 일괄 대사 취소 (대기 원복)
+  const handleBatchCancelReconcilePairs = () => {
+    if (selectedPairIds.size === 0) {
+      showErrorModal('대사를 취소할 항목을 1건 이상 체크해 주세요.');
+      return;
+    }
+    setReconPairs(prev => prev.map(p => {
+      if (selectedPairIds.has(p.pairId)) {
+        return { ...p, isReconciled: false, matchStatus: 'PENDING', memo: '일괄 대사 취소 (대기 원복)' };
+      }
+      return p;
+    }));
+    setSelectedPairIds(new Set());
+    setReconNotificationMsg(`↩️ 선택한 Pair 항목들이 대사 대기(PENDING) 상태로 원복되었습니다.`);
+  };
+
+  // 💡 [사장님 지시] 💳 대사 완료 1건의 통합 매입 지급요청 생성 (Payment Request Bundle)
+  const handleExecuteBundlePaymentRequest = async () => {
+    const reconciledPairs = reconPairs.filter(p => p.isReconciled && p.systemDelivery);
+
+    if (reconciledPairs.length === 0) {
+      showErrorModal('통합 지급 요청을 실행할 대사 완료건이 없습니다. 항목 대사 완료를 먼저 진행해 주세요.');
+      return;
+    }
+
+    const bundleCode = `PAY-BUNDLE-${new Date().toISOString().substring(0, 10).replace(/-/g, '')}-${Math.floor(1000 + Math.random() * 9000)}`;
+    const totalBundleCost = reconciledPairs.reduce((acc, p) => acc + p.systemCost, 0);
+
+    try {
+      for (const pair of reconciledPairs) {
+        if (pair.systemDelivery) {
+          await db.updateRow('deliveries', pair.systemDelivery.id, {
+            reconciliationStatus: 'PAYMENT_REQUESTED',
+            paymentRequestedAt: new Date().toISOString(),
+            memo: `[통합지급요청: ${bundleCode}] ${pair.memo || ''}`
+          } as any);
+        }
+      }
+
+      setReconPairs(prev => prev.map(p => {
+        if (p.isReconciled) {
+          return { ...p, matchStatus: 'PAYMENT_REQUESTED' as any, memo: `[지급요청 묶음: ${bundleCode}]` };
+        }
+        return p;
+      }));
+
+      await refreshAllData();
+      setReconNotificationMsg(`💳 🎉 성공적으로 ${reconciledPairs.length}건 (총 ₩${totalBundleCost.toLocaleString()}원)이 [통합 매입 지급요청 번호: ${bundleCode}] 1건으로 묶여 지급 요청 완료되었습니다!`);
+    } catch (err: any) {
+      showErrorModal('통합 지급 요청 처리 중 오류가 발생하였습니다: ' + err.message);
+    }
+  };
 
   // 대사 통계 실시간 집계
   const reconStats = useMemo(() => {
+    const isPairMode = reconPairs.length > 0;
+    
+    if (isPairMode) {
+      let totalCount = reconPairs.length;
+      let totalCost = reconPairs.reduce((acc, p) => acc + p.systemCost, 0);
+      let matchedCount = reconPairs.filter(p => p.isReconciled).length;
+      let matchedCost = reconPairs.filter(p => p.isReconciled).reduce((acc, p) => acc + p.systemCost, 0);
+      let mismatchCount = reconPairs.filter(p => p.matchStatus === 'MISMATCH').length;
+      let mismatchCost = reconPairs.filter(p => p.matchStatus === 'MISMATCH').reduce((acc, p) => acc + p.excelCost, 0);
+      let paymentRequestedCount = reconPairs.filter(p => p.matchStatus === 'PAYMENT_REQUESTED').length;
+      let paymentRequestedCost = reconPairs.filter(p => p.matchStatus === 'PAYMENT_REQUESTED').reduce((acc, p) => acc + p.systemCost, 0);
+      let pendingCount = reconPairs.filter(p => !p.isReconciled && p.matchStatus !== 'PAYMENT_REQUESTED').length;
+      let pendingCost = reconPairs.filter(p => !p.isReconciled && p.matchStatus !== 'PAYMENT_REQUESTED').reduce((acc, p) => acc + p.systemCost, 0);
+
+      return {
+        totalCount, totalCost,
+        matchedCount, matchedCost,
+        mismatchCount, mismatchCost,
+        paymentRequestedCount, paymentRequestedCost,
+        pendingCount, pendingCost
+      };
+    }
+
     let totalCount = completedDeliveriesForRecon.length;
     let totalCost = 0;
     let matchedCount = 0;
@@ -278,10 +533,10 @@ export const TruckDispatch: React.FC = () => {
     let pendingCost = 0;
 
     completedDeliveriesForRecon.forEach(d => {
-      const cost = d.deliveryCost || d.assignedVehicles?.reduce((acc, v) => acc + (v.deliveryCost || 0), 0) || 70000;
+      const cost = d.deliveryCost || d.assignedVehicles?.reduce((acc: number, v: any) => acc + (v.deliveryCost || 0), 0) || 70000;
       totalCost += cost;
 
-      const st = manualReconMap[d.id]?.status || (d as any).reconciliationStatus || 'PENDING';
+      const st = (d as any).reconciliationStatus || 'PENDING';
       if (st === 'MATCHED') {
         matchedCount++;
         matchedCost += cost;
@@ -304,168 +559,68 @@ export const TruckDispatch: React.FC = () => {
       paymentRequestedCount, paymentRequestedCost,
       pendingCount, pendingCost
     };
-  }, [completedDeliveriesForRecon, manualReconMap]);
+  }, [completedDeliveriesForRecon, reconPairs]);
 
-  // 📄 엑셀 업로드 및 대사 (Reconciliation) 파싱 엔진
-  const handleExcelFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
-
-    const file = files[0];
-    const reader = new FileReader();
-
-    reader.onload = (evt) => {
-      try {
-        const bstr = evt.target?.result;
-        const workbook = XLSX.read(bstr, { type: 'binary' });
-        const sheetName = workbook.SheetNames[0];
-        const sheet = workbook.Sheets[sheetName];
-        const jsonRows: any[] = XLSX.utils.sheet_to_json(sheet, { defval: '' });
-
-        if (!jsonRows || jsonRows.length === 0) {
-          showErrorModal('업로드한 엑셀 파일에 데이터가 없습니다.');
-          return;
-        }
-
-        let matchedCount = 0;
-        let mismatchCount = 0;
-        const unmatchedList: any[] = [];
-        const newMap = { ...manualReconMap };
-
-        jsonRows.forEach(row => {
-          const keys = Object.keys(row);
-          const idKey = keys.find(k => k.includes('배차ID') || k.includes('배차번호') || k.includes('ID') || k.includes('운송ID'));
-          const costKey = keys.find(k => k.includes('운송비') || k.includes('청구금액') || k.includes('금액') || k.includes('운임'));
-          const driverKey = keys.find(k => k.includes('기사명') || k.includes('운송기사') || k.includes('기사'));
-
-          const excelId = idKey ? String(row[idKey]).trim() : '';
-          const excelCost = costKey ? Number(String(row[costKey]).replace(/[^0-9.-]+/g, '')) : 0;
-          const excelDriver = driverKey ? String(row[driverKey]).trim() : '';
-
-          let targetDelivery = completedDeliveriesForRecon.find(d => d.id.toLowerCase() === excelId.toLowerCase());
-
-          if (!targetDelivery && excelDriver) {
-            targetDelivery = completedDeliveriesForRecon.find(d => d.driverName && d.driverName.trim() === excelDriver);
-          }
-
-          if (targetDelivery) {
-            const systemCost = targetDelivery.deliveryCost || targetDelivery.assignedVehicles?.reduce((acc: number, v: any) => acc + (v.deliveryCost || 0), 0) || 70000;
-            const diff = excelCost - systemCost;
-
-            if (excelCost > 0 && Math.abs(diff) > 0) {
-              mismatchCount++;
-              newMap[targetDelivery.id] = {
-                status: 'MISMATCH',
-                excelCost,
-                diffCost: diff,
-                excelDriverName: excelDriver,
-                memo: `시스템 ₩${systemCost.toLocaleString()}원 vs 엑셀 청구 ₩${excelCost.toLocaleString()}원 (차액 ₩${diff.toLocaleString()}원)`
-              };
-            } else {
-              matchedCount++;
-              newMap[targetDelivery.id] = {
-                status: 'MATCHED',
-                excelCost: systemCost,
-                diffCost: 0,
-                excelDriverName: excelDriver,
-                memo: '엑셀 대사 금액 100% 일치'
-              };
-            }
-          } else {
-            unmatchedList.push(row);
-          }
-        });
-
-        setManualReconMap(newMap);
-        setUnmatchedExcelRows(unmatchedList);
-
-        const msg = `🎉 엑셀 대사 완료: [🟢 일치 ${matchedCount}건] | [🟡 금액 불일치 ${mismatchCount}건] | [🔴 미등록 청구건 ${unmatchedList.length}건]`;
-        setReconNotificationMsg(msg);
-      } catch (err: any) {
-        showErrorModal('엑셀 파싱 중 오류가 발생하였습니다: ' + err.message);
-      }
-    };
-
-    reader.readAsBinaryString(file);
-    if (fileInputRef.current) fileInputRef.current.value = '';
-  };
-
-  // 선택건 수동 대사 완료 전환
-  const handleBatchSetReconciled = () => {
-    if (selectedReconIds.size === 0) {
-      showErrorModal('대사 처리할 배차건을 최소 1건 이상 체크해 주세요.');
-      return;
-    }
-    const newMap = { ...manualReconMap };
-    selectedReconIds.forEach(id => {
-      newMap[id] = { status: 'MATCHED', memo: '수동 대사 완료' };
-    });
-    setManualReconMap(newMap);
-    setReconNotificationMsg(`✅ 선택한 ${selectedReconIds.size}건의 배차 내역이 대사 완료(MATCHED)로 전환되었습니다.`);
-  };
-
-  // 대사 완료건 매입 지급 요청 실행 (DB 동기화)
-  const handleExecutePaymentRequest = async () => {
-    const targetIds = Array.from(selectedReconIds).length > 0
-      ? Array.from(selectedReconIds)
-      : completedDeliveriesForRecon.filter(d => (manualReconMap[d.id]?.status === 'MATCHED' || (d as any).reconciliationStatus === 'MATCHED')).map(d => d.id);
-
-    if (targetIds.length === 0) {
-      showErrorModal('지급 요청할 대사 완료건이 없습니다. 먼저 엑셀 대사 또는 체크 후 대사 완료를 집행해 주세요.');
-      return;
-    }
-
-    try {
-      const newMap = { ...manualReconMap };
-      for (const id of targetIds) {
-        newMap[id] = { status: 'PAYMENT_REQUESTED', memo: `지급 요청 실행 (${new Date().toISOString().substring(0, 10)})` };
-        await db.updateRow('deliveries', id, { reconciliationStatus: 'PAYMENT_REQUESTED', paymentRequestedAt: new Date().toISOString() } as any);
-      }
-
-      setManualReconMap(newMap);
-      setSelectedReconIds(new Set());
-      await refreshAllData();
-      setReconNotificationMsg(`💳 성공적으로 ${targetIds.length}건의 대사 완료 내역에 대한 [매입 지급 요청]이 완료되었습니다!`);
-    } catch (err: any) {
-      showErrorModal('지급 요청 처리 중 오류가 발생하였습니다: ' + err.message);
-    }
-  };
+  // 엑셀 업로드 시 시스템 미등록 청구 항목 배열
+  const unmatchedExcelRows = useMemo(() => {
+    return reconPairs
+      .filter(p => p.matchStatus === 'EXCEL_ONLY' && p.excelRow)
+      .map(p => p.excelRow);
+  }, [reconPairs]);
 
   // 엑셀 내보내기 다운로드
   const handleExportReconciliationReport = () => {
-    if (completedDeliveriesForRecon.length === 0) {
+    if (reconPairs.length === 0 && completedDeliveriesForRecon.length === 0) {
       showErrorModal('내보낼 대사 내역이 없습니다.');
       return;
     }
 
-    const exportRows = completedDeliveriesForRecon.map((d, i) => {
-      const contract = contracts.find(c => c.id === d.contractId);
-      const customer = contract ? customers.find(c => c.id === contract.customerId) : null;
-      const localState = manualReconMap[d.id];
-      const st = localState?.status || (d as any).reconciliationStatus || 'PENDING';
-      const cost = d.deliveryCost || d.assignedVehicles?.reduce((acc: number, v: any) => acc + (v.deliveryCost || 0), 0) || 70000;
+    const exportRows = reconPairs.length > 0
+      ? reconPairs.map((p, i) => {
+          const sysD = p.systemDelivery;
+          const contract = sysD ? contracts.find(c => c.id === sysD.contractId) : null;
+          const customer = contract ? customers.find(c => c.id === contract.customerId) : null;
 
-      return {
-        '순번': i + 1,
-        '배차ID': d.id,
-        '운송일자': d.loadingDate || d.requestDate,
-        '운송 거래처': d.transportCompany || d.assignedVehicles?.[0]?.transportCompany || '자사배차',
-        '고객사명': customer?.name || '미지정',
-        '도착지(현장)': d.destinationAddress || '',
-        '운송 기사명': d.driverName || '기사미지정',
-        '차종': d.vehicleType || '3.5T',
-        '시스템 운송비(원)': cost,
-        '엑셀 청구액(원)': localState?.excelCost || cost,
-        '차액(원)': localState?.diffCost || 0,
-        '대사 상태': st === 'MATCHED' ? '대사일치' : st === 'MISMATCH' ? '금액불일치' : st === 'PAYMENT_REQUESTED' ? '지급요청완료' : '대사대기',
-        '비고 / 특이사항': localState?.memo || d.memo || ''
-      };
-    });
+          return {
+            '순번': i + 1,
+            '대사 상태': p.isReconciled ? '대사완료' : p.matchStatus === 'MISMATCH' ? '금액불일치' : p.matchStatus === 'EXCEL_ONLY' ? '엑셀단독' : '대사대기',
+            '시스템 배차ID': sysD?.id || '미존재',
+            '운송일자': sysD?.loadingDate || sysD?.requestDate || p.excelRow?.['운송일자'] || p.excelRow?.['날짜'] || '',
+            '운송 거래처': sysD?.transportCompany || sysD?.assignedVehicles?.[0]?.transportCompany || '자사배차',
+            '고객사/현장': customer?.name ? `${customer.name} (${sysD?.destinationAddress || ''})` : p.excelRow?.['하차지'] || p.excelRow?.['도착지'] || '',
+            '운송 기사명': sysD?.driverName || p.excelRow?.['기사명'] || p.excelRow?.['운송기사'] || '',
+            '시스템 운송비(원)': p.systemCost,
+            '엑셀 청구액(원)': p.excelCost,
+            '차액(원)': p.diffCost,
+            '비고 / 특이사항': p.memo || ''
+          };
+        })
+      : completedDeliveriesForRecon.map((d, i) => {
+          const contract = contracts.find(c => c.id === d.contractId);
+          const customer = contract ? customers.find(c => c.id === contract.customerId) : null;
+          const cost = d.deliveryCost || d.assignedVehicles?.reduce((acc: number, v: any) => acc + (v.deliveryCost || 0), 0) || 70000;
+
+          return {
+            '순번': i + 1,
+            '배차ID': d.id,
+            '운송일자': d.loadingDate || d.requestDate,
+            '운송 거래처': d.transportCompany || d.assignedVehicles?.[0]?.transportCompany || '자사배차',
+            '고객사명': customer?.name || '미지정',
+            '도착지(현장)': d.destinationAddress || '',
+            '운송 기사명': d.driverName || '기사미지정',
+            '차종': d.vehicleType || '3.5T',
+            '시스템 운송비(원)': cost,
+            '엑셀 청구액(원)': cost,
+            '차액(원)': 0,
+            '대사 상태': (d as any).reconciliationStatus === 'PAYMENT_REQUESTED' ? '지급요청완료' : '대사대기',
+            '비고 / 특이사항': d.memo || ''
+          };
+        });
 
     const worksheet = XLSX.utils.json_to_sheet(exportRows);
     const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, '월말_운송료_대사내역');
-    XLSX.writeFile(workbook, `월말_운송료_대사내역_${reconStartDate}_${reconEndDate}.xlsx`);
+    XLSX.utils.book_append_sheet(workbook, worksheet, '월말_운송료_1to1대사내역');
+    XLSX.writeFile(workbook, `월말_운송료_1to1대사내역_${reconStartDate}_${reconEndDate}.xlsx`);
   };
 
   // 엑셀 템플릿 다운로드
@@ -1296,9 +1451,7 @@ export const TruckDispatch: React.FC = () => {
                     );
                   })()}
 
-                  {/* ────────────────────────────────────────────────────────────────── */}
                   {/* 💬 최하단: 스마트 출고 요청 자연어 원본 텍스트 박스 */}
-                  {/* ────────────────────────────────────────────────────────────────── */}
                   <div style={{ marginBottom: '20px', padding: '14px 16px', backgroundColor: 'rgba(59,130,246,0.06)', border: '1.5px solid rgba(59,130,246,0.25)', borderRadius: '10px' }}>
                     <div style={{ fontSize: '13px', fontWeight: 800, color: 'var(--primary)', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
                       <MessageSquare size={16} /> 💬 스마트 출고 요청 자연어 원본 텍스트 (배차 판단 참고용)
@@ -1307,8 +1460,6 @@ export const TruckDispatch: React.FC = () => {
                       {selectedDelivery.rawText || selectedDelivery.memo || '요청된 자연어 원문이 없습니다.'}
                     </div>
                   </div>
-
-
                 </div>
               )}
             </div>
@@ -1316,7 +1467,7 @@ export const TruckDispatch: React.FC = () => {
         </div>
       )}
 
-      {/* 탭 2: 월말 운송료 대사 및 매입 지급 요청 */}
+      {/* 탭 2: 월말 운송료 대사 및 매입 지급 요청 (좌우 분할 1:1 대사 스튜디오) */}
       {activeTab === 'RECONCILIATION' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
           
@@ -1388,7 +1539,7 @@ export const TruckDispatch: React.FC = () => {
                   className="btn-primary"
                   style={{ padding: '8px 14px', fontSize: '12.5px', fontWeight: 800, borderRadius: '8px', display: 'inline-flex', alignItems: 'center', gap: '6px', boxShadow: '0 2px 8px rgba(59,130,246,0.25)' }}
                 >
-                  <Upload size={15} /> 📄 엑셀 거래명세서 업로드 & 자동 대사
+                  <Upload size={15} /> 📄 엑셀 거래명세서 업로드 & 자동대사
                 </button>
 
                 <button
@@ -1485,27 +1636,35 @@ export const TruckDispatch: React.FC = () => {
             </div>
           </div>
 
-          {/* 3. 대사 수행 조치 버튼 바 */}
+          {/* 3. 대사 조치 툴바 (대사 완료, 대사 취소, 1건의 통합 매입 지급요청 버튼) */}
           <div style={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '12px', padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
-            <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+            <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
               <span style={{ fontSize: '13px', fontWeight: 800, color: 'var(--text-primary)' }}>
-                체크 선택 항목: <span style={{ color: 'var(--primary)' }}>{selectedReconIds.size}건</span>
+                체크 선택 항목: <span style={{ color: 'var(--primary)' }}>{selectedPairIds.size}건</span>
               </span>
               <button
-                onClick={handleBatchSetReconciled}
-                style={{ padding: '6px 12px', fontSize: '12px', fontWeight: 800, borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-body)', color: 'var(--text-primary)', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                onClick={handleBatchReconcilePairs}
+                style={{ padding: '6px 12px', fontSize: '12px', fontWeight: 800, borderRadius: '6px', border: '1px solid #16a34a', backgroundColor: 'rgba(22,163,74,0.1)', color: '#16a34a', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
               >
-                <CheckCircle2 size={14} style={{ color: '#16a34a' }} /> 선택건 수동 대사 완료 처리
+                <CheckCircle2 size={14} /> 선택건 대사 완료 처리
+              </button>
+              
+              {/* 💡 [사장님 지시] 대사 취소 (대기 원복) 버튼 */}
+              <button
+                onClick={handleBatchCancelReconcilePairs}
+                style={{ padding: '6px 12px', fontSize: '12px', fontWeight: 800, borderRadius: '6px', border: '1px solid #eab308', backgroundColor: 'rgba(234,179,8,0.1)', color: '#ca8a04', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+              >
+                <RotateCcw size={14} /> ↩️ 선택건 대사 취소 (대기 원복)
               </button>
             </div>
 
-            {/* 메인 매입 지급 요청 실행 버튼 */}
+            {/* 💡 [사장님 지시] 💳 대사 완료 1건의 통합 매입 지급요청 생성 버튼 */}
             <button
-              onClick={handleExecutePaymentRequest}
+              onClick={handleExecuteBundlePaymentRequest}
               style={{
-                padding: '10px 20px',
+                padding: '10px 22px',
                 fontSize: '13.5px',
-                fontWeight: 800,
+                fontWeight: 900,
                 borderRadius: '8px',
                 border: 'none',
                 backgroundColor: '#2563eb',
@@ -1513,130 +1672,184 @@ export const TruckDispatch: React.FC = () => {
                 cursor: 'pointer',
                 display: 'inline-flex',
                 alignItems: 'center',
-                gap: '6px',
-                boxShadow: '0 4px 12px rgba(37,99,235,0.3)'
+                gap: '8px',
+                boxShadow: '0 4px 14px rgba(37,99,235,0.35)'
               }}
             >
-              <Send size={16} /> [💳 대사 완료건 매입 지급 요청 실행]
+              <Send size={16} /> [💳 대사 완료 1건의 통합 매입 지급요청 생성 ({reconPairs.filter(p => p.isReconciled).length}건)]
             </button>
           </div>
 
-          {/* 4. 대사 정밀 비교 테이블 */}
+          {/* 4. 💡 [사장님 지시] 좌우 분할 1:1 대사 스튜디오 메인 테이블 */}
           <div style={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '12px', padding: '16px', overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12.5px' }}>
+            <div style={{ fontSize: '13px', fontWeight: 800, color: 'var(--primary)', marginBottom: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span>↔️ [1:1 좌우 분할 대사 스튜디오] 회사의 운송완료 내역 ↔ 업로드 거래명세서 대조</span>
+              {uploadedFileName && <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>📄 업로드 파일: {uploadedFileName}</span>}
+            </div>
+
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
               <thead>
                 <tr style={{ backgroundColor: 'var(--bg-body)', borderBottom: '2px solid var(--border-color)', color: 'var(--text-secondary)' }}>
-                  <th style={{ padding: '10px 8px', textAlign: 'center', width: '40px' }}>
+                  <th style={{ padding: '10px 6px', textAlign: 'center', width: '35px' }}>
                     <input
                       type="checkbox"
-                      checked={completedDeliveriesForRecon.length > 0 && completedDeliveriesForRecon.every(d => selectedReconIds.has(d.id))}
+                      checked={reconPairs.length > 0 && reconPairs.every(p => selectedPairIds.has(p.pairId))}
                       onChange={e => {
-                        if (e.target.checked) {
-                          setSelectedReconIds(new Set(completedDeliveriesForRecon.map(d => d.id)));
-                        } else {
-                          setSelectedReconIds(new Set());
-                        }
+                        if (e.target.checked) setSelectedPairIds(new Set(reconPairs.map(p => p.pairId)));
+                        else setSelectedPairIds(new Set());
                       }}
                     />
                   </th>
-                  <th style={{ padding: '10px 8px', textAlign: 'center', width: '50px' }}>순번</th>
-                  <th style={{ padding: '10px 8px', textAlign: 'left' }}>운송일자</th>
-                  <th style={{ padding: '10px 8px', textAlign: 'left' }}>배차ID</th>
-                  <th style={{ padding: '10px 8px', textAlign: 'left' }}>운송 거래처</th>
-                  <th style={{ padding: '10px 8px', textAlign: 'left' }}>고객사 / 도착지(현장)</th>
-                  <th style={{ padding: '10px 8px', textAlign: 'left' }}>기사명 (차종)</th>
-                  <th style={{ padding: '10px 8px', textAlign: 'right' }}>시스템 운송비</th>
-                  <th style={{ padding: '10px 8px', textAlign: 'right' }}>엑셀 청구액</th>
-                  <th style={{ padding: '10px 8px', textAlign: 'right' }}>차액</th>
-                  <th style={{ padding: '10px 8px', textAlign: 'center' }}>대사 상태</th>
-                  <th style={{ padding: '10px 8px', textAlign: 'left' }}>비고 / 특이사항</th>
+
+                  {/* ────────────────── [좌측 50%: 시스템 운송 완료] ────────────────── */}
+                  <th style={{ padding: '10px 8px', textAlign: 'left', backgroundColor: 'rgba(59,130,246,0.06)', width: '42%' }}>
+                    🏢 [좌측] 회사의 운송 완료 내역 (일자 / 배차ID / 고객사 / 하차지현장 / 기사명 / 시스템운송비)
+                  </th>
+
+                  {/* ────────────────── [중앙 16%: 1:1 대조 및 조치] ────────────────── */}
+                  <th style={{ padding: '10px 8px', textAlign: 'center', backgroundColor: 'var(--bg-body)', width: '18%' }}>
+                    ↔️ 1:1 대조 & 건별 대사/취소 조치
+                  </th>
+
+                  {/* ────────────────── [우측 42%: 엑셀 거래명세서] ────────────────── */}
+                  <th style={{ padding: '10px 8px', textAlign: 'left', backgroundColor: 'rgba(34,197,94,0.06)', width: '40%' }}>
+                    📄 [우측] 업로드한 거래명세서 엑셀 (일자 / 하차지현장 / 운송기사 / 청구금액)
+                  </th>
                 </tr>
               </thead>
               <tbody>
-                {completedDeliveriesForRecon.length === 0 ? (
+                {reconPairs.length === 0 ? (
                   <tr>
-                    <td colSpan={12} style={{ textAlign: 'center', padding: '40px 10px', color: 'var(--text-muted)' }}>
-                      조건에 해당하는 운송 완료 내역이 없습니다.
+                    <td colSpan={4} style={{ textAlign: 'center', padding: '40px 10px', color: 'var(--text-muted)' }}>
+                      상단 [📄 엑셀 거래명세서 업로드 & 자동대사] 버튼을 클릭하여 명세서 파일(.xlsx, .csv)을 업로드해 주세요.
                     </td>
                   </tr>
                 ) : (
-                  completedDeliveriesForRecon.map((d, i) => {
-                    const contract = contracts.find(c => c.id === d.contractId);
+                  reconPairs.map((pair, idx) => {
+                    const sysD = pair.systemDelivery;
+                    const contract = sysD ? contracts.find(c => c.id === sysD.contractId) : null;
                     const customer = contract ? customers.find(c => c.id === contract.customerId) : null;
-                    const isChecked = selectedReconIds.has(d.id);
-
-                    const localState = manualReconMap[d.id];
-                    const currentStatus = localState?.status || (d as any).reconciliationStatus || 'PENDING';
-                    const systemCost = d.deliveryCost || d.assignedVehicles?.reduce((acc: number, v: any) => acc + (v.deliveryCost || 0), 0) || 70000;
-                    const excelCost = localState?.excelCost !== undefined ? localState.excelCost : systemCost;
-                    const diffCost = localState?.diffCost !== undefined ? localState.diffCost : 0;
+                    const isChecked = selectedPairIds.has(pair.pairId);
 
                     return (
                       <tr
-                        key={d.id}
+                        key={pair.pairId}
                         style={{
                           borderBottom: '1px solid var(--border-color)',
-                          backgroundColor: isChecked ? 'rgba(59,130,246,0.05)' : 'transparent'
+                          backgroundColor: isChecked
+                            ? 'rgba(59,130,246,0.08)'
+                            : pair.isReconciled
+                            ? 'rgba(34,197,94,0.03)'
+                            : pair.matchStatus === 'MISMATCH'
+                            ? 'rgba(234,179,8,0.04)'
+                            : 'transparent'
                         }}
                       >
-                        <td style={{ padding: '10px 8px', textAlign: 'center' }}>
+                        <td style={{ padding: '10px 6px', textAlign: 'center' }}>
                           <input
                             type="checkbox"
                             checked={isChecked}
                             onChange={() => {
-                              const newSet = new Set(selectedReconIds);
-                              if (newSet.has(d.id)) newSet.delete(d.id);
-                              else newSet.add(d.id);
-                              setSelectedReconIds(newSet);
+                              const newSet = new Set(selectedPairIds);
+                              if (newSet.has(pair.pairId)) newSet.delete(pair.pairId);
+                              else newSet.add(pair.pairId);
+                              setSelectedPairIds(newSet);
                             }}
                           />
                         </td>
-                        <td style={{ padding: '10px 8px', textAlign: 'center', color: 'var(--text-muted)' }}>{i + 1}</td>
-                        <td style={{ padding: '10px 8px', fontWeight: 700 }}>{d.loadingDate || d.requestDate}</td>
-                        <td style={{ padding: '10px 8px', fontWeight: 800, color: 'var(--primary)' }}>{d.id}</td>
-                        <td style={{ padding: '10px 8px', fontWeight: 700 }}>
-                          {d.transportCompany || d.assignedVehicles?.[0]?.transportCompany || '자사배차'}
-                        </td>
-                        <td style={{ padding: '10px 8px' }}>
-                          <div style={{ fontWeight: 800 }}>🏢 {customer?.name || '미지정'}</div>
-                          <div style={{ fontSize: '11.5px', color: 'var(--text-muted)' }}>📍 {d.destinationAddress || '도착지 미지정'}</div>
-                        </td>
-                        <td style={{ padding: '10px 8px', fontWeight: 700 }}>
-                          🚛 {d.driverName || '기사미지정'} ({d.vehicleType || '3.5T'})
-                        </td>
-                        <td style={{ padding: '10px 8px', textAlign: 'right', fontWeight: 800 }}>
-                          ₩{systemCost.toLocaleString()}원
-                        </td>
-                        <td style={{ padding: '10px 8px', textAlign: 'right', fontWeight: 800, color: diffCost !== 0 ? '#ca8a04' : 'var(--text-primary)' }}>
-                          ₩{excelCost.toLocaleString()}원
-                        </td>
-                        <td style={{ padding: '10px 8px', textAlign: 'right', fontWeight: 800, color: diffCost > 0 ? '#dc2626' : diffCost < 0 ? '#16a34a' : 'var(--text-muted)' }}>
-                          {diffCost > 0 ? `+₩${diffCost.toLocaleString()}` : diffCost < 0 ? `-₩${Math.abs(diffCost).toLocaleString()}` : '0원'}
-                        </td>
-                        <td style={{ padding: '10px 8px', textAlign: 'center' }}>
-                          {currentStatus === 'MATCHED' && (
-                            <span style={{ padding: '3px 8px', borderRadius: '12px', fontSize: '11px', fontWeight: 800, backgroundColor: 'rgba(34,197,94,0.15)', color: '#16a34a', border: '1px solid rgba(34,197,94,0.3)' }}>
-                              🟢 대사일치
-                            </span>
-                          )}
-                          {currentStatus === 'MISMATCH' && (
-                            <span style={{ padding: '3px 8px', borderRadius: '12px', fontSize: '11px', fontWeight: 800, backgroundColor: 'rgba(234,179,8,0.15)', color: '#ca8a04', border: '1px solid rgba(234,179,8,0.3)' }}>
-                              🟡 금액불일치
-                            </span>
-                          )}
-                          {currentStatus === 'PAYMENT_REQUESTED' && (
-                            <span style={{ padding: '3px 8px', borderRadius: '12px', fontSize: '11px', fontWeight: 800, backgroundColor: 'rgba(59,130,246,0.15)', color: '#2563eb', border: '1px solid rgba(59,130,246,0.3)' }}>
-                              💳 지급요청완료
-                            </span>
-                          )}
-                          {currentStatus === 'PENDING' && (
-                            <span style={{ padding: '3px 8px', borderRadius: '12px', fontSize: '11px', fontWeight: 700, backgroundColor: 'var(--bg-body)', color: 'var(--text-muted)', border: '1px solid var(--border-color)' }}>
-                              ⚪ 대사대기
-                            </span>
+
+                        {/* ────────────────── [좌측: 시스템 운송완료] ────────────────── */}
+                        <td style={{ padding: '10px 8px', verticalAlign: 'top', borderRight: '1px solid var(--border-color)' }}>
+                          {sysD ? (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <span style={{ fontWeight: 800, color: 'var(--primary)' }}>{sysD.id}</span>
+                                <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>📅 {sysD.loadingDate || sysD.requestDate}</span>
+                              </div>
+                              <div style={{ fontWeight: 800 }}>🏢 {customer?.name || '미지정 고객사'}</div>
+                              <div style={{ color: 'var(--text-secondary)', fontSize: '11.5px' }}>📍 {sysD.destinationAddress || '도착지 미지정'}</div>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '2px' }}>
+                                <span>🚛 {sysD.driverName || '기사미지정'} ({sysD.vehicleType || '3.5T'})</span>
+                                <span style={{ fontWeight: 800, color: 'var(--text-primary)' }}>₩{pair.systemCost.toLocaleString()}원</span>
+                              </div>
+                            </div>
+                          ) : (
+                            <div style={{ color: '#ef4444', fontStyle: 'italic', padding: '12px 0' }}>
+                              🔴 시스템 배차 내역에 미존재 (엑셀 단독 청구 항목)
+                            </div>
                           )}
                         </td>
-                        <td style={{ padding: '10px 8px', fontSize: '11.5px', color: 'var(--text-secondary)' }}>
-                          {localState?.memo || d.memo || '-'}
+
+                        {/* ────────────────── [중앙: 1:1 대조 결과 & 조치] ────────────────── */}
+                        <td style={{ padding: '10px 8px', textAlign: 'center', verticalAlign: 'middle', borderRight: '1px solid var(--border-color)' }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px' }}>
+                            {pair.isReconciled ? (
+                              <span style={{ padding: '4px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: 900, backgroundColor: 'rgba(34,197,94,0.15)', color: '#16a34a', border: '1px solid rgba(34,197,94,0.3)' }}>
+                                🟢 대사완료 (일치)
+                              </span>
+                            ) : pair.matchStatus === 'MISMATCH' ? (
+                              <span style={{ padding: '4px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: 900, backgroundColor: 'rgba(234,179,8,0.15)', color: '#ca8a04', border: '1px solid rgba(234,179,8,0.3)' }}>
+                                🟡 금액불일치 (차액 ₩{pair.diffCost.toLocaleString()}원)
+                              </span>
+                            ) : pair.matchStatus === 'EXCEL_ONLY' ? (
+                              <span style={{ padding: '4px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: 800, backgroundColor: 'rgba(239,68,68,0.15)', color: '#dc2626', border: '1px solid rgba(239,68,68,0.3)' }}>
+                                🔴 엑셀단독 (미등록)
+                              </span>
+                            ) : pair.matchStatus === 'SYSTEM_ONLY' ? (
+                              <span style={{ padding: '4px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: 700, backgroundColor: 'var(--bg-body)', color: 'var(--text-muted)', border: '1px solid var(--border-color)' }}>
+                                ⚪ 시스템단독 (명세서누락)
+                              </span>
+                            ) : (
+                              <span style={{ padding: '4px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: 700, backgroundColor: 'var(--bg-body)', color: 'var(--text-muted)', border: '1px solid var(--border-color)' }}>
+                                ⚪ 대사대기
+                              </span>
+                            )}
+
+                            {!pair.isReconciled ? (
+                              <button
+                                onClick={() => handleTogglePairReconciled(pair.pairId)}
+                                style={{ padding: '4px 10px', fontSize: '11.5px', fontWeight: 800, borderRadius: '6px', border: '1px solid #16a34a', backgroundColor: '#16a34a', color: '#fff', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '3px' }}
+                              >
+                                <CheckCircle2 size={13} /> 건별 대사 완료
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => handleTogglePairReconciled(pair.pairId)}
+                                style={{ padding: '4px 10px', fontSize: '11.5px', fontWeight: 800, borderRadius: '6px', border: '1px solid #eab308', backgroundColor: 'rgba(234,179,8,0.12)', color: '#ca8a04', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '3px' }}
+                              >
+                                <RotateCcw size={13} /> ↩️ 대사 취소 (대기 원복)
+                              </button>
+                            )}
+                          </div>
+                        </td>
+
+                        {/* ────────────────── [우측: 업로드 엑셀 청구건] ────────────────── */}
+                        <td style={{ padding: '10px 8px', verticalAlign: 'top' }}>
+                          {pair.excelRow ? (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <span style={{ fontWeight: 800, color: 'var(--text-primary)' }}>
+                                  📄 {pair.excelRow['배차ID'] || pair.excelRow['배차번호'] || pair.excelRow['ID'] || `행 #${idx + 1}`}
+                                </span>
+                                <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                                  📅 {pair.excelRow['운송일자'] || pair.excelRow['날짜'] || pair.excelRow['일자'] || '-'}
+                                </span>
+                              </div>
+                              <div style={{ color: 'var(--text-secondary)', fontSize: '11.5px' }}>
+                                📍 {pair.excelRow['하차지'] || pair.excelRow['도착지'] || pair.excelRow['현장'] || '-'}
+                              </div>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '2px' }}>
+                                <span>🚛 {pair.excelRow['기사명'] || pair.excelRow['운송기사'] || pair.excelRow['기사'] || '-'}</span>
+                                <span style={{ fontWeight: 900, color: pair.diffCost !== 0 ? '#ca8a04' : '#16a34a' }}>
+                                  ₩{pair.excelCost.toLocaleString()}원
+                                </span>
+                              </div>
+                            </div>
+                          ) : (
+                            <div style={{ color: 'var(--text-muted)', fontStyle: 'italic', padding: '12px 0' }}>
+                              ⚪ 업로드한 엑셀 명세서에 누락된 배차 항목
+                            </div>
+                          )}
                         </td>
                       </tr>
                     );
