@@ -1,7 +1,7 @@
 // src/pages/asset_assignment.tsx
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { Wrench, CheckCircle, PackageSearch, Layers, Truck, ChevronDown, Check, Activity } from 'lucide-react';
+import { Wrench, CheckCircle, PackageSearch, Layers, Truck, ChevronDown, Check, Activity, Search } from 'lucide-react';
 
 export const AssetAssignment: React.FC = () => {
   const { hasPermission, contractAssets, contracts, customers, assets, assignAssetToContract } = useApp();
@@ -9,6 +9,7 @@ export const AssetAssignment: React.FC = () => {
   const [selectedContractId, setSelectedContractId] = useState<string>('');
   const [selectedCaId, setSelectedCaId] = useState<string>('');
   const [selectedAssetId, setSelectedAssetId] = useState<string>('');
+  const [searchAssetNo, setSearchAssetNo] = useState(''); // 🔍 관리번호/제조번호 검색 필터
 
   const canEdit = hasPermission('dispatch_assign', 'save');
   const canView = hasPermission('dispatch_assign', 'view');
@@ -89,6 +90,16 @@ export const AssetAssignment: React.FC = () => {
     if (requiredModels.length > 0) {
       availableAssets = availableAssets.filter(a => requiredModels.some(req => isModelMatch(a.modelName, req)));
     }
+  }
+
+  // 🔍 관리번호(assetNo) / 제조번호(serialNo) / 모델명 검색 필터 적용
+  if (searchAssetNo.trim()) {
+    const q = searchAssetNo.trim().toLowerCase();
+    availableAssets = availableAssets.filter(a =>
+      (a.assetNo && a.assetNo.toLowerCase().includes(q)) ||
+      (a.serialNo && a.serialNo.toLowerCase().includes(q)) ||
+      (a.modelName && a.modelName.toLowerCase().includes(q))
+    );
   }
 
   // Maintenance Score 기준 오름차순 정렬 (0에 가까울수록 우선)
@@ -282,6 +293,37 @@ export const AssetAssignment: React.FC = () => {
                 </button>
               )}
             </div>
+
+            {/* 🔍 관리번호 / 제조번호 검색 필터 바 */}
+            <div style={{ padding: '6px 10px', borderBottom: '1px solid var(--border-color)', backgroundColor: '#f8fafc', flexShrink: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <Search size={13} color="#22c55e" style={{ flexShrink: 0 }} />
+              <input
+                type="text"
+                placeholder="관리번호 또는 제조번호 검색 (예: G19013, SN-12345...)"
+                value={searchAssetNo}
+                onChange={e => setSearchAssetNo(e.target.value)}
+                style={{
+                  flex: 1,
+                  padding: '5px 8px',
+                  borderRadius: '5px',
+                  border: `1.5px solid ${searchAssetNo ? '#22c55e' : '#e2e8f0'}`,
+                  fontSize: '11.5px',
+                  fontWeight: 600,
+                  outline: 'none',
+                  color: '#111',
+                  backgroundColor: '#fff',
+                  transition: 'border-color 0.2s'
+                }}
+              />
+              {searchAssetNo && (
+                <button
+                  onClick={() => setSearchAssetNo('')}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', fontSize: '14px', lineHeight: 1, padding: '2px 4px', borderRadius: '3px' }}
+                  title="검색어 초기화"
+                >✕</button>
+              )}
+            </div>
+
             <div style={{ flex: 1, overflowY: 'auto', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: '8px', padding: '12px', alignContent: 'start' }}>
               {availableAssets.length === 0 ? (
                 <div style={{ gridColumn: '1 / -1', padding: '30px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '12px' }}>
