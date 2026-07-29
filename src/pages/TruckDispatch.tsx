@@ -757,11 +757,6 @@ export const TruckDispatch: React.FC = () => {
 
     const reconciledPairs = reconPairs.filter(p => p.isReconciled && p.systemDelivery);
 
-    if (reconciledPairs.length === 0) {
-      showErrorModal('통합 지급 요청을 실행할 대사 완료된 시스템 배차건이 없습니다.');
-      return;
-    }
-
     const bundleCode = `PAY-BUNDLE-${new Date().toISOString().substring(0, 10).replace(/-/g, '')}-${Math.floor(1000 + Math.random() * 9000)}`;
     const totalBundleCost = reconciledPairs.reduce((acc, p) => acc + p.systemCost, 0);
 
@@ -789,6 +784,85 @@ export const TruckDispatch: React.FC = () => {
       showErrorModal('지급 요청 처리 중 오류가 발생하였습니다: ' + err.message);
     }
   };
+
+  // 대사 통계 실시간 집계 (사장님 지시: 엑셀 청구 건수와 시스템 배차 건수를 직관적으로 명확히 분리)
+  const reconStats = useMemo(() => {
+    const isPairMode = reconPairs.length > 0;
+    
+    if (isPairMode) {
+      // 📄 엑셀 거래명세서 기준 업로드 총 건수 및 총 금액
+      const excelPairs = reconPairs.filter(p => p.excelRow);
+      let excelTotalCount = excelPairs.length;
+      let excelTotalCost = excelPairs.reduce((acc, p) => acc + p.excelCost, 0);
+
+      // 🏢 시스템 배차 기준 총 건수
+      let systemTotalCount = completedDeliveriesForRecon.length;
+
+      let matchedCount = reconPairs.filter(p => p.isReconciled).length;
+      let matchedCost = reconPairs.filter(p => p.isReconciled).reduce((acc, p) => acc + p.systemCost, 0);
+      let mismatchCount = reconPairs.filter(p => p.matchStatus === 'MISMATCH').length;
+      let mismatchCost = reconPairs.filter(p => p.matchStatus === 'MISMATCH').reduce((acc, p) => acc + p.excelCost, 0);
+      let paymentRequestedCount = reconPairs.filter(p => p.matchStatus === 'PAYMENT_REQUESTED').length;
+      let paymentRequestedCost = reconPairs.filter(p => p.matchStatus === 'PAYMENT_REQUESTED').reduce((acc, p) => acc + p.systemCost, 0);
+      let pendingCount = reconPairs.filter(p => !p.isReconciled && p.matchStatus !== 'PAYMENT_REQUESTED').length;
+      let pendingCost = reconPairs.filter(p => !p.isReconciled && p.matchStatus !== 'PAYMENT_REQUESTED').reduce((acc, p) => acc + p.systemCost, 0);
+
+      return {
+        isPairMode: true,
+        excelTotalCount, excelTotalCost,
+        systemTotalCount,
+        totalCount: excelTotalCount, // 엑셀 청구 항목 건수를 기본 총건수로 연동 (33건)
+        totalCost: excelTotalCost,
+        matchedCount, matchedCost,
+        mismatchCount, mismatchCost,
+        paymentRequestedCount, paymentRequestedCost,
+        pendingCount, pendingCost
+      };
+    }
+
+    let totalCount = completedDeliveriesForRecon.length;
+    let totalCost = 0;
+    let matchedCount = 0;
+    let matchedCost = 0;
+    let mismatchCount = 0;
+    let mismatchCost = 0;
+    let paymentRequestedCount = 0;
+    let paymentRequestedCost = 0;
+    let pendingCount = 0;
+    let pendingCost = 0;
+
+    completedDeliveriesForRecon.forEach(d => {
+      const cost = d.deliveryCost || d.assignedVehicles?.reduce((acc: number, v: any) => acc + (v.deliveryCost || 0), 0) || 70000;
+      totalCost += cost;
+
+      const st = (d as any).reconciliationStatus || 'PENDING';
+      if (st === 'MATCHED') {
+        matchedCount++;
+        matchedCost += cost;
+      } else if (st === 'MISMATCH') {
+        mismatchCount++;
+        mismatchCost += cost;
+      } else if (st === 'PAYMENT_REQUESTED') {
+        paymentRequestedCount++;
+        paymentRequestedCost += cost;
+      } else {
+        pendingCount++;
+        pendingCost += cost;
+      }
+    });
+
+    return {
+      isPairMode: false,
+      excelTotalCount: 0,
+      excelTotalCost: 0,
+      systemTotalCount: totalCount,
+      totalCount, totalCost,
+      matchedCount, matchedCost,
+      mismatchCount, mismatchCost,
+      paymentRequestedCount, paymentRequestedCost,
+      pendingCount, pendingCost
+    };
+  }, [reconPairs, completedDeliveriesForRecon]);
 
   // 💡 [사장님 지시] 건별 대사 완료 토글 및 [↩️ 대사 취소 (대기 원복)] 기능 (금액 상이 시 대사 거절)
   const handleTogglePairReconciled = (pairId: string) => {
@@ -863,71 +937,6 @@ export const TruckDispatch: React.FC = () => {
     setSelectedPairIds(new Set());
     setReconNotificationMsg(`↩️ 선택한 Pair 항목들이 대사 대기(PENDING) 상태로 원복되었습니다.`);
   };
-
-  // 대사 통계 실시간 집계
-  const reconStats = useMemo(() => {
-    const isPairMode = reconPairs.length > 0;
-    
-    if (isPairMode) {
-      let totalCount = reconPairs.length;
-      let totalCost = reconPairs.reduce((acc, p) => acc + p.systemCost, 0);
-      let matchedCount = reconPairs.filter(p => p.isReconciled).length;
-      let matchedCost = reconPairs.filter(p => p.isReconciled).reduce((acc, p) => acc + p.systemCost, 0);
-      let mismatchCount = reconPairs.filter(p => p.matchStatus === 'MISMATCH').length;
-      let mismatchCost = reconPairs.filter(p => p.matchStatus === 'MISMATCH').reduce((acc, p) => acc + p.excelCost, 0);
-      let paymentRequestedCount = reconPairs.filter(p => p.matchStatus === 'PAYMENT_REQUESTED').length;
-      let paymentRequestedCost = reconPairs.filter(p => p.matchStatus === 'PAYMENT_REQUESTED').reduce((acc, p) => acc + p.systemCost, 0);
-      let pendingCount = reconPairs.filter(p => !p.isReconciled && p.matchStatus !== 'PAYMENT_REQUESTED').length;
-      let pendingCost = reconPairs.filter(p => !p.isReconciled && p.matchStatus !== 'PAYMENT_REQUESTED').reduce((acc, p) => acc + p.systemCost, 0);
-
-      return {
-        totalCount, totalCost,
-        matchedCount, matchedCost,
-        mismatchCount, mismatchCost,
-        paymentRequestedCount, paymentRequestedCost,
-        pendingCount, pendingCost
-      };
-    }
-
-    let totalCount = completedDeliveriesForRecon.length;
-    let totalCost = 0;
-    let matchedCount = 0;
-    let matchedCost = 0;
-    let mismatchCount = 0;
-    let mismatchCost = 0;
-    let paymentRequestedCount = 0;
-    let paymentRequestedCost = 0;
-    let pendingCount = 0;
-    let pendingCost = 0;
-
-    completedDeliveriesForRecon.forEach(d => {
-      const cost = d.deliveryCost || d.assignedVehicles?.reduce((acc: number, v: any) => acc + (v.deliveryCost || 0), 0) || 70000;
-      totalCost += cost;
-
-      const st = (d as any).reconciliationStatus || 'PENDING';
-      if (st === 'MATCHED') {
-        matchedCount++;
-        matchedCost += cost;
-      } else if (st === 'MISMATCH') {
-        mismatchCount++;
-        mismatchCost += cost;
-      } else if (st === 'PAYMENT_REQUESTED') {
-        paymentRequestedCount++;
-        paymentRequestedCost += cost;
-      } else {
-        pendingCount++;
-        pendingCost += cost;
-      }
-    });
-
-    return {
-      totalCount, totalCost,
-      matchedCount, matchedCost,
-      mismatchCount, mismatchCost,
-      paymentRequestedCount, paymentRequestedCost,
-      pendingCount, pendingCost
-    };
-  }, [completedDeliveriesForRecon, reconPairs]);
 
   // 엑셀 업로드 시 시스템 미등록 청구 항목 배열
   const unmatchedExcelRows = useMemo(() => {
@@ -1940,7 +1949,9 @@ export const TruckDispatch: React.FC = () => {
             {/* 💡 [사장님 지시] Row 2: 각 유형 집계를 컴팩트 소형 카드로 축소하여 상단으로 배치 */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px', paddingTop: '4px', borderTop: '1px dashed var(--border-color)' }}>
               <div style={{ backgroundColor: 'var(--bg-body)', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '8px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: '11.5px', fontWeight: 700, color: 'var(--text-muted)' }}>📦 총 운송 완료</span>
+                <span style={{ fontSize: '11.5px', fontWeight: 700, color: 'var(--text-muted)' }}>
+                  {reconStats.isPairMode ? '📄 엑셀 청구 항목' : '🏢 총 운송 완료'}
+                </span>
                 <div style={{ textAlign: 'right' }}>
                   <span style={{ fontSize: '14px', fontWeight: 900, color: 'var(--text-primary)', marginRight: '6px' }}>{reconStats.totalCount}건</span>
                   <span style={{ fontSize: '12px', fontWeight: 800, color: 'var(--primary)' }}>₩{reconStats.totalCost.toLocaleString()}원</span>
