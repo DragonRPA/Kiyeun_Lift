@@ -508,17 +508,52 @@ export const TruckDispatch: React.FC = () => {
             rowObj[hName] = String(rowArr[cIdx] !== undefined ? rowArr[cIdx] : '').trim();
           });
 
-          // 디토 상속 및 날짜/장소 처리
           const keys = Object.keys(rowObj);
           const dateKey = keys.find(k => k.includes('일자') || k.includes('날짜') || k.includes('운송일'));
           const originKey = keys.find(k => k.includes('상차지') || k.includes('출발지'));
           const destKey = keys.find(k => k.includes('하차지') || k.includes('도착지'));
           const costKey = keys.find(k => k.includes('합계') || k.includes('운송비') || k.includes('청구금액') || k.includes('금액') || k.includes('운임'));
 
-          let rawDate = dateKey ? rowObj[dateKey] : '';
-          let rawOrigin = originKey ? rowObj[originKey] : '';
-          let rawDest = destKey ? rowObj[destKey] : '';
-          const excelCost = costKey ? Number(String(rowObj[costKey]).replace(/[^0-9.-]+/g, '')) : 0;
+          // 💡 [사장님 지목 버그 완벽 수술] 디토 상속(이전 행 데이터 가져오기)을 실행하기 전에,
+          //    원본 셀에 실제 거래 데이터(일자, 상/하차지, 금액, 현장/업체/비고)나 명시적 디토 기호('"','·','〃')가 있는지 1차 검증!
+          const rawDateCell = dateKey ? String(rowObj[dateKey]).trim() : '';
+          const rawOriginCell = originKey ? String(rowObj[originKey]).trim() : '';
+          const rawDestCell = destKey ? String(rowObj[destKey]).trim() : '';
+          const rawCostStr = costKey ? String(rowObj[costKey]).replace(/[^0-9.-]+/g, '') : '';
+          const rawCost = Number(rawCostStr) || 0;
+
+          const isExplicitDittoSymbol = (val: string) => val === '"' || val === '·' || val === '〃' || val === "''";
+
+          // 비고/현장/업체 컬럼 원본 셀 데이터 체크
+          const rawMemoParts: string[] = [];
+          keys.forEach(k => {
+            if (!isMemoKey(k)) return;
+            const val = String(rowObj[k] || '').trim();
+            if (val && !isExplicitDittoSymbol(val) && val !== '-') {
+              rawMemoParts.push(val);
+            }
+          });
+
+          const hasOriginalContent =
+            (rawDateCell && !isExplicitDittoSymbol(rawDateCell)) ||
+            (rawOriginCell && !isExplicitDittoSymbol(rawOriginCell)) ||
+            (rawDestCell && !isExplicitDittoSymbol(rawDestCell)) ||
+            (rawCost > 0) ||
+            (rawMemoParts.length > 0) ||
+            isExplicitDittoSymbol(rawDateCell) ||
+            isExplicitDittoSymbol(rawOriginCell) ||
+            isExplicitDittoSymbol(rawDestCell);
+
+          // NO(번호)만 들어있고 실제 거래 내용 및 디토 기호가 전부 비어있는 가짜 덤미 행(예: NO 34번)은 디토 상속 전 즉시 패스!
+          if (!hasOriginalContent) {
+            continue;
+          }
+
+          // 디토 상속 처리 (유효 거래 데이터 행인 경우만 집행)
+          let rawDate = rawDateCell;
+          let rawOrigin = rawOriginCell;
+          let rawDest = rawDestCell;
+          const excelCost = rawCost;
 
           if (isDitto(rawDate) && lastDate) rawDate = lastDate;
           else if (rawDate && !isDitto(rawDate)) lastDate = rawDate;
@@ -569,16 +604,6 @@ export const TruckDispatch: React.FC = () => {
           });
 
           if (memoParts.length > 0) rowObj['비고'] = memoParts.join(' | ');
-
-          // 💡 [사장님 지시] NO(번호)만 들어있고 실제 거래 내용(일자, 상/하차지, 운송비, 비고)이 텅 빈 가짜 더미 행 걸러내기!
-          const hasValidContent = (rawDate && !isDitto(rawDate)) || 
-                                  (rawOrigin && !isDitto(rawOrigin)) || 
-                                  (rawDest && !isDitto(rawDest)) || 
-                                  (excelCost > 0) || 
-                                  (memoParts.length > 0);
-          if (!hasValidContent) {
-            continue; // 내용이 없는 덤미 항목 제외!
-          }
 
           parsedRows.push(rowObj);
         }
