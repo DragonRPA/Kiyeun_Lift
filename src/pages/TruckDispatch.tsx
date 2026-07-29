@@ -80,6 +80,18 @@ export const TruckDispatch: React.FC = () => {
     }
   };
 
+  const getContract = (contractId?: string) => contracts.find(c => c.id === contractId);
+  const getCustomer = (customerId?: string) => customers.find(c => c.id === customerId);
+
+  // 1. 배차 4단계 진행 상태 판정 헬퍼
+  const getNormalizedDeliveryStatus = (d: Delivery): 'PENDING' | 'DISPATCHED' | 'DELIVERED' | 'CANCELLED' => {
+    if (!d) return 'PENDING';
+    if (d.status === 'DISPATCHED') return 'DISPATCHED';
+    if (d.status === 'DELIVERED' || d.status === 'COMPLETED') return 'DELIVERED';
+    if (d.status === 'CANCELLED') return 'CANCELLED';
+    return 'PENDING';
+  };
+
   const [activeTab, setActiveTab] = useState<'DISPATCH' | 'RECONCILIATION'>('DISPATCH');
 
   // 4단계 배차 진행 상태 탭 state ('ALL' | 'PENDING' | 'DISPATCHED' | 'DELIVERED' | 'CANCELLED')
@@ -468,16 +480,6 @@ export const TruckDispatch: React.FC = () => {
     XLSX.writeFile(wb, '월말_운송료_대사_거래명세서_양식.xlsx');
   };
 
-  const getContract = (contractId?: string) => contracts.find(c => c.id === contractId);
-  const getCustomer = (customerId?: string) => customers.find(c => c.id === customerId);
-
-  // 1. 배차 4단계 진행 상태 판정 헬퍼
-  const getNormalizedDeliveryStatus = (d: Delivery): 'PENDING' | 'DISPATCHED' | 'DELIVERED' | 'CANCELLED' => {
-    if (d.status === 'DISPATCHED') return 'DISPATCHED';
-    if (d.status === 'DELIVERED' || d.status === 'COMPLETED') return 'DELIVERED';
-    if (d.status === 'CANCELLED') return 'CANCELLED';
-    return 'PENDING';
-  };
 
   // 2. 배차건 정밀 필터링 (상태 4단계 + 요청/운송일 기간 피커 + 검색어)
   const filteredDeliveries = useMemo(() => {

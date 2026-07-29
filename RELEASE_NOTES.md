@@ -1,3 +1,16 @@
+# Release Notes (v1.13.0.Build.00001 - 2026-07-29 11:53)
+
+## 🚑 [배차 운송관리 메뉴 흰색 화면 (White Screen Crash) 오류 긴급 패치] `TruckDispatch.tsx` 헬퍼 함수 호이스팅 완료
+
+- **개편 배경**: 배차 운송관리 메뉴 접속 시 `getNormalizedDeliveryStatus` 헬퍼 함수 선언 전 참조로 인한 `ReferenceError` 로 화면이 흰색(White Screen)으로 뻗던 런타임 오류를 패치함.
+- **주요 구현 내역**:
+  1. **[헬퍼 함수 컴포넌트 상단 호이스팅]**:
+     - `getNormalizedDeliveryStatus`, `getContract`, `getCustomer` 함수를 컴포넌트 상단으로 이동시켜 `useMemo` 초기화 전 호출 문제 완벽 해소.
+  2. **[렌더링 예외 방어 로직 강화]**:
+     - 전달받은 delivery 객체 `d`가 undefined/null 인 예외 케이스 처리 보강.
+
+---
+
 # Release Notes (v1.13.0.Build.00000 - 2026-07-28 18:29)
 
 ## 📄 [월말 운송료 대사 및 매입 지급 요청 업무 시스템 구축] `TruckDispatch.tsx` 대사 파이프라인 전면 장착
