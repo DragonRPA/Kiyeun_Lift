@@ -30,7 +30,9 @@ interface AssignedVehicleRow {
   vehicleNo: string;
   driverName: string;
   driverContact: string;
-  deliveryCost: number;
+  expectedCost: number; // 💰 예상 운송비 (원) - 필수
+  finalCost?: number;   // 💵 실제 운송비 (원) - 선택
+  deliveryCost: number; // 기존 호환용
 }
 
 export interface ReconPairRow {
@@ -1121,6 +1123,8 @@ export const TruckDispatch: React.FC = () => {
       vehicleNo: d.vehicleNo || '',
       driverName: d.driverName || '',
       driverContact: d.driverContact || '',
+      expectedCost: d.expectedCost || d.deliveryCost || 70000,
+      finalCost: d.finalCost !== undefined ? d.finalCost : undefined,
       deliveryCost: d.finalCost || d.expectedCost || d.deliveryCost || 70000
     }]);
   };
@@ -1153,6 +1157,8 @@ export const TruckDispatch: React.FC = () => {
         vehicleNo: '',
         driverName: '',
         driverContact: '',
+        expectedCost: 70000,
+        finalCost: undefined,
         deliveryCost: 70000
       }
     ]);
@@ -1182,7 +1188,11 @@ export const TruckDispatch: React.FC = () => {
     try {
       const finalLoadingSlot = loadingTimeSlot === '희망시간' ? loadingCustomTime : loadingTimeSlot;
       const finalUnloadingSlot = unloadingTimeSlot === '희망시간' ? unloadingCustomTime : unloadingTimeSlot;
-      const totalCost = assignedVehicles.reduce((sum, v) => sum + (Number(v.deliveryCost) || 0), 0);
+      const totalExpectedCost = assignedVehicles.reduce((sum, v) => sum + (Number(v.expectedCost) || 0), 0);
+      const hasFinalCostInput = assignedVehicles.some(v => v.finalCost !== undefined && v.finalCost !== null && Number(v.finalCost) > 0);
+      const totalFinalCost = hasFinalCostInput 
+        ? assignedVehicles.reduce((sum, v) => sum + (Number(v.finalCost) || 0), 0)
+        : undefined;
 
       const mainVeh = assignedVehicles[0] || {};
       const payload: Partial<Delivery> = {
@@ -1202,9 +1212,9 @@ export const TruckDispatch: React.FC = () => {
         vehicleNo: mainVeh.vehicleNo || '',
         driverName: mainVeh.driverName || '',
         driverContact: mainVeh.driverContact || '',
-        deliveryCost: totalCost,
-        expectedCost: totalCost,
-        finalCost: totalCost,
+        expectedCost: totalExpectedCost,
+        finalCost: totalFinalCost,
+        deliveryCost: totalFinalCost || totalExpectedCost,
         vehicles: JSON.stringify(assignedVehicles),
         closingMemo: closingMemo,
         memo: closingMemo,
@@ -1745,13 +1755,14 @@ export const TruckDispatch: React.FC = () => {
                             )}
                           </div>
 
-                          {/* 컬럼 헤더 */}
-                          <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1.3fr 1fr 1.3fr 1fr 30px', gap: '8px', padding: '6px 10px', backgroundColor: 'var(--bg-body)', borderRadius: '6px', fontSize: '11.5px', fontWeight: 800, color: 'var(--primary)', marginBottom: '6px', border: '1px solid var(--border-color)' }}>
+                          {/* 컬럼 헤더 (사장님 지시: 예상 운송비 필수, 실제 운송비 선택적 입력 2열로 분리) */}
+                          <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1.1fr 0.8fr 1.1fr 1fr 1fr 30px', gap: '6px', padding: '6px 10px', backgroundColor: 'var(--bg-body)', borderRadius: '6px', fontSize: '11px', fontWeight: 800, color: 'var(--primary)', marginBottom: '6px', border: '1px solid var(--border-color)' }}>
                             <div>🏢 운송사 거래처</div>
                             <div>👤 운송 기사명</div>
                             <div>🚚 차종</div>
                             <div>📞 기사 연락처</div>
-                            <div>💰 운송비 (원)</div>
+                            <div>💰 예상 운송비 (필수)</div>
+                            <div>💵 실제 운송비 (선택)</div>
                             <div></div>
                           </div>
 
@@ -1763,16 +1774,16 @@ export const TruckDispatch: React.FC = () => {
                                 : transportDrivers;
 
                               return (
-                                <div key={veh.id || idx} style={{ padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-body)', display: 'grid', gridTemplateColumns: '1.4fr 1.3fr 1fr 1.3fr 1fr 30px', gap: '8px', alignItems: 'center' }}>
+                                <div key={veh.id || idx} style={{ padding: '8px 10px', borderRadius: '8px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-body)', display: 'grid', gridTemplateColumns: '1.2fr 1.1fr 0.8fr 1.1fr 1fr 1fr 30px', gap: '6px', alignItems: 'center' }}>
                                   
                                   {/* 1. 운송사 셀렉트 */}
                                   <select
                                     value={veh.transportCompany}
                                     disabled={isFormDisabled}
                                     onChange={e => handleVehicleFieldChange(idx, 'transportCompany', e.target.value)}
-                                    style={{ padding: '6px 8px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: isFormDisabled ? 'var(--bg-card)' : 'var(--bg-card)', color: 'var(--text-primary)', fontSize: '12px', outline: 'none', opacity: isFormDisabled ? 0.75 : 1, cursor: isFormDisabled ? 'not-allowed' : 'default' }}
+                                    style={{ padding: '6px 6px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: isFormDisabled ? 'var(--bg-card)' : 'var(--bg-card)', color: 'var(--text-primary)', fontSize: '11.5px', outline: 'none', opacity: isFormDisabled ? 0.75 : 1, cursor: isFormDisabled ? 'not-allowed' : 'default' }}
                                   >
-                                    <option value="">-- 운송사 거래처 선택 --</option>
+                                    <option value="">-- 운송사 선택 --</option>
                                     {transportCompanies.map(c => (
                                       <option key={c.id} value={c.name}>{c.name}</option>
                                     ))}
@@ -1786,7 +1797,7 @@ export const TruckDispatch: React.FC = () => {
                                       const selectedName = e.target.value;
                                       handleVehicleFieldChange(idx, 'driverName', selectedName);
                                     }}
-                                    style={{ padding: '6px 8px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: isFormDisabled ? 'var(--bg-card)' : 'var(--bg-card)', color: 'var(--text-primary)', fontSize: '12px', outline: 'none', opacity: isFormDisabled ? 0.75 : 1, cursor: isFormDisabled ? 'not-allowed' : 'default' }}
+                                    style={{ padding: '6px 6px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: isFormDisabled ? 'var(--bg-card)' : 'var(--bg-card)', color: 'var(--text-primary)', fontSize: '11.5px', outline: 'none', opacity: isFormDisabled ? 0.75 : 1, cursor: isFormDisabled ? 'not-allowed' : 'default' }}
                                   >
                                     <option value="">-- 기사 선택 --</option>
                                     {filteredDrivers.map(drv => (
@@ -1801,7 +1812,7 @@ export const TruckDispatch: React.FC = () => {
                                     value={veh.vehicleType}
                                     disabled={isFormDisabled}
                                     onChange={e => handleVehicleFieldChange(idx, 'vehicleType', e.target.value)}
-                                    style={{ padding: '6px 8px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: isFormDisabled ? 'var(--bg-card)' : 'var(--bg-card)', color: 'var(--text-primary)', fontSize: '12px', outline: 'none', opacity: isFormDisabled ? 0.75 : 1, cursor: isFormDisabled ? 'not-allowed' : 'default' }}
+                                    style={{ padding: '6px 6px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: isFormDisabled ? 'var(--bg-card)' : 'var(--bg-card)', color: 'var(--text-primary)', fontSize: '11.5px', outline: 'none', opacity: isFormDisabled ? 0.75 : 1, cursor: isFormDisabled ? 'not-allowed' : 'default' }}
                                   >
                                     {VEHICLE_TYPE_OPTIONS.map(v => <option key={v} value={v}>{v}</option>)}
                                   </select>
@@ -1809,21 +1820,39 @@ export const TruckDispatch: React.FC = () => {
                                   {/* 4. 연락처 */}
                                   <input
                                     type="text"
-                                    placeholder="기사 연락처"
+                                    placeholder="연락처"
                                     value={veh.driverContact}
                                     disabled={isFormDisabled}
                                     onChange={e => handleVehicleFieldChange(idx, 'driverContact', e.target.value)}
-                                    style={{ padding: '6px 8px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: isFormDisabled ? 'var(--bg-card)' : 'var(--bg-card)', color: 'var(--text-primary)', fontSize: '12px', outline: 'none', opacity: isFormDisabled ? 0.75 : 1, cursor: isFormDisabled ? 'not-allowed' : 'default' }}
+                                    style={{ padding: '6px 6px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: isFormDisabled ? 'var(--bg-card)' : 'var(--bg-card)', color: 'var(--text-primary)', fontSize: '11.5px', outline: 'none', opacity: isFormDisabled ? 0.75 : 1, cursor: isFormDisabled ? 'not-allowed' : 'default' }}
                                   />
 
-                                  {/* 5. 운송비 (원) */}
+                                  {/* 5. 💰 예상 운송비 (필수) */}
                                   <input
                                     type="number"
-                                    placeholder="운송비"
-                                    value={veh.deliveryCost}
+                                    placeholder="예상 운송비"
+                                    value={veh.expectedCost !== undefined ? veh.expectedCost : ''}
                                     disabled={isFormDisabled}
-                                    onChange={e => handleVehicleFieldChange(idx, 'deliveryCost', Number(e.target.value))}
-                                    style={{ padding: '6px 8px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: isFormDisabled ? 'var(--bg-card)' : 'var(--bg-card)', color: 'var(--text-primary)', fontSize: '12px', fontWeight: 800, textAlign: 'right', outline: 'none', opacity: isFormDisabled ? 0.75 : 1, cursor: isFormDisabled ? 'not-allowed' : 'default' }}
+                                    onChange={e => {
+                                      const val = Number(e.target.value);
+                                      handleVehicleFieldChange(idx, 'expectedCost', val);
+                                      handleVehicleFieldChange(idx, 'deliveryCost', val);
+                                    }}
+                                    style={{ padding: '6px 6px', borderRadius: '6px', border: '1px solid var(--primary)', backgroundColor: isFormDisabled ? 'var(--bg-card)' : 'var(--bg-card)', color: 'var(--primary)', fontSize: '11.5px', fontWeight: 800, textAlign: 'right', outline: 'none', opacity: isFormDisabled ? 0.75 : 1, cursor: isFormDisabled ? 'not-allowed' : 'default' }}
+                                  />
+
+                                  {/* 6. 💵 실제 운송비 (선택) */}
+                                  <input
+                                    type="number"
+                                    placeholder="실제 운송비 (선택)"
+                                    value={veh.finalCost !== undefined && veh.finalCost !== null ? veh.finalCost : ''}
+                                    disabled={isFormDisabled}
+                                    onChange={e => {
+                                      const valStr = e.target.value;
+                                      const val = valStr === '' ? undefined : Number(valStr);
+                                      handleVehicleFieldChange(idx, 'finalCost', val);
+                                    }}
+                                    style={{ padding: '6px 6px', borderRadius: '6px', border: '1px solid #16a34a', backgroundColor: isFormDisabled ? 'var(--bg-card)' : 'rgba(34,197,94,0.05)', color: '#16a34a', fontSize: '11.5px', fontWeight: 800, textAlign: 'right', outline: 'none', opacity: isFormDisabled ? 0.75 : 1, cursor: isFormDisabled ? 'not-allowed' : 'default' }}
                                   />
 
                                   {!isFormDisabled && (
