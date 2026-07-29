@@ -373,10 +373,10 @@ export const OutboundInspections: React.FC = () => {
           updatedAt: nowIso
         });
 
-        // 🟢 출고 승인 마감 시 해당 고유 장비의 status ➔ 'ASSIGNED' (할당 완료) 로 실시간 변동!
+        // 🟢 출고 승인 마감 시 해당 고유 장비의 status ➔ 'RENTED' (대여중) 으로 실시간 변동!
         if (item.assetId) {
           db.updateRow<Asset>('assets', item.assetId, {
-            status: 'ASSIGNED',
+            status: 'RENTED',
             updatedAt: nowIso
           });
         }
