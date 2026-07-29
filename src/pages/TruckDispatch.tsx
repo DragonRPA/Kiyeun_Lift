@@ -1836,15 +1836,14 @@ export const TruckDispatch: React.FC = () => {
                                     style={{ padding: '6px 6px', borderRadius: '6px', border: '1px solid var(--primary)', backgroundColor: isFormDisabled ? 'var(--bg-card)' : 'var(--bg-card)', color: 'var(--primary)', fontSize: '11.5px', fontWeight: 800, textAlign: 'right', outline: 'none', opacity: isFormDisabled ? 0.75 : 1, cursor: isFormDisabled ? 'not-allowed' : 'default' }}
                                   />
 
-                                  {/* 6. 💵 실제 운송비 (선택) */}
+                                  {/* 6. 💵 실제 운송비 (선택 - 알면 금액 입력, 모르면 기본값 0 유지) */}
                                   <input
                                     type="number"
-                                    placeholder="실제 운송비 (선택)"
-                                    value={veh.finalCost !== undefined && veh.finalCost !== null ? veh.finalCost : ''}
+                                    placeholder="0 (알면 입력)"
+                                    value={veh.finalCost !== undefined && veh.finalCost !== null ? veh.finalCost : 0}
                                     disabled={isFormDisabled}
                                     onChange={e => {
-                                      const valStr = e.target.value;
-                                      const val = valStr === '' ? undefined : Number(valStr);
+                                      const val = e.target.value === '' ? 0 : Number(e.target.value);
                                       handleVehicleFieldChange(idx, 'finalCost', val);
                                     }}
                                     style={{ padding: '6px 6px', borderRadius: '6px', border: '1px solid #16a34a', backgroundColor: isFormDisabled ? 'var(--bg-card)' : 'rgba(34,197,94,0.05)', color: '#16a34a', fontSize: '11.5px', fontWeight: 800, textAlign: 'right', outline: 'none', opacity: isFormDisabled ? 0.75 : 1, cursor: isFormDisabled ? 'not-allowed' : 'default' }}
