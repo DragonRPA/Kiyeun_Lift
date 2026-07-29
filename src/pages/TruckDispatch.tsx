@@ -608,6 +608,58 @@ export const TruckDispatch: React.FC = () => {
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
+  // 💡 [사장님 지시] 💳 대사 완료 1건의 통합 매입 지급요청 생성 (Payment Request Bundle)
+  const handleExecuteBundlePaymentRequest = async () => {
+    const excelPairs = reconPairs.filter(p => p.excelRow);
+
+    if (excelPairs.length === 0) {
+      showErrorModal('지급 요청을 작성하려면 먼저 상단의 [📄 엑셀 거래명세서 업로드]를 진행해 주세요.');
+      return;
+    }
+
+    // 💡 [사장님 지시] 오른쪽 패널(거래명세서 엑셀) 항목 중 대사 미완료건이 있는지 검사 (우측 대사 미완료 남아있으면 작성 불가)
+    const unreconciledExcelPairs = excelPairs.filter(p => !p.isReconciled);
+
+    if (unreconciledExcelPairs.length > 0) {
+      showErrorModal(`⚠️ 업로드한 거래명세서 엑셀 항목 (${excelPairs.length}건) 중 아직 대사가 완료되지 않은 항목이 ${unreconciledExcelPairs.length}건 남아있어 지급요청을 작성할 수 없습니다.\n\n우측 패널의 모든 엑셀 항목을 100% 대사 완료 처리해 주세요. (좌측 시스템 배차 미대사건 남음은 허용됨)`);
+      return;
+    }
+
+    const reconciledPairs = reconPairs.filter(p => p.isReconciled && p.systemDelivery);
+
+    if (reconciledPairs.length === 0) {
+      showErrorModal('통합 지급 요청을 실행할 대사 완료된 시스템 배차건이 없습니다.');
+      return;
+    }
+
+    const bundleCode = `PAY-BUNDLE-${new Date().toISOString().substring(0, 10).replace(/-/g, '')}-${Math.floor(1000 + Math.random() * 9000)}`;
+    const totalBundleCost = reconciledPairs.reduce((acc, p) => acc + p.systemCost, 0);
+
+    try {
+      for (const pair of reconciledPairs) {
+        if (pair.systemDelivery) {
+          await db.updateRow('deliveries', pair.systemDelivery.id, {
+            reconciliationStatus: 'PAYMENT_REQUESTED',
+            paymentRequestedAt: new Date().toISOString(),
+            memo: `[통합지급요청: ${bundleCode}] ${pair.memo || ''}`
+          } as any);
+        }
+      }
+
+      setReconPairs(prev => prev.map(p => {
+        if (p.isReconciled && p.systemDelivery) {
+          return { ...p, matchStatus: 'PAYMENT_REQUESTED' as any };
+        }
+        return p;
+      }));
+
+      setReconNotificationMsg(`🎉 [통합 지급요청 완료] 요청번호: ${bundleCode} | 총 ${reconciledPairs.length}건 (합계 ₩${totalBundleCost.toLocaleString()}원) 매입 지급 요청이 저장되었습니다.`);
+      showErrorModal(`🎉 [통합 지급 요청 완비]\n\n• 지급요청 번호: ${bundleCode}\n• 포함된 배차건수: ${reconciledPairs.length}건\n• 총 매입 지급금액: ₩${totalBundleCost.toLocaleString()}원\n\n매입 지급 요청이 성공적으로 저장되었습니다.`, '매입 지급 요청 완료');
+    } catch (err: any) {
+      showErrorModal('지급 요청 처리 중 오류가 발생하였습니다: ' + err.message);
+    }
+  };
+
   // 💡 [사장님 지시] 건별 대사 완료 토글 및 [↩️ 대사 취소 (대기 원복)] 기능
   const handleTogglePairReconciled = (pairId: string) => {
     setReconPairs(prev => prev.map(p => {
@@ -654,43 +706,6 @@ export const TruckDispatch: React.FC = () => {
     }));
     setSelectedPairIds(new Set());
     setReconNotificationMsg(`↩️ 선택한 Pair 항목들이 대사 대기(PENDING) 상태로 원복되었습니다.`);
-  };
-
-  // 💡 [사장님 지시] 💳 대사 완료 1건의 통합 매입 지급요청 생성 (Payment Request Bundle)
-  const handleExecuteBundlePaymentRequest = async () => {
-    const reconciledPairs = reconPairs.filter(p => p.isReconciled && p.systemDelivery);
-
-    if (reconciledPairs.length === 0) {
-      showErrorModal('통합 지급 요청을 실행할 대사 완료건이 없습니다. 항목 대사 완료를 먼저 진행해 주세요.');
-      return;
-    }
-
-    const bundleCode = `PAY-BUNDLE-${new Date().toISOString().substring(0, 10).replace(/-/g, '')}-${Math.floor(1000 + Math.random() * 9000)}`;
-    const totalBundleCost = reconciledPairs.reduce((acc, p) => acc + p.systemCost, 0);
-
-    try {
-      for (const pair of reconciledPairs) {
-        if (pair.systemDelivery) {
-          await db.updateRow('deliveries', pair.systemDelivery.id, {
-            reconciliationStatus: 'PAYMENT_REQUESTED',
-            paymentRequestedAt: new Date().toISOString(),
-            memo: `[통합지급요청: ${bundleCode}] ${pair.memo || ''}`
-          } as any);
-        }
-      }
-
-      setReconPairs(prev => prev.map(p => {
-        if (p.isReconciled) {
-          return { ...p, matchStatus: 'PAYMENT_REQUESTED' as any, memo: `[지급요청 묶음: ${bundleCode}]` };
-        }
-        return p;
-      }));
-
-      await refreshAllData();
-      setReconNotificationMsg(`💳 🎉 성공적으로 ${reconciledPairs.length}건 (총 ₩${totalBundleCost.toLocaleString()}원)이 [통합 매입 지급요청 번호: ${bundleCode}] 1건으로 묶여 지급 요청 완료되었습니다!`);
-    } catch (err: any) {
-      showErrorModal('통합 지급 요청 처리 중 오류가 발생하였습니다: ' + err.message);
-    }
   };
 
   // 대사 통계 실시간 집계
