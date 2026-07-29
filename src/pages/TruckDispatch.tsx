@@ -194,11 +194,57 @@ export const TruckDispatch: React.FC = () => {
   const [reconStatusFilter, setReconStatusFilter] = useState<'ALL' | 'PENDING' | 'MATCHED' | 'MISMATCH' | 'PAYMENT_REQUESTED'>('ALL');
   const [reconSearchQuery, setReconSearchQuery] = useState<string>('');
 
-  // 1:1 Pair 행 배열 state
+  // 1:1 Pair 행 배열 state 및 독립 듀얼 패널 선택 state
   const [reconPairs, setReconPairs] = useState<ReconPairRow[]>([]);
   const [uploadedFileName, setUploadedFileName] = useState<string>('');
   const [selectedPairIds, setSelectedPairIds] = useState<Set<string>>(new Set());
   const [reconNotificationMsg, setReconNotificationMsg] = useState<string>('');
+  const [selectedSystemDeliveryId, setSelectedSystemDeliveryId] = useState<string | null>(null);
+  const [selectedExcelRowIndex, setSelectedExcelRowIndex] = useState<number | null>(null);
+
+  // 💡 [사장님 지시] 좌측 1개 행 + 우측 1개 행 수동 선택 1:1 대사완료 매칭
+  const handleManualPairMatch = () => {
+    if (!selectedSystemDeliveryId || selectedExcelRowIndex === null) {
+      showErrorModal('좌측 시스템 배차 1건과 우측 엑셀 항목 1건을 각각 선택해 주세요.');
+      return;
+    }
+
+    const sysD = deliveries.find(d => d.id === selectedSystemDeliveryId);
+    const excelRows = reconPairs.filter(p => p.excelRow);
+    const excelPair = excelRows[selectedExcelRowIndex];
+
+    if (!sysD || !excelPair) {
+      showErrorModal('선택한 배차 또는 엑셀 항목을 찾을 수 없습니다.');
+      return;
+    }
+
+    const sysCost = sysD.deliveryCost || sysD.assignedVehicles?.reduce((acc: number, v: any) => acc + (v.deliveryCost || 0), 0) || 70000;
+    const costKey = Object.keys(excelPair.excelRow).find(k => k.includes('합계') || k.includes('운송비') || k.includes('청구금액') || k.includes('금액'));
+    const excelCost = costKey ? Number(String(excelPair.excelRow[costKey]).replace(/[^0-9.-]+/g, '')) : 0;
+    const diff = excelCost - sysCost;
+
+    setReconPairs(prev => {
+      const filtered = prev.filter(p => p.systemDelivery?.id !== sysD.id && p.pairId !== excelPair.pairId);
+      return [
+        ...filtered,
+        {
+          pairId: `MANUAL-PAIR-${sysD.id}-${Date.now()}`,
+          systemDelivery: sysD,
+          excelRow: excelPair.excelRow,
+          matchStatus: 'MATCHED',
+          systemCost: sysCost,
+          excelCost,
+          diffCost: diff,
+          memo: '담당자 1:1 수동 선택 대사 완료',
+          isReconciled: true
+        }
+      ];
+    });
+
+    setSelectedSystemDeliveryId(null);
+    setSelectedExcelRowIndex(null);
+    setReconNotificationMsg(`✅ [${sysD.id}] 배차건과 엑셀 행이 1:1 수동 대사 완료 처리되었습니다.`);
+  };
 
   // 📅 기간 선택 피커 헬퍼
   const handleSetReconDatePreset = (preset: 'THIS_MONTH' | 'LAST_MONTH' | '1M' | '3M' | 'ALL') => {
@@ -1747,26 +1793,47 @@ export const TruckDispatch: React.FC = () => {
             </div>
           </div>
 
-          {/* 3. 대사 조치 툴바 (대사 완료, 대사 취소, 1건의 통합 매입 지급요청 버튼) */}
+          {/* 3. 대사 조치 툴바 (수동 1:1 대사 매칭, 대사 취소, 1건의 통합 매입 지급요청 버튼) */}
           <div style={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '12px', padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
             <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
               <span style={{ fontSize: '13px', fontWeight: 800, color: 'var(--text-primary)' }}>
-                체크 선택 항목: <span style={{ color: 'var(--primary)' }}>{selectedPairIds.size}건</span>
+                선택 상태: <span style={{ color: 'var(--primary)' }}>{selectedSystemDeliveryId ? '🏢 좌측 1건 선택됨' : '🏢 좌측 미선택'}</span> | <span style={{ color: '#16a34a' }}>{selectedExcelRowIndex !== null ? '📄 우측 1건 선택됨' : '📄 우측 미선택'}</span>
               </span>
+
+              {/* 💡 [사장님 지시] 좌측 1개 + 우측 1개 선택 수동 1:1 대사완료 매칭 버튼 */}
               <button
-                onClick={handleBatchReconcilePairs}
-                style={{ padding: '6px 12px', fontSize: '12px', fontWeight: 800, borderRadius: '6px', border: '1px solid #16a34a', backgroundColor: 'rgba(22,163,74,0.1)', color: '#16a34a', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                onClick={handleManualPairMatch}
+                disabled={!selectedSystemDeliveryId || selectedExcelRowIndex === null}
+                style={{
+                  padding: '7px 14px',
+                  fontSize: '12.5px',
+                  fontWeight: 900,
+                  borderRadius: '7px',
+                  border: 'none',
+                  backgroundColor: (selectedSystemDeliveryId && selectedExcelRowIndex !== null) ? '#16a34a' : 'var(--bg-body)',
+                  color: (selectedSystemDeliveryId && selectedExcelRowIndex !== null) ? '#fff' : 'var(--text-muted)',
+                  cursor: (selectedSystemDeliveryId && selectedExcelRowIndex !== null) ? 'pointer' : 'not-allowed',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                  boxShadow: (selectedSystemDeliveryId && selectedExcelRowIndex !== null) ? '0 2px 8px rgba(22,163,74,0.3)' : 'none'
+                }}
               >
-                <CheckCircle2 size={14} /> 선택건 대사 완료 처리
+                <CheckCircle2 size={15} /> 🔗 선택 1:1 수동 대사 완료 매칭
               </button>
-              
-              {/* 💡 [사장님 지시] 대사 취소 (대기 원복) 버튼 */}
-              <button
-                onClick={handleBatchCancelReconcilePairs}
-                style={{ padding: '6px 12px', fontSize: '12px', fontWeight: 800, borderRadius: '6px', border: '1px solid #eab308', backgroundColor: 'rgba(234,179,8,0.1)', color: '#ca8a04', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
-              >
-                <RotateCcw size={14} /> ↩️ 선택건 대사 취소 (대기 원복)
-              </button>
+
+              {/* 선택 해제 버튼 */}
+              {(selectedSystemDeliveryId || selectedExcelRowIndex !== null) && (
+                <button
+                  onClick={() => {
+                    setSelectedSystemDeliveryId(null);
+                    setSelectedExcelRowIndex(null);
+                  }}
+                  style={{ padding: '6px 10px', fontSize: '11.5px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-body)', color: 'var(--text-secondary)', cursor: 'pointer' }}
+                >
+                  선택 해제
+                </button>
+              )}
             </div>
 
             {/* 💡 [사장님 지시] 💳 대사 완료 1건의 통합 매입 지급요청 생성 버튼 */}
@@ -1791,188 +1858,192 @@ export const TruckDispatch: React.FC = () => {
             </button>
           </div>
 
-          {/* 4. 💡 [사장님 지시] 좌우 분할 1:1 대사 스튜디오 메인 테이블 */}
-          <div style={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '12px', padding: '16px', overflowX: 'auto' }}>
-            <div style={{ fontSize: '13px', fontWeight: 800, color: 'var(--primary)', marginBottom: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span>↔️ [1:1 좌우 분할 대사 스튜디오] 회사의 운송완료 내역 ↔ 업로드 거래명세서 대조</span>
-              {uploadedFileName && <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>📄 업로드 파일: {uploadedFileName}</span>}
-            </div>
+          {/* 4. 💡 [사장님 지시] 좌우 독립 스크롤 듀얼 패널 대사 스튜디오 */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+            
+            {/* ────────────── [좌측 패널] 회사의 운송 완료 내역 목록 (독립 스크롤) ────────────── */}
+            <div style={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '12px', padding: '16px', display: 'flex', flexDirection: 'column' }}>
+              <div style={{ fontSize: '13.5px', fontWeight: 800, color: 'var(--primary)', marginBottom: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span>🏢 [좌측] 회사의 운송 완료 내역 ({completedDeliveriesForRecon.length}건)</span>
+                <span style={{ fontSize: '11.5px', color: 'var(--text-muted)' }}>💡 선택 클릭하여 우측과 1:1 수동대사</span>
+              </div>
 
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
-              <thead>
-                <tr style={{ backgroundColor: 'var(--bg-body)', borderBottom: '2px solid var(--border-color)', color: 'var(--text-secondary)' }}>
-                  <th style={{ padding: '10px 6px', textAlign: 'center', width: '35px' }}>
-                    <input
-                      type="checkbox"
-                      checked={reconPairs.length > 0 && reconPairs.every(p => selectedPairIds.has(p.pairId))}
-                      onChange={e => {
-                        if (e.target.checked) setSelectedPairIds(new Set(reconPairs.map(p => p.pairId)));
-                        else setSelectedPairIds(new Set());
-                      }}
-                    />
-                  </th>
-
-                  {/* ────────────────── [좌측 50%: 시스템 운송 완료] ────────────────── */}
-                  <th style={{ padding: '10px 8px', textAlign: 'left', backgroundColor: 'rgba(59,130,246,0.06)', width: '42%' }}>
-                    🏢 [좌측] 회사의 운송 완료 내역 (일자 / 배차ID / 고객사 / 하차지현장 / 기사명 / 시스템운송비)
-                  </th>
-
-                  {/* ────────────────── [중앙 16%: 1:1 대조 및 조치] ────────────────── */}
-                  <th style={{ padding: '10px 8px', textAlign: 'center', backgroundColor: 'var(--bg-body)', width: '18%' }}>
-                    ↔️ 1:1 대조 & 건별 대사/취소 조치
-                  </th>
-
-                  {/* ────────────────── [우측 42%: 엑셀 거래명세서] ────────────────── */}
-                  <th style={{ padding: '10px 8px', textAlign: 'left', backgroundColor: 'rgba(34,197,94,0.06)', width: '40%' }}>
-                    📄 [우측] 업로드한 거래명세서 엑셀 (일자 / 하차지현장 / 운송기사 / 청구금액)
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {reconPairs.length === 0 ? (
-                  <tr>
-                    <td colSpan={4} style={{ textAlign: 'center', padding: '40px 10px', color: 'var(--text-muted)' }}>
-                      상단 [📄 엑셀 거래명세서 업로드 & 자동대사] 버튼을 클릭하여 명세서 파일(.xlsx, .csv)을 업로드해 주세요.
-                    </td>
-                  </tr>
+              <div style={{ maxHeight: '580px', overflowY: 'auto', paddingRight: '4px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {completedDeliveriesForRecon.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '40px 10px', color: 'var(--text-muted)', fontSize: '12.5px' }}>
+                    조회된 기간 내 회사의 운송 완료 배차 내역이 없습니다.
+                  </div>
                 ) : (
-                  reconPairs.map((pair, idx) => {
-                    const sysD = pair.systemDelivery;
-                    const contract = sysD ? contracts.find(c => c.id === sysD.contractId) : null;
+                  completedDeliveriesForRecon.map((d) => {
+                    const contract = contracts.find(c => c.id === d.contractId);
                     const customer = contract ? customers.find(c => c.id === contract.customerId) : null;
-                    const isChecked = selectedPairIds.has(pair.pairId);
+                    const cost = d.deliveryCost || d.assignedVehicles?.reduce((acc: number, v: any) => acc + (v.deliveryCost || 0), 0) || 70000;
+                    const isSelected = selectedSystemDeliveryId === d.id;
+                    const reconPair = reconPairs.find(p => p.systemDelivery?.id === d.id);
+                    const isReconciled = reconPair?.isReconciled || (d as any).reconciliationStatus === 'PAYMENT_REQUESTED';
 
                     return (
-                      <tr
-                        key={pair.pairId}
+                      <div
+                        key={d.id}
+                        onClick={() => setSelectedSystemDeliveryId(isSelected ? null : d.id)}
                         style={{
-                          borderBottom: '1px solid var(--border-color)',
-                          backgroundColor: isChecked
-                            ? 'rgba(59,130,246,0.08)'
-                            : pair.isReconciled
-                            ? 'rgba(34,197,94,0.03)'
-                            : pair.matchStatus === 'MISMATCH'
-                            ? 'rgba(234,179,8,0.04)'
-                            : 'transparent'
+                          padding: '12px',
+                          borderRadius: '8px',
+                          border: isSelected ? '2px solid #2563eb' : '1px solid var(--border-color)',
+                          backgroundColor: isSelected ? 'rgba(59,130,246,0.12)' : isReconciled ? 'rgba(34,197,94,0.03)' : 'var(--bg-body)',
+                          cursor: 'pointer',
+                          transition: 'all 0.15s ease',
+                          boxShadow: isSelected ? '0 0 0 3px rgba(37,99,235,0.2)' : 'none'
                         }}
                       >
-                        <td style={{ padding: '10px 6px', textAlign: 'center' }}>
-                          <input
-                            type="checkbox"
-                            checked={isChecked}
-                            onChange={() => {
-                              const newSet = new Set(selectedPairIds);
-                              if (newSet.has(pair.pairId)) newSet.delete(pair.pairId);
-                              else newSet.add(pair.pairId);
-                              setSelectedPairIds(newSet);
-                            }}
-                          />
-                        </td>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                          <span style={{ fontWeight: 800, color: 'var(--primary)', fontSize: '13px' }}>
+                            {d.id}
+                          </span>
+                          <span style={{ fontSize: '11.5px', color: 'var(--text-muted)' }}>
+                            📅 {d.loadingDate || d.requestDate}
+                          </span>
+                        </div>
 
-                        {/* ────────────────── [좌측: 시스템 운송완료] ────────────────── */}
-                        <td style={{ padding: '10px 8px', verticalAlign: 'top', borderRight: '1px solid var(--border-color)' }}>
-                          {sysD ? (
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <span style={{ fontWeight: 800, color: 'var(--primary)' }}>{sysD.id}</span>
-                                <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>📅 {sysD.loadingDate || sysD.requestDate}</span>
-                              </div>
-                              <div style={{ fontWeight: 800 }}>🏢 {customer?.name || '미지정 고객사'}</div>
-                              <div style={{ color: 'var(--text-secondary)', fontSize: '11.5px' }}>📍 {sysD.destinationAddress || '도착지 미지정'}</div>
-                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '2px' }}>
-                                <span>🚛 {sysD.driverName || '기사미지정'} ({sysD.vehicleType || '3.5T'})</span>
-                                <span style={{ fontWeight: 800, color: 'var(--text-primary)' }}>₩{pair.systemCost.toLocaleString()}원</span>
-                              </div>
-                            </div>
+                        <div style={{ fontWeight: 800, fontSize: '12.5px', color: 'var(--text-primary)' }}>
+                          🏢 {customer?.name || '미지정 고객사'}
+                        </div>
+
+                        <div style={{ fontSize: '12px', color: 'var(--text-secondary)', margin: '2px 0' }}>
+                          📍 {d.destinationAddress || '도착지 미지정'}
+                        </div>
+
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '6px', paddingTop: '6px', borderTop: '1px dashed var(--border-color)' }}>
+                          <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                            🚛 {d.driverName || '기사미지정'} ({d.vehicleType || '3.5T'})
+                          </span>
+                          <span style={{ fontSize: '13px', fontWeight: 900, color: 'var(--text-primary)' }}>
+                            ₩{cost.toLocaleString()}원
+                          </span>
+                        </div>
+
+                        {/* 상태 및 대사 취소 버튼 */}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '8px' }}>
+                          {isReconciled ? (
+                            <span style={{ padding: '3px 8px', borderRadius: '10px', fontSize: '11px', fontWeight: 900, backgroundColor: 'rgba(34,197,94,0.15)', color: '#16a34a', border: '1px solid rgba(34,197,94,0.3)' }}>
+                              🟢 대사 완료
+                            </span>
                           ) : (
-                            <div style={{ color: '#ef4444', fontStyle: 'italic', padding: '12px 0' }}>
-                              🔴 시스템 배차 내역에 미존재 (엑셀 단독 청구 항목)
-                            </div>
+                            <span style={{ padding: '3px 8px', borderRadius: '10px', fontSize: '11px', fontWeight: 700, backgroundColor: 'var(--bg-card)', color: 'var(--text-muted)', border: '1px solid var(--border-color)' }}>
+                              ⚪ 대사 대기
+                            </span>
                           )}
-                        </td>
 
-                        {/* ────────────────── [중앙: 1:1 대조 결과 & 조치] ────────────────── */}
-                        <td style={{ padding: '10px 8px', textAlign: 'center', verticalAlign: 'middle', borderRight: '1px solid var(--border-color)' }}>
-                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px' }}>
-                            {pair.isReconciled ? (
-                              <span style={{ padding: '4px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: 900, backgroundColor: 'rgba(34,197,94,0.15)', color: '#16a34a', border: '1px solid rgba(34,197,94,0.3)' }}>
-                                🟢 대사완료 (일치)
-                              </span>
-                            ) : pair.matchStatus === 'MISMATCH' ? (
-                              <span style={{ padding: '4px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: 900, backgroundColor: 'rgba(234,179,8,0.15)', color: '#ca8a04', border: '1px solid rgba(234,179,8,0.3)' }}>
-                                🟡 금액불일치 (차액 ₩{pair.diffCost.toLocaleString()}원)
-                              </span>
-                            ) : pair.matchStatus === 'EXCEL_ONLY' ? (
-                              <span style={{ padding: '4px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: 800, backgroundColor: 'rgba(239,68,68,0.15)', color: '#dc2626', border: '1px solid rgba(239,68,68,0.3)' }}>
-                                🔴 엑셀단독 (미등록)
-                              </span>
-                            ) : pair.matchStatus === 'SYSTEM_ONLY' ? (
-                              <span style={{ padding: '4px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: 700, backgroundColor: 'var(--bg-body)', color: 'var(--text-muted)', border: '1px solid var(--border-color)' }}>
-                                ⚪ 시스템단독 (명세서누락)
-                              </span>
-                            ) : (
-                              <span style={{ padding: '4px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: 700, backgroundColor: 'var(--bg-body)', color: 'var(--text-muted)', border: '1px solid var(--border-color)' }}>
-                                ⚪ 대사대기
-                              </span>
-                            )}
-
-                            {!pair.isReconciled ? (
-                              <button
-                                onClick={() => handleTogglePairReconciled(pair.pairId)}
-                                style={{ padding: '4px 10px', fontSize: '11.5px', fontWeight: 800, borderRadius: '6px', border: '1px solid #16a34a', backgroundColor: '#16a34a', color: '#fff', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '3px' }}
-                              >
-                                <CheckCircle2 size={13} /> 건별 대사 완료
-                              </button>
-                            ) : (
-                              <button
-                                onClick={() => handleTogglePairReconciled(pair.pairId)}
-                                style={{ padding: '4px 10px', fontSize: '11.5px', fontWeight: 800, borderRadius: '6px', border: '1px solid #eab308', backgroundColor: 'rgba(234,179,8,0.12)', color: '#ca8a04', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '3px' }}
-                              >
-                                <RotateCcw size={13} /> ↩️ 대사 취소 (대기 원복)
-                              </button>
-                            )}
-                          </div>
-                        </td>
-
-                        {/* ────────────────── [우측: 업로드 엑셀 청구건] ────────────────── */}
-                        <td style={{ padding: '10px 8px', verticalAlign: 'top' }}>
-                          {pair.excelRow ? (
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <span style={{ fontWeight: 800, color: 'var(--text-primary)' }}>
-                                  📄 {pair.excelRow['배차ID'] || pair.excelRow['배차번호'] || pair.excelRow['ID'] || `행 #${idx + 1}`}
-                                </span>
-                                <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                                  📅 {pair.excelRow['운송일자'] || pair.excelRow['날짜'] || pair.excelRow['일자'] || '-'}
-                                </span>
-                              </div>
-                              <div style={{ color: 'var(--text-secondary)', fontSize: '11.5px' }}>
-                                📍 {pair.excelRow['하차지'] || pair.excelRow['도착지'] || pair.excelRow['현장'] || '-'}
-                              </div>
-                              {pair.excelRow['비고'] && (
-                                <div style={{ fontSize: '11px', color: 'var(--primary)', backgroundColor: 'rgba(59,130,246,0.06)', padding: '2px 6px', borderRadius: '4px', border: '1px solid rgba(59,130,246,0.2)', marginTop: '2px', wordBreak: 'break-all' }}>
-                                  📝 {pair.excelRow['비고']}
-                                </div>
-                              )}
-                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '2px' }}>
-                                <span>🚛 {pair.excelRow['기사명'] || pair.excelRow['운송기사'] || pair.excelRow['기사'] || '-'}</span>
-                                <span style={{ fontWeight: 900, color: pair.diffCost !== 0 ? '#ca8a04' : '#16a34a' }}>
-                                  ₩{pair.excelCost.toLocaleString()}원
-                                </span>
-                              </div>
-                            </div>
-                          ) : (
-                            <div style={{ color: 'var(--text-muted)', fontStyle: 'italic', padding: '12px 0' }}>
-                              ⚪ 업로드한 엑셀 명세서에 누락된 배차 항목
-                            </div>
+                          {reconPair && isReconciled && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleTogglePairReconciled(reconPair.pairId);
+                              }}
+                              style={{ padding: '3px 8px', fontSize: '11px', fontWeight: 800, borderRadius: '5px', border: '1px solid #eab308', backgroundColor: 'rgba(234,179,8,0.12)', color: '#ca8a04', cursor: 'pointer' }}
+                            >
+                              <RotateCcw size={12} style={{ display: 'inline', marginRight: '2px' }} /> ↩️ 대사 취소
+                            </button>
                           )}
-                        </td>
-                      </tr>
+                        </div>
+                      </div>
                     );
                   })
                 )}
-              </tbody>
-            </table>
+              </div>
+            </div>
+
+            {/* ────────────── [우측 패널] 업로드 거래명세서 엑셀 내역 (독립 스크롤) ────────────── */}
+            <div style={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '12px', padding: '16px', display: 'flex', flexDirection: 'column' }}>
+              <div style={{ fontSize: '13.5px', fontWeight: 800, color: '#16a34a', marginBottom: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span>📄 [우측] 업로드 거래명세서 엑셀 내역 ({reconPairs.filter(p => p.excelRow).length}건)</span>
+                {uploadedFileName && <span style={{ fontSize: '11.5px', color: 'var(--text-muted)' }}>📄 {uploadedFileName}</span>}
+              </div>
+
+              <div style={{ maxHeight: '580px', overflowY: 'auto', paddingRight: '4px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {reconPairs.filter(p => p.excelRow).length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '40px 10px', color: 'var(--text-muted)', fontSize: '12.5px' }}>
+                    상단 [📄 엑셀 거래명세서 업로드 & 자동대사] 버튼으로 명세서(.xlsx, .csv)를 업로드해 주세요.
+                  </div>
+                ) : (
+                  reconPairs.filter(p => p.excelRow).map((pair, idx) => {
+                    const row = pair.excelRow;
+                    const isSelected = selectedExcelRowIndex === idx;
+                    const costKey = Object.keys(row).find(k => k.includes('합계') || k.includes('운송비') || k.includes('청구금액') || k.includes('금액'));
+                    const excelCost = costKey ? Number(String(row[costKey]).replace(/[^0-9.-]+/g, '')) : 0;
+
+                    return (
+                      <div
+                        key={pair.pairId}
+                        onClick={() => setSelectedExcelRowIndex(isSelected ? null : idx)}
+                        style={{
+                          padding: '12px',
+                          borderRadius: '8px',
+                          border: isSelected ? '2px solid #16a34a' : '1px solid var(--border-color)',
+                          backgroundColor: isSelected ? 'rgba(34,197,94,0.12)' : pair.isReconciled ? 'rgba(34,197,94,0.03)' : 'var(--bg-body)',
+                          cursor: 'pointer',
+                          transition: 'all 0.15s ease',
+                          boxShadow: isSelected ? '0 0 0 3px rgba(22,163,74,0.2)' : 'none'
+                        }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                          <span style={{ fontWeight: 800, color: 'var(--text-primary)', fontSize: '13px' }}>
+                            📄 {row['배차ID'] || row['ID'] || `행 #${idx + 1}`}
+                          </span>
+                          <span style={{ fontSize: '11.5px', color: 'var(--text-muted)' }}>
+                            📅 {row['운송일자'] || row['날짜'] || row['일자'] || '-'}
+                          </span>
+                        </div>
+
+                        <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                          📍 {row['하차지'] || row['도착지'] || row['현장'] || '-'}
+                        </div>
+
+                        {row['비고'] && (
+                          <div style={{ fontSize: '11px', color: 'var(--primary)', backgroundColor: 'rgba(59,130,246,0.06)', padding: '3px 6px', borderRadius: '4px', border: '1px solid rgba(59,130,246,0.2)', marginTop: '4px', wordBreak: 'break-all' }}>
+                            📝 {row['비고']}
+                          </div>
+                        )}
+
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '6px', paddingTop: '6px', borderTop: '1px dashed var(--border-color)' }}>
+                          <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                            🚛 {row['기사명'] || row['운송기사'] || '-'}
+                          </span>
+                          <span style={{ fontSize: '13px', fontWeight: 900, color: pair.diffCost !== 0 ? '#ca8a04' : '#16a34a' }}>
+                            ₩{excelCost.toLocaleString()}원
+                          </span>
+                        </div>
+
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '8px' }}>
+                          {pair.isReconciled ? (
+                            <span style={{ padding: '3px 8px', borderRadius: '10px', fontSize: '11px', fontWeight: 900, backgroundColor: 'rgba(34,197,94,0.15)', color: '#16a34a', border: '1px solid rgba(34,197,94,0.3)' }}>
+                              🟢 대사 완료
+                            </span>
+                          ) : (
+                            <span style={{ padding: '3px 8px', borderRadius: '10px', fontSize: '11px', fontWeight: 700, backgroundColor: 'var(--bg-card)', color: 'var(--text-muted)', border: '1px solid var(--border-color)' }}>
+                              ⚪ 대사 대기
+                            </span>
+                          )}
+
+                          {pair.isReconciled && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleTogglePairReconciled(pair.pairId);
+                              }}
+                              style={{ padding: '3px 8px', fontSize: '11px', fontWeight: 800, borderRadius: '5px', border: '1px solid #eab308', backgroundColor: 'rgba(234,179,8,0.12)', color: '#ca8a04', cursor: 'pointer' }}
+                            >
+                              <RotateCcw size={12} style={{ display: 'inline', marginRight: '2px' }} /> ↩️ 대사 취소
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+
           </div>
 
           {/* 5. 엑셀 업로드 시 시스템 미등록 청구 항목 카드 */}
