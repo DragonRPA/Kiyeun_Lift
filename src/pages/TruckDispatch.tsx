@@ -265,12 +265,11 @@ export const TruckDispatch: React.FC = () => {
     });
   }, [deliveries, reconStartDate, reconEndDate, selectedReconCompany, reconSearchQuery, contracts, customers]);
 
-  // 📄 엑셀 업로드 시 [날짜 + 하차지 + 금액] 정밀 스마트 1:1 Pair 짝짓기 엔진
+  // 거래명세서 엑셀 파싱 및 스마트 1:1 페어링 파이프라인 (헤더 동적 검색 & 다중 비고 병합 & 디토 상속 적용)
   const handleExcelFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
+    const file = e.target.files?.[0];
+    if (!file) return;
 
-    const file = files[0];
     setUploadedFileName(file.name);
     const reader = new FileReader();
 
@@ -280,22 +279,134 @@ export const TruckDispatch: React.FC = () => {
         const workbook = XLSX.read(bstr, { type: 'binary' });
         const sheetName = workbook.SheetNames[0];
         const sheet = workbook.Sheets[sheetName];
-        const jsonRows: any[] = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+        
+        // 1. Raw 2D 배열로 먼저 읽기 (헤더 행 동적 감지용)
+        const rawRows: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
 
-        if (!jsonRows || jsonRows.length === 0) {
+        if (!rawRows || rawRows.length === 0) {
           showErrorModal('업로드한 엑셀 파일에 데이터가 없습니다.');
           return;
         }
 
+        // 2. 동적 헤더 행 감지 (Known Header Keywords)
+        const headerKeywords = ['일자', '날짜', '상차지', '하차지', '톤수', '차종', '운송비', '금액', '청구금액', '합계', '현장명', '업체명', '기사명', '비고', 'no', '노'];
+        let headerRowIndex = -1;
+
+        for (let r = 0; r < Math.min(25, rawRows.length); r++) {
+          const rowText = rawRows[r].map(c => String(c).trim().toLowerCase()).join(' ');
+          const matchCount = headerKeywords.filter(kw => rowText.includes(kw)).length;
+          if (matchCount >= 2) {
+            headerRowIndex = r;
+            break;
+          }
+        }
+
+        if (headerRowIndex === -1) {
+          headerRowIndex = 0; // Fallback to 1st row
+        }
+
+        // 3. 헤더 컬럼 파싱 및 데이터 행 정규화
+        const rawHeaderRow = rawRows[headerRowIndex] || [];
+        const headerNames: string[] = rawHeaderRow.map((col: any, cIdx: number) => {
+          const title = String(col).trim();
+          return title || `COL_${cIdx + 1}`;
+        });
+
+        // 4. 데이터 행 구성 (디토 상속 & 다중 비고 병합 적용)
+        const parsedRows: any[] = [];
+        let lastDate = '';
+        let lastOrigin = '';
+        let lastDest = '';
+
+        for (let r = headerRowIndex + 1; r < rawRows.length; r++) {
+          const rowArr = rawRows[r];
+          if (!rowArr || rowArr.every((cell: any) => String(cell).trim() === '')) continue; // 빈 행 패스
+
+          const rowObj: any = {};
+          headerNames.forEach((hName, cIdx) => {
+            rowObj[hName] = String(rowArr[cIdx] !== undefined ? rowArr[cIdx] : '').trim();
+          });
+
+          // 디토( ", ·, 〃, - ) 상속 및 날짜/장소 처리
+          const keys = Object.keys(rowObj);
+          const dateKey = keys.find(k => k.includes('일자') || k.includes('날짜') || k.includes('운송일'));
+          const originKey = keys.find(k => k.includes('상차지') || k.includes('출발지'));
+          const destKey = keys.find(k => k.includes('하차지') || k.includes('도착지'));
+
+          let rawDate = dateKey ? rowObj[dateKey] : '';
+          let rawOrigin = originKey ? rowObj[originKey] : '';
+          let rawDest = destKey ? rowObj[destKey] : '';
+
+          // 디토 기사/기호 검사
+          const isDitto = (val: string) => !val || val === '"' || val === '·' || val === '〃' || val === '-' || val === "''";
+
+          if (isDitto(rawDate) && lastDate) rawDate = lastDate;
+          else if (rawDate && !isDitto(rawDate)) lastDate = rawDate;
+
+          if (isDitto(rawOrigin) && lastOrigin) rawOrigin = lastOrigin;
+          else if (rawOrigin && !isDitto(rawOrigin)) lastOrigin = rawOrigin;
+
+          if (isDitto(rawDest) && lastDest) rawDest = lastDest;
+          else if (rawDest && !isDitto(rawDest)) lastDest = rawDest;
+
+          // 날짜 정규화 (06월 01일 -> 2026-06-01, 6/1 -> 2026-06-01)
+          let normDate = rawDate;
+          const currentYear = new Date().getFullYear();
+          if (rawDate.includes('월') && rawDate.includes('일')) {
+            const mMatch = rawDate.match(/(\d+)월\s*(\d+)일/);
+            if (mMatch) {
+              normDate = `${currentYear}-${String(mMatch[1]).padStart(2, '0')}-${String(mMatch[2]).padStart(2, '0')}`;
+            }
+          } else if (rawDate.includes('/')) {
+            const parts = rawDate.split('/');
+            if (parts.length === 2) {
+              normDate = `${currentYear}-${String(parts[0]).padStart(2, '0')}-${String(parts[1]).padStart(2, '0')}`;
+            } else if (parts.length === 3) {
+              normDate = `${parts[0]}-${String(parts[1]).padStart(2, '0')}-${String(parts[2]).padStart(2, '0')}`;
+            }
+          }
+
+          if (dateKey) rowObj[dateKey] = normDate;
+          if (originKey) rowObj[originKey] = rawOrigin;
+          if (destKey) rowObj[destKey] = rawDest;
+
+          // 💡 [사장님 지시] 비고에 해당하는 컬럼이 여러 개(예: 현장명, 업체명, 비고)이면 텍스트를 묶어서 보여줌!
+          const memoCandidateKeys = keys.filter(k => {
+            const kLower = k.toLowerCase();
+            return kLower.includes('현장') || kLower.includes('업체') || kLower.includes('비고') || 
+                   kLower.includes('메모') || kLower.includes('특이') || kLower.includes('참고');
+          });
+
+          const memoParts: string[] = [];
+          memoCandidateKeys.forEach(k => {
+            const val = rowObj[k];
+            if (val && !isDitto(val)) {
+              memoParts.push(`${k}: ${val}`);
+            }
+          });
+
+          // 병합된 비고 텍스트 생성
+          const combinedMemo = memoParts.length > 0 ? memoParts.join(' | ') : (rowObj['비고'] || '');
+          rowObj['비고'] = combinedMemo;
+
+          parsedRows.push(rowObj);
+        }
+
+        if (parsedRows.length === 0) {
+          showErrorModal('엑셀 파싱 결과 데이터 행을 찾을 수 없습니다.');
+          return;
+        }
+
+        // 5. 1:1 스마트 짝짓기 파이프라인 집행
         const remainingSystemDeliveries = [...completedDeliveriesForRecon];
         const pairs: ReconPairRow[] = [];
         let autoMatchedCount = 0;
         let mismatchCount = 0;
 
-        jsonRows.forEach((row, rIdx) => {
+        parsedRows.forEach((row, rIdx) => {
           const keys = Object.keys(row);
           const idKey = keys.find(k => k.includes('배차ID') || k.includes('배차번호') || k.includes('ID') || k.includes('운송ID'));
-          const costKey = keys.find(k => k.includes('운송비') || k.includes('청구금액') || k.includes('금액') || k.includes('운임'));
+          const costKey = keys.find(k => k.includes('합계') || k.includes('운송비') || k.includes('청구금액') || k.includes('금액') || k.includes('운임'));
           const driverKey = keys.find(k => k.includes('기사명') || k.includes('운송기사') || k.includes('기사'));
           const dateKey = keys.find(k => k.includes('날짜') || k.includes('일자') || k.includes('운송일'));
           const destKey = keys.find(k => k.includes('하차지') || k.includes('도착지') || k.includes('현장'));
@@ -353,7 +464,7 @@ export const TruckDispatch: React.FC = () => {
                 systemCost: sysCost,
                 excelCost,
                 diffCost: diff,
-                memo: `시스템 ₩${sysCost.toLocaleString()}원 vs 엑셀 ₩${excelCost.toLocaleString()}원 (차액 ₩${diff.toLocaleString()}원)`,
+                memo: row['비고'] || `시스템 ₩${sysCost.toLocaleString()}원 vs 엑셀 ₩${excelCost.toLocaleString()}원 (차액 ₩${diff.toLocaleString()}원)`,
                 isReconciled: false
               });
             } else {
@@ -366,7 +477,7 @@ export const TruckDispatch: React.FC = () => {
                 systemCost: sysCost,
                 excelCost: sysCost,
                 diffCost: 0,
-                memo: '날짜/하차지/금액 100% 일치 (자동 매칭)',
+                memo: row['비고'] || '날짜/하차지/금액 100% 일치 (자동 매칭)',
                 isReconciled: true
               });
             }
@@ -378,7 +489,7 @@ export const TruckDispatch: React.FC = () => {
               systemCost: 0,
               excelCost,
               diffCost: excelCost,
-              memo: '시스템 배차 내역 미존재 (엑셀 단독 항목)',
+              memo: row['비고'] || '시스템 배차 내역 미존재 (엑셀 단독 항목)',
               isReconciled: false
             });
           }
@@ -400,7 +511,7 @@ export const TruckDispatch: React.FC = () => {
         });
 
         setReconPairs(pairs);
-        const msg = `🎉 1:1 스마트 짝짓기 완료! [🟢 대사일치 ${autoMatchedCount}건] | [🟡 금액불일치 ${mismatchCount}건] | [🔴 엑셀단독 ${pairs.filter(p => p.matchStatus === 'EXCEL_ONLY').length}건] | [⚪ 시스템단독 ${remainingSystemDeliveries.length}건]`;
+        const msg = `🎉 동적 헤더 & 다중 비고 병합 스마트 대사 완료! [🟢 대사일치 ${autoMatchedCount}건] | [🟡 금액불일치 ${mismatchCount}건] | [🔴 엑셀단독 ${pairs.filter(p => p.matchStatus === 'EXCEL_ONLY').length}건] | [⚪ 시스템단독 ${remainingSystemDeliveries.length}건]`;
         setReconNotificationMsg(msg);
       } catch (err: any) {
         showErrorModal('엑셀 파싱 중 오류가 발생하였습니다: ' + err.message);
@@ -1838,6 +1949,11 @@ export const TruckDispatch: React.FC = () => {
                               <div style={{ color: 'var(--text-secondary)', fontSize: '11.5px' }}>
                                 📍 {pair.excelRow['하차지'] || pair.excelRow['도착지'] || pair.excelRow['현장'] || '-'}
                               </div>
+                              {pair.excelRow['비고'] && (
+                                <div style={{ fontSize: '11px', color: 'var(--primary)', backgroundColor: 'rgba(59,130,246,0.06)', padding: '2px 6px', borderRadius: '4px', border: '1px solid rgba(59,130,246,0.2)', marginTop: '2px', wordBreak: 'break-all' }}>
+                                  📝 {pair.excelRow['비고']}
+                                </div>
+                              )}
                               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '2px' }}>
                                 <span>🚛 {pair.excelRow['기사명'] || pair.excelRow['운송기사'] || pair.excelRow['기사'] || '-'}</span>
                                 <span style={{ fontWeight: 900, color: pair.diffCost !== 0 ? '#ca8a04' : '#16a34a' }}>
