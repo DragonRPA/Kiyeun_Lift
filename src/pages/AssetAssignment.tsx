@@ -113,10 +113,47 @@ export const AssetAssignment: React.FC = () => {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', fontSize: '13px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'var(--bg-card)', padding: '14px 18px', borderRadius: '10px', border: '1px solid var(--border-color)', gap: '16px', flexWrap: 'wrap' }}>
         <div>
           <h2 style={{ fontWeight: '800', marginBottom: '4px', fontSize: '18px', letterSpacing: '-0.5px' }}>장비 할당 보드 (고밀도 뷰)</h2>
-          <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>임대가능 장비를 바둑판 카드로 매핑합니다. (선택된 슬롯과 동일한 모델명만 노출 및 상태 점수순 정렬)</p>
+          <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: 0 }}>임대가능 장비를 바둑판 카드로 매핑합니다. (선택된 슬롯과 동일한 모델명만 노출 및 상태 점수순 정렬)</p>
+        </div>
+
+        {/* 💡 [사장님 지시] 상시 영구 노출되는 장비 관리번호 조회 필터 바 */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '360px', backgroundColor: 'var(--bg-body)', padding: '8px 14px', borderRadius: '8px', border: '2px solid var(--primary)', boxShadow: '0 2px 6px rgba(59,130,246,0.15)' }}>
+          <Search size={16} color="var(--primary)" />
+          <input
+            type="text"
+            placeholder="🔍 장비 관리번호 / 모델명 빠른 조회 (예: G15140, GS-1930...)"
+            value={searchAssetNo}
+            onChange={e => setSearchAssetNo(e.target.value)}
+            style={{
+              flex: 1,
+              border: 'none',
+              backgroundColor: 'transparent',
+              fontSize: '12.5px',
+              fontWeight: 800,
+              outline: 'none',
+              color: 'var(--text-primary)'
+            }}
+          />
+          {searchAssetNo && (
+            <button
+              onClick={() => setSearchAssetNo('')}
+              style={{
+                padding: '3px 8px',
+                fontSize: '11px',
+                borderRadius: '4px',
+                border: 'none',
+                backgroundColor: '#ef4444',
+                color: '#fff',
+                cursor: 'pointer',
+                fontWeight: 700
+              }}
+            >
+              초기화
+            </button>
+          )}
         </div>
       </div>
 
@@ -209,6 +246,33 @@ export const AssetAssignment: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* 💡 [사장님 지시] 계약 선택 전이라도 상단 검색창에 관리번호 입력 시 즉시 검색된 장비 결과 노출 */}
+      {!selectedContractId && searchAssetNo && (
+        <div className="card" style={{ padding: '16px', border: '2px solid var(--primary)', borderRadius: '10px' }}>
+          <h3 style={{ fontSize: '14px', fontWeight: 800, color: 'var(--primary)', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <Search size={16} /> 🔍 '{searchAssetNo}' 관리번호 검색 결과 (가용 장비 {availableAssets.length}대)
+          </h3>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '10px' }}>
+            {availableAssets.length === 0 ? (
+              <div style={{ padding: '24px', textAlign: 'center', color: 'var(--text-muted)' }}>일치하는 임대 가능 장비가 없습니다.</div>
+            ) : (
+              availableAssets.map(a => {
+                const scoreInfo = getScoreBadgeColor(a.maintenanceScore);
+                return (
+                  <div key={a.id} style={{ padding: '12px', border: '1px solid var(--border-color)', borderRadius: '8px', backgroundColor: 'var(--bg-body)' }}>
+                    <div style={{ fontWeight: 800, fontSize: '13px', color: 'var(--text-primary)' }}>{a.assetNo}</div>
+                    <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>{a.modelName}</div>
+                    <div style={{ marginTop: '6px', fontSize: '10px', display: 'inline-block', padding: '1px 6px', borderRadius: '4px', backgroundColor: scoreInfo.bg, color: scoreInfo.color, border: `1px solid ${scoreInfo.border}`, fontWeight: 700 }}>
+                      ⚡ 상태 점수: {a.maintenanceScore || 0}점
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+      )}
 
       {/* 2단계: 선택된 계약의 장비 할당 상세 워크보드 */}
       {selectedContractId && (
