@@ -391,14 +391,16 @@ export const TruckDispatch: React.FC = () => {
           headerRowIndex = 0; // Fallback to 1st row
         }
 
-        // 3. 헤더 컬럼 파싱 및 데이터 행 정규화
+        // 3. 헤더 컬럼 파싱 및 데이터 행 정규화 (제목 없는 컬럼은 비고로 자동 할당)
         const rawHeaderRow = rawRows[headerRowIndex] || [];
         const headerNames: string[] = rawHeaderRow.map((col: any, cIdx: number) => {
           const title = String(col).trim();
-          return title || `COL_${cIdx + 1}`;
+          if (title) return title;
+          // 헤더명이 없는 6번째 이상의 열은 비고/메모 컬럼으로 자동 부여
+          return cIdx >= 6 ? (cIdx === 8 ? '비고' : `비고_${cIdx + 1}`) : `COL_${cIdx + 1}`;
         });
 
-        // 4. 데이터 행 구성 (디토 상속 & 다중 비고 병합 적용)
+        // 4. 데이터 행 구성 (상단/하단 표 자동 걸러내기, 디토 상속 & 다중 비고 병합 적용)
         const parsedRows: any[] = [];
         let lastDate = '';
         let lastOrigin = '';
@@ -407,6 +409,19 @@ export const TruckDispatch: React.FC = () => {
         for (let r = headerRowIndex + 1; r < rawRows.length; r++) {
           const rowArr = rawRows[r];
           if (!rowArr || rowArr.every((cell: any) => String(cell).trim() === '')) continue; // 빈 행 패스
+
+          const fullRowText = rowArr.map((cell: any) => String(cell).trim()).join(' ');
+
+          // 상단 공급자 정보 표 및 하단 합계/소계 행 자동 예외 처리
+          if (fullRowText.includes('공급가액') || fullRowText.includes('합계금액') || fullRowText.includes('부가세') || fullRowText.includes('운송비거래명세표') || fullRowText.includes('사업장주소') || fullRowText.includes('등록번호')) {
+            continue;
+          }
+
+          const firstCell = String(rowArr[0] || '').trim();
+          const secondCell = String(rowArr[1] || '').trim();
+          if (firstCell.includes('합계') || firstCell.includes('소계') || secondCell.includes('합계') || secondCell.includes('소계')) {
+            continue;
+          }
 
           const rowObj: any = {};
           headerNames.forEach((hName, cIdx) => {
@@ -456,22 +471,22 @@ export const TruckDispatch: React.FC = () => {
           if (originKey) rowObj[originKey] = rawOrigin;
           if (destKey) rowObj[destKey] = rawDest;
 
-          // 💡 [사장님 지시] 비고에 해당하는 컬럼이 여러 개(예: 현장명, 업체명, 비고)이면 텍스트를 묶어서 보여줌!
+          // 💡 [사장님 지시] 비고에 해당하는 컬럼이 여러 개(예: 현장명, 업체명, 무제목I열 현장대기 등)이면 텍스트를 병합!
           const memoCandidateKeys = keys.filter(k => {
             const kLower = k.toLowerCase();
             return kLower.includes('현장') || kLower.includes('업체') || kLower.includes('비고') || 
-                   kLower.includes('메모') || kLower.includes('특이') || kLower.includes('참고');
+                   kLower.includes('메모') || kLower.includes('특이') || kLower.includes('참고') || kLower.includes('col_');
           });
 
           const memoParts: string[] = [];
           memoCandidateKeys.forEach(k => {
             let val = String(rowObj[k] || '').trim();
             if (val && !isDitto(val)) {
-              if (k.trim() === '비고' && val.startsWith('비고')) {
+              if (k.trim().includes('비고') && val.startsWith('비고')) {
                 val = val.replace(/^비고[:\s]*/, '').trim();
               }
               if (val) {
-                memoParts.push(k.trim() === '비고' ? val : `${k}: ${val}`);
+                memoParts.push(k.trim().includes('비고') || k.trim().includes('COL_') ? val : `${k}: ${val}`);
               }
             }
           });
