@@ -1,3 +1,22 @@
+# Release Notes (v1.15.0.Build.00008 - 2026-07-29 17:14)
+
+## 🧹 [데드 중복 파일 9개 일괄 제거] 코드베이스 정리
+
+- **개편 배경**: 수차례 반복 지시 과정에서 소문자 파일(`asset_assignment.tsx` 등)과 PascalCase 파일(`AssetAssignment.tsx` 등)이 공존하는 중복 구조가 형성됨. `App.tsx`는 소문자 파일만 import하므로 PascalCase 파일은 전부 데드코드.
+- **삭제된 파일 목록 (9개)**:
+  - `src/pages/AssetAssignment.tsx` → `asset_assignment.tsx` 실사용 중
+  - `src/pages/AssetHistory.tsx` → `asset_history.tsx` 실사용 중
+  - `src/pages/DepreciationExecution.tsx` → `depreciation_execution.tsx` 실사용 중
+  - `src/pages/OutboundInspections.tsx` → `outbound_inspections.tsx` 실사용 중
+  - `src/pages/RentAssets.tsx` → `rent_assets.tsx` 실사용 중
+  - `src/pages/SmartDispatch.tsx` → `smart_dispatch.tsx` 실사용 중
+  - `src/pages/SmartDispatch.tsx.bak` → 백업 잔류 파일
+  - `src/pages/SmartReturn.tsx` → `smart_return.tsx` 실사용 중
+  - `src/pages/UsersPermissions.tsx` → `users_permissions.tsx` 실사용 중
+- **빌드 검증**: TypeScript + Vite 빌드 오류 없음 확인 ✅
+
+---
+
 # Release Notes (v1.15.0.Build.00007 - 2026-07-29 17:11)
 
 ## 🔍 [장비 할당 보드 `관리번호 / 제조번호 검색 필터` 추가] `asset_assignment.tsx` 패치 완료
