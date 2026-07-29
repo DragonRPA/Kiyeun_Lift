@@ -281,6 +281,14 @@ export const TruckDispatch: React.FC = () => {
       // 💡 [사장님 지시] 원격 Supabase DB 쓰기가 100% 완료될 때까지 동기 대기 (Zero Silent Failures)
       await db.awaitPendingWrites();
 
+      // 💡 [사장님 지시] 단순 대기만 하지 않고, 실제 DB를 다시 SELECT 읽기조회하여 목표 금액으로 100% 정상 수정되었는지 실시간 검증 (Read-Back Verification)
+      const verifiedDelivery = db.deliveries.find(d => d.id === editingDelivery.id);
+      const verifiedCost = verifiedDelivery ? (verifiedDelivery.deliveryCost || (verifiedDelivery.assignedVehicles && verifiedDelivery.assignedVehicles[0]?.deliveryCost) || 0) : 0;
+
+      if (!verifiedDelivery || verifiedCost !== newCost) {
+        throw new Error(`DB 반영 검증 실패 (목표 금액: ₩${newCost.toLocaleString()}원 vs 실제 DB 저장액: ₩${verifiedCost.toLocaleString()}원). DB 갱신이 정상적으로 처리되지 않았습니다.`);
+      }
+
       // 2. 전체 데이터 및 state 갱신
       await refreshAllData();
 

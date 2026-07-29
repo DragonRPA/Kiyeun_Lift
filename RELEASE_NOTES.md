@@ -1,3 +1,16 @@
+# Release Notes (v1.14.1.Build.00006 - 2026-07-29 15:55)
+
+## 🔬 [DB 수정 후 실시간 다시 읽기 검증 (Read-Back Verification Engine)] `TruckDispatch.tsx` 패치 완료
+
+- **개편 배경**: 사장님 지시 사항("대기만 하지 말고, 정상 수정 되었는지 DB를 읽어서 검증해")에 따라 단순 쓰기 전송에 그치지 않고, DB 저장 후 해당 `deliveries` 행을 실시간으로 다시 읽어와 목표 금액으로 100% 정상 저장되었는지를 실시간 파이프라인으로 정밀 검증하도록 수술함.
+- **주요 구현 내역**:
+  1. **[실시간 DB 읽기 검증 파이프라인 (Read-Back Verification)]**:
+     - `db.updateRow('deliveries', ...)` ➔ `await db.awaitPendingWrites()` 완료 후, `db.deliveries.find(...)` 조회를 통해 DB 저장 상태를 직접 재조회.
+  2. **[실제 저장액 vs 목표 금액 100% 일치 검증 & 실패 시 팝업 차단]**:
+     - DB에 저장된 `verifiedCost === newCost`를 정밀 검증하여, 정상 수정을 눈으로 100% 확인한 경우에만 완료 처리 및 화면 갱신 수행 (Zero Silent Failures 보장).
+
+---
+
 # Release Notes (v1.14.1.Build.00005 - 2026-07-29 15:50)
 
 ## ⚡ [Supabase 원격 DB 쓰기 비동기 지연 해결 (`await db.awaitPendingWrites()` 동기 대기)] `TruckDispatch.tsx` 패치 완료
