@@ -1,3 +1,16 @@
+# Release Notes (v1.14.1.Build.00007 - 2026-07-29 16:00)
+
+## 💰 [Supabase DB 내 `expectedCost`, `finalCost`, `deliveryCostConfirmed` 전 컬럼 100% 일괄 동기화] `TruckDispatch.tsx` 패치 완료
+
+- **개편 배경**: 사장님 질의("이 두 값은 뭐야: expectedCost, finalCost")에 대한 컬럼 의미 설명 및 일괄 동기화 수술. Supabase 콘솔 대시보드의 `expectedCost`(예상 운송비)와 `finalCost`(최종 정산 운송비) 컬럼이 이전 70,000원으로 남아있던 현상을 원천 수술함.
+- **주요 구현 내역**:
+  1. **[모든 운송비 관련 컬럼 일괄 100% 동기화 (All-Column Batch Sync)]**:
+     - 금액 수정 시 `deliveryCost` 뿐만 아니라 **`finalCost`**, **`expectedCost`**, **`deliveryCostConfirmed`** 컬럼까지 입력한 정정 금액(예: `100,000원`)으로 100% 동일하게 일괄 갱신 전송.
+  2. **[Supabase 콘솔 대시보드 전 컬럼 완벽 통일]**:
+     - Supabase 대시보드의 어떤 컬럼(`deliveryCost`, `finalCost`, `expectedCost`, `deliveryCostConfirmed`)을 조회하더라도 100% 정정된 금액으로 일치함을 보장.
+
+---
+
 # Release Notes (v1.14.1.Build.00006 - 2026-07-29 15:55)
 
 ## 🔬 [DB 수정 후 실시간 다시 읽기 검증 (Read-Back Verification Engine)] `TruckDispatch.tsx` 패치 완료

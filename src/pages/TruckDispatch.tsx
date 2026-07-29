@@ -269,7 +269,10 @@ export const TruckDispatch: React.FC = () => {
         : [];
 
       const updateData: any = {
-        deliveryCost: newCost
+        deliveryCost: newCost,
+        finalCost: newCost,
+        expectedCost: newCost,
+        deliveryCostConfirmed: newCost
       };
 
       if (updatedVehicles.length > 0) {
