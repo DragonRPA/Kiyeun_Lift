@@ -89,6 +89,7 @@ interface InspectionGroup {
   customerName: string;
   siteName: string;
   requestDate: string;
+  loadingDate: string; // 🚚 상차일자 (YYYY-MM-DD)
   status: OutboundInspectionStatus;
   items: OutboundInspection[];
   assets: Asset[];
@@ -119,11 +120,11 @@ export const OutboundInspections: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
 
-  // 📅 요청일(신청일) 기간 필터 state
+  // 📅 상차일자 기간 필터 state
   const [startDate, setStartDate] = useState<string>('');
   const [endDate, setEndDate] = useState<string>('');
 
-  // Quick 날짜 선택 헬퍼
+  // 💡 [사장님 지시] Quick 날짜 선택 헬퍼 - 오늘 이후 미래 기준 조회 (1주일: 오늘~+7일, 1개월: 오늘~+30일)
   const handleSetDateRange = (type: 'TODAY' | 'WEEK' | 'MONTH' | 'ALL') => {
     const today = new Date();
     const todayStr = today.toISOString().split('T')[0];
@@ -131,15 +132,15 @@ export const OutboundInspections: React.FC = () => {
       setStartDate(todayStr);
       setEndDate(todayStr);
     } else if (type === 'WEEK') {
-      const past = new Date();
-      past.setDate(today.getDate() - 7);
-      setStartDate(past.toISOString().split('T')[0]);
-      setEndDate(todayStr);
+      const future = new Date();
+      future.setDate(today.getDate() + 7);
+      setStartDate(todayStr);
+      setEndDate(future.toISOString().split('T')[0]);
     } else if (type === 'MONTH') {
-      const past = new Date();
-      past.setMonth(today.getMonth() - 1);
-      setStartDate(past.toISOString().split('T')[0]);
-      setEndDate(todayStr);
+      const future = new Date();
+      future.setDate(today.getDate() + 30);
+      setStartDate(todayStr);
+      setEndDate(future.toISOString().split('T')[0]);
     } else {
       setStartDate('');
       setEndDate('');
@@ -236,6 +237,8 @@ export const OutboundInspections: React.FC = () => {
         groupStatus = 'IN_PROGRESS';
       }
 
+      const loadingDateVal = delivery?.loadingDate || delivery?.scheduledDate || (contract as any)?.startDate || (firstItem.createdAt ? firstItem.createdAt.substring(0, 10) : new Date().toISOString().split('T')[0]);
+
       groups.push({
         groupId: key,
         contractId: firstItem.contractId || '',
@@ -243,6 +246,7 @@ export const OutboundInspections: React.FC = () => {
         customerName: customer?.name || '고객 미지정',
         siteName: site?.name || '현장 미지정',
         requestDate: firstItem.createdAt ? firstItem.createdAt.substring(0, 10) : new Date().toISOString().split('T')[0],
+        loadingDate: loadingDateVal,
         status: groupStatus,
         items,
         assets: groupAssets,
@@ -252,19 +256,19 @@ export const OutboundInspections: React.FC = () => {
       });
     });
 
-    return groups.sort((a, b) => b.requestDate.localeCompare(a.requestDate));
+    return groups.sort((a, b) => a.loadingDate.localeCompare(b.loadingDate));
   }, [outboundInspections, contracts, customers, sites, assets, deliveries]);
 
   // ──────────────────────────────────────────────────────────────────────────
-  // 2. 검색, 탭 및 📅 요청일자 기간 범위 필터링
+  // 2. 검색, 탭 및 📅 상차일자 기간 범위 필터링
   // ──────────────────────────────────────────────────────────────────────────
   const filteredGroups = useMemo(() => {
     return inspectionGroups.filter(g => {
       if (activeTabStatus !== 'ALL' && g.status !== activeTabStatus) return false;
 
-      // 요청일 기간 범위 필터링 적용
-      if (startDate && g.requestDate < startDate) return false;
-      if (endDate && g.requestDate > endDate) return false;
+      // 💡 [사장님 지시] 상차일자(loadingDate) 기준 기간 범위 필터링 적용
+      if (startDate && g.loadingDate < startDate) return false;
+      if (endDate && g.loadingDate > endDate) return false;
 
       if (!searchQuery) return true;
       const q = searchQuery.toLowerCase();
@@ -563,7 +567,7 @@ export const OutboundInspections: React.FC = () => {
           <div style={{ marginBottom: '12px', padding: '10px 12px', backgroundColor: 'var(--bg-body)', borderRadius: '10px', border: '1px solid var(--border-color)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
               <span style={{ fontSize: '12px', fontWeight: 800, color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <Calendar size={13} /> 의뢰 신청일자 기간 조회
+                <Calendar size={13} /> 상차일자 기간 조회
               </span>
               <div style={{ display: 'flex', gap: '4px' }}>
                 {[
@@ -690,8 +694,8 @@ export const OutboundInspections: React.FC = () => {
                     }}
                   >
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                      <span style={{ fontSize: '11.5px', fontWeight: 700, color: 'var(--primary)' }}>
-                        신청일: {group.requestDate}
+                      <span style={{ fontSize: '11.5px', fontWeight: 800, color: 'var(--primary)' }}>
+                        🚛 상차일: {group.loadingDate} <span style={{ fontSize: '10.5px', color: 'var(--text-muted)', fontWeight: 500 }}>(신청: {group.requestDate})</span>
                       </span>
                       {getStatusBadge(group.status)}
                     </div>
