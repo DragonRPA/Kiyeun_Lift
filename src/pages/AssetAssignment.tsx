@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { Wrench, CheckCircle, PackageSearch, Layers, Truck, ChevronDown, Check, Activity } from 'lucide-react';
+import { Wrench, CheckCircle, PackageSearch, Layers, Truck, ChevronDown, Check, Activity, Search } from 'lucide-react';
 
 export const AssetAssignment: React.FC = () => {
   const { hasPermission, contractAssets, contracts, customers, assets, assignAssetToContract } = useApp();
@@ -22,6 +22,7 @@ export const AssetAssignment: React.FC = () => {
   const pendingContracts = contracts.filter(c => pendingContractIds.includes(c.id));
 
   const [isAssigning, setIsAssigning] = useState(false);
+  const [searchAssetNo, setSearchAssetNo] = useState(''); // 🔍 장비 관리번호 조회 필터 state
 
   const handleAssign = async () => {
     // 1. 클릭 즉시 브라우저 포커스 탈출! (Enter 연타에 의한 중복 클릭 차단)
@@ -88,6 +89,16 @@ export const AssetAssignment: React.FC = () => {
     if (requiredModels.length > 0) {
       availableAssets = availableAssets.filter(a => requiredModels.some(req => isModelMatch(a.modelName, req)));
     }
+  }
+
+  // 💡 [사장님 지시] 관리번호/모델명 검색 필터링 적용
+  if (searchAssetNo.trim()) {
+    const q = searchAssetNo.trim().toLowerCase();
+    availableAssets = availableAssets.filter(a => 
+      (a.assetNo && a.assetNo.toLowerCase().includes(q)) ||
+      (a.modelName && a.modelName.toLowerCase().includes(q)) ||
+      (a.serialNo && a.serialNo.toLowerCase().includes(q))
+    );
   }
 
   // Maintenance Score 기준 오름차순 정렬 (0에 가까울수록 우선)
@@ -257,6 +268,46 @@ export const AssetAssignment: React.FC = () => {
 
           {/* 2-B: 가용 장비 선택 풀 */}
           <div className="card" style={{ height: '400px', display: 'flex', flexDirection: 'column', border: '2px solid var(--success-light)' }}>
+            
+            {/* 💡 [사장님 지시] 표시 위치에 관리번호/모델명 조회 필터 추가 */}
+            <div style={{ padding: '8px 12px', backgroundColor: 'var(--bg-body)', borderBottom: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Search size={14} color="var(--primary)" />
+              <input
+                type="text"
+                placeholder="🔍 장비 관리번호 / 모델명 빠른 검색 (예: G15140, GS-1930...)"
+                value={searchAssetNo}
+                onChange={e => setSearchAssetNo(e.target.value)}
+                style={{
+                  flex: 1,
+                  padding: '6px 10px',
+                  borderRadius: '6px',
+                  border: '1px solid var(--border-color)',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  outline: 'none',
+                  color: 'var(--text-primary)',
+                  backgroundColor: 'var(--bg-card)'
+                }}
+              />
+              {searchAssetNo && (
+                <button
+                  onClick={() => setSearchAssetNo('')}
+                  style={{
+                    padding: '2px 8px',
+                    fontSize: '11px',
+                    borderRadius: '4px',
+                    border: 'none',
+                    backgroundColor: '#ef4444',
+                    color: '#fff',
+                    cursor: 'pointer',
+                    fontWeight: 700
+                  }}
+                >
+                  초기화
+                </button>
+              )}
+            </div>
+
             <div className="card-header" style={{ padding: '10px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'var(--success-light)' }}>
               <h3 className="card-title" style={{ display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--success)', fontSize: '13px' }}>
                 <CheckCircle size={14} /> 필터링된 임대가능 장비 ({availableAssets.length})
