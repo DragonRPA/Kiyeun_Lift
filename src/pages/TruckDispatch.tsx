@@ -489,13 +489,18 @@ export const TruckDispatch: React.FC = () => {
           const rowArr = rawRows[r];
           if (!rowArr || rowArr.every((cell: any) => String(cell).trim() === '')) continue;
 
-          // 하단 합계/소계 행 감지: NO 컬럼 또는 첫 두 셀에 집계 키워드가 있으면 스킵
-          const firstCell = String(rowArr[0] || '').trim();
-          const secondCell = String(rowArr[1] || '').trim();
+          // 하단 합계/소계/서명 행 감지: NO 컬럼 또는 첫 두 셀에 집계 키워드가 있거나 날짜/서명 행인 경우 스킵
+          const firstCellClean = String(rowArr[0] || '').replace(/\s+/g, '');
+          const secondCellClean = String(rowArr[1] || '').replace(/\s+/g, '');
+          const thirdCellClean = String(rowArr[2] || '').replace(/\s+/g, '');
+          const fullRowTextClean = rowArr.map((cell: any) => String(cell).trim()).join(' ');
+
           const isFooterRow =
-            firstCell === '합계' || firstCell === '소계' || firstCell === '계' ||
-            secondCell === '합계' || secondCell === '소계' ||
-            (firstCell === '' && secondCell === '' && String(rowArr[2] || '').trim() === '합계');
+            firstCellClean === '합계' || firstCellClean === '소계' || firstCellClean === '계' || firstCellClean === '총계' ||
+            secondCellClean === '합계' || secondCellClean === '소계' || thirdCellClean === '합계' ||
+            fullRowTextClean.includes('공급가액') || fullRowTextClean.includes('합계금액') || fullRowTextClean.includes('부가세') ||
+            fullRowTextClean.includes('운송비거래명세표') || fullRowTextClean.includes('사업장주소') || fullRowTextClean.includes('등록번호') ||
+            fullRowTextClean.includes('김원진') || fullRowTextClean.includes('서명') || fullRowTextClean.includes('날인');
           if (isFooterRow) continue;
 
           const rowObj: any = {};
@@ -508,10 +513,12 @@ export const TruckDispatch: React.FC = () => {
           const dateKey = keys.find(k => k.includes('일자') || k.includes('날짜') || k.includes('운송일'));
           const originKey = keys.find(k => k.includes('상차지') || k.includes('출발지'));
           const destKey = keys.find(k => k.includes('하차지') || k.includes('도착지'));
+          const costKey = keys.find(k => k.includes('합계') || k.includes('운송비') || k.includes('청구금액') || k.includes('금액') || k.includes('운임'));
 
           let rawDate = dateKey ? rowObj[dateKey] : '';
           let rawOrigin = originKey ? rowObj[originKey] : '';
           let rawDest = destKey ? rowObj[destKey] : '';
+          const excelCost = costKey ? Number(String(rowObj[costKey]).replace(/[^0-9.-]+/g, '')) : 0;
 
           if (isDitto(rawDate) && lastDate) rawDate = lastDate;
           else if (rawDate && !isDitto(rawDate)) lastDate = rawDate;
@@ -538,7 +545,7 @@ export const TruckDispatch: React.FC = () => {
             } else if (rawDate.includes('/')) {
               const parts = rawDate.split('/');
               if (parts.length === 2) normDate = `${currentYear}-${String(parts[0]).padStart(2, '0')}-${String(parts[1]).padStart(2, '0')}`;
-              else if (parts.length === 3) normDate = `${parts[0]}-${String(parts[1]).padStart(2, '0')}-${String(parts[2]).padStart(2, '0')}`;
+              else if (parts.length === 3) normDate = `${parts[0]}-${String(parts[1]).padStart(2, '0')}-${String(parts[1]).padStart(2, '0')}`;
             }
           }
 
@@ -562,6 +569,16 @@ export const TruckDispatch: React.FC = () => {
           });
 
           if (memoParts.length > 0) rowObj['비고'] = memoParts.join(' | ');
+
+          // 💡 [사장님 지시] NO(번호)만 들어있고 실제 거래 내용(일자, 상/하차지, 운송비, 비고)이 텅 빈 가짜 더미 행 걸러내기!
+          const hasValidContent = (rawDate && !isDitto(rawDate)) || 
+                                  (rawOrigin && !isDitto(rawOrigin)) || 
+                                  (rawDest && !isDitto(rawDest)) || 
+                                  (excelCost > 0) || 
+                                  (memoParts.length > 0);
+          if (!hasValidContent) {
+            continue; // 내용이 없는 덤미 항목 제외!
+          }
 
           parsedRows.push(rowObj);
         }
