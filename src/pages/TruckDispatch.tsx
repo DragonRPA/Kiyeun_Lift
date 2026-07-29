@@ -263,6 +263,12 @@ export const TruckDispatch: React.FC = () => {
     const excelCost = costKey ? Number(String(excelPair.excelRow[costKey]).replace(/[^0-9.-]+/g, '')) : 0;
     const diff = excelCost - sysCost;
 
+    // 💡 [사장님 지시] 좌측/우측 금액 상이 시 대사 처리 거절
+    if (diff !== 0) {
+      showErrorModal(`⚠️ [대사 처리 거절]\n\n• 좌측 시스템 금액: ₩${sysCost.toLocaleString()}원\n• 우측 엑셀 청구금액: ₩${excelCost.toLocaleString()}원\n• 차액: ₩${Math.abs(diff).toLocaleString()}원\n\n좌측과 우측 패널의 금액이 상이한 항목은 대사 처리가 불가능합니다.`);
+      return;
+    }
+
     setReconPairs(prev => {
       const filtered = prev.filter(p => p.systemDelivery?.id !== sysD.id && p.pairId !== excelPair.pairId);
       return [
@@ -686,8 +692,19 @@ export const TruckDispatch: React.FC = () => {
     }
   };
 
-  // 💡 [사장님 지시] 건별 대사 완료 토글 및 [↩️ 대사 취소 (대기 원복)] 기능
+  // 💡 [사장님 지시] 건별 대사 완료 토글 및 [↩️ 대사 취소 (대기 원복)] 기능 (금액 상이 시 대사 거절)
   const handleTogglePairReconciled = (pairId: string) => {
+    const targetPair = reconPairs.find(p => p.pairId === pairId);
+    if (!targetPair) return;
+
+    if (!targetPair.isReconciled) {
+      // 대사 완료 전환 시 금액 검증
+      if (targetPair.diffCost !== 0 || targetPair.systemCost !== targetPair.excelCost) {
+        showErrorModal(`⚠️ [대사 처리 거절]\n\n• 좌측 시스템 금액: ₩${targetPair.systemCost.toLocaleString()}원\n• 우측 엑셀 청구금액: ₩${targetPair.excelCost.toLocaleString()}원\n• 차액: ₩${Math.abs(targetPair.diffCost).toLocaleString()}원\n\n좌측과 우측의 금액이 상이한 항목은 대사 처리가 불가능합니다.`);
+        return;
+      }
+    }
+
     setReconPairs(prev => prev.map(p => {
       if (p.pairId === pairId) {
         const nextReconciled = !p.isReconciled;
@@ -702,20 +719,35 @@ export const TruckDispatch: React.FC = () => {
     }));
   };
 
-  // 선택건 일괄 대사 완료
+  // 선택건 일괄 대사 완료 (금액 상이건 대사 거절)
   const handleBatchReconcilePairs = () => {
     if (selectedPairIds.size === 0) {
       showErrorModal('대사 완료 처리할 항목을 1건 이상 체크해 주세요.');
       return;
     }
+
+    let rejectedCount = 0;
+    let successCount = 0;
+
     setReconPairs(prev => prev.map(p => {
       if (selectedPairIds.has(p.pairId)) {
+        if (p.diffCost !== 0 || p.systemCost !== p.excelCost) {
+          rejectedCount++;
+          return p; // 금액 상이 항목은 대사 처리 거절 (상태 유지)
+        }
+        successCount++;
         return { ...p, isReconciled: true, matchStatus: 'MATCHED', memo: '선택 항목 일괄 대사 완료' };
       }
       return p;
     }));
+
     setSelectedPairIds(new Set());
-    setReconNotificationMsg(`✅ 선택한 Pair 항목들이 대사 완료(MATCHED)로 전환되었습니다.`);
+
+    if (rejectedCount > 0) {
+      showErrorModal(`⚠️ 선택한 항목 중 ${rejectedCount}건은 좌/우 금액이 상이하여 대사 처리가 거절되었습니다.\n\n(금액이 일치하는 ${successCount}건만 대사 완료 처리되었습니다.)`);
+    } else if (successCount > 0) {
+      setReconNotificationMsg(`✅ 선택한 Pair 항목 ${successCount}건이 대사 완료(MATCHED)로 전환되었습니다.`);
+    }
   };
 
   // 💡 [사장님 지시] 선택건 일괄 대사 취소 (대기 원복)
