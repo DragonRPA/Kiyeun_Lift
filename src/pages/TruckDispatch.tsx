@@ -465,15 +465,22 @@ export const TruckDispatch: React.FC = () => {
 
           const memoParts: string[] = [];
           memoCandidateKeys.forEach(k => {
-            const val = rowObj[k];
+            let val = String(rowObj[k] || '').trim();
             if (val && !isDitto(val)) {
-              memoParts.push(`${k}: ${val}`);
+              if (k.trim() === '비고' && val.startsWith('비고')) {
+                val = val.replace(/^비고[:\s]*/, '').trim();
+              }
+              if (val) {
+                memoParts.push(k.trim() === '비고' ? val : `${k}: ${val}`);
+              }
             }
           });
 
           // 병합된 비고 텍스트 생성
           const combinedMemo = memoParts.length > 0 ? memoParts.join(' | ') : (rowObj['비고'] || '');
-          rowObj['비고'] = combinedMemo;
+          if (combinedMemo) {
+            rowObj['비고'] = combinedMemo;
+          }
 
           parsedRows.push(rowObj);
         }
@@ -2052,61 +2059,67 @@ export const TruckDispatch: React.FC = () => {
                           boxShadow: isSelected ? '0 0 0 3px rgba(22,163,74,0.2)' : 'none'
                         }}
                       >
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                          <span style={{ fontWeight: 800, color: 'var(--text-primary)', fontSize: '13px' }}>
-                            📄 {row['배차ID'] || row['ID'] || `행 #${idx + 1}`}
-                          </span>
-                          <span style={{ fontSize: '11.5px', color: 'var(--primary)', fontWeight: 800, backgroundColor: 'rgba(59,130,246,0.1)', padding: '2px 6px', borderRadius: '4px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                          <span style={{ fontSize: '11.5px', color: 'var(--primary)', fontWeight: 800, backgroundColor: 'rgba(59,130,246,0.1)', padding: '3px 8px', borderRadius: '5px' }}>
                             📅 {formatExcelDateStr(row['운송일자'] || row['날짜'] || row['일자'])}
+                          </span>
+                          <span style={{ fontSize: '14px', fontWeight: 900, color: pair.diffCost !== 0 ? '#ca8a04' : '#16a34a' }}>
+                            ₩{excelCost.toLocaleString()}원
                           </span>
                         </div>
 
-                        {/* 💡 [사장님 지시] 엑셀 거래명세서에서 읽어온 모든 컬럼 정보 시각적 뱃지 그리드로 노출 */}
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', margin: '6px 0', padding: '6px', backgroundColor: 'var(--bg-card)', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
+                        {/* 💡 [사장님 지시] 심플 뱃지 그리드 (중복 합계/금액/일자/행번호/비고:비고/빈기사아이콘 전면 제거) */}
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', margin: '4px 0' }}>
                           {Object.entries(row).map(([k, v]) => {
                             if (!v || v === '-' || v === "''") return null;
-                            const vStr = String(v);
+                            const kClean = k.trim();
+                            const vStr = String(v).trim();
+                            if (!vStr || vStr === '-') return null;
+
+                            // 1. 중복 금액/합계/일자 컬럼은 우측 상단 금액/날짜로 표출되므로 뱃지에서 생략
+                            if (kClean.includes('합계') || kClean.includes('금액') || kClean.includes('운송비') || kClean.includes('청구금액')) return null;
+                            if (kClean.includes('일자') || kClean.includes('날짜') || kClean.includes('운송일')) return null;
+
+                            // 2. '비고: 비고 세보 엠이씨' 처럼 '비고' 단어 중복 필터링
+                            let displayVal = vStr;
+                            if (kClean === '비고' && displayVal.startsWith('비고')) {
+                              displayVal = displayVal.replace(/^비고[:\s]*/, '').trim();
+                            }
+                            if (!displayVal) return null;
+
                             return (
                               <span
                                 key={k}
                                 style={{
                                   padding: '2px 7px',
                                   borderRadius: '5px',
-                                  fontSize: '11px',
-                                  backgroundColor: 'rgba(59,130,246,0.06)',
-                                  border: '1px solid rgba(59,130,246,0.2)',
+                                  fontSize: '11.5px',
+                                  backgroundColor: 'var(--bg-card)',
+                                  border: '1px solid var(--border-color)',
                                   color: 'var(--text-primary)',
                                   lineHeight: '1.4'
                                 }}
                               >
-                                <strong style={{ color: 'var(--primary)', marginRight: '3px' }}>{k}:</strong>
-                                {k.toLowerCase().includes('일자') || k.toLowerCase().includes('날짜') ? formatExcelDateStr(vStr) : vStr}
+                                <strong style={{ color: 'var(--primary)', marginRight: '3px' }}>{kClean}:</strong>
+                                {displayVal}
                               </span>
                             );
                           })}
                         </div>
 
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '6px', paddingTop: '6px', borderTop: '1px dashed var(--border-color)' }}>
-                          <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-                            🚛 {row['기사명'] || row['운송기사'] || '-'}
-                          </span>
-                          <span style={{ fontSize: '13px', fontWeight: 900, color: pair.diffCost !== 0 ? '#ca8a04' : '#16a34a' }}>
-                            ₩{excelCost.toLocaleString()}원
-                          </span>
-                        </div>
+                        {/* 기사명이 존재할 때만 기사 정보 노출 (빈 기사아이콘 '🚛 -' 제거) */}
+                        {(row['기사명'] || row['운송기사']) && String(row['기사명'] || row['운송기사']).trim() !== '-' && (
+                          <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+                            🚛 {row['기사명'] || row['운송기사']}
+                          </div>
+                        )}
 
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '8px' }}>
-                          {pair.isReconciled ? (
-                            <span style={{ padding: '3px 8px', borderRadius: '10px', fontSize: '11px', fontWeight: 900, backgroundColor: 'rgba(34,197,94,0.15)', color: '#16a34a', border: '1px solid rgba(34,197,94,0.3)' }}>
+                        {/* 대사 완료 상태일 때만 🟢 대사 완료 뱃지 및 ↩️ 대사 취소 버튼 노출 */}
+                        {pair.isReconciled && (
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '6px', paddingTop: '6px', borderTop: '1px dashed var(--border-color)' }}>
+                            <span style={{ padding: '2px 8px', borderRadius: '8px', fontSize: '11px', fontWeight: 900, backgroundColor: 'rgba(34,197,94,0.15)', color: '#16a34a', border: '1px solid rgba(34,197,94,0.3)' }}>
                               🟢 대사 완료
                             </span>
-                          ) : (
-                            <span style={{ padding: '3px 8px', borderRadius: '10px', fontSize: '11px', fontWeight: 700, backgroundColor: 'var(--bg-card)', color: 'var(--text-muted)', border: '1px solid var(--border-color)' }}>
-                              ⚪ 대사 대기
-                            </span>
-                          )}
-
-                          {pair.isReconciled && (
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -2116,8 +2129,8 @@ export const TruckDispatch: React.FC = () => {
                             >
                               <RotateCcw size={12} style={{ display: 'inline', marginRight: '2px' }} /> ↩️ 대사 취소
                             </button>
-                          )}
-                        </div>
+                          </div>
+                        )}
                       </div>
                     );
                   })
