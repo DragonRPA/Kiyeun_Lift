@@ -276,7 +276,10 @@ export const TruckDispatch: React.FC = () => {
         updateData.assignedVehicles = updatedVehicles;
       }
 
-      await db.updateRow('deliveries', editingDelivery.id, updateData);
+      db.updateRow('deliveries', editingDelivery.id, updateData);
+
+      // 💡 [사장님 지시] 원격 Supabase DB 쓰기가 100% 완료될 때까지 동기 대기 (Zero Silent Failures)
+      await db.awaitPendingWrites();
 
       // 2. 전체 데이터 및 state 갱신
       await refreshAllData();

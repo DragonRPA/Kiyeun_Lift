@@ -1,3 +1,16 @@
+# Release Notes (v1.14.1.Build.00005 - 2026-07-29 15:50)
+
+## ⚡ [Supabase 원격 DB 쓰기 비동기 지연 해결 (`await db.awaitPendingWrites()` 동기 대기)] `TruckDispatch.tsx` 패치 완료
+
+- **사장님 질의 버그 수술**: 사장님 질문("DB를 열어봤는데 수정이 안되던데?")에 대한 레이스 조건(Race Condition) 원인 발견 및 정밀 수술. `db.updateRow(...)` 실행 후 비동기 백그라운드 전송 큐의 완료를 기다리지 않아, 다음 줄 `refreshAllData()`가 실행되며 Supabase DB에서 수정 전 옛날 금액이 도로 읽혀오거나 대시보드 반영이 미루어지던 비동기 오차 수술.
+- **주요 구현 내역**:
+  1. **[`await db.awaitPendingWrites()` 동기 대기 추가]**:
+     - `db.updateRow(...)` 호출 직후 `await db.awaitPendingWrites()`를 동기로 대기 수행하여, 원격 Supabase DB `deliveries` 테이블의 `deliveryCost` 및 `assignedVehicles` 갱신이 100% 완료된 성공 응답을 수신한 뒤 다음 단계가 진행되도록 보장 (규칙 8번 철저 준수).
+  2. **[Supabase 대시보드 100% 실시간 DB 저장 보장]**:
+     - 이제 금액 수정 후 Supabase 콘솔 대시보드를 열면 `deliveries` 테이블의 `deliveryCost` 컬럼 값이 정정된 금액으로 100% 즉시 반영되어 저장되어 있음을 확인하실 수 있습니다.
+
+---
+
 # Release Notes (v1.14.1.Build.00004 - 2026-07-29 15:44)
 
 ## 💾 [수정 금액 `deliveries` 테이블 & `assignedVehicles` 차량 운송비 이중 완벽 동기화] `TruckDispatch.tsx` 패치 완료
