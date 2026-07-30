@@ -12,7 +12,7 @@ import { jsPDF } from 'jspdf';
 export const Billings: React.FC = () => {
   const {
     billings, billingDetails, customers, contacts, contracts, contractAssets, assets, sites, googleConfigs,
-    generateBillingsForMonth, receivePayment, hasPermission, currentUser, approveBilling, cancelBilling, refreshAllData
+    generateBillingsForMonth, receivePayment, hasPermission, currentUser, approveBilling, cancelBilling, refreshAllData, showErrorModal
   } = useApp();
 
   const canSave = hasPermission('billing', 'save');
@@ -449,7 +449,7 @@ ${details.map((d, idx) => {
     }
   }, 0);
 
-  const handleGenerateWizardBilling = () => {
+  const handleGenerateWizardBilling = async () => {
     if (!selectedContractForWizard || !wizardStartDate || !wizardEndDate) return;
 
     const extraChargesTotal = extraCharges.reduce((sum, ec) => sum + (ec.quantity * ec.unitPrice), 0);
@@ -541,30 +541,37 @@ ${details.map((d, idx) => {
       }
     }
 
-    const billing = db.insertRow<Billing>('billings', {
-      customerId: selectedContractForWizard.customerId,
-      contractId: selectedContractForWizard.id,
-      billingYm: currentYm,
-      billingDate: todayStr,
-      totalAmount: finalBillingAmount,
-      paidAmount: 0,
-      status: 'REQUESTED',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    });
-
-    detailsList.forEach(det => {
-      db.insertRow<BillingDetail>('billingDetails', {
-        ...det,
-        billingId: billing.id,
-        createdAt: new Date().toISOString()
+    try {
+      const billing = db.insertRow<Billing>('billings', {
+        customerId: selectedContractForWizard.customerId,
+        contractId: selectedContractForWizard.id,
+        billingYm: currentYm,
+        billingDate: todayStr,
+        totalAmount: finalBillingAmount,
+        paidAmount: 0,
+        status: 'REQUESTED',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
       });
-    });
 
-    refreshAllData();
-    setSelectedContractIdForWizard(null);
-    setExtraCharges([]);
-    alert(`[${getCustName(selectedContractForWizard.customerId)}] 고객사에 대해 총 ${overallTotal.toLocaleString()}원(추가청구 포함) 청구 생성이 완료되었습니다.`);
+      detailsList.forEach(det => {
+        db.insertRow<BillingDetail>('billingDetails', {
+          ...det,
+          billingId: billing.id,
+          createdAt: new Date().toISOString()
+        });
+      });
+
+      // 💡 헌장 5.2 준수: 원격 DB 저장을 동기로 대기하여 데이터 누락 및 무음 실패 100% 방지
+      await db.awaitPendingWrites();
+
+      refreshAllData();
+      setSelectedContractIdForWizard(null);
+      setExtraCharges([]);
+      alert(`[${getCustName(selectedContractForWizard.customerId)}] 고객사에 대해 총 ${overallTotal.toLocaleString()}원(추가청구 포함) 청구 생성이 DB에 완벽히 저장되었습니다.`);
+    } catch (err: any) {
+      showErrorModal(`⚠️ 청구서 DB 저장 실패:\n\n${err?.message || err}`, '청구 생성 오류');
+    }
   };
 
   return (

@@ -322,10 +322,11 @@ CREATE TABLE deliveries (
 CREATE TABLE billings (
     id TEXT PRIMARY KEY,
     "customerId" TEXT REFERENCES customers(id),
+    "contractId" TEXT REFERENCES contracts(id),
     "billingYm" TEXT NOT NULL,
     "totalAmount" DOUBLE PRECISION NOT NULL DEFAULT 0,
     "paidAmount" DOUBLE PRECISION NOT NULL DEFAULT 0,
-    status TEXT CHECK (status IN ('UNPAID', 'PARTIAL', 'PAID')) NOT NULL,
+    status TEXT CHECK (status IN ('UNPAID', 'PARTIAL', 'PAID', 'REQUESTED', 'REJECTED')) NOT NULL,
     "billingDate" TEXT NOT NULL,
     "createdAt" TEXT NOT NULL,
     "updatedAt" TEXT NOT NULL

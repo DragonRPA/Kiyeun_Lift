@@ -1,4 +1,26 @@
-# Release Notes (v1.16.5.Build.00001 - 2026-07-30 14:28)
+# Release Notes (v1.16.6.Build.00001 - 2026-07-30 14:56)
+
+## 🛡️ [청구 생성 DB 저장 무누락 동기화(awaitPendingWrites) & Zero Silent Failures 헌장 이행 및 DDL 보완]
+
+### 개편 배경
+청구서 생성 시 원격 DB(Supabase) 인서트 동기 대기(`awaitPendingWrites`) 수행 누락으로 인해 실제 DB에 청구 데이터 저장이 누락되던 결함을 발견하여, 전사 개발 헌장 5.2(Zero Silent Failures) 규격을 적용하고 DDL 스키마를 완벽 보완함.
+
+### 주요 구현 내역
+
+#### 1. 청구서 DB 저장 동기 대기 수행 및 예외 알림 (`Billings.tsx`, `AppContext.tsx`)
+- **원격 DB 저장 무누락 보존**: 정산 마법사 청구 생성(`handleGenerateWizardBilling`) 및 월간 일괄 청구 생성(`generateBillingsForMonth`)을 `async` 함수로 전환하고 `await db.awaitPendingWrites()`를 동기로 호출하여 Supabase 원격 DB 청구서/세부내역 인서트 완수를 100% 무누락 대기 수행.
+- **Zero Silent Failures 규격 이행**: 저장 실패 발생 시 무음 처리(Silent Swallow)를 엄격 금지하고 `showErrorModal(errMessage)`으로 즉시 예외 알림 표출.
+
+#### 2. `billings` 테이블 `contractId` 스키마 DDL 보완 (`schema.sql`, `supabase_patch.sql`)
+- `billings` 테이블 DDL에 `"contractId" TEXT` 컬럼을 신설 및 마이그레이션 수록하여 계약과 청구서 간의 DB 논리적 연결 무결성 확보.
+  - `ALTER TABLE billings ADD COLUMN IF NOT EXISTS "contractId" TEXT;`
+
+### 빌드 검증
+- TypeScript + Vite 빌드 오류 없음 확인 ✅
+
+---
+
+
 
 ## 📑 [구글 드라이브 양식 기반 거래명세서 작성 & PDF 실시간 전환/메일 자동 첨부 엔진 구축]
 

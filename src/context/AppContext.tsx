@@ -126,7 +126,7 @@ interface AppContextType {
   completeTodo: (todoId: string) => void;
   
   // Billings
-  generateBillingsForMonth: (billingYm: string, billingDate: string) => void;
+  generateBillingsForMonth: (billingYm: string, billingDate: string) => Promise<void>;
   approveBilling: (billingId: string) => void;
   cancelBilling: (billingId: string) => void;
   receivePayment: (billingId: string, data: { paymentDate: string; amount: number; method: string; memo: string }) => void;
@@ -1913,150 +1913,158 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     refreshAllData();
   };
 
-  const generateBillingsForMonth = (billingYm: string, billingDate: string) => {
-    const [year, month] = billingYm.split('-').map(Number);
-    const startOfMonth = new Date(year, month - 1, 1);
-    const endOfMonth = new Date(year, month, 0);
+  const generateBillingsForMonth = async (billingYm: string, billingDate: string) => {
+    try {
+      const [year, month] = billingYm.split('-').map(Number);
+      const startOfMonth = new Date(year, month - 1, 1);
+      const endOfMonth = new Date(year, month, 0);
 
-    const activeContracts = db.contracts.filter(c => {
-      const contractStart = new Date(c.startDate);
-      const contractEnd = c.endDate ? new Date(c.endDate) : null;
-      
-      if (contractStart > endOfMonth) return false;
-      if (contractEnd && contractEnd < startOfMonth) return false;
-      
-      return true;
-    });
-    
-    const customerContractsMap: Record<string, Contract[]> = {};
-    activeContracts.forEach(c => {
-      if (!customerContractsMap[c.customerId]) {
-        customerContractsMap[c.customerId] = [];
-      }
-      customerContractsMap[c.customerId].push(c);
-    });
-
-    Object.entries(customerContractsMap).forEach(([customerId, custContracts]) => {
-      const existing = db.billings.find(b => b.customerId === customerId && b.billingYm === billingYm);
-      if (existing) return;
-
-      let billingDetailsList: Omit<BillingDetail, 'id' | 'billingId' | 'createdAt'>[] = [];
-      let customerTotalAmount = 0;
-
-      custContracts.forEach(c => {
-        const cAssets = db.contractAssets.filter(ca => ca.contractId === c.id);
+      const activeContracts = db.contracts.filter(c => {
+        const contractStart = new Date(c.startDate);
+        const contractEnd = c.endDate ? new Date(c.endDate) : null;
         
-        cAssets.forEach(ca => {
-          const assetStart = new Date(ca.startDate);
-          const rawEndDate = ca.endDate || c.endDate;
-          const assetEnd = rawEndDate ? new Date(rawEndDate) : endOfMonth;
+        if (contractStart > endOfMonth) return false;
+        if (contractEnd && contractEnd < startOfMonth) return false;
+        
+        return true;
+      });
+      
+      const customerContractsMap: Record<string, Contract[]> = {};
+      activeContracts.forEach(c => {
+        if (!customerContractsMap[c.customerId]) {
+          customerContractsMap[c.customerId] = [];
+        }
+        customerContractsMap[c.customerId].push(c);
+      });
+
+      for (const [customerId, custContracts] of Object.entries(customerContractsMap)) {
+        const existing = db.billings.find(b => b.customerId === customerId && b.billingYm === billingYm);
+        if (existing) continue;
+
+        let billingDetailsList: Omit<BillingDetail, 'id' | 'billingId' | 'createdAt'>[] = [];
+        let customerTotalAmount = 0;
+        const mainContractId = custContracts[0]?.id;
+
+        custContracts.forEach(c => {
+          const cAssets = db.contractAssets.filter(ca => ca.contractId === c.id);
           
-          const calcStart = assetStart > startOfMonth ? assetStart : startOfMonth;
-          const calcEnd = assetEnd < endOfMonth ? assetEnd : endOfMonth;
-
-          if (calcStart <= calcEnd) {
-            const diffTime = Math.abs(calcEnd.getTime() - calcStart.getTime());
-            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+          cAssets.forEach(ca => {
+            const assetStart = new Date(ca.startDate);
+            const rawEndDate = ca.endDate || c.endDate;
+            const assetEnd = rawEndDate ? new Date(rawEndDate) : endOfMonth;
             
-            const assetInfo = db.assets.find(a => a.id === ca.assetId);
-            const assetName = assetInfo ? `${assetInfo.modelName} (관리번호: ${assetInfo.assetNo})` : '렌탈 장비';
-            
-            let rentalCost = 0;
-            let calcDesc = '';
-            
-            const isFullMonth = calcStart.getDate() === 1 && calcEnd.getDate() === endOfMonth.getDate();
-            if (isFullMonth) {
-              rentalCost = ca.monthlyRentalFee;
-              calcDesc = `${billingYm} 정기 월렌탈료`;
-            } else {
-              rentalCost = ca.dailyRentalFee * diffDays;
-              calcDesc = `${calcStart.toISOString().split('T')[0]} ~ ${calcEnd.toISOString().split('T')[0]} 일할 청구 (${diffDays}일)`;
-            }
+            const calcStart = assetStart > startOfMonth ? assetStart : startOfMonth;
+            const calcEnd = assetEnd < endOfMonth ? assetEnd : endOfMonth;
 
-            if (rentalCost > 0) {
-              billingDetailsList.push({
-                contractAssetId: ca.id,
-                itemName: `${assetName} 렌탈료`,
-                quantity: 1,
-                unitPrice: rentalCost,
-                amount: rentalCost,
-                description: calcDesc
-              });
-              customerTotalAmount += rentalCost;
+            if (calcStart <= calcEnd) {
+              const diffTime = Math.abs(calcEnd.getTime() - calcStart.getTime());
+              const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+              
+              const assetInfo = db.assets.find(a => a.id === ca.assetId);
+              const assetName = assetInfo ? `${assetInfo.modelName} (관리번호: ${assetInfo.assetNo})` : '렌탈 장비';
+              
+              let rentalCost = 0;
+              let calcDesc = '';
+              
+              const isFullMonth = calcStart.getDate() === 1 && calcEnd.getDate() === endOfMonth.getDate();
+              if (isFullMonth) {
+                rentalCost = ca.monthlyRentalFee;
+                calcDesc = `${billingYm} 정기 월렌탈료`;
+              } else {
+                rentalCost = ca.dailyRentalFee * diffDays;
+                calcDesc = `${calcStart.toISOString().split('T')[0]} ~ ${calcEnd.toISOString().split('T')[0]} 일할 청구 (${diffDays}일)`;
+              }
 
-              if (assetInfo) {
-                db.updateRow<Asset>('assets', assetInfo.id, {
-                  cumRentalFee: (assetInfo.cumRentalFee || 0) + rentalCost,
-                  updatedAt: new Date().toISOString()
+              if (rentalCost > 0) {
+                billingDetailsList.push({
+                  contractAssetId: ca.id,
+                  itemName: `${assetName} 렌탈료`,
+                  quantity: 1,
+                  unitPrice: rentalCost,
+                  amount: rentalCost,
+                  description: calcDesc
                 });
+                customerTotalAmount += rentalCost;
+
+                if (assetInfo) {
+                  db.updateRow<Asset>('assets', assetInfo.id, {
+                    cumRentalFee: (assetInfo.cumRentalFee || 0) + rentalCost,
+                    updatedAt: new Date().toISOString()
+                  });
+                }
               }
             }
-          }
-        });
-      });
-
-      const customerAssets = db.assets.filter(a => a.currentCustomerId === customerId);
-      customerAssets.forEach(asset => {
-        const repairList = db.repairs.filter(r => 
-          r.assetId === asset.id && 
-          r.status === 'COMPLETED' && 
-          r.billableToCustomer && 
-          !r.billingId &&
-          r.repairDate && 
-          new Date(r.repairDate) >= startOfMonth && 
-          new Date(r.repairDate) <= endOfMonth
-        );
-
-        repairList.forEach(repair => {
-          billingDetailsList.push({
-            itemName: `${asset.modelName} (관리번호: ${asset.assetNo}) 수리 비용 청구`,
-            quantity: 1,
-            unitPrice: repair.totalCost,
-            amount: repair.totalCost,
-            description: `정비 완료 건 청구 연동 (${repair.repairDate}) - ${repair.details}`
-          });
-          customerTotalAmount += repair.totalCost;
-        });
-      });
-
-      if (billingDetailsList.length > 0) {
-        const billing = db.insertRow<Billing>('billings', {
-          customerId,
-          billingYm,
-          billingDate,
-          totalAmount: customerTotalAmount,
-          paidAmount: 0,
-          status: 'REQUESTED',
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString()
-        });
-
-        billingDetailsList.forEach(detail => {
-          db.insertRow<BillingDetail>('billingDetails', {
-            ...detail,
-            billingId: billing.id,
-            createdAt: new Date().toISOString()
           });
         });
 
+        const customerAssets = db.assets.filter(a => a.currentCustomerId === customerId);
         customerAssets.forEach(asset => {
           const repairList = db.repairs.filter(r => 
             r.assetId === asset.id && 
             r.status === 'COMPLETED' && 
             r.billableToCustomer && 
-            !r.billingId && 
+            !r.billingId &&
             r.repairDate && 
             new Date(r.repairDate) >= startOfMonth && 
             new Date(r.repairDate) <= endOfMonth
           );
+
           repairList.forEach(repair => {
-            db.updateRow<Repair>('repairs', repair.id, { billingId: billing.id });
+            billingDetailsList.push({
+              itemName: `${asset.modelName} (관리번호: ${asset.assetNo}) 수리 비용 청구`,
+              quantity: 1,
+              unitPrice: repair.totalCost,
+              amount: repair.totalCost,
+              description: `정비 완료 건 청구 연동 (${repair.repairDate}) - ${repair.details}`
+            });
+            customerTotalAmount += repair.totalCost;
           });
         });
-      }
-    });
 
-    refreshAllData();
+        if (billingDetailsList.length > 0) {
+          const billing = db.insertRow<Billing>('billings', {
+            customerId,
+            contractId: mainContractId,
+            billingYm,
+            billingDate,
+            totalAmount: customerTotalAmount,
+            paidAmount: 0,
+            status: 'REQUESTED',
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+          });
+
+          billingDetailsList.forEach(detail => {
+            db.insertRow<BillingDetail>('billingDetails', {
+              ...detail,
+              billingId: billing.id,
+              createdAt: new Date().toISOString()
+            });
+          });
+
+          customerAssets.forEach(asset => {
+            const repairList = db.repairs.filter(r => 
+              r.assetId === asset.id && 
+              r.status === 'COMPLETED' && 
+              r.billableToCustomer && 
+              !r.billingId && 
+              r.repairDate && 
+              new Date(r.repairDate) >= startOfMonth && 
+              new Date(r.repairDate) <= endOfMonth
+            );
+            repairList.forEach(repair => {
+              db.updateRow<Repair>('repairs', repair.id, { billingId: billing.id });
+            });
+          });
+        }
+      }
+
+      // 💡 헌장 5.2 준수: 원격 DB 저장을 동기로 대기하여 데이터 무음 생략 방지
+      await db.awaitPendingWrites();
+      refreshAllData();
+    } catch (err: any) {
+      showErrorModal(`⚠️ 일괄 청구서 DB 저장 실패:\n\n${err?.message || err}`, '청구서 생성 실패');
+    }
   };
 
   const approveBilling = (billingId: string) => {
