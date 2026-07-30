@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { db, Asset, Billing, BillingDetail } from '../services/db';
-import { Plus, Download, Mail, CheckCircle, Search, DollarSign, Calendar, FileText, Send } from 'lucide-react';
+import { Plus, Download, Mail, CheckCircle, Search, DollarSign, Calendar, FileText, Send, Edit3 } from 'lucide-react';
 import { emailService } from '../services/email';
 import { exportToExcel } from '../services/excel';
 
@@ -55,9 +55,36 @@ export const Billings: React.FC = () => {
   const [calcMethod, setCalcMethod] = useState<'MONTHLY' | 'PRORATED'>('MONTHLY');
   const [extraCharges, setExtraCharges] = useState<{ id: string; category: string; customName: string; quantity: number; unitPrice: number }[]>([]);
 
+  // 마법사 청구귀속월 & 청구발행일자 수동 지정 상태 (기본값: 생성 연월/오늘)
+  const [wizardBillingYm, setWizardBillingYm] = useState(() => new Date().toISOString().slice(0, 7));
+  const [wizardBillingDate, setWizardBillingDate] = useState(() => new Date().toISOString().split('T')[0]);
+
   // 청구 생성 입력
   const [billingYm, setBillingYm] = useState(() => new Date().toISOString().slice(0, 7));
   const [billingDate, setBillingDate] = useState(() => new Date().toISOString().split('T')[0]);
+
+  // 청구귀속월 수동 변경 핸들러
+  const handleEditBillingYm = async (billingId: string, currentYmVal: string) => {
+    const newYm = prompt('✏️ 변경할 청구귀속월을 입력해 주세요 (형식: YYYY-MM, 예: 2026-08):', currentYmVal);
+    if (!newYm || !newYm.trim() || newYm.trim() === currentYmVal) return;
+    
+    if (!/^\d{4}-\d{2}$/.test(newYm.trim())) {
+      alert('⚠️ 입력 형식이 올바르지 않습니다. YYYY-MM (예: 2026-07) 형식으로 입력해 주세요.');
+      return;
+    }
+
+    try {
+      db.updateRow<Billing>('billings', billingId, {
+        billingYm: newYm.trim(),
+        updatedAt: new Date().toISOString()
+      });
+      await db.awaitPendingWrites();
+      refreshAllData();
+      alert(`✅ 청구귀속월이 [${newYm.trim()}]으로 성공적으로 변경되었습니다.`);
+    } catch (err: any) {
+      showErrorModal(`⚠️ 청구귀속월 변경 중 DB 저장 실패:\n\n${err?.message || err}`, '귀속월 수정 오류');
+    }
+  };
 
   // 선택된 청구서 상세
   const [selectedBillingId, setSelectedBillingId] = useState<string | null>(null);
@@ -404,6 +431,8 @@ ${details.map((d, idx) => {
   const handleSelectContractForWizard = (c: any) => {
     setSelectedContractIdForWizard(c.id);
     setExtraCharges([]);
+    setWizardBillingYm(getCurrentYm());
+    setWizardBillingDate(getTodayStr());
     
     const today = new Date();
     const year = today.getFullYear();
@@ -542,11 +571,14 @@ ${details.map((d, idx) => {
     }
 
     try {
+      const targetYm = wizardBillingYm.trim() || currentYm;
+      const targetDate = wizardBillingDate.trim() || todayStr;
+
       const billing = db.insertRow<Billing>('billings', {
         customerId: selectedContractForWizard.customerId,
         contractId: selectedContractForWizard.id,
-        billingYm: currentYm,
-        billingDate: todayStr,
+        billingYm: targetYm,
+        billingDate: targetDate,
         totalAmount: finalBillingAmount,
         paidAmount: 0,
         status: 'REQUESTED',
@@ -568,7 +600,7 @@ ${details.map((d, idx) => {
       refreshAllData();
       setSelectedContractIdForWizard(null);
       setExtraCharges([]);
-      alert(`[${getCustName(selectedContractForWizard.customerId)}] 고객사에 대해 총 ${overallTotal.toLocaleString()}원(추가청구 포함) 청구 생성이 DB에 완벽히 저장되었습니다.`);
+      alert(`[${getCustName(selectedContractForWizard.customerId)}] 고객사에 대해 청구귀속월(${targetYm}) 기준 총 ${overallTotal.toLocaleString()}원 청구 생성이 DB에 성공적으로 저장되었습니다.`);
     } catch (err: any) {
       showErrorModal(`⚠️ 청구서 DB 저장 실패:\n\n${err?.message || err}`, '청구 생성 오류');
     }
@@ -744,10 +776,21 @@ ${details.map((d, idx) => {
             {activeBilling ? (
               <div className="card" style={{ margin: 0 }}>
                 <div className="card-header" style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '12px', marginBottom: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div>
-                    <h3 className="card-title" style={{ margin: 0 }}>청구 명세서 ({activeBilling.billingYm})</h3>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <h3 className="card-title" style={{ margin: 0 }}>청구 명세서 ({activeBilling.billingYm})</h3>
+                      {canSave && (
+                        <button
+                          type="button"
+                          className="btn-secondary"
+                          onClick={() => handleEditBillingYm(activeBilling.id, activeBilling.billingYm)}
+                          style={{ padding: '2px 8px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px' }}
+                          title="청구귀속월 변경"
+                        >
+                          <Edit3 size={11} /> 귀속월 수정
+                        </button>
+                      )}
+                    </div>
                     <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>발행일자: {activeBilling.billingDate}</span>
-                  </div>
                   <button 
                     type="button" 
                     className="btn-primary"
@@ -980,6 +1023,38 @@ ${details.map((d, idx) => {
                         onChange={e => setWizardEndDate(e.target.value)}
                         style={{ width: '100%', padding: '8px' }}
                       />
+                    </div>
+                  </div>
+
+                  {/* 💡 청구귀속월 & 청구 발행일자 지정 컨트롤 (담당자 휴가/고객 요청 시 월 변경 가능) */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', padding: '12px', backgroundColor: 'var(--bg-app)', borderRadius: '8px', border: '1px solid var(--primary-light, #bfdbfe)' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <label style={{ fontSize: '12px', fontWeight: 700, color: 'var(--primary)' }}>
+                        🗓️ 청구귀속월 (변경 가능)
+                      </label>
+                      <input
+                        type="month"
+                        value={wizardBillingYm}
+                        onChange={e => setWizardBillingYm(e.target.value)}
+                        style={{ width: '100%', padding: '7px 10px', fontSize: '13px', fontWeight: 700, backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '6px' }}
+                      />
+                      <span style={{ fontSize: '10.5px', color: 'var(--text-muted)' }}>
+                        ※ 기본값: 당월 ({currentYm}) / 담당자 휴가·고객 요청 시 수정
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <label style={{ fontSize: '12px', fontWeight: 700, color: 'var(--primary)' }}>
+                        📅 청구 발행 일자
+                      </label>
+                      <input
+                        type="date"
+                        value={wizardBillingDate}
+                        onChange={e => setWizardBillingDate(e.target.value)}
+                        style={{ width: '100%', padding: '7px 10px', fontSize: '13px', backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '6px' }}
+                      />
+                      <span style={{ fontSize: '10.5px', color: 'var(--text-muted)' }}>
+                        ※ 기본값: 오늘 ({todayStr})
+                      </span>
                     </div>
                   </div>
 
