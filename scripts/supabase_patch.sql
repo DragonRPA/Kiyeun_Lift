@@ -32,3 +32,10 @@ ALTER TABLE contract_history ADD COLUMN IF NOT EXISTS "newEndDate" TEXT;
 ALTER TABLE contract_history DROP CONSTRAINT IF EXISTS contract_history_changeType_check;
 ALTER TABLE contract_history ADD CONSTRAINT contract_history_changeType_check CHECK ("changeType" IN ('REGISTER', 'EXTEND', 'SHORTEN', 'SUCCEED', 'TERMINATE', 'EXCHANGE'));
 
+-- [보완 2026-07-30] contracts 테이블 승계 전(predecessor) 이력 추적 컬럼 추가
+ALTER TABLE contracts ADD COLUMN IF NOT EXISTS "successorContractId" TEXT;
+ALTER TABLE contracts ADD COLUMN IF NOT EXISTS "predecessorContractId" TEXT;
+ALTER TABLE contracts ADD COLUMN IF NOT EXISTS "predecessorContractNo" TEXT;
+ALTER TABLE contracts ADD COLUMN IF NOT EXISTS "predecessorCustomerId" TEXT;
+ALTER TABLE contracts ADD COLUMN IF NOT EXISTS "predecessorCustomerName" TEXT;
+

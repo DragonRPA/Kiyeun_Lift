@@ -333,6 +333,10 @@ export interface Contract {
   statementClosingDay?: number; // 거래명세서 마감일 (예: 25)
   status: 'ACTIVE' | 'EXTENDED' | 'SHORTENED' | 'SUCCEEDED' | 'COMPLETED';
   successorContractId?: string;
+  predecessorContractId?: string; // 승계 전 이전 계약 ID
+  predecessorContractNo?: string; // 승계 전 이전 계약번호
+  predecessorCustomerId?: string; // 승계 전 양도 고객사 ID
+  predecessorCustomerName?: string; // 승계 전 양도 고객사명
   driveFolderId?: string;
   salespersonId?: string; // 계약담당자 (영업사원 ID)
   createdAt: string;

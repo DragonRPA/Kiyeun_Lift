@@ -923,6 +923,19 @@ export const Contracts: React.FC = () => {
                 </div>
               </div>
 
+              {/* 승계 이전 정보 안내 박스 */}
+              {(activeContract.predecessorContractNo || activeContract.predecessorCustomerName) && (
+                <div style={{ marginTop: '12px', padding: '10px 12px', backgroundColor: '#eff6ff', borderRadius: '6px', border: '1px solid #bfdbfe', fontSize: '12px' }}>
+                  <div style={{ fontWeight: '700', color: '#1e40af', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    🔄 승계 이전 계약 정보
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', color: '#1e3a8a' }}>
+                    <div><span style={{ color: '#64748b' }}>이전 고객사:</span> <strong>{activeContract.predecessorCustomerName || '-'}</strong></div>
+                    <div><span style={{ color: '#64748b' }}>이전 계약번호:</span> <strong>{activeContract.predecessorContractNo || '-'}</strong></div>
+                  </div>
+                </div>
+              )}
+
               {/* 구글 드라이브 문서함 연동 */}
               <div style={{ marginTop: '16px', padding: '12px', backgroundColor: '#f8fafc', borderRadius: '6px', border: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div>

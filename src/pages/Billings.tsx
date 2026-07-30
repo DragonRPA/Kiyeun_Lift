@@ -19,10 +19,12 @@ export const Billings: React.FC = () => {
 
   // --- 청구 조회 필터 상태 ---
   const [tempSearchTerm, setTempSearchTerm] = useState('');
+  const [tempContractNoFilter, setTempContractNoFilter] = useState('');
   const [tempBillingYmFilter, setTempBillingYmFilter] = useState('ALL');
   const [tempStatusFilter, setTempStatusFilter] = useState('ALL');
 
   const [searchTerm, setSearchTerm] = useState('');
+  const [contractNoFilter, setContractNoFilter] = useState('');
   const [billingYmFilter, setBillingYmFilter] = useState('ALL');
   const [statusFilter, setStatusFilter] = useState('ALL');
 
@@ -34,6 +36,16 @@ export const Billings: React.FC = () => {
   const [wizardSearchEndDate, setWizardSearchEndDate] = useState(() => {
     return new Date().toISOString().split('T')[0];
   });
+
+  // 마법사 고객, 계약번호, 현장명 필터 상태
+  const [wizardTempCustomerFilter, setWizardTempCustomerFilter] = useState('');
+  const [wizardTempContractNoFilter, setWizardTempContractNoFilter] = useState('');
+  const [wizardTempSiteFilter, setWizardTempSiteFilter] = useState('');
+
+  const [wizardCustomerFilter, setWizardCustomerFilter] = useState('');
+  const [wizardContractNoFilter, setWizardContractNoFilter] = useState('');
+  const [wizardSiteFilter, setWizardSiteFilter] = useState('');
+
   const [selectedContractIdForWizard, setSelectedContractIdForWizard] = useState<string | null>(null);
   const [wizardStartDate, setWizardStartDate] = useState('');
   const [wizardEndDate, setWizardEndDate] = useState('');
@@ -68,17 +80,22 @@ export const Billings: React.FC = () => {
 
   const handleSearchClick = () => {
     setSearchTerm(tempSearchTerm);
+    setContractNoFilter(tempContractNoFilter);
     setBillingYmFilter(tempBillingYmFilter);
     setStatusFilter(tempStatusFilter);
   };
 
   const filteredBillings = billings.filter(b => {
     const custName = getCustName(b.customerId).toLowerCase();
+    const contractObj = contracts.find(c => c.id === b.contractId);
+    const contractNoStr = (contractObj?.contractNo || b.contractId || '').toLowerCase();
+
     const matchesSearch = custName.includes(searchTerm.toLowerCase());
+    const matchesContractNo = !contractNoFilter || contractNoStr.includes(contractNoFilter.trim().toLowerCase());
     const matchesBillingYm = billingYmFilter === 'ALL' || b.billingYm === billingYmFilter;
     const matchesStatus = statusFilter === 'ALL' || b.status === statusFilter;
 
-    return matchesSearch && matchesBillingYm && matchesStatus;
+    return matchesSearch && matchesContractNo && matchesBillingYm && matchesStatus;
   });
 
   const handleExportExcel = () => {
@@ -265,8 +282,23 @@ export const Billings: React.FC = () => {
     return billingDayMatch || statementDayMatch;
   };
 
+  const handleWizardSearchClick = () => {
+    setWizardCustomerFilter(wizardTempCustomerFilter);
+    setWizardContractNoFilter(wizardTempContractNoFilter);
+    setWizardSiteFilter(wizardTempSiteFilter);
+  };
+
   const filteredWizardContracts = activeContractsForWizard.filter(c => {
-    return isDuePeriod(c);
+    const custName = getCustName(c.customerId).toLowerCase();
+    const siteName = getSiteName(c.siteId).toLowerCase();
+    const contractNoStr = c.contractNo.toLowerCase();
+
+    const matchesDue = isDuePeriod(c);
+    const matchesCustomer = !wizardCustomerFilter || custName.includes(wizardCustomerFilter.trim().toLowerCase());
+    const matchesContractNo = !wizardContractNoFilter || contractNoStr.includes(wizardContractNoFilter.trim().toLowerCase());
+    const matchesSite = !wizardSiteFilter || siteName.includes(wizardSiteFilter.trim().toLowerCase());
+
+    return matchesDue && matchesCustomer && matchesContractNo && matchesSite;
   });
 
   const handleSelectContractForWizard = (c: any) => {
@@ -445,11 +477,6 @@ export const Billings: React.FC = () => {
           청구 및 수납 내역
         </button>
         {canSave && (
-          <button className={activeTab === 'GENERATE' ? 'btn-primary' : 'btn-secondary'} onClick={() => setActiveTab('GENERATE')}>
-            <Plus size={14} /> 월간 청구서 일괄 생성 (마감)
-          </button>
-        )}
-        {canSave && (
           <button className={activeTab === 'WIZARD' ? 'btn-primary' : 'btn-secondary'} onClick={() => setActiveTab('WIZARD')}>
             <Calendar size={14} /> 미청구 계약 정산 마법사
           </button>
@@ -473,24 +500,34 @@ export const Billings: React.FC = () => {
               </button>
             </div>
 
-            {/* 필터 바 */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr auto', gap: '10px', alignItems: 'end', backgroundColor: 'var(--bg-app)', padding: '12px', borderRadius: '8px' }}>
-              <div>
-                <label style={{ fontSize: '11px', fontWeight: '600', marginBottom: '4px', display: 'block' }}>고객사 검색</label>
+            {/* 필터 바 (상하 헤더 세로 스택 및 5열 배치) */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr auto', gap: '10px', alignItems: 'end', backgroundColor: 'var(--bg-app)', padding: '12px', borderRadius: '8px', overflowX: 'auto' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flexShrink: 0 }}>
+                <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>고객사 검색</label>
                 <input 
                   type="text" 
                   value={tempSearchTerm} 
                   onChange={e => setTempSearchTerm(e.target.value)} 
                   placeholder="고객사명 검색..."
-                  style={{ width: '100%', padding: '6px', fontSize: '12.5px' }}
+                  style={{ width: '100%', padding: '6px 8px', fontSize: '12.5px', borderRadius: '5px', border: '1px solid var(--border-color)' }}
                 />
               </div>
-              <div>
-                <label style={{ fontSize: '11px', fontWeight: '600', marginBottom: '4px', display: 'block' }}>청구 월</label>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flexShrink: 0 }}>
+                <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>계약번호 검색</label>
+                <input 
+                  type="text" 
+                  value={tempContractNoFilter} 
+                  onChange={e => setTempContractNoFilter(e.target.value)} 
+                  placeholder="계약번호 검색..."
+                  style={{ width: '100%', padding: '6px 8px', fontSize: '12.5px', borderRadius: '5px', border: '1px solid var(--border-color)' }}
+                />
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flexShrink: 0 }}>
+                <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>청구 월</label>
                 <select 
                   value={tempBillingYmFilter} 
                   onChange={e => setTempBillingYmFilter(e.target.value)} 
-                  style={{ width: '100%', padding: '6px', fontSize: '12.5px' }}
+                  style={{ width: '100%', padding: '6px 8px', fontSize: '12.5px', borderRadius: '5px', border: '1px solid var(--border-color)', backgroundColor: '#fff' }}
                 >
                   <option value="ALL">전체 월</option>
                   {billingMonths.map(ym => (
@@ -498,12 +535,12 @@ export const Billings: React.FC = () => {
                   ))}
                 </select>
               </div>
-              <div>
-                <label style={{ fontSize: '11px', fontWeight: '600', marginBottom: '4px', display: 'block' }}>결제 상태</label>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flexShrink: 0 }}>
+                <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>결제 상태</label>
                 <select 
                   value={tempStatusFilter} 
                   onChange={e => setTempStatusFilter(e.target.value)} 
-                  style={{ width: '100%', padding: '6px', fontSize: '12.5px' }}
+                  style={{ width: '100%', padding: '6px 8px', fontSize: '12.5px', borderRadius: '5px', border: '1px solid var(--border-color)', backgroundColor: '#fff' }}
                 >
                   <option value="ALL">전체 상태</option>
                   <option value="REQUESTED">결재대기 (REQUESTED)</option>
@@ -517,7 +554,7 @@ export const Billings: React.FC = () => {
                 type="button" 
                 className="btn-primary" 
                 onClick={handleSearchClick}
-                style={{ padding: '6px 12px', height: '33px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '12.5px' }}
+                style={{ padding: '6px 14px', height: '33px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '12.5px', whiteSpace: 'nowrap', flexShrink: 0 }}
               >
                 조회
               </button>
@@ -640,75 +677,78 @@ export const Billings: React.FC = () => {
         </div>
       )}
 
-      {activeTab === 'GENERATE' && (
-        <div className="card" style={{ maxWidth: '600px', margin: 0 }}>
-          <div className="card-header" style={{ marginBottom: '20px' }}>
-            <h3 className="card-title">월간 렌탈/수리 요금 정기 청구 생성</h3>
-            <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>고객별 마감일 기준 장비 일수 및 청구수리비를 합산합니다.</span>
-          </div>
 
-          <form onSubmit={handleGenerateSubmit}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', marginBottom: '20px' }}>
-              <div>
-                <label>청구 대상 년월 (YM) *</label>
-                <input
-                  type="month"
-                  value={billingYm}
-                  onChange={e => setBillingYm(e.target.value)}
-                  required
-                />
-              </div>
-
-              <div>
-                <label>청구 발행일자 *</label>
-                <input
-                  type="date"
-                  value={billingDate}
-                  onChange={e => setBillingDate(e.target.value)}
-                  required
-                />
-              </div>
-
-              <div style={{ padding: '14px', backgroundColor: 'var(--bg-app)', border: '1px dashed var(--border-color)', borderRadius: '8px', fontSize: '13px' }}>
-                <p style={{ fontWeight: '600', marginBottom: '4px' }}>[자동 합산 비즈니스 로직]</p>
-                <ul style={{ paddingLeft: '20px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <li>대상월 전체 렌탈 계약의 계약 기간에 부합하는 장비 요금 합산</li>
-                  <li>중도 출고/중도 회수 건에 대한 일할 임대료 일수 자동 계산</li>
-                  <li>해당월 내 완료된 자산 수리 중 <strong>'고객 청구 대상'</strong> 수리 비용 연동</li>
-                </ul>
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-              <button type="submit" className="btn-primary">청구 생성 및 마감 실행</button>
-            </div>
-          </form>
-        </div>
-      )}
 
       {activeTab === 'WIZARD' && (
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.2fr', gap: '24px', alignItems: 'flex-start' }}>
           {/* 왼쪽: 계약 카드 목록 */}
           <div>
-            <div className="card" style={{ margin: 0, marginBottom: '16px' }}>
-              <h3 className="card-title" style={{ marginBottom: '12px' }}>정산 대상 계약 목록</h3>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                <label style={{ fontSize: '12px', fontWeight: '600', color: 'var(--text-secondary)', margin: 0 }}>마감일 기준 검색 기간</label>
+            <div className="card" style={{ margin: 0, marginBottom: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <h3 className="card-title" style={{ margin: 0 }}>정산 대상 계약 목록</h3>
+              
+              {/* 1행: 마감일 기준 검색 기간 */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <label style={{ fontSize: '11px', fontWeight: '600', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>마감일 기준 검색 기간</label>
                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                   <input
                     type="date"
                     value={wizardSearchStartDate}
                     onChange={e => setWizardSearchStartDate(e.target.value)}
-                    style={{ flex: 1, padding: '6px', fontSize: '13px' }}
+                    style={{ flex: 1, padding: '5px 8px', fontSize: '12.5px', borderRadius: '5px', border: '1px solid var(--border-color)' }}
                   />
                   <span style={{ color: 'var(--text-muted)' }}>~</span>
                   <input
                     type="date"
                     value={wizardSearchEndDate}
                     onChange={e => setWizardSearchEndDate(e.target.value)}
-                    style={{ flex: 1, padding: '6px', fontSize: '13px' }}
+                    style={{ flex: 1, padding: '5px 8px', fontSize: '12.5px', borderRadius: '5px', border: '1px solid var(--border-color)' }}
                   />
                 </div>
+              </div>
+
+              {/* 2행: 고객사, 계약번호, 현장명 세부 필터 & [조회] 버튼 */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr auto', gap: '8px', alignItems: 'end', backgroundColor: '#f8fafc', padding: '10px', borderRadius: '6px', border: '1px solid #e2e8f0', overflowX: 'auto' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flexShrink: 0 }}>
+                  <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>고객사 검색</label>
+                  <input
+                    type="text"
+                    value={wizardTempCustomerFilter}
+                    onChange={e => setWizardTempCustomerFilter(e.target.value)}
+                    placeholder="고객사명..."
+                    style={{ width: '100%', padding: '5px 8px', fontSize: '12px', borderRadius: '5px', border: '1px solid var(--border-color)' }}
+                  />
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flexShrink: 0 }}>
+                  <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>계약번호 검색</label>
+                  <input
+                    type="text"
+                    value={wizardTempContractNoFilter}
+                    onChange={e => setWizardTempContractNoFilter(e.target.value)}
+                    placeholder="계약번호..."
+                    style={{ width: '100%', padding: '5px 8px', fontSize: '12px', borderRadius: '5px', border: '1px solid var(--border-color)' }}
+                  />
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flexShrink: 0 }}>
+                  <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>현장명 검색</label>
+                  <input
+                    type="text"
+                    value={wizardTempSiteFilter}
+                    onChange={e => setWizardTempSiteFilter(e.target.value)}
+                    placeholder="현장명..."
+                    style={{ width: '100%', padding: '5px 8px', fontSize: '12px', borderRadius: '5px', border: '1px solid var(--border-color)' }}
+                  />
+                </div>
+
+                <button
+                  type="button"
+                  className="btn-primary"
+                  onClick={handleWizardSearchClick}
+                  style={{ padding: '5px 12px', height: '30px', fontWeight: 'bold', fontSize: '12px', whiteSpace: 'nowrap', flexShrink: 0 }}
+                >
+                  조회
+                </button>
               </div>
             </div>
 

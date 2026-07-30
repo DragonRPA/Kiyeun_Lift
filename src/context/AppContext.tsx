@@ -1567,6 +1567,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       createdAt: new Date().toISOString()
     });
 
+    const oldCustomer = db.customers.find(cust => cust.id === oldContract.customerId);
+    const oldCustomerName = oldCustomer ? oldCustomer.name : '-';
+
     const nextDay = new Date(new Date(successionDate).getTime() + 24 * 60 * 60 * 1000).toISOString().split('T')[0];
     const newContractNo = `CT-SUCC-${Math.floor(1000 + Math.random() * 9000)}`;
 
@@ -1580,6 +1583,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       billingDay: oldContract.billingDay,
       salespersonId: oldContract.salespersonId,
       status: 'ACTIVE',
+      predecessorContractId: oldContract.id,
+      predecessorContractNo: oldContract.contractNo,
+      predecessorCustomerId: oldContract.customerId,
+      predecessorCustomerName: oldCustomerName,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     });
