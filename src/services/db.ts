@@ -568,6 +568,7 @@ export interface GoogleConfig {
   preDeliveryChecklistTemplateUrl?: string;
   bizRegCertUrl?: string;
   bankbookCopyUrl?: string;
+  transactionStatementTemplateUrl?: string;
   defaultRootFolderId?: string;
   createdAt?: string;
   updatedAt: string;

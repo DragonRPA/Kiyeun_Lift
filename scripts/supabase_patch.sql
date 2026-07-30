@@ -43,3 +43,6 @@ ALTER TABLE contracts ADD COLUMN IF NOT EXISTS "predecessorCustomerName" TEXT;
 ALTER TABLE customers ADD COLUMN IF NOT EXISTS "defaultBillingDay" INTEGER DEFAULT 30;
 ALTER TABLE customers ADD COLUMN IF NOT EXISTS "defaultStatementClosingDay" INTEGER DEFAULT 25;
 
+-- [보완 2026-07-30] google_configs 테이블 거래명세서 양식 경로 컬럼 추가
+ALTER TABLE google_configs ADD COLUMN IF NOT EXISTS "transactionStatementTemplateUrl" TEXT;
+

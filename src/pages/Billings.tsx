@@ -8,7 +8,7 @@ import { exportToExcel } from '../services/excel';
 
 export const Billings: React.FC = () => {
   const {
-    billings, billingDetails, customers, contracts, contractAssets, assets, sites, googleConfigs,
+    billings, billingDetails, customers, contacts, contracts, contractAssets, assets, sites, googleConfigs,
     generateBillingsForMonth, receivePayment, hasPermission, currentUser, approveBilling, cancelBilling, refreshAllData
   } = useApp();
 
@@ -67,10 +67,13 @@ export const Billings: React.FC = () => {
   const [payMethod, setPayMethod] = useState('BANK_TRANSFER');
   const [payMemo, setPayMemo] = useState('');
 
-  // 메일 전송 모달
+  // 메일 전송 모달 (거래명세서 메일 발송)
   const [showMailModal, setShowMailModal] = useState(false);
   const [mailBillingId, setMailBillingId] = useState('');
-  const [mailTo, setMailTo] = useState('');
+  const [mailTo, setMailTo] = useState(''); // 수신인 (기본값 자동입력 & 수동 수정/추가 지정 가능)
+  const [mailCc, setMailCc] = useState(''); // 참조인 (CC 추가 지정 가능)
+  const [mailSubject, setMailSubject] = useState(''); // 메일 제목
+  const [mailTab, setMailTab] = useState<'FORM' | 'PREVIEW'>('FORM'); // 발송폼 / 거래명세서 미리보기
   const [isSending, setIsSending] = useState(false);
 
   const getCustName = (id: string) => customers.find(c => c.id === id)?.name || '-';
@@ -175,9 +178,27 @@ export const Billings: React.FC = () => {
   const handleOpenMail = (billingId: string) => {
     setMailBillingId(billingId);
     const billing = billings.find(b => b.id === billingId);
-    const customer = customers.find(c => c.id === billing?.customerId);
+    if (!billing) return;
+
+    const customer = customers.find(c => c.id === billing.customerId);
     
-    setMailTo(customer?.repEmail || '');
+    // 💡 수신인 후보군 자동 추출 (고객사 대표 이메일 + 해당 고객사 담당자 이메일 목록)
+    const emails: string[] = [];
+    if (customer?.repEmail && customer.repEmail !== '미상') {
+      emails.push(customer.repEmail.trim());
+    }
+
+    const custContacts = contacts.filter(cc => cc.customerId === billing.customerId && cc.email && cc.email !== '미상' && cc.isActive !== false);
+    custContacts.forEach(cc => {
+      if (!emails.includes(cc.email.trim())) {
+        emails.push(cc.email.trim());
+      }
+    });
+
+    setMailTo(emails.join(', '));
+    setMailCc('');
+    setMailSubject(`[(주)기연엘리베이터] ${getCustName(billing.customerId)} ${billing.billingYm} 거래명세서 및 청구서 안내`);
+    setMailTab('FORM');
     setShowMailModal(true);
   };
 
@@ -200,21 +221,60 @@ export const Billings: React.FC = () => {
     setIsSending(true);
     const billing = billings.find(b => b.id === mailBillingId);
     const details = billingDetails.filter(d => d.billingId === mailBillingId);
-    
-    const subject = `[청구내역서] ${getCustName(billing?.customerId || '')} ${billing?.billingYm} 렌탈료 청구 안내`;
+    const customer = customers.find(c => c.id === billing?.customerId);
+    const contract = contracts.find(c => c.id === billing?.contractId);
+
+    const supplyTotal = Math.round((billing?.totalAmount || 0) / 1.1);
+    const vatTotal = (billing?.totalAmount || 0) - supplyTotal;
+
     const body = 
-      `안녕하세요, ${getCustName(billing?.customerId || '')} 귀하.\n\n` +
-      `당사 리프트 임대 계약에 따른 ${billing?.billingYm} 청구내역서를 송부해 드립니다.\n` +
-      `청구 일자: ${billing?.billingDate}\n` +
-      `합계 금액: ${billing?.totalAmount.toLocaleString()}원\n\n` +
-      `[세부 청구 내역]\n` +
-      details.map(d => `- ${d.itemName} : ${d.amount.toLocaleString()}원 (${d.description})`).join('\n') + '\n\n' +
-      `입금 계좌: 신한은행 100-012-345678 (주)기연리프트\n\n` +
-      `감사합니다.`;
+`========================================================================================
+                      (주) 기 연 엘 리 베 이 터   거 래 명 세 서
+========================================================================================
+
+안녕하세요, ${getCustName(billing?.customerId || '')} 귀하.
+당사 리프트 임대 계약(계약번호: ${contract?.contractNo || '-'})에 따른 ${billing?.billingYm} 거래명세서 및 청구 내역을 아래와 같이 송부해 드립니다.
+
+[1. 공급자 정보]
+- 사업자등록번호: 123-45-67890
+- 상호(법인명): (주)기연엘리베이터
+- 대표자명: 기연대표
+- 대표전화: 02-1234-5678
+- 담당부서: 영업/수금관리팀
+
+[2. 공급받는 자 정보]
+- 상호(법인명): ${customer?.name || '-'}
+- 대표자명: ${customer?.representative || '-'}
+- 사업자등록번호: ${customer?.bizRegNo || '-'}
+- 사업장주소: ${customer?.address || '-'}
+
+[3. 거래 세부 내역]
+----------------------------------------------------------------------------------------
+${details.map((d, idx) => {
+  const itemSupply = Math.round(d.amount / 1.1);
+  const itemVat = d.amount - itemSupply;
+  return `${idx + 1}. ${d.itemName}\n   - 적용 기준/기간: ${d.description || '정기 렌탈'}\n   - 공급가액: ${itemSupply.toLocaleString()}원 | 부가세: ${itemVat.toLocaleString()}원 | 합계: ${d.amount.toLocaleString()}원`;
+}).join('\n----------------------------------------------------------------------------------------\n')}
+----------------------------------------------------------------------------------------
+
+[4. 청구 합계 금액]
+- 공급가액: ${supplyTotal.toLocaleString()}원
+- 부가가치세(10%): ${vatTotal.toLocaleString()}원
+- 최종 청구 총액: ${(billing?.totalAmount || 0).toLocaleString()}원 (기수금: ${(billing?.paidAmount || 0).toLocaleString()}원 / 미수잔액: ${((billing?.totalAmount || 0) - (billing?.paidAmount || 0)).toLocaleString()}원)
+
+[5. 입금 계좌 안내]
+- 기업은행 000-000000-00-000 (주)기연엘리베이터
+
+감사합니다.
+(주)기연엘리베이터 올림
+========================================================================================`;
 
     try {
-      await emailService.sendEmail(mailTo, subject, body, []);
-      alert('청구내역서 이메일 발송이 성공적으로 완료되었습니다.');
+      const toList = mailTo.split(',').map(e => e.trim()).filter(Boolean);
+      const ccList = mailCc ? mailCc.split(',').map(e => e.trim()).filter(Boolean) : [];
+
+      await emailService.sendEmail(toList.join(', '), mailSubject, body, [], ccList.join(', '));
+      alert('🎉 표준 거래명세서 이메일 발송이 성공적으로 완료되었습니다.');
       setShowMailModal(false);
     } catch (err) {
       alert('전송 중 에러가 발생했습니다.');
@@ -649,9 +709,19 @@ export const Billings: React.FC = () => {
           <div>
             {activeBilling ? (
               <div className="card" style={{ margin: 0 }}>
-                <div className="card-header" style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '12px', marginBottom: '16px' }}>
-                  <h3 className="card-title">청구 명세서 ({activeBilling.billingYm})</h3>
-                  <span className="badge badge-info">{activeBilling.billingDate} 발행 기안</span>
+                <div className="card-header" style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '12px', marginBottom: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <h3 className="card-title" style={{ margin: 0 }}>청구 명세서 ({activeBilling.billingYm})</h3>
+                    <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>발행일자: {activeBilling.billingDate}</span>
+                  </div>
+                  <button 
+                    type="button" 
+                    className="btn-primary"
+                    onClick={() => handleOpenMail(activeBilling.id)}
+                    style={{ padding: '6px 12px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 'bold' }}
+                  >
+                    <Mail size={13} /> 거래명세서 메일 발송
+                  </button>
                 </div>
                 {activeBilling.status === 'REJECTED' && (
                   <div style={{ padding: '12px', backgroundColor: 'var(--bg-app)', borderLeft: '4px solid var(--danger)', marginBottom: '16px', borderRadius: '4px' }}>
@@ -661,23 +731,47 @@ export const Billings: React.FC = () => {
                 )}
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', fontSize: '14px', marginBottom: '20px' }}>
-                  <div><label>고객사명</label><strong>{getCustName(activeBilling.customerId)}</strong></div>
-                  <div><label>총 청구 금액</label><strong className="text-primary">{activeBilling.totalAmount.toLocaleString()}원</strong></div>
-                  <div><label>기수금액 (수납)</label>{activeBilling.paidAmount.toLocaleString()}원</div>
-                  <div><label>미수금 잔액</label><strong style={{ color: 'var(--danger)' }}>{(activeBilling.totalAmount - activeBilling.paidAmount).toLocaleString()}원</strong></div>
+                  <div><label style={{ fontSize: '11px', color: 'var(--text-muted)' }}>고객사명</label><strong>{getCustName(activeBilling.customerId)}</strong></div>
+                  <div><label style={{ fontSize: '11px', color: 'var(--text-muted)' }}>총 청구 금액</label><strong className="text-primary">{activeBilling.totalAmount.toLocaleString()}원</strong></div>
+                  <div><label style={{ fontSize: '11px', color: 'var(--text-muted)' }}>기수금액 (수납)</label>{activeBilling.paidAmount.toLocaleString()}원</div>
+                  <div><label style={{ fontSize: '11px', color: 'var(--text-muted)' }}>미수금 잔액</label><strong style={{ color: 'var(--danger)' }}>{(activeBilling.totalAmount - activeBilling.paidAmount).toLocaleString()}원</strong></div>
                 </div>
 
-                <h4 style={{ fontSize: '14px', fontWeight: '600', marginBottom: '10px' }}>세부 청구 내역</h4>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  {activeBillingDetails.map(bd => (
-                    <div key={bd.id} style={{ padding: '12px', border: '1px solid var(--border-color)', borderRadius: '8px', fontSize: '13px' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: '600', marginBottom: '4px' }}>
-                        <span>{bd.itemName}</span>
-                        <span>{bd.amount.toLocaleString()}원</span>
+                <h4 style={{ fontSize: '14px', fontWeight: '600', marginBottom: '10px' }}>세부 청구 내역 및 생성 기준값</h4>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  {activeBillingDetails.map(bd => {
+                    const ca = contractAssets.find(cAsset => cAsset.id === bd.contractAssetId);
+                    const isMonthly = bd.description?.includes('월렌탈');
+                    
+                    return (
+                      <div key={bd.id} style={{ padding: '12px 14px', border: '1px solid var(--border-color)', borderRadius: '8px', fontSize: '13px', backgroundColor: 'var(--bg-card)' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: '700', fontSize: '14px', marginBottom: '6px' }}>
+                          <span>{bd.itemName}</span>
+                          <span style={{ color: 'var(--primary)' }}>{bd.amount.toLocaleString()}원</span>
+                        </div>
+                        
+                        {/* 청구 생성 기준값 명시적 표기 */}
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', padding: '8px 10px', backgroundColor: 'var(--bg-app)', borderRadius: '6px', fontSize: '12px', border: '1px solid #e2e8f0' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <span style={{ color: 'var(--text-muted)', fontWeight: '600' }}>📅 적용 기간/날짜:</span>
+                            <span style={{ fontWeight: '600', color: 'var(--text-primary)' }}>{bd.description || '정기 렌탈 기간'}</span>
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <span style={{ color: 'var(--text-muted)', fontWeight: '600' }}>💰 적용 렌탈 단가:</span>
+                            {ca ? (
+                              <span style={{ fontWeight: '600', color: isMonthly ? '#2563eb' : '#059669' }}>
+                                {isMonthly
+                                  ? `월단가 ${ca.monthlyRentalFee.toLocaleString()}원 적용 (월 정기)`
+                                  : `일단가 ${ca.dailyRentalFee.toLocaleString()}원 적용 (일할 계산)`}
+                              </span>
+                            ) : (
+                              <span style={{ color: 'var(--text-secondary)' }}>{isMonthly ? '월단가 적용' : '일단가 일할 적용'}</span>
+                            )}
+                          </div>
+                        </div>
                       </div>
-                      <div style={{ color: 'var(--text-secondary)' }}>{bd.description}</div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             ) : (
@@ -1153,41 +1247,156 @@ export const Billings: React.FC = () => {
         </div>
       )}
 
-      {/* 청구내역서 메일 발송 모달 */}
-      {showMailModal && (
-        <div style={{
-          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-          backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000
-        }}>
-          <form onSubmit={handleSendStatementSubmit} className="card" style={{ width: '100%', maxWidth: '450px', backgroundColor: 'var(--bg-card)' }}>
-            <h3 className="card-title" style={{ marginBottom: '16px' }}>청구내역서 생성 및 이메일 발송</h3>
-            
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '20px' }}>
-              <div>
-                <label>수신자 대표 이메일 *</label>
-                <input
-                  type="email"
-                  value={mailTo}
-                  onChange={e => setMailTo(e.target.value)}
-                  placeholder="name@company.com"
-                  required
-                />
+      {/* (주)기연엘리베이터 표준 거래명세서 메일 발송 모달 */}
+      {showMailModal && (() => {
+        const targetBilling = billings.find(b => b.id === mailBillingId);
+        const targetDetails = billingDetails.filter(d => d.billingId === mailBillingId);
+        const targetCust = customers.find(c => c.id === targetBilling?.customerId);
+        const targetContract = contracts.find(c => c.id === targetBilling?.contractId);
+        
+        return (
+          <div style={{
+            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+            backgroundColor: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px'
+          }}>
+            <form onSubmit={handleSendStatementSubmit} className="card" style={{ width: '100%', maxWidth: '680px', backgroundColor: 'var(--bg-card)', padding: '24px', borderRadius: '12px', maxHeight: '90vh', overflowY: 'auto' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', borderBottom: '1px solid var(--border-color)', paddingBottom: '12px' }}>
+                <h3 className="card-title" style={{ margin: 0, fontSize: '17px', fontWeight: '700' }}>
+                  📄 (주)기연엘리베이터 표준 거래명세서 이메일 발송
+                </h3>
+                <div style={{ display: 'flex', gap: '6px' }}>
+                  <button type="button" className={mailTab === 'FORM' ? 'btn-primary' : 'btn-secondary'} onClick={() => setMailTab('FORM')} style={{ fontSize: '12px', padding: '4px 10px' }}>
+                    📧 수신/참조 설정
+                  </button>
+                  <button type="button" className={mailTab === 'PREVIEW' ? 'btn-primary' : 'btn-secondary'} onClick={() => setMailTab('PREVIEW')} style={{ fontSize: '12px', padding: '4px 10px' }}>
+                    👁️ 명세서 미리보기
+                  </button>
+                </div>
               </div>
 
-              <div style={{ fontSize: '13px', color: 'var(--text-secondary)', padding: '10px', backgroundColor: 'var(--bg-app)', borderRadius: '6px' }}>
-                * 클릭 시 청구 테이블의 세부 내역(일할 렌탈료 및 청구 수리비)이 텍스트 내역서 포맷으로 자동 변환되어 이메일에 포함됩니다.
-              </div>
-            </div>
+              {mailTab === 'FORM' ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', marginBottom: '20px' }}>
+                  <div>
+                    <label style={{ fontSize: '12px', fontWeight: '600', color: 'var(--text-secondary)' }}>메일 제목 *</label>
+                    <input
+                      type="text"
+                      value={mailSubject}
+                      onChange={e => setMailSubject(e.target.value)}
+                      required
+                      style={{ width: '100%', padding: '8px', fontSize: '13px', borderRadius: '6px', border: '1px solid var(--border-color)', marginTop: '4px' }}
+                    />
+                  </div>
 
-            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
-              <button type="button" className="btn-secondary" onClick={() => setShowMailModal(false)}>취소</button>
-              <button type="submit" className="btn-success" disabled={isSending}>
-                {isSending ? '발송 중...' : <><Send size={14} /> 청구내역서 전송</>}
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
+                  <div>
+                    <label style={{ fontSize: '12px', fontWeight: '600', color: 'var(--text-secondary)' }}>
+                      수신인 이메일 (To) * <span style={{ fontSize: '11px', color: 'var(--primary)', fontWeight: 'normal' }}>(고객대표 및 담당자 이메일 자동 채움 / 자유 수정 및 쉼표 추가 가능)</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={mailTo}
+                      onChange={e => setMailTo(e.target.value)}
+                      placeholder="email1@company.com, email2@company.com"
+                      required
+                      style={{ width: '100%', padding: '8px', fontSize: '13px', borderRadius: '6px', border: '1px solid var(--border-color)', marginTop: '4px' }}
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{ fontSize: '12px', fontWeight: '600', color: 'var(--text-secondary)' }}>
+                      참조인 이메일 (CC) <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 'normal' }}>(선택 입력 / 쉼표로 다수 지정 가능)</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={mailCc}
+                      onChange={e => setMailCc(e.target.value)}
+                      placeholder="cc1@company.com, cc2@company.com"
+                      style={{ width: '100%', padding: '8px', fontSize: '13px', borderRadius: '6px', border: '1px solid var(--border-color)', marginTop: '4px' }}
+                    />
+                  </div>
+
+                  <div style={{ fontSize: '12.5px', color: 'var(--text-secondary)', padding: '12px', backgroundColor: 'var(--bg-app)', borderRadius: '8px', border: '1px dashed var(--border-color)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <span style={{ fontWeight: '600' }}>💡 거래명세서 메일 자동 생성 안내</span>
+                    <span>- 발송 시 (주)기연엘리베이터 표준 거래명세서 양식(공급자/공급받는자 정보, 세부 품목별 날짜/적용단가/공급가액/부가세)이 메일 본문에 100% 자동 생성되어 전달됩니다.</span>
+                  </div>
+                </div>
+              ) : (
+                /* 표준 거래명세서 미리보기 (PREVIEW) */
+                <div style={{ marginBottom: '20px', padding: '16px', backgroundColor: '#fff', border: '2px solid #cbd5e1', borderRadius: '8px', color: '#1e293b', fontSize: '12.5px' }}>
+                  <div style={{ textAlign: 'center', borderBottom: '2px double #0f172a', paddingBottom: '8px', marginBottom: '12px' }}>
+                    <h3 style={{ margin: 0, fontSize: '20px', fontWeight: '800', letterSpacing: '4px', color: '#0f172a' }}>거 래 명 세 서</h3>
+                    <span style={{ fontSize: '11px', color: '#64748b' }}>(공급받는자 보관용)</span>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px', border: '1px solid #cbd5e1', padding: '10px', borderRadius: '6px', backgroundColor: '#f8fafc' }}>
+                    <div>
+                      <div style={{ fontWeight: '700', color: '#0f172a', borderBottom: '1px solid #e2e8f0', paddingBottom: '4px', marginBottom: '4px' }}>[공급자]</div>
+                      <div>상호: <strong>(주)기연엘리베이터</strong></div>
+                      <div>사업자번호: 123-45-67890</div>
+                      <div>대표자: 기연대표</div>
+                      <div>전화: 02-1234-5678</div>
+                    </div>
+                    <div>
+                      <div style={{ fontWeight: '700', color: '#0f172a', borderBottom: '1px solid #e2e8f0', paddingBottom: '4px', marginBottom: '4px' }}>[공급받는자]</div>
+                      <div>상호: <strong>{targetCust?.name || '-'}</strong></div>
+                      <div>사업자번호: {targetCust?.bizRegNo || '-'}</div>
+                      <div>대표자: {targetCust?.representative || '-'}</div>
+                      <div>주소: {targetCust?.address || '-'}</div>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '12px', fontWeight: '600', color: '#475569' }}>
+                    <span>청구연월: {targetBilling?.billingYm}</span>
+                    <span>발행일자: {targetBilling?.billingDate}</span>
+                    <span>계약번호: {targetContract?.contractNo || '-'}</span>
+                  </div>
+
+                  <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #cbd5e1', marginBottom: '12px' }}>
+                    <thead>
+                      <tr style={{ backgroundColor: '#f1f5f9', borderBottom: '1px solid #cbd5e1' }}>
+                        <th style={{ padding: '6px', borderRight: '1px solid #cbd5e1' }}>No</th>
+                        <th style={{ padding: '6px', borderRight: '1px solid #cbd5e1' }}>품명 및 적용 기준</th>
+                        <th style={{ padding: '6px', borderRight: '1px solid #cbd5e1', textAlign: 'right' }}>공급가액</th>
+                        <th style={{ padding: '6px', borderRight: '1px solid #cbd5e1', textAlign: 'right' }}>부가세(10%)</th>
+                        <th style={{ padding: '6px', textAlign: 'right' }}>합계</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {targetDetails.map((d, idx) => {
+                        const itemSupply = Math.round(d.amount / 1.1);
+                        const itemVat = d.amount - itemSupply;
+                        return (
+                          <tr key={d.id} style={{ borderBottom: '1px solid #e2e8f0' }}>
+                            <td style={{ padding: '6px', textAlign: 'center', borderRight: '1px solid #cbd5e1' }}>{idx + 1}</td>
+                            <td style={{ padding: '6px', borderRight: '1px solid #cbd5e1' }}>
+                              <strong>{d.itemName}</strong>
+                              <div style={{ fontSize: '11px', color: '#64748b' }}>{d.description}</div>
+                            </td>
+                            <td style={{ padding: '6px', textAlign: 'right', borderRight: '1px solid #cbd5e1' }}>{itemSupply.toLocaleString()}원</td>
+                            <td style={{ padding: '6px', textAlign: 'right', borderRight: '1px solid #cbd5e1' }}>{itemVat.toLocaleString()}원</td>
+                            <td style={{ padding: '6px', textAlign: 'right', fontWeight: '600' }}>{d.amount.toLocaleString()}원</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px', backgroundColor: '#eff6ff', borderRadius: '6px', border: '1px solid #bfdbfe', fontWeight: '700', color: '#1e40af' }}>
+                    <span>총 청구합계 (부가세 포함)</span>
+                    <span style={{ fontSize: '16px' }}>{(targetBilling?.totalAmount || 0).toLocaleString()} 원</span>
+                  </div>
+                </div>
+              )}
+
+              <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+                <button type="button" className="btn-secondary" onClick={() => setShowMailModal(false)}>취소</button>
+                <button type="submit" className="btn-success" disabled={isSending} style={{ fontWeight: 'bold' }}>
+                  {isSending ? '발송 중...' : <><Send size={14} /> 표준 거래명세서 이메일 전송</>}
+                </button>
+              </div>
+            </form>
+          </div>
+        );
+      })()}
 
     </div>
   );

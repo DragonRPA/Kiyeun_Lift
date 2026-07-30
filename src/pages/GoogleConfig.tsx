@@ -29,6 +29,7 @@ export const GoogleConfig: React.FC = () => {
   const [preDeliveryChecklistTemplateUrl, setPreDeliveryChecklistTemplateUrl] = useState('');
   const [bizRegCertUrl, setBizRegCertUrl] = useState('');
   const [bankbookCopyUrl, setBankbookCopyUrl] = useState('');
+  const [transactionStatementTemplateUrl, setTransactionStatementTemplateUrl] = useState('');
   const [defaultRootFolderId, setDefaultRootFolderId] = useState('');
 
   // 패스워드 표시 토글
@@ -58,12 +59,13 @@ export const GoogleConfig: React.FC = () => {
       setPreDeliveryChecklistTemplateUrl(currentConfig.preDeliveryChecklistTemplateUrl || '');
       setBizRegCertUrl(currentConfig.bizRegCertUrl || '');
       setBankbookCopyUrl(currentConfig.bankbookCopyUrl || '');
+      setTransactionStatementTemplateUrl(currentConfig.transactionStatementTemplateUrl || '');
       setDefaultRootFolderId(currentConfig.defaultRootFolderId || '');
     }
   }, [currentConfig]);
 
   // 구글 드라이브 탐색기 모달 상태
-  type DriveFieldTarget = 'rootFolder' | 'quotation' | 'contract' | 'safety' | 'checklist' | 'bizCert' | 'bankbook' | 'contractFolder' | 'consumableFolder' | 'deliveryFolder' | 'maintenanceFolder';
+  type DriveFieldTarget = 'rootFolder' | 'quotation' | 'contract' | 'safety' | 'checklist' | 'bizCert' | 'bankbook' | 'statement' | 'contractFolder' | 'consumableFolder' | 'deliveryFolder' | 'maintenanceFolder';
 
   const [isDriveSelectorOpen, setIsDriveSelectorOpen] = useState(false);
   const [selectorTargetField, setSelectorTargetField] = useState<DriveFieldTarget | null>(null);
@@ -80,6 +82,7 @@ export const GoogleConfig: React.FC = () => {
     else if (selectorTargetField === 'checklist') setPreDeliveryChecklistTemplateUrl(pathOrLink);
     else if (selectorTargetField === 'bizCert') setBizRegCertUrl(pathOrLink);
     else if (selectorTargetField === 'bankbook') setBankbookCopyUrl(pathOrLink);
+    else if (selectorTargetField === 'statement') setTransactionStatementTemplateUrl(pathOrLink);
     else if (selectorTargetField === 'contractFolder') setContractFolder(folderNameOrUrl);
     else if (selectorTargetField === 'consumableFolder') setConsumableFolder(folderNameOrUrl);
     else if (selectorTargetField === 'deliveryFolder') setDeliveryFolder(folderNameOrUrl);
@@ -149,6 +152,7 @@ export const GoogleConfig: React.FC = () => {
         preDeliveryChecklistTemplateUrl,
         bizRegCertUrl,
         bankbookCopyUrl,
+        transactionStatementTemplateUrl,
         defaultRootFolderId,
         updatedAt: new Date().toISOString()
       };
@@ -474,6 +478,28 @@ export const GoogleConfig: React.FC = () => {
                     type="button"
                     className="btn-secondary"
                     onClick={() => openDriveSelector('bankbook')}
+                    style={{ padding: '0 12px', display: 'flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap' }}
+                  >
+                    <Cloud size={14} /> 드라이브 탐색
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label style={{ fontSize: '12px', fontWeight: 'bold', marginBottom: '6px', display: 'block' }}>7. 거래명세서 양식 경로 또는 클라우드 링크 *</label>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <input
+                    type="text"
+                    value={transactionStatementTemplateUrl}
+                    onChange={e => setTransactionStatementTemplateUrl(e.target.value)}
+                    placeholder="예: d:/GoogleDrive/.../표준_거래명세서_양식.html 또는 구글 드라이브 주소"
+                    style={{ flex: 1 }}
+                    required
+                  />
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    onClick={() => openDriveSelector('statement')}
                     style={{ padding: '0 12px', display: 'flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap' }}
                   >
                     <Cloud size={14} /> 드라이브 탐색

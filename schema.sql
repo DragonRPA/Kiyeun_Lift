@@ -606,6 +606,7 @@ CREATE TABLE google_configs (
     "preDeliveryChecklistTemplateUrl" TEXT,
     "bizRegCertUrl" TEXT,
     "bankbookCopyUrl" TEXT,
+    "transactionStatementTemplateUrl" TEXT,
     "defaultRootFolderId" TEXT,
     "createdAt" TEXT NOT NULL,
     "updatedAt" TEXT NOT NULL
