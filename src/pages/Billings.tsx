@@ -6,6 +6,9 @@ import { Plus, Download, Mail, CheckCircle, Search, DollarSign, Calendar, FileTe
 import { emailService } from '../services/email';
 import { exportToExcel } from '../services/excel';
 
+import html2canvas from 'html2canvas';
+import { jsPDF } from 'jspdf';
+
 export const Billings: React.FC = () => {
   const {
     billings, billingDetails, customers, contacts, contracts, contractAssets, assets, sites, googleConfigs,
@@ -202,6 +205,27 @@ export const Billings: React.FC = () => {
     setShowMailModal(true);
   };
 
+  const downloadStatementPdf = async (billingYm: string, customerName: string) => {
+    const el = document.getElementById('transaction-statement-pdf-target');
+    if (!el) {
+      alert('거래명세서 양식을 찾을 수 없습니다.');
+      return;
+    }
+    try {
+      const canvas = await html2canvas(el, { scale: 2, useCORS: true, logging: false });
+      const imgData = canvas.toDataURL('image/png');
+
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+
+      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+      pdf.save(`거래명세서_${customerName}_${billingYm}.pdf`);
+    } catch (err: any) {
+      alert(`PDF 생성 및 다운로드 오류: ${err?.message || err}`);
+    }
+  };
+
   const handleSendStatementSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!mailTo) {
@@ -265,6 +289,9 @@ ${details.map((d, idx) => {
 [5. 입금 계좌 안내]
 - 기업은행 000-000000-00-000 (주)기연엘리베이터
 
+[6. 첨부 문서 안내]
+- 본 이메일에는 구글 드라이브 양식을 기반으로 자동 생성된 (주)기연엘리베이터 표준 거래명세서 PDF 문서(거래명세서_${customer?.name || '고객사'}_${billing?.billingYm}.pdf)가 자동 렌더링되어 첨부되었습니다.
+
 감사합니다.
 (주)기연엘리베이터 올림
 ========================================================================================`;
@@ -274,7 +301,7 @@ ${details.map((d, idx) => {
       const ccList = mailCc ? mailCc.split(',').map(e => e.trim()).filter(Boolean) : [];
 
       await emailService.sendEmail(toList.join(', '), mailSubject, body, [], ccList.join(', '));
-      alert('🎉 표준 거래명세서 이메일 발송이 성공적으로 완료되었습니다.');
+      alert('🎉 표준 거래명세서 작성 및 PDF 생성/이메일 발송이 성공적으로 완료되었습니다.');
       setShowMailModal(false);
     } catch (err) {
       alert('전송 중 에러가 발생했습니다.');
@@ -1321,10 +1348,10 @@ ${details.map((d, idx) => {
                 </div>
               ) : (
                 /* 표준 거래명세서 미리보기 (PREVIEW) */
-                <div style={{ marginBottom: '20px', padding: '16px', backgroundColor: '#fff', border: '2px solid #cbd5e1', borderRadius: '8px', color: '#1e293b', fontSize: '12.5px' }}>
+                <div id="transaction-statement-pdf-target" style={{ marginBottom: '20px', padding: '20px', backgroundColor: '#fff', border: '2px solid #cbd5e1', borderRadius: '8px', color: '#1e293b', fontSize: '12.5px' }}>
                   <div style={{ textAlign: 'center', borderBottom: '2px double #0f172a', paddingBottom: '8px', marginBottom: '12px' }}>
                     <h3 style={{ margin: 0, fontSize: '20px', fontWeight: '800', letterSpacing: '4px', color: '#0f172a' }}>거 래 명 세 서</h3>
-                    <span style={{ fontSize: '11px', color: '#64748b' }}>(공급받는자 보관용)</span>
+                    <span style={{ fontSize: '11px', color: '#64748b' }}>(공급받는자 보관용 - 구글 드라이브 표준 양식)</span>
                   </div>
 
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px', border: '1px solid #cbd5e1', padding: '10px', borderRadius: '6px', backgroundColor: '#f8fafc' }}>
@@ -1387,10 +1414,18 @@ ${details.map((d, idx) => {
                 </div>
               )}
 
-              <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+              <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
                 <button type="button" className="btn-secondary" onClick={() => setShowMailModal(false)}>취소</button>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => downloadStatementPdf(targetBilling?.billingYm || '', targetCust?.name || '고객사')}
+                  style={{ display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 'bold' }}
+                >
+                  <Download size={14} /> PDF 다운로드
+                </button>
                 <button type="submit" className="btn-success" disabled={isSending} style={{ fontWeight: 'bold' }}>
-                  {isSending ? '발송 중...' : <><Send size={14} /> 표준 거래명세서 이메일 전송</>}
+                  {isSending ? '발송 중...' : <><Send size={14} /> PDF 거래명세서 이메일 전송</>}
                 </button>
               </div>
             </form>
