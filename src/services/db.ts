@@ -350,7 +350,7 @@ export interface Contract {
 export interface ContractHistory {
   id: string;
   contractId: string;
-  changeType: 'REGISTER' | 'EXTEND' | 'SHORTEN' | 'SUCCEED' | 'TERMINATE' | 'EXCHANGE';
+  changeType: 'REGISTER' | 'EXTEND' | 'SHORTEN' | 'SUCCEED' | 'TERMINATE' | 'EXCHANGE' | 'FEE_CHANGE';
   changeDate: string;
   prevEndDate?: string;
   newEndDate?: string;

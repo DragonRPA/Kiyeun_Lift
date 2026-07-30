@@ -50,5 +50,10 @@ ALTER TABLE google_configs ADD COLUMN IF NOT EXISTS "transactionStatementTemplat
 ALTER TABLE billings ADD COLUMN IF NOT EXISTS "contractId" TEXT;
 ALTER TABLE billings DROP CONSTRAINT IF EXISTS billings_status_check;
 ALTER TABLE billings ADD CONSTRAINT billings_status_check CHECK (status IN ('UNPAID', 'PARTIAL', 'PAID', 'REQUESTED', 'REJECTED'));
+
+-- [보완 2026-07-30] contract_history 테이블 changeType CHECK 제약 조건 업데이트 ('FEE_CHANGE' 추가)
+ALTER TABLE contract_history DROP CONSTRAINT IF EXISTS contract_history_changeType_check;
+ALTER TABLE contract_history ADD CONSTRAINT contract_history_changeType_check CHECK ("changeType" IN ('REGISTER', 'EXTEND', 'SHORTEN', 'SUCCEED', 'TERMINATE', 'EXCHANGE', 'FEE_CHANGE'));
 NOTIFY pgrst, 'reload schema';
+
 

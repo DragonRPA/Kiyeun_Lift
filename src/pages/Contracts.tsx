@@ -180,14 +180,32 @@ export const Contracts: React.FC = () => {
     // 1. 계약 변경 및 대차 교체 이력
     activeContractHistory.forEach(h => {
       const isExchange = h.changeType === 'EXCHANGE' || h.description.includes('대차') || h.description.includes('교체');
+      
+      let historyTitle = '계약 이력';
+      if (isExchange) {
+        historyTitle = '🔄 자산 대차/교체 이력';
+      } else if (h.changeType === 'FEE_CHANGE' || h.description?.includes('렌탈료') || h.description?.includes('단가')) {
+        if (h.description.includes('월/일') || (h.description.includes('월') && h.description.includes('일'))) {
+          historyTitle = '💰 월/일 렌탈료 단가 변경';
+        } else if (h.description.includes('일 렌탈료') || h.description.includes('일 단가') || h.description.includes('일단가')) {
+          historyTitle = '💰 일 렌탈료 단가 변경';
+        } else {
+          historyTitle = '💰 월 렌탈료 단가 변경';
+        }
+      } else if (h.changeType === 'REGISTER') {
+        historyTitle = '계약 등록';
+      } else if (h.changeType === 'EXTEND') {
+        historyTitle = '기간 변경';
+      } else if (h.changeType === 'SHORTEN') {
+        historyTitle = '기간 단축';
+      } else if (h.changeType === 'SUCCEED') {
+        historyTitle = '계약 승계';
+      }
+
       timeline.push({
         id: `h-${h.id}`,
         date: h.changeDate || h.createdAt?.split('T')[0] || todayStr,
-        title: isExchange ? '🔄 자산 대차/교체 이력' :
-               h.changeType === 'REGISTER' ? '계약 등록' :
-               h.changeType === 'EXTEND' ? '기간 변경' :
-               h.changeType === 'SHORTEN' ? '기간 단축' :
-               h.changeType === 'SUCCEED' ? '계약 승계' : '계약 종료',
+        title: historyTitle,
         desc: h.description,
         category: 'CONTRACT'
       });
@@ -260,17 +278,32 @@ export const Contracts: React.FC = () => {
       const ca = db.contractAssets.find(c => c.id === editCaId);
       const asset = assets.find(a => a.id === ca?.assetId);
       const oldMonthly = ca?.monthlyRentalFee || 0;
+      const oldDaily = ca?.dailyRentalFee || 0;
+
+      const isMonthlyChanged = oldMonthly !== editMonthlyFee;
+      const isDailyChanged = oldDaily !== editDailyFee;
 
       db.updateRow<ContractAsset>('contractAssets', editCaId, {
         monthlyRentalFee: editMonthlyFee,
         dailyRentalFee: editDailyFee
       });
 
+      const assetTag = asset?.assetNo || ca?.expectedModel || '자산';
+      let changeDesc = '';
+
+      if (isMonthlyChanged && isDailyChanged) {
+        changeDesc = `월/일 렌탈료 단가 수정 [${assetTag}]: (월 ${oldMonthly.toLocaleString()}원 ➔ ${editMonthlyFee.toLocaleString()}원, 일 ${oldDaily.toLocaleString()}원 ➔ ${editDailyFee.toLocaleString()}원) (사유: ${feeChangeReason || '단가 조정'})`;
+      } else if (isDailyChanged) {
+        changeDesc = `일 렌탈료 단가 수정 [${assetTag}]: ${oldDaily.toLocaleString()}원 ➔ ${editDailyFee.toLocaleString()}원 (사유: ${feeChangeReason || '단가 조정'})`;
+      } else {
+        changeDesc = `월 렌탈료 단가 수정 [${assetTag}]: ${oldMonthly.toLocaleString()}원 ➔ ${editMonthlyFee.toLocaleString()}원 (사유: ${feeChangeReason || '단가 조정'})`;
+      }
+
       db.insertRow<ContractHistory>('contractHistory', {
         contractId: selectedContractId,
-        changeType: 'EXTEND',
+        changeType: 'FEE_CHANGE',
         changeDate: todayStr,
-        description: `렌탈료 수정 [${asset?.assetNo || ca?.expectedModel || '자산'}]: ${oldMonthly.toLocaleString()}원 ➔ ${editMonthlyFee.toLocaleString()}원 (사유: ${feeChangeReason || '단가 조정'})`,
+        description: changeDesc,
         createdAt: new Date().toISOString()
       });
 

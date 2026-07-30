@@ -280,7 +280,7 @@ CREATE TABLE contract_assets (
 CREATE TABLE contract_history (
     id TEXT PRIMARY KEY,
     "contractId" TEXT REFERENCES contracts(id) ON DELETE CASCADE,
-    "changeType" TEXT CHECK ("changeType" IN ('REGISTER', 'EXTEND', 'SHORTEN', 'SUCCEED', 'TERMINATE', 'EXCHANGE')) NOT NULL,
+    "changeType" TEXT CHECK ("changeType" IN ('REGISTER', 'EXTEND', 'SHORTEN', 'SUCCEED', 'TERMINATE', 'EXCHANGE', 'FEE_CHANGE')) NOT NULL,
     "prevEndDate" TEXT,
     "newEndDate" TEXT,
     "description" TEXT,
