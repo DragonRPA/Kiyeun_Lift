@@ -392,21 +392,21 @@ export const Deliveries: React.FC = () => {
       </div>
 
       {/* 배차 관리 대장 목록 */}
-      <div className="table-container">
-        <table>
+      <div className="table-container" style={{ overflowX: 'auto' }}>
+        <table style={{ minWidth: '1100px', whiteSpace: 'nowrap' }}>
           <thead>
             <tr>
-              <th>번호</th>
-              <th>구분</th>
-              <th>계약번호 / 의뢰메모</th>
-              <th>고객사명 / 회수지</th>
-              <th>운송 차량</th>
-              <th>담당기사/연락처</th>
-              <th>운송비(임시)</th>
-              <th>운송비(확정)</th>
-              <th>배송상태</th>
-              <th>용역 정산</th>
-              <th>관리</th>
+              <th style={{ whiteSpace: 'nowrap' }}>관리</th>
+              <th style={{ whiteSpace: 'nowrap' }}>번호</th>
+              <th style={{ whiteSpace: 'nowrap' }}>구분</th>
+              <th style={{ whiteSpace: 'nowrap' }}>계약번호 / 의뢰메모</th>
+              <th style={{ whiteSpace: 'nowrap' }}>고객사명 / 회수지</th>
+              <th style={{ whiteSpace: 'nowrap' }}>운송 차량</th>
+              <th style={{ whiteSpace: 'nowrap' }}>담당기사/연락처</th>
+              <th style={{ whiteSpace: 'nowrap' }}>운송비(임시)</th>
+              <th style={{ whiteSpace: 'nowrap' }}>운송비(확정)</th>
+              <th style={{ whiteSpace: 'nowrap' }}>배송상태</th>
+              <th style={{ whiteSpace: 'nowrap' }}>용역 정산</th>
             </tr>
           </thead>
           <tbody>
@@ -436,62 +436,7 @@ export const Deliveries: React.FC = () => {
 
                 return (
                   <tr key={d.id}>
-                    <td>{idx + 1}</td>
-                    <td>
-                      <span className={`badge ${d.type === 'OUTBOUND' ? 'badge-primary' : 'badge-danger'}`}>
-                        {d.type === 'OUTBOUND' ? '출고' : '회수'}
-                      </span>
-                    </td>
-                    <td style={{ fontSize: '12.5px' }}>
-                      {d.contractId ? getContractNo(d.contractId) : (
-                        <span style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>
-                          일반이동 ({d.memo.substring(0, 15)}...)
-                        </span>
-                      )}
-                    </td>
-                    <td><strong>{displayName}</strong></td>
-                    <td style={{ fontSize: '13px' }}>
-                      {d.vehicleType ? (
-                        <span>
-                          {d.vehicleType} {vehicleCount > 1 && <span style={{ color: 'var(--primary)', fontWeight: 'bold' }}>(총 {vehicleCount}대)</span>}
-                        </span>
-                      ) : '-'}
-                    </td>
-                    <td style={{ fontSize: '13px' }}>
-                      {d.driverName ? `${d.driverName}` : '-'}
-                    </td>
-                    <td>{d.deliveryCost.toLocaleString()}원</td>
-                    <td style={{ fontWeight: 'bold', color: d.deliveryCostConfirmed ? 'var(--primary)' : 'var(--text-muted)' }}>
-                      {d.deliveryCostConfirmed ? `${d.deliveryCostConfirmed.toLocaleString()}원` : '미확정'}
-                    </td>
-                    <td>
-                      <span className={`badge ${
-                        d.status === 'REQUESTED' ? 'badge-warning' :
-                        d.status === 'DISPATCHED' ? 'badge-info' : 'badge-success'
-                      }`}>
-                        {d.status === 'REQUESTED' ? '배차대기' :
-                         d.status === 'DISPATCHED' ? '이동중' :
-                         d.status === 'COMPLETED' ? '배송완료' : d.status}
-                      </span>
-                    </td>
-                    <td>
-                      {d.status === 'COMPLETED' ? (
-                        d.isCostSettled ? (
-                          <span style={{ color: 'var(--success)', fontWeight: '700', fontSize: '12px' }}>정산완료(마감)</span>
-                        ) : (
-                          <button
-                            className="btn-primary"
-                            onClick={() => handleOpenSettleModal(d)}
-                            style={{ padding: '2px 8px', fontSize: '11.5px', fontWeight: 'bold' }}
-                          >
-                            정산등록
-                          </button>
-                        )
-                      ) : (
-                        <span style={{ color: 'var(--text-muted)', fontSize: '12px' }}>완료 후 가능</span>
-                      )}
-                    </td>
-                    <td>
+                    <td style={{ whiteSpace: 'nowrap' }}>
                       <div style={{ display: 'flex', gap: '4px' }}>
                         {canSave && d.status === 'REQUESTED' && (
                           <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
@@ -515,6 +460,74 @@ export const Deliveries: React.FC = () => {
                           </button>
                         )}
                       </div>
+                    </td>
+                    <td style={{ whiteSpace: 'nowrap' }}>{idx + 1}</td>
+                    <td style={{ whiteSpace: 'nowrap' }}>
+                      <span
+                        className={`badge ${
+                          d.type === 'OUTBOUND' ? 'badge-primary' :
+                          d.type === 'INBOUND' ? 'badge-danger' :
+                          d.type === 'EXCHANGE' ? 'badge-info' : 'badge-warning'
+                        }`}
+                        style={{
+                          backgroundColor: d.type === 'EXCHANGE' ? '#8b5cf6' : undefined,
+                          color: d.type === 'EXCHANGE' ? '#fff' : undefined,
+                          fontWeight: 'bold'
+                        }}
+                      >
+                        {d.type === 'OUTBOUND' ? '출고' :
+                         d.type === 'INBOUND' ? '회수' :
+                         d.type === 'EXCHANGE' ? '교환 (왕복)' : '이동'}
+                      </span>
+                    </td>
+                    <td style={{ fontSize: '12.5px', whiteSpace: 'nowrap' }}>
+                      {d.contractId ? getContractNo(d.contractId) : (
+                        <span style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>
+                          일반이동 ({d.memo.substring(0, 15)}...)
+                        </span>
+                      )}
+                    </td>
+                    <td style={{ whiteSpace: 'nowrap' }}><strong>{displayName}</strong></td>
+                    <td style={{ fontSize: '13px', whiteSpace: 'nowrap' }}>
+                      {d.vehicleType ? (
+                        <span>
+                          {d.vehicleType} {vehicleCount > 1 && <span style={{ color: 'var(--primary)', fontWeight: 'bold' }}>(총 {vehicleCount}대)</span>}
+                        </span>
+                      ) : '-'}
+                    </td>
+                    <td style={{ fontSize: '13px', whiteSpace: 'nowrap' }}>
+                      {d.driverName ? `${d.driverName}` : '-'}
+                    </td>
+                    <td style={{ whiteSpace: 'nowrap' }}>{d.deliveryCost.toLocaleString()}원</td>
+                    <td style={{ fontWeight: 'bold', whiteSpace: 'nowrap', color: d.deliveryCostConfirmed ? 'var(--primary)' : 'var(--text-muted)' }}>
+                      {d.deliveryCostConfirmed ? `${d.deliveryCostConfirmed.toLocaleString()}원` : '미확정'}
+                    </td>
+                    <td style={{ whiteSpace: 'nowrap' }}>
+                      <span className={`badge ${
+                        d.status === 'REQUESTED' ? 'badge-warning' :
+                        d.status === 'DISPATCHED' ? 'badge-info' : 'badge-success'
+                      }`}>
+                        {d.status === 'REQUESTED' ? '배차대기' :
+                         d.status === 'DISPATCHED' ? '이동중' :
+                         d.status === 'COMPLETED' ? '배송완료' : d.status}
+                      </span>
+                    </td>
+                    <td style={{ whiteSpace: 'nowrap' }}>
+                      {d.status === 'COMPLETED' ? (
+                        d.isCostSettled ? (
+                          <span style={{ color: 'var(--success)', fontWeight: '700', fontSize: '12px' }}>정산완료(마감)</span>
+                        ) : (
+                          <button
+                            className="btn-primary"
+                            onClick={() => handleOpenSettleModal(d)}
+                            style={{ padding: '2px 8px', fontSize: '11.5px', fontWeight: 'bold' }}
+                          >
+                            정산등록
+                          </button>
+                        )
+                      ) : (
+                        <span style={{ color: 'var(--text-muted)', fontSize: '12px' }}>완료 후 가능</span>
+                      )}
                     </td>
                   </tr>
                 );

@@ -396,8 +396,8 @@ export interface Delivery {
   id: string;
   contractId?: string;
   assetIds?: string; // 대상 장비 ID 목록 (콤마 구분)
-  type: 'OUTBOUND' | 'INBOUND' | 'EXCHANGE' | 'MOVEMENT' | 'RETURN';
-  dispatchCategory?: '출고' | '입고' | '반납' | '정비' | '이동'; // 배차 세부 유형
+  type: 'OUTBOUND' | 'INBOUND' | 'EXCHANGE' | 'MOVEMENT' | 'RETURN'; // OUTBOUND: 출고, INBOUND: 회수, EXCHANGE: 단일 교환(왕복) 배차
+  dispatchCategory?: '출고' | '입고' | '반납' | '정비' | '이동' | '교환'; // 배차 세부 유형
   status: DeliveryStatus; // 배차 4단계 진행상태 (PENDING: 배차전, DISPATCHED: 배차완료, DELIVERED: 운송완료, CANCELLED: 배차취소)
   requestDate: string;
   scheduledDate?: string;

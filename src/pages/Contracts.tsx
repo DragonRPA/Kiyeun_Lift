@@ -5,7 +5,7 @@ import {
   Plus, Calendar, Search, Download, Edit3, Repeat, Clock, Wrench, ChevronLeft,
   Building2, ArrowLeftRight
 } from 'lucide-react';
-import { Contract, db, Customer, CustomerContact, CustomerSite, ContractAsset, ContractHistory } from '../services/db';
+import { Contract, db, Customer, CustomerContact, CustomerSite, ContractAsset, ContractHistory, Delivery } from '../services/db';
 import { exportToExcel } from '../services/excel';
 
 export const Contracts: React.FC = () => {
@@ -32,7 +32,10 @@ export const Contracts: React.FC = () => {
   // --- 계약 조회 필터 상태 ---
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
-  const [salespersonFilter, setSalespersonFilter] = useState('ALL');
+  const [customerFilter, setCustomerFilter] = useState('ALL');
+  const [siteFilter, setSiteFilter] = useState('ALL');
+  const [startDateFilter, setStartDateFilter] = useState('');
+  const [endDateFilter, setEndDateFilter] = useState('');
   const [quickChipFilter, setQuickChipFilter] = useState<'ALL' | 'ACTIVE' | 'ASSIGNED' | 'D3' | 'ZERO_FEE' | 'SUCCEEDED' | 'COMPLETED'>('ALL');
 
   // 선택된 계약 ID
@@ -104,6 +107,7 @@ export const Contracts: React.FC = () => {
   const [exchangeOldAssetId, setExchangeOldAssetId] = useState('');
   const [exchangeNewAssetId, setExchangeNewAssetId] = useState('');
   const [exchangeDate, setExchangeDate] = useState(new Date().toISOString().split('T')[0]);
+  const [exchangeTimeSlot, setExchangeTimeSlot] = useState('오전 (08:00 ~ 12:00)');
   const [exchangeIdentifyType, setExchangeIdentifyType] = useState<'KNOWN' | 'UNKNOWN'>('KNOWN');
   const [exchangeReason, setExchangeReason] = useState('');
 
@@ -124,7 +128,7 @@ export const Contracts: React.FC = () => {
     return { text: `D-${diff}일`, isWarning: false };
   };
 
-  // 💡 다차원 필터링
+  // 💡 다차원 필터링 (고객사, 현장, 시작일, 종료일)
   const filteredContracts = useMemo(() => {
     return contracts.filter(c => {
       const custName = getCustName(c.customerId).toLowerCase();
@@ -142,7 +146,10 @@ export const Contracts: React.FC = () => {
         assetNos.includes(q);
 
       const matchesStatus = statusFilter === 'ALL' || c.status === statusFilter;
-      const matchesSalesperson = salespersonFilter === 'ALL' || c.salespersonId === salespersonFilter;
+      const matchesCustomer = customerFilter === 'ALL' || c.customerId === customerFilter;
+      const matchesSite = siteFilter === 'ALL' || c.siteId === siteFilter;
+      const matchesStartDate = !startDateFilter || (c.startDate && c.startDate >= startDateFilter);
+      const matchesEndDate = !endDateFilter || (c.endDate && c.endDate !== '미정' && c.endDate <= endDateFilter);
 
       let matchesChip = true;
       if (quickChipFilter === 'ACTIVE') matchesChip = c.status === 'ACTIVE' || c.status === 'EXTENDED';
@@ -155,9 +162,9 @@ export const Contracts: React.FC = () => {
       } else if (quickChipFilter === 'SUCCEEDED') matchesChip = c.status === 'SUCCEEDED';
       else if (quickChipFilter === 'COMPLETED') matchesChip = c.status === 'COMPLETED';
 
-      return matchesSearch && matchesStatus && matchesSalesperson && matchesChip;
+      return matchesSearch && matchesStatus && matchesCustomer && matchesSite && matchesStartDate && matchesEndDate && matchesChip;
     });
-  }, [contracts, contractAssets, assets, customers, sites, contacts, searchTerm, statusFilter, salespersonFilter, quickChipFilter]);
+  }, [contracts, contractAssets, assets, customers, sites, contacts, searchTerm, statusFilter, customerFilter, siteFilter, startDateFilter, endDateFilter, quickChipFilter]);
 
   // 선택된 계약 관련 데이터
   const activeContract = contracts.find(c => c.id === selectedContractId);
@@ -358,23 +365,63 @@ export const Contracts: React.FC = () => {
 
     try {
       const oldAssetObj = assets.find(a => a.id === exchangeOldAssetId);
-      const targetModelName = oldAssetObj?.modelName || activeContractAssets[0]?.expectedModel || '동일/동급 모델';
+      const targetModelName = exchangeIdentifyType === 'KNOWN' 
+        ? (oldAssetObj?.modelName || '동일/동급 모델')
+        : (exchangeContractAssetId || activeContractAssets[0]?.expectedModel || '동일/동급 모델');
 
-      // 계약 속성 상속 대차 출고/회수 의뢰 등록
+      const isKnown = exchangeIdentifyType === 'KNOWN';
+      const identifyTag = isKnown 
+        ? `[식별됨] 관리번호:${oldAssetObj?.assetNo || '미지정'} / SN:${oldAssetObj?.serialNo || '미지정'}`
+        : `[미식별] 모델명(${targetModelName}) 현장 입고 검수 시 자산 확정 필요`;
+
+      // 1. contractHistory 기록
       db.insertRow<ContractHistory>('contractHistory', {
         contractId: selectedContractId,
         changeType: 'EXCHANGE',
         changeDate: exchangeDate,
-        description: `[자산 대차/교체 의뢰 접수] 회수대상: ${exchangeIdentifyType === 'KNOWN' ? oldAssetObj?.assetNo || '자산' : '미식별'} (${targetModelName}) / 사유: ${exchangeReason || '현장 고장/스펙 변경 요청'} — 계약 속성(렌탈료, 마감일, 현장조건) 100% 상속 연동`,
+        description: `[대차/교체 의뢰 접수] ${identifyTag} / 회수모델: ${targetModelName} / 사유: ${exchangeReason || '현장 고장/스펙 변경 요청'} — 기존 계약 조건(렌탈료, 마감일, 현장조건) 100% 자동 상속`,
+        createdAt: new Date().toISOString()
+      });
+
+      // 2. 후속 업무 흐름 연계: 단일 대차 요구에 대해 'EXCHANGE' (교환 왕복 배차) 1건만 발행
+      db.insertRow<Delivery>('deliveries', {
+        contractId: selectedContractId,
+        type: 'EXCHANGE',
+        dispatchCategory: '교환',
+        status: 'REQUESTED',
+        requestDate: exchangeDate,
+        scheduledDate: exchangeDate,
+        loadingTimeSlot: exchangeTimeSlot,
+        unloadingTimeSlot: exchangeTimeSlot,
+        memo: `[대차/교환 왕복 배차] 희망시간: ${exchangeTimeSlot} | 회수대상: ${isKnown ? `${oldAssetObj?.assetNo}(${targetModelName})` : `${targetModelName}(미식별)`} ➔ 대차출고요구: ${targetModelName} | 사유: ${exchangeReason}`,
+        vehicleType: '5톤 렉카',
+        driverName: '',
+        deliveryCost: 0,
+        deliveryCostConfirmed: 0,
+        isCostSettled: false,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      });
+
+      // 3. 후속 업무 흐름 연계: 출고 부서를 위한 대차 출고 슬롯(ContractAsset) 자동 추가
+      db.insertRow<ContractAsset>('contractAssets', {
+        contractId: selectedContractId,
+        assetId: undefined, // 미할당 상태로 생성하여 출고 부서(asset_assignment.tsx)로 할당 요청
+        expectedModel: targetModelName,
+        monthlyRentalFee: activeContractAssets[0]?.monthlyRentalFee || 0,
+        dailyRentalFee: activeContractAssets[0]?.dailyRentalFee || 0,
+        startDate: exchangeDate,
+        endDate: activeContract?.endDate || '미정',
         createdAt: new Date().toISOString()
       });
 
       await db.awaitPendingWrites();
       refreshAllData();
-      alert(`[대차/교체 의뢰 접수 완료]\n\n계약 속성(렌탈료, 현장조건, 청구마감일)이 100% 상속되어 출고/배차 부서로 대차 출고 및 회수 배차 요청이 발송되었습니다.`);
+      alert(`✅ [대차/교체 의뢰 접수 성공]\n\n1. 회수 배차 건이 [배차 관리] 메뉴로 자동 발행되었습니다. (${isKnown ? '자산번호 식별' : '현장 미식별 검수대기'})\n2. 대차 출고 할당 요청이 [장비 할당] 카드 보드 최상단으로 즉시 연동되었습니다.`);
 
       setShowExchangeModal(false);
       setExchangeNewAssetId('');
+      setExchangeReason('');
     } catch (err: any) {
       alert(`대차 의뢰 접수 실패: ${err?.message || err}`);
     }
@@ -562,12 +609,13 @@ export const Contracts: React.FC = () => {
           {/* 필터 패널 */}
           <div className="card" style={{ padding: '14px', margin: 0, border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '12px' }}>
             
+            {/* 1행: 검색어 & 엑셀 다운로드 */}
             <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
               <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: '#f8fafc', padding: '8px 14px', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
                 <Search size={16} color="var(--text-muted)" />
                 <input
                   type="text"
-                  placeholder="검색어 입력 (계약번호, 고객사명, 현장명, 자산번호, 담당자명...)"
+                  placeholder="통합 검색 (계약번호, 고객사명, 현장명, 자산번호, 담당자명...)"
                   value={searchTerm}
                   onChange={e => setSearchTerm(e.target.value)}
                   style={{ flex: 1, border: 'none', backgroundColor: 'transparent', fontSize: '13px', outline: 'none' }}
@@ -577,21 +625,121 @@ export const Contracts: React.FC = () => {
                 )}
               </div>
 
-              <select value={salespersonFilter} onChange={e => setSalespersonFilter(e.target.value)} style={{ padding: '8px 12px', borderRadius: '6px', fontSize: '12px' }}>
-                <option value="ALL">전체 영업담당</option>
-                {users.map(u => (
-                  <option key={u.id} value={u.id}>{u.name}</option>
-                ))}
-              </select>
-
               <button className="btn-secondary" onClick={handleExportExcel} style={{ padding: '8px 12px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px' }}>
                 <Download size={14} /> 엑셀 다운로드
               </button>
             </div>
 
-            {/* 필터 칩 */}
+            {/* 2행: 고객사, 현장, 시작일, 종료일 세부 상세 필터 (레이블 상단 헤더 세로 스택 구조) */}
+            <div style={{ display: 'flex', gap: '16px', alignItems: 'flex-end', flexWrap: 'wrap', backgroundColor: '#f8fafc', padding: '10px 14px', borderRadius: '8px', border: '1px solid #e2e8f0', overflowX: 'auto' }}>
+              {/* 고객사 기준 */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flexShrink: 0 }}>
+                <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>고객사 선택</label>
+                <select
+                  value={customerFilter}
+                  onChange={e => {
+                    setCustomerFilter(e.target.value);
+                    setSiteFilter('ALL');
+                  }}
+                  style={{ padding: '6px 10px', borderRadius: '6px', fontSize: '12.5px', border: '1px solid var(--border-color)', outline: 'none', backgroundColor: '#fff', whiteSpace: 'nowrap', minWidth: '150px' }}
+                >
+                  <option value="ALL">전체 고객사</option>
+                  {customers.map(c => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* 현장 기준 */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flexShrink: 0 }}>
+                <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>현장 선택</label>
+                <select
+                  value={siteFilter}
+                  onChange={e => setSiteFilter(e.target.value)}
+                  style={{ padding: '6px 10px', borderRadius: '6px', fontSize: '12.5px', border: '1px solid var(--border-color)', outline: 'none', backgroundColor: '#fff', whiteSpace: 'nowrap', minWidth: '150px' }}
+                >
+                  <option value="ALL">전체 현장</option>
+                  {(customerFilter === 'ALL' ? sites : sites.filter(s => s.customerId === customerFilter)).map(s => (
+                    <option key={s.id} value={s.id}>{s.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* 계약 시작일 (이후) */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flexShrink: 0 }}>
+                <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>계약 시작일 (이후)</label>
+                <input
+                  type="date"
+                  value={startDateFilter}
+                  onChange={e => setStartDateFilter(e.target.value)}
+                  style={{ padding: '5px 8px', borderRadius: '6px', fontSize: '12px', border: '1px solid var(--border-color)', outline: 'none', backgroundColor: '#fff', whiteSpace: 'nowrap' }}
+                />
+              </div>
+
+              {/* 계약 종료일 (이전) */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flexShrink: 0 }}>
+                <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>계약 종료일 (이전)</label>
+                <input
+                  type="date"
+                  value={endDateFilter}
+                  onChange={e => setEndDateFilter(e.target.value)}
+                  style={{ padding: '5px 8px', borderRadius: '6px', fontSize: '12px', border: '1px solid var(--border-color)', outline: 'none', backgroundColor: '#fff', whiteSpace: 'nowrap' }}
+                />
+              </div>
+
+              {/* 명시적 [조회] 버튼 */}
+              <button
+                className="btn-primary"
+                onClick={() => {
+                  // 명시적 조회 실행
+                }}
+                style={{
+                  padding: '6px 16px',
+                  borderRadius: '6px',
+                  fontSize: '12.5px',
+                  fontWeight: 'bold',
+                  whiteSpace: 'nowrap',
+                  flexShrink: 0,
+                  height: '33px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px'
+                }}
+              >
+                <Search size={14} /> 조회
+              </button>
+
+              {/* 필터 초기화 버튼 */}
+              {(customerFilter !== 'ALL' || siteFilter !== 'ALL' || startDateFilter || endDateFilter) && (
+                <button
+                  onClick={() => {
+                    setCustomerFilter('ALL');
+                    setSiteFilter('ALL');
+                    setStartDateFilter('');
+                    setEndDateFilter('');
+                  }}
+                  style={{
+                    padding: '6px 12px',
+                    borderRadius: '6px',
+                    fontSize: '11.5px',
+                    border: '1px solid #cbd5e1',
+                    backgroundColor: '#fff',
+                    color: '#475569',
+                    cursor: 'pointer',
+                    fontWeight: 600,
+                    whiteSpace: 'nowrap',
+                    flexShrink: 0,
+                    height: '33px'
+                  }}
+                >
+                  필터 초기화 ✕
+                </button>
+              )}
+            </div>
+
+            {/* 3행: 상태 필터 칩 */}
             <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
-              <span style={{ fontSize: '11px', color: 'var(--text-muted)', marginRight: '4px' }}>상태 필터:</span>
+              <span style={{ fontSize: '11px', color: 'var(--text-muted)', marginRight: '4px', whiteSpace: 'nowrap', flexShrink: 0 }}>상태 필터:</span>
               {[
                 { id: 'ALL', label: `전체 (${contracts.length})` },
                 { id: 'ACTIVE', label: `진행중 (${contracts.filter(c => c.status === 'ACTIVE' || c.status === 'EXTENDED').length})` },
@@ -667,12 +815,15 @@ export const Contracts: React.FC = () => {
                       return (
                         <tr
                           key={c.id}
-                          onClick={() => handleSelectContract(c.id)}
-                          style={{ cursor: 'pointer', whiteSpace: 'nowrap' }}
+                          style={{ whiteSpace: 'nowrap' }}
                           className="hover-row"
                         >
                           <td style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>
-                            <button className="btn-primary" style={{ padding: '3px 10px', fontSize: '11px' }}>
+                            <button
+                              className="btn-primary"
+                              style={{ padding: '3px 10px', fontSize: '11px' }}
+                              onClick={() => handleSelectContract(c.id)}
+                            >
                               상세 ➔
                             </button>
                           </td>
@@ -984,33 +1135,35 @@ export const Contracts: React.FC = () => {
         </div>
       )}
 
-      {/* 모달 4: 자산 교체 / 대차 의뢰 (계약 속성 100% 자동 상속 구조) */}
+      {/* 모달 4: 자산 교체 / 대차 의뢰 (식별 여부 구분 및 업무 흐름 자동 연계 구조) */}
       {showExchangeModal && activeContract && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-          <form onSubmit={handleExchangeSubmit} className="card" style={{ width: '100%', maxWidth: '480px', backgroundColor: 'var(--bg-card)' }}>
-            <h3 className="card-title" style={{ marginBottom: '14px', color: 'var(--primary)' }}>자산 교체 / 대차 의뢰</h3>
+          <form onSubmit={handleExchangeSubmit} className="card" style={{ width: '100%', maxWidth: '500px', backgroundColor: 'var(--bg-card)' }}>
+            <h3 className="card-title" style={{ marginBottom: '14px', color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <ArrowLeftRight size={18} /> 자산 교체 / 대차 의뢰
+            </h3>
             
             <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', marginBottom: '18px' }}>
               
               {/* 1단계 시작점 분기: 교체 대상 식별 여부 */}
               <div>
-                <label style={{ fontWeight: 'bold', display: 'block', marginBottom: '6px' }}>1. 회수 대상 장비 식별 상태 *</label>
+                <label style={{ fontWeight: 'bold', display: 'block', marginBottom: '6px', fontSize: '12px' }}>1. 회수 대상 장비 식별 상태 *</label>
                 <div style={{ display: 'flex', gap: '8px' }}>
                   <button
                     type="button"
                     className={exchangeIdentifyType === 'KNOWN' ? 'btn-primary' : 'btn-secondary'}
                     onClick={() => setExchangeIdentifyType('KNOWN')}
-                    style={{ flex: 1, padding: '7px 10px', fontSize: '11.5px', fontWeight: 'bold' }}
+                    style={{ flex: 1, padding: '8px 10px', fontSize: '11.5px', fontWeight: 'bold', borderRadius: '6px' }}
                   >
-                    🔵 자산번호 식별 가능
+                    🔵 모델 + 관리번호/S/N 식별됨
                   </button>
                   <button
                     type="button"
                     className={exchangeIdentifyType === 'UNKNOWN' ? 'btn-primary' : 'btn-secondary'}
                     onClick={() => setExchangeIdentifyType('UNKNOWN')}
-                    style={{ flex: 1, padding: '7px 10px', fontSize: '11.5px', fontWeight: 'bold' }}
+                    style={{ flex: 1, padding: '8px 10px', fontSize: '11.5px', fontWeight: 'bold', borderRadius: '6px' }}
                   >
-                    🟠 미식별 (모델 기준 요청)
+                    🟠 모델명만 지정 (현장회수시 확정)
                   </button>
                 </div>
               </div>
@@ -1018,21 +1171,31 @@ export const Contracts: React.FC = () => {
               {/* 회수 대상 장비 선택 */}
               {exchangeIdentifyType === 'KNOWN' ? (
                 <div>
-                  <label>회수 대상 계약 자산 선택 (식별됨) *</label>
-                  <select value={exchangeOldAssetId} onChange={e => setExchangeOldAssetId(e.target.value)} required style={{ width: '100%', padding: '8px' }}>
+                  <label style={{ fontSize: '12px', fontWeight: 600, marginBottom: '4px', display: 'block' }}>회수 대상 계약 자산 선택 (자산번호/SN 지정) *</label>
+                  <select value={exchangeOldAssetId} onChange={e => setExchangeOldAssetId(e.target.value)} required style={{ width: '100%', padding: '8px', borderRadius: '6px', fontSize: '12.5px' }}>
                     {activeContractAssets.map(ca => {
                       const ast = assets.find(a => a.id === ca.assetId);
                       return (
                         <option key={ca.id} value={ca.assetId}>
-                          {ast ? `${ast.modelName} (관리번호: ${ast.assetNo})` : (ca.expectedModel || '자산')}
+                          {ast ? `${ast.modelName} (관리번호: ${ast.assetNo} / SN: ${ast.serialNo || '미기재'})` : (ca.expectedModel || '자산')}
                         </option>
                       );
                     })}
                   </select>
                 </div>
               ) : (
-                <div style={{ padding: '10px', backgroundColor: '#fff7ed', border: '1px solid #fed7aa', borderRadius: '6px', fontSize: '11.5px', color: '#c2410c' }}>
-                  💡 <strong>미식별 교체 안내:</strong> 현장의 정확한 자산번호를 모르는 상태입니다. 대차 장비 출고 후 회수 장비가 센터에 <strong>입고 검수 승인되는 시점에 자산번호가 최종 매핑 완성</strong>됩니다.
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <div>
+                    <label style={{ fontSize: '12px', fontWeight: 600, marginBottom: '4px', display: 'block' }}>회수 대상 요청 모델 선택 (모델명만) *</label>
+                    <select value={exchangeContractAssetId} onChange={e => setExchangeContractAssetId(e.target.value)} required style={{ width: '100%', padding: '8px', borderRadius: '6px', fontSize: '12.5px' }}>
+                      {Array.from(new Set(activeContractAssets.map(ca => ca.expectedModel || (assets.find(a => a.id === ca.assetId)?.modelName)))).map((model, idx) => (
+                        <option key={idx} value={model}>{model} (현장 회수 검수 시 자산번호 확정)</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div style={{ padding: '8px 10px', backgroundColor: '#fff7ed', border: '1px solid #fed7aa', borderRadius: '6px', fontSize: '11.5px', color: '#c2410c' }}>
+                    💡 <strong>미식별 교체 안내:</strong> 현장의 정확한 자산번호/SN을 모르는 상태입니다. 대차 장비 출고 후 회수 장비가 센터에 <strong>입고 검수 승인되는 시점에 자산번호가 최종 매핑 완성</strong>됩니다.
+                  </div>
                 </div>
               )}
 
@@ -1040,25 +1203,59 @@ export const Contracts: React.FC = () => {
               <div style={{ padding: '12px', backgroundColor: '#f8fafc', border: '1px solid var(--border-color)', borderRadius: '6px', fontSize: '12px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
                 <div style={{ fontWeight: 'bold', color: 'var(--primary)', marginBottom: '2px' }}>🔒 기존 계약 속성 100% 자동 상속</div>
                 <div>고객사 / 현장: <strong>{getCustName(activeContract.customerId)} — {getSiteName(activeContract.siteId)}</strong></div>
-                <div>대차 요구 모델: <strong>{assets.find(a => a.id === exchangeOldAssetId)?.modelName || activeContractAssets[0]?.expectedModel || '동급 동일 모델'}</strong></div>
+                <div>대차 요구 모델: <strong>{exchangeIdentifyType === 'KNOWN' ? (assets.find(a => a.id === exchangeOldAssetId)?.modelName || activeContractAssets[0]?.expectedModel || '동급 동일 모델') : (exchangeContractAssetId || activeContractAssets[0]?.expectedModel || '동급 동일 모델')}</strong></div>
                 <div>렌탈료 단가 조건: 기존 계약 월 렌탈료 조건 100% 동일 상속 (추가 비용 없음)</div>
                 <div>청구 / 작업지시 조건: 매월 {activeContract.billingDay}일 청구 마감 조건 승계</div>
               </div>
 
-              <div>
-                <label>대차/교체 희망일자 *</label>
-                <input type="date" value={exchangeDate} onChange={e => setExchangeDate(e.target.value)} required style={{ width: '100%', padding: '8px' }} />
+              {/* 후속 업무 흐름 연계 시각화 카드 */}
+              <div style={{ padding: '10px 12px', backgroundColor: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '6px', fontSize: '11.5px', color: '#1e40af' }}>
+                <div style={{ fontWeight: 'bold', marginBottom: '3px' }}>🔄 후속 업무 자동 연계 체인</div>
+                <div>1. <strong>[배차 관리]</strong>에 기존 장비 회수 배차(INBOUND) 자동 등록 ({exchangeIdentifyType === 'KNOWN' ? '자산번호 지정' : '미식별 현장확인'})</div>
+                <div>2. <strong>[장비 할당]</strong> 보드 최상단 카드로 대차 출고 할당 요청 자동 노출</div>
+                <div>3. <strong>[입고 검수]</strong> 승인 마감 시 자산 상태 `AVAILABLE`(또는 수리) 자동 마감 연동</div>
+              </div>
+
+              {/* 대차/교체 희망일자 및 희망시간대 (상하 헤더 세로 스택 컨셉) */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-main)', whiteSpace: 'nowrap' }}>대차/교체 희망일자 *</label>
+                  <input
+                    type="date"
+                    value={exchangeDate}
+                    onChange={e => setExchangeDate(e.target.value)}
+                    required
+                    style={{ width: '100%', padding: '8px', borderRadius: '6px', fontSize: '12.5px', border: '1px solid var(--border-color)' }}
+                  />
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-main)', whiteSpace: 'nowrap' }}>희망 시간대 (배차 스케줄) *</label>
+                  <select
+                    value={exchangeTimeSlot}
+                    onChange={e => setExchangeTimeSlot(e.target.value)}
+                    required
+                    style={{ width: '100%', padding: '8px', borderRadius: '6px', fontSize: '12.5px', border: '1px solid var(--border-color)', backgroundColor: '#fff' }}
+                  >
+                    <option value="오전 (08:00 ~ 12:00)">오전 (08:00 ~ 12:00)</option>
+                    <option value="오후 (13:00 ~ 17:00)">오후 (13:00 ~ 17:00)</option>
+                    <option value="새벽/조기 (07:00 이전)">새벽/조기 (07:00 이전)</option>
+                    <option value="08:30 정시 도착">08:30 정시 도착</option>
+                    <option value="13:00 정시 도착">13:00 정시 도착</option>
+                    <option value="야간/작업 마감후">야간/작업 마감후</option>
+                  </select>
+                </div>
               </div>
 
               <div>
-                <label>교체 사유 및 현장 상황 메모 *</label>
-                <input type="text" placeholder="예: 유압유 누유 고장, 작업 높이 변경 요청 등" value={exchangeReason} onChange={e => setExchangeReason(e.target.value)} required style={{ width: '100%', padding: '8px' }} />
+                <label style={{ fontSize: '12px', fontWeight: 600, marginBottom: '4px', display: 'block' }}>교체 사유 및 현장 상황 메모 *</label>
+                <input type="text" placeholder="예: 유압유 누유 고장, 작업 높이 변경 요청 등" value={exchangeReason} onChange={e => setExchangeReason(e.target.value)} required style={{ width: '100%', padding: '8px', borderRadius: '6px', fontSize: '12.5px' }} />
               </div>
             </div>
 
             <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
               <button type="button" className="btn-secondary" onClick={() => setShowExchangeModal(false)}>취소</button>
-              <button type="submit" className="btn-success">
+              <button type="submit" className="btn-success" style={{ fontWeight: 'bold', padding: '8px 14px' }}>
                 대차 의뢰 접수 (출고/회수 배차 발행)
               </button>
             </div>

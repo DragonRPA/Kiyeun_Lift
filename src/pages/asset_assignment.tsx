@@ -1,15 +1,15 @@
 // src/pages/asset_assignment.tsx
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { Wrench, CheckCircle, PackageSearch, Layers, Truck, ChevronDown, Check, Activity, Search } from 'lucide-react';
+import { Wrench, CheckCircle, PackageSearch, Layers, Truck, ChevronDown, Check, Activity, Search, AlertTriangle } from 'lucide-react';
 
 export const AssetAssignment: React.FC = () => {
-  const { hasPermission, contractAssets, contracts, customers, assets, assignAssetToContract } = useApp();
+  const { hasPermission, contractAssets, contracts, customers, assets, assignAssetToContract, contractHistory } = useApp();
   
   const [selectedContractId, setSelectedContractId] = useState<string>('');
   const [selectedCaId, setSelectedCaId] = useState<string>('');
   const [selectedAssetId, setSelectedAssetId] = useState<string>('');
-  const [searchAssetNo, setSearchAssetNo] = useState(''); // 🔍 관리번호/제조번호 검색 필터
+  const [searchAssetNo, setSearchAssetNo] = useState('');
 
   const canEdit = hasPermission('dispatch_assign', 'save');
   const canView = hasPermission('dispatch_assign', 'view');
@@ -18,10 +18,20 @@ export const AssetAssignment: React.FC = () => {
     return <div style={{ padding: '16px', fontSize: '13px' }}>이 메뉴에 접근할 권한이 없습니다. (dispatch_assign)</div>;
   }
 
+  // 대차 교체 의뢰 접수 건 (EXCHANGE 이력 기반)
+  const exchangeRequests = (contractHistory || []).filter(h => h.changeType === 'EXCHANGE');
+  // 아직 미할당 슬롯이 있는 대차 의뢰 계약만 추출
+  const exchangeContractIds = Array.from(new Set(exchangeRequests.map(h => h.contractId)));
+  const exchangePendingContracts = contracts.filter(c =>
+    exchangeContractIds.includes(c.id) &&
+    contractAssets.some(ca => ca.contractId === c.id && !ca.assetId)
+  );
+
   // 1. 미할당된 ContractAsset을 포함하고 있는 Contract 들을 찾는다.
   const pendingCaList = contractAssets.filter(ca => !ca.assetId);
   const pendingContractIds = Array.from(new Set(pendingCaList.map(ca => ca.contractId)));
-  const pendingContracts = contracts.filter(c => pendingContractIds.includes(c.id));
+  // 대차 의뢰 건을 제외한 일반 출고 대기 계약
+  const pendingContracts = contracts.filter(c => pendingContractIds.includes(c.id) && !exchangeContractIds.includes(c.id));
 
   const [isAssigning, setIsAssigning] = useState(false);
 
@@ -116,12 +126,54 @@ export const AssetAssignment: React.FC = () => {
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', fontSize: '13px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
-          <h2 style={{ fontWeight: '800', marginBottom: '4px', fontSize: '18px', letterSpacing: '-0.5px' }}>장비 할당 보드 (고밀도 뷰)</h2>
-          <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>임대가능 장비를 바둑판 카드로 매핑합니다. (선택된 슬롯과 동일한 모델명만 노출 및 상태 점수순 정렬)</p>
+          <h2 style={{ fontWeight: '800', marginBottom: '4px', fontSize: '18px', letterSpacing: '-0.5px' }}>장비 할당</h2>
+          <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>임대가능 장비를 대기 계약에 매핑합니다. 선택된 슬롯과 동일한 모델명만 노출되며 정비 점수 순으로 정렬됩니다.</p>
         </div>
       </div>
 
-      {/* 1단계: 출고 대기 중인 계약(기안) 카드 바둑판 뷰 */}
+      {/* 대차 교체 출고할당 대기 — 최우선 표출 (영업사원 대차 의뢰 접수 건) */}
+      {exchangePendingContracts.length > 0 && (
+        <div style={{ backgroundColor: '#fff7ed', padding: '14px', borderRadius: '10px', border: '2px solid #f97316', boxShadow: '0 2px 8px rgba(249,115,22,0.12)' }}>
+          <h3 style={{ fontSize: '14px', fontWeight: '700', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px', color: '#c2410c' }}>
+            <AlertTriangle size={14} /> 대차 교체 출고할당 대기 ({exchangePendingContracts.length}건)
+            <span style={{ fontSize: '11px', fontWeight: '500', color: '#9a3412', marginLeft: '4px' }}>— 영업사원 대차 의뢰 접수 건. 자사 자산 또는 전대 장비를 선택하여 할당하세요.</span>
+          </h3>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '12px' }}>
+            {exchangePendingContracts.map(contract => {
+              const cust = customers.find(c => c.id === contract.customerId);
+              const cas = contractAssets.filter(ca => ca.contractId === contract.id);
+              const isSelected = selectedContractId === contract.id;
+              const excHistory = exchangeRequests.find(h => h.contractId === contract.id);
+              return (
+                <div
+                  key={contract.id}
+                  onClick={() => { setSelectedContractId(contract.id); setSelectedCaId(''); }}
+                  style={{
+                    padding: '12px', backgroundColor: isSelected ? '#fed7aa' : '#fff',
+                    border: `2px solid ${isSelected ? '#f97316' : '#fdba74'}`, borderRadius: '10px',
+                    cursor: 'pointer', boxShadow: isSelected ? '0 4px 8px rgba(249,115,22,0.2)' : '0 1px 3px rgba(0,0,0,0.05)',
+                    transition: 'all 0.2s ease'
+                  }}
+                  className="hover-lift"
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '6px' }}>
+                    <div style={{ fontWeight: '800', fontSize: '13px' }}>{cust?.name || '미상 고객'}</div>
+                    <span style={{ fontSize: '10px', fontWeight: '700', backgroundColor: '#f97316', color: '#fff', padding: '2px 6px', borderRadius: '4px' }}>대차할당대기</span>
+                  </div>
+                  <div style={{ fontSize: '11px', color: '#7c2d12', marginBottom: '6px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                    <div>계약번호: <strong>{contract.contractNo}</strong></div>
+                    <div>요구 모델: <strong>{cas.map(ca => ca.expectedModel || '미지정').join(', ')}</strong></div>
+                    <div style={{ fontSize: '10px', color: '#9a3412', marginTop: '2px' }}>사유: {excHistory?.description?.substring(excHistory.description.indexOf('사유:') + 3, excHistory.description.indexOf('사유:') + 30) || '대차 요청'}</div>
+                  </div>
+                  {isSelected && <div style={{ color: '#f97316', fontWeight: '700', fontSize: '11px' }}>▶ 할당 진행 중</div>}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* 1단계: 일반 출고 대기 중인 계약(기안) 카드 바둑판 뷰 */}
       <div style={{ backgroundColor: 'var(--bg-card)', padding: '14px', borderRadius: '10px', border: '1px solid var(--border-color)', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
         <h3 style={{ fontSize: '14px', fontWeight: '700', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
           <PackageSearch size={14} className="text-warning" /> 출고 대기 요청 건 ({pendingContracts.length}건)

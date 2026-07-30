@@ -523,16 +523,16 @@ export const Billings: React.FC = () => {
               </button>
             </div>
 
-            <div className="table-container" style={{ border: 'none', boxShadow: 'none' }}>
-              <table style={{ minWidth: '450px' }}>
+            <div className="table-container" style={{ border: 'none', boxShadow: 'none', overflowX: 'auto' }}>
+              <table style={{ minWidth: '650px', whiteSpace: 'nowrap' }}>
                 <thead>
                   <tr>
-                    <th>청구월</th>
-                    <th>고객사</th>
-                    <th>청구액</th>
-                    <th>미납액</th>
-                    <th>상태</th>
-                    <th>관리</th>
+                    <th style={{ whiteSpace: 'nowrap' }}>관리</th>
+                    <th style={{ whiteSpace: 'nowrap' }}>청구월</th>
+                    <th style={{ whiteSpace: 'nowrap' }}>고객사</th>
+                    <th style={{ whiteSpace: 'nowrap' }}>청구액</th>
+                    <th style={{ whiteSpace: 'nowrap' }}>미납액</th>
+                    <th style={{ whiteSpace: 'nowrap' }}>상태</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -548,26 +548,7 @@ export const Billings: React.FC = () => {
                     const unpaid = b.totalAmount - b.paidAmount;
                     return (
                       <tr key={b.id} style={{ cursor: 'pointer' }} onClick={() => setSelectedBillingId(b.id)}>
-                        <td><strong>{b.billingYm}</strong></td>
-                        <td>{getCustName(b.customerId)}</td>
-                        <td>{b.totalAmount.toLocaleString()}원</td>
-                        <td style={{ color: unpaid > 0 ? 'var(--danger)' : 'var(--text-secondary)' }}>
-                          {unpaid.toLocaleString()}원
-                        </td>
-                        <td>
-                          <span className={`badge ${
-                            b.status === 'REQUESTED' ? 'badge-warning' :
-                            b.status === 'REJECTED' ? 'badge-danger' :
-                            b.status === 'PAID' ? 'badge-success' :
-                            b.status === 'PARTIAL' ? 'badge-warning' : 'badge-info'
-                          }`}>
-                            {b.status === 'REQUESTED' ? '결재대기' : 
-                             b.status === 'REJECTED' ? '취소됨' : 
-                             b.status === 'PAID' ? '완납' : 
-                             b.status === 'PARTIAL' ? '일부납' : '승인(미납)'}
-                          </span>
-                        </td>
-                        <td onClick={e => e.stopPropagation()}>
+                        <td onClick={e => e.stopPropagation()} style={{ whiteSpace: 'nowrap' }}>
                           <div style={{ display: 'flex', gap: '4px' }}>
                             {isAdmin && b.status === 'REQUESTED' && (
                               <>
@@ -586,6 +567,25 @@ export const Billings: React.FC = () => {
                               </button>
                             )}
                           </div>
+                        </td>
+                        <td style={{ whiteSpace: 'nowrap' }}><strong>{b.billingYm}</strong></td>
+                        <td style={{ whiteSpace: 'nowrap' }}>{getCustName(b.customerId)}</td>
+                        <td style={{ whiteSpace: 'nowrap' }}>{b.totalAmount.toLocaleString()}원</td>
+                        <td style={{ whiteSpace: 'nowrap', color: unpaid > 0 ? 'var(--danger)' : 'var(--text-secondary)' }}>
+                          {unpaid.toLocaleString()}원
+                        </td>
+                        <td style={{ whiteSpace: 'nowrap' }}>
+                          <span className={`badge ${
+                            b.status === 'REQUESTED' ? 'badge-warning' :
+                            b.status === 'REJECTED' ? 'badge-danger' :
+                            b.status === 'PAID' ? 'badge-success' :
+                            b.status === 'PARTIAL' ? 'badge-warning' : 'badge-info'
+                          }`}>
+                            {b.status === 'REQUESTED' ? '결재대기' : 
+                             b.status === 'REJECTED' ? '취소됨' : 
+                             b.status === 'PAID' ? '완납' : 
+                             b.status === 'PARTIAL' ? '일부납' : '승인(미납)'}
+                          </span>
                         </td>
                       </tr>
                     );

@@ -288,7 +288,7 @@ CREATE TABLE deliveries (
     "transportVendorId" TEXT REFERENCES vendors(id), -- 운송 거래처
     type TEXT CHECK (type IN ('OUTBOUND', 'INBOUND', 'EXCHANGE', 'MOVEMENT', 'RETURN')) NOT NULL,
     status TEXT CHECK (status IN ('PENDING', 'REQUESTED', 'DISPATCHED', 'DELIVERED', 'COMPLETED', 'CANCELLED')) NOT NULL DEFAULT 'PENDING',
-    "dispatchCategory" TEXT CHECK ("dispatchCategory" IN ('출고', '입고', '반납', '정비', '이동')) DEFAULT '출고',
+    "dispatchCategory" TEXT CHECK ("dispatchCategory" IN ('출고', '입고', '반납', '정비', '이동', '교환')) DEFAULT '출고',
     "loadingDate" TEXT, -- 상차일자 (YYYY-MM-DD)
     "loadingTimeSlot" TEXT DEFAULT '오전', -- 상차시간 구분 (오전/오후/희망시간)
     "unloadingDate" TEXT, -- 하차일자 (YYYY-MM-DD)

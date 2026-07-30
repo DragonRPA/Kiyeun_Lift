@@ -22,3 +22,7 @@ CREATE TABLE cash_flow_snapshots (
     "createdAt" TEXT NOT NULL
 );
 
+-- [보완 2026-07-29] deliveries 테이블 CHECK 제약 조건 업데이트 ('교환' 추가)
+ALTER TABLE deliveries DROP CONSTRAINT IF EXISTS deliveries_dispatchCategory_check;
+ALTER TABLE deliveries ADD CONSTRAINT deliveries_dispatchCategory_check CHECK ("dispatchCategory" IN ('출고', '입고', '반납', '정비', '이동', '교환'));
+

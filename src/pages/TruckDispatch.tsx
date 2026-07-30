@@ -182,7 +182,7 @@ export const TruckDispatch: React.FC = () => {
   const [selectedDelivery, setSelectedDelivery] = useState<Delivery | null>(null);
   
   // 배차 세부 유형 ('출고' | '입고' | '반납' | '정비' | '이동')
-  const [dispatchCategory, setDispatchCategory] = useState<'출고' | '입고' | '반납' | '정비' | '이동'>('출고');
+  const [dispatchCategory, setDispatchCategory] = useState<'출고' | '입고' | '반납' | '정비' | '이동' | '교환'>('출고');
   
   // 상차 일시 & 시간 지정
   const [loadingDate, setLoadingDate] = useState(() => new Date().toISOString().split('T')[0]);
@@ -1070,7 +1070,7 @@ export const TruckDispatch: React.FC = () => {
     setSelectedDelivery(d);
     setIsEditUnlocked(false); // 💡 새로 선택 시 기본 잠금(readOnly) 적용!
 
-    let defaultCat: '출고' | '입고' | '반납' | '정비' | '이동' = d.dispatchCategory || (d.type === 'OUTBOUND' ? '출고' : d.type === 'RETURN' || d.type === 'INBOUND' ? '반납' : '출고');
+    let defaultCat: '출고' | '입고' | '반납' | '정비' | '이동' | '교환' = d.dispatchCategory || (d.type === 'EXCHANGE' ? '교환' : d.type === 'OUTBOUND' ? '출고' : d.type === 'RETURN' || d.type === 'INBOUND' ? '반납' : '출고');
     setDispatchCategory(defaultCat);
 
     setLoadingDate(d.loadingDate || todayStr);
