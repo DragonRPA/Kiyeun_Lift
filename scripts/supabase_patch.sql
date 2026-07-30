@@ -46,6 +46,9 @@ ALTER TABLE customers ADD COLUMN IF NOT EXISTS "defaultStatementClosingDay" INTE
 -- [보완 2026-07-30] google_configs 테이블 거래명세서 양식 경로 컬럼 추가
 ALTER TABLE google_configs ADD COLUMN IF NOT EXISTS "transactionStatementTemplateUrl" TEXT;
 
--- [보완 2026-07-30] billings 테이블 contractId 컬럼 추가
+-- [보완 2026-07-30] billings 테이블 contractId 컬럼 및 status CHECK 제약 조건 업데이트 ('REQUESTED', 'REJECTED' 추가)
 ALTER TABLE billings ADD COLUMN IF NOT EXISTS "contractId" TEXT;
+ALTER TABLE billings DROP CONSTRAINT IF EXISTS billings_status_check;
+ALTER TABLE billings ADD CONSTRAINT billings_status_check CHECK (status IN ('UNPAID', 'PARTIAL', 'PAID', 'REQUESTED', 'REJECTED'));
+NOTIFY pgrst, 'reload schema';
 

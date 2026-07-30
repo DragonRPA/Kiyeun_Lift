@@ -41,13 +41,24 @@ function extractDdlStatements(message: string, ddlPatch: string): string[] {
     });
   }
   
-  if (text.includes('deliveries_status_check') || text.includes('check constraint')) {
+  if (text.includes('deliveries_status_check') || (text.includes('deliveries') && text.includes('check constraint'))) {
     const deliveryCheckDdl = [
       `ALTER TABLE "deliveries" DROP CONSTRAINT IF EXISTS "deliveries_status_check";`,
       `ALTER TABLE "deliveries" ADD CONSTRAINT "deliveries_status_check" CHECK (status IN ('PENDING', 'REQUESTED', 'DISPATCHED', 'DELIVERED', 'COMPLETED', 'CANCELLED'));`,
       `NOTIFY pgrst, 'reload schema';`
     ];
     deliveryCheckDdl.forEach(s => {
+      if (!stmts.includes(s)) stmts.push(s);
+    });
+  }
+
+  if (text.includes('billings_status_check') || (text.includes('billings') && text.includes('check constraint'))) {
+    const billingsCheckDdl = [
+      `ALTER TABLE "billings" DROP CONSTRAINT IF EXISTS "billings_status_check";`,
+      `ALTER TABLE "billings" ADD CONSTRAINT "billings_status_check" CHECK (status IN ('UNPAID', 'PARTIAL', 'PAID', 'REQUESTED', 'REJECTED'));`,
+      `NOTIFY pgrst, 'reload schema';`
+    ];
+    billingsCheckDdl.forEach(s => {
       if (!stmts.includes(s)) stmts.push(s);
     });
   }

@@ -1,4 +1,29 @@
-# Release Notes (v1.16.6.Build.00001 - 2026-07-30 14:56)
+# Release Notes (v1.16.7.Build.00001 - 2026-07-30 15:17)
+
+## 🛠️ [billings_status_check DB 제약 조건 개편 & ErrorModal DDL 자동 실행기 수술]
+
+### 개편 배경
+PostgreSQL DB 레벨의 `billings_status_check` 제약 조건이 결재 대기 상태인 `'REQUESTED'`를 거부하던 예외를 차단하기 위해 제약 조건 업데이트 DDL을 반영하고, 오류 발생 시 1-Click 자동 패치를 지원하도록 ErrorModal 파서를 강화함.
+
+### 주요 구현 내역
+
+#### 1. DB 제약 조건 DDL 수록 (`schema.sql`, `supabase_patch.sql`)
+- `billings` 테이블 CHECK 제약 조건 교체:
+  ```sql
+  ALTER TABLE billings DROP CONSTRAINT IF EXISTS billings_status_check;
+  ALTER TABLE billings ADD CONSTRAINT billings_status_check CHECK (status IN ('UNPAID', 'PARTIAL', 'PAID', 'REQUESTED', 'REJECTED'));
+  NOTIFY pgrst, 'reload schema';
+  ```
+
+#### 2. ErrorModal 지능형 DDL 추론기 보강 (`ErrorModal.tsx`)
+- `billings_status_check` 제약 조건 오류 메시지 감지 시 `[🚀 1-Click DB 패치 즉시 실행]` 버튼이 즉시 활성화되어 원격 DB 패치를 동적으로 자동 집행하는 기능 추가.
+
+### 빌드 검증
+- TypeScript + Vite 빌드 오류 없음 확인 ✅
+
+---
+
+
 
 ## 🛡️ [청구 생성 DB 저장 무누락 동기화(awaitPendingWrites) & Zero Silent Failures 헌장 이행 및 DDL 보완]
 
