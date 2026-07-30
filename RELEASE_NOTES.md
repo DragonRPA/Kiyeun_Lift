@@ -1,4 +1,38 @@
-# Release Notes (v1.16.2.Build.00001 - 2026-07-30 10:58)
+# Release Notes (v1.16.3.Build.00001 - 2026-07-30 12:53)
+
+## 🏢 [고객 정보 청구서/거래명세서 마감일 스키마 구축 & 계약 자동 연동 및 31일(말일) 동적 보정 알고리즘 탑재]
+
+### 개편 배경
+고객사별 정기 정산 주기를 체계화하기 위해 고객 기본 정보에 청구서(세금계산서) 기본 마감일 및 거래명세서 기본 마감일 컬럼을 구축하고 신규 계약에 자동 상속되도록 연동함. 아울러 31일(말일) 마감 선택 시 30일/28일 달에서 마감이 누락되던 예외를 완전 차단하는 동적 보정 알고리즘(`getEffectiveDay`)을 탑재함.
+
+### 주요 구현 내역
+
+#### 1. DB 스키마 & DDL 전면 개편 (`schema.sql`, `scripts/supabase_patch.sql`, `db.ts`)
+- **`customers` 테이블 컬럼 신설**:
+  - `defaultBillingDay`: 청구서(세금계산서) 기본 마감일 (INTEGER, 기본값 `30`일)
+  - `defaultStatementClosingDay`: 거래명세서 기본 마감일 (INTEGER, 기본값 `25`일)
+- **Supabase 마이그레이션 DDL 수록**:
+  - `ALTER TABLE customers ADD COLUMN IF NOT EXISTS "defaultBillingDay" INTEGER DEFAULT 30;`
+  - `ALTER TABLE customers ADD COLUMN IF NOT EXISTS "defaultStatementClosingDay" INTEGER DEFAULT 25;`
+
+#### 2. 고객사 관리 모달 UI & 상세 정보 카드 보강 (`Customers.tsx`)
+- **고객사 등록/수정 모달 UI 개편**: `청구서(세금계산서) 마감일` 및 `거래명세서 마감일` 선택 필드(1일~31일/월말) 추가.
+- **고객사 상세 뷰 시각화**: 고객사 상세 카드에 `매월 30일(청구서)` / `매월 25일(명세서)` 표시 항목 신설.
+- **전사 UI/UX 헌장 준수 (헌장 3.2, 3.4)**: 상하 세로 스택 레이아웃 (`flex-direction: column`, `gap: 4px`) 및 No-Wrap 규격 100% 적용.
+
+#### 3. 신규 계약 등록 시 고객 마감일 100% 자동 상속 연동 (`Contracts.tsx`)
+- 신규 계약 등록 시 고객사를 선택하면 해당 고객사에 등록된 `defaultBillingDay`와 `defaultStatementClosingDay`가 계약의 마감일 필드로 **100% 자동 채움(Auto-Fill)**되도록 연동.
+
+#### 4. 31일(말일) 지정 건의 월의 마지막 날 동적 보정 알고리즘 탑재 (`Billings.tsx`)
+- **알고리즘 공식**: $\text{실제 마감일} = \min(\text{설정 마감일(31일)}, \text{해당 월의 실제 마지막 일수})$
+- **월별 동적 보정**: 4월/6월/9월/11월(30일 달)에는 30일로, 2월(28일/29일 달)에는 28일/29일로 동적 보정하여 정산 마감 누락 예외를 100% 차단.
+
+### 빌드 검증
+- TypeScript + Vite 빌드 오류 없음 확인 ✅
+
+---
+
+
 
 ## 🧾 [청구 대장 일괄 생성 제거 & 정산 마법사 다차원 필터 도입 및 계약 승계 이력 추적성(Audit Trail) 전면 강화]
 

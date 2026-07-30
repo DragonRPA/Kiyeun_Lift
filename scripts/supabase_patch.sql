@@ -39,3 +39,7 @@ ALTER TABLE contracts ADD COLUMN IF NOT EXISTS "predecessorContractNo" TEXT;
 ALTER TABLE contracts ADD COLUMN IF NOT EXISTS "predecessorCustomerId" TEXT;
 ALTER TABLE contracts ADD COLUMN IF NOT EXISTS "predecessorCustomerName" TEXT;
 
+-- [보완 2026-07-30] customers 테이블 청구서(세금계산서) 및 거래명세서 마감일 컬럼 추가
+ALTER TABLE customers ADD COLUMN IF NOT EXISTS "defaultBillingDay" INTEGER DEFAULT 30;
+ALTER TABLE customers ADD COLUMN IF NOT EXISTS "defaultStatementClosingDay" INTEGER DEFAULT 25;
+

@@ -92,6 +92,8 @@ export interface Customer {
   driveFolderId?: string;
   prepaidBalance?: number; // 선수금 (예치금) 잔액
   transactionStatus?: 'ALLOWED' | 'BLOCKED'; // ALLOWED: 거래가능 (기본), BLOCKED: 거래불가 (신규 계약/출고 제한)
+  defaultBillingDay?: number; // 청구서(세금계산서) 기본 마감일 (예: 30일/월말)
+  defaultStatementClosingDay?: number; // 거래명세서 기본 마감일 (예: 25일)
   createdAt: string;
 }
 

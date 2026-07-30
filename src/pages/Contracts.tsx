@@ -1282,7 +1282,22 @@ export const Contracts: React.FC = () => {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', marginBottom: '16px' }}>
             <div>
               <label>고객사 선택 *</label>
-              <select value={custSelect} onChange={e => setCustSelect(e.target.value)} required style={{ width: '100%', padding: '8px' }}>
+              <select
+                value={custSelect}
+                onChange={e => {
+                  const val = e.target.value;
+                  setCustSelect(val);
+                  if (val && val !== 'NEW') {
+                    const sel = customers.find(c => c.id === val);
+                    if (sel) {
+                      setBillingDay(sel.defaultBillingDay || 30);
+                      setStatementClosingDay(sel.defaultStatementClosingDay || 25);
+                    }
+                  }
+                }}
+                required
+                style={{ width: '100%', padding: '8px' }}
+              >
                 {customers.map(c => (
                   <option key={c.id} value={c.id}>{c.name} ({c.bizRegNo})</option>
                 ))}

@@ -265,10 +265,23 @@ export const Billings: React.FC = () => {
   const isDuePeriod = (c: any) => {
     if (!wizardSearchStartDate || !wizardSearchEndDate) return true;
     
-    const startDay = new Date(wizardSearchStartDate).getDate();
-    const endDay = new Date(wizardSearchEndDate).getDate();
+    const startDateObj = new Date(wizardSearchStartDate);
+    const endDateObj = new Date(wizardSearchEndDate);
+    const startDay = startDateObj.getDate();
+    const endDay = endDateObj.getDate();
     
-    const isDayInRange = (day: number) => {
+    // 💡 31일(말일) 지정 건을 해당 월의 실제 마지막 날(30일/28일 등)로 동적 보정
+    const getEffectiveDay = (targetDay: number | undefined) => {
+      if (!targetDay) return undefined;
+      const lastDayOfMonth = new Date(startDateObj.getFullYear(), startDateObj.getMonth() + 1, 0).getDate();
+      return Math.min(targetDay, lastDayOfMonth);
+    };
+
+    const effectiveBillingDay = getEffectiveDay(c.billingDay);
+    const effectiveStatementDay = getEffectiveDay(c.statementClosingDay);
+
+    const isDayInRange = (day: number | undefined) => {
+      if (!day) return false;
       if (startDay <= endDay) {
         return day >= startDay && day <= endDay;
       } else {
@@ -276,8 +289,8 @@ export const Billings: React.FC = () => {
       }
     };
     
-    const billingDayMatch = c.billingDay && isDayInRange(c.billingDay);
-    const statementDayMatch = c.statementClosingDay && isDayInRange(c.statementClosingDay);
+    const billingDayMatch = isDayInRange(effectiveBillingDay);
+    const statementDayMatch = isDayInRange(effectiveStatementDay);
     
     return billingDayMatch || statementDayMatch;
   };

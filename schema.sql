@@ -112,6 +112,8 @@ CREATE TABLE customers (
     "repEmail" TEXT,
     "driveFolderId" TEXT,
     "prepaidBalance" DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "defaultBillingDay" INTEGER DEFAULT 30,
+    "defaultStatementClosingDay" INTEGER DEFAULT 25,
     "createdAt" TEXT NOT NULL,
     "updatedAt" TEXT NOT NULL
 );

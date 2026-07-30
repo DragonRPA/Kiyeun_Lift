@@ -139,12 +139,16 @@ export const Customers: React.FC = () => {
   };
 
   const handleOpenAddCust = () => {
-    setEditingCust({ name: '', bizRegNo: '', isClosed: false, address: '', representative: '', repContact: '', repEmail: '' });
+    setEditingCust({ name: '', bizRegNo: '', isClosed: false, address: '', representative: '', repContact: '', repEmail: '', defaultBillingDay: 30, defaultStatementClosingDay: 25 });
     setShowCustModal(true);
   };
 
   const handleOpenEditCust = (cust: Customer) => {
-    setEditingCust(cust);
+    setEditingCust({
+      defaultBillingDay: 30,
+      defaultStatementClosingDay: 25,
+      ...cust
+    });
     setShowCustModal(true);
   };
 
@@ -157,9 +161,9 @@ export const Customers: React.FC = () => {
     
     let simulatedQuery = "";
     if (isEdit) {
-      simulatedQuery = `UPDATE customers \nSET name = '${editingCust.name}', "bizRegNo" = '${editingCust.bizRegNo || ''}', "isClosed" = ${editingCust.isClosed}, address = '${editingCust.address || ''}', representative = '${editingCust.representative || ''}', "repContact" = '${editingCust.repContact || ''}', "repEmail" = '${editingCust.repEmail || ''}' \nWHERE id = '${editingCust.id}';`;
+      simulatedQuery = `UPDATE customers \nSET name = '${editingCust.name}', "bizRegNo" = '${editingCust.bizRegNo || ''}', "isClosed" = ${editingCust.isClosed}, address = '${editingCust.address || ''}', representative = '${editingCust.representative || ''}', "repContact" = '${editingCust.repContact || ''}', "repEmail" = '${editingCust.repEmail || ''}', "defaultBillingDay" = ${editingCust.defaultBillingDay || 30}, "defaultStatementClosingDay" = ${editingCust.defaultStatementClosingDay || 25} \nWHERE id = '${editingCust.id}';`;
     } else {
-      simulatedQuery = `INSERT INTO customers (id, name, "bizRegNo", "isClosed", address, representative, "repContact", "repEmail", "createdAt") \nVALUES ('${nextId}', '${editingCust.name}', '${editingCust.bizRegNo || ''}', ${editingCust.isClosed}, '${editingCust.address || ''}', '${editingCust.representative || ''}', '${editingCust.repContact || ''}', '${editingCust.repEmail || ''}', '${new Date().toISOString()}');`;
+      simulatedQuery = `INSERT INTO customers (id, name, "bizRegNo", "isClosed", address, representative, "repContact", "repEmail", "defaultBillingDay", "defaultStatementClosingDay", "createdAt") \nVALUES ('${nextId}', '${editingCust.name}', '${editingCust.bizRegNo || ''}', ${editingCust.isClosed}, '${editingCust.address || ''}', '${editingCust.representative || ''}', '${editingCust.repContact || ''}', '${editingCust.repEmail || ''}', ${editingCust.defaultBillingDay || 30}, ${editingCust.defaultStatementClosingDay || 25}, '${new Date().toISOString()}');`;
     }
     
     alert(`[DB 전송 예정 SQL 쿼리 안내]\n\n${simulatedQuery}\n\n확인을 누르면 Supabase에 전송됩니다.`);
@@ -383,8 +387,16 @@ export const Customers: React.FC = () => {
                     <div style={{ fontSize: '15px', fontWeight: '500' }}>{activeCustomer.repContact || '-'}</div>
                   </div>
                   <div>
-                    <label>대표 이메일</label>
-                    <div style={{ fontSize: '15px', fontWeight: '500' }}>{activeCustomer.repEmail || '-'}</div>
+                    <label style={{ whiteSpace: 'nowrap' }}>청구서(세금계산서) 마감일</label>
+                    <div style={{ fontSize: '15px', fontWeight: '600', color: 'var(--primary)' }}>
+                      매월 {activeCustomer.defaultBillingDay || 30}일 {activeCustomer.defaultBillingDay === 31 ? '(월말)' : ''}
+                    </div>
+                  </div>
+                  <div>
+                    <label style={{ whiteSpace: 'nowrap' }}>거래명세서 마감일</label>
+                    <div style={{ fontSize: '15px', fontWeight: '600', color: '#059669' }}>
+                      매월 {activeCustomer.defaultStatementClosingDay || 25}일 {activeCustomer.defaultStatementClosingDay === 31 ? '(월말)' : ''}
+                    </div>
                   </div>
                   <div style={{ gridColumn: 'span 2' }}>
                     <label>사업장 주소</label>
@@ -591,6 +603,32 @@ export const Customers: React.FC = () => {
                 </div>
                 <div style={{ display: 'flex', alignItems: 'flex-end', paddingBottom: '4px', fontSize: '11px', color: 'var(--text-muted)' }}>
                   {currentUser?.role !== 'ADMIN' && currentUser?.role !== 'MANAGER' ? '⚠️ 변경 권한이 없습니다.' : '💡 거래 불가 시 계약/배차 차단'}
+                </div>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', padding: '10px 12px', backgroundColor: 'var(--bg-app)', borderRadius: '8px', border: '1px dashed var(--border-color)' }}>
+                <div>
+                  <label style={{ whiteSpace: 'nowrap', fontSize: '12px', fontWeight: '600' }}>청구서(세금계산서) 마감일</label>
+                  <select
+                    value={editingCust.defaultBillingDay || 30}
+                    onChange={e => setEditingCust({ ...editingCust, defaultBillingDay: Number(e.target.value) })}
+                    style={{ width: '100%', padding: '6px 8px', fontSize: '13px', borderRadius: '6px', border: '1px solid var(--border-color)', marginTop: '4px' }}
+                  >
+                    {Array.from({ length: 31 }, (_, i) => i + 1).map(day => (
+                      <option key={day} value={day}>{day === 31 ? '31일 (월말)' : `매월 ${day}일`}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label style={{ whiteSpace: 'nowrap', fontSize: '12px', fontWeight: '600' }}>거래명세서 마감일</label>
+                  <select
+                    value={editingCust.defaultStatementClosingDay || 25}
+                    onChange={e => setEditingCust({ ...editingCust, defaultStatementClosingDay: Number(e.target.value) })}
+                    style={{ width: '100%', padding: '6px 8px', fontSize: '13px', borderRadius: '6px', border: '1px solid var(--border-color)', marginTop: '4px' }}
+                  >
+                    {Array.from({ length: 31 }, (_, i) => i + 1).map(day => (
+                      <option key={day} value={day}>{day === 31 ? '31일 (월말)' : `매월 ${day}일`}</option>
+                    ))}
+                  </select>
                 </div>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
