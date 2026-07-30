@@ -26,3 +26,9 @@ CREATE TABLE cash_flow_snapshots (
 ALTER TABLE deliveries DROP CONSTRAINT IF EXISTS deliveries_dispatchCategory_check;
 ALTER TABLE deliveries ADD CONSTRAINT deliveries_dispatchCategory_check CHECK ("dispatchCategory" IN ('출고', '입고', '반납', '정비', '이동', '교환'));
 
+-- [보완 2026-07-30] contract_history 테이블 컬럼 및 제약조건 보강
+ALTER TABLE contract_history ADD COLUMN IF NOT EXISTS "prevEndDate" TEXT;
+ALTER TABLE contract_history ADD COLUMN IF NOT EXISTS "newEndDate" TEXT;
+ALTER TABLE contract_history DROP CONSTRAINT IF EXISTS contract_history_changeType_check;
+ALTER TABLE contract_history ADD CONSTRAINT contract_history_changeType_check CHECK ("changeType" IN ('REGISTER', 'EXTEND', 'SHORTEN', 'SUCCEED', 'TERMINATE', 'EXCHANGE'));
+

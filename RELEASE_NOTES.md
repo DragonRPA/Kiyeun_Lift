@@ -1,4 +1,22 @@
-# Release Notes (v1.16.1.Build.00001 - 2026-07-30 10:30)
+# Release Notes (v1.16.1.Build.00002 - 2026-07-30 10:33)
+
+## 🐛 [계약 단축/연장 저장 시 `contract_history` 스키마 오차 버그 긴급 수술 패치]
+
+### 패치 배경
+계약 단축/연장 처리 시 원격 Supabase DB의 `contract_history` 테이블에 존재하지 않는 `newEndDate`, `prevEndDate` 컬럼을 입력하여 발생하던 스키마 캐시 오류(`Could not find the 'newEndDate' column of 'contract_history' in the schema cache`)를 즉시 수술함.
+
+### 주요 수정 내역
+1. **`Contracts.tsx` 연장/단축 저장 로직 수정**:
+   - `contractHistory` 테이블 저장 시 Supabase DB 스키마에 부합하도록 입력 필드를 정돈하고 `description` 상세 설명란에 변경 전/후 만료일 정보(`계약 기간 변경: 2026-07-29 ➔ 2026-07-30`)를 100% 보존하여 저장 성공 보장.
+2. **원격 DB 마이그레이션 DDL 보강 (`schema.sql` & `scripts/supabase_patch.sql`)**:
+   - `contract_history` 테이블에 `"prevEndDate"`, `"newEndDate"` 컬럼을 동적으로 추가할 수 있는 DDL 패치 및 `changeType` 제약조건(`'EXCHANGE'` 포함) 스키마 반영.
+
+### 빌드 검증
+- TypeScript + Vite 빌드 오류 없음 확인 ✅
+
+---
+
+
 
 ## 🚚 [단일 'EXCHANGE' 교환 왕복 배차 발행 체인 수술 및 계약 필터·UI/UX 표준 전면 개편]
 

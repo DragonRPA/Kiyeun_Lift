@@ -308,9 +308,7 @@ export const Contracts: React.FC = () => {
         contractId: activeContract.id,
         changeType: 'EXTEND',
         changeDate: todayStr,
-        prevEndDate: prevEnd,
-        newEndDate: targetEndDate,
-        description: `계약 기간 변경: ${prevEnd} ➔ ${targetEndDate} (사유: ${modDesc || '기간 조정'})`,
+        description: `계약 기간 변경: ${prevEnd || '미정'} ➔ ${targetEndDate} (사유: ${modDesc || '기간 조정'})`,
         createdAt: new Date().toISOString()
       });
 
