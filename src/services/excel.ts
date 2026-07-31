@@ -37,24 +37,52 @@ export const exportTransactionStatementExcel = async (
   fileName: string,
   templateUrl?: string
 ) => {
-  // 1. 구글 드라이브 공유링크 → 직접다운로드 URL 변환
-  let fetchUrl = '/거래명세서양식.xlsx'; // fallback: public 폴더 복사본
+  // 1. 구글 URL → 직접 다운로드 URL 변환
+  //    케이스 A: docs.google.com/spreadsheets (Google Sheets)
+  //      https://docs.google.com/spreadsheets/d/FILE_ID/edit?...
+  //      → https://docs.google.com/spreadsheets/d/FILE_ID/export?format=xlsx
+  //    케이스 B: drive.google.com/file/d/FILE_ID/view
+  //      → https://drive.google.com/uc?export=download&id=FILE_ID
+  //    케이스 C: drive.google.com/open?id=FILE_ID
+  //      → https://drive.google.com/uc?export=download&id=FILE_ID
+  //    그 외 http URL: 그대로 사용
+  //    로컬 경로 또는 미설정: fallback (public 폴더 복사본)
+  let fetchUrl = '/거래명세서양식.xlsx'; // fallback
 
-  if (templateUrl && templateUrl.includes('drive.google.com')) {
-    // https://drive.google.com/file/d/FILE_ID/view  또는
-    // https://drive.google.com/open?id=FILE_ID
-    const fileIdMatch = templateUrl.match(/\/d\/([a-zA-Z0-9_-]+)/) ||
-                        templateUrl.match(/[?&]id=([a-zA-Z0-9_-]+)/);
-    if (fileIdMatch) {
-      fetchUrl = `https://drive.google.com/uc?export=download&id=${fileIdMatch[1]}`;
+  if (templateUrl) {
+    if (templateUrl.includes('docs.google.com/spreadsheets')) {
+      // Google Sheets → xlsx export
+      const fileIdMatch = templateUrl.match(/\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/);
+      if (fileIdMatch) {
+        fetchUrl = `https://docs.google.com/spreadsheets/d/${fileIdMatch[1]}/export?format=xlsx`;
+      }
+    } else if (templateUrl.includes('drive.google.com')) {
+      // Google Drive 파일
+      const fileIdMatch = templateUrl.match(/\/d\/([a-zA-Z0-9_-]+)/) ||
+                          templateUrl.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+      if (fileIdMatch) {
+        fetchUrl = `https://drive.google.com/uc?export=download&id=${fileIdMatch[1]}`;
+      }
+    } else if (templateUrl.startsWith('http')) {
+      fetchUrl = templateUrl; // 기타 직접 HTTP URL
     }
-  } else if (templateUrl && templateUrl.startsWith('http')) {
-    fetchUrl = templateUrl; // 기타 직접 URL
+    // else: 로컬 경로(.html 등) → fallback 유지
   }
 
   // 2. 양식 파일 fetch
   const response = await fetch(fetchUrl);
   if (!response.ok) throw new Error(`거래명세서 양식 파일 로드 실패 (${fetchUrl}): HTTP ${response.status}`);
+
+  // 응답 Content-Type 체크 - HTML이 반환된 경우 명확한 오류 표시
+  const contentType = response.headers.get('content-type') || '';
+  if (contentType.includes('text/html')) {
+    throw new Error(
+      `거래명세서 양식 파일을 받지 못했습니다 (HTML 응답).\n` +
+      `구글 드라이브 파일이 "링크 있는 모든 사용자" 공개로 설정되었는지 확인하세요.\n` +
+      `(fetchUrl: ${fetchUrl})`
+    );
+  }
+
   const arrayBuffer = await response.arrayBuffer();
   const wb = XLSX.read(new Uint8Array(arrayBuffer), { type: 'array', cellStyles: true });
 

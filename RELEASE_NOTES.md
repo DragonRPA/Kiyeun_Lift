@@ -1,3 +1,26 @@
+# Release Notes (v1.16.9.Build.00006 - 2026-07-31 10:41)
+
+## 🐛 [거래명세서 엑셀 다운로드 - URL 파싱 오류 수정 (docs.google.com/spreadsheets 미처리 버그)]
+
+### 버그 원인
+Supabase `google_configs.transactionStatementTemplateUrl`에 저장된 URL이 `docs.google.com/spreadsheets/d/.../edit` 형태(구글 스프레드시트 편집 URL)인 경우, 코드가 `drive.google.com`만 감지하고 `docs.google.com`은 미처리하여 스프레드시트 편집 HTML 페이지를 그대로 fetch → XLSX 라이브러리가 HTML 파싱 시도 → `Invalid HTML: could not find <table>` 오류 발생.
+
+### 수정 내역 (`excel.ts`)
+- `docs.google.com/spreadsheets` URL 감지 시 `/export?format=xlsx` 형태로 자동 변환하여 직접 다운로드 처리.
+- 응답 Content-Type이 `text/html`인 경우 XLSX 파싱 전에 즉시 한글 안내 오류 표출 (구글 드라이브 공개 설정 안내 포함).
+
+### URL 변환 매핑 (수정 후)
+| 저장 URL 형식 | 변환 결과 |
+|---|---|
+| `docs.google.com/spreadsheets/d/FILE_ID/edit` | `docs.google.com/spreadsheets/d/FILE_ID/export?format=xlsx` |
+| `drive.google.com/file/d/FILE_ID/view` | `drive.google.com/uc?export=download&id=FILE_ID` |
+| 로컬 경로 또는 미설정 | `public/거래명세서양식.xlsx` fallback |
+
+### 빌드 검증
+- TypeScript + Vite 빌드 오류 없음 확인 ✅
+
+---
+
 # Release Notes (v1.16.9.Build.00005 - 2026-07-31 10:34)
 
 ## 📊 [거래명세서 엑셀 양식 - 구글 드라이브 원본 파일 직접 연동 개편]
