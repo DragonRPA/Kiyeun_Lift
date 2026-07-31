@@ -1,3 +1,20 @@
+# Release Notes (v1.16.9.Build.00026 - 2026-07-31 20:27)
+
+## 📧 [구글 연동 계정 기반 실제 Gmail SMTP 메일 발송 기능 전격 연동]
+
+### 핵심 구현 내용
+1. **Gmail 발송용 Vercel Serverless Function 구축 (`api/send-email.ts`)**:
+   - `nodemailer` 기반의 Gmail SMTP (`smtp.gmail.com:465 SSL`) 백엔드 송신 API엔드포인트 개발.
+2. **구글 연동 계정 크리덴셜 자동 연동 (`email.ts`)**:
+   - [시스템 설정 > 구글 및 클라우드 연계 설정]에 등록된 **구글 계정 이메일(`googleEmail`)** 및 **16자리 Gmail 발송용 앱 비밀번호(`gmailAppPassword`)**를 실시간 참조하여 실제 메일 수신인의 이메일함으로 즉시 전송.
+3. **오류 및 미등록 방어 검증**:
+   - 구글 계정 또는 16자리 앱 비밀번호 미등록 시 사용자 직관 모달 안내 표출.
+
+### 빌드 검증
+- TypeScript + Vite + Vercel Serverless Function 빌드 정상 통과 ✅
+
+---
+
 # Release Notes (v1.16.9.Build.00025 - 2026-07-31 20:13)
 
 ## 📌 [청구번호 BILL-YYMM0000 체계화 / PDF 상단 청구번호 표기 / 렌탈료 우선 정렬]

@@ -333,10 +333,10 @@ ${details.map((d, idx) => {
       const ccList = mailCc ? mailCc.split(',').map(e => e.trim()).filter(Boolean) : [];
 
       await emailService.sendEmail(toList.join(', '), mailSubject, body, [], ccList.join(', '));
-      alert('🎉 표준 거래명세서 작성 및 PDF 생성/이메일 발송이 성공적으로 완료되었습니다.');
+      alert(`🎉 [${toList.join(', ')}] 수신자에게 표준 거래명세서 이메일이 Gmail SMTP를 통해 성공적으로 실제 발송되었습니다.`);
       setShowMailModal(false);
-    } catch (err) {
-      alert('전송 중 에러가 발생했습니다.');
+    } catch (err: any) {
+      showErrorModal(`⚠️ 이메일 발송 실패:\n\n${err?.message || err}`, '메일 발송 오류');
     } finally {
       setIsSending(false);
     }

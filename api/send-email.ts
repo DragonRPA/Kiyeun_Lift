@@ -1,0 +1,74 @@
+// d:\Kiyeun_Lift\api\send-email.ts
+// Vercel Serverless Function — Gmail SMTP (App Password) 메일 발송 API
+import type { VercelRequest, VercelResponse } from '@vercel/node';
+import nodemailer from 'nodemailer';
+
+export default async function handler(req: VercelRequest, res: VercelResponse) {
+  // CORS 처리
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
+  res.setHeader(
+    'Access-Control-Allow-Headers',
+    'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version'
+  );
+
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  const { to, cc, subject, body, html, googleEmail, gmailAppPassword } = req.body || {};
+
+  if (!to || !subject || !body) {
+    return res.status(400).json({ error: '수신자(to), 제목(subject), 본문(body)은 필수 항목입니다.' });
+  }
+
+  if (!googleEmail || !gmailAppPassword) {
+    return res.status(400).json({
+      error: '구글 연동 설정(이메일 계정 및 16자리 앱 비밀번호)이 입력되지 않았습니다. [설정 > 구글 연동 설정] 메뉴에서 등록해 주세요.'
+    });
+  }
+
+  try {
+    const cleanEmail = String(googleEmail).trim();
+    const cleanPass  = String(gmailAppPassword).replace(/\s+/g, '').trim();
+
+    // Gmail SMTP 클라이언트 트랜스포터 생성
+    const transporter = nodemailer.createTransport({
+      host: 'smtp.gmail.com',
+      port: 465,
+      secure: true, // SSL (port 465)
+      auth: {
+        user: cleanEmail,
+        pass: cleanPass
+      }
+    });
+
+    const mailOptions: nodemailer.SendMailOptions = {
+      from: `"(주)기연리프트" <${cleanEmail}>`,
+      to: String(to).trim(),
+      cc: cc ? String(cc).trim() : undefined,
+      subject: String(subject).trim(),
+      text: String(body),
+      html: html ? String(html) : undefined
+    };
+
+    const info = await transporter.sendMail(mailOptions);
+
+    return res.status(200).json({
+      success: true,
+      messageId: info.messageId,
+      accepted: info.accepted
+    });
+
+  } catch (err: any) {
+    console.error('Gmail SMTP Transport Error:', err);
+    return res.status(500).json({
+      error: `Gmail 발송 실패: ${err?.message || '구글 앱 비밀번호가 올바른지 확인해 주세요.'}`
+    });
+  }
+}

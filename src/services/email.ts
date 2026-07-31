@@ -1,5 +1,5 @@
 // d:\Kiyeun_Lift\src\services\email.ts
-import { drive, DriveFile } from './drive';
+// 실 구글 연동 계정 (googleEmail + gmailAppPassword) 기반 real Gmail SMTP 발송 서비스
 
 export interface SentEmail {
   id: string;
@@ -7,15 +7,20 @@ export interface SentEmail {
   cc?: string;
   subject: string;
   body: string;
-  attachments: DriveFile[];
   sentAt: string;
+  success: boolean;
+  error?: string;
 }
 
-class MockEmailService {
+class RealGmailService {
   private getEmails(): SentEmail[] {
     const val = localStorage.getItem('sent_emails');
     if (!val) return [];
-    return JSON.parse(val);
+    try {
+      return JSON.parse(val);
+    } catch {
+      return [];
+    }
   }
 
   private setEmails(data: SentEmail[]) {
@@ -26,40 +31,76 @@ class MockEmailService {
     return this.getEmails();
   }
 
-  sendEmail(to: string, subject: string, body: string, attachmentIds: string[], cc?: string): Promise<SentEmail> {
-    return new Promise((resolve) => {
-      // 1.5초 시뮬레이션 지연 (네트워크 지연 모방)
-      setTimeout(() => {
-        const allFiles = drive.listAllFiles();
-        const attachments = allFiles.filter(f => attachmentIds.includes(f.id));
+  /**
+   * Gmail 연동 설정 계정 정보를 바탕으로 /api/send-email 호출을 통해 실제 수신인에게 전송
+   */
+  async sendEmail(
+    to: string,
+    subject: string,
+    body: string,
+    _attachmentIds: string[] = [],
+    cc?: string
+  ): Promise<SentEmail> {
 
-        // 개발모드 강제 리디렉션 확인
-        const configsVal = localStorage.getItem('erp_googleConfigs');
-        const configs = configsVal ? JSON.parse(configsVal) : [];
-        const isDev = configs[0]?.isDevMode !== false;
+    // 1. 등록된 GoogleConfig 정보 로드
+    const configsVal = localStorage.getItem('erp_googleConfigs');
+    const configs = configsVal ? JSON.parse(configsVal) : [];
+    const config = configs[0];
 
-        const finalTo = isDev ? '77.victor.lee@gmail.com' : to;
-        const finalCc = isDev ? undefined : cc;
+    const googleEmail      = config?.googleEmail || '';
+    const gmailAppPassword = config?.gmailAppPassword || '';
 
-        const newEmail: SentEmail = {
-          id: `mail-${Math.random().toString(36).substr(2, 9)}`,
-          to: finalTo,
-          cc: finalCc,
-          subject: isDev ? `[DEV-우회] ${subject}` : subject,
-          body: isDev ? `[★개발모드 우회 메일★ 원래 수신처: ${to}${cc ? `, 참조: ${cc}` : ''}]\n\n${body}` : body,
-          attachments,
-          sentAt: new Date().toISOString()
-        };
+    if (!googleEmail || !gmailAppPassword) {
+      throw new Error(
+        '⚠️ 구글 연동 설정(구글 서비스 계정 이메일 및 Gmail 발송용 16자리 앱 비밀번호)이 시스템에 저장되어 있지 않습니다. [시스템 설정 > 구글 및 클라우드 연계 설정] 메뉴에서 구글 이메일 및 앱 비밀번호를 먼저 입력하고 저장해 주세요.'
+      );
+    }
 
-        const emails = this.getEmails();
-        emails.unshift(newEmail); // 최신 보낸메일 우선
-        this.setEmails(emails);
+    // 2. Vercel Serverless API (/api/send-email) 호출
+    try {
+      const resp = await fetch('/api/send-email', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          to,
+          cc,
+          subject,
+          body,
+          googleEmail,
+          gmailAppPassword
+        })
+      });
 
-        console.log(`[Email Sent] To: ${to}, Subject: ${subject}, Attachments: ${attachments.map(a => a.name).join(', ')}`);
-        resolve(newEmail);
-      }, 1500);
-    });
+      const result = await resp.json();
+
+      if (!resp.ok || !result.success) {
+        throw new Error(result.error || 'Gmail 서버 메일 전송에 실패했습니다.');
+      }
+
+      // 3. 발송 성공 기록
+      const newEmail: SentEmail = {
+        id: `mail-${Math.random().toString(36).substr(2, 9)}`,
+        to,
+        cc,
+        subject,
+        body,
+        sentAt: new Date().toISOString(),
+        success: true
+      };
+
+      const history = this.getEmails();
+      history.unshift(newEmail);
+      this.setEmails(history);
+
+      return newEmail;
+
+    } catch (err: any) {
+      console.error('Email sending error:', err);
+      throw new Error(err?.message || '이메일 발송 도중 오류가 발생했습니다.');
+    }
   }
 }
 
-export const emailService = new MockEmailService();
+export const emailService = new RealGmailService();
