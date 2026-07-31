@@ -94,9 +94,7 @@ export const exportTransactionStatementExcel = async (
     cell.numFmt = existingFmt;
   };
 
-  const supplyTotal = Math.round((billing?.totalAmount || 0) / 1.1);
-  const vatTotal = (billing?.totalAmount || 0) - supplyTotal;
-  const totalAmount = billing?.totalAmount || 0;
+
 
   const billingDate: string = billing?.billingDate || '';
   const billingYm: string = billing?.billingYm || '';
@@ -105,30 +103,40 @@ export const exportTransactionStatementExcel = async (
   const dateD = parts[2] ? Number(parts[2]) : '';
 
   // === 공급받는자 정보 ===
-  setVal('N5', customer?.bizRegNo || '');
-  setVal('N6', customer?.name || '');
-  setVal('R6', customer?.representative || '');
-  setVal('N7', customer?.address || '');
-  setVal('E13', billingDate || billingYm);
+  // 병합셀 구조: M5:N5=레이블, O5:U5=값 입력 셀
+  setVal('O5', customer?.bizRegNo || '');    // 등록번호
+  setVal('O6', customer?.name || '');         // 상호
+  setVal('T6', customer?.representative || ''); // 대표 (Q6:S6=레이블, T6:U6=값)
+  setVal('O7', customer?.address || '');      // 주소
+  setVal('E13', billingDate || billingYm);    // 작성일자
 
   // === 품목 행 (row 16~26, 최대 11행) ===
   const ITEM_START_ROW = 16;
   const ITEM_MAX = 11;
+
+  let calcSupplyTotal = 0;
+  let calcVatTotal = 0;
 
   for (let i = 0; i < ITEM_MAX; i++) {
     const d = details[i];
     const row = ITEM_START_ROW + i;
 
     if (d) {
-      const itemSupply = Math.round(d.amount / 1.1);
-      const itemVat = d.amount - itemSupply;
+      // 공급가 = 단가 × 수량, 부가세 = 공급가 × 10%
+      const unitPrice = d.unitPrice || 0;
+      const qty = d.quantity || 1;
+      const itemSupply = unitPrice * qty;
+      const itemVat = Math.round(itemSupply * 0.1);
+
+      calcSupplyTotal += itemSupply;
+      calcVatTotal += itemVat;
 
       setVal(`B${row}`, i + 1);
       setVal(`C${row}`, dateM);
       setVal(`D${row}`, dateD);
       setVal(`E${row}`, d.itemName + (d.description ? ` [${d.description}]` : ''));
-      setVal(`L${row}`, d.quantity || 1);
-      setNum(`M${row}`, d.unitPrice || itemSupply);
+      setVal(`L${row}`, qty);
+      setNum(`M${row}`, unitPrice);
       setNum(`O${row}`, itemSupply);
       setNum(`Q${row}`, itemVat);
       setVal(`T${row}`, siteName || '');
@@ -140,10 +148,10 @@ export const exportTransactionStatementExcel = async (
     }
   }
 
-  // === 합계 행 (row 27) ===
-  setNum('E27', supplyTotal);
-  setNum('J27', vatTotal);
-  setNum('O27', totalAmount);
+  // === 합계 행 (row 27) - 품목별 계산값 합산 ===
+  setNum('E27', calcSupplyTotal);
+  setNum('J27', calcVatTotal);
+  setNum('O27', calcSupplyTotal + calcVatTotal);
 
   // 4. 파일 다운로드
   const buffer = await workbook.xlsx.writeBuffer();
