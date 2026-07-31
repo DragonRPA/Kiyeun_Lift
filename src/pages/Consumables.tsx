@@ -5,6 +5,8 @@ import { ShoppingCart, Hammer, ListCollapse, Layers, Plus, ClipboardList, Packag
 import { exportToExcel } from '../services/excel';
 import { drive } from '../services/drive';
 import { Consumable } from '../services/db';
+import { compressFileIfNeeded } from '../utils/imageCompressor';
+import { uploadToGoogleDriveCloud } from '../services/googleDriveSync';
 
 const compressImage = (file: File): Promise<File> => {
   return new Promise((resolve) => {
@@ -264,66 +266,59 @@ export const Consumables: React.FC = () => {
 
     setIsUploading(true);
 
-    // 1. 이미지 압축 처리 (JPEG/JPG/PNG 이미지 대상)
-    let fileToUpload = selectedFile;
-    const ext = selectedFile.name.split('.').pop()?.toLowerCase() || 'pdf';
-    const isImage = ['jpg', 'jpeg', 'png'].includes(ext) || selectedFile.type.startsWith('image/');
-    
-    if (isImage) {
-      try {
-        fileToUpload = await compressImage(selectedFile);
-      } catch (err) {
-        console.error("Image compression failed, using original file:", err);
-      }
-    }
-
     const targetReq = consumablePurchases.find(p => p.id === selectedReqId);
-    const purchaseNo = targetReq ? targetReq.id.toUpperCase() : `PUR-${new Date().toISOString().slice(2,10).replace(/-/g, '')}`;
-    const newFileName = `${purchaseNo}.${ext}`;
+    const purchaseNo = targetReq ? targetReq.id.toUpperCase() : `CPR-${new Date().getTime()}`;
+    const rawExt = selectedFile.name.split('.').pop()?.toLowerCase() || (selectedFile.type.includes('pdf') ? 'pdf' : 'jpg');
+    const newFileName = `${purchaseNo}.${rawExt}`;
 
-    let base64Url = '';
     try {
-      base64Url = await fileToBase64(fileToUpload);
-    } catch (err) {
-      console.error("FileReader failed:", err);
-    }
+      // 1. 이미지 파일 자동 고화질 압축 (PDF는 원본 유지)
+      const compressed = await compressFileIfNeeded(selectedFile);
 
-    const config = googleConfigs[0];
-    const targetFolderName = config?.consumableFolder || '소모품납품증빙';
+      // 2. 구글 드라이브 Cloud API 실물 자동 전송 동기화
+      const config = googleConfigs[0];
+      const targetFolderName = config?.consumableFolder || '소모품납품';
 
-    setTimeout(async () => {
-      // 1. 구글 드라이브 관리 폴더가 있는지 체크하고 없으면 생성
+      const cloudResult = await uploadToGoogleDriveCloud({
+        folderName: targetFolderName,
+        fileName: newFileName,
+        mimeType: compressed.mimeType,
+        base64Data: compressed.base64,
+        appsScriptUrl: config?.appsScriptUrl
+      });
+
+      // 3. 로컬 가상 드라이브 시뮬레이터 동기화
       let folder = drive.listFolders().find(f => f.name === targetFolderName);
       if (!folder) {
         folder = drive.createFolder(targetFolderName, 'root');
       }
-
-      // 2. 구글드라이브에 가상 파일 업로드
-      const mockFile = drive.uploadFile(
+      drive.uploadFile(
         newFileName,
-        fileToUpload.type || (ext.toLowerCase() === 'pdf' ? 'application/pdf' : 'image/jpeg'),
-        `${(fileToUpload.size / 1024 / 1024).toFixed(2)}MB`,
+        compressed.mimeType,
+        `${(compressed.compressedSize / 1024 / 1024).toFixed(2)}MB`,
         folder.id,
-        base64Url
+        compressed.base64
       );
 
-      try {
-        await inboundConsumablePurchase(selectedReqId, inboundQty, mockFile.webViewLink);
-        setIsUploading(false);
-        const docTypeText = noInvoice ? '실물 납품 증빙 사진이' : '거래명세서가';
-        alert(`소모품 입고 처리가 완료되었습니다.\n${docTypeText} 구글드라이브 [${targetFolderName}] 폴더에 안전하게 보존되었습니다.\n저장된 파일명: ${newFileName}`);
-        
-        // 리셋
-        setSelectedReqId('');
-        setInboundQty(1);
-        setSelectedFile(null);
-        setNoInvoice(false);
-        setActiveTab('STOCK');
-      } catch (err: any) {
-        setIsUploading(false);
-        showErrorModal(`⚠️ 입고 처리 중 오류가 발생했습니다:\n\n${err?.message || err}`, '소모품 입고 오류');
-      }
-    }, 1000);
+      // 4. DB 보존 (Base64 데이터 URL 또는 구글 드라이브 실물 URL)
+      const finalEvidenceUrl = cloudResult.fileUrl && cloudResult.fileUrl.startsWith('http') ? cloudResult.fileUrl : compressed.base64;
+      await inboundConsumablePurchase(selectedReqId, inboundQty, finalEvidenceUrl);
+
+      setIsUploading(false);
+      const compressInfoStr = compressed.isCompressed ? `\n(자동 고화질 압축: ${(compressed.originalSize / 1024).toFixed(0)}KB ➔ ${(compressed.compressedSize / 1024).toFixed(0)}KB)` : '';
+      const docTypeText = noInvoice ? '실물 납품 증빙 사진이' : '거래명세서가';
+      alert(`✅ 소모품 입고 처리가 완료되었습니다.\n${docTypeText} 구글드라이브 [${targetFolderName}] 폴더 및 DB에 안전하게 보존되었습니다.${compressInfoStr}\n\n저장 파일명: ${newFileName}`);
+
+      // 리셋
+      setSelectedReqId('');
+      setInboundQty(1);
+      setSelectedFile(null);
+      setNoInvoice(false);
+      setActiveTab('STOCK');
+    } catch (err: any) {
+      setIsUploading(false);
+      showErrorModal(`⚠️ 입고 처리 중 오류가 발생했습니다:\n\n${err?.message || err}`, '소모품 입고 오류');
+    }
   };
 
   const handleUseSubmit = async (e: React.FormEvent) => {
