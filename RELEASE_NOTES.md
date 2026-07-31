@@ -1,3 +1,18 @@
+# Release Notes (v1.16.9.Build.00017 - 2026-07-31 19:30)
+
+## 📐 [거래명세서 PDF - 절반 크기 출력 + onclone body폭 강제 고정으로 오른쪽 자름 완전 해결]
+
+### 핵심 변경 (pdf.ts)
+1. **printW = 95mm (기존 190mm의 절반)**: jsPDF 출력 폭을 절반으로 축소. A4 중앙 배치 (좌우 여백 각 약 57.5mm).
+2. **onclone 콜백 추가**: html2canvas가 HTML을 클론할 때 `body.style`을 `width:380px; max-width:380px; overflow:hidden`으로 강제 고정하여 뷰포트/화면 폭에 무관하게 380px만 렌더링.
+3. **scale:4 적용**: 380px × 4 = 1520px canvas → 95mm 출력 = 400 DPI (고품질).
+4. **컨테이너 position:absolute 변경**: position:fixed는 화면 좌표 기반이라 예외 상황 발생 가능성이 있어 absolute로 변경.
+
+### 빌드 검증
+- TypeScript + Vite 빌드 오류 없음 확인 ✅
+
+---
+
 # Release Notes (v1.16.9.Build.00016 - 2026-07-31 19:23)
 
 ## 🔍 [거래명세서 PDF - 30% 축소 및 오른쪽 자름 근본 원인 완전 해결 (원칙론적 검토 후 실행)]
