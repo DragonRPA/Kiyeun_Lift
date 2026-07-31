@@ -6,7 +6,7 @@ import { useApp } from '../context/AppContext';
 import { PurchaseSettlement, PurchaseSettlementType } from '../services/db';
 import {
   Truck, ShoppingBag, Building2, Plus, CheckCircle2, CreditCard,
-  ChevronDown, ChevronUp, FileText, AlertCircle, RefreshCw, X
+  ChevronDown, ChevronUp, FileText, AlertCircle, RefreshCw, X, Download, ExternalLink, Eye
 } from 'lucide-react';
 
 // 정산 유형 탭 정의
@@ -52,6 +52,30 @@ export const PurchaseSettlementPage: React.FC = () => {
   const [paymentForm, setPaymentForm]              = useState({ paidAmount: '', paymentDate: currentYm.slice(0,7) + '-' + String(now.getDate()).padStart(2,'0'), paymentMethod: '계좌이체', bankAccount: '', memo: '' });
   const [memoEditId, setMemoEditId]                = useState<string | null>(null);
   const [memoText, setMemoText]                    = useState('');
+
+  // 증빙 파일 미리보기 모달 상태
+  const [previewEvidence, setPreviewEvidence]      = useState<{ url: string; title: string } | null>(null);
+
+
+  // 증빙 열람 / 미리보기 핸들러
+  const handleOpenEvidence = (url?: string, title?: string) => {
+    if (!url || url === '-' || url.trim() === '') {
+      alert('첨부된 증빙 파일이 없습니다.');
+      return;
+    }
+
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+      window.open(url, '_blank', 'noopener,noreferrer');
+      return;
+    }
+
+    if (url.startsWith('data:')) {
+      setPreviewEvidence({ url, title: title || '거래명세서 증빙' });
+      return;
+    }
+
+    alert(`증빙 정보: ${url}`);
+  };
 
   // 필터링된 정산 목록
   const filtered = useMemo(() => {
@@ -218,7 +242,21 @@ export const PurchaseSettlementPage: React.FC = () => {
                   </span>
 
                   {/* 매입처명 */}
-                  <span style={{ fontWeight: '800', fontSize: '15px', flexGrow: 1, minWidth: '120px' }}>{p.vendorName}</span>
+                  <span style={{ fontWeight: '800', fontSize: '15px', flexGrow: 1, minWidth: '120px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                    {p.vendorName.startsWith('http://') || p.vendorName.startsWith('https://') ? (
+                      <a
+                        href={p.vendorName}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={e => e.stopPropagation()}
+                        style={{ color: 'var(--primary)', textDecoration: 'underline', wordBreak: 'break-all', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                      >
+                        {p.vendorName} <ExternalLink size={13} />
+                      </a>
+                    ) : (
+                      p.vendorName
+                    )}
+                  </span>
 
                   {/* 상태 뱃지 */}
                   <span style={{ fontSize: '12px', fontWeight: '700', padding: '3px 10px', borderRadius: '12px', background: statusInfo.color + '22', color: statusInfo.color, whiteSpace: 'nowrap' }}>
@@ -249,21 +287,38 @@ export const PurchaseSettlementPage: React.FC = () => {
                         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
                           <thead>
                             <tr style={{ background: 'var(--bg-card)' }}>
-                              {['내역', '수량', '단가', '금액', '증빙'].map(h => (
-                                <th key={h} style={{ padding: '8px 10px', textAlign: 'left', fontWeight: '700', whiteSpace: 'nowrap', borderBottom: '1px solid var(--border)' }}>{h}</th>
-                              ))}
+                              <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: '700', whiteSpace: 'nowrap', borderBottom: '1px solid var(--border)' }}>내역</th>
+                              <th style={{ padding: '8px 12px', textAlign: 'right', fontWeight: '700', whiteSpace: 'nowrap', width: '80px', borderBottom: '1px solid var(--border)' }}>수량</th>
+                              <th style={{ padding: '8px 12px', textAlign: 'right', fontWeight: '700', whiteSpace: 'nowrap', width: '110px', borderBottom: '1px solid var(--border)' }}>단가</th>
+                              <th style={{ padding: '8px 12px', textAlign: 'right', fontWeight: '700', whiteSpace: 'nowrap', width: '130px', borderBottom: '1px solid var(--border)' }}>금액</th>
+                              <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: '700', whiteSpace: 'nowrap', width: '120px', borderBottom: '1px solid var(--border)' }}>증빙</th>
                             </tr>
                           </thead>
                           <tbody>
                             {items.map(item => (
                               <tr key={item.id} style={{ borderBottom: '1px solid var(--border)' }}>
-                                <td style={{ padding: '8px 10px' }}>{item.itemDescription}</td>
-                                <td style={{ padding: '8px 10px', textAlign: 'right', whiteSpace: 'nowrap' }}>{item.quantity}</td>
-                                <td style={{ padding: '8px 10px', textAlign: 'right', whiteSpace: 'nowrap' }}>{item.unitPrice.toLocaleString()}</td>
-                                <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: '700', whiteSpace: 'nowrap' }}>{item.amount.toLocaleString()}원</td>
-                                <td style={{ padding: '8px 10px' }}>
-                                  {item.evidenceFileUrl ? (
-                                    <a href={item.evidenceFileUrl} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--primary)', fontSize: '12px', textDecoration: 'underline' }}>증빙 보기</a>
+                                <td style={{ padding: '8px 12px', textAlign: 'left' }}>{item.itemDescription}</td>
+                                <td style={{ padding: '8px 12px', textAlign: 'right', whiteSpace: 'nowrap' }}>{item.quantity.toLocaleString()}</td>
+                                <td style={{ padding: '8px 12px', textAlign: 'right', whiteSpace: 'nowrap' }}>{item.unitPrice.toLocaleString()}원</td>
+                                <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: '700', whiteSpace: 'nowrap', color: 'var(--primary)' }}>{item.amount.toLocaleString()}원</td>
+                                <td style={{ padding: '8px 12px', textAlign: 'center', whiteSpace: 'nowrap' }}>
+                                  {item.evidenceFileUrl && item.evidenceFileUrl !== '-' ? (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleOpenEvidence(item.evidenceFileUrl, item.itemDescription);
+                                      }}
+                                      style={{
+                                        display: 'inline-flex', alignItems: 'center', gap: '4px',
+                                        padding: '4px 10px', borderRadius: '4px', border: '1px solid var(--primary)',
+                                        background: 'rgba(99, 102, 241, 0.08)', color: 'var(--primary)',
+                                        fontSize: '12px', fontWeight: '600', cursor: 'pointer'
+                                      }}
+                                    >
+                                      {item.evidenceFileUrl.startsWith('http') ? <ExternalLink size={13} /> : <Eye size={13} />}
+                                      증빙 보기
+                                    </button>
                                   ) : (
                                     <span style={{ color: 'var(--text-secondary)', fontSize: '12px' }}>없음</span>
                                   )}
@@ -376,6 +431,54 @@ export const PurchaseSettlementPage: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* 증빙 파일 미리보기/다운로드 모달 */}
+      {previewEvidence && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000, padding: '20px' }}>
+          <div style={{ background: 'var(--bg-card)', borderRadius: '12px', width: '100%', maxWidth: '720px', maxHeight: '90vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 20px 60px rgba(0,0,0,0.4)' }}>
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <h3 style={{ fontSize: '16px', fontWeight: '800', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <FileText size={18} color="var(--primary)" />
+                {previewEvidence.title} 증빙 파일
+              </h3>
+              <button onClick={() => setPreviewEvidence(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)' }}><X size={18} /></button>
+            </div>
+
+            <div style={{ padding: '20px', overflowY: 'auto', flex: 1, textAlign: 'center' }}>
+              {previewEvidence.url.startsWith('data:image/') ? (
+                <img src={previewEvidence.url} alt="증빙 이미지" style={{ maxWidth: '100%', maxHeight: '550px', borderRadius: '6px', border: '1px solid var(--border)' }} />
+              ) : previewEvidence.url.startsWith('data:application/pdf') || previewEvidence.url.startsWith('data:') ? (
+                <div style={{ padding: '40px 20px' }}>
+                  <FileText size={56} style={{ color: 'var(--primary)', marginBottom: '16px' }} />
+                  <h4 style={{ fontSize: '15px', fontWeight: '700', marginBottom: '8px' }}>PDF 증빙 문서가 준비되어 있습니다.</h4>
+                  <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '20px' }}>
+                    아래 버튼을 눌러 PDF 문서를 안전하게 다운로드하거나 열람하실 수 있습니다.
+                  </p>
+                  <a
+                    href={previewEvidence.url}
+                    download={`${previewEvidence.title || '매입증빙'}.pdf`}
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '10px 18px', background: 'var(--primary)', color: '#fff', borderRadius: '6px', fontWeight: '700', textDecoration: 'none', fontSize: '14px' }}
+                  >
+                    <Download size={15} /> PDF 파일 다운로드 및 열기
+                  </a>
+                </div>
+              ) : (
+                <div style={{ padding: '30px' }}>
+                  <a
+                    href={previewEvidence.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '10px 18px', background: 'var(--primary)', color: '#fff', borderRadius: '6px', fontWeight: '700', textDecoration: 'none', fontSize: '14px' }}
+                  >
+                    <ExternalLink size={15} /> 증빙 URL 원본 열기
+                  </a>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
 
       {/* Phase 2 임차료 안내 */}
       {(typeFilter === 'ALL' || typeFilter === 'EQUIPMENT_LEASE') && (
