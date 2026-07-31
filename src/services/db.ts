@@ -1457,7 +1457,10 @@ class LocalDB {
       if (val === undefined) {
         continue;
       }
-      if (typeof val === 'string' && val.trim() === '' && (key.endsWith('Id') || key === 'contractId' || key === 'assetId' || key === 'customerId' || key === 'siteId' || key === 'salespersonId' || key === 'vendorId')) {
+      if (typeof val === 'string' && (key === 'requesterId' || key === 'accepterId' || key === 'completerId' || key === 'inbounderId')) {
+        const userExists = this.users.some(u => u.id === val);
+        sanitized[key] = userExists ? val : (this.users[0]?.id || null);
+      } else if (typeof val === 'string' && val.trim() === '' && (key.endsWith('Id') || key === 'contractId' || key === 'assetId' || key === 'customerId' || key === 'siteId' || key === 'salespersonId' || key === 'vendorId')) {
         sanitized[key] = null;
       } else {
         sanitized[key] = val;

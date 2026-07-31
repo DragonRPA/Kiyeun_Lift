@@ -1,3 +1,22 @@
+# Release Notes (v1.16.9.Build.00033 - 2026-07-31 20:55)
+
+## 🛡️ [소모품 구매신청 requesterId 외래키(FK) 제약조건 위반 방어 패치]
+
+### 오류 원인 분석
+- `consumable_purchases_requesterId_fkey`
+- 소모품 구매신청 등록 시 `requesterId` 값으로 DB `users` 테이블에 존재하지 않는 임의의 값(`'system'` 또는 미등록 ID)이 전송되어 PostgreSQL Foreign Key Constraint Violation (`23503`) 거부 에러가 원인이었음.
+
+### 핵심 패치 내용
+1. **유효 사용자 ID 자동 검증 헬퍼 연동 (`AppContext.tsx`)**:
+   - `getValidUserId(currentUser?.id)` 함수를 구현하여, DB `users` 테이블에 등록된 실제 사용자 ID로만 매핑되도록 보장.
+2. **Supabase Payload 2중 방어 필터 (`db.ts`)**:
+   - `sanitizeSupabasePayload`에서 `requesterId`, `accepterId`, `completerId`, `inbounderId` 등 유저 참조 컬럼이 `users` 테이블에 존재하는지 자동 검증 및 매핑하여 외래키 오류를 원천 차단.
+
+### 빌드 검증
+- TypeScript + Vite 빌드 정상 통과 ✅
+
+---
+
 # Release Notes (v1.16.9.Build.00032 - 2026-07-31 20:53)
 
 ## 📷 [구매품 입고 처리 '📁 파일지정' & '📷 사진촬영' 원터치 버튼 직관화]

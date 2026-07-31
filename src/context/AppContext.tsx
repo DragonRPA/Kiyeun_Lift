@@ -1301,7 +1301,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     refreshAllData();
   };
 
+  const getValidUserId = (id?: string): string => {
+    if (id && id !== 'system') {
+      const exists = db.users.some(u => u.id === id);
+      if (exists) return id;
+    }
+    return db.users[0]?.id || 'usr-admin';
+  };
+
   const requestConsumablePurchase = async (data: { consumableId?: string; modelName: string; qty: number; unitPrice: number; requestDate: string; sellerName: string }) => {
+    const validUserId = getValidUserId(currentUser?.id);
     db.insertRow<ConsumablePurchaseRequest>('consumablePurchases', {
       consumableId: data.consumableId || undefined,
       modelName: data.modelName,
@@ -1310,7 +1319,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       requestDate: data.requestDate,
       sellerName: data.sellerName,
       status: 'REQUESTED',
-      requesterId: currentUser?.id || 'system',
+      requesterId: validUserId,
       requesterName: currentUser?.name || '시스템',
       receivedQty: 0,
       createdAt: new Date().toISOString(),
@@ -1321,10 +1330,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const acceptConsumablePurchase = async (id: string) => {
+    const validUserId = getValidUserId(currentUser?.id);
     db.updateRow<ConsumablePurchaseRequest>('consumablePurchases', id, {
       status: 'ACCEPTED',
       acceptedDate: new Date().toISOString().split('T')[0],
-      accepterId: currentUser?.id || 'system',
+      accepterId: validUserId,
       accepterName: currentUser?.name || '시스템',
       updatedAt: new Date().toISOString()
     });
@@ -1333,10 +1343,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const completeConsumablePurchase = async (id: string) => {
+    const validUserId = getValidUserId(currentUser?.id);
     db.updateRow<ConsumablePurchaseRequest>('consumablePurchases', id, {
       status: 'COMPLETED',
       completedDate: new Date().toISOString().split('T')[0],
-      accepterId: currentUser?.id || 'system',
+      accepterId: validUserId,
       accepterName: currentUser?.name || '시스템',
       updatedAt: new Date().toISOString()
     });
