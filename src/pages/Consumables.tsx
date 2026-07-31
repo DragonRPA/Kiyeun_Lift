@@ -940,14 +940,14 @@ export const Consumables: React.FC = () => {
             </div>
 
             {/* 하단 입고 완료 대형 직관 버튼 (모바일 100% 가시성 보장) */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '24px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '24px', marginBottom: '20px' }}>
               <button
                 type="submit"
                 className="btn-primary"
                 disabled={isUploading || inboundQty <= 0 || !selectedFile}
                 style={{
                   width: '100%',
-                  height: '48px',
+                  height: '52px',
                   fontSize: '16px',
                   fontWeight: '800',
                   display: 'flex',
@@ -978,14 +978,17 @@ export const Consumables: React.FC = () => {
                 type="button"
                 className="btn-secondary"
                 onClick={() => setActiveTab('STOCK')}
-                style={{ width: '100%', height: '38px', fontSize: '13.5px', justifyContent: 'center' }}
+                style={{ width: '100%', height: '40px', fontSize: '14px', justifyContent: 'center' }}
               >
                 취소 후 목록으로 이동
               </button>
             </div>
+
+            {/* 스마트폰 하단 툴바 가림 방지 폼 내부 초대형 스페이서 (350px) */}
+            <div style={{ height: '350px', width: '100%', minHeight: '350px', clear: 'both' }} aria-hidden="true" />
           </form>
-          {/* 스마트폰 하단 툴바 가림 방지용 넉넉한 150px 하단 여백 스페이서 */}
-          <div style={{ height: '150px', width: '100%', clear: 'both' }} aria-hidden="true" />
+          {/* 스마트폰 하단 툴바 가림 방지 카드 하단 스페이서 (350px) */}
+          <div style={{ height: '350px', width: '100%', minHeight: '350px', clear: 'both' }} aria-hidden="true" />
         </div>
       )}
 
@@ -1234,8 +1237,8 @@ export const Consumables: React.FC = () => {
           </div>
         </div>
       )}
-      {/* 모바일 화면 하단 스크롤 여유 150px 스페이서 */}
-      <div style={{ height: '150px', width: '100%', clear: 'both' }} aria-hidden="true" />
+      {/* 모바일 화면 하단 스크롤 여유 350px 스페이서 */}
+      <div style={{ height: '350px', width: '100%', minHeight: '350px', clear: 'both' }} aria-hidden="true" />
     </div>
   );
 };
