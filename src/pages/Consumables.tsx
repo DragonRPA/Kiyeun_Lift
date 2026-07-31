@@ -6,7 +6,7 @@ import { exportToExcel } from '../services/excel';
 import { drive } from '../services/drive';
 import { Consumable } from '../services/db';
 import { compressFileIfNeeded } from '../utils/imageCompressor';
-import { uploadToGoogleDriveCloud } from '../services/googleDriveSync';
+import { uploadToGoogleDriveOAuth } from '../services/googleDriveOAuth';
 
 const compressImage = (file: File): Promise<File> => {
   return new Promise((resolve) => {
@@ -272,44 +272,48 @@ export const Consumables: React.FC = () => {
     const newFileName = `${purchaseNo}.${rawExt}`;
 
     try {
-      // 1. 이미지 파일 자동 고화질 압축 (PDF는 원본 유지)
-      const compressed = await compressFileIfNeeded(selectedFile);
-
-      // 2. 구글 드라이브 Cloud API 실물 자동 전송 동기화
       const config = googleConfigs[0];
       const targetFolderName = config?.consumableFolder || '소모품납품';
+      const clientId = config?.oauthClientId || '';
 
-      const cloudResult = await uploadToGoogleDriveCloud({
-        folderName: targetFolderName,
+      if (!clientId) {
+        showErrorModal(
+          '구글 드라이브 OAuth Client ID가 설정되지 않았습니다.\n\n[시스템 관리] ➔ [구글 드라이브 설정] 메뉴에서\nOAuth Client ID를 먼저 등록해 주세요.',
+          '구글 드라이브 설정 필요'
+        );
+        setIsUploading(false);
+        return;
+      }
+
+      // 1. 이미지 자동 고화질 압축 (PDF는 원본 유지)
+      const compressed = await compressFileIfNeeded(selectedFile);
+
+      // 2. 압축된 Base64를 다시 File 객체로 변환
+      const base64Response = await fetch(compressed.base64);
+      const uploadBlob = await base64Response.blob();
+      const uploadFile = new File([uploadBlob], newFileName, { type: compressed.mimeType });
+
+      // 3. 구글 드라이브 OAuth 직접 업로드 (브라우저 팝업 로그인)
+      const oauthResult = await uploadToGoogleDriveOAuth({
+        file: uploadFile,
         fileName: newFileName,
-        mimeType: compressed.mimeType,
-        base64Data: compressed.base64,
-        appsScriptUrl: config?.appsScriptUrl
+        folderName: targetFolderName,
+        clientId
       });
 
-      // 3. 로컬 가상 드라이브 시뮬레이터 동기화
-      let folder = drive.listFolders().find(f => f.name === targetFolderName);
-      if (!folder) {
-        folder = drive.createFolder(targetFolderName, 'root');
+      if (!oauthResult.success) {
+        throw new Error(oauthResult.message || '구글 드라이브 업로드 실패');
       }
-      drive.uploadFile(
-        newFileName,
-        compressed.mimeType,
-        `${(compressed.compressedSize / 1024 / 1024).toFixed(2)}MB`,
-        folder.id,
-        compressed.base64
-      );
 
-      // 4. DB 보존: 대용량 Base64 데이터를 DB에 저장하지 않고, 구글 드라이브 경량 URL만 DB에 저장 (DB 용량 0Byte)
-      const finalEvidenceUrl = (cloudResult.fileUrl && cloudResult.fileUrl.startsWith('http'))
-        ? cloudResult.fileUrl
-        : `https://drive.google.com/file/d/${newFileName}/view`;
-      await inboundConsumablePurchase(selectedReqId, inboundQty, finalEvidenceUrl);
+      // 4. DB에는 구글 드라이브 파일 URL만 저장 (실물 파일은 구글 드라이브에 보존)
+      await inboundConsumablePurchase(selectedReqId, inboundQty, oauthResult.fileUrl);
 
       setIsUploading(false);
-      const compressInfoStr = compressed.isCompressed ? `\n(자동 고화질 압축: ${(compressed.originalSize / 1024).toFixed(0)}KB ➔ ${(compressed.compressedSize / 1024).toFixed(0)}KB)` : '';
+      const compressInfoStr = compressed.isCompressed
+        ? `\n(자동 고화질 압축: ${(compressed.originalSize / 1024).toFixed(0)}KB ➔ ${(compressed.compressedSize / 1024).toFixed(0)}KB)`
+        : '';
       const docTypeText = noInvoice ? '실물 납품 증빙 사진이' : '거래명세서가';
-      alert(`✅ 소모품 입고 처리가 완료되었습니다.\n${docTypeText} 구글드라이브 [${targetFolderName}] 전용 URL 주소만 DB에 보존되었습니다 (ERP DB 0Byte 경량화).${compressInfoStr}\n\n저장 파일명: ${newFileName}`);
+      alert(`✅ 소모품 입고 처리 완료!\n${docTypeText} 구글드라이브 [Kiyuen_Lift/${targetFolderName}] 폴더에 실물 저장 완료되었습니다.${compressInfoStr}\n\n저장 파일명: ${newFileName}\n드라이브 URL: ${oauthResult.fileUrl}`);
 
       // 리셋
       setSelectedReqId('');

@@ -1,4 +1,36 @@
+# Release Notes (v1.17.0.Build.00057 - 2026-07-31 23:58)
+
+## ☁️ [소모품 증빙 파일 구글 드라이브 직접 업로드 (OAuth 2.0) 구현]
+
+### 배경
+- 구글 앱스크립트(GAS) 방식이 회사 계정 정책으로 인해 'This app is blocked' 오류로 사용 불가.
+- Apps Script 없이 구글 공식 OAuth 2.0 브라우저 인증 방식으로 구글 드라이브에 직접 실물 파일 저장하는 방식으로 전환.
+
+### 변경 내용
+1. **`src/services/googleDriveOAuth.ts` 신규 생성**
+   - Google Identity Services(GIS) 스크립트 동적 로드 (별도 설치 불필요)
+   - 브라우저 팝업으로 구글 계정 1회 로그인 → Access Token 자동 발급·캐시
+   - Token 만료 시 자동 갱신 (1시간 주기)
+   - `Kiyuen_Lift/소모품납품` 폴더 없으면 자동 생성 후 업로드
+   - Google Drive API v3 Multipart Upload로 실물 파일(PDF/JPG) 100% 전송
+
+2. **`src/pages/Consumables.tsx` 업로드 엔진 교체**
+   - `uploadToGoogleDriveCloud` (GAS webhook) → `uploadToGoogleDriveOAuth` (직접 OAuth) 전환
+   - OAuth Client ID 미설정 시 에러 모달로 설정 화면 안내
+   - DB에는 실제 구글 드라이브 webViewLink URL 저장 (실물 파일은 구글 드라이브에 보존)
+
+3. **`src/pages/GoogleConfig.tsx` UI 개편**
+   - Apps Script 웹앱 URL 카드 → **OAuth 2.0 Client ID 입력 카드**로 교체
+   - 연동 상태 배지 표시 (미설정/연동 완료)
+   - 3분 가이드: Google Cloud Console에서 OAuth Client ID 발급 단계별 안내 포함
+
+4. **`src/services/db.ts`**
+   - `GoogleConfig` 인터페이스에 `oauthClientId` 필드 추가
+
+---
+
 # Release Notes (v1.17.0.Build.00056 - 2026-07-31 23:14)
+
 
 ## 🛠️ [소모품 입고 처리 시 `consumable_logs_userId_fkey` 외래키(FK) 위반 에러 근본 해결]
 
