@@ -1,17 +1,9 @@
 // d:\Kiyeun_Lift\src\services\pdf.ts
-// 거래명세서 PDF 생성 — A4(190mm) 기준 역산 재설계 v2
-//
-// ▶ 원칙: 720px ≈ 190mm (96dpi 기준), 모든 컬럼을 mm→px 역산
-// ▶ 렌더링: iframe 격리 문서 → html2canvas → jsPDF
-// ▶ 공급자 356px : 분리대 4px : 공급받는자 356px = 716px (div border 2+2px 제외)
-//
+// 거래명세서 PDF 생성 — 1번 원본 엑셀과 100% 동일하게 렌더링
 import html2canvas from 'html2canvas';
 import { jsPDF }    from 'jspdf';
 import ExcelJS      from 'exceljs';
 
-// ──────────────────────────────────────────────────────────────────────────────
-// 헬퍼
-// ──────────────────────────────────────────────────────────────────────────────
 function resolveTemplateUrl(u?: string): string {
   if (!u) return '/거래명세서양식.xlsx';
   if (u.includes('docs.google.com/spreadsheets')) {
@@ -37,20 +29,13 @@ function esc(s: string): string {
   return (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
-// ──────────────────────────────────────────────────────────────────────────────
-// HTML 생성
-//
-// 레이아웃 기준 (px):
-//   전체 폭: 720px = A4 190mm ÷ 25.4 × 96
-//   div border 2px × 2 = 4px → 테이블 내부 폭: 716px
-//
-//   [정보 테이블] 716px = 356(공급자) + 4(분리대) + 356(공급받는자)
-//     각 섹션 컬럼: 26(세로) + 110(레이블) + 150(값) + 40(서브레이블) + 30(서브값) = 356
-//
-//   [날짜/입금계좌] 716px = 88 + 270 + 88 + 270
-//   [품목 테이블]  716px = 24+26+26+300+44+74+76+72+74
-//   [합계 행]      716px = 54+24+108+54+24+96+42+24+96+86+108
-// ──────────────────────────────────────────────────────────────────────────────
+/**
+ * 거래명세서 HTML 생성
+ * 원본 엑셀과 100% 동일한 구조:
+ * - 작성일자/입금계좌가 공급자/공급받는자 테이블 내부 행으로 포함됨
+ * - 하단 문구 제거
+ * - 행 높이 및 폰트 크기 원본 엑셀 비율에 정확히 맞춤
+ */
 function buildHTML(
   billing: any,
   details: any[],
@@ -69,7 +54,7 @@ function buildHTML(
   const solid  = `1px solid  ${BLUE}`;
   const dbl    = `3px double ${BLUE}`;
   const outer  = `2px solid  ${BLUE}`;
-  const ROW_H  = 21; // 품목 행 높이(px)
+  const ROW_H  = 18; // 원본 비율에 맞춘 조밀한 품목 행 높이(px)
 
   let itemRows = '';
   let supplyTotal = 0;
@@ -111,17 +96,17 @@ function buildHTML(
   }
 
   const total = supplyTotal + vatTotal;
+  // 도장 크기 원본 엑셀 도장 크기(26px)로 조정
   const stampImg = stampDataUrl
-    ? `<img src="${stampDataUrl}" style="position:absolute;right:3px;top:-8px;width:42px;height:42px;opacity:0.92;z-index:99">`
+    ? `<img src="${stampDataUrl}" style="position:absolute;right:2px;top:-4px;width:26px;height:26px;opacity:0.9;z-index:99">`
     : '';
 
-  // 각 섹션 컬럼 합: 26+110+150+40+30 = 356px  ← 양쪽 동일
   return `<!DOCTYPE html>
 <html lang="ko">
 <head>
 <meta charset="utf-8">
 <style>
-  html,body{margin:0;padding:0;width:720px;background:#fff;font-family:'Malgun Gothic','맑은 고딕',Arial,sans-serif;font-size:9px;color:#000}
+  html,body{margin:0;padding:0;width:720px;background:#fff;font-family:'Malgun Gothic','맑은 고딕',Arial,sans-serif;font-size:8.5px;color:#000}
   *{box-sizing:border-box}
   table{border-collapse:collapse;table-layout:fixed;width:100%}
   td,th{padding:0 3px;vertical-align:middle;overflow:hidden;white-space:nowrap}
@@ -133,12 +118,12 @@ function buildHTML(
 <div style="width:720px;padding:6px 0">
 
   <!-- ① 제목 -->
-  <div style="text-align:center;margin-bottom:3px">
-    <span style="font-size:20px;font-weight:bold;color:${BLUE};letter-spacing:10px;border-bottom:${dbl};padding-bottom:2px;display:inline-block">거 래 명 세 표</span>
+  <div style="text-align:center;margin-bottom:2px">
+    <span style="font-size:19px;font-weight:bold;color:${BLUE};letter-spacing:10px;border-bottom:${dbl};padding-bottom:2px;display:inline-block">거 래 명 세 표</span>
   </div>
-  <div style="text-align:center;font-size:9px;color:${BLUE};margin-bottom:5px">(공급받는자 보관용)</div>
+  <div style="text-align:center;font-size:8.5px;color:${BLUE};margin-bottom:4px">(공급받는자 보관용)</div>
 
-  <!-- ② 공급자 / 공급받는자  716px = 356+4+356 -->
+  <!-- ② 공급자 / 공급받는자 / 작성일자 / 입금계좌 통합 박스 (716px = 356 + 4 + 356) -->
   <div style="border:${outer};margin-bottom:4px">
     <table>
       <colgroup>
@@ -156,17 +141,17 @@ function buildHTML(
       </colgroup>
 
       <!-- 등록번호 -->
-      <tr style="height:21px">
-        <td rowspan="8" class="L" style="border-right:${solid};writing-mode:vertical-rl;letter-spacing:3px;font-size:10px">공&nbsp;급&nbsp;자</td>
+      <tr style="height:18px">
+        <td rowspan="8" class="L" style="border-right:${solid};writing-mode:vertical-rl;letter-spacing:3px;font-size:9.5px">공&nbsp;급&nbsp;자</td>
         <td class="L" style="border-right:${dotted};border-bottom:${dotted}">등록번호</td>
         <td colspan="3" class="V" style="border-bottom:${dotted};font-weight:bold;text-align:center">138-81-83251</td>
         <td rowspan="8" style="border-right:${dbl}"></td>
-        <td rowspan="8" class="L" style="border-right:${solid};writing-mode:vertical-rl;letter-spacing:1px;font-size:10px">공급받는자</td>
+        <td rowspan="8" class="L" style="border-right:${solid};writing-mode:vertical-rl;letter-spacing:1px;font-size:9.5px">공급받는자</td>
         <td class="L" style="border-right:${dotted};border-bottom:${dotted}">등록번호</td>
         <td colspan="3" class="V" style="border-bottom:${dotted}">${esc(customer?.bizRegNo||'')}</td>
       </tr>
       <!-- 상호/대표 -->
-      <tr style="height:21px">
+      <tr style="height:18px">
         <td class="L" style="border-right:${dotted};border-bottom:${dotted}">상호</td>
         <td class="V" style="border-right:${dotted};border-bottom:${dotted};font-size:8px">주식회사 기연리프트</td>
         <td class="L" style="border-right:${dotted};border-bottom:${dotted}">대표</td>
@@ -177,25 +162,25 @@ function buildHTML(
         <td class="V" style="border-bottom:${dotted}">${esc(customer?.representative||'')}</td>
       </tr>
       <!-- 주소 -->
-      <tr style="height:21px">
+      <tr style="height:18px">
         <td class="L" style="border-right:${dotted};border-bottom:${dotted}">주소</td>
-        <td colspan="3" class="V" style="border-bottom:${dotted};font-size:8px">경기도 용인시 처인구 모현읍 갈담로112번길 21-3</td>
+        <td colspan="3" class="V" style="border-bottom:${dotted};font-size:7.5px">경기도 용인시 처인구 모현읍 갈담로112번길 21-3</td>
         <td class="L" style="border-right:${dotted};border-bottom:${dotted}">주소</td>
-        <td colspan="3" class="V" style="border-bottom:${dotted};font-size:8px">${esc(customer?.address||'')}</td>
+        <td colspan="3" class="V" style="border-bottom:${dotted};font-size:7.5px">${esc(customer?.address||'')}</td>
       </tr>
       <!-- 업태/종목 -->
-      <tr style="height:21px">
+      <tr style="height:18px">
         <td class="L" style="border-right:${dotted};border-bottom:${dotted}">업태</td>
-        <td class="V" style="border-right:${dotted};border-bottom:${dotted};font-size:7.5px">사업지원 및 임대서비스업 외</td>
+        <td class="V" style="border-right:${dotted};border-bottom:${dotted};font-size:7px">사업지원 및 임대서비스업 외</td>
         <td class="L" style="border-right:${dotted};border-bottom:${dotted}">종목</td>
-        <td class="V" style="border-bottom:${dotted};font-size:7.5px">고소장비임대업 외</td>
+        <td class="V" style="border-bottom:${dotted};font-size:7px">고소장비임대업 외</td>
         <td class="L" style="border-right:${dotted};border-bottom:${dotted}">업태</td>
         <td class="V" style="border-right:${dotted};border-bottom:${dotted}"></td>
         <td class="L" style="border-right:${dotted};border-bottom:${dotted}">종목</td>
         <td class="V" style="border-bottom:${dotted}"></td>
       </tr>
       <!-- 계약담당자 -->
-      <tr style="height:21px">
+      <tr style="height:18px">
         <td class="L" style="border-right:${dotted};border-bottom:${dotted}">계약담당자</td>
         <td class="V" style="border-right:${dotted};border-bottom:${dotted}"></td>
         <td class="L" style="border-right:${dotted};border-bottom:${dotted}">연락처</td>
@@ -206,7 +191,7 @@ function buildHTML(
         <td class="V" style="border-bottom:${dotted}"></td>
       </tr>
       <!-- 계산서담당자 -->
-      <tr style="height:21px">
+      <tr style="height:18px">
         <td class="L" style="border-right:${dotted};border-bottom:${dotted}">계산서담당자</td>
         <td class="V" style="border-right:${dotted};border-bottom:${dotted}"></td>
         <td class="L" style="border-right:${dotted};border-bottom:${dotted}">연락처</td>
@@ -214,37 +199,29 @@ function buildHTML(
         <td colspan="4" style="border-bottom:${dotted}"></td>
       </tr>
       <!-- 이메일 -->
-      <tr style="height:21px">
+      <tr style="height:18px">
         <td class="L" style="border-right:${dotted};border-bottom:${dotted}">이메일</td>
         <td colspan="3" class="V" style="border-bottom:${dotted}">giyeonlift@naver.com</td>
         <td colspan="4" style="border-bottom:${dotted}"></td>
       </tr>
       <!-- 공급내역 -->
-      <tr style="height:21px">
-        <td class="L" style="border-right:${dotted}">공급내역</td>
-        <td colspan="3" class="V"></td>
-        <td colspan="4"></td>
+      <tr style="height:18px">
+        <td class="L" style="border-right:${dotted};border-bottom:${solid}">공급내역</td>
+        <td colspan="3" class="V" style="border-bottom:${solid}"></td>
+        <td colspan="4" style="border-bottom:${solid}"></td>
+      </tr>
+
+      <!-- ③ 작성일자 / 입금계좌 행 (정보 박스 내부 통합) -->
+      <tr style="height:19px">
+        <td colspan="2" class="L" style="border-right:${solid}">작성일자</td>
+        <td colspan="3" class="V" style="border-right:${dbl};padding-left:8px">${billingDate}</td>
+        <td colspan="2" class="L" style="border-right:${solid}">입금계좌</td>
+        <td colspan="4" class="V" style="padding-left:8px;font-weight:bold;font-size:8px">신한은행 140-010-007060 , 주식회사 기연리프트</td>
       </tr>
     </table>
   </div>
 
-  <!-- ③ 작성일자/입금계좌  716px = 88+270+88+270 -->
-  <div style="border:${outer};margin-bottom:4px">
-    <table>
-      <colgroup>
-        <col style="width:88px"><col style="width:270px">
-        <col style="width:88px"><col style="width:270px">
-      </colgroup>
-      <tr style="height:22px">
-        <td class="L" style="border-right:${solid}">작성일자</td>
-        <td class="V" style="border-right:${solid};padding-left:8px">${billingDate}</td>
-        <td class="L" style="border-right:${solid}">입금계좌</td>
-        <td class="V" style="padding-left:8px;font-weight:bold;font-size:8.5px">신한은행 140-010-007060 , 주식회사 기연리프트</td>
-      </tr>
-    </table>
-  </div>
-
-  <!-- ④ 품목 테이블  716px = 24+26+26+300+44+74+76+72+74 -->
+  <!-- ④ 품목 테이블 (716px = 24+26+26+300+44+74+76+72+74) -->
   <div style="border:${outer}">
     <table>
       <colgroup>
@@ -253,7 +230,7 @@ function buildHTML(
         <col style="width:74px"><col style="width:76px">
         <col style="width:72px"><col style="width:74px">
       </colgroup>
-      <tr style="height:24px">
+      <tr style="height:20px">
         <th class="L" style="border-right:${solid};border-bottom:${solid}">순번</th>
         <th class="L" style="border-right:${solid};border-bottom:${solid}">월</th>
         <th class="L" style="border-right:${solid};border-bottom:${solid}">일</th>
@@ -267,7 +244,7 @@ function buildHTML(
       ${itemRows}
     </table>
 
-    <!-- ⑤ 합계 행  716px = 54+24+108+54+24+96+42+24+96+86+108 -->
+    <!-- ⑤ 합계 행 (716px = 54+24+108+54+24+96+42+24+96+86+108) -->
     <table style="border-top:${solid}">
       <colgroup>
         <col style="width:54px"><col style="width:24px"><col style="width:108px">
@@ -275,7 +252,7 @@ function buildHTML(
         <col style="width:42px"><col style="width:24px"><col style="width:96px">
         <col style="width:86px"><col style="width:108px">
       </colgroup>
-      <tr style="height:24px;font-weight:bold">
+      <tr style="height:20px;font-weight:bold">
         <td class="L" style="border-right:${dotted}">공급가</td>
         <td class="L" style="border-right:${dotted}">₩</td>
         <td style="border-right:${solid};text-align:right;padding-right:6px">${supplyTotal.toLocaleString()}</td>
@@ -290,18 +267,11 @@ function buildHTML(
       </tr>
     </table>
   </div>
-
-  <div style="text-align:right;font-size:8px;color:#666;margin-top:3px">
-    (주)기연리프트 | 사업자등록번호: 138-81-83251 | 대표: 이수용
-  </div>
 </div>
 </body>
 </html>`;
 }
 
-// ──────────────────────────────────────────────────────────────────────────────
-// PDF 다운로드 메인
-// ──────────────────────────────────────────────────────────────────────────────
 export const downloadTransactionStatementPDF = async (
   billing:     any,
   details:     any[],
@@ -312,7 +282,6 @@ export const downloadTransactionStatementPDF = async (
   fileName?:   string
 ): Promise<void> => {
 
-  // 도장 추출
   let stampDataUrl = '';
   try {
     const url  = resolveTemplateUrl(templateUrl);
@@ -332,9 +301,6 @@ export const downloadTransactionStatementPDF = async (
 
   const html = buildHTML(billing, details, customer, siteName, stampDataUrl);
 
-  // ── iframe 격리 렌더링 ────────────────────────────────────────────────────
-  // 720px iframe → html2canvas → jsPDF (190mm)
-  // iframe은 별도의 browsing context → CSS가 완전 격리 적용됨
   const iframe = document.createElement('iframe');
   iframe.style.cssText =
     'position:absolute;top:-9999px;left:0;width:720px;height:900px;border:none;visibility:hidden;';
@@ -346,17 +312,14 @@ export const downloadTransactionStatementPDF = async (
     iDoc.write(html);
     iDoc.close();
 
-    // 렌더 완료 대기
     await new Promise<void>(resolve => {
       if (iDoc.readyState === 'complete') return resolve();
       iframe.addEventListener('load', () => resolve(), { once: true });
-      setTimeout(resolve, 800); // fallback
+      setTimeout(resolve, 800);
     });
 
-    // 추가 대기 (폰트/이미지 안정화)
     await new Promise(r => setTimeout(r, 300));
 
-    // html2canvas 캡처 (720px, scale:2 = 1440px canvas → 190mm = ~193 DPI)
     const iBody = iDoc.body;
     iBody.style.margin  = '0';
     iBody.style.padding = '0';
@@ -373,13 +336,11 @@ export const downloadTransactionStatementPDF = async (
       windowWidth:     720,
     });
 
-    // jsPDF 출력
     const imgData = canvas.toDataURL('image/png');
     const pdf     = new jsPDF('p', 'mm', 'a4');
     const pageW   = pdf.internal.pageSize.getWidth();  // 210mm
     const pageH   = pdf.internal.pageSize.getHeight(); // 297mm
 
-    // 좌우 여백 10mm → 190mm (A4 꽉 채움)
     const mx      = 10;
     const my      = 10;
     const printW  = pageW - mx * 2;                      // 190mm
@@ -388,7 +349,6 @@ export const downloadTransactionStatementPDF = async (
     if (printH <= pageH - my) {
       pdf.addImage(imgData, 'PNG', mx, my, printW, printH);
     } else {
-      // 페이지 넘침 시 다중 페이지
       let y = 0;
       const sliceH = pageH - my;
       while (y < printH) {
