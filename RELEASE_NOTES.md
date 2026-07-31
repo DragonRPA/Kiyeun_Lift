@@ -1,3 +1,18 @@
+# Release Notes (v1.16.9.Build.00028 - 2026-07-31 20:34)
+
+## 🔄 [구글 연동 설정 페이지 계정/비밀번호/앱비밀번호 실시간 동기 반영 적용]
+
+### 핵심 개편 내용
+1. **단일 진실의 원천(SSOT) 실시간 반영 (`email.ts`)**:
+   - 관리자가 [시스템 설정 > 구글 및 클라우드 연계 설정] 페이지에서 **발송계정(`googleEmail`), 패스워드(`googlePassword`), 앱비밀번호(`gmailAppPassword`)**를 변경하면, 메일 발송 시 즉시 변경된 최신 크리덴셜 정보를 100% 동기화하여 발송하도록 개선.
+2. **원격 DB 및 로컬 스토리지 즉시 동기화 (`AppContext.tsx`)**:
+   - 구글 연동 설정 변경 시 `db.googleConfigs` 인메모리와 `localStorage('erp_googleConfigs')` 및 Supabase 원격 DB `google_configs` 테이블 전체에 `await db.awaitPendingWrites()` 동기 저장을 완결하여 데이터 파편화 방지.
+
+### 빌드 검증
+- TypeScript + Vite + Vercel API 빌드 정상 통과 ✅
+
+---
+
 # Release Notes (v1.16.9.Build.00027 - 2026-07-31 20:31)
 
 ## 🔑 [Gmail 534 5.7.9 인증 오류 원인 해결 & 실제 16자리 앱 비밀번호 검증 적용]

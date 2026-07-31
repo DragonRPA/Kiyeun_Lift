@@ -504,6 +504,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         currentList.push({ ...payload, createdAt: nowIso });
       }
       db.googleConfigs = currentList;
+      localStorage.setItem('erp_googleConfigs', JSON.stringify(currentList));
 
       // 2. Supabase UPSERT — 행 존재 여부와 관계없이 반드시 반영
       if (supabase) {
@@ -517,6 +518,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
       }
 
+      await db.awaitPendingWrites();
       refreshAllData();
     } catch (err: any) {
       console.error('updateGoogleConfig Error:', err);
