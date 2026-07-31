@@ -4,7 +4,7 @@ import { useApp } from '../context/AppContext';
 import { db, Asset, Billing, BillingDetail } from '../services/db';
 import { Plus, Download, Mail, CheckCircle, Search, DollarSign, Calendar, FileText, Send, Edit3 } from 'lucide-react';
 import { emailService } from '../services/email';
-import { exportToExcel } from '../services/excel';
+import { exportToExcel, exportTransactionStatementExcel } from '../services/excel';
 
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
@@ -1372,7 +1372,7 @@ ${details.map((d, idx) => {
             <form onSubmit={handleSendStatementSubmit} className="card" style={{ width: '100%', maxWidth: '680px', backgroundColor: 'var(--bg-card)', padding: '24px', borderRadius: '12px', maxHeight: '90vh', overflowY: 'auto' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', borderBottom: '1px solid var(--border-color)', paddingBottom: '12px' }}>
                 <h3 className="card-title" style={{ margin: 0, fontSize: '17px', fontWeight: '700' }}>
-                  📄 (주)기연엘리베이터 표준 거래명세서 이메일 발송
+                  📄 (주)기연리프트 표준 거래명세서 이메일 발송
                 </h3>
                 <div style={{ display: 'flex', gap: '6px' }}>
                   <button type="button" className={mailTab === 'FORM' ? 'btn-primary' : 'btn-secondary'} onClick={() => setMailTab('FORM')} style={{ fontSize: '12px', padding: '4px 10px' }}>
@@ -1426,7 +1426,7 @@ ${details.map((d, idx) => {
 
                   <div style={{ fontSize: '12.5px', color: 'var(--text-secondary)', padding: '12px', backgroundColor: 'var(--bg-app)', borderRadius: '8px', border: '1px dashed var(--border-color)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
                     <span style={{ fontWeight: '600' }}>💡 거래명세서 메일 자동 생성 안내</span>
-                    <span>- 발송 시 (주)기연엘리베이터 표준 거래명세서 양식(공급자/공급받는자 정보, 세부 품목별 날짜/적용단가/공급가액/부가세)이 메일 본문에 100% 자동 생성되어 전달됩니다.</span>
+                    <span>- 발송 시 (주)기연리프트 표준 거래명세서 양식(공급자/공급받는자 정보, 세부 품목별 날짜/적용단가/공급가액/부가세)이 메일 본문에 100% 자동 생성되어 전달됩니다.</span>
                   </div>
                 </div>
               ) : (
@@ -1445,8 +1445,23 @@ ${details.map((d, idx) => {
                 />
               )}
 
-              <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+              <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
                 <button type="button" className="btn-secondary" onClick={() => setShowMailModal(false)}>취소</button>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => exportTransactionStatementExcel(
+                    targetBilling,
+                    targetDetails,
+                    targetCust,
+                    targetContract,
+                    sites.find(s => s.id === targetContract?.siteId)?.name || '본사/직납',
+                    `거래명세서_${targetCust?.name || '고객사'}_${targetBilling?.billingYm || ''}`
+                  )}
+                  style={{ display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 'bold' }}
+                >
+                  <FileText size={14} /> 엑셀 다운로드 (.xlsx)
+                </button>
                 <button
                   type="button"
                   className="btn-secondary"
