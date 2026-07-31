@@ -446,20 +446,31 @@ export const PurchaseSettlementPage: React.FC = () => {
 
             <div style={{ padding: '20px', overflowY: 'auto', flex: 1, textAlign: 'center' }}>
               {previewEvidence.url.startsWith('data:image/') ? (
-                <img src={previewEvidence.url} alt="증빙 이미지" style={{ maxWidth: '100%', maxHeight: '550px', borderRadius: '6px', border: '1px solid var(--border)' }} />
+                <div style={{ textAlign: 'center' }}>
+                  <img src={previewEvidence.url} alt="증빙 이미지" style={{ maxWidth: '100%', maxHeight: '480px', borderRadius: '6px', border: '1px solid var(--border)', marginBottom: '16px' }} />
+                  <div>
+                    <a
+                      href={previewEvidence.url}
+                      download={`${(previewEvidence.title || '매입증빙').replace(/[^a-zA-Z0-9가-힣_-]/g, '_')}.jpg`}
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '9px 18px', background: 'var(--primary)', color: '#fff', borderRadius: '6px', fontWeight: '700', textDecoration: 'none', fontSize: '13.5px' }}
+                    >
+                      <Download size={15} /> 원본 사진 파일 저장 (내PC/스마트폰 다운로드)
+                    </a>
+                  </div>
+                </div>
               ) : previewEvidence.url.startsWith('data:application/pdf') || previewEvidence.url.startsWith('data:') ? (
                 <div style={{ padding: '40px 20px' }}>
                   <FileText size={56} style={{ color: 'var(--primary)', marginBottom: '16px' }} />
                   <h4 style={{ fontSize: '15px', fontWeight: '700', marginBottom: '8px' }}>PDF 증빙 문서가 준비되어 있습니다.</h4>
                   <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '20px' }}>
-                    아래 버튼을 눌러 PDF 문서를 안전하게 다운로드하거나 열람하실 수 있습니다.
+                    아래 버튼을 누르시면 구매번호 파일명으로 원본 PDF 문서가 다운로드됩니다.
                   </p>
                   <a
                     href={previewEvidence.url}
-                    download={`${previewEvidence.title || '매입증빙'}.pdf`}
+                    download={`${(previewEvidence.title || '매입증빙').replace(/[^a-zA-Z0-9가-힣_-]/g, '_')}.pdf`}
                     style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '10px 18px', background: 'var(--primary)', color: '#fff', borderRadius: '6px', fontWeight: '700', textDecoration: 'none', fontSize: '14px' }}
                   >
-                    <Download size={15} /> PDF 파일 다운로드 및 열기
+                    <Download size={15} /> PDF 파일 저장 (내PC/스마트폰 다운로드)
                   </a>
                 </div>
               ) : (

@@ -277,10 +277,9 @@ export const Consumables: React.FC = () => {
       }
     }
 
-    const dateStr = new Date().toISOString().split('T')[0];
-    const seq = String(consumableLogs.filter(l => l.actionDate === dateStr && l.type === 'INBOUND').length + 1).padStart(3, '0');
-    const prefix = noInvoice ? 'INB-PHOTO-' : 'INB-';
-    const newFileName = `${prefix}${dateStr}-${seq}.${ext}`;
+    const targetReq = consumablePurchases.find(p => p.id === selectedReqId);
+    const purchaseNo = targetReq ? targetReq.id.toUpperCase() : `PUR-${new Date().toISOString().slice(2,10).replace(/-/g, '')}`;
+    const newFileName = `${purchaseNo}.${ext}`;
 
     let base64Url = '';
     try {
@@ -1128,27 +1127,38 @@ export const Consumables: React.FC = () => {
                     <img 
                       src={previewRequest.statementFileUrl} 
                       alt="거래명세서 증빙 이미지" 
-                      style={{ maxWidth: '100%', maxHeight: '550px', borderRadius: '6px', border: '1px solid var(--border)', boxShadow: 'var(--shadow-sm)' }} 
+                      style={{ maxWidth: '100%', maxHeight: '480px', borderRadius: '6px', border: '1px solid var(--border)', boxShadow: 'var(--shadow-sm)', marginBottom: '16px' }} 
                     />
+                    <div>
+                      <a 
+                        href={previewRequest.statementFileUrl} 
+                        download={`${previewRequest.id.toUpperCase()}_증빙.jpg`}
+                        className="btn-primary" 
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '9px 18px', borderRadius: '6px', textDecoration: 'none', fontSize: '13.5px', fontWeight: '700' }}
+                      >
+                        <Download size={15} /> 원본 사진 파일 저장 ({previewRequest.id.toUpperCase()}.jpg)
+                      </a>
+                    </div>
                   </div>
                 ) : (
                   // PDF 또는 기타 문서형식의 Data URL
                   <div style={{ textAlign: 'center', padding: '40px 20px' }}>
                     <FileText size={56} style={{ color: 'var(--primary)', marginBottom: '16px' }} />
-                    <h4 style={{ fontSize: '15px', fontWeight: '700', marginBottom: '8px' }}>PDF 증빙 문서가 안전하게 보관되어 있습니다.</h4>
+                    <h4 style={{ fontSize: '15px', fontWeight: '700', marginBottom: '8px' }}>PDF 증빙 문서가 보관되어 있습니다.</h4>
                     <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '20px', lineHeight: '1.4' }}>
-                      브라우저 보안 보안 정책에 따라, 파일 다운로드를 통해 원본 거래명세서를 안전하게 열람하실 수 있습니다.
+                      아래 버튼을 누르시면 구매번호 파일명으로 원본 PDF 문서가 컴퓨터/스마트폰으로 다운로드됩니다.
                     </p>
                     <a 
                       href={previewRequest.statementFileUrl} 
-                      download={`INB-${previewRequest.completedDate || previewRequest.requestDate || '증빙'}.pdf`}
+                      download={`${previewRequest.id.toUpperCase()}_증빙.pdf`}
                       className="btn-primary" 
-                      style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '10px 16px', borderRadius: '6px', textDecoration: 'none' }}
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '10px 18px', borderRadius: '6px', textDecoration: 'none', fontWeight: '700', fontSize: '14px' }}
                     >
-                      <Download size={14} /> PDF 다운로드 및 열기
+                      <Download size={15} /> PDF 파일 저장 ({previewRequest.id.toUpperCase()}.pdf)
                     </a>
                   </div>
                 )
+
               ) : (
                 // 모의(Seed) 데이터용 거래명세서 템플릿
                 <div style={{ border: '2px solid #333', padding: '24px', fontFamily: 'monospace', color: '#000', backgroundColor: '#fff', borderRadius: '4px', lineHeight: '1.5', boxShadow: 'inset 0 0 10px rgba(0,0,0,0.05)' }}>
