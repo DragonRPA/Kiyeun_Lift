@@ -9,75 +9,123 @@ export const exportToExcel = (data: any[], fileName: string, sheetName: string =
   XLSX.writeFile(workbook, `${fileName}.xlsx`);
 };
 
-export const exportTransactionStatementExcel = (
+/**
+ * 공식 거래명세서 양식 파일(구글 드라이브 또는 public/)을 fetch로 읽어서
+ * 실제 청구 데이터를 셀에 직접 채워넣고 다운로드
+ *
+ * templateUrl: google_configs.transactionStatementTemplateUrl (Supabase 저장값)
+ *   - 구글 드라이브 공유링크 형식: https://drive.google.com/file/d/FILE_ID/view
+ *     → 자동으로 직접다운로드 URL로 변환: https://drive.google.com/uc?export=download&id=FILE_ID
+ *   - fallback: /거래명세서양식.xlsx (public 폴더 복사본)
+ *
+ * 양식 셀 맵 (0-indexed row, 0-indexed col):
+ * - 공급받는자 등록번호: N5(r4,c13)
+ * - 공급받는자 상호:     N6(r5,c13)  대표: R6(r5,c17)
+ * - 공급받는자 주소:     N7(r6,c13)
+ * - 작성일자:           E13(r12,c4)
+ * - 품목행(row16~26):   B=순번, C=월, D=일, E=품목(~K), L=수량, M=단가, O=공급가액, Q=부가세, T=비고
+ * - 공급가 합계:        E27(r26,c4)
+ * - 부가세 합계:        J27(r26,c9)
+ * - 합계 금액:          O27(r26,c14)
+ */
+export const exportTransactionStatementExcel = async (
   billing: any,
   details: any[],
   customer: any,
   contract: any,
   siteName: string,
-  fileName: string
+  fileName: string,
+  templateUrl?: string
 ) => {
+  // 1. 구글 드라이브 공유링크 → 직접다운로드 URL 변환
+  let fetchUrl = '/거래명세서양식.xlsx'; // fallback: public 폴더 복사본
+
+  if (templateUrl && templateUrl.includes('drive.google.com')) {
+    // https://drive.google.com/file/d/FILE_ID/view  또는
+    // https://drive.google.com/open?id=FILE_ID
+    const fileIdMatch = templateUrl.match(/\/d\/([a-zA-Z0-9_-]+)/) ||
+                        templateUrl.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+    if (fileIdMatch) {
+      fetchUrl = `https://drive.google.com/uc?export=download&id=${fileIdMatch[1]}`;
+    }
+  } else if (templateUrl && templateUrl.startsWith('http')) {
+    fetchUrl = templateUrl; // 기타 직접 URL
+  }
+
+  // 2. 양식 파일 fetch
+  const response = await fetch(fetchUrl);
+  if (!response.ok) throw new Error(`거래명세서 양식 파일 로드 실패 (${fetchUrl}): HTTP ${response.status}`);
+  const arrayBuffer = await response.arrayBuffer();
+  const wb = XLSX.read(new Uint8Array(arrayBuffer), { type: 'array', cellStyles: true });
+
+  const sheetName = wb.SheetNames[0];
+  const ws = wb.Sheets[sheetName];
+
+  const setCell = (addr: string, value: any, numFmt?: string) => {
+    if (!ws[addr]) ws[addr] = { t: typeof value === 'number' ? 'n' : 's', v: value };
+    else ws[addr] = { ...ws[addr], v: value, t: typeof value === 'number' ? 'n' : 's' };
+    if (numFmt) ws[addr].z = numFmt;
+  };
+
   const supplyTotal = Math.round((billing?.totalAmount || 0) / 1.1);
   const vatTotal = (billing?.totalAmount || 0) - supplyTotal;
   const totalAmount = billing?.totalAmount || 0;
 
-  const aoaData: any[][] = [
-    ['거 래 명 세 서 (공급받는자 보관용 - (주)기연리프트 표준 엑셀 양식)'],
-    [''],
-    ['[공급자 정보]', '', '', '', '[공급받는자 정보]'],
-    ['상호(법인명)', '(주)기연리프트', '', '', '상호(법인명)', customer?.name || '-'],
-    ['사업자등록번호', '138-81-83251', '', '', '사업자등록번호', customer?.bizRegNo || '-'],
-    ['대표자명', '이수용', '', '', '대표자명', customer?.representative || '-'],
-    ['사업장주소', '경기도 용인시 처인구 남사읍 성호로 81', '', '', '사업장주소', customer?.address || '-'],
-    ['대표전화/팩스', '031-334-5296 / 031-335-5297', '', '', '작업현장', siteName || '-'],
-    [''],
-    ['청구귀속월', billing?.billingYm || '-', '발행일자', billing?.billingDate || '-', '계약번호', contract?.contractNo || '-'],
-    [''],
-    ['청구 총 금액', `₩${totalAmount.toLocaleString()} (공급가액: ₩${supplyTotal.toLocaleString()} / 부가세: ₩${vatTotal.toLocaleString()})`],
-    [''],
-    ['No', '품명 및 적용 기준', '수량', '단가', '공급가액', '부가가치세', '합계 금액']
-  ];
+  // 발행 날짜 파싱
+  const billingDate: string = billing?.billingDate || '';
+  const billingYm: string = billing?.billingYm || '';
+  const [dateY, dateM, dateD] = billingDate ? billingDate.split('-') : ['', '', ''];
 
-  details.forEach((d, idx) => {
-    const itemSupply = Math.round(d.amount / 1.1);
-    const itemVat = d.amount - itemSupply;
-    aoaData.push([
-      idx + 1,
-      `${d.itemName}${d.description ? ` (${d.description})` : ''}`,
-      d.quantity || 1,
-      d.unitPrice || itemSupply,
-      itemSupply,
-      itemVat,
-      d.amount
-    ]);
-  });
+  // === 공급받는자 정보 채우기 ===
+  setCell('N5', customer?.bizRegNo || '');           // 등록번호
+  setCell('N6', customer?.name || '');                // 상호
+  setCell('R6', customer?.representative || '');      // 대표
+  setCell('N7', customer?.address || '');             // 주소
+  setCell('E13', billingDate || billingYm);           // 작성일자
 
-  aoaData.push([
-    '합계',
-    '',
-    '',
-    '',
-    supplyTotal,
-    vatTotal,
-    totalAmount
-  ]);
-  aoaData.push(['']);
-  aoaData.push(['[입금 계좌 안내]', '기업은행 138-81-83251 (주)기연리프트']);
+  // === 품목 행 채우기 (row16~row26 = r15~r25, 최대 11행) ===
+  const ITEM_START_ROW = 15; // 0-indexed (row 16)
+  const ITEM_MAX = 11;
 
-  const ws = XLSX.utils.aoa_to_sheet(aoaData);
+  for (let i = 0; i < ITEM_MAX; i++) {
+    const d = details[i];
+    const rowIdx = ITEM_START_ROW + i;
+    const rB = XLSX.utils.encode_cell({ r: rowIdx, c: 1 }); // 순번 (B)
+    const rC = XLSX.utils.encode_cell({ r: rowIdx, c: 2 }); // 월 (C)
+    const rD = XLSX.utils.encode_cell({ r: rowIdx, c: 3 }); // 일 (D)
+    const rE = XLSX.utils.encode_cell({ r: rowIdx, c: 4 }); // 품목 (E)
+    const rL = XLSX.utils.encode_cell({ r: rowIdx, c: 11 }); // 수량 (L)
+    const rM = XLSX.utils.encode_cell({ r: rowIdx, c: 12 }); // 단가 (M)
+    const rO = XLSX.utils.encode_cell({ r: rowIdx, c: 14 }); // 공급가액 (O)
+    const rQ = XLSX.utils.encode_cell({ r: rowIdx, c: 16 }); // 부가세 (Q)
+    const rT = XLSX.utils.encode_cell({ r: rowIdx, c: 19 }); // 비고 (T)
 
-  // 셀 넓이 지정
-  ws['!cols'] = [
-    { wch: 6 },
-    { wch: 38 },
-    { wch: 8 },
-    { wch: 14 },
-    { wch: 14 },
-    { wch: 14 },
-    { wch: 14 }
-  ];
+    if (d) {
+      const itemSupply = Math.round(d.amount / 1.1);
+      const itemVat = d.amount - itemSupply;
 
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, '거래명세서');
+      setCell(rB, i + 1, '0');
+      setCell(rC, dateM ? Number(dateM) : '');
+      setCell(rD, dateD ? Number(dateD) : '');
+      setCell(rE, d.itemName + (d.description ? ` [${d.description}]` : ''));
+      setCell(rL, d.quantity || 1, '0');
+      setCell(rM, d.unitPrice || itemSupply, '#,##0');
+      setCell(rO, itemSupply, '#,##0');
+      setCell(rQ, itemVat, '#,##0');
+      setCell(rT, siteName || '');
+    } else {
+      // 빈 행 초기화 (기존 더미값 제거)
+      setCell(rB, '');
+      setCell(rO, 0, '#,##0');
+      setCell(rQ, 0, '#,##0');
+    }
+  }
+
+  // === 합계 행 채우기 (row27 = r26) ===
+  setCell('E27', supplyTotal, '#,##0');
+  setCell('J27', vatTotal, '#,##0');
+  setCell('O27', totalAmount, '#,##0');
+
+  // 2. 파일 다운로드
   XLSX.writeFile(wb, `${fileName}.xlsx`);
 };

@@ -1,3 +1,34 @@
+# Release Notes (v1.16.9.Build.00005 - 2026-07-31 10:34)
+
+## 📊 [거래명세서 엑셀 양식 - 구글 드라이브 원본 파일 직접 연동 개편]
+
+### 개편 배경
+기존에는 `public/거래명세서양식.xlsx` 복사본을 고정 사용하여 구글 드라이브 원본과 단절된 문제가 있었음.
+Supabase `google_configs.transactionStatementTemplateUrl` 컬럼에 실제 저장된 구글 드라이브 URL을 읽어서 직접 fetch → 셀 채우기 → 다운로드하는 방식으로 완전 전환함.
+
+### 주요 구현 내역
+
+#### 1. 구글 드라이브 URL 자동 변환 (`excel.ts`)
+- `templateUrl` 파라미터 추가.
+- `drive.google.com` 링크 감지 시 `/uc?export=download&id=FILE_ID` 형태로 자동 변환하여 직접 다운로드 URL 생성.
+- fallback: `public/거래명세서양식.xlsx` (URL 미설정 시).
+
+#### 2. Supabase 저장값 전달 (`Billings.tsx`)
+- `googleConfigs[0]?.transactionStatementTemplateUrl`을 `exportTransactionStatementExcel` 호출 시 자동 주입.
+
+### 데이터 흐름
+```
+Supabase google_configs.transactionStatementTemplateUrl
+→ 구글 드라이브 원본 .xlsx fetch
+→ 실제 청구 데이터 셀 채우기
+→ 고객명_현장명_청구연월.xlsx 다운로드
+```
+
+### 빌드 검증
+- TypeScript + Vite 빌드 오류 없음 확인 ✅
+
+---
+
 # Release Notes (v1.16.9.Build.00004 - 2026-07-31 10:21)
 
 ## 🏢 [상호명 (주)기연리프트 일괄 정정 & 표준 엑셀 거래명세서 양식 채우기 다운로드 탑재]

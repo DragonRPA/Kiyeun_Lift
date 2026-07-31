@@ -1450,14 +1450,28 @@ ${details.map((d, idx) => {
                 <button
                   type="button"
                   className="btn-secondary"
-                  onClick={() => exportTransactionStatementExcel(
-                    targetBilling,
-                    targetDetails,
-                    targetCust,
-                    targetContract,
-                    sites.find(s => s.id === targetContract?.siteId)?.name || '본사/직납',
-                    `거래명세서_${targetCust?.name || '고객사'}_${targetBilling?.billingYm || ''}`
-                  )}
+                  onClick={async () => {
+                    const site = sites.find(s => s.id === targetContract?.siteId);
+                    const custName = targetCust?.name || '고객사';
+                    const sName = site?.name || '현장';
+                    const ym = targetBilling?.billingYm || '';
+                    const fileName = `${custName}_${sName}_${ym}`;
+                    // Supabase google_configs 에 저장된 구글 드라이브 양식 URL 사용
+                    const templateUrl = googleConfigs[0]?.transactionStatementTemplateUrl;
+                    try {
+                      await exportTransactionStatementExcel(
+                        targetBilling,
+                        targetDetails,
+                        targetCust,
+                        targetContract,
+                        sName,
+                        fileName,
+                        templateUrl
+                      );
+                    } catch (e: any) {
+                      showErrorModal('엑셀 거래명세서 생성 실패: ' + (e?.message || String(e)));
+                    }
+                  }}
                   style={{ display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 'bold' }}
                 >
                   <FileText size={14} /> 엑셀 다운로드 (.xlsx)
