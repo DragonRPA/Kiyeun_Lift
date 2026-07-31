@@ -1,3 +1,16 @@
+# Release Notes (v1.16.9.Build.00031 - 2026-07-31 20:45)
+
+## 🐛 [Vercel API nodemailer import 구문 복원 패치]
+
+### 원인 및 수정 내용
+- 앞선 Vercel config 수정 시 `api/send-email.ts` 파일 최상단의 `import nodemailer from 'nodemailer';` 구문이 오누락되어 백엔드 런타임 시 `nodemailer is not defined` 에러 발생.
+- `api/send-email.ts` 상단에 `nodemailer` 및 `@vercel/node` 모듈 import 구문을 완벽하게 복원 및 고도화.
+
+### 빌드 검증
+- TypeScript + Vite + Vercel Serverless Function 빌드 정상 통과 ✅
+
+---
+
 # Release Notes (v1.16.9.Build.00030 - 2026-07-31 20:42)
 
 ## ⚡ [메일 첨부 PDF 용량 최적화 & Vercel API 페이로드 10MB 확장 (Request Entity Too Large 해소)]
