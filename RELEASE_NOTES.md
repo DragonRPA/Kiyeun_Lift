@@ -1,3 +1,19 @@
+# Release Notes (v1.16.9.Build.00011 - 2026-07-31 17:22)
+
+## 🐛 [거래명세서 PDF - 오른쪽 넘침 수정 & 품목 표시 간소화]
+
+### 버그 수정
+- **테이블 폭 오버플로우**: `table-layout:fixed` 적용 + 모든 colgroup 열 너비 합계를 756px에 정밀 맞춤.
+- **컨테이너 너비**: html 영역 780px → 756px, html2canvas width 파라미터 756px 명시.
+- **품목 열 텍스트**: `itemName + [description]` 전부 출력 → `itemName`만 출력 (모델명/관리번호/렌탈료만 표기), `text-overflow:ellipsis` 적용으로 폭 초과 시 말줄임.
+
+### 변경 사항 (pdf.ts)
+- 정보 테이블 colgroup: 22+56+144+30+110+4+22+56+144+30+138 = 756px.
+- 품목 테이블 colgroup: 26+20+20+300+36+80+90+80+104 = 756px.
+- 비고(siteName) 열: 60px → 104px (충분한 현장명 표시 공간 확보).
+
+---
+
 # Release Notes (v1.16.9.Build.00010 - 2026-07-31 17:06)
 
 ## 📄 [거래명세서 시스템 PDF 변환 기능 신규 구현 (Excel→PDF 즉시 다운로드)]

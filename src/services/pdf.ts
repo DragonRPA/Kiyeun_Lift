@@ -62,7 +62,7 @@ function buildStatementHTML(
           <td style="${cellStyle(borderColor)};text-align:center;">${i + 1}</td>
           <td style="${cellStyle(borderColor)};text-align:center;">${dateM}</td>
           <td style="${cellStyle(borderColor)};text-align:center;">${dateD}</td>
-          <td style="${cellStyle(borderColor)};text-align:left;padding-left:4px;">${escHtml(d.itemName)}${d.description ? ` [${escHtml(d.description)}]` : ''}</td>
+          <td class="item-name" style="${cellStyle(borderColor)};text-align:left;padding-left:4px;">${escHtml(d.itemName)}</td>
           <td style="${cellStyle(borderColor)};text-align:center;">${d.quantity || 1}</td>
           <td style="${cellStyle(borderColor)};text-align:right;padding-right:4px;">${supply > 0 ? (d.unitPrice || 0).toLocaleString() : ''}</td>
           <td style="${cellStyle(borderColor)};text-align:right;padding-right:4px;">${supply.toLocaleString()}</td>
@@ -99,12 +99,13 @@ function buildStatementHTML(
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: 'Malgun Gothic', '맑은 고딕', sans-serif; font-size: 9pt; background: white; color: #000; }
-  table { border-collapse: collapse; width: 100%; }
-  td, th { padding: 2px 3px; vertical-align: middle; white-space: nowrap; }
+  table { border-collapse: collapse; width: 100%; table-layout: fixed; }
+  td, th { padding: 2px 3px; vertical-align: middle; white-space: nowrap; overflow: hidden; }
+  .item-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 </style>
 </head>
 <body>
-<div style="width:780px;padding:10px 12px;background:white;">
+<div style="width:756px;padding:10px 0;background:white;">
 
   <!-- 제목 -->
   <div style="text-align:center;font-size:22pt;font-weight:bold;color:${titleColor};
@@ -117,13 +118,14 @@ function buildStatementHTML(
   </div>
 
   <!-- 공급자 / 공급받는자 -->
+  <!-- 총 756px: 22+56+144+30+110 +4+ 22+56+144+30+138 = 756 -->
   <table style="border:1px solid ${borderColor};margin-bottom:4px;">
     <colgroup>
-      <col style="width:30px"><col style="width:60px"><col style="width:150px">
-      <col style="width:30px"><col style="width:100px">
-      <col style="width:5px">
-      <col style="width:30px"><col style="width:60px"><col style="width:150px">
-      <col style="width:30px"><col style="width:100px">
+      <col style="width:22px"><col style="width:56px"><col style="width:144px">
+      <col style="width:30px"><col style="width:110px">
+      <col style="width:4px">
+      <col style="width:22px"><col style="width:56px"><col style="width:144px">
+      <col style="width:30px"><col style="width:138px">
     </colgroup>
     <!-- 타이틀 행 -->
     <tr style="height:20px;">
@@ -205,11 +207,12 @@ function buildStatementHTML(
   </table>
 
   <!-- 품목 테이블 -->
+  <!-- 총 756px: 26+20+20+300+36+80+90+80+104=756 -->
   <table style="border:1px solid ${borderColor};margin-bottom:4px;">
     <colgroup>
-      <col style="width:30px"><col style="width:22px"><col style="width:22px">
-      <col style="width:240px"><col style="width:35px"><col style="width:70px">
-      <col style="width:80px"><col style="width:70px"><col style="width:60px">
+      <col style="width:26px"><col style="width:20px"><col style="width:20px">
+      <col style="width:300px"><col style="width:36px"><col style="width:80px">
+      <col style="width:90px"><col style="width:80px"><col style="width:104px">
     </colgroup>
     <!-- 헤더 -->
     <tr style="height:24px;background:${headerBg};">
@@ -297,7 +300,7 @@ export const downloadTransactionStatementPDF = async (
   // 3. 숨김 컨테이너에 렌더링
   const container = document.createElement('div');
   container.style.cssText =
-    'position:fixed;top:-9999px;left:-9999px;width:794px;background:white;z-index:-9999;';
+    'position:fixed;top:-9999px;left:-9999px;width:756px;background:white;z-index:-9999;';
   container.innerHTML = html;
   document.body.appendChild(container);
 
@@ -308,6 +311,7 @@ export const downloadTransactionStatementPDF = async (
       useCORS: true,
       logging: false,
       backgroundColor: '#ffffff',
+      width: 756,
     });
 
     const imgData = canvas.toDataURL('image/png');
