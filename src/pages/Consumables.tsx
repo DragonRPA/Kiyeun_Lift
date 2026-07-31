@@ -779,12 +779,14 @@ export const Consumables: React.FC = () => {
 
       {/* [TAB 4] 구매품 입고 처리 (거래명세서 구글드라이브 저장 의무화) */}
       {activeTab === 'REQ_INBOUND' && (
-        <div className="card" style={{ maxWidth: '700px', margin: 0 }}>
-          <h3 className="card-title" style={{ marginBottom: '20px' }}>구매 완료된 소모품 자재 입고 처리</h3>
+        <div className="card" style={{ maxWidth: '700px', width: '100%', margin: '0 0 40px 0', padding: '20px 18px 24px 18px' }}>
+          <h3 className="card-title" style={{ marginBottom: '16px', fontSize: '18px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            📦 구매 완료된 소모품 자재 입고 처리
+          </h3>
           <form onSubmit={handleInboundConfirmSubmit}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginBottom: '24px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginBottom: '20px' }}>
               <div>
-                <label>구매 완료된 신청 건 선택 *</label>
+                <label style={{ fontWeight: '700', fontSize: '13.5px', marginBottom: '6px', display: 'block' }}>구매 완료된 신청 건 선택 *</label>
                 <select value={selectedReqId} onChange={e => {
                   setSelectedReqId(e.target.value);
                   const p = consumablePurchases.find(req => req.id === e.target.value);
@@ -795,7 +797,7 @@ export const Consumables: React.FC = () => {
                   }
                   setSelectedFile(null);
                   setUploadedFileUrl('');
-                }} required>
+                }} required style={{ width: '100%', height: '42px', fontSize: '13.5px' }}>
                   <option value="">-- 입고할 완료된 구매신청 선택 --</option>
                   {activeCompletedPurchases.map(p => (
                     <option key={p.id} value={p.id}>
@@ -813,11 +815,11 @@ export const Consumables: React.FC = () => {
                       const p = consumablePurchases.find(req => req.id === selectedReqId);
                       if (!p) return null;
                       return (
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '12.5px' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '8px', fontSize: '12.5px' }}>
                           <div><strong>품명:</strong> {p.modelName}</div>
                           <div><strong>신청 수량:</strong> {p.requestedQty}개</div>
                           <div><strong>기 입고량:</strong> {p.receivedQty}개</div>
-                          <div><strong>미입고 잔량:</strong> {p.requestedQty - p.receivedQty}개</div>
+                          <div><strong>미입고 잔량:</strong> <span style={{ color: 'var(--primary)', fontWeight: 'bold' }}>{p.requestedQty - p.receivedQty}개</span></div>
                           <div><strong>단가:</strong> {p.unitPrice.toLocaleString()}원</div>
                           <div><strong>판매처:</strong> {p.sellerName}</div>
                         </div>
@@ -826,7 +828,7 @@ export const Consumables: React.FC = () => {
                   </div>
 
                   <div>
-                    <label>금회 입고 수량 *</label>
+                    <label style={{ fontWeight: '700', fontSize: '13.5px', marginBottom: '6px', display: 'block' }}>금회 입고 수량 *</label>
                     <input
                       type="number"
                       value={inboundQty || ''}
@@ -837,16 +839,17 @@ export const Consumables: React.FC = () => {
                         return p ? (p.requestedQty - p.receivedQty) : 9999;
                       })()}
                       required
+                      style={{ width: '100%', height: '40px', fontSize: '14px' }}
                     />
                   </div>
 
                   {/* 공급자 거래명세서 / 사진 촬영 증빙 지정 영역 */}
                   <div style={{ border: '1px solid var(--border)', borderRadius: '8px', padding: '16px', backgroundColor: 'var(--bg-card)' }}>
-                    <label style={{ fontWeight: '700', fontSize: '13.5px', marginBottom: '8px', display: 'block', color: 'var(--primary)' }}>
+                    <label style={{ fontWeight: '700', fontSize: '13.5px', marginBottom: '6px', display: 'block', color: 'var(--primary)' }}>
                       📑 납품 증빙 문서 및 사진 첨부 (필수)
                     </label>
                     <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '14px', lineHeight: '1.4' }}>
-                      스캔된 거래명세서 문서는 <strong>[📁 파일지정]</strong>을 이용하시고, 현장 실물 자재나 약식 인수표는 <strong>[📷 사진촬영]</strong>을 클릭하여 스마트폰으로 즉시 촬영하여 첨부하세요. (저장된 증빙은 구글 드라이브에 보존되며 월말 매입 지급처리에 사용됩니다.)
+                      스캔된 거래명세서 문서는 <strong>[📁 파일지정]</strong>을 이용하시고, 현장 실물 자재나 약식 인수표는 <strong>[📷 사진촬영]</strong>을 클릭하여 스마트폰으로 즉시 촬영하여 첨부하세요.
                     </p>
 
                     <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap', marginBottom: '12px' }}>
@@ -858,9 +861,9 @@ export const Consumables: React.FC = () => {
                           setNoInvoice(false);
                           fileInputRef.current?.click();
                         }}
-                        style={{ display: 'flex', alignItems: 'center', gap: '6px', height: '40px', padding: '0 16px', fontWeight: '700' }}
+                        style={{ display: 'flex', alignItems: 'center', gap: '6px', height: '42px', padding: '0 16px', fontWeight: '700', flex: '1 1 140px', justifyContent: 'center' }}
                       >
-                        <Upload size={16} /> 📁 파일지정 (스캔/PDF/이미지)
+                        <Upload size={16} /> 📁 파일지정
                       </button>
                       <input
                         type="file"
@@ -881,9 +884,9 @@ export const Consumables: React.FC = () => {
                           setNoInvoice(true);
                           cameraInputRef.current?.click();
                         }}
-                        style={{ display: 'flex', alignItems: 'center', gap: '6px', height: '40px', padding: '0 16px', fontWeight: '700', background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)', borderColor: '#059669' }}
+                        style={{ display: 'flex', alignItems: 'center', gap: '6px', height: '42px', padding: '0 16px', fontWeight: '700', flex: '1 1 140px', justifyContent: 'center', background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)', borderColor: '#059669' }}
                       >
-                        <Camera size={16} /> 📷 사진촬영 (스마트폰 카메라)
+                        <Camera size={16} /> 📷 사진촬영
                       </button>
                       <input
                         type="file"
@@ -901,9 +904,9 @@ export const Consumables: React.FC = () => {
                     {/* 선택된 파일 명세 안내 */}
                     {selectedFile && (
                       <div style={{ padding: '10px 12px', backgroundColor: 'var(--bg-app)', borderRadius: '6px', border: '1px solid var(--border)', fontSize: '13px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
-                        <div>
+                        <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           <span style={{ color: 'var(--text-secondary)', marginRight: '6px' }}>
-                            {noInvoice ? '📸 실물 사진 촬영' : '📄 문서 파일 지정'}:
+                            {noInvoice ? '📸 사진촬영' : '📄 문서지정'}:
                           </span>
                           <strong>{selectedFile.name}</strong>
                           <span style={{ fontSize: '11.5px', color: 'var(--text-secondary)', marginLeft: '6px' }}>
@@ -913,7 +916,7 @@ export const Consumables: React.FC = () => {
                         <button
                           type="button"
                           onClick={() => setSelectedFile(null)}
-                          style={{ border: 'none', background: 'none', color: 'var(--danger)', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold' }}
+                          style={{ border: 'none', background: 'none', color: 'var(--danger)', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold', flexShrink: 0 }}
                         >
                           취소
                         </button>
@@ -923,11 +926,11 @@ export const Consumables: React.FC = () => {
                     <div style={{ marginTop: '12px', display: 'flex', alignItems: 'center', gap: '6px', color: selectedFile ? 'var(--success)' : 'var(--danger)', fontSize: '12.5px', fontWeight: '600' }}>
                       {selectedFile ? (
                         <>
-                          <CheckCircle2 size={16} /> {noInvoice ? '실물 납품 사진 촬영본이 준비되었습니다. [입고완료] 클릭 시 소모품입고사진 증빙으로 구글 드라이브에 보존 저장됩니다.' : '거래명세서 파일이 준비되었습니다. [입고완료] 클릭 시 소모품입고번호 파일로 구글 드라이브에 보존 저장됩니다.'}
+                          <CheckCircle2 size={16} /> {noInvoice ? '실물 납품 사진이 첨부되었습니다.' : '거래명세서 파일이 첨부되었습니다.'}
                         </>
                       ) : (
                         <>
-                          <XCircle size={14} /> [📁 파일지정] 또는 [📷 사진촬영] 중 하나를 터치/클릭하여 납품 증빙을 선택해 주세요.
+                          <XCircle size={14} /> [📁 파일지정] 또는 [📷 사진촬영]으로 증빙을 먼저 선택해 주세요.
                         </>
                       )}
                     </div>
@@ -936,16 +939,48 @@ export const Consumables: React.FC = () => {
               )}
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
-              <button type="button" className="btn-secondary" onClick={() => setActiveTab('STOCK')}>취소</button>
-              <button type="submit" className="btn-primary" disabled={isUploading || inboundQty <= 0 || !selectedFile}>
+            {/* 하단 입고 완료 대형 직관 버튼 (모바일 100% 가시성 보장) */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '24px' }}>
+              <button
+                type="submit"
+                className="btn-primary"
+                disabled={isUploading || inboundQty <= 0 || !selectedFile}
+                style={{
+                  width: '100%',
+                  height: '48px',
+                  fontSize: '16px',
+                  fontWeight: '800',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px',
+                  borderRadius: '8px',
+                  background: (isUploading || inboundQty <= 0 || !selectedFile)
+                    ? '#94a3b8'
+                    : 'linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%)',
+                  boxShadow: (isUploading || inboundQty <= 0 || !selectedFile)
+                    ? 'none'
+                    : '0 4px 14px rgba(37, 99, 235, 0.35)',
+                  cursor: (isUploading || inboundQty <= 0 || !selectedFile) ? 'not-allowed' : 'pointer'
+                }}
+              >
                 {isUploading ? (
                   <>
-                    <RefreshCw size={14} className="animate-spin" style={{ marginRight: '6px' }} /> 입고 처리 중...
+                    <RefreshCw size={18} className="animate-spin" /> 입고 처리 중...
                   </>
                 ) : (
-                  '입고완료'
+                  <>
+                    <CheckCircle2 size={20} /> 입고완료 및 증빙 보전 저장
+                  </>
                 )}
+              </button>
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => setActiveTab('STOCK')}
+                style={{ width: '100%', height: '38px', fontSize: '13.5px', justifyContent: 'center' }}
+              >
+                취소 후 목록으로 이동
               </button>
             </div>
           </form>
