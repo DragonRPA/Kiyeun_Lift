@@ -1,3 +1,84 @@
+# Release Notes (v1.17.0.Build.00040 - 2026-07-31 21:55)
+
+## 🔄 [실서버 배포 & DB 테이블 동적 검증 체계 고도화]
+
+### 핵심 개편 내용
+1. **DB 테이블 동적 집계 단일 진실의 원천(SSOT) 통합 (`db.ts`)**:
+   - `ALL_DB_KEYS` 상수를 신설하여 34개 전사 DB 엔티티 키를 일괄 정의.
+   - 하드코딩되어 일부 테이블이 누락되던 `pullFromSupabase()`, `uploadAllTables()`, `clearAllTables()`의 테이블 목록을 `ALL_DB_KEYS` 동적 참조로 100% 자동 전환.
+2. **동적 스키마 검증 라벨 및 파싱 완전 자동화 (`DevDataUploader.tsx`)**:
+   - `TABLE_LABEL_MAP`에 `outbound_inspections`, `depreciation_logs`, `purchase_settlements`, `purchase_settlement_items`, `external_leases` 등 신규 스키마 라벨 추가.
+   - `schema.sql` 내의 `CREATE TABLE`을 동적으로 파싱하여 정정 테이블 수를 자동 산출하도록 완전 유동화.
+3. **원격 실서버 (Vercel Production) 즉시 배포**:
+   - 신규 개발된 '월말 매입 정산' 메뉴 및 43개 테이블 정합성 검증 도구를 실 서버에 반영.
+
+### 빌드 검증
+- TypeScript `--noEmit` 통과 ✅
+
+---
+
+# Release Notes (v1.17.0.Build.00039 - 2026-07-31 21:53)
+
+## 📋 [schema.sql 신규 테이블 3종 추가 — 40개 → 43개]
+
+### 내용
+`schema.sql` SSOT에 월말 매입 정산 관련 테이블 3종의 DDL + RLS Policy를 추가.
+스키마 정합성 도구(`DevDataUploader`)의 테이블 카운트가 **40 → 43개**로 정확히 반영.
+
+| 추가 테이블 | 설명 |
+|---|---|
+| `purchase_settlements` | 월말 매입 정산 헤더 (매입처 × 정산연월) |
+| `purchase_settlement_items` | 정산 라인 아이템 (원천 건 1:1 연결) |
+| `external_leases` | 임차(전대)장비 임차 계약 (Phase 2 예비) |
+
+- 각 테이블 RLS: anon/authenticated SELCECT/INSERT/UPDATE 정책 멱등성(DROP IF EXISTS 선행) 적용
+
+### 빌드 검증
+- TypeScript `--noEmit` 통과 ✅
+
+---
+
+# Release Notes (v1.17.0.Build.00038 - 2026-07-31 21:30)
+
+## 🧾 [월말 매입 정산 통합 시스템 Phase 1 신규 개발]
+
+### 개요
+운송료 / 소모품 매입 / 임차(전대)장비 임차료의 3가지 매입 유형을 월별 매입처 단위로 통합 집계·확정·지급 처리하는 **월말 매입 정산** 메뉴를 신설.
+
+### 주요 개발 내용
+
+1. **DB 스키마 신설 (`db.ts`)**:
+   - `PurchaseSettlement` 인터페이스: 매입처 × 정산연월 단위 통합 헤더 (`PST-YYMM0001` ID 형식)
+   - `PurchaseSettlementItem` 인터페이스: 배차 건 / 구매신청 건 / 임차 건과 1:1 원천 연결 라인 아이템
+   - `ExternalLease` 인터페이스: Phase 2 임차(전대)장비 임차 계약 관리 예비 스키마
+   - `LocalDB` getter/setter 및 Supabase 테이블 맵핑 3종 추가 (`purchase_settlements`, `purchase_settlement_items`, `external_leases`)
+
+2. **AppContext 연동 (`AppContext.tsx`)**:
+   - `purchaseSettlements` / `purchaseSettlementItems` / `externalLeases` state 추가
+   - `generateMonthlyPurchaseSettlements(ym)`: 당월 운송료(DELIVERED 배차 중 미정산 건) + 소모품 매입(COMPLETED 구매신청 중 미정산 건)을 매입처별 자동 그루핑 → PurchaseSettlement 헤더 + PurchaseSettlementItem 라인 일괄 생성. 중복 집계 방지 로직 내장.
+   - `confirmPurchaseSettlement(id)`: 집계중 → 정산확정 상태 전환
+   - `recordPurchaseSettlementPayment(id, data)`: 지급금액 누적, 전액지급 시 PAID 전환. 운송료 타입은 연결 배차 건의 `reconciliationStatus` 자동 PAID 연동.
+   - `savePurchaseSettlement(partial)`: 비고 등 부분 수정
+
+3. **신규 페이지 (`PurchaseSettlementPage.tsx`)**:
+   - 정산 연월 선택 (최근 12개월 드롭다운)
+   - [자동 집계] 버튼: 당월 미정산 데이터 자동 집계 및 결과 안내
+   - 유형별 탭 필터 (전체 / 운송료 / 소모품 매입 / 임차료)
+   - 요약 카드: 총 정산건수 / 총 청구액 / 지급 완료액 / 미지급 잔액
+   - 매입처 카드 목록: 상태 뱃지(집계중/정산확정/지급완료), 펼쳐보기(라인 아이템 테이블 + 증빙 링크)
+   - [정산 확정] 버튼 (PENDING → CONFIRMED)
+   - [지급 처리] 버튼: 지급금액/지급일/수단/계좌번호/비고 입력 모달 → 누적 지급 처리
+   - 비고 인라인 수정 기능
+   - Phase 2 임차료 안내 섹션
+
+4. **메뉴 등록 (`App.tsx`, `menu_config.ts`)**:
+   - 경영관리 그룹 최상단에 `월말 매입 정산` 메뉴 추가
+
+### 빌드 검증
+- TypeScript `--noEmit` 통과 ✅
+
+---
+
 # Release Notes (v1.16.9.Build.00037 - 2026-07-31 21:18)
 
 ## 🛡️ [소모품 입고 처리 consumables 테이블 'supplier' 미존재 컬럼 오염 차단 패치]

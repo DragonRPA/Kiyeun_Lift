@@ -632,7 +632,67 @@ export interface DepreciationLog {
   updatedAt: string;
 }
 
+// ============================================================
+// 월말 매입 정산 (Purchase Settlement)
+// ============================================================
+
+export type PurchaseSettlementType = 'TRANSPORT' | 'CONSUMABLE' | 'EQUIPMENT_LEASE';
+export type PurchaseSettlementStatus = 'PENDING' | 'CONFIRMED' | 'PAID';
+
+/** 월말 매입 정산 헤더 — 매입처 × 정산 연월 단위 통합 집계 */
+export interface PurchaseSettlement {
+  id: string;                          // PST-YYMM0001 형식
+  settlementYm: string;                // 정산 연월 YYYY-MM
+  settlementType: PurchaseSettlementType;
+  vendorId?: string;                   // 매입처 ID (TransportCompany.id or Vendor.id)
+  vendorName: string;                  // 매입처명
+  totalAmount: number;                 // 총 청구액
+  paidAmount: number;                  // 지급 완료액
+  status: PurchaseSettlementStatus;
+  paymentDate?: string;                // 최종 지급 완료일
+  paymentMethod?: string;              // 지급 수단
+  bankAccount?: string;                // 지급 계좌번호
+  confirmedAt?: string;                // 정산 확정 일시
+  confirmedBy?: string;                // 정산 확정자 이름
+  memo?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** 정산 라인 아이템 — 원천 건(배차 / 구매신청 / 임차)과 1:1 연결 */
+export interface PurchaseSettlementItem {
+  id: string;
+  settlementId: string;                // FK → PurchaseSettlement.id
+  sourceType: 'DELIVERY' | 'CONSUMABLE_PURCHASE' | 'EQUIPMENT_LEASE';
+  sourceId: string;                    // 원천 ID
+  itemDescription: string;            // 내역 설명
+  quantity: number;                    // 수량 or 가동일수
+  unitPrice: number;                   // 단가 or 일할료
+  amount: number;                      // 금액
+  evidenceFileUrl?: string;            // 증빙 파일 URL
+  createdAt: string;
+}
+
+/** 임차(전대)장비 임차 계약 — Phase 2 */
+export interface ExternalLease {
+  id: string;
+  vendorId: string;                    // 임차사 ID (Vendor[RENTAL])
+  contractId: string;                  // 연결 계약 ID
+  contractAssetId?: string;            // 연결 계약 자산 슬롯 ID
+  assetDescription: string;            // 임차 장비 사양/모델명
+  monthlyRentFee: number;              // 월 임차료
+  dailyRentFee: number;                // 일할 임차료
+  leaseStartDate: string;              // 임차 시작일 (출고 완료일)
+  leaseEndDate?: string;               // 임차 종료일 (반납 완료일)
+  status: 'ACTIVE' | 'RETURNED';
+  statementFileUrl?: string;           // 임차사 거래명세서 증빙
+  memo?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 // 초기 로컬 스토리지 데이터 생성
+
 const generateMockProducts = (): Product[] => {
   return [
     { id: 'prod-1', modelName: 'SKY-800', feet: 8, spec: '배터리형, 8m', manufacturer: 'SKY', isActive: true, createdAt: new Date().toISOString() },
@@ -1141,6 +1201,15 @@ class LocalDB {
   get depreciationLogs() { return this.get<DepreciationLog>('depreciationLogs', []); }
   set depreciationLogs(val: DepreciationLog[]) { this.set('depreciationLogs', val); }
 
+  get purchaseSettlements() { return this.get<PurchaseSettlement>('purchaseSettlements', []); }
+  set purchaseSettlements(val: PurchaseSettlement[]) { this.set('purchaseSettlements', val); }
+
+  get purchaseSettlementItems() { return this.get<PurchaseSettlementItem>('purchaseSettlementItems', []); }
+  set purchaseSettlementItems(val: PurchaseSettlementItem[]) { this.set('purchaseSettlementItems', val); }
+
+  get externalLeases() { return this.get<ExternalLease>('externalLeases', []); }
+  set externalLeases(val: ExternalLease[]) { this.set('externalLeases', val); }
+
   // Supabase 테이블 맵핑
   private mapToSupabaseTable(key: string): string {
     const mapping: Record<string, string> = {
@@ -1173,7 +1242,10 @@ class LocalDB {
       vendors: 'vendors',
       cashFlowSnapshots: 'cash_flow_snapshots',
       outboundInspections: 'outbound_inspections',
-      depreciationLogs: 'depreciation_logs'
+      depreciationLogs: 'depreciation_logs',
+      purchaseSettlements: 'purchase_settlements',
+      purchaseSettlementItems: 'purchase_settlement_items',
+      externalLeases: 'external_leases'
     };
     return mapping[key] || key;
   }
@@ -1305,6 +1377,17 @@ class LocalDB {
     }
   }
 
+export const ALL_DB_KEYS = [
+  'users', 'departments', 'permissions', 'customers', 'contacts', 'sites', 
+  'products', 'assets', 'consumables', 'consumableLogs', 'consumablePurchases',
+  'contracts', 'contractAssets', 'contractHistory', 'deliveries', 
+  'transportCompanies', 'transportDrivers', 'vendors',
+  'billings', 'billingDetails', 'payments', 'repairs', 'repairConsumables', 'todos', 
+  'bankTransactions', 'bankMatchingRules', 'googleConfigs', 'assetInOutLogs',
+  'cashFlowSnapshots', 'outboundInspections', 'depreciationLogs',
+  'purchaseSettlements', 'purchaseSettlementItems', 'externalLeases'
+];
+
   async pullFromSupabase(): Promise<void> {
     if (!supabase) return;
 
@@ -1322,13 +1405,7 @@ class LocalDB {
     // (이전에 SEED 데이터가 localStorage에 캐싱된 경우도 완전히 초기화)
     this.set('googleConfigs', []);
 
-    const tables = [
-      'users', 'departments', 'permissions', 'customers', 'contacts', 'sites', 
-      'products', 'assets', 'consumables', 'consumableLogs', 'consumablePurchases',
-      'contracts', 'contractAssets', 'contractHistory', 'deliveries', 
-      'transportCompanies', 'transportDrivers', 'vendors',
-      'billings', 'billingDetails', 'payments', 'repairs', 'repairConsumables', 'todos', 'bankTransactions', 'bankMatchingRules', 'googleConfigs', 'assetInOutLogs'
-    ];
+    const tables = ALL_DB_KEYS;
 
     try {
       const results = await Promise.all(
@@ -1570,12 +1647,7 @@ class LocalDB {
   // Bulk upload all tables to Supabase
   async uploadAllTables(): Promise<void> {
     if (!supabase) return;
-    const tables = [
-      'users','departments','permissions','customers','contacts','sites',
-      'products','assets','consumables','consumableLogs','consumablePurchases','contracts','contractAssets',
-      'contractHistory','deliveries','transportCompanies','transportDrivers','vendors',
-      'billings','billingDetails','payments','repairs','repairConsumables','todos','bankTransactions','bankMatchingRules','googleConfigs','assetInOutLogs'
-    ];
+    const tables = ALL_DB_KEYS;
     await Promise.all(tables.map(async (key) => {
       const data = (this as any)[key] as any[];
       const tableName = this.mapToSupabaseTable(key);
@@ -1587,12 +1659,7 @@ class LocalDB {
 
   // Clear all data from Supabase tables
   async clearAllTables(): Promise<void> {
-    const tables = [
-      'users','departments','permissions','customers','contacts','sites',
-      'products','assets','consumables','consumableLogs','consumablePurchases','contracts','contractAssets',
-      'contractHistory','deliveries','transportCompanies','transportDrivers','vendors',
-      'billings','billingDetails','payments','repairs','repairConsumables','todos','bankTransactions','bankMatchingRules','googleConfigs','assetInOutLogs'
-    ];
+    const tables = ALL_DB_KEYS;
     // Clear local storage first
     tables.forEach(key => {
       this.set(key, []);

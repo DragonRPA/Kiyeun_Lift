@@ -131,6 +131,11 @@ const TABLE_LABEL_MAP: Record<string, string> = {
   todos: 'ToDo 할일',
   google_configs: '구글 드라이브 연동 정보',
   cash_flow_snapshots: '캐시플로우 스냅샷',
+  outbound_inspections: '출고 검수 의뢰',
+  depreciation_logs: '감가상각 마감 이력',
+  purchase_settlements: '월말 매입 정산 헤더',
+  purchase_settlement_items: '매입 정산 라인 항목',
+  external_leases: '임차(전대)장비 임차 계약',
 };
 
 const COLUMN_LABEL_MAP: Record<string, string> = {

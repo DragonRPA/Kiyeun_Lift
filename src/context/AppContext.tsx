@@ -1,6 +1,6 @@
 // d:\Kiyeun_Lift\src\context\AppContext.tsx
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { db, supabase, User, MenuPermission, createMenuPermission, Customer, CustomerContact, CustomerSite, Product, Asset, Consumable, ConsumableLog, ConsumablePurchaseRequest, Contract, ContractAsset, ContractHistory, Billing, BillingDetail, Payment, Delivery, TransportCompany, TransportDriver, Repair, RepairConsumable, Todo, BankTransaction, BankMatchingRule, AssetInOutLog, Vendor, GoogleConfig, CashFlowSnapshot, OutboundInspection, DepreciationLog, findCustomerByNormalizedName } from '../services/db';
+import { db, supabase, User, MenuPermission, createMenuPermission, Customer, CustomerContact, CustomerSite, Product, Asset, Consumable, ConsumableLog, ConsumablePurchaseRequest, Contract, ContractAsset, ContractHistory, Billing, BillingDetail, Payment, Delivery, TransportCompany, TransportDriver, Repair, RepairConsumable, Todo, BankTransaction, BankMatchingRule, AssetInOutLog, Vendor, GoogleConfig, CashFlowSnapshot, OutboundInspection, DepreciationLog, PurchaseSettlement, PurchaseSettlementItem, ExternalLease, PurchaseSettlementType, PurchaseSettlementStatus, findCustomerByNormalizedName } from '../services/db';
 import { ErrorModal } from '../components/ErrorModal';
 import { getAllSystemMenuIds } from '../config/menu_config';
 
@@ -76,6 +76,9 @@ interface AppContextType {
   cashFlowSnapshots: CashFlowSnapshot[];
   outboundInspections: OutboundInspection[];
   depreciationLogs: DepreciationLog[];
+  purchaseSettlements: PurchaseSettlement[];
+  purchaseSettlementItems: PurchaseSettlementItem[];
+  externalLeases: ExternalLease[];
 
   // Mutators
   refreshAllData: () => void;
@@ -148,6 +151,12 @@ interface AppContextType {
   // Transport Master
   saveTransportDataOnFly: (companyName: string, driverName: string, contact: string, vehicleNo: string, vehicleType: string) => void;
 
+  // Purchase Settlement Mutators
+  generateMonthlyPurchaseSettlements: (ym: string) => Promise<{ transport: number; consumable: number }>;
+  confirmPurchaseSettlement: (id: string) => Promise<void>;
+  recordPurchaseSettlementPayment: (id: string, data: { paidAmount: number; paymentDate: string; paymentMethod: string; bankAccount?: string; memo?: string }) => Promise<void>;
+  savePurchaseSettlement: (settlement: Partial<PurchaseSettlement>) => Promise<void>;
+
   // Navigation states (cross-page routing)
   activeTab: string;
   setActiveTab: (tab: string) => void;
@@ -192,6 +201,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [cashFlowSnapshots, setCashFlowSnapshots] = useState<CashFlowSnapshot[]>([]);
   const [outboundInspections, setOutboundInspections] = useState<OutboundInspection[]>([]);
   const [depreciationLogs, setDepreciationLogs] = useState<DepreciationLog[]>([]);
+  const [purchaseSettlements, setPurchaseSettlements] = useState<PurchaseSettlement[]>([]);
+  const [purchaseSettlementItems, setPurchaseSettlementItems] = useState<PurchaseSettlementItem[]>([]);
+  const [externalLeases, setExternalLeases] = useState<ExternalLease[]>([]);
 
   // Navigation / Routing states
   const [activeTab, setActiveTab] = useState<string>('dashboard');
@@ -262,6 +274,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setCashFlowSnapshots([...db.cashFlowSnapshots]);
     setOutboundInspections([...db.outboundInspections]);
     setDepreciationLogs([...db.depreciationLogs]);
+    setPurchaseSettlements([...db.purchaseSettlements]);
+    setPurchaseSettlementItems([...db.purchaseSettlementItems]);
+    setExternalLeases([...db.externalLeases]);
   };
 
   // 전체 28개 테이블 Supabase pull 후 state 동기화 (초기 로딩 전용)
@@ -2835,11 +2850,183 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return { count: updatedCount, totalAmount: totalDepnSum };
   };
 
+  // ─────────────────────────────────────────────────────────
+  // 월말 매입 정산 관련 Mutators
+  // ─────────────────────────────────────────────────────────
+
+  /** 당월 운송료 + 소모품 매입 자동 집계 → PurchaseSettlement 생성 */
+  const generateMonthlyPurchaseSettlements = async (ym: string): Promise<{ transport: number; consumable: number }> => {
+    const nowIso = new Date().toISOString();
+    let transportCount = 0;
+    let consumableCount = 0;
+
+    // ① 운송료 집계 — 당월 DELIVERED 배차 중 미정산 건
+    const deliveriesOfMonth = db.deliveries.filter(d => {
+      const dateStr = d.unloadingDate || d.scheduledDate || d.requestDate;
+      return dateStr?.startsWith(ym) &&
+        d.status === 'DELIVERED' &&
+        d.reconciliationStatus !== 'PAID' &&
+        (d.deliveryCostConfirmed || 0) > 0;
+    });
+
+    // 운송사별 그루핑
+    const transportGroups = new Map<string, typeof deliveriesOfMonth>();
+    deliveriesOfMonth.forEach(d => {
+      const key = d.transportCompany || '미지정 운송사';
+      if (!transportGroups.has(key)) transportGroups.set(key, []);
+      transportGroups.get(key)!.push(d);
+    });
+
+    for (const [vendorName, items] of transportGroups.entries()) {
+      // 이미 동일 정산월+운송사 정산건이 있으면 스킵
+      const exists = db.purchaseSettlements.find(p => p.settlementYm === ym && p.settlementType === 'TRANSPORT' && p.vendorName === vendorName);
+      if (exists) continue;
+
+      const totalAmount = items.reduce((sum, d) => sum + (d.deliveryCostConfirmed || d.deliveryCost || 0), 0);
+      const settlement = db.insertRow<PurchaseSettlement>('purchaseSettlements', {
+        settlementYm: ym,
+        settlementType: 'TRANSPORT',
+        vendorName,
+        totalAmount,
+        paidAmount: 0,
+        status: 'PENDING',
+        createdAt: nowIso,
+        updatedAt: nowIso
+      });
+
+      items.forEach(d => {
+        db.insertRow<PurchaseSettlementItem>('purchaseSettlementItems', {
+          settlementId: settlement.id,
+          sourceType: 'DELIVERY',
+          sourceId: d.id,
+          itemDescription: `배차 ${d.id} / ${d.dispatchCategory || d.type} (${d.unloadingDate || d.scheduledDate || d.requestDate})`,
+          quantity: 1,
+          unitPrice: d.deliveryCostConfirmed || d.deliveryCost || 0,
+          amount: d.deliveryCostConfirmed || d.deliveryCost || 0,
+          evidenceFileUrl: d.statementFileUrl,
+          createdAt: nowIso
+        });
+      });
+      transportCount++;
+    }
+
+    // ② 소모품 매입 집계 — 당월 COMPLETED 구매신청 중 미정산 건
+    const existingConsumableSettlementSourceIds = new Set(
+      db.purchaseSettlementItems
+        .filter(i => i.sourceType === 'CONSUMABLE_PURCHASE')
+        .map(i => i.sourceId)
+    );
+
+    const purchasesOfMonth = db.consumablePurchases.filter(p =>
+      p.status === 'COMPLETED' &&
+      p.completedDate?.startsWith(ym) &&
+      !existingConsumableSettlementSourceIds.has(p.id)
+    );
+
+    // 판매처별 그루핑
+    const consumableGroups = new Map<string, typeof purchasesOfMonth>();
+    purchasesOfMonth.forEach(p => {
+      const key = p.sellerName || '미지정 판매처';
+      if (!consumableGroups.has(key)) consumableGroups.set(key, []);
+      consumableGroups.get(key)!.push(p);
+    });
+
+    for (const [vendorName, items] of consumableGroups.entries()) {
+      const totalAmount = items.reduce((sum, p) => sum + (p.requestedQty * p.unitPrice), 0);
+      const settlement = db.insertRow<PurchaseSettlement>('purchaseSettlements', {
+        settlementYm: ym,
+        settlementType: 'CONSUMABLE',
+        vendorName,
+        totalAmount,
+        paidAmount: 0,
+        status: 'PENDING',
+        createdAt: nowIso,
+        updatedAt: nowIso
+      });
+
+      items.forEach(p => {
+        db.insertRow<PurchaseSettlementItem>('purchaseSettlementItems', {
+          settlementId: settlement.id,
+          sourceType: 'CONSUMABLE_PURCHASE',
+          sourceId: p.id,
+          itemDescription: `${p.modelName} × ${p.requestedQty}개 (${p.completedDate || p.requestDate})`,
+          quantity: p.requestedQty,
+          unitPrice: p.unitPrice,
+          amount: p.requestedQty * p.unitPrice,
+          evidenceFileUrl: p.statementFileUrl,
+          createdAt: nowIso
+        });
+      });
+      consumableCount++;
+    }
+
+    try {
+      await db.awaitPendingWrites();
+    } catch (err: any) {
+      console.error('generateMonthlyPurchaseSettlements error:', err);
+    }
+    refreshAllData();
+    return { transport: transportCount, consumable: consumableCount };
+  };
+
+  const confirmPurchaseSettlement = async (id: string): Promise<void> => {
+    db.updateRow<PurchaseSettlement>('purchaseSettlements', id, {
+      status: 'CONFIRMED',
+      confirmedAt: new Date().toISOString(),
+      confirmedBy: currentUser?.name || '시스템'
+    });
+    await db.awaitPendingWrites();
+    refreshAllData();
+  };
+
+  const recordPurchaseSettlementPayment = async (
+    id: string,
+    data: { paidAmount: number; paymentDate: string; paymentMethod: string; bankAccount?: string; memo?: string }
+  ): Promise<void> => {
+    const settlement = db.purchaseSettlements.find(p => p.id === id);
+    if (!settlement) return;
+    const newPaidAmount = (settlement.paidAmount || 0) + data.paidAmount;
+    const newStatus: PurchaseSettlementStatus = newPaidAmount >= settlement.totalAmount ? 'PAID' : 'CONFIRMED';
+    db.updateRow<PurchaseSettlement>('purchaseSettlements', id, {
+      paidAmount: newPaidAmount,
+      status: newStatus,
+      paymentDate: data.paymentDate,
+      paymentMethod: data.paymentMethod,
+      bankAccount: data.bankAccount,
+      memo: data.memo
+    });
+
+    // 연결된 배차 건 상태 PAID 연동
+    if (newStatus === 'PAID' && settlement.settlementType === 'TRANSPORT') {
+      const items = db.purchaseSettlementItems.filter(i => i.settlementId === id && i.sourceType === 'DELIVERY');
+      items.forEach(item => {
+        db.updateRow<Delivery>('deliveries', item.sourceId, {
+          reconciliationStatus: 'PAID',
+          paymentCompletedAt: new Date().toISOString()
+        });
+      });
+    }
+
+    await db.awaitPendingWrites();
+    refreshAllData();
+  };
+
+  const savePurchaseSettlement = async (settlement: Partial<PurchaseSettlement>): Promise<void> => {
+    if (!settlement.id) return;
+    db.updateRow<PurchaseSettlement>('purchaseSettlements', settlement.id, {
+      ...settlement,
+      updatedAt: new Date().toISOString()
+    });
+    await db.awaitPendingWrites();
+    refreshAllData();
+  };
+
   return (
     <AppContext.Provider value={{
       currentUser, theme, toggleTheme, login, logout, hasPermission, showErrorModal,
       users, permissions, customers, contacts, sites, products, assets, consumables, consumableLogs, consumablePurchases, contracts, contractAssets, contractHistory, deliveries, billings, billingDetails, payments, repairs, repairConsumables, transportCompanies, transportDrivers, todos,
       bankTransactions, bankMatchingRules, assetInOutLogs, vendors, googleConfigs, cashFlowSnapshots, outboundInspections, depreciationLogs,
+      purchaseSettlements, purchaseSettlementItems, externalLeases,
       refreshAllData, executeMonthlyDepreciation, loadTablesForMenu, updatePermissions, saveUser, saveCustomer, saveContact, saveSite, saveProduct, saveAsset, updateGoogleConfig,
       saveCashFlowSnapshot, deleteCashFlowSnapshot, saveVendor, deleteVendor,
       acquireAsset, disposeAsset, registerRentedAsset, returnRentedAsset, changeAssetStatus,
@@ -2854,6 +3041,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       dispatchDelivery, settleDeliveryCost, completeDelivery, completeInboundDelivery,
       registerRepair,
       saveTransportDataOnFly,
+      generateMonthlyPurchaseSettlements, confirmPurchaseSettlement, recordPurchaseSettlementPayment, savePurchaseSettlement,
       activeTab,
       setActiveTab,
       navigationPayload,

@@ -685,8 +685,105 @@ CREATE POLICY "allow_authenticated_update" ON depreciation_logs FOR UPDATE TO au
 
 
 -- ==========================================
+-- 월말 매입 정산 (Purchase Settlement)
+-- ==========================================
+
+CREATE TABLE purchase_settlements (
+    id TEXT PRIMARY KEY,
+    "settlementYm" TEXT NOT NULL,
+    "settlementType" TEXT NOT NULL,
+    "vendorId" TEXT,
+    "vendorName" TEXT NOT NULL,
+    "totalAmount" NUMERIC NOT NULL DEFAULT 0,
+    "paidAmount" NUMERIC NOT NULL DEFAULT 0,
+    status TEXT NOT NULL DEFAULT 'PENDING',
+    "paymentDate" TEXT,
+    "paymentMethod" TEXT,
+    "bankAccount" TEXT,
+    "confirmedAt" TEXT,
+    "confirmedBy" TEXT,
+    memo TEXT,
+    "createdAt" TEXT NOT NULL,
+    "updatedAt" TEXT NOT NULL
+);
+
+ALTER TABLE purchase_settlements ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "allow_anon_select" ON purchase_settlements;
+DROP POLICY IF EXISTS "allow_anon_insert" ON purchase_settlements;
+DROP POLICY IF EXISTS "allow_anon_update" ON purchase_settlements;
+DROP POLICY IF EXISTS "allow_authenticated_select" ON purchase_settlements;
+DROP POLICY IF EXISTS "allow_authenticated_insert" ON purchase_settlements;
+DROP POLICY IF EXISTS "allow_authenticated_update" ON purchase_settlements;
+CREATE POLICY "allow_anon_select" ON purchase_settlements FOR SELECT TO anon USING (true);
+CREATE POLICY "allow_anon_insert" ON purchase_settlements FOR INSERT TO anon WITH CHECK (true);
+CREATE POLICY "allow_anon_update" ON purchase_settlements FOR UPDATE TO anon USING (true) WITH CHECK (true);
+CREATE POLICY "allow_authenticated_select" ON purchase_settlements FOR SELECT TO authenticated USING (true);
+CREATE POLICY "allow_authenticated_insert" ON purchase_settlements FOR INSERT TO authenticated WITH CHECK (true);
+CREATE POLICY "allow_authenticated_update" ON purchase_settlements FOR UPDATE TO authenticated USING (true) WITH CHECK (true);
+
+CREATE TABLE purchase_settlement_items (
+    id TEXT PRIMARY KEY,
+    "settlementId" TEXT NOT NULL,
+    "sourceType" TEXT NOT NULL,
+    "sourceId" TEXT NOT NULL,
+    "itemDescription" TEXT NOT NULL,
+    quantity NUMERIC NOT NULL DEFAULT 1,
+    "unitPrice" NUMERIC NOT NULL DEFAULT 0,
+    amount NUMERIC NOT NULL DEFAULT 0,
+    "evidenceFileUrl" TEXT,
+    "createdAt" TEXT NOT NULL
+);
+
+ALTER TABLE purchase_settlement_items ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "allow_anon_select" ON purchase_settlement_items;
+DROP POLICY IF EXISTS "allow_anon_insert" ON purchase_settlement_items;
+DROP POLICY IF EXISTS "allow_anon_update" ON purchase_settlement_items;
+DROP POLICY IF EXISTS "allow_authenticated_select" ON purchase_settlement_items;
+DROP POLICY IF EXISTS "allow_authenticated_insert" ON purchase_settlement_items;
+DROP POLICY IF EXISTS "allow_authenticated_update" ON purchase_settlement_items;
+CREATE POLICY "allow_anon_select" ON purchase_settlement_items FOR SELECT TO anon USING (true);
+CREATE POLICY "allow_anon_insert" ON purchase_settlement_items FOR INSERT TO anon WITH CHECK (true);
+CREATE POLICY "allow_anon_update" ON purchase_settlement_items FOR UPDATE TO anon USING (true) WITH CHECK (true);
+CREATE POLICY "allow_authenticated_select" ON purchase_settlement_items FOR SELECT TO authenticated USING (true);
+CREATE POLICY "allow_authenticated_insert" ON purchase_settlement_items FOR INSERT TO authenticated WITH CHECK (true);
+CREATE POLICY "allow_authenticated_update" ON purchase_settlement_items FOR UPDATE TO authenticated USING (true) WITH CHECK (true);
+
+CREATE TABLE external_leases (
+    id TEXT PRIMARY KEY,
+    "vendorId" TEXT NOT NULL,
+    "contractId" TEXT NOT NULL,
+    "contractAssetId" TEXT,
+    "assetDescription" TEXT NOT NULL,
+    "monthlyRentFee" NUMERIC NOT NULL DEFAULT 0,
+    "dailyRentFee" NUMERIC NOT NULL DEFAULT 0,
+    "leaseStartDate" TEXT NOT NULL,
+    "leaseEndDate" TEXT,
+    status TEXT NOT NULL DEFAULT 'ACTIVE',
+    "statementFileUrl" TEXT,
+    memo TEXT,
+    "createdAt" TEXT NOT NULL,
+    "updatedAt" TEXT NOT NULL
+);
+
+ALTER TABLE external_leases ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "allow_anon_select" ON external_leases;
+DROP POLICY IF EXISTS "allow_anon_insert" ON external_leases;
+DROP POLICY IF EXISTS "allow_anon_update" ON external_leases;
+DROP POLICY IF EXISTS "allow_authenticated_select" ON external_leases;
+DROP POLICY IF EXISTS "allow_authenticated_insert" ON external_leases;
+DROP POLICY IF EXISTS "allow_authenticated_update" ON external_leases;
+CREATE POLICY "allow_anon_select" ON external_leases FOR SELECT TO anon USING (true);
+CREATE POLICY "allow_anon_insert" ON external_leases FOR INSERT TO anon WITH CHECK (true);
+CREATE POLICY "allow_anon_update" ON external_leases FOR UPDATE TO anon USING (true) WITH CHECK (true);
+CREATE POLICY "allow_authenticated_select" ON external_leases FOR SELECT TO authenticated USING (true);
+CREATE POLICY "allow_authenticated_insert" ON external_leases FOR INSERT TO authenticated WITH CHECK (true);
+CREATE POLICY "allow_authenticated_update" ON external_leases FOR UPDATE TO authenticated USING (true) WITH CHECK (true);
+
+
+-- ==========================================
 -- 초기 기초 데이터 시딩 (Seed Data)
 -- ==========================================
+
 
 -- 1. 부서 및 조직도 시드 (비어 있음)
 

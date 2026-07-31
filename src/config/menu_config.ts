@@ -69,6 +69,7 @@ export const SYSTEM_MENU_CONFIG: MenuGroupConfig[] = [
     id: 'grp_management',
     name: '경영관리',
     items: [
+      { id: 'purchase_settlement', name: '월말 매입 정산' },
       { id: 'vendors', name: '매입처 (공급자/외주처) 관리' },
       { id: 'bank_matching', name: '은행 입출금 대장' },
       { id: 'corporate_card', name: '법인카드 매입정산' },
