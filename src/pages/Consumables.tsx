@@ -984,6 +984,8 @@ export const Consumables: React.FC = () => {
               </button>
             </div>
           </form>
+          {/* 스마트폰 하단 툴바 가림 방지용 넉넉한 150px 하단 여백 스페이서 */}
+          <div style={{ height: '150px', width: '100%', clear: 'both' }} aria-hidden="true" />
         </div>
       )}
 
@@ -1232,6 +1234,8 @@ export const Consumables: React.FC = () => {
           </div>
         </div>
       )}
+      {/* 모바일 화면 하단 스크롤 여유 150px 스페이서 */}
+      <div style={{ height: '150px', width: '100%', clear: 'both' }} aria-hidden="true" />
     </div>
   );
 };
