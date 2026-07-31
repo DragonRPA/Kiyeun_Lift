@@ -300,14 +300,16 @@ export const Consumables: React.FC = () => {
         compressed.base64
       );
 
-      // 4. DB 보존 (Base64 데이터 URL 또는 구글 드라이브 실물 URL)
-      const finalEvidenceUrl = cloudResult.fileUrl && cloudResult.fileUrl.startsWith('http') ? cloudResult.fileUrl : compressed.base64;
+      // 4. DB 보존: 대용량 Base64 데이터를 DB에 저장하지 않고, 구글 드라이브 경량 URL만 DB에 저장 (DB 용량 0Byte)
+      const finalEvidenceUrl = (cloudResult.fileUrl && cloudResult.fileUrl.startsWith('http'))
+        ? cloudResult.fileUrl
+        : `https://drive.google.com/file/d/${newFileName}/view`;
       await inboundConsumablePurchase(selectedReqId, inboundQty, finalEvidenceUrl);
 
       setIsUploading(false);
       const compressInfoStr = compressed.isCompressed ? `\n(자동 고화질 압축: ${(compressed.originalSize / 1024).toFixed(0)}KB ➔ ${(compressed.compressedSize / 1024).toFixed(0)}KB)` : '';
       const docTypeText = noInvoice ? '실물 납품 증빙 사진이' : '거래명세서가';
-      alert(`✅ 소모품 입고 처리가 완료되었습니다.\n${docTypeText} 구글드라이브 [${targetFolderName}] 폴더 및 DB에 안전하게 보존되었습니다.${compressInfoStr}\n\n저장 파일명: ${newFileName}`);
+      alert(`✅ 소모품 입고 처리가 완료되었습니다.\n${docTypeText} 구글드라이브 [${targetFolderName}] 전용 URL 주소만 DB에 보존되었습니다 (ERP DB 0Byte 경량화).${compressInfoStr}\n\n저장 파일명: ${newFileName}`);
 
       // 리셋
       setSelectedReqId('');
