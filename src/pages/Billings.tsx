@@ -153,7 +153,20 @@ export const Billings: React.FC = () => {
   };
 
   const activeBilling = billings.find(b => b.id === selectedBillingId);
-  const activeBillingDetails = billingDetails.filter(bd => bd.billingId === selectedBillingId);
+
+  // 청구서 상세 중복 제거 헬퍼 함수 (DB 중복 데이터 자동 방어)
+  const getBillingDetailsDeduplicated = (bId: string) => {
+    const raw = billingDetails.filter(bd => bd.billingId === bId);
+    const seen = new Set<string>();
+    return raw.filter(bd => {
+      const key = `${bd.contractAssetId || ''}_${bd.itemName}_${bd.amount}_${bd.description || ''}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  };
+
+  const activeBillingDetails = selectedBillingId ? getBillingDetailsDeduplicated(selectedBillingId) : [];
 
   const handleGenerateSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -233,7 +246,7 @@ export const Billings: React.FC = () => {
   // 거래명세서 PDF 직접 생성 (시스템 Excel→PDF 변환)
   const printStatementAsPdf = async () => {
     const billing = billings.find(b => b.id === mailBillingId);
-    const details = billingDetails.filter(d => d.billingId === mailBillingId);
+    const details = mailBillingId ? getBillingDetailsDeduplicated(mailBillingId) : [];
     const customer = customers.find(c => c.id === billing?.customerId);
     const contract = contracts.find(c => c.id === billing?.contractId);
     const site = sites.find(s => s.id === contract?.siteId);

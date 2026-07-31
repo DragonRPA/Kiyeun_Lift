@@ -1,3 +1,21 @@
+# Release Notes (v1.16.9.Build.00023 - 2026-07-31 20:02)
+
+## 🐛 [청구서 세부 내역 중복 노출 결함 해결 & DB 원천 중복 소탕]
+
+### 결함 원인 분석
+- 청구서 생성 및 DB 시드/동기화 과정에서 동일한 `billingId`에 동일한 `BillingDetail` 레코드가 중복 저장되면서, 화면 패널 및 거래명세서 출력 시 항목(기타테스트 8만 원, GS-3246 렌탈료 30만 원 등)이 2번씩 이중 노출되던 현상 발생.
+
+### 수정 내용
+1. **DB 내 기존 중복 레코드 자동 소탕 (`AppContext.tsx`)**:
+   - `syncLocalToState` 실행 시 동일 `billingId` 내 동일 항목(`contractAssetId` + `itemName` + `amount` + `description`)을 검출하여 1개만 남기고 자동으로 중복 레코드 소탕 제거.
+2. **UI 및 PDF 렌더링 2중 중복 방어 헬퍼 적용 (`Billings.tsx`)**:
+   - `getBillingDetailsDeduplicated` 헬퍼 함수를 통해 청구서 명세서 패널 및 거래명세서 PDF 다운로드 시 항목 중복 노출을 100% 원천 차단.
+
+### 빌드 검증
+- TypeScript + Vite 빌드 정상 통과 ✅
+
+---
+
 # Release Notes (v1.16.9.Build.00022 - 2026-07-31 19:57)
 
 ## 📐 [거래명세서 PDF - 중앙 세로 이중선 겹선(다중 선) 현상 100% 영구 해결]

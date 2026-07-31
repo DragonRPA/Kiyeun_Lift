@@ -215,6 +215,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // ─────────────────────────────────────────────────────────
   // 로컬 db 인메모리 스토어 → React state 즉시 동기화 (Supabase pull 없음 — 저장 후 즉각 화면 반영용)
   const syncLocalToState = () => {
+    // 💡 DB 상에 누적된 중복 청구 상세 레코드 자동 소탕
+    const seen = new Set<string>();
+    const duplicateIds: string[] = [];
+    db.billingDetails.forEach(bd => {
+      const key = `${bd.billingId}_${bd.contractAssetId || ''}_${bd.itemName}_${bd.amount}_${bd.description || ''}`;
+      if (seen.has(key)) {
+        duplicateIds.push(bd.id);
+      } else {
+        seen.add(key);
+      }
+    });
+    if (duplicateIds.length > 0) {
+      duplicateIds.forEach(id => db.deleteRow('billingDetails', id));
+    }
+
     setUsers([...db.users]);
     setPermissions([...db.permissions]);
     setCustomers([...db.customers]);
