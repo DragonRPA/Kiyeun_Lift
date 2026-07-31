@@ -1448,13 +1448,17 @@ class LocalDB {
     return `${prefix}${paddedNum}`;
   }
 
-  private sanitizeSupabasePayload(obj: any): any {
+  private sanitizeSupabasePayload(obj: any, tableName?: string): any {
     if (!obj || typeof obj !== 'object') return obj;
     const sanitized: any = Array.isArray(obj) ? [] : {};
     for (const key in obj) {
       const val = obj[key];
       // undefined 값은 제외 (PostgreSQL update/insert Payload 오염 및 쿼리 거부 방지)
       if (val === undefined) {
+        continue;
+      }
+      // DB consumables 스키마에 없는 supplier 컬럼 오염 방지
+      if (tableName === 'consumables' && key === 'supplier') {
         continue;
       }
       if (typeof val === 'string' && (key === 'requesterId' || key === 'accepterId' || key === 'completerId' || key === 'inbounderId')) {
@@ -1486,7 +1490,7 @@ class LocalDB {
 
     if (supabase) {
       const tableName = this.mapToSupabaseTable(key as string);
-      const payloadForSupabase = this.sanitizeSupabasePayload(newRow);
+      const payloadForSupabase = this.sanitizeSupabasePayload(newRow, tableName);
       // upsert(onConflict: 'id'): 동일 id가 이미 존재하면 update로 대체 — PK 중복 오류 방지
       const promise = supabase
         .from(tableName)
@@ -1519,7 +1523,7 @@ class LocalDB {
 
     if (supabase) {
       const tableName = this.mapToSupabaseTable(key as string);
-      const payloadForSupabase = this.sanitizeSupabasePayload(updatedPayload);
+      const payloadForSupabase = this.sanitizeSupabasePayload(updatedPayload, tableName);
       const promise = supabase
         .from(tableName)
         .update(payloadForSupabase as any)
@@ -1575,7 +1579,8 @@ class LocalDB {
     await Promise.all(tables.map(async (key) => {
       const data = (this as any)[key] as any[];
       const tableName = this.mapToSupabaseTable(key);
-      const { error } = await supabase.from(tableName).upsert(data as any[], { onConflict: 'id' });
+      const sanitizedData = Array.isArray(data) ? data.map(item => this.sanitizeSupabasePayload(item, tableName)) : [];
+      const { error } = await supabase.from(tableName).upsert(sanitizedData, { onConflict: 'id' });
       if (error) console.error(`Bulk upsert error for ${tableName}:`, error);
     }));
   }

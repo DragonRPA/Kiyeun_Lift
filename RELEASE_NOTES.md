@@ -1,3 +1,21 @@
+# Release Notes (v1.16.9.Build.00037 - 2026-07-31 21:18)
+
+## 🛡️ [소모품 입고 처리 consumables 테이블 'supplier' 미존재 컬럼 오염 차단 패치]
+
+### 오류 원인 분석
+- `Could not find the 'supplier' column of 'consumables' in the schema cache`
+- 소모품 입고 처리 시 `consumables` (소모품 수량 대장) 테이블 업데이트 과정에서, Supabase DB `consumables` 스키마에 없는 `supplier` (판매처) 속성이 포함되어 PostgreSQL schema cache 오류로 거부됨.
+
+### 핵심 패치 내용
+1. **Supabase Payload 테이블별 자동 필터링 고도화 (`db.ts`)**:
+   - `sanitizeSupabasePayload(obj, tableName)`에 테이블별 컬럼 필터링 로직을 추가하여, `consumables` 테이블 업로드 시 DB 스키마에 없는 `supplier` 컬럼을 자동 제외(omit) 처리.
+   - `supplier` (판매처/입출고처) 정보는 해당 데이터가 존재하는 `consumable_purchases` 및 `consumable_logs` 이력 대장에 100% 보존.
+
+### 빌드 검증
+- TypeScript + Vite 빌드 정상 통과 ✅
+
+---
+
 # Release Notes (v1.16.9.Build.00036 - 2026-07-31 21:12)
 
 ## 📱 [스마트폰 하단 툴바 가림 방지 초대형 350px 여백 스페이서 확장]
