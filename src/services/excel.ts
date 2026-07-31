@@ -1,8 +1,8 @@
 // d:\Kiyeun_Lift\src\services\excel.ts
 import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
 
 export const exportToExcel = (data: any[], fileName: string, sheetName: string = 'Sheet1') => {
-  // 한글 컬럼 등으로 변환하고 싶을 때 유용하게 확장 가능
   const worksheet = XLSX.utils.json_to_sheet(data);
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
@@ -10,23 +10,23 @@ export const exportToExcel = (data: any[], fileName: string, sheetName: string =
 };
 
 /**
- * 공식 거래명세서 양식 파일(구글 드라이브 또는 public/)을 fetch로 읽어서
- * 실제 청구 데이터를 셀에 직접 채워넣고 다운로드
+ * 공식 거래명세서 양식 파일(구글 드라이브 또는 public/)을 ExcelJS로 읽어서
+ * 실제 청구 데이터를 셀 값만 채워넣고 다운로드.
+ *
+ * ExcelJS 사용 이유:
+ * - 무료 xlsx 라이브러리는 embedded 이미지(도장)를 완전히 드롭하고 셀 스타일도 손실됨.
+ * - ExcelJS는 이미지 포함 전체 워크북 구조를 그대로 보존하면서 셀 값만 교체 가능.
  *
  * templateUrl: google_configs.transactionStatementTemplateUrl (Supabase 저장값)
- *   - 구글 드라이브 공유링크 형식: https://drive.google.com/file/d/FILE_ID/view
- *     → 자동으로 직접다운로드 URL로 변환: https://drive.google.com/uc?export=download&id=FILE_ID
+ *   - docs.google.com/spreadsheets/d/FILE_ID/edit → /export?format=xlsx 변환
+ *   - drive.google.com/file/d/FILE_ID/view → /uc?export=download&id=FILE_ID 변환
  *   - fallback: /거래명세서양식.xlsx (public 폴더 복사본)
  *
- * 양식 셀 맵 (0-indexed row, 0-indexed col):
- * - 공급받는자 등록번호: N5(r4,c13)
- * - 공급받는자 상호:     N6(r5,c13)  대표: R6(r5,c17)
- * - 공급받는자 주소:     N7(r6,c13)
- * - 작성일자:           E13(r12,c4)
- * - 품목행(row16~26):   B=순번, C=월, D=일, E=품목(~K), L=수량, M=단가, O=공급가액, Q=부가세, T=비고
- * - 공급가 합계:        E27(r26,c4)
- * - 부가세 합계:        J27(r26,c9)
- * - 합계 금액:          O27(r26,c14)
+ * 양식 셀 맵:
+ * - 공급받는자 등록번호: N5   상호: N6   대표: R6   주소: N7
+ * - 작성일자: E13
+ * - 품목행 row16~26: B=순번, C=월, D=일, E=품목, L=수량, M=단가, O=공급가액, Q=부가세, T=비고
+ * - 합계: E27=공급가, J27=부가세, O27=합계
  */
 export const exportTransactionStatementExcel = async (
   billing: any,
@@ -37,34 +37,23 @@ export const exportTransactionStatementExcel = async (
   fileName: string,
   templateUrl?: string
 ) => {
-  // 1. 구글 URL → 직접 다운로드 URL 변환
-  //    케이스 A: docs.google.com/spreadsheets (Google Sheets)
-  //      https://docs.google.com/spreadsheets/d/FILE_ID/edit?...
-  //      → https://docs.google.com/spreadsheets/d/FILE_ID/export?format=xlsx
-  //    케이스 B: drive.google.com/file/d/FILE_ID/view
-  //      → https://drive.google.com/uc?export=download&id=FILE_ID
-  //    케이스 C: drive.google.com/open?id=FILE_ID
-  //      → https://drive.google.com/uc?export=download&id=FILE_ID
-  //    그 외 http URL: 그대로 사용
-  //    로컬 경로 또는 미설정: fallback (public 폴더 복사본)
-  let fetchUrl = '/거래명세서양식.xlsx'; // fallback
+  // 1. URL 변환 (구글 드라이브 공유링크 → 직접 다운로드 URL)
+  let fetchUrl = '/거래명세서양식.xlsx'; // fallback: public 폴더 복사본
 
   if (templateUrl) {
     if (templateUrl.includes('docs.google.com/spreadsheets')) {
-      // Google Sheets → xlsx export
       const fileIdMatch = templateUrl.match(/\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/);
       if (fileIdMatch) {
         fetchUrl = `https://docs.google.com/spreadsheets/d/${fileIdMatch[1]}/export?format=xlsx`;
       }
     } else if (templateUrl.includes('drive.google.com')) {
-      // Google Drive 파일
       const fileIdMatch = templateUrl.match(/\/d\/([a-zA-Z0-9_-]+)/) ||
                           templateUrl.match(/[?&]id=([a-zA-Z0-9_-]+)/);
       if (fileIdMatch) {
         fetchUrl = `https://drive.google.com/uc?export=download&id=${fileIdMatch[1]}`;
       }
     } else if (templateUrl.startsWith('http')) {
-      fetchUrl = templateUrl; // 기타 직접 HTTP URL
+      fetchUrl = templateUrl;
     }
     // else: 로컬 경로(.html 등) → fallback 유지
   }
@@ -73,7 +62,6 @@ export const exportTransactionStatementExcel = async (
   const response = await fetch(fetchUrl);
   if (!response.ok) throw new Error(`거래명세서 양식 파일 로드 실패 (${fetchUrl}): HTTP ${response.status}`);
 
-  // 응답 Content-Type 체크 - HTML이 반환된 경우 명확한 오류 표시
   const contentType = response.headers.get('content-type') || '';
   if (contentType.includes('text/html')) {
     throw new Error(
@@ -84,76 +72,90 @@ export const exportTransactionStatementExcel = async (
   }
 
   const arrayBuffer = await response.arrayBuffer();
-  const wb = XLSX.read(new Uint8Array(arrayBuffer), { type: 'array', cellStyles: true });
 
-  const sheetName = wb.SheetNames[0];
-  const ws = wb.Sheets[sheetName];
+  // 3. ExcelJS로 워크북 로드 (이미지·스타일 100% 보존)
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.load(arrayBuffer);
 
-  const setCell = (addr: string, value: any, numFmt?: string) => {
-    if (!ws[addr]) ws[addr] = { t: typeof value === 'number' ? 'n' : 's', v: value };
-    else ws[addr] = { ...ws[addr], v: value, t: typeof value === 'number' ? 'n' : 's' };
-    if (numFmt) ws[addr].z = numFmt;
+  const worksheet = workbook.worksheets[0];
+  if (!worksheet) throw new Error('거래명세서 양식 파일에 시트가 없습니다.');
+
+  // 헬퍼: 셀에 값만 설정 (스타일은 건드리지 않음)
+  const setVal = (addr: string, value: string | number | null) => {
+    const cell = worksheet.getCell(addr);
+    cell.value = value;
+  };
+
+  // 숫자 값 설정 (기존 numFmt 보존)
+  const setNum = (addr: string, value: number) => {
+    const cell = worksheet.getCell(addr);
+    const existingFmt = (cell.numFmt as string) || '#,##0';
+    cell.value = value;
+    cell.numFmt = existingFmt;
   };
 
   const supplyTotal = Math.round((billing?.totalAmount || 0) / 1.1);
   const vatTotal = (billing?.totalAmount || 0) - supplyTotal;
   const totalAmount = billing?.totalAmount || 0;
 
-  // 발행 날짜 파싱
   const billingDate: string = billing?.billingDate || '';
   const billingYm: string = billing?.billingYm || '';
-  const [dateY, dateM, dateD] = billingDate ? billingDate.split('-') : ['', '', ''];
+  const parts = billingDate ? billingDate.split('-') : ['', '', ''];
+  const dateM = parts[1] ? Number(parts[1]) : '';
+  const dateD = parts[2] ? Number(parts[2]) : '';
 
-  // === 공급받는자 정보 채우기 ===
-  setCell('N5', customer?.bizRegNo || '');           // 등록번호
-  setCell('N6', customer?.name || '');                // 상호
-  setCell('R6', customer?.representative || '');      // 대표
-  setCell('N7', customer?.address || '');             // 주소
-  setCell('E13', billingDate || billingYm);           // 작성일자
+  // === 공급받는자 정보 ===
+  setVal('N5', customer?.bizRegNo || '');
+  setVal('N6', customer?.name || '');
+  setVal('R6', customer?.representative || '');
+  setVal('N7', customer?.address || '');
+  setVal('E13', billingDate || billingYm);
 
-  // === 품목 행 채우기 (row16~row26 = r15~r25, 최대 11행) ===
-  const ITEM_START_ROW = 15; // 0-indexed (row 16)
+  // === 품목 행 (row 16~26, 최대 11행) ===
+  const ITEM_START_ROW = 16;
   const ITEM_MAX = 11;
 
   for (let i = 0; i < ITEM_MAX; i++) {
     const d = details[i];
-    const rowIdx = ITEM_START_ROW + i;
-    const rB = XLSX.utils.encode_cell({ r: rowIdx, c: 1 }); // 순번 (B)
-    const rC = XLSX.utils.encode_cell({ r: rowIdx, c: 2 }); // 월 (C)
-    const rD = XLSX.utils.encode_cell({ r: rowIdx, c: 3 }); // 일 (D)
-    const rE = XLSX.utils.encode_cell({ r: rowIdx, c: 4 }); // 품목 (E)
-    const rL = XLSX.utils.encode_cell({ r: rowIdx, c: 11 }); // 수량 (L)
-    const rM = XLSX.utils.encode_cell({ r: rowIdx, c: 12 }); // 단가 (M)
-    const rO = XLSX.utils.encode_cell({ r: rowIdx, c: 14 }); // 공급가액 (O)
-    const rQ = XLSX.utils.encode_cell({ r: rowIdx, c: 16 }); // 부가세 (Q)
-    const rT = XLSX.utils.encode_cell({ r: rowIdx, c: 19 }); // 비고 (T)
+    const row = ITEM_START_ROW + i;
 
     if (d) {
       const itemSupply = Math.round(d.amount / 1.1);
       const itemVat = d.amount - itemSupply;
 
-      setCell(rB, i + 1, '0');
-      setCell(rC, dateM ? Number(dateM) : '');
-      setCell(rD, dateD ? Number(dateD) : '');
-      setCell(rE, d.itemName + (d.description ? ` [${d.description}]` : ''));
-      setCell(rL, d.quantity || 1, '0');
-      setCell(rM, d.unitPrice || itemSupply, '#,##0');
-      setCell(rO, itemSupply, '#,##0');
-      setCell(rQ, itemVat, '#,##0');
-      setCell(rT, siteName || '');
+      setVal(`B${row}`, i + 1);
+      setVal(`C${row}`, dateM);
+      setVal(`D${row}`, dateD);
+      setVal(`E${row}`, d.itemName + (d.description ? ` [${d.description}]` : ''));
+      setVal(`L${row}`, d.quantity || 1);
+      setNum(`M${row}`, d.unitPrice || itemSupply);
+      setNum(`O${row}`, itemSupply);
+      setNum(`Q${row}`, itemVat);
+      setVal(`T${row}`, siteName || '');
     } else {
-      // 빈 행 초기화 (기존 더미값 제거)
-      setCell(rB, '');
-      setCell(rO, 0, '#,##0');
-      setCell(rQ, 0, '#,##0');
+      // 빈 행 초기화
+      setVal(`B${row}`, null);
+      setNum(`O${row}`, 0);
+      setNum(`Q${row}`, 0);
     }
   }
 
-  // === 합계 행 채우기 (row27 = r26) ===
-  setCell('E27', supplyTotal, '#,##0');
-  setCell('J27', vatTotal, '#,##0');
-  setCell('O27', totalAmount, '#,##0');
+  // === 합계 행 (row 27) ===
+  setNum('E27', supplyTotal);
+  setNum('J27', vatTotal);
+  setNum('O27', totalAmount);
 
-  // 2. 파일 다운로드
-  XLSX.writeFile(wb, `${fileName}.xlsx`);
+  // 4. 파일 다운로드
+  const buffer = await workbook.xlsx.writeBuffer();
+  const blob = new Blob([buffer], {
+    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+  });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${fileName}.xlsx`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 };

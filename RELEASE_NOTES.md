@@ -1,3 +1,26 @@
+# Release Notes (v1.16.9.Build.00007 - 2026-07-31 10:57)
+
+## 🖼️ [거래명세서 엑셀 생성 엔진 xlsx → ExcelJS 교체 (도장 이미지·셀 스타일 보존 수술)]
+
+### 버그 원인 (2가지)
+1. **셀 스타일 소실**: `xlsx` 무료 패키지는 writeFile 시 셀 색상·테두리·폰트를 드롭함.
+2. **도장(stamp) 이미지 완전 소실**: `xlsx` 무료 패키지는 embedded 이미지를 읽을 때부터 완전히 드롭하며, 이미지 지원은 Pro 유료 버전에서만 제공.
+
+### 수정 내역
+- `exceljs` 패키지 설치 (`npm install exceljs`).
+- `excel.ts` `exportTransactionStatementExcel` 함수를 `xlsx` → `ExcelJS` 기반으로 완전 재작성.
+- `workbook.xlsx.load(arrayBuffer)`로 원본 양식 파일을 로드 → 이미지/스타일/병합셀 100% 내부 보존.
+- `worksheet.getCell(addr).value = value` 로 셀 값만 교체 → 스타일/이미지에 무간섭.
+- `workbook.xlsx.writeBuffer()` → Blob → `<a>` 태그 클릭 방식으로 다운로드.
+
+### 기대 결과
+- 원본 양식의 파란 테두리, 셀 색상, 폰트 크기, 병합셀 구조, 대표 직인 이미지가 그대로 보존된 채로 청구 데이터가 채워져 다운로드됨.
+
+### 빌드 검증
+- TypeScript + Vite 빌드 오류 없음 확인 ✅
+
+---
+
 # Release Notes (v1.16.9.Build.00006 - 2026-07-31 10:41)
 
 ## 🐛 [거래명세서 엑셀 다운로드 - URL 파싱 오류 수정 (docs.google.com/spreadsheets 미처리 버그)]
