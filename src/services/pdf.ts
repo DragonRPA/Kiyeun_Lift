@@ -348,7 +348,8 @@ async function generateStatementJsPDF(
   customer:  any,
   _contract: any,
   siteName:  string,
-  templateUrl?: string
+  templateUrl?: string,
+  isCompressForEmail: boolean = false
 ): Promise<{ pdf: jsPDF; fileName: string }> {
 
   let stampDataUrl = '';
@@ -395,8 +396,10 @@ async function generateStatementJsPDF(
     iBody.style.width    = '700px';
     iBody.style.overflow = 'hidden';
 
+    // 메일 첨부용일 경우 scale: 1.6 및 JPEG 82% 압축으로 200KB 내외 경량화
+    const canvasScale = isCompressForEmail ? 1.6 : 2.0;
     const canvas = await html2canvas(iBody, {
-      scale:           2.5,
+      scale:           canvasScale,
       useCORS:         true,
       allowTaint:      true,
       logging:         false,
@@ -405,16 +408,17 @@ async function generateStatementJsPDF(
       windowWidth:     700,
     });
 
-    const imgData = canvas.toDataURL('image/png');
-    const pdf     = new jsPDF('p', 'mm', 'a4');
-    const pageW   = pdf.internal.pageSize.getWidth();  // 210mm
+    const imgFormat = isCompressForEmail ? 'JPEG' : 'PNG';
+    const imgData   = isCompressForEmail ? canvas.toDataURL('image/jpeg', 0.82) : canvas.toDataURL('image/png');
+    const pdf       = new jsPDF('p', 'mm', 'a4');
+    const pageW     = pdf.internal.pageSize.getWidth();  // 210mm
     
     const mx      = 15;
     const my      = 15;
     const printW  = pageW - mx * 2; // 180mm
     const printH  = (canvas.height * printW) / canvas.width;
 
-    pdf.addImage(imgData, 'PNG', mx, my, printW, printH);
+    pdf.addImage(imgData, imgFormat, mx, my, printW, printH);
 
     const custName = customer?.name || '고객사';
     const ym       = billing?.billingYm || '';
@@ -454,7 +458,7 @@ export const generateTransactionStatementPdfBase64 = async (
   siteName:    string,
   templateUrl?: string
 ): Promise<{ filename: string; base64: string }> => {
-  const { pdf, fileName } = await generateStatementJsPDF(billing, details, customer, contract, siteName, templateUrl);
+  const { pdf, fileName } = await generateStatementJsPDF(billing, details, customer, contract, siteName, templateUrl, true);
   
   // pure base64 string (data:application/pdf;base64, 접두사 제외)
   const dataUri = pdf.output('datauristring');

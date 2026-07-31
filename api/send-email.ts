@@ -1,7 +1,11 @@
-// d:\Kiyeun_Lift\api\send-email.ts
-// Vercel Serverless Function — Gmail SMTP (App Password) 메일 발송 API
-import type { VercelRequest, VercelResponse } from '@vercel/node';
-import nodemailer from 'nodemailer';
+// Vercel Serverless Function Config — 페이로드 용량 10MB로 확장
+export const config = {
+  api: {
+    bodyParser: {
+      sizeLimit: '10mb'
+    }
+  }
+};
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // CORS 처리

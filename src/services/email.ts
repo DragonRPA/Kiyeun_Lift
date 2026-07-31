@@ -91,7 +91,13 @@ class RealGmailService {
         })
       });
 
-      const result = await resp.json();
+      const rawText = await resp.text();
+      let result: any = {};
+      try {
+        result = JSON.parse(rawText);
+      } catch (_) {
+        throw new Error(`서버 응답 오류 (${resp.status}): ${rawText.slice(0, 150)}`);
+      }
 
       if (!resp.ok || !result.success) {
         throw new Error(result.error || 'Gmail 서버 메일 전송에 실패했습니다.');

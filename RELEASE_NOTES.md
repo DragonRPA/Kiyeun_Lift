@@ -1,3 +1,24 @@
+# Release Notes (v1.16.9.Build.00030 - 2026-07-31 20:42)
+
+## ⚡ [메일 첨부 PDF 용량 최적화 & Vercel API 페이로드 10MB 확장 (Request Entity Too Large 해소)]
+
+### 오류 원인 분석
+- `Unexpected token 'R', "Request Entity Too Large"...`
+- 비압축 고해상도 PDF Base64 페이로드가 커서 Vercel API의 기본 전송 용량 제한에 걸려 `413 Request Entity Too Large` 에러가 발생하고, 이를 JSON으로 파싱하려다 예외 발생.
+
+### 핵심 해결 조치
+1. **메일 첨부용 PDF 용량 최적화 (`pdf.ts`)**:
+   - 다운로드용 인쇄 품질은 그대로 보존하면서, 메일 첨부용 PDF 캔버스는 **JPEG 82% 고효율 압축 및 scale 최적화**를 적용하여 페이로드 크기를 **3MB+ ➔ 200KB 이내로 1/10 가량 경량화**.
+2. **Vercel API Body Size Config 10MB 확장 (`api/send-email.ts`)**:
+   - Vercel Serverless Function body parser `sizeLimit: '10mb'` 설정으로 용량 제한 여유 확보.
+3. **API 응답 파싱 예외 안전 처리 (`email.ts`)**:
+   - 비-JSON 텍스트 응답 도착 시에도 튕기지 않고 명확한 서버 오류 메시지를 표출하도록 방어.
+
+### 빌드 검증
+- TypeScript + Vite + Vercel Serverless Function 빌드 정상 통과 ✅
+
+---
+
 # Release Notes (v1.16.9.Build.00029 - 2026-07-31 20:40)
 
 ## 📎 [거래명세서 PDF 메일 실제 파일 첨부 연동 & 본문 [6] 구문 제거]
