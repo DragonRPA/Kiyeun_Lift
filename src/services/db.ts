@@ -988,8 +988,8 @@ const SEED_GOOGLE_CONFIG: GoogleConfig[] = [
   {
     id: 'default-config',
     googleEmail: 'kiyeunlift@gmail.com',
-    googlePassword: '••••••••••••',
-    gmailAppPassword: '••••••••••••',
+    googlePassword: '',
+    gmailAppPassword: '',
     contractFolder: '렌탈계약서_증빙',
     consumableFolder: '소모품납품증빙',
     deliveryFolder: '출고의뢰_증빙',

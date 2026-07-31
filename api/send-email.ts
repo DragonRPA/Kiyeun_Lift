@@ -27,9 +27,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(400).json({ error: '수신자(to), 제목(subject), 본문(body)은 필수 항목입니다.' });
   }
 
-  if (!googleEmail || !gmailAppPassword) {
+  if (!googleEmail || !gmailAppPassword || gmailAppPassword.includes('•')) {
     return res.status(400).json({
-      error: '구글 연동 설정(이메일 계정 및 16자리 앱 비밀번호)이 입력되지 않았습니다. [설정 > 구글 연동 설정] 메뉴에서 등록해 주세요.'
+      error: '구글 연동 설정에 16자리 Gmail 앱 비밀번호가 올바르게 저장되지 않았습니다. [시스템 설정 > 구글 및 클라우드 연계 설정] 메뉴에서 구글 앱 비밀번호를 다시 입력하고 저장해 주세요.'
     });
   }
 

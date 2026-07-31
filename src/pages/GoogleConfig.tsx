@@ -132,7 +132,7 @@ export const GoogleConfig: React.FC = () => {
         : googlePassword;
 
       const finalAppPassword = (gmailAppPassword === '••••••••••••' || !gmailAppPassword) 
-        ? (currentConfig?.gmailAppPassword || '') 
+        ? (currentConfig?.gmailAppPassword && !currentConfig.gmailAppPassword.includes('•') ? currentConfig.gmailAppPassword : '') 
         : gmailAppPassword;
 
       const updated: GoogleConfigType = {

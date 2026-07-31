@@ -50,9 +50,9 @@ class RealGmailService {
     const googleEmail      = config?.googleEmail || '';
     const gmailAppPassword = config?.gmailAppPassword || '';
 
-    if (!googleEmail || !gmailAppPassword) {
+    if (!googleEmail || !gmailAppPassword || gmailAppPassword.includes('•')) {
       throw new Error(
-        '⚠️ 구글 연동 설정(구글 서비스 계정 이메일 및 Gmail 발송용 16자리 앱 비밀번호)이 시스템에 저장되어 있지 않습니다. [시스템 설정 > 구글 및 클라우드 연계 설정] 메뉴에서 구글 이메일 및 앱 비밀번호를 먼저 입력하고 저장해 주세요.'
+        '⚠️ 구글 연동 설정에 Gmail 발송용 16자리 앱 비밀번호가 설정되지 않았거나 마스킹 상태입니다. [시스템 설정 > 구글 및 클라우드 연계 설정] 메뉴에서 구글 계정 2단계 인증 후 발급받으신 16자리 앱 비밀번호를 직접 입력하고 저장해 주세요.'
       );
     }
 
