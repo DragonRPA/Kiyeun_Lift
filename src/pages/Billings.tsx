@@ -4,11 +4,7 @@ import { useApp } from '../context/AppContext';
 import { db, Asset, Billing, BillingDetail } from '../services/db';
 import { Plus, Download, Mail, CheckCircle, Search, DollarSign, Calendar, FileText, Send, Edit3 } from 'lucide-react';
 import { emailService } from '../services/email';
-import { exportToExcel, exportTransactionStatementExcel } from '../services/excel';
-
-import html2canvas from 'html2canvas';
-import { jsPDF } from 'jspdf';
-import { documentBuilder } from '../services/templates';
+import { exportToExcel, exportTransactionStatementExcel, exportTransactionStatementExcelBuffer } from '../services/excel';
 
 export const Billings: React.FC = () => {
   const {
@@ -233,24 +229,39 @@ export const Billings: React.FC = () => {
     setShowMailModal(true);
   };
 
-  const downloadStatementPdf = async (billingYm: string, customerName: string) => {
-    const el = document.getElementById('transaction-statement-pdf-target');
-    if (!el) {
-      alert('거래명세서 양식을 찾을 수 없습니다.');
-      return;
-    }
+  // 거래명세서 Excel 양식 → 브라우저 인쇄(PDF 저장) 트리거
+  const printStatementAsPdf = async () => {
+    const billing = billings.find(b => b.id === mailBillingId);
+    const details = billingDetails.filter(d => d.billingId === mailBillingId);
+    const customer = customers.find(c => c.id === billing?.customerId);
+    const contract = contracts.find(c => c.id === billing?.contractId);
+    const site = sites.find(s => s.id === contract?.siteId);
+    const templateUrl = googleConfigs[0]?.transactionStatementTemplateUrl;
+    const custName = customer?.name || '고객사';
+    const sName = site?.name || '현장';
+    const ym = billing?.billingYm || '';
+
     try {
-      const canvas = await html2canvas(el, { scale: 2, useCORS: true, logging: false });
-      const imgData = canvas.toDataURL('image/png');
-
-      const pdf = new jsPDF('p', 'mm', 'a4');
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
-
-      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
-      pdf.save(`거래명세서_${customerName}_${billingYm}.pdf`);
+      const buffer = await exportTransactionStatementExcelBuffer(
+        billing, details, customer, contract, sName, templateUrl
+      );
+      // Blob URL로 새 창 열고 인쇄 다이얼로그 트리거 → 사용자가 PDF로 저장
+      const blob = new Blob([buffer], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      });
+      const url = URL.createObjectURL(blob);
+      // 엑셀을 직접 PDF로 변환하는 브라우저 API가 없으므로,
+      // 엑셀 파일을 다운로드하고 PDF 저장 안내창을 표시
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${custName}_${sName}_${ym}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      alert('엑셀 파일이 다운로드되었습니다.\n엑셀에서 파일 → 다른 이름으로 저장 → PDF 형식으로 저장하세요.');
     } catch (err: any) {
-      alert(`PDF 생성 및 다운로드 오류: ${err?.message || err}`);
+      showErrorModal('PDF 저장용 엑셀 생성 실패: ' + (err?.message || String(err)));
     }
   };
 
@@ -276,12 +287,12 @@ export const Billings: React.FC = () => {
     const customer = customers.find(c => c.id === billing?.customerId);
     const contract = contracts.find(c => c.id === billing?.contractId);
 
-    const supplyTotal = Math.round((billing?.totalAmount || 0) / 1.1);
-    const vatTotal = (billing?.totalAmount || 0) - supplyTotal;
+    const details_supply = details.reduce((sum, d) => sum + (d.unitPrice || 0) * (d.quantity || 1), 0);
+    const details_vat = Math.round(details_supply * 0.1);
 
-    const body = 
+    const body =
 `========================================================================================
-                      (주) 기 연 엘 리 베 이 터   거 래 명 세 서
+                        (주) 기 연 리 프 트   거 래 명 세 서
 ========================================================================================
 
 안녕하세요, ${getCustName(billing?.customerId || '')} 귀하.
@@ -303,25 +314,25 @@ export const Billings: React.FC = () => {
 [3. 거래 세부 내역]
 ----------------------------------------------------------------------------------------
 ${details.map((d, idx) => {
-  const itemSupply = Math.round(d.amount / 1.1);
-  const itemVat = d.amount - itemSupply;
-  return `${idx + 1}. ${d.itemName}\n   - 적용 기준/기간: ${d.description || '정기 렌탈'}\n   - 공급가액: ${itemSupply.toLocaleString()}원 | 부가세: ${itemVat.toLocaleString()}원 | 합계: ${d.amount.toLocaleString()}원`;
+  const itemSupply = (d.unitPrice || 0) * (d.quantity || 1);
+  const itemVat = Math.round(itemSupply * 0.1);
+  return `${idx + 1}. ${d.itemName}\n   - 적용 기준/기간: ${d.description || '정기 렌탈'}\n   - 공급가액: ${itemSupply.toLocaleString()}원 | 부가세: ${itemVat.toLocaleString()}원 | 합계: ${(itemSupply + itemVat).toLocaleString()}원`;
 }).join('\n----------------------------------------------------------------------------------------\n')}
 ----------------------------------------------------------------------------------------
 
 [4. 청구 합계 금액]
-- 공급가액: ${supplyTotal.toLocaleString()}원
-- 부가가치세(10%): ${vatTotal.toLocaleString()}원
-- 최종 청구 총액: ${(billing?.totalAmount || 0).toLocaleString()}원 (기수금: ${(billing?.paidAmount || 0).toLocaleString()}원 / 미수잔액: ${((billing?.totalAmount || 0) - (billing?.paidAmount || 0)).toLocaleString()}원)
+- 공급가액: ${details_supply.toLocaleString()}원
+- 부가가치세(10%): ${details_vat.toLocaleString()}원
+- 최종 청구 총액: ${(details_supply + details_vat).toLocaleString()}원 (기수금: ${(billing?.paidAmount || 0).toLocaleString()}원 / 미수잔액: ${(details_supply + details_vat - (billing?.paidAmount || 0)).toLocaleString()}원)
 
 [5. 입금 계좌 안내]
-- 기업은행 138-81-83251 (주)기연리프트
+- 신한은행 140-010-007060 (주)기연리프트
 
 [6. 첨부 문서 안내]
-- 본 이메일에는 구글 드라이브 양식을 기반으로 자동 생성된 (주)기연엘리베이터 표준 거래명세서 PDF 문서(거래명세서_${customer?.name || '고객사'}_${billing?.billingYm}.pdf)가 자동 렌더링되어 첨부되었습니다.
+- 거래명세서 엑셀 파일(xlsx)을 별도로 다운로드하여 PDF로 저장 후 첨부하실 수 있습니다.
 
 감사합니다.
-(주)기연엘리베이터 올림
+(주)기연리프트 올림
 ========================================================================================`;
 
     try {
@@ -1430,19 +1441,16 @@ ${details.map((d, idx) => {
                   </div>
                 </div>
               ) : (
-                /* 표준 거래명세서 미리보기 (PREVIEW - (주)기연리프트 구글 드라이브 표준 양식) */
-                <div 
-                  style={{ marginBottom: '20px' }}
-                  dangerouslySetInnerHTML={{
-                    __html: documentBuilder.buildTransactionStatement(
-                      targetBilling,
-                      targetDetails,
-                      targetCust,
-                      targetContract,
-                      sites.find(s => s.id === targetContract?.siteId)
-                    )
-                  }}
-                />
+                /* 거래명세서 미리보기: 엑셀 양식 기반으로 전환됨 */
+                <div style={{ marginBottom: '20px', padding: '16px', background: 'rgba(99,179,237,0.08)', borderRadius: '8px', border: '1px solid rgba(99,179,237,0.3)', fontSize: '13px', color: '#a0aec0' }}>
+                  <div style={{ fontWeight: 'bold', marginBottom: '6px', color: '#63b3ed' }}>📊 거래명세서 (엑셀 양식 기반)</div>
+                  <div>구글 드라이브에 등록된 공식 거래명세서 양식(xlsx)에 청구 데이터를 채워 생성합니다.</div>
+                  <div style={{ marginTop: '6px' }}>
+                    <b>고객사:</b> {targetCust?.name || '-'} &nbsp;|&nbsp;
+                    <b>청구월:</b> {targetBilling?.billingYm || '-'} &nbsp;|&nbsp;
+                    <b>합계:</b> {targetDetails.reduce((s, d) => s + (d.unitPrice || 0) * (d.quantity || 1), 0).toLocaleString()}원 (공급가) + 부가세 10%
+                  </div>
+                </div>
               )}
 
               <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
@@ -1479,13 +1487,13 @@ ${details.map((d, idx) => {
                 <button
                   type="button"
                   className="btn-secondary"
-                  onClick={() => downloadStatementPdf(targetBilling?.billingYm || '', targetCust?.name || '고객사')}
+                  onClick={printStatementAsPdf}
                   style={{ display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 'bold' }}
                 >
-                  <Download size={14} /> PDF 다운로드
+                  <Download size={14} /> PDF 저장용 엑셀 다운로드
                 </button>
                 <button type="submit" className="btn-success" disabled={isSending} style={{ fontWeight: 'bold' }}>
-                  {isSending ? '발송 중...' : <><Send size={14} /> PDF 거래명세서 이메일 전송</>}
+                  {isSending ? '발송 중...' : <><Send size={14} /> 거래명세서 이메일 전송</>}
                 </button>
               </div>
             </form>

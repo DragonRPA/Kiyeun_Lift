@@ -1,3 +1,28 @@
+# Release Notes (v1.16.9.Build.00009 - 2026-07-31 12:03)
+
+## 🗑️ [청구 거래명세서 - 기존 HTML/PDF 로직 제거 & 엑셀 양식 기반 전환 완결]
+
+### 제거된 항목 (Billings.tsx)
+- `html2canvas`, `jsPDF`, `documentBuilder` import 제거.
+- `downloadStatementPdf()` 함수(HTML→canvas→PDF 방식) 완전 제거.
+- 메일 모달 내 `dangerouslySetInnerHTML` HTML 미리보기 제거.
+- 이메일 본문 내 잘못된 회사명("기연엘리베이터"), 잘못된 계좌 정보 수정.
+
+### 추가된 항목
+- `exportTransactionStatementExcelBuffer()` (excel.ts): 파일 다운로드 없이 ArrayBuffer만 반환하는 공용 함수 (이메일 첨부 등 확장 용도).
+- `printStatementAsPdf()` (Billings.tsx): 엑셀 양식 채우기 → xlsx 다운로드 → "파일→다른이름으로저장→PDF" 안내.
+- 메일 모달 미리보기 영역: 청구 요약 정보 표시 블록으로 교체.
+
+### 정책 확인
+- `html2canvas`, `jspdf` 패키지 및 `documentBuilder`(templates.ts)는 다른 메뉴(계약서, 견적서 등)에서 계속 사용되므로 **유지**.
+- 엑셀 양식 방식은 **거래명세서에만 적용**; 타 문서는 기존 HTML/PDF 방식 유지.
+
+### 빌드 검증
+- TypeScript + Vite 빌드 오류 없음 확인 ✅
+- 번들 크기: 3,318KB → 2,663KB (html2canvas·jsPDF가 Billings에서 제거되어 감소)
+
+---
+
 # Release Notes (v1.16.9.Build.00008 - 2026-07-31 11:23)
 
 ## 🐛 [거래명세서 엑셀 - 공급받는자 셀 위치 오류 수정 & 공급가/부가세 계산 방식 교정]

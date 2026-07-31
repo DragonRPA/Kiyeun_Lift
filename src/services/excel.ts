@@ -167,3 +167,100 @@ export const exportTransactionStatementExcel = async (
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
 };
+
+/**
+ * 거래명세서 양식에 데이터를 채운 Excel 워크북 Buffer만 반환 (다운로드 없음).
+ * PDF 저장용 엑셀 파일 생성, 이메일 첨부 등 다운로드 외 용도에 사용.
+ */
+export const exportTransactionStatementExcelBuffer = async (
+  billing: any,
+  details: any[],
+  customer: any,
+  contract: any,
+  siteName: string,
+  templateUrl?: string
+): Promise<ArrayBuffer> => {
+  // URL 변환
+  let fetchUrl = '/거래명세서양식.xlsx';
+  if (templateUrl) {
+    if (templateUrl.includes('docs.google.com/spreadsheets')) {
+      const m = templateUrl.match(/\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/);
+      if (m) fetchUrl = `https://docs.google.com/spreadsheets/d/${m[1]}/export?format=xlsx`;
+    } else if (templateUrl.includes('drive.google.com')) {
+      const m = templateUrl.match(/\/d\/([a-zA-Z0-9_-]+)/) || templateUrl.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+      if (m) fetchUrl = `https://drive.google.com/uc?export=download&id=${m[1]}`;
+    } else if (templateUrl.startsWith('http')) {
+      fetchUrl = templateUrl;
+    }
+  }
+
+  const response = await fetch(fetchUrl);
+  if (!response.ok) throw new Error(`거래명세서 양식 파일 로드 실패: HTTP ${response.status}`);
+  const contentType = response.headers.get('content-type') || '';
+  if (contentType.includes('text/html')) {
+    throw new Error('거래명세서 양식 파일을 받지 못했습니다 (HTML 응답).\n구글 드라이브 파일이 "링크 있는 모든 사용자" 공개로 설정되었는지 확인하세요.');
+  }
+
+  const arrayBuffer = await response.arrayBuffer();
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.load(arrayBuffer);
+  const worksheet = workbook.worksheets[0];
+  if (!worksheet) throw new Error('거래명세서 양식 파일에 시트가 없습니다.');
+
+  const setVal = (addr: string, value: string | number | null) => { worksheet.getCell(addr).value = value; };
+  const setNum = (addr: string, value: number) => {
+    const cell = worksheet.getCell(addr);
+    const fmt = (cell.numFmt as string) || '#,##0';
+    cell.value = value;
+    cell.numFmt = fmt;
+  };
+
+  const billingDate: string = billing?.billingDate || '';
+  const billingYm: string = billing?.billingYm || '';
+  const parts = billingDate ? billingDate.split('-') : ['', '', ''];
+  const dateM = parts[1] ? Number(parts[1]) : '';
+  const dateD = parts[2] ? Number(parts[2]) : '';
+
+  setVal('O5', customer?.bizRegNo || '');
+  setVal('O6', customer?.name || '');
+  setVal('T6', customer?.representative || '');
+  setVal('O7', customer?.address || '');
+  setVal('E13', billingDate || billingYm);
+
+  const ITEM_START_ROW = 16;
+  const ITEM_MAX = 11;
+  let calcSupplyTotal = 0;
+  let calcVatTotal = 0;
+
+  for (let i = 0; i < ITEM_MAX; i++) {
+    const d = details[i];
+    const row = ITEM_START_ROW + i;
+    if (d) {
+      const unitPrice = d.unitPrice || 0;
+      const qty = d.quantity || 1;
+      const itemSupply = unitPrice * qty;
+      const itemVat = Math.round(itemSupply * 0.1);
+      calcSupplyTotal += itemSupply;
+      calcVatTotal += itemVat;
+      setVal(`B${row}`, i + 1);
+      setVal(`C${row}`, dateM);
+      setVal(`D${row}`, dateD);
+      setVal(`E${row}`, d.itemName + (d.description ? ` [${d.description}]` : ''));
+      setVal(`L${row}`, qty);
+      setNum(`M${row}`, unitPrice);
+      setNum(`O${row}`, itemSupply);
+      setNum(`Q${row}`, itemVat);
+      setVal(`T${row}`, siteName || '');
+    } else {
+      setVal(`B${row}`, null);
+      setNum(`O${row}`, 0);
+      setNum(`Q${row}`, 0);
+    }
+  }
+
+  setNum('E27', calcSupplyTotal);
+  setNum('J27', calcVatTotal);
+  setNum('O27', calcSupplyTotal + calcVatTotal);
+
+  return workbook.xlsx.writeBuffer() as Promise<ArrayBuffer>;
+};
