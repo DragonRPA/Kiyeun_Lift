@@ -67,7 +67,14 @@ export const GoogleConfig: React.FC = () => {
   }, [currentConfig]);
 
   const handleCopyGasCode = () => {
-    const gasCode = `function doPost(e) {
+    const gasCode = `// 1. 최초 1회 권한 승인용 테스트 함수 (상단 메인 툴바 [실행] 버튼용)
+function testRun() {
+  var root = DriveApp.getRootFolder();
+  Logger.log('Google Drive 연결 승인 완료: ' + root.getName());
+}
+
+// 2. ERP 시스템 자동 파일 생성/업로드 Webhook 엔진
+function doPost(e) {
   try {
     var data = JSON.parse(e.postData.contents);
     var folderName = data.folderName || '소모품납품';
@@ -123,7 +130,7 @@ function doGet(e) {
 }`;
 
     navigator.clipboard.writeText(gasCode);
-    alert('📋 구글 Apps Script 소스코드가 클립보드에 복사되었습니다!\nhttps://script.google.com 에 붙여넣으신 후 배포 URL을 입력해 주세요.');
+    alert('📋 구글 Apps Script 소스코드가 클립보드에 복사되었습니다!\nhttps://script.google.com 에 붙여넣으신 후 testRun [실행] ➔ 배포 순으로 진행해 주세요.');
   };
 
   const handleTestWebAppConnection = async () => {

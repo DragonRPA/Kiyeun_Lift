@@ -1,3 +1,19 @@
+# Release Notes (v1.17.0.Build.00054 - 2026-07-31 23:00)
+
+## 🔑 [구글 Apps Script Editor 내 `testRun()` 실행을 통한 10초 권한 승인 방법 가이드 적용]
+
+### 원인 및 해결 조치
+- 구글 배포(Deploy) 대화상자에서 직접 승인을 시도할 때 Google Workspace / Chrome 보안 정책에 의해 `Advanced`(고급) 링크가 숨겨지고 `This app is blocked`만 나타나던 원인 해결.
+- **`testRun()` 에디터 직접 실행 솔루션 도입**:
+  - Apps Script 에디터 내 상단 툴바에서 `testRun` 선택 후 **`[실행]`** 버튼을 클릭하면, 에디터 내부 권한 승인창에서 **`[Advanced]`(고급) ➔ `[Go to project (unsafe)]`(안전하지 않은 프로젝트로 이동) ➔ `[Allow]`(허용)** 링크가 100% 정상 출현.
+  - 에디터 안에서 1회 승인 완료 후 우측 상단 **`[배포]`** 버튼을 누르면 아무런 차단 오류 없이 1초 만에 배포 URL 정상 발급.
+
+### 빌드 검증
+- TypeScript `tsc -b` 통과 ✅
+- `npx vite build` 정규 빌드 성공 ✅
+
+---
+
 # Release Notes (v1.17.0.Build.00053 - 2026-07-31 22:57)
 
 ## 🚨 [구글 Apps Script 'This app is blocked' 승인 우회 가이드 & UI 보완]
