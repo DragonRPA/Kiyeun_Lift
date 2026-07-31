@@ -1604,7 +1604,21 @@ class LocalDB {
 
     if (supabase) {
       const tableName = this.mapToSupabaseTable(key as string);
-      const payloadForSupabase = this.sanitizeSupabasePayload(updatedPayload, tableName);
+      let payloadForSupabase = this.sanitizeSupabasePayload(updatedPayload, tableName);
+
+      // 🛡️ [FK 위반 원천 차단] consumable_purchases 테이블 업데이트 시,
+      // 기존 레코드에 남아있는 consumableId가 유효하지 않으면 consumableId = null을 명시하여 Supabase FK 오류를 완벽하게 예방
+      if (tableName === 'consumable_purchases') {
+        const targetConsumableId = ('consumableId' in payloadForSupabase) ? payloadForSupabase.consumableId : (list[index] as any)?.consumableId;
+        const isValid = typeof targetConsumableId === 'string' && targetConsumableId.trim() !== '' && this.consumables.some(c => c.id === targetConsumableId);
+        if (!isValid) {
+          payloadForSupabase = {
+            ...payloadForSupabase,
+            consumableId: null
+          };
+        }
+      }
+
       const promise = supabase
         .from(tableName)
         .update(payloadForSupabase as any)

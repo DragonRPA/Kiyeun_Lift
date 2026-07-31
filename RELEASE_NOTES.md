@@ -1,3 +1,25 @@
+# Release Notes (v1.17.0.Build.00046 - 2026-07-31 22:29)
+
+## 🛡️ [원격 DB 기존 레코드 레거시 FK 오염 자동 보정 & 입고 처리 오류 근본 해결]
+
+### 근본 원인 분석
+- `violates foreign key constraint "consumable_purchases_consumableId_fkey"`
+- 기존 Supabase DB의 `consumable_purchases` 레코드 중 마스터 `consumables`에 존재하지 않는 무효한 `consumableId` 값(예: 레거시 시드 또는 미동기화 ID)이 이미 들어있는 상태에서 `updateRow`가 실행될 때:
+- updatePayload에 `consumableId`가 포함되지 않더라도 PostgreSQL이 해당 행의 기존 FK 제약조건을 재검증하여 UPDATE 쿼리를 즉시 거부(Abort)하던 문제 발견.
+
+### 핵심 패치 내용
+1. **`updateRow` 동적 FK 자동 보정 패치 (`db.ts`)**:
+   - `consumable_purchases` 테이블 업데이트 시 대상 레코드의 `consumableId`가 `consumables` 마스터에 존재하는지 실시간 검증.
+   - 유효하지 않은 FK 참조일 경우, 업데이트 페이로드에 `consumableId: null`을 동적 포함시켜 PostgreSQL의 레거시 FK 오염을 즉시 보정하고 UPDATE 쿼리가 100% 성공하도록 원천 교정.
+2. **DB 스키마 정합성 도구 레거시 FK 자동 클리닝 DDL 추가 (`DevDataUploader.tsx`)**:
+   - `UPDATE consumable_purchases SET "consumableId" = NULL WHERE "consumableId" IS NOT NULL AND "consumableId" NOT IN (SELECT id FROM consumables);` 자동 실행 로직 보완.
+
+### 빌드 검증
+- TypeScript `--noEmit` 통과 ✅
+- `npx vite build` 정규 빌드 성공 ✅
+
+---
+
 # Release Notes (v1.17.0.Build.00045 - 2026-07-31 22:22)
 
 ## 🛡️ [소모품 입고 처리 'consumable_purchases_consumableId_fkey' 참조키(FK) 위반 에러 완벽 차단]
