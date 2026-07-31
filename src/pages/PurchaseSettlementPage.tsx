@@ -33,6 +33,8 @@ export const PurchaseSettlementPage: React.FC = () => {
   const {
     purchaseSettlements,
     purchaseSettlementItems,
+    consumablePurchases,
+    deliveries,
     generateMonthlyPurchaseSettlements,
     confirmPurchaseSettlement,
     recordPurchaseSettlementPayment,
@@ -56,6 +58,25 @@ export const PurchaseSettlementPage: React.FC = () => {
   // 증빙 파일 미리보기 모달 상태
   const [previewEvidence, setPreviewEvidence]      = useState<{ url: string; title: string } | null>(null);
 
+
+  // 동적 원천 레코드 증빙 조회 (정산 항목에 없다면 원천 레코드에서 파악)
+  const getItemEvidenceUrl = (item: PurchaseSettlementItem): string | undefined => {
+    if (item.evidenceFileUrl && item.evidenceFileUrl !== '-' && item.evidenceFileUrl.trim() !== '') {
+      return item.evidenceFileUrl;
+    }
+    if (item.sourceType === 'CONSUMABLE_PURCHASE') {
+      const cp = consumablePurchases.find(p => p.id === item.sourceId);
+      if (cp?.statementFileUrl && cp.statementFileUrl !== '-' && cp.statementFileUrl.trim() !== '') {
+        return cp.statementFileUrl;
+      }
+    } else if (item.sourceType === 'DELIVERY') {
+      const d = deliveries.find(d => d.id === item.sourceId);
+      if (d?.statementFileUrl && d.statementFileUrl !== '-' && d.statementFileUrl.trim() !== '') {
+        return d.statementFileUrl;
+      }
+    }
+    return undefined;
+  };
 
   // 증빙 열람 / 미리보기 핸들러
   const handleOpenEvidence = (url?: string, title?: string) => {
@@ -263,6 +284,29 @@ export const PurchaseSettlementPage: React.FC = () => {
                     {statusInfo.label}
                   </span>
 
+                  {/* 카드 헤더 증빙 보기 직결 버튼 */}
+                  {(() => {
+                    const evidences = items.map(item => ({ item, url: getItemEvidenceUrl(item) })).filter(x => !!x.url) as { item: PurchaseSettlementItem; url: string }[];
+                    if (evidences.length === 0) return null;
+                    return (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleOpenEvidence(evidences[0].url, evidences[0].item.itemDescription);
+                        }}
+                        style={{
+                          display: 'inline-flex', alignItems: 'center', gap: '4px',
+                          padding: '4px 10px', borderRadius: '6px', border: '1px solid var(--primary)',
+                          background: 'rgba(99, 102, 241, 0.1)', color: 'var(--primary)',
+                          fontSize: '12.5px', fontWeight: '700', cursor: 'pointer', whiteSpace: 'nowrap'
+                        }}
+                      >
+                        <Eye size={13} /> 증빙 보기 ({evidences.length}건)
+                      </button>
+                    );
+                  })()}
+
                   {/* 금액 */}
                   <div style={{ textAlign: 'right', minWidth: '120px' }}>
                     <div style={{ fontSize: '16px', fontWeight: '800' }}>{p.totalAmount.toLocaleString()}원</div>
@@ -295,36 +339,39 @@ export const PurchaseSettlementPage: React.FC = () => {
                             </tr>
                           </thead>
                           <tbody>
-                            {items.map(item => (
-                              <tr key={item.id} style={{ borderBottom: '1px solid var(--border)' }}>
-                                <td style={{ padding: '8px 12px', textAlign: 'left' }}>{item.itemDescription}</td>
-                                <td style={{ padding: '8px 12px', textAlign: 'right', whiteSpace: 'nowrap' }}>{item.quantity.toLocaleString()}</td>
-                                <td style={{ padding: '8px 12px', textAlign: 'right', whiteSpace: 'nowrap' }}>{item.unitPrice.toLocaleString()}원</td>
-                                <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: '700', whiteSpace: 'nowrap', color: 'var(--primary)' }}>{item.amount.toLocaleString()}원</td>
-                                <td style={{ padding: '8px 12px', textAlign: 'center', whiteSpace: 'nowrap' }}>
-                                  {item.evidenceFileUrl && item.evidenceFileUrl !== '-' ? (
-                                    <button
-                                      type="button"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        handleOpenEvidence(item.evidenceFileUrl, item.itemDescription);
-                                      }}
-                                      style={{
-                                        display: 'inline-flex', alignItems: 'center', gap: '4px',
-                                        padding: '4px 10px', borderRadius: '4px', border: '1px solid var(--primary)',
-                                        background: 'rgba(99, 102, 241, 0.08)', color: 'var(--primary)',
-                                        fontSize: '12px', fontWeight: '600', cursor: 'pointer'
-                                      }}
-                                    >
-                                      {item.evidenceFileUrl.startsWith('http') ? <ExternalLink size={13} /> : <Eye size={13} />}
-                                      증빙 보기
-                                    </button>
-                                  ) : (
-                                    <span style={{ color: 'var(--text-secondary)', fontSize: '12px' }}>없음</span>
-                                  )}
-                                </td>
-                              </tr>
-                            ))}
+                            {items.map(item => {
+                              const evidenceUrl = getItemEvidenceUrl(item);
+                              return (
+                                <tr key={item.id} style={{ borderBottom: '1px solid var(--border)' }}>
+                                  <td style={{ padding: '8px 12px', textAlign: 'left' }}>{item.itemDescription}</td>
+                                  <td style={{ padding: '8px 12px', textAlign: 'right', whiteSpace: 'nowrap' }}>{item.quantity.toLocaleString()}</td>
+                                  <td style={{ padding: '8px 12px', textAlign: 'right', whiteSpace: 'nowrap' }}>{item.unitPrice.toLocaleString()}원</td>
+                                  <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: '700', whiteSpace: 'nowrap', color: 'var(--primary)' }}>{item.amount.toLocaleString()}원</td>
+                                  <td style={{ padding: '8px 12px', textAlign: 'center', whiteSpace: 'nowrap' }}>
+                                    {evidenceUrl ? (
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleOpenEvidence(evidenceUrl, item.itemDescription);
+                                        }}
+                                        style={{
+                                          display: 'inline-flex', alignItems: 'center', gap: '4px',
+                                          padding: '4px 10px', borderRadius: '4px', border: '1px solid var(--primary)',
+                                          background: 'rgba(99, 102, 241, 0.08)', color: 'var(--primary)',
+                                          fontSize: '12px', fontWeight: '600', cursor: 'pointer'
+                                        }}
+                                      >
+                                        {evidenceUrl.startsWith('http') ? <ExternalLink size={13} /> : <Eye size={13} />}
+                                        증빙 보기
+                                      </button>
+                                    ) : (
+                                      <span style={{ color: 'var(--text-secondary)', fontSize: '12px' }}>없음</span>
+                                    )}
+                                  </td>
+                                </tr>
+                              );
+                            })}
                           </tbody>
                         </table>
                       </div>
