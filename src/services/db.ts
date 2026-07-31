@@ -1081,6 +1081,17 @@ const SEED_CASH_FLOW_SNAPSHOTS: CashFlowSnapshot[] = [
   }
 ];
 
+export const ALL_DB_KEYS = [
+  'users', 'departments', 'permissions', 'customers', 'contacts', 'sites', 
+  'products', 'assets', 'consumables', 'consumableLogs', 'consumablePurchases',
+  'contracts', 'contractAssets', 'contractHistory', 'deliveries', 
+  'transportCompanies', 'transportDrivers', 'vendors',
+  'billings', 'billingDetails', 'payments', 'repairs', 'repairConsumables', 'todos', 
+  'bankTransactions', 'bankMatchingRules', 'googleConfigs', 'assetInOutLogs',
+  'cashFlowSnapshots', 'outboundInspections', 'depreciationLogs',
+  'purchaseSettlements', 'purchaseSettlementItems', 'externalLeases'
+];
+
 class LocalDB {
   private get<T>(key: string, seed: T[]): T[] {
     const val = localStorage.getItem(`erp_${key}`);
@@ -1377,16 +1388,6 @@ class LocalDB {
     }
   }
 
-export const ALL_DB_KEYS = [
-  'users', 'departments', 'permissions', 'customers', 'contacts', 'sites', 
-  'products', 'assets', 'consumables', 'consumableLogs', 'consumablePurchases',
-  'contracts', 'contractAssets', 'contractHistory', 'deliveries', 
-  'transportCompanies', 'transportDrivers', 'vendors',
-  'billings', 'billingDetails', 'payments', 'repairs', 'repairConsumables', 'todos', 
-  'bankTransactions', 'bankMatchingRules', 'googleConfigs', 'assetInOutLogs',
-  'cashFlowSnapshots', 'outboundInspections', 'depreciationLogs',
-  'purchaseSettlements', 'purchaseSettlementItems', 'externalLeases'
-];
 
   async pullFromSupabase(): Promise<void> {
     if (!supabase) return;

@@ -1,3 +1,23 @@
+# Release Notes (v1.17.0.Build.00041 - 2026-07-31 22:04)
+
+## 🐛 [Vercel 프로덕션 빌드 구문 오류 긴급 수정 & 실서버 적용 완료]
+
+### 오류 원인 분석 및 수정
+- `[builtin:vite-transform] 'export' modifier cannot appear on class elements`
+- 이전 커밋에서 `db.ts` 내 `ALL_DB_KEYS` 상수가 `LocalDB` 클래스 본문 내부에 오배치되어 `tsc --noEmit`은 통과하였으나 Vite 8 (Rolldown) 프로덕션 빌드 단계에서 구문 오류로 거부됨.
+- 이로 인해 Vercel 원격 자동 빌드가 실패하고 이전 배포 버전(Build 37)에 머물러 있었음.
+
+### 핵심 패치 내용
+1. **`db.ts` 상율 위치 교정**: `export const ALL_DB_KEYS` 상수를 `LocalDB` 클래스 선언부 상단 외부로 정상 이관.
+2. **Vite 프로덕션 번들링 검증 완료**: `npx vite build` 결과 정규 빌드 성공 (`dist/assets/index.js` 정상 생성).
+3. **Vercel 실서버 재배포 완료**: `git push origin main` 즉시 집행으로 프로덕션 최신 배포 연동.
+
+### 빌드 검증
+- TypeScript `--noEmit` 통과 ✅
+- `npx vite build` 프로덕션 번들 빌드 정상 통과 ✅
+
+---
+
 # Release Notes (v1.17.0.Build.00040 - 2026-07-31 21:55)
 
 ## 🔄 [실서버 배포 & DB 테이블 동적 검증 체계 고도화]
