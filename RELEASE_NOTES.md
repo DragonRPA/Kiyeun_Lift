@@ -1,3 +1,19 @@
+# Release Notes (v1.17.0.Build.00056 - 2026-07-31 23:14)
+
+## 🛠️ [소모품 입고 처리 시 `consumable_logs_userId_fkey` 외래키(FK) 위반 에러 근본 해결]
+
+### 오류 원인 분석 및 완전 수정
+- **오류 원인**: `consumableLogs` (소모품 입출고 이력) 테이블에 레코드 추가 시, `userId` 필드가 `sanitizeSupabasePayload`의 유저 ID 검증 대상에서 누락되어 있었고 `inboundConsumablePurchase` / `purchaseConsumable` / `useConsumable` 함수에서 `currentUser?.id`를 검증 없이 직접 넘겼을 때 PostgreSQL 외래키 제약조건(`consumable_logs_userId_fkey`) 위반 오류 발생.
+- **근본 해결 조치**:
+  1. `db.ts` 내 `sanitizeSupabasePayload`의 유저 FK 검증 대상에 `userId` 및 모든 유저 FK 필드를 추가하여, 유효하지 않은 `userId` 전달 시 DB 상의 정상 유저 ID로 100% 자동 치환 및 보정.
+  2. `AppContext.tsx` 내 소모품 입고/출고 이력 저장 로직에 `getValidUserId(currentUser?.id)` 적용으로 이중 방어 보장.
+
+### 빌드 검증
+- TypeScript `tsc -b` 통과 ✅
+- `npx vite build` 정규 빌드 성공 ✅
+
+---
+
 # Release Notes (v1.17.0.Build.00055 - 2026-07-31 23:09)
 
 ## ☁️ [ERP DB 용량 0Byte 경량화 & 구글 드라이브 전용 URL 저장 체계 전면 전환]

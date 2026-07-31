@@ -1273,7 +1273,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       quantity: data.qty,
       unitPrice: data.unitPrice,
       supplier: data.supplier,
-      userId: currentUser?.id,
+      userId: getValidUserId(currentUser?.id),
       actionDate: new Date().toISOString().split('T')[0],
       description: '소모품 구입 입고',
       createdAt: new Date().toISOString()
@@ -1298,7 +1298,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       quantity: data.quantity,
       unitPrice: consumable.unitPrice,
       targetAssetId: data.targetAssetId,
-      userId: currentUser?.id,
+      userId: getValidUserId(currentUser?.id),
       actionDate: new Date().toISOString().split('T')[0],
       description: data.description,
       createdAt: new Date().toISOString()
@@ -1426,7 +1426,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       quantity: qty,
       unitPrice: req.unitPrice,
       supplier: req.sellerName,
-      userId: currentUser?.id,
+      userId: getValidUserId(currentUser?.id),
       actionDate: new Date().toISOString().split('T')[0],
       description: `구매신청 연계 입고 (증빙: ${statementFileUrl.split('/').pop()})`,
       createdAt: new Date().toISOString()
