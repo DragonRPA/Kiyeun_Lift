@@ -40,7 +40,7 @@ class RealGmailService {
     to: string,
     subject: string,
     body: string,
-    _attachmentIds: string[] = [],
+    attachments: { filename: string; content: string }[] = [],
     cc?: string
   ): Promise<SentEmail> {
 
@@ -86,7 +86,8 @@ class RealGmailService {
           subject,
           body,
           googleEmail,
-          gmailAppPassword
+          gmailAppPassword,
+          attachments
         })
       });
 

@@ -1,5 +1,5 @@
 // d:\Kiyeun_Lift\src\services\pdf.ts
-// PDF 거래명세서 출력 서비스 - 중앙 이중 구분선 다중 겹선 현상 100% 영구 제거
+// PDF 거래명세서 출력 및 메일 첨부용 Base64 생성 서비스
 import html2canvas from 'html2canvas';
 import { jsPDF }    from 'jspdf';
 import ExcelJS      from 'exceljs';
@@ -29,14 +29,6 @@ function esc(s: string): string {
   return (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
-/**
- * 중앙 구분선 겹선(다중 선) 완전 제거 HTML 템플릿
- * 
- * 중앙 구분선 정책:
- * - 6번 컬럼(4px)에만 오직 단 하나의 `border-right: 3px double #1B65A6` 지정.
- * - 5번 컬럼 우측 border 및 7번 컬럼 좌측 border는 모두 `none` 처리하여 겹선 차단.
- * - 하단 작성일자/입금계좌 테이블의 3번 컬럼(4px) 역시 동일하게 `border-right: 3px double #1B65A6` 만 지정하여 상하 이중선이 100% 수직 일치 및 단일 이중선 유지.
- */
 function buildExactStatementHTML(
   billing: any,
   details: any[],
@@ -347,15 +339,17 @@ function buildExactStatementHTML(
 </html>`;
 }
 
-export const downloadTransactionStatementPDF = async (
-  billing:     any,
-  details:     any[],
-  customer:    any,
-  _contract:   any,
-  siteName:    string,
-  templateUrl?: string,
-  fileName?:   string
-): Promise<void> => {
+// ──────────────────────────────────────────────────────────────────────────────
+// 공통 jsPDF 생성 내부 함수
+// ──────────────────────────────────────────────────────────────────────────────
+async function generateStatementJsPDF(
+  billing:   any,
+  details:   any[],
+  customer:  any,
+  _contract: any,
+  siteName:  string,
+  templateUrl?: string
+): Promise<{ pdf: jsPDF; fileName: string }> {
 
   let stampDataUrl = '';
   try {
@@ -415,7 +409,6 @@ export const downloadTransactionStatementPDF = async (
     const pdf     = new jsPDF('p', 'mm', 'a4');
     const pageW   = pdf.internal.pageSize.getWidth();  // 210mm
     
-    // A4 규격 여백: 좌우 15mm 여백 (인쇄가능 폭 180mm)
     const mx      = 15;
     const my      = 15;
     const printW  = pageW - mx * 2; // 180mm
@@ -425,9 +418,47 @@ export const downloadTransactionStatementPDF = async (
 
     const custName = customer?.name || '고객사';
     const ym       = billing?.billingYm || '';
-    pdf.save(`${fileName || `${custName}_${siteName}_${ym}`}.pdf`);
+    const fileName = `거래명세서_${custName}_${siteName}_${ym}.pdf`;
+
+    return { pdf, fileName };
 
   } finally {
     document.body.removeChild(iframe);
   }
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// 브라우저 PDF 다운로드 메인
+// ──────────────────────────────────────────────────────────────────────────────
+export const downloadTransactionStatementPDF = async (
+  billing:     any,
+  details:     any[],
+  customer:    any,
+  contract:    any,
+  siteName:    string,
+  templateUrl?: string,
+  customFileName?: string
+): Promise<void> => {
+  const { pdf, fileName } = await generateStatementJsPDF(billing, details, customer, contract, siteName, templateUrl);
+  pdf.save(customFileName ? `${customFileName}.pdf` : fileName);
+};
+
+// ──────────────────────────────────────────────────────────────────────────────
+// 메일 첨부용 Base64 생성 함수 (순수 base64 반환)
+// ──────────────────────────────────────────────────────────────────────────────
+export const generateTransactionStatementPdfBase64 = async (
+  billing:     any,
+  details:     any[],
+  customer:    any,
+  contract:    any,
+  siteName:    string,
+  templateUrl?: string
+): Promise<{ filename: string; base64: string }> => {
+  const { pdf, fileName } = await generateStatementJsPDF(billing, details, customer, contract, siteName, templateUrl);
+  
+  // pure base64 string (data:application/pdf;base64, 접두사 제외)
+  const dataUri = pdf.output('datauristring');
+  const base64  = dataUri.split(',')[1] || '';
+
+  return { filename: fileName, base64 };
 };

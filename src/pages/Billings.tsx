@@ -5,7 +5,7 @@ import { db, Asset, Billing, BillingDetail } from '../services/db';
 import { Plus, Download, Mail, CheckCircle, Search, DollarSign, Calendar, FileText, Send, Edit3 } from 'lucide-react';
 import { emailService } from '../services/email';
 import { exportToExcel, exportTransactionStatementExcel, exportTransactionStatementExcelBuffer } from '../services/excel';
-import { downloadTransactionStatementPDF } from '../services/pdf';
+import { downloadTransactionStatementPDF, generateTransactionStatementPdfBase64 } from '../services/pdf';
 
 export const Billings: React.FC = () => {
   const {
@@ -280,6 +280,10 @@ export const Billings: React.FC = () => {
     const customer = customers.find(c => c.id === billing?.customerId);
     const contract = contracts.find(c => c.id === billing?.contractId);
 
+    const site = sites.find(s => s.id === contract?.siteId);
+    const siteName = site?.name || '현장';
+    const templateUrl = googleConfigs[0]?.transactionStatementTemplateUrl;
+
     const details_supply = details.reduce((sum, d) => sum + (d.unitPrice || 0) * (d.quantity || 1), 0);
     const details_vat = Math.round(details_supply * 0.1);
 
@@ -321,9 +325,6 @@ ${details.map((d, idx) => {
 [5. 입금 계좌 안내]
 - 신한은행 140-010-007060 (주)기연리프트
 
-[6. 첨부 문서 안내]
-- 거래명세서 엑셀 파일(xlsx)을 별도로 다운로드하여 PDF로 저장 후 첨부하실 수 있습니다.
-
 감사합니다.
 (주)기연리프트 올림
 ========================================================================================`;
@@ -332,8 +333,20 @@ ${details.map((d, idx) => {
       const toList = mailTo.split(',').map(e => e.trim()).filter(Boolean);
       const ccList = mailCc ? mailCc.split(',').map(e => e.trim()).filter(Boolean) : [];
 
-      await emailService.sendEmail(toList.join(', '), mailSubject, body, [], ccList.join(', '));
-      alert(`🎉 [${toList.join(', ')}] 수신자에게 표준 거래명세서 이메일이 Gmail SMTP를 통해 성공적으로 실제 발송되었습니다.`);
+      // 💡 100% 동일한 거래명세서 PDF 파일 자동 생성 (첨부파일용 Base64)
+      const pdfResult = await generateTransactionStatementPdfBase64(
+        billing, details, customer, contract, siteName, templateUrl
+      );
+
+      await emailService.sendEmail(
+        toList.join(', '),
+        mailSubject,
+        body,
+        [{ filename: pdfResult.filename, content: pdfResult.base64 }],
+        ccList.join(', ')
+      );
+
+      alert(`🎉 [${toList.join(', ')}] 수신자에게 거래명세서 PDF 파일이 첨부되어 성공적으로 실제 발송되었습니다.`);
       setShowMailModal(false);
     } catch (err: any) {
       showErrorModal(`⚠️ 이메일 발송 실패:\n\n${err?.message || err}`, '메일 발송 오류');

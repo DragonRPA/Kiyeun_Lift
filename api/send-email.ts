@@ -21,7 +21,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { to, cc, subject, body, html, googleEmail, gmailAppPassword } = req.body || {};
+  const { to, cc, subject, body, html, googleEmail, gmailAppPassword, attachments } = req.body || {};
 
   if (!to || !subject || !body) {
     return res.status(400).json({ error: '수신자(to), 제목(subject), 본문(body)은 필수 항목입니다.' });
@@ -48,13 +48,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     });
 
+    const parsedAttachments = Array.isArray(attachments) ? attachments.map((att: any) => {
+      const base64Data = String(att.content || '').replace(/^data:.*?;base64,/, '');
+      return {
+        filename: att.filename || '거래명세서.pdf',
+        content: Buffer.from(base64Data, 'base64'),
+        contentType: att.contentType || 'application/pdf'
+      };
+    }) : undefined;
+
     const mailOptions: nodemailer.SendMailOptions = {
       from: `"(주)기연리프트" <${cleanEmail}>`,
       to: String(to).trim(),
       cc: cc ? String(cc).trim() : undefined,
       subject: String(subject).trim(),
       text: String(body),
-      html: html ? String(html) : undefined
+      html: html ? String(html) : undefined,
+      attachments: parsedAttachments
     };
 
     const info = await transporter.sendMail(mailOptions);
