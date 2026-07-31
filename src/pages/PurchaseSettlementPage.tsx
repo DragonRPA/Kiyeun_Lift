@@ -506,19 +506,27 @@ export const PurchaseSettlementPage: React.FC = () => {
                   </div>
                 </div>
               ) : previewEvidence.url.startsWith('data:application/pdf') || previewEvidence.url.startsWith('data:') ? (
-                <div style={{ padding: '40px 20px' }}>
-                  <FileText size={56} style={{ color: 'var(--primary)', marginBottom: '16px' }} />
-                  <h4 style={{ fontSize: '15px', fontWeight: '700', marginBottom: '8px' }}>PDF 증빙 문서가 준비되어 있습니다.</h4>
-                  <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '20px' }}>
-                    아래 버튼을 누르시면 구매번호 파일명으로 원본 PDF 문서가 다운로드됩니다.
-                  </p>
-                  <a
-                    href={previewEvidence.url}
-                    download={`${(previewEvidence.title || '매입증빙').replace(/[^a-zA-Z0-9가-힣_-]/g, '_')}.pdf`}
-                    style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '10px 18px', background: 'var(--primary)', color: '#fff', borderRadius: '6px', fontWeight: '700', textDecoration: 'none', fontSize: '14px' }}
-                  >
-                    <Download size={15} /> PDF 파일 저장 (내PC/스마트폰 다운로드)
-                  </a>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', background: 'var(--bg-app)', borderRadius: '6px', border: '1px solid var(--border)' }}>
+                    <span style={{ fontSize: '13px', fontWeight: '700', color: 'var(--text-primary)', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                      <FileText size={16} color="var(--primary)" />
+                      PDF 증빙 문서 실물 미리보기
+                    </span>
+                    <a
+                      href={previewEvidence.url}
+                      download={`${(previewEvidence.title || '매입증빙').replace(/[^a-zA-Z0-9가-힣_-]/g, '_')}.pdf`}
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '6px 14px', background: 'var(--primary)', color: '#fff', borderRadius: '6px', fontWeight: '700', textDecoration: 'none', fontSize: '12.5px' }}
+                    >
+                      <Download size={14} /> PDF 저장
+                    </a>
+                  </div>
+                  <div style={{ height: '520px', borderRadius: '8px', overflow: 'hidden', border: '1px solid var(--border)', background: '#525659' }}>
+                    <iframe
+                      src={previewEvidence.url}
+                      title="PDF 증빙 문서 미리보기"
+                      style={{ width: '100%', height: '100%', border: 'none' }}
+                    />
+                  </div>
                 </div>
               ) : (
                 <div style={{ padding: '30px' }}>

@@ -1141,21 +1141,29 @@ export const Consumables: React.FC = () => {
                     </div>
                   </div>
                 ) : (
-                  // PDF 또는 기타 문서형식의 Data URL
-                  <div style={{ textAlign: 'center', padding: '40px 20px' }}>
-                    <FileText size={56} style={{ color: 'var(--primary)', marginBottom: '16px' }} />
-                    <h4 style={{ fontSize: '15px', fontWeight: '700', marginBottom: '8px' }}>PDF 증빙 문서가 보관되어 있습니다.</h4>
-                    <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '20px', lineHeight: '1.4' }}>
-                      아래 버튼을 누르시면 구매번호 파일명으로 원본 PDF 문서가 컴퓨터/스마트폰으로 다운로드됩니다.
-                    </p>
-                    <a 
-                      href={previewRequest.statementFileUrl} 
-                      download={`${previewRequest.id.toUpperCase()}_증빙.pdf`}
-                      className="btn-primary" 
-                      style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '10px 18px', borderRadius: '6px', textDecoration: 'none', fontWeight: '700', fontSize: '14px' }}
-                    >
-                      <Download size={15} /> PDF 파일 저장 ({previewRequest.id.toUpperCase()}.pdf)
-                    </a>
+                  // PDF 또는 기타 문서형식의 Data URL -> 실물 뷰어 iframe 및 저장 툴바
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', background: 'var(--bg-app)', borderRadius: '6px', border: '1px solid var(--border)' }}>
+                      <span style={{ fontSize: '13px', fontWeight: '700', color: 'var(--text-primary)', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                        <FileText size={16} color="var(--primary)" />
+                        PDF 증빙 문서 실물 미리보기
+                      </span>
+                      <a 
+                        href={previewRequest.statementFileUrl} 
+                        download={`${previewRequest.id.toUpperCase()}_증빙.pdf`}
+                        className="btn-primary" 
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '6px 14px', borderRadius: '6px', textDecoration: 'none', fontWeight: '700', fontSize: '12.5px' }}
+                      >
+                        <Download size={14} /> PDF 파일 저장 ({previewRequest.id.toUpperCase()}.pdf)
+                      </a>
+                    </div>
+                    <div style={{ height: '520px', borderRadius: '8px', overflow: 'hidden', border: '1px solid var(--border)', background: '#525659' }}>
+                      <iframe 
+                        src={previewRequest.statementFileUrl} 
+                        title="PDF 증빙 문서 미리보기" 
+                        style={{ width: '100%', height: '100%', border: 'none' }} 
+                      />
+                    </div>
                   </div>
                 )
 
