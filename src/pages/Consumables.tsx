@@ -840,83 +840,94 @@ export const Consumables: React.FC = () => {
                     />
                   </div>
 
-                  {/* 공급자 거래명세서 업로드 제어부 */}
-                  <div style={{ border: '1px solid var(--border)', borderRadius: '8px', padding: '16px' }}>
-                    <label style={{ fontWeight: '700', fontSize: '13px', marginBottom: '10px', display: 'block' }}>
-                      {noInvoice ? '📸 공급 물품 실물 사진 업로드 (대체 증빙)' : '📄 공급자 거래명세서 증빙 업로드 (필수)'}
+                  {/* 공급자 거래명세서 / 사진 촬영 증빙 지정 영역 */}
+                  <div style={{ border: '1px solid var(--border)', borderRadius: '8px', padding: '16px', backgroundColor: 'var(--bg-card)' }}>
+                    <label style={{ fontWeight: '700', fontSize: '13.5px', marginBottom: '8px', display: 'block', color: 'var(--primary)' }}>
+                      📑 납품 증빙 문서 및 사진 첨부 (필수)
                     </label>
+                    <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '14px', lineHeight: '1.4' }}>
+                      스캔된 거래명세서 문서는 <strong>[📁 파일지정]</strong>을 이용하시고, 현장 실물 자재나 약식 인수표는 <strong>[📷 사진촬영]</strong>을 클릭하여 스마트폰으로 즉시 촬영하여 첨부하세요. (저장된 증빙은 구글 드라이브에 보존되며 월말 매입 지급처리에 사용됩니다.)
+                    </p>
 
-                    <div style={{ display: 'flex', gap: '16px', marginBottom: '12px', fontSize: '13px' }}>
-                      <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
-                        <input type="radio" name="uploadMethod" checked={uploadMethod === 'PC'} onChange={() => { setUploadMethod('PC'); setSelectedFile(null); }} />
-                        PC 파일 지정 업로드
-                      </label>
-                      <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
-                        <input type="radio" name="uploadMethod" checked={uploadMethod === 'MOBILE'} onChange={() => { setUploadMethod('MOBILE'); setSelectedFile(null); }} />
-                        핸드폰 카메라 사진 촬영 업로드
-                      </label>
+                    <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap', marginBottom: '12px' }}>
+                      {/* 1. 파일 지정 버튼 */}
+                      <button
+                        type="button"
+                        className="btn-secondary"
+                        onClick={() => {
+                          setNoInvoice(false);
+                          fileInputRef.current?.click();
+                        }}
+                        style={{ display: 'flex', alignItems: 'center', gap: '6px', height: '40px', padding: '0 16px', fontWeight: '700' }}
+                      >
+                        <Upload size={16} /> 📁 파일지정 (스캔/PDF/이미지)
+                      </button>
+                      <input
+                        type="file"
+                        ref={fileInputRef}
+                        onChange={(e) => {
+                          setNoInvoice(false);
+                          handleFileChange(e);
+                        }}
+                        style={{ display: 'none' }}
+                        accept="application/pdf,image/*"
+                      />
+
+                      {/* 2. 사진 촬영 버튼 */}
+                      <button
+                        type="button"
+                        className="btn-primary"
+                        onClick={() => {
+                          setNoInvoice(true);
+                          cameraInputRef.current?.click();
+                        }}
+                        style={{ display: 'flex', alignItems: 'center', gap: '6px', height: '40px', padding: '0 16px', fontWeight: '700', background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)', borderColor: '#059669' }}
+                      >
+                        <Camera size={16} /> 📷 사진촬영 (스마트폰 카메라)
+                      </button>
+                      <input
+                        type="file"
+                        ref={cameraInputRef}
+                        onChange={(e) => {
+                          setNoInvoice(true);
+                          handleFileChange(e);
+                        }}
+                        style={{ display: 'none' }}
+                        accept="image/*"
+                        capture="environment"
+                      />
                     </div>
 
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12.5px', marginBottom: '14px', color: 'var(--text-secondary)', cursor: 'pointer', fontWeight: '600' }}>
-                      <input type="checkbox" checked={noInvoice} onChange={(e) => setNoInvoice(e.target.checked)} />
-                      <span>거래명세서 분실/미발급 (물품 촬영본으로 대체 증빙)</span>
-                    </label>
-
-                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                      {uploadMethod === 'PC' ? (
+                    {/* 선택된 파일 명세 안내 */}
+                    {selectedFile && (
+                      <div style={{ padding: '10px 12px', backgroundColor: 'var(--bg-app)', borderRadius: '6px', border: '1px solid var(--border)', fontSize: '13px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
                         <div>
-                          <button
-                            type="button"
-                            className="btn-secondary"
-                            onClick={() => fileInputRef.current?.click()}
-                            style={{ display: 'flex', alignItems: 'center', gap: '6px', height: '38px' }}
-                          >
-                            <Upload size={14} /> {noInvoice ? '물품 사진 파일 선택 (이미지)' : '거래명세서 파일 선택 (PDF/이미지)'}
-                          </button>
-                          <input
-                            type="file"
-                            ref={fileInputRef}
-                            onChange={handleFileChange}
-                            style={{ display: 'none' }}
-                            accept="application/pdf,image/*"
-                          />
+                          <span style={{ color: 'var(--text-secondary)', marginRight: '6px' }}>
+                            {noInvoice ? '📸 실물 사진 촬영' : '📄 문서 파일 지정'}:
+                          </span>
+                          <strong>{selectedFile.name}</strong>
+                          <span style={{ fontSize: '11.5px', color: 'var(--text-secondary)', marginLeft: '6px' }}>
+                            ({((selectedFile.size || 0) / 1024).toFixed(1)} KB)
+                          </span>
                         </div>
-                      ) : (
-                        <div>
-                          <button
-                            type="button"
-                            className="btn-secondary"
-                            onClick={() => cameraInputRef.current?.click()}
-                            style={{ display: 'flex', alignItems: 'center', gap: '6px', height: '38px' }}
-                          >
-                            <Camera size={14} /> 사진 촬영하기
-                          </button>
-                          <input
-                            type="file"
-                            ref={cameraInputRef}
-                            onChange={handleFileChange}
-                            style={{ display: 'none' }}
-                            accept="image/*"
-                            capture="environment"
-                          />
-                        </div>
-                      )}
+                        <button
+                          type="button"
+                          onClick={() => setSelectedFile(null)}
+                          style={{ border: 'none', background: 'none', color: 'var(--danger)', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold' }}
+                        >
+                          취소
+                        </button>
+                      </div>
+                    )}
 
-                      {selectedFile && (
-                        <span style={{ fontSize: '13px', color: 'var(--text-main)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '300px' }}>
-                          선택됨: <strong>{selectedFile.name}</strong> ({((selectedFile.size || 0) / 1024).toFixed(1)} KB)
-                        </span>
-                      )}
-                    </div>
-
-                    <div style={{ marginTop: '10px', display: 'flex', alignItems: 'center', gap: '6px', color: selectedFile ? 'var(--success)' : 'var(--danger)', fontSize: '12.5px', fontWeight: '600' }}>
+                    <div style={{ marginTop: '12px', display: 'flex', alignItems: 'center', gap: '6px', color: selectedFile ? 'var(--success)' : 'var(--danger)', fontSize: '12.5px', fontWeight: '600' }}>
                       {selectedFile ? (
                         <>
-                          <CheckCircle2 size={16} /> {noInvoice ? '물품 실물사진 대체 증빙이 선택되었습니다. [입고완료] 클릭 시 소모품입고사진 형식으로 변환하여 구글 드라이브에 자동 업로드됩니다.' : '거래명세서 증빙이 선택되었습니다. [입고완료] 클릭 시 소모품입고번호 형식으로 변환하여 구글 드라이브에 자동 업로드됩니다.'}
+                          <CheckCircle2 size={16} /> {noInvoice ? '실물 납품 사진 촬영본이 준비되었습니다. [입고완료] 클릭 시 소모품입고사진 증빙으로 구글 드라이브에 보존 저장됩니다.' : '거래명세서 파일이 준비되었습니다. [입고완료] 클릭 시 소모품입고번호 파일로 구글 드라이브에 보존 저장됩니다.'}
                         </>
                       ) : (
                         <>
-                          <XCircle size={14} /> {noInvoice ? '물품 실물사진 촬영 및 업로드가 필수입니다. 촬영 후 사진을 지정해 주세요.' : '거래명세서 증빙 업로드가 필수입니다. 파일을 지정해 주세요.'}
+                          <XCircle size={14} /> [📁 파일지정] 또는 [📷 사진촬영] 중 하나를 터치/클릭하여 납품 증빙을 선택해 주세요.
                         </>
                       )}
                     </div>
