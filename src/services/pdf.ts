@@ -1,5 +1,5 @@
 // d:\Kiyeun_Lift\src\services\pdf.ts
-// PDF 거래명세서 출력 서비스 - 사용자 지적 2곳(작성일자 좌측 경계, 입금계좌 중앙선 경계) 수학적 완벽 교정
+// PDF 거래명세서 출력 서비스 - 중앙 이중 구분선 다중 겹선 현상 100% 영구 제거
 import html2canvas from 'html2canvas';
 import { jsPDF }    from 'jspdf';
 import ExcelJS      from 'exceljs';
@@ -30,20 +30,12 @@ function esc(s: string): string {
 }
 
 /**
- * 사용자 지적 2곳 완벽 교정 HTML 템플릿
+ * 중앙 구분선 겹선(다중 선) 완전 제거 HTML 템플릿
  * 
- * 1. 공급자/공급받는자 상단 8행 (테이블 A: 696px)
- *    - 공급자: 24px + 76px + 130px + 40px + 76px = 346px
- *    - 중앙 이중 구분선: 4px (위치: 346px ~ 350px)
- *    - 공급받는자: 24px + 76px + 130px + 40px + 76px = 346px
- *    ※ (24+76 = 100px 위치에 수직 세로선)
- * 
- * 2. 작성일자 & 입금계좌 하단 1행 (테이블 B: 696px, border-top 구분)
- *    - 작성일자 레이블: 100px (위치: 0px ~ 100px, 상단 100px 세로선과 100% 수직 일치)
- *    - 작성일자 값:     246px (위치: 100px ~ 346px)
- *    - 중앙 이중 구분선: 4px   (위치: 346px ~ 350px, 상단 이중선과 100% 수직 일치)
- *    - 입금계좌 레이블: 100px (위치: 350px ~ 450px, 상단 450px 세로선과 100% 수직 일치)
- *    - 입금계좌 값:     246px (위치: 450px ~ 696px)
+ * 중앙 구분선 정책:
+ * - 6번 컬럼(4px)에만 오직 단 하나의 `border-right: 3px double #1B65A6` 지정.
+ * - 5번 컬럼 우측 border 및 7번 컬럼 좌측 border는 모두 `none` 처리하여 겹선 차단.
+ * - 하단 작성일자/입금계좌 테이블의 3번 컬럼(4px) 역시 동일하게 `border-right: 3px double #1B65A6` 만 지정하여 상하 이중선이 100% 수직 일치 및 단일 이중선 유지.
  */
 function buildExactStatementHTML(
   billing: any,
@@ -161,17 +153,17 @@ function buildExactStatementHTML(
     <!-- 상단 8행: 공급자 vs 공급받는자 정보 (총 696px) -->
     <table>
       <colgroup>
-        <col style="width: 24px;"> <!-- 공급자 세로 -->
-        <col style="width: 76px;"> <!-- 레이블 -->
-        <col style="width: 130px;"><!-- 값 -->
-        <col style="width: 40px;"> <!-- 대표 레이블 -->
-        <col style="width: 76px;"> <!-- 대표자+도장 -->
-        <col style="width: 4px;">  <!-- 이중 구분선 -->
-        <col style="width: 24px;"> <!-- 공급받는자 세로 -->
-        <col style="width: 76px;"> <!-- 레이블 -->
-        <col style="width: 130px;"><!-- 값 -->
-        <col style="width: 40px;"> <!-- 대표 레이블 -->
-        <col style="width: 76px;"> <!-- 대표자명 -->
+        <col style="width: 24px;"> <!-- 1: 공급자 세로 -->
+        <col style="width: 76px;"> <!-- 2: 레이블 -->
+        <col style="width: 130px;"><!-- 3: 값 -->
+        <col style="width: 40px;"> <!-- 4: 대표 레이블 -->
+        <col style="width: 76px;"> <!-- 5: 대표자+도장 -->
+        <col style="width: 4px;">  <!-- 6: 중앙 이중 구분선 -->
+        <col style="width: 24px;"> <!-- 7: 공급받는자 세로 -->
+        <col style="width: 76px;"> <!-- 8: 레이블 -->
+        <col style="width: 130px;"><!-- 9: 값 -->
+        <col style="width: 40px;"> <!-- 10: 대표 레이블 -->
+        <col style="width: 76px;"> <!-- 11: 대표자명 -->
       </colgroup>
 
       <!-- 1행: 등록번호 -->
@@ -179,7 +171,7 @@ function buildExactStatementHTML(
         <td rowspan="8" class="L" style="border-right: ${solid}; writing-mode: vertical-rl; letter-spacing: 4px; font-size: 10px;">공&nbsp;급&nbsp;자</td>
         <td class="L" style="border-right: ${dotted}; border-bottom: ${dotted};">등록번호</td>
         <td colspan="3" class="V" style="border-bottom: ${dotted}; font-weight: bold; text-align: center; letter-spacing: 1px;">138-81-83251</td>
-        <td rowspan="8" style="border-right: ${dbl}; border-left: ${solid};"></td>
+        <td rowspan="8" style="border-right: ${dbl};"></td>
         <td rowspan="8" class="L" style="border-right: ${solid}; writing-mode: vertical-rl; letter-spacing: 2px; font-size: 10px;">공급받는자</td>
         <td class="L" style="border-right: ${dotted}; border-bottom: ${dotted};">등록번호</td>
         <td colspan="3" class="V" style="border-bottom: ${dotted}; font-size: 9px;">${esc(customer?.bizRegNo || '')}</td>
@@ -253,7 +245,7 @@ function buildExactStatementHTML(
       </tr>
     </table>
 
-    <!-- 하단 1행: 작성일자 & 입금계좌 (독립 매핑 테이블: 696px) -->
+    <!-- 하단 1행: 작성일자 & 입금계좌 (단일 이중선 100% 매칭: 696px) -->
     <table style="border-top: ${solid};">
       <colgroup>
         <col style="width: 100px;"> <!-- 작성일자 레이블 (24+76) -->
@@ -264,8 +256,8 @@ function buildExactStatementHTML(
       </colgroup>
       <tr style="height: 22px;">
         <td class="L" style="border-right: ${solid}; font-size: 9px;">작성일자</td>
-        <td class="V" style="border-right: ${dbl}; padding-left: 8px; font-size: 9px;">${billingDate}</td>
-        <td style="border-right: ${solid};"></td>
+        <td class="V" style="padding-left: 8px; font-size: 9px;">${billingDate}</td>
+        <td style="border-right: ${dbl};"></td>
         <td class="L" style="border-right: ${solid}; font-size: 9px;">입금계좌</td>
         <td class="V" style="padding-left: 8px; font-weight: bold; font-size: 8.5px;">신한은행 140-010-007060 , 주식회사 기연리프트</td>
       </tr>
