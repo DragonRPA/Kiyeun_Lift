@@ -5,6 +5,7 @@ import { db, Asset, Billing, BillingDetail } from '../services/db';
 import { Plus, Download, Mail, CheckCircle, Search, DollarSign, Calendar, FileText, Send, Edit3 } from 'lucide-react';
 import { emailService } from '../services/email';
 import { exportToExcel, exportTransactionStatementExcel, exportTransactionStatementExcelBuffer } from '../services/excel';
+import { downloadTransactionStatementPDF } from '../services/pdf';
 
 export const Billings: React.FC = () => {
   const {
@@ -229,7 +230,7 @@ export const Billings: React.FC = () => {
     setShowMailModal(true);
   };
 
-  // 거래명세서 Excel 양식 → 브라우저 인쇄(PDF 저장) 트리거
+  // 거래명세서 PDF 직접 생성 (시스템 Excel→PDF 변환)
   const printStatementAsPdf = async () => {
     const billing = billings.find(b => b.id === mailBillingId);
     const details = billingDetails.filter(d => d.billingId === mailBillingId);
@@ -242,26 +243,12 @@ export const Billings: React.FC = () => {
     const ym = billing?.billingYm || '';
 
     try {
-      const buffer = await exportTransactionStatementExcelBuffer(
-        billing, details, customer, contract, sName, templateUrl
+      await downloadTransactionStatementPDF(
+        billing, details, customer, contract, sName, templateUrl,
+        `${custName}_${sName}_${ym}`
       );
-      // Blob URL로 새 창 열고 인쇄 다이얼로그 트리거 → 사용자가 PDF로 저장
-      const blob = new Blob([buffer], {
-        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-      });
-      const url = URL.createObjectURL(blob);
-      // 엑셀을 직접 PDF로 변환하는 브라우저 API가 없으므로,
-      // 엑셀 파일을 다운로드하고 PDF 저장 안내창을 표시
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${custName}_${sName}_${ym}.xlsx`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      alert('엑셀 파일이 다운로드되었습니다.\n엑셀에서 파일 → 다른 이름으로 저장 → PDF 형식으로 저장하세요.');
     } catch (err: any) {
-      showErrorModal('PDF 저장용 엑셀 생성 실패: ' + (err?.message || String(err)));
+      showErrorModal('PDF 생성 실패: ' + (err?.message || String(err)));
     }
   };
 
@@ -1490,7 +1477,7 @@ ${details.map((d, idx) => {
                   onClick={printStatementAsPdf}
                   style={{ display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 'bold' }}
                 >
-                  <Download size={14} /> PDF 저장용 엑셀 다운로드
+                  <Download size={14} /> PDF 다운로드
                 </button>
                 <button type="submit" className="btn-success" disabled={isSending} style={{ fontWeight: 'bold' }}>
                   {isSending ? '발송 중...' : <><Send size={14} /> 거래명세서 이메일 전송</>}

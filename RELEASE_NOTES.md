@@ -1,3 +1,24 @@
+# Release Notes (v1.16.9.Build.00010 - 2026-07-31 17:06)
+
+## 📄 [거래명세서 시스템 PDF 변환 기능 신규 구현 (Excel→PDF 즉시 다운로드)]
+
+### 신규 파일
+- `src/services/pdf.ts`: 거래명세서 전용 PDF 생성 서비스 신설.
+
+### 구현 방식 (시스템 내부 변환, 사용자 조작 없음)
+1. ExcelJS로 구글 드라이브 양식 파일 fetch (이전 구현 재사용).
+2. `worksheet.getImages()`로 도장(stamp) 이미지 추출 → base64 data URL 변환.
+3. 거래명세서 레이아웃(공급자/공급받는자/품목표/합계) 을 HTML로 재현 (파란 테두리/배경 포함).
+4. 숨김 div에 렌더링 → `html2canvas` 캡처 (scale:2, useCORS:true).
+5. `jsPDF` A4 PDF 생성 → `고객명_현장명_청구연월.pdf` 즉시 다운로드.
+
+### 변경 사항 (Billings.tsx)
+- `printStatementAsPdf()` 내부 로직 → `downloadTransactionStatementPDF()` 호출로 교체.
+- 버튼 레이블: "PDF 저장용 엑셀 다운로드" → "PDF 다운로드".
+- `pdf.ts` import 추가.
+
+---
+
 # Release Notes (v1.16.9.Build.00009 - 2026-07-31 12:03)
 
 ## 🗑️ [청구 거래명세서 - 기존 HTML/PDF 로직 제거 & 엑셀 양식 기반 전환 완결]
