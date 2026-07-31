@@ -1375,10 +1375,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!req) return;
 
     const nextReceivedQty = req.receivedQty + qty;
+    const isCompleted = nextReceivedQty >= req.requestedQty;
+    const todayStr = new Date().toISOString().split('T')[0];
+
     db.updateRow<ConsumablePurchaseRequest>('consumablePurchases', id, {
       receivedQty: nextReceivedQty,
       statementFileUrl,
       inbounderName: currentUser?.name || '시스템',
+      status: isCompleted ? 'COMPLETED' : req.status,
+      completedDate: req.completedDate || todayStr,
       updatedAt: new Date().toISOString()
     });
 
@@ -2916,18 +2921,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       transportCount++;
     }
 
-    // ② 소모품 매입 집계 — 당월 COMPLETED 구매신청 중 미정산 건
+    // ② 소모품 매입 집계 — 당월 COMPLETED / 입고 완료 구매신청 중 미정산 건
     const existingConsumableSettlementSourceIds = new Set(
       db.purchaseSettlementItems
         .filter(i => i.sourceType === 'CONSUMABLE_PURCHASE')
         .map(i => i.sourceId)
     );
 
-    const purchasesOfMonth = db.consumablePurchases.filter(p =>
-      p.status === 'COMPLETED' &&
-      p.completedDate?.startsWith(ym) &&
-      !existingConsumableSettlementSourceIds.has(p.id)
-    );
+    const purchasesOfMonth = db.consumablePurchases.filter(p => {
+      if (existingConsumableSettlementSourceIds.has(p.id)) return false;
+      const isFinished = p.status === 'COMPLETED' || p.receivedQty > 0;
+      if (!isFinished) return false;
+      const rawDate = p.completedDate || p.requestDate || p.createdAt || '';
+      const normDate = rawDate.replace(/\./g, '-');
+      return normDate.startsWith(ym);
+    });
 
     // 판매처별 그루핑
     const consumableGroups = new Map<string, typeof purchasesOfMonth>();
@@ -2938,17 +2946,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
 
     for (const [vendorName, items] of consumableGroups.entries()) {
-      const totalAmount = items.reduce((sum, p) => sum + (p.requestedQty * p.unitPrice), 0);
-      const settlement = db.insertRow<PurchaseSettlement>('purchaseSettlements', {
-        settlementYm: ym,
-        settlementType: 'CONSUMABLE',
-        vendorName,
-        totalAmount,
-        paidAmount: 0,
-        status: 'PENDING',
-        createdAt: nowIso,
-        updatedAt: nowIso
-      });
+      const groupTotalAmount = items.reduce((sum, p) => sum + (p.requestedQty * p.unitPrice), 0);
+
+      let settlement = db.purchaseSettlements.find(p => p.settlementYm === ym && p.settlementType === 'CONSUMABLE' && p.vendorName === vendorName);
+      if (!settlement) {
+        settlement = db.insertRow<PurchaseSettlement>('purchaseSettlements', {
+          settlementYm: ym,
+          settlementType: 'CONSUMABLE',
+          vendorName,
+          totalAmount: groupTotalAmount,
+          paidAmount: 0,
+          status: 'PENDING',
+          createdAt: nowIso,
+          updatedAt: nowIso
+        });
+      } else {
+        db.updateRow<PurchaseSettlement>('purchaseSettlements', settlement.id, {
+          totalAmount: settlement.totalAmount + groupTotalAmount,
+          updatedAt: nowIso
+        });
+      }
 
       items.forEach(p => {
         db.insertRow<PurchaseSettlementItem>('purchaseSettlementItems', {
