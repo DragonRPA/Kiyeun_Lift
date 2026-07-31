@@ -1,3 +1,17 @@
+# Release Notes (v1.17.0.Build.00052 - 2026-07-31 22:50)
+
+## 🛠️ [Vercel 프로덕션 빌드 TS2552 타입 툴링 누락 패치 및 배포 완료]
+
+### 원인 및 패치 내용
+- `src/pages/PurchaseSettlementPage.tsx` 내부 타입 주석에 사용된 `PurchaseSettlementItem` 인터페이스의 top-level import 구문이 누락되어 Vercel의 `tsc -b` 타입 검증 단계에서 발생했던 `TS2552: Cannot find name 'PurchaseSettlementItem'` 빌드 오류 수정.
+- `PurchaseSettlementItem` 명시적 import 추가 및 `npx tsc -b && npx vite build` 100% 성공 검증 완료.
+
+### 빌드 검증
+- TypeScript `tsc -b` 통과 ✅
+- `npx vite build` 정규 빌드 성공 ✅
+
+---
+
 # Release Notes (v1.17.0.Build.00051 - 2026-07-31 22:46)
 
 ## ☁️ [구글 드라이브 설정 메뉴 '웹앱 설정 변경' 카드 & 1클릭 코드복사/테스트 신설]

@@ -3,7 +3,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
-import { PurchaseSettlement, PurchaseSettlementType } from '../services/db';
+import { PurchaseSettlement, PurchaseSettlementItem, PurchaseSettlementType } from '../services/db';
 import {
   Truck, ShoppingBag, Building2, Plus, CheckCircle2, CreditCard,
   ChevronDown, ChevronUp, FileText, AlertCircle, RefreshCw, X, Download, ExternalLink, Eye
