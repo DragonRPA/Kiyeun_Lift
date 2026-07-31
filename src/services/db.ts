@@ -1185,8 +1185,12 @@ class LocalDB {
     if (!this.pendingWrites || this.pendingWrites.length === 0) return;
     try {
       await Promise.all(this.pendingWrites);
-    } catch (err) {
+    } catch (err: any) {
       console.error("Supabase pending write error:", err);
+      const errMsg = err?.message || String(err);
+      if (errMsg.includes('Failed to fetch') || errMsg.includes('NetworkError')) {
+        throw new Error(`원격 Supabase DB 통신 장애 (Failed to fetch):\n\n인터넷 네트워크 연결 상태, 사내 방화벽 정책 또는 Supabase 서버 상태를 확인해 주세요.\n(로컬 데이터는 안전하게 보존되었습니다.)`);
+      }
       throw err;
     } finally {
       this.pendingWrites = [];

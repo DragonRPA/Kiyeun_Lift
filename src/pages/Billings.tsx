@@ -78,11 +78,11 @@ export const Billings: React.FC = () => {
         billingYm: newYm.trim(),
         updatedAt: new Date().toISOString()
       });
-      await db.awaitPendingWrites();
       refreshAllData();
+      await db.awaitPendingWrites();
       alert(`✅ 청구귀속월이 [${newYm.trim()}]으로 성공적으로 변경되었습니다.`);
     } catch (err: any) {
-      showErrorModal(`⚠️ 청구귀속월 변경 중 DB 저장 실패:\n\n${err?.message || err}`, '귀속월 수정 오류');
+      showErrorModal(`⚠️ 청구귀속월 변경 중 DB 저장 실패:\n\n${err?.message || err}`, '청구월 수정 오류');
     }
   };
 
@@ -786,7 +786,7 @@ ${details.map((d, idx) => {
                           style={{ padding: '2px 8px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px' }}
                           title="청구귀속월 변경"
                         >
-                          <Edit3 size={11} /> 귀속월 수정
+                          <Edit3 size={11} /> 청구월 수정
                         </button>
                       )}
                     </div>
