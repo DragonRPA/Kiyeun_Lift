@@ -8,6 +8,7 @@ import { exportToExcel } from '../services/excel';
 
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
+import { documentBuilder } from '../services/templates';
 
 export const Billings: React.FC = () => {
   const {
@@ -287,10 +288,10 @@ export const Billings: React.FC = () => {
 당사 리프트 임대 계약(계약번호: ${contract?.contractNo || '-'})에 따른 ${billing?.billingYm} 거래명세서 및 청구 내역을 아래와 같이 송부해 드립니다.
 
 [1. 공급자 정보]
-- 사업자등록번호: 123-45-67890
-- 상호(법인명): (주)기연엘리베이터
-- 대표자명: 기연대표
-- 대표전화: 02-1234-5678
+- 사업자등록번호: 138-81-83251
+- 상호(법인명): (주)기연리프트
+- 대표자명: 이수용
+- 대표전화: 031-334-5296 (팩스: 031-335-5297)
 - 담당부서: 영업/수금관리팀
 
 [2. 공급받는 자 정보]
@@ -314,7 +315,7 @@ ${details.map((d, idx) => {
 - 최종 청구 총액: ${(billing?.totalAmount || 0).toLocaleString()}원 (기수금: ${(billing?.paidAmount || 0).toLocaleString()}원 / 미수잔액: ${((billing?.totalAmount || 0) - (billing?.paidAmount || 0)).toLocaleString()}원)
 
 [5. 입금 계좌 안내]
-- 기업은행 000-000000-00-000 (주)기연엘리베이터
+- 기업은행 138-81-83251 (주)기연리프트
 
 [6. 첨부 문서 안내]
 - 본 이메일에는 구글 드라이브 양식을 기반으로 자동 생성된 (주)기연엘리베이터 표준 거래명세서 PDF 문서(거래명세서_${customer?.name || '고객사'}_${billing?.billingYm}.pdf)가 자동 렌더링되어 첨부되었습니다.
@@ -1429,71 +1430,19 @@ ${details.map((d, idx) => {
                   </div>
                 </div>
               ) : (
-                /* 표준 거래명세서 미리보기 (PREVIEW) */
-                <div id="transaction-statement-pdf-target" style={{ marginBottom: '20px', padding: '20px', backgroundColor: '#fff', border: '2px solid #cbd5e1', borderRadius: '8px', color: '#1e293b', fontSize: '12.5px' }}>
-                  <div style={{ textAlign: 'center', borderBottom: '2px double #0f172a', paddingBottom: '8px', marginBottom: '12px' }}>
-                    <h3 style={{ margin: 0, fontSize: '20px', fontWeight: '800', letterSpacing: '4px', color: '#0f172a' }}>거 래 명 세 서</h3>
-                    <span style={{ fontSize: '11px', color: '#64748b' }}>(공급받는자 보관용 - 구글 드라이브 표준 양식)</span>
-                  </div>
-
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px', border: '1px solid #cbd5e1', padding: '10px', borderRadius: '6px', backgroundColor: '#f8fafc' }}>
-                    <div>
-                      <div style={{ fontWeight: '700', color: '#0f172a', borderBottom: '1px solid #e2e8f0', paddingBottom: '4px', marginBottom: '4px' }}>[공급자]</div>
-                      <div>상호: <strong>(주)기연엘리베이터</strong></div>
-                      <div>사업자번호: 123-45-67890</div>
-                      <div>대표자: 기연대표</div>
-                      <div>전화: 02-1234-5678</div>
-                    </div>
-                    <div>
-                      <div style={{ fontWeight: '700', color: '#0f172a', borderBottom: '1px solid #e2e8f0', paddingBottom: '4px', marginBottom: '4px' }}>[공급받는자]</div>
-                      <div>상호: <strong>{targetCust?.name || '-'}</strong></div>
-                      <div>사업자번호: {targetCust?.bizRegNo || '-'}</div>
-                      <div>대표자: {targetCust?.representative || '-'}</div>
-                      <div>주소: {targetCust?.address || '-'}</div>
-                    </div>
-                  </div>
-
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '12px', fontWeight: '600', color: '#475569' }}>
-                    <span>청구연월: {targetBilling?.billingYm}</span>
-                    <span>발행일자: {targetBilling?.billingDate}</span>
-                    <span>계약번호: {targetContract?.contractNo || '-'}</span>
-                  </div>
-
-                  <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #cbd5e1', marginBottom: '12px' }}>
-                    <thead>
-                      <tr style={{ backgroundColor: '#f1f5f9', borderBottom: '1px solid #cbd5e1' }}>
-                        <th style={{ padding: '6px', borderRight: '1px solid #cbd5e1' }}>No</th>
-                        <th style={{ padding: '6px', borderRight: '1px solid #cbd5e1' }}>품명 및 적용 기준</th>
-                        <th style={{ padding: '6px', borderRight: '1px solid #cbd5e1', textAlign: 'right' }}>공급가액</th>
-                        <th style={{ padding: '6px', borderRight: '1px solid #cbd5e1', textAlign: 'right' }}>부가세(10%)</th>
-                        <th style={{ padding: '6px', textAlign: 'right' }}>합계</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {targetDetails.map((d, idx) => {
-                        const itemSupply = Math.round(d.amount / 1.1);
-                        const itemVat = d.amount - itemSupply;
-                        return (
-                          <tr key={d.id} style={{ borderBottom: '1px solid #e2e8f0' }}>
-                            <td style={{ padding: '6px', textAlign: 'center', borderRight: '1px solid #cbd5e1' }}>{idx + 1}</td>
-                            <td style={{ padding: '6px', borderRight: '1px solid #cbd5e1' }}>
-                              <strong>{d.itemName}</strong>
-                              <div style={{ fontSize: '11px', color: '#64748b' }}>{d.description}</div>
-                            </td>
-                            <td style={{ padding: '6px', textAlign: 'right', borderRight: '1px solid #cbd5e1' }}>{itemSupply.toLocaleString()}원</td>
-                            <td style={{ padding: '6px', textAlign: 'right', borderRight: '1px solid #cbd5e1' }}>{itemVat.toLocaleString()}원</td>
-                            <td style={{ padding: '6px', textAlign: 'right', fontWeight: '600' }}>{d.amount.toLocaleString()}원</td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px', backgroundColor: '#eff6ff', borderRadius: '6px', border: '1px solid #bfdbfe', fontWeight: '700', color: '#1e40af' }}>
-                    <span>총 청구합계 (부가세 포함)</span>
-                    <span style={{ fontSize: '16px' }}>{(targetBilling?.totalAmount || 0).toLocaleString()} 원</span>
-                  </div>
-                </div>
+                /* 표준 거래명세서 미리보기 (PREVIEW - (주)기연리프트 구글 드라이브 표준 양식) */
+                <div 
+                  style={{ marginBottom: '20px' }}
+                  dangerouslySetInnerHTML={{
+                    __html: documentBuilder.buildTransactionStatement(
+                      targetBilling,
+                      targetDetails,
+                      targetCust,
+                      targetContract,
+                      sites.find(s => s.id === targetContract?.siteId)
+                    )
+                  }}
+                />
               )}
 
               <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>

@@ -1001,7 +1001,7 @@ const SEED_GOOGLE_CONFIG: GoogleConfig[] = [
     preDeliveryChecklistTemplateUrl: 'd:/GoogleDrive/RPA 개발/01.AntiGravity/Kiyuen_Lift/templates/반입전_CHECK_LIST_양식.html',
     bizRegCertUrl: 'd:/GoogleDrive/RPA 개발/01.AntiGravity/Kiyuen_Lift/templates/사업자등록증.pdf',
     bankbookCopyUrl: 'd:/GoogleDrive/RPA 개발/01.AntiGravity/Kiyuen_Lift/templates/통장사본.pdf',
-    transactionStatementTemplateUrl: 'https://docs.google.com/spreadsheets/d/1xuXeHeD7HfXBOYc6umrM0GGj_mItJ6sy/edit?usp=drive_link&ouid=116288778275129582746&rtpof=true&sd=true',
+    transactionStatementTemplateUrl: 'd:/GoogleDrive/RPA 개발/01.AntiGravity/Kiyuen_Lift/templates/거래명세서_양식.html',
     defaultRootFolderId: 'root',
     updatedAt: new Date().toISOString()
   }

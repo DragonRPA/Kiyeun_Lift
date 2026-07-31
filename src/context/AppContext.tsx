@@ -326,7 +326,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             safetyInspectionTemplateUrl: 'templates/고소작업대_안전점검결과서_양식.html',
             preDeliveryChecklistTemplateUrl: 'templates/반입전_CHECK_LIST_양식.html',
             bizRegCertUrl: 'C:/Users/이정용/GoogleDrive/Kiyuen_Lift/company/사업자등록증.pdf',
-            bankbookCopyUrl: 'C:/Users/이정용/GoogleDrive/Kiyuen_Lift/company/통장사본.pdf'
+            bankbookCopyUrl: 'C:/Users/이정용/GoogleDrive/Kiyuen_Lift/company/통장사본.pdf',
+            transactionStatementTemplateUrl: 'templates/거래명세서_양식.html'
           };
 
           const mergedConfigs = configs.map(cfg => {
