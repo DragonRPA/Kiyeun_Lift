@@ -1,5 +1,5 @@
 // d:\Kiyeun_Lift\src\services\pdf.ts
-// 거래명세서 PDF 생성 — 1번 원본 엑셀과 100% 동일하게 렌더링
+// PDF 거래명세서 출력 서비스 - 사용자 제공 PDF 규격 100% 정밀 분석 기반 완전 재작성
 import html2canvas from 'html2canvas';
 import { jsPDF }    from 'jspdf';
 import ExcelJS      from 'exceljs';
@@ -30,13 +30,18 @@ function esc(s: string): string {
 }
 
 /**
- * 거래명세서 HTML 생성
- * 원본 엑셀과 100% 동일한 구조:
- * - 작성일자/입금계좌가 공급자/공급받는자 테이블 내부 행으로 포함됨
- * - 하단 문구 제거
- * - 행 높이 및 폰트 크기 원본 엑셀 비율에 정확히 맞춤
+ * 사용자 PDF 원본 100% 정밀 복원 HTML 구조
+ * 
+ * 폭 계산 (컨테이너 700px, 테두리 2px*2 제외 = 696px):
+ * 1. 공급자/공급받는자 박스 (696px = 346px + 4px 이중구분선 + 346px)
+ *    - 공급자: 세로명(24) + 레이블(76) + 값(130) + 대표(40) + 이름(76) = 346px
+ *    - 공급받는자: 세로명(24) + 레이블(76) + 값(130) + 대표(40) + 이름(76) = 346px
+ *    - 하단 작성일자/입금계좌: 작성일자(100)+일자(246) + 구분선(4) + 입금계좌(100)+계좌(246) = 696px
+ * 
+ * 2. 품목 테이블 (696px = 28+22+22+274+35+75+80+75+85)
+ * 3. 합계 행 (696px = 50+20+100+50+20+90+40+20+100+110+96)
  */
-function buildHTML(
+function buildExactStatementHTML(
   billing: any,
   details: any[],
   customer: any,
@@ -51,10 +56,10 @@ function buildHTML(
   const ITEM_MAX = 11;
   const BLUE = '#1B65A6';
   const dotted = `1px dotted ${BLUE}`;
-  const solid  = `1px solid  ${BLUE}`;
+  const solid  = `1px solid ${BLUE}`;
   const dbl    = `3px double ${BLUE}`;
-  const outer  = `2px solid  ${BLUE}`;
-  const ROW_H  = 18; // 원본 비율에 맞춘 조밀한 품목 행 높이(px)
+  const outer  = `2px solid ${BLUE}`;
+  const ROW_H  = 20;
 
   let itemRows = '';
   let supplyTotal = 0;
@@ -72,12 +77,12 @@ function buildHTML(
         <td style="border-right:${dotted};border-bottom:${dotted};text-align:center">${i+1}</td>
         <td style="border-right:${dotted};border-bottom:${dotted};text-align:center">${dateM}</td>
         <td style="border-right:${dotted};border-bottom:${dotted};text-align:center">${dateD}</td>
-        <td style="border-right:${dotted};border-bottom:${dotted};padding-left:4px;overflow:hidden;text-overflow:ellipsis">${esc(d.itemName)}</td>
+        <td style="border-right:${dotted};border-bottom:${dotted};padding-left:5px;overflow:hidden;text-overflow:ellipsis">${esc(d.itemName)}</td>
         <td style="border-right:${dotted};border-bottom:${dotted};text-align:center">${d.quantity||1}</td>
-        <td style="border-right:${dotted};border-bottom:${dotted};text-align:right;padding-right:4px">${supply>0?(d.unitPrice||0).toLocaleString():''}</td>
-        <td style="border-right:${dotted};border-bottom:${dotted};text-align:right;padding-right:4px">${supply.toLocaleString()}</td>
-        <td style="border-right:${dotted};border-bottom:${dotted};text-align:right;padding-right:4px">${vat.toLocaleString()}</td>
-        <td style="border-bottom:${dotted};padding-left:4px;overflow:hidden;text-overflow:ellipsis">${esc(siteName)}</td>
+        <td style="border-right:${dotted};border-bottom:${dotted};text-align:right;padding-right:5px">${supply>0?(d.unitPrice||0).toLocaleString():''}</td>
+        <td style="border-right:${dotted};border-bottom:${dotted};text-align:right;padding-right:5px">${supply.toLocaleString()}</td>
+        <td style="border-right:${dotted};border-bottom:${dotted};text-align:right;padding-right:5px">${vat.toLocaleString()}</td>
+        <td style="border-bottom:${dotted};padding-left:5px;overflow:hidden;text-overflow:ellipsis">${esc(siteName)}</td>
       </tr>`;
     } else {
       itemRows += `
@@ -88,17 +93,16 @@ function buildHTML(
         <td style="border-right:${dotted};border-bottom:${dotted}"></td>
         <td style="border-right:${dotted};border-bottom:${dotted}"></td>
         <td style="border-right:${dotted};border-bottom:${dotted}"></td>
-        <td style="border-right:${dotted};border-bottom:${dotted};text-align:right;padding-right:4px">-</td>
-        <td style="border-right:${dotted};border-bottom:${dotted};text-align:right;padding-right:4px">-</td>
+        <td style="border-right:${dotted};border-bottom:${dotted};text-align:right;padding-right:5px;color:#000">-</td>
+        <td style="border-right:${dotted};border-bottom:${dotted};text-align:right;padding-right:5px;color:#000">-</td>
         <td style="border-bottom:${dotted}"></td>
       </tr>`;
     }
   }
 
   const total = supplyTotal + vatTotal;
-  // 도장 크기 원본 엑셀 도장 크기(26px)로 조정
   const stampImg = stampDataUrl
-    ? `<img src="${stampDataUrl}" style="position:absolute;right:2px;top:-4px;width:26px;height:26px;opacity:0.9;z-index:99">`
+    ? `<img src="${stampDataUrl}" style="position:absolute;right:4px;top:-6px;width:30px;height:30px;opacity:0.9;z-index:99">`
     : '';
 
   return `<!DOCTYPE html>
@@ -106,167 +110,215 @@ function buildHTML(
 <head>
 <meta charset="utf-8">
 <style>
-  html,body{margin:0;padding:0;width:720px;background:#fff;font-family:'Malgun Gothic','맑은 고딕',Arial,sans-serif;font-size:8.5px;color:#000}
-  *{box-sizing:border-box}
-  table{border-collapse:collapse;table-layout:fixed;width:100%}
-  td,th{padding:0 3px;vertical-align:middle;overflow:hidden;white-space:nowrap}
-  .L{color:${BLUE};font-weight:bold;text-align:center}
-  .V{color:#000;padding-left:4px}
+  html, body {
+    margin: 0;
+    padding: 0;
+    width: 700px;
+    background: #fff;
+    font-family: 'Malgun Gothic', '맑은 고딕', Arial, sans-serif;
+    font-size: 9px;
+    color: #000;
+  }
+  * { box-sizing: border-box; }
+  table {
+    border-collapse: collapse;
+    table-layout: fixed;
+    width: 100%;
+  }
+  td, th {
+    padding: 0 4px;
+    vertical-align: middle;
+    overflow: hidden;
+    white-space: nowrap;
+  }
+  .L {
+    color: ${BLUE};
+    font-weight: bold;
+    text-align: center;
+  }
+  .V {
+    color: #000;
+    padding-left: 4px;
+  }
 </style>
 </head>
 <body>
-<div style="width:720px;padding:6px 0">
+<div style="width: 700px; padding: 10px 0; background: #fff;">
 
-  <!-- ① 제목 -->
-  <div style="text-align:center;margin-bottom:2px">
-    <span style="font-size:19px;font-weight:bold;color:${BLUE};letter-spacing:10px;border-bottom:${dbl};padding-bottom:2px;display:inline-block">거 래 명 세 표</span>
+  <!-- ① 타이틀 -->
+  <div style="text-align: center; margin-bottom: 4px;">
+    <span style="font-size: 20px; font-weight: bold; color: ${BLUE}; letter-spacing: 10px; border-bottom: ${dbl}; padding-bottom: 3px; display: inline-block;">거 래 명 세 표</span>
   </div>
-  <div style="text-align:center;font-size:8.5px;color:${BLUE};margin-bottom:4px">(공급받는자 보관용)</div>
+  <div style="text-align: center; font-size: 9px; color: ${BLUE}; margin-bottom: 8px;">(공급받는자 보관용)</div>
 
-  <!-- ② 공급자 / 공급받는자 / 작성일자 / 입금계좌 통합 박스 (716px = 356 + 4 + 356) -->
-  <div style="border:${outer};margin-bottom:4px">
+  <!-- ② 공급자 / 공급받는자 / 작성일자 / 입금계좌 (단일 통합 외곽선) -->
+  <div style="border: ${outer}; margin-bottom: 6px;">
     <table>
       <colgroup>
-        <col style="width:26px"> <!-- 공급자 세로 -->
-        <col style="width:110px"><!-- 레이블 -->
-        <col style="width:150px"><!-- 값 -->
-        <col style="width:40px"> <!-- 대표 레이블 -->
-        <col style="width:30px"> <!-- 대표자+도장 -->
-        <col style="width:4px">  <!-- 이중선 분리대 -->
-        <col style="width:26px"> <!-- 공급받는자 세로 -->
-        <col style="width:110px"><!-- 레이블 -->
-        <col style="width:150px"><!-- 값 -->
-        <col style="width:40px"> <!-- 대표 레이블 -->
-        <col style="width:30px"> <!-- 대표자명 -->
+        <col style="width: 24px;"> <!-- 공급자 세로 -->
+        <col style="width: 76px;"> <!-- 레이블 -->
+        <col style="width: 130px;"><!-- 값 -->
+        <col style="width: 40px;"> <!-- 대표 레이블 -->
+        <col style="width: 76px;"> <!-- 대표자+도장 -->
+        <col style="width: 4px;">  <!-- 이중 구분선 -->
+        <col style="width: 24px;"> <!-- 공급받는자 세로 -->
+        <col style="width: 76px;"> <!-- 레이블 -->
+        <col style="width: 130px;"><!-- 값 -->
+        <col style="width: 40px;"> <!-- 대표 레이블 -->
+        <col style="width: 76px;"> <!-- 대표자명 -->
       </colgroup>
 
-      <!-- 등록번호 -->
-      <tr style="height:18px">
-        <td rowspan="8" class="L" style="border-right:${solid};writing-mode:vertical-rl;letter-spacing:3px;font-size:9.5px">공&nbsp;급&nbsp;자</td>
-        <td class="L" style="border-right:${dotted};border-bottom:${dotted}">등록번호</td>
-        <td colspan="3" class="V" style="border-bottom:${dotted};font-weight:bold;text-align:center">138-81-83251</td>
-        <td rowspan="8" style="border-right:${dbl}"></td>
-        <td rowspan="8" class="L" style="border-right:${solid};writing-mode:vertical-rl;letter-spacing:1px;font-size:9.5px">공급받는자</td>
-        <td class="L" style="border-right:${dotted};border-bottom:${dotted}">등록번호</td>
-        <td colspan="3" class="V" style="border-bottom:${dotted}">${esc(customer?.bizRegNo||'')}</td>
-      </tr>
-      <!-- 상호/대표 -->
-      <tr style="height:18px">
-        <td class="L" style="border-right:${dotted};border-bottom:${dotted}">상호</td>
-        <td class="V" style="border-right:${dotted};border-bottom:${dotted};font-size:8px">주식회사 기연리프트</td>
-        <td class="L" style="border-right:${dotted};border-bottom:${dotted}">대표</td>
-        <td class="V" style="position:relative;overflow:visible!important;border-bottom:${dotted}">이수용${stampImg}</td>
-        <td class="L" style="border-right:${dotted};border-bottom:${dotted}">상호</td>
-        <td class="V" style="border-right:${dotted};border-bottom:${dotted};font-size:8px">${esc(customer?.name||'')}</td>
-        <td class="L" style="border-right:${dotted};border-bottom:${dotted}">대표</td>
-        <td class="V" style="border-bottom:${dotted}">${esc(customer?.representative||'')}</td>
-      </tr>
-      <!-- 주소 -->
-      <tr style="height:18px">
-        <td class="L" style="border-right:${dotted};border-bottom:${dotted}">주소</td>
-        <td colspan="3" class="V" style="border-bottom:${dotted};font-size:7.5px">경기도 용인시 처인구 모현읍 갈담로112번길 21-3</td>
-        <td class="L" style="border-right:${dotted};border-bottom:${dotted}">주소</td>
-        <td colspan="3" class="V" style="border-bottom:${dotted};font-size:7.5px">${esc(customer?.address||'')}</td>
-      </tr>
-      <!-- 업태/종목 -->
-      <tr style="height:18px">
-        <td class="L" style="border-right:${dotted};border-bottom:${dotted}">업태</td>
-        <td class="V" style="border-right:${dotted};border-bottom:${dotted};font-size:7px">사업지원 및 임대서비스업 외</td>
-        <td class="L" style="border-right:${dotted};border-bottom:${dotted}">종목</td>
-        <td class="V" style="border-bottom:${dotted};font-size:7px">고소장비임대업 외</td>
-        <td class="L" style="border-right:${dotted};border-bottom:${dotted}">업태</td>
-        <td class="V" style="border-right:${dotted};border-bottom:${dotted}"></td>
-        <td class="L" style="border-right:${dotted};border-bottom:${dotted}">종목</td>
-        <td class="V" style="border-bottom:${dotted}"></td>
-      </tr>
-      <!-- 계약담당자 -->
-      <tr style="height:18px">
-        <td class="L" style="border-right:${dotted};border-bottom:${dotted}">계약담당자</td>
-        <td class="V" style="border-right:${dotted};border-bottom:${dotted}"></td>
-        <td class="L" style="border-right:${dotted};border-bottom:${dotted}">연락처</td>
-        <td class="V" style="border-bottom:${dotted}"></td>
-        <td class="L" style="border-right:${dotted};border-bottom:${dotted}">담당자</td>
-        <td class="V" style="border-right:${dotted};border-bottom:${dotted}"></td>
-        <td class="L" style="border-right:${dotted};border-bottom:${dotted}">연락처</td>
-        <td class="V" style="border-bottom:${dotted}"></td>
-      </tr>
-      <!-- 계산서담당자 -->
-      <tr style="height:18px">
-        <td class="L" style="border-right:${dotted};border-bottom:${dotted}">계산서담당자</td>
-        <td class="V" style="border-right:${dotted};border-bottom:${dotted}"></td>
-        <td class="L" style="border-right:${dotted};border-bottom:${dotted}">연락처</td>
-        <td class="V" style="border-bottom:${dotted}"></td>
-        <td colspan="4" style="border-bottom:${dotted}"></td>
-      </tr>
-      <!-- 이메일 -->
-      <tr style="height:18px">
-        <td class="L" style="border-right:${dotted};border-bottom:${dotted}">이메일</td>
-        <td colspan="3" class="V" style="border-bottom:${dotted}">giyeonlift@naver.com</td>
-        <td colspan="4" style="border-bottom:${dotted}"></td>
-      </tr>
-      <!-- 공급내역 -->
-      <tr style="height:18px">
-        <td class="L" style="border-right:${dotted};border-bottom:${solid}">공급내역</td>
-        <td colspan="3" class="V" style="border-bottom:${solid}"></td>
-        <td colspan="4" style="border-bottom:${solid}"></td>
+      <!-- 1행: 등록번호 -->
+      <tr style="height: 20px;">
+        <td rowspan="8" class="L" style="border-right: ${solid}; writing-mode: vertical-rl; letter-spacing: 4px; font-size: 10px;">공&nbsp;급&nbsp;자</td>
+        <td class="L" style="border-right: ${dotted}; border-bottom: ${dotted};">등록번호</td>
+        <td colspan="3" class="V" style="border-bottom: ${dotted}; font-weight: bold; text-align: center; letter-spacing: 1px;">138-81-83251</td>
+        <td rowspan="8" style="border-right: ${dbl};"></td>
+        <td rowspan="8" class="L" style="border-right: ${solid}; writing-mode: vertical-rl; letter-spacing: 2px; font-size: 10px;">공급받는자</td>
+        <td class="L" style="border-right: ${dotted}; border-bottom: ${dotted};">등록번호</td>
+        <td colspan="3" class="V" style="border-bottom: ${dotted}; font-size: 9px;">${esc(customer?.bizRegNo || '')}</td>
       </tr>
 
-      <!-- ③ 작성일자 / 입금계좌 행 (정보 박스 내부 통합) -->
-      <tr style="height:19px">
-        <td colspan="2" class="L" style="border-right:${solid}">작성일자</td>
-        <td colspan="3" class="V" style="border-right:${dbl};padding-left:8px">${billingDate}</td>
-        <td colspan="2" class="L" style="border-right:${solid}">입금계좌</td>
-        <td colspan="4" class="V" style="padding-left:8px;font-weight:bold;font-size:8px">신한은행 140-010-007060 , 주식회사 기연리프트</td>
+      <!-- 2행: 상호 / 대표 -->
+      <tr style="height: 20px;">
+        <td class="L" style="border-right: ${dotted}; border-bottom: ${dotted};">상호</td>
+        <td class="V" style="border-right: ${dotted}; border-bottom: ${dotted}; font-size: 8.5px;">주식회사 기연리프트</td>
+        <td class="L" style="border-right: ${dotted}; border-bottom: ${dotted};">대표</td>
+        <td class="V" style="position: relative; overflow: visible !important; border-bottom: ${dotted}; font-size: 9px;">이수용${stampImg}</td>
+        <td class="L" style="border-right: ${dotted}; border-bottom: ${dotted};">상호</td>
+        <td class="V" style="border-right: ${dotted}; border-bottom: ${dotted}; font-size: 8.5px;">${esc(customer?.name || '')}</td>
+        <td class="L" style="border-right: ${dotted}; border-bottom: ${dotted};">대표</td>
+        <td class="V" style="border-bottom: ${dotted}; font-size: 9px;">${esc(customer?.representative || '')}</td>
+      </tr>
+
+      <!-- 3행: 주소 -->
+      <tr style="height: 20px;">
+        <td class="L" style="border-right: ${dotted}; border-bottom: ${dotted};">주소</td>
+        <td colspan="3" class="V" style="border-bottom: ${dotted}; font-size: 8px;">경기도 용인시 처인구 모현읍 갈담로112번길 21-3</td>
+        <td class="L" style="border-right: ${dotted}; border-bottom: ${dotted};">주소</td>
+        <td colspan="3" class="V" style="border-bottom: ${dotted}; font-size: 8px;">${esc(customer?.address || '')}</td>
+      </tr>
+
+      <!-- 4행: 업태 / 종목 -->
+      <tr style="height: 20px;">
+        <td class="L" style="border-right: ${dotted}; border-bottom: ${dotted};">업태</td>
+        <td class="V" style="border-right: ${dotted}; border-bottom: ${dotted}; font-size: 7.5px;">사업지원 및 임대서비스업 외</td>
+        <td class="L" style="border-right: ${dotted}; border-bottom: ${dotted};">종목</td>
+        <td class="V" style="border-bottom: ${dotted}; font-size: 7.5px;">고소장비임대업 외</td>
+        <td class="L" style="border-right: ${dotted}; border-bottom: ${dotted};">업태</td>
+        <td class="V" style="border-right: ${dotted}; border-bottom: ${dotted};"></td>
+        <td class="L" style="border-right: ${dotted}; border-bottom: ${dotted};">종목</td>
+        <td class="V" style="border-bottom: ${dotted};"></td>
+      </tr>
+
+      <!-- 5행: 담당자 / 연락처 -->
+      <tr style="height: 20px;">
+        <td class="L" style="border-right: ${dotted}; border-bottom: ${dotted};">계약담당자</td>
+        <td class="V" style="border-right: ${dotted}; border-bottom: ${dotted};"></td>
+        <td class="L" style="border-right: ${dotted}; border-bottom: ${dotted};">연락처</td>
+        <td class="V" style="border-bottom: ${dotted};"></td>
+        <td class="L" style="border-right: ${dotted}; border-bottom: ${dotted};">담당자</td>
+        <td class="V" style="border-right: ${dotted}; border-bottom: ${dotted};"></td>
+        <td class="L" style="border-right: ${dotted}; border-bottom: ${dotted};">연락처</td>
+        <td class="V" style="border-bottom: ${dotted};"></td>
+      </tr>
+
+      <!-- 6행: 계산서담당자 / 연락처 -->
+      <tr style="height: 20px;">
+        <td class="L" style="border-right: ${dotted}; border-bottom: ${dotted};">계산서담당자</td>
+        <td class="V" style="border-right: ${dotted}; border-bottom: ${dotted};"></td>
+        <td class="L" style="border-right: ${dotted}; border-bottom: ${dotted};">연락처</td>
+        <td class="V" style="border-bottom: ${dotted};"></td>
+        <td colspan="4" style="border-bottom: ${dotted};"></td>
+      </tr>
+
+      <!-- 7행: 이메일 -->
+      <tr style="height: 20px;">
+        <td class="L" style="border-right: ${dotted}; border-bottom: ${dotted};">이메일</td>
+        <td colspan="3" class="V" style="border-bottom: ${dotted}; font-size: 8.5px;">giyeonlift@naver.com</td>
+        <td colspan="4" style="border-bottom: ${dotted};"></td>
+      </tr>
+
+      <!-- 8행: 공급내역 -->
+      <tr style="height: 20px;">
+        <td class="L" style="border-right: ${dotted}; border-bottom: ${solid};">공급내역</td>
+        <td colspan="3" class="V" style="border-bottom: ${solid};"></td>
+        <td colspan="4" style="border-bottom: ${solid};"></td>
+      </tr>
+
+      <!-- 9행: 작성일자 & 입금계좌 (통합 테두리 내부 하단 행) -->
+      <tr style="height: 22px;">
+        <td colspan="2" class="L" style="border-right: ${solid}; font-size: 9px;">작성일자</td>
+        <td colspan="3" class="V" style="border-right: ${dbl}; padding-left: 8px; font-size: 9px;">${billingDate}</td>
+        <td colspan="2" class="L" style="border-right: ${solid}; font-size: 9px;">입금계좌</td>
+        <td colspan="4" class="V" style="padding-left: 8px; font-weight: bold; font-size: 8.5px;">신한은행 140-010-007060 , 주식회사 기연리프트</td>
       </tr>
     </table>
   </div>
 
-  <!-- ④ 품목 테이블 (716px = 24+26+26+300+44+74+76+72+74) -->
-  <div style="border:${outer}">
+  <!-- ③ 품목 및 금액 테이블 -->
+  <div style="border: ${outer};">
     <table>
       <colgroup>
-        <col style="width:24px"><col style="width:26px"><col style="width:26px">
-        <col style="width:300px"><col style="width:44px">
-        <col style="width:74px"><col style="width:76px">
-        <col style="width:72px"><col style="width:74px">
+        <col style="width: 28px;">
+        <col style="width: 22px;">
+        <col style="width: 22px;">
+        <col style="width: 274px;">
+        <col style="width: 35px;">
+        <col style="width: 75px;">
+        <col style="width: 80px;">
+        <col style="width: 75px;">
+        <col style="width: 85px;">
       </colgroup>
-      <tr style="height:20px">
-        <th class="L" style="border-right:${solid};border-bottom:${solid}">순번</th>
-        <th class="L" style="border-right:${solid};border-bottom:${solid}">월</th>
-        <th class="L" style="border-right:${solid};border-bottom:${solid}">일</th>
-        <th class="L" style="border-right:${solid};border-bottom:${solid}">품목</th>
-        <th class="L" style="border-right:${solid};border-bottom:${solid}">수량</th>
-        <th class="L" style="border-right:${solid};border-bottom:${solid}">단가</th>
-        <th class="L" style="border-right:${solid};border-bottom:${solid}">공급가액</th>
-        <th class="L" style="border-right:${solid};border-bottom:${solid}">부가세</th>
-        <th class="L" style="border-bottom:${solid}">비고</th>
+
+      <!-- 품목 헤더 -->
+      <tr style="height: 22px;">
+        <th class="L" style="border-right: ${solid}; border-bottom: ${solid};">순번</th>
+        <th class="L" style="border-right: ${solid}; border-bottom: ${solid};">월</th>
+        <th class="L" style="border-right: ${solid}; border-bottom: ${solid};">일</th>
+        <th class="L" style="border-right: ${solid}; border-bottom: ${solid};">품목</th>
+        <th class="L" style="border-right: ${solid}; border-bottom: ${solid};">수량</th>
+        <th class="L" style="border-right: ${solid}; border-bottom: ${solid};">단가</th>
+        <th class="L" style="border-right: ${solid}; border-bottom: ${solid};">공급가액</th>
+        <th class="L" style="border-right: ${solid}; border-bottom: ${solid};">부가세</th>
+        <th class="L" style="border-bottom: ${solid};">비고</th>
       </tr>
+
+      <!-- 품목 목록 (11행 고정) -->
       ${itemRows}
     </table>
 
-    <!-- ⑤ 합계 행 (716px = 54+24+108+54+24+96+42+24+96+86+108) -->
-    <table style="border-top:${solid}">
+    <!-- ④ 하단 합계 행 -->
+    <table style="border-top: ${solid};">
       <colgroup>
-        <col style="width:54px"><col style="width:24px"><col style="width:108px">
-        <col style="width:54px"><col style="width:24px"><col style="width:96px">
-        <col style="width:42px"><col style="width:24px"><col style="width:96px">
-        <col style="width:86px"><col style="width:108px">
+        <col style="width: 50px;">
+        <col style="width: 20px;">
+        <col style="width: 100px;">
+        <col style="width: 50px;">
+        <col style="width: 20px;">
+        <col style="width: 90px;">
+        <col style="width: 40px;">
+        <col style="width: 20px;">
+        <col style="width: 100px;">
+        <col style="width: 110px;">
+        <col style="width: 96px;">
       </colgroup>
-      <tr style="height:20px;font-weight:bold">
-        <td class="L" style="border-right:${dotted}">공급가</td>
-        <td class="L" style="border-right:${dotted}">₩</td>
-        <td style="border-right:${solid};text-align:right;padding-right:6px">${supplyTotal.toLocaleString()}</td>
-        <td class="L" style="border-right:${dotted}">부가세</td>
-        <td class="L" style="border-right:${dotted}">₩</td>
-        <td style="border-right:${solid};text-align:right;padding-right:6px">${vatTotal.toLocaleString()}</td>
-        <td class="L" style="border-right:${dotted}">합계</td>
-        <td class="L" style="border-right:${dotted}">₩</td>
-        <td style="border-right:${solid};text-align:right;padding-right:6px">${total.toLocaleString()}</td>
-        <td class="L" style="text-align:right;padding-right:6px">인수자</td>
+      <tr style="height: 22px; font-weight: bold;">
+        <td class="L" style="border-right: ${dotted};">공급가</td>
+        <td class="L" style="border-right: ${dotted};">₩</td>
+        <td style="border-right: ${solid}; text-align: right; padding-right: 6px;">${supplyTotal.toLocaleString()}</td>
+        <td class="L" style="border-right: ${dotted};">부가세</td>
+        <td class="L" style="border-right: ${dotted};">₩</td>
+        <td style="border-right: ${solid}; text-align: right; padding-right: 6px;">${vatTotal.toLocaleString()}</td>
+        <td class="L" style="border-right: ${dotted};">합계</td>
+        <td class="L" style="border-right: ${dotted};">₩</td>
+        <td style="border-right: ${solid}; text-align: right; padding-right: 6px;">${total.toLocaleString()}</td>
+        <td class="L" style="text-align: right; padding-right: 6px;">인수자</td>
         <td class="L">(인)</td>
       </tr>
     </table>
   </div>
+
 </div>
 </body>
 </html>`;
@@ -297,13 +349,13 @@ export const downloadTransactionStatementPDF = async (
         if (img?.buffer) stampDataUrl = bufferToDataUrl(img.buffer as ArrayBuffer, img.extension || 'png');
       }
     }
-  } catch (_) { /* 도장 실패 시 무시 */ }
+  } catch (_) { /* 도장 로드 실패 시 무시 */ }
 
-  const html = buildHTML(billing, details, customer, siteName, stampDataUrl);
+  const html = buildExactStatementHTML(billing, details, customer, siteName, stampDataUrl);
 
   const iframe = document.createElement('iframe');
   iframe.style.cssText =
-    'position:absolute;top:-9999px;left:0;width:720px;height:900px;border:none;visibility:hidden;';
+    'position:absolute;top:-9999px;left:0;width:700px;height:950px;border:none;visibility:hidden;';
   document.body.appendChild(iframe);
 
   try {
@@ -321,42 +373,32 @@ export const downloadTransactionStatementPDF = async (
     await new Promise(r => setTimeout(r, 300));
 
     const iBody = iDoc.body;
-    iBody.style.margin  = '0';
-    iBody.style.padding = '0';
-    iBody.style.width   = '720px';
-    iBody.style.overflow= 'hidden';
+    iBody.style.margin   = '0';
+    iBody.style.padding  = '0';
+    iBody.style.width    = '700px';
+    iBody.style.overflow = 'hidden';
 
     const canvas = await html2canvas(iBody, {
-      scale:           2,
+      scale:           2.5,
       useCORS:         true,
       allowTaint:      true,
       logging:         false,
       backgroundColor: '#ffffff',
-      width:           720,
-      windowWidth:     720,
+      width:           700,
+      windowWidth:     700,
     });
 
     const imgData = canvas.toDataURL('image/png');
     const pdf     = new jsPDF('p', 'mm', 'a4');
     const pageW   = pdf.internal.pageSize.getWidth();  // 210mm
-    const pageH   = pdf.internal.pageSize.getHeight(); // 297mm
-
-    const mx      = 10;
-    const my      = 10;
-    const printW  = pageW - mx * 2;                      // 190mm
+    
+    // A4 규격 여백: 좌우 15mm 여백 (인쇄가능 폭 180mm)
+    const mx      = 15;
+    const my      = 15;
+    const printW  = pageW - mx * 2; // 180mm
     const printH  = (canvas.height * printW) / canvas.width;
 
-    if (printH <= pageH - my) {
-      pdf.addImage(imgData, 'PNG', mx, my, printW, printH);
-    } else {
-      let y = 0;
-      const sliceH = pageH - my;
-      while (y < printH) {
-        pdf.addImage(imgData, 'PNG', mx, my - y, printW, printH);
-        y += sliceH;
-        if (y < printH) pdf.addPage();
-      }
-    }
+    pdf.addImage(imgData, 'PNG', mx, my, printW, printH);
 
     const custName = customer?.name || '고객사';
     const ym       = billing?.billingYm || '';
