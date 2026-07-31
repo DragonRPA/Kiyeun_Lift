@@ -420,13 +420,24 @@ function doGet(e) {
 
               <div style={{ background: 'var(--bg-app)', padding: '14px', borderRadius: '8px', border: '1px solid var(--border)', fontSize: '12px', lineHeight: '1.5' }}>
                 <strong style={{ color: 'var(--primary)', display: 'block', marginBottom: '6px' }}>📖 [1분 가이드] 구글 웹앱 URL 연동 방법:</strong>
-                <ol style={{ margin: 0, paddingLeft: '18px', color: 'var(--text-secondary)' }}>
+                <ol style={{ margin: '0 0 10px 0', paddingLeft: '18px', color: 'var(--text-secondary)' }}>
                   <li><a href="https://script.google.com" target="_blank" rel="noreferrer" style={{ color: 'var(--primary)', fontWeight: 'bold' }}>script.google.com</a> 접속 ➔ [새 프로젝트] 클릭</li>
                   <li>위 <strong>[📋 GAS 스크립트 코드 복사]</strong> 버튼을 누른 후 코드 창에 전체 붙여넣기</li>
                   <li>우측 상단 [배포] ➔ [새 배포] ➔ 유형: <strong>웹 앱</strong></li>
                   <li>실행 권한: <strong>나(Me)</strong> / 액세스 권한: <strong>누구나(Anyone)</strong> 선택 후 배포</li>
                   <li>발급된 웹앱 URL을 위 입력창에 붙여넣고 <strong>[웹앱 설정 변경 저장]</strong> 버튼 클릭!</li>
                 </ol>
+
+                <div style={{ borderTop: '1px dashed var(--border)', paddingTop: '10px', marginTop: '10px' }}>
+                  <strong style={{ color: '#EF4444', display: 'block', marginBottom: '4px' }}>🚨 'This app is blocked' 경고창 통과 방법:</strong>
+                  <p style={{ margin: '0 0 6px 0', color: 'var(--text-secondary)' }}>
+                    구글 보안 정책으로 자체 스크립트 최초 권한 승인 시 경고창이 나타날 수 있습니다.
+                  </p>
+                  <ul style={{ margin: 0, paddingLeft: '18px', color: 'var(--text-secondary)' }}>
+                    <li><strong>해결법 1 (승인 승인)</strong>: 승인 창 하단의 <strong>[Advanced] (고급)</strong> 클릭 ➔ <strong>[Go to Project (unsafe)] (안전하지 않은 프로젝트로 이동)</strong> ➔ <strong>[Allow] (허용)</strong> 클릭!</li>
+                    <li><strong>해결법 2 (계정 간소화)</strong>: 개인 <strong>@gmail.com 계정</strong>으로 `script.google.com`에 접속하여 배포하시면 구글 보안 제약 없이 3초 만에 깔끔하게 배포 완료됩니다.</li>
+                  </ul>
+                </div>
               </div>
             </div>
           </div>

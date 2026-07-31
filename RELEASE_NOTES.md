@@ -1,3 +1,18 @@
+# Release Notes (v1.17.0.Build.00053 - 2026-07-31 22:57)
+
+## 🚨 [구글 Apps Script 'This app is blocked' 승인 우회 가이드 & UI 보완]
+
+### 배경 및 해결 방안
+- 구글 보완 정책상 검증되지 않은 개인/자체 작성 Apps Script를 처음 권한 승인(Authorize)할 때 **`This app is blocked`** 또는 **`확인되지 않은 앱`** 경고창이 나타나는 현상 해결.
+- **해결법 1 (승인 우회)**: 승인 팝업 창 하단의 **`[Advanced]` (고급)** 클릭 ➔ **`[Go to Project (unsafe)]` (안전하지 않은 프로젝트로 이동)** ➔ **`[Allow]` (허용)** 버튼 클릭 시 차단이 해제되어 배포 URL 정상 발급.
+- **해결법 2 (개인 Gmail 계정 배포)**: 일반 `@gmail.com` 계정으로 접속하여 스크립트 배포 시 구글 보안 경고 없이 3초 만에 깔끔하게 배포 완료.
+
+### 빌드 검증
+- TypeScript `tsc -b` 통과 ✅
+- `npx vite build` 정규 빌드 성공 ✅
+
+---
+
 # Release Notes (v1.17.0.Build.00052 - 2026-07-31 22:50)
 
 ## 🛠️ [Vercel 프로덕션 빌드 TS2552 타입 툴링 누락 패치 및 배포 완료]
