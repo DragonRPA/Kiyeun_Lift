@@ -1,3 +1,22 @@
+# Release Notes (v1.17.0.Build.00049 - 2026-07-31 22:38)
+
+## 📄 [PDF 미리보기 뷰어 호환성 강화 & 모달 900px 대화면 업그레이드]
+
+### 보완 및 개선 원인
+- 캐시 미갱신 브라우저 메모리 상태나 일부 모바일/브라우저 보안 정책에서 PDF Data URL이 iframe 단독 태그 사용 시 렌더링되지 않았던 현상을 완벽하게 보완.
+
+### 핵심 패치 내용
+1. **`<object>` + `<iframe>` 이중 하이브리드 PDF 뷰어 탑재 (`PurchaseSettlementPage.tsx`, `Consumables.tsx`)**:
+   - `<object data={url} type="application/pdf">` 태그와 내부 `<iframe src={url}>` 샌드박스를 이중 결합하여 Chrome, Edge, Safari, Firefox 및 모바일 브라우저 100% 호환성 확보.
+2. **미리보기 팝업 모달 가로폭 900px 대화면 확대**:
+   - 모달 폭을 기존 650px/720px에서 **900px 대화면(높이 600px)**으로 대폭 확대하여 PDF 거래명세서 서류의 깨끗한 가독성과 확대/스크롤 편의성 대폭 향상.
+
+### 빌드 검증
+- TypeScript `--noEmit` 통과 ✅
+- `npx vite build` 정규 빌드 성공 ✅
+
+---
+
 # Release Notes (v1.17.0.Build.00048 - 2026-07-31 22:36)
 
 ## 🛒 [소모품 입고/구매완료 건 매입정산 누락 방지 & 자동 집계 대상 보강]

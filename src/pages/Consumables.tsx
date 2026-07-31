@@ -1102,7 +1102,7 @@ export const Consumables: React.FC = () => {
       {/* [MODAL] 증빙 거래명세서 미리보기 모달 */}
       {previewRequest && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
-          <div style={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '12px', width: '100%', maxWidth: '650px', display: 'flex', flexDirection: 'column', maxHeight: '90vh', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.15)' }}>
+          <div style={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '12px', width: '100%', maxWidth: '900px', display: 'flex', flexDirection: 'column', maxHeight: '92vh', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.15)' }}>
             
             {/* 모달 헤더 */}
             <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -1127,7 +1127,7 @@ export const Consumables: React.FC = () => {
                     <img 
                       src={previewRequest.statementFileUrl} 
                       alt="거래명세서 증빙 이미지" 
-                      style={{ maxWidth: '100%', maxHeight: '480px', borderRadius: '6px', border: '1px solid var(--border)', boxShadow: 'var(--shadow-sm)', marginBottom: '16px' }} 
+                      style={{ maxWidth: '100%', maxHeight: '580px', borderRadius: '6px', border: '1px solid var(--border)', boxShadow: 'var(--shadow-sm)', marginBottom: '16px' }} 
                     />
                     <div>
                       <a 
@@ -1141,7 +1141,7 @@ export const Consumables: React.FC = () => {
                     </div>
                   </div>
                 ) : (
-                  // PDF 또는 기타 문서형식의 Data URL -> 실물 뷰어 iframe 및 저장 툴바
+                  // PDF 또는 기타 문서형식의 Data URL -> 실물 뷰어 object/iframe 및 저장 툴바
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', background: 'var(--bg-app)', borderRadius: '6px', border: '1px solid var(--border)' }}>
                       <span style={{ fontSize: '13px', fontWeight: '700', color: 'var(--text-primary)', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
@@ -1157,12 +1157,19 @@ export const Consumables: React.FC = () => {
                         <Download size={14} /> PDF 파일 저장 ({previewRequest.id.toUpperCase()}.pdf)
                       </a>
                     </div>
-                    <div style={{ height: '520px', borderRadius: '8px', overflow: 'hidden', border: '1px solid var(--border)', background: '#525659' }}>
-                      <iframe 
-                        src={previewRequest.statementFileUrl} 
-                        title="PDF 증빙 문서 미리보기" 
-                        style={{ width: '100%', height: '100%', border: 'none' }} 
-                      />
+                    <div style={{ height: '600px', borderRadius: '8px', overflow: 'hidden', border: '1px solid var(--border)', background: '#525659' }}>
+                      <object
+                        data={previewRequest.statementFileUrl}
+                        type="application/pdf"
+                        width="100%"
+                        height="100%"
+                      >
+                        <iframe 
+                          src={previewRequest.statementFileUrl} 
+                          title="PDF 증빙 문서 미리보기" 
+                          style={{ width: '100%', height: '100%', border: 'none' }} 
+                        />
+                      </object>
                     </div>
                   </div>
                 )

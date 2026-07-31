@@ -482,7 +482,7 @@ export const PurchaseSettlementPage: React.FC = () => {
       {/* 증빙 파일 미리보기/다운로드 모달 */}
       {previewEvidence && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000, padding: '20px' }}>
-          <div style={{ background: 'var(--bg-card)', borderRadius: '12px', width: '100%', maxWidth: '720px', maxHeight: '90vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 20px 60px rgba(0,0,0,0.4)' }}>
+          <div style={{ background: 'var(--bg-card)', borderRadius: '12px', width: '100%', maxWidth: '900px', maxHeight: '92vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 20px 60px rgba(0,0,0,0.4)' }}>
             <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <h3 style={{ fontSize: '16px', fontWeight: '800', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <FileText size={18} color="var(--primary)" />
@@ -492,9 +492,9 @@ export const PurchaseSettlementPage: React.FC = () => {
             </div>
 
             <div style={{ padding: '20px', overflowY: 'auto', flex: 1, textAlign: 'center' }}>
-              {previewEvidence.url.startsWith('data:image/') ? (
+              {previewEvidence.url.startsWith('data:image/') || previewEvidence.url.match(/\.(jpeg|jpg|png|gif|webp)(\?.*)?$/i) ? (
                 <div style={{ textAlign: 'center' }}>
-                  <img src={previewEvidence.url} alt="증빙 이미지" style={{ maxWidth: '100%', maxHeight: '480px', borderRadius: '6px', border: '1px solid var(--border)', marginBottom: '16px' }} />
+                  <img src={previewEvidence.url} alt="증빙 이미지" style={{ maxWidth: '100%', maxHeight: '580px', borderRadius: '6px', border: '1px solid var(--border)', marginBottom: '16px' }} />
                   <div>
                     <a
                       href={previewEvidence.url}
@@ -505,7 +505,7 @@ export const PurchaseSettlementPage: React.FC = () => {
                     </a>
                   </div>
                 </div>
-              ) : previewEvidence.url.startsWith('data:application/pdf') || previewEvidence.url.startsWith('data:') ? (
+              ) : previewEvidence.url.startsWith('data:') || previewEvidence.url.includes('pdf') ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', background: 'var(--bg-app)', borderRadius: '6px', border: '1px solid var(--border)' }}>
                     <span style={{ fontSize: '13px', fontWeight: '700', color: 'var(--text-primary)', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
@@ -517,15 +517,22 @@ export const PurchaseSettlementPage: React.FC = () => {
                       download={`${(previewEvidence.title || '매입증빙').replace(/[^a-zA-Z0-9가-힣_-]/g, '_')}.pdf`}
                       style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '6px 14px', background: 'var(--primary)', color: '#fff', borderRadius: '6px', fontWeight: '700', textDecoration: 'none', fontSize: '12.5px' }}
                     >
-                      <Download size={14} /> PDF 저장
+                      <Download size={14} /> PDF 원본 저장
                     </a>
                   </div>
-                  <div style={{ height: '520px', borderRadius: '8px', overflow: 'hidden', border: '1px solid var(--border)', background: '#525659' }}>
-                    <iframe
-                      src={previewEvidence.url}
-                      title="PDF 증빙 문서 미리보기"
-                      style={{ width: '100%', height: '100%', border: 'none' }}
-                    />
+                  <div style={{ height: '600px', borderRadius: '8px', overflow: 'hidden', border: '1px solid var(--border)', background: '#525659' }}>
+                    <object
+                      data={previewEvidence.url}
+                      type="application/pdf"
+                      width="100%"
+                      height="100%"
+                    >
+                      <iframe
+                        src={previewEvidence.url}
+                        title="PDF 증빙 문서 미리보기"
+                        style={{ width: '100%', height: '100%', border: 'none' }}
+                      />
+                    </object>
                   </div>
                 </div>
               ) : (
