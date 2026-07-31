@@ -215,7 +215,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // ─────────────────────────────────────────────────────────
   // 로컬 db 인메모리 스토어 → React state 즉시 동기화 (Supabase pull 없음 — 저장 후 즉각 화면 반영용)
   const syncLocalToState = () => {
-    // 💡 DB 상에 누적된 중복 청구 상세 레코드 자동 소탕
+    // 💡 헌장 1.2 & 5.2 준수: DB 상에 존재하는 물리적 중복 청구 상세 레코드 완벽 소탕 & 원격 DB(Supabase) 동기 삭제
     const seen = new Set<string>();
     const duplicateIds: string[] = [];
     db.billingDetails.forEach(bd => {
@@ -228,6 +228,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
     if (duplicateIds.length > 0) {
       duplicateIds.forEach(id => db.deleteRow('billingDetails', id));
+      // 원격 DB에서도 중복 행 물리 삭제 대기
+      db.awaitPendingWrites().catch(err => console.error("BillingDetails cleanup error:", err));
     }
 
     setUsers([...db.users]);

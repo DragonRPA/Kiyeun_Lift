@@ -153,20 +153,9 @@ export const Billings: React.FC = () => {
   };
 
   const activeBilling = billings.find(b => b.id === selectedBillingId);
-
-  // 청구서 상세 중복 제거 헬퍼 함수 (DB 중복 데이터 자동 방어)
-  const getBillingDetailsDeduplicated = (bId: string) => {
-    const raw = billingDetails.filter(bd => bd.billingId === bId);
-    const seen = new Set<string>();
-    return raw.filter(bd => {
-      const key = `${bd.contractAssetId || ''}_${bd.itemName}_${bd.amount}_${bd.description || ''}`;
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
-  };
-
-  const activeBillingDetails = selectedBillingId ? getBillingDetailsDeduplicated(selectedBillingId) : [];
+  const activeBillingDetails = selectedBillingId 
+    ? billingDetails.filter(bd => bd.billingId === selectedBillingId)
+    : [];
 
   const handleGenerateSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -246,7 +235,7 @@ export const Billings: React.FC = () => {
   // 거래명세서 PDF 직접 생성 (시스템 Excel→PDF 변환)
   const printStatementAsPdf = async () => {
     const billing = billings.find(b => b.id === mailBillingId);
-    const details = mailBillingId ? getBillingDetailsDeduplicated(mailBillingId) : [];
+    const details = billingDetails.filter(d => d.billingId === mailBillingId);
     const customer = customers.find(c => c.id === billing?.customerId);
     const contract = contracts.find(c => c.id === billing?.contractId);
     const site = sites.find(s => s.id === contract?.siteId);
@@ -490,7 +479,10 @@ ${details.map((d, idx) => {
     }
   }, 0);
 
+  const [isWizardGenerating, setIsWizardGenerating] = useState(false);
+
   const handleGenerateWizardBilling = async () => {
+    if (isWizardGenerating) return;
     if (!selectedContractForWizard || !wizardStartDate || !wizardEndDate) return;
 
     const extraChargesTotal = extraCharges.reduce((sum, ec) => sum + (ec.quantity * ec.unitPrice), 0);
@@ -501,6 +493,7 @@ ${details.map((d, idx) => {
       return;
     }
 
+    setIsWizardGenerating(true);
     const detailsList: any[] = [];
     
     // 1. 기본 장비 렌탈료 정산 (논리적 기간/방식 계산 적용)
@@ -615,6 +608,8 @@ ${details.map((d, idx) => {
       alert(`[${getCustName(selectedContractForWizard.customerId)}] 고객사에 대해 청구귀속월(${targetYm}) 기준 총 ${overallTotal.toLocaleString()}원 청구 생성이 DB에 성공적으로 저장되었습니다.`);
     } catch (err: any) {
       showErrorModal(`⚠️ 청구서 DB 저장 실패:\n\n${err?.message || err}`, '청구 생성 오류');
+    } finally {
+      setIsWizardGenerating(false);
     }
   };
 

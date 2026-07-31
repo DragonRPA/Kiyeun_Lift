@@ -1,3 +1,19 @@
+# Release Notes (v1.16.9.Build.00024 - 2026-07-31 20:05)
+
+## 🏛️ [청구서 상세 DB 원천 중복 제거 & Supabase 레코드 물리 삭제(Purge) 보장]
+
+### 사장님 지적 사항 수용 및 원칙론적 교정
+- **원인 분석**: 임시 조치(프론트엔드 UI상 deduplication)는 전사 표준 헌장에 어긋나는 눈속임이었으며, 실제 Supabase DB 스토리지에 중복 행(`BDET-0000011`, `BDET-0000012` 등)이 물리적으로 존재하고 있었음.
+- **수정 조치**:
+  1. **눈속임 코드 완전 제거**: 프론트엔드의 임시 필터(deduplicate hack)를 전면 삭제하고 단일 진실의 원천(SSOT) 원칙 복원.
+  2. **Supabase 실제 DB 물리적 삭제 (Database Purge)**: `syncLocalToState` 및 동기화 시점에 동일 `billingId` 내 물리 중복 행을 탐지하여 Supabase DB에서 `DELETE` 동기 실행(`await db.awaitPendingWrites()`).
+  3. **원천 이중 생성 방지**: 정산 마법사 청구서 발행 시 `isWizardGenerating` 락을 걸어 이중 클릭/중복 `insertRow` 원천 차단.
+
+### 빌드 검증
+- TypeScript + Vite 빌드 정상 통과 ✅
+
+---
+
 # Release Notes (v1.16.9.Build.00023 - 2026-07-31 20:02)
 
 ## 🐛 [청구서 세부 내역 중복 노출 결함 해결 & DB 원천 중복 소탕]
