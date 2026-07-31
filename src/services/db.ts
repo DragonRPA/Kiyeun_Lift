@@ -1542,6 +1542,9 @@ class LocalDB {
       if (typeof val === 'string' && (key === 'requesterId' || key === 'accepterId' || key === 'completerId' || key === 'inbounderId')) {
         const userExists = this.users.some(u => u.id === val);
         sanitized[key] = userExists ? val : (this.users[0]?.id || null);
+      } else if (key === 'consumableId') {
+        const consumableExists = typeof val === 'string' && val.trim() !== '' && this.consumables.some(c => c.id === val);
+        sanitized[key] = consumableExists ? val : null;
       } else if (typeof val === 'string' && val.trim() === '' && (key.endsWith('Id') || key === 'contractId' || key === 'assetId' || key === 'customerId' || key === 'siteId' || key === 'salespersonId' || key === 'vendorId')) {
         sanitized[key] = null;
       } else {

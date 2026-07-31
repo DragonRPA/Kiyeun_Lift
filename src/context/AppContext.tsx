@@ -1404,6 +1404,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       });
+      // ⚠️ FK(Foreign Key) 위반 방지: consumables 마스터 생성이 원격 DB에 먼저 반영되도록 1차 동기 대기
+      try {
+        await db.awaitPendingWrites();
+      } catch (e) {
+        console.warn('Consumable insert pending write warning:', e);
+      }
       db.updateRow<ConsumablePurchaseRequest>('consumablePurchases', id, {
         consumableId: consumable.id
       });

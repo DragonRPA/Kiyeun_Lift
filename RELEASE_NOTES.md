@@ -1,3 +1,23 @@
+# Release Notes (v1.17.0.Build.00045 - 2026-07-31 22:22)
+
+## 🛡️ [소모품 입고 처리 'consumable_purchases_consumableId_fkey' 참조키(FK) 위반 에러 완벽 차단]
+
+### 오류 원인 분석
+- `violates foreign key constraint "consumable_purchases_consumableId_fkey"`
+- 신규 소모품 입고 처리 시 `consumables` (소모품 수량 마스터) 신규 행 생성과 `consumable_purchases` (구매신청 대장) `consumableId` 필드 업데이트가 동시 병렬(Promise.all)로 원격 Supabase DB에 쓰여질 때, 원격 DB 상에 마스터 행 생성이 완성되기 전에 FK 검증이 먼저 실행되어 쿼리가 거부됨.
+
+### 핵심 패치 내용
+1. **마스터-디테일 순차 동기 생성 보장 (`AppContext.tsx`)**:
+   - `inboundConsumablePurchase`에서 신규 소모품 마스터 생성 시 `await db.awaitPendingWrites()`를 중간에 1차 배치 실행하여 마스터 생성 완료를 보장한 뒤 구매 대장을 업데이트하도록 순서 보장.
+2. **Supabase Payload `consumableId` 정밀 필터링 (`db.ts`)**:
+   - `sanitizeSupabasePayload`에 `consumableId` 자동 검증 로직을 추가하여, 유효하지 않거나 미존재하는 ID일 경우 안전하게 `null`로 변환하여 Supabase FK 제약조건 거부를 원천 차단.
+
+### 빌드 검증
+- TypeScript `--noEmit` 통과 ✅
+- `npx vite build` 정규 빌드 성공 ✅
+
+---
+
 # Release Notes (v1.17.0.Build.00044 - 2026-07-31 22:17)
 
 ## 🔍 [월말 매입정산 카드 헤더 증빙보기 직결 & 원천 레코드 증빙 동적 추적 적용]
