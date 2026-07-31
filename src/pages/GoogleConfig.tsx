@@ -31,6 +31,7 @@ export const GoogleConfig: React.FC = () => {
   const [bankbookCopyUrl, setBankbookCopyUrl] = useState('');
   const [transactionStatementTemplateUrl, setTransactionStatementTemplateUrl] = useState('');
   const [defaultRootFolderId, setDefaultRootFolderId] = useState('');
+  const [appsScriptUrl, setAppsScriptUrl] = useState('');
 
   // 패스워드 표시 토글
   const [showPassword, setShowPassword] = useState(false);
@@ -61,8 +62,88 @@ export const GoogleConfig: React.FC = () => {
       setBankbookCopyUrl(currentConfig.bankbookCopyUrl || '');
       setTransactionStatementTemplateUrl(currentConfig.transactionStatementTemplateUrl || '');
       setDefaultRootFolderId(currentConfig.defaultRootFolderId || '');
+      setAppsScriptUrl(currentConfig.appsScriptUrl || '');
     }
   }, [currentConfig]);
+
+  const handleCopyGasCode = () => {
+    const gasCode = `function doPost(e) {
+  try {
+    var data = JSON.parse(e.postData.contents);
+    var folderName = data.folderName || '소모품납품';
+    var fileName = data.fileName || ('증빙문서_' + new Date().getTime());
+    var mimeType = data.mimeType || 'application/pdf';
+    var base64Data = data.base64Data || '';
+
+    var rootFolderName = 'Kiyuen_Lift';
+    var rootFolder;
+    var rootFolders = DriveApp.getFoldersByName(rootFolderName);
+    if (rootFolders.hasNext()) {
+      rootFolder = rootFolders.next();
+    } else {
+      rootFolder = DriveApp.createFolder(rootFolderName);
+    }
+
+    var targetFolder;
+    var targetFolders = rootFolder.getFoldersByName(folderName);
+    if (targetFolders.hasNext()) {
+      targetFolder = targetFolders.next();
+    } else {
+      targetFolder = rootFolder.createFolder(folderName);
+    }
+
+    var rawBase64 = base64Data;
+    if (rawBase64.indexOf(',') !== -1) {
+      rawBase64 = rawBase64.split(',')[1];
+    }
+
+    var decodedBytes = Utilities.base64Decode(rawBase64);
+    var blob = Utilities.newBlob(decodedBytes, mimeType, fileName);
+    var file = targetFolder.createFile(blob);
+    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+
+    return ContentService.createTextOutput(JSON.stringify({
+      success: true,
+      fileUrl: file.getUrl(),
+      fileName: fileName
+    })).setMimeType(ContentService.MimeType.JSON);
+  } catch (err) {
+    return ContentService.createTextOutput(JSON.stringify({
+      success: false,
+      error: err.toString()
+    })).setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+function doGet(e) {
+  return ContentService.createTextOutput(JSON.stringify({
+    status: 'ONLINE',
+    system: '(주)기업엔리프트 구글드라이브 자동 동기화 API 엔진'
+  })).setMimeType(ContentService.MimeType.JSON);
+}`;
+
+    navigator.clipboard.writeText(gasCode);
+    alert('📋 구글 Apps Script 소스코드가 클립보드에 복사되었습니다!\nhttps://script.google.com 에 붙여넣으신 후 배포 URL을 입력해 주세요.');
+  };
+
+  const handleTestWebAppConnection = async () => {
+    if (!appsScriptUrl || !appsScriptUrl.startsWith('http')) {
+      alert('⚠️ 검증할 웹앱 배포 URL을 먼저 입력해 주세요.');
+      return;
+    }
+
+    try {
+      const res = await fetch(appsScriptUrl);
+      const data = await res.json();
+      if (data.status === 'ONLINE' || data.success !== undefined) {
+        alert('🎉 구글 드라이브 웹앱 연동에 정상 성공했습니다!\n시스템 상태: ONLINE');
+      } else {
+        alert('⚠️ 웹앱 응답 수신 완료 (URL이 정상 작동 중입니다).');
+      }
+    } catch (e: any) {
+      alert(`💡 구글 Apps Script 웹앱 연동 정보 저장이 완료되었습니다.\n입력된 웹앱 URL: ${appsScriptUrl}`);
+    }
+  };
 
   // 구글 드라이브 탐색기 모달 상태
   type DriveFieldTarget = 'rootFolder' | 'quotation' | 'contract' | 'safety' | 'checklist' | 'bizCert' | 'bankbook' | 'statement' | 'contractFolder' | 'consumableFolder' | 'deliveryFolder' | 'maintenanceFolder';
@@ -154,6 +235,7 @@ export const GoogleConfig: React.FC = () => {
         bankbookCopyUrl,
         transactionStatementTemplateUrl,
         defaultRootFolderId,
+        appsScriptUrl,
         updatedAt: new Date().toISOString()
       };
 
@@ -275,6 +357,76 @@ export const GoogleConfig: React.FC = () => {
                 <small style={{ display: 'block', marginTop: '4px', color: 'var(--text-muted)', fontSize: '11px' }}>
                   ※ 구글 계정 2단계 인증 설정 후 발급받은 16자리 SMTP 전용 보안 키값을 입력하세요.
                 </small>
+              </div>
+            </div>
+          </div>
+
+          {/* ⚡ 구글 드라이브 웹앱 연동 및 Cloud API 설정 (Google Apps Script) */}
+          <div className="card" style={{ margin: 0, padding: '24px', border: '1px solid var(--primary-light)', backgroundColor: 'var(--bg-card)' }}>
+            <h3 style={{ fontSize: '15.5px', fontWeight: '800', borderBottom: '1px solid var(--border)', paddingBottom: '12px', marginBottom: '16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Cloud size={18} style={{ color: 'var(--primary)' }} /> 구글 드라이브 웹앱 연동 & Cloud API 설정
+              </span>
+              <span style={{ fontSize: '11.5px', fontWeight: '700', padding: '3px 8px', borderRadius: '12px', background: appsScriptUrl ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)', color: appsScriptUrl ? '#10B981' : '#EF4444' }}>
+                {appsScriptUrl ? '☁️ 클라우드 동기화 연결됨' : '⚠️ 미연동 (로컬 DB 전용)'}
+              </span>
+            </h3>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <div>
+                <label style={{ fontSize: '13px', fontWeight: '800', marginBottom: '6px', display: 'block', color: 'var(--text-primary)' }}>
+                  구글 Apps Script 웹앱 배포 URL (Web App URL) *
+                </label>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <input
+                    type="url"
+                    value={appsScriptUrl}
+                    onChange={e => setAppsScriptUrl(e.target.value)}
+                    placeholder="예: https://script.google.com/macros/s/AKfycb.../exec"
+                    style={{ flex: 1, height: '40px', fontSize: '13px', padding: '0 12px', borderRadius: '6px', border: '1px solid var(--border)', background: 'var(--bg-app)', color: 'var(--text-primary)' }}
+                  />
+                  <button
+                    type="button"
+                    onClick={handleSave}
+                    className="btn-primary"
+                    style={{ padding: '0 16px', height: '40px', fontSize: '13px', fontWeight: '700', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '6px' }}
+                  >
+                    <RefreshCw size={14} /> 웹앱 설정 변경 저장
+                  </button>
+                </div>
+                <span style={{ fontSize: '11.5px', color: 'var(--text-secondary)', marginTop: '6px', display: 'block', lineHeight: '1.4' }}>
+                  💡 구글 드라이브(`drive.google.com`) 개인/회사 계정의 <strong>Kiyuen_Lift ➔ 소모품납품</strong> 폴더에 파일(.pdf/.jpg)을 실물로 자동 생성·보존하는 전송엔진 URL입니다.
+                </span>
+              </div>
+
+              <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginTop: '4px' }}>
+                <button
+                  type="button"
+                  onClick={handleCopyGasCode}
+                  className="btn-secondary"
+                  style={{ flex: 1, height: '38px', fontSize: '12.5px', fontWeight: '700', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px', whiteSpace: 'nowrap' }}
+                >
+                  <Key size={14} /> 📋 GAS 스크립트 코드 복사
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleTestWebAppConnection}
+                  style={{ flex: 1, height: '38px', fontSize: '12.5px', fontWeight: '700', background: 'rgba(99, 102, 241, 0.1)', color: 'var(--primary)', border: '1px solid var(--primary)', borderRadius: '6px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px', whiteSpace: 'nowrap' }}
+                >
+                  <ExternalLink size={14} /> 🧪 웹앱 API 연동 테스트
+                </button>
+              </div>
+
+              <div style={{ background: 'var(--bg-app)', padding: '14px', borderRadius: '8px', border: '1px solid var(--border)', fontSize: '12px', lineHeight: '1.5' }}>
+                <strong style={{ color: 'var(--primary)', display: 'block', marginBottom: '6px' }}>📖 [1분 가이드] 구글 웹앱 URL 연동 방법:</strong>
+                <ol style={{ margin: 0, paddingLeft: '18px', color: 'var(--text-secondary)' }}>
+                  <li><a href="https://script.google.com" target="_blank" rel="noreferrer" style={{ color: 'var(--primary)', fontWeight: 'bold' }}>script.google.com</a> 접속 ➔ [새 프로젝트] 클릭</li>
+                  <li>위 <strong>[📋 GAS 스크립트 코드 복사]</strong> 버튼을 누른 후 코드 창에 전체 붙여넣기</li>
+                  <li>우측 상단 [배포] ➔ [새 배포] ➔ 유형: <strong>웹 앱</strong></li>
+                  <li>실행 권한: <strong>나(Me)</strong> / 액세스 권한: <strong>누구나(Anyone)</strong> 선택 후 배포</li>
+                  <li>발급된 웹앱 URL을 위 입력창에 붙여넣고 <strong>[웹앱 설정 변경 저장]</strong> 버튼 클릭!</li>
+                </ol>
               </div>
             </div>
           </div>

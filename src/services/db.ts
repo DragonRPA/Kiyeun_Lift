@@ -570,6 +570,7 @@ export interface GoogleConfig {
   bankbookCopyUrl?: string;
   transactionStatementTemplateUrl?: string;
   defaultRootFolderId?: string;
+  appsScriptUrl?: string;
   createdAt?: string;
   updatedAt: string;
 }
