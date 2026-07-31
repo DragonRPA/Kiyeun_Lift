@@ -61,8 +61,15 @@ function buildExactStatementHTML(
   let supplyTotal = 0;
   let vatTotal    = 0;
 
+  // 렌탈료 항목이 품목 목록 상단에 먼저 나오도록 정렬
+  const sortedDetails = [...details].sort((a, b) => {
+    const aIsRental = (a.contractAssetId || a.itemName?.includes('렌탈료')) ? 0 : 1;
+    const bIsRental = (b.contractAssetId || b.itemName?.includes('렌탈료')) ? 0 : 1;
+    return aIsRental - bIsRental;
+  });
+
   for (let i = 0; i < ITEM_MAX; i++) {
-    const d = details[i];
+    const d = sortedDetails[i];
     if (d) {
       const supply = (d.unitPrice || 0) * (d.quantity || 1);
       const vat    = Math.round(supply * 0.1);
@@ -100,6 +107,8 @@ function buildExactStatementHTML(
   const stampImg = stampDataUrl
     ? `<img src="${stampDataUrl}" style="position:absolute;right:4px;top:-6px;width:30px;height:30px;opacity:0.9;z-index:99">`
     : '';
+
+  const billingNoStr = billing?.id || billing?.billingNo || '';
 
   return `<!DOCTYPE html>
 <html lang="ko">
@@ -139,7 +148,12 @@ function buildExactStatementHTML(
 </style>
 </head>
 <body>
-<div style="width: 700px; padding: 10px 0; background: #fff;">
+<div style="width: 700px; padding: 10px 0; background: #fff; position: relative;">
+
+  <!-- ① 가장 왼쪽 상단 여백 청구번호 표시 -->
+  <div style="position: absolute; top: 10px; left: 0; font-size: 8.5px; color: #1B65A6; font-weight: bold;">
+    청구번호: ${esc(billingNoStr)}
+  </div>
 
   <!-- ① 타이틀 -->
   <div style="text-align: center; margin-bottom: 4px;">

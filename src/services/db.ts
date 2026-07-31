@@ -1363,7 +1363,33 @@ class LocalDB {
     }
   }
 
-  generateNextId(key: string, list: { id: string }[]): string {
+  generateNextId(key: string, list: { id: string }[], extraData?: any): string {
+    if (key === 'billings') {
+      let ymStr = '';
+      if (extraData && typeof extraData.billingYm === 'string') {
+        ymStr = extraData.billingYm.replace('-', '').trim().slice(2, 6);
+      } else if (extraData && typeof extraData.billingDate === 'string') {
+        ymStr = extraData.billingDate.replace('-', '').trim().slice(2, 6);
+      }
+      if (!ymStr || ymStr.length !== 4) {
+        const now = new Date();
+        ymStr = String(now.getFullYear()).slice(2) + String(now.getMonth() + 1).padStart(2, '0');
+      }
+
+      const billPrefix = `BILL-${ymStr}`;
+      let maxNum = 0;
+      list.forEach(item => {
+        if (!item || !item.id) return;
+        if (item.id.startsWith(billPrefix)) {
+          const numPart = parseInt(item.id.replace(billPrefix, ''), 10);
+          if (!isNaN(numPart) && numPart > maxNum) {
+            maxNum = numPart;
+          }
+        }
+      });
+      return `${billPrefix}${String(maxNum + 1).padStart(4, '0')}`;
+    }
+
     let prefix = '';
     switch (key) {
       case 'products':           prefix = 'PROD-';   break;
@@ -1443,7 +1469,7 @@ class LocalDB {
   // 헬퍼 메소드들 - CRUD 시뮬레이션 및 백그라운드 Supabase 업로드
   insertRow<T extends { id: string }>(key: keyof LocalDB, row: Omit<T, 'id'> & { id?: string }): T {
     const list = (this[key] as unknown) as T[];
-    const newId = row.id || this.generateNextId(key as string, list as any);
+    const newId = row.id || this.generateNextId(key as string, list as any, row);
     const nowIso = new Date().toISOString();
     const formattedRow = {
       createdAt: nowIso,

@@ -154,7 +154,11 @@ export const Billings: React.FC = () => {
 
   const activeBilling = billings.find(b => b.id === selectedBillingId);
   const activeBillingDetails = selectedBillingId 
-    ? billingDetails.filter(bd => bd.billingId === selectedBillingId)
+    ? [...billingDetails.filter(bd => bd.billingId === selectedBillingId)].sort((a, b) => {
+        const aIsRental = (a.contractAssetId || a.itemName?.includes('렌탈료')) ? 0 : 1;
+        const bIsRental = (b.contractAssetId || b.itemName?.includes('렌탈료')) ? 0 : 1;
+        return aIsRental - bIsRental;
+      })
     : [];
 
   const handleGenerateSubmit = (e: React.FormEvent) => {
