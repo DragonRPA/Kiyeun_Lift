@@ -1748,7 +1748,7 @@ ${details.map((d, idx) => {
                           )}
                         </div>
 
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '250px', overflowY: 'auto', paddingRight: '4px' }}>
                           {filteredDeposits.map(dep => {
                             const isChecked = depositLinkDraft[dep.id] !== undefined;
                             const inputVal = depositLinkDraft[dep.id] ?? 0;
