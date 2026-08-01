@@ -1047,21 +1047,29 @@ export const RentAssets: React.FC = () => {
                             ₩{(a.monthlyRentFee || 0).toLocaleString()}
                           </td>
 
-                          {/* 실제 반납일 */}
+                          {/* 실제 반납일 / 현재 가동 상태 */}
                           <td style={{ padding: '10px', whiteSpace: 'nowrap' }}>
                             {a.actualRentReturnDate ? (
-                              <span style={{ color: '#10b981', fontWeight: '600' }}>{a.actualRentReturnDate}</span>
+                              <span style={{ color: '#10b981', fontWeight: '600' }}>{a.actualRentReturnDate} (반납)</span>
+                            ) : (a.status === 'RENTED' || a.currentCustomerId) ? (
+                              <span style={{ color: '#3b82f6', fontWeight: '600' }}>대여중 (현장가동중)</span>
                             ) : (
-                              <span style={{ color: 'var(--text-muted)' }}>미반납 (가동중)</span>
+                              <span style={{ color: 'var(--text-muted)' }}>입고 보관중 (미출고)</span>
                             )}
                           </td>
 
                           {/* 상태 / 경보 */}
                           <td style={{ padding: '10px', textAlign: 'center', whiteSpace: 'nowrap' }}>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', alignItems: 'center' }}>
-                              <span className={`badge ${isReturned ? 'badge-success' : 'badge-warning'}`} style={{ fontSize: '10px' }}>
-                                {isReturned ? '반납 완료' : '임차 가동중'}
-                              </span>
+                              {a.status === 'RENTED_RETURNED' ? (
+                                <span className="badge" style={{ backgroundColor: '#64748b', color: '#fff', fontSize: '10px' }}>⚪ 임차처 반납완료</span>
+                              ) : (a.status === 'RENTED' || a.status === 'ASSIGNED' || a.currentCustomerId) ? (
+                                <span className="badge badge-info" style={{ fontSize: '10px' }}>🔵 대여중 (현장가동)</span>
+                              ) : a.status === 'REPAIRING' ? (
+                                <span className="badge badge-danger" style={{ fontSize: '10px' }}>🔧 정비중</span>
+                              ) : (
+                                <span className="badge badge-success" style={{ fontSize: '10px' }}>🟢 임대가능 (보관중)</span>
+                              )}
 
                               {isOverdue && (
                                 <span className="badge badge-danger" style={{ fontSize: '9px', display: 'inline-flex', alignItems: 'center', gap: '2px' }}>
