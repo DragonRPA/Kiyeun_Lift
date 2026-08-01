@@ -488,23 +488,6 @@ function doGet(e) {
                   </button>
                 </div>
 
-                {/* 구글 드라이브 백업용 Client ID 입력 */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <label style={{ fontSize: '12px', fontWeight: '700', color: 'var(--text-secondary)' }}>구글 드라이브 백업용 OAuth Client ID</label>
-                  <div style={{ display: 'flex', gap: '8px' }}>
-                    <input
-                      type="text"
-                      value={oauthClientId}
-                      onChange={e => setOauthClientId(e.target.value)}
-                      placeholder="123456789-xxx.apps.googleusercontent.com"
-                      style={{ flex: 1, height: '36px', fontSize: '12.5px', padding: '0 10px', borderRadius: '6px', border: `1px solid ${oauthClientId ? '#10B981' : 'var(--border)'}`, background: 'var(--bg-app)', color: 'var(--text-primary)' }}
-                    />
-                    <button type="button" onClick={handleSave} className="btn-primary" style={{ padding: '0 14px', height: '36px', fontSize: '12.5px', fontWeight: '700', whiteSpace: 'nowrap' }}>
-                      저장
-                    </button>
-                  </div>
-                  <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>미입력 시 구글 드라이브 백업 기능을 사용할 수 없습니다.</span>
-                </div>
               </div>
             </div>
           </div>
@@ -552,10 +535,15 @@ function doGet(e) {
           </div>
 
           {/* 이메일 발송 첨부 서류 절대경로 설정 */}
-          <div className="card" style={{ margin: 0, padding: '24px' }}>
+          <div className="card" style={{ margin: 0, padding: '24px', border: '1px solid rgba(245,158,11,0.4)' }}>
             <h3 style={{ fontSize: '15px', fontWeight: '700', borderBottom: '1px solid var(--border)', paddingBottom: '12px', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
               <FolderOpen size={16} style={{ color: 'var(--primary)' }} /> 이메일 자동 첨부 서류 로컬 절대경로 설정
             </h3>
+            {/* ⚠️ 주의 배너 */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.35)', borderRadius: '7px', padding: '10px 14px', marginBottom: '16px' }}>
+              <AlertTriangle size={15} style={{ color: '#F59E0B', flexShrink: 0 }} />
+              <span style={{ fontSize: '12px', color: '#B45309', fontWeight: '600' }}>주의: 시스템 작동에 중요한 설정입니다. 편집에 주의하세요.</span>
+            </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
               <div style={{ backgroundColor: 'rgba(59, 130, 246, 0.08)', padding: '12px 14px', borderRadius: '8px', border: '1px solid rgba(59, 130, 246, 0.3)', marginBottom: '4px' }}>
                 <label style={{ fontSize: '12.5px', fontWeight: 'bold', marginBottom: '6px', display: 'block', color: 'var(--primary)' }}>
@@ -832,6 +820,24 @@ function doGet(e) {
                     <Cloud size={14} /> 드라이브 탐색
                   </button>
                 </div>
+              </div>
+
+              {/* 구글 드라이브 백업용 OAuth Client ID */}
+              <div style={{ gridColumn: '1 / -1', borderTop: '1px solid var(--border)', paddingTop: '16px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <label style={{ fontSize: '12px', fontWeight: '700', color: 'var(--text-secondary)' }}>구글 드라이브 백업용 OAuth 2.0 Client ID</label>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <input
+                    type="text"
+                    value={oauthClientId}
+                    onChange={e => setOauthClientId(e.target.value)}
+                    placeholder="123456789-xxx.apps.googleusercontent.com"
+                    style={{ flex: 1, height: '38px', fontSize: '13px', padding: '0 12px', borderRadius: '6px', border: `1px solid ${oauthClientId ? '#10B981' : 'var(--border)'}`, background: 'var(--bg-app)', color: 'var(--text-primary)' }}
+                  />
+                  <button type="button" onClick={handleSave} className="btn-primary" style={{ padding: '0 16px', height: '38px', fontSize: '13px', fontWeight: '700', whiteSpace: 'nowrap' }}>
+                    저장
+                  </button>
+                </div>
+                <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>미입력 시 [Supabase Storage 증빙 파일 저장소] 커드에서 구글 드라이브에 백업 기능을 사용할 수 없습니다.</span>
               </div>
             </div>
           </div>
