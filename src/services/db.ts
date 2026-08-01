@@ -571,7 +571,6 @@ export interface GoogleConfig {
   transactionStatementTemplateUrl?: string;
   defaultRootFolderId?: string;
   appsScriptUrl?: string;
-  oauthClientId?: string;   // Google OAuth 2.0 Client ID (브라우저 직접 업로드용)
   createdAt?: string;
   updatedAt: string;
 }

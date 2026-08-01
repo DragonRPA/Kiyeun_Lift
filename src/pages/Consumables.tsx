@@ -6,7 +6,7 @@ import { exportToExcel } from '../services/excel';
 import { drive } from '../services/drive';
 import { Consumable } from '../services/db';
 import { compressFileIfNeeded } from '../utils/imageCompressor';
-import { uploadToGoogleDriveOAuth } from '../services/googleDriveOAuth';
+import { uploadToSupabaseStorage, downloadEvidenceAsZip } from '../services/supabaseStorage';
 
 const compressImage = (file: File): Promise<File> => {
   return new Promise((resolve) => {
@@ -186,6 +186,32 @@ export const Consumables: React.FC = () => {
     exportToExcel(excelData, `소모품_입출고이력_${new Date().toISOString().split('T')[0]}`, '입출고로그');
   };
 
+  // --- 증빙 파일 ZIP 로컬 백업 다운로드 ---
+  const [isZipDownloading, setIsZipDownloading] = useState(false);
+  const handleDownloadEvidenceZip = async () => {
+    const targets = consumablePurchases.filter(
+      p => p.statementFileUrl && p.statementFileUrl.startsWith('http')
+    );
+    if (targets.length === 0) {
+      alert('다운로드할 증빙 파일이 없습니다.\n(Supabase Storage에 저장된 파일만 백업 가능합니다.)');
+      return;
+    }
+    setIsZipDownloading(true);
+    try {
+      const today = new Date().toISOString().split('T')[0];
+      const items = targets.map(p => ({
+        fileName: `${p.id.toUpperCase()}_${p.sellerName}_${p.completedDate || today}.${p.statementFileUrl!.split('.').pop()?.split('?')[0] || 'pdf'}`,
+        fileUrl: p.statementFileUrl!
+      }));
+      await downloadEvidenceAsZip(items, `소모품_증빙파일_백업_${today}.zip`);
+      alert(`✅ 증빙 파일 ${items.length}건을 ZIP으로 저장했습니다.`);
+    } catch (err: any) {
+      showErrorModal(err?.message || 'ZIP 다운로드 오류', '증빙 백업 오류');
+    } finally {
+      setIsZipDownloading(false);
+    }
+  };
+
   // --- 구매신청 필터 연동 ---
   const getFilteredPurchases = () => {
     return consumablePurchases.filter(p => {
@@ -272,48 +298,30 @@ export const Consumables: React.FC = () => {
     const newFileName = `${purchaseNo}.${rawExt}`;
 
     try {
-      const config = googleConfigs[0];
-      const targetFolderName = config?.consumableFolder || '소모품납품';
-      const clientId = config?.oauthClientId || '';
-
-      if (!clientId) {
-        showErrorModal(
-          '구글 드라이브 OAuth Client ID가 설정되지 않았습니다.\n\n[시스템 관리] ➔ [구글 드라이브 설정] 메뉴에서\nOAuth Client ID를 먼저 등록해 주세요.',
-          '구글 드라이브 설정 필요'
-        );
-        setIsUploading(false);
-        return;
-      }
-
       // 1. 이미지 자동 고화질 압축 (PDF는 원본 유지)
       const compressed = await compressFileIfNeeded(selectedFile);
 
-      // 2. 압축된 Base64를 다시 File 객체로 변환
+      // 2. 압축된 Base64 → File 객체 변환
       const base64Response = await fetch(compressed.base64);
       const uploadBlob = await base64Response.blob();
       const uploadFile = new File([uploadBlob], newFileName, { type: compressed.mimeType });
 
-      // 3. 구글 드라이브 OAuth 직접 업로드 (브라우저 팝업 로그인)
-      const oauthResult = await uploadToGoogleDriveOAuth({
+      // 3. Supabase Storage 버킷 'evidence/consumables/' 에 업로드 (구글 로그인 없음)
+      const storageResult = await uploadToSupabaseStorage({
         file: uploadFile,
         fileName: newFileName,
-        folderName: targetFolderName,
-        clientId
+        folder: 'consumables'
       });
 
-      if (!oauthResult.success) {
-        throw new Error(oauthResult.message || '구글 드라이브 업로드 실패');
-      }
-
-      // 4. DB에는 구글 드라이브 파일 URL만 저장 (실물 파일은 구글 드라이브에 보존)
-      await inboundConsumablePurchase(selectedReqId, inboundQty, oauthResult.fileUrl);
+      // 4. DB에는 Supabase Storage 공개 URL 저장
+      await inboundConsumablePurchase(selectedReqId, inboundQty, storageResult.fileUrl);
 
       setIsUploading(false);
       const compressInfoStr = compressed.isCompressed
         ? `\n(자동 고화질 압축: ${(compressed.originalSize / 1024).toFixed(0)}KB ➔ ${(compressed.compressedSize / 1024).toFixed(0)}KB)`
         : '';
       const docTypeText = noInvoice ? '실물 납품 증빙 사진이' : '거래명세서가';
-      alert(`✅ 소모품 입고 처리 완료!\n${docTypeText} 구글드라이브 [Kiyuen_Lift/${targetFolderName}] 폴더에 실물 저장 완료되었습니다.${compressInfoStr}\n\n저장 파일명: ${newFileName}\n드라이브 URL: ${oauthResult.fileUrl}`);
+      alert(`✅ 소모품 입고 처리 완료!\n${docTypeText} Supabase Storage에 실물 저장 완료되었습니다.${compressInfoStr}\n\n저장 파일명: ${newFileName}`);
 
       // 리셋
       setSelectedReqId('');
@@ -381,6 +389,16 @@ export const Consumables: React.FC = () => {
           {activeTab === 'LOGS' && (
             <button className="btn-secondary" onClick={handleExportLogs} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
               <Download size={14} /> 이력로그 다운로드
+            </button>
+          )}
+          {activeTab === 'REQ_LIST' && (
+            <button
+              className="btn-secondary"
+              onClick={handleDownloadEvidenceZip}
+              disabled={isZipDownloading}
+              style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'rgba(16,185,129,0.1)', color: '#10B981', border: '1px solid rgba(16,185,129,0.4)' }}
+            >
+              <Download size={14} /> {isZipDownloading ? 'ZIP 생성 중...' : '증빙파일 ZIP 백업'}
             </button>
           )}
         </div>

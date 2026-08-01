@@ -32,7 +32,6 @@ export const GoogleConfig: React.FC = () => {
   const [transactionStatementTemplateUrl, setTransactionStatementTemplateUrl] = useState('');
   const [defaultRootFolderId, setDefaultRootFolderId] = useState('');
   const [appsScriptUrl, setAppsScriptUrl] = useState('');
-  const [oauthClientId, setOauthClientId] = useState('');
 
   // 패스워드 표시 토글
   const [showPassword, setShowPassword] = useState(false);
@@ -64,7 +63,6 @@ export const GoogleConfig: React.FC = () => {
       setTransactionStatementTemplateUrl(currentConfig.transactionStatementTemplateUrl || '');
       setDefaultRootFolderId(currentConfig.defaultRootFolderId || '');
       setAppsScriptUrl(currentConfig.appsScriptUrl || '');
-      setOauthClientId(currentConfig.oauthClientId || '');
     }
   }, [currentConfig]);
 
@@ -245,7 +243,6 @@ function doGet(e) {
         transactionStatementTemplateUrl,
         defaultRootFolderId,
         appsScriptUrl,
-        oauthClientId,
         updatedAt: new Date().toISOString()
       };
 
@@ -371,54 +368,35 @@ function doGet(e) {
             </div>
           </div>
 
-          {/* ☁️ 구글 드라이브 OAuth 직접 업로드 설정 */}
-          <div className="card" style={{ margin: 0, padding: '24px', border: oauthClientId ? '1px solid #10B981' : '1px solid var(--primary-light)', backgroundColor: 'var(--bg-card)' }}>
+          {/* ☁️ Supabase Storage 증빙 파일 저장소 안내 */}
+          <div className="card" style={{ margin: 0, padding: '24px', border: '1px solid #10B981', backgroundColor: 'var(--bg-card)' }}>
             <h3 style={{ fontSize: '15.5px', fontWeight: '800', borderBottom: '1px solid var(--border)', paddingBottom: '12px', marginBottom: '16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Cloud size={18} style={{ color: oauthClientId ? '#10B981' : 'var(--primary)' }} /> 구글 드라이브 직접 업로드 설정 (OAuth 2.0)
+                <Cloud size={18} style={{ color: '#10B981' }} /> Supabase Storage 증빙 파일 저장소
               </span>
-              <span style={{ fontSize: '11.5px', fontWeight: '700', padding: '3px 10px', borderRadius: '12px', background: oauthClientId ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)', color: oauthClientId ? '#10B981' : '#EF4444', whiteSpace: 'nowrap' }}>
-                {oauthClientId ? '☁️ 연동 완료' : '⚠️ Client ID 미설정'}
+              <span style={{ fontSize: '11.5px', fontWeight: '700', padding: '3px 10px', borderRadius: '12px', background: 'rgba(16, 185, 129, 0.15)', color: '#10B981', whiteSpace: 'nowrap' }}>
+                ✅ 연동 완료 (별도 설정 없음)
               </span>
             </h3>
-
             <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-              <div>
-                <label style={{ fontSize: '13px', fontWeight: '800', marginBottom: '6px', display: 'block', color: 'var(--text-primary)' }}>
-                  구글 OAuth 2.0 Client ID
-                </label>
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  <input
-                    type="text"
-                    value={oauthClientId}
-                    onChange={e => setOauthClientId(e.target.value)}
-                    placeholder="예: 123456789-abcdef.apps.googleusercontent.com"
-                    style={{ flex: 1, height: '40px', fontSize: '13px', padding: '0 12px', borderRadius: '6px', border: `1px solid ${oauthClientId ? '#10B981' : 'var(--border)'}`, background: 'var(--bg-app)', color: 'var(--text-primary)' }}
-                  />
-                  <button
-                    type="button"
-                    onClick={handleSave}
-                    className="btn-primary"
-                    style={{ padding: '0 16px', height: '40px', fontSize: '13px', fontWeight: '700', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '6px' }}
-                  >
-                    <RefreshCw size={14} /> 저장
-                  </button>
-                </div>
-                <span style={{ fontSize: '11.5px', color: 'var(--text-secondary)', marginTop: '6px', display: 'block', lineHeight: '1.6' }}>
-                  💡 소모품 입고 시 <strong>브라우저 팝업으로 구글 계정 로그인 1회</strong> → 사장님 구글 드라이브 <strong>Kiyuen_Lift/소모품납품</strong> 폴더에 실물 파일(.pdf/.jpg) 직접 저장됩니다.
-                </span>
+              <div style={{ background: 'rgba(16,185,129,0.06)', border: '1px solid rgba(16,185,129,0.25)', borderRadius: '8px', padding: '14px', fontSize: '12.5px', lineHeight: '1.7', color: 'var(--text-secondary)' }}>
+                <strong style={{ color: '#10B981', display: 'block', marginBottom: '6px' }}>☁️ 저장 방식</strong>
+                소모품 입고 처리 시 거래명세서/증빙 사진이 <strong style={{ color: 'var(--text-primary)' }}>Supabase Storage 버킷 'evidence/consumables/'</strong>에 자동 저장됩니다.<br />
+                구글 로그인 팝업 없이 ERP 계정만으로 즉시 업로드됩니다.
               </div>
-
-              <div style={{ background: 'var(--bg-app)', padding: '14px', borderRadius: '8px', border: '1px solid var(--border)', fontSize: '12px', lineHeight: '1.6' }}>
-                <strong style={{ color: 'var(--primary)', display: 'block', marginBottom: '8px' }}>📖 [3분 가이드] OAuth Client ID 발급 방법:</strong>
-                <ol style={{ margin: 0, paddingLeft: '18px', color: 'var(--text-secondary)' }}>
-                  <li><a href="https://console.cloud.google.com" target="_blank" rel="noreferrer" style={{ color: 'var(--primary)', fontWeight: 'bold' }}>console.cloud.google.com</a> 접속 → 프로젝트 선택 또는 [새 프로젝트] 생성</li>
-                  <li>좌측 메뉴 <strong>[API 및 서비스]</strong> → <strong>[라이브러리]</strong> → <strong>"Google Drive API"</strong> 검색 → <strong>[사용]</strong> 클릭</li>
-                  <li><strong>[사용자 인증 정보]</strong> → <strong>[+ 사용자 인증 정보 만들기]</strong> → <strong>[OAuth 클라이언트 ID]</strong></li>
-                  <li>애플리케이션 유형: <strong>웹 애플리케이션</strong> 선택</li>
-                  <li>"승인된 JavaScript 원본"에 현재 사이트 주소 추가:<br/><code style={{background:'rgba(0,0,0,0.1)',padding:'1px 4px',borderRadius:'3px'}}>https://kiyeun-lift.vercel.app</code></li>
-                  <li>생성 후 나오는 <strong>클라이언트 ID</strong> (숫자...apps.googleusercontent.com)를 위 입력창에 붙여넣고 <strong>[저장]</strong></li>
+              <div style={{ background: 'var(--bg-app)', border: '1px solid var(--border)', borderRadius: '8px', padding: '14px', fontSize: '12.5px', lineHeight: '1.7', color: 'var(--text-secondary)' }}>
+                <strong style={{ color: 'var(--text-primary)', display: 'block', marginBottom: '6px' }}>📦 로컬 백업 방법</strong>
+                [소모품 관리] → [구매신청 내역] 탭 → <strong style={{ color: 'var(--text-primary)' }}>[증빙파일 ZIP 백업]</strong> 버튼 클릭<br />
+                저장된 모든 증빙 파일을 ZIP으로 PC에 다운로드합니다.
+              </div>
+              <div style={{ background: 'rgba(59,130,246,0.06)', border: '1px solid rgba(59,130,246,0.2)', borderRadius: '8px', padding: '14px', fontSize: '12.5px', lineHeight: '1.7', color: 'var(--text-secondary)' }}>
+                <strong style={{ color: '#3B82F6', display: 'block', marginBottom: '6px' }}>⚙️ 최초 1회 설정 필요 (Supabase 대시보드)</strong>
+                <ol style={{ margin: 0, paddingLeft: '18px' }}>
+                  <li><a href="https://app.supabase.com" target="_blank" rel="noreferrer" style={{ color: 'var(--primary)', fontWeight: 'bold' }}>app.supabase.com</a> 접속 → 프로젝트 선택</li>
+                  <li>왼쪽 메뉴 <strong>Storage</strong> → <strong>[New Bucket]</strong> 클릭</li>
+                  <li>이름: <code style={{ background: 'rgba(0,0,0,0.1)', padding: '1px 6px', borderRadius: '3px', fontFamily: 'monospace' }}>evidence</code>, <strong>Public 토글 ON</strong> → [Save]</li>
                 </ol>
+                이후 별도 설정 없이 자동으로 동작합니다.
               </div>
             </div>
           </div>
