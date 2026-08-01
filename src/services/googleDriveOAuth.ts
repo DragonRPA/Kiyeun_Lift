@@ -100,10 +100,9 @@ function getAccessToken(clientId: string): Promise<string> {
 // ─────────────────────────────────────────────────────────────────────────────
 // 3. Google Drive 폴더 ID 조회 (없으면 생성)
 // ─────────────────────────────────────────────────────────────────────────────
-async function getOrCreateFolder(token: string, folderName: string, parentId?: string): Promise<string> {
-  // 루트 폴더 검색 시 'root' in parents 조건 추가로 중복 방지
-  const parentCondition = parentId ? `'${parentId}' in parents` : `'root' in parents`;
-  const query = `mimeType='application/vnd.google-apps.folder' and name='${folderName}' and trashed=false and ${parentCondition}`;
+async function findFolder(token: string, folderName: string): Promise<string> {
+  // 드라이브 루트에서 정확히 일치하는 폴더 검색 (자동 생성 없음)
+  const query = `mimeType='application/vnd.google-apps.folder' and name='${folderName}' and trashed=false and 'root' in parents`;
 
   const searchRes = await fetch(
     `${DRIVE_API}/files?q=${encodeURIComponent(query)}&fields=files(id,name)&orderBy=createdTime`,
@@ -112,27 +111,15 @@ async function getOrCreateFolder(token: string, folderName: string, parentId?: s
   const searchData = await searchRes.json();
 
   if (searchData.files && searchData.files.length > 0) {
-    // 이미 존재하는 폴더 재사용 (중복 생성 방지)
     return searchData.files[0].id;
   }
 
-  // 폴더가 없을 때만 생성
-  const createBody: any = {
-    name: folderName,
-    mimeType: 'application/vnd.google-apps.folder',
-    parents: [parentId || 'root']
-  };
-
-  const createRes = await fetch(`${DRIVE_API}/files`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify(createBody)
-  });
-  const created = await createRes.json();
-  return created.id;
+  // 폴더가 없으면 오류 - 임의 생성하지 않음
+  throw new Error(
+    `구글 드라이브에 "${folderName}" 폴더가 존재하지 않습니다.\n\n` +
+    `구글 드라이브(drive.google.com)에서 해당 폴더를 먼저 만든 후 다시 시도하거나,\n` +
+    `[시스템 관리] → [구글 드라이브 설정]에서 폴더명을 실제 드라이브 폴더명과 일치시켜 주세요.`
+  );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -183,10 +170,8 @@ export async function uploadToGoogleDriveOAuth(
   // 1. 브라우저 팝업으로 구글 로그인 → Access Token
   const token = await getAccessToken(clientId);
 
-  // 2. 설정에서 지정한 폴더명을 드라이브 루트에서 직접 검색 (없으면 생성)
-  //    - Kiyuen_Lift 같은 중간 폴더를 강제 생성하지 않음
-  //    - 사용자가 구글 드라이브 설정 메뉴에서 지정한 폴더를 그대로 사용
-  const targetFolderId = await getOrCreateFolder(token, folderName);
+  // 2. 설정에서 지정한 폴더명을 드라이브 루트에서 검색 (폴더 없으면 즉시 오류)
+  const targetFolderId = await findFolder(token, folderName);
 
   // 3. 파일 업로드
   const uploaded = await uploadFileToDrive(token, file, fileName, targetFolderId);
