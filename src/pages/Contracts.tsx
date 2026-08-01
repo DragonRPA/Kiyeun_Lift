@@ -642,17 +642,17 @@ export const Contracts: React.FC = () => {
             
             {/* 1행: 검색어 & 엑셀 다운로드 */}
             <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-              <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: '#f8fafc', padding: '8px 14px', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
+              <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: 'var(--bg-app)', padding: '8px 14px', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
                 <Search size={16} color="var(--text-muted)" />
                 <input
                   type="text"
                   placeholder="통합 검색 (계약번호, 고객사명, 현장명, 자산번호, 담당자명...)"
                   value={searchTerm}
                   onChange={e => setSearchTerm(e.target.value)}
-                  style={{ flex: 1, border: 'none', backgroundColor: 'transparent', fontSize: '13px', outline: 'none' }}
+                  style={{ flex: 1, border: 'none', backgroundColor: 'transparent', fontSize: '13px', outline: 'none', color: 'var(--text-primary)' }}
                 />
                 {searchTerm && (
-                  <button onClick={() => setSearchTerm('')} style={{ border: 'none', background: 'none', color: '#94a3b8', cursor: 'pointer' }}>✕</button>
+                  <button onClick={() => setSearchTerm('')} style={{ border: 'none', background: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }}>✕</button>
                 )}
               </div>
 
@@ -662,7 +662,7 @@ export const Contracts: React.FC = () => {
             </div>
 
             {/* 2행: 고객사, 현장, 시작일, 종료일 세부 상세 필터 (레이블 상단 헤더 세로 스택 구조) */}
-            <div style={{ display: 'flex', gap: '16px', alignItems: 'flex-end', flexWrap: 'wrap', backgroundColor: '#f8fafc', padding: '10px 14px', borderRadius: '8px', border: '1px solid #e2e8f0', overflowX: 'auto' }}>
+            <div style={{ display: 'flex', gap: '16px', alignItems: 'flex-end', flexWrap: 'wrap', backgroundColor: 'var(--bg-app)', padding: '10px 14px', borderRadius: '8px', border: '1px solid var(--border-color)', overflowX: 'auto' }}>
               {/* 고객사 기준 */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flexShrink: 0 }}>
                 <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>고객사 선택</label>
@@ -672,7 +672,7 @@ export const Contracts: React.FC = () => {
                     setCustomerFilter(e.target.value);
                     setSiteFilter('ALL');
                   }}
-                  style={{ padding: '6px 10px', borderRadius: '6px', fontSize: '12.5px', border: '1px solid var(--border-color)', outline: 'none', backgroundColor: '#fff', whiteSpace: 'nowrap', minWidth: '150px' }}
+                  style={{ padding: '6px 10px', borderRadius: '6px', fontSize: '12.5px', border: '1px solid var(--border-color)', outline: 'none', backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)', whiteSpace: 'nowrap', minWidth: '150px' }}
                 >
                   <option value="ALL">전체 고객사</option>
                   {customers.map(c => (
@@ -687,7 +687,7 @@ export const Contracts: React.FC = () => {
                 <select
                   value={siteFilter}
                   onChange={e => setSiteFilter(e.target.value)}
-                  style={{ padding: '6px 10px', borderRadius: '6px', fontSize: '12.5px', border: '1px solid var(--border-color)', outline: 'none', backgroundColor: '#fff', whiteSpace: 'nowrap', minWidth: '150px' }}
+                  style={{ padding: '6px 10px', borderRadius: '6px', fontSize: '12.5px', border: '1px solid var(--border-color)', outline: 'none', backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)', whiteSpace: 'nowrap', minWidth: '150px' }}
                 >
                   <option value="ALL">전체 현장</option>
                   {(customerFilter === 'ALL' ? sites : sites.filter(s => s.customerId === customerFilter)).map(s => (
@@ -703,7 +703,7 @@ export const Contracts: React.FC = () => {
                   type="date"
                   value={startDateFilter}
                   onChange={e => setStartDateFilter(e.target.value)}
-                  style={{ padding: '5px 8px', borderRadius: '6px', fontSize: '12px', border: '1px solid var(--border-color)', outline: 'none', backgroundColor: '#fff', whiteSpace: 'nowrap' }}
+                  style={{ padding: '5px 8px', borderRadius: '6px', fontSize: '12px', border: '1px solid var(--border-color)', outline: 'none', backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)', whiteSpace: 'nowrap' }}
                 />
               </div>
 
@@ -714,7 +714,7 @@ export const Contracts: React.FC = () => {
                   type="date"
                   value={endDateFilter}
                   onChange={e => setEndDateFilter(e.target.value)}
-                  style={{ padding: '5px 8px', borderRadius: '6px', fontSize: '12px', border: '1px solid var(--border-color)', outline: 'none', backgroundColor: '#fff', whiteSpace: 'nowrap' }}
+                  style={{ padding: '5px 8px', borderRadius: '6px', fontSize: '12px', border: '1px solid var(--border-color)', outline: 'none', backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)', whiteSpace: 'nowrap' }}
                 />
               </div>
 
@@ -753,9 +753,9 @@ export const Contracts: React.FC = () => {
                     padding: '6px 12px',
                     borderRadius: '6px',
                     fontSize: '11.5px',
-                    border: '1px solid #cbd5e1',
-                    backgroundColor: '#fff',
-                    color: '#475569',
+                    border: '1px solid var(--border-color)',
+                    backgroundColor: 'var(--bg-card)',
+                    color: 'var(--text-secondary)',
                     cursor: 'pointer',
                     fontWeight: 600,
                     whiteSpace: 'nowrap',
@@ -787,9 +787,9 @@ export const Contracts: React.FC = () => {
                     borderRadius: '4px',
                     fontSize: '11.5px',
                     cursor: 'pointer',
-                    border: `1px solid ${quickChipFilter === chip.id ? 'var(--primary)' : '#cbd5e1'}`,
-                    backgroundColor: quickChipFilter === chip.id ? 'var(--primary-light)' : '#fff',
-                    color: quickChipFilter === chip.id ? 'var(--primary)' : '#475569',
+                    border: `1px solid ${quickChipFilter === chip.id ? 'var(--primary)' : 'var(--border-color)'}`,
+                    backgroundColor: quickChipFilter === chip.id ? 'rgba(99, 102, 241, 0.15)' : 'var(--bg-card)',
+                    color: quickChipFilter === chip.id ? 'var(--primary)' : 'var(--text-secondary)',
                   }}
                 >
                   {chip.label}
@@ -803,7 +803,7 @@ export const Contracts: React.FC = () => {
             <div className="table-container" style={{ overflowX: 'auto' }}>
               <table style={{ width: '100%', minWidth: '1200px', borderCollapse: 'collapse', whiteSpace: 'nowrap' }}>
                 <thead>
-                  <tr style={{ backgroundColor: '#f8fafc', whiteSpace: 'nowrap' }}>
+                  <tr style={{ backgroundColor: 'var(--bg-app)', whiteSpace: 'nowrap' }}>
                     <th style={{ textAlign: 'center', whiteSpace: 'nowrap', width: '80px' }}>상세 보기</th>
                     <th style={{ whiteSpace: 'nowrap' }}>계약번호</th>
                     <th style={{ whiteSpace: 'nowrap' }}>고객사명</th>
@@ -908,7 +908,7 @@ export const Contracts: React.FC = () => {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           
           {/* 상단 컨트롤 바 */}
-          <div className="card" style={{ padding: '12px 18px', margin: 0, display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#f8fafc', border: '1px solid var(--border-color)', flexWrap: 'wrap', gap: '10px' }}>
+          <div className="card" style={{ padding: '12px 18px', margin: 0, display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'var(--bg-app)', border: '1px solid var(--border-color)', flexWrap: 'wrap', gap: '10px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <span className="badge badge-success" style={{ fontSize: '12px' }}>
                 {activeContract.status === 'ACTIVE' ? '진행중' : activeContract.status === 'EXTENDED' ? '연장됨' : activeContract.status === 'SUCCEEDED' ? '승계됨' : '종료'}
@@ -958,19 +958,19 @@ export const Contracts: React.FC = () => {
 
               {/* 승계 이전 정보 안내 박스 */}
               {(activeContract.predecessorContractNo || activeContract.predecessorCustomerName) && (
-                <div style={{ marginTop: '12px', padding: '10px 12px', backgroundColor: '#eff6ff', borderRadius: '6px', border: '1px solid #bfdbfe', fontSize: '12px' }}>
-                  <div style={{ fontWeight: '700', color: '#1e40af', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <div style={{ marginTop: '12px', padding: '10px 12px', backgroundColor: 'var(--bg-app)', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '12px' }}>
+                  <div style={{ fontWeight: '700', color: 'var(--primary)', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
                     🔄 승계 이전 계약 정보
                   </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', color: '#1e3a8a' }}>
-                    <div><span style={{ color: '#64748b' }}>이전 고객사:</span> <strong>{activeContract.predecessorCustomerName || '-'}</strong></div>
-                    <div><span style={{ color: '#64748b' }}>이전 계약번호:</span> <strong>{activeContract.predecessorContractNo || '-'}</strong></div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', color: 'var(--text-primary)' }}>
+                    <div><span style={{ color: 'var(--text-muted)' }}>이전 고객사:</span> <strong>{activeContract.predecessorCustomerName || '-'}</strong></div>
+                    <div><span style={{ color: 'var(--text-muted)' }}>이전 계약번호:</span> <strong>{activeContract.predecessorContractNo || '-'}</strong></div>
                   </div>
                 </div>
               )}
 
               {/* 구글 드라이브 문서함 연동 */}
-              <div style={{ marginTop: '16px', padding: '12px', backgroundColor: '#f8fafc', borderRadius: '6px', border: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ marginTop: '16px', padding: '12px', backgroundColor: 'var(--bg-app)', borderRadius: '6px', border: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div>
                   <div style={{ fontWeight: 600, fontSize: '12px' }}>구글 드라이브 문서함 연동</div>
                   <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>스캔 계약서 및 관련 파일 보관 폴더</div>
@@ -1006,7 +1006,7 @@ export const Contracts: React.FC = () => {
               <div className="table-container" style={{ border: 'none', boxShadow: 'none' }}>
                 <table>
                   <thead>
-                    <tr style={{ backgroundColor: '#f8fafc' }}>
+                    <tr style={{ backgroundColor: 'var(--bg-app)' }}>
                       <th>자산번호</th>
                       <th>모델명</th>
                       <th>월 렌탈료</th>
@@ -1244,7 +1244,7 @@ export const Contracts: React.FC = () => {
               )}
 
               {/* 계약 속성 자동 상속 카드 명세 */}
-              <div style={{ padding: '12px', backgroundColor: '#f8fafc', border: '1px solid var(--border-color)', borderRadius: '6px', fontSize: '12px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <div style={{ padding: '12px', backgroundColor: 'var(--bg-app)', border: '1px solid var(--border-color)', borderRadius: '6px', fontSize: '12px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
                 <div style={{ fontWeight: 'bold', color: 'var(--primary)', marginBottom: '2px' }}>🔒 기존 계약 속성 100% 자동 상속</div>
                 <div>고객사 / 현장: <strong>{getCustName(activeContract.customerId)} — {getSiteName(activeContract.siteId)}</strong></div>
                 <div>대차 요구 모델: <strong>{exchangeIdentifyType === 'KNOWN' ? (assets.find(a => a.id === exchangeOldAssetId)?.modelName || activeContractAssets[0]?.expectedModel || '동급 동일 모델') : (exchangeContractAssetId || activeContractAssets[0]?.expectedModel || '동급 동일 모델')}</strong></div>
@@ -1371,7 +1371,7 @@ export const Contracts: React.FC = () => {
           </div>
 
           {/* 자산 바스켓 */}
-          <div style={{ padding: '14px', backgroundColor: '#f8fafc', borderRadius: '6px', border: '1px solid var(--border-color)', marginBottom: '16px' }}>
+          <div style={{ padding: '14px', backgroundColor: 'var(--bg-app)', borderRadius: '6px', border: '1px solid var(--border-color)', marginBottom: '16px' }}>
             <h4 style={{ fontWeight: 600, marginBottom: '10px' }}>체결 자산 선택</h4>
             <div style={{ display: 'flex', gap: '10px', alignItems: 'center', marginBottom: '10px', flexWrap: 'wrap' }}>
               <select value={basketAssetMethod} onChange={e => setBasketAssetMethod(e.target.value as any)} style={{ padding: '7px' }}>
