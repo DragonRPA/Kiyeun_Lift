@@ -394,6 +394,9 @@ export interface Payment {
   method: string; // 'BANK_TRANSFER' | 'CARD' | 'CASH'
   memo: string;
   createdAt: string;
+  // 통장입금 연동 필드 (계좌이체 수납 시 사용)
+  bankTransactionId?: string; // 연결된 BankTransaction ID
+  usedAmount?: number;        // 해당 입금건에서 이 수납으로 소진한 금액
 }
 
 export type DeliveryStatus = 'PENDING' | 'DISPATCHED' | 'DELIVERED' | 'CANCELLED' | 'REQUESTED' | 'COMPLETED';
@@ -542,6 +545,9 @@ export interface BankTransaction {
   matchedBillingId?: string; // 매칭된 청구서 ID (비어 있으면 미매칭)
   matchingType?: 'AUTO' | 'MANUAL';
   createdAt: string;
+  // 수납 연동 확장 필드
+  customerId?: string;     // 매핑된 고객사 ID (수납 잔액 추적용)
+  isDeposit?: boolean;     // true: 입금내역 (수납 재원), false: 일반 거래내역
 }
 
 export interface BankMatchingRule {

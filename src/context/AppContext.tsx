@@ -134,7 +134,9 @@ interface AppContextType {
   generateBillingsForMonth: (billingYm: string, billingDate: string) => Promise<void>;
   approveBilling: (billingId: string) => void;
   cancelBilling: (billingId: string) => void;
-  receivePayment: (billingId: string, data: { paymentDate: string; amount: number; method: string; memo: string }) => void;
+  receivePayment: (billingId: string, data: { paymentDate: string; amount: number; method: string; memo: string; bankTransactionId?: string; usedAmount?: number }) => void;
+  saveBankDeposit: (data: Omit<BankTransaction, 'id' | 'createdAt' | 'withdrawAmount'>) => void;  // 통장입금 등록/수정
+  deleteBankDeposit: (txId: string) => void;  // 통장입금 삭제 (연결 수납 없을 때만)
   uploadBankTransactions: (txs: Omit<BankTransaction, 'id' | 'createdAt'>[]) => void;
   matchTransactionManual: (txId: string, billingId: string, learnRule: boolean) => void;
   unmatchTransaction: (txId: string) => void;
@@ -2188,7 +2190,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     refreshAllData();
   };
 
-  const receivePayment = (billingId: string, data: { paymentDate: string; amount: number; method: string; memo: string }) => {
+  const receivePayment = (billingId: string, data: { paymentDate: string; amount: number; method: string; memo: string; bankTransactionId?: string; usedAmount?: number }) => {
     const billing = db.billings.find(b => b.id === billingId);
     if (!billing) return;
 
@@ -2198,7 +2200,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       amount: data.amount,
       method: data.method,
       memo: data.memo,
-      createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
+      ...(data.bankTransactionId ? { bankTransactionId: data.bankTransactionId, usedAmount: data.usedAmount ?? data.amount } : {})
     });
 
     const nextPaid = billing.paidAmount + data.amount;
@@ -2215,6 +2218,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       updatedAt: new Date().toISOString()
     });
 
+    refreshAllData();
+  };
+
+  // 통장입금 등록 (입금내역으로 수납 재원 등록)
+  const saveBankDeposit = (data: Omit<BankTransaction, 'id' | 'createdAt' | 'withdrawAmount'>) => {
+    db.insertRow<BankTransaction>('bankTransactions', {
+      ...data,
+      withdrawAmount: 0,
+      isDeposit: true,
+      createdAt: new Date().toISOString()
+    });
+    refreshAllData();
+  };
+
+  // 통장입금 삭제 (연결된 수납이 있으면 차단)
+  const deleteBankDeposit = (txId: string) => {
+    const linked = db.payments.filter(p => p.bankTransactionId === txId);
+    if (linked.length > 0) {
+      throw new Error(`이 입금건에 연결된 수납 내역 ${linked.length}건이 존재합니다.\n수납을 먼저 취소한 후 삭제하세요.`);
+    }
+    db.deleteRow('bankTransactions', txId);
     refreshAllData();
   };
 
@@ -3079,7 +3103,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       assignAssetToContract, exchangeOutboundAsset,
       saveSmartDispatch, saveSmartReturn,
       completeTodo,
-      generateBillingsForMonth, approveBilling, cancelBilling, receivePayment,
+      generateBillingsForMonth, approveBilling, cancelBilling, receivePayment, saveBankDeposit, deleteBankDeposit,
       uploadBankTransactions, matchTransactionManual, unmatchTransaction, saveMatchingRule, deleteMatchingRule,
       dispatchDelivery, settleDeliveryCost, completeDelivery, completeInboundDelivery,
       registerRepair,
