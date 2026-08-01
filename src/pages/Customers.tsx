@@ -809,7 +809,88 @@ export const Customers: React.FC = () => {
                   }}
                 />
               </div>
+
+              {/* 입금 계좌 정보 (수납용) */}
+              {(() => {
+                const primaryAcc = editingCust.bankAccounts?.[0];
+                const primaryBankName = primaryAcc?.bankName || '';
+                const primaryAccNo = primaryAcc?.accountNumber || '';
+                const primaryHolder = primaryAcc?.accountHolder || '';
+                const primaryMemo = primaryAcc?.memo || '';
+
+                const updatePrimaryBank = (bName: string, accNo: string, holder: string, memo: string) => {
+                  const currentAccounts = editingCust.bankAccounts || [];
+                  if (!bName.trim() && !accNo.trim()) {
+                    const remaining = currentAccounts.slice(1);
+                    setEditingCust({ ...editingCust, bankAccounts: remaining });
+                    return;
+                  }
+                  const updatedPrimary: CustomerBankAccount = {
+                    id: primaryAcc?.id || `ACC-${Date.now()}`,
+                    bankName: bName,
+                    accountNumber: accNo,
+                    accountHolder: holder,
+                    memo: memo
+                  };
+                  const nextAccounts = [updatedPrimary, ...currentAccounts.slice(1)];
+                  setEditingCust({ ...editingCust, bankAccounts: nextAccounts });
+                };
+
+                return (
+                  <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '12px', marginTop: '4px' }}>
+                    <div style={{ fontSize: '13px', fontWeight: '600', color: '#8B5CF6', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <CreditCard size={15} /> 입금 계좌 정보 (통장입금 수납 시 자동 매핑)
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                      <div>
+                        <label style={{ fontSize: '12px' }}>은행명</label>
+                        <input
+                          type="text"
+                          value={primaryBankName}
+                          onChange={e => updatePrimaryBank(e.target.value, primaryAccNo, primaryHolder, primaryMemo)}
+                          placeholder="예: 국민은행, 농협"
+                        />
+                      </div>
+                      <div>
+                        <label style={{ fontSize: '12px' }}>계좌번호</label>
+                        <input
+                          type="text"
+                          value={primaryAccNo}
+                          onChange={e => updatePrimaryBank(primaryBankName, e.target.value, primaryHolder, primaryMemo)}
+                          placeholder="예: 123-456-789012"
+                        />
+                      </div>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginTop: '8px' }}>
+                      <div>
+                        <label style={{ fontSize: '12px' }}>예금주명</label>
+                        <input
+                          type="text"
+                          value={primaryHolder}
+                          onChange={e => updatePrimaryBank(primaryBankName, primaryAccNo, e.target.value, primaryMemo)}
+                          placeholder={editingCust.name || '예금주'}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ fontSize: '12px' }}>계좌 비고</label>
+                        <input
+                          type="text"
+                          value={primaryMemo}
+                          onChange={e => updatePrimaryBank(primaryBankName, primaryAccNo, primaryHolder, e.target.value)}
+                          placeholder="예: 대표 입금 계좌"
+                        />
+                      </div>
+                    </div>
+                    {editingCust.bankAccounts && editingCust.bankAccounts.length > 1 && (
+                      <div style={{ fontSize: '11px', color: '#8B5CF6', marginTop: '6px' }}>
+                        💡 총 <strong>{editingCust.bankAccounts.length}개</strong>의 계좌가 등록되어 있습니다. (우측 '등록 입금 계좌' 패널에서 다중 계좌 추가/관리 가능)
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
+
             <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
               <button type="button" className="btn-secondary" onClick={() => setShowCustModal(false)}>취소</button>
               <button type="submit" className="btn-primary">저장</button>
