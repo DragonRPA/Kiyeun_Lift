@@ -111,6 +111,7 @@ interface AppContextType {
   acceptConsumablePurchase: (id: string) => Promise<void>;
   completeConsumablePurchase: (id: string) => Promise<void>;
   inboundConsumablePurchase: (id: string, qty: number, statementFileUrl: string) => Promise<void>;
+  clearEvidenceFileUrls: (ids: string[]) => Promise<void>;  // Storage 삭제 후 DB URL 초기화
   
   // Contract Mutators
   createContract: (contractData: Omit<Contract, 'id' | 'createdAt' | 'updatedAt' | 'contractNo'>, assetsList: { assetId?: string; expectedModel?: string; monthlyRentalFee: number; dailyRentalFee: number }[]) => Promise<void>;
@@ -1432,6 +1433,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       createdAt: new Date().toISOString()
     });
 
+    await db.awaitPendingWrites();
+    refreshAllData();
+  };
+
+  // 증빙 파일 Storage 삭제 후 DB URL 초기화
+  const clearEvidenceFileUrls = async (ids: string[]): Promise<void> => {
+    for (const id of ids) {
+      db.updateRow<ConsumablePurchaseRequest>('consumablePurchases', id, { statementFileUrl: '' });
+    }
     await db.awaitPendingWrites();
     refreshAllData();
   };
@@ -3054,7 +3064,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       saveCashFlowSnapshot, deleteCashFlowSnapshot, saveVendor, deleteVendor,
       acquireAsset, disposeAsset, registerRentedAsset, returnRentedAsset, changeAssetStatus,
       purchaseConsumable, useConsumable,
-      requestConsumablePurchase, acceptConsumablePurchase, completeConsumablePurchase, inboundConsumablePurchase,
+      requestConsumablePurchase, acceptConsumablePurchase, completeConsumablePurchase, inboundConsumablePurchase, clearEvidenceFileUrls,
       createContract, extendContract, shortenContract, succeedContract, exchangeAsset,
       assignAssetToContract, exchangeOutboundAsset,
       saveSmartDispatch, saveSmartReturn,

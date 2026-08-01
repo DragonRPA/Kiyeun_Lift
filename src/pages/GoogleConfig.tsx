@@ -9,7 +9,7 @@ import { downloadEvidenceAsZip, deleteStorageFiles } from '../services/supabaseS
 import { backupToGoogleDrive } from '../services/googleDriveBackup';
 
 export const GoogleConfig: React.FC = () => {
-  const { googleConfigs, updateGoogleConfig, currentUser, showErrorModal, consumablePurchases } = useApp();
+  const { googleConfigs, updateGoogleConfig, currentUser, showErrorModal, consumablePurchases, clearEvidenceFileUrls } = useApp();
 
   const isAdmin = currentUser?.role === 'ADMIN';
 
@@ -31,6 +31,14 @@ export const GoogleConfig: React.FC = () => {
   const [isDriveBackingUp, setIsDriveBackingUp] = useState(false);
   const [backupProgress, setBackupProgress] = useState('');
   const [isDevMode, setIsDevMode] = useState(true);
+
+  // 삭제 확인 모달
+  const [deleteModal, setDeleteModal] = useState<{
+    open: boolean;
+    count: number;
+    onConfirm: () => Promise<void>;
+  } | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [quotationTemplateUrl, setQuotationTemplateUrl] = useState('');
   const [contractTemplateUrl, setContractTemplateUrl] = useState('');
   const [safetyInspectionTemplateUrl, setSafetyInspectionTemplateUrl] = useState('');
@@ -299,6 +307,58 @@ function doGet(e) {
 
   return (
     <div style={{ maxWidth: '1400px', margin: '0 auto' }}>
+
+      {/* ═══ 삭제 확인 모달 ═══ */}
+      {deleteModal?.open && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.65)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ background: 'var(--bg-card)', borderRadius: '12px', border: '2px solid #EF4444', padding: '32px 28px', maxWidth: '420px', width: '90%', boxShadow: '0 20px 60px rgba(239,68,68,0.3)' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px', textAlign: 'center' }}>
+              <div style={{ width: '56px', height: '56px', borderRadius: '50%', background: 'rgba(239,68,68,0.15)', border: '2px solid #EF4444', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <AlertTriangle size={28} style={{ color: '#EF4444' }} />
+              </div>
+              <div>
+                <div style={{ fontSize: '18px', fontWeight: '800', color: '#EF4444', marginBottom: '8px' }}>Storage 파일 영구 삭제</div>
+                <div style={{ fontSize: '14px', color: 'var(--text-primary)', fontWeight: '600', marginBottom: '6px' }}>
+                  {deleteModal.count}건의 증빙 파일을 Supabase Storage에서
+                </div>
+                <div style={{ fontSize: '14px', color: 'var(--text-primary)', fontWeight: '600', marginBottom: '12px' }}>
+                  영구 삭제합니다.
+                </div>
+                <div style={{ fontSize: '12.5px', color: '#EF4444', fontWeight: '700', padding: '10px 14px', background: 'rgba(239,68,68,0.08)', borderRadius: '8px', border: '1px solid rgba(239,68,68,0.3)' }}>
+                  ⚠️ 이 작업은 되돌릴 수 없습니다.<br/>
+                  백업이 완료된 것을 확인한 후 진행하세요.
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: '10px', width: '100%' }}>
+                <button
+                  type="button"
+                  disabled={isDeleting}
+                  onClick={() => setDeleteModal(null)}
+                  style={{ flex: 1, padding: '11px', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--bg-app)', color: 'var(--text-primary)', fontWeight: '700', fontSize: '14px', cursor: 'pointer' }}
+                >
+                  취소
+                </button>
+                <button
+                  type="button"
+                  disabled={isDeleting}
+                  onClick={async () => {
+                    setIsDeleting(true);
+                    try {
+                      await deleteModal.onConfirm();
+                    } finally {
+                      setIsDeleting(false);
+                      setDeleteModal(null);
+                    }
+                  }}
+                  style={{ flex: 1, padding: '11px', borderRadius: '8px', border: 'none', background: '#EF4444', color: '#fff', fontWeight: '800', fontSize: '14px', cursor: isDeleting ? 'not-allowed' : 'pointer', opacity: isDeleting ? 0.7 : 1 }}
+                >
+                  {isDeleting ? '삭제 중...' : '영구 삭제'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
       
       {/* 타이틀 헤더 */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '24px' }}>
@@ -438,19 +498,21 @@ function doGet(e) {
                           fileUrl: p.statementFileUrl!
                         }));
                         await downloadEvidenceAsZip(items, `소모품_증빙파일_백업_${today}.zip`);
-                        setBackupProgress(`✅ ZIP 다운로드 완료 (${items.length}건)`);
-                        // 백업 완료 후 Storage 삭제 여부 확인
-                        const doDelete = window.confirm(
-                          `✅ 로컈 ZIP 백업 완료 (${items.length}건)\n\n` +
-                          `Supabase Storage에서 백업된 파일 ${items.length}건을 삭제할까요?\n` +
-                          `(삭제 후에는 복구할 수 없습니다)`
-                        );
-                        if (doDelete) {
-                          setBackupProgress('Storage 파일 삭제 중...');
-                          const delResult = await deleteStorageFiles(items.map(i => i.fileUrl));
-                          setBackupProgress(`✅ 삭제 완료 (${delResult.deleted}건)`);
-                        }
-                        setTimeout(() => setBackupProgress(''), 5000);
+                        setBackupProgress(`✅ ZIP 다운로드 완료 (${items.length}건) — 없애려면 영구 삭제 버튼 실행`);
+                        // 커스텀 삭제 확인 모달
+                        setDeleteModal({
+                          open: true,
+                          count: items.length,
+                          onConfirm: async () => {
+                            setBackupProgress('Storage 파일 삭제 중...');
+                            await deleteStorageFiles(items.map(i => i.fileUrl));
+                            // DB에서 statementFileUrl 초기화
+                            await clearEvidenceFileUrls(targets.map(p => p.id));
+                            setBackupProgress(`✅ 삭제 완료 (${items.length}건) — ERP 목록에서 증빙 링크 제거됨`);
+                            setTimeout(() => setBackupProgress(''), 5000);
+                          }
+                        });
+                        setTimeout(() => setBackupProgress(''), 8000);
                       } catch (err: any) {
                         showErrorModal(err?.message, '로컬 백업 오류');
                         setBackupProgress('');
@@ -491,20 +553,25 @@ function doGet(e) {
                           ? `완료: 성공 ${result.success}건, 실패 ${result.fail}건`
                           : `구글 드라이브 백업 완료 (${result.success}건)`;
                         setBackupProgress(`✅ ${resultMsg}`);
-                        // 성공 파일에 대해서만 삭제 여부 확인
+                        // 성공 파일에 대해서만 삭제 확인 모달
                         if (successUrls.length > 0) {
-                          const doDelete = window.confirm(
-                            `✅ ${resultMsg}\n\n` +
-                            `Supabase Storage에서 백업 완료된 파일 ${successUrls.length}건을 삭제할까요?\n` +
-                            `(삭제 후에는 복구할 수 없습니다)`
-                          );
-                          if (doDelete) {
-                            setBackupProgress('Storage 파일 삭제 중...');
-                            const delResult = await deleteStorageFiles(successUrls);
-                            setBackupProgress(`✅ 삭제 완료 (${delResult.deleted}건)`);
-                          }
+                          setDeleteModal({
+                            open: true,
+                            count: successUrls.length,
+                            onConfirm: async () => {
+                              setBackupProgress('Storage 파일 삭제 중...');
+                              await deleteStorageFiles(successUrls);
+                              // DB에서 statementFileUrl 초기화 (성공한 건만)
+                              const successSet = new Set(successUrls);
+                              await clearEvidenceFileUrls(
+                                targets.filter(p => successSet.has(p.statementFileUrl!)).map(p => p.id)
+                              );
+                              setBackupProgress(`✅ 삭제 완료 (${successUrls.length}건) — ERP 목록에서 증빙 링크 제거됨`);
+                              setTimeout(() => setBackupProgress(''), 5000);
+                            }
+                          });
                         }
-                        setTimeout(() => setBackupProgress(''), 8000);
+                        setTimeout(() => setBackupProgress(''), 10000);
                       } catch (err: any) {
                         showErrorModal(err?.message, '구글 드라이브 백업 오류');
                         setBackupProgress('');
