@@ -183,9 +183,10 @@ export async function uploadToGoogleDriveOAuth(
   // 1. 브라우저 팝업으로 구글 로그인 → Access Token
   const token = await getAccessToken(clientId);
 
-  // 2. 루트 폴더 'Kiyuen_Lift' → 하위 폴더 자동 생성
-  const rootFolderId = await getOrCreateFolder(token, 'Kiyuen_Lift');
-  const targetFolderId = await getOrCreateFolder(token, folderName, rootFolderId);
+  // 2. 설정에서 지정한 폴더명을 드라이브 루트에서 직접 검색 (없으면 생성)
+  //    - Kiyuen_Lift 같은 중간 폴더를 강제 생성하지 않음
+  //    - 사용자가 구글 드라이브 설정 메뉴에서 지정한 폴더를 그대로 사용
+  const targetFolderId = await getOrCreateFolder(token, folderName);
 
   // 3. 파일 업로드
   const uploaded = await uploadFileToDrive(token, file, fileName, targetFolderId);
@@ -197,7 +198,7 @@ export async function uploadToGoogleDriveOAuth(
     fileUrl,
     fileId: uploaded.id,
     fileName,
-    message: `구글 드라이브 [Kiyuen_Lift/${folderName}]에 실물 파일 업로드 완료`
+    message: `구글 드라이브 [${folderName}]에 실물 파일 업로드 완료`
   };
 }
 
