@@ -506,9 +506,9 @@ function doGet(e) {
                           onConfirm: async () => {
                             setBackupProgress('Storage 파일 삭제 중...');
                             await deleteStorageFiles(items.map(i => i.fileUrl));
-                            // DB에서 statementFileUrl 초기화
-                            await clearEvidenceFileUrls(targets.map(p => p.id));
-                            setBackupProgress(`✅ 삭제 완료 (${items.length}건) — ERP 목록에서 증빙 링크 제거됨`);
+                            // DB에서 statementFileUrl 을 센티널 값으로 표시
+                            await updateEvidenceFileUrls(targets.map(p => ({ id: p.id, url: 'DELETED_AFTER_BACKUP' })));
+                            setBackupProgress(`✅ 삭제 완료 (${items.length}건) — ERP 목록에 '백업 후 삭제됨' 표시`);
                             setTimeout(() => setBackupProgress(''), 5000);
                           }
                         });

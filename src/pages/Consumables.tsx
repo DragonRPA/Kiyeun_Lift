@@ -159,7 +159,7 @@ export const Consumables: React.FC = () => {
       '접수일': p.acceptedDate || '-',
       '완료일': p.completedDate || '-',
       '누적입고수량': p.receivedQty,
-      '증빙링크': p.statementFileUrl || '-',
+      '증빙링크': p.statementFileUrl === 'DELETED_AFTER_BACKUP' ? '백업 후 삭제됨' : (p.statementFileUrl || '-'),
       '신청자': p.requesterName || '-',
       '접수자': p.accepterName || '-',
       '입고처리자': p.inbounderName || '-'
@@ -606,7 +606,11 @@ export const Consumables: React.FC = () => {
                             <div>완료: {p.completedDate || '-'} {p.inbounderName ? `(입고: ${p.inbounderName})` : ''}</div>
                           </td>
                           <td>
-                            {p.statementFileUrl ? (
+                            {p.statementFileUrl === 'DELETED_AFTER_BACKUP' ? (
+                              <span style={{ fontSize: '11px', color: '#6B7280', background: 'rgba(107,114,128,0.12)', border: '1px solid rgba(107,114,128,0.3)', borderRadius: '4px', padding: '2px 7px', whiteSpace: 'nowrap' }}>
+                                🗂️ 백업 후 삭제됨
+                              </span>
+                            ) : p.statementFileUrl ? (
                               <button
                                 type="button"
                                 className="btn-secondary"
