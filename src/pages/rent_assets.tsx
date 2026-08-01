@@ -998,14 +998,14 @@ export const RentAssets: React.FC = () => {
                       const delayDays = calculateDelayDays(a);
 
                       return (
-                        <tr key={a.id} style={{ borderBottom: '1px solid #e2e8f0', backgroundColor: isReturned ? '#f8fafc' : '#fff' }}>
+                        <tr key={a.id} style={{ borderBottom: '1px solid var(--border-color)', backgroundColor: isReturned ? 'rgba(255, 255, 255, 0.03)' : 'transparent', color: 'var(--text-main)' }}>
                           {/* 관리 버튼 */}
                           <td style={{ padding: '8px', textAlign: 'center', whiteSpace: 'nowrap' }}>
                             <div style={{ display: 'flex', gap: '4px', justifyContent: 'center' }}>
                               {canSave && (
                                 <button
                                   onClick={() => handleOpenEdit(a)}
-                                  style={{ padding: '3px 6px', fontSize: '11px', backgroundColor: '#e2e8f0', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+                                  style={{ padding: '3px 6px', fontSize: '11px', backgroundColor: 'var(--bg-app)', border: '1px solid var(--border-color)', color: 'var(--text-main)', borderRadius: '4px', cursor: 'pointer' }}
                                 >
                                   수정
                                 </button>
@@ -1022,16 +1022,16 @@ export const RentAssets: React.FC = () => {
                           </td>
 
                           {/* 관리번호 */}
-                          <td style={{ padding: '10px', whiteSpace: 'nowrap', fontWeight: '800' }}>
+                          <td style={{ padding: '10px', whiteSpace: 'nowrap', fontWeight: '800', color: 'var(--text-main)' }}>
                             {a.assetNo}
                             <span className="badge badge-info" style={{ marginLeft: '4px', fontSize: '9px' }}>임차</span>
                           </td>
 
                           {/* 모델명 */}
-                          <td style={{ padding: '10px', whiteSpace: 'nowrap' }}>{a.modelName}</td>
+                          <td style={{ padding: '10px', whiteSpace: 'nowrap', color: 'var(--text-main)' }}>{a.modelName}</td>
 
                           {/* 임차처 */}
-                          <td style={{ padding: '10px', whiteSpace: 'nowrap', fontWeight: '600' }}>{a.renter || '미지정'}</td>
+                          <td style={{ padding: '10px', whiteSpace: 'nowrap', fontWeight: '600', color: 'var(--text-main)' }}>{a.renter || '미지정'}</td>
 
                           {/* 임차 계약기간 */}
                           <td style={{ padding: '10px', whiteSpace: 'nowrap', color: 'var(--text-secondary)' }}>
@@ -1039,14 +1039,14 @@ export const RentAssets: React.FC = () => {
                           </td>
 
                           {/* 월 임차료 */}
-                          <td style={{ padding: '10px', whiteSpace: 'nowrap', textAlign: 'right', fontWeight: '700' }}>
+                          <td style={{ padding: '10px', whiteSpace: 'nowrap', textAlign: 'right', fontWeight: '700', color: 'var(--text-main)' }}>
                             ₩{(a.monthlyRentFee || 0).toLocaleString()}
                           </td>
 
                           {/* 실제 반납일 */}
                           <td style={{ padding: '10px', whiteSpace: 'nowrap' }}>
                             {a.actualRentReturnDate ? (
-                              <span style={{ color: '#059669', fontWeight: '600' }}>{a.actualRentReturnDate}</span>
+                              <span style={{ color: '#10b981', fontWeight: '600' }}>{a.actualRentReturnDate}</span>
                             ) : (
                               <span style={{ color: 'var(--text-muted)' }}>미반납 (가동중)</span>
                             )}

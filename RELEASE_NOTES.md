@@ -1,3 +1,15 @@
+# Release Notes (v1.18.6.Build.89 - 2026-08-01 21:49)
+
+## 🎨 [임차자산 대장 테이블 데이터 행 다크 모드 하양 현상 정화 & 텍스트 시독성 100% 확보]
+
+### 주요 개선 사항
+
+1. **임차자산 대장 테이블 데이터 행(`tr`) 하드코딩 하얀 배경 제거 (`rent_assets.tsx`)**
+   - 사용자 캡처 화면에서 노출되었던 데이터 행의 하드코딩 하얀 배경(`backgroundColor: '#fff'`, `#f8fafc`)을 전사 표준 CSS 테마 변수(`backgroundColor: 'transparent'`, `var(--border-color)`)로 전면 개체.
+   - 글자색(`color: 'var(--text-main)'`, `var(--text-secondary)`)을 테마에 맞추어 시원하고 또렷하게 교체하여, 다크 테마에서 글씨가 희미하게 묻히던 UX 문제를 100% 완전 해결.
+
+---
+
 # Release Notes (v1.18.5.Build.88 - 2026-08-01 21:46)
 
 ## 🐛 [임차자산 등록 시 DB 스키마 미존재 속성(`billingDay`) 제거 오류 해결]
