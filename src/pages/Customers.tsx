@@ -810,80 +810,119 @@ export const Customers: React.FC = () => {
                 />
               </div>
 
-              {/* 입금 계좌 정보 (수납용) */}
+              {/* 입금 계좌 목록 (수납용 다중 계좌 관리) */}
               {(() => {
-                const primaryAcc = editingCust.bankAccounts?.[0];
-                const primaryBankName = primaryAcc?.bankName || '';
-                const primaryAccNo = primaryAcc?.accountNumber || '';
-                const primaryHolder = primaryAcc?.accountHolder || '';
-                const primaryMemo = primaryAcc?.memo || '';
+                const accounts = editingCust.bankAccounts || [];
 
-                const updatePrimaryBank = (bName: string, accNo: string, holder: string, memo: string) => {
-                  const currentAccounts = editingCust.bankAccounts || [];
-                  if (!bName.trim() && !accNo.trim()) {
-                    const remaining = currentAccounts.slice(1);
-                    setEditingCust({ ...editingCust, bankAccounts: remaining });
-                    return;
-                  }
-                  const updatedPrimary: CustomerBankAccount = {
-                    id: primaryAcc?.id || `ACC-${Date.now()}`,
-                    bankName: bName,
-                    accountNumber: accNo,
-                    accountHolder: holder,
-                    memo: memo
+                const addAccount = () => {
+                  const newAcc: CustomerBankAccount = {
+                    id: `ACC-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+                    bankName: '',
+                    accountNumber: '',
+                    accountHolder: editingCust.name || '',
+                    memo: ''
                   };
-                  const nextAccounts = [updatedPrimary, ...currentAccounts.slice(1)];
-                  setEditingCust({ ...editingCust, bankAccounts: nextAccounts });
+                  setEditingCust({ ...editingCust, bankAccounts: [...accounts, newAcc] });
+                };
+
+                const updateAccount = (idx: number, field: keyof CustomerBankAccount, val: string) => {
+                  const nextAccs = [...accounts];
+                  nextAccs[idx] = { ...nextAccs[idx], [field]: val };
+                  setEditingCust({ ...editingCust, bankAccounts: nextAccs });
+                };
+
+                const removeAccount = (idx: number) => {
+                  const nextAccs = accounts.filter((_, i) => i !== idx);
+                  setEditingCust({ ...editingCust, bankAccounts: nextAccs });
                 };
 
                 return (
-                  <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '12px', marginTop: '4px' }}>
-                    <div style={{ fontSize: '13px', fontWeight: '600', color: '#8B5CF6', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <CreditCard size={15} /> 입금 계좌 정보 (통장입금 수납 시 자동 매핑)
+                  <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '14px', marginTop: '4px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                      <div style={{ fontSize: '13px', fontWeight: '600', color: '#8B5CF6', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <CreditCard size={15} /> 입금 계좌 목록 ({accounts.length}개 등록됨)
+                      </div>
+                      <button
+                        type="button"
+                        onClick={addAccount}
+                        style={{
+                          padding: '4px 10px',
+                          fontSize: '12px',
+                          borderRadius: '6px',
+                          border: '1px solid #8B5CF6',
+                          backgroundColor: 'rgba(139, 92, 246, 0.1)',
+                          color: '#8B5CF6',
+                          fontWeight: '600',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '4px'
+                        }}
+                      >
+                        <Plus size={13} /> 계좌 추가
+                      </button>
                     </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                      <div>
-                        <label style={{ fontSize: '12px' }}>은행명</label>
-                        <input
-                          type="text"
-                          value={primaryBankName}
-                          onChange={e => updatePrimaryBank(e.target.value, primaryAccNo, primaryHolder, primaryMemo)}
-                          placeholder="예: 국민은행, 농협"
-                        />
+
+                    {accounts.length === 0 ? (
+                      <div style={{ padding: '12px', borderRadius: '8px', border: '1px dashed var(--border-color)', textAlign: 'center', fontSize: '12px', color: 'var(--text-muted)' }}>
+                        등록된 입금 계좌가 없습니다. 상단 <strong>'+ 계좌 추가'</strong> 버튼을 눌러 계좌를 등록하세요.
                       </div>
-                      <div>
-                        <label style={{ fontSize: '12px' }}>계좌번호</label>
-                        <input
-                          type="text"
-                          value={primaryAccNo}
-                          onChange={e => updatePrimaryBank(primaryBankName, e.target.value, primaryHolder, primaryMemo)}
-                          placeholder="예: 123-456-789012"
-                        />
-                      </div>
-                    </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginTop: '8px' }}>
-                      <div>
-                        <label style={{ fontSize: '12px' }}>예금주명</label>
-                        <input
-                          type="text"
-                          value={primaryHolder}
-                          onChange={e => updatePrimaryBank(primaryBankName, primaryAccNo, e.target.value, primaryMemo)}
-                          placeholder={editingCust.name || '예금주'}
-                        />
-                      </div>
-                      <div>
-                        <label style={{ fontSize: '12px' }}>계좌 비고</label>
-                        <input
-                          type="text"
-                          value={primaryMemo}
-                          onChange={e => updatePrimaryBank(primaryBankName, primaryAccNo, primaryHolder, e.target.value)}
-                          placeholder="예: 대표 입금 계좌"
-                        />
-                      </div>
-                    </div>
-                    {editingCust.bankAccounts && editingCust.bankAccounts.length > 1 && (
-                      <div style={{ fontSize: '11px', color: '#8B5CF6', marginTop: '6px' }}>
-                        💡 총 <strong>{editingCust.bankAccounts.length}개</strong>의 계좌가 등록되어 있습니다. (우측 '등록 입금 계좌' 패널에서 다중 계좌 추가/관리 가능)
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '200px', overflowY: 'auto', paddingRight: '2px' }}>
+                        {accounts.map((acc, idx) => (
+                          <div key={acc.id || idx} style={{ padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-app)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <span style={{ fontSize: '12px', fontWeight: '700', color: '#8B5CF6' }}>계좌 #{idx + 1}</span>
+                              <button
+                                type="button"
+                                onClick={() => removeAccount(idx)}
+                                style={{ padding: '2px 8px', fontSize: '11px', borderRadius: '4px', border: '1px solid rgba(239,68,68,0.3)', backgroundColor: 'rgba(239,68,68,0.08)', color: '#EF4444', cursor: 'pointer' }}
+                              >
+                                삭제
+                              </button>
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                              <div>
+                                <label style={{ fontSize: '11px' }}>은행명 *</label>
+                                <input
+                                  type="text"
+                                  value={acc.bankName || ''}
+                                  onChange={e => updateAccount(idx, 'bankName', e.target.value)}
+                                  placeholder="예: 국민은행, 농협"
+                                />
+                              </div>
+                              <div>
+                                <label style={{ fontSize: '11px' }}>계좌번호 *</label>
+                                <input
+                                  type="text"
+                                  value={acc.accountNumber || ''}
+                                  onChange={e => updateAccount(idx, 'accountNumber', e.target.value)}
+                                  placeholder="예: 123-456-789012"
+                                />
+                              </div>
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                              <div>
+                                <label style={{ fontSize: '11px' }}>예금주명</label>
+                                <input
+                                  type="text"
+                                  value={acc.accountHolder || ''}
+                                  onChange={e => updateAccount(idx, 'accountHolder', e.target.value)}
+                                  placeholder={editingCust.name || '예금주'}
+                                />
+                              </div>
+                              <div>
+                                <label style={{ fontSize: '11px' }}>비고 (구분/용도)</label>
+                                <input
+                                  type="text"
+                                  value={acc.memo || ''}
+                                  onChange={e => updateAccount(idx, 'memo', e.target.value)}
+                                  placeholder="예: 대표 계좌, 현장 전용 등"
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     )}
                   </div>
