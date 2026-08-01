@@ -697,7 +697,7 @@ export const Assets: React.FC = () => {
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '12px' }}>
                     {isEditing ? (
                       <>
-                        <div><label style={labelStyle}>임차처 (소유원사)</label><input style={inputStyle} value={editForm.renter || ''} onChange={ef('renter')} /></div>
+                        <div><label style={labelStyle}>임차처</label><input style={inputStyle} value={editForm.renter || ''} onChange={ef('renter')} /></div>
                         <div><label style={labelStyle}>임차 개시일</label><input type="date" style={inputStyle} value={editForm.rentStart || ''} onChange={ef('rentStart')} /></div>
                         <div><label style={labelStyle}>임차 만료일</label><input type="date" style={inputStyle} value={editForm.rentEnd || ''} onChange={ef('rentEnd')} /></div>
                         <div><label style={labelStyle}>월 임차료 (원)</label><input type="number" style={inputStyle} value={editForm.monthlyRentFee ?? ''} onChange={ef('monthlyRentFee')} /></div>
@@ -705,7 +705,7 @@ export const Assets: React.FC = () => {
                       </>
                     ) : (
                       <>
-                        <InfoItem label="임차처 (소유원사)" value={selectedAsset.renter || '-'} />
+                        <InfoItem label="임차처" value={selectedAsset.renter || '-'} />
                         <InfoItem label="임차 개시일" value={selectedAsset.rentStart || '-'} />
                         <InfoItem label="임차 만료일" value={selectedAsset.rentEnd || '-'} />
                         <InfoItem label="월 임차료" value={`${(selectedAsset.monthlyRentFee || 0).toLocaleString()}원`} />

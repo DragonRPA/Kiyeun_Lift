@@ -556,9 +556,9 @@ export const PurchaseSettlementPage: React.FC = () => {
 
       {/* 임차료 정산 연동 안내 */}
       {(typeFilter === 'ALL' || typeFilter === 'EQUIPMENT_LEASE') && (
-        <div style={{ marginTop: '28px', padding: '16px', borderRadius: '8px', border: '1px solid #bfdbfe', backgroundColor: '#eff6ff', color: '#1e3a8a', fontSize: '13px', lineHeight: '1.6' }}>
+        <div style={{ marginTop: '28px', padding: '16px', borderRadius: '8px', border: '1px solid rgba(59, 130, 246, 0.3)', backgroundColor: 'rgba(59, 130, 246, 0.1)', color: 'var(--text-main)', fontSize: '13px', lineHeight: '1.6' }}>
           <strong>🏢 임차(전대)장비 임차료 매입 정산 프로세스</strong><br />
-          배차 관리 및 소모품 매입과 동일하게, 임차자산 관리 메뉴의 <strong>[원사 거래명세서 대사 & 매입 정산]</strong>에서 1:1 대사를 완벽하게 검증하고 <strong>승인 확정한 내역만</strong> 본 월말 매입 정산 대장으로 전달되어 확정/지급 처리됩니다.
+          배차 관리 및 소모품 매입과 동일하게, 임차자산 관리 메뉴의 <strong>[임차처 거래명세서 대사 & 매입 정산]</strong>에서 1:1 대사를 완벽하게 검증하고 <strong>승인 확정한 내역만</strong> 본 월말 매입 정산 대장으로 전달되어 확정/지급 처리됩니다.
         </div>
       )}
 
