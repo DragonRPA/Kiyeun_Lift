@@ -7,6 +7,8 @@ import {
   TrendingUp, Clock, AlertTriangle, Building2, ChevronDown, ChevronRight, Briefcase, Box, FolderKanban, ShieldAlert, Terminal, ArrowLeftRight, CheckSquare
 } from 'lucide-react';
 
+import { WeatherWidget } from './components/WeatherWidget';
+
 // 페이지 컴포넌트 임포트 (SSOT 언더바 파일명 통일)
 import { Dashboard } from './pages/Dashboard';
 import { UsersPermissions } from './pages/users_permissions';
@@ -367,7 +369,7 @@ const App: React.FC = () => {
         padding: '0 24px',
         zIndex: 50
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
           <button
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
             style={{ padding: '8px', display: 'none', borderRadius: '4px', backgroundColor: 'transparent' }}
@@ -375,27 +377,47 @@ const App: React.FC = () => {
           >
             {mobileMenuOpen ? <X size={20} /> : <Menu size={20} />}
           </button>
-          <h1 style={{ fontSize: '19px', fontWeight: '800', color: 'var(--primary)', letterSpacing: '-0.5px' }}>
+          <h1 style={{ fontSize: '19px', fontWeight: '800', color: 'var(--primary)', letterSpacing: '-0.5px', whiteSpace: 'nowrap' }}>
             KIYEUN LIFT ERP
           </h1>
+
+          {/* 헤더 좌측 실시간 현장 날씨 정보 위젯 */}
+          <WeatherWidget />
         </div>
 
-        {/* 사용자 정보 및 다크모드 */}
+        {/* 사용자 정보 및 화면 모드 (밝은화면모드 / 어두운화면모드) */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+          {/* 화면 모드 전환 버튼 (명시적 텍스트 라벨 적용) */}
           <button
             onClick={toggleTheme}
             style={{
-              padding: '8px',
-              borderRadius: '50%',
+              padding: '6px 14px',
+              borderRadius: '20px',
               backgroundColor: 'var(--bg-app)',
-              color: 'var(--text-secondary)',
+              color: 'var(--text-primary)',
               border: '1px solid var(--border-color)',
               display: 'flex',
               alignItems: 'center',
-              justifyContent: 'center'
+              gap: '6px',
+              fontSize: '12.5px',
+              fontWeight: '600',
+              cursor: 'pointer',
+              whiteSpace: 'nowrap',
+              transition: 'all 0.15s ease'
             }}
+            title={theme === 'light' ? '어두운화면모드(다크모드)로 전환' : '밝은화면모드(라이트모드)로 전환'}
           >
-            {theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
+            {theme === 'light' ? (
+              <>
+                <Sun size={15} color="#F59E0B" />
+                <span>밝은화면모드</span>
+              </>
+            ) : (
+              <>
+                <Moon size={15} color="#8B5CF6" />
+                <span>어두운화면모드</span>
+              </>
+            )}
           </button>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }} className="user-profile-badge">
