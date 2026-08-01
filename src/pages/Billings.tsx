@@ -23,6 +23,7 @@ export const Billings: React.FC = () => {
   // 통장입금 관리 탭 폼 상태
   const [depDate, setDepDate] = useState(new Date().toISOString().split('T')[0]);
   const [depSender, setDepSender] = useState('');
+  const [depSenderAccount, setDepSenderAccount] = useState(''); // 입금자 계좌번호
   const [depCustomerId, setDepCustomerId] = useState('');
   const [depAmount, setDepAmount] = useState(0);
   const [depMemo, setDepMemo] = useState('');
@@ -106,6 +107,8 @@ export const Billings: React.FC = () => {
   const [payMode, setPayMode] = useState<'DEPOSIT' | 'DIRECT'>('DEPOSIT');
   const [depositLinkDraft, setDepositLinkDraft] = useState<Record<string, number>>({}); // txId -> usedAmount
   const [directAmount, setDirectAmount] = useState(0); // 직접입력 모드 금액
+  // 통합 검색 필터 (고객명/입금자명/계좌번호/비고)
+  const [depSearchQuery, setDepSearchQuery] = useState(''); // 통합 검색어
 
 
   // 메일 전송 모달 (거래명세서 메일 발송)
@@ -209,24 +212,37 @@ export const Billings: React.FC = () => {
   const handleOpenPay = (bId: string, unpaidAmount: number) => {
     const billing = billings.find(b => b.id === bId);
     const custId = billing?.customerId;
-    // 해당 고객사의 미소진 입금잔액 목록 (날짜 무관)
-    const custDeposits = bankTransactions
-      .filter(t => t.isDeposit && t.customerId === custId)
-      .map(t => ({ ...t, balance: getDepositBalance(t.id) }))
-      .filter(t => t.balance > 0)
-      .sort((a, b) => a.transactionDate.localeCompare(b.transactionDate)); // 오래된 것 먼저
+    const custName = customers.find(c => c.id === custId)?.name || '';
 
+    // 검색어 초기값: 고객명 → 고객명으로 매핑된 입금내역 자동 표시
+    setDepSearchQuery(custName);
     setPayBillingId(bId);
     setPayDate(new Date().toISOString().split('T')[0]);
     setPayMethod('BANK_TRANSFER');
     setPayMemo('');
-    setPayMode(custDeposits.length > 0 ? 'DEPOSIT' : 'DIRECT');
+    setPayMode('DEPOSIT');
     setDirectAmount(unpaidAmount);
 
-    // 잔액이 있는 입금건들을 미납액 소진될 때까지 자동 할당
+    // 고객명 기준 검색 후 잔액있는 건 오래된 것부터 자동 할당
+    const query = custName.trim().toLowerCase();
+    const matchedDeposits = bankTransactions
+      .filter(t => {
+        if (!t.isDeposit) return false;
+        const mappedCustName = customers.find(c => c.id === t.customerId)?.name || '';
+        return (
+          t.senderName.toLowerCase().includes(query) ||
+          mappedCustName.toLowerCase().includes(query) ||
+          (t.senderAccount || '').toLowerCase().includes(query) ||
+          (t.memo || '').toLowerCase().includes(query)
+        );
+      })
+      .map(t => ({ ...t, balance: getDepositBalance(t.id) }))
+      .filter(t => t.balance > 0)
+      .sort((a, b) => a.transactionDate.localeCompare(b.transactionDate));
+
     const draft: Record<string, number> = {};
     let remaining = unpaidAmount;
-    for (const dep of custDeposits) {
+    for (const dep of matchedDeposits) {
       if (remaining <= 0) break;
       const use = Math.min(dep.balance, remaining);
       draft[dep.id] = use;
@@ -235,6 +251,7 @@ export const Billings: React.FC = () => {
     setDepositLinkDraft(draft);
     setShowPayModal(true);
   };
+
 
   const handlePaySubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -745,6 +762,7 @@ ${details.map((d, idx) => {
           saveBankDeposit({
             transactionDate: depDate,
             senderName: depSender,
+            senderAccount: depSenderAccount || undefined,
             depositAmount: depAmount,
             memo: depMemo,
             customerId: depCustomerId || undefined,
@@ -752,6 +770,7 @@ ${details.map((d, idx) => {
             matchedBillingId: undefined,
           });
           setDepSender('');
+          setDepSenderAccount('');
           setDepAmount(0);
           setDepMemo('');
           setDepCustomerId('');
@@ -771,6 +790,10 @@ ${details.map((d, idx) => {
                 <div>
                   <label>입금인명 (통장 표시명) *</label>
                   <input type="text" value={depSender} onChange={e => setDepSender(e.target.value)} placeholder="예: 세보엠이씨" required />
+                </div>
+                <div>
+                  <label>입금자 계좌번호 (선택)</label>
+                  <input type="text" value={depSenderAccount} onChange={e => setDepSenderAccount(e.target.value)} placeholder="예: 110-123-456789" />
                 </div>
                 <div>
                   <label>고객사 매핑</label>
@@ -810,19 +833,31 @@ ${details.map((d, idx) => {
                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
                     <thead>
                       <tr style={{ borderBottom: '1px solid var(--border)' }}>
-                        {['입금일', '입금인', '고객사', '입금액', '소진액', '잔액', '상태', '삭제'].map(h => (
+                        {['입금일', '입금인', '계좌번호', '고객사', '입금액', '소진액', '잔액', '연결 청구번호', '상태', '삭제'].map(h => (
                           <th key={h} style={{ padding: '8px 10px', textAlign: 'left', fontWeight: '600', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>{h}</th>
                         ))}
                       </tr>
                     </thead>
                     <tbody>
                       {depositsWithBalance.map(dep => {
-                        const custName = customers.find(c => c.id === dep.customerId)?.name || <span style={{ color: 'var(--text-muted)' }}>미매핑</span>;
+                        const custName = customers.find(c => c.id === dep.customerId)?.name || '미매핑';
                         const isExhausted = dep.balance <= 0;
+                        // 이 입금건에 연결된 청구번호 목록 (PDL → Payment → Billing)
+                        const linkedBillingNos = paymentDepositLinks
+                          .filter(l => l.bankTransactionId === dep.id)
+                          .map(l => payments.find(p => p.id === l.paymentId)?.billingId)
+                          .map(bId => billings.find(b => b.id === bId)?.id || bId)
+                          .filter((v, i, a): v is string => Boolean(v) && a.indexOf(v) === i); // 중복 제거
                         return (
                           <tr key={dep.id} style={{ borderBottom: '1px solid var(--border)', opacity: isExhausted ? 0.6 : 1 }}>
                             <td style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>{dep.transactionDate.split(' ')[0]}</td>
-                            <td style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>{dep.senderName}</td>
+                            <td style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>
+                              <div style={{ fontWeight: '600' }}>{dep.senderName}</div>
+                              {dep.memo && <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>{dep.memo}</div>}
+                            </td>
+                            <td style={{ padding: '8px 10px', whiteSpace: 'nowrap', fontSize: '12px', color: 'var(--text-secondary)' }}>
+                              {dep.senderAccount || <span style={{ color: 'var(--text-muted)' }}>-</span>}
+                            </td>
                             <td style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>{custName}</td>
                             <td style={{ padding: '8px 10px', whiteSpace: 'nowrap', textAlign: 'right' }}>{dep.depositAmount.toLocaleString()}원</td>
                             <td style={{ padding: '8px 10px', whiteSpace: 'nowrap', textAlign: 'right', color: '#EF4444' }}>
@@ -830,6 +865,14 @@ ${details.map((d, idx) => {
                             </td>
                             <td style={{ padding: '8px 10px', whiteSpace: 'nowrap', textAlign: 'right', fontWeight: '700', color: isExhausted ? 'var(--text-muted)' : '#10B981' }}>
                               {dep.balance.toLocaleString()}원
+                            </td>
+                            <td style={{ padding: '8px 10px', minWidth: '100px' }}>
+                              {linkedBillingNos.length > 0
+                                ? linkedBillingNos.map(no => (
+                                    <span key={no} style={{ fontSize: '11px', display: 'inline-block', marginRight: '4px', padding: '1px 6px', borderRadius: '4px', background: 'rgba(99,102,241,0.1)', color: 'var(--primary)', border: '1px solid rgba(99,102,241,0.25)' }}>{no}</span>
+                                  ))
+                                : <span style={{ color: 'var(--text-muted)', fontSize: '12px' }}>-</span>
+                              }
                             </td>
                             <td style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>
                               {isExhausted
@@ -1544,54 +1587,87 @@ ${details.map((d, idx) => {
         const payBilling = billings.find(b => b.id === payBillingId);
         const unpaid = payBilling ? payBilling.totalAmount - payBilling.paidAmount : 0;
         const custId = payBilling?.customerId;
+        const billingNo = payBillingId;
 
-        // 해당 고객사 입금잔액 목록 (PaymentDepositLinks 기반 실시간 계산)
-        const custDeposits = bankTransactions
-          .filter(t => t.isDeposit && t.customerId === custId)
+        // ── 통합 검색 필터: 고객명 / 입금자명 / 계좌번호 / 비고 ──
+        const searchQ = depSearchQuery.trim().toLowerCase();
+        const filteredDeposits = bankTransactions
+          .filter(t => {
+            if (!t.isDeposit) return false;
+            if (!searchQ) return true; // 검색어 없으면 전체 표시
+            const mappedCustName = customers.find(c => c.id === t.customerId)?.name || '';
+            return (
+              t.senderName.toLowerCase().includes(searchQ) ||
+              mappedCustName.toLowerCase().includes(searchQ) ||
+              (t.senderAccount || '').toLowerCase().includes(searchQ) ||
+              (t.memo || '').toLowerCase().includes(searchQ)
+            );
+          })
           .map(dep => ({ ...dep, balance: getDepositBalance(dep.id) }))
           .sort((a, b) => a.transactionDate.localeCompare(b.transactionDate)); // 오래된 것 먼저
 
-        // 선택 합계 (0원인 항목 제외)
+        // 선택 합계
         const selectedTotal = Object.values(depositLinkDraft).reduce((s, v) => s + v, 0);
-        const allAvailableBalance = custDeposits.reduce((s, d) => s + d.balance, 0);
+        const availableTotal = filteredDeposits.filter(d => d.balance > 0).reduce((s, d) => s + d.balance, 0);
 
-        const toggleDep = (depId: string, balance: number) => {
+        // 체크박스 토글: 체크하면 잔액 있는 건들을 오래된 것 부터 자동 재분배
+        const toggleDep = (depId: string) => {
           setDepositLinkDraft(prev => {
             const next = { ...prev };
             if (next[depId] !== undefined) {
-              delete next[depId]; // 체크 해제
+              delete next[depId]; // 해제
             } else {
-              // 체크 — 아직 채워지지 않은 미납액만큼 자동 입력
-              const alreadySelected = Object.values(next).reduce((s, v) => s + v, 0);
-              const fill = Math.min(balance, Math.max(0, unpaid - alreadySelected));
-              next[depId] = fill;
+              next[depId] = 0; // 체크 추가
+            }
+            // 체크된 모든 항목을 날짜 오름차순으로 정렬 후 oldest-first 재분배
+            const checkedSorted = filteredDeposits
+              .filter(d => next[d.id] !== undefined)
+              .sort((a, b) => a.transactionDate.localeCompare(b.transactionDate));
+            let rem = unpaid;
+            for (const d of checkedSorted) {
+              const use = Math.min(d.balance, Math.max(0, rem));
+              next[d.id] = use;
+              rem -= use;
             }
             return next;
           });
         };
 
+        // 매핑 근거 판별
+        const getMatchReason = (dep: typeof filteredDeposits[0]) => {
+          const mappedCustName = customers.find(c => c.id === dep.customerId)?.name || '';
+          if (dep.customerId === custId) return { label: '고객사 매핑', color: '#10B981' };
+          const custName = customers.find(c => c.id === custId)?.name?.toLowerCase() || '';
+          if (dep.senderName.toLowerCase().includes(custName) || (custName && custName.includes(dep.senderName.toLowerCase()))) return { label: '입금자명 일치', color: '#6366F1' };
+          if (searchQ && mappedCustName.toLowerCase().includes(searchQ)) return { label: '고객명 검색', color: '#F59E0B' };
+          if (searchQ && (dep.senderAccount || '').toLowerCase().includes(searchQ)) return { label: '계좌번호 검색', color: '#8B5CF6' };
+          return { label: '비고 검색', color: '#64748B' };
+        };
+
         return (
           <div style={{
             position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-            backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '16px'
+            backgroundColor: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '16px'
           }}>
-            <form onSubmit={handlePaySubmit} className="card" style={{ width: '100%', maxWidth: '560px', backgroundColor: 'var(--bg-card)', maxHeight: '90vh', overflowY: 'auto' }}>
-              <h3 className="card-title" style={{ marginBottom: '4px' }}>수납 처리</h3>
-              <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '16px' }}>
-                {getCustName(custId || '')} — 미납액: <strong style={{ color: '#EF4444' }}>{unpaid.toLocaleString()}원</strong>
+            <form onSubmit={handlePaySubmit} className="card" style={{ width: '100%', maxWidth: '620px', backgroundColor: 'var(--bg-card)', maxHeight: '92vh', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0' }}>
+
+              {/* 헤더 */}
+              <div style={{ marginBottom: '16px' }}>
+                <h3 className="card-title" style={{ marginBottom: '4px' }}>수납 처리</h3>
+                <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
+                  {getCustName(custId || '')} — 청구번호: <strong>{billingNo}</strong> — 미납액: <strong style={{ color: '#EF4444' }}>{unpaid.toLocaleString()}원</strong>
+                </div>
               </div>
 
               {/* 모드 탭 */}
               <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', marginBottom: '16px' }}>
-                <button type="button"
-                  onClick={() => setPayMode('DEPOSIT')}
+                <button type="button" onClick={() => setPayMode('DEPOSIT')}
                   style={{ padding: '7px 16px', fontSize: '13px', fontWeight: '600', border: 'none', background: 'none', cursor: 'pointer',
                     borderBottom: payMode === 'DEPOSIT' ? '2px solid var(--primary)' : '2px solid transparent',
                     color: payMode === 'DEPOSIT' ? 'var(--primary)' : 'var(--text-secondary)' }}>
                   🏦 통장입금 연동
                 </button>
-                <button type="button"
-                  onClick={() => setPayMode('DIRECT')}
+                <button type="button" onClick={() => setPayMode('DIRECT')}
                   style={{ padding: '7px 16px', fontSize: '13px', fontWeight: '600', border: 'none', background: 'none', cursor: 'pointer',
                     borderBottom: payMode === 'DIRECT' ? '2px solid var(--primary)' : '2px solid transparent',
                     color: payMode === 'DIRECT' ? 'var(--primary)' : 'var(--text-secondary)' }}>
@@ -1603,48 +1679,92 @@ ${details.map((d, idx) => {
 
                 {payMode === 'DEPOSIT' ? (
                   <>
-                    {custDeposits.length === 0 ? (
-                      <div style={{ padding: '16px', borderRadius: '8px', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', color: '#EF4444', fontSize: '13px', textAlign: 'center' }}>
-                        이 고객사의 미소진 입금잔액이 없습니다.<br />
-                        <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>통장입금을 먼저 등록하거나 직접 입력 탭을 사용하세요.</span>
+                    {/* ── 통합 검색 필터 ── */}
+                    <div style={{ padding: '12px', borderRadius: '8px', background: 'rgba(99,102,241,0.06)', border: '1px solid rgba(99,102,241,0.2)' }}>
+                      <label style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '6px', display: 'block' }}>
+                        통합 검색 — 고객명 · 입금자명 · 계좌번호 · 비고 중 하나를 입력
+                      </label>
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <input type="text" value={depSearchQuery} onChange={e => {
+                          setDepSearchQuery(e.target.value);
+                          setDepositLinkDraft({}); // 검색 변경 시 선택 초기화
+                        }}
+                          placeholder="예: 세보엠이씨 / 123-456-789012 / 7월 렌탈료"
+                          style={{ flex: 1 }} />
+                        <button type="button" onClick={() => { setDepSearchQuery(''); setDepositLinkDraft({}); }}
+                          style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid var(--border)', background: 'var(--bg-app)', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '12px', whiteSpace: 'nowrap' }}>
+                          초기화
+                        </button>
+                      </div>
+                      <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '5px' }}>
+                        검색 결과: <strong>{filteredDeposits.length}건</strong>
+                        {filteredDeposits.filter(d => d.balance > 0).length > 0 && (
+                          <span> / 사용가능 잔액: <strong style={{ color: '#10B981' }}>{availableTotal.toLocaleString()}원</strong></span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* ── 입금 목록 ── */}
+                    {filteredDeposits.length === 0 ? (
+                      <div style={{ padding: '20px', borderRadius: '8px', background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.2)', color: '#EF4444', fontSize: '13px', textAlign: 'center' }}>
+                        검색 결과가 없습니다.<br />
+                        <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>고객명, 입금자명, 계좌번호, 비고 등으로 검색하거나 직접 입력 탭을 사용하세요.</span>
                       </div>
                     ) : (
                       <div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                          <label style={{ margin: 0 }}>입금잔액 선택 (복수 선택 가능)</label>
-                          <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
-                            사용가능 총액: {allAvailableBalance.toLocaleString()}원
-                          </span>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                          <label style={{ margin: 0 }}>입금건 선택 (복수 선택 가능 · 오래된 입금부터 자동 차감)</label>
+                          {Object.keys(depositLinkDraft).length > 0 && (
+                            <button type="button" onClick={() => setDepositLinkDraft({})}
+                              style={{ fontSize: '11px', color: 'var(--text-secondary)', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>
+                              선택 초기화
+                            </button>
+                          )}
                         </div>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                          {custDeposits.map(dep => {
+
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                          {filteredDeposits.map(dep => {
                             const isChecked = depositLinkDraft[dep.id] !== undefined;
                             const inputVal = depositLinkDraft[dep.id] ?? 0;
+                            const isExhausted = dep.balance <= 0;
+                            const matchReason = getMatchReason(dep);
+                            const mappedCustName = customers.find(c => c.id === dep.customerId)?.name;
+
                             return (
                               <div key={dep.id} style={{
-                                display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 12px', borderRadius: '8px',
-                                border: `1px solid ${isChecked ? 'var(--primary)' : 'var(--border)'}`,
-                                background: isChecked ? 'rgba(99,102,241,0.06)' : dep.balance <= 0 ? 'rgba(0,0,0,0.03)' : 'var(--bg-app)',
-                                opacity: dep.balance <= 0 ? 0.45 : 1
+                                display: 'flex', alignItems: 'flex-start', gap: '10px', padding: '10px 12px', borderRadius: '8px',
+                                border: `1px solid ${isChecked ? 'var(--primary)' : isExhausted ? 'var(--border)' : 'var(--border)'}`,
+                                background: isChecked ? 'rgba(99,102,241,0.07)' : isExhausted ? 'rgba(0,0,0,0.02)' : 'var(--bg-app)',
+                                opacity: isExhausted && !isChecked ? 0.45 : 1
                               }}>
                                 <input type="checkbox" checked={isChecked}
-                                  disabled={dep.balance <= 0}
-                                  onChange={() => toggleDep(dep.id, dep.balance)}
-                                  style={{ accentColor: 'var(--primary)', width: '16px', height: '16px', flexShrink: 0 }} />
+                                  disabled={isExhausted}
+                                  onChange={() => toggleDep(dep.id)}
+                                  style={{ accentColor: 'var(--primary)', width: '16px', height: '16px', marginTop: '2px', flexShrink: 0 }} />
                                 <div style={{ flex: 1, minWidth: 0 }}>
-                                  <div style={{ fontSize: '13px', fontWeight: '600', whiteSpace: 'nowrap' }}>{dep.senderName}</div>
-                                  <div style={{ fontSize: '11px', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
-                                    입금일: {dep.transactionDate.split(' ')[0]} | 원금: {dep.depositAmount.toLocaleString()}원
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                    <span style={{ fontSize: '13px', fontWeight: '600', whiteSpace: 'nowrap' }}>{dep.senderName}</span>
+                                    <span style={{ fontSize: '10px', padding: '1px 6px', borderRadius: '10px', fontWeight: '600', whiteSpace: 'nowrap',
+                                      background: `${matchReason.color}18`, color: matchReason.color, border: `1px solid ${matchReason.color}40` }}>
+                                      {matchReason.label}
+                                    </span>
+                                    {mappedCustName && (
+                                      <span style={{ fontSize: '11px', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>({mappedCustName})</span>
+                                    )}
+                                  </div>
+                                  <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                    <span>입금일: {dep.transactionDate.split(' ')[0]}</span>
+                                    <span>원금: {dep.depositAmount.toLocaleString()}원</span>
+                                    {dep.senderAccount && <span>계좌: {dep.senderAccount}</span>}
+                                    {dep.memo && <span>비고: {dep.memo}</span>}
                                     {dep.balance < dep.depositAmount && (
-                                      <span style={{ color: '#F59E0B', marginLeft: '6px' }}>
-                                        (기소진: {(dep.depositAmount - dep.balance).toLocaleString()}원)
-                                      </span>
+                                      <span style={{ color: '#F59E0B' }}>기소진: {(dep.depositAmount - dep.balance).toLocaleString()}원</span>
                                     )}
                                   </div>
                                 </div>
-                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '2px', flexShrink: 0 }}>
-                                  <span style={{ fontSize: '11px', color: '#10B981', fontWeight: '700', whiteSpace: 'nowrap' }}>
-                                    잔액 {dep.balance.toLocaleString()}원
+                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px', flexShrink: 0 }}>
+                                  <span style={{ fontSize: '12px', fontWeight: '700', color: isExhausted ? 'var(--text-muted)' : '#10B981', whiteSpace: 'nowrap' }}>
+                                    {isExhausted ? '소진완료' : `잔액 ${dep.balance.toLocaleString()}원`}
                                   </span>
                                   {isChecked && (
                                     <input type="number"
@@ -1656,8 +1776,8 @@ ${details.map((d, idx) => {
                                         setDepositLinkDraft(prev => ({ ...prev, [dep.id]: v }));
                                       }}
                                       onClick={e => e.stopPropagation()}
-                                      style={{ width: '110px', padding: '3px 6px', fontSize: '12px', textAlign: 'right', borderRadius: '4px', border: '1px solid var(--border)' }}
-                                      placeholder="사용금액"
+                                      style={{ width: '115px', padding: '4px 8px', fontSize: '12px', textAlign: 'right', borderRadius: '4px', border: '1px solid var(--primary)' }}
+                                      placeholder="사용금액(원)"
                                     />
                                   )}
                                 </div>
@@ -1666,16 +1786,20 @@ ${details.map((d, idx) => {
                           })}
                         </div>
 
-                        {/* 선택 합계 */}
-                        <div style={{ marginTop: '10px', padding: '10px 14px', borderRadius: '8px', background: 'var(--bg-app)', border: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>선택 합계</span>
-                          <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-                            <span style={{ fontSize: '16px', fontWeight: '700', color: selectedTotal === unpaid ? '#10B981' : selectedTotal > unpaid ? '#EF4444' : 'var(--text-primary)' }}>
+                        {/* 선택 합계 바 */}
+                        <div style={{ marginTop: '10px', padding: '10px 16px', borderRadius: '8px', background: 'var(--bg-app)', border: `1px solid ${selectedTotal > unpaid ? '#EF4444' : selectedTotal === unpaid ? '#10B981' : 'var(--border)'}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <div>
+                            <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>선택 합계</span>
+                            <span style={{ marginLeft: '8px', fontSize: '16px', fontWeight: '700',
+                              color: selectedTotal > unpaid ? '#EF4444' : selectedTotal === unpaid ? '#10B981' : 'var(--text-primary)' }}>
                               {selectedTotal.toLocaleString()}원
                             </span>
-                            <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>/ 미납 {unpaid.toLocaleString()}원</span>
-                            {selectedTotal === unpaid && <span style={{ fontSize: '11px', color: '#10B981', fontWeight: '600' }}>✅ 완납</span>}
-                            {selectedTotal > unpaid && <span style={{ fontSize: '11px', color: '#EF4444', fontWeight: '600' }}>⚠️ 초과</span>}
+                          </div>
+                          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                            <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>미납 {unpaid.toLocaleString()}원</span>
+                            {selectedTotal === unpaid && <span style={{ fontSize: '12px', color: '#10B981', fontWeight: '700' }}>✅ 완납</span>}
+                            {selectedTotal > unpaid && <span style={{ fontSize: '12px', color: '#EF4444', fontWeight: '700' }}>⚠️ 미납 초과</span>}
+                            {selectedTotal > 0 && selectedTotal < unpaid && <span style={{ fontSize: '12px', color: '#F59E0B', fontWeight: '600' }}>⚡ 부분수납</span>}
                           </div>
                         </div>
                       </div>
@@ -1698,22 +1822,23 @@ ${details.map((d, idx) => {
                   </>
                 )}
 
-                <div>
-                  <label>수납 일자</label>
-                  <input type="date" value={payDate} onChange={e => setPayDate(e.target.value)} required />
-                </div>
-
-                <div>
-                  <label>비고</label>
-                  <input type="text" value={payMemo} onChange={e => setPayMemo(e.target.value)}
-                    placeholder={payMode === 'DEPOSIT' ? '(자동 입력됨, 선택 수정 가능)' : '예: 현대건설 김민수 입금'} />
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                  <div>
+                    <label>수납 일자</label>
+                    <input type="date" value={payDate} onChange={e => setPayDate(e.target.value)} required />
+                  </div>
+                  <div>
+                    <label>비고</label>
+                    <input type="text" value={payMemo} onChange={e => setPayMemo(e.target.value)}
+                      placeholder={payMode === 'DEPOSIT' ? '(자동 입력됨)' : '예: 김민수 현금 납부'} />
+                  </div>
                 </div>
               </div>
 
-              <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+              <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', paddingTop: '4px', borderTop: '1px solid var(--border)' }}>
                 <button type="button" className="btn-secondary" onClick={() => setShowPayModal(false)}>취소</button>
                 <button type="submit" className="btn-primary"
-                  disabled={payMode === 'DEPOSIT' && (custDeposits.length === 0 || selectedTotal <= 0)}>
+                  disabled={payMode === 'DEPOSIT' && selectedTotal <= 0}>
                   수납 완료 처리
                 </button>
               </div>
@@ -1721,6 +1846,7 @@ ${details.map((d, idx) => {
           </div>
         );
       })()}
+
 
 
 

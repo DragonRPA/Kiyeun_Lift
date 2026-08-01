@@ -545,6 +545,7 @@ export interface BankTransaction {
   id: string;
   transactionDate: string; // 'YYYY-MM-DD HH:mm:ss'
   senderName: string;      // 이체자/입금자명 (적요)
+  senderAccount?: string;  // 입금자 계좌번호 (통장 표시, 검색용)
   depositAmount: number;   // 입금액 (매출 수납용)
   withdrawAmount: number;  // 출금액
   memo: string;            // 거래 메모
