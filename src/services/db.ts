@@ -841,7 +841,6 @@ const generateMockAssets = (products: Product[]): Asset[] => {
     currentSiteId: 'site-1-1',
     contractStart: '2026-05-05',
     contractEnd: '2026-07-20',
-    billingDay: 30,
     monthlyRentalFee: 500000,
     dailyRentalFee: 20000,
     cumRentalFee: 1000000,

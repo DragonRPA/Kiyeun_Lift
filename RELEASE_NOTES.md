@@ -1,3 +1,18 @@
+# Release Notes (v1.18.5.Build.88 - 2026-08-01 21:46)
+
+## 🐛 [임차자산 등록 시 DB 스키마 미존재 속성(`billingDay`) 제거 오류 해결]
+
+### 오류 원인 분석 및 긴급 조치
+
+1. **오류 원인 (Root Cause)**
+   - `AppContext.tsx` 내 `registerRentedAsset` 함수에서 `assets` 테이블로 자산 정보를 DB에 등록(insertRow)할 때, Supabase PostgreSQL `assets` 스키마 카탈로그에 존재하지 않는 `billingDay: 30` 속성을 함께 전송하여 `Could not find the 'billingDay' column of 'assets' in the schema cache` 오류 발생.
+
+2. **수정 및 긴급 조치 내용 (`AppContext.tsx` & `db.ts`)**
+   - `assets` 테이블 insert/seed 페이로드에서 미존재 속성인 `billingDay`를 완전히 제거하여 DB 동기화 오류 완전 차단.
+   - 임차 자산 신규 등록 및 수정 저장이 100% 정상적으로 DB에 즉시 등록 및 반영되도록 버그 수정 완료.
+
+---
+
 # Release Notes (v1.18.4.Build.87 - 2026-08-01 21:41)
 
 ## 🏢 [임차 자산 등록 모달 임차처 입력창 ➔ 등록된 매입처 드롭다운 선택상자 전환]

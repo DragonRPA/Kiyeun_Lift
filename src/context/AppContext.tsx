@@ -1220,7 +1220,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         manufacturer: assetData.manufacturer || '',
         ownerType: 'RENTED',
         status: 'AVAILABLE',
-        billingDay: 30,
         monthlyRentalFee: assetData.monthlyRentalFee || 0,
         dailyRentalFee: assetData.dailyRentalFee || 0,
         renter: assetData.renter || '',
