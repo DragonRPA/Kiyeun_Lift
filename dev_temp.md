@@ -25,6 +25,13 @@
 ### 3. 빌드 검증
 - TypeScript + Vite 빌드 오류 없음 확인 ✅
 
+
 ---
 
-✅ **상태**: 전면 개편 집행 완료. 사장님 로컬 검토 대기 중.
+## 📌 [보완 완결] 임차자산 원사 대사 정산 및 월말 매입 정산(`PurchaseSettlementPage.tsx`) 100% 연동
+- **요구 배경**: 원사 거래명세서 대사 승인 내역 및 임차자산 월별 임차료 집계가 **`월말 매입 정산`** 메뉴와 100% 실시간 연동되어야 함.
+- **조치 사항**:
+  1. `AppContext.tsx` 내 `generateMonthlyPurchaseSettlements` 함수 개편: 운송료 + 소모품 + **③ 임차자산 임차료(EQUIPMENT_LEASE)** 자동 집계 엔진 확장.
+  2. `PurchaseSettlementPage.tsx` 개편: `🏢 임차료(전대장비)` 탭에 대사 승인건 및 자동 집계건 실시간 연동 표출. 하단 'Phase 2 개발 예정' 안내 박스를 실시간 연동 완료 안내 박스로 전환.
+
+

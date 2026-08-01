@@ -164,7 +164,7 @@ interface AppContextType {
   saveTransportDataOnFly: (companyName: string, driverName: string, contact: string, vehicleNo: string, vehicleType: string) => void;
 
   // Purchase Settlement Mutators
-  generateMonthlyPurchaseSettlements: (ym: string) => Promise<{ transport: number; consumable: number }>;
+  generateMonthlyPurchaseSettlements: (ym: string) => Promise<{ transport: number; consumable: number; lease: number }>;
   confirmPurchaseSettlement: (id: string) => Promise<void>;
   recordPurchaseSettlementPayment: (id: string, data: { paidAmount: number; paymentDate: string; paymentMethod: string; bankAccount?: string; memo?: string }) => Promise<void>;
   savePurchaseSettlement: (settlement: Partial<PurchaseSettlement>) => Promise<void>;
@@ -1208,6 +1208,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       result = db.updateRow<Asset>('assets', existing.id, {
         ...assetData,
         ownerType: 'RENTED',
+        status: 'AVAILABLE',
+        actualRentReturnDate: '', // 과거 실제 반납일 초기화 (재임차 활성화)
         updatedAt: new Date().toISOString()
       });
     } else {
@@ -2973,11 +2975,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // 월말 매입 정산 관련 Mutators
   // ─────────────────────────────────────────────────────────
 
-  /** 당월 운송료 + 소모품 매입 자동 집계 → PurchaseSettlement 생성 */
-  const generateMonthlyPurchaseSettlements = async (ym: string): Promise<{ transport: number; consumable: number }> => {
+  /** 당월 운송료 + 소모품 매입 + 임차자산 임차료 자동 집계 → PurchaseSettlement 생성 */
+  const generateMonthlyPurchaseSettlements = async (ym: string): Promise<{ transport: number; consumable: number; lease: number }> => {
     const nowIso = new Date().toISOString();
     let transportCount = 0;
     let consumableCount = 0;
+    let leaseCount = 0;
 
     // ① 운송료 집계 — 당월 DELIVERED 배차 중 미정산 건
     const deliveriesOfMonth = db.deliveries.filter(d => {
@@ -3091,13 +3094,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       consumableCount++;
     }
 
+    // ③ 임차자산 임차료 집계 — 임차 관리 메뉴(RentAssets)에서 대사를 완료하고 확정한 내역만 수집
+    const leaseSettlementsOfMonth = db.purchaseSettlements.filter(p => 
+      p.settlementYm === ym && 
+      (p.settlementType === 'EQUIPMENT_LEASE' || (p.settlementType as any) === 'RENTAL')
+    );
+    leaseCount = leaseSettlementsOfMonth.length;
+
     try {
       await db.awaitPendingWrites();
     } catch (err: any) {
       console.error('generateMonthlyPurchaseSettlements error:', err);
     }
+
     refreshAllData();
-    return { transport: transportCount, consumable: consumableCount };
+    return { transport: transportCount, consumable: consumableCount, lease: leaseCount };
   };
 
   const confirmPurchaseSettlement = async (id: string): Promise<void> => {

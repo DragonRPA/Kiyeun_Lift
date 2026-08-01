@@ -130,10 +130,11 @@ export const PurchaseSettlementPage: React.FC = () => {
     setGenerateResult(null);
     try {
       const result = await generateMonthlyPurchaseSettlements(selectedYm);
-      if (result.transport + result.consumable === 0) {
+      const totalCount = result.transport + result.consumable + result.lease;
+      if (totalCount === 0) {
         setGenerateResult('ℹ️ 집계할 신규 정산 건이 없습니다. (이미 집계되었거나 해당 월 데이터 없음)');
       } else {
-        setGenerateResult(`✅ 자동 집계 완료 — 운송료 ${result.transport}건 / 소모품 매입 ${result.consumable}건 생성`);
+        setGenerateResult(`✅ 자동 집계 완료 — 운송료 ${result.transport}건 / 소모품 ${result.consumable}건 / 임차료(전대장비) ${result.lease}건 생성`);
       }
     } catch (err: any) {
       setGenerateResult(`❌ 집계 실패: ${err?.message || err}`);
@@ -553,11 +554,11 @@ export const PurchaseSettlementPage: React.FC = () => {
       )}
 
 
-      {/* Phase 2 임차료 안내 */}
+      {/* 임차료 정산 연동 안내 */}
       {(typeFilter === 'ALL' || typeFilter === 'EQUIPMENT_LEASE') && (
-        <div style={{ marginTop: '28px', padding: '16px', borderRadius: '8px', border: '1px dashed var(--border)', color: 'var(--text-secondary)', fontSize: '13px', lineHeight: '1.6' }}>
-          <strong>📌 임차(전대)장비 임차료 정산</strong> — Phase 2 개발 예정<br />
-          외부 임차사(RENTAL)로부터 전대한 장비의 월 가동일수 × 일할 임차료 자동 집계 기능은 별도 임차 계약 등록 기능 개발 후 연동될 예정입니다.
+        <div style={{ marginTop: '28px', padding: '16px', borderRadius: '8px', border: '1px solid #bfdbfe', backgroundColor: '#eff6ff', color: '#1e3a8a', fontSize: '13px', lineHeight: '1.6' }}>
+          <strong>🏢 임차(전대)장비 임차료 매입 정산 프로세스</strong><br />
+          배차 관리 및 소모품 매입과 동일하게, 임차자산 관리 메뉴의 <strong>[원사 거래명세서 대사 & 매입 정산]</strong>에서 1:1 대사를 완벽하게 검증하고 <strong>승인 확정한 내역만</strong> 본 월말 매입 정산 대장으로 전달되어 확정/지급 처리됩니다.
         </div>
       )}
 
