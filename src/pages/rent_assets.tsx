@@ -83,15 +83,14 @@ export const RentAssets: React.FC = () => {
     // 문자열 공백/하이픈/소문자 통일 정화 헬퍼
     const cleanStr = (s?: string) => (s || '').replace(/[\s\-_]/g, '').toLowerCase();
 
-    // A. 원사 청구 명세서 행 기준으로 자사 DB 자산 대조 (3단계 매칭)
+    // A. 임차처 거래명세서 행 기준으로 자사 DB 자산 대조 (오직 관리번호 기준 1:1 매칭)
     statementRows.forEach((row, idx) => {
-      // 1단계: 관리번호 또는 시리얼번호 정밀 매칭
+      // 1단계: 관리번호(assetNo) 정밀 매칭 (시리얼번호/제조번호 일절 무시)
       let matched = rentedAssets.find(a => 
-        (a.assetNo && cleanStr(a.assetNo) === cleanStr(row.assetNo)) ||
-        (a.serialNo && row.serialNo && cleanStr(a.serialNo) === cleanStr(row.serialNo))
+        a.assetNo && cleanStr(a.assetNo) === cleanStr(row.assetNo)
       );
 
-      // 2단계: 관리번호 불일치 시 [모델명 + 임차처(원사)] 조합 2차 자동 추적
+      // 2단계: 관리번호 불일치 시 [모델명 + 임차처] 조합 2차 보조 추적
       if (!matched && row.modelName) {
         matched = rentedAssets.find(a => 
           cleanStr(a.modelName) === cleanStr(row.modelName) &&
@@ -852,10 +851,9 @@ export const RentAssets: React.FC = () => {
                             </span>
                           </td>
 
-                          {/* 관리번호 / 시리얼 */}
+                          {/* 관리번호 */}
                           <td style={{ padding: '10px', whiteSpace: 'nowrap', fontWeight: '800', color: 'var(--text-main)' }}>
                             {stmt?.assetNo || matched?.assetNo}
-                            {stmt?.serialNo && <div style={{ fontSize: '10px', color: 'var(--text-muted)', fontWeight: 'normal' }}>S/N: {stmt.serialNo}</div>}
                           </td>
 
                           {/* 모델명 */}
