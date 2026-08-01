@@ -394,9 +394,15 @@ export interface Payment {
   method: string; // 'BANK_TRANSFER' | 'CARD' | 'CASH'
   memo: string;
   createdAt: string;
-  // 통장입금 연동 필드 (계좌이체 수납 시 사용)
-  bankTransactionId?: string; // 연결된 BankTransaction ID
-  usedAmount?: number;        // 해당 입금건에서 이 수납으로 소진한 금액
+}
+
+/** 통장입금-수납 마늤투마니 연결 테이블 (1건 수납 : N건 입금건) */
+export interface PaymentDepositLink {
+  id: string;
+  paymentId: string;           // FK → Payment
+  bankTransactionId: string;   // FK → BankTransaction (isDeposit=true)
+  usedAmount: number;          // 이 수납에서 해당 입금건에서 소진한 금액
+  createdAt: string;
 }
 
 export type DeliveryStatus = 'PENDING' | 'DISPATCHED' | 'DELIVERED' | 'CANCELLED' | 'REQUESTED' | 'COMPLETED';
@@ -1187,6 +1193,9 @@ class LocalDB {
   get payments() { return this.get<Payment>('payments', SEED_PAYMENTS); }
   set payments(val: Payment[]) { this.set('payments', val); }
 
+  get paymentDepositLinks() { return this.get<PaymentDepositLink>('paymentDepositLinks', []); }
+  set paymentDepositLinks(val: PaymentDepositLink[]) { this.set('paymentDepositLinks', val); }
+
   get repairs() { return this.get<Repair>('repairs', SEED_REPAIRS); }
   set repairs(val: Repair[]) { this.set('repairs', val); }
 
@@ -1252,6 +1261,7 @@ class LocalDB {
       billings: 'billings',
       billingDetails: 'billing_details',
       payments: 'payments',
+      paymentDepositLinks: 'payment_deposit_links',
       repairs: 'repairs',
       repairConsumables: 'repair_consumables',
       bankTransactions: 'bank_transactions',
@@ -1489,7 +1499,8 @@ class LocalDB {
       case 'repairs':            prefix = 'REP-';    break;
       case 'billings':           prefix = 'BILL-';   break;
       case 'billingDetails':     prefix = 'BDET-';   break;
-      case 'payments':           prefix = 'PAY-';    break;
+      case 'payments':               prefix = 'PAY-';    break;
+      case 'paymentDepositLinks':    prefix = 'PDL-';    break;
       case 'todos':              prefix = 'TODO-';   break;
       case 'bankMatchingRules':  prefix = 'RULE-';   break;
       case 'bankTransactions':   prefix = 'TXN-';    break;

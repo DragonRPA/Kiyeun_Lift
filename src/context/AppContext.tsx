@@ -1,6 +1,6 @@
 // d:\Kiyeun_Lift\src\context\AppContext.tsx
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import { db, supabase, User, MenuPermission, createMenuPermission, Customer, CustomerContact, CustomerSite, Product, Asset, Consumable, ConsumableLog, ConsumablePurchaseRequest, Contract, ContractAsset, ContractHistory, Billing, BillingDetail, Payment, Delivery, TransportCompany, TransportDriver, Repair, RepairConsumable, Todo, BankTransaction, BankMatchingRule, AssetInOutLog, Vendor, GoogleConfig, CashFlowSnapshot, OutboundInspection, DepreciationLog, PurchaseSettlement, PurchaseSettlementItem, ExternalLease, PurchaseSettlementType, PurchaseSettlementStatus, findCustomerByNormalizedName } from '../services/db';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
+import { db, supabase, User, MenuPermission, createMenuPermission, Customer, CustomerContact, CustomerSite, Product, Asset, Consumable, ConsumableLog, ConsumablePurchaseRequest, Contract, ContractAsset, ContractHistory, Delivery, Billing, BillingDetail, Payment, PaymentDepositLink, Repair, RepairConsumable, Todo, BankTransaction, BankMatchingRule, AssetInOutLog, GoogleConfig, Vendor, CashFlowSnapshot, OutboundInspection, TransportCompany, TransportDriver, DepreciationLog, PurchaseSettlement, PurchaseSettlementItem, ExternalLease, PurchaseSettlementType, PurchaseSettlementStatus, findCustomerByNormalizedName } from '../services/db';
 import { ErrorModal } from '../components/ErrorModal';
 import { getAllSystemMenuIds } from '../config/menu_config';
 
@@ -65,6 +65,7 @@ interface AppContextType {
   billings: Billing[];
   billingDetails: BillingDetail[];
   payments: Payment[];
+  paymentDepositLinks: PaymentDepositLink[];
   repairs: Repair[];
   repairConsumables: RepairConsumable[];
   todos: Todo[];
@@ -134,7 +135,14 @@ interface AppContextType {
   generateBillingsForMonth: (billingYm: string, billingDate: string) => Promise<void>;
   approveBilling: (billingId: string) => void;
   cancelBilling: (billingId: string) => void;
-  receivePayment: (billingId: string, data: { paymentDate: string; amount: number; method: string; memo: string; bankTransactionId?: string; usedAmount?: number }) => void;
+  receivePayment: (billingId: string, data: {
+    paymentDate: string;
+    amount: number;
+    method: string;
+    memo: string;
+    depositLinks?: { bankTransactionId: string; usedAmount: number }[]; // 통장입금 연동 (N건)
+  }) => void;
+  cancelPayment: (paymentId: string) => void;  // 수납 취소 + PDL 연쉬 삭제 + Billing 롤백
   saveBankDeposit: (data: Omit<BankTransaction, 'id' | 'createdAt' | 'withdrawAmount'>) => void;  // 통장입금 등록/수정
   deleteBankDeposit: (txId: string) => void;  // 통장입금 삭제 (연결 수납 없을 때만)
   uploadBankTransactions: (txs: Omit<BankTransaction, 'id' | 'createdAt'>[]) => void;
@@ -194,6 +202,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [billings, setBillings] = useState<Billing[]>([]);
   const [billingDetails, setBillingDetails] = useState<BillingDetail[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
+  const [paymentDepositLinks, setPaymentDepositLinks] = useState<PaymentDepositLink[]>([]);
   const [repairs, setRepairs] = useState<Repair[]>([]);
   const [repairConsumables, setRepairConsumables] = useState<RepairConsumable[]>([]);
   const [todos, setTodos] = useState<Todo[]>([]);
@@ -267,6 +276,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setBillings([...db.billings]);
     setBillingDetails([...db.billingDetails]);
     setPayments([...db.payments]);
+    setPaymentDepositLinks([...db.paymentDepositLinks]);
     setRepairs([...db.repairs]);
     setRepairConsumables([...db.repairConsumables]);
     setTodos([...db.todos]);
@@ -301,7 +311,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     'delivery':             ['deliveries', 'transportCompanies', 'transportDrivers', 'contracts', 'assets'],
     'transport_master':     ['transportCompanies', 'transportDrivers'],
     'contract':             ['contracts', 'contractAssets', 'contractHistory', 'customers', 'assets'],
-    'billing':              ['billings', 'billingDetails', 'payments', 'contracts', 'customers'],
+    'billing':              ['billings', 'billingDetails', 'payments', 'paymentDepositLinks', 'bankTransactions', 'contracts', 'customers'],
     'customer':             ['customers', 'contacts', 'sites'],
     'product':              ['products'],
     'asset':                ['assets', 'products', 'vendors', 'contracts'],
@@ -2190,20 +2200,42 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     refreshAllData();
   };
 
-  const receivePayment = (billingId: string, data: { paymentDate: string; amount: number; method: string; memo: string; bankTransactionId?: string; usedAmount?: number }) => {
+  // v2: 복수 입금건 연동 수납 처리
+  const receivePayment = (billingId: string, data: {
+    paymentDate: string;
+    amount: number;
+    method: string;
+    memo: string;
+    depositLinks?: { bankTransactionId: string; usedAmount: number }[];
+  }) => {
     const billing = db.billings.find(b => b.id === billingId);
     if (!billing) return;
 
-    db.insertRow<Payment>('payments', {
+    // Payment 1건 생성
+    const newPayment = db.insertRow<Payment>('payments', {
       billingId,
       paymentDate: data.paymentDate,
       amount: data.amount,
       method: data.method,
       memo: data.memo,
-      createdAt: new Date().toISOString(),
-      ...(data.bankTransactionId ? { bankTransactionId: data.bankTransactionId, usedAmount: data.usedAmount ?? data.amount } : {})
+      createdAt: new Date().toISOString()
     });
 
+    // PaymentDepositLinks N건 생성 (통장입금 연동 시)
+    if (data.depositLinks && data.depositLinks.length > 0) {
+      for (const link of data.depositLinks) {
+        if (link.usedAmount > 0) {
+          db.insertRow<PaymentDepositLink>('paymentDepositLinks', {
+            paymentId: newPayment.id,
+            bankTransactionId: link.bankTransactionId,
+            usedAmount: link.usedAmount,
+            createdAt: new Date().toISOString()
+          });
+        }
+      }
+    }
+
+    // Billing.paidAmount / status 자동 갱신
     const nextPaid = billing.paidAmount + data.amount;
     let nextStatus: Billing['status'] = 'UNPAID';
     if (nextPaid >= billing.totalAmount) {
@@ -2221,6 +2253,37 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     refreshAllData();
   };
 
+  // 수납 취소: Payment 삭제 + 연결된 PDL 전체 삭제 + Billing.paidAmount 롤백
+  const cancelPayment = (paymentId: string) => {
+    const payment = db.payments.find(p => p.id === paymentId);
+    if (!payment) return;
+
+    // 연결된 PDL 모두 삭제 (입금잔액 자동 복원 — 계산 필드이므로)
+    const linkedLinks = db.paymentDepositLinks.filter(l => l.paymentId === paymentId);
+    for (const link of linkedLinks) {
+      db.deleteRow('paymentDepositLinks', link.id);
+    }
+
+    // Payment 삭제
+    db.deleteRow('payments', paymentId);
+
+    // Billing paidAmount 롤백
+    const billing = db.billings.find(b => b.id === payment.billingId);
+    if (billing) {
+      const newPaid = Math.max(0, billing.paidAmount - payment.amount);
+      let newStatus: Billing['status'] = 'UNPAID';
+      if (newPaid >= billing.totalAmount) newStatus = 'PAID';
+      else if (newPaid > 0) newStatus = 'PARTIAL';
+      db.updateRow<Billing>('billings', billing.id, {
+        paidAmount: newPaid,
+        status: newStatus,
+        updatedAt: new Date().toISOString()
+      });
+    }
+
+    refreshAllData();
+  };
+
   // 통장입금 등록 (입금내역으로 수납 재원 등록)
   const saveBankDeposit = (data: Omit<BankTransaction, 'id' | 'createdAt' | 'withdrawAmount'>) => {
     db.insertRow<BankTransaction>('bankTransactions', {
@@ -2232,15 +2295,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     refreshAllData();
   };
 
-  // 통장입금 삭제 (연결된 수납이 있으면 차단)
+  // 통장입금 삭제 (연결된 PaymentDepositLink가 있으면 차단)
   const deleteBankDeposit = (txId: string) => {
-    const linked = db.payments.filter(p => p.bankTransactionId === txId);
+    const linked = db.paymentDepositLinks.filter(l => l.bankTransactionId === txId);
     if (linked.length > 0) {
       throw new Error(`이 입금건에 연결된 수납 내역 ${linked.length}건이 존재합니다.\n수납을 먼저 취소한 후 삭제하세요.`);
     }
     db.deleteRow('bankTransactions', txId);
     refreshAllData();
   };
+
 
   const executeMatch = (txId: string, billingId: string, matchingType: 'AUTO' | 'MANUAL') => {
     const tx = db.bankTransactions.find(t => t.id === txId);
@@ -3091,7 +3155,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   return (
     <AppContext.Provider value={{
       currentUser, theme, toggleTheme, login, logout, hasPermission, showErrorModal,
-      users, permissions, customers, contacts, sites, products, assets, consumables, consumableLogs, consumablePurchases, contracts, contractAssets, contractHistory, deliveries, billings, billingDetails, payments, repairs, repairConsumables, transportCompanies, transportDrivers, todos,
+      users, permissions, customers, contacts, sites, products, assets, consumables, consumableLogs, consumablePurchases, contracts, contractAssets, contractHistory, deliveries, billings, billingDetails, payments, paymentDepositLinks, repairs, repairConsumables, transportCompanies, transportDrivers, todos,
       bankTransactions, bankMatchingRules, assetInOutLogs, vendors, googleConfigs, cashFlowSnapshots, outboundInspections, depreciationLogs,
       purchaseSettlements, purchaseSettlementItems, externalLeases,
       refreshAllData, executeMonthlyDepreciation, loadTablesForMenu, updatePermissions, saveUser, saveCustomer, saveContact, saveSite, saveProduct, saveAsset, updateGoogleConfig,
@@ -3103,7 +3167,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       assignAssetToContract, exchangeOutboundAsset,
       saveSmartDispatch, saveSmartReturn,
       completeTodo,
-      generateBillingsForMonth, approveBilling, cancelBilling, receivePayment, saveBankDeposit, deleteBankDeposit,
+      generateBillingsForMonth, approveBilling, cancelBilling, receivePayment, cancelPayment, saveBankDeposit, deleteBankDeposit,
       uploadBankTransactions, matchTransactionManual, unmatchTransaction, saveMatchingRule, deleteMatchingRule,
       dispatchDelivery, settleDeliveryCost, completeDelivery, completeInboundDelivery,
       registerRepair,

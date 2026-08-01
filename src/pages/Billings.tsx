@@ -10,8 +10,8 @@ import { downloadTransactionStatementPDF, generateTransactionStatementPdfBase64 
 export const Billings: React.FC = () => {
   const {
     billings, billingDetails, customers, contacts, contracts, contractAssets, assets, sites, googleConfigs,
-    generateBillingsForMonth, receivePayment, hasPermission, currentUser, approveBilling, cancelBilling,
-    refreshAllData, showErrorModal, bankTransactions, saveBankDeposit, deleteBankDeposit
+    generateBillingsForMonth, receivePayment, cancelPayment, hasPermission, currentUser, approveBilling, cancelBilling,
+    refreshAllData, showErrorModal, bankTransactions, paymentDepositLinks, saveBankDeposit, deleteBankDeposit, payments
   } = useApp();
 
 
@@ -100,12 +100,13 @@ export const Billings: React.FC = () => {
   const [showPayModal, setShowPayModal] = useState(false);
   const [payBillingId, setPayBillingId] = useState('');
   const [payDate, setPayDate] = useState(new Date().toISOString().split('T')[0]);
-  const [payAmount, setPayAmount] = useState(0);
   const [payMethod, setPayMethod] = useState('BANK_TRANSFER');
   const [payMemo, setPayMemo] = useState('');
-  // 통장입금 연동 수납 상태
-  const [payMode, setPayMode] = useState<'DEPOSIT' | 'DIRECT'>('DEPOSIT'); // DEPOSIT: 입금잔액 선택, DIRECT: 직접입력
-  const [selectedDepositId, setSelectedDepositId] = useState(''); // 선택된 입금건 ID
+  // v2: 다중 입금건 선택 상태 { txId → usedAmount }
+  const [payMode, setPayMode] = useState<'DEPOSIT' | 'DIRECT'>('DEPOSIT');
+  const [depositLinkDraft, setDepositLinkDraft] = useState<Record<string, number>>({}); // txId -> usedAmount
+  const [directAmount, setDirectAmount] = useState(0); // 직접입력 모드 금액
+
 
   // 메일 전송 모달 (거래명세서 메일 발송)
   const [showMailModal, setShowMailModal] = useState(false);
@@ -196,47 +197,85 @@ export const Billings: React.FC = () => {
     }
   };
 
-  const handleOpenPay = (bId: string, amount: number) => {
+  // v2: 미납액 기준으로 입금잔액 자동 할당
+  const getDepositBalance = (txId: string) => {
+    const tx = bankTransactions.find(t => t.id === txId);
+    const used = paymentDepositLinks
+      .filter(l => l.bankTransactionId === txId)
+      .reduce((s, l) => s + l.usedAmount, 0);
+    return (tx?.depositAmount || 0) - used;
+  };
+
+  const handleOpenPay = (bId: string, unpaidAmount: number) => {
     const billing = billings.find(b => b.id === bId);
     const custId = billing?.customerId;
-    // 해당 고객사의 미소진 입금잔액 조회
-    const custDeposits = bankTransactions.filter(t => t.isDeposit && t.customerId === custId && t.depositAmount > 0);
-    const firstDeposit = custDeposits[0];
+    // 해당 고객사의 미소진 입금잔액 목록 (날짜 무관)
+    const custDeposits = bankTransactions
+      .filter(t => t.isDeposit && t.customerId === custId)
+      .map(t => ({ ...t, balance: getDepositBalance(t.id) }))
+      .filter(t => t.balance > 0)
+      .sort((a, b) => a.transactionDate.localeCompare(b.transactionDate)); // 오래된 것 먼저
+
     setPayBillingId(bId);
-    setPayAmount(amount); // 미납액 기본입력
     setPayDate(new Date().toISOString().split('T')[0]);
     setPayMethod('BANK_TRANSFER');
     setPayMemo('');
     setPayMode(custDeposits.length > 0 ? 'DEPOSIT' : 'DIRECT');
-    setSelectedDepositId(firstDeposit?.id || '');
+    setDirectAmount(unpaidAmount);
+
+    // 잔액이 있는 입금건들을 미납액 소진될 때까지 자동 할당
+    const draft: Record<string, number> = {};
+    let remaining = unpaidAmount;
+    for (const dep of custDeposits) {
+      if (remaining <= 0) break;
+      const use = Math.min(dep.balance, remaining);
+      draft[dep.id] = use;
+      remaining -= use;
+    }
+    setDepositLinkDraft(draft);
     setShowPayModal(true);
   };
 
   const handlePaySubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!canSave || !payBillingId || payAmount <= 0) return;
+    if (!canSave || !payBillingId) return;
 
-    if (payMode === 'DEPOSIT' && selectedDepositId) {
-      // 입금잔액 범위 검증
-      const dep = bankTransactions.find(t => t.id === selectedDepositId);
-      const usedSoFar = db.payments.filter(p => p.bankTransactionId === selectedDepositId).reduce((s, p) => s + (p.usedAmount || 0), 0);
-      const remaining = (dep?.depositAmount || 0) - usedSoFar;
-      if (payAmount > remaining) {
-        showErrorModal(`입금잔액 부족\n입금잔액: ${remaining.toLocaleString()}원 / 수납하려는 금액: ${payAmount.toLocaleString()}원`, '수납 오류');
+    if (payMode === 'DEPOSIT') {
+      const links = Object.entries(depositLinkDraft)
+        .filter(([, amt]) => amt > 0)
+        .map(([txId, amt]) => ({ bankTransactionId: txId, usedAmount: amt }));
+
+      if (links.length === 0) {
+        showErrorModal('수납할 입금건을 선택하고 금액을 입력하세요.', '수납 오류');
         return;
       }
+
+      // 각 입금건 잔액 초과 검증
+      for (const link of links) {
+        const bal = getDepositBalance(link.bankTransactionId);
+        if (link.usedAmount > bal) {
+          const tx = bankTransactions.find(t => t.id === link.bankTransactionId);
+          showErrorModal(
+            `[${tx?.senderName}] 입금잔액 부족\n잔액: ${bal.toLocaleString()}원 / 입력 금액: ${link.usedAmount.toLocaleString()}원`,
+            '수납 오류'
+          );
+          return;
+        }
+      }
+
+      const totalAmount = links.reduce((s, l) => s + l.usedAmount, 0);
       receivePayment(payBillingId, {
         paymentDate: payDate,
-        amount: payAmount,
+        amount: totalAmount,
         method: 'BANK_TRANSFER',
-        memo: payMemo || `통장입금 연동 (${dep?.senderName})`,
-        bankTransactionId: selectedDepositId,
-        usedAmount: payAmount
+        memo: payMemo || `통장입금 연동 ${links.length}건 합산`,
+        depositLinks: links
       });
     } else {
+      if (directAmount <= 0) return;
       receivePayment(payBillingId, {
         paymentDate: payDate,
-        amount: payAmount,
+        amount: directAmount,
         method: payMethod,
         memo: payMemo
       });
@@ -691,13 +730,14 @@ ${details.map((d, idx) => {
       {activeTab === 'DEPOSIT_MGMT' && (() => {
         // 모든 입금 건 (isDeposit=true)
         const allDeposits = bankTransactions.filter(t => t.isDeposit);
-        // 입금건별 잔액 계산
+        // 입금건별 잔액 계산 (PaymentDepositLinks 기반 — v2)
         const depositsWithBalance = allDeposits.map(dep => {
-          const usedSoFar = db.payments
-            .filter(p => p.bankTransactionId === dep.id)
-            .reduce((s, p) => s + (p.usedAmount || 0), 0);
+          const usedSoFar = paymentDepositLinks
+            .filter(l => l.bankTransactionId === dep.id)
+            .reduce((s, l) => s + l.usedAmount, 0);
           return { ...dep, usedAmount: usedSoFar, balance: dep.depositAmount - usedSoFar };
         }).sort((a, b) => b.transactionDate.localeCompare(a.transactionDate));
+
 
         const handleDepositSubmit = (e: React.FormEvent) => {
           e.preventDefault();
@@ -1416,7 +1456,6 @@ ${details.map((d, idx) => {
                               style={{ width: '50px', padding: '6px', fontSize: '13px', border: '1px solid var(--border-color)', borderRadius: '4px', backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)' }}
                             />
                           </div>
-
                           {/* 단가 */}
                           <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flex: 1 }}>
                             <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>단가:</span>
@@ -1505,25 +1544,38 @@ ${details.map((d, idx) => {
         const payBilling = billings.find(b => b.id === payBillingId);
         const unpaid = payBilling ? payBilling.totalAmount - payBilling.paidAmount : 0;
         const custId = payBilling?.customerId;
-        // 해당 고객사의 통장입금 목록 (isDeposit=true)
-        const custDeposits = bankTransactions.filter(t => t.isDeposit && t.customerId === custId);
-        // 입금건별 잔액 계산
-        const depositWithBalance = custDeposits.map(dep => {
-          const usedSoFar = db.payments
-            .filter(p => p.bankTransactionId === dep.id)
-            .reduce((s, p) => s + (p.usedAmount || 0), 0);
-          return { ...dep, balance: dep.depositAmount - usedSoFar };
-        }).filter(d => d.balance > 0); // 잔액 있는 것만
 
-        const selectedDep = depositWithBalance.find(d => d.id === selectedDepositId);
-        const maxPayable = payMode === 'DEPOSIT' && selectedDep ? Math.min(selectedDep.balance, unpaid) : unpaid;
+        // 해당 고객사 입금잔액 목록 (PaymentDepositLinks 기반 실시간 계산)
+        const custDeposits = bankTransactions
+          .filter(t => t.isDeposit && t.customerId === custId)
+          .map(dep => ({ ...dep, balance: getDepositBalance(dep.id) }))
+          .sort((a, b) => a.transactionDate.localeCompare(b.transactionDate)); // 오래된 것 먼저
+
+        // 선택 합계 (0원인 항목 제외)
+        const selectedTotal = Object.values(depositLinkDraft).reduce((s, v) => s + v, 0);
+        const allAvailableBalance = custDeposits.reduce((s, d) => s + d.balance, 0);
+
+        const toggleDep = (depId: string, balance: number) => {
+          setDepositLinkDraft(prev => {
+            const next = { ...prev };
+            if (next[depId] !== undefined) {
+              delete next[depId]; // 체크 해제
+            } else {
+              // 체크 — 아직 채워지지 않은 미납액만큼 자동 입력
+              const alreadySelected = Object.values(next).reduce((s, v) => s + v, 0);
+              const fill = Math.min(balance, Math.max(0, unpaid - alreadySelected));
+              next[depId] = fill;
+            }
+            return next;
+          });
+        };
 
         return (
           <div style={{
             position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-            backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000
+            backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '16px'
           }}>
-            <form onSubmit={handlePaySubmit} className="card" style={{ width: '100%', maxWidth: '500px', backgroundColor: 'var(--bg-card)' }}>
+            <form onSubmit={handlePaySubmit} className="card" style={{ width: '100%', maxWidth: '560px', backgroundColor: 'var(--bg-card)', maxHeight: '90vh', overflowY: 'auto' }}>
               <h3 className="card-title" style={{ marginBottom: '4px' }}>수납 처리</h3>
               <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '16px' }}>
                 {getCustName(custId || '')} — 미납액: <strong style={{ color: '#EF4444' }}>{unpaid.toLocaleString()}원</strong>
@@ -1532,14 +1584,14 @@ ${details.map((d, idx) => {
               {/* 모드 탭 */}
               <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', marginBottom: '16px' }}>
                 <button type="button"
-                  onClick={() => { setPayMode('DEPOSIT'); setPayAmount(maxPayable); }}
+                  onClick={() => setPayMode('DEPOSIT')}
                   style={{ padding: '7px 16px', fontSize: '13px', fontWeight: '600', border: 'none', background: 'none', cursor: 'pointer',
                     borderBottom: payMode === 'DEPOSIT' ? '2px solid var(--primary)' : '2px solid transparent',
                     color: payMode === 'DEPOSIT' ? 'var(--primary)' : 'var(--text-secondary)' }}>
                   🏦 통장입금 연동
                 </button>
                 <button type="button"
-                  onClick={() => { setPayMode('DIRECT'); setSelectedDepositId(''); }}
+                  onClick={() => setPayMode('DIRECT')}
                   style={{ padding: '7px 16px', fontSize: '13px', fontWeight: '600', border: 'none', background: 'none', cursor: 'pointer',
                     borderBottom: payMode === 'DIRECT' ? '2px solid var(--primary)' : '2px solid transparent',
                     color: payMode === 'DIRECT' ? 'var(--primary)' : 'var(--text-secondary)' }}>
@@ -1551,43 +1603,99 @@ ${details.map((d, idx) => {
 
                 {payMode === 'DEPOSIT' ? (
                   <>
-                    {depositWithBalance.length === 0 ? (
+                    {custDeposits.length === 0 ? (
                       <div style={{ padding: '16px', borderRadius: '8px', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', color: '#EF4444', fontSize: '13px', textAlign: 'center' }}>
                         이 고객사의 미소진 입금잔액이 없습니다.<br />
                         <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>통장입금을 먼저 등록하거나 직접 입력 탭을 사용하세요.</span>
                       </div>
                     ) : (
                       <div>
-                        <label>입금잔액 선택</label>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '6px' }}>
-                          {depositWithBalance.map(dep => (
-                            <label key={dep.id} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 12px', borderRadius: '8px', border: `1px solid ${selectedDepositId === dep.id ? 'var(--primary)' : 'var(--border)'}`, background: selectedDepositId === dep.id ? 'rgba(99,102,241,0.06)' : 'var(--bg-app)', cursor: 'pointer' }}>
-                              <input type="radio" name="depositId" value={dep.id} checked={selectedDepositId === dep.id}
-                                onChange={() => { setSelectedDepositId(dep.id); setPayAmount(Math.min(dep.balance, unpaid)); }} />
-                              <div style={{ flex: 1, minWidth: 0 }}>
-                                <div style={{ fontSize: '13px', fontWeight: '600', whiteSpace: 'nowrap' }}>{dep.senderName}</div>
-                                <div style={{ fontSize: '11px', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
-                                  입금일: {dep.transactionDate.split(' ')[0]} | 입금액: {dep.depositAmount.toLocaleString()}원
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                          <label style={{ margin: 0 }}>입금잔액 선택 (복수 선택 가능)</label>
+                          <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
+                            사용가능 총액: {allAvailableBalance.toLocaleString()}원
+                          </span>
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                          {custDeposits.map(dep => {
+                            const isChecked = depositLinkDraft[dep.id] !== undefined;
+                            const inputVal = depositLinkDraft[dep.id] ?? 0;
+                            return (
+                              <div key={dep.id} style={{
+                                display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 12px', borderRadius: '8px',
+                                border: `1px solid ${isChecked ? 'var(--primary)' : 'var(--border)'}`,
+                                background: isChecked ? 'rgba(99,102,241,0.06)' : dep.balance <= 0 ? 'rgba(0,0,0,0.03)' : 'var(--bg-app)',
+                                opacity: dep.balance <= 0 ? 0.45 : 1
+                              }}>
+                                <input type="checkbox" checked={isChecked}
+                                  disabled={dep.balance <= 0}
+                                  onChange={() => toggleDep(dep.id, dep.balance)}
+                                  style={{ accentColor: 'var(--primary)', width: '16px', height: '16px', flexShrink: 0 }} />
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                  <div style={{ fontSize: '13px', fontWeight: '600', whiteSpace: 'nowrap' }}>{dep.senderName}</div>
+                                  <div style={{ fontSize: '11px', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
+                                    입금일: {dep.transactionDate.split(' ')[0]} | 원금: {dep.depositAmount.toLocaleString()}원
+                                    {dep.balance < dep.depositAmount && (
+                                      <span style={{ color: '#F59E0B', marginLeft: '6px' }}>
+                                        (기소진: {(dep.depositAmount - dep.balance).toLocaleString()}원)
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '2px', flexShrink: 0 }}>
+                                  <span style={{ fontSize: '11px', color: '#10B981', fontWeight: '700', whiteSpace: 'nowrap' }}>
+                                    잔액 {dep.balance.toLocaleString()}원
+                                  </span>
+                                  {isChecked && (
+                                    <input type="number"
+                                      value={inputVal || ''}
+                                      max={dep.balance}
+                                      min={1}
+                                      onChange={e => {
+                                        const v = Math.min(parseInt(e.target.value) || 0, dep.balance);
+                                        setDepositLinkDraft(prev => ({ ...prev, [dep.id]: v }));
+                                      }}
+                                      onClick={e => e.stopPropagation()}
+                                      style={{ width: '110px', padding: '3px 6px', fontSize: '12px', textAlign: 'right', borderRadius: '4px', border: '1px solid var(--border)' }}
+                                      placeholder="사용금액"
+                                    />
+                                  )}
                                 </div>
                               </div>
-                              <span style={{ fontSize: '13px', fontWeight: '700', color: '#10B981', whiteSpace: 'nowrap' }}>
-                                잔액 {dep.balance.toLocaleString()}원
-                              </span>
-                            </label>
-                          ))}
+                            );
+                          })}
+                        </div>
+
+                        {/* 선택 합계 */}
+                        <div style={{ marginTop: '10px', padding: '10px 14px', borderRadius: '8px', background: 'var(--bg-app)', border: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>선택 합계</span>
+                          <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                            <span style={{ fontSize: '16px', fontWeight: '700', color: selectedTotal === unpaid ? '#10B981' : selectedTotal > unpaid ? '#EF4444' : 'var(--text-primary)' }}>
+                              {selectedTotal.toLocaleString()}원
+                            </span>
+                            <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>/ 미납 {unpaid.toLocaleString()}원</span>
+                            {selectedTotal === unpaid && <span style={{ fontSize: '11px', color: '#10B981', fontWeight: '600' }}>✅ 완납</span>}
+                            {selectedTotal > unpaid && <span style={{ fontSize: '11px', color: '#EF4444', fontWeight: '600' }}>⚠️ 초과</span>}
+                          </div>
                         </div>
                       </div>
                     )}
                   </>
                 ) : (
-                  <div>
-                    <label>수납 방법</label>
-                    <select value={payMethod} onChange={e => setPayMethod(e.target.value)}>
-                      <option value="BANK_TRANSFER">통장 송금 (Bank Transfer)</option>
-                      <option value="CARD">카드 결제</option>
-                      <option value="CASH">현금 수납</option>
-                    </select>
-                  </div>
+                  <>
+                    <div>
+                      <label>수납 방법</label>
+                      <select value={payMethod} onChange={e => setPayMethod(e.target.value)}>
+                        <option value="BANK_TRANSFER">통장 송금 (Bank Transfer)</option>
+                        <option value="CARD">카드 결제</option>
+                        <option value="CASH">현금 수납</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label>수납 처리액 (원) *</label>
+                      <input type="number" value={directAmount || ''} onChange={e => setDirectAmount(parseInt(e.target.value) || 0)} required />
+                    </div>
+                  </>
                 )}
 
                 <div>
@@ -1596,36 +1704,16 @@ ${details.map((d, idx) => {
                 </div>
 
                 <div>
-                  <label>수납 처리액 (원) *</label>
-                  <input
-                    type="number"
-                    value={payAmount || ''}
-                    onChange={e => setPayAmount(parseInt(e.target.value) || 0)}
-                    max={payMode === 'DEPOSIT' && selectedDep ? selectedDep.balance : undefined}
-                    required
-                  />
-                  {payMode === 'DEPOSIT' && selectedDep && (
-                    <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '4px' }}>
-                      최대 사용 가능: {selectedDep.balance.toLocaleString()}원 (입금잔액 기준)
-                    </div>
-                  )}
-                </div>
-
-                <div>
                   <label>비고</label>
-                  <input
-                    type="text"
-                    value={payMemo}
-                    onChange={e => setPayMemo(e.target.value)}
-                    placeholder={payMode === 'DEPOSIT' ? '(자동 입력됨, 선택 수정 가능)' : '예: 현대건설 김민수 입금'}
-                  />
+                  <input type="text" value={payMemo} onChange={e => setPayMemo(e.target.value)}
+                    placeholder={payMode === 'DEPOSIT' ? '(자동 입력됨, 선택 수정 가능)' : '예: 현대건설 김민수 입금'} />
                 </div>
               </div>
 
               <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
                 <button type="button" className="btn-secondary" onClick={() => setShowPayModal(false)}>취소</button>
                 <button type="submit" className="btn-primary"
-                  disabled={payMode === 'DEPOSIT' && depositWithBalance.length === 0}>
+                  disabled={payMode === 'DEPOSIT' && (custDeposits.length === 0 || selectedTotal <= 0)}>
                   수납 완료 처리
                 </button>
               </div>
@@ -1633,6 +1721,7 @@ ${details.map((d, idx) => {
           </div>
         );
       })()}
+
 
 
       {/* (주)기연엘리베이터 표준 거래명세서 메일 발송 모달 */}
