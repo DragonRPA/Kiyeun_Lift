@@ -117,8 +117,8 @@ export const Billings: React.FC = () => {
   const [mailTo, setMailTo] = useState(''); // 수신인 (기본값 자동입력 & 수동 수정/추가 지정 가능)
   const [mailCc, setMailCc] = useState(''); // 참조인 (CC 추가 지정 가능)
   const [mailSubject, setMailSubject] = useState(''); // 메일 제목
-  const [mailTab, setMailTab] = useState<'FORM' | 'PREVIEW'>('FORM'); // 발송폼 / 거래명세서 미리보기
   const [isSending, setIsSending] = useState(false);
+
 
   const getCustName = (id: string) => customers.find(c => c.id === id)?.name || '-';
 
@@ -340,7 +340,6 @@ export const Billings: React.FC = () => {
     setMailTo(emails.join(', '));
     setMailCc('');
     setMailSubject(`[(주)기연엘리베이터] ${getCustName(billing.customerId)} ${billing.billingYm} 거래명세서 및 청구서 안내`);
-    setMailTab('FORM');
     setShowMailModal(true);
   };
 
@@ -1893,73 +1892,53 @@ ${details.map((d, idx) => {
                 <h3 className="card-title" style={{ margin: 0, fontSize: '17px', fontWeight: '700' }}>
                   📄 (주)기연리프트 표준 거래명세서 이메일 발송
                 </h3>
-                <div style={{ display: 'flex', gap: '6px' }}>
-                  <button type="button" className={mailTab === 'FORM' ? 'btn-primary' : 'btn-secondary'} onClick={() => setMailTab('FORM')} style={{ fontSize: '12px', padding: '4px 10px' }}>
-                    📧 수신/참조 설정
-                  </button>
-                  <button type="button" className={mailTab === 'PREVIEW' ? 'btn-primary' : 'btn-secondary'} onClick={() => setMailTab('PREVIEW')} style={{ fontSize: '12px', padding: '4px 10px' }}>
-                    👁️ 명세서 미리보기
-                  </button>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', marginBottom: '20px' }}>
+                <div>
+                  <label style={{ fontSize: '12px', fontWeight: '600', color: 'var(--text-secondary)' }}>메일 제목 *</label>
+                  <input
+                    type="text"
+                    value={mailSubject}
+                    onChange={e => setMailSubject(e.target.value)}
+                    required
+                    style={{ width: '100%', padding: '8px', fontSize: '13px', borderRadius: '6px', border: '1px solid var(--border-color)', marginTop: '4px' }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ fontSize: '12px', fontWeight: '600', color: 'var(--text-secondary)' }}>
+                    수신인 이메일 (To) * <span style={{ fontSize: '11px', color: 'var(--primary)', fontWeight: 'normal' }}>(고객대표 및 담당자 이메일 자동 채움 / 자유 수정 및 쉼표 추가 가능)</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={mailTo}
+                    onChange={e => setMailTo(e.target.value)}
+                    placeholder="email1@company.com, email2@company.com"
+                    required
+                    style={{ width: '100%', padding: '8px', fontSize: '13px', borderRadius: '6px', border: '1px solid var(--border-color)', marginTop: '4px' }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ fontSize: '12px', fontWeight: '600', color: 'var(--text-secondary)' }}>
+                    참조인 이메일 (CC) <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 'normal' }}>(선택 입력 / 쉼표로 다수 지정 가능)</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={mailCc}
+                    onChange={e => setMailCc(e.target.value)}
+                    placeholder="cc1@company.com, cc2@company.com"
+                    style={{ width: '100%', padding: '8px', fontSize: '13px', borderRadius: '6px', border: '1px solid var(--border-color)', marginTop: '4px' }}
+                  />
+                </div>
+
+                <div style={{ fontSize: '12.5px', color: 'var(--text-secondary)', padding: '12px', backgroundColor: 'var(--bg-app)', borderRadius: '8px', border: '1px dashed var(--border-color)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <span style={{ fontWeight: '600' }}>💡 거래명세서 메일 자동 생성 안내</span>
+                  <span>- 발송 시 (주)기연리프트 표준 거래명세서 양식(공급자/공급받는자 정보, 세부 품목별 날짜/적용단가/공급가액/부가세)이 메일 본문에 100% 자동 생성되어 전달됩니다.</span>
                 </div>
               </div>
 
-              {mailTab === 'FORM' ? (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', marginBottom: '20px' }}>
-                  <div>
-                    <label style={{ fontSize: '12px', fontWeight: '600', color: 'var(--text-secondary)' }}>메일 제목 *</label>
-                    <input
-                      type="text"
-                      value={mailSubject}
-                      onChange={e => setMailSubject(e.target.value)}
-                      required
-                      style={{ width: '100%', padding: '8px', fontSize: '13px', borderRadius: '6px', border: '1px solid var(--border-color)', marginTop: '4px' }}
-                    />
-                  </div>
-
-                  <div>
-                    <label style={{ fontSize: '12px', fontWeight: '600', color: 'var(--text-secondary)' }}>
-                      수신인 이메일 (To) * <span style={{ fontSize: '11px', color: 'var(--primary)', fontWeight: 'normal' }}>(고객대표 및 담당자 이메일 자동 채움 / 자유 수정 및 쉼표 추가 가능)</span>
-                    </label>
-                    <input
-                      type="text"
-                      value={mailTo}
-                      onChange={e => setMailTo(e.target.value)}
-                      placeholder="email1@company.com, email2@company.com"
-                      required
-                      style={{ width: '100%', padding: '8px', fontSize: '13px', borderRadius: '6px', border: '1px solid var(--border-color)', marginTop: '4px' }}
-                    />
-                  </div>
-
-                  <div>
-                    <label style={{ fontSize: '12px', fontWeight: '600', color: 'var(--text-secondary)' }}>
-                      참조인 이메일 (CC) <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 'normal' }}>(선택 입력 / 쉼표로 다수 지정 가능)</span>
-                    </label>
-                    <input
-                      type="text"
-                      value={mailCc}
-                      onChange={e => setMailCc(e.target.value)}
-                      placeholder="cc1@company.com, cc2@company.com"
-                      style={{ width: '100%', padding: '8px', fontSize: '13px', borderRadius: '6px', border: '1px solid var(--border-color)', marginTop: '4px' }}
-                    />
-                  </div>
-
-                  <div style={{ fontSize: '12.5px', color: 'var(--text-secondary)', padding: '12px', backgroundColor: 'var(--bg-app)', borderRadius: '8px', border: '1px dashed var(--border-color)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                    <span style={{ fontWeight: '600' }}>💡 거래명세서 메일 자동 생성 안내</span>
-                    <span>- 발송 시 (주)기연리프트 표준 거래명세서 양식(공급자/공급받는자 정보, 세부 품목별 날짜/적용단가/공급가액/부가세)이 메일 본문에 100% 자동 생성되어 전달됩니다.</span>
-                  </div>
-                </div>
-              ) : (
-                /* 거래명세서 미리보기: 엑셀 양식 기반으로 전환됨 */
-                <div style={{ marginBottom: '20px', padding: '16px', background: 'rgba(99,179,237,0.08)', borderRadius: '8px', border: '1px solid rgba(99,179,237,0.3)', fontSize: '13px', color: '#a0aec0' }}>
-                  <div style={{ fontWeight: 'bold', marginBottom: '6px', color: '#63b3ed' }}>📊 거래명세서 (엑셀 양식 기반)</div>
-                  <div>구글 드라이브에 등록된 공식 거래명세서 양식(xlsx)에 청구 데이터를 채워 생성합니다.</div>
-                  <div style={{ marginTop: '6px' }}>
-                    <b>고객사:</b> {targetCust?.name || '-'} &nbsp;|&nbsp;
-                    <b>청구월:</b> {targetBilling?.billingYm || '-'} &nbsp;|&nbsp;
-                    <b>합계:</b> {targetDetails.reduce((s, d) => s + (d.unitPrice || 0) * (d.quantity || 1), 0).toLocaleString()}원 (공급가) + 부가세 10%
-                  </div>
-                </div>
-              )}
 
               <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
                 <button type="button" className="btn-secondary" onClick={() => setShowMailModal(false)}>취소</button>
