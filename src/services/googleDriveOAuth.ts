@@ -101,26 +101,27 @@ function getAccessToken(clientId: string): Promise<string> {
 // 3. Google Drive 폴더 ID 조회 (없으면 생성)
 // ─────────────────────────────────────────────────────────────────────────────
 async function getOrCreateFolder(token: string, folderName: string, parentId?: string): Promise<string> {
-  // 폴더 검색
-  let query = `mimeType='application/vnd.google-apps.folder' and name='${folderName}' and trashed=false`;
-  if (parentId) query += ` and '${parentId}' in parents`;
+  // 루트 폴더 검색 시 'root' in parents 조건 추가로 중복 방지
+  const parentCondition = parentId ? `'${parentId}' in parents` : `'root' in parents`;
+  const query = `mimeType='application/vnd.google-apps.folder' and name='${folderName}' and trashed=false and ${parentCondition}`;
 
   const searchRes = await fetch(
-    `${DRIVE_API}/files?q=${encodeURIComponent(query)}&fields=files(id,name)`,
+    `${DRIVE_API}/files?q=${encodeURIComponent(query)}&fields=files(id,name)&orderBy=createdTime`,
     { headers: { Authorization: `Bearer ${token}` } }
   );
   const searchData = await searchRes.json();
 
   if (searchData.files && searchData.files.length > 0) {
+    // 이미 존재하는 폴더 재사용 (중복 생성 방지)
     return searchData.files[0].id;
   }
 
-  // 폴더 생성
+  // 폴더가 없을 때만 생성
   const createBody: any = {
     name: folderName,
-    mimeType: 'application/vnd.google-apps.folder'
+    mimeType: 'application/vnd.google-apps.folder',
+    parents: [parentId || 'root']
   };
-  if (parentId) createBody.parents = [parentId];
 
   const createRes = await fetch(`${DRIVE_API}/files`, {
     method: 'POST',

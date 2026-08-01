@@ -1121,60 +1121,98 @@ export const Consumables: React.FC = () => {
 
             {/* 모달 바디 */}
             <div style={{ padding: '20px', overflowY: 'auto', flex: 1 }}>
-              {previewRequest.statementFileUrl.startsWith('data:') ? (
-                // 실제 업로드된 파일 (Data URL)
-                previewRequest.statementFileUrl.startsWith('data:image/') ? (
-                  <div style={{ textAlign: 'center' }}>
-                    <img 
-                      src={previewRequest.statementFileUrl} 
-                      alt="거래명세서 증빙 이미지" 
-                      style={{ maxWidth: '100%', maxHeight: '580px', borderRadius: '6px', border: '1px solid var(--border)', boxShadow: 'var(--shadow-sm)', marginBottom: '16px' }} 
-                    />
-                    <div>
-                      <a 
-                        href={previewRequest.statementFileUrl} 
-                        download={`${previewRequest.id.toUpperCase()}_증빙.jpg`}
-                        className="btn-primary" 
-                        style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '9px 18px', borderRadius: '6px', textDecoration: 'none', fontSize: '13.5px', fontWeight: '700' }}
-                      >
-                        <Download size={15} /> 원본 사진 파일 저장 ({previewRequest.id.toUpperCase()}.jpg)
-                      </a>
-                    </div>
+              {previewRequest.statementFileUrl.startsWith('data:image/') ? (
+                // 실제 업로드된 이미지 파일 (Data URL)
+                <div style={{ textAlign: 'center' }}>
+                  <img 
+                    src={previewRequest.statementFileUrl} 
+                    alt="거래명세서 증빙 이미지" 
+                    style={{ maxWidth: '100%', maxHeight: '580px', borderRadius: '6px', border: '1px solid var(--border)', boxShadow: 'var(--shadow-sm)', marginBottom: '16px' }} 
+                  />
+                  <div>
+                    <a 
+                      href={previewRequest.statementFileUrl} 
+                      download={`${previewRequest.id.toUpperCase()}_증빙.jpg`}
+                      className="btn-primary" 
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '9px 18px', borderRadius: '6px', textDecoration: 'none', fontSize: '13.5px', fontWeight: '700' }}
+                    >
+                      <Download size={15} /> 원본 사진 파일 저장 ({previewRequest.id.toUpperCase()}.jpg)
+                    </a>
                   </div>
-                ) : (
-                  // PDF 또는 기타 문서형식의 Data URL -> 실물 뷰어 object/iframe 및 저장 툴바
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', background: 'var(--bg-app)', borderRadius: '6px', border: '1px solid var(--border)' }}>
-                      <span style={{ fontSize: '13px', fontWeight: '700', color: 'var(--text-primary)', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-                        <FileText size={16} color="var(--primary)" />
-                        PDF 증빙 문서 실물 미리보기
-                      </span>
-                      <a 
-                        href={previewRequest.statementFileUrl} 
-                        download={`${previewRequest.id.toUpperCase()}_증빙.pdf`}
-                        className="btn-primary" 
-                        style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '6px 14px', borderRadius: '6px', textDecoration: 'none', fontWeight: '700', fontSize: '12.5px' }}
-                      >
-                        <Download size={14} /> PDF 파일 저장 ({previewRequest.id.toUpperCase()}.pdf)
-                      </a>
-                    </div>
-                    <div style={{ height: '600px', borderRadius: '8px', overflow: 'hidden', border: '1px solid var(--border)', background: '#525659' }}>
-                      <object
-                        data={previewRequest.statementFileUrl}
-                        type="application/pdf"
-                        width="100%"
-                        height="100%"
-                      >
-                        <iframe 
-                          src={previewRequest.statementFileUrl} 
-                          title="PDF 증빙 문서 미리보기" 
-                          style={{ width: '100%', height: '100%', border: 'none' }} 
-                        />
-                      </object>
-                    </div>
+                </div>
+              ) : previewRequest.statementFileUrl.startsWith('data:') ? (
+                // PDF Data URL
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', background: 'var(--bg-app)', borderRadius: '6px', border: '1px solid var(--border)' }}>
+                    <span style={{ fontSize: '13px', fontWeight: '700', color: 'var(--text-primary)', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                      <FileText size={16} color="var(--primary)" />
+                      PDF 증빙 문서 실물 미리보기
+                    </span>
+                    <a 
+                      href={previewRequest.statementFileUrl} 
+                      download={`${previewRequest.id.toUpperCase()}_증빙.pdf`}
+                      className="btn-primary" 
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '6px 14px', borderRadius: '6px', textDecoration: 'none', fontWeight: '700', fontSize: '12.5px' }}
+                    >
+                      <Download size={14} /> PDF 파일 저장 ({previewRequest.id.toUpperCase()}.pdf)
+                    </a>
                   </div>
-                )
+                  <div style={{ height: '600px', borderRadius: '8px', overflow: 'hidden', border: '1px solid var(--border)', background: '#525659' }}>
+                    <object
+                      data={previewRequest.statementFileUrl}
+                      type="application/pdf"
+                      width="100%"
+                      height="100%"
+                    >
+                      <iframe 
+                        src={previewRequest.statementFileUrl} 
+                        title="PDF 증빙 문서 미리보기" 
+                        style={{ width: '100%', height: '100%', border: 'none' }} 
+                      />
+                    </object>
+                  </div>
+                </div>
 
+              ) : previewRequest.statementFileUrl.startsWith('https://') ? (
+                // ☁️ 구글 드라이브 실물 파일 URL
+                (() => {
+                  // webViewLink → previewLink 변환
+                  // https://drive.google.com/file/d/FILE_ID/view?... → https://drive.google.com/file/d/FILE_ID/preview
+                  const driveUrl = previewRequest.statementFileUrl;
+                  const fileIdMatch = driveUrl.match(/\/file\/d\/([^/]+)/);
+                  const previewUrl = fileIdMatch
+                    ? `https://drive.google.com/file/d/${fileIdMatch[1]}/preview`
+                    : driveUrl;
+                  const openUrl = fileIdMatch
+                    ? `https://drive.google.com/file/d/${fileIdMatch[1]}/view`
+                    : driveUrl;
+                  return (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: 'rgba(16,185,129,0.08)', borderRadius: '8px', border: '1px solid rgba(16,185,129,0.3)' }}>
+                        <span style={{ fontSize: '13px', fontWeight: '700', color: '#10B981', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                          <Upload size={15} /> 구글 드라이브 실물 저장 파일
+                        </span>
+                        <a
+                          href={openUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="btn-primary"
+                          style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '6px 14px', borderRadius: '6px', textDecoration: 'none', fontWeight: '700', fontSize: '12.5px' }}
+                        >
+                          <FileText size={14} /> 구글 드라이브에서 열기
+                        </a>
+                      </div>
+                      <div style={{ height: '600px', borderRadius: '8px', overflow: 'hidden', border: '1px solid var(--border)', background: '#525659' }}>
+                        <iframe
+                          src={previewUrl}
+                          title="구글 드라이브 증빙 파일"
+                          style={{ width: '100%', height: '100%', border: 'none' }}
+                          allow="autoplay"
+                        />
+                      </div>
+                    </div>
+                  );
+                })()
               ) : (
                 // 모의(Seed) 데이터용 거래명세서 템플릿
                 <div style={{ border: '2px solid #333', padding: '24px', fontFamily: 'monospace', color: '#000', backgroundColor: '#fff', borderRadius: '4px', lineHeight: '1.5', boxShadow: 'inset 0 0 10px rgba(0,0,0,0.05)' }}>
