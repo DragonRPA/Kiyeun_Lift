@@ -186,32 +186,6 @@ export const Consumables: React.FC = () => {
     exportToExcel(excelData, `소모품_입출고이력_${new Date().toISOString().split('T')[0]}`, '입출고로그');
   };
 
-  // --- 증빙 파일 ZIP 로컬 백업 다운로드 ---
-  const [isZipDownloading, setIsZipDownloading] = useState(false);
-  const handleDownloadEvidenceZip = async () => {
-    const targets = consumablePurchases.filter(
-      p => p.statementFileUrl && p.statementFileUrl.startsWith('http')
-    );
-    if (targets.length === 0) {
-      alert('다운로드할 증빙 파일이 없습니다.\n(Supabase Storage에 저장된 파일만 백업 가능합니다.)');
-      return;
-    }
-    setIsZipDownloading(true);
-    try {
-      const today = new Date().toISOString().split('T')[0];
-      const items = targets.map(p => ({
-        fileName: `${p.id.toUpperCase()}_${p.sellerName}_${p.completedDate || today}.${p.statementFileUrl!.split('.').pop()?.split('?')[0] || 'pdf'}`,
-        fileUrl: p.statementFileUrl!
-      }));
-      await downloadEvidenceAsZip(items, `소모품_증빙파일_백업_${today}.zip`);
-      alert(`✅ 증빙 파일 ${items.length}건을 ZIP으로 저장했습니다.`);
-    } catch (err: any) {
-      showErrorModal(err?.message || 'ZIP 다운로드 오류', '증빙 백업 오류');
-    } finally {
-      setIsZipDownloading(false);
-    }
-  };
-
   // --- 구매신청 필터 연동 ---
   const getFilteredPurchases = () => {
     return consumablePurchases.filter(p => {
@@ -389,16 +363,6 @@ export const Consumables: React.FC = () => {
           {activeTab === 'LOGS' && (
             <button className="btn-secondary" onClick={handleExportLogs} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
               <Download size={14} /> 이력로그 다운로드
-            </button>
-          )}
-          {activeTab === 'REQ_LIST' && (
-            <button
-              className="btn-secondary"
-              onClick={handleDownloadEvidenceZip}
-              disabled={isZipDownloading}
-              style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'rgba(16,185,129,0.1)', color: '#10B981', border: '1px solid rgba(16,185,129,0.4)' }}
-            >
-              <Download size={14} /> {isZipDownloading ? 'ZIP 생성 중...' : '증빙파일 ZIP 백업'}
             </button>
           )}
         </div>

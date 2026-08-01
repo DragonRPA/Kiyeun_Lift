@@ -571,6 +571,7 @@ export interface GoogleConfig {
   transactionStatementTemplateUrl?: string;
   defaultRootFolderId?: string;
   appsScriptUrl?: string;
+  oauthClientId?: string;   // 구글 드라이브 백업용 OAuth 2.0 Client ID
   createdAt?: string;
   updatedAt: string;
 }

@@ -1,13 +1,15 @@
 // d:\Kiyeun_Lift\src\pages\GoogleConfig.tsx
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
-import { Settings, Mail, FolderOpen, RefreshCw, CheckCircle2, Lock, Eye, EyeOff, ShieldCheck, HelpCircle, AlertTriangle, ExternalLink, Key, Search, Cloud, Folder, File, ArrowLeft } from 'lucide-react';
+import { Settings, Mail, FolderOpen, RefreshCw, CheckCircle2, Lock, Eye, EyeOff, ShieldCheck, HelpCircle, AlertTriangle, ExternalLink, Key, Search, Cloud, Folder, File, ArrowLeft, Download, HardDrive } from 'lucide-react';
 import { GoogleConfig as GoogleConfigType } from '../services/db';
 import { drive, DriveFile, DriveFolder } from '../services/drive';
 import { GoogleDrivePickerModal } from '../components/GoogleDrivePickerModal';
+import { downloadEvidenceAsZip } from '../services/supabaseStorage';
+import { backupToGoogleDrive } from '../services/googleDriveBackup';
 
 export const GoogleConfig: React.FC = () => {
-  const { googleConfigs, updateGoogleConfig, currentUser, showErrorModal } = useApp();
+  const { googleConfigs, updateGoogleConfig, currentUser, showErrorModal, consumablePurchases } = useApp();
 
   const isAdmin = currentUser?.role === 'ADMIN';
 
@@ -22,6 +24,12 @@ export const GoogleConfig: React.FC = () => {
   const [maintenanceFolder, setMaintenanceFolder] = useState('');
 
   // 신설 필드 상태
+  const [oauthClientId, setOauthClientId] = useState('');
+
+  // 백업 상태
+  const [isZipBackingUp, setIsZipBackingUp] = useState(false);
+  const [isDriveBackingUp, setIsDriveBackingUp] = useState(false);
+  const [backupProgress, setBackupProgress] = useState('');
   const [isDevMode, setIsDevMode] = useState(true);
   const [quotationTemplateUrl, setQuotationTemplateUrl] = useState('');
   const [contractTemplateUrl, setContractTemplateUrl] = useState('');
@@ -63,6 +71,8 @@ export const GoogleConfig: React.FC = () => {
       setTransactionStatementTemplateUrl(currentConfig.transactionStatementTemplateUrl || '');
       setDefaultRootFolderId(currentConfig.defaultRootFolderId || '');
       setAppsScriptUrl(currentConfig.appsScriptUrl || '');
+      setOauthClientId(currentConfig.oauthClientId || '');
+      setIsDevMode(currentConfig.isDevMode !== undefined ? currentConfig.isDevMode : true);
     }
   }, [currentConfig]);
 
@@ -243,6 +253,7 @@ function doGet(e) {
         transactionStatementTemplateUrl,
         defaultRootFolderId,
         appsScriptUrl,
+        oauthClientId,
         updatedAt: new Date().toISOString()
       };
 
@@ -397,6 +408,103 @@ function doGet(e) {
                   <li>이름: <code style={{ background: 'rgba(0,0,0,0.1)', padding: '1px 6px', borderRadius: '3px', fontFamily: 'monospace' }}>evidence</code>, <strong>Public 토글 ON</strong> → [Save]</li>
                 </ol>
                 이후 별도 설정 없이 자동으로 동작합니다.
+              </div>
+
+              {/* ─── 백업 버튼 영역 ─── */}
+              <div style={{ borderTop: '1px solid var(--border)', paddingTop: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                <strong style={{ fontSize: '13px', color: 'var(--text-primary)' }}>📦 증빙 파일 백업</strong>
+
+                {/* 백업 진행 상황 */}
+                {backupProgress && (
+                  <div style={{ fontSize: '12px', color: 'var(--text-secondary)', padding: '8px 12px', background: 'var(--bg-app)', borderRadius: '6px', border: '1px solid var(--border)' }}>
+                    {backupProgress}
+                  </div>
+                )}
+
+                <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                  {/* 로컬 ZIP 백업 */}
+                  <button
+                    type="button"
+                    disabled={isZipBackingUp || isDriveBackingUp}
+                    onClick={async () => {
+                      const targets = consumablePurchases.filter(p => p.statementFileUrl?.startsWith('http'));
+                      if (!targets.length) { alert('백업할 증빙 파일이 없습니다.\n(Supabase Storage에 저장된 파일만 가능)'); return; }
+                      setIsZipBackingUp(true);
+                      setBackupProgress(`ZIP 생성 중... (총 ${targets.length}건)`);
+                      try {
+                        const today = new Date().toISOString().split('T')[0];
+                        const items = targets.map(p => ({
+                          fileName: `${p.id.toUpperCase()}_${p.sellerName}_${p.completedDate || today}.${p.statementFileUrl!.split('.').pop()?.split('?')[0] || 'pdf'}`,
+                          fileUrl: p.statementFileUrl!
+                        }));
+                        await downloadEvidenceAsZip(items, `소모품_증빙파일_백업_${today}.zip`);
+                        setBackupProgress(`✅ ZIP 다운로드 완료 (${items.length}건)`);
+                        setTimeout(() => setBackupProgress(''), 5000);
+                      } catch (err: any) {
+                        showErrorModal(err?.message, '로컬 백업 오류');
+                        setBackupProgress('');
+                      } finally { setIsZipBackingUp(false); }
+                    }}
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '9px 18px', borderRadius: '7px', border: '1px solid var(--border)', background: 'var(--bg-app)', color: 'var(--text-primary)', fontWeight: '700', fontSize: '13px', cursor: 'pointer', whiteSpace: 'nowrap' }}
+                  >
+                    <Download size={15} /> {isZipBackingUp ? 'ZIP 생성 중...' : '로컬 백업 (ZIP)'}
+                  </button>
+
+                  {/* 구글 드라이브 백업 */}
+                  <button
+                    type="button"
+                    disabled={isZipBackingUp || isDriveBackingUp}
+                    onClick={async () => {
+                      const targets = consumablePurchases.filter(p => p.statementFileUrl?.startsWith('http'));
+                      if (!targets.length) { alert('백업할 증빙 파일이 없습니다.'); return; }
+                      const config = googleConfigs[0];
+                      const clientId = config?.oauthClientId || oauthClientId;
+                      const folder = config?.consumableFolder || '소모품납품';
+                      setIsDriveBackingUp(true);
+                      setBackupProgress('구글 계정 인증 중...');
+                      try {
+                        const today = new Date().toISOString().split('T')[0];
+                        const items = targets.map(p => ({
+                          fileName: `${p.id.toUpperCase()}_${p.sellerName}_${p.completedDate || today}.${p.statementFileUrl!.split('.').pop()?.split('?')[0] || 'pdf'}`,
+                          fileUrl: p.statementFileUrl!
+                        }));
+                        const result = await backupToGoogleDrive(
+                          items, clientId, folder,
+                          (done, total) => setBackupProgress(`구글 드라이브 업로드 중... (${done}/${total}건)`)
+                        );
+                        const msg = result.fail > 0
+                          ? `⚠️ 완료: 성공 ${result.success}건, 실패 ${result.fail}건\n실패: ${result.failedFiles.join(', ')}`
+                          : `✅ 구글 드라이브 백업 완료 (${result.success}건)`;
+                        setBackupProgress(msg);
+                        setTimeout(() => setBackupProgress(''), 8000);
+                      } catch (err: any) {
+                        showErrorModal(err?.message, '구글 드라이브 백업 오류');
+                        setBackupProgress('');
+                      } finally { setIsDriveBackingUp(false); }
+                    }}
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '9px 18px', borderRadius: '7px', border: '1px solid rgba(16,185,129,0.4)', background: 'rgba(16,185,129,0.08)', color: '#10B981', fontWeight: '700', fontSize: '13px', cursor: 'pointer', whiteSpace: 'nowrap' }}
+                  >
+                    <HardDrive size={15} /> {isDriveBackingUp ? '업로드 중...' : '구글 드라이브에 백업'}
+                  </button>
+                </div>
+
+                {/* 구글 드라이브 백업용 Client ID 입력 */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label style={{ fontSize: '12px', fontWeight: '700', color: 'var(--text-secondary)' }}>구글 드라이브 백업용 OAuth Client ID</label>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <input
+                      type="text"
+                      value={oauthClientId}
+                      onChange={e => setOauthClientId(e.target.value)}
+                      placeholder="123456789-xxx.apps.googleusercontent.com"
+                      style={{ flex: 1, height: '36px', fontSize: '12.5px', padding: '0 10px', borderRadius: '6px', border: `1px solid ${oauthClientId ? '#10B981' : 'var(--border)'}`, background: 'var(--bg-app)', color: 'var(--text-primary)' }}
+                    />
+                    <button type="button" onClick={handleSave} className="btn-primary" style={{ padding: '0 14px', height: '36px', fontSize: '12.5px', fontWeight: '700', whiteSpace: 'nowrap' }}>
+                      저장
+                    </button>
+                  </div>
+                  <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>미입력 시 구글 드라이브 백업 기능을 사용할 수 없습니다.</span>
+                </div>
               </div>
             </div>
           </div>
