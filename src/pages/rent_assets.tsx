@@ -498,7 +498,11 @@ export const RentAssets: React.FC = () => {
       return;
     }
     try {
-      await registerRentedAsset(editingAsset);
+      const calculatedDailyFee = editingAsset.dailyRentFee || Math.floor((editingAsset.monthlyRentFee || 0) / 30);
+      await registerRentedAsset({
+        ...editingAsset,
+        dailyRentFee: calculatedDailyFee
+      });
       alert(`임차 자산(${editingAsset.assetNo}) 등록/수정이 완료되었습니다.`);
       setShowModal(false);
       setEditingAsset(null);

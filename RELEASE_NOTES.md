@@ -1,3 +1,18 @@
+# Release Notes (v1.18.7.Build.90 - 2026-08-01 21:53)
+
+## 🐛 [임차자산 등록 시 DB 미존재 속성(`dailyRentalFee`) 완전 제거 & 일 렌탈료 자동 계산]
+
+### 주요 개선 사항
+
+1. **DB 스키마 미존재 컬럼 `dailyRentalFee` 전송 오류 원천 조치 (`AppContext.tsx`)**
+   - 캡처 화면에서 발생한 `Could not find the 'dailyRentalFee' column of 'assets' in the schema cache` 오류 분석 완료.
+   - DB `assets` 스키마 카탈로그에 존재하지 않던 잘못된 네이밍(`dailyRentalFee`, `monthlyRentalFee`) 페이로드를 완전히 제거하여, 정식 컬럼인 `monthlyRentFee`와 `dailyRentFee`만 정확히 저장되도록 조치 완료.
+
+2. **일 임차료(`dailyRentFee`) 자동 계산 서포트 (`rent_assets.tsx`)**
+   - 임차 자산 신규 등록 시 별도의 일 렌탈료 입력창 없이도 **월 임차료 입력값으로부터 일 렌탈료가 1/30로 자동 정밀 계산(`monthlyRentFee / 30`)**되어 DB에 저장되도록 편익 기능 추가.
+
+---
+
 # Release Notes (v1.18.6.Build.89 - 2026-08-01 21:49)
 
 ## 🎨 [임차자산 대장 테이블 데이터 행 다크 모드 하양 현상 정화 & 텍스트 시독성 100% 확보]
