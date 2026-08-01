@@ -728,10 +728,15 @@ function doGet(e) {
           </div>
 
           {/* 구글 드라이브 폴더 체계 */}
-          <div className="card" style={{ margin: 0, padding: '24px' }}>
+          <div className="card" style={{ margin: 0, padding: '24px', border: '1px solid rgba(245,158,11,0.4)' }}>
             <h3 style={{ fontSize: '15px', fontWeight: '700', borderBottom: '1px solid var(--border)', paddingBottom: '12px', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
               <FolderOpen size={16} style={{ color: 'var(--primary)' }} /> 파일 유형별 구글 드라이브 폴더명 맵핑
             </h3>
+            {/* ⚠️ 주의 배너 */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.35)', borderRadius: '7px', padding: '10px 14px', marginBottom: '16px' }}>
+              <AlertTriangle size={15} style={{ color: '#F59E0B', flexShrink: 0 }} />
+              <span style={{ fontSize: '12px', color: '#B45309', fontWeight: '600' }}>주의: 시스템 작동에 중요한 설정입니다. 편집에 주의하세요.</span>
+            </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
               <div>
