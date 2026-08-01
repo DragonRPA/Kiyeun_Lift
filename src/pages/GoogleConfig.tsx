@@ -5,7 +5,7 @@ import { Settings, Mail, FolderOpen, RefreshCw, CheckCircle2, Lock, Eye, EyeOff,
 import { GoogleConfig as GoogleConfigType } from '../services/db';
 import { drive, DriveFile, DriveFolder } from '../services/drive';
 import { GoogleDrivePickerModal } from '../components/GoogleDrivePickerModal';
-import { downloadEvidenceAsZip } from '../services/supabaseStorage';
+import { downloadEvidenceAsZip, deleteStorageFiles } from '../services/supabaseStorage';
 import { backupToGoogleDrive } from '../services/googleDriveBackup';
 
 export const GoogleConfig: React.FC = () => {
@@ -439,6 +439,17 @@ function doGet(e) {
                         }));
                         await downloadEvidenceAsZip(items, `소모품_증빙파일_백업_${today}.zip`);
                         setBackupProgress(`✅ ZIP 다운로드 완료 (${items.length}건)`);
+                        // 백업 완료 후 Storage 삭제 여부 확인
+                        const doDelete = window.confirm(
+                          `✅ 로컈 ZIP 백업 완료 (${items.length}건)\n\n` +
+                          `Supabase Storage에서 백업된 파일 ${items.length}건을 삭제할까요?\n` +
+                          `(삭제 후에는 복구할 수 없습니다)`
+                        );
+                        if (doDelete) {
+                          setBackupProgress('Storage 파일 삭제 중...');
+                          const delResult = await deleteStorageFiles(items.map(i => i.fileUrl));
+                          setBackupProgress(`✅ 삭제 완료 (${delResult.deleted}건)`);
+                        }
                         setTimeout(() => setBackupProgress(''), 5000);
                       } catch (err: any) {
                         showErrorModal(err?.message, '로컬 백업 오류');
@@ -472,10 +483,27 @@ function doGet(e) {
                           items, clientId, folder,
                           (done, total) => setBackupProgress(`구글 드라이브 업로드 중... (${done}/${total}건)`)
                         );
-                        const msg = result.fail > 0
-                          ? `⚠️ 완료: 성공 ${result.success}건, 실패 ${result.fail}건\n실패: ${result.failedFiles.join(', ')}`
-                          : `✅ 구글 드라이브 백업 완료 (${result.success}건)`;
-                        setBackupProgress(msg);
+                        // 성공한 파일 URL만 추립
+                        const successUrls = items
+                          .filter(it => !result.failedFiles.includes(it.fileName))
+                          .map(it => it.fileUrl);
+                        const resultMsg = result.fail > 0
+                          ? `완료: 성공 ${result.success}건, 실패 ${result.fail}건`
+                          : `구글 드라이브 백업 완료 (${result.success}건)`;
+                        setBackupProgress(`✅ ${resultMsg}`);
+                        // 성공 파일에 대해서만 삭제 여부 확인
+                        if (successUrls.length > 0) {
+                          const doDelete = window.confirm(
+                            `✅ ${resultMsg}\n\n` +
+                            `Supabase Storage에서 백업 완료된 파일 ${successUrls.length}건을 삭제할까요?\n` +
+                            `(삭제 후에는 복구할 수 없습니다)`
+                          );
+                          if (doDelete) {
+                            setBackupProgress('Storage 파일 삭제 중...');
+                            const delResult = await deleteStorageFiles(successUrls);
+                            setBackupProgress(`✅ 삭제 완료 (${delResult.deleted}건)`);
+                          }
+                        }
                         setTimeout(() => setBackupProgress(''), 8000);
                       } catch (err: any) {
                         showErrorModal(err?.message, '구글 드라이브 백업 오류');

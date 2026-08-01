@@ -119,3 +119,34 @@ export async function downloadEvidenceAsZip(
     console.warn(`ZIP 다운로드 완료: 성공 ${successCount}건, 실패 ${failCount}건`);
   }
 }
+
+/**
+ * Supabase Storage에서 파일 일괄 삭제
+ * - 공개 URL에서 버킷 내 경로를 추출하여 삭제
+ * - 예: https://xxx.supabase.co/storage/v1/object/public/evidence/consumables/CPRC-001.pdf
+ *       → 삭제 경로: consumables/CPRC-001.pdf
+ */
+export async function deleteStorageFiles(fileUrls: string[]): Promise<{ deleted: number; failed: number }> {
+  if (!supabase) throw new Error('Supabase 연결이 설정되지 않았습니다.');
+
+  // 공개 URL에서 버킷 내 경로 추출
+  // URL 패턴: .../object/public/{bucket}/{path}
+  const paths = fileUrls
+    .map(url => {
+      const match = url.match(/\/object\/public\/evidence\/(.+?)(\?.*)?$/);
+      return match ? match[1] : null;
+    })
+    .filter(Boolean) as string[];
+
+  if (paths.length === 0) {
+    throw new Error('삭제할 수 있는 Supabase Storage 파일 경로를 추출할 수 없습니다.');
+  }
+
+  const { error } = await supabase.storage.from(BUCKET).remove(paths);
+
+  if (error) {
+    throw new Error(`Storage 파일 삭제 실패: ${error.message}`);
+  }
+
+  return { deleted: paths.length, failed: fileUrls.length - paths.length };
+}
