@@ -80,6 +80,14 @@ export function createMenuPermission(
   };
 }
 
+export interface CustomerBankAccount {
+  id: string;
+  bankName: string;      // 은행명 (예: 국민, 농협, 신한, 기업 등)
+  accountNumber: string; // 계좌번호
+  accountHolder?: string;// 예금주명
+  memo?: string;         // 메모 (예: 대표 계좌, 현장 전용 등)
+}
+
 export interface Customer {
   id: string;
   name: string;
@@ -94,6 +102,7 @@ export interface Customer {
   transactionStatus?: 'ALLOWED' | 'BLOCKED'; // ALLOWED: 거래가능 (기본), BLOCKED: 거래불가 (신규 계약/출고 제한)
   defaultBillingDay?: number; // 청구서(세금계산서) 기본 마감일 (예: 30일/월말)
   defaultStatementClosingDay?: number; // 거래명세서 기본 마감일 (예: 25일)
+  bankAccounts?: CustomerBankAccount[]; // 고객사 다중 계좌 목록
   createdAt: string;
 }
 

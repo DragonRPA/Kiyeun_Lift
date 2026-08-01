@@ -223,22 +223,36 @@ export const Billings: React.FC = () => {
     setPayMode('DEPOSIT');
     setDirectAmount(unpaidAmount);
 
-    // 고객명 기준 검색 후 잔액있는 건 오래된 것부터 자동 할당
+    // 고객명 기준 검색 및 등록 계좌 일치 건 매핑 후 오래된 것부터 자동 할당
+    const targetCust = customers.find(c => c.id === custId);
+    const regAccounts = targetCust?.bankAccounts || [];
     const query = custName.trim().toLowerCase();
+
     const matchedDeposits = bankTransactions
       .filter(t => {
         if (!t.isDeposit) return false;
+
+        // 1) 고객사 등록 계좌번호와 일치 여부 검화
+        const senderAccNorm = (t.senderAccount || '').replace(/[^0-9]/g, '');
+        const isRegAccMatch = senderAccNorm && regAccounts.some(a => {
+          const norm = a.accountNumber.replace(/[^0-9]/g, '');
+          return norm && (norm === senderAccNorm || senderAccNorm.includes(norm) || norm.includes(senderAccNorm));
+        });
+        if (isRegAccMatch) return true;
+
+        // 2) 고객명, 입금자명, 계좌번호, 비고 검색어 기준
         const mappedCustName = customers.find(c => c.id === t.customerId)?.name || '';
         return (
-          t.senderName.toLowerCase().includes(query) ||
-          mappedCustName.toLowerCase().includes(query) ||
-          (t.senderAccount || '').toLowerCase().includes(query) ||
-          (t.memo || '').toLowerCase().includes(query)
+          (query && t.senderName.toLowerCase().includes(query)) ||
+          (query && mappedCustName.toLowerCase().includes(query)) ||
+          (query && (t.senderAccount || '').toLowerCase().includes(query)) ||
+          (query && (t.memo || '').toLowerCase().includes(query))
         );
       })
       .map(t => ({ ...t, balance: getDepositBalance(t.id) }))
       .filter(t => t.balance > 0)
       .sort((a, b) => a.transactionDate.localeCompare(b.transactionDate));
+
 
     const draft: Record<string, number> = {};
     let remaining = unpaidAmount;
@@ -1635,9 +1649,21 @@ ${details.map((d, idx) => {
 
         // 매핑 근거 판별
         const getMatchReason = (dep: typeof filteredDeposits[0]) => {
+          const targetCust = customers.find(c => c.id === custId);
+          const regAccs = targetCust?.bankAccounts || [];
+          const senderAccNorm = (dep.senderAccount || '').replace(/[^0-9]/g, '');
+
+          // 1) 등록 계좌 일치 여부 (최우선)
+          const matchedRegAcc = senderAccNorm ? regAccs.find(a => {
+            const norm = a.accountNumber.replace(/[^0-9]/g, '');
+            return norm && (norm === senderAccNorm || senderAccNorm.includes(norm) || norm.includes(senderAccNorm));
+          }) : null;
+          if (matchedRegAcc) return { label: `등록계좌(${matchedRegAcc.bankName})`, color: '#EC4899' };
+
+          // 2) 기존 매핑/검색어 근거
           const mappedCustName = customers.find(c => c.id === dep.customerId)?.name || '';
           if (dep.customerId === custId) return { label: '고객사 매핑', color: '#10B981' };
-          const custName = customers.find(c => c.id === custId)?.name?.toLowerCase() || '';
+          const custName = targetCust?.name?.toLowerCase() || '';
           if (dep.senderName.toLowerCase().includes(custName) || (custName && custName.includes(dep.senderName.toLowerCase()))) return { label: '입금자명 일치', color: '#6366F1' };
           if (searchQ && mappedCustName.toLowerCase().includes(searchQ)) return { label: '고객명 검색', color: '#F59E0B' };
           if (searchQ && (dep.senderAccount || '').toLowerCase().includes(searchQ)) return { label: '계좌번호 검색', color: '#8B5CF6' };

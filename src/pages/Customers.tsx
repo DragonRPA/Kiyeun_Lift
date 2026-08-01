@@ -1,8 +1,8 @@
 // d:\Kiyeun_Lift\src\pages\Customers.tsx
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
-import { Plus, Search, MapPin, Phone, User, Mail, PlusCircle, Building, Download } from 'lucide-react';
-import { db, Customer, CustomerContact, CustomerSite } from '../services/db';
+import { Plus, Search, MapPin, Phone, User, Mail, PlusCircle, Building, Download, CreditCard } from 'lucide-react';
+import { db, Customer, CustomerContact, CustomerSite, CustomerBankAccount } from '../services/db';
 import { exportToExcel } from '../services/excel';
 
 export const Customers: React.FC = () => {
@@ -31,6 +31,10 @@ export const Customers: React.FC = () => {
 
   const [showSiteModal, setShowSiteModal] = useState(false);
   const [editingSite, setEditingSite] = useState<Partial<CustomerSite> | null>(null);
+
+  // 계좌 관리 모달 상태
+  const [showAccountModal, setShowAccountModal] = useState(false);
+  const [editingAccount, setEditingAccount] = useState<Partial<CustomerBankAccount> | null>(null);
 
   const activeCustomer = customers.find(c => c.id === selectedCustomerId);
   const customerContacts = contacts
@@ -257,6 +261,58 @@ export const Customers: React.FC = () => {
     } catch (err: any) {
       const errMsg = err?.message || JSON.stringify(err);
       alert(`❌ Supabase 동기화 실패!\n\n에러 메시지: ${errMsg}`);
+    }
+  };
+
+  // 계좌 관리 폼
+  const handleOpenAddAccount = () => {
+    if (!selectedCustomerId) return;
+    setEditingAccount({ bankName: '', accountNumber: '', accountHolder: '', memo: '' });
+    setShowAccountModal(true);
+  };
+
+  const handleOpenEditAccount = (acc: CustomerBankAccount) => {
+    setEditingAccount(acc);
+    setShowAccountModal(true);
+  };
+
+  const handleDeleteAccount = async (accId: string) => {
+    if (!activeCustomer || !window.confirm('이 입금 계좌를 삭제하시겠습니까?')) return;
+    const nextAccounts = (activeCustomer.bankAccounts || []).filter(a => a.id !== accId);
+    try {
+      await saveCustomer({ ...activeCustomer, bankAccounts: nextAccounts });
+      alert('✅ 입금 계좌가 삭제되었습니다.');
+    } catch (err: any) {
+      alert(`❌ 계좌 삭제 실패: ${err.message}`);
+    }
+  };
+
+  const handleSaveAccountSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingAccount || !editingAccount.bankName || !editingAccount.accountNumber || !activeCustomer) return;
+
+    const accounts = activeCustomer.bankAccounts || [];
+    let nextAccounts: CustomerBankAccount[];
+    if (editingAccount.id) {
+      nextAccounts = accounts.map(a => a.id === editingAccount.id ? (editingAccount as CustomerBankAccount) : a);
+    } else {
+      const newAcc: CustomerBankAccount = {
+        id: `ACC-${Date.now()}`,
+        bankName: editingAccount.bankName.trim(),
+        accountNumber: editingAccount.accountNumber.trim(),
+        accountHolder: editingAccount.accountHolder?.trim() || activeCustomer.name,
+        memo: editingAccount.memo?.trim() || '',
+      };
+      nextAccounts = [...accounts, newAcc];
+    }
+
+    try {
+      await saveCustomer({ ...activeCustomer, bankAccounts: nextAccounts });
+      alert('🎉 입금 계좌 정보가 저장되었습니다!');
+      setShowAccountModal(false);
+      setEditingAccount(null);
+    } catch (err: any) {
+      alert(`❌ 입금 계좌 저장 실패: ${err.message}`);
     }
   };
 
@@ -515,6 +571,61 @@ export const Customers: React.FC = () => {
                             <td>
                               {canSave && (
                                 <button className="btn-secondary" onClick={() => handleOpenEditSite(cs)} style={{ padding: '4px 8px', fontSize: '11px' }}>수정</button>
+                              )}
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* 하위 탭 3: 고객 입금 계좌 관리 */}
+              <div className="card" style={{ margin: 0 }}>
+                <div className="card-header">
+                  <h3 className="card-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <CreditCard size={18} style={{ color: '#8B5CF6' }} /> 등록 입금 계좌 목록 (수납 시 자동 매핑)
+                  </h3>
+                  {canSave && (
+                    <button type="button" className="btn-primary" onClick={handleOpenAddAccount} style={{ padding: '6px 12px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '4px', backgroundColor: '#8B5CF6', borderColor: '#8B5CF6' }}>
+                      <PlusCircle size={14} /> 계좌 추가
+                    </button>
+                  )}
+                </div>
+
+                <div className="table-container" style={{ border: 'none', boxShadow: 'none' }}>
+                  <table style={{ minWidth: '500px' }}>
+                    <thead>
+                      <tr>
+                        <th>은행명</th>
+                        <th>계좌번호</th>
+                        <th>예금주명</th>
+                        <th>비고 (용도)</th>
+                        <th>관리</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(!activeCustomer.bankAccounts || activeCustomer.bankAccounts.length === 0) ? (
+                        <tr>
+                          <td colSpan={5} style={{ textAlign: 'center', padding: '20px 0', color: 'var(--text-muted)' }}>
+                            등록된 입금 계좌가 없습니다.<br />
+                            <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>계좌를 등록해 두면 통장 입금 수납 처리 시 해당 계좌 입금건이 자동으로 동기화 매핑됩니다.</span>
+                          </td>
+                        </tr>
+                      ) : (
+                        activeCustomer.bankAccounts.map(acc => (
+                          <tr key={acc.id}>
+                            <td><strong style={{ color: '#8B5CF6' }}>{acc.bankName}</strong></td>
+                            <td style={{ fontFamily: 'monospace', fontWeight: '600', fontSize: '13px' }}>{acc.accountNumber}</td>
+                            <td>{acc.accountHolder || '-'}</td>
+                            <td>{acc.memo || '-'}</td>
+                            <td>
+                              {canSave && (
+                                <div style={{ display: 'flex', gap: '4px' }}>
+                                  <button className="btn-secondary" onClick={() => handleOpenEditAccount(acc)} style={{ padding: '4px 8px', fontSize: '11px' }}>수정</button>
+                                  <button className="btn-secondary" onClick={() => handleDeleteAccount(acc.id)} style={{ padding: '4px 8px', fontSize: '11px', color: '#EF4444', borderColor: 'rgba(239,68,68,0.3)' }}>삭제</button>
+                                </div>
                               )}
                             </td>
                           </tr>
@@ -873,6 +984,66 @@ export const Customers: React.FC = () => {
             <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
               <button type="button" className="btn-secondary" onClick={() => setShowSiteModal(false)}>취소</button>
               <button type="submit" className="btn-primary">저장</button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* 계좌 등록/수정 모달 */}
+      {showAccountModal && editingAccount && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000
+        }}>
+          <form onSubmit={handleSaveAccountSubmit} className="card" style={{ width: '100%', maxWidth: '480px', backgroundColor: 'var(--bg-card)' }}>
+            <h3 className="card-title" style={{ marginBottom: '16px' }}>
+              {editingAccount.id ? '고객 입금 계좌 수정' : '고객 입금 계좌 신규 등록'}
+            </h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '20px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div>
+                  <label>은행명 *</label>
+                  <input
+                    type="text"
+                    value={editingAccount.bankName || ''}
+                    onChange={e => setEditingAccount({ ...editingAccount, bankName: e.target.value })}
+                    placeholder="예: 국민은행, 농협, 신한"
+                    required
+                  />
+                </div>
+                <div>
+                  <label>예금주명</label>
+                  <input
+                    type="text"
+                    value={editingAccount.accountHolder || ''}
+                    onChange={e => setEditingAccount({ ...editingAccount, accountHolder: e.target.value })}
+                    placeholder={activeCustomer?.name || '예금주'}
+                  />
+                </div>
+              </div>
+              <div>
+                <label>계좌번호 *</label>
+                <input
+                  type="text"
+                  value={editingAccount.accountNumber || ''}
+                  onChange={e => setEditingAccount({ ...editingAccount, accountNumber: e.target.value })}
+                  placeholder="예: 123-456-789012"
+                  required
+                />
+              </div>
+              <div>
+                <label>메모 (용도 및 구분)</label>
+                <input
+                  type="text"
+                  value={editingAccount.memo || ''}
+                  onChange={e => setEditingAccount({ ...editingAccount, memo: e.target.value })}
+                  placeholder="예: 주거래 계좌, 현장 전용 입금 계좌"
+                />
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+              <button type="button" className="btn-secondary" onClick={() => setShowAccountModal(false)}>취소</button>
+              <button type="submit" className="btn-primary" style={{ backgroundColor: '#8B5CF6', borderColor: '#8B5CF6' }}>저장</button>
             </div>
           </form>
         </div>
