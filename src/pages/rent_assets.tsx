@@ -63,11 +63,17 @@ export const RentAssets: React.FC = () => {
   // 임차 자산(ownerType === 'RENTED') 전체 리스트
   const rentedAssets = assets.filter(a => a.ownerType === 'RENTED');
 
-  // 등록된 임차처(임차거래처) 목록
-  const renterVendors = Array.from(new Set([
-    ...rentedAssets.map(a => a.renter).filter(Boolean),
-    ...vendors.filter(v => v.type === 'RENTAL' || (v.types && v.types.includes('RENTAL'))).map(v => v.name)
-  ])) as string[];
+  // 등록된 임차처(임차거래처) 목록 (알파벳/한글 오름차순 정렬)
+  const renterVendors = React.useMemo(() => {
+    const rentalVendorNames = vendors
+      .filter(v => v.type === 'RENTAL' || (v.types && v.types.includes('RENTAL')))
+      .map(v => v.name)
+      .filter(Boolean);
+
+    const existingRenters = rentedAssets.map(a => a.renter).filter(Boolean) as string[];
+    const combined = Array.from(new Set([...rentalVendorNames, ...existingRenters]));
+    return combined.sort((a, b) => a.localeCompare(b));
+  }, [vendors, rentedAssets]);
 
   // 1:1 대사 계산 엔진 (3단계 스마트 매칭 & 5대 교차 검증)
   const reconcileResults: ReconcileResultItem[] = React.useMemo(() => {
@@ -1115,14 +1121,18 @@ export const RentAssets: React.FC = () => {
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <label style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-muted)' }}>임차처</label>
-                <input
-                  type="text"
-                  placeholder="예: ABC 렌탈"
+                <label style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-muted)' }}>임차처 (필수)</label>
+                <select
+                  required
                   value={editingAsset.renter || ''}
                   onChange={e => setEditingAsset({ ...editingAsset, renter: e.target.value })}
                   style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-app)', color: 'var(--text-main)', fontSize: '12px' }}
-                />
+                >
+                  <option value="">-- 임차처 선택 --</option>
+                  {renterVendors.map(r => (
+                    <option key={r} value={r}>{r}</option>
+                  ))}
+                </select>
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
