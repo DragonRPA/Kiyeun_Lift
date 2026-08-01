@@ -64,7 +64,14 @@ interface DailyForecast {
 }
 
 export const WeatherWidget: React.FC = () => {
-  const [selectedRegion, setSelectedRegion] = useState<WeatherRegion>(WEATHER_REGIONS[0]);
+  const [selectedRegion, setSelectedRegion] = useState<WeatherRegion>(() => {
+    const savedId = localStorage.getItem('weather_region_id');
+    if (savedId) {
+      const found = WEATHER_REGIONS.find(r => r.id === savedId);
+      if (found) return found;
+    }
+    return WEATHER_REGIONS[0];
+  });
   const [current, setCurrent] = useState<CurrentWeatherData | null>(null);
   const [hourly, setHourly] = useState<HourlyForecast[]>([]);
   const [daily, setDaily] = useState<DailyForecast[]>([]);
@@ -224,7 +231,10 @@ export const WeatherWidget: React.FC = () => {
                 value={selectedRegion.id}
                 onChange={e => {
                   const reg = WEATHER_REGIONS.find(r => r.id === e.target.value);
-                  if (reg) setSelectedRegion(reg);
+                  if (reg) {
+                    setSelectedRegion(reg);
+                    localStorage.setItem('weather_region_id', reg.id);
+                  }
                 }}
                 style={{
                   flex: 1, padding: '7px 10px', borderRadius: '6px', fontSize: '13px', fontWeight: 600,
