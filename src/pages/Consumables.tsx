@@ -77,14 +77,17 @@ export const Consumables: React.FC = () => {
   // --- [1] 구매신청 조회용 필터 상태 ---
   const [reqSearchTerm, setReqSearchTerm] = useState('');
   const [reqStatusFilter, setReqStatusFilter] = useState<'ALL' | 'INCOMPLETE' | 'COMPLETED'>('ALL');
-  const [reqStartDate, setReqStartDate] = useState('');
-  const [reqEndDate, setReqEndDate] = useState('');
+  // 이번 달 첫날 / 마지막 날 기본값
+  const thisMonthStart = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-01`; })();
+  const thisMonthEnd   = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(new Date(d.getFullYear(), d.getMonth()+1, 0).getDate()).padStart(2,'0')}`; })();
+  const [reqStartDate, setReqStartDate] = useState(thisMonthStart);
+  const [reqEndDate, setReqEndDate] = useState(thisMonthEnd);
 
   // 실제 조회 버튼 클릭 시 확정되어 적용되는 필터 상태
   const [searchQuery, setSearchQuery] = useState('');
   const [statusQuery, setStatusQuery] = useState<'ALL' | 'INCOMPLETE' | 'COMPLETED'>('ALL');
-  const [startDateQuery, setStartDateQuery] = useState('');
-  const [endDateQuery, setEndDateQuery] = useState('');
+  const [startDateQuery, setStartDateQuery] = useState(thisMonthStart);
+  const [endDateQuery, setEndDateQuery] = useState(thisMonthEnd);
 
   // --- [2] 구매신청 작성(Write) 폼 상태 ---
   const [reqConsumableId, setReqConsumableId] = useState('');
@@ -526,12 +529,12 @@ export const Consumables: React.FC = () => {
                     onClick={() => {
                       setReqSearchTerm('');
                       setReqStatusFilter('ALL');
-                      setReqStartDate('');
-                      setReqEndDate('');
+                      setReqStartDate(thisMonthStart);
+                      setReqEndDate(thisMonthEnd);
                       setSearchQuery('');
                       setStatusQuery('ALL');
-                      setStartDateQuery('');
-                      setEndDateQuery('');
+                      setStartDateQuery(thisMonthStart);
+                      setEndDateQuery(thisMonthEnd);
                     }}
                     style={{ height: '38px' }}
                   >
