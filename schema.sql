@@ -114,9 +114,11 @@ CREATE TABLE customers (
     "prepaidBalance" DOUBLE PRECISION NOT NULL DEFAULT 0,
     "defaultBillingDay" INTEGER DEFAULT 30,
     "defaultStatementClosingDay" INTEGER DEFAULT 25,
+    "bankAccounts" JSONB,
     "createdAt" TEXT NOT NULL,
     "updatedAt" TEXT NOT NULL
 );
+
 
 -- 6. 고객 담당자 및 현장 (customer_contacts, customer_sites)
 CREATE TABLE customer_contacts (
@@ -486,15 +488,28 @@ CREATE TABLE collaboration_request_history (
 CREATE TABLE bank_transactions (
     id TEXT PRIMARY KEY,
     "senderName" TEXT NOT NULL,
+    "senderAccount" TEXT,
     "depositAmount" DOUBLE PRECISION NOT NULL DEFAULT 0,
     "withdrawAmount" DOUBLE PRECISION NOT NULL DEFAULT 0,
     memo TEXT,
     "matchedBillingId" TEXT REFERENCES billings(id) ON DELETE SET NULL,
     "matchingType" TEXT CHECK ("matchingType" IN ('AUTO', 'MANUAL')),
     "transactionDate" TEXT NOT NULL,
+    "customerId" TEXT REFERENCES customers(id) ON DELETE SET NULL,
+    "isDeposit" BOOLEAN NOT NULL DEFAULT TRUE,
     "createdAt" TEXT NOT NULL,
     "updatedAt" TEXT NOT NULL
 );
+
+-- 26-1. 수납-통장입금 N:N 매핑 테이블 (payment_deposit_links)
+CREATE TABLE payment_deposit_links (
+    id TEXT PRIMARY KEY,
+    "paymentId" TEXT NOT NULL REFERENCES payments(id) ON DELETE CASCADE,
+    "bankTransactionId" TEXT NOT NULL REFERENCES bank_transactions(id) ON DELETE CASCADE,
+    "usedAmount" DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "createdAt" TEXT NOT NULL
+);
+
 
 -- 27. 은행 입금 대조 학습 매핑 룰 (bank_matching_rules) - 신설
 CREATE TABLE bank_matching_rules (
@@ -778,6 +793,21 @@ CREATE POLICY "allow_anon_update" ON external_leases FOR UPDATE TO anon USING (t
 CREATE POLICY "allow_authenticated_select" ON external_leases FOR SELECT TO authenticated USING (true);
 CREATE POLICY "allow_authenticated_insert" ON external_leases FOR INSERT TO authenticated WITH CHECK (true);
 CREATE POLICY "allow_authenticated_update" ON external_leases FOR UPDATE TO authenticated USING (true) WITH CHECK (true);
+
+ALTER TABLE payment_deposit_links ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "allow_anon_select" ON payment_deposit_links;
+DROP POLICY IF EXISTS "allow_anon_insert" ON payment_deposit_links;
+DROP POLICY IF EXISTS "allow_anon_update" ON payment_deposit_links;
+DROP POLICY IF EXISTS "allow_authenticated_select" ON payment_deposit_links;
+DROP POLICY IF EXISTS "allow_authenticated_insert" ON payment_deposit_links;
+DROP POLICY IF EXISTS "allow_authenticated_update" ON payment_deposit_links;
+CREATE POLICY "allow_anon_select" ON payment_deposit_links FOR SELECT TO anon USING (true);
+CREATE POLICY "allow_anon_insert" ON payment_deposit_links FOR INSERT TO anon WITH CHECK (true);
+CREATE POLICY "allow_anon_update" ON payment_deposit_links FOR UPDATE TO anon USING (true) WITH CHECK (true);
+CREATE POLICY "allow_authenticated_select" ON payment_deposit_links FOR SELECT TO authenticated USING (true);
+CREATE POLICY "allow_authenticated_insert" ON payment_deposit_links FOR INSERT TO authenticated WITH CHECK (true);
+CREATE POLICY "allow_authenticated_update" ON payment_deposit_links FOR UPDATE TO authenticated USING (true) WITH CHECK (true);
+
 
 
 -- ==========================================

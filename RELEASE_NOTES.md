@@ -1,4 +1,15 @@
-# Release Notes (v1.17.7.Build.77 - 2026-08-01 20:38)
+# Release Notes (v1.17.8.Build.78 - 2026-08-01 20:39)
+
+## 🔍 [DB 스키마 정합성 최신화 (`schema.sql` 100% 동기화)]
+
+### 주요 개선 사항
+
+1. **`schema.sql` 스키마 및 DDL 동기화 검증**
+   - `customers.bankAccounts` (JSONB) 컬럼 추가.
+   - `bank_transactions.senderAccount`, `bank_transactions.customerId`, `bank_transactions.isDeposit` 컬럼 반영.
+   - `payment_deposit_links` 신규 테이블 DDL 및 RLS 보안 Policy(SELECT/INSERT/UPDATE) 동적 멱등성 보장 100% 최신화 완결.
+
+---
 
 ## 🏦 [고객사 등록/수정 모달 내 입금 계좌 직접 입력 항목 추가]
 
