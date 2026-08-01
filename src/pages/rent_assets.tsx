@@ -895,7 +895,7 @@ export const RentAssets: React.FC = () => {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
 
           {/* 자산 검색/필터 바 */}
-          <div className="card" style={{ padding: '14px', backgroundColor: '#fff', border: '1px solid var(--border-color)' }}>
+          <div className="card" style={{ padding: '14px', backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '10px' }}>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '10px', alignItems: 'end' }}>
               
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
@@ -905,16 +905,16 @@ export const RentAssets: React.FC = () => {
                   placeholder="관리번호 또는 모델명"
                   value={searchQuery}
                   onChange={e => setSearchQuery(e.target.value)}
-                  style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '12px' }}
+                  style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-app)', color: 'var(--text-main)', fontSize: '12px' }}
                 />
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <label style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>임차처(소유원사)</label>
+                <label style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>임차처</label>
                 <select
                   value={renterQuery}
                   onChange={e => setRenterQuery(e.target.value)}
-                  style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '12px' }}
+                  style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-app)', color: 'var(--text-main)', fontSize: '12px' }}
                 >
                   <option value="">전체 임차처</option>
                   {renterVendors.map(r => (
@@ -928,7 +928,7 @@ export const RentAssets: React.FC = () => {
                 <select
                   value={returnQuery}
                   onChange={e => setReturnQuery(e.target.value)}
-                  style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '12px' }}
+                  style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-app)', color: 'var(--text-main)', fontSize: '12px' }}
                 >
                   <option value="ALL">전체 반납 상태</option>
                   <option value="ACTIVE">미반납 (임차 가동 중)</option>
@@ -939,7 +939,7 @@ export const RentAssets: React.FC = () => {
               <div>
                 <button
                   onClick={() => exportToExcel(filteredAssets, '임차자산_대장_목록')}
-                  style={{ padding: '7px 12px', fontSize: '12px', fontWeight: '600', backgroundColor: '#fff', border: '1px solid #cbd5e1', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}
+                  style={{ padding: '7px 12px', fontSize: '12px', fontWeight: '600', backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', color: 'var(--text-main)', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}
                 >
                   <Download size={13} /> 엑셀 다운로드
                 </button>
@@ -949,15 +949,15 @@ export const RentAssets: React.FC = () => {
           </div>
 
           {/* 자산 목록 테이블 */}
-          <div className="card" style={{ border: '1px solid var(--border-color)', borderRadius: '10px', overflow: 'hidden' }}>
+          <div className="card" style={{ border: '1px solid var(--border-color)', borderRadius: '10px', overflow: 'hidden', backgroundColor: 'var(--bg-card)' }}>
             <div style={{ overflowX: 'auto' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
                 <thead>
-                  <tr style={{ backgroundColor: '#f8fafc', borderBottom: '2px solid #e2e8f0', textAlign: 'left' }}>
+                  <tr style={{ backgroundColor: 'var(--bg-card-header)', borderBottom: '2px solid var(--border-color)', textAlign: 'left', color: 'var(--text-muted)' }}>
                     <th style={{ padding: '10px', whiteSpace: 'nowrap', textAlign: 'center' }}>관리</th>
                     <th style={{ padding: '10px', whiteSpace: 'nowrap' }}>관리번호</th>
                     <th style={{ padding: '10px', whiteSpace: 'nowrap' }}>모델명</th>
-                    <th style={{ padding: '10px', whiteSpace: 'nowrap' }}>임차처(소유원사)</th>
+                    <th style={{ padding: '10px', whiteSpace: 'nowrap' }}>임차처</th>
                     <th style={{ padding: '10px', whiteSpace: 'nowrap' }}>임차 계약기간</th>
                     <th style={{ padding: '10px', whiteSpace: 'nowrap', textAlign: 'right' }}>월 임차료</th>
                     <th style={{ padding: '10px', whiteSpace: 'nowrap' }}>실제 반납일</th>
@@ -1068,31 +1068,31 @@ export const RentAssets: React.FC = () => {
       {/* 3. 모달: 임차 자산 등록 / 수정 모달 */}
       {/* ========================================================================= */}
       {showModal && editingAsset && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-          <div style={{ backgroundColor: '#fff', padding: '24px', borderRadius: '12px', width: '500px', maxWidth: '90%', maxHeight: '90vh', overflowY: 'auto' }}>
-            <h2 style={{ fontSize: '16px', fontWeight: '800', marginBottom: '16px' }}>
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+          <div style={{ backgroundColor: 'var(--bg-card)', color: 'var(--text-main)', padding: '24px', borderRadius: '12px', width: '500px', maxWidth: '90%', maxHeight: '90vh', overflowY: 'auto', border: '1px solid var(--border-color)' }}>
+            <h2 style={{ fontSize: '16px', fontWeight: '800', marginBottom: '16px', color: 'var(--text-main)' }}>
               {editingAsset.id ? '임차 자산 수정' : '임차 자산 신규 등록'}
             </h2>
 
             <form onSubmit={handleSubmitAsset} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <label style={{ fontSize: '11px', fontWeight: '700' }}>관리번호 (필수)</label>
+                <label style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-muted)' }}>관리번호 (필수)</label>
                 <input
                   type="text"
                   required
                   placeholder="예: R-001"
                   value={editingAsset.assetNo || ''}
                   onChange={e => setEditingAsset({ ...editingAsset, assetNo: e.target.value })}
-                  style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '12px' }}
+                  style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-app)', color: 'var(--text-main)', fontSize: '12px' }}
                 />
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <label style={{ fontSize: '11px', fontWeight: '700' }}>모델명 (필수)</label>
+                <label style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-muted)' }}>모델명 (필수)</label>
                 <select
                   value={editingAsset.modelName || ''}
                   onChange={e => setEditingAsset({ ...editingAsset, modelName: e.target.value })}
-                  style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '12px' }}
+                  style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-app)', color: 'var(--text-main)', fontSize: '12px' }}
                 >
                   {products.map(p => (
                     <option key={p.id} value={p.modelName}>{p.modelName}</option>
@@ -1101,46 +1101,46 @@ export const RentAssets: React.FC = () => {
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <label style={{ fontSize: '11px', fontWeight: '700' }}>임차처 (소유원사)</label>
+                <label style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-muted)' }}>임차처</label>
                 <input
                   type="text"
                   placeholder="예: ABC 렌탈"
                   value={editingAsset.renter || ''}
                   onChange={e => setEditingAsset({ ...editingAsset, renter: e.target.value })}
-                  style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '12px' }}
+                  style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-app)', color: 'var(--text-main)', fontSize: '12px' }}
                 />
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <label style={{ fontSize: '11px', fontWeight: '700' }}>임차 시작일</label>
+                  <label style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-muted)' }}>임차 시작일</label>
                   <input
                     type="date"
                     value={editingAsset.rentStart || ''}
                     onChange={e => setEditingAsset({ ...editingAsset, rentStart: e.target.value })}
-                    style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '12px' }}
+                    style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-app)', color: 'var(--text-main)', fontSize: '12px' }}
                   />
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <label style={{ fontSize: '11px', fontWeight: '700' }}>임차 만료예정일</label>
+                  <label style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-muted)' }}>임차 만료예정일</label>
                   <input
                     type="date"
                     value={editingAsset.rentEnd || ''}
                     onChange={e => setEditingAsset({ ...editingAsset, rentEnd: e.target.value })}
-                    style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '12px' }}
+                    style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-app)', color: 'var(--text-main)', fontSize: '12px' }}
                   />
                 </div>
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <label style={{ fontSize: '11px', fontWeight: '700' }}>월 임차료 (원)</label>
+                <label style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-muted)' }}>월 임차료 (원)</label>
                 <input
                   type="number"
                   placeholder="300000"
                   value={editingAsset.monthlyRentFee || 0}
                   onChange={e => setEditingAsset({ ...editingAsset, monthlyRentFee: Number(e.target.value) })}
-                  style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '12px' }}
+                  style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-app)', color: 'var(--text-main)', fontSize: '12px' }}
                 />
               </div>
 
@@ -1148,7 +1148,7 @@ export const RentAssets: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setShowModal(false)}
-                  style={{ padding: '8px 14px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: '#fff', fontSize: '12px', cursor: 'pointer' }}
+                  style={{ padding: '8px 14px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-card)', color: 'var(--text-main)', fontSize: '12px', cursor: 'pointer' }}
                 >
                   취소
                 </button>
@@ -1169,26 +1169,26 @@ export const RentAssets: React.FC = () => {
       {/* 4. 모달: 임차 자산 반납 및 회수 배차 동시 신청 모달 */}
       {/* ========================================================================= */}
       {showReturnModal && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-          <div style={{ backgroundColor: '#fff', padding: '24px', borderRadius: '12px', width: '480px', maxWidth: '90%' }}>
-            <h2 style={{ fontSize: '16px', fontWeight: '800', marginBottom: '14px', color: '#b91c1c' }}>
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+          <div style={{ backgroundColor: 'var(--bg-card)', color: 'var(--text-main)', padding: '24px', borderRadius: '12px', width: '480px', maxWidth: '90%', border: '1px solid var(--border-color)' }}>
+            <h2 style={{ fontSize: '16px', fontWeight: '800', marginBottom: '14px', color: '#ef4444' }}>
               임차 자산 반납 처리
             </h2>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <label style={{ fontSize: '11px', fontWeight: '700' }}>실제 원사 반납일자</label>
+                <label style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-muted)' }}>실제 임차처 반납일자</label>
                 <input
                   type="date"
                   value={returnDate}
                   onChange={e => setReturnDate(e.target.value)}
-                  style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '12px' }}
+                  style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-app)', color: 'var(--text-main)', fontSize: '12px' }}
                 />
               </div>
 
               {/* 반납 회수 배차 동시 신청 옵션 */}
-              <div style={{ padding: '12px', backgroundColor: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0', marginTop: '6px' }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', fontWeight: '700', cursor: 'pointer' }}>
+              <div style={{ padding: '12px', backgroundColor: 'var(--bg-app)', borderRadius: '8px', border: '1px solid var(--border-color)', marginTop: '6px' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', fontWeight: '700', cursor: 'pointer', color: 'var(--text-main)' }}>
                   <input
                     type="checkbox"
                     checked={isDispatchRequested}
@@ -1201,16 +1201,16 @@ export const RentAssets: React.FC = () => {
                   <div style={{ marginTop: '10px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
                       <label style={{ fontSize: '10px', color: 'var(--text-muted)' }}>상차지 (출발)</label>
-                      <input type="text" value={returnOrigin} onChange={e => setReturnOrigin(e.target.value)} style={{ padding: '4px 8px', fontSize: '11px', border: '1px solid #cbd5e1', borderRadius: '4px' }} />
+                      <input type="text" value={returnOrigin} onChange={e => setReturnOrigin(e.target.value)} style={{ padding: '4px 8px', fontSize: '11px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-card)', color: 'var(--text-main)', borderRadius: '4px' }} />
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                      <label style={{ fontSize: '10px', color: 'var(--text-muted)' }}>하차지 (원사 도착지)</label>
-                      <input type="text" value={returnDestination} onChange={e => setReturnDestination(e.target.value)} style={{ padding: '4px 8px', fontSize: '11px', border: '1px solid #cbd5e1', borderRadius: '4px' }} />
+                      <label style={{ fontSize: '10px', color: 'var(--text-muted)' }}>하차지 (임차처 반납 장소)</label>
+                      <input type="text" value={returnDestination} onChange={e => setReturnDestination(e.target.value)} style={{ padding: '4px 8px', fontSize: '11px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-card)', color: 'var(--text-main)', borderRadius: '4px' }} />
                     </div>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
                         <label style={{ fontSize: '10px', color: 'var(--text-muted)' }}>차량 톤수</label>
-                        <select value={returnVehicleType} onChange={e => setReturnVehicleType(e.target.value)} style={{ padding: '4px 8px', fontSize: '11px', border: '1px solid #cbd5e1', borderRadius: '4px' }}>
+                        <select value={returnVehicleType} onChange={e => setReturnVehicleType(e.target.value)} style={{ padding: '4px 8px', fontSize: '11px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-card)', color: 'var(--text-main)', borderRadius: '4px' }}>
                           <option value="1T">1톤</option>
                           <option value="3.5T">3.5톤 셀프로더</option>
                           <option value="5T">5톤 셀프로더</option>
@@ -1218,7 +1218,7 @@ export const RentAssets: React.FC = () => {
                       </div>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
                         <label style={{ fontSize: '10px', color: 'var(--text-muted)' }}>예상 운송료 (원)</label>
-                        <input type="number" value={returnCost} onChange={e => setReturnCost(Number(e.target.value))} style={{ padding: '4px 8px', fontSize: '11px', border: '1px solid #cbd5e1', borderRadius: '4px' }} />
+                        <input type="number" value={returnCost} onChange={e => setReturnCost(Number(e.target.value))} style={{ padding: '4px 8px', fontSize: '11px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-card)', color: 'var(--text-main)', borderRadius: '4px' }} />
                       </div>
                     </div>
                   </div>
@@ -1228,7 +1228,7 @@ export const RentAssets: React.FC = () => {
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '12px' }}>
                 <button
                   onClick={() => setShowReturnModal(false)}
-                  style={{ padding: '8px 14px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: '#fff', fontSize: '12px', cursor: 'pointer' }}
+                  style={{ padding: '8px 14px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-card)', color: 'var(--text-main)', fontSize: '12px', cursor: 'pointer' }}
                 >
                   취소
                 </button>
