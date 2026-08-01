@@ -9,7 +9,7 @@ import { downloadEvidenceAsZip, deleteStorageFiles } from '../services/supabaseS
 import { backupToGoogleDrive } from '../services/googleDriveBackup';
 
 export const GoogleConfig: React.FC = () => {
-  const { googleConfigs, updateGoogleConfig, currentUser, showErrorModal, consumablePurchases, clearEvidenceFileUrls } = useApp();
+  const { googleConfigs, updateGoogleConfig, currentUser, showErrorModal, consumablePurchases, clearEvidenceFileUrls, updateEvidenceFileUrls } = useApp();
 
   const isAdmin = currentUser?.role === 'ADMIN';
 
@@ -561,12 +561,15 @@ function doGet(e) {
                             onConfirm: async () => {
                               setBackupProgress('Storage 파일 삭제 중...');
                               await deleteStorageFiles(successUrls);
-                              // DB에서 statementFileUrl 초기화 (성공한 건만)
-                              const successSet = new Set(successUrls);
-                              await clearEvidenceFileUrls(
-                                targets.filter(p => successSet.has(p.statementFileUrl!)).map(p => p.id)
-                              );
-                              setBackupProgress(`✅ 삭제 완료 (${successUrls.length}건) — ERP 목록에서 증빙 링크 제거됨`);
+                              // DB의 statementFileUrl 을 Drive URL로 교체
+                              const updates = targets
+                                .filter(p => result.successUrlMap.has(p.statementFileUrl!))
+                                .map(p => ({
+                                  id: p.id,
+                                  url: result.successUrlMap.get(p.statementFileUrl!)!
+                                }));
+                              await updateEvidenceFileUrls(updates);
+                              setBackupProgress(`✅ 삭제 완료 (${successUrls.length}건) — ERP 증빙보기 링크가 구글드라이브로 변경됨`);
                               setTimeout(() => setBackupProgress(''), 5000);
                             }
                           });

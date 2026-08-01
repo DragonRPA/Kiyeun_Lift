@@ -112,6 +112,7 @@ interface AppContextType {
   completeConsumablePurchase: (id: string) => Promise<void>;
   inboundConsumablePurchase: (id: string, qty: number, statementFileUrl: string) => Promise<void>;
   clearEvidenceFileUrls: (ids: string[]) => Promise<void>;  // Storage 삭제 후 DB URL 초기화
+  updateEvidenceFileUrls: (updates: { id: string; url: string }[]) => Promise<void>; // Storage 삭제 후 Drive URL로 교체
   
   // Contract Mutators
   createContract: (contractData: Omit<Contract, 'id' | 'createdAt' | 'updatedAt' | 'contractNo'>, assetsList: { assetId?: string; expectedModel?: string; monthlyRentalFee: number; dailyRentalFee: number }[]) => Promise<void>;
@@ -1441,6 +1442,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const clearEvidenceFileUrls = async (ids: string[]): Promise<void> => {
     for (const id of ids) {
       db.updateRow<ConsumablePurchaseRequest>('consumablePurchases', id, { statementFileUrl: '' });
+    }
+    await db.awaitPendingWrites();
+    refreshAllData();
+  };
+
+  // Storage 삭제 후 Drive URL로 교체
+  const updateEvidenceFileUrls = async (updates: { id: string; url: string }[]): Promise<void> => {
+    for (const { id, url } of updates) {
+      db.updateRow<ConsumablePurchaseRequest>('consumablePurchases', id, { statementFileUrl: url });
     }
     await db.awaitPendingWrites();
     refreshAllData();
@@ -3064,7 +3074,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       saveCashFlowSnapshot, deleteCashFlowSnapshot, saveVendor, deleteVendor,
       acquireAsset, disposeAsset, registerRentedAsset, returnRentedAsset, changeAssetStatus,
       purchaseConsumable, useConsumable,
-      requestConsumablePurchase, acceptConsumablePurchase, completeConsumablePurchase, inboundConsumablePurchase, clearEvidenceFileUrls,
+      requestConsumablePurchase, acceptConsumablePurchase, completeConsumablePurchase, inboundConsumablePurchase, clearEvidenceFileUrls, updateEvidenceFileUrls,
       createContract, extendContract, shortenContract, succeedContract, exchangeAsset,
       assignAssetToContract, exchangeOutboundAsset,
       saveSmartDispatch, saveSmartReturn,

@@ -11,7 +11,7 @@ declare global {
 
 const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
 const DRIVE_API   = 'https://www.googleapis.com/drive/v3';
-const UPLOAD_API  = 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name';
+const UPLOAD_API  = 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,webViewLink';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 1. GIS 스크립트 로드
@@ -64,9 +64,9 @@ async function findDriveFolder(token: string, folderName: string): Promise<strin
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 4. 단일 파일 업로드
+// 4. 단일 파일 업로드 → Drive webViewLink 반환
 // ─────────────────────────────────────────────────────────────────────────────
-async function uploadOneFile(token: string, fileName: string, blob: Blob, folderId: string): Promise<void> {
+async function uploadOneFile(token: string, fileName: string, blob: Blob, folderId: string): Promise<string> {
   const meta = { name: fileName, parents: [folderId] };
   const form = new FormData();
   form.append('metadata', new Blob([JSON.stringify(meta)], { type: 'application/json' }));
@@ -80,6 +80,9 @@ async function uploadOneFile(token: string, fileName: string, blob: Blob, folder
     const err = await res.json().catch(() => ({}));
     throw new Error(err?.error?.message || res.statusText);
   }
+  const data = await res.json();
+  // webViewLink 가 없으면 폴더 URL로 대체
+  return data.webViewLink || `https://drive.google.com/drive/folders/${folderId}`;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -95,6 +98,8 @@ export interface BackupResult {
   success: number;
   fail: number;
   failedFiles: string[];
+  /** 원본 Supabase URL → Drive webViewLink 맵핑 (성공한 파일만) */
+  successUrlMap: Map<string, string>;
 }
 
 export async function backupToGoogleDrive(
@@ -117,7 +122,7 @@ export async function backupToGoogleDrive(
   const token = await getBackupToken(clientId);
   const folderId = await findDriveFolder(token, folderName);
 
-  const result: BackupResult = { total: items.length, success: 0, fail: 0, failedFiles: [] };
+  const result: BackupResult = { total: items.length, success: 0, fail: 0, failedFiles: [], successUrlMap: new Map() };
 
   for (let i = 0; i < items.length; i++) {
     const item = items[i];
@@ -125,7 +130,8 @@ export async function backupToGoogleDrive(
       const fetchRes = await fetch(item.fileUrl);
       if (!fetchRes.ok) throw new Error(`HTTP ${fetchRes.status}`);
       const blob = await fetchRes.blob();
-      await uploadOneFile(token, item.fileName, blob, folderId);
+      const driveUrl = await uploadOneFile(token, item.fileName, blob, folderId);
+      result.successUrlMap.set(item.fileUrl, driveUrl);
       result.success++;
     } catch {
       result.fail++;
