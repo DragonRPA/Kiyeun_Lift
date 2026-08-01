@@ -1,4 +1,45 @@
+# Release Notes (v1.17.0.Build.00062 - 2026-08-01 18:58)
+
+## ☁️ [증빙 파일 저장소 전면 재편: Google Drive OAuth → Supabase Storage + 로컬 ZIP 백업]
+
+### 배경
+- Google Drive OAuth 방식의 구조적 문제(팝업 반복, 폴더 중복 생성, 권한 정책 충돌 등)가 반복되어 근본 재설계 결정.
+- Supabase Storage 버킷으로 전환하여 ERP 계정만으로 즉시 업로드, 구글 로그인 팝업 완전 제거.
+
+### 변경 내용 (Build.58~62 통합)
+
+1. **`src/services/supabaseStorage.ts` 신규 생성**
+   - Supabase Storage SDK(`supabase.storage.from('evidence').upload()`) 사용
+   - 버킷: `evidence/consumables/{fileName}` 경로에 실물 저장
+   - 버킷 미존재 시 명확한 오류 메시지 표출 (자동 생성 없음)
+   - `downloadEvidenceAsZip()`: JSZip + file-saver로 증빙파일 일괄 ZIP 로컬 다운로드 구현
+
+2. **`src/services/googleDriveOAuth.ts` 완전 삭제**
+   - OAuth 2.0, GIS 스크립트, sessionStorage 토큰 캐시 등 전체 제거
+
+3. **`src/pages/Consumables.tsx` 업로드 엔진 교체**
+   - `uploadToGoogleDriveOAuth` → `uploadToSupabaseStorage` 전환 (OAuth 팝업 없음)
+   - [구매신청 내역] 탭에 **[증빙파일 ZIP 백업]** 버튼 추가
+     - Supabase Storage URL로 저장된 모든 증빙파일을 ZIP으로 PC 로컬 다운로드
+
+4. **`src/pages/GoogleConfig.tsx` 카드 교체**
+   - OAuth 2.0 Client ID 설정 카드 → **Supabase Storage 연동 안내 카드**로 교체
+   - 버킷 생성 3단계 가이드, 로컬 백업 방법 안내 포함
+
+5. **`src/services/db.ts`**
+   - `GoogleConfig.oauthClientId` 필드 제거
+
+6. **패키지 추가**
+   - `jszip`, `file-saver`, `@types/file-saver` 설치
+
+### Supabase 설정 (1회 완료)
+- 버킷 `evidence` (Public) 생성
+- RLS Policy: SELECT/INSERT/UPDATE/DELETE → anon, authenticated 허용
+
+---
+
 # Release Notes (v1.17.0.Build.00057 - 2026-07-31 23:58)
+
 
 ## ☁️ [소모품 증빙 파일 구글 드라이브 직접 업로드 (OAuth 2.0) 구현]
 
