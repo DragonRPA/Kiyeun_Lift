@@ -419,6 +419,19 @@ export const RentAssets: React.FC = () => {
     return matchesSearch && matchesRenter && matchesStartDate && matchesEndDate && matchesReturn;
   });
 
+  // 모델명 알파벳/한글 오름차순 정렬
+  const sortedProducts = React.useMemo(() => {
+    return [...products].sort((a, b) => (a.modelName || '').localeCompare(b.modelName || ''));
+  }, [products]);
+
+  // 임차 만료예정일 자동 계산 헬퍼 (시작일로부터 30일 뒤)
+  const calcRentEnd = (startStr: string): string => {
+    if (!startStr) return '';
+    const d = new Date(startStr);
+    d.setDate(d.getDate() + 30);
+    return d.toISOString().split('T')[0];
+  };
+
   // 반납 지연일 및 초과 검사 헬퍼
   const calculateDelayDays = (asset: Asset): number => {
     if (!asset.rentEnd) return 0;
@@ -441,14 +454,15 @@ export const RentAssets: React.FC = () => {
   };
 
   const handleOpenAdd = () => {
+    const today = new Date().toISOString().split('T')[0];
     setEditingAsset({
-      modelName: products[0]?.modelName || '',
+      modelName: sortedProducts[0]?.modelName || '',
       assetNo: '',
       serialNo: '',
       manufacturer: '',
       renter: renterVendors[0] || '',
-      rentStart: new Date().toISOString().split('T')[0],
-      rentEnd: new Date(new Date().getTime() + 180 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+      rentStart: today,
+      rentEnd: calcRentEnd(today),
       monthlyRentFee: 0,
       dailyRentFee: 0,
       memo1: ''
@@ -1094,7 +1108,7 @@ export const RentAssets: React.FC = () => {
                   onChange={e => setEditingAsset({ ...editingAsset, modelName: e.target.value })}
                   style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-app)', color: 'var(--text-main)', fontSize: '12px' }}
                 >
-                  {products.map(p => (
+                  {sortedProducts.map(p => (
                     <option key={p.id} value={p.modelName}>{p.modelName}</option>
                   ))}
                 </select>
@@ -1117,7 +1131,14 @@ export const RentAssets: React.FC = () => {
                   <input
                     type="date"
                     value={editingAsset.rentStart || ''}
-                    onChange={e => setEditingAsset({ ...editingAsset, rentStart: e.target.value })}
+                    onChange={e => {
+                      const newStart = e.target.value;
+                      setEditingAsset({
+                        ...editingAsset,
+                        rentStart: newStart,
+                        rentEnd: calcRentEnd(newStart)
+                      });
+                    }}
                     style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-app)', color: 'var(--text-main)', fontSize: '12px' }}
                   />
                 </div>
