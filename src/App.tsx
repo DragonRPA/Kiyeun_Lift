@@ -385,6 +385,31 @@ const App: React.FC = () => {
             KIYEUN LIFT ERP
           </h1>
 
+          {/* ⚡ 눈에 띄는 Gemini API 사용량 대시보드 열기 버튼 (헤더 좌측 메인 로고 바로 옆) */}
+          <button
+            onClick={() => setShowGeminiModal(true)}
+            style={{
+              padding: '6px 14px',
+              borderRadius: '20px',
+              backgroundColor: '#8B5CF6',
+              color: '#ffffff',
+              border: 'none',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              fontSize: '12.5px',
+              fontWeight: '800',
+              cursor: 'pointer',
+              whiteSpace: 'nowrap',
+              boxShadow: '0 2px 8px rgba(139, 92, 246, 0.4)',
+              transition: 'all 0.15s ease'
+            }}
+            title="Google Gemini API 사용량 및 Quotas / Rate Limits 대시보드 열기"
+          >
+            <Sparkles size={15} color="#ffffff" />
+            <span>⚡ Gemini API 사용량</span>
+          </button>
+
           {/* 헤더 좌측 실시간 현장 날씨 정보 위젯 */}
           <WeatherWidget />
         </div>
@@ -392,20 +417,20 @@ const App: React.FC = () => {
         {/* 사용자 정보 및 화면 모드 (밝은화면모드 / 어두운화면모드) */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           
-          {/* Gemini API 사용량 / 할당량 링크 바로가기 버튼 */}
+          {/* 헤더 우측 Gemini API 사용량 / 할당량 바로가기 버튼 */}
           <button
             onClick={() => setShowGeminiModal(true)}
             style={{
               padding: '6px 14px',
               borderRadius: '20px',
-              backgroundColor: 'rgba(139, 92, 246, 0.12)',
+              backgroundColor: 'rgba(139, 92, 246, 0.15)',
               color: '#8B5CF6',
-              border: '1px solid rgba(139, 92, 246, 0.35)',
+              border: '1.5px solid #8B5CF6',
               display: 'flex',
               alignItems: 'center',
               gap: '6px',
               fontSize: '12.5px',
-              fontWeight: '700',
+              fontWeight: '800',
               cursor: 'pointer',
               whiteSpace: 'nowrap',
               transition: 'all 0.15s ease'
@@ -413,7 +438,7 @@ const App: React.FC = () => {
             title="Google Gemini API 사용량 및 Quotas / Rate Limits 조회 대시보드 열기"
           >
             <Sparkles size={15} color="#8B5CF6" />
-            <span>Gemini API 사용량</span>
+            <span>⚡ Gemini API 사용량</span>
           </button>
 
           {/* 화면 모드 전환 버튼 (명시적 텍스트 라벨 적용) */}
