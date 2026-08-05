@@ -4,7 +4,8 @@ import { useApp } from './context/AppContext';
 import {
   LayoutDashboard, Users, UserCheck, Package, Layers, PlusCircle,
   Truck, Wrench, Shield, ShoppingBag, CreditCard, LogOut, Sun, Moon, Menu, X, Zap, Settings, Database as DatabaseIcon,
-  TrendingUp, Clock, AlertTriangle, Building2, ChevronDown, ChevronRight, Briefcase, Box, FolderKanban, ShieldAlert, Terminal, ArrowLeftRight, CheckSquare
+  TrendingUp, Clock, AlertTriangle, Building2, ChevronDown, ChevronRight, Briefcase, Box, FolderKanban, ShieldAlert, Terminal, ArrowLeftRight, CheckSquare,
+  ExternalLink, Sparkles, HelpCircle
 } from 'lucide-react';
 
 import { WeatherWidget } from './components/WeatherWidget';
@@ -228,6 +229,9 @@ const App: React.FC = () => {
     grp_system_dev: true
   });
 
+  // Gemini API 사용량 & Quotas 바로가기 모달 상태
+  const [showGeminiModal, setShowGeminiModal] = useState<boolean>(false);
+
   const toggleGroup = (groupId: string) => {
     setExpandedGroups(prev => ({
       ...prev,
@@ -386,7 +390,32 @@ const App: React.FC = () => {
         </div>
 
         {/* 사용자 정보 및 화면 모드 (밝은화면모드 / 어두운화면모드) */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          
+          {/* Gemini API 사용량 / 할당량 링크 바로가기 버튼 */}
+          <button
+            onClick={() => setShowGeminiModal(true)}
+            style={{
+              padding: '6px 14px',
+              borderRadius: '20px',
+              backgroundColor: 'rgba(139, 92, 246, 0.12)',
+              color: '#8B5CF6',
+              border: '1px solid rgba(139, 92, 246, 0.35)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              fontSize: '12.5px',
+              fontWeight: '700',
+              cursor: 'pointer',
+              whiteSpace: 'nowrap',
+              transition: 'all 0.15s ease'
+            }}
+            title="Google Gemini API 사용량 및 Quotas / Rate Limits 조회 대시보드 열기"
+          >
+            <Sparkles size={15} color="#8B5CF6" />
+            <span>Gemini API 사용량</span>
+          </button>
+
           {/* 화면 모드 전환 버튼 (명시적 텍스트 라벨 적용) */}
           <button
             onClick={toggleTheme}
@@ -442,6 +471,300 @@ const App: React.FC = () => {
           </button>
         </div>
       </header>
+
+      {/* ========================================================================= */}
+      {/* Gemini API 사용량 & Quotas 바로가기 모달 */}
+      {/* ========================================================================= */}
+      {showGeminiModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.65)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 9999,
+          backdropFilter: 'blur(4px)'
+        }}>
+          <div style={{
+            backgroundColor: 'var(--bg-card)',
+            color: 'var(--text-main)',
+            borderRadius: '16px',
+            width: '620px',
+            maxWidth: '92vw',
+            border: '1px solid var(--border-color)',
+            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.3)',
+            overflow: 'hidden'
+          }}>
+            {/* 모달 헤더 */}
+            <div style={{
+              padding: '20px 24px',
+              borderBottom: '1px solid var(--border-color)',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              backgroundColor: 'var(--bg-card-header)'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div style={{
+                  padding: '8px',
+                  borderRadius: '10px',
+                  backgroundColor: 'rgba(139, 92, 246, 0.15)',
+                  color: '#8B5CF6'
+                }}>
+                  <Sparkles size={20} />
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '17px', fontWeight: '800', color: 'var(--text-main)' }}>
+                    Gemini API 사용량 & 할당량 센터
+                  </h3>
+                  <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                    Google AI Studio & Google Cloud Console 사용량 / Rate Limits 대시보드 바로가기
+                  </span>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowGeminiModal(false)}
+                style={{
+                  background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '4px'
+                }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* 모달 바디 - 링크 목록 */}
+            <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '14px', maxHeight: '75vh', overflowY: 'auto' }}>
+              
+              {/* 메인 추천 링크 (Rate Limits & Quotas 문서) */}
+              <div style={{
+                padding: '16px',
+                borderRadius: '12px',
+                border: '1px solid rgba(139, 92, 246, 0.4)',
+                backgroundColor: 'rgba(139, 92, 246, 0.08)',
+                display: 'flex',
+                alignItems: 'flex-start',
+                justifyContent: 'space-between',
+                gap: '14px'
+              }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', flex: 1 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{
+                      fontSize: '11px',
+                      fontWeight: '800',
+                      padding: '2px 8px',
+                      borderRadius: '12px',
+                      backgroundColor: '#8B5CF6',
+                      color: '#ffffff'
+                    }}>⚡ 추천 문서</span>
+                    <h4 style={{ margin: 0, fontSize: '14.5px', fontWeight: '800', color: 'var(--text-main)' }}>
+                      Gemini API 모델별 Rate Limits & Quotas 문서
+                    </h4>
+                  </div>
+                  <p style={{ margin: 0, fontSize: '12.5px', color: 'var(--text-muted)', lineHeight: '1.5' }}>
+                    RPM(분당 요청수), TPM(분당 토큰수), RPD(일당 요청수) 무료/유료 티어 제한 기준표 공식 확인
+                  </p>
+                </div>
+                <button
+                  onClick={() => window.open('https://ai.google.dev/gemini-api/docs/rate-limits', '_blank')}
+                  className="btn-primary"
+                  style={{
+                    padding: '8px 14px',
+                    fontSize: '12.5px',
+                    fontWeight: '700',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    whiteSpace: 'nowrap',
+                    flexShrink: 0
+                  }}
+                >
+                  바로가기 <ExternalLink size={14} />
+                </button>
+              </div>
+
+              {/* 2. Google AI Studio API Keys & Plan */}
+              <div style={{
+                padding: '16px',
+                borderRadius: '12px',
+                border: '1px solid var(--border-color)',
+                backgroundColor: 'var(--bg-app)',
+                display: 'flex',
+                alignItems: 'flex-start',
+                justifyContent: 'space-between',
+                gap: '14px'
+              }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', flex: 1 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{
+                      fontSize: '11px',
+                      fontWeight: '700',
+                      padding: '2px 8px',
+                      borderRadius: '12px',
+                      backgroundColor: 'rgba(59, 130, 246, 0.2)',
+                      color: '#3B82F6'
+                    }}>AI Studio</span>
+                    <h4 style={{ margin: 0, fontSize: '14px', fontWeight: '700', color: 'var(--text-main)' }}>
+                      Google AI Studio API 키 및 플랜 현황
+                    </h4>
+                  </div>
+                  <p style={{ margin: 0, fontSize: '12.5px', color: 'var(--text-muted)', lineHeight: '1.5' }}>
+                    발급된 Gemini API 키 목록 조회, 플랜 상태(Free Tier / Pay-as-you-go) 확인 및 신규 키 생성
+                  </p>
+                </div>
+                <button
+                  onClick={() => window.open('https://aistudio.google.com/app/apikey', '_blank')}
+                  style={{
+                    padding: '8px 14px',
+                    fontSize: '12.5px',
+                    fontWeight: '600',
+                    backgroundColor: 'var(--bg-card)',
+                    color: 'var(--text-main)',
+                    border: '1px solid var(--border-color)',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    whiteSpace: 'nowrap',
+                    flexShrink: 0
+                  }}
+                >
+                  바로가기 <ExternalLink size={14} />
+                </button>
+              </div>
+
+              {/* 3. GCP API Dashboard */}
+              <div style={{
+                padding: '16px',
+                borderRadius: '12px',
+                border: '1px solid var(--border-color)',
+                backgroundColor: 'var(--bg-app)',
+                display: 'flex',
+                alignItems: 'flex-start',
+                justifyContent: 'space-between',
+                gap: '14px'
+              }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', flex: 1 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{
+                      fontSize: '11px',
+                      fontWeight: '700',
+                      padding: '2px 8px',
+                      borderRadius: '12px',
+                      backgroundColor: 'rgba(16, 185, 129, 0.2)',
+                      color: '#10B981'
+                    }}>GCP Dashboard</span>
+                    <h4 style={{ margin: 0, fontSize: '14px', fontWeight: '700', color: 'var(--text-main)' }}>
+                      Google Cloud API 사용량 실시간 대시보드
+                    </h4>
+                  </div>
+                  <p style={{ margin: 0, fontSize: '12.5px', color: 'var(--text-muted)', lineHeight: '1.5' }}>
+                    Generative Language API (Gemini) 일별/시간별 실시간 호출 성공률, Latency 및 에러 그래프
+                  </p>
+                </div>
+                <button
+                  onClick={() => window.open('https://console.cloud.google.com/apis/dashboard', '_blank')}
+                  style={{
+                    padding: '8px 14px',
+                    fontSize: '12.5px',
+                    fontWeight: '600',
+                    backgroundColor: 'var(--bg-card)',
+                    color: 'var(--text-main)',
+                    border: '1px solid var(--border-color)',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    whiteSpace: 'nowrap',
+                    flexShrink: 0
+                  }}
+                >
+                  바로가기 <ExternalLink size={14} />
+                </button>
+              </div>
+
+              {/* 4. GCP Quotas & Billing */}
+              <div style={{
+                padding: '16px',
+                borderRadius: '12px',
+                border: '1px solid var(--border-color)',
+                backgroundColor: 'var(--bg-app)',
+                display: 'flex',
+                alignItems: 'flex-start',
+                justifyContent: 'space-between',
+                gap: '14px'
+              }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', flex: 1 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{
+                      fontSize: '11px',
+                      fontWeight: '700',
+                      padding: '2px 8px',
+                      borderRadius: '12px',
+                      backgroundColor: 'rgba(245, 158, 11, 0.2)',
+                      color: '#F59E0B'
+                    }}>Quota 증액</span>
+                    <h4 style={{ margin: 0, fontSize: '14px', fontWeight: '700', color: 'var(--text-main)' }}>
+                      Google Cloud Quotas & 시스템 한도 설정
+                    </h4>
+                  </div>
+                  <p style={{ margin: 0, fontSize: '12.5px', color: 'var(--text-muted)', lineHeight: '1.5' }}>
+                    프로젝트별 Gemini API 실시간 할당량 소진 비율 조회 및 Quota 상향 증액 신청
+                  </p>
+                </div>
+                <button
+                  onClick={() => window.open('https://console.cloud.google.com/iam-admin/quotas', '_blank')}
+                  style={{
+                    padding: '8px 14px',
+                    fontSize: '12.5px',
+                    fontWeight: '600',
+                    backgroundColor: 'var(--bg-card)',
+                    color: 'var(--text-main)',
+                    border: '1px solid var(--border-color)',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    whiteSpace: 'nowrap',
+                    flexShrink: 0
+                  }}
+                >
+                  바로가기 <ExternalLink size={14} />
+                </button>
+              </div>
+
+            </div>
+
+            {/* 모달 푸터 */}
+            <div style={{
+              padding: '16px 24px',
+              borderTop: '1px solid var(--border-color)',
+              display: 'flex',
+              justifyContent: 'flex-end',
+              backgroundColor: 'var(--bg-card-header)'
+            }}>
+              <button
+                onClick={() => setShowGeminiModal(false)}
+                style={{
+                  padding: '8px 18px',
+                  borderRadius: '6px',
+                  backgroundColor: 'var(--bg-card)',
+                  color: 'var(--text-main)',
+                  border: '1px solid var(--border-color)',
+                  fontSize: '13px',
+                  fontWeight: '600',
+                  cursor: 'pointer'
+                }}
+              >
+                닫기
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 메인 레이아웃 본문 (850px 헤더 제외 수직 프레임) */}
       <div style={{ display: 'flex', flex: 1, height: 'calc(850px - 64px)', overflow: 'hidden', position: 'relative' }}>

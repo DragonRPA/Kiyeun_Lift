@@ -1,3 +1,21 @@
+# Release Notes (v1.18.10.Build.93 - 2026-08-05 17:25)
+
+## ⚡ [Gemini API 사용량 및 Rate Limits / Quotas 센터 바로가기 버튼 & 팝업 모달 추가]
+
+### 주요 개선 사항
+
+1. **상단 네비게이션 헤더에 `⚡ Gemini API 사용량` 바로가기 버튼 탑재 (`App.tsx`)**
+   - 상단 헤더 우측 상단에 1-Click으로 Gemini API 사용량 및 Quotas 대시보드로 이동할 수 있는 `⚡ Gemini API 사용량` 버튼 추가.
+
+2. **Gemini API 사용량 & 할당량 센터 모달 구현 (`App.tsx`)**
+   - 클릭 시 주요 Gemini API 사용량/할당량 관련 4대 공식 대시보드로 바로 이동할 수 있는 팝업 모달 제공:
+     - ⚡ **Gemini API 모델별 Rate Limits & Quotas 공식 문서** (`https://ai.google.dev/gemini-api/docs/rate-limits`) - RPM, TPM, RPD 제한 기준표 조회
+     - 🔑 **Google AI Studio API 키 및 플랜 현황 대시보드** (`https://aistudio.google.com/app/apikey`)
+     - 📊 **Google Cloud API 사용량 실시간 대시보드** (`https://console.cloud.google.com/apis/dashboard`)
+     - 💳 **Google Cloud Quotas & 시스템 한도 설정** (`https://console.cloud.google.com/iam-admin/quotas`)
+
+---
+
 # Release Notes (v1.18.9.Build.92 - 2026-08-01 22:05)
 
 ## 🎯 [임차자산 거래명세서 대사 규칙 개편 - 오직 관리번호 단일 매칭 기준 적용]
