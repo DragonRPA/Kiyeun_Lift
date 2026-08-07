@@ -10,35 +10,29 @@ export const exportToExcel = (data: any[], fileName: string, sheetName: string =
 };
 
 /**
- * 공식 거래명세서 양식 파일(구글 드라이브 또는 public/)을 ExcelJS로 읽어서
+ * 신규 표준 거래명세서 양식 파일(구글 드라이브 또는 public/)을 ExcelJS로 읽어서
  * 실제 청구 데이터를 셀 값만 채워넣고 다운로드.
  *
- * ExcelJS 사용 이유:
- * - 무료 xlsx 라이브러리는 embedded 이미지(도장)를 완전히 드롭하고 셀 스타일도 손실됨.
- * - ExcelJS는 이미지 포함 전체 워크북 구조를 그대로 보존하면서 셀 값만 교체 가능.
- *
- * templateUrl: google_configs.transactionStatementTemplateUrl (Supabase 저장값)
- *   - docs.google.com/spreadsheets/d/FILE_ID/edit → /export?format=xlsx 변환
- *   - drive.google.com/file/d/FILE_ID/view → /uc?export=download&id=FILE_ID 변환
- *   - fallback: /거래명세서양식.xlsx (public 폴더 복사본)
- *
- * 양식 셀 맵:
- * - 공급받는자 등록번호: N5   상호: N6   대표: R6   주소: N7
+ * 신규 셀 주소 매핑 (2026-08 개편):
+ * - 공급자: E9=계약담당자(영업사원명), L9=연락처(영업사원전화)
+ * - 공급받는자: S5=등록번호, S6=상호, Z6=대표, S7=주소, S8=업태, Z8=종목
+ *              S9=현장담당자, Z9=연락처, S10=계산서담당자, Z10=연락처, S11=계산서메일, S12=현장명
  * - 작성일자: E13
- * - 품목행 row16~26: B=순번, C=월, D=일, E=품목, L=수량, M=단가, O=공급가액, Q=부가세, T=비고
- * - 합계: E27=공급가, J27=부가세, O27=합계
+ * - 데이터 행 (row 16~25):
+ *   B=순번, C=월, D=일, E=모델/높이, I=관리번호, K=현장투입일, M=사용기간, Q=청구구분, S=수량, U=단가, X=공급가액, AA=세액, AD=비고
  */
 export const exportTransactionStatementExcel = async (
   billing: any,
   details: any[],
   customer: any,
   contract: any,
-  siteName: string,
-  fileName: string,
+  site: any,
+  salesperson?: any,
+  fileName?: string,
   templateUrl?: string
 ) => {
   // 1. URL 변환 (구글 드라이브 공유링크 → 직접 다운로드 URL)
-  let fetchUrl = '/거래명세서양식.xlsx'; // fallback: public 폴더 복사본
+  let fetchUrl = '/거래명세서양식.xlsx';
 
   if (templateUrl) {
     if (templateUrl.includes('docs.google.com/spreadsheets')) {
@@ -55,7 +49,6 @@ export const exportTransactionStatementExcel = async (
     } else if (templateUrl.startsWith('http')) {
       fetchUrl = templateUrl;
     }
-    // else: 로컬 경로(.html 등) → fallback 유지
   }
 
   // 2. 양식 파일 fetch
@@ -73,14 +66,14 @@ export const exportTransactionStatementExcel = async (
 
   const arrayBuffer = await response.arrayBuffer();
 
-  // 3. ExcelJS로 워크북 로드 (이미지·스타일 100% 보존)
+  // 3. ExcelJS로 워크북 로드 (이미지·도장·서식 100% 보존)
   const workbook = new ExcelJS.Workbook();
   await workbook.xlsx.load(arrayBuffer);
 
   const worksheet = workbook.worksheets[0];
   if (!worksheet) throw new Error('거래명세서 양식 파일에 시트가 없습니다.');
 
-  // 헬퍼: 셀에 값만 설정 (스타일은 건드리지 않음)
+  // 헬퍼: 셀에 값만 설정 (스타일 건드리지 않음)
   const setVal = (addr: string, value: string | number | null) => {
     const cell = worksheet.getCell(addr);
     cell.value = value;
@@ -94,64 +87,90 @@ export const exportTransactionStatementExcel = async (
     cell.numFmt = existingFmt;
   };
 
-
-
-  const billingDate: string = billing?.billingDate || '';
-  const billingYm: string = billing?.billingYm || '';
-  const parts = billingDate ? billingDate.split('-') : ['', '', ''];
+  const billingDate: string = billing?.billingDate || new Date().toISOString().split('T')[0];
+  const parts = billingDate.split('-');
+  const dateY = parts[0] || '';
   const dateM = parts[1] ? Number(parts[1]) : '';
   const dateD = parts[2] ? Number(parts[2]) : '';
+  const formattedBillingDate = `${dateY}년 ${String(dateM).padStart(2, '0')}월 ${String(dateD).padStart(2, '0')}일`;
 
-  // === 공급받는자 정보 ===
-  // 병합셀 구조: M5:N5=레이블, O5:U5=값 입력 셀
-  setVal('O5', customer?.bizRegNo || '');    // 등록번호
-  setVal('O6', customer?.name || '');         // 상호
-  setVal('T6', customer?.representative || ''); // 대표 (Q6:S6=레이블, T6:U6=값)
-  setVal('O7', customer?.address || '');      // 주소
-  setVal('E13', billingDate || billingYm);    // 작성일자
+  // === 공급자 (당사) 영업담당자 정보 ===
+  const spName = salesperson?.name || contract?.salespersonName || '';
+  const spPhone = salesperson?.mobile || salesperson?.phone || '';
+  if (spName) setVal('E9', spName);
+  if (spPhone) setVal('L9', spPhone);
 
-  // === 품목 행 (row 16~26, 최대 11행) ===
+  // === 공급받는자 (고객사 및 현장) 정보 ===
+  setVal('S5', customer?.bizRegNo || '');                                      // 등록번호
+  setVal('S6', customer?.name || '');                                         // 상호
+  setVal('Z6', customer?.representative || '');                               // 대표자
+  setVal('S7', customer?.address || '');                                      // 주소
+  if (customer?.bizType) setVal('S8', customer.bizType);                      // 업태
+  if (customer?.bizItem) setVal('Z8', customer.bizItem);                      // 종목
+
+  // 현장담당자, 계산서담당자, 계산서메일, 현장명
+  setVal('S9', site?.managerName || site?.contactName || customer?.managerName || ''); // 현장담당자
+  setVal('Z9', site?.managerPhone || site?.contactPhone || customer?.phone || '');    // 현장담당자 연락처
+  setVal('S10', customer?.billingManagerName || customer?.managerName || '');         // 계산서담당자
+  setVal('Z10', customer?.billingManagerPhone || customer?.phone || '');             // 계산서담당자 연락처
+  setVal('S11', customer?.billingEmail || customer?.email || '');                     // 계산서메일
+  setVal('S12', site?.name || (typeof site === 'string' ? site : '') || '');          // 현장명
+
+  // 작성일자 (E13)
+  setVal('E13', formattedBillingDate);
+
+  // === 데이터 품목 행 (row 16~25, 최대 10행) ===
   const ITEM_START_ROW = 16;
-  const ITEM_MAX = 11;
-
-  let calcSupplyTotal = 0;
-  let calcVatTotal = 0;
+  const ITEM_MAX = 10;
 
   for (let i = 0; i < ITEM_MAX; i++) {
     const d = details[i];
     const row = ITEM_START_ROW + i;
 
     if (d) {
-      // 공급가 = 단가 × 수량, 부가세 = 공급가 × 10%
       const unitPrice = d.unitPrice || 0;
       const qty = d.quantity || 1;
       const itemSupply = unitPrice * qty;
       const itemVat = Math.round(itemSupply * 0.1);
 
-      calcSupplyTotal += itemSupply;
-      calcVatTotal += itemVat;
+      // 모델 / 높이 (예: SJ1432 / 6.3M)
+      const modelHeight = d.assetHeight ? `${d.itemName} / ${d.assetHeight}` : d.itemName;
+      
+      // 청구구분 (렌탈료 / 옵션 / 운송비 / 소모품 등)
+      const category = d.billingCategory || d.itemType || (d.itemName?.includes('운송') ? '운송비' : d.itemName?.includes('옵션') ? '옵션' : '렌탈료');
 
-      setVal(`B${row}`, i + 1);
-      setVal(`C${row}`, dateM);
-      setVal(`D${row}`, dateD);
-      setVal(`E${row}`, d.itemName + (d.description ? ` [${d.description}]` : ''));
-      setVal(`L${row}`, qty);
-      setNum(`M${row}`, unitPrice);
-      setNum(`O${row}`, itemSupply);
-      setNum(`Q${row}`, itemVat);
-      setVal(`T${row}`, siteName || '');
+      // 현장투입일
+      const inputDate = d.siteInputDate || contract?.startDate || '';
+
+      // 사용 기간 (정산 대상 기간)
+      const servicePeriod = d.servicePeriod || (d.startDate && d.endDate ? `${d.startDate} ~ ${d.endDate}` : `${billing?.billingYm || ''} 정산`);
+
+      setVal(`B${row}`, i + 1);                       // 순번
+      setVal(`C${row}`, dateM);                       // 월
+      setVal(`D${row}`, dateD);                       // 일
+      setVal(`E${row}`, modelHeight);                 // 모델 / 높이
+      setVal(`I${row}`, d.assetNo || '-');            // 관리번호
+      setVal(`K${row}`, inputDate);                   // 현장투입일
+      setVal(`M${row}`, servicePeriod);               // 사용 기간
+      setVal(`Q${row}`, category);                    // 청구구분
+      setVal(`S${row}`, qty);                         // 수량
+      setNum(`U${row}`, unitPrice);                   // 단가
+      setNum(`X${row}`, itemSupply);                  // 공급가액
+      setNum(`AA${row}`, itemVat);                    // 세액
+      setVal(`AD${row}`, d.memo || d.description || ''); // 비고
     } else {
       // 빈 행 초기화
       setVal(`B${row}`, null);
-      setNum(`O${row}`, 0);
-      setNum(`Q${row}`, 0);
+      setVal(`C${row}`, null);
+      setVal(`D${row}`, null);
+      setVal(`E${row}`, null);
+      setVal(`I${row}`, null);
+      setVal(`K${row}`, null);
+      setVal(`M${row}`, null);
+      setVal(`Q${row}`, null);
+      setVal(`S${row}`, null);
     }
   }
-
-  // === 합계 행 (row 27) - 품목별 계산값 합산 ===
-  setNum('E27', calcSupplyTotal);
-  setNum('J27', calcVatTotal);
-  setNum('O27', calcSupplyTotal + calcVatTotal);
 
   // 4. 파일 다운로드
   const buffer = await workbook.xlsx.writeBuffer();
@@ -161,7 +180,7 @@ export const exportTransactionStatementExcel = async (
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `${fileName}.xlsx`;
+  a.download = `${fileName || '거래명세서'}.xlsx`;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
@@ -177,10 +196,10 @@ export const exportTransactionStatementExcelBuffer = async (
   details: any[],
   customer: any,
   contract: any,
-  siteName: string,
+  site: any,
+  salesperson?: any,
   templateUrl?: string
 ): Promise<ArrayBuffer> => {
-  // URL 변환
   let fetchUrl = '/거래명세서양식.xlsx';
   if (templateUrl) {
     if (templateUrl.includes('docs.google.com/spreadsheets')) {
@@ -215,22 +234,38 @@ export const exportTransactionStatementExcelBuffer = async (
     cell.numFmt = fmt;
   };
 
-  const billingDate: string = billing?.billingDate || '';
-  const billingYm: string = billing?.billingYm || '';
-  const parts = billingDate ? billingDate.split('-') : ['', '', ''];
+  const billingDate: string = billing?.billingDate || new Date().toISOString().split('T')[0];
+  const parts = billingDate.split('-');
+  const dateY = parts[0] || '';
   const dateM = parts[1] ? Number(parts[1]) : '';
   const dateD = parts[2] ? Number(parts[2]) : '';
+  const formattedBillingDate = `${dateY}년 ${String(dateM).padStart(2, '0')}월 ${String(dateD).padStart(2, '0')}일`;
 
-  setVal('O5', customer?.bizRegNo || '');
-  setVal('O6', customer?.name || '');
-  setVal('T6', customer?.representative || '');
-  setVal('O7', customer?.address || '');
-  setVal('E13', billingDate || billingYm);
+  // === 공급자 영업담당자 정보 ===
+  const spName = salesperson?.name || contract?.salespersonName || '';
+  const spPhone = salesperson?.mobile || salesperson?.phone || '';
+  if (spName) setVal('E9', spName);
+  if (spPhone) setVal('L9', spPhone);
+
+  // === 공급받는자 정보 ===
+  setVal('S5', customer?.bizRegNo || '');
+  setVal('S6', customer?.name || '');
+  setVal('Z6', customer?.representative || '');
+  setVal('S7', customer?.address || '');
+  if (customer?.bizType) setVal('S8', customer.bizType);
+  if (customer?.bizItem) setVal('Z8', customer.bizItem);
+
+  setVal('S9', site?.managerName || site?.contactName || customer?.managerName || '');
+  setVal('Z9', site?.managerPhone || site?.contactPhone || customer?.phone || '');
+  setVal('S10', customer?.billingManagerName || customer?.managerName || '');
+  setVal('Z10', customer?.billingManagerPhone || customer?.phone || '');
+  setVal('S11', customer?.billingEmail || customer?.email || '');
+  setVal('S12', site?.name || (typeof site === 'string' ? site : '') || '');
+
+  setVal('E13', formattedBillingDate);
 
   const ITEM_START_ROW = 16;
-  const ITEM_MAX = 11;
-  let calcSupplyTotal = 0;
-  let calcVatTotal = 0;
+  const ITEM_MAX = 10;
 
   for (let i = 0; i < ITEM_MAX; i++) {
     const d = details[i];
@@ -240,27 +275,36 @@ export const exportTransactionStatementExcelBuffer = async (
       const qty = d.quantity || 1;
       const itemSupply = unitPrice * qty;
       const itemVat = Math.round(itemSupply * 0.1);
-      calcSupplyTotal += itemSupply;
-      calcVatTotal += itemVat;
+      const modelHeight = d.assetHeight ? `${d.itemName} / ${d.assetHeight}` : d.itemName;
+      const category = d.billingCategory || d.itemType || (d.itemName?.includes('운송') ? '운송비' : d.itemName?.includes('옵션') ? '옵션' : '렌탈료');
+      const inputDate = d.siteInputDate || contract?.startDate || '';
+      const servicePeriod = d.servicePeriod || (d.startDate && d.endDate ? `${d.startDate} ~ ${d.endDate}` : `${billing?.billingYm || ''} 정산`);
+
       setVal(`B${row}`, i + 1);
       setVal(`C${row}`, dateM);
       setVal(`D${row}`, dateD);
-      setVal(`E${row}`, d.itemName + (d.description ? ` [${d.description}]` : ''));
-      setVal(`L${row}`, qty);
-      setNum(`M${row}`, unitPrice);
-      setNum(`O${row}`, itemSupply);
-      setNum(`Q${row}`, itemVat);
-      setVal(`T${row}`, siteName || '');
+      setVal(`E${row}`, modelHeight);
+      setVal(`I${row}`, d.assetNo || '-');
+      setVal(`K${row}`, inputDate);
+      setVal(`M${row}`, servicePeriod);
+      setVal(`Q${row}`, category);
+      setVal(`S${row}`, qty);
+      setNum(`U${row}`, unitPrice);
+      setNum(`X${row}`, itemSupply);
+      setNum(`AA${row}`, itemVat);
+      setVal(`AD${row}`, d.memo || d.description || '');
     } else {
       setVal(`B${row}`, null);
-      setNum(`O${row}`, 0);
-      setNum(`Q${row}`, 0);
+      setVal(`C${row}`, null);
+      setVal(`D${row}`, null);
+      setVal(`E${row}`, null);
+      setVal(`I${row}`, null);
+      setVal(`K${row}`, null);
+      setVal(`M${row}`, null);
+      setVal(`Q${row}`, null);
+      setVal(`S${row}`, null);
     }
   }
-
-  setNum('E27', calcSupplyTotal);
-  setNum('J27', calcVatTotal);
-  setNum('O27', calcSupplyTotal + calcVatTotal);
 
   return workbook.xlsx.writeBuffer() as Promise<ArrayBuffer>;
 };

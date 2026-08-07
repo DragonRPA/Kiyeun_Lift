@@ -9,7 +9,7 @@ import { downloadTransactionStatementPDF, generateTransactionStatementPdfBase64 
 
 export const Billings: React.FC = () => {
   const {
-    billings, billingDetails, customers, contacts, contracts, contractAssets, assets, sites, googleConfigs,
+    billings, billingDetails, customers, contacts, contracts, contractAssets, assets, sites, users, googleConfigs,
     generateBillingsForMonth, receivePayment, cancelPayment, hasPermission, currentUser, approveBilling, cancelBilling,
     refreshAllData, showErrorModal, bankTransactions, paymentDepositLinks, saveBankDeposit, deleteBankDeposit, payments
   } = useApp();
@@ -350,6 +350,7 @@ export const Billings: React.FC = () => {
     const customer = customers.find(c => c.id === billing?.customerId);
     const contract = contracts.find(c => c.id === billing?.contractId);
     const site = sites.find(s => s.id === contract?.siteId);
+    const salesperson = users.find((u: any) => u.id === contract?.salespersonId);
     const templateUrl = googleConfigs[0]?.transactionStatementTemplateUrl;
     const custName = customer?.name || '고객사';
     const sName = site?.name || '현장';
@@ -357,7 +358,7 @@ export const Billings: React.FC = () => {
 
     try {
       await downloadTransactionStatementPDF(
-        billing, details, customer, contract, sName, templateUrl,
+        billing, details, customer, contract, site, salesperson, templateUrl,
         `${custName}_${sName}_${ym}`
       );
     } catch (err: any) {
@@ -386,13 +387,20 @@ export const Billings: React.FC = () => {
     const details = billingDetails.filter(d => d.billingId === mailBillingId);
     const customer = customers.find(c => c.id === billing?.customerId);
     const contract = contracts.find(c => c.id === billing?.contractId);
-
     const site = sites.find(s => s.id === contract?.siteId);
-    const siteName = site?.name || '현장';
+    const salesperson = users.find((u: any) => u.id === contract?.salespersonId);
     const templateUrl = googleConfigs[0]?.transactionStatementTemplateUrl;
 
     const details_supply = details.reduce((sum, d) => sum + (d.unitPrice || 0) * (d.quantity || 1), 0);
     const details_vat = Math.round(details_supply * 0.1);
+
+    const spName = salesperson?.name || (contract as any)?.salespersonName || '-';
+    const spPhone = (salesperson as any)?.mobile || salesperson?.phone || '-';
+    const siteManagerName = (site as any)?.managerName || (site as any)?.contactPerson || (customer as any)?.managerName || (customer as any)?.contactPerson || '-';
+    const siteManagerPhone = (site as any)?.managerPhone || (site as any)?.contactPhone || (customer as any)?.phone || (customer as any)?.contactPhone || '-';
+    const billingManagerName = (customer as any)?.billingManagerName || (customer as any)?.managerName || (customer as any)?.contactPerson || '-';
+    const billingManagerPhone = (customer as any)?.billingManagerPhone || (customer as any)?.phone || (customer as any)?.contactPhone || '-';
+    const billingEmail = (customer as any)?.billingEmail || (customer as any)?.email || '-';
 
     const body =
 `========================================================================================
@@ -403,24 +411,29 @@ export const Billings: React.FC = () => {
 당사 리프트 임대 계약(계약번호: ${contract?.contractNo || '-'})에 따른 ${billing?.billingYm} 거래명세서 및 청구 내역을 아래와 같이 송부해 드립니다.
 
 [1. 공급자 정보]
-- 사업자등록번호: 138-81-83251
-- 상호(법인명): (주)기연리프트
-- 대표자명: 이수용
-- 대표전화: 031-334-5296 (팩스: 031-335-5297)
-- 담당부서: 영업/수금관리팀
+- 사업자등록번호: 138-81-83251 | 상호: (주)기연리프트 | 대표자: 이수용
+- 계약담당자(영업): ${spName} (연락처: ${spPhone})
+- 계산서담당자(경영): 정수아 (연락처: 031-334-5295)
+- 이메일: giyeonlift@naver.com
 
 [2. 공급받는 자 정보]
-- 상호(법인명): ${customer?.name || '-'}
-- 대표자명: ${customer?.representative || '-'}
-- 사업자등록번호: ${customer?.bizRegNo || '-'}
-- 사업장주소: ${customer?.address || '-'}
+- 상호(법인명): ${customer?.name || '-'} | 대표자명: ${customer?.representative || '-'}
+- 사업자등록번호: ${customer?.bizRegNo || '-'} | 사업장주소: ${customer?.address || '-'}
+- 현장명: ${site?.name || '-'}
+- 현장담당자: ${siteManagerName} (연락처: ${siteManagerPhone})
+- 계산서담당자: ${billingManagerName} (연락처: ${billingManagerPhone})
+- 계산서메일: ${billingEmail}
 
 [3. 거래 세부 내역]
 ----------------------------------------------------------------------------------------
 ${details.map((d, idx) => {
   const itemSupply = (d.unitPrice || 0) * (d.quantity || 1);
   const itemVat = Math.round(itemSupply * 0.1);
-  return `${idx + 1}. ${d.itemName}\n   - 적용 기준/기간: ${d.description || '정기 렌탈'}\n   - 공급가액: ${itemSupply.toLocaleString()}원 | 부가세: ${itemVat.toLocaleString()}원 | 합계: ${(itemSupply + itemVat).toLocaleString()}원`;
+  const category = (d as any).billingCategory || (d as any).itemType || '렌탈료';
+  const period = (d as any).servicePeriod || `${billing?.billingYm || ''} 정산`;
+  return `${idx + 1}. [${category}] ${d.itemName} (관리번호: ${(d as any).assetNo || '-'})
+   - 현장투입일: ${(d as any).siteInputDate || contract?.startDate || '-'} | 정산사용기간: ${period}
+   - 공급가액: ${itemSupply.toLocaleString()}원 | 부가세: ${itemVat.toLocaleString()}원 | 합계: ${(itemSupply + itemVat).toLocaleString()}원`;
 }).join('\n----------------------------------------------------------------------------------------\n')}
 ----------------------------------------------------------------------------------------
 
@@ -442,7 +455,7 @@ ${details.map((d, idx) => {
 
       // 💡 100% 동일한 거래명세서 PDF 파일 자동 생성 (첨부파일용 Base64)
       const pdfResult = await generateTransactionStatementPdfBase64(
-        billing, details, customer, contract, siteName, templateUrl
+        billing, details, customer, contract, site, salesperson, templateUrl
       );
 
       await emailService.sendEmail(
@@ -1947,6 +1960,7 @@ ${details.map((d, idx) => {
                   className="btn-secondary"
                   onClick={async () => {
                     const site = sites.find(s => s.id === targetContract?.siteId);
+                    const salesperson = users.find((u: any) => u.id === targetContract?.salespersonId);
                     const custName = targetCust?.name || '고객사';
                     const sName = site?.name || '현장';
                     const ym = targetBilling?.billingYm || '';
@@ -1959,7 +1973,8 @@ ${details.map((d, idx) => {
                         targetDetails,
                         targetCust,
                         targetContract,
-                        sName,
+                        site,
+                        salesperson,
                         fileName,
                         templateUrl
                       );

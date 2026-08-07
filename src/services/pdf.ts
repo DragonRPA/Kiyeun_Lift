@@ -33,15 +33,19 @@ function buildExactStatementHTML(
   billing: any,
   details: any[],
   customer: any,
-  siteName: string,
+  contract: any,
+  site: any,
+  salesperson: any,
   stampDataUrl: string
 ): string {
-  const billingDate: string = billing?.billingDate || billing?.billingYm || '';
+  const billingDate: string = billing?.billingDate || billing?.billingYm || new Date().toISOString().split('T')[0];
   const pts   = billingDate.split('-');
+  const dateY = pts[0] || '';
   const dateM = pts[1] ? Number(pts[1]) : '';
   const dateD = pts[2] ? Number(pts[2]) : '';
+  const formattedBillingDate = `${dateY}년 ${String(dateM).padStart(2, '0')}월 ${String(dateD).padStart(2, '0')}일`;
 
-  const ITEM_MAX = 11;
+  const ITEM_MAX = 10;
   const BLUE = '#1B65A6';
   const dotted = `1px dotted ${BLUE}`;
   const solid  = `1px solid ${BLUE}`;
@@ -53,7 +57,6 @@ function buildExactStatementHTML(
   let supplyTotal = 0;
   let vatTotal    = 0;
 
-  // 렌탈료 항목이 품목 목록 상단에 먼저 나오도록 정렬
   const sortedDetails = [...details].sort((a, b) => {
     const aIsRental = (a.contractAssetId || a.itemName?.includes('렌탈료')) ? 0 : 1;
     const bIsRental = (b.contractAssetId || b.itemName?.includes('렌탈료')) ? 0 : 1;
@@ -67,17 +70,27 @@ function buildExactStatementHTML(
       const vat    = Math.round(supply * 0.1);
       supplyTotal += supply;
       vatTotal    += vat;
+
+      const modelHeight = d.assetHeight ? `${d.itemName} / ${d.assetHeight}` : d.itemName;
+      const category = d.billingCategory || d.itemType || (d.itemName?.includes('운송') ? '운송비' : d.itemName?.includes('옵션') ? '옵션' : '렌탈료');
+      const inputDate = d.siteInputDate || contract?.startDate || '';
+      const servicePeriod = d.servicePeriod || (d.startDate && d.endDate ? `${d.startDate} ~ ${d.endDate}` : `${billing?.billingYm || ''} 정산`);
+
       itemRows += `
       <tr style="height:${ROW_H}px">
         <td style="border-right:${dotted};border-bottom:${dotted};text-align:center">${i+1}</td>
         <td style="border-right:${dotted};border-bottom:${dotted};text-align:center">${dateM}</td>
         <td style="border-right:${dotted};border-bottom:${dotted};text-align:center">${dateD}</td>
-        <td style="border-right:${dotted};border-bottom:${dotted};padding-left:5px;overflow:hidden;text-overflow:ellipsis">${esc(d.itemName)}</td>
+        <td style="border-right:${dotted};border-bottom:${dotted};padding-left:4px;overflow:hidden;text-overflow:ellipsis">${esc(modelHeight)}</td>
+        <td style="border-right:${dotted};border-bottom:${dotted};text-align:center">${esc(d.assetNo || '-')}</td>
+        <td style="border-right:${dotted};border-bottom:${dotted};text-align:center">${esc(inputDate)}</td>
+        <td style="border-right:${dotted};border-bottom:${dotted};text-align:center;font-size:8px">${esc(servicePeriod)}</td>
+        <td style="border-right:${dotted};border-bottom:${dotted};text-align:center">${esc(category)}</td>
         <td style="border-right:${dotted};border-bottom:${dotted};text-align:center">${d.quantity||1}</td>
-        <td style="border-right:${dotted};border-bottom:${dotted};text-align:right;padding-right:5px">${supply>0?(d.unitPrice||0).toLocaleString():''}</td>
-        <td style="border-right:${dotted};border-bottom:${dotted};text-align:right;padding-right:5px">${supply.toLocaleString()}</td>
-        <td style="border-right:${dotted};border-bottom:${dotted};text-align:right;padding-right:5px">${vat.toLocaleString()}</td>
-        <td style="border-bottom:${dotted};padding-left:5px;overflow:hidden;text-overflow:ellipsis">${esc(siteName)}</td>
+        <td style="border-right:${dotted};border-bottom:${dotted};text-align:right;padding-right:4px">${supply>0?(d.unitPrice||0).toLocaleString():''}</td>
+        <td style="border-right:${dotted};border-bottom:${dotted};text-align:right;padding-right:4px">${supply.toLocaleString()}</td>
+        <td style="border-right:${dotted};border-bottom:${dotted};text-align:right;padding-right:4px">${vat.toLocaleString()}</td>
+        <td style="border-bottom:${dotted};padding-left:4px;overflow:hidden;text-overflow:ellipsis">${esc(d.memo || d.description || '')}</td>
       </tr>`;
     } else {
       itemRows += `
@@ -88,8 +101,12 @@ function buildExactStatementHTML(
         <td style="border-right:${dotted};border-bottom:${dotted}"></td>
         <td style="border-right:${dotted};border-bottom:${dotted}"></td>
         <td style="border-right:${dotted};border-bottom:${dotted}"></td>
-        <td style="border-right:${dotted};border-bottom:${dotted};text-align:right;padding-right:5px;color:#000">-</td>
-        <td style="border-right:${dotted};border-bottom:${dotted};text-align:right;padding-right:5px;color:#000">-</td>
+        <td style="border-right:${dotted};border-bottom:${dotted}"></td>
+        <td style="border-right:${dotted};border-bottom:${dotted}"></td>
+        <td style="border-right:${dotted};border-bottom:${dotted}"></td>
+        <td style="border-right:${dotted};border-bottom:${dotted}"></td>
+        <td style="border-right:${dotted};border-bottom:${dotted};text-align:right;padding-right:4px;color:#000">-</td>
+        <td style="border-right:${dotted};border-bottom:${dotted};text-align:right;padding-right:4px;color:#000">-</td>
         <td style="border-bottom:${dotted}"></td>
       </tr>`;
     }
@@ -101,6 +118,15 @@ function buildExactStatementHTML(
     : '';
 
   const billingNoStr = billing?.id || billing?.billingNo || '';
+  const spName = salesperson?.name || contract?.salespersonName || '';
+  const spPhone = salesperson?.mobile || salesperson?.phone || '';
+
+  const siteManagerName = site?.managerName || site?.contactName || customer?.managerName || '';
+  const siteManagerPhone = site?.managerPhone || site?.contactPhone || customer?.phone || '';
+  const billingManagerName = customer?.billingManagerName || customer?.managerName || '';
+  const billingManagerPhone = customer?.billingManagerPhone || customer?.phone || '';
+  const billingEmail = customer?.billingEmail || customer?.email || '';
+  const sName = site?.name || (typeof site === 'string' ? site : '') || '';
 
   return `<!DOCTYPE html>
 <html lang="ko">
@@ -113,7 +139,7 @@ function buildExactStatementHTML(
     width: 700px;
     background: #fff;
     font-family: 'Malgun Gothic', '맑은 고딕', Arial, sans-serif;
-    font-size: 9px;
+    font-size: 8.5px;
     color: #000;
   }
   * { box-sizing: border-box; }
@@ -123,7 +149,7 @@ function buildExactStatementHTML(
     width: 100%;
   }
   td, th {
-    padding: 0 4px;
+    padding: 0 3px;
     vertical-align: middle;
     overflow: hidden;
     white-space: nowrap;
@@ -135,68 +161,67 @@ function buildExactStatementHTML(
   }
   .V {
     color: #000;
-    padding-left: 4px;
+    padding-left: 3px;
   }
 </style>
 </head>
 <body>
 <div style="width: 700px; padding: 10px 0; background: #fff; position: relative;">
 
-  <!-- ① 가장 왼쪽 상단 여백 청구번호 표시 -->
+  <!-- 청구번호 표시 -->
   <div style="position: absolute; top: 10px; left: 0; font-size: 8.5px; color: #1B65A6; font-weight: bold;">
     청구번호: ${esc(billingNoStr)}
   </div>
 
   <!-- ① 타이틀 -->
   <div style="text-align: center; margin-bottom: 4px;">
-    <span style="font-size: 20px; font-weight: bold; color: ${BLUE}; letter-spacing: 10px; border-bottom: ${dbl}; padding-bottom: 3px; display: inline-block;">거 래 명 세 표</span>
+    <span style="font-size: 20px; font-weight: bold; color: ${BLUE}; letter-spacing: 10px; border-bottom: ${dbl}; padding-bottom: 3px; display: inline-block;">거 래 명 세 서</span>
   </div>
   <div style="text-align: center; font-size: 9px; color: ${BLUE}; margin-bottom: 8px;">(공급받는자 보관용)</div>
 
-  <!-- ② 공급자 / 공급받는자 / 작성일자 / 입금계좌 (단일 테두리 박스) -->
+  <!-- ② 공급자 / 공급받는자 정보 박스 -->
   <div style="border: ${outer}; margin-bottom: 6px;">
 
-    <!-- 상단 8행: 공급자 vs 공급받는자 정보 (총 696px) -->
     <table>
       <colgroup>
-        <col style="width: 24px;"> <!-- 1: 공급자 세로 -->
-        <col style="width: 76px;"> <!-- 2: 레이블 -->
-        <col style="width: 130px;"><!-- 3: 값 -->
-        <col style="width: 40px;"> <!-- 4: 대표 레이블 -->
-        <col style="width: 76px;"> <!-- 5: 대표자+도장 -->
-        <col style="width: 4px;">  <!-- 6: 중앙 이중 구분선 -->
-        <col style="width: 24px;"> <!-- 7: 공급받는자 세로 -->
-        <col style="width: 76px;"> <!-- 8: 레이블 -->
-        <col style="width: 130px;"><!-- 9: 값 -->
-        <col style="width: 40px;"> <!-- 10: 대표 레이블 -->
-        <col style="width: 76px;"> <!-- 11: 대표자명 -->
+        <col style="width: 20px;"> <!-- 1: 공급자 세로 -->
+        <col style="width: 65px;"> <!-- 2: 레이블 -->
+        <col style="width: 120px;"><!-- 3: 값 -->
+        <col style="width: 35px;"> <!-- 4: 대표 레이블 -->
+        <col style="width: 108px;"><!-- 5: 대표자+도장 -->
+        <col style="width: 4px;">   <!-- 6: 중앙 이중 구분선 -->
+        <col style="width: 20px;"> <!-- 7: 공급받는자 세로 -->
+        <col style="width: 65px;"> <!-- 8: 레이블 -->
+        <col style="width: 120px;"><!-- 9: 값 -->
+        <col style="width: 35px;"> <!-- 10: 대표 레이블 -->
+        <col style="width: 108px;"><!-- 11: 대표자명 -->
       </colgroup>
 
       <!-- 1행: 등록번호 -->
-      <tr style="height: 20px;">
-        <td rowspan="8" class="L" style="border-right: ${solid}; writing-mode: vertical-rl; letter-spacing: 4px; font-size: 10px;">공&nbsp;급&nbsp;자</td>
+      <tr style="height: 19px;">
+        <td rowspan="8" class="L" style="border-right: ${solid}; writing-mode: vertical-rl; letter-spacing: 3px; font-size: 9.5px;">공&nbsp;급&nbsp;자</td>
         <td class="L" style="border-right: ${dotted}; border-bottom: ${dotted};">등록번호</td>
         <td colspan="3" class="V" style="border-bottom: ${dotted}; font-weight: bold; text-align: center; letter-spacing: 1px;">138-81-83251</td>
         <td rowspan="8" style="border-right: ${dbl};"></td>
-        <td rowspan="8" class="L" style="border-right: ${solid}; writing-mode: vertical-rl; letter-spacing: 2px; font-size: 10px;">공급받는자</td>
+        <td rowspan="8" class="L" style="border-right: ${solid}; writing-mode: vertical-rl; letter-spacing: 2px; font-size: 9.5px;">공급받는자</td>
         <td class="L" style="border-right: ${dotted}; border-bottom: ${dotted};">등록번호</td>
-        <td colspan="3" class="V" style="border-bottom: ${dotted}; font-size: 9px;">${esc(customer?.bizRegNo || '')}</td>
+        <td colspan="3" class="V" style="border-bottom: ${dotted}; font-size: 8.5px;">${esc(customer?.bizRegNo || '')}</td>
       </tr>
 
       <!-- 2행: 상호 / 대표 -->
-      <tr style="height: 20px;">
+      <tr style="height: 19px;">
         <td class="L" style="border-right: ${dotted}; border-bottom: ${dotted};">상호</td>
         <td class="V" style="border-right: ${dotted}; border-bottom: ${dotted}; font-size: 8.5px;">주식회사 기연리프트</td>
         <td class="L" style="border-right: ${dotted}; border-bottom: ${dotted};">대표</td>
-        <td class="V" style="position: relative; overflow: visible !important; border-bottom: ${dotted}; font-size: 9px;">이수용${stampImg}</td>
+        <td class="V" style="position: relative; overflow: visible !important; border-bottom: ${dotted}; font-size: 8.5px;">이수용${stampImg}</td>
         <td class="L" style="border-right: ${dotted}; border-bottom: ${dotted};">상호</td>
         <td class="V" style="border-right: ${dotted}; border-bottom: ${dotted}; font-size: 8.5px;">${esc(customer?.name || '')}</td>
         <td class="L" style="border-right: ${dotted}; border-bottom: ${dotted};">대표</td>
-        <td class="V" style="border-bottom: ${dotted}; font-size: 9px;">${esc(customer?.representative || '')}</td>
+        <td class="V" style="border-bottom: ${dotted}; font-size: 8.5px;">${esc(customer?.representative || '')}</td>
       </tr>
 
       <!-- 3행: 주소 -->
-      <tr style="height: 20px;">
+      <tr style="height: 19px;">
         <td class="L" style="border-right: ${dotted}; border-bottom: ${dotted};">주소</td>
         <td colspan="3" class="V" style="border-bottom: ${dotted}; font-size: 8px;">경기도 용인시 처인구 모현읍 갈담로112번길 21-3</td>
         <td class="L" style="border-right: ${dotted}; border-bottom: ${dotted};">주소</td>
@@ -204,102 +229,115 @@ function buildExactStatementHTML(
       </tr>
 
       <!-- 4행: 업태 / 종목 -->
-      <tr style="height: 20px;">
+      <tr style="height: 19px;">
         <td class="L" style="border-right: ${dotted}; border-bottom: ${dotted};">업태</td>
         <td class="V" style="border-right: ${dotted}; border-bottom: ${dotted}; font-size: 7.5px;">사업지원 및 임대서비스업 외</td>
         <td class="L" style="border-right: ${dotted}; border-bottom: ${dotted};">종목</td>
         <td class="V" style="border-bottom: ${dotted}; font-size: 7.5px;">고소장비임대업 외</td>
         <td class="L" style="border-right: ${dotted}; border-bottom: ${dotted};">업태</td>
-        <td class="V" style="border-right: ${dotted}; border-bottom: ${dotted};"></td>
+        <td class="V" style="border-right: ${dotted}; border-bottom: ${dotted}; font-size: 7.5px;">${esc(customer?.bizType || '')}</td>
         <td class="L" style="border-right: ${dotted}; border-bottom: ${dotted};">종목</td>
-        <td class="V" style="border-bottom: ${dotted};"></td>
+        <td class="V" style="border-bottom: ${dotted}; font-size: 7.5px;">${esc(customer?.bizItem || '')}</td>
       </tr>
 
-      <!-- 5행: 담당자 / 연락처 -->
-      <tr style="height: 20px;">
+      <!-- 5행: 계약담당자(영업사원) / 현장담당자 -->
+      <tr style="height: 19px;">
         <td class="L" style="border-right: ${dotted}; border-bottom: ${dotted};">계약담당자</td>
-        <td class="V" style="border-right: ${dotted}; border-bottom: ${dotted};"></td>
+        <td class="V" style="border-right: ${dotted}; border-bottom: ${dotted}; font-weight: bold;">${esc(spName)}</td>
         <td class="L" style="border-right: ${dotted}; border-bottom: ${dotted};">연락처</td>
-        <td class="V" style="border-bottom: ${dotted};"></td>
-        <td class="L" style="border-right: ${dotted}; border-bottom: ${dotted};">담당자</td>
-        <td class="V" style="border-right: ${dotted}; border-bottom: ${dotted};"></td>
+        <td class="V" style="border-bottom: ${dotted};">${esc(spPhone)}</td>
+        <td class="L" style="border-right: ${dotted}; border-bottom: ${dotted};">현장담당자</td>
+        <td class="V" style="border-right: ${dotted}; border-bottom: ${dotted};">${esc(siteManagerName)}</td>
         <td class="L" style="border-right: ${dotted}; border-bottom: ${dotted};">연락처</td>
-        <td class="V" style="border-bottom: ${dotted};"></td>
+        <td class="V" style="border-bottom: ${dotted};">${esc(siteManagerPhone)}</td>
       </tr>
 
       <!-- 6행: 계산서담당자 / 연락처 -->
-      <tr style="height: 20px;">
+      <tr style="height: 19px;">
         <td class="L" style="border-right: ${dotted}; border-bottom: ${dotted};">계산서담당자</td>
-        <td class="V" style="border-right: ${dotted}; border-bottom: ${dotted};"></td>
+        <td class="V" style="border-right: ${dotted}; border-bottom: ${dotted};">정수아</td>
         <td class="L" style="border-right: ${dotted}; border-bottom: ${dotted};">연락처</td>
-        <td class="V" style="border-bottom: ${dotted};"></td>
-        <td colspan="4" style="border-bottom: ${dotted};"></td>
+        <td class="V" style="border-bottom: ${dotted};">031-334-5295</td>
+        <td class="L" style="border-right: ${dotted}; border-bottom: ${dotted};">계산서담당자</td>
+        <td class="V" style="border-right: ${dotted}; border-bottom: ${dotted};">${esc(billingManagerName)}</td>
+        <td class="L" style="border-right: ${dotted}; border-bottom: ${dotted};">연락처</td>
+        <td class="V" style="border-bottom: ${dotted};">${esc(billingManagerPhone)}</td>
       </tr>
 
-      <!-- 7행: 이메일 -->
-      <tr style="height: 20px;">
+      <!-- 7행: 이메일 / 계산서메일 -->
+      <tr style="height: 19px;">
         <td class="L" style="border-right: ${dotted}; border-bottom: ${dotted};">이메일</td>
         <td colspan="3" class="V" style="border-bottom: ${dotted}; font-size: 8.5px;">giyeonlift@naver.com</td>
-        <td colspan="4" style="border-bottom: ${dotted};"></td>
+        <td class="L" style="border-right: ${dotted}; border-bottom: ${dotted};">계산서메일</td>
+        <td colspan="3" class="V" style="border-bottom: ${dotted}; font-size: 8.5px;">${esc(billingEmail)}</td>
       </tr>
 
-      <!-- 8행: 공급내역 -->
-      <tr style="height: 20px;">
+      <!-- 8행: 공급내역 / 현장명 -->
+      <tr style="height: 19px;">
         <td class="L" style="border-right: ${dotted};">공급내역</td>
-        <td colspan="3" class="V"></td>
-        <td colspan="4"></td>
+        <td colspan="3" class="V">고소작업대 임대료 외</td>
+        <td class="L" style="border-right: ${dotted};">현장명</td>
+        <td colspan="3" class="V" style="font-weight: bold;">${esc(sName)}</td>
       </tr>
     </table>
 
-    <!-- 하단 1행: 작성일자 & 입금계좌 (단일 이중선 100% 매칭: 696px) -->
+    <!-- 작성일자 & 입금계좌 -->
     <table style="border-top: ${solid};">
       <colgroup>
-        <col style="width: 100px;"> <!-- 작성일자 레이블 (24+76) -->
-        <col style="width: 246px;"> <!-- 작성일자 값 (130+40+76) -->
-        <col style="width: 4px;">   <!-- 중앙 이중 구분선 (4) -->
-        <col style="width: 100px;"> <!-- 입금계좌 레이블 (24+76) -->
-        <col style="width: 246px;"> <!-- 입금계좌 값 (130+40+76) -->
+        <col style="width: 85px;">
+        <col style="width: 261px;">
+        <col style="width: 4px;">
+        <col style="width: 85px;">
+        <col style="width: 261px;">
       </colgroup>
-      <tr style="height: 22px;">
+      <tr style="height: 20px;">
         <td class="L" style="border-right: ${solid}; font-size: 9px;">작성일자</td>
-        <td class="V" style="padding-left: 8px; font-size: 9px;">${billingDate}</td>
+        <td class="V" style="padding-left: 6px; font-size: 9px;">${formattedBillingDate}</td>
         <td style="border-right: ${dbl};"></td>
         <td class="L" style="border-right: ${solid}; font-size: 9px;">입금계좌</td>
-        <td class="V" style="padding-left: 8px; font-weight: bold; font-size: 8.5px;">신한은행 140-010-007060 , 주식회사 기연리프트</td>
+        <td class="V" style="padding-left: 6px; font-weight: bold; font-size: 8.5px;">신한은행 140-010-007060 , 주식회사 기연리프트</td>
       </tr>
     </table>
 
   </div>
 
-  <!-- ③ 품목 및 금액 테이블 -->
+  <!-- ③ 품목 및 금액 테이블 (신규 컬럼 구조) -->
   <div style="border: ${outer};">
     <table>
       <colgroup>
-        <col style="width: 28px;">
-        <col style="width: 22px;">
-        <col style="width: 22px;">
-        <col style="width: 274px;">
-        <col style="width: 35px;">
-        <col style="width: 75px;">
-        <col style="width: 80px;">
-        <col style="width: 75px;">
-        <col style="width: 85px;">
+        <col style="width: 24px;">  <!-- 1. 순번 -->
+        <col style="width: 18px;">  <!-- 2. 월 -->
+        <col style="width: 18px;">  <!-- 3. 일 -->
+        <col style="width: 105px;"> <!-- 4. 모델 / 높이 -->
+        <col style="width: 55px;">  <!-- 5. 관리번호 -->
+        <col style="width: 62px;">  <!-- 6. 현장투입일 -->
+        <col style="width: 125px;"> <!-- 7. 사용 기간 -->
+        <col style="width: 42px;">  <!-- 8. 청구구분 -->
+        <col style="width: 28px;">  <!-- 9. 수량 -->
+        <col style="width: 55px;">  <!-- 10. 단가 -->
+        <col style="width: 60px;">  <!-- 11. 공급가액 -->
+        <col style="width: 52px;">  <!-- 12. 세액 -->
+        <col style="width: 56px;">  <!-- 13. 비고 -->
       </colgroup>
 
       <!-- 품목 헤더 -->
-      <tr style="height: 22px;">
-        <th class="L" style="border-right: ${solid}; border-bottom: ${solid};">순번</th>
-        <th class="L" style="border-right: ${solid}; border-bottom: ${solid};">월</th>
-        <th class="L" style="border-right: ${solid}; border-bottom: ${solid};">일</th>
-        <th class="L" style="border-right: ${solid}; border-bottom: ${solid};">품목</th>
-        <th class="L" style="border-right: ${solid}; border-bottom: ${solid};">수량</th>
-        <th class="L" style="border-right: ${solid}; border-bottom: ${solid};">단가</th>
-        <th class="L" style="border-right: ${solid}; border-bottom: ${solid};">공급가액</th>
-        <th class="L" style="border-right: ${solid}; border-bottom: ${solid};">부가세</th>
+      <tr style="height: 21px; background-color: #f8fafc;">
+        <th class="L" style="border-right: ${dotted}; border-bottom: ${solid};">순번</th>
+        <th class="L" style="border-right: ${dotted}; border-bottom: ${solid};">월</th>
+        <th class="L" style="border-right: ${dotted}; border-bottom: ${solid};">일</th>
+        <th class="L" style="border-right: ${dotted}; border-bottom: ${solid};">모델 / 높이</th>
+        <th class="L" style="border-right: ${dotted}; border-bottom: ${solid};">관리번호</th>
+        <th class="L" style="border-right: ${dotted}; border-bottom: ${solid};">현장투입일</th>
+        <th class="L" style="border-right: ${dotted}; border-bottom: ${solid};">사용 기간</th>
+        <th class="L" style="border-right: ${dotted}; border-bottom: ${solid};">청구구분</th>
+        <th class="L" style="border-right: ${dotted}; border-bottom: ${solid};">수량</th>
+        <th class="L" style="border-right: ${dotted}; border-bottom: ${solid};">단가</th>
+        <th class="L" style="border-right: ${dotted}; border-bottom: ${solid};">공급가액</th>
+        <th class="L" style="border-right: ${dotted}; border-bottom: ${solid};">세액</th>
         <th class="L" style="border-bottom: ${solid};">비고</th>
       </tr>
 
-      <!-- 품목 목록 (11행 고정) -->
+      <!-- 품목 목록 (10행 고정) -->
       ${itemRows}
     </table>
 
@@ -307,28 +345,28 @@ function buildExactStatementHTML(
     <table style="border-top: ${solid};">
       <colgroup>
         <col style="width: 50px;">
-        <col style="width: 20px;">
-        <col style="width: 100px;">
+        <col style="width: 15px;">
+        <col style="width: 95px;">
         <col style="width: 50px;">
-        <col style="width: 20px;">
-        <col style="width: 90px;">
+        <col style="width: 15px;">
+        <col style="width: 85px;">
         <col style="width: 40px;">
-        <col style="width: 20px;">
-        <col style="width: 100px;">
+        <col style="width: 15px;">
+        <col style="width: 95px;">
+        <col style="width: 130px;">
         <col style="width: 110px;">
-        <col style="width: 96px;">
       </colgroup>
-      <tr style="height: 22px; font-weight: bold;">
+      <tr style="height: 21px; font-weight: bold;">
         <td class="L" style="border-right: ${dotted};">공급가</td>
         <td class="L" style="border-right: ${dotted};">₩</td>
-        <td style="border-right: ${solid}; text-align: right; padding-right: 6px;">${supplyTotal.toLocaleString()}</td>
+        <td style="border-right: ${solid}; text-align: right; padding-right: 4px;">${supplyTotal.toLocaleString()}</td>
         <td class="L" style="border-right: ${dotted};">부가세</td>
         <td class="L" style="border-right: ${dotted};">₩</td>
-        <td style="border-right: ${solid}; text-align: right; padding-right: 6px;">${vatTotal.toLocaleString()}</td>
+        <td style="border-right: ${solid}; text-align: right; padding-right: 4px;">${vatTotal.toLocaleString()}</td>
         <td class="L" style="border-right: ${dotted};">합계</td>
         <td class="L" style="border-right: ${dotted};">₩</td>
-        <td style="border-right: ${solid}; text-align: right; padding-right: 6px;">${total.toLocaleString()}</td>
-        <td class="L" style="text-align: right; padding-right: 6px;">인수자</td>
+        <td style="border-right: ${solid}; text-align: right; padding-right: 4px;">${total.toLocaleString()}</td>
+        <td class="L" style="text-align: right; padding-right: 4px;">인수자</td>
         <td class="L">(인)</td>
       </tr>
     </table>
@@ -343,11 +381,12 @@ function buildExactStatementHTML(
 // 공통 jsPDF 생성 내부 함수
 // ──────────────────────────────────────────────────────────────────────────────
 async function generateStatementJsPDF(
-  billing:   any,
-  details:   any[],
-  customer:  any,
-  _contract: any,
-  siteName:  string,
+  billing:     any,
+  details:     any[],
+  customer:    any,
+  contract:    any,
+  site:        any,
+  salesperson: any,
   templateUrl?: string,
   isCompressForEmail: boolean = false
 ): Promise<{ pdf: jsPDF; fileName: string }> {
@@ -369,7 +408,7 @@ async function generateStatementJsPDF(
     }
   } catch (_) { /* 도장 로드 실패 시 무시 */ }
 
-  const html = buildExactStatementHTML(billing, details, customer, siteName, stampDataUrl);
+  const html = buildExactStatementHTML(billing, details, customer, contract, site, salesperson, stampDataUrl);
 
   const iframe = document.createElement('iframe');
   iframe.style.cssText =
@@ -421,8 +460,9 @@ async function generateStatementJsPDF(
     pdf.addImage(imgData, imgFormat, mx, my, printW, printH);
 
     const custName = customer?.name || '고객사';
+    const sName    = site?.name || (typeof site === 'string' ? site : '') || '현장';
     const ym       = billing?.billingYm || '';
-    const fileName = `거래명세서_${custName}_${siteName}_${ym}.pdf`;
+    const fileName = `거래명세서_${custName}_${sName}_${ym}.pdf`;
 
     return { pdf, fileName };
 
@@ -439,11 +479,12 @@ export const downloadTransactionStatementPDF = async (
   details:     any[],
   customer:    any,
   contract:    any,
-  siteName:    string,
+  site:        any,
+  salesperson?: any,
   templateUrl?: string,
   customFileName?: string
 ): Promise<void> => {
-  const { pdf, fileName } = await generateStatementJsPDF(billing, details, customer, contract, siteName, templateUrl);
+  const { pdf, fileName } = await generateStatementJsPDF(billing, details, customer, contract, site, salesperson, templateUrl);
   pdf.save(customFileName ? `${customFileName}.pdf` : fileName);
 };
 
@@ -455,12 +496,12 @@ export const generateTransactionStatementPdfBase64 = async (
   details:     any[],
   customer:    any,
   contract:    any,
-  siteName:    string,
+  site:        any,
+  salesperson?: any,
   templateUrl?: string
 ): Promise<{ filename: string; base64: string }> => {
-  const { pdf, fileName } = await generateStatementJsPDF(billing, details, customer, contract, siteName, templateUrl, true);
+  const { pdf, fileName } = await generateStatementJsPDF(billing, details, customer, contract, site, salesperson, templateUrl, true);
   
-  // pure base64 string (data:application/pdf;base64, 접두사 제외)
   const dataUri = pdf.output('datauristring');
   const base64  = dataUri.split(',')[1] || '';
 
