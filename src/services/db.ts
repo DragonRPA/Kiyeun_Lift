@@ -97,6 +97,8 @@ export interface Customer {
   representative: string;
   repContact: string;
   repEmail: string;
+  bizType?: string; // 업태 (예: 건설업, 도소매업)
+  bizItem?: string; // 종목 (예: 고소작업대임대, 가설재)
   driveFolderId?: string;
   prepaidBalance?: number; // 선수금 (예치금) 잔액
   transactionStatus?: 'ALLOWED' | 'BLOCKED'; // ALLOWED: 거래가능 (기본), BLOCKED: 거래불가 (신규 계약/출고 제한)
@@ -740,6 +742,8 @@ const generateMockCustomers = () => {
       representative: `대표자${i}`,
       repContact: `010-1234-${i.toString().padStart(4, '0')}`,
       repEmail: `ceo${i}@example.com`,
+      bizType: '건설 및 임대업',
+      bizItem: '고소작업대 외',
       transactionStatus: 'ALLOWED',
       createdAt: new Date().toISOString()
     });

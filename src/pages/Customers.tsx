@@ -103,6 +103,8 @@ export const Customers: React.FC = () => {
       'No': idx + 1,
       '고객명': c.name,
       '대표자': c.representative,
+      '업태': c.bizType || '-',
+      '종목': c.bizItem || '-',
       '대표 연락처': c.repContact || '-',
       '대표 이메일': c.repEmail || '-',
       '사업자등록번호': c.bizRegNo || '-',
@@ -443,6 +445,14 @@ export const Customers: React.FC = () => {
                     <div style={{ fontSize: '15px', fontWeight: '500' }}>{activeCustomer.repContact || '-'}</div>
                   </div>
                   <div>
+                    <label>업태</label>
+                    <div style={{ fontSize: '15px', fontWeight: '500' }}>{activeCustomer.bizType || '-'}</div>
+                  </div>
+                  <div>
+                    <label>종목</label>
+                    <div style={{ fontSize: '15px', fontWeight: '500' }}>{activeCustomer.bizItem || '-'}</div>
+                  </div>
+                  <div>
                     <label style={{ whiteSpace: 'nowrap' }}>청구서(세금계산서) 마감일</label>
                     <div style={{ fontSize: '15px', fontWeight: '600', color: 'var(--primary)' }}>
                       매월 {activeCustomer.defaultBillingDay || 30}일 {activeCustomer.defaultBillingDay === 31 ? '(월말)' : ''}
@@ -700,6 +710,27 @@ export const Customers: React.FC = () => {
                   </select>
                 </div>
               </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div>
+                  <label>업태</label>
+                  <input
+                    type="text"
+                    value={editingCust.bizType || ''}
+                    onChange={e => setEditingCust({ ...editingCust, bizType: e.target.value })}
+                    placeholder="예: 건설 및 임대업"
+                  />
+                </div>
+                <div>
+                  <label>종목</label>
+                  <input
+                    type="text"
+                    value={editingCust.bizItem || ''}
+                    onChange={e => setEditingCust({ ...editingCust, bizItem: e.target.value })}
+                    placeholder="예: 고소작업대 외"
+                  />
+                </div>
+              </div>
+
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                 <div>
                   <label>거래 승인 상태</label>
