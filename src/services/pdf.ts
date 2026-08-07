@@ -3,6 +3,7 @@
 import html2canvas from 'html2canvas';
 import { jsPDF }    from 'jspdf';
 import ExcelJS      from 'exceljs';
+import { calcServicePeriod } from './excel';
 
 function resolveTemplateUrl(u?: string): string {
   if (!u) return '/거래명세서양식.xlsx';
@@ -74,7 +75,7 @@ function buildExactStatementHTML(
       const modelHeight = d.assetHeight ? `${d.itemName} / ${d.assetHeight}` : d.itemName;
       const category = d.billingCategory || d.itemType || (d.itemName?.includes('운송') ? '운송비' : d.itemName?.includes('옵션') ? '옵션' : '렌탈료');
       const inputDate = d.siteInputDate || contract?.startDate || '';
-      const servicePeriod = d.servicePeriod || (d.startDate && d.endDate ? `${d.startDate} ~ ${d.endDate}` : `${billing?.billingYm || ''} 정산`);
+      const servicePeriod = calcServicePeriod(d, billing, contract);
 
       itemRows += `
       <tr style="height:${ROW_H}px">
@@ -163,6 +164,10 @@ function buildExactStatementHTML(
     color: #000;
     padding-left: 3px;
   }
+  .VC {
+    color: #000;
+    text-align: center;
+  }
 </style>
 </head>
 <body>
@@ -201,83 +206,83 @@ function buildExactStatementHTML(
       <tr style="height: 19px;">
         <td rowspan="8" class="L" style="border-right: ${solid}; writing-mode: vertical-rl; letter-spacing: 3px; font-size: 9.5px;">공&nbsp;급&nbsp;자</td>
         <td class="L" style="border-right: ${dotted}; border-bottom: ${dotted};">등록번호</td>
-        <td colspan="3" class="V" style="border-bottom: ${dotted}; font-weight: bold; text-align: center; letter-spacing: 1px;">138-81-83251</td>
+        <td colspan="3" class="VC" style="border-bottom: ${dotted}; font-weight: bold; letter-spacing: 1px;">138-81-83251</td>
         <td rowspan="8" style="border-right: ${dbl};"></td>
         <td rowspan="8" class="L" style="border-right: ${solid}; writing-mode: vertical-rl; letter-spacing: 2px; font-size: 9.5px;">공급받는자</td>
         <td class="L" style="border-right: ${dotted}; border-bottom: ${dotted};">등록번호</td>
-        <td colspan="3" class="V" style="border-bottom: ${dotted}; font-size: 8.5px;">${esc(customer?.bizRegNo || '')}</td>
+        <td colspan="3" class="VC" style="border-bottom: ${dotted}; font-size: 8.5px;">${esc(customer?.bizRegNo || '')}</td>
       </tr>
 
       <!-- 2행: 상호 / 대표 -->
       <tr style="height: 19px;">
         <td class="L" style="border-right: ${dotted}; border-bottom: ${dotted};">상호</td>
-        <td class="V" style="border-right: ${dotted}; border-bottom: ${dotted}; font-size: 8.5px;">주식회사 기연리프트</td>
+        <td class="VC" style="border-right: ${dotted}; border-bottom: ${dotted}; font-size: 8.5px;">주식회사 기연리프트</td>
         <td class="L" style="border-right: ${dotted}; border-bottom: ${dotted};">대표</td>
-        <td class="V" style="position: relative; overflow: visible !important; border-bottom: ${dotted}; font-size: 8.5px;">이수용${stampImg}</td>
+        <td class="VC" style="position: relative; overflow: visible !important; border-bottom: ${dotted}; font-size: 8.5px;">이수용${stampImg}</td>
         <td class="L" style="border-right: ${dotted}; border-bottom: ${dotted};">상호</td>
-        <td class="V" style="border-right: ${dotted}; border-bottom: ${dotted}; font-size: 8.5px;">${esc(customer?.name || '')}</td>
+        <td class="VC" style="border-right: ${dotted}; border-bottom: ${dotted}; font-size: 8.5px;">${esc(customer?.name || '')}</td>
         <td class="L" style="border-right: ${dotted}; border-bottom: ${dotted};">대표</td>
-        <td class="V" style="border-bottom: ${dotted}; font-size: 8.5px;">${esc(customer?.representative || '')}</td>
+        <td class="VC" style="border-bottom: ${dotted}; font-size: 8.5px;">${esc(customer?.representative || '')}</td>
       </tr>
 
       <!-- 3행: 주소 -->
       <tr style="height: 19px;">
         <td class="L" style="border-right: ${dotted}; border-bottom: ${dotted};">주소</td>
-        <td colspan="3" class="V" style="border-bottom: ${dotted}; font-size: 8px;">경기도 용인시 처인구 모현읍 갈담로112번길 21-3</td>
+        <td colspan="3" class="VC" style="border-bottom: ${dotted}; font-size: 8px;">경기도 용인시 처인구 모현읍 갈담로112번길 21-3</td>
         <td class="L" style="border-right: ${dotted}; border-bottom: ${dotted};">주소</td>
-        <td colspan="3" class="V" style="border-bottom: ${dotted}; font-size: 8px;">${esc(customer?.address || '')}</td>
+        <td colspan="3" class="VC" style="border-bottom: ${dotted}; font-size: 8px;">${esc(customer?.address || '')}</td>
       </tr>
 
       <!-- 4행: 업태 / 종목 -->
       <tr style="height: 19px;">
         <td class="L" style="border-right: ${dotted}; border-bottom: ${dotted};">업태</td>
-        <td class="V" style="border-right: ${dotted}; border-bottom: ${dotted}; font-size: 7.5px;">사업지원 및 임대서비스업 외</td>
+        <td class="VC" style="border-right: ${dotted}; border-bottom: ${dotted}; font-size: 7.5px;">사업지원 및 임대서비스업 외</td>
         <td class="L" style="border-right: ${dotted}; border-bottom: ${dotted};">종목</td>
-        <td class="V" style="border-bottom: ${dotted}; font-size: 7.5px;">고소장비임대업 외</td>
+        <td class="VC" style="border-bottom: ${dotted}; font-size: 7.5px;">고소장비임대업 외</td>
         <td class="L" style="border-right: ${dotted}; border-bottom: ${dotted};">업태</td>
-        <td class="V" style="border-right: ${dotted}; border-bottom: ${dotted}; font-size: 7.5px;">${esc(customer?.bizType || '')}</td>
+        <td class="VC" style="border-right: ${dotted}; border-bottom: ${dotted}; font-size: 7.5px;">${esc(customer?.bizType || '')}</td>
         <td class="L" style="border-right: ${dotted}; border-bottom: ${dotted};">종목</td>
-        <td class="V" style="border-bottom: ${dotted}; font-size: 7.5px;">${esc(customer?.bizItem || '')}</td>
+        <td class="VC" style="border-bottom: ${dotted}; font-size: 7.5px;">${esc(customer?.bizItem || '')}</td>
       </tr>
 
       <!-- 5행: 계약담당자(영업사원) / 현장담당자 -->
       <tr style="height: 19px;">
         <td class="L" style="border-right: ${dotted}; border-bottom: ${dotted};">계약담당자</td>
-        <td class="V" style="border-right: ${dotted}; border-bottom: ${dotted}; font-weight: bold;">${esc(spName)}</td>
+        <td class="VC" style="border-right: ${dotted}; border-bottom: ${dotted}; font-weight: bold;">${esc(spName)}</td>
         <td class="L" style="border-right: ${dotted}; border-bottom: ${dotted};">연락처</td>
-        <td class="V" style="border-bottom: ${dotted};">${esc(spPhone)}</td>
+        <td class="VC" style="border-bottom: ${dotted};">${esc(spPhone)}</td>
         <td class="L" style="border-right: ${dotted}; border-bottom: ${dotted};">현장담당자</td>
-        <td class="V" style="border-right: ${dotted}; border-bottom: ${dotted};">${esc(siteManagerName)}</td>
+        <td class="VC" style="border-right: ${dotted}; border-bottom: ${dotted};">${esc(siteManagerName)}</td>
         <td class="L" style="border-right: ${dotted}; border-bottom: ${dotted};">연락처</td>
-        <td class="V" style="border-bottom: ${dotted};">${esc(siteManagerPhone)}</td>
+        <td class="VC" style="border-bottom: ${dotted};">${esc(siteManagerPhone)}</td>
       </tr>
 
       <!-- 6행: 계산서담당자 / 연락처 -->
       <tr style="height: 19px;">
         <td class="L" style="border-right: ${dotted}; border-bottom: ${dotted};">계산서담당자</td>
-        <td class="V" style="border-right: ${dotted}; border-bottom: ${dotted};">정수아</td>
+        <td class="VC" style="border-right: ${dotted}; border-bottom: ${dotted};">정수아</td>
         <td class="L" style="border-right: ${dotted}; border-bottom: ${dotted};">연락처</td>
-        <td class="V" style="border-bottom: ${dotted};">031-334-5295</td>
+        <td class="VC" style="border-bottom: ${dotted};">031-334-5295</td>
         <td class="L" style="border-right: ${dotted}; border-bottom: ${dotted};">계산서담당자</td>
-        <td class="V" style="border-right: ${dotted}; border-bottom: ${dotted};">${esc(billingManagerName)}</td>
+        <td class="VC" style="border-right: ${dotted}; border-bottom: ${dotted};">${esc(billingManagerName)}</td>
         <td class="L" style="border-right: ${dotted}; border-bottom: ${dotted};">연락처</td>
-        <td class="V" style="border-bottom: ${dotted};">${esc(billingManagerPhone)}</td>
+        <td class="VC" style="border-bottom: ${dotted};">${esc(billingManagerPhone)}</td>
       </tr>
 
       <!-- 7행: 이메일 / 계산서메일 -->
       <tr style="height: 19px;">
         <td class="L" style="border-right: ${dotted}; border-bottom: ${dotted};">이메일</td>
-        <td colspan="3" class="V" style="border-bottom: ${dotted}; font-size: 8.5px;">giyeonlift@naver.com</td>
+        <td colspan="3" class="VC" style="border-bottom: ${dotted}; font-size: 8.5px;">giyeonlift@naver.com</td>
         <td class="L" style="border-right: ${dotted}; border-bottom: ${dotted};">계산서메일</td>
-        <td colspan="3" class="V" style="border-bottom: ${dotted}; font-size: 8.5px;">${esc(billingEmail)}</td>
+        <td colspan="3" class="VC" style="border-bottom: ${dotted}; font-size: 8.5px;">${esc(billingEmail)}</td>
       </tr>
 
       <!-- 8행: 공급내역 / 현장명 -->
       <tr style="height: 19px;">
         <td class="L" style="border-right: ${dotted};">공급내역</td>
-        <td colspan="3" class="V">고소작업대 임대료 외</td>
+        <td colspan="3" class="VC">고소작업대 임대료 외</td>
         <td class="L" style="border-right: ${dotted};">현장명</td>
-        <td colspan="3" class="V" style="font-weight: bold;">${esc(sName)}</td>
+        <td colspan="3" class="VC" style="font-weight: bold;">${esc(sName)}</td>
       </tr>
     </table>
 
@@ -292,10 +297,10 @@ function buildExactStatementHTML(
       </colgroup>
       <tr style="height: 20px;">
         <td class="L" style="border-right: ${solid}; font-size: 9px;">작성일자</td>
-        <td class="V" style="padding-left: 6px; font-size: 9px;">${formattedBillingDate}</td>
+        <td class="VC" style="font-size: 9px;">${formattedBillingDate}</td>
         <td style="border-right: ${dbl};"></td>
         <td class="L" style="border-right: ${solid}; font-size: 9px;">입금계좌</td>
-        <td class="V" style="padding-left: 6px; font-weight: bold; font-size: 8.5px;">신한은행 140-010-007060 , 주식회사 기연리프트</td>
+        <td class="VC" style="font-weight: bold; font-size: 8.5px;">신한은행 140-010-007060 , 주식회사 기연리프트</td>
       </tr>
     </table>
 

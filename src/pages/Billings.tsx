@@ -4,7 +4,7 @@ import { useApp } from '../context/AppContext';
 import { db, Asset, Billing, BillingDetail } from '../services/db';
 import { Plus, Download, Mail, CheckCircle, Search, DollarSign, Calendar, FileText, Send, Edit3 } from 'lucide-react';
 import { emailService } from '../services/email';
-import { exportToExcel, exportTransactionStatementExcel, exportTransactionStatementExcelBuffer } from '../services/excel';
+import { exportToExcel, exportTransactionStatementExcel, exportTransactionStatementExcelBuffer, calcServicePeriod } from '../services/excel';
 import { downloadTransactionStatementPDF, generateTransactionStatementPdfBase64 } from '../services/pdf';
 
 export const Billings: React.FC = () => {
@@ -430,7 +430,7 @@ ${details.map((d, idx) => {
   const itemSupply = (d.unitPrice || 0) * (d.quantity || 1);
   const itemVat = Math.round(itemSupply * 0.1);
   const category = (d as any).billingCategory || (d as any).itemType || '렌탈료';
-  const period = (d as any).servicePeriod || `${billing?.billingYm || ''} 정산`;
+  const period = calcServicePeriod(d, billing, contract);
   return `${idx + 1}. [${category}] ${d.itemName} (관리번호: ${(d as any).assetNo || '-'})
    - 현장투입일: ${(d as any).siteInputDate || contract?.startDate || '-'} | 정산사용기간: ${period}
    - 공급가액: ${itemSupply.toLocaleString()}원 | 부가세: ${itemVat.toLocaleString()}원 | 합계: ${(itemSupply + itemVat).toLocaleString()}원`;

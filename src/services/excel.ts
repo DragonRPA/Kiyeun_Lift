@@ -10,6 +10,42 @@ export const exportToExcel = (data: any[], fileName: string, sheetName: string =
 };
 
 /**
+ * 정산 사용기간 계산 헬퍼 (시작일~종료일 YYYY-MM-DD ~ YYYY-MM-DD)
+ */
+export function calcServicePeriod(d: any, billing: any, contract: any): string {
+  if (d?.servicePeriod) return d.servicePeriod;
+  if (d?.startDate && d?.endDate) return `${d.startDate} ~ ${d.endDate}`;
+  if (billing?.periodStart && billing?.periodEnd) return `${billing.periodStart} ~ ${billing.periodEnd}`;
+  if (billing?.startDate && billing?.endDate) return `${billing.startDate} ~ ${billing.endDate}`;
+
+  const ym = billing?.billingYm;
+  if (ym && ym.length === 7) {
+    const [yStr, mStr] = ym.split('-');
+    const year = Number(yStr);
+    const month = Number(mStr);
+    const closingDay = contract?.closingDay || contract?.defaultStatementClosingDay || 30;
+
+    if (closingDay >= 28 || closingDay === 31 || closingDay === 30) {
+      const lastDay = new Date(year, month, 0).getDate();
+      return `${ym}-01 ~ ${ym}-${String(lastDay).padStart(2, '0')}`;
+    } else {
+      const prevYear = month === 1 ? year - 1 : year;
+      const prevMonth = month === 1 ? 12 : month - 1;
+      const prevStartDay = closingDay + 1;
+      const s = `${prevYear}-${String(prevMonth).padStart(2, '0')}-${String(prevStartDay).padStart(2, '0')}`;
+      const e = `${ym}-${String(closingDay).padStart(2, '0')}`;
+      return `${s} ~ ${e}`;
+    }
+  }
+
+  if (contract?.startDate && contract?.endDate) {
+    return `${contract.startDate} ~ ${contract.endDate}`;
+  }
+
+  return billing?.billingYm ? `${billing.billingYm}-01 ~ ${billing.billingYm}-31` : '';
+}
+
+/**
  * 신규 표준 거래명세서 양식 파일(구글 드라이브 또는 public/)을 ExcelJS로 읽어서
  * 실제 청구 데이터를 셀 값만 채워넣고 다운로드.
  *
@@ -79,6 +115,13 @@ export const exportTransactionStatementExcel = async (
     cell.value = value;
   };
 
+  // 헬퍼: 셀에 가운데정렬 및 값 설정
+  const setCenterVal = (addr: string, value: string | number | null) => {
+    const cell = worksheet.getCell(addr);
+    cell.value = value;
+    cell.alignment = { horizontal: 'center', vertical: 'middle' };
+  };
+
   // 숫자 값 설정 (기존 numFmt 보존)
   const setNum = (addr: string, value: number) => {
     const cell = worksheet.getCell(addr);
@@ -94,30 +137,30 @@ export const exportTransactionStatementExcel = async (
   const dateD = parts[2] ? Number(parts[2]) : '';
   const formattedBillingDate = `${dateY}년 ${String(dateM).padStart(2, '0')}월 ${String(dateD).padStart(2, '0')}일`;
 
-  // === 공급자 (당사) 영업담당자 정보 ===
+  // === 공급자 (당사) 영업담당자 정보 (가운데 정렬) ===
   const spName = salesperson?.name || contract?.salespersonName || '';
   const spPhone = salesperson?.mobile || salesperson?.phone || '';
-  if (spName) setVal('E9', spName);
-  if (spPhone) setVal('L9', spPhone);
+  if (spName) setCenterVal('E9', spName);
+  if (spPhone) setCenterVal('L9', spPhone);
 
-  // === 공급받는자 (고객사 및 현장) 정보 ===
-  setVal('S5', customer?.bizRegNo || '');                                      // 등록번호
-  setVal('S6', customer?.name || '');                                         // 상호
-  setVal('Z6', customer?.representative || '');                               // 대표자
-  setVal('S7', customer?.address || '');                                      // 주소
-  if (customer?.bizType) setVal('S8', customer.bizType);                      // 업태
-  if (customer?.bizItem) setVal('Z8', customer.bizItem);                      // 종목
+  // === 공급받는자 (고객사 및 현장) 정보 (가운데 정렬) ===
+  setCenterVal('S5', customer?.bizRegNo || '');                                      // 등록번호
+  setCenterVal('S6', customer?.name || '');                                         // 상호
+  setCenterVal('Z6', customer?.representative || '');                               // 대표자
+  setCenterVal('S7', customer?.address || '');                                      // 주소
+  if (customer?.bizType) setCenterVal('S8', customer.bizType);                      // 업태
+  if (customer?.bizItem) setCenterVal('Z8', customer.bizItem);                      // 종목
 
-  // 현장담당자, 계산서담당자, 계산서메일, 현장명
-  setVal('S9', site?.managerName || site?.contactName || customer?.managerName || ''); // 현장담당자
-  setVal('Z9', site?.managerPhone || site?.contactPhone || customer?.phone || '');    // 현장담당자 연락처
-  setVal('S10', customer?.billingManagerName || customer?.managerName || '');         // 계산서담당자
-  setVal('Z10', customer?.billingManagerPhone || customer?.phone || '');             // 계산서담당자 연락처
-  setVal('S11', customer?.billingEmail || customer?.email || '');                     // 계산서메일
-  setVal('S12', site?.name || (typeof site === 'string' ? site : '') || '');          // 현장명
+  // 현장담당자, 계산서담당자, 계산서메일, 현장명 (가운데 정렬)
+  setCenterVal('S9', site?.managerName || site?.contactName || customer?.managerName || ''); // 현장담당자
+  setCenterVal('Z9', site?.managerPhone || site?.contactPhone || customer?.phone || '');    // 현장담당자 연락처
+  setCenterVal('S10', customer?.billingManagerName || customer?.managerName || '');         // 계산서담당자
+  setCenterVal('Z10', customer?.billingManagerPhone || customer?.phone || '');             // 계산서담당자 연락처
+  setCenterVal('S11', customer?.billingEmail || customer?.email || '');                     // 계산서메일
+  setCenterVal('S12', site?.name || (typeof site === 'string' ? site : '') || '');          // 현장명
 
-  // 작성일자 (E13)
-  setVal('E13', formattedBillingDate);
+  // 작성일자 (E13) - 가운데 정렬
+  setCenterVal('E13', formattedBillingDate);
 
   // === 데이터 품목 행 (row 16~25, 최대 10행) ===
   const ITEM_START_ROW = 16;
@@ -142,22 +185,22 @@ export const exportTransactionStatementExcel = async (
       // 현장투입일
       const inputDate = d.siteInputDate || contract?.startDate || '';
 
-      // 사용 기간 (정산 대상 기간)
-      const servicePeriod = d.servicePeriod || (d.startDate && d.endDate ? `${d.startDate} ~ ${d.endDate}` : `${billing?.billingYm || ''} 정산`);
+      // 사용 기간 (정산 시작일~종료일 YYYY-MM-DD ~ YYYY-MM-DD 형식 계산)
+      const servicePeriod = calcServicePeriod(d, billing, contract);
 
-      setVal(`B${row}`, i + 1);                       // 순번
-      setVal(`C${row}`, dateM);                       // 월
-      setVal(`D${row}`, dateD);                       // 일
-      setVal(`E${row}`, modelHeight);                 // 모델 / 높이
-      setVal(`I${row}`, d.assetNo || '-');            // 관리번호
-      setVal(`K${row}`, inputDate);                   // 현장투입일
-      setVal(`M${row}`, servicePeriod);               // 사용 기간
-      setVal(`Q${row}`, category);                    // 청구구분
-      setVal(`S${row}`, qty);                         // 수량
-      setNum(`U${row}`, unitPrice);                   // 단가
-      setNum(`X${row}`, itemSupply);                  // 공급가액
-      setNum(`AA${row}`, itemVat);                    // 세액
-      setVal(`AD${row}`, d.memo || d.description || ''); // 비고
+      setCenterVal(`B${row}`, i + 1);                     // 순번 (가운데 정렬)
+      setCenterVal(`C${row}`, dateM);                     // 월 (가운데 정렬)
+      setCenterVal(`D${row}`, dateD);                     // 일 (가운데 정렬)
+      setVal(`E${row}`, modelHeight);                     // 모델 / 높이
+      setCenterVal(`I${row}`, d.assetNo || '-');          // 관리번호 (가운데 정렬)
+      setCenterVal(`K${row}`, inputDate);                 // 현장투입일 (가운데 정렬)
+      setCenterVal(`M${row}`, servicePeriod);             // 사용 기간 (가운데 정렬)
+      setCenterVal(`Q${row}`, category);                  // 청구구분 (가운데 정렬)
+      setCenterVal(`S${row}`, qty);                       // 수량 (가운데 정렬)
+      setNum(`U${row}`, unitPrice);                       // 단가
+      setNum(`X${row}`, itemSupply);                      // 공급가액
+      setNum(`AA${row}`, itemVat);                        // 세액
+      setVal(`AD${row}`, d.memo || d.description || '');  // 비고
     } else {
       // 빈 행 초기화
       setVal(`B${row}`, null);
@@ -227,6 +270,11 @@ export const exportTransactionStatementExcelBuffer = async (
   if (!worksheet) throw new Error('거래명세서 양식 파일에 시트가 없습니다.');
 
   const setVal = (addr: string, value: string | number | null) => { worksheet.getCell(addr).value = value; };
+  const setCenterVal = (addr: string, value: string | number | null) => {
+    const cell = worksheet.getCell(addr);
+    cell.value = value;
+    cell.alignment = { horizontal: 'center', vertical: 'middle' };
+  };
   const setNum = (addr: string, value: number) => {
     const cell = worksheet.getCell(addr);
     const fmt = (cell.numFmt as string) || '#,##0';
@@ -241,28 +289,28 @@ export const exportTransactionStatementExcelBuffer = async (
   const dateD = parts[2] ? Number(parts[2]) : '';
   const formattedBillingDate = `${dateY}년 ${String(dateM).padStart(2, '0')}월 ${String(dateD).padStart(2, '0')}일`;
 
-  // === 공급자 영업담당자 정보 ===
+  // === 공급자 영업담당자 정보 (가운데 정렬) ===
   const spName = salesperson?.name || contract?.salespersonName || '';
   const spPhone = salesperson?.mobile || salesperson?.phone || '';
-  if (spName) setVal('E9', spName);
-  if (spPhone) setVal('L9', spPhone);
+  if (spName) setCenterVal('E9', spName);
+  if (spPhone) setCenterVal('L9', spPhone);
 
-  // === 공급받는자 정보 ===
-  setVal('S5', customer?.bizRegNo || '');
-  setVal('S6', customer?.name || '');
-  setVal('Z6', customer?.representative || '');
-  setVal('S7', customer?.address || '');
-  if (customer?.bizType) setVal('S8', customer.bizType);
-  if (customer?.bizItem) setVal('Z8', customer.bizItem);
+  // === 공급받는자 정보 (가운데 정렬) ===
+  setCenterVal('S5', customer?.bizRegNo || '');
+  setCenterVal('S6', customer?.name || '');
+  setCenterVal('Z6', customer?.representative || '');
+  setCenterVal('S7', customer?.address || '');
+  if (customer?.bizType) setCenterVal('S8', customer.bizType);
+  if (customer?.bizItem) setCenterVal('Z8', customer.bizItem);
 
-  setVal('S9', site?.managerName || site?.contactName || customer?.managerName || '');
-  setVal('Z9', site?.managerPhone || site?.contactPhone || customer?.phone || '');
-  setVal('S10', customer?.billingManagerName || customer?.managerName || '');
-  setVal('Z10', customer?.billingManagerPhone || customer?.phone || '');
-  setVal('S11', customer?.billingEmail || customer?.email || '');
-  setVal('S12', site?.name || (typeof site === 'string' ? site : '') || '');
+  setCenterVal('S9', site?.managerName || site?.contactName || customer?.managerName || '');
+  setCenterVal('Z9', site?.managerPhone || site?.contactPhone || customer?.phone || '');
+  setCenterVal('S10', customer?.billingManagerName || customer?.managerName || '');
+  setCenterVal('Z10', customer?.billingManagerPhone || customer?.phone || '');
+  setCenterVal('S11', customer?.billingEmail || customer?.email || '');
+  setCenterVal('S12', site?.name || (typeof site === 'string' ? site : '') || '');
 
-  setVal('E13', formattedBillingDate);
+  setCenterVal('E13', formattedBillingDate);
 
   const ITEM_START_ROW = 16;
   const ITEM_MAX = 10;
@@ -278,17 +326,17 @@ export const exportTransactionStatementExcelBuffer = async (
       const modelHeight = d.assetHeight ? `${d.itemName} / ${d.assetHeight}` : d.itemName;
       const category = d.billingCategory || d.itemType || (d.itemName?.includes('운송') ? '운송비' : d.itemName?.includes('옵션') ? '옵션' : '렌탈료');
       const inputDate = d.siteInputDate || contract?.startDate || '';
-      const servicePeriod = d.servicePeriod || (d.startDate && d.endDate ? `${d.startDate} ~ ${d.endDate}` : `${billing?.billingYm || ''} 정산`);
+      const servicePeriod = calcServicePeriod(d, billing, contract);
 
-      setVal(`B${row}`, i + 1);
-      setVal(`C${row}`, dateM);
-      setVal(`D${row}`, dateD);
+      setCenterVal(`B${row}`, i + 1);
+      setCenterVal(`C${row}`, dateM);
+      setCenterVal(`D${row}`, dateD);
       setVal(`E${row}`, modelHeight);
-      setVal(`I${row}`, d.assetNo || '-');
-      setVal(`K${row}`, inputDate);
-      setVal(`M${row}`, servicePeriod);
-      setVal(`Q${row}`, category);
-      setVal(`S${row}`, qty);
+      setCenterVal(`I${row}`, d.assetNo || '-');
+      setCenterVal(`K${row}`, inputDate);
+      setCenterVal(`M${row}`, servicePeriod);
+      setCenterVal(`Q${row}`, category);
+      setCenterVal(`S${row}`, qty);
       setNum(`U${row}`, unitPrice);
       setNum(`X${row}`, itemSupply);
       setNum(`AA${row}`, itemVat);
