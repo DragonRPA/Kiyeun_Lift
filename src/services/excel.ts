@@ -200,7 +200,7 @@ export const exportTransactionStatementExcel = async (
       setNum(`U${row}`, unitPrice);                       // 단가
       setNum(`X${row}`, itemSupply);                      // 공급가액
       setNum(`AA${row}`, itemVat);                        // 세액
-      setVal(`AD${row}`, d.memo || d.description || '');  // 비고
+      setVal(`AD${row}`, '');                             // 비고 (빈 값)
     } else {
       // 빈 행 초기화
       setVal(`B${row}`, null);
@@ -340,7 +340,7 @@ export const exportTransactionStatementExcelBuffer = async (
       setNum(`U${row}`, unitPrice);
       setNum(`X${row}`, itemSupply);
       setNum(`AA${row}`, itemVat);
-      setVal(`AD${row}`, d.memo || d.description || '');
+      setVal(`AD${row}`, '');
     } else {
       setVal(`B${row}`, null);
       setVal(`C${row}`, null);

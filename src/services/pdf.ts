@@ -91,7 +91,7 @@ function buildExactStatementHTML(
         <td style="border-right:${dotted};border-bottom:${dotted};text-align:right;padding-right:4px">${supply>0?(d.unitPrice||0).toLocaleString():''}</td>
         <td style="border-right:${dotted};border-bottom:${dotted};text-align:right;padding-right:4px">${supply.toLocaleString()}</td>
         <td style="border-right:${dotted};border-bottom:${dotted};text-align:right;padding-right:4px">${vat.toLocaleString()}</td>
-        <td style="border-bottom:${dotted};padding-left:4px;overflow:hidden;text-overflow:ellipsis">${esc(d.memo || d.description || '')}</td>
+        <td style="border-bottom:${dotted};padding-left:4px;overflow:hidden;text-overflow:ellipsis"></td>
       </tr>`;
     } else {
       itemRows += `
