@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 
 export const PayrollPage: React.FC = () => {
-  const { users, leaveUsages, overtimeRecords, payrollClosings, currentUser, hasPermission, setPayrollClosingStatus } = useApp();
+  const { users, leaveUsages, overtimeRecords, payrollClosings, currentUser, hasPermission, setPayrollClosingStatus, saveUser } = useApp();
   const canSave = hasPermission('payroll', 'save');
   const isAdmin = currentUser?.role === 'ADMIN' || currentUser?.role === 'MANAGER';
 
@@ -20,6 +20,10 @@ export const PayrollPage: React.FC = () => {
   const [isTaxDataUploaded, setIsTaxDataUploaded] = useState(false);
   const [payrollStatus, setPayrollStatus] = useState<'DRAFT' | 'APPROVED'>('DRAFT');
   const [isSendingEmails, setIsSendingEmails] = useState(false);
+
+  // 기본급 수정 모달 상태 (급여 정산 권한자 전용)
+  const [editingEmpId, setEditingEmpId] = useState<string | null>(null);
+  const [inputSalary, setInputSalary] = useState<number>(3000000);
 
   // 선택한 월이 변경되면 DB의 월별 마감 상태(payrollClosings) 자동 동기화
   useEffect(() => {
@@ -44,15 +48,19 @@ export const PayrollPage: React.FC = () => {
     return { otHours, leaveDays };
   };
 
-  // 당월 급여 데이터 로드 및 leave_ot 자동 연동
+  // 당월 급여 데이터 로드 및 leave_ot 자동 연동 (u.baseSalary DB 속성 우선 사용)
   const loadPayrollData = (month: string) => {
     const activeStaff = users.filter(u => u.id !== 'sys-admin');
 
     const list = activeStaff.map(u => {
-      let baseSalary = 3000000;
-      if (u.role === 'ADMIN') baseSalary = 5500000;
-      else if (u.role === 'MANAGER') baseSalary = 4200000;
-      else if (u.id.includes('mech')) baseSalary = 3500000;
+      // u.baseSalary 필드가 DB에 존재하면 우선 적용, 없을 경우 규칙상 디폴트값 부여
+      let baseSalary = u.baseSalary;
+      if (!baseSalary || baseSalary <= 0) {
+        if (u.role === 'ADMIN') baseSalary = 5500000;
+        else if (u.role === 'MANAGER') baseSalary = 4200000;
+        else if (u.id.includes('mech')) baseSalary = 3500000;
+        else baseSalary = 3000000;
+      }
 
       const ordinaryHourly = Math.round(baseSalary / 209);
       const { otHours, leaveDays } = calculateMonthLeaveOt(u.id, month);
@@ -187,6 +195,25 @@ export const PayrollPage: React.FC = () => {
     if (confirm(`[${selectedMonth}] 귀속월의 마감 락을 해제하시겠습니까?\n락 해제 시 급여 데이터 재정산 및 수정을 진행할 수 있습니다.`)) {
       await setPayrollClosingStatus(selectedMonth, 'DRAFT');
       alert(`[${selectedMonth}] 귀속월의 마감 락이 성공적으로 해제되었습니다.`);
+    }
+  };
+
+  // 기본급 변경 저장 (급여 정산 권한자 전용)
+  const handleOpenSalaryModal = (empId: string, currentSalary: number) => {
+    setEditingEmpId(empId);
+    setInputSalary(currentSalary);
+  };
+
+  const handleSaveSalary = async () => {
+    if (!editingEmpId || inputSalary < 0) return;
+    const targetUser = users.find(u => u.id === editingEmpId);
+    if (targetUser) {
+      await saveUser({
+        ...targetUser,
+        baseSalary: inputSalary
+      });
+      alert(`[${targetUser.name}] 임직원의 계약 기본급이 ${inputSalary.toLocaleString()}원으로 DB에 저장되었습니다.\n(통상시급 및 급여 정산 대장에 실시간 반영 완료)`);
+      setEditingEmpId(null);
     }
   };
 
@@ -368,7 +395,23 @@ export const PayrollPage: React.FC = () => {
                         </div>
                       )}
                     </td>
-                    <td>{p.baseSalary.toLocaleString()}원</td>
+                    <td>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span style={{ fontWeight: 'bold' }}>{p.baseSalary.toLocaleString()}원</span>
+                        {canSave && (
+                          <button
+                            type="button"
+                            className="btn btn-secondary"
+                            onClick={() => handleOpenSalaryModal(p.employeeId, p.baseSalary)}
+                            disabled={payrollStatus === 'APPROVED'}
+                            style={{ fontSize: '10.5px', padding: '2px 6px', color: 'var(--primary)', whiteSpace: 'nowrap' }}
+                            title="임직원 계약 기본급 수정 (DB 저장)"
+                          >
+                            ✏️ 수정
+                          </button>
+                        )}
+                      </div>
+                    </td>
                     <td>
                       <div style={{ display: 'flex', gap: '6px' }}>
                         <div>연장 <input type="number" min="0" max="60" value={p.overtimeHours} onChange={(e) => handleHoursChange(p.employeeId, 'overtimeHours', parseFloat(e.target.value) || 0)} disabled={payrollStatus === 'APPROVED'} style={{ width: '45px', padding: '2px 4px', fontSize: '11px', fontWeight: p.overtimeHours > 0 ? 'bold' : 'normal', color: p.overtimeHours > 0 ? 'var(--primary)' : 'inherit' }} />h</div>
@@ -433,6 +476,71 @@ export const PayrollPage: React.FC = () => {
           </table>
         </div>
       </div>
+
+      {/* 기본급 수정 모달 팝업 (급여 정산 권한자 전용) */}
+      {editingEmpId && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.75)', backdropFilter: 'blur(6px)', display: 'flex',
+          justifyContent: 'center', alignItems: 'center', zIndex: 1000
+        }}>
+          <div style={{
+            backgroundColor: 'var(--bg-card)', borderRadius: '12px',
+            width: '90%', maxWidth: '420px', padding: '24px', display: 'flex',
+            flexDirection: 'column', gap: '16px', border: '1px solid var(--border-color)',
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-color)', paddingBottom: '12px' }}>
+              <h3 style={{ fontSize: '16px', fontWeight: 'bold', margin: 0, color: 'var(--text-main)' }}>
+                ⚙️ 계약 기본급 설정 (급여 권한자 전용)
+              </h3>
+              <button onClick={() => setEditingEmpId(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}>
+                ✕
+              </button>
+            </div>
+
+            {(() => {
+              const targetU = users.find(u => u.id === editingEmpId);
+              return (
+                <form onSubmit={(e) => { e.preventDefault(); handleSaveSalary(); }} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                  <div style={{ backgroundColor: 'var(--bg-app)', padding: '12px', borderRadius: '6px', fontSize: '13px' }}>
+                    <div><strong>성명:</strong> {targetU?.name || '알 수 없음'}</div>
+                    <div style={{ color: 'var(--text-muted)', marginTop: '2px' }}><strong>부서/직급:</strong> {targetU?.department || '미정'} / {targetU?.position || '직원'}</div>
+                  </div>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <label style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--text-muted)' }}>
+                      월 계약 기본급 (원):
+                    </label>
+                    <input
+                      type="number"
+                      step="10000"
+                      min="0"
+                      required
+                      value={inputSalary}
+                      onChange={(e) => setInputSalary(parseInt(e.target.value) || 0)}
+                      className="form-control"
+                      style={{ fontSize: '14px', fontWeight: 'bold' }}
+                    />
+                    <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                      통상시급: 약 {Math.round(inputSalary / 209).toLocaleString()}원/시간 (월 소정근로시간 209시간 기준)
+                    </span>
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '10px' }}>
+                    <button type="button" className="btn btn-secondary" onClick={() => setEditingEmpId(null)}>
+                      취소
+                    </button>
+                    <button type="submit" className="btn btn-primary">
+                      기본급 저장
+                    </button>
+                  </div>
+                </form>
+              );
+            })()}
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -35,6 +35,7 @@ export interface User {
   status?: 'ACTIVE' | 'LEAVE_OF_ABSENCE' | 'RETIRED';
   birthDate?: string;
   joinDate?: string;  // 입사일 (YYYY-MM-DD)
+  baseSalary?: number; // 기본급 (원) - 급여 정산 권한자 전용
   address?: string;
   phone?: string;
   email?: string;

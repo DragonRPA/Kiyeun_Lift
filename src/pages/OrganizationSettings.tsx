@@ -26,6 +26,8 @@ interface UserNode {
   loginId?: string;
   passwordHash?: string;
   birthDate?: string;
+  joinDate?: string;
+  baseSalary?: number; // 기본급 (원) - 급여 정산 권한자 전용
   address?: string;
   phone?: string;
   email?: string;
@@ -39,9 +41,10 @@ const INITIAL_DEPTS: Department[] = [];
 const INITIAL_USERS: UserNode[] = [];
 
 export const OrganizationSettings: React.FC = () => {
-  const { currentUser, saveUser, refreshAllData, showErrorModal } = useApp();
+  const { currentUser, saveUser, refreshAllData, showErrorModal, hasPermission } = useApp();
   const isSuperAdmin = currentUser?.loginId === 'admin';
   const canEdit = currentUser?.role === 'ADMIN' || currentUser?.role === 'MANAGER';
+  const canViewPayroll = hasPermission('payroll', 'view'); // 급여 정산 권한자 여부
   
   // --- States ---
   const [departments, setDepartments] = useState<Department[]>([]);
@@ -754,6 +757,28 @@ const enforceManagerPolicies = (usersList: UserNode[], deptList: Department[]) =
                   <label style={{ marginBottom: '2px', fontSize: '12px' }}><MapPin size={12} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: '4px' }}/> 자택 주소</label>
                   <input type="text" style={{ padding: '4px 8px', fontSize: '12px' }} placeholder="자택 주소 입력" value={selectedProfile.address || ''} onChange={e => setSelectedProfile({...selectedProfile, address: e.target.value})} disabled={!canEdit} />
                 </div>
+
+                {/* 급여 정산 권한자 전용 계약 기본급 설정 */}
+                {canViewPayroll && (
+                  <div style={{ marginTop: '6px', padding: '10px', backgroundColor: 'var(--bg-app)', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
+                    <label style={{ marginBottom: '4px', fontSize: '12px', fontWeight: 'bold', color: 'var(--primary)', display: 'block' }}>
+                      💰 계약 기본급 (원) [급여 권한자 전용]
+                    </label>
+                    <input
+                      type="number"
+                      step="10000"
+                      min="0"
+                      style={{ padding: '6px 10px', fontSize: '13px', fontWeight: 'bold' }}
+                      placeholder="기본급 입력 (예: 3500000)"
+                      value={selectedProfile.baseSalary || ''}
+                      onChange={e => setSelectedProfile({...selectedProfile, baseSalary: parseInt(e.target.value) || 0})}
+                      disabled={!canEdit}
+                    />
+                    <span style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'block', marginTop: '2px' }}>
+                      * 통상시급: 약 {Math.round((selectedProfile.baseSalary || 3000000) / 209).toLocaleString()}원/시간 (209h 기준)
+                    </span>
+                  </div>
+                )}
               </div>
             </div>
           </div>
