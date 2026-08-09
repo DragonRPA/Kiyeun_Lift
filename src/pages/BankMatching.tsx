@@ -1,11 +1,11 @@
 // d:\Kiyeun_Lift\src\pages\BankMatching.tsx
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
 import { 
   Search, Check, X, Download, Upload, Trash2, 
   RefreshCw, TrendingUp, AlertCircle, FileSpreadsheet,
   Link as LinkIcon, Plus, DollarSign, Calendar, Layers,
-  Building2, ToggleLeft, ToggleRight, Info, CheckCircle2
+  Building2, ToggleLeft, ToggleRight, Info, CheckCircle2, Wallet
 } from 'lucide-react';
 import { exportToExcel } from '../services/excel';
 import { BankTransaction } from '../services/db';
@@ -34,7 +34,8 @@ export const BankMatching: React.FC = () => {
 
   const [activeTab, setActiveTab] = useState<'MATCHING' | 'RULES'>('MATCHING');
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'ALL' | 'UNMATCHED' | 'MATCHED'>('ALL');
+  const [typeFilter, setTypeFilter] = useState<'ALL' | 'DEPOSIT' | 'WITHDRAW'>('ALL');
+  const [statusFilter, setStatusFilter] = useState<string>('ALL');
   
   // 은행별 필터 ('ALL' | '우리은행' | '신한은행' | 기타)
   const [selectedBankFilter, setSelectedBankFilter] = useState<string>('ALL');
@@ -106,7 +107,24 @@ export const BankMatching: React.FC = () => {
     }
   };
 
-  // 2. 통계 메트릭 계산 (수납/입금 관점 + 지급/출금 관점)
+  // 2. 통계 메트릭 계산 (수납/입금 관점 + 지급/출금 관점 + 실시간 계좌 잔액)
+  const bankBalances = useMemo(() => {
+    const bankMap: Record<string, { latestDate: string; balance: number; accountNumber?: string }> = {};
+    bankTransactions.forEach(t => {
+      const bName = t.bankName || '우리은행';
+      if (!bankMap[bName] || t.transactionDate > bankMap[bName].latestDate) {
+        bankMap[bName] = {
+          latestDate: t.transactionDate,
+          balance: t.balance || 0,
+          accountNumber: t.accountNumber
+        };
+      }
+    });
+
+    const totalBalance = Object.values(bankMap).reduce((sum, b) => sum + b.balance, 0);
+    return { bankMap, totalBalance };
+  }, [bankTransactions]);
+
   const deposits = bankTransactions.filter(t => t.depositAmount > 0);
   const matchedDepositCount = deposits.filter(t => !!t.matchedBillingId).length;
   const unmatchedDepositCount = deposits.filter(t => !t.matchedBillingId).length;
@@ -201,11 +219,31 @@ export const BankMatching: React.FC = () => {
     const matchesSearch = sender.includes(searchLower) || memoStr.includes(searchLower) || summaryStr.includes(searchLower);
     if (!matchesSearch) return false;
 
-    if (statusFilter === 'UNMATCHED') {
-      return t.depositAmount > 0 && !t.matchedBillingId;
+    // 1) 입금액 / 출금액 구분 필터 (typeFilter)
+    if (typeFilter === 'DEPOSIT' && (t.withdrawAmount > 0 && t.depositAmount === 0)) return false;
+    if (typeFilter === 'WITHDRAW' && (t.depositAmount > 0 && t.withdrawAmount === 0)) return false;
+
+    // 2) 지급 / 수납 매치 완료 여부 상태 필터 (statusFilter)
+    const isMatchedDeposit = !!t.matchedBillingId;
+    const isMatchedWithdraw = purchaseSettlements.some(s => s.bankTransactionId === t.id);
+
+    if (statusFilter === 'DEPOSIT_UNMATCHED') {
+      return t.depositAmount > 0 && !isMatchedDeposit;
     }
-    if (statusFilter === 'MATCHED') {
-      return !!t.matchedBillingId;
+    if (statusFilter === 'DEPOSIT_MATCHED') {
+      return t.depositAmount > 0 && isMatchedDeposit;
+    }
+    if (statusFilter === 'WITHDRAW_UNMATCHED') {
+      return t.withdrawAmount > 0 && !isMatchedWithdraw;
+    }
+    if (statusFilter === 'WITHDRAW_MATCHED') {
+      return t.withdrawAmount > 0 && isMatchedWithdraw;
+    }
+    if (statusFilter === 'UNMATCHED_ALL') {
+      return (t.depositAmount > 0 && !isMatchedDeposit) || (t.withdrawAmount > 0 && !isMatchedWithdraw);
+    }
+    if (statusFilter === 'MATCHED_ALL') {
+      return (t.depositAmount > 0 && isMatchedDeposit) || (t.withdrawAmount > 0 && isMatchedWithdraw);
     }
     return true;
   }).sort((a, b) => b.transactionDate.localeCompare(a.transactionDate));
@@ -490,6 +528,58 @@ export const BankMatching: React.FC = () => {
         </div>
       </div>
 
+      {/* 🏦 은행별 실시간 계좌 잔액 현황 카드 패널 */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+        <div style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <Wallet size={16} style={{ color: 'var(--primary)' }} />
+          <span>🏦 [은행별 실시간 계좌 잔액 현황] (최신 거래 시점 기준)</span>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px' }}>
+          {Object.keys(bankBalances.bankMap).length === 0 ? (
+            <div style={{ padding: '14px', backgroundColor: 'var(--bg-surface)', borderRadius: '8px', border: '1px solid var(--border-color)', fontSize: '12px', color: 'var(--text-muted)' }}>
+              등록된 은행 계좌 잔액 데이터가 없습니다.
+            </div>
+          ) : (
+            Object.entries(bankBalances.bankMap).map(([bName, bInfo]) => (
+              <div
+                key={bName}
+                onClick={() => setSelectedBankFilter(selectedBankFilter === bName ? 'ALL' : bName)}
+                style={{
+                  padding: '14px',
+                  backgroundColor: selectedBankFilter === bName ? 'rgba(59, 130, 246, 0.1)' : 'var(--bg-surface)',
+                  borderRadius: '8px',
+                  border: selectedBankFilter === bName ? '2px solid var(--primary)' : '1px solid var(--border-color)',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '4px'
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--text-main)' }}>{bName}</span>
+                  <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{bInfo.accountNumber || '계좌'}</span>
+                </div>
+                <div style={{ fontSize: '18px', fontWeight: '800', color: 'var(--primary)' }}>
+                  {bInfo.balance.toLocaleString()} 원
+                </div>
+                <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
+                  최종 거래: {bInfo.latestDate}
+                </div>
+              </div>
+            ))
+          )}
+
+          {/* 합계 총 계좌 잔액 카드 */}
+          <div style={{ padding: '14px', backgroundColor: 'var(--bg-surface)', borderRadius: '8px', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+            <div style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--text-main)' }}>전 계좌 잔액 총합계</div>
+            <div style={{ fontSize: '18px', fontWeight: '800', color: 'var(--success)' }}>
+              {bankBalances.totalBalance.toLocaleString()} 원
+            </div>
+            <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>전사 은행 계좌 합산액</div>
+          </div>
+        </div>
+      </div>
+
       {activeTab === 'MATCHING' ? (
         <>
           {/* 전사 컨트롤 툴바 */}
@@ -520,48 +610,78 @@ export const BankMatching: React.FC = () => {
               </div>
             </div>
 
-            {/* 2열: 검색 필터 및 액션 버튼 */}
+            {/* 2열: 입출금 구분 필터 & 검색 필터 및 액션 버튼 */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
               
-              {/* 은행선택 탭 */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                <span style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--text-muted)', marginRight: '4px', whiteSpace: 'nowrap' }}>
-                  🏦 거래 은행:
+              {/* 입금/출금 구분 버튼 필터 & 은행 선택 */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <button
+                    className={`btn ${typeFilter === 'ALL' ? 'btn-primary' : 'btn-secondary'}`}
+                    style={{ fontSize: '12px', padding: '4px 10px', whiteSpace: 'nowrap' }}
+                    onClick={() => setTypeFilter('ALL')}
+                  >
+                    입출금 전체
+                  </button>
+                  <button
+                    className={`btn ${typeFilter === 'DEPOSIT' ? 'btn-primary' : 'btn-secondary'}`}
+                    style={{ fontSize: '12px', padding: '4px 10px', whiteSpace: 'nowrap' }}
+                    onClick={() => setTypeFilter('DEPOSIT')}
+                  >
+                    📥 입금액만 보기
+                  </button>
+                  <button
+                    className={`btn ${typeFilter === 'WITHDRAW' ? 'btn-primary' : 'btn-secondary'}`}
+                    style={{ fontSize: '12px', padding: '4px 10px', whiteSpace: 'nowrap' }}
+                    onClick={() => setTypeFilter('WITHDRAW')}
+                  >
+                    💸 출금액만 보기
+                  </button>
+                </div>
+
+                <div style={{ height: '16px', width: '1px', backgroundColor: 'var(--border-color)' }} />
+
+                <span style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--text-muted)', marginRight: '2px', whiteSpace: 'nowrap' }}>
+                  🏦 은행:
                 </span>
                 <button
                   className={`btn ${selectedBankFilter === 'ALL' ? 'btn-primary' : 'btn-secondary'}`}
-                  style={{ fontSize: '12px', padding: '4px 10px', whiteSpace: 'nowrap' }}
+                  style={{ fontSize: '12px', padding: '4px 8px', whiteSpace: 'nowrap' }}
                   onClick={() => setSelectedBankFilter('ALL')}
                 >
-                  전체 은행
+                  전체
                 </button>
                 <button
                   className={`btn ${selectedBankFilter === '우리은행' ? 'btn-primary' : 'btn-secondary'}`}
-                  style={{ fontSize: '12px', padding: '4px 10px', whiteSpace: 'nowrap' }}
+                  style={{ fontSize: '12px', padding: '4px 8px', whiteSpace: 'nowrap' }}
                   onClick={() => setSelectedBankFilter('우리은행')}
                 >
                   우리은행
                 </button>
                 <button
                   className={`btn ${selectedBankFilter === '신한은행' ? 'btn-primary' : 'btn-secondary'}`}
-                  style={{ fontSize: '12px', padding: '4px 10px', whiteSpace: 'nowrap' }}
+                  style={{ fontSize: '12px', padding: '4px 8px', whiteSpace: 'nowrap' }}
                   onClick={() => setSelectedBankFilter('신한은행')}
                 >
                   신한은행
                 </button>
               </div>
 
-              {/* 필터 및 검색창 */}
+              {/* 매칭 상태 필터 및 검색창 */}
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
                 <select
                   value={statusFilter}
                   onChange={(e: any) => setStatusFilter(e.target.value)}
                   className="form-control"
-                  style={{ width: '130px', fontSize: '12px', whiteSpace: 'nowrap' }}
+                  style={{ width: '180px', fontSize: '12px', whiteSpace: 'nowrap' }}
                 >
-                  <option value="ALL">전체 내역</option>
-                  <option value="UNMATCHED">미매칭 (수납대기)</option>
-                  <option value="MATCHED">수납대사 완료</option>
+                  <option value="ALL">전체 매칭 상태</option>
+                  <option value="UNMATCHED_ALL">⚠️ 전체 미대사건 (미수납+미지급대사)</option>
+                  <option value="MATCHED_ALL">✅ 전체 대사완료건</option>
+                  <option value="DEPOSIT_UNMATCHED">📥 입금 미수납 (수납대기)</option>
+                  <option value="DEPOSIT_MATCHED">📥 입금 수납 완료</option>
+                  <option value="WITHDRAW_UNMATCHED">💸 출금 미대사 (지급대기)</option>
+                  <option value="WITHDRAW_MATCHED">💸 출금 지급대사 완료</option>
                 </select>
 
                 <div style={{ position: 'relative', width: '200px' }}>
