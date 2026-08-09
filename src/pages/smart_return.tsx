@@ -5,7 +5,7 @@ import { Zap, Clipboard, FileText, Check, Search, ArrowUpDown, Shield, AlertTria
 import { SmartReturnData } from '../context/AppContext';
 
 export const SmartReturn: React.FC = () => {
-  const { hasPermission, saveSmartReturn, contracts, customers, sites, contractAssets, assets, repairs, vendors } = useApp();
+  const { hasPermission, saveSmartReturn, contracts, customers, sites, contacts, deliveries, contractAssets, assets, repairs, vendors } = useApp();
   const canSave = hasPermission('delivery', 'save');
 
   // 모드 상태: 'SALES' (영업사원 - Case 1,2,3) | 'MAINTENANCE' (정비직원 - Case 4)
@@ -26,6 +26,23 @@ export const SmartReturn: React.FC = () => {
   const [contactName, setContactName] = useState('');
   const [contactPhone, setContactPhone] = useState('');
   const [note, setNote] = useState('');
+
+  // 💡 [사장님 지시] 계약 선택 시 최초 출고/현장에 등록되었던 담당자 정보 자동 기본값 세팅 (수정 가능)
+  useEffect(() => {
+    if (!selectedContractId) return;
+    const contract = contracts.find(c => c.id === selectedContractId);
+    if (!contract) return;
+
+    const outboundDelivery = (deliveries || []).find((d: any) => d.contractId === selectedContractId);
+    const site = (sites || []).find((s: any) => s.id === contract.siteId);
+    const contact = (contacts || []).find((ct: any) => ct.id === contract.contactId);
+
+    const defaultContactName = (outboundDelivery as any)?.siteContactName || (outboundDelivery as any)?.recipientName || contact?.name || site?.contactName || '';
+    const defaultContactPhone = (outboundDelivery as any)?.siteContactPhone || (outboundDelivery as any)?.recipientPhone || contact?.contact || site?.contact || '';
+
+    if (defaultContactName) setContactName(defaultContactName);
+    if (defaultContactPhone) setContactPhone(defaultContactPhone);
+  }, [selectedContractId, contracts, deliveries, sites, contacts]);
 
   // 메신저 텍스트 오더 입력 및 파싱용 상태
   const [rawText, setRawText] = useState<string>(
