@@ -1,6 +1,6 @@
 // d:\Kiyeun_Lift\src\context\AppContext.tsx
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
-import { db, supabase, User, MenuPermission, createMenuPermission, Customer, CustomerContact, CustomerSite, Product, Asset, Consumable, ConsumableLog, ConsumablePurchaseRequest, Contract, ContractAsset, ContractHistory, Delivery, Billing, BillingDetail, Payment, PaymentDepositLink, Repair, RepairConsumable, Todo, BankTransaction, BankMatchingRule, AssetInOutLog, GoogleConfig, Vendor, CashFlowSnapshot, OutboundInspection, TransportCompany, TransportDriver, DepreciationLog, PurchaseSettlement, PurchaseSettlementItem, SettlementPaymentLog, ExternalLease, PurchaseSettlementType, PurchaseSettlementStatus, findCustomerByNormalizedName, AnnualLeaveQuota, LeaveUsage, OvertimeRecord, PayrollClosing } from '../services/db';
+import { db, supabase, User, MenuPermission, createMenuPermission, Customer, CustomerContact, CustomerSite, Product, Asset, Consumable, ConsumableLog, ConsumablePurchaseRequest, Contract, ContractAsset, ContractHistory, Delivery, Billing, BillingDetail, Payment, PaymentDepositLink, Repair, RepairConsumable, Todo, BankTransaction, BankMatchingRule, BankAccountInitialBalance, AssetInOutLog, GoogleConfig, Vendor, CashFlowSnapshot, OutboundInspection, TransportCompany, TransportDriver, DepreciationLog, PurchaseSettlement, PurchaseSettlementItem, SettlementPaymentLog, ExternalLease, PurchaseSettlementType, PurchaseSettlementStatus, findCustomerByNormalizedName, AnnualLeaveQuota, LeaveUsage, OvertimeRecord, PayrollClosing } from '../services/db';
 import { ErrorModal } from '../components/ErrorModal';
 import { getAllSystemMenuIds } from '../config/menu_config';
 
@@ -71,6 +71,7 @@ interface AppContextType {
   todos: Todo[];
   bankTransactions: BankTransaction[];
   bankMatchingRules: BankMatchingRule[];
+  bankInitialBalances: BankAccountInitialBalance[];
   assetInOutLogs: AssetInOutLog[];
   vendors: Vendor[];
   googleConfigs: GoogleConfig[];
@@ -88,6 +89,7 @@ interface AppContextType {
   payrollClosings: PayrollClosing[];
 
   // Mutators
+  saveBankInitialBalance: (bankName: string, initialBalance: number, accountNumber?: string) => Promise<void>;
   updateAnnualLeaveQuota: (userId: string, periodStart: string, periodEnd: string, grantedDays: number, memo?: string) => void;
   addLeaveUsage: (usage: Omit<LeaveUsage, 'id' | 'createdAt'>) => void;
   deleteLeaveUsage: (id: string) => void;
@@ -220,6 +222,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [todos, setTodos] = useState<Todo[]>([]);
   const [bankTransactions, setBankTransactions] = useState<BankTransaction[]>([]);
   const [bankMatchingRules, setBankMatchingRules] = useState<BankMatchingRule[]>([]);
+  const [bankInitialBalances, setBankInitialBalances] = useState<BankAccountInitialBalance[]>([]);
   const [assetInOutLogs, setAssetInOutLogs] = useState<AssetInOutLog[]>([]);
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [googleConfigs, setGoogleConfigs] = useState<GoogleConfig[]>([]);
@@ -298,6 +301,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setTodos([...db.todos]);
     setBankTransactions([...db.bankTransactions]);
     setBankMatchingRules([...db.bankMatchingRules]);
+    setBankInitialBalances([...db.bankInitialBalances]);
     setAssetInOutLogs([...db.assetInOutLogs]);
     setVendors([...db.vendors]);
     setGoogleConfigs([...db.googleConfigs]);
@@ -2552,6 +2556,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     refreshAllData();
   };
 
+  const saveBankInitialBalance = async (bankName: string, initialBalance: number, accountNumber?: string) => {
+    const existing = db.bankInitialBalances.find(b => b.bankName === bankName);
+    if (existing) {
+      db.updateRow<BankAccountInitialBalance>('bankInitialBalances', existing.id, {
+        initialBalance,
+        accountNumber: accountNumber || existing.accountNumber,
+        updatedAt: new Date().toISOString()
+      } as any);
+    } else {
+      db.insertRow<BankAccountInitialBalance>('bankInitialBalances', {
+        id: `bank-init-${bankName}`,
+        bankName,
+        accountNumber,
+        initialBalance,
+        updatedAt: new Date().toISOString()
+      } as any);
+    }
+    await db.awaitPendingWrites();
+    refreshAllData();
+  };
+
   const updateAnnualLeaveQuota = (userId: string, periodStart: string, periodEnd: string, grantedDays: number, memo?: string) => {
     const existing = db.annualLeaveQuotas.find(q => q.userId === userId && q.periodStart === periodStart);
     if (existing) {
@@ -3268,11 +3293,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     <AppContext.Provider value={{
       currentUser, theme, toggleTheme, login, logout, hasPermission, showErrorModal,
       users, permissions, customers, contacts, sites, products, assets, consumables, consumableLogs, consumablePurchases, contracts, contractAssets, contractHistory, deliveries, billings, billingDetails, payments, paymentDepositLinks, repairs, repairConsumables, transportCompanies, transportDrivers, todos,
-      bankTransactions, bankMatchingRules, assetInOutLogs, vendors, googleConfigs, cashFlowSnapshots, outboundInspections, depreciationLogs,
+      bankTransactions, bankMatchingRules, bankInitialBalances, assetInOutLogs, vendors, googleConfigs, cashFlowSnapshots, outboundInspections, depreciationLogs,
       purchaseSettlements, purchaseSettlementItems, settlementPaymentLogs: db.settlementPaymentLogs, externalLeases,
       annualLeaveQuotas, leaveUsages, overtimeRecords, payrollClosings,
       refreshAllData, executeMonthlyDepreciation, loadTablesForMenu, updatePermissions, saveUser, saveCustomer, saveContact, saveSite, saveProduct, saveAsset, updateGoogleConfig,
-      saveCashFlowSnapshot, deleteCashFlowSnapshot, saveVendor, deleteVendor,
+      saveCashFlowSnapshot, deleteCashFlowSnapshot, saveVendor, deleteVendor, saveBankInitialBalance,
       updateAnnualLeaveQuota, addLeaveUsage, deleteLeaveUsage, addOvertimeRecord, deleteOvertimeRecord, setPayrollClosingStatus,
       acquireAsset, disposeAsset, registerRentedAsset, returnRentedAsset, changeAssetStatus,
       purchaseConsumable, useConsumable,

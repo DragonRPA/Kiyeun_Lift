@@ -627,6 +627,14 @@ export interface BankMatchingRule {
   updatedAt?: string;
 }
 
+export interface BankAccountInitialBalance {
+  id: string;             // 'bank-init-우리은행'
+  bankName: string;       // '우리은행' | '신한은행' 등
+  accountNumber?: string; // 계좌번호
+  initialBalance: number; // 기초 시작 잔액 (원)
+  updatedAt: string;
+}
+
 export interface GoogleConfig {
   id: string;
   googleEmail: string;
@@ -1231,13 +1239,18 @@ const SEED_OVERTIME_RECORDS: OvertimeRecord[] = [
   }
 ];
 
+export const SEED_BANK_INITIAL_BALANCES: BankAccountInitialBalance[] = [
+  { id: 'bank-init-우리은행', bankName: '우리은행', accountNumber: '1005502717011', initialBalance: 15000000, updatedAt: new Date().toISOString() },
+  { id: 'bank-init-신한은행', bankName: '신한은행', accountNumber: '110987654321', initialBalance: 10000000, updatedAt: new Date().toISOString() }
+];
+
 export const ALL_DB_KEYS = [
   'users', 'departments', 'permissions', 'customers', 'contacts', 'sites', 
   'products', 'assets', 'consumables', 'consumableLogs', 'consumablePurchases',
   'contracts', 'contractAssets', 'contractHistory', 'deliveries', 
   'transportCompanies', 'transportDrivers', 'vendors',
   'billings', 'billingDetails', 'payments', 'repairs', 'repairConsumables', 'todos', 
-  'bankTransactions', 'bankMatchingRules', 'googleConfigs', 'assetInOutLogs',
+  'bankTransactions', 'bankMatchingRules', 'bankInitialBalances', 'googleConfigs', 'assetInOutLogs',
   'cashFlowSnapshots', 'outboundInspections', 'depreciationLogs',
   'purchaseSettlements', 'purchaseSettlementItems', 'settlementPaymentLogs', 'externalLeases',
   'annualLeaveQuotas', 'leaveUsages', 'overtimeRecords', 'payrollClosings'
@@ -1362,6 +1375,9 @@ class LocalDB {
 
   get bankMatchingRules() { return this.get<BankMatchingRule>('bankMatchingRules', SEED_BANK_MATCHING_RULES); }
   set bankMatchingRules(val: BankMatchingRule[]) { this.set('bankMatchingRules', val); }
+
+  get bankInitialBalances() { return this.get<BankAccountInitialBalance>('bankInitialBalances', SEED_BANK_INITIAL_BALANCES); }
+  set bankInitialBalances(val: BankAccountInitialBalance[]) { this.set('bankInitialBalances', val); }
 
   get googleConfigs() { return this.get<GoogleConfig>('googleConfigs', []); }
   set googleConfigs(val: GoogleConfig[]) { this.set('googleConfigs', val); }

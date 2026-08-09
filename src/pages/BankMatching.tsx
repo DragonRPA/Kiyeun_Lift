@@ -1,11 +1,10 @@
-// d:\Kiyeun_Lift\src\pages\BankMatching.tsx
 import React, { useState, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
 import { 
   Search, Check, X, Download, Upload, Trash2, 
   RefreshCw, TrendingUp, AlertCircle, FileSpreadsheet,
   Link as LinkIcon, Plus, DollarSign, Calendar, Layers,
-  Building2, ToggleLeft, ToggleRight, Info, CheckCircle2, Wallet
+  Building2, ToggleLeft, ToggleRight, Info, CheckCircle2, Wallet, Settings
 } from 'lucide-react';
 import { exportToExcel } from '../services/excel';
 import { BankTransaction } from '../services/db';
@@ -15,6 +14,8 @@ export const BankMatching: React.FC = () => {
   const {
     bankTransactions,
     bankMatchingRules,
+    bankInitialBalances,
+    saveBankInitialBalance,
     billings,
     customers,
     payments,
@@ -33,6 +34,10 @@ export const BankMatching: React.FC = () => {
   const isAdmin = currentUser?.role === 'ADMIN';
 
   const [activeTab, setActiveTab] = useState<'MATCHING' | 'RULES'>('MATCHING');
+  const [isInitBalanceModalOpen, setIsInitBalanceModalOpen] = useState(false);
+  const [editingBankName, setEditingBankName] = useState('우리은행');
+  const [editingInitialBalance, setEditingInitialBalance] = useState<number>(15000000);
+  const [editingAccountNumber, setEditingAccountNumber] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [typeFilter, setTypeFilter] = useState<'ALL' | 'DEPOSIT' | 'WITHDRAW'>('ALL');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
@@ -107,23 +112,54 @@ export const BankMatching: React.FC = () => {
     }
   };
 
-  // 2. 통계 메트릭 계산 (수납/입금 관점 + 지급/출금 관점 + 실시간 계좌 잔액)
+  // 2. 통계 메트릭 계산 (수납/입금 관점 + 지급/출금 관점 + 실시간 계좌 누계 잔액)
   const bankBalances = useMemo(() => {
-    const bankMap: Record<string, { latestDate: string; balance: number; accountNumber?: string }> = {};
-    bankTransactions.forEach(t => {
-      const bName = t.bankName || '우리은행';
-      if (!bankMap[bName] || t.transactionDate > bankMap[bName].latestDate) {
-        bankMap[bName] = {
-          latestDate: t.transactionDate,
-          balance: t.balance || 0,
-          accountNumber: t.accountNumber
-        };
+    const bankNames = Array.from(new Set([
+      '우리은행', '신한은행',
+      ...bankTransactions.map(t => t.bankName || '우리은행')
+    ]));
+
+    const bankMap: Record<string, { latestDate: string; balance: number; accountNumber?: string; isEstimated?: boolean }> = {};
+
+    bankNames.forEach(bName => {
+      const initRecord = bankInitialBalances.find(b => b.bankName === bName);
+      const initBal = initRecord?.initialBalance || (bName === '우리은행' ? 15000000 : bName === '신한은행' ? 10000000 : 0);
+      const initAccNumber = initRecord?.accountNumber || (bName === '우리은행' ? '1005502717011' : bName === '신한은행' ? '110987654321' : '');
+
+      const bTxs = bankTransactions.filter(t => (t.bankName || '우리은행') === bName)
+        .sort((a, b) => b.transactionDate.localeCompare(a.transactionDate));
+
+      const latestTx = bTxs[0];
+      const latestDate = latestTx ? latestTx.transactionDate : '미등록';
+      const latestAccNumber = latestTx?.accountNumber || initAccNumber;
+
+      // 1순위: 거래 데이터 중 balance가 유효한 가장 최신 건 잔액
+      const txWithBalance = bTxs.find(t => (t.balance || 0) > 0);
+      
+      let finalBalance = 0;
+      let isEstimated = false;
+
+      if (txWithBalance && txWithBalance.balance) {
+        finalBalance = txWithBalance.balance;
+      } else {
+        // 2순위: 기초 잔액 + 해당 은행 누적 입금액 - 누적 출금액
+        const totalDep = bTxs.reduce((sum, t) => sum + (t.depositAmount || 0), 0);
+        const totalWth = bTxs.reduce((sum, t) => sum + (t.withdrawAmount || 0), 0);
+        finalBalance = initBal + totalDep - totalWth;
+        isEstimated = true;
       }
+
+      bankMap[bName] = {
+        latestDate,
+        balance: finalBalance,
+        accountNumber: latestAccNumber,
+        isEstimated
+      };
     });
 
     const totalBalance = Object.values(bankMap).reduce((sum, b) => sum + b.balance, 0);
     return { bankMap, totalBalance };
-  }, [bankTransactions]);
+  }, [bankTransactions, bankInitialBalances]);
 
   const deposits = bankTransactions.filter(t => t.depositAmount > 0);
   const matchedDepositCount = deposits.filter(t => !!t.matchedBillingId).length;
@@ -530,52 +566,87 @@ export const BankMatching: React.FC = () => {
 
       {/* 🏦 은행별 실시간 계좌 잔액 현황 카드 패널 */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-        <div style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <Wallet size={16} style={{ color: 'var(--primary)' }} />
-          <span>🏦 [은행별 실시간 계좌 잔액 현황] (최신 거래 시점 기준)</span>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <Wallet size={16} style={{ color: 'var(--primary)' }} />
+            <span>🏦 [은행별 실시간 계좌 잔액 현황] (최신 거래 시점 & 누계 계산)</span>
+          </div>
+          <button
+            onClick={() => {
+              const bInfo = bankBalances.bankMap['우리은행'];
+              setEditingBankName('우리은행');
+              setEditingInitialBalance(bankInitialBalances.find(b => b.bankName === '우리은행')?.initialBalance || 15000000);
+              setEditingAccountNumber(bInfo?.accountNumber || '1005502717011');
+              setIsInitBalanceModalOpen(true);
+            }}
+            className="btn btn-secondary"
+            style={{ fontSize: '11px', padding: '3px 8px', display: 'flex', alignItems: 'center', gap: '4px' }}
+          >
+            <Settings size={12} />
+            기초 / 현재 잔액 설정
+          </button>
         </div>
+
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px' }}>
-          {Object.keys(bankBalances.bankMap).length === 0 ? (
-            <div style={{ padding: '14px', backgroundColor: 'var(--bg-surface)', borderRadius: '8px', border: '1px solid var(--border-color)', fontSize: '12px', color: 'var(--text-muted)' }}>
-              등록된 은행 계좌 잔액 데이터가 없습니다.
-            </div>
-          ) : (
-            Object.entries(bankBalances.bankMap).map(([bName, bInfo]) => (
+          {Object.entries(bankBalances.bankMap).map(([bName, bInfo]) => {
+            const isSelected = selectedBankFilter === bName;
+            return (
               <div
                 key={bName}
-                onClick={() => setSelectedBankFilter(selectedBankFilter === bName ? 'ALL' : bName)}
+                onClick={() => setSelectedBankFilter(isSelected ? 'ALL' : bName)}
                 style={{
                   padding: '14px',
-                  backgroundColor: selectedBankFilter === bName ? 'rgba(59, 130, 246, 0.1)' : 'var(--bg-surface)',
+                  backgroundColor: isSelected ? 'rgba(59, 130, 246, 0.12)' : 'var(--bg-surface)',
                   borderRadius: '8px',
-                  border: selectedBankFilter === bName ? '2px solid var(--primary)' : '1px solid var(--border-color)',
+                  border: isSelected ? '2px solid var(--primary)' : '1px solid var(--border-color)',
                   cursor: 'pointer',
                   display: 'flex',
                   flexDirection: 'column',
-                  gap: '4px'
+                  gap: '4px',
+                  boxShadow: isSelected ? '0 0 10px rgba(59, 130, 246, 0.3)' : 'none',
+                  transition: 'all 0.15s ease'
                 }}
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--text-main)' }}>{bName}</span>
+                  <span style={{ fontSize: '12px', fontWeight: 'bold', color: isSelected ? 'var(--primary)' : 'var(--text-main)' }}>
+                    {bName} {isSelected && '✓ 선택됨'}
+                  </span>
                   <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{bInfo.accountNumber || '계좌'}</span>
                 </div>
-                <div style={{ fontSize: '18px', fontWeight: '800', color: 'var(--primary)' }}>
+                <div style={{ fontSize: '18px', fontWeight: '800', color: isSelected ? 'var(--primary)' : 'var(--text-main)' }}>
                   {bInfo.balance.toLocaleString()} 원
                 </div>
-                <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
-                  최종 거래: {bInfo.latestDate}
+                <div style={{ fontSize: '10px', color: 'var(--text-muted)', display: 'flex', justifyContent: 'space-between' }}>
+                  <span>최종 거래: {bInfo.latestDate}</span>
+                  {bInfo.isEstimated && <span style={{ color: 'var(--warning)' }}>[누계산출]</span>}
                 </div>
               </div>
-            ))
-          )}
+            );
+          })}
 
           {/* 합계 총 계좌 잔액 카드 */}
-          <div style={{ padding: '14px', backgroundColor: 'var(--bg-surface)', borderRadius: '8px', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-            <div style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--text-main)' }}>전 계좌 잔액 총합계</div>
+          <div
+            onClick={() => setSelectedBankFilter('ALL')}
+            style={{
+              padding: '14px',
+              backgroundColor: selectedBankFilter === 'ALL' ? 'rgba(16, 185, 129, 0.1)' : 'var(--bg-surface)',
+              borderRadius: '8px',
+              border: selectedBankFilter === 'ALL' ? '2px solid var(--success)' : '1px solid var(--border-color)',
+              cursor: 'pointer',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '4px',
+              transition: 'all 0.15s ease'
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--text-main)' }}>전 계좌 잔액 총합계</span>
+              {selectedBankFilter === 'ALL' && <span style={{ fontSize: '10px', color: 'var(--success)', fontWeight: 'bold' }}>전체 보기 중</span>}
+            </div>
             <div style={{ fontSize: '18px', fontWeight: '800', color: 'var(--success)' }}>
               {bankBalances.totalBalance.toLocaleString()} 원
             </div>
-            <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>전사 은행 계좌 합산액</div>
+            <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>전사 은행 계좌 합산 누계액</div>
           </div>
         </div>
       </div>
@@ -850,8 +921,12 @@ export const BankMatching: React.FC = () => {
                           {tx.withdrawAmount > 0 ? `-${tx.withdrawAmount.toLocaleString()}원` : '-'}
                         </td>
 
-                        <td style={{ padding: '10px 14px', whiteSpace: 'nowrap', textAlign: 'right', color: 'var(--text-muted)', fontSize: '12px' }}>
-                          {tx.balance ? `${tx.balance.toLocaleString()}원` : '-'}
+                        <td style={{ padding: '10px 14px', whiteSpace: 'nowrap', textAlign: 'right', color: 'var(--text-main)', fontSize: '12px', fontWeight: '500' }}>
+                          {tx.balance && tx.balance > 0 
+                            ? `${tx.balance.toLocaleString()}원` 
+                            : bankBalances.bankMap[bBank] 
+                              ? `${bankBalances.bankMap[bBank].balance.toLocaleString()}원 (누계)` 
+                              : '-'}
                         </td>
 
                         <td style={{ padding: '10px 14px', whiteSpace: 'nowrap', color: 'var(--text-muted)', fontSize: '12px' }}>
@@ -1267,6 +1342,102 @@ export const BankMatching: React.FC = () => {
                 >
                   출금 지급 대사 승인
                 </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ⚙️ 은행별 기초 / 현재 잔액 설정 모달 팝업 */}
+      {isInitBalanceModalOpen && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.75)', backdropFilter: 'blur(6px)', display: 'flex',
+          justifyContent: 'center', alignItems: 'center', zIndex: 1000
+        }}>
+          <div style={{
+            backgroundColor: 'var(--bg-card)', borderRadius: '12px',
+            width: '90%', maxWidth: '480px', padding: '24px', display: 'flex',
+            flexDirection: 'column', gap: '16px', border: '1px solid var(--border-color)',
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-color)', paddingBottom: '12px' }}>
+              <h3 style={{ fontSize: '16px', fontWeight: 'bold', margin: 0, display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-main)' }}>
+                <Settings size={18} style={{ color: 'var(--primary)' }} />
+                은행별 기초 / 실시간 잔액 설정
+              </h3>
+              <button onClick={() => setIsInitBalanceModalOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}>
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={async (e) => {
+              e.preventDefault();
+              await saveBankInitialBalance(editingBankName, editingInitialBalance, editingAccountNumber);
+              setIsInitBalanceModalOpen(false);
+              alert(`✅ [${editingBankName}] 계좌 잔액 설정이 완료되었습니다.`);
+            }} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <label style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                  설정할 은행명:
+                </label>
+                <select
+                  value={editingBankName}
+                  onChange={(e) => {
+                    const bName = e.target.value;
+                    setEditingBankName(bName);
+                    const initRec = bankInitialBalances.find(b => b.bankName === bName);
+                    const bInfo = bankBalances.bankMap[bName];
+                    setEditingInitialBalance(initRec?.initialBalance || (bName === '우리은행' ? 15000000 : 10000000));
+                    setEditingAccountNumber(bInfo?.accountNumber || '');
+                  }}
+                  className="form-control"
+                  style={{ fontSize: '13px' }}
+                >
+                  <option value="우리은행">우리은행</option>
+                  <option value="신한은행">신한은행</option>
+                  <option value="KB국민은행">KB국민은행</option>
+                  <option value="IBK기업은행">IBK기업은행</option>
+                  <option value="NH농협은행">NH농협은행</option>
+                </select>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <label style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                  당사 계좌번호 (선택):
+                </label>
+                <input
+                  type="text"
+                  placeholder="예: 1005502717011"
+                  value={editingAccountNumber}
+                  onChange={(e) => setEditingAccountNumber(e.target.value)}
+                  className="form-control"
+                  style={{ fontSize: '13px' }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <label style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                  기초 시작 계좌 잔액 (원):
+                </label>
+                <input
+                  type="number"
+                  required
+                  placeholder="예: 15000000"
+                  value={editingInitialBalance}
+                  onChange={(e) => setEditingInitialBalance(Number(e.target.value))}
+                  className="form-control"
+                  style={{ fontSize: '14px', fontWeight: 'bold', color: 'var(--primary)' }}
+                />
+                <span style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                  💡 통장 엑셀 내 잔액 데이터가 비어 있을 때, 이 기초 잔액에 입출금액 누계를 자동으로 합산하여 정확한 계좌 잔액을 산출합니다.
+                </span>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '10px' }}>
+                <button type="button" className="btn btn-secondary" onClick={() => setIsInitBalanceModalOpen(false)}>취소</button>
+                <button type="submit" className="btn btn-primary">잔액 설정 저장</button>
               </div>
             </form>
           </div>
