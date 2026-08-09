@@ -11,6 +11,8 @@ export const SmartReturn: React.FC = () => {
   // 모드 상태: 'SALES' (영업사원 - Case 1,2,3) | 'MAINTENANCE' (정비직원 - Case 4)
   const [activeMode, setActiveMode] = useState<'SALES' | 'MAINTENANCE'>('SALES');
 
+  const getTodayString = () => new Date().toISOString().split('T')[0];
+
   // ==========================================
   // [1] 영업사원 모드 (SALES) 상태
   // ==========================================
@@ -19,8 +21,9 @@ export const SmartReturn: React.FC = () => {
   const [salesSortDesc, setSalesSortDesc] = useState(false);
   const [selectedContractId, setSelectedContractId] = useState('');
   const [selectedAssetIds, setSelectedAssetIds] = useState<string[]>([]);
-  const [returnDate, setReturnDate] = useState('');
-  const [loadingTime, setLoadingTime] = useState('');
+  const [returnDate, setReturnDate] = useState(getTodayString()); // 오늘 날짜 기본 제공
+  const [loadingTime, setLoadingTime] = useState('오전 (08:00 ~ 12:00)');
+  const [isCustomLoadingTime, setIsCustomLoadingTime] = useState(false);
   const [contactName, setContactName] = useState('');
   const [contactPhone, setContactPhone] = useState('');
   const [note, setNote] = useState('');
@@ -43,8 +46,9 @@ export const SmartReturn: React.FC = () => {
   // ==========================================
   const [selectedVendorId, setSelectedVendorId] = useState('');
   const [selectedRepairIds, setSelectedRepairIds] = useState<string[]>([]);
-  const [maintReturnDate, setMaintReturnDate] = useState('');
-  const [maintLoadingTime, setMaintLoadingTime] = useState('');
+  const [maintReturnDate, setMaintReturnDate] = useState(getTodayString()); // 오늘 날짜 기본 제공
+  const [maintLoadingTime, setMaintLoadingTime] = useState('오전 (08:00 ~ 12:00)');
+  const [isCustomMaintLoadingTime, setIsCustomMaintLoadingTime] = useState(false);
   const [maintNote, setMaintNote] = useState('');
 
   // ==========================================
@@ -558,12 +562,35 @@ export const SmartReturn: React.FC = () => {
                   </div>
                   <div>
                     <label>회수 희망시간</label>
-                    <input
-                      type="text"
-                      placeholder="예: 오전 10시 상차"
-                      value={loadingTime}
-                      onChange={e => setLoadingTime(e.target.value)}
-                    />
+                    <div style={{ display: 'flex', gap: '6px' }}>
+                      <select
+                        value={isCustomLoadingTime ? 'CUSTOM' : loadingTime}
+                        onChange={e => {
+                          if (e.target.value === 'CUSTOM') {
+                            setIsCustomLoadingTime(true);
+                            setLoadingTime('');
+                          } else {
+                            setIsCustomLoadingTime(false);
+                            setLoadingTime(e.target.value);
+                          }
+                        }}
+                        style={{ flex: 1 }}
+                      >
+                        <option value="오전 (08:00 ~ 12:00)">오전 (08:00 ~ 12:00)</option>
+                        <option value="오후 (13:00 ~ 17:00)">오후 (13:00 ~ 17:00)</option>
+                        <option value="CUSTOM">희망시간선택 (직접입력)</option>
+                      </select>
+                      {isCustomLoadingTime && (
+                        <input
+                          type="text"
+                          placeholder="예: 10:30 상차"
+                          value={loadingTime}
+                          onChange={e => setLoadingTime(e.target.value)}
+                          style={{ flex: 1 }}
+                          autoFocus
+                        />
+                      )}
+                    </div>
                   </div>
                 </div>
 
@@ -752,12 +779,35 @@ export const SmartReturn: React.FC = () => {
                   </div>
                   <div>
                     <label>상차 희망시간</label>
-                    <input
-                      type="text"
-                      placeholder="예: 오후 2시 공장출발"
-                      value={maintLoadingTime}
-                      onChange={e => setMaintLoadingTime(e.target.value)}
-                    />
+                    <div style={{ display: 'flex', gap: '6px' }}>
+                      <select
+                        value={isCustomMaintLoadingTime ? 'CUSTOM' : maintLoadingTime}
+                        onChange={e => {
+                          if (e.target.value === 'CUSTOM') {
+                            setIsCustomMaintLoadingTime(true);
+                            setMaintLoadingTime('');
+                          } else {
+                            setIsCustomMaintLoadingTime(false);
+                            setMaintLoadingTime(e.target.value);
+                          }
+                        }}
+                        style={{ flex: 1 }}
+                      >
+                        <option value="오전 (08:00 ~ 12:00)">오전 (08:00 ~ 12:00)</option>
+                        <option value="오후 (13:00 ~ 17:00)">오후 (13:00 ~ 17:00)</option>
+                        <option value="CUSTOM">희망시간선택 (직접입력)</option>
+                      </select>
+                      {isCustomMaintLoadingTime && (
+                        <input
+                          type="text"
+                          placeholder="예: 14:00 공장출발"
+                          value={maintLoadingTime}
+                          onChange={e => setMaintLoadingTime(e.target.value)}
+                          style={{ flex: 1 }}
+                          autoFocus
+                        />
+                      )}
+                    </div>
                   </div>
                 </div>
 
