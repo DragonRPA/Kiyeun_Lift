@@ -1,6 +1,6 @@
 // d:\Kiyeun_Lift\src\context\AppContext.tsx
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
-import { db, supabase, User, MenuPermission, createMenuPermission, Customer, CustomerContact, CustomerSite, Product, Asset, Consumable, ConsumableLog, ConsumablePurchaseRequest, Contract, ContractAsset, ContractHistory, Delivery, Billing, BillingDetail, Payment, PaymentDepositLink, Repair, RepairConsumable, Todo, BankTransaction, BankMatchingRule, BankAccountInitialBalance, AssetInOutLog, GoogleConfig, Vendor, CashFlowSnapshot, OutboundInspection, TransportCompany, TransportDriver, DepreciationLog, PurchaseSettlement, PurchaseSettlementItem, SettlementPaymentLog, ExternalLease, PurchaseSettlementType, PurchaseSettlementStatus, findCustomerByNormalizedName, AnnualLeaveQuota, LeaveUsage, OvertimeRecord, PayrollClosing } from '../services/db';
+import { db, supabase, User, MenuPermission, createMenuPermission, Customer, CustomerContact, CustomerSite, Product, Asset, Consumable, ConsumableLog, ConsumablePurchaseRequest, Contract, ContractAsset, ContractHistory, Delivery, Billing, BillingDetail, Payment, PaymentDepositLink, Repair, RepairConsumable, Todo, BankTransaction, BankMatchingRule, BankAccountInitialBalance, AssetInOutLog, GoogleConfig, Vendor, CashFlowSnapshot, OutboundInspection, TransportCompany, TransportDriver, DepreciationLog, PurchaseSettlement, PurchaseSettlementItem, SettlementPaymentLog, ExternalLease, PurchaseSettlementType, PurchaseSettlementStatus, findCustomerByNormalizedName, AnnualLeaveQuota, LeaveUsage, OvertimeRecord, PayrollClosing, InspectionChecklistItem } from '../services/db';
 import { ErrorModal } from '../components/ErrorModal';
 import { getAllSystemMenuIds } from '../config/menu_config';
 
@@ -82,6 +82,7 @@ interface AppContextType {
   purchaseSettlementItems: PurchaseSettlementItem[];
   settlementPaymentLogs: SettlementPaymentLog[];
   externalLeases: ExternalLease[];
+  inspectionChecklistItems: InspectionChecklistItem[];
 
   annualLeaveQuotas: AnnualLeaveQuota[];
   leaveUsages: LeaveUsage[];
@@ -111,6 +112,8 @@ interface AppContextType {
   deleteCashFlowSnapshot: (snapId: string) => void;
   saveVendor: (vendor: Vendor) => Promise<void>;
   deleteVendor: (id: string) => void;
+  saveInspectionChecklistItem: (item: Omit<InspectionChecklistItem, 'id' | 'createdAt'> & { id?: string }) => Promise<void>;
+  deleteInspectionChecklistItem: (id: string) => Promise<void>;
   
   // Asset Mutators
   changeAssetStatus: (assetId: string, status: Asset['status'], extraData?: Partial<Asset>) => Promise<void>;
@@ -234,6 +237,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [purchaseSettlements, setPurchaseSettlements] = useState<PurchaseSettlement[]>([]);
   const [purchaseSettlementItems, setPurchaseSettlementItems] = useState<PurchaseSettlementItem[]>([]);
   const [externalLeases, setExternalLeases] = useState<ExternalLease[]>([]);
+  const [inspectionChecklistItems, setInspectionChecklistItems] = useState<InspectionChecklistItem[]>([]);
   const [annualLeaveQuotas, setAnnualLeaveQuotas] = useState<AnnualLeaveQuota[]>([]);
   const [leaveUsages, setLeaveUsages] = useState<LeaveUsage[]>([]);
   const [overtimeRecords, setOvertimeRecords] = useState<OvertimeRecord[]>([]);
@@ -313,6 +317,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setPurchaseSettlements([...db.purchaseSettlements]);
     setPurchaseSettlementItems([...db.purchaseSettlementItems]);
     setExternalLeases([...db.externalLeases]);
+    setInspectionChecklistItems([...db.inspectionChecklistItems]);
     setAnnualLeaveQuotas([...db.annualLeaveQuotas]);
     setLeaveUsages([...db.leaveUsages]);
     setOvertimeRecords([...db.overtimeRecords]);
@@ -710,6 +715,30 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     
     refreshAllData();
     return result;
+  };
+
+  // 💡 [신규] 입고 검수 필요 항목 및 점수 기준 CUD
+  const saveInspectionChecklistItem = async (itemData: Omit<InspectionChecklistItem, 'id' | 'createdAt'> & { id?: string }) => {
+    if (itemData.id) {
+      db.updateRow<InspectionChecklistItem>('inspectionChecklistItems', itemData.id, {
+        ...itemData
+      });
+    } else {
+      const nextId = db.generateNextId('inspectionChecklistItems', db.inspectionChecklistItems);
+      db.insertRow<InspectionChecklistItem>('inspectionChecklistItems', {
+        ...itemData,
+        id: nextId,
+        createdAt: new Date().toISOString()
+      });
+    }
+    await db.awaitPendingWrites();
+    refreshAllData();
+  };
+
+  const deleteInspectionChecklistItem = async (id: string) => {
+    db.deleteRow('inspectionChecklistItems', id);
+    await db.awaitPendingWrites();
+    refreshAllData();
   };
 
   const saveAsset = async (asset: Omit<Asset, 'id' | 'createdAt' | 'updatedAt'> & { id?: string }) => {
@@ -3441,10 +3470,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       currentUser, theme, toggleTheme, login, logout, hasPermission, showErrorModal,
       users, permissions, customers, contacts, sites, products, assets, consumables, consumableLogs, consumablePurchases, contracts, contractAssets, contractHistory, deliveries, billings, billingDetails, payments, paymentDepositLinks, repairs, repairConsumables, transportCompanies, transportDrivers, todos,
       bankTransactions, bankMatchingRules, bankInitialBalances, assetInOutLogs, vendors, googleConfigs, cashFlowSnapshots, outboundInspections, depreciationLogs,
-      purchaseSettlements, purchaseSettlementItems, settlementPaymentLogs: db.settlementPaymentLogs, externalLeases,
+      purchaseSettlements, purchaseSettlementItems, settlementPaymentLogs: db.settlementPaymentLogs, externalLeases, inspectionChecklistItems,
       annualLeaveQuotas, leaveUsages, overtimeRecords, payrollClosings,
       refreshAllData, executeMonthlyDepreciation, loadTablesForMenu, updatePermissions, saveUser, saveCustomer, saveContact, saveSite, saveProduct, saveAsset, updateGoogleConfig,
-      saveCashFlowSnapshot, deleteCashFlowSnapshot, saveVendor, deleteVendor, saveBankInitialBalance,
+      saveCashFlowSnapshot, deleteCashFlowSnapshot, saveVendor, deleteVendor, saveBankInitialBalance, saveInspectionChecklistItem, deleteInspectionChecklistItem,
       updateAnnualLeaveQuota, addLeaveUsage, deleteLeaveUsage, addOvertimeRecord, deleteOvertimeRecord, setPayrollClosingStatus,
       acquireAsset, disposeAsset, registerRentedAsset, returnRentedAsset, changeAssetStatus, registerInboundAsset, cancelInboundAsset,
       purchaseConsumable, useConsumable,

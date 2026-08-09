@@ -7,7 +7,7 @@ import { exportToExcel } from '../services/excel';
 export const AssetHistory: React.FC = () => {
   const { 
     assetInOutLogs, assets, customers, sites, contractAssets, contracts, repairs, repairConsumables, consumables, navigationPayload, setNavigationPayload,
-    registerInboundAsset, cancelInboundAsset
+    inspectionChecklistItems, registerInboundAsset, cancelInboundAsset
   } = useApp();
 
   // 1. 탭 상태: 'INBOUND_REGISTER' | 'INBOUND' | 'OUTBOUND' | 'REPAIR'
@@ -29,13 +29,18 @@ export const AssetHistory: React.FC = () => {
     searchTerm: ''
   });
 
-  // 💡 [신설] 입고 등록 폼 상태
+  // 💡 [입고 등록 폼 상태] (수동 점수 입력 제거 ➔ 정비 필요 항목 체크박스 선택 연동)
   const [inboundAssetNoInput, setInboundAssetNoInput] = useState('');
   const [selectedInboundAssetId, setSelectedInboundAssetId] = useState('');
   const [inboundDate, setInboundDate] = useState(todayStr);
-  const [inboundScore, setInboundScore] = useState<number>(0);
+  const [selectedChecklistIds, setSelectedChecklistIds] = useState<string[]>([]);
   const [inboundMemo, setInboundMemo] = useState('');
   const [isSubmittingInbound, setIsSubmittingInbound] = useState(false);
+
+  // 💡 [사장님 지시] 사전 정의 정비 필요 항목 점수 100% 자동 합산 (수동 입력 휴먼에러 전면 제거)
+  const selectedChecklistObjects = inspectionChecklistItems.filter(item => selectedChecklistIds.includes(item.id));
+  const calculatedInboundScore = selectedChecklistObjects.reduce((sum, item) => sum + item.score, 0);
+  const selectedChecklistSummary = selectedChecklistObjects.map(item => `${item.name}(+${item.score}점)`).join(', ');
 
   // 0. 타 탭 이동 페이로드(특정 자산 이력 조회) 감지
   useEffect(() => {
@@ -122,26 +127,30 @@ export const AssetHistory: React.FC = () => {
   const handleSubmitInbound = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!inboundTargetAsset) {
-      alert('입고 처리할 대상 자산을 선택하거나 정확한 관리번호를 입력해주세요.');
+      alert('입고 처리할 대상 자산의 정확한 관리번호를 입력해 주세요.');
       return;
     }
 
     try {
       setIsSubmittingInbound(true);
+      const combinedMemo = selectedChecklistSummary 
+        ? `[정비 필요 항목: ${selectedChecklistSummary}] ${inboundMemo}`.trim()
+        : (inboundMemo.trim() || '입고 검수 이상 무');
+
       await registerInboundAsset({
         assetId: inboundTargetAsset.id,
         returnDate: inboundDate,
-        maintenanceScore: Number(inboundScore),
-        memo: inboundMemo
+        maintenanceScore: calculatedInboundScore,
+        memo: combinedMemo
       });
 
-      alert(`✅ [입고 등록 완결]\n\n자산번호: [${inboundTargetAsset.assetNo}] (${inboundTargetAsset.modelName})\n입고 일자: ${inboundDate}\n상태 전환: ${inboundScore === 0 ? '임대가능 (AVAILABLE)' : '입고반납/검수대기 (RENTED_RETURNED)'}\n\n계약 반납 마감 및 자산 이력이 정상 등록되었습니다.`);
+      alert(`✅ [입고 등록 완결]\n\n자산번호: [${inboundTargetAsset.assetNo}] (${inboundTargetAsset.modelName})\n입고 일자: ${inboundDate}\n정비 필요 점수: ${calculatedInboundScore}점\n상태 전환: ${calculatedInboundScore === 0 ? '임대가능 (AVAILABLE)' : '입고반납/검수대기 (RENTED_RETURNED)'}\n\n계약 반납 마감 및 자산 이력이 정상 등록되었습니다.`);
       
       // 폼 초기화 및 입고 조회 탭으로 이동
       setSelectedInboundAssetId('');
       setInboundAssetNoInput('');
+      setSelectedChecklistIds([]);
       setInboundMemo('');
-      setInboundScore(0);
       setActiveTab('INBOUND');
     } catch (err: any) {
       alert(`⚠️ 입고 등록 중 오류 발생: ${err?.message || err}`);
@@ -278,74 +287,99 @@ export const AssetHistory: React.FC = () => {
 
             <form onSubmit={handleSubmitInbound} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
               
-              {/* 관리번호 빠른 셀렉트 드롭다운 */}
+              {/* 1. 관리번호 수동/검색 입력 (휴먼에러 교차 검증) */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <label style={{ fontSize: '12.5px', fontWeight: 'bold' }}>대여 중인 자산 선택 *</label>
-                <select
-                  value={selectedInboundAssetId}
-                  onChange={e => {
-                    setSelectedInboundAssetId(e.target.value);
-                    const found = assets.find(a => a.id === e.target.value);
-                    if (found) setInboundAssetNoInput(found.assetNo);
-                  }}
-                  style={{ padding: '8px', fontSize: '13px' }}
-                >
-                  <option value="">-- 현재 대여 중(RENTED) 자산 목록 선택 --</option>
-                  {assets.filter(a => a.status === 'RENTED' || a.status === 'ASSIGNED' || a.status === 'REPAIRING').map(a => (
-                    <option key={a.id} value={a.id}>[{a.assetNo}] {a.modelName} ({a.status === 'RENTED' ? '대여중' : a.status})</option>
-                  ))}
-                </select>
-              </div>
-
-              {/* 관리번호 직접 입력 (오타 탐색용) */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <label style={{ fontSize: '12.5px', fontWeight: 'bold' }}>관리번호 수동/검색 입력 (휴먼에러 교차 검증)</label>
+                <label style={{ fontSize: '12.5px', fontWeight: 'bold' }}>입고 장비 관리번호 입력 / 검색 *</label>
                 <input
                   type="text"
-                  placeholder="예: RENT-0001 또는 관리번호 입력..."
+                  placeholder="예: G19004 또는 RENT-0001 관리번호 입력..."
                   value={inboundAssetNoInput}
                   onChange={e => {
-                    setInboundAssetNoInput(e.target.value);
-                    const matched = assets.find(a => a.assetNo.toLowerCase() === e.target.value.trim().toLowerCase());
+                    const val = e.target.value;
+                    setInboundAssetNoInput(val);
+                    const matched = assets.find(a => a.assetNo.toLowerCase() === val.trim().toLowerCase());
                     if (matched) setSelectedInboundAssetId(matched.id);
                   }}
+                  required
+                  style={{ padding: '9px 12px', fontSize: '13.5px', fontWeight: 'bold' }}
+                />
+              </div>
+
+              {/* 2. 입고 일자 */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <label style={{ fontSize: '12.5px', fontWeight: 'bold' }}>입고 일자 *</label>
+                <input
+                  type="date"
+                  max={todayStr}
+                  value={inboundDate}
+                  onChange={e => setInboundDate(e.target.value)}
+                  required
                   style={{ padding: '8px', fontSize: '13px' }}
                 />
               </div>
 
-              {/* 입고일자 & 검수점수 */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <label style={{ fontSize: '12.5px', fontWeight: 'bold' }}>입고 일자 *</label>
-                  <input
-                    type="date"
-                    max={todayStr}
-                    value={inboundDate}
-                    onChange={e => setInboundDate(e.target.value)}
-                    required
-                    style={{ padding: '7px', fontSize: '13px' }}
-                  />
+              {/* 3. [사장님 지시] 정비 필요 항목 선택 및 정비필요점수 자동 연동 (수동 입력 제거) */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', backgroundColor: 'var(--bg-app)', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <label style={{ fontSize: '12.5px', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <ShieldCheck size={15} className="text-primary" /> 정비 필요 항목 점검 선택 (자동 합산 연동)
+                  </label>
+                  <span className={`badge ${calculatedInboundScore === 0 ? 'badge-success' : 'badge-warning'}`} style={{ fontSize: '12px', fontWeight: 'bold', padding: '4px 8px' }}>
+                    총 정비필요점수: {calculatedInboundScore}점 {calculatedInboundScore === 0 ? '(이상무: AVAILABLE)' : '(검수대기: RENTED_RETURNED)'}
+                  </span>
                 </div>
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <label style={{ fontSize: '12.5px', fontWeight: 'bold' }}>검수 정비필요 점수 (0점:이상무)</label>
-                  <input
-                    type="number"
-                    min={0}
-                    max={100}
-                    value={inboundScore}
-                    onChange={e => setInboundScore(Number(e.target.value))}
-                    style={{ padding: '7px', fontSize: '13px' }}
-                  />
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginTop: '4px' }}>
+                  {inspectionChecklistItems.map(item => {
+                    const isChecked = selectedChecklistIds.includes(item.id);
+                    return (
+                      <label
+                        key={item.id}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '8px',
+                          padding: '8px 10px',
+                          borderRadius: '6px',
+                          backgroundColor: isChecked ? 'var(--primary-light)' : 'var(--bg-card)',
+                          border: `1px solid ${isChecked ? 'var(--primary)' : 'var(--border-color)'}`,
+                          cursor: 'pointer',
+                          fontSize: '12px',
+                          transition: 'all 0.15s ease'
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={e => {
+                            if (e.target.checked) {
+                              setSelectedChecklistIds(prev => [...prev, item.id]);
+                            } else {
+                              setSelectedChecklistIds(prev => prev.filter(id => id !== item.id));
+                            }
+                          }}
+                          style={{ width: '15px', height: '15px', accentColor: 'var(--primary)', cursor: 'pointer' }}
+                        />
+                        <div style={{ flex: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ fontWeight: isChecked ? 'bold' : 'normal' }}>{item.name}</span>
+                          <span style={{ fontSize: '11px', color: isChecked ? 'var(--primary)' : 'var(--warning)', fontWeight: 'bold' }}>
+                            +{item.score}점
+                          </span>
+                        </div>
+                      </label>
+                    );
+                  })}
                 </div>
               </div>
 
-              {/* 검수 메모 */}
+              {/* 4. 검수 메모 (선택사항) */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <label style={{ fontSize: '12.5px', fontWeight: 'bold' }}>검수 및 입고 특이사항 메모</label>
+                <label style={{ fontSize: '12.5px', fontWeight: 'bold', color: 'var(--text-secondary)' }}>
+                  검수 및 입고 특이사항 메모 (선택사항)
+                </label>
                 <textarea
-                  rows={3}
-                  placeholder="외관 손상 여부, 유압유 파손 등 정비 검수 메모 입력..."
+                  rows={2}
+                  placeholder="추가적인 특이사항 또는 담당자 비고 입력 (선택)..."
                   value={inboundMemo}
                   onChange={e => setInboundMemo(e.target.value)}
                   style={{ padding: '8px', fontSize: '12.5px' }}

@@ -37,7 +37,8 @@ export const SYSTEM_MENU_CONFIG: MenuGroupConfig[] = [
       { id: 'product', name: '제품 관리' },
       { id: 'asset', name: '자산 관리 (대장)' },
       { id: 'acquisition_disposal', name: '당사자산 취득/매각' },
-      { id: 'rent_asset', name: '임차자산 관리' }
+      { id: 'rent_asset', name: '임차자산 관리' },
+      { id: 'inspection_checklist_manage', name: '입고 검수 항목 관리' }
     ]
   },
   {

@@ -589,6 +589,16 @@ export interface Repair {
   consumables?: RepairConsumable[];
 }
 
+export interface InspectionChecklistItem {
+  id: string;
+  category: string;
+  code: string;
+  name: string;
+  score: number;
+  description?: string;
+  createdAt: string;
+}
+
 export interface Todo {
   id: string;
   userId: string;
@@ -1242,6 +1252,54 @@ const SEED_OVERTIME_RECORDS: OvertimeRecord[] = [
   }
 ];
 
+const SEED_INSPECTION_CHECKLIST_ITEMS: InspectionChecklistItem[] = [
+  {
+    id: 'chk-1',
+    category: '외관/바디',
+    code: 'DEFECT_A',
+    name: 'A 불량 (외관 스크래치/도장 손상)',
+    score: 5,
+    description: '외관 상의 경미한 도장 손상 또는 스크래치 발생',
+    createdAt: new Date().toISOString()
+  },
+  {
+    id: 'chk-2',
+    category: '외관/바디',
+    code: 'DEFECT_B',
+    name: 'B 불량 (섀시 함몰/커버 찌그러짐)',
+    score: 10,
+    description: '외함 판금 찌그러짐 또는 섀시 파손',
+    createdAt: new Date().toISOString()
+  },
+  {
+    id: 'chk-3',
+    category: '유압/동력',
+    code: 'DEFECT_OIL_LEAK',
+    name: '유압유 누유 (실린더/호스 누유)',
+    score: 15,
+    description: '유압 호스 피팅부 유압유 누출 파손',
+    createdAt: new Date().toISOString()
+  },
+  {
+    id: 'chk-4',
+    category: '전기/배터리',
+    code: 'DEFECT_WIRE_CUT',
+    name: '배터리/전선 단선 및 접촉 불량',
+    score: 20,
+    description: '컨트롤러 배선 단선 또는 배터리 단자 부식',
+    createdAt: new Date().toISOString()
+  },
+  {
+    id: 'chk-5',
+    category: '주행/타이어',
+    code: 'DEFECT_TIRE_DAMAGED',
+    name: '타이어 찢어짐 및 이상 마모',
+    score: 10,
+    description: '주행 타이어 찢어짐 또는 편마모 심함',
+    createdAt: new Date().toISOString()
+  }
+];
+
 export const SEED_BANK_INITIAL_BALANCES: BankAccountInitialBalance[] = [
   { id: 'bank-init-우리은행', bankName: '우리은행', accountNumber: '1005502717011', initialBalance: 15000000, updatedAt: new Date().toISOString() },
   { id: 'bank-init-신한은행', bankName: '신한은행', accountNumber: '110987654321', initialBalance: 10000000, updatedAt: new Date().toISOString() }
@@ -1256,7 +1314,7 @@ export const ALL_DB_KEYS = [
   'bankTransactions', 'bankMatchingRules', 'bankInitialBalances', 'googleConfigs', 'assetInOutLogs',
   'cashFlowSnapshots', 'outboundInspections', 'depreciationLogs',
   'purchaseSettlements', 'purchaseSettlementItems', 'settlementPaymentLogs', 'externalLeases',
-  'annualLeaveQuotas', 'leaveUsages', 'overtimeRecords', 'payrollClosings'
+  'annualLeaveQuotas', 'leaveUsages', 'overtimeRecords', 'payrollClosings', 'inspectionChecklistItems'
 ];
 
 class LocalDB {
@@ -1309,6 +1367,9 @@ class LocalDB {
 
   get assets() { return this.get<Asset>('assets', SEED_ASSETS); }
   set assets(val: Asset[]) { this.set('assets', val); }
+
+  get inspectionChecklistItems() { return this.get<InspectionChecklistItem>('inspectionChecklistItems', SEED_INSPECTION_CHECKLIST_ITEMS); }
+  set inspectionChecklistItems(val: InspectionChecklistItem[]) { this.set('inspectionChecklistItems', val); }
 
   get consumables() { return this.get<Consumable>('consumables', SEED_CONSUMABLES); }
   set consumables(val: Consumable[]) { this.set('consumables', val); }
