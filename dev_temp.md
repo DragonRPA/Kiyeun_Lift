@@ -1,20 +1,21 @@
 # 개발 지시 및 개편 완료 내역 (dev_temp.md)
 
-## 🎨 [완료] 850px 고정 높이 → 100dvh 동적 뷰포트 근본 수정 + 하단 5px 여백 (v1.38.0.Build.123)
+## 🎨 [완료] 라이트 모드 카드/입력창/버튼 둥근 테두리 시인성 강화 (v1.39.0.Build.124)
 
-### 1. 근본 원인 확인 및 수정
-- **진짜 원인 발견**: `App.tsx`의 최상위 루트 div에 `height: '850px', maxHeight: '850px'`로 픽셀 고정값이 하드코딩되어 있었음.
-  - 어떤 모니터 해상도여도 850px이 상한선이므로, 내부의 flex fill / calc(100vh - N) 등 모든 수식이 무의미했음.
-- **수정**: `height: '100dvh', maxHeight: '100dvh'` — 100% 동적 뷰포트 높이로 변경.
-- **사이드바+메인 래퍼 div**: `height: 'calc(850px - 64px)'` 고정 제거 → `flex: 1, minHeight: 0`으로 변경.
-- **main 하단 여백**: `padding: '16px 20px 5px 20px'` — 하단 5px 여백 확보.
+### 1. 사장님 지시사항
+- 밝은 화면 모드의 카드, 입력창, 버튼 등 둥근 모서리 사각형 테두리가 배경과 거의 구분이 안 됨 → 시인성 개선
 
-### 2. 주요 수정 파일
-- `App.tsx`: 루트 div `height: 850px` → `100dvh`, 사이드바 래퍼 `calc(850px-64px)` → `flex:1 minHeight:0`, main paddingBottom 5px 적용.
+### 2. 수정 내용
+- `--border-color: #cbd5e1` (Slate-300) → **`#94a3b8` (Slate-400)** 으로 짙게 보강
+  - 전 메뉴의 카드(.card), 입력창(input, select, textarea), 버튼(.btn-secondary), 테이블 컨테이너 등 `var(--border-color)`를 사용하는 모든 테두리가 일괄 강화됨.
+- `--shadow-sm/md/lg`: 불투명도 0.05→0.10으로 그림자 강화
 
-### 3. 빌드 및 검증
+### 3. 주요 수정 파일
+- `index.css`: `--border-color` 값 변경
+
+### 4. 빌드 및 검증
 - TypeScript `npx tsc -b` 컴파일 오류 없음 확인 ✅ (Exit code: 0)
 
 ---
-**기록 일시**: 2026-08-09 16:24  
-**작성 버전**: `v1.38.0.Build.123`
+**기록 일시**: 2026-08-09 16:31
+**작성 버전**: `v1.39.0.Build.124`
