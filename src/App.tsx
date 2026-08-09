@@ -603,8 +603,8 @@ const App: React.FC = () => {
           })}
         </aside>
 
-        {/* 메인 콘텐츠 영역 (flex fill, 하단 5px 여백 확보) */}
-        <main style={{ flex: 1, height: '100%', minHeight: 0, padding: '16px 20px 5px 20px', overflow: 'hidden', display: 'flex', flexDirection: 'column', backgroundColor: 'var(--bg-app)' }} className="main-content-area">
+        {/* 메인 콘텐츠 영역 (독자 종스크롤 & 다이나믹 뷰포트 활용, 두꺼운 16px 스크롤바 적용) */}
+        <main style={{ flex: 1, height: '100%', minHeight: 0, padding: '16px 20px 5px 20px', overflowY: 'auto', display: 'flex', flexDirection: 'column', backgroundColor: 'var(--bg-app)' }} className="main-content-area">
           {userHasViewPerm ? (
             getActiveComponent()
           ) : (

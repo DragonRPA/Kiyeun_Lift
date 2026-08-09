@@ -116,7 +116,7 @@ html, body, #root {
 
 /* 메인 작업 화면 독자 스크롤 영역 */
 .main-content-area {
-  overflow: hidden !important;
+  overflow-y: auto !important;
   overscroll-behavior: contain !important;
 }
 
