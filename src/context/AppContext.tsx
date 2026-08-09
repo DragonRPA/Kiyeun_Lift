@@ -3026,10 +3026,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     let updatedCount = 0;
     const nowIso = new Date().toISOString();
 
+    // 마감 연월의 말일 시점 Date 생성 (예: '2026-08' -> 2026년 8월 31일 23:59:59)
+    const [ymYear, ymMonth] = depreciationYm.split('-').map(Number);
+    const closingDate = new Date(ymYear, ymMonth, 0, 23, 59, 59, 999); // 해당 월의 마지막 날
+
     for (const asset of ownedAssets) {
       const cost = asset.acquisitionPrice || 0;
       if (cost <= 0 || !asset.acquisitionDate || !asset.depreciationMonths || asset.depreciationMonths <= 0) {
         continue;
+      }
+
+      // 1. 취득일자 검증: 마감 연월 말일보다 미래에 취득된 자산은 당월 상각 대상 제외
+      const acqDate = new Date(asset.acquisitionDate);
+      if (isNaN(acqDate.getTime()) || acqDate > closingDate) {
+        continue;
+      }
+
+      // 2. 매각 여부 및 매각일자 검증: 매각 상태이거나 매각일이 마감 연월 이전/당월인 경우 상각 정지 처리
+      if (asset.status === 'SOLD' || asset.disposalDate) {
+        const dispDateStr = asset.disposalDate ? asset.disposalDate.substring(0, 7) : '';
+        // 이미 마감 연월 이전이나 당월 이전에 매각된 자산은 감가상각 발생 중단
+        if (dispDateStr && dispDateStr < depreciationYm) {
+          continue;
+        }
       }
 
       const residualRate = asset.residualValueRate ?? 0;
@@ -3037,16 +3056,40 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const depreciableAmount = cost - residualValue;
       if (depreciableAmount <= 0) continue;
 
-      const monthlyDepn = Math.round(depreciableAmount / asset.depreciationMonths);
+      const monthlyDepn = depreciableAmount / asset.depreciationMonths;
       if (monthlyDepn <= 0) continue;
 
+      // 3. 취득일(acqDate)부터 마감연월 말일(closingDate)까지의 경과 개월수 정밀 산출
+      let yearsDiff = closingDate.getFullYear() - acqDate.getFullYear();
+      let monthsDiff = closingDate.getMonth() - acqDate.getMonth();
+      let totalElapsedMonths = yearsDiff * 12 + monthsDiff + 1; // 취득당월 포함
+
+      if (totalElapsedMonths < 1) totalElapsedMonths = 1;
+
+      // 매각 자산은 매각 시점까지의 경과월수로 캡 제한
+      if ((asset.status === 'SOLD' || asset.disposalDate) && asset.disposalDate) {
+        const dispDate = new Date(asset.disposalDate);
+        if (!isNaN(dispDate.getTime()) && dispDate <= closingDate) {
+          let dispYears = dispDate.getFullYear() - acqDate.getFullYear();
+          let dispMonths = dispDate.getMonth() - acqDate.getMonth();
+          totalElapsedMonths = Math.max(1, dispYears * 12 + dispMonths + 1);
+        }
+      }
+
+      // 내용월수 캡 제한
+      const effectiveElapsed = Math.min(totalElapsedMonths, asset.depreciationMonths);
+
+      // 이번 마감 연월 시점의 목표 누적상각액 (IFRS 정액법 정밀 산출)
+      const targetAccum = Math.min(depreciableAmount, Math.round(monthlyDepn * effectiveElapsed));
+
       const currentAccum = asset.accumDepreciation || 0;
-      const maxAccum = depreciableAmount;
 
-      if (currentAccum >= maxAccum) continue;
+      // 당월 반영할 감가상각비 = 목표 누적상각액 - 기존 누적상각액
+      const actualDepn = Math.max(0, targetAccum - currentAccum);
 
-      const actualDepn = Math.min(monthlyDepn, maxAccum - currentAccum);
-      const newAccum = currentAccum + actualDepn;
+      if (actualDepn <= 0 && currentAccum >= targetAccum) continue;
+
+      const newAccum = Math.min(depreciableAmount, currentAccum + actualDepn);
       const newBookValue = Math.max(residualValue, cost - newAccum);
 
       db.updateRow<Asset>('assets', asset.id, {

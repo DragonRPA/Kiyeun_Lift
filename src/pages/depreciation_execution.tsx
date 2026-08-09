@@ -22,22 +22,55 @@ export const DepreciationExecution: React.FC = () => {
   let estimatedCount = 0;
   let estimatedTotalDepn = 0;
 
+  // 마감 연월의 말일 시점 Date 생성
+  const [ymYear, ymMonth] = selectedYm.split('-').map(Number);
+  const closingDate = new Date(ymYear, ymMonth, 0, 23, 59, 59, 999);
+
   ownedAssets.forEach(asset => {
     const cost = asset.acquisitionPrice || 0;
     if (cost <= 0 || !asset.acquisitionDate || !asset.depreciationMonths || asset.depreciationMonths <= 0) return;
+
+    // 1. 취득일자 검증: 마감 연월 말일보다 미래 취득 자산 제외
+    const acqDate = new Date(asset.acquisitionDate);
+    if (isNaN(acqDate.getTime()) || acqDate > closingDate) return;
+
+    // 2. 매각 여부 및 매각일자 검증: 매각 상태이거나 매각일이 마감 연월 이전인 경우 상각 중단
+    if (asset.status === 'SOLD' || asset.disposalDate) {
+      const dispDateStr = asset.disposalDate ? asset.disposalDate.substring(0, 7) : '';
+      if (dispDateStr && dispDateStr < selectedYm) return;
+    }
 
     const residualRate = asset.residualValueRate ?? 0;
     const residualValue = Math.round(cost * (residualRate / 100));
     const depreciableAmount = cost - residualValue;
     if (depreciableAmount <= 0) return;
 
-    const monthlyDepn = Math.round(depreciableAmount / asset.depreciationMonths);
+    const monthlyDepn = depreciableAmount / asset.depreciationMonths;
     if (monthlyDepn <= 0) return;
 
-    const currentAccum = asset.accumDepreciation || 0;
-    if (currentAccum >= depreciableAmount) return;
+    // 3. 취득일부터 마감연월까지의 전체 경과월수 정밀 계산
+    let yearsDiff = closingDate.getFullYear() - acqDate.getFullYear();
+    let monthsDiff = closingDate.getMonth() - acqDate.getMonth();
+    let totalElapsedMonths = yearsDiff * 12 + monthsDiff + 1; // 취득당월 포함
 
-    const actualDepn = Math.min(monthlyDepn, depreciableAmount - currentAccum);
+    if (totalElapsedMonths < 1) totalElapsedMonths = 1;
+
+    if ((asset.status === 'SOLD' || asset.disposalDate) && asset.disposalDate) {
+      const dispDate = new Date(asset.disposalDate);
+      if (!isNaN(dispDate.getTime()) && dispDate <= closingDate) {
+        let dispYears = dispDate.getFullYear() - acqDate.getFullYear();
+        let dispMonths = dispDate.getMonth() - acqDate.getMonth();
+        totalElapsedMonths = Math.max(1, dispYears * 12 + dispMonths + 1);
+      }
+    }
+
+    const effectiveElapsed = Math.min(totalElapsedMonths, asset.depreciationMonths);
+    const targetAccum = Math.min(depreciableAmount, Math.round(monthlyDepn * effectiveElapsed));
+    const currentAccum = asset.accumDepreciation || 0;
+
+    const actualDepn = Math.max(0, targetAccum - currentAccum);
+    if (actualDepn <= 0) return;
+
     estimatedTotalDepn += actualDepn;
     estimatedCount++;
   });
