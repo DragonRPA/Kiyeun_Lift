@@ -20,7 +20,18 @@ export const InspectionChecklistManage: React.FC = () => {
   const handleOpenAddModal = () => {
     setEditingItem(null);
     setFormCategory('외관/바디');
-    setFormCode(`DEFECT_${Date.now().toString().slice(-4)}`);
+    
+    // CHK-000000X 7자리 자동 채번 계산
+    let maxNum = 0;
+    inspectionChecklistItems.forEach(item => {
+      if (item.code && item.code.startsWith('CHK-')) {
+        const num = parseInt(item.code.replace('CHK-', ''), 10);
+        if (!isNaN(num) && num > maxNum) maxNum = num;
+      }
+    });
+    const nextCode = `CHK-${String(maxNum + 1).padStart(7, '0')}`;
+
+    setFormCode(nextCode);
     setFormName('');
     setFormScore(5);
     setFormDescription('');
@@ -48,13 +59,13 @@ export const InspectionChecklistManage: React.FC = () => {
       await saveInspectionChecklistItem({
         id: editingItem?.id,
         category: formCategory,
-        code: formCode || `DEFECT_${Date.now().toString().slice(-4)}`,
+        code: formCode || `CHK-${Date.now().toString().slice(-7)}`,
         name: formName.trim(),
         score: Number(formScore),
         description: formDescription.trim()
       });
 
-      alert(`✅ [정비 필요 항목 ${editingItem ? '수정' : '신규 등록'} 완료]\n\n항목명: ${formName}\n부여 점수: ${formScore}점`);
+      alert(`✅ [정비 필요 항목 ${editingItem ? '수정' : '신규 등록'} 완료]\n\n항목코드: ${formCode}\n항목명: ${formName}\n부여 점수: ${formScore}점`);
       setIsModalOpen(false);
     } catch (err: any) {
       alert(`⚠️ 저장 중 오류 발생: ${err?.message || err}`);
@@ -85,7 +96,7 @@ export const InspectionChecklistManage: React.FC = () => {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
           <h2 style={{ fontWeight: '700', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <ShieldCheck className="text-primary" size={22} /> 입고 검수 항목 및 정비 필요 점수 관리
+            <ShieldCheck className="text-primary" size={22} /> 정비항목관리
           </h2>
           <p style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
             현장 입고 시 담당자 주관 판단(휴먼에러)을 차단하고, 사전에 정의된 정비필요 항목 선택 시 점수가 자동 합산 연동되는 마스터 대장입니다.

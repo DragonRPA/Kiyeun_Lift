@@ -1256,7 +1256,7 @@ const SEED_INSPECTION_CHECKLIST_ITEMS: InspectionChecklistItem[] = [
   {
     id: 'chk-1',
     category: '외관/바디',
-    code: 'DEFECT_A',
+    code: 'CHK-0000001',
     name: 'A 불량 (외관 스크래치/도장 손상)',
     score: 5,
     description: '외관 상의 경미한 도장 손상 또는 스크래치 발생',
@@ -1265,7 +1265,7 @@ const SEED_INSPECTION_CHECKLIST_ITEMS: InspectionChecklistItem[] = [
   {
     id: 'chk-2',
     category: '외관/바디',
-    code: 'DEFECT_B',
+    code: 'CHK-0000002',
     name: 'B 불량 (섀시 함몰/커버 찌그러짐)',
     score: 10,
     description: '외함 판금 찌그러짐 또는 섀시 파손',
@@ -1274,7 +1274,7 @@ const SEED_INSPECTION_CHECKLIST_ITEMS: InspectionChecklistItem[] = [
   {
     id: 'chk-3',
     category: '유압/동력',
-    code: 'DEFECT_OIL_LEAK',
+    code: 'CHK-0000003',
     name: '유압유 누유 (실린더/호스 누유)',
     score: 15,
     description: '유압 호스 피팅부 유압유 누출 파손',
@@ -1283,7 +1283,7 @@ const SEED_INSPECTION_CHECKLIST_ITEMS: InspectionChecklistItem[] = [
   {
     id: 'chk-4',
     category: '전기/배터리',
-    code: 'DEFECT_WIRE_CUT',
+    code: 'CHK-0000004',
     name: '배터리/전선 단선 및 접촉 불량',
     score: 20,
     description: '컨트롤러 배선 단선 또는 배터리 단자 부식',
@@ -1292,7 +1292,7 @@ const SEED_INSPECTION_CHECKLIST_ITEMS: InspectionChecklistItem[] = [
   {
     id: 'chk-5',
     category: '주행/타이어',
-    code: 'DEFECT_TIRE_DAMAGED',
+    code: 'CHK-0000005',
     name: '타이어 찢어짐 및 이상 마모',
     score: 10,
     description: '주행 타이어 찢어짐 또는 편마모 심함',
@@ -1749,6 +1749,7 @@ class LocalDB {
       case 'transportCompanies': prefix = 'TCOM-';   break;
       case 'transportDrivers':   prefix = 'TDRV-';   break;
       case 'outboundInspections':prefix = 'OIN-';    break;
+      case 'inspectionChecklistItems': prefix = 'CHK-'; break;
       case 'depreciationLogs':   prefix = 'DEP-';    break;
       default:
         prefix = key.slice(0, 4).toUpperCase() + '-';

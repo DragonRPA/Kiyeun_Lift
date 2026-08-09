@@ -154,7 +154,6 @@ const App: React.FC = () => {
         { id: 'asset', name: '자산 관리 (대장)', icon: <Layers size={16} />, component: <Assets /> },
         { id: 'acquisition_disposal', name: '당사자산 취득 / 매각', icon: <PlusCircle size={16} />, component: <AssetAcquisitionDisposal /> },
         { id: 'rent_asset', name: '임차자산 관리', icon: <ShoppingBag size={16} />, component: <RentAssets /> },
-        { id: 'inspection_checklist_manage', name: '입고 검수 항목 관리', icon: <Shield size={16} />, component: <InspectionChecklistManage /> },
       ]
     },
     {
@@ -183,6 +182,7 @@ const App: React.FC = () => {
       items: [
         { id: 'consumable', name: '소모품 관리', icon: <ShoppingBag size={16} />, component: <Consumables /> },
         { id: 'repair', name: '자산 정비 수리', icon: <Wrench size={16} />, component: <Repairs /> },
+        { id: 'inspection_checklist_manage', name: '정비항목관리', icon: <Shield size={16} />, component: <InspectionChecklistManage /> },
       ]
     },
     {
