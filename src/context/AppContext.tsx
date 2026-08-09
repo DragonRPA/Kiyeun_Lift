@@ -1,6 +1,6 @@
 // d:\Kiyeun_Lift\src\context\AppContext.tsx
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
-import { db, supabase, User, MenuPermission, createMenuPermission, Customer, CustomerContact, CustomerSite, Product, Asset, Consumable, ConsumableLog, ConsumablePurchaseRequest, Contract, ContractAsset, ContractHistory, Delivery, Billing, BillingDetail, Payment, PaymentDepositLink, Repair, RepairConsumable, Todo, BankTransaction, BankMatchingRule, AssetInOutLog, GoogleConfig, Vendor, CashFlowSnapshot, OutboundInspection, TransportCompany, TransportDriver, DepreciationLog, PurchaseSettlement, PurchaseSettlementItem, ExternalLease, PurchaseSettlementType, PurchaseSettlementStatus, findCustomerByNormalizedName } from '../services/db';
+import { db, supabase, User, MenuPermission, createMenuPermission, Customer, CustomerContact, CustomerSite, Product, Asset, Consumable, ConsumableLog, ConsumablePurchaseRequest, Contract, ContractAsset, ContractHistory, Delivery, Billing, BillingDetail, Payment, PaymentDepositLink, Repair, RepairConsumable, Todo, BankTransaction, BankMatchingRule, AssetInOutLog, GoogleConfig, Vendor, CashFlowSnapshot, OutboundInspection, TransportCompany, TransportDriver, DepreciationLog, PurchaseSettlement, PurchaseSettlementItem, ExternalLease, PurchaseSettlementType, PurchaseSettlementStatus, findCustomerByNormalizedName, AnnualLeaveQuota, LeaveUsage, OvertimeRecord } from '../services/db';
 import { ErrorModal } from '../components/ErrorModal';
 import { getAllSystemMenuIds } from '../config/menu_config';
 
@@ -81,7 +81,16 @@ interface AppContextType {
   purchaseSettlementItems: PurchaseSettlementItem[];
   externalLeases: ExternalLease[];
 
+  annualLeaveQuotas: AnnualLeaveQuota[];
+  leaveUsages: LeaveUsage[];
+  overtimeRecords: OvertimeRecord[];
+
   // Mutators
+  updateAnnualLeaveQuota: (userId: string, periodStart: string, periodEnd: string, grantedDays: number, memo?: string) => void;
+  addLeaveUsage: (usage: Omit<LeaveUsage, 'id' | 'createdAt'>) => void;
+  deleteLeaveUsage: (id: string) => void;
+  addOvertimeRecord: (record: Omit<OvertimeRecord, 'id' | 'createdAt'>) => void;
+  deleteOvertimeRecord: (id: string) => void;
   refreshAllData: () => void;
   executeMonthlyDepreciation: (depreciationYm: string, note?: string) => Promise<{ count: number; totalAmount: number }>;
   loadTablesForMenu: (menuId: string) => Promise<void>;
@@ -217,6 +226,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [purchaseSettlements, setPurchaseSettlements] = useState<PurchaseSettlement[]>([]);
   const [purchaseSettlementItems, setPurchaseSettlementItems] = useState<PurchaseSettlementItem[]>([]);
   const [externalLeases, setExternalLeases] = useState<ExternalLease[]>([]);
+  const [annualLeaveQuotas, setAnnualLeaveQuotas] = useState<AnnualLeaveQuota[]>([]);
+  const [leaveUsages, setLeaveUsages] = useState<LeaveUsage[]>([]);
+  const [overtimeRecords, setOvertimeRecords] = useState<OvertimeRecord[]>([]);
 
   // Navigation / Routing states
   const [activeTab, setActiveTab] = useState<string>('dashboard');
@@ -239,7 +251,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // ─────────────────────────────────────────────────────────
   // 로컬 db 인메모리 스토어 → React state 즉시 동기화 (Supabase pull 없음 — 저장 후 즉각 화면 반영용)
-  const syncLocalToState = () => {
+  const refreshAllData = () => {
     // 💡 헌장 1.2 & 5.2 준수: DB 상에 존재하는 물리적 중복 청구 상세 레코드 완벽 소탕 & 원격 DB(Supabase) 동기 삭제
     const seen = new Set<string>();
     const duplicateIds: string[] = [];
@@ -291,6 +303,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setPurchaseSettlements([...db.purchaseSettlements]);
     setPurchaseSettlementItems([...db.purchaseSettlementItems]);
     setExternalLeases([...db.externalLeases]);
+    setAnnualLeaveQuotas([...db.annualLeaveQuotas]);
+    setLeaveUsages([...db.leaveUsages]);
+    setOvertimeRecords([...db.overtimeRecords]);
   };
 
   // 전체 28개 테이블 Supabase pull 후 state 동기화 (초기 로딩 전용)
@@ -302,7 +317,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         console.error("Failed to sync from Supabase:", err);
       }
     }
-    syncLocalToState();
+    refreshAllData();
   };
 
   // 메뉴별 관련 테이블만 Supabase pull (메뉴 전환 시 호출 — 최신 데이터 보장)
@@ -334,6 +349,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     'delinquency':          ['billings', 'customers', 'contracts'],
     'google_config':        ['googleConfigs'],
     'depreciation_execution': ['depreciationLogs', 'assets'],
+    'leave_ot':             ['users', 'annualLeaveQuotas', 'leaveUsages', 'overtimeRecords'],
   };
 
   const loadTablesForMenu = async (menuId: string) => {
@@ -342,14 +358,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!keys || keys.length === 0) return;
     try {
       await Promise.all(keys.map(key => db.pullTableFromSupabase(key)));
-      syncLocalToState();
+      refreshAllData();
     } catch (err) {
       console.warn('loadTablesForMenu error:', err);
     }
   };
-
-  // 하위 호환 유지용 alias — 저장 후 즉각 화면 반영 (Supabase pull 없음, 순수 로컬 동기화)
-  const refreshAllData = syncLocalToState;
 
 
   useEffect(() => {
@@ -1796,7 +1809,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         `⚠️ 장비 할당 저장 중 DB 동기화 오류가 발생했습니다:\n\n` +
         `■ [안내]: 저장 실패로 인해 장비 할당 상태가 이전 미할당 상태로 안전하게 롤백(자동 원복)되었습니다. 할당 대상 목록에서 계속 작업하실 수 있습니다.\n\n` +
         `■ [실패 원인]: ${errMsg}\n\n` +
-        `■ [조치 방법]: 아래 버튼 [🚀 1-Click DB 패치 즉시 실행] 을 누르시거나 개발자 도구에서 패치를 실행해 주십시오:\n\n` +
+        `■ [조치 방법]: 아래 버튼 [DB 패치 실행] 을 누르시거나 개발자 도구에서 패치를 실행해 주십시오:\n\n` +
         `ALTER TABLE "assets" ADD COLUMN IF NOT EXISTS "contractStart" TEXT;\n` +
         `ALTER TABLE "assets" ADD COLUMN IF NOT EXISTS "contractEnd" TEXT;\n` +
         `ALTER TABLE "assets" ADD COLUMN IF NOT EXISTS "currentCustomerId" TEXT;\n` +
@@ -2534,6 +2547,53 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     refreshAllData();
   };
 
+  const updateAnnualLeaveQuota = (userId: string, periodStart: string, periodEnd: string, grantedDays: number, memo?: string) => {
+    const existing = db.annualLeaveQuotas.find(q => q.userId === userId && q.periodStart === periodStart);
+    if (existing) {
+      db.updateRow<AnnualLeaveQuota>('annualLeaveQuotas', existing.id, {
+        grantedDays,
+        memo,
+        updatedAt: new Date().toISOString()
+      } as any);
+    } else {
+      db.insertRow<AnnualLeaveQuota>('annualLeaveQuotas', {
+        userId,
+        periodStart,
+        periodEnd,
+        grantedDays,
+        memo,
+        createdAt: new Date().toISOString()
+      } as any);
+    }
+    refreshAllData();
+  };
+
+  const addLeaveUsage = (usage: Omit<LeaveUsage, 'id' | 'createdAt'>) => {
+    db.insertRow<LeaveUsage>('leaveUsages', {
+      ...usage,
+      createdAt: new Date().toISOString()
+    } as any);
+    refreshAllData();
+  };
+
+  const deleteLeaveUsage = (id: string) => {
+    db.deleteRow('leaveUsages', id);
+    refreshAllData();
+  };
+
+  const addOvertimeRecord = (record: Omit<OvertimeRecord, 'id' | 'createdAt'>) => {
+    db.insertRow<OvertimeRecord>('overtimeRecords', {
+      ...record,
+      createdAt: new Date().toISOString()
+    } as any);
+    refreshAllData();
+  };
+
+  const deleteOvertimeRecord = (id: string) => {
+    db.deleteRow('overtimeRecords', id);
+    refreshAllData();
+  };
+
   const dispatchDelivery = (
     deliveryId: string, 
     dispatchData: { 
@@ -3166,8 +3226,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       users, permissions, customers, contacts, sites, products, assets, consumables, consumableLogs, consumablePurchases, contracts, contractAssets, contractHistory, deliveries, billings, billingDetails, payments, paymentDepositLinks, repairs, repairConsumables, transportCompanies, transportDrivers, todos,
       bankTransactions, bankMatchingRules, assetInOutLogs, vendors, googleConfigs, cashFlowSnapshots, outboundInspections, depreciationLogs,
       purchaseSettlements, purchaseSettlementItems, externalLeases,
+      annualLeaveQuotas, leaveUsages, overtimeRecords,
       refreshAllData, executeMonthlyDepreciation, loadTablesForMenu, updatePermissions, saveUser, saveCustomer, saveContact, saveSite, saveProduct, saveAsset, updateGoogleConfig,
       saveCashFlowSnapshot, deleteCashFlowSnapshot, saveVendor, deleteVendor,
+      updateAnnualLeaveQuota, addLeaveUsage, deleteLeaveUsage, addOvertimeRecord, deleteOvertimeRecord,
       acquireAsset, disposeAsset, registerRentedAsset, returnRentedAsset, changeAssetStatus,
       purchaseConsumable, useConsumable,
       requestConsumablePurchase, acceptConsumablePurchase, completeConsumablePurchase, inboundConsumablePurchase, clearEvidenceFileUrls, updateEvidenceFileUrls,

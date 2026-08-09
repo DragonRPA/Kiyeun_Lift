@@ -34,12 +34,46 @@ export interface User {
   position?: string;
   status?: 'ACTIVE' | 'LEAVE_OF_ABSENCE' | 'RETIRED';
   birthDate?: string;
+  joinDate?: string;  // 입사일 (YYYY-MM-DD)
   address?: string;
   phone?: string;
   email?: string;
   profileImageUrl?: string;
   createdAt?: string;
   updatedAt?: string;
+}
+
+export interface AnnualLeaveQuota {
+  id: string;
+  userId: string;
+  periodStart: string; // YYYY-MM-DD (갱신 주기 시작)
+  periodEnd: string;   // YYYY-MM-DD (갱신 주기 종료)
+  grantedDays: number; // 이번 1년 동안 부여될 연차 갯수 (예: 15)
+  memo?: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface LeaveUsage {
+  id: string;
+  userId: string;
+  leaveType: 'ANNUAL' | 'HALF_AM' | 'HALF_PM'; // 연차(1일) / 오전반차(0.5일) / 오후반차(0.5일)
+  usedDays: number; // 1.0 또는 0.5
+  startDate: string; // YYYY-MM-DD
+  endDate: string;   // YYYY-MM-DD
+  reason: string;
+  status: 'APPROVED' | 'PENDING' | 'REJECTED';
+  createdAt: string;
+}
+
+export interface OvertimeRecord {
+  id: string;
+  userId: string;
+  startDateTime: string; // YYYY-MM-DD HH:mm (시작 일시)
+  hours: number;         // 몇 시간 OT 하였는지 (예: 2.5)
+  workDetail: string;    // 연장근무 내용
+  status: 'APPROVED' | 'PENDING' | 'REJECTED';
+  createdAt: string;
 }
 
 export interface Department {
@@ -554,11 +588,17 @@ export interface Todo {
 
 export interface BankTransaction {
   id: string;
+  bankName?: string;       // 은행명 ('우리은행' | '신한은행' 등)
+  accountNumber?: string;  // 당사 계좌번호
   transactionDate: string; // 'YYYY-MM-DD HH:mm:ss'
-  senderName: string;      // 이체자/입금자명 (적요)
-  senderAccount?: string;  // 입금자 계좌번호 (통장 표시, 검색용)
+  summary?: string;        // 적요/거래구분 (인터넷, CMS, FB자동 등)
+  counterparty?: string;   // 기재내용/내용 (실질적 입금자명 / 거래상대방)
+  senderName: string;      // 이체자/입금자명 (기존 호환용, counterparty와 동동)
+  senderAccount?: string;  // 입금자 계좌번호 (기본값 null)
   depositAmount: number;   // 입금액 (매출 수납용)
   withdrawAmount: number;  // 출금액
+  balance?: number;        // 거래후 잔액
+  branchName?: string;     // 취급점 / 거래점명
   memo: string;            // 거래 메모
   matchedBillingId?: string; // 매칭된 청구서 ID (비어 있으면 미매칭)
   matchingType?: 'AUTO' | 'MANUAL';
@@ -1108,6 +1148,64 @@ const SEED_CASH_FLOW_SNAPSHOTS: CashFlowSnapshot[] = [
   }
 ];
 
+const SEED_ANNUAL_LEAVE_QUOTAS: AnnualLeaveQuota[] = [
+  {
+    id: 'quota-1',
+    userId: 'usr-admin',
+    periodStart: '2026-01-01',
+    periodEnd: '2026-12-31',
+    grantedDays: 15,
+    memo: '2026년 정기 부여 연차',
+    createdAt: new Date().toISOString()
+  },
+  {
+    id: 'quota-2',
+    userId: 'usr-sales1',
+    periodStart: '2026-03-15',
+    periodEnd: '2027-03-14',
+    grantedDays: 15,
+    memo: '입사일 주기 연차 부여',
+    createdAt: new Date().toISOString()
+  }
+];
+
+const SEED_LEAVE_USAGES: LeaveUsage[] = [
+  {
+    id: 'leave-1',
+    userId: 'usr-sales1',
+    leaveType: 'ANNUAL',
+    usedDays: 1.0,
+    startDate: '2026-06-10',
+    endDate: '2026-06-10',
+    reason: '개인 사유 휴가',
+    status: 'APPROVED',
+    createdAt: new Date().toISOString()
+  },
+  {
+    id: 'leave-2',
+    userId: 'usr-sales1',
+    leaveType: 'HALF_PM',
+    usedDays: 0.5,
+    startDate: '2026-07-20',
+    endDate: '2026-07-20',
+    reason: '병원 진료 (오후 반차)',
+    status: 'APPROVED',
+    createdAt: new Date().toISOString()
+  }
+];
+
+const SEED_OVERTIME_RECORDS: OvertimeRecord[] = [
+  {
+    id: 'ot-1',
+    userId: 'usr-sales1',
+    startDateTime: '2026-08-01 18:00',
+    hours: 2.5,
+    workDetail: '긴급 출고 장비 정비 및 야간 배차 대기',
+    status: 'APPROVED',
+    createdAt: new Date().toISOString()
+  }
+];
+
 export const ALL_DB_KEYS = [
   'users', 'departments', 'permissions', 'customers', 'contacts', 'sites', 
   'products', 'assets', 'consumables', 'consumableLogs', 'consumablePurchases',
@@ -1116,7 +1214,8 @@ export const ALL_DB_KEYS = [
   'billings', 'billingDetails', 'payments', 'repairs', 'repairConsumables', 'todos', 
   'bankTransactions', 'bankMatchingRules', 'googleConfigs', 'assetInOutLogs',
   'cashFlowSnapshots', 'outboundInspections', 'depreciationLogs',
-  'purchaseSettlements', 'purchaseSettlementItems', 'externalLeases'
+  'purchaseSettlements', 'purchaseSettlementItems', 'externalLeases',
+  'annualLeaveQuotas', 'leaveUsages', 'overtimeRecords'
 ];
 
 class LocalDB {
@@ -1208,6 +1307,15 @@ class LocalDB {
 
   get paymentDepositLinks() { return this.get<PaymentDepositLink>('paymentDepositLinks', []); }
   set paymentDepositLinks(val: PaymentDepositLink[]) { this.set('paymentDepositLinks', val); }
+
+  get annualLeaveQuotas() { return this.get<AnnualLeaveQuota>('annualLeaveQuotas', SEED_ANNUAL_LEAVE_QUOTAS); }
+  set annualLeaveQuotas(val: AnnualLeaveQuota[]) { this.set('annualLeaveQuotas', val); }
+
+  get leaveUsages() { return this.get<LeaveUsage>('leaveUsages', SEED_LEAVE_USAGES); }
+  set leaveUsages(val: LeaveUsage[]) { this.set('leaveUsages', val); }
+
+  get overtimeRecords() { return this.get<OvertimeRecord>('overtimeRecords', SEED_OVERTIME_RECORDS); }
+  set overtimeRecords(val: OvertimeRecord[]) { this.set('overtimeRecords', val); }
 
   get repairs() { return this.get<Repair>('repairs', SEED_REPAIRS); }
   set repairs(val: Repair[]) { this.set('repairs', val); }

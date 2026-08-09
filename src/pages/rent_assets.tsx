@@ -550,7 +550,7 @@ export const RentAssets: React.FC = () => {
             <Layers className="text-primary" size={22} /> 임차(전대) 자산관리 & 임차처 거래명세서 매입 정산
           </h1>
           <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: '4px 0 0 0' }}>
-            임차처 거래명세서 1:1 교차 대사, 단가/기간 오차 자동 검증 및 매입 정산 1-Click 승인 시스템
+            임차처 거래명세서 1:1 교차 대사, 단가/기간 오차 자동 검증 및 매입 정산 승인 시스템
           </p>
         </div>
 
@@ -739,7 +739,7 @@ export const RentAssets: React.FC = () => {
                         setSelectedReconcileIds(matchedIds);
                       }}
                       style={{ padding: '3px 8px', fontSize: '11px', fontWeight: 'bold', backgroundColor: 'rgba(16, 185, 129, 0.15)', color: '#10b981', border: '1px solid rgba(16, 185, 129, 0.3)', borderRadius: '4px', cursor: 'pointer' }}
-                      title="🟢 일치 건만 1-Click 선택"
+                      title="🟢 일치 건 선택"
                     >
                       🟢 일치 건만 빠른 선택 ({statsRecon.matchedCount}건)
                     </button>

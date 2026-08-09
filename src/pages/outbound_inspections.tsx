@@ -835,7 +835,7 @@ export const OutboundInspections: React.FC = () => {
                       className="btn-secondary"
                       style={{ fontSize: '12px', padding: '5px 12px', display: 'flex', alignItems: 'center', gap: '4px' }}
                     >
-                      <CheckCircle size={14} /> 1-Click 전체 체크/해제
+                      <CheckCircle size={14} /> 전체 선택/해제
                     </button>
                   )}
                 </div>
@@ -1030,7 +1030,7 @@ export const OutboundInspections: React.FC = () => {
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 99999, padding: '20px' }}>
           <div style={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '14px', padding: '24px', width: '100%', maxWidth: '640px', maxHeight: '90vh', overflowY: 'auto' }}>
             <h3 style={{ fontSize: '18px', fontWeight: 800, margin: '0 0 8px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <ArrowRightLeft size={20} color="var(--primary)" /> 출고 의뢰 1-Click 장비 교체
+              <ArrowRightLeft size={20} color="var(--primary)" /> 출고 의뢰 장비 교체
             </h3>
             <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '16px' }}>
               기존 장비 <strong style={{ color: 'var(--primary)' }}>[{exchangeModalAsset.assetNo}] ({exchangeModalAsset.modelName})</strong>를 대체 가능한 동급 장비로 교체합니다.

@@ -314,7 +314,7 @@ export const UsersPermissions: React.FC = () => {
         `현재 저장하려는 권한 목록에 DB 임직원 마스터(users)에 존재하지 않는 무효 유저 ID가 포함되어 있습니다.\n\n` +
         `■ 발견된 무효 유저 ID 목록 (${invalidUserIdsList.length}개): [${invalidUserIdsList.join(', ')}]\n` +
         `■ 무효 고스트 권한 데이터 건수: 총 ${ghostPermissions.length}건\n\n` +
-        `💡 원천 해결: 상단의 [🔍 고스트 권한 진단 및 1-Click 정돈] 버튼을 누르시면 무효 데이터만 자동으로 깔끔히 정리하여 안전하게 저장할 수 있습니다.`;
+        `💡 원천 해결: 상단의 [🔍 고스트 권한 진단 및 정돈] 버튼을 누르시면 무효 데이터만 자동으로 깔끔히 정리하여 안전하게 저장할 수 있습니다.`;
       
       showErrorModal(warningMsg, '저장 사전 차단 - 참조키(FK) 위반 방지');
       setShowGhostModal(true); // 자동 팝업 가이드 오픈
@@ -430,7 +430,7 @@ export const UsersPermissions: React.FC = () => {
                   <button type="button" className="btn-secondary" onClick={() => setShowGhostModal(false)} style={{ padding: '8px 14px', fontSize: '13px' }}>닫기</button>
                   {canSave && (
                     <button type="button" className="btn-danger" onClick={handleCleanGhostPermissions} style={{ padding: '8px 16px', fontSize: '13px', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <Check size={16} /> 🧹 고스트 권한 1-Click 자동 정돈 & 정상 데이터 저장
+                      <Check size={16} /> 🧹 고스트 권한 정돈 & 정상 데이터 저장
                     </button>
                   )}
                 </div>

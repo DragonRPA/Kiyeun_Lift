@@ -341,7 +341,7 @@ export const TransportMaster: React.FC = () => {
 
               {/* 입금 계좌 정보 */}
               <div style={{ padding: '12px', backgroundColor: 'var(--bg-active)', borderRadius: '8px', border: '1px solid var(--border)' }}>
-                <label style={{ fontWeight: '700', color: 'var(--primary)', marginBottom: '8px', display: 'block' }}>🏦 지급 입금 계좌 정보 (1-Click 연동)</label>
+                <label style={{ fontWeight: '700', color: 'var(--primary)', marginBottom: '8px', display: 'block' }}>🏦 지급 입금 계좌 정보 (계좌 연동)</label>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '8px' }}>
                   <div>
                     <label style={{ fontSize: '11px' }}>은행명</label>

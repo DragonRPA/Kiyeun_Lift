@@ -1,9 +1,10 @@
 // d:\Kiyeun_Lift\src\pages\Deliveries.tsx
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { Truck, Check, DollarSign, Calendar, Navigation, AlertTriangle, CheckCircle, ShieldAlert, Download, Search, Camera, Upload } from 'lucide-react';
+import { Truck, Check, DollarSign, Calendar, Navigation, AlertTriangle, CheckCircle, ShieldAlert, Download, Search, Camera, Upload, Sun, MapPin } from 'lucide-react';
 import { Delivery } from '../services/db';
 import { exportToExcel } from '../services/excel';
+import { DestinationWeatherModal } from '../components/DestinationWeatherModal';
 
 interface SettleVehicle {
   id: string;
@@ -54,10 +55,41 @@ const compressImage = (file: File): Promise<File> => {
 
 export const Deliveries: React.FC = () => {
   const {
-    deliveries, contracts, customers, assets, contractAssets, dispatchDelivery, settleDeliveryCost, completeDelivery, completeInboundDelivery, hasPermission
+    deliveries, contracts, customers, assets, contractAssets, sites, dispatchDelivery, settleDeliveryCost, completeDelivery, completeInboundDelivery, hasPermission
   } = useApp();
 
   const canSave = hasPermission('delivery', 'save');
+
+  // --- 배차 하차지 일기예보 모달 상태 ---
+  const [showDestWeatherModal, setShowDestWeatherModal] = useState(false);
+  const [destWeatherParams, setDestWeatherParams] = useState({
+    customerName: '',
+    siteName: '',
+    rawAddress: ''
+  });
+
+  const handleOpenDestWeather = (delivery: Delivery) => {
+    const contract = contracts.find(c => c.id === delivery.contractId);
+    const customer = customers.find(cust => cust.id === contract?.customerId);
+    const site = sites?.find(s => s.id === contract?.siteId);
+
+    const customerName = customer?.name || getCustNameFromContract(delivery.contractId);
+    const siteName = site?.name || (typeof site === 'string' ? site : '현장미지정');
+    
+    // 하차지 주소 순위: 1) site.address  2) customer.address  3) delivery.memo 내 주소
+    let rawAddress = site?.address || customer?.address || '';
+    if (!rawAddress && delivery.memo) {
+      const match = delivery.memo.match(/주소:\s*(.*?)(?=\||$)/);
+      if (match) rawAddress = match[1].trim();
+    }
+
+    setDestWeatherParams({
+      customerName,
+      siteName,
+      rawAddress
+    });
+    setShowDestWeatherModal(true);
+  };
 
   // --- 배차 조회 필터 상태 ---
   const [tempSearchTerm, setTempSearchTerm] = useState('');
@@ -330,14 +362,31 @@ export const Deliveries: React.FC = () => {
             출고 배차 및 장비 회수(INBOUND)를 제어하고, 물류사 차량별 운송비(임시 vs 확정)를 정산 마감합니다.
           </span>
         </div>
-        <button 
-          type="button" 
-          className="btn-secondary" 
-          onClick={handleExportExcel}
-          style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '13px', padding: '8px 14px' }}
-        >
-          <Download size={14} /> 배차목록 엑셀 다운로드
-        </button>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button 
+            type="button" 
+            className="btn-primary" 
+            onClick={() => {
+              if (deliveries.length > 0) {
+                handleOpenDestWeather(deliveries[deliveries.length - 1]);
+              } else {
+                setDestWeatherParams({ customerName: '일기예보', siteName: '하차지 선택', rawAddress: '경기도 용인시' });
+                setShowDestWeatherModal(true);
+              }
+            }}
+            style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '13px', padding: '8px 14px', backgroundColor: '#3B82F6', fontWeight: 'bold' }}
+          >
+            <Sun size={15} color="#F59E0B" /> 하차지 일기예보
+          </button>
+          <button 
+            type="button" 
+            className="btn-secondary" 
+            onClick={handleExportExcel}
+            style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '13px', padding: '8px 14px' }}
+          >
+            <Download size={14} /> 배차목록 엑셀 다운로드
+          </button>
+        </div>
       </div>
 
       {/* 필터 제어부 */}
@@ -487,7 +536,31 @@ export const Deliveries: React.FC = () => {
                         </span>
                       )}
                     </td>
-                    <td style={{ whiteSpace: 'nowrap' }}><strong>{displayName}</strong></td>
+                    <td style={{ whiteSpace: 'nowrap' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <strong>{displayName}</strong>
+                        <button
+                          type="button"
+                          onClick={() => handleOpenDestWeather(d)}
+                          title="해당 운송 하차지 현장 실시간 날씨 및 주간 예보 보기"
+                          style={{
+                            padding: '2px 6px',
+                            fontSize: '11px',
+                            fontWeight: '600',
+                            borderRadius: '4px',
+                            border: '1px solid rgba(59, 130, 246, 0.4)',
+                            backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                            color: '#3B82F6',
+                            cursor: 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '3px'
+                          }}
+                        >
+                          <Sun size={11} color="#F59E0B" /> 하차지 날씨
+                        </button>
+                      </div>
+                    </td>
                     <td style={{ fontSize: '13px', whiteSpace: 'nowrap' }}>
                       {d.vehicleType ? (
                         <span>
@@ -790,6 +863,15 @@ export const Deliveries: React.FC = () => {
           </form>
         </div>
       )}
+
+      {/* [4] 운송 하차지 실시간 날씨 및 주간 예보 모달 */}
+      <DestinationWeatherModal
+        isOpen={showDestWeatherModal}
+        onClose={() => setShowDestWeatherModal(false)}
+        customerName={destWeatherParams.customerName}
+        siteName={destWeatherParams.siteName}
+        rawAddress={destWeatherParams.rawAddress}
+      />
 
     </div>
   );

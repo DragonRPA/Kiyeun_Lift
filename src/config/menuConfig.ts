@@ -26,8 +26,9 @@ export const SYSTEM_MENU_CONFIG: MenuGroupConfig[] = [
       { id: 'customer', name: '고객 관리 (담당자/현장)' },
       { id: 'contract', name: '계약 관리' },
       { id: 'billing', name: '청구/수납 관리' },
-      { id: 'smart_dispatch', name: '스마트 출고 요청' },
-      { id: 'smart_return', name: '스마트 회수 요청' }
+      { id: 'smart_dispatch', name: '출고 요청' },
+      { id: 'smart_return', name: '회수 요청' },
+      { id: 'leave_ot', name: '연차/OT 관리' }
     ]
   },
   {

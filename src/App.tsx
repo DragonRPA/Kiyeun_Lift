@@ -33,6 +33,7 @@ import { AssetAssignment } from './pages/asset_assignment';
 import { OrganizationSettings } from './pages/OrganizationSettings';
 import { Vendors } from './pages/Vendors';
 import { GoogleConfig } from './pages/GoogleConfig';
+import { LeaveOtPage } from './pages/LeaveOtPage';
 import { PayrollPage } from './pages/PayrollPage';
 import { CorporateCardPage } from './pages/CorporateCardPage';
 import { CashFlowPage } from './pages/CashFlowPage';
@@ -139,8 +140,9 @@ const App: React.FC = () => {
         { id: 'customer', name: '고객 관리', icon: <Users size={16} />, component: <Customers /> },
         { id: 'contract', name: '계약 관리', icon: <UserCheck size={16} />, component: <Contracts /> },
         { id: 'billing', name: '청구 / 수납 관리', icon: <CreditCard size={16} />, component: <Billings /> },
-        { id: 'smart_dispatch', name: '스마트 출고 요청', icon: <Zap size={16} />, component: <SmartDispatch /> },
-        { id: 'smart_return', name: '스마트 회수 요청', icon: <Zap size={16} />, component: <SmartReturn /> },
+        { id: 'smart_dispatch', name: '출고 요청', icon: <Zap size={16} />, component: <SmartDispatch /> },
+        { id: 'smart_return', name: '회수 요청', icon: <Zap size={16} />, component: <SmartReturn /> },
+        { id: 'leave_ot', name: '연차/OT 관리', icon: <Clock size={16} />, component: <LeaveOtPage /> },
       ]
     },
     {

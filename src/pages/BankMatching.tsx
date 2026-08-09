@@ -4,10 +4,12 @@ import { useApp } from '../context/AppContext';
 import { 
   Search, Check, X, Download, Upload, Trash2, 
   RefreshCw, TrendingUp, AlertCircle, FileSpreadsheet,
-  Link as LinkIcon, Plus, DollarSign, Calendar, Layers
+  Link as LinkIcon, Plus, DollarSign, Calendar, Layers,
+  Building2, ToggleLeft, ToggleRight, Info, CheckCircle2
 } from 'lucide-react';
 import { exportToExcel } from '../services/excel';
 import { BankTransaction } from '../services/db';
+import { parseBankExcelFile } from '../services/bankParser';
 
 export const BankMatching: React.FC = () => {
   const {
@@ -32,6 +34,12 @@ export const BankMatching: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'UNMATCHED' | 'MATCHED'>('ALL');
   
+  // 은행별 필터 ('ALL' | '우리은행' | '신한은행' | 기타)
+  const [selectedBankFilter, setSelectedBankFilter] = useState<string>('ALL');
+
+  // 계좌번호 매칭 ON/OFF 토글 스위치 (기본값: OFF)
+  const [useAccountNumberMatch, setUseAccountNumberMatch] = useState<boolean>(false);
+
   // 학습형 매칭 룰 검색 및 등록 상태
   const [ruleSearchInput, setRuleSearchInput] = useState('');
   const [ruleSearchTerm, setRuleSearchTerm] = useState('');
@@ -50,12 +58,6 @@ export const BankMatching: React.FC = () => {
     return customers.find(c => c.id === custId)?.name || '알 수 없음';
   };
 
-  const getBillingName = (bId: string) => {
-    const b = billings.find(x => x.id === bId);
-    if (!b) return '-';
-    return `[${getCustName(b.customerId)}] ${b.billingYm} 청구분 (${b.totalAmount.toLocaleString()}원)`;
-  };
-
   const getMatchedBillingsInfo = (txId: string) => {
     const matchPrefix = `pay-matching-${txId}`;
     const txPayments = payments.filter(p => p.id.startsWith(matchPrefix));
@@ -65,7 +67,7 @@ export const BankMatching: React.FC = () => {
     return txPayments.map((p) => {
       if (!p.billingId) {
         return (
-          <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--success)', fontSize: '12px' }}>
+          <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--success)', fontSize: '12px', whiteSpace: 'nowrap' }}>
             <span>• 선수금 적립 (+{p.amount.toLocaleString()}원)</span>
           </div>
         );
@@ -74,8 +76,8 @@ export const BankMatching: React.FC = () => {
       const b = billings.find(x => x.id === p.billingId);
       if (!b) return null;
       return (
-        <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px' }}>
-          <LinkIcon size={10} style={{ color: 'var(--primary)' }} />
+        <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px', whiteSpace: 'nowrap' }}>
+          <LinkIcon size={10} style={{ color: 'var(--primary)', flexShrink: 0 }} />
           <span>
             {b.billingYm} 청구분 ({p.amount.toLocaleString()}원 수납)
           </span>
@@ -95,76 +97,37 @@ export const BankMatching: React.FC = () => {
 
   // 3. 모의 데이터 생성
   const handleGenerateMockData = () => {
-    const mockTxs = [
-      { transactionDate: '2026-07-20 09:30:15', senderName: '대현테크', depositAmount: 1050000, withdrawAmount: 0, memo: '통장입금' },
-      { transactionDate: '2026-07-20 10:15:22', senderName: '주식회사기연', depositAmount: 600000, withdrawAmount: 0, memo: '7월분결제' },
-      { transactionDate: '2026-07-20 11:00:00', senderName: '이정용', depositAmount: 300000, withdrawAmount: 0, memo: '임대료 송금' },
-      { transactionDate: '2026-07-20 13:45:10', senderName: '현장가설', depositAmount: 0, withdrawAmount: 150000, memo: '유류비 지출' },
-      { transactionDate: '2026-07-20 14:20:00', senderName: '한성건설', depositAmount: 900000, withdrawAmount: 0, memo: '7월렌탈료' },
-      { transactionDate: '2026-07-21 09:10:00', senderName: '삼성물산', depositAmount: 1200000, withdrawAmount: 0, memo: '공사대금' },
-      { transactionDate: '2026-07-21 11:30:00', senderName: '현대건설', depositAmount: 850000, withdrawAmount: 0, memo: '장비대' },
-      { transactionDate: '2026-07-21 14:00:00', senderName: '김정비', depositAmount: 0, withdrawAmount: 350000, memo: '외주수리비' },
-      { transactionDate: '2026-07-22 10:00:00', senderName: '에이스렌탈', depositAmount: 0, withdrawAmount: 500000, memo: '임차료' },
-      { transactionDate: '2026-07-22 16:30:00', senderName: '기연산업', depositAmount: 450000, withdrawAmount: 0, memo: '렌탈입금' }
+    const mockTxs: Omit<BankTransaction, 'id' | 'createdAt'>[] = [
+      { bankName: '우리은행', accountNumber: '1005502717011', transactionDate: '2026-08-05 08:44:37', summary: '인터넷', counterparty: '주식회사 기연', senderName: '주식회사 기연', depositAmount: 600000, withdrawAmount: 0, balance: 12500000, branchName: '신한은행(021497)', memo: '렌탈료입금', isDeposit: true },
+      { bankName: '우리은행', accountNumber: '1005502717011', transactionDate: '2026-08-05 09:30:15', summary: '타행IB', counterparty: '대현테크', senderName: '대현테크', depositAmount: 1050000, withdrawAmount: 0, balance: 13550000, branchName: '우리은행', memo: '7월수금', isDeposit: true },
+      { bankName: '신한은행', accountNumber: '110987654321', transactionDate: '2026-08-05 18:50:39', summary: 'CMS지', counterparty: '한성건설', senderName: '한성건설', depositAmount: 900000, withdrawAmount: 0, balance: 8900000, branchName: '자금부', memo: 'CMS자동입금', isDeposit: true },
+      { bankName: '신한은행', accountNumber: '110987654321', transactionDate: '2026-08-05 18:31:44', summary: 'FB자동', counterparty: '삼성물산', senderName: '삼성물산', depositAmount: 1200000, withdrawAmount: 0, balance: 10100000, branchName: 'FI영2', memo: '공사대금결제', isDeposit: true },
+      { bankName: '우리은행', accountNumber: '1005502717011', transactionDate: '2026-08-06 11:00:00', summary: '인터넷', counterparty: '현대건설', senderName: '현대건설', depositAmount: 850000, withdrawAmount: 0, balance: 14400000, branchName: '우리은행', memo: '장비렌탈비', isDeposit: true },
+      { bankName: '신한은행', accountNumber: '110987654321', transactionDate: '2026-08-06 14:20:00', summary: '타행PC', counterparty: '기연산업', senderName: '기연산업', depositAmount: 450000, withdrawAmount: 0, balance: 10550000, branchName: '(기업)', memo: '렌탈료', isDeposit: true }
     ];
     uploadBankTransactions(mockTxs);
-    alert('10건의 모의 거래 내역이 성공적으로 생성되었으며, 규칙에 따른 자동 대조 처리가 완료되었습니다.');
+    alert('모의 통장 거래 내역 6건이 생성되었습니다.');
   };
 
-  // 4. CSV 다운로드/업로드 처리
-  const handleDownloadTemplate = () => {
-    const headers = '거래일시,이체자명,입금액,출금액,메모\n';
-    const rows = [
-      '2026-07-20 09:30:00,대현테크,1050000,0,보통예금입금',
-      '2026-07-20 10:15:00,주식회사기연,600000,0,수금대금',
-      '2026-07-20 14:00:00,홍길동,300000,0,렌탈료송금'
-    ].join('\n');
-    
-    const blob = new Blob(['\uFEFF' + headers + rows], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.setAttribute('href', url);
-    link.setAttribute('download', 'bank_transactions_template.csv');
-    link.style.visibility = 'hidden';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-
-  const handleCSVUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // 4. 다중 은행 엑셀 업로드 처리 (동적 헤더 감지 파서)
+  const handleBankExcelUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const text = event.target?.result as string;
-      const lines = text.split('\n');
-      const parsed: any[] = [];
-
-      for (let i = 1; i < lines.length; i++) {
-        const line = lines[i].trim();
-        if (!line) continue;
-        
-        const cols = line.split(',');
-        if (cols.length >= 5) {
-          parsed.push({
-            transactionDate: cols[0].trim(),
-            senderName: cols[1].trim(),
-            depositAmount: parseFloat(cols[2].trim()) || 0,
-            withdrawAmount: parseFloat(cols[3].trim()) || 0,
-            memo: cols[4].trim()
-          });
-        }
+    try {
+      const parsedResult = await parseBankExcelFile(file);
+      if (parsedResult.transactions.length === 0) {
+        alert('엑셀 파일에서 읽을 수 있는 통장 거래 내역을 찾지 못했습니다.');
+        return;
       }
 
-      if (parsed.length > 0) {
-        uploadBankTransactions(parsed);
-        alert(`${parsed.length}건의 은행 입출금 거래 내역이 업로드되었으며 자동 대조를 마쳤습니다.`);
-      } else {
-        alert('올바른 CSV 형식이 아닙니다. 헤더라인을 포함하여 컬럼을 맞춰 주십시오.');
-      }
-    };
-    reader.readAsText(file, 'utf-8');
+      uploadBankTransactions(parsedResult.transactions);
+      alert(`[${parsedResult.bankName}] 엑셀 파싱이 완료되었습니다.\n총 ${parsedResult.transactions.length}건의 통장 거래 내역이 등록되었습니다.`);
+      e.target.value = '';
+    } catch (err: any) {
+      console.error('Bank Excel Parse Error:', err);
+      alert(`엑셀 파싱 중 오류가 발생하였습니다:\n${err.message || '파일 형식을 확인해 주십시오.'}`);
+    }
   };
 
   // 5. 엑셀 다운로드
@@ -178,24 +141,35 @@ export const BankMatching: React.FC = () => {
 
       return {
         'No': idx + 1,
+        '은행명': t.bankName || '미지정',
         '거래일시': t.transactionDate,
-        '이체/입금자명': t.senderName,
+        '적요': t.summary || '-',
+        '입금자명(기재내용)': t.counterparty || t.senderName,
         '입금액': t.depositAmount.toLocaleString() + '원',
         '출금액': t.withdrawAmount.toLocaleString() + '원',
-        '적요/메모': t.memo,
+        '거래후잔액': t.balance ? t.balance.toLocaleString() + '원' : '-',
+        '취급/거래점': t.branchName || '-',
+        '메모': t.memo,
         '매칭형태': t.matchedBillingId ? (t.matchingType === 'AUTO' ? '자동매칭' : '수동매칭') : '미매칭',
         '매칭된 청구 정보': matchInfo
       };
     });
-    exportToExcel(excelData, `은행입출금매칭_${new Date().toISOString().split('T')[0]}`, '입출금대조');
+    exportToExcel(excelData, `은행입출금수납대사_${new Date().toISOString().split('T')[0]}`, '입출금대조');
   };
 
   // 6. 데이터 필터링
   const filteredTransactions = bankTransactions.filter(t => {
-    const matchesSearch = 
-      t.senderName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      t.memo.toLowerCase().includes(searchTerm.toLowerCase());
-    
+    if (selectedBankFilter !== 'ALL') {
+      const tBank = t.bankName || '우리은행';
+      if (tBank !== selectedBankFilter) return false;
+    }
+
+    const sender = (t.counterparty || t.senderName || '').toLowerCase();
+    const memoStr = (t.memo || '').toLowerCase();
+    const summaryStr = (t.summary || '').toLowerCase();
+    const searchLower = searchTerm.toLowerCase();
+
+    const matchesSearch = sender.includes(searchLower) || memoStr.includes(searchLower) || summaryStr.includes(searchLower);
     if (!matchesSearch) return false;
 
     if (statusFilter === 'UNMATCHED') {
@@ -207,14 +181,15 @@ export const BankMatching: React.FC = () => {
     return true;
   }).sort((a, b) => b.transactionDate.localeCompare(a.transactionDate));
 
-  // 7. 수동 매칭 모달 활성화 및 정렬
+  // 7. 수동 매칭 모달 활성화
   const handleOpenManualMatch = (tx: BankTransaction) => {
     setSelectedTx(tx);
     setLearnRule(true);
     setBillingSearchTerm('');
     
+    const senderKey = tx.counterparty || tx.senderName;
     const matchedCustomer = customers.find(c => 
-      tx.senderName.includes(c.name) || c.name.includes(tx.senderName)
+      senderKey.includes(c.name) || c.name.includes(senderKey)
     );
     
     const candidateBillings = unpaidBillings.filter(b => {
@@ -242,269 +217,356 @@ export const BankMatching: React.FC = () => {
 
     matchTransactionManual(selectedTx.id, matchingBillingId, learnRule);
     setSelectedTx(null);
-    alert('수동 매칭 및 수납 처리가 완료되었습니다.');
+    alert('수동 매칭 및 수납 승인이 완료되었습니다.');
   };
 
   const getModalFilteredBillings = () => {
     if (!selectedTx) return [];
     
-    const matchedCustomer = customers.find(c => 
-      selectedTx.senderName.includes(c.name) || c.name.includes(selectedTx.senderName)
-    );
-
+    const senderKey = selectedTx.counterparty || selectedTx.senderName;
     return unpaidBillings.filter(b => {
-      const custName = getCustName(b.customerId);
-      return custName.toLowerCase().includes(billingSearchTerm.toLowerCase()) ||
-             b.billingYm.includes(billingSearchTerm);
+      const cust = customers.find(c => c.id === b.customerId);
+      const custName = cust?.name || '';
+      const bYm = b.billingYm || '';
+      
+      const search = billingSearchTerm.toLowerCase();
+      if (search) {
+        return custName.toLowerCase().includes(search) || bYm.includes(search);
+      }
+      return true;
     }).sort((a, b) => {
-      const aIsMatch = matchedCustomer && a.customerId === matchedCustomer.id;
-      const bIsMatch = matchedCustomer && b.customerId === matchedCustomer.id;
-      if (aIsMatch && !bIsMatch) return -1;
-      if (!aIsMatch && bIsMatch) return 1;
+      // 상호 일치 1순위, 금액 일치 2순위 상단 배치
+      const custA = customers.find(c => c.id === a.customerId)?.name || '';
+      const custB = customers.find(c => c.id === b.customerId)?.name || '';
+      const matchA = senderKey.includes(custA) || custA.includes(senderKey);
+      const matchB = senderKey.includes(custB) || custB.includes(senderKey);
 
-      const aAmtMatch = (a.totalAmount - a.paidAmount) === selectedTx.depositAmount;
-      const bAmtMatch = (b.totalAmount - b.paidAmount) === selectedTx.depositAmount;
-      if (aAmtMatch && !bAmtMatch) return -1;
-      if (!aAmtMatch && bAmtMatch) return 1;
+      if (matchA && !matchB) return -1;
+      if (!matchA && matchB) return 1;
 
-      return a.billingYm.localeCompare(b.billingYm);
+      const amtA = (a.totalAmount - a.paidAmount) === selectedTx.depositAmount;
+      const amtB = (b.totalAmount - b.paidAmount) === selectedTx.depositAmount;
+      if (amtA && !amtB) return -1;
+      if (!amtA && amtB) return 1;
+
+      return b.billingYm.localeCompare(a.billingYm);
     });
   };
 
   return (
-    <div>
-      <h2 style={{ marginBottom: '24px', fontWeight: '700' }}>은행 입출금 및 청구서 대조 관리</h2>
+    <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+      
+      {/* 헤더 타이틀 */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+        <div>
+          <h2 style={{ fontSize: '20px', fontWeight: 'bold', margin: 0, color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Building2 size={22} style={{ color: 'var(--primary)' }} />
+            통장 입출금 내역 및 수납 대사 관리
+          </h2>
+          <p style={{ fontSize: '13px', color: 'var(--text-muted)', margin: '4px 0 0 0' }}>
+            거래 은행의 통장 엑셀을 업로드하여 입금 내역 및 미수 청구서 수납 대사를 수행합니다.
+          </p>
+        </div>
 
-      {/* 탭 헤더 */}
-      <div style={{ display: 'flex', gap: '8px', marginBottom: '24px' }}>
-        <button 
-          className={activeTab === 'MATCHING' ? 'btn-primary' : 'btn-secondary'} 
-          onClick={() => setActiveTab('MATCHING')}
-        >
-          <RefreshCw size={14} /> 입출금 대조 및 수납 매칭
-        </button>
-        <button 
-          className={activeTab === 'RULES' ? 'btn-primary' : 'btn-secondary'} 
-          onClick={() => setActiveTab('RULES')}
-        >
-          <Layers size={14} /> 학습형 매칭 룰 관리 ({bankMatchingRules.length}건)
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <button
+            onClick={() => setActiveTab('MATCHING')}
+            className={`btn ${activeTab === 'MATCHING' ? 'btn-primary' : 'btn-secondary'}`}
+            style={{ fontSize: '13px', whiteSpace: 'nowrap' }}
+          >
+            <Layers size={14} style={{ marginRight: '6px' }} />
+            통장 입출금 대사
+          </button>
+          <button
+            onClick={() => setActiveTab('RULES')}
+            className={`btn ${activeTab === 'RULES' ? 'btn-primary' : 'btn-secondary'}`}
+            style={{ fontSize: '13px', whiteSpace: 'nowrap' }}
+          >
+            <RefreshCw size={14} style={{ marginRight: '6px' }} />
+            매칭 규칙 관리 ({bankMatchingRules.length}건)
+          </button>
+        </div>
+      </div>
+
+      {/* 통계 메트릭 카드 */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
+        <div style={{ padding: '16px', backgroundColor: 'var(--bg-surface)', borderRadius: '8px', border: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div style={{ padding: '10px', backgroundColor: 'rgba(59, 130, 246, 0.1)', color: 'var(--primary)', borderRadius: '8px' }}>
+            <DollarSign size={20} />
+          </div>
+          <div>
+            <div style={{ fontSize: '12px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>총 입금 수납 대상</div>
+            <div style={{ fontSize: '18px', fontWeight: 'bold', color: 'var(--text-main)' }}>{deposits.length} 건</div>
+          </div>
+        </div>
+
+        <div style={{ padding: '16px', backgroundColor: 'var(--bg-surface)', borderRadius: '8px', border: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div style={{ padding: '10px', backgroundColor: 'rgba(16, 185, 129, 0.1)', color: 'var(--success)', borderRadius: '8px' }}>
+            <CheckCircle2 size={20} />
+          </div>
+          <div>
+            <div style={{ fontSize: '12px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>수납 대사 완료</div>
+            <div style={{ fontSize: '18px', fontWeight: 'bold', color: 'var(--success)' }}>{matchedCount} 건 ({matchRate}%)</div>
+          </div>
+        </div>
+
+        <div style={{ padding: '16px', backgroundColor: 'var(--bg-surface)', borderRadius: '8px', border: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div style={{ padding: '10px', backgroundColor: 'rgba(245, 158, 11, 0.1)', color: 'var(--warning)', borderRadius: '8px' }}>
+            <AlertCircle size={20} />
+          </div>
+          <div>
+            <div style={{ fontSize: '12px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>미매칭 입금 (수동 대사 대상)</div>
+            <div style={{ fontSize: '18px', fontWeight: 'bold', color: 'var(--warning)' }}>{unmatchedCount} 건</div>
+          </div>
+        </div>
+
+        <div style={{ padding: '16px', backgroundColor: 'var(--bg-surface)', borderRadius: '8px', border: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div style={{ padding: '10px', backgroundColor: 'rgba(239, 68, 68, 0.1)', color: 'var(--danger)', borderRadius: '8px' }}>
+            <TrendingUp size={20} />
+          </div>
+          <div>
+            <div style={{ fontSize: '12px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>전사 미수금 잔액 총액</div>
+            <div style={{ fontSize: '18px', fontWeight: 'bold', color: 'var(--danger)' }}>{totalUnpaidAmount.toLocaleString()} 원</div>
+          </div>
+        </div>
       </div>
 
       {activeTab === 'MATCHING' ? (
         <>
-          {/* 상단 통계 카드 */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '20px', marginBottom: '24px' }}>
-            <div className="card" style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '16px', padding: '20px' }}>
-              <div style={{ padding: '12px', backgroundColor: 'rgba(59, 130, 246, 0.1)', borderRadius: '12px', color: 'var(--primary)' }}>
-                <TrendingUp size={24} />
-              </div>
-              <div>
-                <span style={{ fontSize: '13px', color: 'var(--text-secondary)', display: 'block' }}>전체 통장 입금</span>
-                <strong style={{ fontSize: '20px', fontWeight: '700' }}>{deposits.length} 건</strong>
-              </div>
-            </div>
-
-            <div className="card" style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '16px', padding: '20px' }}>
-              <div style={{ padding: '12px', backgroundColor: 'rgba(16, 185, 129, 0.1)', borderRadius: '12px', color: 'var(--success)' }}>
-                <Check size={24} />
-              </div>
-              <div>
-                <span style={{ fontSize: '13px', color: 'var(--text-secondary)', display: 'block' }}>대조 매칭 완료 (매칭율)</span>
-                <strong style={{ fontSize: '20px', fontWeight: '700' }}>{matchedCount} 건 ({matchRate}%)</strong>
-              </div>
-            </div>
-
-            <div className="card" style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '16px', padding: '20px' }}>
-              <div style={{ padding: '12px', backgroundColor: 'rgba(245, 158, 11, 0.1)', borderRadius: '12px', color: 'var(--warning)' }}>
-                <AlertCircle size={24} />
-              </div>
-              <div>
-                <span style={{ fontSize: '13px', color: 'var(--text-secondary)', display: 'block' }}>미매칭 대기 입금</span>
-                <strong style={{ fontSize: '20px', fontWeight: '700', color: 'var(--warning)' }}>{unmatchedCount} 건</strong>
-              </div>
-            </div>
-
-            <div className="card" style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '16px', padding: '20px' }}>
-              <div style={{ padding: '12px', backgroundColor: 'rgba(239, 68, 68, 0.1)', borderRadius: '12px', color: 'var(--danger)' }}>
-                <DollarSign size={24} />
-              </div>
-              <div>
-                <span style={{ fontSize: '13px', color: 'var(--text-secondary)', display: 'block' }}>미수금 청구 잔액</span>
-                <strong style={{ fontSize: '18px', fontWeight: '700', color: 'var(--danger)' }}>
-                  {totalUnpaidAmount.toLocaleString()}원 ({unpaidBillings.length}건)
-                </strong>
-              </div>
-            </div>
-          </div>
-
-          {/* 작업 컨트롤 바 */}
-          <div className="card" style={{ padding: '16px', marginBottom: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
-            <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-              <button className="btn-secondary" onClick={handleDownloadTemplate} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <FileSpreadsheet size={15} /> 템플릿 받기
-              </button>
-              {canSave && (
-                <label className="btn-primary" style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', margin: 0 }}>
-                  <Upload size={15} /> CSV 업로드
-                  <input type="file" accept=".csv" onChange={handleCSVUpload} style={{ display: 'none' }} />
-                </label>
-              )}
-              {canSave && (
-                <button className="btn-secondary" onClick={handleGenerateMockData} style={{ display: 'flex', alignItems: 'center', gap: '4px', border: '1px dashed var(--border-color)' }}>
-                  <Plus size={14} /> 모의 입출금 데이터 생성
-                </button>
-              )}
-            </div>
-
-            <button className="btn-secondary" onClick={handleExport} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <Download size={15} /> 현재 목록 엑셀 저장
-            </button>
-          </div>
-
-          {/* 검색 및 필터 패널 */}
-          <div className="card" style={{ padding: '16px', marginBottom: '20px', display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
-            <div style={{ flex: 1, minWidth: '240px', position: 'relative' }}>
-              <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
-              <input
-                type="text"
-                value={searchTerm}
-                onChange={e => setSearchTerm(e.target.value)}
-                placeholder="이체자명 또는 적요 검색..."
-                style={{ paddingLeft: '36px' }}
-              />
-            </div>
+          {/* 전사 컨트롤 툴바 */}
+          <div style={{ padding: '16px', backgroundColor: 'var(--bg-surface)', borderRadius: '8px', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '14px' }}>
             
-            <div style={{ display: 'flex', border: '1px solid var(--border-color)', borderRadius: '6px', overflow: 'hidden' }}>
-              <button 
-                onClick={() => setStatusFilter('ALL')}
-                style={{
-                  padding: '8px 16px', fontSize: '13px', border: 'none', borderRadius: 0,
-                  backgroundColor: statusFilter === 'ALL' ? 'var(--bg-active)' : 'transparent',
-                  color: statusFilter === 'ALL' ? 'var(--primary)' : 'var(--text-secondary)'
-                }}
-              >
-                전체 거래
-              </button>
-              <button 
-                onClick={() => setStatusFilter('UNMATCHED')}
-                style={{
-                  padding: '8px 16px', fontSize: '13px', border: 'none', borderRadius: 0,
-                  backgroundColor: statusFilter === 'UNMATCHED' ? 'var(--bg-active)' : 'transparent',
-                  color: statusFilter === 'UNMATCHED' ? 'var(--primary)' : 'var(--text-secondary)',
-                  borderLeft: '1px solid var(--border-color)', borderRight: '1px solid var(--border-color)'
-                }}
-              >
-                대기 (미대조)
-              </button>
-              <button 
-                onClick={() => setStatusFilter('MATCHED')}
-                style={{
-                  padding: '8px 16px', fontSize: '13px', border: 'none', borderRadius: 0,
-                  backgroundColor: statusFilter === 'MATCHED' ? 'var(--bg-active)' : 'transparent',
-                  color: statusFilter === 'MATCHED' ? 'var(--primary)' : 'var(--text-secondary)'
-                }}
-              >
-                대조 완료
-              </button>
+            {/* 1열: 토글 스위치 바 */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', backgroundColor: 'var(--bg-main)', padding: '10px 14px', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Info size={16} style={{ color: 'var(--primary)', flexShrink: 0 }} />
+                <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-main)', whiteSpace: 'nowrap' }}>
+                  수납 대사 설정:
+                </span>
+                <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                  상대방 계좌번호가 없는 통장 내역에 대응하여 입금자명 기준 수동 수납 처리가 기본 수행됩니다.
+                </span>
+              </div>
+
+              {/* 계좌번호 매칭 ON/OFF 토글 (기본값: OFF) */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }} onClick={() => setUseAccountNumberMatch(!useAccountNumberMatch)}>
+                <span style={{ fontSize: '12px', fontWeight: 'bold', color: useAccountNumberMatch ? 'var(--primary)' : 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                  계좌번호 자동 매칭 {useAccountNumberMatch ? '[ ON ]' : '[ OFF (기본값) ]'}
+                </span>
+                {useAccountNumberMatch ? (
+                  <ToggleRight size={26} style={{ color: 'var(--primary)' }} />
+                ) : (
+                  <ToggleLeft size={26} style={{ color: 'var(--text-muted)' }} />
+                )}
+              </div>
+            </div>
+
+            {/* 2열: 검색 필터 및 액션 버튼 */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+              
+              {/* 은행선택 탭 */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                <span style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--text-muted)', marginRight: '4px', whiteSpace: 'nowrap' }}>
+                  🏦 거래 은행:
+                </span>
+                <button
+                  className={`btn ${selectedBankFilter === 'ALL' ? 'btn-primary' : 'btn-secondary'}`}
+                  style={{ fontSize: '12px', padding: '4px 10px', whiteSpace: 'nowrap' }}
+                  onClick={() => setSelectedBankFilter('ALL')}
+                >
+                  전체 은행
+                </button>
+                <button
+                  className={`btn ${selectedBankFilter === '우리은행' ? 'btn-primary' : 'btn-secondary'}`}
+                  style={{ fontSize: '12px', padding: '4px 10px', whiteSpace: 'nowrap' }}
+                  onClick={() => setSelectedBankFilter('우리은행')}
+                >
+                  우리은행
+                </button>
+                <button
+                  className={`btn ${selectedBankFilter === '신한은행' ? 'btn-primary' : 'btn-secondary'}`}
+                  style={{ fontSize: '12px', padding: '4px 10px', whiteSpace: 'nowrap' }}
+                  onClick={() => setSelectedBankFilter('신한은행')}
+                >
+                  신한은행
+                </button>
+              </div>
+
+              {/* 필터 및 검색창 */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                <select
+                  value={statusFilter}
+                  onChange={(e: any) => setStatusFilter(e.target.value)}
+                  className="form-control"
+                  style={{ width: '130px', fontSize: '12px', whiteSpace: 'nowrap' }}
+                >
+                  <option value="ALL">전체 내역</option>
+                  <option value="UNMATCHED">미매칭 (수납대기)</option>
+                  <option value="MATCHED">수납대사 완료</option>
+                </select>
+
+                <div style={{ position: 'relative', width: '200px' }}>
+                  <Search size={14} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+                  <input
+                    type="text"
+                    placeholder="입금자명 / 기재내용 / 메모"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="form-control"
+                    style={{ paddingLeft: '30px', fontSize: '12px' }}
+                  />
+                </div>
+
+                {/* 다중 은행 엑셀 업로드 */}
+                <label className="btn btn-primary" style={{ fontSize: '12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap' }}>
+                  <Upload size={14} />
+                  통장 엑셀 업로드
+                  <input
+                    type="file"
+                    accept=".xlsx, .xls, .csv"
+                    style={{ display: 'none' }}
+                    onChange={handleBankExcelUpload}
+                  />
+                </label>
+
+                {isAdmin && (
+                  <button
+                    onClick={handleGenerateMockData}
+                    className="btn btn-secondary"
+                    style={{ fontSize: '12px', whiteSpace: 'nowrap' }}
+                  >
+                    <Plus size={14} style={{ marginRight: '4px' }} />
+                    샘플 엑셀 데이터 생성
+                  </button>
+                )}
+
+                <button
+                  onClick={handleExport}
+                  className="btn btn-secondary"
+                  style={{ fontSize: '12px', whiteSpace: 'nowrap' }}
+                >
+                  <FileSpreadsheet size={14} style={{ marginRight: '4px' }} />
+                  엑셀 내보내기
+                </button>
+              </div>
             </div>
           </div>
 
-          {/* 메인 리스트 그리드 */}
-          <div className="table-container">
-            <table>
+          {/* 데이터 테이블 */}
+          <div style={{ backgroundColor: 'var(--bg-surface)', borderRadius: '8px', border: '1px solid var(--border-color)', overflowX: 'auto' }}>
+            <table style={{ width: '100%', minWidth: '1100px', borderCollapse: 'collapse', fontSize: '13px', textAlign: 'left' }}>
               <thead>
-                <tr>
-                  <th>No</th>
-                  <th>거래일시</th>
-                  <th>이체/입금자명</th>
-                  <th>입금액 (매출)</th>
-                  <th>출금액 (매입)</th>
-                  <th>적요/메모</th>
-                  <th style={{ width: '100px' }}>상태</th>
-                  <th>대조 매칭된 청구서</th>
-                  {canSave && <th style={{ width: '100px', textAlign: 'center' }}>작업</th>}
+                <tr style={{ backgroundColor: 'var(--bg-main)', borderBottom: '1px solid var(--border-color)', color: 'var(--text-muted)' }}>
+                  <th style={{ padding: '12px 14px', whiteSpace: 'nowrap', width: '120px' }}>수납 대사</th>
+                  <th style={{ padding: '12px 14px', whiteSpace: 'nowrap' }}>은행명</th>
+                  <th style={{ padding: '12px 14px', whiteSpace: 'nowrap' }}>거래일시</th>
+                  <th style={{ padding: '12px 14px', whiteSpace: 'nowrap' }}>적요</th>
+                  <th style={{ padding: '12px 14px', whiteSpace: 'nowrap' }}>기재내용 (입금자명)</th>
+                  <th style={{ padding: '12px 14px', whiteSpace: 'nowrap', textAlign: 'right' }}>입금액 (원)</th>
+                  <th style={{ padding: '12px 14px', whiteSpace: 'nowrap', textAlign: 'right' }}>출금액 (원)</th>
+                  <th style={{ padding: '12px 14px', whiteSpace: 'nowrap', textAlign: 'right' }}>거래후 잔액</th>
+                  <th style={{ padding: '12px 14px', whiteSpace: 'nowrap' }}>취급/거래점</th>
+                  <th style={{ padding: '12px 14px', whiteSpace: 'nowrap' }}>매칭된 청구 정보</th>
+                  <th style={{ padding: '12px 14px', whiteSpace: 'nowrap' }}>메모</th>
                 </tr>
               </thead>
               <tbody>
                 {filteredTransactions.length === 0 ? (
                   <tr>
-                    <td colSpan={canSave ? 9 : 8} style={{ textAlign: 'center', padding: '40px 0', color: 'var(--text-muted)' }}>
-                      {bankTransactions.length === 0
-                        ? '📭 등록된 통장 거래 내역이 없습니다. (상단의 \'모의 입출금 데이터 생성\'을 눌러 테스트해 보세요)'
-                        : '🔍 조회 조건에 맞는 거래 내역이 없습니다. 필터 조건을 변경해 보세요.'}
+                    <td colSpan={11} style={{ padding: '32px', textAlign: 'center', color: 'var(--text-muted)' }}>
+                      조회된 통장 거래 내역이 없습니다.
                     </td>
                   </tr>
                 ) : (
-                  filteredTransactions.map((tx, index) => {
-                    const isDeposit = tx.depositAmount > 0;
+                  filteredTransactions.map((tx) => {
                     const isMatched = !!tx.matchedBillingId;
+                    const senderDisplay = tx.counterparty || tx.senderName;
+                    const bBank = tx.bankName || '우리은행';
 
                     return (
-                      <tr key={tx.id}>
-                        <td>{index + 1}</td>
-                        <td>{tx.transactionDate}</td>
-                        <td>
-                          <strong>{tx.senderName}</strong>
-                        </td>
-                        <td style={{ color: tx.depositAmount > 0 ? 'var(--primary)' : 'inherit', fontWeight: tx.depositAmount > 0 ? '600' : 'normal' }}>
-                          {tx.depositAmount > 0 ? `+${tx.depositAmount.toLocaleString()}원` : '-'}
-                        </td>
-                        <td style={{ color: tx.withdrawAmount > 0 ? 'var(--danger)' : 'inherit' }}>
-                          {tx.withdrawAmount > 0 ? `-${tx.withdrawAmount.toLocaleString()}원` : '-'}
-                        </td>
-                        <td>
-                          <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{tx.memo}</span>
-                        </td>
-                        <td>
-                          {!isDeposit ? (
-                            <span className="badge badge-secondary" style={{ backgroundColor: 'var(--bg-app)', color: 'var(--text-muted)' }}>출금(제외)</span>
-                          ) : isMatched ? (
-                            tx.matchingType === 'AUTO' ? (
-                              <span className="badge badge-success" style={{ backgroundColor: 'rgba(16, 185, 129, 0.1)', color: 'var(--success)' }}>자동 매칭</span>
+                      <tr 
+                        key={tx.id}
+                        style={{ 
+                          borderBottom: '1px solid var(--border-color)',
+                          backgroundColor: isMatched ? 'rgba(16, 185, 129, 0.02)' : 'transparent'
+                        }}
+                      >
+                        <td style={{ padding: '10px 14px', whiteSpace: 'nowrap' }}>
+                          {tx.depositAmount > 0 ? (
+                            isMatched ? (
+                              <button
+                                onClick={() => unmatchTransaction(tx.id)}
+                                className="btn btn-secondary"
+                                style={{ fontSize: '11px', padding: '4px 8px', color: 'var(--danger)', whiteSpace: 'nowrap' }}
+                                disabled={!canSave}
+                              >
+                                <X size={12} style={{ marginRight: '3px' }} />
+                                매칭 해제
+                              </button>
                             ) : (
-                              <span className="badge badge-info" style={{ backgroundColor: 'rgba(59, 130, 246, 0.1)', color: 'var(--primary)' }}>수동 매칭</span>
+                              <button
+                                onClick={() => handleOpenManualMatch(tx)}
+                                className="btn btn-primary"
+                                style={{ fontSize: '11px', padding: '4px 10px', whiteSpace: 'nowrap' }}
+                                disabled={!canSave}
+                              >
+                                <Check size={12} style={{ marginRight: '3px' }} />
+                                수납/매칭 ➔
+                              </button>
                             )
                           ) : (
-                            <span className="badge badge-warning" style={{ backgroundColor: 'rgba(245, 158, 11, 0.1)', color: 'var(--warning)' }}>대기</span>
+                            <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>-</span>
                           )}
                         </td>
-                        <td>
-                          {isMatched ? (
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                              {getMatchedBillingsInfo(tx.id)}
-                            </div>
-                          ) : (
-                            <span style={{ color: 'var(--text-muted)', fontSize: '12px' }}>-</span>
-                          )}
+
+                        <td style={{ padding: '10px 14px', whiteSpace: 'nowrap' }}>
+                          <span style={{
+                            padding: '2px 8px',
+                            borderRadius: '4px',
+                            fontSize: '11px',
+                            fontWeight: 'bold',
+                            backgroundColor: bBank === '우리은행' ? 'rgba(59, 130, 246, 0.15)' : bBank === '신한은행' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(156, 163, 175, 0.15)',
+                            color: bBank === '우리은행' ? 'var(--primary)' : bBank === '신한은행' ? 'var(--success)' : 'var(--text-muted)'
+                          }}>
+                            {bBank}
+                          </span>
                         </td>
-                        {canSave && (
-                          <td style={{ textAlign: 'center' }}>
-                            {isDeposit && !isMatched && (
-                              <button 
-                                className="btn-primary" 
-                                onClick={() => handleOpenManualMatch(tx)}
-                                style={{ padding: '4px 8px', fontSize: '11px' }}
-                              >
-                                대조 매칭
-                              </button>
-                            )}
-                            {isMatched && (
-                              <button 
-                                className="btn-danger" 
-                                onClick={() => {
-                                  if (confirm('이 매칭을 취소하시겠습니까?\n매칭을 취소하면 청구서의 수납 전표가 완전히 삭제되고 미납 상태로 롤백됩니다.')) {
-                                    unmatchTransaction(tx.id);
-                                    alert('대조 매칭이 해제되고 수납 내역이 안전하게 롤백되었습니다.');
-                                  }
-                                }}
-                                style={{ padding: '4px 8px', fontSize: '11px' }}
-                              >
-                                매칭 취소
-                              </button>
-                            )}
-                          </td>
-                        )}
+
+                        <td style={{ padding: '10px 14px', whiteSpace: 'nowrap', fontSize: '12px', color: 'var(--text-muted)' }}>
+                          {tx.transactionDate}
+                        </td>
+
+                        <td style={{ padding: '10px 14px', whiteSpace: 'nowrap', fontSize: '12px' }}>
+                          {tx.summary || '-'}
+                        </td>
+
+                        <td style={{ padding: '10px 14px', whiteSpace: 'nowrap', fontWeight: 'bold', color: 'var(--text-main)' }}>
+                          {senderDisplay}
+                        </td>
+
+                        <td style={{ padding: '10px 14px', whiteSpace: 'nowrap', textAlign: 'right', fontWeight: 'bold', color: tx.depositAmount > 0 ? 'var(--primary)' : 'var(--text-muted)' }}>
+                          {tx.depositAmount > 0 ? `+${tx.depositAmount.toLocaleString()}원` : '-'}
+                        </td>
+
+                        <td style={{ padding: '10px 14px', whiteSpace: 'nowrap', textAlign: 'right', color: tx.withdrawAmount > 0 ? 'var(--danger)' : 'var(--text-muted)' }}>
+                          {tx.withdrawAmount > 0 ? `-${tx.withdrawAmount.toLocaleString()}원` : '-'}
+                        </td>
+
+                        <td style={{ padding: '10px 14px', whiteSpace: 'nowrap', textAlign: 'right', color: 'var(--text-muted)', fontSize: '12px' }}>
+                          {tx.balance ? `${tx.balance.toLocaleString()}원` : '-'}
+                        </td>
+
+                        <td style={{ padding: '10px 14px', whiteSpace: 'nowrap', color: 'var(--text-muted)', fontSize: '12px' }}>
+                          {tx.branchName || '-'}
+                        </td>
+
+                        <td style={{ padding: '10px 14px', whiteSpace: 'nowrap' }}>
+                          {getMatchedBillingsInfo(tx.id)}
+                        </td>
+
+                        <td style={{ padding: '10px 14px', whiteSpace: 'nowrap', color: 'var(--text-muted)', fontSize: '12px' }}>
+                          {tx.memo || '-'}
+                        </td>
                       </tr>
                     );
                   })
@@ -514,354 +576,319 @@ export const BankMatching: React.FC = () => {
           </div>
         </>
       ) : (
-        /* 학습형 매칭 룰 탭 */
-        <div className="card" style={{ padding: '24px' }}>
-          <div style={{ marginBottom: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        /* 규칙 관리 탭 */
+        <div style={{ backgroundColor: 'var(--bg-surface)', padding: '20px', borderRadius: '8px', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
             <div>
-              <h3 className="card-title">학습형 매칭 규칙 목록</h3>
-              <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '4px' }}>
-                수동 매칭 시 등록한 이체자명과 고객사의 연결 고리를 보여줍니다. 통장 내역 업로드 시 본 규칙을 조회하여 우선적으로 자동 대조 수납을 처리합니다.
+              <h3 style={{ fontSize: '16px', fontWeight: 'bold', margin: 0, color: 'var(--text-main)' }}>
+                이체자(입금자명) ↔ 고객사 매칭 규칙
+              </h3>
+              <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: '2px 0 0 0' }}>
+                동일 입금자명이 입금될 경우 지정된 고객사 청구건으로 매칭이 연결됩니다.
               </p>
             </div>
+
             {canSave && (
-              <button 
-                className="btn-primary" 
-                onClick={() => {
-                  setNewRuleSenderName('');
-                  setNewRuleCustomerId(customers.length > 0 ? customers[0].id : '');
-                  setIsRuleModalOpen(true);
-                }}
-                style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12.5px' }}
+              <button
+                onClick={() => setIsRuleModalOpen(false)}
+                className="btn btn-primary"
+                style={{ fontSize: '13px', whiteSpace: 'nowrap' }}
               >
-                <Plus size={15} /> 신규 매칭 룰 등록
+                <Plus size={14} style={{ marginRight: '4px' }} />
+                신규 규칙 등록
               </button>
             )}
           </div>
 
-          {/* 🔍 매칭 룰 전용 검색 및 필터 바 */}
-          <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', alignItems: 'center' }}>
-            <div style={{ position: 'relative', flex: 1, maxWidth: '400px' }}>
-              <Search size={15} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
-              <input
-                type="text"
-                placeholder="통장 적요(입금자명), 고객사명 검색..."
-                value={ruleSearchInput}
-                onChange={e => setRuleSearchInput(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter') setRuleSearchTerm(ruleSearchInput); }}
-                style={{ paddingLeft: '32px', width: '100%', fontSize: '13px' }}
-              />
-            </div>
-            <button
-              className="btn-primary"
-              onClick={() => setRuleSearchTerm(ruleSearchInput)}
-              style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '7px 14px', fontSize: '12.5px', fontWeight: '600' }}
-            >
-              <Search size={14} /> 조회
-            </button>
-            <button
-              className="btn-secondary"
-              onClick={() => { setRuleSearchInput(''); setRuleSearchTerm(''); }}
-              style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '7px 10px', fontSize: '12px' }}
-              title="검색 초기화"
-            >
-              <RefreshCw size={13} />
-            </button>
-            <span style={{ fontSize: '12.5px', color: 'var(--text-muted)', marginLeft: 'auto' }}>
-              전체 <strong>{bankMatchingRules.length}</strong>건 (조회: {
-                bankMatchingRules.filter(r => {
-                  const custName = getCustName(r.customerId).toLowerCase();
-                  const sender = r.senderName.toLowerCase();
-                  const term = ruleSearchTerm.toLowerCase();
-                  return sender.includes(term) || custName.includes(term);
-                }).length
-              }건)
-            </span>
+          <div style={{ display: 'flex', gap: '10px', width: '300px' }}>
+            <input
+              type="text"
+              placeholder="이체자명 검색"
+              value={ruleSearchInput}
+              onChange={(e) => setRuleSearchInput(e.target.value)}
+              className="form-control"
+              style={{ fontSize: '12px' }}
+            />
           </div>
 
-          <div className="table-container">
-            <table>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', minWidth: '600px', borderCollapse: 'collapse', fontSize: '13px', textAlign: 'left' }}>
               <thead>
-                <tr>
-                  <th style={{ width: '80px' }}>No</th>
-                  <th>은행 이체자/입금자명 (적요 기준)</th>
-                  <th>연결된 ERP 고객사</th>
-                  <th style={{ width: '150px' }}>등록일</th>
-                  {canSave && <th style={{ width: '100px', textAlign: 'center' }}>작업</th>}
+                <tr style={{ backgroundColor: 'var(--bg-main)', borderBottom: '1px solid var(--border-color)', color: 'var(--text-muted)' }}>
+                  <th style={{ padding: '10px 14px', whiteSpace: 'nowrap', width: '80px' }}>삭제</th>
+                  <th style={{ padding: '10px 14px', whiteSpace: 'nowrap' }}>통장 기재 입금자명</th>
+                  <th style={{ padding: '10px 14px', whiteSpace: 'nowrap' }}>매핑 고객사명</th>
+                  <th style={{ padding: '10px 14px', whiteSpace: 'nowrap' }}>등록일시</th>
                 </tr>
               </thead>
               <tbody>
-                {(() => {
-                  const filteredRules = bankMatchingRules.filter(r => {
-                    const custName = getCustName(r.customerId).toLowerCase();
-                    const sender = r.senderName.toLowerCase();
-                    const term = ruleSearchTerm.toLowerCase();
-                    return sender.includes(term) || custName.includes(term);
-                  });
-
-                  if (filteredRules.length === 0) {
-                    return (
-                      <tr>
-                        <td colSpan={canSave ? 5 : 4} style={{ textAlign: 'center', padding: '30px 0', color: 'var(--text-muted)' }}>
-                          {ruleSearchTerm ? '조회 검색 조건에 부합하는 매칭 룰이 없습니다.' : '등록된 학습형 매칭 룰이 없습니다.'}
-                        </td>
-                      </tr>
-                    );
-                  }
-
-                  return filteredRules.map((rule, idx) => (
-                    <tr key={rule.id}>
-                      <td>{idx + 1}</td>
-                      <td>
-                        <strong>{rule.senderName}</strong>
-                      </td>
-                      <td>{getCustName(rule.customerId)}</td>
-                      <td>{rule.createdAt.substring(0, 10)}</td>
-                      {canSave && (
-                        <td style={{ textAlign: 'center' }}>
-                          <button 
-                            className="btn-danger" 
-                            onClick={() => {
-                              if (confirm(`'${rule.senderName}' 매핑 매칭 규칙을 삭제하시겠습니까?`)) {
-                                deleteMatchingRule(rule.id);
-                                alert('매핑 규칙이 제거되었습니다.');
-                              }
-                            }}
-                            style={{ padding: '3px 8px', fontSize: '11px', display: 'inline-flex', alignItems: 'center', gap: '2px' }}
+                {bankMatchingRules.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} style={{ padding: '24px', textAlign: 'center', color: 'var(--text-muted)' }}>
+                      등록된 매칭 규칙이 없습니다.
+                    </td>
+                  </tr>
+                ) : (
+                  bankMatchingRules
+                    .filter(r => !ruleSearchInput || r.senderName.toLowerCase().includes(ruleSearchInput.toLowerCase()))
+                    .map((rule) => (
+                      <tr key={rule.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                        <td style={{ padding: '10px 14px', whiteSpace: 'nowrap' }}>
+                          <button
+                            onClick={() => deleteMatchingRule(rule.id)}
+                            className="btn btn-secondary"
+                            style={{ padding: '4px 8px', color: 'var(--danger)', fontSize: '11px' }}
+                            disabled={!canSave}
                           >
-                            <Trash2 size={10} /> 삭제
+                            <Trash2 size={12} />
                           </button>
                         </td>
-                      )}
-                    </tr>
-                  ));
-                })()}
+                        <td style={{ padding: '10px 14px', whiteSpace: 'nowrap', fontWeight: 'bold' }}>
+                          {rule.senderName}
+                        </td>
+                        <td style={{ padding: '10px 14px', whiteSpace: 'nowrap', color: 'var(--primary)' }}>
+                          {getCustName(rule.customerId)}
+                        </td>
+                        <td style={{ padding: '10px 14px', whiteSpace: 'nowrap', color: 'var(--text-muted)', fontSize: '12px' }}>
+                          {rule.createdAt?.substring(0, 10) || '-'}
+                        </td>
+                      </tr>
+                    ))
+                )}
               </tbody>
             </table>
           </div>
         </div>
       )}
 
-      {/* 🆕 신규 매칭 룰 직접 등록 모달 */}
-      {isRuleModalOpen && (
+      {/* 수동 수납 대사 모달 */}
+      {selectedTx && (
         <div style={{
           position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-          backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000
+          backgroundColor: 'rgba(0, 0, 0, 0.5)', display: 'flex',
+          justifyContent: 'center', alignItems: 'center', zIndex: 1000
         }}>
-          <div className="card" style={{ width: '90%', maxWidth: '480px', backgroundColor: 'var(--bg-card)', padding: '24px' }}>
-            <h3 style={{ margin: '0 0 16px 0', fontWeight: '700', borderBottom: '1px solid var(--border-color)', paddingBottom: '12px' }}>
-              신규 학습형 매칭 룰 수동 등록
-            </h3>
+          <div style={{
+            backgroundColor: 'var(--bg-surface)', borderRadius: '10px',
+            width: '90%', maxWidth: '650px', maxHeight: '90vh', overflowY: 'auto',
+            padding: '24px', display: 'flex', flexDirection: 'column', gap: '18px',
+            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)'
+          }}>
+            
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-color)', paddingBottom: '12px' }}>
+              <h3 style={{ fontSize: '17px', fontWeight: 'bold', margin: 0, color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <CheckCircle2 size={18} style={{ color: 'var(--primary)' }} />
+                수납 대사 및 승인
+              </h3>
+              <button onClick={() => setSelectedTx(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}>
+                <X size={20} />
+              </button>
+            </div>
 
-            <form onSubmit={(e) => {
-              e.preventDefault();
-              if (!newRuleSenderName.trim()) {
-                alert('은행 이체자/입금자명을 입력해주세요.');
-                return;
-              }
-              if (!newRuleCustomerId) {
-                alert('연결할 ERP 고객사를 선택해주세요.');
-                return;
-              }
-              saveMatchingRule(newRuleSenderName.trim(), newRuleCustomerId);
-              alert('매칭 룰이 성공적으로 등록/업데이트되었습니다.');
-              setIsRuleModalOpen(false);
-            }}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', marginBottom: '20px' }}>
-                <div>
-                  <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', marginBottom: '4px' }}>
-                    은행 이체자/입금자명 (통장 적요 키워드) *
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="예: 주식회사 기연, 홍길동, 대현테크"
-                    value={newRuleSenderName}
-                    onChange={e => setNewRuleSenderName(e.target.value)}
-                    required
-                    style={{ width: '100%', padding: '8px', fontSize: '13px' }}
-                  />
-                  <span style={{ fontSize: '11.5px', color: 'var(--text-muted)', marginTop: '4px', display: 'block' }}>
-                    💡 통장 입금 내역의 이체자명과 완벽히 동일하거나 주요 키워드를 입력합니다.
-                  </span>
-                </div>
+            {/* 입금 정보 카드 */}
+            <div style={{ backgroundColor: 'var(--bg-main)', padding: '14px', borderRadius: '8px', border: '1px solid var(--border-color)', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', fontSize: '13px' }}>
+              <div>
+                <span style={{ color: 'var(--text-muted)' }}>거래 은행: </span>
+                <span style={{ fontWeight: 'bold', color: 'var(--primary)' }}>{selectedTx.bankName || '우리은행'}</span>
+              </div>
+              <div>
+                <span style={{ color: 'var(--text-muted)' }}>거래 일시: </span>
+                <span>{selectedTx.transactionDate}</span>
+              </div>
+              <div>
+                <span style={{ color: 'var(--text-muted)' }}>입금자명 (적요): </span>
+                <span style={{ fontWeight: 'bold', color: 'var(--text-main)' }}>{selectedTx.counterparty || selectedTx.senderName}</span>
+              </div>
+              <div>
+                <span style={{ color: 'var(--text-muted)' }}>입금 금액: </span>
+                <span style={{ fontWeight: 'bold', color: 'var(--success)', fontSize: '15px' }}>+{selectedTx.depositAmount.toLocaleString()}원</span>
+              </div>
+            </div>
 
-                <div>
-                  <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', marginBottom: '4px' }}>
-                    연결할 ERP 고객사 선택 *
-                  </label>
-                  <select
-                    value={newRuleCustomerId}
-                    onChange={e => setNewRuleCustomerId(e.target.value)}
-                    required
-                    style={{ width: '100%', padding: '8px', fontSize: '13px' }}
-                  >
-                    <option value="">고객사 선택...</option>
-                    {customers.map(c => (
-                      <option key={c.id} value={c.id}>{c.name} ({c.id})</option>
-                    ))}
-                  </select>
+            <form onSubmit={handleManualMatchSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              
+              {/* 청구 내역 검색 필터 */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <label style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                  고객사 / 청구서 검색:
+                </label>
+                <input
+                  type="text"
+                  placeholder="고객사명 또는 청구년월(YYYY-MM) 검색"
+                  value={billingSearchTerm}
+                  onChange={(e) => setBillingSearchTerm(e.target.value)}
+                  className="form-control"
+                  style={{ fontSize: '13px' }}
+                />
+              </div>
+
+              {/* 미수 청구서 목록 */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <label style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                  매칭 대상 미수 청구건 선택:
+                </label>
+
+                <div style={{ maxHeight: '220px', overflowY: 'auto', border: '1px solid var(--border-color)', borderRadius: '6px', padding: '8px', display: 'flex', flexDirection: 'column', gap: '6px', backgroundColor: 'var(--bg-main)' }}>
+                  {getModalFilteredBillings().length === 0 ? (
+                    <div style={{ padding: '16px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '12px' }}>
+                      매칭 가능한 미수 청구 내역이 없습니다.
+                    </div>
+                  ) : (
+                    getModalFilteredBillings().map((b) => {
+                      const custName = getCustName(b.customerId);
+                      const unpaidAmt = b.totalAmount - b.paidAmount;
+                      const senderKey = selectedTx.counterparty || selectedTx.senderName;
+                      const isSmartMatch = senderKey.includes(custName) || custName.includes(senderKey);
+                      const isExactAmount = unpaidAmt === selectedTx.depositAmount;
+
+                      return (
+                        <label
+                          key={b.id}
+                          style={{
+                            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                            padding: '10px 12px', borderRadius: '6px', cursor: 'pointer',
+                            backgroundColor: matchingBillingId === b.id ? 'rgba(59, 130, 246, 0.1)' : 'var(--bg-surface)',
+                            border: matchingBillingId === b.id ? '1px solid var(--primary)' : '1px solid var(--border-color)'
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <input
+                              type="radio"
+                              name="matchingBilling"
+                              value={b.id}
+                              checked={matchingBillingId === b.id}
+                              onChange={() => setMatchingBillingId(b.id)}
+                            />
+                            <div>
+                              <div style={{ fontWeight: 'bold', fontSize: '13px', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                {custName} ({b.billingYm} 청구)
+                                {isSmartMatch && (
+                                  <span style={{ fontSize: '10px', padding: '2px 6px', borderRadius: '4px', backgroundColor: 'rgba(16, 185, 129, 0.2)', color: 'var(--success)' }}>
+                                    상호 일치
+                                  </span>
+                                )}
+                                {isExactAmount && (
+                                  <span style={{ fontSize: '10px', padding: '2px 6px', borderRadius: '4px', backgroundColor: 'rgba(59, 130, 246, 0.2)', color: 'var(--primary)' }}>
+                                    금액 일치
+                                  </span>
+                                )}
+                              </div>
+                              <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                                총 청구액: {b.totalAmount.toLocaleString()}원 | 기존 기수납: {b.paidAmount.toLocaleString()}원
+                              </div>
+                            </div>
+                          </div>
+
+                          <div style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                            <div style={{ fontSize: '13px', fontWeight: 'bold', color: 'var(--danger)' }}>
+                              미수 잔액: {unpaidAmt.toLocaleString()}원
+                            </div>
+                          </div>
+                        </label>
+                      );
+                    })
+                  )}
                 </div>
               </div>
 
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', borderTop: '1px solid var(--border-color)', paddingTop: '12px' }}>
-                <button type="button" className="btn-secondary" onClick={() => setIsRuleModalOpen(false)}>취소</button>
-                <button type="submit" className="btn-primary">룰 등록 (기억)</button>
+              {/* 규칙 저장 체크박스 */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: 'var(--bg-main)', padding: '10px', borderRadius: '6px' }}>
+                <input
+                  type="checkbox"
+                  id="learnRuleCheck"
+                  checked={learnRule}
+                  onChange={(e) => setLearnRule(e.target.checked)}
+                />
+                <label htmlFor="learnRuleCheck" style={{ fontSize: '12px', color: 'var(--text-main)', cursor: 'pointer' }}>
+                  이 입금자명(<strong>{selectedTx.counterparty || selectedTx.senderName}</strong>)을 해당 고객사 매칭 규칙으로 등록합니다.
+                </label>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '10px' }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setSelectedTx(null)}
+                >
+                  취소
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  disabled={!matchingBillingId}
+                >
+                  수납 승인 완료
+                </button>
               </div>
             </form>
           </div>
         </div>
       )}
 
-      {/* 수동 매칭 모달 */}
-      {selectedTx && (
+      {/* 매칭 규칙 등록 모달 */}
+      {isRuleModalOpen && (
         <div style={{
-          position: 'fixed', left: 0, top: 0, right: 0, bottom: 0,
-          backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center',
-          zIndex: 999, padding: '16px'
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.5)', display: 'flex',
+          justifyContent: 'center', alignItems: 'center', zIndex: 1000
         }}>
-          <div className="card" style={{ width: '100%', maxWidth: '700px', maxHeight: '90vh', display: 'flex', flexDirection: 'column', padding: 0 }}>
-            
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px', borderBottom: '1px solid var(--border-color)' }}>
-              <h3 className="card-title" style={{ margin: 0 }}>수동 대조 매칭 실행</h3>
-              <button onClick={() => setSelectedTx(null)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}>
-                <X size={20} />
+          <div style={{
+            backgroundColor: 'var(--bg-surface)', borderRadius: '10px',
+            width: '90%', maxWidth: '450px', padding: '24px', display: 'flex',
+            flexDirection: 'column', gap: '16px'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-color)', paddingBottom: '10px' }}>
+              <h3 style={{ fontSize: '16px', fontWeight: 'bold', margin: 0 }}>신규 매칭 규칙 추가</h3>
+              <button onClick={() => setIsRuleModalOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}>
+                <X size={18} />
               </button>
             </div>
 
-            <div style={{ padding: '20px', overflowY: 'auto', flex: 1 }}>
-              <div style={{
-                display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px',
-                padding: '16px', backgroundColor: 'var(--bg-app)', borderRadius: '8px', marginBottom: '20px'
-              }}>
-                <div>
-                  <span style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'block' }}>거래일시</span>
-                  <strong>{selectedTx.transactionDate}</strong>
-                </div>
-                <div>
-                  <span style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'block' }}>이체자/입금자명</span>
-                  <strong className="text-primary">{selectedTx.senderName}</strong>
-                </div>
-                <div>
-                  <span style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'block' }}>실제 입금액</span>
-                  <strong style={{ color: 'var(--success)' }}>{selectedTx.depositAmount.toLocaleString()}원</strong>
-                </div>
-              </div>
-
-              <div style={{ marginBottom: '16px', position: 'relative' }}>
-                <Search size={14} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+            <form onSubmit={(e) => {
+              e.preventDefault();
+              if (!newRuleSenderName || !newRuleCustomerId) return;
+              saveMatchingRule(newRuleSenderName, newRuleCustomerId);
+              setIsRuleModalOpen(false);
+              setNewRuleSenderName('');
+              setNewRuleCustomerId('');
+            }} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <label style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                  통장 기재 입금자명:
+                </label>
                 <input
                   type="text"
-                  value={billingSearchTerm}
-                  onChange={e => setBillingSearchTerm(e.target.value)}
-                  placeholder="고객사명 또는 청구월(YYYY-MM) 검색..."
-                  style={{ paddingLeft: '32px', fontSize: '13px' }}
+                  required
+                  placeholder="예: (주)한국건설"
+                  value={newRuleSenderName}
+                  onChange={(e) => setNewRuleSenderName(e.target.value)}
+                  className="form-control"
                 />
               </div>
 
-              <label style={{ display: 'block', marginBottom: '8px', fontSize: '13px', fontWeight: '600' }}>매칭할 청구서 선택 (이체자명 기준 자동 추천 정렬됨)</label>
-              
-              <div className="table-container" style={{ maxHeight: '250px', overflowY: 'auto', border: '1px solid var(--border-color)' }}>
-                <table style={{ fontSize: '12px' }}>
-                  <thead>
-                    <tr>
-                      <th style={{ width: '40px' }}>선택</th>
-                      <th>청구월</th>
-                      <th>고객사명</th>
-                      <th>총액</th>
-                      <th>미납잔액</th>
-                      <th>상태</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {getModalFilteredBillings().length === 0 ? (
-                      <tr>
-                        <td colSpan={6} style={{ textAlign: 'center', padding: '20px 0', color: 'var(--text-muted)' }}>
-                          수납 매칭 대기 중인(미납/일부납 상태) 청구서가 존재하지 않습니다.
-                        </td>
-                      </tr>
-                    ) : (
-                      getModalFilteredBillings().map(b => {
-                        const unpaidAmount = b.totalAmount - b.paidAmount;
-                        const isExactAmount = unpaidAmount === selectedTx.depositAmount;
-                        const matchedCustomer = customers.find(c => 
-                          selectedTx.senderName.includes(c.name) || c.name.includes(selectedTx.senderName)
-                        );
-                        const isRecommendedCustomer = matchedCustomer && b.customerId === matchedCustomer.id;
-
-                        return (
-                          <tr 
-                            key={b.id} 
-                            onClick={() => setMatchingBillingId(b.id)} 
-                            style={{ 
-                              cursor: 'pointer',
-                              backgroundColor: matchingBillingId === b.id ? 'var(--bg-active)' : 'transparent'
-                            }}
-                          >
-                            <td>
-                              <input 
-                                type="radio" 
-                                checked={matchingBillingId === b.id}
-                                onChange={() => setMatchingBillingId(b.id)}
-                              />
-                            </td>
-                            <td>{b.billingYm}</td>
-                            <td>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                <strong>{getCustName(b.customerId)}</strong>
-                                {isRecommendedCustomer && (
-                                  <span style={{ fontSize: '10px', padding: '1px 4px', backgroundColor: 'rgba(59, 130, 246, 0.1)', color: 'var(--primary)', borderRadius: '3px' }}>추천 고객사</span>
-                                )}
-                              </div>
-                            </td>
-                            <td>{b.totalAmount.toLocaleString()}원</td>
-                            <td>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                <strong style={{ color: isExactAmount ? 'var(--success)' : 'inherit' }}>
-                                  {unpaidAmount.toLocaleString()}원
-                                </strong>
-                                {isExactAmount && (
-                                  <span style={{ fontSize: '10px', padding: '1px 4px', backgroundColor: 'rgba(16, 185, 129, 0.1)', color: 'var(--success)', borderRadius: '3px' }}>금액 일치</span>
-                                )}
-                              </div>
-                            </td>
-                            <td>
-                              <span className={`badge ${b.status === 'PARTIAL' ? 'badge-warning' : 'badge-info'}`}>
-                                {b.status === 'PARTIAL' ? '일부납' : '승인(미납)'}
-                              </span>
-                            </td>
-                          </tr>
-                        );
-                      })
-                    )}
-                  </tbody>
-                </table>
-              </div>
-
-              <div style={{ marginTop: '20px', padding: '12px', border: '1px solid var(--border-color)', borderRadius: '6px', backgroundColor: 'var(--bg-app)' }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', margin: 0, fontSize: '13px' }}>
-                  <input
-                    type="checkbox"
-                    checked={learnRule}
-                    onChange={e => setLearnRule(e.target.checked)}
-                  />
-                  <span>
-                    향후 <strong>'{selectedTx.senderName}'</strong> 입금자는 매칭된 고객사로 자동 대조 학습형 규칙 추가
-                  </span>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <label style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                  매핑할 고객사:
                 </label>
+                <select
+                  required
+                  value={newRuleCustomerId}
+                  onChange={(e) => setNewRuleCustomerId(e.target.value)}
+                  className="form-control"
+                >
+                  <option value="">고객사 선택</option>
+                  {customers.map(c => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
               </div>
 
-            </div>
-
-            <div style={{ display: 'flex', gap: '10px', padding: '16px 20px', borderTop: '1px solid var(--border-color)', justifyContent: 'flex-end' }}>
-              <button className="btn-secondary" onClick={() => setSelectedTx(null)}>취소</button>
-              <button 
-                className="btn-primary" 
-                onClick={handleManualMatchSubmit}
-                disabled={!matchingBillingId}
-              >
-                매칭 완료 (수납 확정)
-              </button>
-            </div>
-
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '8px' }}>
+                <button type="button" className="btn btn-secondary" onClick={() => setIsRuleModalOpen(false)}>취소</button>
+                <button type="submit" className="btn btn-primary">규칙 저장</button>
+              </div>
+            </form>
           </div>
         </div>
       )}
