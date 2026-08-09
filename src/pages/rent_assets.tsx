@@ -313,6 +313,21 @@ export const RentAssets: React.FC = () => {
       contractNo: '2612002530'
     });
 
+    // 🧹 하이로드 이미지 2 스타일: 중간 청소비 렌탈료 외 청구 샘플 항목 추가
+    samples.push({
+      id: `sample-cleaning`,
+      assetNo: '기타/청소비',
+      modelName: '청소비',
+      rentStart: `${selectedYm}-05-26`,
+      rentEnd: `${selectedYm}-05-26`,
+      billedAmount: 1200000,
+      taxAmount: 120000,
+      totalAmount: 1320000,
+      memo: '청소비 (4건 × ₩300,000)',
+      itemType: 'OTHER_FEE',
+      seq: 61
+    });
+
     setStatementRows(samples);
     setSelectedReconcileIds(samples.map(s => s.id));
   };

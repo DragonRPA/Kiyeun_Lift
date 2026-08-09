@@ -6,18 +6,18 @@ import * as XLSX from 'xlsx';
  */
 export interface VendorStatementRow {
   id: string;
-  assetNo: string;        // 관리번호 (예: J0576, G8143 등 / 기타비용의 경우 "기타/수리비")
+  assetNo: string;        // 관리번호/장비번호 (예: J0576, H3379 등 / 기타비용의 경우 "기타/청소비", "기타/수리비")
   serialNo?: string;      // 시리얼/제조번호
-  modelName?: string;     // 모델명 (예: 1230ES, 1930ES / 기타비용의 경우 "기타/비용")
+  modelName?: string;     // 모델명/장비명 (예: 1230ES, GS1930 / 기타비용의 경우 "청소비")
   rentStart: string;      // YYYY-MM-DD
   rentEnd: string;        // YYYY-MM-DD
   billedAmount: number;   // 공급가액 (청구금액)
-  taxAmount?: number;     // 세액
+  taxAmount?: number;     // 세액 (V.A.T)
   totalAmount?: number;   // 공급가액 + 세액 (합계)
-  contractNo?: string;    // 원사 계약번호 (예: 롯데렌탈 2512001247)
-  seq?: number;           // 순번 (예: 1, 2, 115)
+  contractNo?: string;    // 원사 계약번호
+  seq?: number;           // 순번
   memo?: string;          // 비고 / 품목 상세명
-  itemType: 'EQUIPMENT' | 'REPAIR' | 'OTHER_FEE'; // 장비 렌탈 vs 수리비 vs 기타 비용
+  itemType: 'EQUIPMENT' | 'REPAIR' | 'OTHER_FEE'; // 장비 렌탈 vs 수리비 vs 청소비/기타 비용
   rawItemName?: string;   // 원본 셀 품목 텍스트
 }
 
@@ -31,7 +31,40 @@ export interface ParseVendorStatementResult {
 }
 
 /**
- * 다양한 날짜/기간 문자열(예: "26.07.01 ~26.07.31", "2026.07.01~2026.07.14") 파싱 헬퍼
+ * 날짜 문자열(단일 날짜 예: "7/1", "7/31", "5/26", "2026-07-01") 파싱 헬퍼
+ */
+export function parseSingleDateString(dateStr: string, defaultYm: string): string {
+  if (!dateStr || typeof dateStr !== 'string') return '';
+  const clean = dateStr.trim();
+  if (!clean || clean === '-') return '';
+
+  const [defaultYear] = defaultYm.split('-');
+
+  // 패턴 1: YYYY-MM-DD 또는 YYYY.MM.DD
+  const ymdMatch = clean.match(/(\d{4})[\.\-\/](\d{1,2})[\.\-\/](\d{1,2})/);
+  if (ymdMatch) {
+    return `${ymdMatch[1]}-${ymdMatch[2].padStart(2, '0')}-${ymdMatch[3].padStart(2, '0')}`;
+  }
+
+  // 패턴 2: YY-MM-DD 또는 YY.MM.DD (예: 26.07.01)
+  const yymdMatch = clean.match(/(\d{2})[\.\-\/](\d{1,2})[\.\-\/](\d{1,2})/);
+  if (yymdMatch) {
+    return `20${yymdMatch[1]}-${yymdMatch[2].padStart(2, '0')}-${yymdMatch[3].padStart(2, '0')}`;
+  }
+
+  // 패턴 3: M/D 또는 M.D (예: 7/1, 7/31, 5/26, 9/12 - 하이로드 양식)
+  const mdMatch = clean.match(/^(\d{1,2})[\.\-\/](\d{1,2})$/);
+  if (mdMatch) {
+    const m = mdMatch[1].padStart(2, '0');
+    const d = mdMatch[2].padStart(2, '0');
+    return `${defaultYear}-${m}-${d}`;
+  }
+
+  return '';
+}
+
+/**
+ * 다양한 기간 문자열(예: "26.07.01 ~26.07.31", "2026.07.01~2026.07.14") 파싱 헬퍼
  */
 export function parsePeriodString(periodStr: string, defaultYm: string): { rentStart: string; rentEnd: string } {
   const [defaultYear, defaultMonth] = defaultYm.split('-');
@@ -44,7 +77,6 @@ export function parsePeriodString(periodStr: string, defaultYm: string): { rentS
   }
 
   const clean = periodStr.trim();
-  // 정규식: 26.07.01 ~26.07.31 또는 2026-07-01 ~ 2026-07-31
   const periodMatch = clean.match(/(\d{2,4})[\.\-\/](\d{1,2})[\.\-\/](\d{1,2})\s*~\s*(\d{2,4})[\.\-\/](\d{1,2})[\.\-\/](\d{1,2})/);
   
   if (periodMatch) {
@@ -88,10 +120,10 @@ function parseString(val: any): string {
 
 /**
  * 임차처 거래명세서 엑셀 범용 파서 엔진
- * - 롯데렌탈(주), AJ네트웍스, 한국리프트 등 다중 양식 자동 감지 및 파싱
- * - 동적 헤더 행 자동 탐색
- * - 중간 기타 비용(수리비/세척비/도색비/운송비 등) 누락 없는 파싱
- * - 하단 합계 행('계', '합계', '입금계좌') 및 빈 행 자동 거름
+ * - 롯데렌탈(주), (주)하이로드, AJ네트웍스, 한국리프트 등 다중 양식 자동 감지 및 파싱
+ * - 동적 헤더 행 자동 탐색 (장비명, 장비번호, 사용시작, 사용종료, V.A.T 등 표준어 매핑)
+ * - 중간 청소비/수리비/세척비/도색비/운송비 등 기타 비용 항목 누락 없는 수용 (이미지 2)
+ * - 하단 합계 행('소계', '합계', '청구금액', '결제계좌') 및 빈 행 자동 거름 (이미지 3)
  */
 export function parseVendorStatementExcel(
   worksheet: XLSX.WorkSheet,
@@ -107,7 +139,10 @@ export function parseVendorStatementExcel(
   let detectedVendor: string | undefined = undefined;
   for (let r = 0; r < Math.min(20, matrix.length); r++) {
     const rowStr = matrix[r].map(cell => parseString(cell)).join(' ');
-    if (rowStr.includes('롯데렌탈')) {
+    if (rowStr.includes('하이로드')) {
+      detectedVendor = '(주)하이로드';
+      break;
+    } else if (rowStr.includes('롯데렌탈')) {
       detectedVendor = '롯데렌탈(주)';
       break;
     } else if (rowStr.includes('AJ네트웍스') || rowStr.includes('에이엔네트웍스')) {
@@ -115,6 +150,9 @@ export function parseVendorStatementExcel(
       break;
     } else if (rowStr.includes('한국리프트')) {
       detectedVendor = '한국리프트';
+      break;
+    } else if (rowStr.includes('중부렌탈')) {
+      detectedVendor = '(주)중부렌탈';
       break;
     }
   }
@@ -124,8 +162,9 @@ export function parseVendorStatementExcel(
   let maxHeaderScore = 0;
 
   const headerKeywords = [
-    '관리번호', '자산번호', '장비번호', '시리얼', '제조번호',
-    '모델명', '기간', '월렌탈료', '공급가액', '청구금액', '세액', '순번', '계약번호', '일수'
+    '관리번호', '자산번호', '장비번호', '장비No', '시리얼', '제조번호',
+    '모델명', '장비명', '모델', '기간', '사용시작', '사용종료', '투입일자', '철수일지',
+    '월렌탈료', '공급가액', '청구금액', '세액', 'V.A.T', 'VAT', '순번', '계약번호', '일수', '단가', '운반비'
   ];
 
   for (let r = 0; r < Math.min(40, matrix.length); r++) {
@@ -153,7 +192,7 @@ export function parseVendorStatementExcel(
 
   const headerRow = matrix[headerRowIndex] || [];
   
-  // 4. 컬럼 인덱스 매핑
+  // 4. 컬럼 인덱스 매핑 (거래명세서별 상이한 용어를 우리 시스템 표준 단어로 통일)
   let colAssetNo = -1;
   let colSerialNo = -1;
   let colModelName = -1;
@@ -166,41 +205,35 @@ export function parseVendorStatementExcel(
   let colSeq = -1;
   let colContractNo = -1;
   let colMemo = -1;
-  let colMonth = -1;
-  let colDay = -1;
 
   headerRow.forEach((cell, idx) => {
-    const txt = parseString(cell).replace(/\s+/g, '');
+    const txt = parseString(cell).replace(/\s+/g, '').toUpperCase();
     if (!txt) return;
 
-    if (txt.includes('관리번호') || txt.includes('자산번호') || txt.includes('장비번호')) {
+    if (txt.includes('장비번호') || txt.includes('관리번호') || txt.includes('자산번호') || txt.includes('장비NO')) {
       colAssetNo = idx;
     } else if (txt.includes('시리얼') || txt.includes('제조번호')) {
       colSerialNo = idx;
-    } else if (txt.includes('모델명') || txt.includes('모델')) {
+    } else if (txt.includes('장비명') || txt.includes('모델명') || txt === '모델' || txt.includes('규격')) {
       colModelName = idx;
     } else if (txt.includes('기간') || txt.includes('사용기간') || txt.includes('임차기간')) {
       colPeriod = idx;
-    } else if (txt.includes('시작일') || txt.includes('임차시작')) {
+    } else if (txt.includes('사용시작') || txt.includes('임차시작') || txt.includes('시작일') || txt.includes('투입일')) {
       colRentStart = idx;
-    } else if (txt.includes('종료일') || txt.includes('임차종료')) {
+    } else if (txt.includes('사용종료') || txt.includes('임차종료') || txt.includes('종료일') || txt.includes('철수일')) {
       colRentEnd = idx;
-    } else if (txt === '공급가액' || txt === '청구금액' || txt === '임차료' || txt === '금액' || txt.includes('공급가')) {
+    } else if (txt.includes('공급가액') || txt.includes('청구금액') || txt.includes('임차료') || txt === '금액' || txt.includes('공급가')) {
       colSupplyAmount = idx;
-    } else if (txt.includes('세액') || txt.includes('부가세')) {
+    } else if (txt.includes('V.A.T') || txt.includes('VAT') || txt.includes('세액') || txt.includes('부가세')) {
       colTaxAmount = idx;
-    } else if (txt.includes('월렌탈료') || txt.includes('월임대료')) {
+    } else if (txt.includes('월렌탈료') || txt.includes('월임대료') || txt === '단가') {
       colMonthlyRent = idx;
-    } else if (txt.includes('순번') || txt.includes('No') || txt.includes('NO')) {
+    } else if (txt.includes('순번') || txt.includes('NO') || txt === '순번') {
       colSeq = idx;
     } else if (txt.includes('계약번호')) {
       colContractNo = idx;
-    } else if (txt.includes('비고') || txt.includes('적요') || txt.includes('특이사항')) {
+    } else if (txt.includes('비고') || txt.includes('적요') || txt.includes('현장명') || txt.includes('특이사항')) {
       colMemo = idx;
-    } else if (txt === '월') {
-      colMonth = idx;
-    } else if (txt === '일') {
-      colDay = idx;
     }
   });
 
@@ -215,21 +248,31 @@ export function parseVendorStatementExcel(
 
     // 행 전체 텍스트 병합
     const rowFullText = rowData.map(c => parseString(c)).join(' ').trim();
-    if (!rowFullText) continue; // 빈 행 무시 (Image 3/4 요구사항)
+    if (!rowFullText) continue; // 빈 행 무시 (이미지 3 요구사항)
 
-    // 하단 합계 행 및 계좌안내 무시 (Image 3/4 요구사항)
-    const firstColStr = parseString(rowData[0]);
+    // 하단 소계/합계 행 및 계좌/연락처 무시 (이미지 3 요구사항)
+    const firstColStr = parseString(rowData[0]).replace(/\s+/g, '');
+    const secondColStr = parseString(rowData[1]).replace(/\s+/g, '');
+    const cleanFullText = rowFullText.replace(/\s+/g, '');
+
     if (
-      rowFullText.startsWith('계 ') || 
-      rowFullText.startsWith('계\t') || 
-      rowFullText.includes('입금계좌') || 
-      rowFullText.includes('합계') || 
-      rowFullText.includes('소계') || 
-      rowFullText.includes('공급자 보관용') ||
+      firstColStr === '소계' ||
+      firstColStr === '합계' ||
       firstColStr === '계' ||
-      firstColStr === '합계'
+      firstColStr === '총계' ||
+      secondColStr === '소계' ||
+      secondColStr === '합계' ||
+      cleanFullText.includes('소계') ||
+      cleanFullText.includes('합계') ||
+      cleanFullText.includes('청구금액') ||
+      cleanFullText.includes('결제계좌') ||
+      cleanFullText.includes('입금계좌') ||
+      cleanFullText.includes('아래와같이청구합니다') ||
+      cleanFullText.includes('공급자보관용') ||
+      cleanFullText.includes('공급받는자용') ||
+      cleanFullText.includes('영업담당') ||
+      cleanFullText.includes('연락처:')
     ) {
-      // 합계행 이후는 무시하고 계속 진행 또는 종료
       continue;
     }
 
@@ -238,6 +281,8 @@ export function parseVendorStatementExcel(
     const rawSerialNo = colSerialNo !== -1 ? parseString(rowData[colSerialNo]) : '';
     const rawModelName = colModelName !== -1 ? parseString(rowData[colModelName]) : '';
     const rawPeriod = colPeriod !== -1 ? parseString(rowData[colPeriod]) : '';
+    const rawRentStart = colRentStart !== -1 ? parseString(rowData[colRentStart]) : '';
+    const rawRentEnd = colRentEnd !== -1 ? parseString(rowData[colRentEnd]) : '';
     const rawSupplyAmount = colSupplyAmount !== -1 ? parseNumber(rowData[colSupplyAmount]) : 0;
     const rawTaxAmount = colTaxAmount !== -1 ? parseNumber(rowData[colTaxAmount]) : 0;
     const rawContractNo = colContractNo !== -1 ? parseString(rowData[colContractNo]) : '';
@@ -250,45 +295,61 @@ export function parseVendorStatementExcel(
     }
 
     // 헤더 행 재등장 무시
-    if (rawAssetNo === '관리번호' || rawModelName === '모델명' || rawAssetNo === '자산번호') {
+    if (rawAssetNo === '장비번호' || rawAssetNo === '관리번호' || rawModelName === '장비명' || rawModelName === '모델명') {
       continue;
     }
 
-    // 날짜 파싱
+    // 날짜 파싱 (M/D 단일 날짜 및 기간 포맷 모두 대처)
     let rentStart = '';
     let rentEnd = '';
 
-    if (colRentStart !== -1 && colRentEnd !== -1 && parseString(rowData[colRentStart])) {
-      rentStart = parseString(rowData[colRentStart]);
-      rentEnd = parseString(rowData[colRentEnd]);
-    } else {
+    if (rawRentStart) {
+      rentStart = parseSingleDateString(rawRentStart, selectedYm);
+    }
+    if (rawRentEnd) {
+      rentEnd = parseSingleDateString(rawRentEnd, selectedYm);
+    }
+
+    if (!rentStart || !rentEnd) {
       const dates = parsePeriodString(rawPeriod, selectedYm);
-      rentStart = dates.rentStart;
-      rentEnd = dates.rentEnd;
+      if (!rentStart) rentStart = dates.rentStart;
+      if (!rentEnd) rentEnd = dates.rentEnd;
     }
 
     // =========================================================
-    // 이미지 2 지원: 장비 임대료가 아닌 기타 항목 (수리비/세척비/도색비 등) 판별
+    // 이미지 2 지원: 장비 임대료 외 청소비/수리비/세척비/도색비/운송비 등 기타 항목
+    // (이미지 3의 더미 행으로 무시하지 않고 정상 항목 수용!)
     // =========================================================
-    let isOtherFee = false;
     let itemType: 'EQUIPMENT' | 'REPAIR' | 'OTHER_FEE' = 'EQUIPMENT';
     let finalAssetNo = rawAssetNo;
     let finalModelName = rawModelName;
     let finalMemo = rawMemo;
 
-    // 관리번호는 없으나 수리비/세척비/도색비/운송비 등의 품목명과 금액이 있는 경우
+    // 장비번호가 없으나 모델명/품목 셀에 청소비/수리비 등 청구 텍스트 및 공급가액이 있는 경우
     if (!rawAssetNo) {
-      // 행 전체 텍스트 또는 모델명 셀에서 품목명 탐색
       const feeText = rawModelName || rawMemo || rowFullText;
-      if (feeText.includes('수리') || feeText.includes('세척') || feeText.includes('도색') || feeText.includes('부품') || feeText.includes('운송') || rawSupplyAmount > 0) {
-        isOtherFee = true;
-        itemType = feeText.includes('수리') ? 'REPAIR' : 'OTHER_FEE';
-        finalAssetNo = feeText.includes('수리') ? '기타/수리비' : '기타/비용';
-        finalModelName = rawModelName || '기타비용';
-        finalMemo = feeText;
+      const isKnownFeeKeyword = feeText.includes('청소') || feeText.includes('수리') || feeText.includes('세척') || feeText.includes('도색') || feeText.includes('부품') || feeText.includes('운송') || feeText.includes('소모품');
+      
+      if (isKnownFeeKeyword || rawSupplyAmount > 0) {
+        if (feeText.includes('수리')) {
+          itemType = 'REPAIR';
+          finalAssetNo = '기타/수리비';
+        } else if (feeText.includes('청소')) {
+          itemType = 'OTHER_FEE';
+          finalAssetNo = '기타/청소비';
+        } else {
+          itemType = 'OTHER_FEE';
+          finalAssetNo = `기타/${rawModelName || '비용'}`;
+        }
+        finalModelName = rawModelName || feeText || '기타비용';
+        finalMemo = rawMemo ? `${rawModelName} - ${rawMemo}` : feeText;
       } else {
-        // 관리번호도 없고 금액도 없으면 무시
         if (rawSupplyAmount === 0) continue;
+      }
+    } else {
+      // 장비번호가 있더라도 품목명이 청소비/수리비 등인 경우
+      if (rawModelName.includes('청소') || rawModelName.includes('수리') || rawModelName.includes('세척')) {
+        itemType = rawModelName.includes('수리') ? 'REPAIR' : 'OTHER_FEE';
       }
     }
 
@@ -298,8 +359,8 @@ export function parseVendorStatementExcel(
       assetNo: finalAssetNo || `R-${1000 + r}`,
       serialNo: rawSerialNo,
       modelName: finalModelName,
-      rentStart,
-      rentEnd,
+      rentStart: rentStart || `${selectedYm}-01`,
+      rentEnd: rentEnd || `${selectedYm}-28`,
       billedAmount: rawSupplyAmount,
       taxAmount: rawTaxAmount,
       totalAmount: rawSupplyAmount + rawTaxAmount,
