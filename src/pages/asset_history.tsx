@@ -12,10 +12,13 @@ export const AssetHistory: React.FC = () => {
   // 1. 탭 상태: 'OUTBOUND' (출고 조회) | 'INBOUND' (입고 조회) | 'REPAIR' (정비 이력 조회)
   const [activeTab, setActiveTab] = useState<'OUTBOUND' | 'INBOUND' | 'REPAIR'>('OUTBOUND');
 
-  // 2. 검색 및 조회기간 필터 상태
+  const getTodayStr = () => new Date().toISOString().split('T')[0];
+  const todayStr = getTodayStr();
+
+  // 2. 검색 및 조회기간 필터 상태 (입출고/정비 이력은 과거/현재 사건이므로 종료일 기본값 오늘)
   const [searchTerm, setSearchTerm] = useState('');
   const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
+  const [endDate, setEndDate] = useState(todayStr);
   const [selectedAssetId, setSelectedAssetId] = useState('');
 
   // 0. 타 탭 이동 페이로드(특정 자산 이력 조회) 감지
@@ -26,22 +29,23 @@ export const AssetHistory: React.FC = () => {
     }
   }, [navigationPayload]);
 
-  // 날짜 간편 세팅 헬퍼
-  const setQuickRange = (rangeType: 'ALL' | 'THIS_MONTH' | 'LAST_1MONTH') => {
+  // 💡 [사장님 지시] 기간 빠른 선택 (오늘 / 1주 / 1개월 / 전체) - 종료일은 항상 오늘로 고정 (미래 조회 불가)
+  const setQuickRange = (rangeType: 'TODAY' | 'WEEK' | 'MONTH' | 'ALL') => {
     const today = new Date();
-    if (rangeType === 'ALL') {
-      setStartDate('');
-      setEndDate('');
-    } else if (rangeType === 'THIS_MONTH') {
-      const year = today.getFullYear();
-      const month = String(today.getMonth() + 1).padStart(2, '0');
-      setStartDate(`${year}-${month}-01`);
-      setEndDate(today.toISOString().split('T')[0]);
-    } else if (rangeType === 'LAST_1MONTH') {
+    setEndDate(todayStr);
+
+    if (rangeType === 'TODAY') {
+      setStartDate(todayStr);
+    } else if (rangeType === 'WEEK') {
+      const pastWeek = new Date(today);
+      pastWeek.setDate(today.getDate() - 7);
+      setStartDate(pastWeek.toISOString().split('T')[0]);
+    } else if (rangeType === 'MONTH') {
       const pastMonth = new Date(today);
       pastMonth.setMonth(today.getMonth() - 1);
       setStartDate(pastMonth.toISOString().split('T')[0]);
-      setEndDate(today.toISOString().split('T')[0]);
+    } else if (rangeType === 'ALL') {
+      setStartDate('');
     }
   };
 
@@ -49,6 +53,9 @@ export const AssetHistory: React.FC = () => {
   const filteredTabLogs = assetInOutLogs.filter(log => {
     // 탭 매칭
     if (log.type !== activeTab) return false;
+
+    // 💡 비즈니스 논리: 출고/입고/정비는 발생 완료 건이므로 미래 사건은 조회 차단
+    if (log.eventDate > todayStr) return false;
 
     // 개별 자산 필터
     if (selectedAssetId && log.assetId !== selectedAssetId) return false;
@@ -175,12 +182,13 @@ export const AssetHistory: React.FC = () => {
           {/* 조회 기간 설정 필터 */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
             <label style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
-              조회 기간 설정
+              조회 기간 설정 (상한: 오늘)
             </label>
             <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
               <input
                 type="date"
                 value={startDate}
+                max={todayStr}
                 onChange={e => setStartDate(e.target.value)}
                 style={{ flex: 1, padding: '7px', fontSize: '12.5px' }}
               />
@@ -188,41 +196,53 @@ export const AssetHistory: React.FC = () => {
               <input
                 type="date"
                 value={endDate}
-                onChange={e => setEndDate(e.target.value)}
+                max={todayStr}
+                onChange={e => {
+                  const val = e.target.value;
+                  setEndDate(val > todayStr ? todayStr : val);
+                }}
                 style={{ flex: 1, padding: '7px', fontSize: '12.5px' }}
               />
             </div>
           </div>
 
-          {/* 조회기간 단축 버튼 */}
+          {/* 조회기간 빠른 선택 버튼 (오늘 / 1주 / 1개월 / 전체) */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
             <label style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
               기간 빠른 선택
             </label>
-            <div style={{ display: 'flex', gap: '6px' }}>
+            <div style={{ display: 'flex', gap: '4px' }}>
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => setQuickRange('TODAY')}
+                style={{ flex: 1, padding: '6px 4px', fontSize: '12px', whiteSpace: 'nowrap' }}
+              >
+                오늘
+              </button>
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => setQuickRange('WEEK')}
+                style={{ flex: 1, padding: '6px 4px', fontSize: '12px', whiteSpace: 'nowrap' }}
+              >
+                1주
+              </button>
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => setQuickRange('MONTH')}
+                style={{ flex: 1, padding: '6px 4px', fontSize: '12px', whiteSpace: 'nowrap' }}
+              >
+                1개월
+              </button>
               <button
                 type="button"
                 className="btn-secondary"
                 onClick={() => setQuickRange('ALL')}
-                style={{ flex: 1, padding: '6px', fontSize: '12px', whiteSpace: 'nowrap' }}
+                style={{ flex: 1, padding: '6px 4px', fontSize: '12px', whiteSpace: 'nowrap' }}
               >
                 전체
-              </button>
-              <button
-                type="button"
-                className="btn-secondary"
-                onClick={() => setQuickRange('THIS_MONTH')}
-                style={{ flex: 1, padding: '6px', fontSize: '12px', whiteSpace: 'nowrap' }}
-              >
-                이번달
-              </button>
-              <button
-                type="button"
-                className="btn-secondary"
-                onClick={() => setQuickRange('LAST_1MONTH')}
-                style={{ flex: 1, padding: '6px', fontSize: '12px', whiteSpace: 'nowrap' }}
-              >
-                최근 1개월
               </button>
             </div>
           </div>
