@@ -665,14 +665,15 @@ export const BankMatching: React.FC = () => {
       {selectedTx && (
         <div style={{
           position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-          backgroundColor: 'rgba(0, 0, 0, 0.5)', display: 'flex',
+          backgroundColor: 'rgba(0, 0, 0, 0.75)', backdropFilter: 'blur(6px)', display: 'flex',
           justifyContent: 'center', alignItems: 'center', zIndex: 1000
         }}>
           <div style={{
-            backgroundColor: 'var(--bg-surface)', borderRadius: '10px',
+            backgroundColor: 'var(--bg-card)', borderRadius: '12px',
             width: '90%', maxWidth: '650px', maxHeight: '90vh', overflowY: 'auto',
             padding: '24px', display: 'flex', flexDirection: 'column', gap: '18px',
-            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)'
+            border: '1px solid var(--border-color)',
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)'
           }}>
             
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-color)', paddingBottom: '12px' }}>
@@ -686,7 +687,7 @@ export const BankMatching: React.FC = () => {
             </div>
 
             {/* 입금 정보 카드 */}
-            <div style={{ backgroundColor: 'var(--bg-main)', padding: '14px', borderRadius: '8px', border: '1px solid var(--border-color)', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', fontSize: '13px' }}>
+            <div style={{ backgroundColor: 'var(--bg-app)', padding: '14px', borderRadius: '8px', border: '1px solid var(--border-color)', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', fontSize: '13px' }}>
               <div>
                 <span style={{ color: 'var(--text-muted)' }}>거래 은행: </span>
                 <span style={{ fontWeight: 'bold', color: 'var(--primary)' }}>{selectedTx.bankName || '우리은행'}</span>
@@ -728,7 +729,7 @@ export const BankMatching: React.FC = () => {
                   매칭 대상 미수 청구건 선택:
                 </label>
 
-                <div style={{ maxHeight: '220px', overflowY: 'auto', border: '1px solid var(--border-color)', borderRadius: '6px', padding: '8px', display: 'flex', flexDirection: 'column', gap: '6px', backgroundColor: 'var(--bg-main)' }}>
+                <div style={{ maxHeight: '220px', overflowY: 'auto', border: '1px solid var(--border-color)', borderRadius: '6px', padding: '8px', display: 'flex', flexDirection: 'column', gap: '6px', backgroundColor: 'var(--bg-app)' }}>
                   {getModalFilteredBillings().length === 0 ? (
                     <div style={{ padding: '16px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '12px' }}>
                       매칭 가능한 미수 청구 내역이 없습니다.
@@ -747,7 +748,7 @@ export const BankMatching: React.FC = () => {
                           style={{
                             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                             padding: '10px 12px', borderRadius: '6px', cursor: 'pointer',
-                            backgroundColor: matchingBillingId === b.id ? 'rgba(59, 130, 246, 0.1)' : 'var(--bg-surface)',
+                            backgroundColor: matchingBillingId === b.id ? 'rgba(99, 102, 241, 0.2)' : 'var(--bg-card)',
                             border: matchingBillingId === b.id ? '1px solid var(--primary)' : '1px solid var(--border-color)'
                           }}
                         >
@@ -792,7 +793,7 @@ export const BankMatching: React.FC = () => {
               </div>
 
               {/* 규칙 저장 체크박스 */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: 'var(--bg-main)', padding: '10px', borderRadius: '6px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: 'var(--bg-app)', padding: '10px', borderRadius: '6px' }}>
                 <input
                   type="checkbox"
                   id="learnRuleCheck"
@@ -829,13 +830,14 @@ export const BankMatching: React.FC = () => {
       {isRuleModalOpen && (
         <div style={{
           position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-          backgroundColor: 'rgba(0, 0, 0, 0.5)', display: 'flex',
+          backgroundColor: 'rgba(0, 0, 0, 0.75)', backdropFilter: 'blur(6px)', display: 'flex',
           justifyContent: 'center', alignItems: 'center', zIndex: 1000
         }}>
           <div style={{
-            backgroundColor: 'var(--bg-surface)', borderRadius: '10px',
+            backgroundColor: 'var(--bg-card)', borderRadius: '12px',
             width: '90%', maxWidth: '450px', padding: '24px', display: 'flex',
-            flexDirection: 'column', gap: '16px'
+            flexDirection: 'column', gap: '16px', border: '1px solid var(--border-color)',
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)'
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-color)', paddingBottom: '10px' }}>
               <h3 style={{ fontSize: '16px', fontWeight: 'bold', margin: 0 }}>신규 매칭 규칙 추가</h3>

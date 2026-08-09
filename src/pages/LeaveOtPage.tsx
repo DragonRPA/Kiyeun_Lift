@@ -1,9 +1,10 @@
 // src/pages/LeaveOtPage.tsx
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
+import * as XLSX from 'xlsx';
 import { 
   Calendar, Clock, UserCheck, Plus, Trash2, Edit3, 
-  CheckCircle2, AlertCircle, Info, Layers, User, UserPlus
+  CheckCircle2, AlertCircle, Info, Layers, User, UserPlus, Download
 } from 'lucide-react';
 import { AnnualLeaveQuota, LeaveUsage, OvertimeRecord, User as UserType } from '../services/db';
 
@@ -180,6 +181,78 @@ export const LeaveOtPage: React.FC = () => {
     alert(`OT 연장근무(${otHours}시간) 내역이 등록되었습니다.`);
   };
 
+  // 6. 엑셀 다운로드 헬퍼
+  const handleExportExcel = () => {
+    const ymd = new Date().toISOString().substring(0, 10).replace(/-/g, '');
+
+    if (activeTab === 'QUOTA') {
+      const data = users.map((u, idx) => {
+        const summary = getUserLeaveSummary(u);
+        const totalOtHours = overtimeRecords
+          .filter(ot => ot.userId === u.id)
+          .reduce((sum, ot) => sum + (ot.hours || 0), 0);
+
+        return {
+          '번호': idx + 1,
+          '성명': u.name,
+          '부서': u.department || '미지정',
+          '직급': u.position || '직원',
+          '입사일': u.joinDate || '미기재',
+          '1년 갱신 주기 시작일': summary.periodStart,
+          '1년 갱신 주기 종료일': summary.periodEnd,
+          '1년 부여 연차 (일)': summary.grantedDays,
+          '소진 연차 (일)': summary.usedDays,
+          '잔여 연차 (일)': summary.remainingDays,
+          '누적 OT (시간)': totalOtHours
+        };
+      });
+
+      const ws = XLSX.utils.json_to_sheet(data);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, '임직원 연차 현황');
+      XLSX.writeFile(wb, `임직원_연차_현황_대장_${ymd}.xlsx`);
+    } else if (activeTab === 'USAGE') {
+      const data = leaveUsages.map((l, idx) => {
+        const uName = users.find(u => u.id === l.userId)?.name || '알 수 없음';
+        const typeLabel = l.leaveType === 'ANNUAL' ? '연차' : l.leaveType === 'HALF_AM' ? '오전반차' : '오후반차';
+
+        return {
+          '번호': idx + 1,
+          '성명': uName,
+          '휴가 구분': typeLabel,
+          '차감 일수 (일)': l.usedDays,
+          '시작 일자': l.startDate,
+          '종료 일자': l.endDate,
+          '휴가 사유': l.reason,
+          '등록 일시': l.createdAt?.substring(0, 10)
+        };
+      });
+
+      const ws = XLSX.utils.json_to_sheet(data);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, '연차반차 소진 이력');
+      XLSX.writeFile(wb, `연차_반차_소진_이력_${ymd}.xlsx`);
+    } else if (activeTab === 'OT') {
+      const data = overtimeRecords.map((ot, idx) => {
+        const uName = users.find(u => u.id === ot.userId)?.name || '알 수 없음';
+
+        return {
+          '번호': idx + 1,
+          '성명': uName,
+          '시작 일시': ot.startDateTime,
+          'OT 연장근무 시간 (h)': ot.hours,
+          '근무 상세 내용': ot.workDetail,
+          '등록 일시': ot.createdAt?.substring(0, 10)
+        };
+      });
+
+      const ws = XLSX.utils.json_to_sheet(data);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'OT 연장근무 이력');
+      XLSX.writeFile(wb, `OT_연장근무_이력_${ymd}.xlsx`);
+    }
+  };
+
   return (
     <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
       
@@ -195,8 +268,18 @@ export const LeaveOtPage: React.FC = () => {
           </p>
         </div>
 
-        {/* 탭 버튼 그룹 */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        {/* 탭 버튼 그룹 & 엑셀 다운로드 버튼 */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+          <button
+            onClick={handleExportExcel}
+            className="btn btn-secondary"
+            style={{ fontSize: '13px', whiteSpace: 'nowrap', backgroundColor: 'rgba(16, 185, 129, 0.12)', color: '#10b981', border: '1px solid rgba(16, 185, 129, 0.3)', fontWeight: 'bold' }}
+            title="현재 탭의 조회 데이터 엑셀 내보내기"
+          >
+            <Download size={14} style={{ marginRight: '6px' }} />
+            📊 엑셀 다운로드
+          </button>
+
           <button
             onClick={() => setActiveTab('QUOTA')}
             className={`btn ${activeTab === 'QUOTA' ? 'btn-primary' : 'btn-secondary'}`}
