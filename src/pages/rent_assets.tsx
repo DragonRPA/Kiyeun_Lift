@@ -328,6 +328,20 @@ export const RentAssets: React.FC = () => {
       seq: 61
     });
 
+    // 🏢 하은(주) 양식 스타일: 고소작업대 10M 샘플 항목 추가
+    samples.push({
+      id: `sample-haeun`,
+      assetNo: 'J6100',
+      modelName: '고소작업대 10M',
+      rentStart: `${selectedYm}-01`,
+      rentEnd: `${selectedYm}-31`,
+      billedAmount: 360000,
+      taxAmount: 36000,
+      totalAmount: 396000,
+      memo: '하은(주) 정기 임대료',
+      itemType: 'EQUIPMENT'
+    });
+
     setStatementRows(samples);
     setSelectedReconcileIds(samples.map(s => s.id));
   };
