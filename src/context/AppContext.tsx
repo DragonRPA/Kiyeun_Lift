@@ -183,7 +183,7 @@ interface AppContextType {
   saveTransportDataOnFly: (companyName: string, driverName: string, contact: string, vehicleNo: string, vehicleType: string) => void;
 
   // Purchase Settlement Mutators
-  generateMonthlyPurchaseSettlements: (ym: string) => Promise<{ transport: number; consumable: number; lease: number }>;
+  generateMonthlyPurchaseSettlements: (ym: string) => Promise<{ transport: number; consumable: number; lease: number; repair: number }>;
   confirmPurchaseSettlement: (id: string) => Promise<void>;
   recordPurchaseSettlementPayment: (id: string, data: { paidAmount: number; paymentDate: string; paymentMethod: string; bankAccount?: string; bankTransactionId?: string; memo?: string }) => Promise<void>;
   savePurchaseSettlement: (settlement: Partial<PurchaseSettlement>) => Promise<void>;
@@ -3296,8 +3296,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // 월말 매입 정산 관련 Mutators
   // ─────────────────────────────────────────────────────────
 
-  /** 당월 운송료 + 소모품 매입 + 임차자산 임차료 자동 집계 → PurchaseSettlement 생성 */
-  const generateMonthlyPurchaseSettlements = async (ym: string): Promise<{ transport: number; consumable: number; lease: number }> => {
+  /** 당월 운송료 + 소모품 매입 + 임차자산 임차료 + 외주 정비비 자동 집계 → PurchaseSettlement 생성 */
+  const generateMonthlyPurchaseSettlements = async (ym: string): Promise<{ transport: number; consumable: number; lease: number; repair: number }> => {
     const nowIso = new Date().toISOString();
     let transportCount = 0;
     let consumableCount = 0;
@@ -3422,6 +3422,65 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     );
     leaseCount = leaseSettlementsOfMonth.length;
 
+    // ④ [신규 추가] 외주 정비비 집계 — 정비수리(Repairs)에서 repairType === 'EXTERNAL'이고 status === 'COMPLETED'인 외주 정비 건 수집
+    let repairCount = 0;
+    const completedExternalRepairs = db.repairs.filter(r => {
+      if (r.repairType !== 'EXTERNAL' || r.status !== 'COMPLETED' || !r.vendorId) return false;
+      const rDate = r.completedDate || r.requestDate || r.repairDate;
+      return rDate && rDate.startsWith(ym);
+    });
+
+    const repairsByVendor: Record<string, Repair[]> = {};
+    completedExternalRepairs.forEach(r => {
+      if (!repairsByVendor[r.vendorId!]) repairsByVendor[r.vendorId!] = [];
+      repairsByVendor[r.vendorId!].push(r);
+    });
+
+    for (const [vendorId, rList] of Object.entries(repairsByVendor)) {
+      const vendor = db.vendors.find(v => v.id === vendorId);
+      const vendorName = vendor?.name || '외주 정비업체';
+      const existing = db.purchaseSettlements.find(p => p.vendorId === vendorId && p.settlementYm === ym && p.settlementType === 'EXTERNAL_REPAIR');
+      if (existing) continue;
+
+      const totalAmount = rList.reduce((sum, r) => sum + (r.totalCost || 0), 0);
+      const settlementId = db.generateNextId('purchaseSettlements', db.purchaseSettlements);
+
+      db.insertRow<PurchaseSettlement>('purchaseSettlements', {
+        id: settlementId,
+        settlementYm: ym,
+        vendorId,
+        vendorName,
+        settlementType: 'EXTERNAL_REPAIR',
+        totalAmount,
+        paidAmount: 0,
+        status: 'PENDING',
+        itemCount: rList.length,
+        createdAt: nowIso
+      });
+
+      rList.forEach(r => {
+        const asset = db.assets.find(a => a.id === r.assetId);
+        db.insertRow<PurchaseSettlementItem>('purchaseSettlementItems', {
+          settlementId,
+          sourceType: 'REPAIR' as any,
+          sourceId: r.id,
+          itemDescription: `외주 정비 [${asset?.assetNo || '자산'}] ${r.details.slice(0, 30)}`,
+          quantity: 1,
+          unitPrice: r.totalCost,
+          amount: r.totalCost,
+          evidenceFileUrl: r.estimateFileUrl || r.faultImageUrl,
+          createdAt: nowIso
+        });
+
+        // repair에 purchaseBillId 연결
+        db.updateRow<Repair>('repairs', r.id, {
+          purchaseBillId: settlementId,
+          updatedAt: nowIso
+        });
+      });
+      repairCount++;
+    }
+
     try {
       await db.awaitPendingWrites();
     } catch (err: any) {
@@ -3429,7 +3488,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     refreshAllData();
-    return { transport: transportCount, consumable: consumableCount, lease: leaseCount };
+    return { transport: transportCount, consumable: consumableCount, lease: leaseCount, repair: repairCount };
   };
 
   const confirmPurchaseSettlement = async (id: string): Promise<void> => {

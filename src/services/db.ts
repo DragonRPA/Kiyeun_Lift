@@ -746,7 +746,7 @@ export interface DepreciationLog {
 // 월말 매입 정산 (Purchase Settlement)
 // ============================================================
 
-export type PurchaseSettlementType = 'TRANSPORT' | 'CONSUMABLE' | 'EQUIPMENT_LEASE';
+export type PurchaseSettlementType = 'TRANSPORT' | 'CONSUMABLE' | 'EQUIPMENT_LEASE' | 'EXTERNAL_REPAIR';
 export type PurchaseSettlementStatus = 'PENDING' | 'CONFIRMED' | 'PAID';
 
 /** 월말 매입 정산 헤더 — 매입처 × 정산 연월 단위 통합 집계 */
@@ -765,16 +765,17 @@ export interface PurchaseSettlement {
   bankTransactionId?: string;          // 통장 출금 연결 ID (감사 대사 Audit Trail용)
   confirmedAt?: string;                // 정산 확정 일시
   confirmedBy?: string;                // 정산 확정자 이름
+  itemCount?: number;
   memo?: string;
   createdAt: string;
-  updatedAt: string;
+  updatedAt?: string;
 }
 
-/** 정산 라인 아이템 — 원천 건(배차 / 구매신청 / 임차)과 1:1 연결 */
+/** 정산 라인 아이템 — 원천 건(배차 / 구매신청 / 임차 / 외주정비)과 1:1 연결 */
 export interface PurchaseSettlementItem {
   id: string;
   settlementId: string;                // FK → PurchaseSettlement.id
-  sourceType: 'DELIVERY' | 'CONSUMABLE_PURCHASE' | 'EQUIPMENT_LEASE';
+  sourceType: 'DELIVERY' | 'CONSUMABLE_PURCHASE' | 'EQUIPMENT_LEASE' | 'REPAIR';
   sourceId: string;                    // 원천 ID
   itemDescription: string;            // 내역 설명
   quantity: number;                    // 수량 or 가동일수

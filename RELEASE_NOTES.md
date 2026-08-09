@@ -50,6 +50,26 @@
 
 ---
 
+# Release Notes (v1.62.0.Build.147 - 2026-08-09 18:45)
+
+## 🎨 [월말 매입정산 메뉴 내 외주 정비비 (EXTERNAL_REPAIR) 항목 신설 & 자동 정산/지급대사 구축]
+
+### 주요 개편 사항
+
+1. **월말 매입 정산 스키마 & 정산 타입 확장 (`db.ts`)**:
+   - `PurchaseSettlementType`: `'TRANSPORT' | 'CONSUMABLE' | 'EQUIPMENT_LEASE' | 'EXTERNAL_REPAIR'` 추가.
+   - `PurchaseSettlementItem.sourceType`: `'REPAIR'` 추가.
+
+2. **외주 정비비 월말 일괄 자동 정산서 발행 파이프라인 구축 (`AppContext.tsx`)**:
+   - 정비수리 대장(`repairs`)에서 외주 정비(`EXTERNAL`) 및 완료(`COMPLETED`) 건을 수집하여 지정된 외주 정비업체(`vendorId`)별로 `EXTERNAL_REPAIR` 매입 정산서 일괄 자동 발행.
+   - 정비 건에 매입정산서 FK (`purchaseBillId`) 1:1 연결 연동.
+
+3. **매입 정산 화면 UI 개편 (`PurchaseSettlementPage.tsx`)**:
+   - 상단 정산 탭 및 명세 목록에 **`외주 정비비`** 탭 신설 및 아이콘/배지 렌더링.
+   - 지급 대사 명세서 및 1:N 분할 지급 Log 카드에서 외주 정비 내역 상세 및 견적/파손 증빙 파일 1:1 표출.
+
+---
+
 # Release Notes (v1.61.0.Build.146 - 2026-08-09 18:44)
 
 ## 🎨 [정비항목관리 초기 시드 & 기존 로컬 데이터 CHK-0000001 코드 자가 마이그레이션 적용]

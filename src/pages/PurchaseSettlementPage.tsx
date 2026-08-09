@@ -6,7 +6,7 @@ import { useApp } from '../context/AppContext';
 import { PurchaseSettlement, PurchaseSettlementItem, PurchaseSettlementType } from '../services/db';
 import {
   Truck, ShoppingBag, Building2, Plus, CheckCircle2, CreditCard,
-  ChevronDown, ChevronUp, FileText, AlertCircle, RefreshCw, X, Download, ExternalLink, Eye
+  ChevronDown, ChevronUp, FileText, AlertCircle, RefreshCw, X, Download, ExternalLink, Eye, Wrench
 } from 'lucide-react';
 
 // 정산 유형 탭 정의
@@ -15,6 +15,7 @@ const SETTLEMENT_TYPES: { id: PurchaseSettlementType | 'ALL'; label: string; ico
   { id: 'TRANSPORT',        label: '운송료',           icon: <Truck size={15} /> },
   { id: 'CONSUMABLE',       label: '소모품 매입',       icon: <ShoppingBag size={15} /> },
   { id: 'EQUIPMENT_LEASE',  label: '임차료 (전대장비)', icon: <Building2 size={15} /> },
+  { id: 'EXTERNAL_REPAIR',   label: '외주 정비비',      icon: <Wrench size={15} /> },
 ];
 
 const STATUS_LABEL: Record<string, { label: string; color: string }> = {
@@ -27,6 +28,7 @@ const TYPE_LABEL: Record<string, string> = {
   TRANSPORT:       '운송료',
   CONSUMABLE:      '소모품 매입',
   EQUIPMENT_LEASE: '임차료',
+  EXTERNAL_REPAIR: '외주 정비비',
 };
 
 export const PurchaseSettlementPage: React.FC = () => {
@@ -863,7 +865,7 @@ export const PurchaseSettlementPage: React.FC = () => {
                             <tr key={item.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
                               <td style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>
                                 <span style={{ fontSize: '11px', padding: '2px 6px', borderRadius: '4px', backgroundColor: 'var(--bg-app)', border: '1px solid var(--border-color)' }}>
-                                  {item.sourceType === 'DELIVERY' ? '운송료' : item.sourceType === 'CONSUMABLE_PURCHASE' ? '소모품' : '임차료'}
+                                  {item.sourceType === 'DELIVERY' ? '운송료' : item.sourceType === 'CONSUMABLE_PURCHASE' ? '소모품' : item.sourceType === 'REPAIR' ? '외주정비' : '임차료'}
                                 </span>
                               </td>
                               <td style={{ padding: '8px 10px' }}>{item.itemDescription}</td>
