@@ -50,6 +50,20 @@
 
 ---
 
+# Release Notes (v1.62.2.Build.149 - 2026-08-09 18:57)
+
+## 🐛 [Hotfix] DDL 패치 자동 적용 도구 CREATE TABLE 중복 구문 오류 핫픽스
+
+### 주요 수정 사항
+
+1. **`DevDataUploader.tsx` DDL 파서 중복 병합 방지 정규식 강화 (`DevDataUploader.tsx`)**:
+   - `CREATE TABLE IF NOT EXISTS IF NOT EXISTS ...` 형태의 중복 결합 Syntax Error가 발생하지 않도록 정규식 안전망 구축.
+
+2. **`schema.sql` 정의 구문 정정 (`schema.sql`)**:
+   - `inspection_checklist_items` 테이블 정의 구문을 표준 `CREATE TABLE` 형식으로 조치.
+
+---
+
 # Release Notes (v1.62.1.Build.148 - 2026-08-09 18:52)
 
 ## 🐛 [Hotfix] 정비항목 등록 원격 DB 미존재 예외 격리 (Graceful Isolation) 적용 & schema.sql DDL 확충

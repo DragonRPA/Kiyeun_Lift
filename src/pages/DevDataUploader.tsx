@@ -1129,7 +1129,7 @@ export const DevDataUploader: React.FC = () => {
         if (actualCols === null || actualCols.length === 0) {
           // null 또는 빈 배열(0개) → 테이블 자체가 원격 DB에 미존재
           audit.push({ table, status: 'MISSING', message: '테이블이 Supabase에 존재하지 않습니다.' });
-          const createStmt = schemaDef.createSql.replace(/CREATE TABLE\s+("?\w+"?)/gi, 'CREATE TABLE IF NOT EXISTS $1').trim();
+          const createStmt = schemaDef.createSql.replace(/CREATE TABLE\s+(IF NOT EXISTS\s+)?("?\w+"?)/gi, 'CREATE TABLE IF NOT EXISTS $2').trim();
           stmts.push(createStmt);
           stmts.push(...generateRlsPolicyDDL(table).split('\n').filter(s => s.trim()));
           sqlPatchDisplay += `-- [신규 테이블 생성] ${table}\n${createStmt}\n${generateRlsPolicyDDL(table)}\n\n`;

@@ -781,7 +781,7 @@ CREATE TABLE external_leases (
     "updatedAt" TEXT NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS inspection_checklist_items (
+CREATE TABLE inspection_checklist_items (
     id TEXT PRIMARY KEY,
     category TEXT NOT NULL,
     code TEXT NOT NULL,
