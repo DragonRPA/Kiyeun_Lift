@@ -1138,7 +1138,7 @@ export const OutboundInspections: React.FC = () => {
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: '10px', maxHeight: '260px', overflowY: 'auto' }}>
                     {filteredAssets.map(a => {
                       const isTarget = targetNewAssetId === a.id;
-                      const score = (a as any).maintenanceScore ?? 95;
+                      const score = a.maintenanceScore || 0;
                       return (
                         <div
                           key={a.id}
@@ -1154,8 +1154,8 @@ export const OutboundInspections: React.FC = () => {
                         >
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
                             <span style={{ fontWeight: 800, fontSize: '14px', color: 'var(--text-primary)' }}>🏷️ {a.assetNo}</span>
-                            <span style={{ padding: '2px 8px', borderRadius: '12px', fontSize: '11px', fontWeight: 700, backgroundColor: score >= 80 ? 'rgba(34,197,94,0.15)' : 'rgba(245,158,11,0.15)', color: score >= 80 ? '#16a34a' : '#d97706' }}>
-                              정비점수: {score}점
+                            <span style={{ padding: '2px 8px', borderRadius: '12px', fontSize: '11px', fontWeight: 700, backgroundColor: score === 0 ? 'rgba(34,197,94,0.15)' : 'rgba(245,158,11,0.15)', color: score === 0 ? '#16a34a' : '#d97706' }}>
+                              정비점수: {score}점 {score === 0 ? '(이상무)' : '(검수필요)'}
                             </span>
                           </div>
                           <div style={{ fontSize: '11.5px', color: 'var(--text-muted)' }}>시리얼: {a.serialNo || '-'}</div>

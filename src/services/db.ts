@@ -897,7 +897,7 @@ const generateMockAssets = (products: Product[]): Asset[] => {
       bookValue: 15000000,
       cumRentalFee: 0,
       cumRepairCost: 0,
-      maintenanceScore: Math.floor(Math.random() * 51), // 0 ~ 50 무작위 점수
+      maintenanceScore: 0, // 기본 이상무 (0점)
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     });
@@ -922,7 +922,7 @@ const generateMockAssets = (products: Product[]): Asset[] => {
       bookValue: 15000000,
       cumRentalFee: 0,
       cumRepairCost: 0,
-      maintenanceScore: Math.floor(Math.random() * 51),
+      maintenanceScore: 0,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     });
