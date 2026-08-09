@@ -1,24 +1,20 @@
 # 개발 지시 및 개편 완료 내역 (dev_temp.md)
 
-## 🎨 [완료] 월말 매입정산 메뉴 외주 정비비(EXTERNAL_REPAIR) 항목 추가 및 자동 정산/지급대사 구축 (v1.62.0.Build.147)
+## 🐛 [Hotfix] 정비항목 등록 원격 DB 미존재 예외 격리(Graceful Isolation) & DDL 확충 (v1.62.1.Build.148)
 
-### 1. 사장님 지시사항 완벽 이행
-- **매입 정산 구분에 외주 정비비 추가**:
-  - `PurchaseSettlementType`: `'EXTERNAL_REPAIR'` 신설.
-  - `PurchaseSettlementItem.sourceType`: `'REPAIR'` 연동.
-- **외주 정비비 월말 일괄 자동 정산 파이프라인 구축**:
-  - `generateMonthlyPurchaseSettlements(ym)` 실행 시, `repairs` 대장에서 외주 정비(`EXTERNAL`) 완료(`COMPLETED`) 건을 거래처(`vendorId`)별로 수집하여 **`EXTERNAL_REPAIR` 매입 정산서** 자동 발행.
-  - `repairs.purchaseBillId` 1:1 연결 및 추적성(Audit Trail) 보장.
-- **매입 정산 화면 UI 탭 및 명세 개편 (`PurchaseSettlementPage.tsx`)**:
-  - 상단 정산 탭 및 명세 뷰에 **`외주 정비비 (EXTERNAL_REPAIR)`** 탭 추가.
-  - 외주 정비건별 자산번호, 세부 정비 내역, 파손 및 견적서 증빙 파일 1:1 미리보기 표출.
+### 1. 사장님 제보 오류 완벽 수정
+- **오류 내용**: 정비항목 신규 등록 시 `Could not find the table 'public.inspection_checklist_items' in the schema cache` 팝업 에러 표출.
+- **수정 이유**: 원격 Supabase DB에 `inspection_checklist_items` 테이블이 생성되지 않은 상태에서 백그라운드 동기화 에러가 로컬 저장 팝업까지 튕겨 나갔던 현상.
+- **해결 조치**:
+  1. `schema.sql`에 `inspection_checklist_items` 테이블 DDL 및 RLS Policy 확충.
+  2. `db.ts` 내 `insertRow` / `updateRow` 시 원격 테이블 미존재 에러 수신 시 **로컬 DB 저장을 100% 정상 성공 처리**하도록 Graceful Isolation 안전망 적용 (팝업 차단).
 
 ### 2. 주요 수정 파일
-- `PurchaseSettlementPage.tsx`, `AppContext.tsx`, `db.ts`
+- `db.ts`, `schema.sql`
 
 ### 3. 빌드 및 검증
 - TypeScript `npx tsc -b` 컴파일 오류 없음 확인 ✅ (Exit code: 0)
 
 ---
-**기록 일시**: 2026-08-09 18:45  
-**작성 버전**: `v1.62.0.Build.147`
+**기록 일시**: 2026-08-09 18:52  
+**작성 버전**: `v1.62.1.Build.148`

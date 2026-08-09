@@ -781,6 +781,31 @@ CREATE TABLE external_leases (
     "updatedAt" TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS inspection_checklist_items (
+    id TEXT PRIMARY KEY,
+    category TEXT NOT NULL,
+    code TEXT NOT NULL,
+    name TEXT NOT NULL,
+    score INT NOT NULL DEFAULT 0,
+    description TEXT,
+    "createdAt" TEXT NOT NULL,
+    "updatedAt" TEXT
+);
+
+ALTER TABLE inspection_checklist_items ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "allow_anon_select" ON inspection_checklist_items;
+DROP POLICY IF EXISTS "allow_anon_insert" ON inspection_checklist_items;
+DROP POLICY IF EXISTS "allow_anon_update" ON inspection_checklist_items;
+DROP POLICY IF EXISTS "allow_authenticated_select" ON inspection_checklist_items;
+DROP POLICY IF EXISTS "allow_authenticated_insert" ON inspection_checklist_items;
+DROP POLICY IF EXISTS "allow_authenticated_update" ON inspection_checklist_items;
+CREATE POLICY "allow_anon_select" ON inspection_checklist_items FOR SELECT TO anon USING (true);
+CREATE POLICY "allow_anon_insert" ON inspection_checklist_items FOR INSERT TO anon WITH CHECK (true);
+CREATE POLICY "allow_anon_update" ON inspection_checklist_items FOR UPDATE TO anon USING (true) WITH CHECK (true);
+CREATE POLICY "allow_authenticated_select" ON inspection_checklist_items FOR SELECT TO authenticated USING (true);
+CREATE POLICY "allow_authenticated_insert" ON inspection_checklist_items FOR INSERT TO authenticated WITH CHECK (true);
+CREATE POLICY "allow_authenticated_update" ON inspection_checklist_items FOR UPDATE TO authenticated USING (true) WITH CHECK (true);
+
 ALTER TABLE external_leases ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "allow_anon_select" ON external_leases;
 DROP POLICY IF EXISTS "allow_anon_insert" ON external_leases;

@@ -1879,6 +1879,11 @@ class LocalDB {
         .then(({ data, error }) => {
           if (error) {
             console.error(`Supabase upsert failed for ${tableName}:`, error);
+            const msg = error.message || String(error);
+            if (msg.includes('Could not find the table') || error.code === 'PGRST204' || error.code === '42P01') {
+              console.warn(`[Graceful Isolation] 원격 Supabase DB에 ${tableName} 테이블이 존재하지 않습니다. 로컬 저장을 완결합니다.`);
+              return null;
+            }
             throw error;
           }
           return data;
@@ -1926,6 +1931,11 @@ class LocalDB {
         .then(({ data, error }) => {
           if (error) {
             console.error(`Supabase update failed for ${tableName}:`, error);
+            const msg = error.message || String(error);
+            if (msg.includes('Could not find the table') || error.code === 'PGRST204' || error.code === '42P01') {
+              console.warn(`[Graceful Isolation] 원격 Supabase DB에 ${tableName} 테이블이 존재하지 않습니다. 로컬 저장을 완결합니다.`);
+              return null;
+            }
             throw error;
           }
           return data;

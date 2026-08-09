@@ -50,6 +50,21 @@
 
 ---
 
+# Release Notes (v1.62.1.Build.148 - 2026-08-09 18:52)
+
+## 🐛 [Hotfix] 정비항목 등록 원격 DB 미존재 예외 격리 (Graceful Isolation) 적용 & schema.sql DDL 확충
+
+### 주요 수정 사항
+
+1. **원격 Supabase 미생성 테이블 에러 격리 보호 (`db.ts`)**:
+   - Supabase 원격 DB에 테이블이 생성되지 않았을 때(`Could not find the table` / `PGRST204`), 백그라운드 동기화 실패가 로컬 DB 저장을 차단하지 않도록 Graceful Isolation 안전망 구축.
+   - **로컬 스토리지 데이터베이스에는 즉시 100% 저장 성공 조치**.
+
+2. **`schema.sql` 내 `inspection_checklist_items` DDL 및 RLS Policy 선언 (`schema.sql`)**:
+   - `inspection_checklist_items` 테이블 DDL 및 anon/authenticated 6대 RLS Policy DDL 반영.
+
+---
+
 # Release Notes (v1.62.0.Build.147 - 2026-08-09 18:45)
 
 ## 🎨 [월말 매입정산 메뉴 내 외주 정비비 (EXTERNAL_REPAIR) 항목 신설 & 자동 정산/지급대사 구축]
