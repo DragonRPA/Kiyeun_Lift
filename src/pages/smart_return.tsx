@@ -584,7 +584,7 @@ export const SmartReturn: React.FC = () => {
                           setLoadingTime(e.target.value);
                           (e.target as HTMLSelectElement).blur();
                         }}
-                        onFocus={e => { (e.target as HTMLSelectElement).size = 6; }}
+                        onFocus={e => { (e.target as HTMLSelectElement).size = 10; }}
                         onBlur={e => { (e.target as HTMLSelectElement).size = 1; }}
                         style={{
                           flex: 1,
@@ -809,7 +809,7 @@ export const SmartReturn: React.FC = () => {
                           setMaintLoadingTime(e.target.value);
                           (e.target as HTMLSelectElement).blur();
                         }}
-                        onFocus={e => { (e.target as HTMLSelectElement).size = 6; }}
+                        onFocus={e => { (e.target as HTMLSelectElement).size = 10; }}
                         onBlur={e => { (e.target as HTMLSelectElement).size = 1; }}
                         style={{
                           flex: 1,

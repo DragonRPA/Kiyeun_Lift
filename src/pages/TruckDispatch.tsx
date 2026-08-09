@@ -1774,7 +1774,7 @@ export const TruckDispatch: React.FC = () => {
                                   setLoadingTimeSlot(e.target.value);
                                   (e.target as HTMLSelectElement).blur();
                                 }}
-                                onFocus={e => { (e.target as HTMLSelectElement).size = 6; }}
+                                onFocus={e => { (e.target as HTMLSelectElement).size = 10; }}
                                 onBlur={e => { (e.target as HTMLSelectElement).size = 1; }}
                                 style={{
                                   width: '100px',
@@ -1832,7 +1832,7 @@ export const TruckDispatch: React.FC = () => {
                                   setUnloadingTimeSlot(e.target.value);
                                   (e.target as HTMLSelectElement).blur();
                                 }}
-                                onFocus={e => { (e.target as HTMLSelectElement).size = 6; }}
+                                onFocus={e => { (e.target as HTMLSelectElement).size = 10; }}
                                 onBlur={e => { (e.target as HTMLSelectElement).size = 1; }}
                                 style={{
                                   width: '100px',
