@@ -1759,19 +1759,39 @@ export const TruckDispatch: React.FC = () => {
 
                           <div>
                             <label style={{ fontSize: '12px', fontWeight: 700, marginBottom: '4px', display: 'block', color: 'var(--text-secondary)' }}>상차일자 & 시간</label>
-                            <div style={{ display: 'flex', gap: '6px' }}>
+                            <div style={{ display: 'flex', gap: '6px', position: 'relative', height: '34px' }}>
                               <input
                                 type="date"
                                 value={loadingDate}
                                 disabled={isFormDisabled}
                                 onChange={e => setLoadingDate(e.target.value)}
-                                style={{ flex: 1, padding: '7px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: isFormDisabled ? 'var(--bg-card)' : 'var(--bg-body)', fontSize: '12.5px', color: 'var(--text-primary)', opacity: isFormDisabled ? 0.75 : 1, cursor: isFormDisabled ? 'not-allowed' : 'default' }}
+                                style={{ flex: 1, padding: '7px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: isFormDisabled ? 'var(--bg-card)' : 'var(--bg-body)', fontSize: '12.5px', color: 'var(--text-primary)', opacity: isFormDisabled ? 0.75 : 1, cursor: isFormDisabled ? 'not-allowed' : 'default', marginRight: '106px' }}
                               />
                               <select
                                 value={loadingTimeSlot}
                                 disabled={isFormDisabled}
-                                onChange={e => setLoadingTimeSlot(e.target.value)}
-                                style={{ width: '95px', padding: '7px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: isFormDisabled ? 'var(--bg-card)' : 'var(--bg-body)', fontSize: '12.5px', color: 'var(--text-primary)', opacity: isFormDisabled ? 0.75 : 1, cursor: isFormDisabled ? 'not-allowed' : 'default' }}
+                                onChange={e => {
+                                  setLoadingTimeSlot(e.target.value);
+                                  (e.target as HTMLSelectElement).blur();
+                                }}
+                                onFocus={e => { (e.target as HTMLSelectElement).size = 6; }}
+                                onBlur={e => { (e.target as HTMLSelectElement).size = 1; }}
+                                style={{
+                                  width: '100px',
+                                  padding: '6px',
+                                  borderRadius: '6px',
+                                  border: '1px solid var(--border-color)',
+                                  backgroundColor: isFormDisabled ? 'var(--bg-card)' : 'var(--bg-body)',
+                                  fontSize: '12.5px',
+                                  color: 'var(--text-primary)',
+                                  opacity: isFormDisabled ? 0.75 : 1,
+                                  cursor: isFormDisabled ? 'not-allowed' : 'default',
+                                  position: 'absolute',
+                                  right: 0,
+                                  top: 0,
+                                  zIndex: 30,
+                                  boxShadow: '0 4px 12px rgba(0,0,0,0.15)'
+                                }}
                               >
                                 <option value="오전">오전</option>
                                 <option value="오후">오후</option>
@@ -1798,19 +1818,39 @@ export const TruckDispatch: React.FC = () => {
 
                           <div>
                             <label style={{ fontSize: '12px', fontWeight: 700, marginBottom: '4px', display: 'block', color: 'var(--text-secondary)' }}>하차일자 & 시간</label>
-                            <div style={{ display: 'flex', gap: '6px' }}>
+                            <div style={{ display: 'flex', gap: '6px', position: 'relative', height: '34px' }}>
                               <input
                                 type="date"
                                 value={unloadingDate}
                                 disabled={isFormDisabled}
                                 onChange={e => setUnloadingDate(e.target.value)}
-                                style={{ flex: 1, padding: '7px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: isFormDisabled ? 'var(--bg-card)' : 'var(--bg-body)', fontSize: '12.5px', color: 'var(--text-primary)', opacity: isFormDisabled ? 0.75 : 1, cursor: isFormDisabled ? 'not-allowed' : 'default' }}
+                                style={{ flex: 1, padding: '7px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: isFormDisabled ? 'var(--bg-card)' : 'var(--bg-body)', fontSize: '12.5px', color: 'var(--text-primary)', opacity: isFormDisabled ? 0.75 : 1, cursor: isFormDisabled ? 'not-allowed' : 'default', marginRight: '106px' }}
                               />
                               <select
                                 value={unloadingTimeSlot}
                                 disabled={isFormDisabled}
-                                onChange={e => setUnloadingTimeSlot(e.target.value)}
-                                style={{ width: '95px', padding: '7px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: isFormDisabled ? 'var(--bg-card)' : 'var(--bg-body)', fontSize: '12.5px', color: 'var(--text-primary)', opacity: isFormDisabled ? 0.75 : 1, cursor: isFormDisabled ? 'not-allowed' : 'default' }}
+                                onChange={e => {
+                                  setUnloadingTimeSlot(e.target.value);
+                                  (e.target as HTMLSelectElement).blur();
+                                }}
+                                onFocus={e => { (e.target as HTMLSelectElement).size = 6; }}
+                                onBlur={e => { (e.target as HTMLSelectElement).size = 1; }}
+                                style={{
+                                  width: '100px',
+                                  padding: '6px',
+                                  borderRadius: '6px',
+                                  border: '1px solid var(--border-color)',
+                                  backgroundColor: isFormDisabled ? 'var(--bg-card)' : 'var(--bg-body)',
+                                  fontSize: '12.5px',
+                                  color: 'var(--text-primary)',
+                                  opacity: isFormDisabled ? 0.75 : 1,
+                                  cursor: isFormDisabled ? 'not-allowed' : 'default',
+                                  position: 'absolute',
+                                  right: 0,
+                                  top: 0,
+                                  zIndex: 30,
+                                  boxShadow: '0 4px 12px rgba(0,0,0,0.15)'
+                                }}
                               >
                                 <option value="오전">오전</option>
                                 <option value="오후">오후</option>

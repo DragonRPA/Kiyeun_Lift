@@ -562,7 +562,7 @@ export const SmartReturn: React.FC = () => {
                   </div>
                   <div>
                     <label>회수 희망시간</label>
-                    <div style={{ display: 'flex', gap: '6px' }}>
+                    <div style={{ display: 'flex', gap: '6px', position: 'relative', height: '38px' }}>
                       <select
                         value={isCustomLoadingTime ? 'CUSTOM' : loadingTime}
                         onChange={e => {
@@ -573,8 +573,17 @@ export const SmartReturn: React.FC = () => {
                             setIsCustomLoadingTime(false);
                             setLoadingTime(e.target.value);
                           }
+                          (e.target as HTMLSelectElement).blur();
                         }}
-                        style={{ flex: 1 }}
+                        onFocus={e => { (e.target as HTMLSelectElement).size = 6; }}
+                        onBlur={e => { (e.target as HTMLSelectElement).size = 1; }}
+                        style={{
+                          flex: 1,
+                          position: isCustomLoadingTime ? 'static' : 'absolute',
+                          width: '100%',
+                          zIndex: 30,
+                          boxShadow: '0 4px 12px rgba(0,0,0,0.15)'
+                        }}
                       >
                         <option value="오전">오전</option>
                         <option value="오후">오후</option>
@@ -795,7 +804,7 @@ export const SmartReturn: React.FC = () => {
                   </div>
                   <div>
                     <label>상차 희망시간</label>
-                    <div style={{ display: 'flex', gap: '6px' }}>
+                    <div style={{ display: 'flex', gap: '6px', position: 'relative', height: '38px' }}>
                       <select
                         value={isCustomMaintLoadingTime ? 'CUSTOM' : maintLoadingTime}
                         onChange={e => {
@@ -806,8 +815,17 @@ export const SmartReturn: React.FC = () => {
                             setIsCustomMaintLoadingTime(false);
                             setMaintLoadingTime(e.target.value);
                           }
+                          (e.target as HTMLSelectElement).blur();
                         }}
-                        style={{ flex: 1 }}
+                        onFocus={e => { (e.target as HTMLSelectElement).size = 6; }}
+                        onBlur={e => { (e.target as HTMLSelectElement).size = 1; }}
+                        style={{
+                          flex: 1,
+                          position: isCustomMaintLoadingTime ? 'static' : 'absolute',
+                          width: '100%',
+                          zIndex: 30,
+                          boxShadow: '0 4px 12px rgba(0,0,0,0.15)'
+                        }}
                       >
                         <option value="오전">오전</option>
                         <option value="오후">오후</option>
