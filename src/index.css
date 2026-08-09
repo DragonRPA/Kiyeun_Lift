@@ -7,7 +7,8 @@
   --bg-sidebar: #ffffff;
   --bg-card: #ffffff;
   --bg-header: #ffffff;
-  --border-color: #e2e8f0;
+  --border-color: #cbd5e1;
+  --table-border-color: #cbd5e1;
   
   --primary: #4f46e5;
   --primary-hover: #4338ca;
@@ -53,6 +54,7 @@
   --bg-card: #1f2937;
   --bg-header: #111827;
   --border-color: #374151;
+  --table-border-color: #374151;
   
   --primary: #6366f1;
   --primary-hover: #4f46e5;
@@ -252,7 +254,7 @@ th {
   color: var(--text-secondary);
   font-weight: 600;
   padding: 14px 16px;
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 2px solid var(--border-color);
   font-size: 13px;
   text-transform: uppercase;
   letter-spacing: 0.5px;
