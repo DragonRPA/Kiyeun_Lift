@@ -1,6 +1,6 @@
 // d:\Kiyeun_Lift\src\context\AppContext.tsx
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
-import { db, supabase, User, MenuPermission, createMenuPermission, Customer, CustomerContact, CustomerSite, Product, Asset, Consumable, ConsumableLog, ConsumablePurchaseRequest, Contract, ContractAsset, ContractHistory, Delivery, Billing, BillingDetail, Payment, PaymentDepositLink, Repair, RepairConsumable, Todo, BankTransaction, BankMatchingRule, AssetInOutLog, GoogleConfig, Vendor, CashFlowSnapshot, OutboundInspection, TransportCompany, TransportDriver, DepreciationLog, PurchaseSettlement, PurchaseSettlementItem, ExternalLease, PurchaseSettlementType, PurchaseSettlementStatus, findCustomerByNormalizedName, AnnualLeaveQuota, LeaveUsage, OvertimeRecord, PayrollClosing } from '../services/db';
+import { db, supabase, User, MenuPermission, createMenuPermission, Customer, CustomerContact, CustomerSite, Product, Asset, Consumable, ConsumableLog, ConsumablePurchaseRequest, Contract, ContractAsset, ContractHistory, Delivery, Billing, BillingDetail, Payment, PaymentDepositLink, Repair, RepairConsumable, Todo, BankTransaction, BankMatchingRule, AssetInOutLog, GoogleConfig, Vendor, CashFlowSnapshot, OutboundInspection, TransportCompany, TransportDriver, DepreciationLog, PurchaseSettlement, PurchaseSettlementItem, SettlementPaymentLog, ExternalLease, PurchaseSettlementType, PurchaseSettlementStatus, findCustomerByNormalizedName, AnnualLeaveQuota, LeaveUsage, OvertimeRecord, PayrollClosing } from '../services/db';
 import { ErrorModal } from '../components/ErrorModal';
 import { getAllSystemMenuIds } from '../config/menu_config';
 
@@ -79,6 +79,7 @@ interface AppContextType {
   depreciationLogs: DepreciationLog[];
   purchaseSettlements: PurchaseSettlement[];
   purchaseSettlementItems: PurchaseSettlementItem[];
+  settlementPaymentLogs: SettlementPaymentLog[];
   externalLeases: ExternalLease[];
 
   annualLeaveQuotas: AnnualLeaveQuota[];
@@ -177,7 +178,7 @@ interface AppContextType {
   // Purchase Settlement Mutators
   generateMonthlyPurchaseSettlements: (ym: string) => Promise<{ transport: number; consumable: number; lease: number }>;
   confirmPurchaseSettlement: (id: string) => Promise<void>;
-  recordPurchaseSettlementPayment: (id: string, data: { paidAmount: number; paymentDate: string; paymentMethod: string; bankAccount?: string; memo?: string }) => Promise<void>;
+  recordPurchaseSettlementPayment: (id: string, data: { paidAmount: number; paymentDate: string; paymentMethod: string; bankAccount?: string; bankTransactionId?: string; memo?: string }) => Promise<void>;
   savePurchaseSettlement: (settlement: Partial<PurchaseSettlement>) => Promise<void>;
 
   // Navigation states (cross-page routing)
@@ -3206,7 +3207,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const recordPurchaseSettlementPayment = async (
     id: string,
-    data: { paidAmount: number; paymentDate: string; paymentMethod: string; bankAccount?: string; memo?: string }
+    data: { paidAmount: number; paymentDate: string; paymentMethod: string; bankAccount?: string; bankTransactionId?: string; memo?: string }
   ): Promise<void> => {
     const settlement = db.purchaseSettlements.find(p => p.id === id);
     if (!settlement) return;
@@ -3218,8 +3219,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       paymentDate: data.paymentDate,
       paymentMethod: data.paymentMethod,
       bankAccount: data.bankAccount,
+      bankTransactionId: data.bankTransactionId,
       memo: data.memo
     });
+
+    // SettlementPaymentLog 지급 이력 레코드 1:N 보관 (Audit Trail)
+    const logId = `SPL-${Date.now()}`;
+    const logs = db.settlementPaymentLogs;
+    logs.push({
+      id: logId,
+      settlementId: id,
+      bankTransactionId: data.bankTransactionId,
+      paidAmount: data.paidAmount,
+      paymentDate: data.paymentDate,
+      paymentMethod: data.paymentMethod,
+      bankAccount: data.bankAccount,
+      memo: data.memo,
+      createdAt: new Date().toISOString()
+    });
+    db.settlementPaymentLogs = logs;
 
     // 연결된 배차 건 상태 PAID 연동
     if (newStatus === 'PAID' && settlement.settlementType === 'TRANSPORT') {
@@ -3251,7 +3269,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       currentUser, theme, toggleTheme, login, logout, hasPermission, showErrorModal,
       users, permissions, customers, contacts, sites, products, assets, consumables, consumableLogs, consumablePurchases, contracts, contractAssets, contractHistory, deliveries, billings, billingDetails, payments, paymentDepositLinks, repairs, repairConsumables, transportCompanies, transportDrivers, todos,
       bankTransactions, bankMatchingRules, assetInOutLogs, vendors, googleConfigs, cashFlowSnapshots, outboundInspections, depreciationLogs,
-      purchaseSettlements, purchaseSettlementItems, externalLeases,
+      purchaseSettlements, purchaseSettlementItems, settlementPaymentLogs: db.settlementPaymentLogs, externalLeases,
       annualLeaveQuotas, leaveUsages, overtimeRecords, payrollClosings,
       refreshAllData, executeMonthlyDepreciation, loadTablesForMenu, updatePermissions, saveUser, saveCustomer, saveContact, saveSite, saveProduct, saveAsset, updateGoogleConfig,
       saveCashFlowSnapshot, deleteCashFlowSnapshot, saveVendor, deleteVendor,

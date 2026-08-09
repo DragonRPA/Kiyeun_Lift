@@ -33,8 +33,10 @@ export const PurchaseSettlementPage: React.FC = () => {
   const {
     purchaseSettlements,
     purchaseSettlementItems,
+    settlementPaymentLogs,
     consumablePurchases,
     deliveries,
+    bankTransactions,
     generateMonthlyPurchaseSettlements,
     confirmPurchaseSettlement,
     recordPurchaseSettlementPayment,
@@ -50,8 +52,13 @@ export const PurchaseSettlementPage: React.FC = () => {
   const [expandedId, setExpandedId]                = useState<string | null>(null);
   const [isGenerating, setIsGenerating]            = useState(false);
   const [generateResult, setGenerateResult]        = useState<string | null>(null);
-  const [paymentModal, setPaymentModal]            = useState<{ id: string; totalAmount: number; paidAmount: number } | null>(null);
+  const [paymentModal, setPaymentModal]            = useState<{ id: string; totalAmount: number; paidAmount: number; vendorName: string } | null>(null);
   const [paymentForm, setPaymentForm]              = useState({ paidAmount: '', paymentDate: currentYm.slice(0,7) + '-' + String(now.getDate()).padStart(2,'0'), paymentMethod: '계좌이체', bankAccount: '', memo: '' });
+  const [selectedBankTxId, setSelectedBankTxId]    = useState<string | null>(null);
+
+  // 🔍 지급 대사 상세 명세서 모달 상태 (Audit 1:N 이력)
+  const [detailModalSettlementId, setDetailModalSettlementId] = useState<string | null>(null);
+
   const [memoEditId, setMemoEditId]                = useState<string | null>(null);
   const [memoText, setMemoText]                    = useState('');
 
@@ -155,9 +162,11 @@ export const PurchaseSettlementPage: React.FC = () => {
       paymentDate: paymentForm.paymentDate,
       paymentMethod: paymentForm.paymentMethod,
       bankAccount: paymentForm.bankAccount || undefined,
+      bankTransactionId: selectedBankTxId || undefined,
       memo: paymentForm.memo || undefined,
     });
     setPaymentModal(null);
+    setSelectedBankTxId(null);
   };
 
   const handleMemoSave = async (id: string) => {
@@ -312,7 +321,9 @@ export const PurchaseSettlementPage: React.FC = () => {
                   <div style={{ textAlign: 'right', minWidth: '120px' }}>
                     <div style={{ fontSize: '16px', fontWeight: '800' }}>{p.totalAmount.toLocaleString()}원</div>
                     {p.paidAmount > 0 && (
-                      <div style={{ fontSize: '11.5px', color: '#10B981' }}>지급 {p.paidAmount.toLocaleString()}원</div>
+                      <div style={{ fontSize: '11.5px', color: p.paidAmount > p.totalAmount ? 'var(--danger)' : '#10B981', fontWeight: p.paidAmount > p.totalAmount ? 'bold' : 'normal' }}>
+                        {p.paidAmount > p.totalAmount ? `과지급 ${p.paidAmount.toLocaleString()}원 (+${(p.paidAmount - p.totalAmount).toLocaleString()}원)` : `지급 ${p.paidAmount.toLocaleString()}원`}
+                      </div>
                     )}
                   </div>
 
@@ -412,16 +423,46 @@ export const PurchaseSettlementPage: React.FC = () => {
                       )}
                       {(p.status === 'CONFIRMED' || (p.status === 'PAID' && p.paidAmount < p.totalAmount)) && remaining > 0 && (
                         <button
-                          onClick={() => setPaymentModal({ id: p.id, totalAmount: p.totalAmount, paidAmount: p.paidAmount })}
+                          onClick={() => {
+                            setSelectedBankTxId(null);
+                            setPaymentModal({ id: p.id, totalAmount: p.totalAmount, paidAmount: p.paidAmount, vendorName: p.vendorName });
+                            setPaymentForm(prev => ({ ...prev, paidAmount: (p.totalAmount - p.paidAmount).toString() }));
+                          }}
                           style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '7px 16px', background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)', color: '#fff', border: 'none', borderRadius: '6px', fontSize: '13.5px', fontWeight: '700', cursor: 'pointer', whiteSpace: 'nowrap' }}
                         >
                           <CreditCard size={15} /> 지급 처리 ({remaining.toLocaleString()}원 잔여)
                         </button>
                       )}
                       {p.status === 'PAID' && (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#10B981', fontWeight: '700', fontSize: '13.5px' }}>
-                          <CheckCircle2 size={16} /> 지급 완료 ({p.paymentDate})
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#10B981', fontWeight: '700', fontSize: '13.5px' }}>
+                            <CheckCircle2 size={16} /> 지급 완료 ({p.paymentDate})
+                          </div>
+                          {p.bankTransactionId && (
+                            <span style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '4px', backgroundColor: 'rgba(16, 185, 129, 0.15)', color: '#10B981', border: '1px solid rgba(16, 185, 129, 0.3)', fontWeight: 'bold' }}>
+                              🏦 통장 출금 증빙 연결됨 (Audit)
+                            </span>
+                          )}
                         </div>
+                      )}
+
+                      {/* 🔍 지급 대사 이력 상세 명세서 버튼 */}
+                      {(p.paidAmount > 0 || p.bankTransactionId) && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDetailModalSettlementId(p.id);
+                          }}
+                          style={{
+                            display: 'inline-flex', alignItems: 'center', gap: '4px',
+                            padding: '6px 12px', borderRadius: '6px', border: '1px solid var(--primary)',
+                            background: 'rgba(99, 102, 241, 0.1)', color: 'var(--primary)',
+                            fontSize: '12.5px', fontWeight: '700', cursor: 'pointer', whiteSpace: 'nowrap'
+                          }}
+                        >
+                          <FileText size={14} /> 🔍 지급 대사 이력 명세서
+                        </button>
                       )}
                     </div>
                   </div>
@@ -432,46 +473,189 @@ export const PurchaseSettlementPage: React.FC = () => {
         </div>
       )}
 
-      {/* 지급 처리 모달 */}
+      {/* 통장 출금 내역 매칭 지급 대사 모달 (Audit Trail 지원) */}
       {paymentModal && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: '20px' }}>
-          <div style={{ background: 'var(--bg-card)', borderRadius: '12px', padding: '28px', width: '100%', maxWidth: '420px', boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }}>
-            <h3 style={{ fontWeight: '800', fontSize: '17px', marginBottom: '6px' }}>지급 처리</h3>
-            <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '20px' }}>
-              총 {paymentModal.totalAmount.toLocaleString()}원 | 기지급 {paymentModal.paidAmount.toLocaleString()}원 | 잔여 {(paymentModal.totalAmount - paymentModal.paidAmount).toLocaleString()}원
-            </p>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-              {[
-                { label: '지급 금액 *', key: 'paidAmount', type: 'number', placeholder: '지급할 금액 입력' },
-                { label: '지급일 *', key: 'paymentDate', type: 'date', placeholder: '' },
-                { label: '지급 수단', key: 'paymentMethod', type: 'text', placeholder: '계좌이체 / 현금 등' },
-                { label: '지급 계좌번호', key: 'bankAccount', type: 'text', placeholder: '은행명 계좌번호 예금주' },
-                { label: '비고', key: 'memo', type: 'text', placeholder: '' },
-              ].map(field => (
-                <div key={field.key} style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <label style={{ fontSize: '12.5px', fontWeight: '700', whiteSpace: 'nowrap' }}>{field.label}</label>
-                  <input
-                    type={field.type}
-                    value={(paymentForm as any)[field.key]}
-                    onChange={e => setPaymentForm(prev => ({ ...prev, [field.key]: e.target.value }))}
-                    placeholder={field.placeholder}
-                    style={{ height: '38px', fontSize: '14px', padding: '0 10px', borderRadius: '6px', border: '1px solid var(--border)', background: 'var(--bg-app)', color: 'var(--text-primary)' }}
-                  />
-                </div>
-              ))}
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: '20px' }}>
+          <div style={{ background: 'var(--bg-card)', borderRadius: '12px', padding: '24px', width: '100%', maxWidth: '620px', maxHeight: '90vh', overflowY: 'auto', border: '1px solid var(--border-color)', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-color)', paddingBottom: '12px' }}>
+              <h3 style={{ fontWeight: '800', fontSize: '17px', margin: 0, display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-main)' }}>
+                <CreditCard size={18} style={{ color: 'var(--primary)' }} />
+                월말 매입 정산 지급 처리 & 통장 출금 대사 (Audit)
+              </h3>
+              <button onClick={() => { setPaymentModal(null); setSelectedBankTxId(null); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}>
+                <X size={20} />
+              </button>
             </div>
 
-            <div style={{ display: 'flex', gap: '10px', marginTop: '24px' }}>
+            <div style={{ backgroundColor: 'var(--bg-app)', padding: '12px 14px', borderRadius: '8px', border: '1px solid var(--border-color)', fontSize: '13px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <span style={{ color: 'var(--text-muted)' }}>매입처: </span>
+                <strong style={{ fontSize: '14px', color: 'var(--primary)' }}>{paymentModal.vendorName}</strong>
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>총 정산: {paymentModal.totalAmount.toLocaleString()}원 | 기지급: {paymentModal.paidAmount.toLocaleString()}원</span><br />
+                <strong style={{ fontSize: '14px', color: 'var(--danger)' }}>잔여 미지급액: {(paymentModal.totalAmount - paymentModal.paidAmount).toLocaleString()}원</strong>
+              </div>
+            </div>
+
+            {/* 통장 출금 내역 매칭 섹션 */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <label style={{ fontSize: '12.5px', fontWeight: '800', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span>🏦 등록된 통장 출금 내역 대사 매칭 (Audit 증빙):</span>
+              </label>
+
+              {(() => {
+                const withdrawTxs = bankTransactions.filter(tx => (tx.withdrawAmount || 0) > 0);
+                const remainingAmt = paymentModal.totalAmount - paymentModal.paidAmount;
+
+                if (withdrawTxs.length === 0) {
+                  return (
+                    <div style={{ padding: '12px', borderRadius: '6px', border: '1px dashed var(--border-color)', backgroundColor: 'var(--bg-app)', color: 'var(--text-muted)', fontSize: '12px', textAlign: 'center' }}>
+                      등록된 통장 출금 내역이 없습니다. (아래 폼에 직조 수동 입력 가능)
+                    </div>
+                  );
+                }
+
+                return (
+                  <div style={{ maxHeight: '180px', overflowY: 'auto', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '6px', display: 'flex', flexDirection: 'column', gap: '6px', backgroundColor: 'var(--bg-app)' }}>
+                    {withdrawTxs.map(tx => {
+                      const isSelected = selectedBankTxId === tx.id;
+                      const senderText = (tx.counterparty || tx.senderName || tx.summary || '') + (tx.memo || '');
+                      const isMatchVendor = senderText.includes(paymentModal.vendorName) || paymentModal.vendorName.includes(senderText);
+                      const isMatchAmount = tx.withdrawAmount === remainingAmt;
+                      const isPerfect = isMatchVendor && isMatchAmount;
+
+                      return (
+                        <div
+                          key={tx.id}
+                          onClick={() => {
+                            setSelectedBankTxId(tx.id);
+                            setPaymentForm(prev => ({
+                              ...prev,
+                              paidAmount: tx.withdrawAmount.toString(),
+                              paymentDate: (tx.transactionDate || '').substring(0, 10),
+                              paymentMethod: '계좌이체',
+                              bankAccount: tx.bankName || prev.bankAccount,
+                              memo: `[통장출금대사] ${tx.summary || tx.senderName || ''}`
+                            }));
+                          }}
+                          style={{
+                            padding: '8px 12px', borderRadius: '6px', cursor: 'pointer',
+                            backgroundColor: isSelected ? 'rgba(16, 185, 129, 0.15)' : 'var(--bg-card)',
+                            border: isSelected ? '1px solid #10B981' : '1px solid var(--border-color)',
+                            display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '12px'
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <input
+                              type="radio"
+                              name="bankTxSelect"
+                              checked={isSelected}
+                              onChange={() => {}}
+                            />
+                            <div>
+                              <div style={{ fontWeight: 'bold', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <span>[{tx.bankName || '은행'}] {tx.counterparty || tx.senderName || '출금내역'}</span>
+                                {isPerfect && (
+                                  <span style={{ fontSize: '10px', padding: '1px 5px', borderRadius: '4px', backgroundColor: 'rgba(16, 185, 129, 0.2)', color: '#10B981', fontWeight: 'bold' }}>
+                                    일치
+                                  </span>
+                                )}
+                                {isMatchVendor && !isPerfect && (
+                                  <span style={{ fontSize: '10px', padding: '1px 5px', borderRadius: '4px', backgroundColor: 'rgba(59, 130, 246, 0.2)', color: '#3B82F6', fontWeight: 'bold' }}>
+                                    상호 일치
+                                  </span>
+                                )}
+                                {isMatchAmount && !isPerfect && (
+                                  <span style={{ fontSize: '10px', padding: '1px 5px', borderRadius: '4px', backgroundColor: 'rgba(139, 92, 246, 0.2)', color: '#8B5CF6', fontWeight: 'bold' }}>
+                                    금액 일치
+                                  </span>
+                                )}
+                              </div>
+                              <div style={{ color: 'var(--text-muted)', fontSize: '11px', marginTop: '2px' }}>
+                                출금일시: {tx.transactionDate} | 적요: {tx.summary || '-'}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div style={{ textAlign: 'right', fontWeight: 'bold', color: 'var(--danger)', fontSize: '13px' }}>
+                            -{tx.withdrawAmount.toLocaleString()}원
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
+            </div>
+
+            {/* 세부 지급 정보 입력 폼 */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <label style={{ fontSize: '12px', fontWeight: '700', whiteSpace: 'nowrap' }}>지급 금액 *</label>
+                <input
+                  type="number"
+                  value={paymentForm.paidAmount}
+                  onChange={e => setPaymentForm(prev => ({ ...prev, paidAmount: e.target.value }))}
+                  placeholder="지급할 금액 입력"
+                  style={{ height: '36px', fontSize: '13px', padding: '0 10px', borderRadius: '6px', border: '1px solid var(--border)', background: 'var(--bg-app)', color: 'var(--text-primary)', fontWeight: 'bold' }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <label style={{ fontSize: '12px', fontWeight: '700', whiteSpace: 'nowrap' }}>지급일 *</label>
+                <input
+                  type="date"
+                  value={paymentForm.paymentDate}
+                  onChange={e => setPaymentForm(prev => ({ ...prev, paymentDate: e.target.value }))}
+                  style={{ height: '36px', fontSize: '13px', padding: '0 10px', borderRadius: '6px', border: '1px solid var(--border)', background: 'var(--bg-app)', color: 'var(--text-primary)' }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <label style={{ fontSize: '12px', fontWeight: '700', whiteSpace: 'nowrap' }}>지급 수단</label>
+                <input
+                  type="text"
+                  value={paymentForm.paymentMethod}
+                  onChange={e => setPaymentForm(prev => ({ ...prev, paymentMethod: e.target.value }))}
+                  placeholder="계좌이체 / 현금 등"
+                  style={{ height: '36px', fontSize: '13px', padding: '0 10px', borderRadius: '6px', border: '1px solid var(--border)', background: 'var(--bg-app)', color: 'var(--text-primary)' }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <label style={{ fontSize: '12px', fontWeight: '700', whiteSpace: 'nowrap' }}>지급 계좌 / 은행</label>
+                <input
+                  type="text"
+                  value={paymentForm.bankAccount}
+                  onChange={e => setPaymentForm(prev => ({ ...prev, bankAccount: e.target.value }))}
+                  placeholder="은행명 계좌번호"
+                  style={{ height: '36px', fontSize: '13px', padding: '0 10px', borderRadius: '6px', border: '1px solid var(--border)', background: 'var(--bg-app)', color: 'var(--text-primary)' }}
+                />
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <label style={{ fontSize: '12px', fontWeight: '700', whiteSpace: 'nowrap' }}>지급 메모</label>
+              <input
+                type="text"
+                value={paymentForm.memo}
+                onChange={e => setPaymentForm(prev => ({ ...prev, memo: e.target.value }))}
+                placeholder="지급 관련 비고"
+                style={{ height: '36px', fontSize: '13px', padding: '0 10px', borderRadius: '6px', border: '1px solid var(--border)', background: 'var(--bg-app)', color: 'var(--text-primary)' }}
+              />
+            </div>
+
+            <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
               <button
                 onClick={handlePaymentSubmit}
-                style={{ flex: 1, height: '42px', background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '800', fontSize: '14px', cursor: 'pointer' }}
+                style={{ flex: 1, height: '40px', background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '800', fontSize: '14px', cursor: 'pointer' }}
               >
-                지급 완료 처리
+                지급 대사 완료 승인
               </button>
               <button
-                onClick={() => setPaymentModal(null)}
-                style={{ flex: 1, height: '42px', background: 'var(--bg-app)', border: '1px solid var(--border)', borderRadius: '8px', fontWeight: '700', fontSize: '14px', cursor: 'pointer', color: 'var(--text-primary)' }}
+                onClick={() => { setPaymentModal(null); setSelectedBankTxId(null); }}
+                style={{ flex: 1, height: '40px', background: 'var(--bg-app)', border: '1px solid var(--border)', borderRadius: '8px', fontWeight: '700', fontSize: '14px', cursor: 'pointer', color: 'var(--text-primary)' }}
               >
                 취소
               </button>
@@ -553,6 +737,128 @@ export const PurchaseSettlementPage: React.FC = () => {
         </div>
       )}
 
+
+      {/* 🔍 지급 대사 이력 상세 명세서 모달 (1:N 구성 내역 Audit) */}
+      {detailModalSettlementId && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000, padding: '20px' }}>
+          <div style={{ background: 'var(--bg-card)', borderRadius: '12px', width: '100%', maxWidth: '750px', maxHeight: '90vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', border: '1px solid var(--border-color)', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)' }}>
+            {(() => {
+              const targetSettlement = purchaseSettlements.find(s => s.id === detailModalSettlementId);
+              if (!targetSettlement) return null;
+
+              const targetItems = purchaseSettlementItems.filter(i => i.settlementId === targetSettlement.id);
+              const targetLogs = settlementPaymentLogs.filter(l => l.settlementId === targetSettlement.id);
+              const bankTx = targetSettlement.bankTransactionId ? bankTransactions.find(bt => bt.id === targetSettlement.bankTransactionId) : undefined;
+
+              return (
+                <>
+                  <div style={{ padding: '18px 24px', borderBottom: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', backgroundColor: 'var(--bg-app)' }}>
+                    <div>
+                      <h3 style={{ fontSize: '17px', fontWeight: '800', margin: 0, display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-main)' }}>
+                        <FileText size={18} color="var(--primary)" />
+                        지급 대사 이력 상세 명세서 (Audit Trail)
+                      </h3>
+                      <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                        매입처: <strong>{targetSettlement.vendorName}</strong> | 정산 연월: {targetSettlement.settlementYm}
+                      </span>
+                    </div>
+                    <button onClick={() => setDetailModalSettlementId(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}><X size={20} /></button>
+                  </div>
+
+                  <div style={{ padding: '24px', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                    {/* 상단 요약 카드 */}
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px', backgroundColor: 'var(--bg-app)', padding: '14px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                      <div>
+                        <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>총 정산 확정액</div>
+                        <div style={{ fontSize: '16px', fontWeight: '800', color: 'var(--text-main)' }}>{targetSettlement.totalAmount.toLocaleString()}원</div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>누적 지급액</div>
+                        <div style={{ fontSize: '16px', fontWeight: '800', color: '#10B981' }}>{targetSettlement.paidAmount.toLocaleString()}원</div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>미지급 잔액</div>
+                        <div style={{ fontSize: '16px', fontWeight: '800', color: 'var(--danger)' }}>{(targetSettlement.totalAmount - targetSettlement.paidAmount).toLocaleString()}원</div>
+                      </div>
+                    </div>
+
+                    {/* 통장 출금 증빙 연결 이력 */}
+                    {bankTx && (
+                      <div style={{ padding: '12px', backgroundColor: 'rgba(16, 185, 129, 0.1)', borderRadius: '8px', border: '1px solid rgba(16, 185, 129, 0.3)', fontSize: '13px' }}>
+                        <div style={{ fontWeight: 'bold', color: '#10B981', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <span>🏦 연결된 통장 출금 증빙 (Audit Log)</span>
+                        </div>
+                        <div><strong>출금 은행/상호:</strong> [{bankTx.bankName || '은행'}] {bankTx.counterparty || bankTx.senderName || '-'}</div>
+                        <div><strong>출금 일시:</strong> {bankTx.transactionDate} | <strong>출금액:</strong> -{bankTx.withdrawAmount.toLocaleString()}원</div>
+                        {bankTx.summary && <div><strong>적요/기재사항:</strong> {bankTx.summary}</div>}
+                      </div>
+                    )}
+
+                    {/* 1:N 지급 분할 이력 로그 */}
+                    <div>
+                      <h4 style={{ fontSize: '14px', fontWeight: 'bold', marginBottom: '8px', color: 'var(--text-main)' }}>
+                        💳 지급 수납 차감 이력 (분할 지급 Log)
+                      </h4>
+                      {targetLogs.length === 0 ? (
+                        <div style={{ fontSize: '12px', color: 'var(--text-muted)', padding: '10px', backgroundColor: 'var(--bg-app)', borderRadius: '6px' }}>
+                          지급 일자: {targetSettlement.paymentDate || '-'} | 수단: {targetSettlement.paymentMethod || '계좌이체'} | 계좌: {targetSettlement.bankAccount || '-'}
+                        </div>
+                      ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                          {targetLogs.map((log, idx) => (
+                            <div key={log.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 12px', backgroundColor: 'var(--bg-app)', borderRadius: '6px', fontSize: '12px', border: '1px solid var(--border-color)' }}>
+                              <div>
+                                <strong>#{idx + 1} 차수 지급:</strong> {log.paymentDate} ({log.paymentMethod}) {log.bankAccount ? `[${log.bankAccount}]` : ''}
+                                {log.memo && <div style={{ color: 'var(--text-muted)', fontSize: '11px' }}>메모: {log.memo}</div>}
+                              </div>
+                              <div style={{ fontWeight: 'bold', color: '#10B981' }}>
+                                +{log.paidAmount.toLocaleString()}원
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* 📦 지급 출금액을 구성하는 1:N 라인 아이템 명세 */}
+                    <div>
+                      <h4 style={{ fontSize: '14px', fontWeight: 'bold', marginBottom: '8px', color: 'var(--text-main)' }}>
+                        📦 이 출금액을 구성하는 매입 정산 세부 내역 (1:N 라인 항목)
+                      </h4>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12.5px' }}>
+                        <thead>
+                          <tr style={{ backgroundColor: 'var(--bg-app)', borderBottom: '1px solid var(--border-color)' }}>
+                            <th style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 'bold' }}>구분</th>
+                            <th style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 'bold' }}>내역 설명</th>
+                            <th style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 'bold' }}>수량/가동일</th>
+                            <th style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 'bold' }}>단가</th>
+                            <th style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 'bold' }}>금액</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {targetItems.map(item => (
+                            <tr key={item.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                              <td style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>
+                                <span style={{ fontSize: '11px', padding: '2px 6px', borderRadius: '4px', backgroundColor: 'var(--bg-app)', border: '1px solid var(--border-color)' }}>
+                                  {item.sourceType === 'DELIVERY' ? '운송료' : item.sourceType === 'CONSUMABLE_PURCHASE' ? '소모품' : '임차료'}
+                                </span>
+                              </td>
+                              <td style={{ padding: '8px 10px' }}>{item.itemDescription}</td>
+                              <td style={{ padding: '8px 10px', textAlign: 'right' }}>{item.quantity.toLocaleString()}</td>
+                              <td style={{ padding: '8px 10px', textAlign: 'right' }}>{item.unitPrice.toLocaleString()}원</td>
+                              <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 'bold', color: 'var(--primary)' }}>{item.amount.toLocaleString()}원</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </>
+              );
+            })()}
+          </div>
+        </div>
+      )}
 
       {/* 임차료 정산 연동 안내 */}
       {(typeFilter === 'ALL' || typeFilter === 'EQUIPMENT_LEASE') && (

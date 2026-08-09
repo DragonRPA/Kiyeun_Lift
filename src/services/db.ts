@@ -729,6 +729,7 @@ export interface PurchaseSettlement {
   paymentDate?: string;                // 최종 지급 완료일
   paymentMethod?: string;              // 지급 수단
   bankAccount?: string;                // 지급 계좌번호
+  bankTransactionId?: string;          // 통장 출금 연결 ID (감사 대사 Audit Trail용)
   confirmedAt?: string;                // 정산 확정 일시
   confirmedBy?: string;                // 정산 확정자 이름
   memo?: string;
@@ -747,6 +748,19 @@ export interface PurchaseSettlementItem {
   unitPrice: number;                   // 단가 or 일할료
   amount: number;                      // 금액
   evidenceFileUrl?: string;            // 증빙 파일 URL
+  createdAt: string;
+}
+
+/** 정산 지급/수납 분할 이력 레코드 — 통장 출금 1건 ↔ 정산 항목들 1:N 감사 대사 연결 */
+export interface SettlementPaymentLog {
+  id: string;                          // SPL-YYMM0001
+  settlementId: string;                // FK → PurchaseSettlement.id
+  bankTransactionId?: string;          // FK → BankTransaction.id
+  paidAmount: number;                  // 이번 지급 금액
+  paymentDate: string;                 // 지급일
+  paymentMethod: string;               // 지급 수단
+  bankAccount?: string;                // 지급 계좌
+  memo?: string;                       // 비고
   createdAt: string;
 }
 
@@ -1225,7 +1239,7 @@ export const ALL_DB_KEYS = [
   'billings', 'billingDetails', 'payments', 'repairs', 'repairConsumables', 'todos', 
   'bankTransactions', 'bankMatchingRules', 'googleConfigs', 'assetInOutLogs',
   'cashFlowSnapshots', 'outboundInspections', 'depreciationLogs',
-  'purchaseSettlements', 'purchaseSettlementItems', 'externalLeases',
+  'purchaseSettlements', 'purchaseSettlementItems', 'settlementPaymentLogs', 'externalLeases',
   'annualLeaveQuotas', 'leaveUsages', 'overtimeRecords', 'payrollClosings'
 ];
 
@@ -1369,6 +1383,9 @@ class LocalDB {
 
   get purchaseSettlementItems() { return this.get<PurchaseSettlementItem>('purchaseSettlementItems', []); }
   set purchaseSettlementItems(val: PurchaseSettlementItem[]) { this.set('purchaseSettlementItems', val); }
+
+  get settlementPaymentLogs() { return this.get<SettlementPaymentLog>('settlementPaymentLogs', []); }
+  set settlementPaymentLogs(val: SettlementPaymentLog[]) { this.set('settlementPaymentLogs', val); }
 
   get externalLeases() { return this.get<ExternalLease>('externalLeases', []); }
   set externalLeases(val: ExternalLease[]) { this.set('externalLeases', val); }
