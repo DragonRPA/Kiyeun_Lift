@@ -22,8 +22,7 @@ export const SmartReturn: React.FC = () => {
   const [selectedContractId, setSelectedContractId] = useState('');
   const [selectedAssetIds, setSelectedAssetIds] = useState<string[]>([]);
   const [returnDate, setReturnDate] = useState(getTodayString()); // 오늘 날짜 기본 제공
-  const [loadingTime, setLoadingTime] = useState('오전 (08:00 ~ 12:00)');
-  const [isCustomLoadingTime, setIsCustomLoadingTime] = useState(false);
+  const [loadingTime, setLoadingTime] = useState('오전');
   const [contactName, setContactName] = useState('');
   const [contactPhone, setContactPhone] = useState('');
   const [note, setNote] = useState('');
@@ -47,8 +46,7 @@ export const SmartReturn: React.FC = () => {
   const [selectedVendorId, setSelectedVendorId] = useState('');
   const [selectedRepairIds, setSelectedRepairIds] = useState<string[]>([]);
   const [maintReturnDate, setMaintReturnDate] = useState(getTodayString()); // 오늘 날짜 기본 제공
-  const [maintLoadingTime, setMaintLoadingTime] = useState('오전 (08:00 ~ 12:00)');
-  const [isCustomMaintLoadingTime, setIsCustomMaintLoadingTime] = useState(false);
+  const [maintLoadingTime, setMaintLoadingTime] = useState('오전');
   const [maintNote, setMaintNote] = useState('');
 
   // ==========================================
@@ -564,22 +562,16 @@ export const SmartReturn: React.FC = () => {
                     <label>회수 희망시간</label>
                     <div style={{ display: 'flex', gap: '6px', position: 'relative', height: '38px' }}>
                       <select
-                        value={isCustomLoadingTime ? 'CUSTOM' : loadingTime}
+                        value={loadingTime}
                         onChange={e => {
-                          if (e.target.value === 'CUSTOM') {
-                            setIsCustomLoadingTime(true);
-                            setLoadingTime('');
-                          } else {
-                            setIsCustomLoadingTime(false);
-                            setLoadingTime(e.target.value);
-                          }
+                          setLoadingTime(e.target.value);
                           (e.target as HTMLSelectElement).blur();
                         }}
                         onFocus={e => { (e.target as HTMLSelectElement).size = 6; }}
                         onBlur={e => { (e.target as HTMLSelectElement).size = 1; }}
                         style={{
                           flex: 1,
-                          position: isCustomLoadingTime ? 'static' : 'absolute',
+                          position: 'absolute',
                           width: '100%',
                           zIndex: 30,
                           boxShadow: '0 4px 12px rgba(0,0,0,0.15)'
@@ -603,18 +595,7 @@ export const SmartReturn: React.FC = () => {
                         <option value="18시">18시</option>
                         <option value="19시">19시</option>
                         <option value="20시">20시</option>
-                        <option value="CUSTOM">희망시간선택 (직접입력)</option>
                       </select>
-                      {isCustomLoadingTime && (
-                        <input
-                          type="text"
-                          placeholder="예: 10:30 상차"
-                          value={loadingTime}
-                          onChange={e => setLoadingTime(e.target.value)}
-                          style={{ flex: 1 }}
-                          autoFocus
-                        />
-                      )}
                     </div>
                   </div>
                 </div>
@@ -806,22 +787,16 @@ export const SmartReturn: React.FC = () => {
                     <label>상차 희망시간</label>
                     <div style={{ display: 'flex', gap: '6px', position: 'relative', height: '38px' }}>
                       <select
-                        value={isCustomMaintLoadingTime ? 'CUSTOM' : maintLoadingTime}
+                        value={maintLoadingTime}
                         onChange={e => {
-                          if (e.target.value === 'CUSTOM') {
-                            setIsCustomMaintLoadingTime(true);
-                            setMaintLoadingTime('');
-                          } else {
-                            setIsCustomMaintLoadingTime(false);
-                            setMaintLoadingTime(e.target.value);
-                          }
+                          setMaintLoadingTime(e.target.value);
                           (e.target as HTMLSelectElement).blur();
                         }}
                         onFocus={e => { (e.target as HTMLSelectElement).size = 6; }}
                         onBlur={e => { (e.target as HTMLSelectElement).size = 1; }}
                         style={{
                           flex: 1,
-                          position: isCustomMaintLoadingTime ? 'static' : 'absolute',
+                          position: 'absolute',
                           width: '100%',
                           zIndex: 30,
                           boxShadow: '0 4px 12px rgba(0,0,0,0.15)'
@@ -845,18 +820,7 @@ export const SmartReturn: React.FC = () => {
                         <option value="18시">18시</option>
                         <option value="19시">19시</option>
                         <option value="20시">20시</option>
-                        <option value="CUSTOM">희망시간선택 (직접입력)</option>
                       </select>
-                      {isCustomMaintLoadingTime && (
-                        <input
-                          type="text"
-                          placeholder="예: 14:00 공장출발"
-                          value={maintLoadingTime}
-                          onChange={e => setMaintLoadingTime(e.target.value)}
-                          style={{ flex: 1 }}
-                          autoFocus
-                        />
-                      )}
                     </div>
                   </div>
                 </div>

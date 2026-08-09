@@ -1811,7 +1811,6 @@ export const TruckDispatch: React.FC = () => {
                                 <option value="18시">18시</option>
                                 <option value="19시">19시</option>
                                 <option value="20시">20시</option>
-                                <option value="희망시간">희망시간</option>
                               </select>
                             </div>
                           </div>
@@ -1870,7 +1869,6 @@ export const TruckDispatch: React.FC = () => {
                                 <option value="18시">18시</option>
                                 <option value="19시">19시</option>
                                 <option value="20시">20시</option>
-                                <option value="희망시간">희망시간</option>
                               </select>
                             </div>
                           </div>
