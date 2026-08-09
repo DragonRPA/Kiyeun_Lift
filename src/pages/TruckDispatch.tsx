@@ -1771,11 +1771,26 @@ export const TruckDispatch: React.FC = () => {
                                 value={loadingTimeSlot}
                                 disabled={isFormDisabled}
                                 onChange={e => setLoadingTimeSlot(e.target.value)}
-                                style={{ width: '80px', padding: '7px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: isFormDisabled ? 'var(--bg-card)' : 'var(--bg-body)', fontSize: '12.5px', color: 'var(--text-primary)', opacity: isFormDisabled ? 0.75 : 1, cursor: isFormDisabled ? 'not-allowed' : 'default' }}
+                                style={{ width: '95px', padding: '7px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: isFormDisabled ? 'var(--bg-card)' : 'var(--bg-body)', fontSize: '12.5px', color: 'var(--text-primary)', opacity: isFormDisabled ? 0.75 : 1, cursor: isFormDisabled ? 'not-allowed' : 'default' }}
                               >
                                 <option value="오전">오전</option>
                                 <option value="오후">오후</option>
                                 <option value="수시">수시</option>
+                                <option value="06시">06시</option>
+                                <option value="07시">07시</option>
+                                <option value="08시">08시</option>
+                                <option value="09시">09시</option>
+                                <option value="10시">10시</option>
+                                <option value="11시">11시</option>
+                                <option value="12시">12시</option>
+                                <option value="13시">13시</option>
+                                <option value="14시">14시</option>
+                                <option value="15시">15시</option>
+                                <option value="16시">16시</option>
+                                <option value="17시">17시</option>
+                                <option value="18시">18시</option>
+                                <option value="19시">19시</option>
+                                <option value="20시">20시</option>
                                 <option value="희망시간">희망시간</option>
                               </select>
                             </div>
@@ -1795,11 +1810,26 @@ export const TruckDispatch: React.FC = () => {
                                 value={unloadingTimeSlot}
                                 disabled={isFormDisabled}
                                 onChange={e => setUnloadingTimeSlot(e.target.value)}
-                                style={{ width: '80px', padding: '7px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: isFormDisabled ? 'var(--bg-card)' : 'var(--bg-body)', fontSize: '12.5px', color: 'var(--text-primary)', opacity: isFormDisabled ? 0.75 : 1, cursor: isFormDisabled ? 'not-allowed' : 'default' }}
+                                style={{ width: '95px', padding: '7px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: isFormDisabled ? 'var(--bg-card)' : 'var(--bg-body)', fontSize: '12.5px', color: 'var(--text-primary)', opacity: isFormDisabled ? 0.75 : 1, cursor: isFormDisabled ? 'not-allowed' : 'default' }}
                               >
                                 <option value="오전">오전</option>
                                 <option value="오후">오후</option>
                                 <option value="수시">수시</option>
+                                <option value="06시">06시</option>
+                                <option value="07시">07시</option>
+                                <option value="08시">08시</option>
+                                <option value="09시">09시</option>
+                                <option value="10시">10시</option>
+                                <option value="11시">11시</option>
+                                <option value="12시">12시</option>
+                                <option value="13시">13시</option>
+                                <option value="14시">14시</option>
+                                <option value="15시">15시</option>
+                                <option value="16시">16시</option>
+                                <option value="17시">17시</option>
+                                <option value="18시">18시</option>
+                                <option value="19시">19시</option>
+                                <option value="20시">20시</option>
                                 <option value="희망시간">희망시간</option>
                               </select>
                             </div>

@@ -576,8 +576,24 @@ export const SmartReturn: React.FC = () => {
                         }}
                         style={{ flex: 1 }}
                       >
-                        <option value="오전 (08:00 ~ 12:00)">오전 (08:00 ~ 12:00)</option>
-                        <option value="오후 (13:00 ~ 17:00)">오후 (13:00 ~ 17:00)</option>
+                        <option value="오전">오전</option>
+                        <option value="오후">오후</option>
+                        <option value="수시">수시</option>
+                        <option value="06시">06시</option>
+                        <option value="07시">07시</option>
+                        <option value="08시">08시</option>
+                        <option value="09시">09시</option>
+                        <option value="10시">10시</option>
+                        <option value="11시">11시</option>
+                        <option value="12시">12시</option>
+                        <option value="13시">13시</option>
+                        <option value="14시">14시</option>
+                        <option value="15시">15시</option>
+                        <option value="16시">16시</option>
+                        <option value="17시">17시</option>
+                        <option value="18시">18시</option>
+                        <option value="19시">19시</option>
+                        <option value="20시">20시</option>
                         <option value="CUSTOM">희망시간선택 (직접입력)</option>
                       </select>
                       {isCustomLoadingTime && (
@@ -793,8 +809,24 @@ export const SmartReturn: React.FC = () => {
                         }}
                         style={{ flex: 1 }}
                       >
-                        <option value="오전 (08:00 ~ 12:00)">오전 (08:00 ~ 12:00)</option>
-                        <option value="오후 (13:00 ~ 17:00)">오후 (13:00 ~ 17:00)</option>
+                        <option value="오전">오전</option>
+                        <option value="오후">오후</option>
+                        <option value="수시">수시</option>
+                        <option value="06시">06시</option>
+                        <option value="07시">07시</option>
+                        <option value="08시">08시</option>
+                        <option value="09시">09시</option>
+                        <option value="10시">10시</option>
+                        <option value="11시">11시</option>
+                        <option value="12시">12시</option>
+                        <option value="13시">13시</option>
+                        <option value="14시">14시</option>
+                        <option value="15시">15시</option>
+                        <option value="16시">16시</option>
+                        <option value="17시">17시</option>
+                        <option value="18시">18시</option>
+                        <option value="19시">19시</option>
+                        <option value="20시">20시</option>
                         <option value="CUSTOM">희망시간선택 (직접입력)</option>
                       </select>
                       {isCustomMaintLoadingTime && (
