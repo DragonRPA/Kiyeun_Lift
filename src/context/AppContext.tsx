@@ -382,10 +382,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
 
   useEffect(() => {
-    if (!localStorage.getItem('seed_v1_8_dummy_contracts_v2')) {
-      localStorage.removeItem('erp_contracts');
-      localStorage.removeItem('erp_contractAssets');
-      localStorage.setItem('seed_v1_8_dummy_contracts_v2', 'true');
+    // Seed 계약 데이터 초기화는 개발 환경(localhost)에서만 실행
+    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+      if (!localStorage.getItem('seed_v1_8_dummy_contracts_v2')) {
+        localStorage.removeItem('erp_contracts');
+        localStorage.removeItem('erp_contractAssets');
+        localStorage.setItem('seed_v1_8_dummy_contracts_v2', 'true');
+      }
     }
     // 안전한 Google Config 마이그레이션 (기존 정보 보존 및 신규 컬럼 주입)
     const existingConfigsStr = localStorage.getItem('erp_googleConfigs');
@@ -395,13 +398,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (Array.isArray(configs) && configs.length > 0) {
           let updated = false;
           const defaultTemplate: Record<string, any> = {
-            isDevMode: true,
+            isDevMode: false,
             quotationTemplateUrl: 'templates/렌탈견적서_양식.html',
             contractTemplateUrl: 'templates/고소작업대_임대차계약서_양식.html',
             safetyInspectionTemplateUrl: 'templates/고소작업대_안전점검결과서_양식.html',
             preDeliveryChecklistTemplateUrl: 'templates/반입전_CHECK_LIST_양식.html',
-            bizRegCertUrl: 'C:/Users/이정용/GoogleDrive/Kiyuen_Lift/company/사업자등록증.pdf',
-            bankbookCopyUrl: 'C:/Users/이정용/GoogleDrive/Kiyuen_Lift/company/통장사본.pdf',
+            bizRegCertUrl: '',
+            bankbookCopyUrl: '',
             transactionStatementTemplateUrl: 'templates/거래명세서_양식.html'
           };
 
@@ -1031,9 +1034,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       vehicleNo: '',
       driverName: '',
       driverContact: '',
-      deliveryCost: 70000,
-      expectedCost: 70000,
-      finalCost: 70000,
+      deliveryCost: 0,
+      expectedCost: 0,
+      finalCost: 0,
       reconciliationStatus: 'PENDING',
       cargoItems,
       isCostSettled: false,
@@ -1163,9 +1166,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         vehicleNo: '',
         driverName: '',
         driverContact: '',
-        deliveryCost: 70000,
-        expectedCost: 70000,
-        finalCost: 70000,
+        deliveryCost: 0,
+        expectedCost: 0,
+        finalCost: 0,
         reconciliationStatus: 'PENDING',
         cargoItems,
         isCostSettled: false,
@@ -1744,7 +1747,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const oldCustomerName = oldCustomer ? oldCustomer.name : '-';
 
     const nextDay = new Date(new Date(successionDate).getTime() + 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-    const newContractNo = `CT-SUCC-${Math.floor(1000 + Math.random() * 9000)}`;
+    const newContractNo = `CT-SUCC-${new Date().toISOString().replace(/[-:T.Z]/g, '').slice(0, 14)}`;
 
     const newContract = db.insertRow<Contract>('contracts', {
       contractNo: newContractNo,
@@ -3065,7 +3068,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       db.insertRow<Repair>('repairs', {
         id: repairId,
         assetId: repairData.assetId || '',
-        mechanicId: currentUser?.id || 'u-4',
+        mechanicId: currentUser?.id || '',
         requestDate: repairData.requestDate || new Date().toISOString().split('T')[0],
         repairDate: repairData.repairDate || new Date().toISOString().split('T')[0],
         status: repairData.status || 'COMPLETED',
@@ -3449,7 +3452,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // ③ 임차자산 임차료 집계 — 임차 관리 메뉴(RentAssets)에서 대사를 완료하고 확정한 내역만 수집
     const leaseSettlementsOfMonth = db.purchaseSettlements.filter(p => 
       p.settlementYm === ym && 
-      (p.settlementType === 'EQUIPMENT_LEASE' || (p.settlementType as any) === 'RENTAL')
+      (p.settlementType === 'EQUIPMENT_LEASE')
     );
     leaseCount = leaseSettlementsOfMonth.length;
 

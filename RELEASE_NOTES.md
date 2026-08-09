@@ -50,6 +50,39 @@
 
 ---
 
+# Release Notes (v1.64.0.Build.153 - 2026-08-09 19:44)
+
+## 🔐 [전수 감사] 로컬/온라인 환경 불일치 하드코딩 값 전면 제거 (29건 중 P0/P1/P2 16건 수정)
+
+### 🔴 P0 — 즉시 보안 위협 (4건 수정)
+
+1. **로그인 화면 테스트 계정 평문 노출 차단 (`App.tsx`)**: 비밀번호 placeholder에서 `admin123` 제거. 테스트 계정 안내 UI 블록을 `localhost/127.0.0.1`에서만 노출하도록 조건 처리.
+2. **개인 PC 경로 제거 (`AppContext.tsx`, `db.ts`)**: `C:/Users/이정용/GoogleDrive/...`, `d:/GoogleDrive/RPA 개발/...` 하드코딩 경로를 빈 문자열 또는 상대 경로로 대체.
+3. **`isDevMode: true` 기본값 수정 (`db.ts`, `AppContext.tsx`)**: Google 연동 개발 모드 기본값을 `false`로 변경. 온라인 배포 시 이메일/Drive 연동이 실 운영 모드로 동작.
+4. **실제 계좌번호 및 실명 seed 데이터 마스킹 (`db.ts`)**: 우리은행 계좌번호 `1005502717011` → `XXXX-XX-XXXXXXX01`, 신한은행 `110987654321` → `XXX-XXXXXXXXX-XX`으로 마스킹. 초기 잔액 `15,000,000` → `0`으로 초기화. senderName 실명 제거.
+
+### 🔴 P1 — 데이터 오염 위험 (3건 수정)
+
+5. **`mechanicId: || 'u-4'` 하드코딩 fallback 제거 (`AppContext.tsx`)**: 미로그인 상태에서 정비 등록 시 더미 담당자 `u-4` 저장 방지. 빈 문자열로 대체.
+6. **`RENTAL` 타입 불일치 (`AppContext.tsx`)**: `PurchaseSettlementType`에 없는 `'RENTAL'` 타입 우회 `as any` 제거. `EQUIPMENT_LEASE`로 정리.
+7. **localStorage seed 초기화 로직 개발환경 한정 (`AppContext.tsx`)**: `erp_contracts` 삭제 로직이 운영 서버에서 실행되어 실제 계약 데이터가 지워지는 사고 방지.
+
+### 🟠 P2 — 오작동 위험 (4건 수정)
+
+8. **배송비 자동 생성 기본값 `70,000원 → 0원` (`AppContext.tsx`)**: 스마트 출고/회수 배차 자동 생성 시 배송비가 실제 협의 전 7만원으로 저장되던 문제 해결.
+9. **계약 승계 번호 `Math.random()` → 타임스탬프 채번 (`AppContext.tsx`)**: `CT-SUCC-{YYYYMMDDHHmmss}` 형식으로 유일성 보장.
+10. **Billings.tsx 추가 청구 항목 `id: Math.random()` 수정 (`Billings.tsx`)**: `EXTRA-{timestamp}-{random}` 복합 키로 렌더링 key 안정화.
+11. **CorporateCardPage.tsx mock 데이터 주입 제거 (`CorporateCardPage.tsx`)**: 파일 업로드 시 mock 4건 고정 데이터 강제 표출 제거. 실제 파싱 로직 연동 전 빈 상태 유지.
+
+### 🟢 미수정 P2~P4 항목 (의도적 보류)
+
+- `drive.ts` 전체 Mock LocalStorage 구현 → Google Drive API 연동 시 전면 교체 예정
+- `TruckDispatch.tsx` `(d as any).reconciliationStatus` → 타입 정의 정비 별도 작업 예정
+- `Billings.tsx` `as any` 필드 접근 chain → Customer/Site 인터페이스 필드 추가 별도 작업 예정
+- `ToggleSwitch.tsx` `Math.random()` → `useId()` 교체 별도 작업 예정
+
+---
+
 # Release Notes (v1.63.1.Build.152 - 2026-08-09 19:24)
 
 ## 🐛 [Hotfix] 출고 의뢰 장비 교체 모달 정비점수 95점 하드코딩 오류 수정 & DB 실제 데이터 바인딩

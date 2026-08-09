@@ -1454,7 +1454,7 @@ ${details.map((d, idx) => {
                       type="button"
                       className="btn-secondary"
                       onClick={() => setExtraCharges([...extraCharges, {
-                        id: Math.random().toString(),
+                        id: `EXTRA-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
                         category: 'TRANSPORT_ONEWAY',
                         customName: '',
                         quantity: 1,

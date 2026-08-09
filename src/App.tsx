@@ -295,7 +295,7 @@ const App: React.FC = () => {
                 type="password"
                 value={password}
                 onChange={e => setPassword(e.target.value)}
-                placeholder="비밀번호 입력 (admin123)"
+                placeholder="비밀번호 입력"
                 required
                 style={{ fontSize: '14px', padding: '8px 12px' }}
               />
@@ -342,16 +342,18 @@ const App: React.FC = () => {
             </button>
           </form>
 
-          {/* 테스트 계정 안내 */}
-          <div style={{ marginTop: '16px', padding: '12px', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', backgroundColor: 'var(--bg-app)', fontSize: '12px' }}>
-            <div style={{ fontWeight: '700', marginBottom: '6px', color: 'var(--text-main)' }}>[테스트 계정 안내]</div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
-              <div>• 최고관리자: <strong>admin / admin123</strong></div>
-              <div>• 영업관리: <strong>manager / mgr123</strong></div>
-              <div>• 일반영업: <strong>user / user123</strong></div>
-              <div>• 정비현장: <strong>mechanic / mech123</strong></div>
+          {/* 테스트 계정 안내 — 개발 환경(localhost)에서만 표시 */}
+          {(window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') && (
+            <div style={{ marginTop: '16px', padding: '12px', border: '1px dashed #f59e0b', borderRadius: 'var(--radius-sm)', backgroundColor: 'rgba(251,191,36,0.07)', fontSize: '12px' }}>
+              <div style={{ fontWeight: '700', marginBottom: '6px', color: '#d97706' }}>⚠️ [개발 전용] 테스트 계정 — 운영 환경에서는 표시 안됨</div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
+                <div>• 최고관리자: <strong>admin / admin123</strong></div>
+                <div>• 영업관리: <strong>manager / mgr123</strong></div>
+                <div>• 일반영업: <strong>user / user123</strong></div>
+                <div>• 정비현장: <strong>mechanic / mech123</strong></div>
+              </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
     );

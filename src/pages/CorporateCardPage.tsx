@@ -57,29 +57,8 @@ export const CorporateCardPage: React.FC = () => {
   const [transactions, setTransactions] = useState<any[]>([]);
   const [actualAmounts, setActualAmounts] = useState<Record<string, number>>({});
 
-  // 초기 실제 기입액 주입 (테스트 데모용)
-  useEffect(() => {
-    // 기본적으로 정수기/생수 등 초기 실 기입액 세팅
-    setActualAmounts({
-      cat_rent: 8450000,
-      cat_logistics: 2300000,
-      cat_consumable: 1200000,
-      cat_repair: 450000,
-      cat_office_rent: 1500000,
-      cat_lease: 600000,
-      cat_bookkeeping: 150000,
-      cat_tax_vat: 4200000,
-      cat_tax_withholding: 320000,
-      cat_tax_local_income: 32000,
-      cat_tax_corporate: 1500000,
-      cat_tax_resident: 50000,
-      cat_tax_car: 250000,
-      cat_meals: 0, // 고의 누락 (지정식당 식대정산 누락 시뮬레이션용)
-      cat_payroll: 18500000,
-      cat_capex: 45000000,
-      cat_petty: 85000
-    });
-  }, []);
+  // 실제 카드 명세서 업로드 시 파싱된 데이터로 actualAmounts 갱신
+  // (useEffect 내 테스트 데모용 하드코딩 초기값 주입 제거 — 운영 환경에서 오염 방지)
 
   // 카드 파일 업로드 시 파싱
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -141,9 +120,10 @@ export const CorporateCardPage: React.FC = () => {
       }
     ];
 
-    setTransactions(mockTx);
+    // 실제 카드 명세서 파일 파싱 로직 연동 필요 (현재는 파일 형식 안내만 제공)
+    setTransactions([]);
     setIsUploaded(true);
-    alert('카드사 거래내역 파일 업로드 완료!\n등록된 지출 카테고리 기준의 누락 방지 모니터링이 자동 연동됩니다.');
+    alert('카드사 거래내역 파일이 선택되었습니다.\n실제 파싱 기능은 카드사별 CSV/Excel 연동 개발 후 사용 가능합니다.');
   };
 
   // 템플릿 다운로드 (UTF-8 BOM 지원)
