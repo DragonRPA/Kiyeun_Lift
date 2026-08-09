@@ -10,6 +10,11 @@
   --border-color: #cbd5e1;
   --table-border-color: #cbd5e1;
   
+  --scrollbar-track: #e2e8f0;
+  --scrollbar-thumb: #64748b;
+  --scrollbar-thumb-hover: #3b82f6;
+  --scrollbar-thumb-border: #ffffff;
+  
   --primary: #4f46e5;
   --primary-hover: #4338ca;
   --primary-light: #e0e7ff;
@@ -55,6 +60,11 @@
   --bg-header: #111827;
   --border-color: #374151;
   --table-border-color: #374151;
+  
+  --scrollbar-track: #1e293b;
+  --scrollbar-thumb: #64748b;
+  --scrollbar-thumb-hover: #60a5fa;
+  --scrollbar-thumb-border: #1f2937;
   
   --primary: #6366f1;
   --primary-hover: #4f46e5;
@@ -113,23 +123,41 @@ table, .table-container, .table-wrapper, .modal-content, .card {
   overscroll-behavior: contain !important;
 }
 
-/* 커스텀 모던 슬림 스크롤바 */
+/* 🎨 도드라진 선명한 횡/종 커스텀 스크롤바 */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 10px;
+  height: 10px;
 }
 
 ::-webkit-scrollbar-track {
-  background: transparent;
+  background: var(--scrollbar-track);
+  border-radius: 5px;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--border-color);
-  border-radius: 3px;
+  background: var(--scrollbar-thumb);
+  border-radius: 5px;
+  border: 2px solid var(--scrollbar-thumb-border);
+  transition: background-color var(--transition-fast);
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--text-muted);
+  background: var(--scrollbar-thumb-hover);
+}
+
+/* 데이터 테이블/대장 및 모달 독자 스크롤바 강조 */
+.table-container::-webkit-scrollbar,
+.table-wrapper::-webkit-scrollbar,
+div[style*="overflow"]::-webkit-scrollbar {
+  width: 11px;
+  height: 11px;
+}
+
+.table-container::-webkit-scrollbar-thumb,
+.table-wrapper::-webkit-scrollbar-thumb,
+div[style*="overflow"]::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border: 2px solid var(--scrollbar-thumb-border);
 }
 
 body {
@@ -230,7 +258,7 @@ button:disabled {
   cursor: not-allowed;
 }
 
-/* 테이블 공통 스타일 */
+/* 테이블 공통 스타일 & 다이나믹 컴팩트 밀도 적용 */
 .table-container {
   width: 100%;
   overflow-x: auto;
@@ -238,33 +266,37 @@ button:disabled {
   border-radius: var(--radius-md);
   background-color: var(--bg-card);
   box-shadow: var(--shadow-sm);
-  margin-bottom: 24px;
+  margin-bottom: 14px;
+  max-height: calc(100vh - 190px);
 }
 
 table {
   width: 100%;
   border-collapse: collapse;
   text-align: left;
-  font-size: 14px;
+  font-size: 13px;
   min-width: 800px;
 }
 
 th {
   background-color: var(--bg-app);
   color: var(--text-secondary);
-  font-weight: 600;
-  padding: 14px 16px;
+  font-weight: 700;
+  padding: 8px 12px;
   border-bottom: 2px solid var(--border-color);
-  font-size: 13px;
+  font-size: 12px;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.3px;
+  white-space: nowrap;
 }
 
 td {
-  padding: 14px 16px;
+  padding: 8px 12px;
   border-bottom: 1px solid var(--border-color);
   color: var(--text-main);
   vertical-align: middle;
+  font-size: 13px;
+  white-space: nowrap;
 }
 
 tr:last-child td {

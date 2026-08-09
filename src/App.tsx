@@ -603,8 +603,8 @@ const App: React.FC = () => {
           })}
         </aside>
 
-        {/* 메인 콘텐츠 영역 (독자 스크롤) */}
-        <main style={{ flex: 1, height: '100%', padding: '30px', overflowY: 'auto', overscrollBehavior: 'contain', backgroundColor: 'var(--bg-app)' }} className="main-content-area">
+        {/* 메인 콘텐츠 영역 (독자 스크롤 & 다이나믹 뷰포트 활용) */}
+        <main style={{ flex: 1, height: '100%', padding: '16px 20px', overflowY: 'auto', overscrollBehavior: 'contain', backgroundColor: 'var(--bg-app)' }} className="main-content-area">
           {userHasViewPerm ? (
             getActiveComponent()
           ) : (
