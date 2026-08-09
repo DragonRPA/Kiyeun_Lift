@@ -50,6 +50,20 @@
 
 ---
 
+# Release Notes (v1.40.0.Build.125 - 2026-08-09 16:35)
+
+## 🎨 [전사 UI/UX - 다크 모드 입력폼 배경색 일관성 강제 통일]
+
+### 주요 개편 사항
+
+1. **다크 모드 입력폼 배경색 흰색 튐 현상 완전 차단 (`index.css`)**:
+   - 브라우저가 `input[type="date"]`, `input[type="month"]`, `select` 등에 OS 기본 흰색 배경을 강제 적용하던 문제를 `[data-theme='dark']` 전용 `!important` 강제 오버라이드로 완전 차단.
+   - `color-scheme: dark` 속성 명시로 브라우저 날짜 피커 팝업 UI까지 다크 테마로 통일.
+   - 라이트 테마에는 `color-scheme: light` 명시.
+   - placeholder 텍스트도 `var(--text-muted)` 색상으로 통일.
+
+---
+
 # Release Notes (v1.39.0.Build.124 - 2026-08-09 16:31)
 
 ## 🎨 [전사 UI/UX - 라이트 모드 카드/입력창/버튼 둥근 테두리 시인성 강화]

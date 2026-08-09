@@ -184,6 +184,17 @@ input, select, textarea {
   font-size: 14px;
   outline: none;
   transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+  /* 브라우저 기본 배경/색상 오버라이드 강제 적용 */
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+/* select는 화살표 아이콘 유지를 위해 appearance 따로 처리 */
+select {
+  -webkit-appearance: auto;
+  appearance: auto;
+  background-color: var(--bg-card);
+  color: var(--text-main);
 }
 
 input:focus, select:focus, textarea:focus {
@@ -195,6 +206,51 @@ input:disabled, select:disabled, textarea:disabled {
   opacity: 0.6;
   cursor: not-allowed;
   background-color: var(--bg-app);
+}
+
+/* ───────────────────────────────────────────────────
+   다크 테마 - 입력폼 일관성 강제 오버라이드
+   브라우저가 기본적으로 날짜/선택박스에 흰색 배경을
+   강제 적용하는 것을 color-scheme으로 차단
+─────────────────────────────────────────────────── */
+[data-theme='dark'] input,
+[data-theme='dark'] select,
+[data-theme='dark'] textarea,
+[data-theme='dark'] input[type="date"],
+[data-theme='dark'] input[type="month"],
+[data-theme='dark'] input[type="time"],
+[data-theme='dark'] input[type="datetime-local"],
+[data-theme='dark'] input[type="number"],
+[data-theme='dark'] input[type="text"],
+[data-theme='dark'] input[type="search"],
+[data-theme='dark'] input[type="email"],
+[data-theme='dark'] input[type="password"] {
+  background-color: var(--bg-card) !important;
+  color: var(--text-main) !important;
+  border-color: var(--border-color) !important;
+  color-scheme: dark; /* 브라우저 날짜 피커 팝업도 다크 테마로 */
+}
+
+[data-theme='dark'] input::placeholder,
+[data-theme='dark'] textarea::placeholder {
+  color: var(--text-muted) !important;
+  opacity: 1;
+}
+
+[data-theme='dark'] input:disabled,
+[data-theme='dark'] select:disabled,
+[data-theme='dark'] textarea:disabled {
+  background-color: var(--bg-app) !important;
+  color: var(--text-muted) !important;
+  opacity: 0.6;
+}
+
+/* 라이트 테마 - color-scheme 명시 */
+:root {
+  color-scheme: light;
+}
+[data-theme='dark'] {
+  color-scheme: dark;
 }
 
 label {
