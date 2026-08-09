@@ -372,11 +372,14 @@ export interface ContractAsset {
   contractId: string;
   assetId?: string;
   expectedModel?: string;
+  status?: 'RENTED' | 'RETURNED' | 'ASSIGNED' | string;
+  actualReturnDate?: string;
   monthlyRentalFee: number;
   dailyRentalFee: number;
   startDate: string;
   endDate: string;
   createdAt: string;
+  updatedAt?: string;
 }
 
 export interface Contract {
@@ -676,7 +679,7 @@ export interface AssetInOutLog {
   assetId: string;
   assetNo: string;
   modelName: string;
-  type: 'OUTBOUND' | 'INBOUND' | 'REPAIR'; // 출고, 입고, 정비
+  type: 'OUTBOUND' | 'INBOUND' | 'INBOUND_CANCEL' | 'REPAIR'; // 출고, 입고, 입고취소롤백, 정비
   eventDate: string; // YYYY-MM-DD
   customerId?: string;
   customerName?: string;

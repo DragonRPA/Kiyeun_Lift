@@ -118,6 +118,8 @@ interface AppContextType {
   disposeAsset: (assetId: string, disposalData: { disposalDate: string; disposalPrice: number; buyer: string; billingYm?: string }) => void;
   registerRentedAsset: (assetData: Partial<Asset>) => Promise<any>;
   returnRentedAsset: (assetId: string, returnDate: string) => void;
+  registerInboundAsset: (data: { assetId: string; returnDate: string; maintenanceScore?: number; memo?: string }) => Promise<void>;
+  cancelInboundAsset: (logId: string, cancelReason?: string) => Promise<void>;
   
   // Consumables Mutators
   purchaseConsumable: (data: { modelName: string; qty: number; unit: string; unitPrice: number; supplier: string }) => Promise<void>;
@@ -2850,6 +2852,108 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     refreshAllData();
   };
 
+  // 💡 [사장님 지시] 입고 등록 (휴먼에러 방지 확인 및 입고 처리)
+  const registerInboundAsset = async (data: { assetId: string; returnDate: string; maintenanceScore?: number; memo?: string }) => {
+    const asset = db.assets.find(a => a.id === data.assetId);
+    if (!asset) throw new Error('해당 자산을 찾을 수 없습니다.');
+
+    // 대여 중인 계약 자산 탐색
+    const ca = db.contractAssets.find(c => c.assetId === data.assetId && c.status === 'RENTED');
+    const contract = ca ? db.contracts.find(ct => ct.id === ca.contractId) : null;
+    const customer = contract ? db.customers.find(cu => cu.id === contract.customerId) : null;
+    const site = contract ? db.sites.find(s => s.id === contract.siteId) : null;
+
+    const score = data.maintenanceScore || 0;
+    // 자산 상태: 점수 0점이면 AVAILABLE(임대가능), 이상 시 RENTED_RETURNED(입고반납/검수대기)
+    const nextAssetStatus: Asset['status'] = score === 0 ? 'AVAILABLE' : 'RENTED_RETURNED';
+
+    // 1. 자산 마스터 갱신
+    db.updateRow<Asset>('assets', asset.id, {
+      status: nextAssetStatus,
+      maintenanceScore: score,
+      currentCustomerId: '',
+      currentSiteId: '',
+      contractStart: '',
+      contractEnd: '',
+      updatedAt: new Date().toISOString()
+    });
+
+    // 2. 계약 자산 반납 갱신
+    if (ca) {
+      db.updateRow<ContractAsset>('contractAssets', ca.id, {
+        status: 'RETURNED',
+        actualReturnDate: data.returnDate,
+        updatedAt: new Date().toISOString()
+      });
+    }
+
+    // 3. 자산 입출고 이력 무누락 기록 (INBOUND)
+    db.insertRow<AssetInOutLog>('assetInOutLogs', {
+      assetId: asset.id,
+      assetNo: asset.assetNo,
+      modelName: asset.modelName,
+      type: 'INBOUND',
+      eventDate: data.returnDate,
+      customerId: customer?.id || '',
+      customerName: customer?.name || '',
+      siteId: site?.id || '',
+      siteName: site?.name || '',
+      maintenanceScore: score,
+      memo: data.memo || '입고 등록 완결',
+      createdAt: new Date().toISOString()
+    });
+
+    await db.awaitPendingWrites();
+    refreshAllData();
+  };
+
+  // 💡 [사장님 지시] 입고 취소 롤백 (휴먼에러 복원 및 INBOUND_CANCEL 히스토리 무누락 저장)
+  const cancelInboundAsset = async (logId: string, cancelReason?: string) => {
+    const log = db.assetInOutLogs.find(l => l.id === logId && l.type === 'INBOUND');
+    if (!log) throw new Error('해당 입고 이력 로그를 찾을 수 없거나 이미 취소된 건입니다.');
+
+    const asset = db.assets.find(a => a.id === log.assetId);
+    if (!asset) throw new Error('연관 자산을 찾을 수 없습니다.');
+
+    // 1. 자산 상태 RENTED(대여중)로 복원
+    db.updateRow<Asset>('assets', asset.id, {
+      status: 'RENTED',
+      currentCustomerId: log.customerId || asset.currentCustomerId,
+      currentSiteId: log.siteId || asset.currentSiteId,
+      updatedAt: new Date().toISOString()
+    });
+
+    // 2. 계약 체결 자산 RENTED(대여중)로 복원
+    const ca = db.contractAssets.find(c => c.assetId === asset.id);
+    if (ca) {
+      db.updateRow<ContractAsset>('contractAssets', ca.id, {
+        status: 'RENTED',
+        actualReturnDate: undefined,
+        updatedAt: new Date().toISOString()
+      });
+    }
+
+    // 3. 기존 입고 로그 삭제 및 'INBOUND_CANCEL' 롤백 이력 무누락 생성
+    db.deleteRow('assetInOutLogs', logId);
+
+    db.insertRow<AssetInOutLog>('assetInOutLogs', {
+      assetId: asset.id,
+      assetNo: asset.assetNo,
+      modelName: asset.modelName,
+      type: 'INBOUND_CANCEL',
+      eventDate: new Date().toISOString().split('T')[0],
+      customerId: log.customerId,
+      customerName: log.customerName,
+      siteId: log.siteId,
+      siteName: log.siteName,
+      memo: `[입고 취소 롤백] ${cancelReason || '사용자 휴먼에러 입고 취소 처리'}`,
+      createdAt: new Date().toISOString()
+    });
+
+    await db.awaitPendingWrites();
+    refreshAllData();
+  };
+
   const registerRepair = (repairData: Partial<Repair>, usedConsumables: { consumableId: string; quantity: number }[]) => {
     const repairId = repairData.id || db.generateNextId('repairs', db.repairs);
     const totalRepairCost = repairData.totalCost ?? 0;
@@ -3342,7 +3446,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       refreshAllData, executeMonthlyDepreciation, loadTablesForMenu, updatePermissions, saveUser, saveCustomer, saveContact, saveSite, saveProduct, saveAsset, updateGoogleConfig,
       saveCashFlowSnapshot, deleteCashFlowSnapshot, saveVendor, deleteVendor, saveBankInitialBalance,
       updateAnnualLeaveQuota, addLeaveUsage, deleteLeaveUsage, addOvertimeRecord, deleteOvertimeRecord, setPayrollClosingStatus,
-      acquireAsset, disposeAsset, registerRentedAsset, returnRentedAsset, changeAssetStatus,
+      acquireAsset, disposeAsset, registerRentedAsset, returnRentedAsset, changeAssetStatus, registerInboundAsset, cancelInboundAsset,
       purchaseConsumable, useConsumable,
       requestConsumablePurchase, acceptConsumablePurchase, completeConsumablePurchase, inboundConsumablePurchase, clearEvidenceFileUrls, updateEvidenceFileUrls,
       createContract, extendContract, shortenContract, succeedContract, exchangeAsset,

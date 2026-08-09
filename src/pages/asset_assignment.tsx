@@ -149,8 +149,8 @@ export const AssetAssignment: React.FC = () => {
                   key={contract.id}
                   onClick={() => { setSelectedContractId(contract.id); setSelectedCaId(''); }}
                   style={{
-                    padding: '12px', backgroundColor: isSelected ? '#fed7aa' : '#fff',
-                    border: `2px solid ${isSelected ? '#f97316' : '#fdba74'}`, borderRadius: '10px',
+                    padding: '12px', backgroundColor: isSelected ? 'var(--warning-light)' : 'var(--bg-card)',
+                    border: `2px solid ${isSelected ? 'var(--warning)' : 'var(--border-color)'}`, borderRadius: '10px',
                     cursor: 'pointer', boxShadow: isSelected ? '0 4px 8px rgba(249,115,22,0.2)' : '0 1px 3px rgba(0,0,0,0.05)',
                     transition: 'all 0.2s ease'
                   }}
@@ -212,8 +212,8 @@ export const AssetAssignment: React.FC = () => {
                   }}
                   style={{
                     padding: '12px',
-                    backgroundColor: isSelected ? 'var(--primary-light)' : '#fff',
-                    border: `2px solid ${isSelected ? 'var(--primary)' : 'transparent'}`,
+                    backgroundColor: isSelected ? 'var(--primary-light)' : 'var(--bg-card)',
+                    border: `2px solid ${isSelected ? 'var(--primary)' : 'var(--border-color)'}`,
                     borderRadius: '10px',
                     cursor: 'pointer',
                     boxShadow: isSelected ? '0 4px 8px rgba(59,130,246,0.15)' : '0 1px 3px rgba(0,0,0,0.05)',
