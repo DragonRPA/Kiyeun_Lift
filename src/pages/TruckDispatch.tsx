@@ -1194,9 +1194,9 @@ export const TruckDispatch: React.FC = () => {
         vehicleNo: '',
         driverName: '',
         driverContact: '',
-        expectedCost: 70000,
+        expectedCost: 0,
         finalCost: 0,
-        deliveryCost: 70000
+        deliveryCost: 0
       }
     ]);
   };

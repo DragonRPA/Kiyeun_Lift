@@ -127,7 +127,7 @@ export const BankMatching: React.FC = () => {
 
       const latestTx = bTxs[0];
       const latestDate = latestTx ? latestTx.transactionDate : '내역없음';
-      const latestAccNumber = latestTx?.accountNumber || (bName === '우리은행' ? '1005502717011' : bName === '신한은행' ? '110987654321' : '');
+      const latestAccNumber = latestTx?.accountNumber || '';
 
       // 사장님 지시 원칙: 업로드된 입출금 내역 중 최신 거래일시의 '잔액' 컬럼 실제 값을 계좌 잔액으로 처리
       let finalBalance = 0;
@@ -173,12 +173,12 @@ export const BankMatching: React.FC = () => {
   // 3. 모의 데이터 생성
   const handleGenerateMockData = () => {
     const mockTxs: Omit<BankTransaction, 'id' | 'createdAt'>[] = [
-      { bankName: '우리은행', accountNumber: '1005502717011', transactionDate: '2026-08-05 08:44:37', summary: '인터넷', counterparty: '주식회사 기연', senderName: '주식회사 기연', depositAmount: 600000, withdrawAmount: 0, balance: 12500000, branchName: '신한은행(021497)', memo: '렌탈료입금', isDeposit: true },
-      { bankName: '우리은행', accountNumber: '1005502717011', transactionDate: '2026-08-05 09:30:15', summary: '타행IB', counterparty: '대현테크', senderName: '대현테크', depositAmount: 1050000, withdrawAmount: 0, balance: 13550000, branchName: '우리은행', memo: '7월수금', isDeposit: true },
-      { bankName: '신한은행', accountNumber: '110987654321', transactionDate: '2026-08-05 18:50:39', summary: 'CMS지', counterparty: '한성건설', senderName: '한성건설', depositAmount: 900000, withdrawAmount: 0, balance: 8900000, branchName: '자금부', memo: 'CMS자동입금', isDeposit: true },
-      { bankName: '신한은행', accountNumber: '110987654321', transactionDate: '2026-08-05 18:31:44', summary: 'FB자동', counterparty: '삼성물산', senderName: '삼성물산', depositAmount: 1200000, withdrawAmount: 0, balance: 10100000, branchName: 'FI영2', memo: '공사대금결제', isDeposit: true },
-      { bankName: '우리은행', accountNumber: '1005502717011', transactionDate: '2026-08-06 11:00:00', summary: '인터넷', counterparty: '현대건설', senderName: '현대건설', depositAmount: 850000, withdrawAmount: 0, balance: 14400000, branchName: '우리은행', memo: '장비렌탈비', isDeposit: true },
-      { bankName: '신한은행', accountNumber: '110987654321', transactionDate: '2026-08-06 14:20:00', summary: '타행PC', counterparty: '기연산업', senderName: '기연산업', depositAmount: 450000, withdrawAmount: 0, balance: 10550000, branchName: '(기업)', memo: '렌탈료', isDeposit: true }
+      { bankName: '우리은행', accountNumber: 'XXXX-XX-XXXXXXX01', transactionDate: '2026-08-05 08:44:37', summary: '인터넷', counterparty: '주식회사 기연', senderName: '주식회사 기연', depositAmount: 600000, withdrawAmount: 0, balance: 12500000, branchName: '신한은행(021497)', memo: '렌탈료입금', isDeposit: true },
+      { bankName: '우리은행', accountNumber: 'XXXX-XX-XXXXXXX01', transactionDate: '2026-08-05 09:30:15', summary: '타행IB', counterparty: '대현테크', senderName: '대현테크', depositAmount: 1050000, withdrawAmount: 0, balance: 13550000, branchName: '우리은행', memo: '7월수금', isDeposit: true },
+      { bankName: '신한은행', accountNumber: 'XXX-XXXXXXXXX-XX', transactionDate: '2026-08-05 18:50:39', summary: 'CMS지', counterparty: '한성건설', senderName: '한성건설', depositAmount: 900000, withdrawAmount: 0, balance: 8900000, branchName: '자금부', memo: 'CMS자동입금', isDeposit: true },
+      { bankName: '신한은행', accountNumber: 'XXX-XXXXXXXXX-XX', transactionDate: '2026-08-05 18:31:44', summary: 'FB자동', counterparty: '삼성물산', senderName: '삼성물산', depositAmount: 1200000, withdrawAmount: 0, balance: 10100000, branchName: 'FI영2', memo: '공사대금결제', isDeposit: true },
+      { bankName: '우리은행', accountNumber: 'XXXX-XX-XXXXXXX01', transactionDate: '2026-08-06 11:00:00', summary: '인터넷', counterparty: '현대건설', senderName: '현대건설', depositAmount: 850000, withdrawAmount: 0, balance: 14400000, branchName: '우리은행', memo: '장비렌탈비', isDeposit: true },
+      { bankName: '신한은행', accountNumber: 'XXX-XXXXXXXXX-XX', transactionDate: '2026-08-06 14:20:00', summary: '타행PC', counterparty: '기연산업', senderName: '기연산업', depositAmount: 450000, withdrawAmount: 0, balance: 10550000, branchName: '(기업)', memo: '렌탈료', isDeposit: true }
     ];
     uploadBankTransactions(mockTxs);
     alert('모의 통장 거래 내역 6건이 생성되었습니다.');
@@ -568,7 +568,7 @@ export const BankMatching: React.FC = () => {
               const bInfo = bankBalances.bankMap['우리은행'];
               setEditingBankName('우리은행');
               setEditingInitialBalance(bankInitialBalances.find(b => b.bankName === '우리은행')?.initialBalance || 15000000);
-              setEditingAccountNumber(bInfo?.accountNumber || '1005502717011');
+              setEditingAccountNumber(bInfo?.accountNumber || '');
               setIsInitBalanceModalOpen(true);
             }}
             className="btn btn-secondary"
@@ -1400,7 +1400,7 @@ export const BankMatching: React.FC = () => {
                 </label>
                 <input
                   type="text"
-                  placeholder="예: 1005502717011"
+                  placeholder="예: 1234567890123"
                   value={editingAccountNumber}
                   onChange={(e) => setEditingAccountNumber(e.target.value)}
                   className="form-control"
