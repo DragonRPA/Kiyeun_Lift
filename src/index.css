@@ -268,8 +268,8 @@ button:disabled {
   border-radius: var(--radius-md);
   background-color: var(--bg-card);
   box-shadow: var(--shadow-sm);
-  margin-bottom: 14px;
-  max-height: calc(100vh - 240px);
+  margin-bottom: 8px;
+  max-height: calc(100vh - 175px);
 }
 
 table {

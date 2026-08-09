@@ -304,8 +304,8 @@ export const Assets: React.FC = () => {
         </div>
       </div>
 
-      {/* 자산 목록 테이블 - 모든 DB 컬럼 표시, 횡스크롤 허용 */}
-      <div className="table-container" style={{ overflowX: 'auto', overflowY: 'auto', maxHeight: 'calc(100vh - 340px)' }}>
+      {/* 자산 목록 테이블 - 모든 DB 컬럼 표시, 횡스크롤 허용 (하단 남는 뷰포트 공간 100% 꽉 차게 활용) */}
+      <div className="table-container" style={{ overflowX: 'auto', overflowY: 'auto', maxHeight: 'calc(100vh - 175px)' }}>
         <table style={{ width: 'max-content', minWidth: '100%', borderCollapse: 'separate', borderSpacing: 0, fontSize: '13px' }}>
           <colgroup>
             <col style={{ width: `${colWidths.action}px` }} />
