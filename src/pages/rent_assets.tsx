@@ -9,17 +9,7 @@ import { Asset, db, PurchaseSettlement, PurchaseSettlementItem, Delivery } from 
 import { exportToExcel } from '../services/excel';
 import * as XLSX from 'xlsx';
 
-// 원사 거래명세서 파싱 레코드 인터페이스
-export interface VendorStatementRow {
-  id: string;
-  assetNo: string;
-  serialNo?: string;
-  modelName?: string;
-  rentStart: string;
-  rentEnd: string;
-  billedAmount: number;
-  memo?: string;
-}
+import { VendorStatementRow, parseVendorStatementExcel } from '../services/vendorStatementParser';
 
 // 5대 대사 결과 항목 인터페이스
 export type ReconcileStatusKey = 'MATCHED' | 'PRICE_MISMATCH' | 'PERIOD_MISMATCH' | 'UNREGISTERED' | 'MISSING_BILLING';
@@ -85,6 +75,21 @@ export const RentAssets: React.FC = () => {
 
     // A. 임차처 거래명세서 행 기준으로 자사 DB 자산 대조 (오직 관리번호 기준 1:1 매칭)
     statementRows.forEach((row, idx) => {
+      // 이미지 2 지원: 장비 임대료가 아닌 기타 수리비/세척비/도색비/운송비 등 항목
+      if (row.itemType === 'REPAIR' || row.itemType === 'OTHER_FEE') {
+        results.push({
+          id: `recon-fee-${idx}`,
+          status: 'UNREGISTERED',
+          statusLabel: row.itemType === 'REPAIR' ? '🛠️ 기타/수리비' : '📦 기타 청구비',
+          badgeClass: 'badge-info',
+          statementRow: row,
+          priceDiff: row.billedAmount,
+          expectedAmount: 0,
+          reason: row.memo || '장비 임대료 외 기타 청구 항목입니다 (수리비/세척비/도색비/운송비 등).'
+        });
+        return;
+      }
+
       // 1단계: 관리번호(assetNo) 정밀 매칭 (시리얼번호/제조번호 일절 무시)
       let matched = rentedAssets.find(a => 
         a.assetNo && cleanStr(a.assetNo) === cleanStr(row.assetNo)
@@ -214,7 +219,7 @@ export const RentAssets: React.FC = () => {
     return { totalCount, totalBilled, matchedCount, priceMismatchCount, periodMismatchCount, unregisteredCount, missingCount, totalDiffAmount };
   }, [statementRows, reconcileResults]);
 
-  // 엑셀 업로드 처리 핸들러
+  // 엑셀 업로드 처리 핸들러 (범용 파서 엔진 기반: 롯데렌탈 등 동적 헤더 행 탐색 & 기타 비용/합계행 자동 처리)
   const handleExcelUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
@@ -228,32 +233,20 @@ export const RentAssets: React.FC = () => {
         const workbook = XLSX.read(data, { type: 'array' });
         const firstSheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[firstSheetName];
-        const rawRows = XLSX.utils.sheet_to_json<any>(worksheet, { defval: '' });
+        
+        // 스마트 다중 양식 범용 파서 호출
+        const parseResult = parseVendorStatementExcel(worksheet, selectedYm);
 
-        const parsedRows: VendorStatementRow[] = rawRows.map((r, i) => {
-          const assetNo = (r['관리번호'] || r['자산번호'] || r['assetNo'] || r['장비번호'] || '').toString().trim();
-          const serialNo = (r['제조번호'] || r['시리얼'] || r['serialNo'] || '').toString().trim();
-          const modelName = (r['모델명'] || r['modelName'] || '').toString().trim();
-          const rentStart = (r['임차시작일'] || r['시작일'] || r['rentStart'] || '').toString().trim();
-          const rentEnd = (r['임차종료일'] || r['종료일'] || r['rentEnd'] || '').toString().trim();
-          const billedAmount = Number(r['청구금액'] || r['임차료'] || r['billedAmount'] || 0);
-          const memo = (r['비고'] || r['memo'] || '').toString().trim();
+        if (parseResult.detectedVendor) {
+          setSelectedVendor(parseResult.detectedVendor);
+        }
 
-          return {
-            id: `stmt-${i}-${Date.now()}`,
-            assetNo: assetNo || `R-${1000 + i}`,
-            serialNo,
-            modelName,
-            rentStart: rentStart || `${selectedYm}-01`,
-            rentEnd: rentEnd || `${selectedYm}-28`,
-            billedAmount,
-            memo
-          };
-        }).filter(row => Boolean(row.assetNo));
+        setStatementRows(parseResult.rows);
+        setSelectedReconcileIds(parseResult.rows.map(r => r.id));
 
-        setStatementRows(parsedRows);
-        setSelectedReconcileIds(parsedRows.map(r => r.id));
-        alert(`✅ 원사 거래명세서 ${parsedRows.length}건이 성공적으로 업로드 및 대사 처리되었습니다.`);
+        const vendorNotice = parseResult.detectedVendor ? `[${parseResult.detectedVendor}]` : '거래명세서';
+        const headerNotice = parseResult.headerRowIndex >= 0 ? ` (헤더 ${parseResult.headerRowIndex + 1}행 인식)` : '';
+        alert(`✅ ${vendorNotice} 양식 업로드 완료!${headerNotice}\n- 파싱 항목: 총 ${parseResult.totalParsedCount}건\n- 총 공급가액: ₩${parseResult.totalParsedAmount.toLocaleString()}\n- 세액: ₩${parseResult.totalParsedTax.toLocaleString()}\n\n자사 DB 자산대장과의 1:1 대사가 자동으로 완료되었습니다.`);
       } catch (err: any) {
         alert(`⚠️ 엑셀 파일 읽기 오류: ${err?.message || err}`);
       }
@@ -286,7 +279,8 @@ export const RentAssets: React.FC = () => {
         rentStart: a.rentStart || `${selectedYm}-01`,
         rentEnd: a.rentEnd || `${selectedYm}-28`,
         billedAmount: billed,
-        memo: idx === 1 ? '원사 청구 단가 인상분 반영' : '정상 월 임차료'
+        memo: idx === 1 ? '원사 청구 단가 인상분 반영' : '정상 월 임차료',
+        itemType: 'EQUIPMENT'
       };
     });
 
@@ -299,7 +293,24 @@ export const RentAssets: React.FC = () => {
       rentStart: `${selectedYm}-01`,
       rentEnd: `${selectedYm}-28`,
       billedAmount: 450000,
-      memo: '자사 대장에 없는 원사 단독 청구 건'
+      memo: '자사 대장에 없는 원사 단독 청구 건',
+      itemType: 'EQUIPMENT'
+    });
+
+    // 🛠️ 이미지 2 스타일: 장비 렌탈 외 중간 기타 수리비/세척비 샘플 항목 추가
+    samples.push({
+      id: `sample-repair`,
+      assetNo: '기타/수리비',
+      modelName: '기타비용',
+      rentStart: `${selectedYm}-01`,
+      rentEnd: `${selectedYm}-28`,
+      billedAmount: 350000,
+      taxAmount: 35000,
+      totalAmount: 385000,
+      memo: '수리비(외관오염 세척/도색비)',
+      itemType: 'REPAIR',
+      seq: 115,
+      contractNo: '2612002530'
     });
 
     setStatementRows(samples);
