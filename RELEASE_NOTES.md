@@ -50,6 +50,20 @@
 
 ---
 
+# Release Notes (v1.41.0.Build.126 - 2026-08-09 16:40)
+
+## 🎨 [전사 UI/UX - 다크 모드 그룹박스/카드 내부 하드코딩 배경색 전사 CSS 변수 통일]
+
+### 주요 개편 사항
+
+1. **전사 페이지 하드코딩 배경색 전수 조사 및 CSS 변수 교체**:
+   - `Billings.tsx`: 청구월 셀렉트 `#fff` → `var(--bg-card)`, 2행 필터 그룹박스 `#f8fafc` → `var(--bg-app)`
+   - `Contracts.tsx`: 경고 박스 `#fff7ed` → `var(--warning-light)`, 정보 박스 `#eff6ff` → `var(--info-light)`, 태그 아이템 `#fff` → `var(--primary-light)`, 셀렉트 `#fff` → `var(--bg-card)`
+   - `asset_assignment.tsx`: 대차할당대기 알림 `#fff7ed` → `var(--warning-light)`, 검색 헤더 `#f8fafc` → `var(--bg-app)`, 진행률 바 트랙 `#e5e7eb` → `var(--border-color)`
+   - **인쇄용 시트**(smart_dispatch, Consumables)의 흰색 배경은 실물 인쇄 목적으로 의도 보존.
+
+---
+
 # Release Notes (v1.40.0.Build.125 - 2026-08-09 16:35)
 
 ## 🎨 [전사 UI/UX - 다크 모드 입력폼 배경색 일관성 강제 통일]

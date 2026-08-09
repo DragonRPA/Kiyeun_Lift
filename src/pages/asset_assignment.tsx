@@ -133,7 +133,7 @@ export const AssetAssignment: React.FC = () => {
 
       {/* 대차 교체 출고할당 대기 — 최우선 표출 (영업사원 대차 의뢰 접수 건) */}
       {exchangePendingContracts.length > 0 && (
-        <div style={{ backgroundColor: '#fff7ed', padding: '14px', borderRadius: '10px', border: '2px solid #f97316', boxShadow: '0 2px 8px rgba(249,115,22,0.12)' }}>
+        <div style={{ backgroundColor: 'var(--warning-light)', padding: '14px', borderRadius: '10px', border: '2px solid var(--warning)', boxShadow: '0 2px 8px rgba(0,0,0,0.12)' }}>
           <h3 style={{ fontSize: '14px', fontWeight: '700', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px', color: '#c2410c' }}>
             <AlertTriangle size={14} /> 대차 교체 출고할당 대기 ({exchangePendingContracts.length}건)
             <span style={{ fontSize: '11px', fontWeight: '500', color: '#9a3412', marginLeft: '4px' }}>— 영업사원 대차 의뢰 접수 건. 자사 자산 또는 전대 장비를 선택하여 할당하세요.</span>
@@ -241,7 +241,7 @@ export const AssetAssignment: React.FC = () => {
                       <span>진행률</span>
                       <span>{assignedCount}/{totalCount} 대</span>
                     </div>
-                    <div style={{ height: '5px', backgroundColor: '#e5e7eb', borderRadius: '3px', overflow: 'hidden' }}>
+                    <div style={{ height: '5px', backgroundColor: 'var(--border-color)', borderRadius: '3px', overflow: 'hidden' }}>
                       <div style={{ 
                         height: '100%', 
                         width: `${progress}%`, 
@@ -347,7 +347,7 @@ export const AssetAssignment: React.FC = () => {
             </div>
 
             {/* 🔍 관리번호 / 제조번호 검색 필터 바 */}
-            <div style={{ padding: '6px 10px', borderBottom: '1px solid var(--border-color)', backgroundColor: '#f8fafc', flexShrink: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <div style={{ padding: '6px 10px', borderBottom: '1px solid var(--border-color)', backgroundColor: 'var(--bg-app)', flexShrink: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
               <Search size={13} color="#22c55e" style={{ flexShrink: 0 }} />
               <input
                 type="text"
@@ -363,7 +363,7 @@ export const AssetAssignment: React.FC = () => {
                   fontWeight: 600,
                   outline: 'none',
                   color: '#111',
-                  backgroundColor: '#fff',
+                  backgroundColor: 'var(--primary-light)',
                   transition: 'border-color 0.2s'
                 }}
               />

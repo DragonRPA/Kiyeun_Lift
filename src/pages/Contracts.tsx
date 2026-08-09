@@ -1237,7 +1237,7 @@ export const Contracts: React.FC = () => {
                       ))}
                     </select>
                   </div>
-                  <div style={{ padding: '8px 10px', backgroundColor: '#fff7ed', border: '1px solid #fed7aa', borderRadius: '6px', fontSize: '11.5px', color: '#c2410c' }}>
+                  <div style={{ padding: '8px 10px', backgroundColor: 'var(--warning-light)', border: '1px solid var(--warning)', borderRadius: '6px', fontSize: '11.5px', color: 'var(--warning-hover)' }}>
                     💡 <strong>미식별 교체 안내:</strong> 현장의 정확한 자산번호/SN을 모르는 상태입니다. 대차 장비 출고 후 회수 장비가 센터에 <strong>입고 검수 승인되는 시점에 자산번호가 최종 매핑 완성</strong>됩니다.
                   </div>
                 </div>
@@ -1253,7 +1253,7 @@ export const Contracts: React.FC = () => {
               </div>
 
               {/* 후속 업무 흐름 연계 시각화 카드 */}
-              <div style={{ padding: '10px 12px', backgroundColor: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '6px', fontSize: '11.5px', color: '#1e40af' }}>
+              <div style={{ padding: '10px 12px', backgroundColor: 'var(--info-light)', border: '1px solid var(--info)', borderRadius: '6px', fontSize: '11.5px', color: 'var(--info)' }}>
                 <div style={{ fontWeight: 'bold', marginBottom: '3px' }}>🔄 후속 업무 자동 연계 체인</div>
                 <div>1. <strong>[배차 관리]</strong>에 기존 장비 회수 배차(INBOUND) 자동 등록 ({exchangeIdentifyType === 'KNOWN' ? '자산번호 지정' : '미식별 현장확인'})</div>
                 <div>2. <strong>[장비 할당]</strong> 보드 최상단 카드로 대차 출고 할당 요청 자동 노출</div>
@@ -1279,7 +1279,7 @@ export const Contracts: React.FC = () => {
                     value={exchangeTimeSlot}
                     onChange={e => setExchangeTimeSlot(e.target.value)}
                     required
-                    style={{ width: '100%', padding: '8px', borderRadius: '6px', fontSize: '12.5px', border: '1px solid var(--border-color)', backgroundColor: '#fff' }}
+                    style={{ width: '100%', padding: '8px', borderRadius: '6px', fontSize: '12.5px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-card)', color: 'var(--text-main)' }}
                   >
                     <option value="오전 (08:00 ~ 12:00)">오전 (08:00 ~ 12:00)</option>
                     <option value="오후 (13:00 ~ 17:00)">오후 (13:00 ~ 17:00)</option>
@@ -1408,7 +1408,7 @@ export const Contracts: React.FC = () => {
                 basket.map((b, idx) => {
                   const ast = assets.find(a => a.id === b.assetId);
                   return (
-                    <div key={idx} style={{ padding: '4px 10px', backgroundColor: '#fff', border: '1px solid var(--primary)', borderRadius: '4px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <div key={idx} style={{ padding: '4px 10px', backgroundColor: 'var(--primary-light)', border: '1px solid var(--primary)', borderRadius: '4px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
                       <strong>{ast?.assetNo || b.expectedModel}</strong> (월 {b.monthlyRentalFee.toLocaleString()}원)
                       <button type="button" onClick={() => handleRemoveFromBasket(b.assetId || b.expectedModel)} style={{ border: 'none', background: 'none', color: 'red', cursor: 'pointer' }}>✕</button>
                     </div>
