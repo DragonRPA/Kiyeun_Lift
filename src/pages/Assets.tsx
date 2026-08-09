@@ -222,8 +222,8 @@ export const Assets: React.FC = () => {
   };
 
   return (
-    <div>
-      <div className="card-header" style={{ marginBottom: '16px' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, gap: 0 }}>
+      <div className="card-header" style={{ marginBottom: '12px', flexShrink: 0 }}>
         <div>
           <h2 style={{ fontWeight: '700' }}>자산 (장비) 관리 대장</h2>
           <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '4px' }}>
@@ -239,7 +239,7 @@ export const Assets: React.FC = () => {
       </div>
 
       {/* 필터 카드 */}
-      <div className="card" style={{ padding: '14px 16px', marginBottom: '14px' }}>
+      <div className="card" style={{ padding: '12px 16px', marginBottom: '10px', flexShrink: 0 }}>
         <div style={{ display: 'grid', gridTemplateColumns: '2fr 0.8fr 0.9fr 0.9fr 1.4fr 0.7fr', gap: '10px', alignItems: 'end' }}>
           <div>
             <label style={{ fontSize: '12px', fontWeight: '600', marginBottom: '5px', display: 'block' }}>통합 검색</label>
@@ -304,8 +304,8 @@ export const Assets: React.FC = () => {
         </div>
       </div>
 
-      {/* 자산 목록 테이블 - 모든 DB 컬럼 표시, 횡스크롤 허용 (하단 남는 뷰포트 공간 100% 꽉 차게 활용) */}
-      <div className="table-container" style={{ overflowX: 'auto', overflowY: 'auto', maxHeight: 'calc(100vh - 175px)' }}>
+      {/* 자산 목록 테이블 - 하단 남는 뷰포트 공간 100% flex-fill */}
+      <div className="table-container" style={{ overflowX: 'auto', overflowY: 'auto', flex: 1, minHeight: 0, maxHeight: 'none' }}>
         <table style={{ width: 'max-content', minWidth: '100%', borderCollapse: 'separate', borderSpacing: 0, fontSize: '13px' }}>
           <colgroup>
             <col style={{ width: `${colWidths.action}px` }} />

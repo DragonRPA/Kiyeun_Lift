@@ -50,6 +50,21 @@
 
 ---
 
+# Release Notes (v1.37.0.Build.122 - 2026-08-09 16:18)
+
+## 🎨 [전사 UI/UX - flex 레이아웃 근본 재설계: 화면 하단 낭비 공간 0px 완전 소멸 + 종스크롤바 두께 16px 확장]
+
+### 주요 개편 사항
+
+1. **`calc(100vh - Npx)` 임시방편 폐기 → flex fill 근본 구조 재설계 (`App.tsx` & `Assets.tsx` & `index.css`)**:
+   - 기존 방식은 헤더/필터 높이를 수동으로 계산해서 빼주는 임시방편이었으며, 근본적으로 화면 하단 낭비 공간을 0으로 만드는 것이 불가능했음.
+   - `App.tsx` `<main>` 태그를 `overflow: hidden + display: flex, column`으로 변경, `Assets.tsx` 최상위 div를 flex column height 100%로, `.table-container`를 `flex: 1, minHeight: 0`으로 변경하여 **남은 뷰포트 전체를 테이블이 100% 자동으로 채우는 근본 구조 완성.**
+
+2. **전사 스크롤바 두께 12px → 16px 확장**:
+   - 종/횡 스크롤바 두께를 16px로 확장하여 클릭 및 드래그 조작이 훨씬 더 편리해졌습니다.
+
+---
+
 # Release Notes (v1.36.0.Build.121 - 2026-08-09 16:13)
 
 ## 🎨 [전사 UI/UX - 화면 하단 낭비 공간 100% 팽창 활용 다이나믹 Flex-Fill 뷰포트 개편]

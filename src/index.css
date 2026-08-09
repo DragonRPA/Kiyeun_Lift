@@ -116,7 +116,7 @@ html, body, #root {
 
 /* 메인 작업 화면 독자 스크롤 영역 */
 .main-content-area {
-  overflow-y: auto !important;
+  overflow: hidden !important;
   overscroll-behavior: contain !important;
 }
 
@@ -127,8 +127,8 @@ table, .table-container, .table-wrapper, .modal-content, .card {
 
 /* 🎨 도드라진 선명한 횡/종 커스텀 스크롤바 */
 ::-webkit-scrollbar {
-  width: 12px;
-  height: 12px;
+  width: 16px;
+  height: 16px;
 }
 
 ::-webkit-scrollbar-track {
@@ -151,8 +151,8 @@ table, .table-container, .table-wrapper, .modal-content, .card {
 .table-container::-webkit-scrollbar,
 .table-wrapper::-webkit-scrollbar,
 div[style*="overflow"]::-webkit-scrollbar {
-  width: 12px;
-  height: 12px;
+  width: 16px;
+  height: 16px;
 }
 
 .table-container::-webkit-scrollbar-thumb,
@@ -268,8 +268,8 @@ button:disabled {
   border-radius: var(--radius-md);
   background-color: var(--bg-card);
   box-shadow: var(--shadow-sm);
-  margin-bottom: 8px;
-  max-height: calc(100vh - 175px);
+  margin-bottom: 0;
+  /* max-height는 각 페이지에서 flex:1 로 제어 */
 }
 
 table {

@@ -604,7 +604,7 @@ const App: React.FC = () => {
         </aside>
 
         {/* 메인 콘텐츠 영역 (독자 스크롤 & 다이나믹 뷰포트 활용) */}
-        <main style={{ flex: 1, height: '100%', padding: '16px 20px', overflowY: 'auto', overscrollBehavior: 'contain', backgroundColor: 'var(--bg-app)' }} className="main-content-area">
+        <main style={{ flex: 1, height: '100%', minHeight: 0, padding: '16px 20px', overflow: 'hidden', display: 'flex', flexDirection: 'column', backgroundColor: 'var(--bg-app)' }} className="main-content-area">
           {userHasViewPerm ? (
             getActiveComponent()
           ) : (
@@ -643,6 +643,7 @@ const App: React.FC = () => {
           }
           .main-content-area {
             padding: 16px !important;
+            overflow: hidden !important;
           }
         }
       `}</style>
