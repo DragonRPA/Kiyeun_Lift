@@ -252,8 +252,29 @@ export const Repairs: React.FC = () => {
                     </td>
                     <td>{r.requestDate}</td>
                     <td>{r.repairDate || '-'}</td>
-                    <td style={{ maxWidth: '250px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                      {r.details}
+                    <td style={{ maxWidth: '280px', fontSize: '12px' }}>
+                      {r.inboundNo && (
+                        <div style={{ fontSize: '11px', fontWeight: 'bold', color: 'var(--primary)', marginBottom: '2px' }}>
+                          📥 연동 입고번호: {r.inboundNo}
+                        </div>
+                      )}
+                      <div style={{ whiteSpace: 'pre-wrap' }}>{r.details}</div>
+                      {r.defectsJson && (
+                        <div style={{ marginTop: '6px', display: 'flex', flexDirection: 'column', gap: '4px', backgroundColor: 'var(--bg-app)', padding: '6px', borderRadius: '4px', border: '1px solid var(--border-color)' }}>
+                          <span style={{ fontSize: '11px', fontWeight: 'bold', color: 'var(--warning)' }}>📸 입고 파손 사진 및 증상:</span>
+                          {JSON.parse(r.defectsJson).map((d: any, idx: number) => (
+                            <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11.5px' }}>
+                              <span className="badge badge-secondary" style={{ fontSize: '10px' }}>{d.subNo}</span>
+                              <span>{d.checkitemName} (+{d.score}점)</span>
+                              {d.photoUrl && (
+                                <a href={d.photoUrl} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()}>
+                                  <img src={d.photoUrl} alt="사진" style={{ width: '26px', height: '26px', objectFit: 'cover', borderRadius: '3px', border: '1px solid var(--border-color)' }} />
+                                </a>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </td>
                     <td style={{ fontWeight: '600' }}>
                       {r.totalCost.toLocaleString()}원

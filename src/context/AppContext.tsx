@@ -1,6 +1,6 @@
 // d:\Kiyeun_Lift\src\context\AppContext.tsx
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
-import { db, supabase, User, MenuPermission, createMenuPermission, Customer, CustomerContact, CustomerSite, Product, Asset, Consumable, ConsumableLog, ConsumablePurchaseRequest, Contract, ContractAsset, ContractHistory, Delivery, Billing, BillingDetail, Payment, PaymentDepositLink, Repair, RepairConsumable, Todo, BankTransaction, BankMatchingRule, BankAccountInitialBalance, AssetInOutLog, GoogleConfig, Vendor, CashFlowSnapshot, OutboundInspection, TransportCompany, TransportDriver, DepreciationLog, PurchaseSettlement, PurchaseSettlementItem, SettlementPaymentLog, ExternalLease, PurchaseSettlementType, PurchaseSettlementStatus, findCustomerByNormalizedName, AnnualLeaveQuota, LeaveUsage, OvertimeRecord, PayrollClosing, InspectionChecklistItem } from '../services/db';
+import { db, supabase, User, MenuPermission, createMenuPermission, Customer, CustomerContact, CustomerSite, Product, Asset, Consumable, ConsumableLog, ConsumablePurchaseRequest, Contract, ContractAsset, ContractHistory, Delivery, Billing, BillingDetail, Payment, PaymentDepositLink, Repair, RepairConsumable, Todo, BankTransaction, BankMatchingRule, BankAccountInitialBalance, AssetInOutLog, GoogleConfig, Vendor, CashFlowSnapshot, OutboundInspection, TransportCompany, TransportDriver, DepreciationLog, PurchaseSettlement, PurchaseSettlementItem, SettlementPaymentLog, ExternalLease, PurchaseSettlementType, PurchaseSettlementStatus, findCustomerByNormalizedName, AnnualLeaveQuota, LeaveUsage, OvertimeRecord, PayrollClosing, InspectionChecklistItem, InboundDefectDetail } from '../services/db';
 import { ErrorModal } from '../components/ErrorModal';
 import { getAllSystemMenuIds } from '../config/menu_config';
 
@@ -121,7 +121,7 @@ interface AppContextType {
   disposeAsset: (assetId: string, disposalData: { disposalDate: string; disposalPrice: number; buyer: string; billingYm?: string }) => void;
   registerRentedAsset: (assetData: Partial<Asset>) => Promise<any>;
   returnRentedAsset: (assetId: string, returnDate: string) => void;
-  registerInboundAsset: (data: { assetId: string; returnDate: string; maintenanceScore?: number; memo?: string }) => Promise<void>;
+  registerInboundAsset: (data: { assetId: string; returnDate: string; maintenanceScore?: number; memo?: string; inboundNo?: string; defects?: InboundDefectDetail[] }) => Promise<void>;
   cancelInboundAsset: (logId: string, cancelReason?: string) => Promise<void>;
   
   // Consumables Mutators
@@ -2881,8 +2881,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     refreshAllData();
   };
 
-  // 💡 [사장님 지시] 입고 등록 (휴먼에러 방지 확인 및 입고 처리)
-  const registerInboundAsset = async (data: { assetId: string; returnDate: string; maintenanceScore?: number; memo?: string }) => {
+  // 💡 [사장님 지시] 입고 등록 (입고번호, 하위번호 INB-XXXX-01, 증상별 사진 및 자산정비수리 자동연동)
+  const registerInboundAsset = async (data: { assetId: string; returnDate: string; maintenanceScore?: number; memo?: string; inboundNo?: string; defects?: InboundDefectDetail[] }) => {
     const asset = db.assets.find(a => a.id === data.assetId);
     if (!asset) throw new Error('해당 자산을 찾을 수 없습니다.');
 
@@ -2895,6 +2895,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const score = data.maintenanceScore || 0;
     // 자산 상태: 점수 0점이면 AVAILABLE(임대가능), 이상 시 RENTED_RETURNED(입고반납/검수대기)
     const nextAssetStatus: Asset['status'] = score === 0 ? 'AVAILABLE' : 'RENTED_RETURNED';
+
+    // 💡 [입고 번호 채번]
+    const assignedInboundNo = data.inboundNo || db.generateNextId('inboundNo', db.assetInOutLogs as any);
+
+    // 💡 [불량 증상 하위 번호 결합 (예: INB-20260809-001-01)]
+    const processedDefects: InboundDefectDetail[] = (data.defects || []).map((d, idx) => ({
+      ...d,
+      subNo: d.subNo || `${assignedInboundNo}-${String(idx + 1).padStart(2, '0')}`
+    }));
+
+    const defectsJsonStr = processedDefects.length > 0 ? JSON.stringify(processedDefects) : undefined;
 
     // 1. 자산 마스터 갱신
     db.updateRow<Asset>('assets', asset.id, {
@@ -2916,18 +2927,43 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       });
     }
 
-    // 3. 자산 입출고 이력 무누락 기록 (INBOUND)
+    // 3. 자산 정비수리 대장 연동 (점수가 1점 이상일 때 자동 PENDING 정비 건 발행)
+    let createdRepairId: string | undefined = undefined;
+    if (score > 0) {
+      const repairId = db.generateNextId('repairs', db.repairs);
+      createdRepairId = repairId;
+      const defectSummary = processedDefects.map(d => `[${d.subNo}] ${d.checkitemName}(+${d.score}점)`).join(', ');
+      
+      db.insertRow<Repair>('repairs', {
+        id: repairId,
+        assetId: asset.id,
+        requestDate: data.returnDate,
+        status: 'PENDING',
+        details: `[입고검수 자동 정비 접수 - ${assignedInboundNo}]\n정비 필요 항목: ${defectSummary}\n비고: ${data.memo || '이상 무'}`,
+        totalCost: 0,
+        billableToCustomer: false,
+        inboundNo: assignedInboundNo,
+        defectsJson: defectsJsonStr,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      });
+    }
+
+    // 4. 자산 입출고 이력 무누락 기록 (INBOUND)
     db.insertRow<AssetInOutLog>('assetInOutLogs', {
       assetId: asset.id,
       assetNo: asset.assetNo,
       modelName: asset.modelName,
       type: 'INBOUND',
+      inboundNo: assignedInboundNo,
       eventDate: data.returnDate,
       customerId: customer?.id || '',
       customerName: customer?.name || '',
       siteId: site?.id || '',
       siteName: site?.name || '',
+      repairId: createdRepairId,
       maintenanceScore: score,
+      defectsJson: defectsJsonStr,
       memo: data.memo || '입고 등록 완결',
       createdAt: new Date().toISOString()
     });

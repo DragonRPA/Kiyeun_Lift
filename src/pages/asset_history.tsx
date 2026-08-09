@@ -1,8 +1,9 @@
 // src/pages/asset_history.tsx
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
-import { Search, Download, Calendar, Layers, Wrench, ArrowUpRight, ArrowDownLeft, CheckCircle2, RotateCcw, AlertTriangle, ShieldCheck } from 'lucide-react';
+import { Search, Download, Calendar, Layers, Wrench, ArrowUpRight, ArrowDownLeft, CheckCircle2, RotateCcw, AlertTriangle, ShieldCheck, Camera } from 'lucide-react';
 import { exportToExcel } from '../services/excel';
+import { InboundDefectDetail } from '../services/db';
 
 export const AssetHistory: React.FC = () => {
   const { 
@@ -29,11 +30,12 @@ export const AssetHistory: React.FC = () => {
     searchTerm: ''
   });
 
-  // 💡 [입고 등록 폼 상태] (수동 점수 입력 제거 ➔ 정비 필요 항목 체크박스 선택 연동)
+  // 💡 [입고 등록 폼 상태] (수동 점수 입력 제거 ➔ 정비 필요 항목 체크박스 선택 연동 + 사진 첨부)
   const [inboundAssetNoInput, setInboundAssetNoInput] = useState('');
   const [selectedInboundAssetId, setSelectedInboundAssetId] = useState('');
   const [inboundDate, setInboundDate] = useState(todayStr);
   const [selectedChecklistIds, setSelectedChecklistIds] = useState<string[]>([]);
+  const [defectPhotos, setDefectPhotos] = useState<Record<string, string>>({}); // { checkitemId: photoUrlBase64 }
   const [inboundMemo, setInboundMemo] = useState('');
   const [isSubmittingInbound, setIsSubmittingInbound] = useState(false);
 
@@ -41,6 +43,18 @@ export const AssetHistory: React.FC = () => {
   const selectedChecklistObjects = inspectionChecklistItems.filter(item => selectedChecklistIds.includes(item.id));
   const calculatedInboundScore = selectedChecklistObjects.reduce((sum, item) => sum + item.score, 0);
   const selectedChecklistSummary = selectedChecklistObjects.map(item => `${item.name}(+${item.score}점)`).join(', ');
+
+  // 사진 업로드 처리 (모바일 촬영 & PC 탐색기 파일 선택 지원)
+  const handlePhotoFileChange = (itemId: string, file: File | null) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      if (e.target?.result) {
+        setDefectPhotos(prev => ({ ...prev, [itemId]: e.target!.result as string }));
+      }
+    };
+    reader.readAsDataURL(file);
+  };
 
   // 0. 타 탭 이동 페이로드(특정 자산 이력 조회) 감지
   useEffect(() => {
@@ -137,19 +151,29 @@ export const AssetHistory: React.FC = () => {
         ? `[정비 필요 항목: ${selectedChecklistSummary}] ${inboundMemo}`.trim()
         : (inboundMemo.trim() || '입고 검수 이상 무');
 
+      const defectPayloads: InboundDefectDetail[] = selectedChecklistObjects.map(item => ({
+        subNo: '', // AppContext에서 INB-XXXX-01 채번 결합
+        checkitemId: item.id,
+        checkitemName: item.name,
+        score: item.score,
+        photoUrl: defectPhotos[item.id] || undefined
+      }));
+
       await registerInboundAsset({
         assetId: inboundTargetAsset.id,
         returnDate: inboundDate,
         maintenanceScore: calculatedInboundScore,
+        defects: defectPayloads,
         memo: combinedMemo
       });
 
-      alert(`✅ [입고 등록 완결]\n\n자산번호: [${inboundTargetAsset.assetNo}] (${inboundTargetAsset.modelName})\n입고 일자: ${inboundDate}\n정비 필요 점수: ${calculatedInboundScore}점\n상태 전환: ${calculatedInboundScore === 0 ? '임대가능 (AVAILABLE)' : '입고반납/검수대기 (RENTED_RETURNED)'}\n\n계약 반납 마감 및 자산 이력이 정상 등록되었습니다.`);
+      alert(`✅ [입고 등록 완결]\n\n자산번호: [${inboundTargetAsset.assetNo}] (${inboundTargetAsset.modelName})\n입고 일자: ${inboundDate}\n정비 필요 점수: ${calculatedInboundScore}점\n상태 전환: ${calculatedInboundScore === 0 ? '임대가능 (AVAILABLE)' : '입고반납/검수대기 (RENTED_RETURNED)'}\n\n계약 반납 마감, 입고 고유번호 및 자산 정비수리 이력이 정상 연동 등록되었습니다.`);
       
       // 폼 초기화 및 입고 조회 탭으로 이동
       setSelectedInboundAssetId('');
       setInboundAssetNoInput('');
       setSelectedChecklistIds([]);
+      setDefectPhotos({});
       setInboundMemo('');
       setActiveTab('INBOUND');
     } catch (err: any) {
@@ -160,13 +184,13 @@ export const AssetHistory: React.FC = () => {
   };
 
   // 💡 [입고 취소 롤백] 휴먼에러 입고 취소 처리
-  const handleCancelInboundLog = async (logId: string, assetNo: string) => {
-    const reason = prompt(`[휴먼에러 복원 - 입고 취소 롤백]\n\n자산번호 [${assetNo}] 입고 건을 취소하고 자산 상태를 대여중(RENTED)으로 복원하시겠습니까?\n취소 사유를 작성해주세요:`, '사용자 입력 오타로 인한 입고 취소 롤백');
+  const handleCancelInbound = async (log: any) => {
+    const reason = prompt(`[휴먼에러 복원 - 입고 취소 롤백]\n\n자산번호 [${log.assetNo}] 입고 건을 취소하고 자산 상태를 대여중(RENTED)으로 복원하시겠습니까?\n취소 사유를 작성해주세요:`, '사용자 입력 오타로 인한 입고 취소 롤백');
     if (reason === null) return; // 취소 누름
 
     try {
-      await cancelInboundAsset(logId, reason);
-      alert(`✅ [입고 취소 롤백 성공]\n\n자산 [${assetNo}]의 상태 및 계약 매핑이 [대여중(RENTED)]으로 안전하게 원복 되었습니다.\n\n※Audit Trail: 입고 취소(INBOUND_CANCEL) 이력이 기록되어 무누락 추적성이 보장됩니다.`);
+      await cancelInboundAsset(log.id, reason);
+      alert(`✅ [입고 취소 롤백 성공]\n\n자산 [${log.assetNo}]의 상태 및 계약 매핑이 [대여중(RENTED)]으로 안전하게 원복 되었습니다.\n\n※Audit Trail: 입고 취소(INBOUND_CANCEL) 이력이 기록되어 무누락 추적성이 보장됩니다.`);
     } catch (err: any) {
       alert(`⚠️ 입고 취소 롤백 실패: ${err?.message || err}`);
     }
@@ -329,44 +353,87 @@ export const AssetHistory: React.FC = () => {
                   </span>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginTop: '4px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '8px', marginTop: '4px' }}>
                   {inspectionChecklistItems.map(item => {
                     const isChecked = selectedChecklistIds.includes(item.id);
+                    const photo = defectPhotos[item.id];
                     return (
-                      <label
+                      <div
                         key={item.id}
                         style={{
                           display: 'flex',
-                          alignItems: 'center',
-                          gap: '8px',
-                          padding: '8px 10px',
+                          flexDirection: 'column',
+                          gap: '6px',
+                          padding: '10px 12px',
                           borderRadius: '6px',
                           backgroundColor: isChecked ? 'var(--primary-light)' : 'var(--bg-card)',
                           border: `1px solid ${isChecked ? 'var(--primary)' : 'var(--border-color)'}`,
-                          cursor: 'pointer',
-                          fontSize: '12px',
                           transition: 'all 0.15s ease'
                         }}
                       >
-                        <input
-                          type="checkbox"
-                          checked={isChecked}
-                          onChange={e => {
-                            if (e.target.checked) {
-                              setSelectedChecklistIds(prev => [...prev, item.id]);
-                            } else {
-                              setSelectedChecklistIds(prev => prev.filter(id => id !== item.id));
-                            }
-                          }}
-                          style={{ width: '15px', height: '15px', accentColor: 'var(--primary)', cursor: 'pointer' }}
-                        />
-                        <div style={{ flex: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <span style={{ fontWeight: isChecked ? 'bold' : 'normal' }}>{item.name}</span>
-                          <span style={{ fontSize: '11px', color: isChecked ? 'var(--primary)' : 'var(--warning)', fontWeight: 'bold' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                          <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px', margin: 0 }}>
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={e => {
+                                if (e.target.checked) {
+                                  setSelectedChecklistIds(prev => [...prev, item.id]);
+                                } else {
+                                  setSelectedChecklistIds(prev => prev.filter(id => id !== item.id));
+                                  // 체크 해제 시 사진 제거
+                                  setDefectPhotos(prev => {
+                                    const next = { ...prev };
+                                    delete next[item.id];
+                                    return next;
+                                  });
+                                }
+                              }}
+                              style={{ width: '16px', height: '16px', accentColor: 'var(--primary)', cursor: 'pointer' }}
+                            />
+                            <span style={{ fontWeight: isChecked ? 'bold' : 'normal' }}>{item.name}</span>
+                          </label>
+                          <span style={{ fontSize: '12px', color: isChecked ? 'var(--primary)' : 'var(--warning)', fontWeight: 'bold' }}>
                             +{item.score}점
                           </span>
                         </div>
-                      </label>
+
+                        {/* 체크 시 사진 촬영 / PC 업로드 영역 표출 */}
+                        {isChecked && (
+                          <div style={{ marginTop: '4px', paddingTop: '6px', borderTop: '1px dashed var(--border-color)', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <label className="btn-secondary" style={{ padding: '4px 8px', fontSize: '11px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', margin: 0 }}>
+                              <Camera size={13} /> 📸 증상 사진 촬영 / PC 선택
+                              <input
+                                type="file"
+                                accept="image/*"
+                                capture="environment"
+                                style={{ display: 'none' }}
+                                onChange={e => handlePhotoFileChange(item.id, e.target.files?.[0] || null)}
+                              />
+                            </label>
+
+                            {photo ? (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <img src={photo} alt="파손 사진" style={{ width: '36px', height: '36px', objectFit: 'cover', borderRadius: '4px', border: '1px solid var(--border-color)' }} />
+                                <span style={{ fontSize: '11px', color: 'var(--success)', fontWeight: 'bold' }}>✅ 사진 첨부됨</span>
+                                <button
+                                  type="button"
+                                  onClick={() => setDefectPhotos(prev => {
+                                    const next = { ...prev };
+                                    delete next[item.id];
+                                    return next;
+                                  })}
+                                  style={{ border: 'none', background: 'none', color: 'var(--danger)', fontSize: '11px', cursor: 'pointer', textDecoration: 'underline' }}
+                                >
+                                  삭제
+                                </button>
+                              </div>
+                            ) : (
+                              <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>(사진 선택 시 자동 저장)</span>
+                            )}
+                          </div>
+                        )}
+                      </div>
                     );
                   })}
                 </div>
@@ -688,13 +755,14 @@ export const AssetHistory: React.FC = () => {
                 {activeTab === 'INBOUND' && (
                   <tr>
                     <th style={{ whiteSpace: 'nowrap' }}>번호</th>
+                    <th style={{ whiteSpace: 'nowrap' }}>입고 고유번호</th>
                     <th style={{ whiteSpace: 'nowrap' }}>입고일자</th>
                     <th style={{ whiteSpace: 'nowrap' }}>관리번호</th>
                     <th style={{ whiteSpace: 'nowrap' }}>모델명</th>
                     <th style={{ whiteSpace: 'nowrap' }}>고객사 (거래처)</th>
                     <th style={{ whiteSpace: 'nowrap' }}>현장명</th>
                     <th style={{ whiteSpace: 'nowrap' }}>정비 점수</th>
-                    <th style={{ whiteSpace: 'nowrap' }}>검수 메모 / 비고</th>
+                    <th>불량 증상 상세 (하위번호/사진)</th>
                     <th style={{ whiteSpace: 'nowrap' }}>작업 (휴먼에러 복원)</th>
                   </tr>
                 )}
@@ -713,13 +781,14 @@ export const AssetHistory: React.FC = () => {
               <tbody>
                 {filteredTabLogs.length === 0 ? (
                   <tr>
-                    <td colSpan={9} style={{ textAlign: 'center', padding: '36px 0', color: 'var(--text-muted)' }}>
+                    <td colSpan={10} style={{ textAlign: 'center', padding: '36px 0', color: 'var(--text-muted)' }}>
                       선택한 탭 및 검색 조건에 부합하는 자산 이력 데이터가 존재하지 않습니다.
                     </td>
                   </tr>
                 ) : (
                   filteredTabLogs.map((log, idx) => {
                     const repDetail = log.type === 'REPAIR' && log.repairId ? getRepairDetail(log.repairId) : null;
+                    const parsedDefects: InboundDefectDetail[] = log.defectsJson ? JSON.parse(log.defectsJson) : [];
                     return (
                       <tr
                         key={log.id}
@@ -728,17 +797,61 @@ export const AssetHistory: React.FC = () => {
                         title="클릭 시 자산별 생애주기 통합 연대기를 확인합니다."
                       >
                         <td style={{ whiteSpace: 'nowrap' }}>{idx + 1}</td>
-                        <td style={{ whiteSpace: 'nowrap' }}>{log.eventDate}</td>
-                        <td style={{ whiteSpace: 'nowrap' }}>
-                          <strong style={{ color: 'var(--primary)' }}>[{log.assetNo}]</strong>
-                        </td>
-                        <td style={{ whiteSpace: 'nowrap' }}>{log.modelName}</td>
                         
                         {activeTab === 'OUTBOUND' && (
                           <>
+                            <td style={{ whiteSpace: 'nowrap' }}>{log.eventDate}</td>
+                            <td style={{ whiteSpace: 'nowrap' }}><strong style={{ color: 'var(--primary)' }}>[{log.assetNo}]</strong></td>
+                            <td style={{ whiteSpace: 'nowrap' }}>{log.modelName}</td>
                             <td style={{ whiteSpace: 'nowrap' }}><strong>{log.customerName || '-'}</strong></td>
                             <td style={{ whiteSpace: 'nowrap' }}>{log.siteName || '-'}</td>
                             <td style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{log.memo || '-'}</td>
+                          </>
+                        )}
+
+                        {activeTab === 'INBOUND' && (
+                          <>
+                            <td style={{ whiteSpace: 'nowrap', fontWeight: 'bold', color: 'var(--primary)', fontSize: '12px' }}>
+                              {log.inboundNo || '-'}
+                            </td>
+                            <td style={{ whiteSpace: 'nowrap' }}>{log.eventDate}</td>
+                            <td style={{ whiteSpace: 'nowrap' }}><strong style={{ color: 'var(--primary)' }}>[{log.assetNo}]</strong></td>
+                            <td style={{ whiteSpace: 'nowrap' }}>{log.modelName}</td>
+                            <td style={{ whiteSpace: 'nowrap' }}><strong>{log.customerName || '-'}</strong></td>
+                            <td style={{ whiteSpace: 'nowrap' }}>{log.siteName || '-'}</td>
+                            <td style={{ whiteSpace: 'nowrap' }}>
+                              <span className={`badge ${(log.maintenanceScore || 0) === 0 ? 'badge-success' : 'badge-warning'}`}>
+                                {log.maintenanceScore || 0}점
+                              </span>
+                            </td>
+                            <td style={{ fontSize: '12px' }}>
+                              {parsedDefects.length > 0 ? (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                  {parsedDefects.map((d, dIdx) => (
+                                    <div key={dIdx} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                      <span className="badge badge-secondary" style={{ fontSize: '10px' }}>{d.subNo}</span>
+                                      <span>{d.checkitemName} (+{d.score}점)</span>
+                                      {d.photoUrl && (
+                                        <a href={d.photoUrl} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()}>
+                                          <img src={d.photoUrl} alt="사진" style={{ width: '24px', height: '24px', objectFit: 'cover', borderRadius: '3px', border: '1px solid var(--border-color)' }} />
+                                        </a>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                <span>{log.memo || '-'}</span>
+                              )}
+                            </td>
+                            <td style={{ whiteSpace: 'nowrap' }} onClick={e => e.stopPropagation()}>
+                              <button
+                                className="btn-secondary"
+                                onClick={() => handleCancelInbound(log)}
+                                style={{ padding: '3px 8px', fontSize: '11px', color: 'var(--danger)', display: 'flex', alignItems: 'center', gap: '3px' }}
+                              >
+                                <RotateCcw size={12} /> 입고 취소 (롤백)
+                              </button>
+                            </td>
                           </>
                         )}
 
@@ -756,7 +869,7 @@ export const AssetHistory: React.FC = () => {
                               <button
                                 type="button"
                                 className="btn-secondary"
-                                onClick={() => handleCancelInboundLog(log.id, log.assetNo)}
+                                onClick={() => handleCancelInbound(log)}
                                 style={{ fontSize: '11px', padding: '3px 8px', display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--danger)', border: '1px solid var(--danger-light)' }}
                                 title="사용자 휴먼에러 입고 오타 시 원래 대여중 상태로 롤백 복원합니다."
                               >

@@ -583,6 +583,8 @@ export interface Repair {
   purchaseBillId?: string;
   isCustomerFault?: boolean;
   faultImageUrl?: string;
+  inboundNo?: string;
+  defectsJson?: string;
   createdAt: string;
   updatedAt: string;
   // 가상필드
@@ -684,12 +686,21 @@ export interface CashFlowSnapshot {
   createdAt: string;
 }
 
+export interface InboundDefectDetail {
+  subNo: string; // 입고하위번호 (예: INB-20260809-001-01)
+  checkitemId: string;
+  checkitemName: string;
+  score: number;
+  photoUrl?: string; // 모바일 촬영 또는 PC 업로드 파일 URL
+}
+
 export interface AssetInOutLog {
   id: string;
   assetId: string;
   assetNo: string;
   modelName: string;
   type: 'OUTBOUND' | 'INBOUND' | 'INBOUND_CANCEL' | 'REPAIR'; // 출고, 입고, 입고취소롤백, 정비
+  inboundNo?: string; // 입고 고유 번호 (예: INB-20260809-001)
   eventDate: string; // YYYY-MM-DD
   customerId?: string;
   customerName?: string;
@@ -698,6 +709,7 @@ export interface AssetInOutLog {
   deliveryId?: string;
   repairId?: string;
   maintenanceScore?: number;
+  defectsJson?: string; // InboundDefectDetail[] JSON 문자열
   memo?: string;
   createdAt: string;
 }
@@ -1692,6 +1704,20 @@ class LocalDB {
   }
 
   generateNextId(key: string, list: { id: string }[], extraData?: any): string {
+    if (key === 'inboundNo') {
+      const todayStr = new Date().toISOString().split('T')[0].replace(/-/g, '');
+      const prefix = `INB-${todayStr}-`;
+      let maxNum = 0;
+      list.forEach((item: any) => {
+        const checkStr = item.inboundNo || item.id;
+        if (checkStr && typeof checkStr === 'string' && checkStr.startsWith(prefix)) {
+          const numPart = parseInt(checkStr.replace(prefix, ''), 10);
+          if (!isNaN(numPart) && numPart > maxNum) maxNum = numPart;
+        }
+      });
+      return `${prefix}${String(maxNum + 1).padStart(3, '0')}`;
+    }
+
     if (key === 'billings') {
       let ymStr = '';
       if (extraData && typeof extraData.billingYm === 'string') {

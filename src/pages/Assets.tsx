@@ -1,13 +1,13 @@
 import React, { useState, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
-import { Search, Download, Eye, Layers, Edit2, Save, X, FolderOpen } from 'lucide-react';
+import { Search, Download, Eye, Layers, Edit2, Save, X, FolderOpen, Wrench } from 'lucide-react';
 import { exportToExcel } from '../services/excel';
-import { Asset, calculateAssetDepreciation } from '../services/db';
+import { Asset, calculateAssetDepreciation, AssetInOutLog, Repair } from '../services/db';
 import { ASSET_STATUS_SSOT, getAssetStatusLabel, getAssetStatusBadgeClass } from '../config/asset_status_config';
 import { GoogleDrivePickerModal } from '../components/GoogleDrivePickerModal';
 
 export const Assets: React.FC = () => {
-  const { assets, customers, sites, hasPermission, saveAsset, showErrorModal, loadTablesForMenu } = useApp();
+  const { assets, customers, sites, hasPermission, saveAsset, showErrorModal, loadTablesForMenu, assetInOutLogs, repairs } = useApp();
 
   const canEdit = hasPermission('asset', 'save');
 
@@ -33,6 +33,7 @@ export const Assets: React.FC = () => {
   const [selectedAsset, setSelectedAsset] = useState<Asset | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [editForm, setEditForm] = useState<Partial<Asset>>({});
+  const [showHistoryToggle, setShowHistoryToggle] = useState(false); // 명시적 자산이력 조회 버튼 전용 상태
 
   // 구글 드라이브 탐색 모달 상태
   const [isDrivePickerOpen, setIsDrivePickerOpen] = useState(false);
@@ -41,7 +42,31 @@ export const Assets: React.FC = () => {
   const handleSelectAsset = (asset: Asset) => {
     setSelectedAsset(asset);
     setIsEditing(false);
+    setShowHistoryToggle(false);
     setEditForm({ ...asset });
+  };
+
+  // 자산 개별 생애주기 통합 이력 엑셀 내려받기
+  const handleExportAssetHistoryExcel = (asset: Asset) => {
+    const assetLogs = assetInOutLogs.filter((log: AssetInOutLog) => log.assetId === asset.id);
+    if (assetLogs.length === 0) {
+      alert('해당 자산의 누적 이력 데이터가 존재하지 않습니다.');
+      return;
+    }
+    const dataToExport = assetLogs.map((log: AssetInOutLog, idx: number) => ({
+      'No': idx + 1,
+      '구분': log.type === 'OUTBOUND' ? '출고' : log.type === 'INBOUND' ? '입고' : log.type === 'INBOUND_CANCEL' ? '입고취소' : '정비',
+      '입고고유번호': log.inboundNo || '-',
+      '발생일자': log.eventDate,
+      '관리번호': log.assetNo,
+      '모델명': log.modelName,
+      '거래처(고객사)': log.customerName || '-',
+      '현장명': log.siteName || '-',
+      '정비점수': log.maintenanceScore || 0,
+      '특이사항/메모': log.memo || '-'
+    }));
+
+    exportToExcel(dataToExport, `자산이력_${asset.assetNo}_${new Date().toISOString().split('T')[0]}`);
   };
 
   const handleStartEdit = () => {
@@ -730,26 +755,94 @@ export const Assets: React.FC = () => {
                 </div>
               </section>
 
-              {/* 5. 매각 정보 */}
-              {(isEditing ? editForm.status === 'SOLD' : selectedAsset.status === 'SOLD') && (
-                <section>
-                  <hr style={{ border: 'none', borderTop: '1px solid var(--border-color)', marginBottom: '16px' }} />
-                  <h4 style={{ fontWeight: '600', marginBottom: '12px', color: 'var(--danger)', fontSize: '14px' }}>5. 장비 매각 상세 내역</h4>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '12px' }}>
-                    {isEditing ? (
-                      <>
-                        <div><label style={labelStyle}>매각일자</label><input type="date" style={inputStyle} value={editForm.disposalDate || ''} onChange={ef('disposalDate')} /></div>
-                        <div><label style={labelStyle}>매각가격 (원)</label><input type="number" style={inputStyle} value={editForm.disposalPrice ?? ''} onChange={ef('disposalPrice')} /></div>
-                        <div><label style={labelStyle}>매각인수처</label><input style={inputStyle} value={editForm.buyer || ''} onChange={ef('buyer')} /></div>
-                      </>
-                    ) : (
-                      <>
-                        <InfoItem label="매각일자" value={selectedAsset.disposalDate || '-'} />
-                        <InfoItem label="매각가격" value={`${(selectedAsset.disposalPrice || 0).toLocaleString()}원`} />
-                        <InfoItem label="매각인수처" value={selectedAsset.buyer || '-'} />
-                      </>
-                    )}
+              {/* 5. 정비 및 검수 이력 현황 */}
+              {!isEditing && (
+                <section style={{ backgroundColor: 'var(--bg-app)', padding: '14px', borderRadius: '8px', border: '1px solid var(--border-color)', marginTop: '8px' }}>
+                  <h4 style={{ fontWeight: '600', marginBottom: '12px', color: 'var(--warning)', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <Wrench size={16} /> 5. 자산 정비 및 검수 이력 현황
+                  </h4>
+                  
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '12px', marginBottom: '12px' }}>
+                    <InfoItem
+                      label="현재 정비필요점수"
+                      value={
+                        <span className={`badge ${(selectedAsset.maintenanceScore || 0) === 0 ? 'badge-success' : 'badge-warning'}`} style={{ fontWeight: 'bold' }}>
+                          {selectedAsset.maintenanceScore || 0}점 {(selectedAsset.maintenanceScore || 0) === 0 ? '(이상무)' : '(검수대기)'}
+                        </span>
+                      }
+                    />
+                    <InfoItem
+                      label="누적 정비/수리 횟수"
+                      value={`${repairs.filter((r: Repair) => r.assetId === selectedAsset.id).length}회`}
+                    />
+                    <InfoItem
+                      label="최근 입고 일자"
+                      value={assetInOutLogs.filter((l: AssetInOutLog) => l.assetId === selectedAsset.id && l.type === 'INBOUND')[0]?.eventDate || '-'}
+                    />
                   </div>
+
+                  {/* 이력 조회 & 엑셀 내려받기 명시적 버튼 그룹 */}
+                  <div style={{ display: 'flex', gap: '10px', alignItems: 'center', paddingTop: '10px', borderTop: '1px dashed var(--border-color)' }}>
+                    <button
+                      type="button"
+                      className="btn-primary"
+                      onClick={() => setShowHistoryToggle(!showHistoryToggle)}
+                      style={{ flex: 1, padding: '8px 12px', fontSize: '13px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+                    >
+                      <Layers size={15} /> {showHistoryToggle ? '📜 자산 통합 이력 닫기' : '📜 자산 이력 조회'}
+                    </button>
+
+                    <button
+                      type="button"
+                      className="btn-secondary"
+                      onClick={() => handleExportAssetHistoryExcel(selectedAsset)}
+                      style={{ flex: 1, padding: '8px 12px', fontSize: '13px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', color: 'var(--success)', borderColor: 'var(--success)' }}
+                    >
+                      <Download size={15} /> 📥 엑셀 내려받기
+                    </button>
+                  </div>
+
+                  {/* 명시적 [자산 이력 조회] 클릭 시에만 자산이력 연대기 표출 */}
+                  {showHistoryToggle && (
+                    <div style={{ marginTop: '14px', paddingTop: '12px', borderTop: '1px solid var(--border-color)' }}>
+                      <h5 style={{ margin: '0 0 10px 0', fontSize: '13px', fontWeight: 'bold' }}>
+                        자산 생애주기 전체 이력 연대기 ({assetInOutLogs.filter((l: AssetInOutLog) => l.assetId === selectedAsset.id).length}건)
+                      </h5>
+
+                      {assetInOutLogs.filter((l: AssetInOutLog) => l.assetId === selectedAsset.id).length === 0 ? (
+                        <div style={{ padding: '16px', color: 'var(--text-muted)', fontSize: '12px', textAlign: 'center' }}>
+                          기록된 입출고 및 정비 이력이 없습니다.
+                        </div>
+                      ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', borderLeft: '2px solid var(--border-color)', paddingLeft: '12px', marginLeft: '4px' }}>
+                          {assetInOutLogs.filter((l: AssetInOutLog) => l.assetId === selectedAsset.id).map((log: AssetInOutLog, idx: number) => (
+                            <div key={idx} style={{ fontSize: '12px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <span className={`badge ${log.type === 'OUTBOUND' ? 'badge-primary' : log.type === 'INBOUND' ? 'badge-success' : 'badge-warning'}`}>
+                                  {log.type === 'OUTBOUND' ? '출고' : log.type === 'INBOUND' ? '입고' : log.type === 'INBOUND_CANCEL' ? '입고취소' : '정비'}
+                                </span>
+                                <strong>{log.eventDate}</strong>
+                                {log.inboundNo && <span style={{ color: 'var(--primary)', fontWeight: 'bold' }}>[{log.inboundNo}]</span>}
+                                {log.customerName && <span>(거래처: {log.customerName})</span>}
+                              </div>
+                              <div style={{ color: 'var(--text-secondary)', paddingLeft: '4px' }}>
+                                {log.memo || '이상 무'}
+                                {log.defectsJson && (
+                                  <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '4px' }}>
+                                    {JSON.parse(log.defectsJson).map((d: any, dIdx: number) => (
+                                      <span key={dIdx} className="badge badge-secondary" style={{ fontSize: '10px' }}>
+                                        {d.subNo}: {d.checkitemName} (+{d.score}점)
+                                      </span>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </section>
               )}
 
