@@ -30,7 +30,7 @@ export interface ReconcileResultItem {
 export const RentAssets: React.FC = () => {
   const { 
     assets, products, customers, vendors, registerRentedAsset, returnRentedAsset, 
-    hasPermission
+    hasPermission, setActiveTab: setGlobalActiveTab
   } = useApp();
   
   const canSave = hasPermission('rent_asset', 'save');
@@ -38,6 +38,13 @@ export const RentAssets: React.FC = () => {
 
   // 대사 상세 모달 상태 (임차처 거래명세서 원본 vs 자사 DB 1:1 대비)
   const [selectedReconcileDetail, setSelectedReconcileDetail] = useState<ReconcileResultItem | null>(null);
+
+  // 💳 [실무 1:1 대조 & 지급 요청] 모달 상태
+  const [showPaymentRequestModal, setShowPaymentRequestModal] = useState<boolean>(false);
+  const [paymentBankAccount, setPaymentBankAccount] = useState<string>('');
+  const [paymentDueDate, setPaymentDueDate] = useState<string>('');
+  const [paymentMemo, setPaymentMemo] = useState<string>('');
+  const [createdSettlementId, setCreatedSettlementId] = useState<string | null>(null);
 
   // 활성화 탭 상태: CURRENT (임차자산 대장 & 반납 현황 관리 - 기본 메인), RECONCILIATION (임차처 거래명세서 대사 & 매입 정산)
   const [activeTab, setActiveTab] = useState<'CURRENT' | 'RECONCILIATION'>('CURRENT');
@@ -376,34 +383,48 @@ export const RentAssets: React.FC = () => {
     XLSX.writeFile(wb, '원사_임차료_거래명세서_대사양식.xlsx');
   };
 
-  // 선택된 대사 항목만 부분 매입 정산 1-Click 확정 처리
-  const handleConfirmPurchaseSettlement = async () => {
+  // 💳 선택된 대사 항목에 대한 [매입 정산 생성 & 지급 요청] 모달 열기
+  const handleOpenPaymentRequestModal = () => {
     if (!canSave) {
       alert('매입 정산 승인 권한이 없습니다.');
       return;
     }
 
-    // 선택된 ID에 해당하는 명세서 행 추출
     const targetRows = statementRows.filter(r => selectedReconcileIds.includes(r.id));
-
     if (targetRows.length === 0) {
-      alert('매입 정산을 승인할 선택 항목이 없습니다. 대사 테이블에서 체크박스를 선택해주세요.');
+      alert('매입 정산 승인 및 지급 요청을 전송할 선택 항목이 없습니다. 대사 테이블에서 체크박스를 선택해주세요.');
       return;
     }
 
-    const partialTotalBilled = targetRows.reduce((sum, r) => sum + r.billedAmount, 0);
-    const unselectedCount = statementRows.length - targetRows.length;
     const vendorName = selectedVendor || (targetRows[0]?.assetNo ? (rentedAssets.find(a => a.assetNo === targetRows[0].assetNo)?.renter || '기타 원사') : '기타 원사');
+    const matchedVendorMaster = vendors.find(v => v.name === vendorName);
 
-    const confirmMsg = `[부분 매입 정산 확정 승인]\n\n- 선택 승인 대상: ${targetRows.length}건 (전체 ${statementRows.length}건 중)\n- 보류/미승인 유지: ${unselectedCount}건\n- 정산월: ${selectedYm}\n- 거래처: ${vendorName}\n- 선택 확정 청구액: ${partialTotalBilled.toLocaleString()}원\n\n선택한 ${targetRows.length}건만 부분 매입 정산 대장으로 전송하시겠습니까?\n(미선택된 ${unselectedCount}건은 '보류' 상태로 남아 후속 조정이 가능합니다.)`;
+    // 계좌번호 자동 세팅
+    const defaultBank = matchedVendorMaster?.bankAccount || '기업은행 258-060890-01-011';
+    setPaymentBankAccount(defaultBank);
 
-    if (!window.confirm(confirmMsg)) return;
+    // 당월 말일 계산
+    const [y, m] = selectedYm.split('-');
+    const lastDay = new Date(parseInt(y, 10), parseInt(m, 10), 0).getDate();
+    setPaymentDueDate(`${selectedYm}-${String(lastDay).padStart(2, '0')}`);
+
+    setPaymentMemo(`[임차료 대사 완결] ${selectedYm} ${vendorName} 매입 정산 ${targetRows.length}건 지급 요청`);
+    setCreatedSettlementId(null);
+    setShowPaymentRequestModal(true);
+  };
+
+  // 🚀 매입 정산 생성 및 지급 요청 실제 실행
+  const handleExecutePaymentRequest = async () => {
+    const targetRows = statementRows.filter(r => selectedReconcileIds.includes(r.id));
+    if (targetRows.length === 0) return;
+
+    const partialTotalBilled = targetRows.reduce((sum, r) => sum + r.billedAmount, 0);
+    const vendorName = selectedVendor || (targetRows[0]?.assetNo ? (rentedAssets.find(a => a.assetNo === targetRows[0].assetNo)?.renter || '기타 원사') : '기타 원사');
+    const nowStr = new Date().toISOString();
 
     setIsSettling(true);
     try {
-      const nowStr = new Date().toISOString();
-
-      // 1. PurchaseSettlement 레코드 생성 (선택 정산액 기준)
+      // 1. PurchaseSettlement 정산서 생성 (status: 'CONFIRMED' -> 지급 결제 요청 상태)
       const settlement = db.insertRow<PurchaseSettlement>('purchaseSettlements', {
         settlementYm: selectedYm,
         settlementType: 'EQUIPMENT_LEASE',
@@ -412,19 +433,19 @@ export const RentAssets: React.FC = () => {
         paidAmount: 0,
         status: 'CONFIRMED',
         confirmedAt: nowStr,
-        memo: `[부분정산 확정] ${targetRows.length}건 부분 승인 (보류 ${unselectedCount}건 제외)`,
+        memo: paymentMemo || `[임차료 대사 완결] ${targetRows.length}건 승인 (입금계좌: ${paymentBankAccount})`,
         createdAt: nowStr,
         updatedAt: nowStr
       });
 
-      // 2. 선택된 행들만 PurchaseSettlementItem 생성
+      // 2. 1:1 매칭 상세 항목 생성
       targetRows.forEach(row => {
         const matched = rentedAssets.find(a => a.assetNo === row.assetNo);
         db.insertRow<PurchaseSettlementItem>('purchaseSettlementItems', {
           settlementId: settlement.id,
           sourceType: 'EQUIPMENT_LEASE',
           sourceId: matched ? matched.id : row.assetNo,
-          itemDescription: `[임차료 부분승인] ${row.modelName || row.assetNo} (${row.rentStart}~${row.rentEnd})`,
+          itemDescription: `[1:1 매칭] ${row.modelName || row.assetNo} (관리번호: ${row.assetNo}, 기간: ${row.rentStart}~${row.rentEnd})`,
           quantity: 1,
           unitPrice: row.billedAmount,
           amount: row.billedAmount,
@@ -433,14 +454,15 @@ export const RentAssets: React.FC = () => {
       });
 
       await db.awaitPendingWrites();
-      alert(`✅ 선택한 ${targetRows.length}건(${partialTotalBilled.toLocaleString()}원)의 부분 매입 정산 승인이 완료되었습니다!\n(미선택된 ${unselectedCount}건은 '보류' 상태로 계속 유지됩니다.)`);
-      
-      // 승인 완료된 행만 제거하고 미승인(보류) 행은 잔여 유지
+
+      setCreatedSettlementId(settlement.id);
+
+      // 승인 완료된 행 제거
       const remainingRows = statementRows.filter(r => !selectedReconcileIds.includes(r.id));
       setStatementRows(remainingRows);
       setSelectedReconcileIds([]);
     } catch (err: any) {
-      alert(`⚠️ 부분 매입 정산 승인 오류: ${err?.message || err}`);
+      alert(`⚠️ 매입 정산 및 지급 요청 오류: ${err?.message || err}`);
     } finally {
       setIsSettling(false);
     }
@@ -819,12 +841,12 @@ export const RentAssets: React.FC = () => {
 
               {statementRows.length > 0 && canSave && (
                 <button
-                  onClick={handleConfirmPurchaseSettlement}
+                  onClick={handleOpenPaymentRequestModal}
                   disabled={isSettling || selectedReconcileIds.length === 0}
                   className="btn-primary"
-                  style={{ padding: '6px 14px', fontSize: '12px', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '6px', borderRadius: '6px' }}
+                  style={{ padding: '7px 16px', fontSize: '12px', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '6px', borderRadius: '6px', backgroundColor: '#10b981', borderColor: '#10b981' }}
                 >
-                  <CreditCard size={14} /> 💳 선택한 {selectedReconcileIds.length}건만 부분 매입 정산 승인
+                  <CreditCard size={14} /> 💳 선택한 {selectedReconcileIds.length}건 1:1 매칭 & 지급 요청 전송
                 </button>
               )}
             </div>
@@ -1428,6 +1450,206 @@ export const RentAssets: React.FC = () => {
                 닫기
               </button>
             </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* 💳 2. [실무 1:1 대조 & 지급 요청] 전송 모달 */}
+      {showPaymentRequestModal && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.65)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100 }}>
+          <div style={{ backgroundColor: 'var(--bg-card)', color: 'var(--text-main)', padding: '24px', borderRadius: '12px', width: '780px', maxWidth: '95%', maxHeight: '92vh', overflowY: 'auto', border: '1px solid var(--border-color)', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.3)' }}>
+            
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', borderBottom: '2px solid var(--border-color)', paddingBottom: '12px' }}>
+              <div>
+                <h2 style={{ fontSize: '16px', fontWeight: '800', margin: 0, display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-main)' }}>
+                  💳 [1:1 매칭 완결] 임차료 매입 정산 확정 & 지급 요청
+                </h2>
+                <p style={{ fontSize: '11px', color: 'var(--text-muted)', margin: '4px 0 0 0' }}>
+                  실무 기록과 원사 청구 명세서 교차 검증 결과를 바탕으로 매입 정산 대장에 [정산확정]을 등록하고 지급을 요청합니다.
+                </p>
+              </div>
+              <button onClick={() => setShowPaymentRequestModal(false)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}>
+                <XCircle size={20} />
+              </button>
+            </div>
+
+            {/* 정산 요약 카드 */}
+            {(() => {
+              const targetRows = statementRows.filter(r => selectedReconcileIds.includes(r.id));
+              const totalBilled = targetRows.reduce((sum, r) => sum + r.billedAmount, 0);
+              const totalTax = targetRows.reduce((sum, r) => sum + (r.taxAmount || Math.round(r.billedAmount * 0.1)), 0);
+              const totalSum = totalBilled + totalTax;
+              const vendorName = selectedVendor || (targetRows[0]?.assetNo ? (rentedAssets.find(a => a.assetNo === targetRows[0].assetNo)?.renter || '기타 원사') : '기타 원사');
+
+              return (
+                <div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '10px', marginBottom: '16px', backgroundColor: 'var(--bg-app)', padding: '14px', borderRadius: '10px', border: '1px solid var(--border-color)' }}>
+                    <div>
+                      <div style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-muted)' }}>임차처 (원사)</div>
+                      <div style={{ fontSize: '13px', fontWeight: '800', color: '#3b82f6', marginTop: '2px' }}>{vendorName}</div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-muted)' }}>청구 정산년월</div>
+                      <div style={{ fontSize: '13px', fontWeight: '800', color: 'var(--text-main)', marginTop: '2px' }}>{selectedYm}</div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-muted)' }}>승인 선택건수</div>
+                      <div style={{ fontSize: '13px', fontWeight: '800', color: '#10b981', marginTop: '2px' }}>{targetRows.length}건</div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-muted)' }}>총 지급 요청액</div>
+                      <div style={{ fontSize: '14px', fontWeight: '800', color: '#ef4444', marginTop: '2px' }}>₩{totalSum.toLocaleString()}원</div>
+                    </div>
+                  </div>
+
+                  {/* 실무 1:1 대조 항목 상세 리스트 */}
+                  <div style={{ marginBottom: '16px' }}>
+                    <div style={{ fontSize: '12px', fontWeight: '800', color: 'var(--text-main)', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <CheckCircle size={14} color="#10b981" /> 1:1 실무 이력 교차 검증 대상 목록 ({targetRows.length}건)
+                    </div>
+                    <div style={{ maxHeight: '180px', overflowY: 'auto', border: '1px solid var(--border-color)', borderRadius: '8px' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px' }}>
+                        <thead>
+                          <tr style={{ backgroundColor: 'var(--bg-card-header)', borderBottom: '1px solid var(--border-color)', textAlign: 'left', color: 'var(--text-muted)' }}>
+                            <th style={{ padding: '6px 10px', whiteSpace: 'nowrap' }}>관리번호</th>
+                            <th style={{ padding: '6px 10px', whiteSpace: 'nowrap' }}>모델명</th>
+                            <th style={{ padding: '6px 10px', whiteSpace: 'nowrap' }}>자사 DB 약정 정보</th>
+                            <th style={{ padding: '6px 10px', whiteSpace: 'nowrap', textAlign: 'right' }}>원사 청구액</th>
+                            <th style={{ padding: '6px 10px', whiteSpace: 'nowrap', textAlign: 'center' }}>대사 상태</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {targetRows.map((r, idx) => {
+                            const matched = rentedAssets.find(a => a.assetNo === r.assetNo);
+                            const recItem = reconcileResults.find(res => res.id === r.id);
+                            return (
+                              <tr key={r.id} style={{ borderBottom: '1px solid var(--border-color)', backgroundColor: idx % 2 === 1 ? 'var(--bg-app)' : 'transparent' }}>
+                                <td style={{ padding: '6px 10px', fontWeight: '700', whiteSpace: 'nowrap' }}>{r.assetNo}</td>
+                                <td style={{ padding: '6px 10px', whiteSpace: 'nowrap' }}>{r.modelName}</td>
+                                <td style={{ padding: '6px 10px' }}>
+                                  {matched ? (
+                                    <span style={{ color: '#10b981', fontWeight: '600' }}>
+                                      약정 ₩{(matched.monthlyRentFee || 0).toLocaleString()}원 (반납: {matched.actualRentReturnDate || '가동중'})
+                                    </span>
+                                  ) : (
+                                    <span style={{ color: r.itemType === 'EQUIPMENT' ? '#ef4444' : '#3b82f6', fontWeight: '600' }}>
+                                      {r.itemType === 'EQUIPMENT' ? '⚠️ 자사 미등록 유령장비' : `📦 기타비용 (${r.memo || '비장비 항목'})`}
+                                    </span>
+                                  )}
+                                </td>
+                                <td style={{ padding: '6px 10px', textAlign: 'right', fontWeight: '700', color: 'var(--text-main)', whiteSpace: 'nowrap' }}>
+                                  ₩{r.billedAmount.toLocaleString()}원
+                                </td>
+                                <td style={{ padding: '6px 10px', textAlign: 'center', whiteSpace: 'nowrap' }}>
+                                  <span className={`badge ${recItem?.badgeClass || 'badge-success'}`} style={{ fontSize: '10px', padding: '2px 6px' }}>
+                                    {recItem?.statusLabel || '정상'}
+                                  </span>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  {/* 결재 & 지급 요청 정보 입력 폼 (전사 표준 상하 세로 스택 레이아웃) */}
+                  {createdSettlementId ? (
+                    <div style={{ padding: '16px', backgroundColor: 'rgba(16, 185, 129, 0.1)', border: '1px solid #10b981', borderRadius: '8px', marginBottom: '16px', textAlign: 'center' }}>
+                      <h3 style={{ fontSize: '14px', fontWeight: '800', color: '#10b981', margin: '0 0 6px 0' }}>
+                        🎉 [지급 요청 완료] 매입 정산이 성공적으로 확정 승인되었습니다!
+                      </h3>
+                      <p style={{ fontSize: '12px', color: 'var(--text-main)', margin: '0 0 12px 0' }}>
+                        정산서 번호: <strong>{createdSettlementId}</strong> | 재무팀 지급 대장에 <strong>[정산확정]</strong> 상태로 등록되었습니다.
+                      </p>
+                      <div style={{ display: 'flex', justifyContent: 'center', gap: '10px' }}>
+                        <button
+                          onClick={() => {
+                            setShowPaymentRequestModal(false);
+                            setGlobalActiveTab('purchase_settlement');
+                          }}
+                          style={{ padding: '8px 16px', backgroundColor: '#3b82f6', color: '#fff', border: 'none', borderRadius: '6px', fontSize: '12px', fontWeight: '800', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
+                        >
+                          <CreditCard size={14} /> 💳 [월말 매입 정산 대장]으로 즉시 이동하여 계좌이체 지급
+                        </button>
+                        <button
+                          onClick={() => setShowPaymentRequestModal(false)}
+                          style={{ padding: '8px 14px', backgroundColor: 'var(--bg-app)', color: 'var(--text-main)', border: '1px solid var(--border-color)', borderRadius: '6px', fontSize: '12px', fontWeight: '700', cursor: 'pointer' }}
+                        >
+                          닫기
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '20px', backgroundColor: 'var(--bg-app)', padding: '16px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                      <div style={{ fontSize: '12px', fontWeight: '800', color: 'var(--text-main)', marginBottom: '4px' }}>
+                        📝 결재 & 지급 요청 정보
+                      </div>
+                      
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                          <label style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                            원사 입금 계좌번호 (Bank Account)
+                          </label>
+                          <input
+                            type="text"
+                            value={paymentBankAccount}
+                            onChange={e => setPaymentBankAccount(e.target.value)}
+                            placeholder="예: 기업은행 258-060890-01-011 (원사명)"
+                            style={{ padding: '7px 10px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-card)', color: 'var(--text-main)', fontSize: '12px' }}
+                          />
+                        </div>
+
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                          <label style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                            지급 희망 예정일 (Payment Due Date)
+                          </label>
+                          <input
+                            type="date"
+                            value={paymentDueDate}
+                            onChange={e => setPaymentDueDate(e.target.value)}
+                            style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-card)', color: 'var(--text-main)', fontSize: '12px' }}
+                          />
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        <label style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                          결재 및 지급 요청 메모 (Memo)
+                        </label>
+                        <input
+                          type="text"
+                          value={paymentMemo}
+                          onChange={e => setPaymentMemo(e.target.value)}
+                          placeholder="지급 요청 관련 사유 또는 부서 전달 사항"
+                          style={{ padding: '7px 10px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-card)', color: 'var(--text-main)', fontSize: '12px' }}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {!createdSettlementId && (
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+                      <button
+                        onClick={() => setShowPaymentRequestModal(false)}
+                        style={{ padding: '8px 16px', backgroundColor: 'var(--bg-app)', color: 'var(--text-main)', border: '1px solid var(--border-color)', borderRadius: '6px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer' }}
+                      >
+                        취소
+                      </button>
+                      <button
+                        onClick={handleExecutePaymentRequest}
+                        disabled={isSettling}
+                        className="btn-primary"
+                        style={{ padding: '8px 20px', backgroundColor: '#10b981', borderColor: '#10b981', fontSize: '12px', fontWeight: 'bold', borderRadius: '6px', display: 'flex', alignItems: 'center', gap: '6px' }}
+                      >
+                        <CreditCard size={14} /> 🚀 매입 정산 확정 & 재무팀 지급 요청 전송
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
 
           </div>
         </div>
