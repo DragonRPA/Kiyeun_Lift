@@ -719,12 +719,9 @@ ${activeSpecs.map((s, idx) => `  ${idx + 1}. [적용] ${s.label}`).join('\n') ||
       {/* 타이틀 및 가이드 배너 */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
-          <h2 style={{ fontWeight: '700', marginBottom: '4px' }}>출고 요청 입력 (디지털 파서)</h2>
+          <h2 style={{ fontWeight: '700', marginBottom: '4px' }}>출고 요청 입력</h2>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <p style={{ fontSize: '13px', color: 'var(--text-muted)', margin: 0 }}>카카오톡/메신저로 전송받은 비정형 출고 의뢰 텍스트를 AI 없이 브라우저 단독 정규식으로 안전하게 분할 분석합니다.</p>
-            <span className="badge badge-success" style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px' }}>
-              <Zap size={12} /> AI-less Deterministic Parser
-            </span>
+            <p style={{ fontSize: '13px', color: 'var(--text-muted)', margin: 0 }}>카카오톡/메신저로 전송받은 비정형 출고 의뢰 텍스트를 브라우저 단독 정규식으로 안전하게 분할 분석합니다.</p>
           </div>
         </div>
       </div>

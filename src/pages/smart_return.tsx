@@ -568,8 +568,23 @@ export const SmartReturn: React.FC = () => {
                               type="checkbox"
                               checked={isChecked}
                               onChange={() => handleSalesAssetCheckboxChange(asset.id)}
-                              style={{ width: '16px', height: '16px', flexShrink: 0, cursor: 'pointer' }}
+                              style={{ display: 'none' }}
                             />
+                            <div style={{
+                              width: '18px',
+                              height: '18px',
+                              borderRadius: '4px',
+                              border: isChecked ? '2px solid var(--primary)' : '1px solid var(--border-color)',
+                              backgroundColor: isChecked ? 'var(--primary)' : 'var(--bg-app)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              color: '#ffffff',
+                              flexShrink: 0,
+                              transition: 'all 0.15s ease'
+                            }}>
+                              {isChecked && <Check size={13} style={{ strokeWidth: 3.5, color: '#ffffff' }} />}
+                            </div>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                               <strong style={{ color: 'var(--primary)' }}>[{asset.assetNo}]</strong>
                               <span style={{ fontWeight: 600 }}>{asset.modelName}</span>
