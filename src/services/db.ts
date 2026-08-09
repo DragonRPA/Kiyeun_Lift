@@ -1380,7 +1380,23 @@ class LocalDB {
   get assets() { return this.get<Asset>('assets', SEED_ASSETS); }
   set assets(val: Asset[]) { this.set('assets', val); }
 
-  get inspectionChecklistItems() { return this.get<InspectionChecklistItem>('inspectionChecklistItems', SEED_INSPECTION_CHECKLIST_ITEMS); }
+  get inspectionChecklistItems() {
+    const list = this.get<InspectionChecklistItem>('inspectionChecklistItems', SEED_INSPECTION_CHECKLIST_ITEMS);
+    let isMigrated = false;
+    const migrated = list.map(item => {
+      if (item.code === 'DEFECT_A') { isMigrated = true; return { ...item, code: 'CHK-0000001' }; }
+      if (item.code === 'DEFECT_B') { isMigrated = true; return { ...item, code: 'CHK-0000002' }; }
+      if (item.code === 'DEFECT_OIL_LEAK') { isMigrated = true; return { ...item, code: 'CHK-0000003' }; }
+      if (item.code === 'DEFECT_WIRE_CUT') { isMigrated = true; return { ...item, code: 'CHK-0000004' }; }
+      if (item.code === 'DEFECT_TIRE_DAMAGED') { isMigrated = true; return { ...item, code: 'CHK-0000005' }; }
+      return item;
+    });
+
+    if (isMigrated) {
+      this.set('inspectionChecklistItems', migrated);
+    }
+    return migrated;
+  }
   set inspectionChecklistItems(val: InspectionChecklistItem[]) { this.set('inspectionChecklistItems', val); }
 
   get consumables() { return this.get<Consumable>('consumables', SEED_CONSUMABLES); }
@@ -1518,7 +1534,8 @@ class LocalDB {
       depreciationLogs: 'depreciation_logs',
       purchaseSettlements: 'purchase_settlements',
       purchaseSettlementItems: 'purchase_settlement_items',
-      externalLeases: 'external_leases'
+      externalLeases: 'external_leases',
+      inspectionChecklistItems: 'inspection_checklist_items'
     };
     return mapping[key] || key;
   }
