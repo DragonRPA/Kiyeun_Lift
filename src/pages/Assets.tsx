@@ -55,7 +55,7 @@ export const Assets: React.FC = () => {
     }
     const dataToExport = assetLogs.map((log: AssetInOutLog, idx: number) => ({
       'No': idx + 1,
-      '구분': log.type === 'OUTBOUND' ? '출고' : log.type === 'INBOUND' ? '입고' : log.type === 'INBOUND_CANCEL' ? '입고취소' : '정비',
+      '구분': log.type === 'ACQUISITION' ? '취득' : log.type === 'OUTBOUND' ? '출고' : log.type === 'INBOUND' ? '입고' : log.type === 'INBOUND_CANCEL' ? '입고취소' : log.type === 'DISPOSAL' ? '매각' : '정비',
       '입고고유번호': log.inboundNo || '-',
       '발생일자': log.eventDate,
       '관리번호': log.assetNo,
@@ -815,30 +815,48 @@ export const Assets: React.FC = () => {
                         </div>
                       ) : (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', borderLeft: '2px solid var(--border-color)', paddingLeft: '12px', marginLeft: '4px' }}>
-                          {assetInOutLogs.filter((l: AssetInOutLog) => l.assetId === selectedAsset.id).map((log: AssetInOutLog, idx: number) => (
-                            <div key={idx} style={{ fontSize: '12px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                <span className={`badge ${log.type === 'OUTBOUND' ? 'badge-primary' : log.type === 'INBOUND' ? 'badge-success' : 'badge-warning'}`}>
-                                  {log.type === 'OUTBOUND' ? '출고' : log.type === 'INBOUND' ? '입고' : log.type === 'INBOUND_CANCEL' ? '입고취소' : '정비'}
-                                </span>
-                                <strong>{log.eventDate}</strong>
-                                {log.inboundNo && <span style={{ color: 'var(--primary)', fontWeight: 'bold' }}>[{log.inboundNo}]</span>}
-                                {log.customerName && <span>(거래처: {log.customerName})</span>}
+                          {(() => {
+                            const rawLogs = assetInOutLogs.filter((l: AssetInOutLog) => l.assetId === selectedAsset.id);
+                            const hasAcquisition = rawLogs.some(l => l.type === 'ACQUISITION');
+                            const displayLogs = [...rawLogs];
+                            if (!hasAcquisition && selectedAsset.acquisitionDate) {
+                              displayLogs.unshift({
+                                id: `acq-fallback-${selectedAsset.id}`,
+                                assetId: selectedAsset.id,
+                                assetNo: selectedAsset.assetNo,
+                                modelName: selectedAsset.modelName,
+                                type: 'ACQUISITION',
+                                eventDate: selectedAsset.acquisitionDate,
+                                memo: `자산 최초 취득 및 대장 등록 (취득일: ${selectedAsset.acquisitionDate} / 취득가: ${(selectedAsset.acquisitionPrice || 0).toLocaleString()}원 / 임차/구입처: ${selectedAsset.renter || '-'})`,
+                                createdAt: selectedAsset.createdAt || selectedAsset.acquisitionDate
+                              });
+                            }
+
+                            return displayLogs.map((log: AssetInOutLog, idx: number) => (
+                              <div key={idx} style={{ fontSize: '12px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                  <span className={`badge ${log.type === 'ACQUISITION' ? 'badge-info' : log.type === 'OUTBOUND' ? 'badge-primary' : log.type === 'INBOUND' ? 'badge-success' : log.type === 'DISPOSAL' ? 'badge-danger' : 'badge-warning'}`}>
+                                    {log.type === 'ACQUISITION' ? '취득' : log.type === 'OUTBOUND' ? '출고' : log.type === 'INBOUND' ? '입고' : log.type === 'INBOUND_CANCEL' ? '입고취소' : log.type === 'DISPOSAL' ? '매각' : '정비'}
+                                  </span>
+                                  <strong>{log.eventDate}</strong>
+                                  {log.inboundNo && <span style={{ color: 'var(--primary)', fontWeight: 'bold' }}>[{log.inboundNo}]</span>}
+                                  {log.customerName && <span>(거래처: {log.customerName})</span>}
+                                </div>
+                                <div style={{ color: 'var(--text-secondary)', paddingLeft: '4px' }}>
+                                  {log.memo || '이상 무'}
+                                  {log.defectsJson && (
+                                    <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '4px' }}>
+                                      {JSON.parse(log.defectsJson).map((d: any, dIdx: number) => (
+                                        <span key={dIdx} className="badge badge-secondary" style={{ fontSize: '10px' }}>
+                                          {d.subNo}: {d.checkitemName} (+{d.score}점)
+                                        </span>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
                               </div>
-                              <div style={{ color: 'var(--text-secondary)', paddingLeft: '4px' }}>
-                                {log.memo || '이상 무'}
-                                {log.defectsJson && (
-                                  <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '4px' }}>
-                                    {JSON.parse(log.defectsJson).map((d: any, dIdx: number) => (
-                                      <span key={dIdx} className="badge badge-secondary" style={{ fontSize: '10px' }}>
-                                        {d.subNo}: {d.checkitemName} (+{d.score}점)
-                                      </span>
-                                    ))}
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          ))}
+                            ));
+                          })()}
                         </div>
                       )}
                     </div>

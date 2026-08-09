@@ -743,6 +743,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const saveAsset = async (asset: Omit<Asset, 'id' | 'createdAt' | 'updatedAt'> & { id?: string }) => {
     let result;
+    const isNew = !asset.id;
+    const existingAsset = asset.id ? db.assets.find(a => a.id === asset.id) : null;
+
     if (asset.id) {
       result = db.updateRow<Asset>('assets', asset.id, asset as Asset);
     } else {
@@ -752,6 +755,35 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updatedAt: new Date().toISOString()
       } as Omit<Asset, 'id'>);
     }
+
+    if (result) {
+      // 1. 신규 취득(ACQUISITION) 이력 자동 기록
+      if (isNew) {
+        db.insertRow<AssetInOutLog>('assetInOutLogs', {
+          assetId: result.id,
+          assetNo: result.assetNo,
+          modelName: result.modelName,
+          type: 'ACQUISITION',
+          eventDate: result.acquisitionDate || new Date().toISOString().split('T')[0],
+          memo: `자산 최초 취득 및 대장 등록 (취득일: ${result.acquisitionDate || '-'} / 취득가: ${(result.acquisitionPrice || 0).toLocaleString()}원 / 임차/구입처: ${result.renter || '-'})`,
+          createdAt: new Date().toISOString()
+        });
+      }
+
+      // 2. 자산 매각(DISPOSAL) 이력 자동 기록
+      if (result.status === 'SOLD' && (!existingAsset || existingAsset.status !== 'SOLD')) {
+        db.insertRow<AssetInOutLog>('assetInOutLogs', {
+          assetId: result.id,
+          assetNo: result.assetNo,
+          modelName: result.modelName,
+          type: 'DISPOSAL',
+          eventDate: result.disposalDate || new Date().toISOString().split('T')[0],
+          memo: `자산 매각 완료 (매각일: ${result.disposalDate || '-'} / 매각가: ${(result.disposalPrice || 0).toLocaleString()}원 / 매각인수처: ${result.buyer || '-'})`,
+          createdAt: new Date().toISOString()
+        });
+      }
+    }
+
     try {
       await db.awaitPendingWrites();
     } catch (err: any) {
@@ -3085,20 +3117,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updatedAt: new Date().toISOString()
       });
 
-      // 정비 완료 시 정비 이력 로그 추가
-      if (repairData.status === 'COMPLETED') {
-        db.insertRow<AssetInOutLog>('assetInOutLogs', {
-          assetId: asset.id,
-          assetNo: asset.assetNo,
-          modelName: asset.modelName,
-          type: 'REPAIR',
-          eventDate: repairData.repairDate || new Date().toISOString().split('T')[0],
-          repairId: repairId,
-          maintenanceScore: 0,
-          memo: `정비 완료: ${repairData.details || ''}`,
-          createdAt: new Date().toISOString()
-        });
-      }
+      // 정비 수리 이력 로그 추가 (완료 또는 진행 중)
+      db.insertRow<AssetInOutLog>('assetInOutLogs', {
+        assetId: asset.id,
+        assetNo: asset.assetNo,
+        modelName: asset.modelName,
+        type: 'REPAIR',
+        eventDate: repairData.repairDate || new Date().toISOString().split('T')[0],
+        repairId: repairId,
+        inboundNo: repairData.inboundNo,
+        maintenanceScore: repairData.status === 'COMPLETED' ? 0 : asset.maintenanceScore,
+        memo: repairData.status === 'COMPLETED' ? `정비/수리 완료 (수리비용: ${totalRepairCost.toLocaleString()}원): ${repairData.details || ''}` : `정비/수리 진행 (접수/수리중): ${repairData.details || ''}`,
+        createdAt: new Date().toISOString()
+      });
     }
 
     refreshAllData();

@@ -699,7 +699,7 @@ export interface AssetInOutLog {
   assetId: string;
   assetNo: string;
   modelName: string;
-  type: 'OUTBOUND' | 'INBOUND' | 'INBOUND_CANCEL' | 'REPAIR'; // 출고, 입고, 입고취소롤백, 정비
+  type: 'ACQUISITION' | 'OUTBOUND' | 'INBOUND' | 'INBOUND_CANCEL' | 'REPAIR' | 'DISPOSAL'; // 취득등록, 출고, 입고, 입고취소롤백, 정비, 매각
   inboundNo?: string; // 입고 고유 번호 (예: INB-20260809-001)
   eventDate: string; // YYYY-MM-DD
   customerId?: string;
