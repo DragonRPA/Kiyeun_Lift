@@ -10,6 +10,7 @@ import { exportToExcel } from '../services/excel';
 import * as XLSX from 'xlsx';
 
 import { VendorStatementRow, parseVendorStatementExcel } from '../services/vendorStatementParser';
+import { parsePdfStatement } from '../services/pdfStatementParser';
 
 // 5대 대사 결과 항목 인터페이스
 export type ReconcileStatusKey = 'MATCHED' | 'PRICE_MISMATCH' | 'PERIOD_MISMATCH' | 'UNREGISTERED' | 'MISSING_BILLING';
@@ -219,36 +220,53 @@ export const RentAssets: React.FC = () => {
     return { totalCount, totalBilled, matchedCount, priceMismatchCount, periodMismatchCount, unregisteredCount, missingCount, totalDiffAmount };
   }, [statementRows, reconcileResults]);
 
-  // 엑셀 업로드 처리 핸들러 (범용 파서 엔진 기반: 롯데렌탈 등 동적 헤더 행 탐색 & 기타 비용/합계행 자동 처리)
-  const handleExcelUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // 거래명세서 파일 업로드 처리 핸들러 (엑셀 .xlsx / .xls 및 PDF .pdf 통합 범용 파서 연동)
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
     const file = files[0];
+    const isPdf = file.name.toLowerCase().endsWith('.pdf');
     const reader = new FileReader();
 
-    reader.onload = (event) => {
+    reader.onload = async (event) => {
       try {
-        const data = new Uint8Array(event.target?.result as ArrayBuffer);
-        const workbook = XLSX.read(data, { type: 'array' });
-        const firstSheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[firstSheetName];
-        
-        // 스마트 다중 양식 범용 파서 호출
-        const parseResult = parseVendorStatementExcel(worksheet, selectedYm);
+        const data = event.target?.result as ArrayBuffer;
 
-        if (parseResult.detectedVendor) {
-          setSelectedVendor(parseResult.detectedVendor);
+        if (isPdf) {
+          // PDF 파일 텍스트 정밀 파싱 서비스 연동 (현대렌탈 등 지원)
+          const parseResult = await parsePdfStatement(data, selectedYm);
+
+          if (parseResult.detectedVendor) {
+            setSelectedVendor(parseResult.detectedVendor);
+          }
+
+          setStatementRows(parseResult.rows);
+          setSelectedReconcileIds(parseResult.rows.map(r => r.id));
+
+          const vendorNotice = parseResult.detectedVendor ? `[${parseResult.detectedVendor}]` : 'PDF 거래명세서';
+          alert(`✅ ${vendorNotice} PDF 파싱 완결!\n- 파싱 항목: 총 ${parseResult.totalParsedCount}건\n- 총 공급가액: ₩${parseResult.totalParsedAmount.toLocaleString()}\n- 부가세: ₩${parseResult.totalParsedTax.toLocaleString()}\n\n자사 DB 자산대장과의 1:1 대사가 자동으로 완료되었습니다.`);
+        } else {
+          // 엑셀 파일 (.xlsx / .xls) 스마트 범용 파서 연동
+          const workbook = XLSX.read(new Uint8Array(data), { type: 'array' });
+          const firstSheetName = workbook.SheetNames[0];
+          const worksheet = workbook.Sheets[firstSheetName];
+          
+          const parseResult = parseVendorStatementExcel(worksheet, selectedYm);
+
+          if (parseResult.detectedVendor) {
+            setSelectedVendor(parseResult.detectedVendor);
+          }
+
+          setStatementRows(parseResult.rows);
+          setSelectedReconcileIds(parseResult.rows.map(r => r.id));
+
+          const vendorNotice = parseResult.detectedVendor ? `[${parseResult.detectedVendor}]` : '거래명세서';
+          const headerNotice = parseResult.headerRowIndex >= 0 ? ` (헤더 ${parseResult.headerRowIndex + 1}행 인식)` : '';
+          alert(`✅ ${vendorNotice} 엑셀 업로드 완결!${headerNotice}\n- 파싱 항목: 총 ${parseResult.totalParsedCount}건\n- 총 공급가액: ₩${parseResult.totalParsedAmount.toLocaleString()}\n- 세액: ₩${parseResult.totalParsedTax.toLocaleString()}\n\n자사 DB 자산대장과의 1:1 대사가 자동으로 완료되었습니다.`);
         }
-
-        setStatementRows(parseResult.rows);
-        setSelectedReconcileIds(parseResult.rows.map(r => r.id));
-
-        const vendorNotice = parseResult.detectedVendor ? `[${parseResult.detectedVendor}]` : '거래명세서';
-        const headerNotice = parseResult.headerRowIndex >= 0 ? ` (헤더 ${parseResult.headerRowIndex + 1}행 인식)` : '';
-        alert(`✅ ${vendorNotice} 양식 업로드 완료!${headerNotice}\n- 파싱 항목: 총 ${parseResult.totalParsedCount}건\n- 총 공급가액: ₩${parseResult.totalParsedAmount.toLocaleString()}\n- 세액: ₩${parseResult.totalParsedTax.toLocaleString()}\n\n자사 DB 자산대장과의 1:1 대사가 자동으로 완료되었습니다.`);
       } catch (err: any) {
-        alert(`⚠️ 엑셀 파일 읽기 오류: ${err?.message || err}`);
+        alert(`⚠️ 거래명세서 파일 파싱 오류: ${err?.message || err}`);
       }
     };
     reader.readAsArrayBuffer(file);
@@ -688,8 +706,8 @@ export const RentAssets: React.FC = () => {
                 <input
                   type="file"
                   ref={fileInputRef}
-                  onChange={handleExcelUpload}
-                  accept=".xlsx, .xls"
+                  onChange={handleFileUpload}
+                  accept=".xlsx, .xls, .pdf"
                   style={{ display: 'none' }}
                 />
 
@@ -698,7 +716,7 @@ export const RentAssets: React.FC = () => {
                   className="btn-primary"
                   style={{ padding: '8px 14px', fontSize: '12px', fontWeight: '700', borderRadius: '6px', display: 'flex', alignItems: 'center', gap: '6px' }}
                 >
-                  <Upload size={14} /> 📄 임차처 거래명세서(엑셀) 업로드
+                  <Upload size={14} /> 📄 임차처 거래명세서 업로드 (엑셀 / PDF)
                 </button>
 
                 <button
