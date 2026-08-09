@@ -153,20 +153,35 @@ export const PurchaseSettlementPage: React.FC = () => {
     await confirmPurchaseSettlement(id);
   };
 
+  const [isSubmittingPayment, setIsSubmittingPayment] = useState(false);
+
   const handlePaymentSubmit = async () => {
     if (!paymentModal) return;
     const amt = parseFloat(paymentForm.paidAmount);
-    if (!amt || amt <= 0) return;
-    await recordPurchaseSettlementPayment(paymentModal.id, {
-      paidAmount: amt,
-      paymentDate: paymentForm.paymentDate,
-      paymentMethod: paymentForm.paymentMethod,
-      bankAccount: paymentForm.bankAccount || undefined,
-      bankTransactionId: selectedBankTxId || undefined,
-      memo: paymentForm.memo || undefined,
-    });
-    setPaymentModal(null);
-    setSelectedBankTxId(null);
+    if (!amt || amt <= 0) {
+      alert('지급 금액을 올바르게 입력해주세요.');
+      return;
+    }
+
+    setIsSubmittingPayment(true);
+    try {
+      await recordPurchaseSettlementPayment(paymentModal.id, {
+        paidAmount: amt,
+        paymentDate: paymentForm.paymentDate,
+        paymentMethod: paymentForm.paymentMethod,
+        bankAccount: paymentForm.bankAccount || undefined,
+        bankTransactionId: selectedBankTxId || undefined,
+        memo: paymentForm.memo || undefined,
+      });
+
+      alert(`✅ [${paymentModal.vendorName}] 매입처 ${amt.toLocaleString()}원 지급 대사 승인이 완결되었습니다.`);
+      setPaymentModal(null);
+      setSelectedBankTxId(null);
+    } catch (err: any) {
+      alert(`❌ 지급 처리 실패: ${err?.message || err}`);
+    } finally {
+      setIsSubmittingPayment(false);
+    }
   };
 
   const handleMemoSave = async (id: string) => {
@@ -529,15 +544,20 @@ export const PurchaseSettlementPage: React.FC = () => {
                         <div
                           key={tx.id}
                           onClick={() => {
-                            setSelectedBankTxId(tx.id);
-                            setPaymentForm(prev => ({
-                              ...prev,
-                              paidAmount: tx.withdrawAmount.toString(),
-                              paymentDate: (tx.transactionDate || '').substring(0, 10),
-                              paymentMethod: '계좌이체',
-                              bankAccount: tx.bankName || prev.bankAccount,
-                              memo: `[통장출금대사] ${tx.summary || tx.senderName || ''}`
-                            }));
+                            if (isSelected) {
+                              setSelectedBankTxId(null);
+                            } else {
+                              setSelectedBankTxId(tx.id);
+                              // 지급 금액은 기본 정산 미지급 잔액으로 추천하되, 통장 정보 자동 채움
+                              setPaymentForm(prev => ({
+                                ...prev,
+                                paidAmount: (remainingAmt > 0 ? remainingAmt : tx.withdrawAmount).toString(),
+                                paymentDate: (tx.transactionDate || '').substring(0, 10),
+                                paymentMethod: '계좌이체',
+                                bankAccount: (tx.bankName || '통장출금') + ' ' + (tx.counterparty || tx.senderName || ''),
+                                memo: `[통장출금대사] ${tx.summary || tx.senderName || ''}`
+                              }));
+                            }
                           }}
                           style={{
                             padding: '8px 12px', borderRadius: '6px', cursor: 'pointer',
@@ -551,7 +571,9 @@ export const PurchaseSettlementPage: React.FC = () => {
                               type="radio"
                               name="bankTxSelect"
                               checked={isSelected}
-                              onChange={() => {}}
+                              onChange={() => {
+                                setSelectedBankTxId(isSelected ? null : tx.id);
+                              }}
                             />
                             <div>
                               <div style={{ fontWeight: 'bold', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -649,9 +671,10 @@ export const PurchaseSettlementPage: React.FC = () => {
             <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
               <button
                 onClick={handlePaymentSubmit}
-                style={{ flex: 1, height: '40px', background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '800', fontSize: '14px', cursor: 'pointer' }}
+                disabled={isSubmittingPayment}
+                style={{ flex: 1, height: '40px', background: isSubmittingPayment ? 'var(--text-muted)' : 'linear-gradient(135deg, #10B981 0%, #059669 100%)', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '800', fontSize: '14px', cursor: isSubmittingPayment ? 'not-allowed' : 'pointer' }}
               >
-                지급 대사 완료 승인
+                {isSubmittingPayment ? '⏳ 지급 대사 승인 중...' : '지급 대사 완료 승인'}
               </button>
               <button
                 onClick={() => { setPaymentModal(null); setSelectedBankTxId(null); }}
