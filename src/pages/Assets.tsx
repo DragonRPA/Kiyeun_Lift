@@ -789,7 +789,7 @@ export const Assets: React.FC = () => {
                       onClick={() => setShowHistoryToggle(!showHistoryToggle)}
                       style={{ flex: 1, padding: '8px 12px', fontSize: '13px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
                     >
-                      <Layers size={15} /> {showHistoryToggle ? '📜 자산 통합 이력 닫기' : '📜 자산 이력 조회'}
+                      <Layers size={15} /> {showHistoryToggle ? '📜 자산이력 닫기' : '📜 자산이력 조회'}
                     </button>
 
                     <button
@@ -802,11 +802,11 @@ export const Assets: React.FC = () => {
                     </button>
                   </div>
 
-                  {/* 명시적 [자산 이력 조회] 클릭 시에만 자산이력 연대기 표출 */}
+                  {/* 명시적 [자산이력 조회] 클릭 시에만 자산이력 표출 */}
                   {showHistoryToggle && (
                     <div style={{ marginTop: '14px', paddingTop: '12px', borderTop: '1px solid var(--border-color)' }}>
                       <h5 style={{ margin: '0 0 10px 0', fontSize: '13px', fontWeight: 'bold' }}>
-                        자산 생애주기 전체 이력 연대기 ({assetInOutLogs.filter((l: AssetInOutLog) => l.assetId === selectedAsset.id).length}건)
+                        자산이력 ({assetInOutLogs.filter((l: AssetInOutLog) => l.assetId === selectedAsset.id).length}건)
                       </h5>
 
                       {assetInOutLogs.filter((l: AssetInOutLog) => l.assetId === selectedAsset.id).length === 0 ? (
