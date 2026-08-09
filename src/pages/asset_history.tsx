@@ -15,11 +15,18 @@ export const AssetHistory: React.FC = () => {
   const getTodayStr = () => new Date().toISOString().split('T')[0];
   const todayStr = getTodayStr();
 
-  // 2. 검색 및 조회기간 필터 상태 (입출고/정비 이력은 과거/현재 사건이므로 종료일 기본값 오늘)
-  const [searchTerm, setSearchTerm] = useState('');
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState(todayStr);
+  // 2. 검색 및 조회기간 입력 상태 (사용자 조작용)
+  const [inputStartDate, setInputStartDate] = useState('');
+  const [inputEndDate, setInputEndDate] = useState(todayStr);
+  const [inputSearchTerm, setInputSearchTerm] = useState('');
   const [selectedAssetId, setSelectedAssetId] = useState('');
+
+  // 3. 확정 조회 조건 (명시적 [조회] 버튼 클릭 시에만 갱신)
+  const [activeSearchParams, setActiveSearchParams] = useState({
+    startDate: '',
+    endDate: todayStr,
+    searchTerm: ''
+  });
 
   // 0. 타 탭 이동 페이로드(특정 자산 이력 조회) 감지
   useEffect(() => {
@@ -29,44 +36,58 @@ export const AssetHistory: React.FC = () => {
     }
   }, [navigationPayload]);
 
-  // 💡 [사장님 지시] 기간 빠른 선택 (오늘 / 1주 / 1개월 / 전체) - 종료일은 항상 오늘로 고정 (미래 조회 불가)
+  // 💡 [사장님 지시] 명시적 [조회] 버튼 실행 헬퍼
+  const handleSearch = (overrideStart?: string, overrideEnd?: string) => {
+    setActiveSearchParams({
+      startDate: overrideStart !== undefined ? overrideStart : inputStartDate,
+      endDate: overrideEnd !== undefined ? overrideEnd : inputEndDate,
+      searchTerm: inputSearchTerm
+    });
+  };
+
+  // 💡 [사장님 지시] 기간 빠른 선택 (오늘 / 1주 / 1개월 / 전체) - 클릭 시 즉시 입력값 갱신 및 조회 실행
   const setQuickRange = (rangeType: 'TODAY' | 'WEEK' | 'MONTH' | 'ALL') => {
     const today = new Date();
-    setEndDate(todayStr);
+    let newStart = '';
+    let newEnd = todayStr;
 
     if (rangeType === 'TODAY') {
-      setStartDate(todayStr);
+      newStart = todayStr;
     } else if (rangeType === 'WEEK') {
       const pastWeek = new Date(today);
       pastWeek.setDate(today.getDate() - 7);
-      setStartDate(pastWeek.toISOString().split('T')[0]);
+      newStart = pastWeek.toISOString().split('T')[0];
     } else if (rangeType === 'MONTH') {
       const pastMonth = new Date(today);
       pastMonth.setMonth(today.getMonth() - 1);
-      setStartDate(pastMonth.toISOString().split('T')[0]);
+      newStart = pastMonth.toISOString().split('T')[0];
     } else if (rangeType === 'ALL') {
-      setStartDate('');
+      newStart = '';
     }
+
+    setInputStartDate(newStart);
+    setInputEndDate(newEnd);
+    handleSearch(newStart, newEnd);
   };
 
-  // 3. 탭별 및 필터조건별 로그 데이터 집계
+  // 4. 탭별 및 확정 조회 조건 교집합(AND) 로그 집계
   const filteredTabLogs = assetInOutLogs.filter(log => {
-    // 탭 매칭
+    // [교집합 1] 탭 조건 (출고 / 입고 / 정비)
     if (log.type !== activeTab) return false;
 
-    // 💡 비즈니스 논리: 출고/입고/정비는 발생 완료 건이므로 미래 사건은 조회 차단
+    // [교집합 2] 미래 일자 차단 (출고/입고/정비는 수립된 사건만 해당)
     if (log.eventDate > todayStr) return false;
 
-    // 개별 자산 필터
+    // [교집합 3] 선택 자산 조건 (타 페이지 연동 시)
     if (selectedAssetId && log.assetId !== selectedAssetId) return false;
 
-    // 조회기간 필터
-    if (startDate && log.eventDate < startDate) return false;
-    if (endDate && log.eventDate > endDate) return false;
+    // [교집합 4] 확정 조회 기간 (시작일자 ~ 종료일자)
+    if (activeSearchParams.startDate && log.eventDate < activeSearchParams.startDate) return false;
+    if (activeSearchParams.endDate && log.eventDate > activeSearchParams.endDate) return false;
 
-    // 통합 검색 필터 (모델명, 자산번호, 고객사명, 현장명, 비고)
-    if (searchTerm.trim()) {
-      const term = searchTerm.toLowerCase();
+    // [교집합 5] 확정 통합 검색어 (모델명 OR 관리번호 OR 거래처명 OR 현장명 OR 메모)
+    if (activeSearchParams.searchTerm.trim()) {
+      const term = activeSearchParams.searchTerm.toLowerCase();
       const matchesAssetNo = log.assetNo.toLowerCase().includes(term);
       const matchesModel = log.modelName.toLowerCase().includes(term);
       const matchesCustomer = log.customerName && log.customerName.toLowerCase().includes(term);
@@ -179,7 +200,7 @@ export const AssetHistory: React.FC = () => {
       <div className="card" style={{ padding: '16px' }}>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px', alignItems: 'end' }}>
           
-          {/* 조회 기간 설정 필터 */}
+          {/* 1. 조회 기간 설정 필터 */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
             <label style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
               조회 기간 설정 (상한: 오늘)
@@ -187,26 +208,26 @@ export const AssetHistory: React.FC = () => {
             <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
               <input
                 type="date"
-                value={startDate}
+                value={inputStartDate}
                 max={todayStr}
-                onChange={e => setStartDate(e.target.value)}
+                onChange={e => setInputStartDate(e.target.value)}
                 style={{ flex: 1, padding: '7px', fontSize: '12.5px' }}
               />
               <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>~</span>
               <input
                 type="date"
-                value={endDate}
+                value={inputEndDate}
                 max={todayStr}
                 onChange={e => {
                   const val = e.target.value;
-                  setEndDate(val > todayStr ? todayStr : val);
+                  setInputEndDate(val > todayStr ? todayStr : val);
                 }}
                 style={{ flex: 1, padding: '7px', fontSize: '12.5px' }}
               />
             </div>
           </div>
 
-          {/* 조회기간 빠른 선택 버튼 (오늘 / 1주 / 1개월 / 전체) */}
+          {/* 2. 조회기간 빠른 선택 버튼 (오늘 / 1주 / 1개월 / 전체) */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
             <label style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
               기간 빠른 선택
@@ -247,7 +268,7 @@ export const AssetHistory: React.FC = () => {
             </div>
           </div>
 
-          {/* 통합 검색 필터 (모델명 / 관리번호 / 거래처 / 현장명) */}
+          {/* 3. 통합 검색 필터 (모델명 / 관리번호 / 거래처 / 현장명) */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
             <label style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
               통합 검색 (모델명 / 관리번호 / 거래처)
@@ -255,30 +276,40 @@ export const AssetHistory: React.FC = () => {
             <div style={{ position: 'relative' }}>
               <input
                 type="text"
-                value={searchTerm}
-                onChange={e => setSearchTerm(e.target.value)}
-                placeholder="모델명, 관리번호, 거래처명, 현장 검색..."
+                value={inputSearchTerm}
+                onChange={e => setInputSearchTerm(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') handleSearch(); }}
+                placeholder="모델명, 관리번호, 거래처명, 현장 검색 (Enter 키)..."
                 style={{ width: '100%', padding: '7px 10px 7px 32px', fontSize: '12.5px' }}
               />
               <Search size={14} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
             </div>
           </div>
 
-          {/* 개별 자산 필터 */}
+          {/* 4. 명시적 [조회] 실행 버튼 (불필요한 특정자산지정 필터 전면 제거 자리에 배치) */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-            <label style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
-              특정 자산 지정 필터
+            <label style={{ fontSize: '12px', fontWeight: 'bold', color: 'transparent', whiteSpace: 'nowrap', userSelect: 'none' }}>
+              조회 실행
             </label>
-            <select
-              value={selectedAssetId}
-              onChange={e => setSelectedAssetId(e.target.value)}
-              style={{ width: '100%', padding: '7px', fontSize: '12.5px' }}
+            <button
+              type="button"
+              className="btn-primary"
+              onClick={() => handleSearch()}
+              style={{
+                width: '100%',
+                padding: '7px 16px',
+                fontSize: '13px',
+                fontWeight: 'bold',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '6px',
+                whiteSpace: 'nowrap',
+                height: '34px'
+              }}
             >
-              <option value="">전체 장비 (자산 전체)</option>
-              {assets.map(a => (
-                <option key={a.id} value={a.id}>[{a.assetNo}] {a.modelName}</option>
-              ))}
-            </select>
+              <Search size={15} /> 조회
+            </button>
           </div>
 
         </div>
