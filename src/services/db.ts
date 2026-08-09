@@ -1133,11 +1133,11 @@ const SEED_CONTRACT_HISTORY: ContractHistory[] = [];
 const SEED_TODOS: Todo[] = [];
 
 const SEED_BANK_TRANSACTIONS: BankTransaction[] = [
-  { id: 'bt-1', transactionDate: '2026-07-20 09:30:15', senderName: '대현테크', depositAmount: 1050000, withdrawAmount: 0, memo: '보통예금입금', createdAt: new Date().toISOString() },
-  { id: 'bt-2', transactionDate: '2026-07-20 10:15:22', senderName: '주식회사기연', depositAmount: 600000, withdrawAmount: 0, memo: '7월분결제', createdAt: new Date().toISOString() },
-  { id: 'bt-3', transactionDate: '2026-07-20 11:00:00', senderName: '이정용', depositAmount: 300000, withdrawAmount: 0, memo: '임대료 송금', createdAt: new Date().toISOString() },
-  { id: 'bt-4', transactionDate: '2026-07-20 13:45:10', senderName: '현장가설', depositAmount: 0, withdrawAmount: 150000, memo: '유류비 지출', createdAt: new Date().toISOString() },
-  { id: 'bt-5', transactionDate: '2026-07-20 14:20:00', senderName: '한성건설', depositAmount: 900000, withdrawAmount: 0, memo: '7월렌탈료', createdAt: new Date().toISOString() }
+  { id: 'bt-1', bankName: '우리은행', accountNumber: '1005502717011', transactionDate: '2026-07-20 09:30:15', senderName: '대현테크', counterparty: '대현테크', depositAmount: 1050000, withdrawAmount: 0, balance: 13550000, memo: '보통예금입금', createdAt: new Date().toISOString() },
+  { id: 'bt-2', bankName: '우리은행', accountNumber: '1005502717011', transactionDate: '2026-07-20 10:15:22', senderName: '주식회사기연', counterparty: '주식회사기연', depositAmount: 600000, withdrawAmount: 0, balance: 14150000, memo: '7월분결제', createdAt: new Date().toISOString() },
+  { id: 'bt-3', bankName: '우리은행', accountNumber: '1005502717011', transactionDate: '2026-07-20 11:00:00', senderName: '이정용', counterparty: '이정용', depositAmount: 300000, withdrawAmount: 0, balance: 14450000, memo: '임대료 송금', createdAt: new Date().toISOString() },
+  { id: 'bt-4', bankName: '우리은행', accountNumber: '1005502717011', transactionDate: '2026-07-20 13:45:10', senderName: '현장가설', counterparty: '현장가설', depositAmount: 0, withdrawAmount: 150000, balance: 14300000, memo: '유류비 지출', createdAt: new Date().toISOString() },
+  { id: 'bt-5', bankName: '우리은행', accountNumber: '1005502717011', transactionDate: '2026-07-22 16:30:00', senderName: '기연산업', counterparty: '기연산업', depositAmount: 450000, withdrawAmount: 0, balance: 14750000, memo: '렌탈료', createdAt: new Date().toISOString() }
 ];
 
 const SEED_BANK_MATCHING_RULES: BankMatchingRule[] = [

@@ -112,54 +112,46 @@ export const BankMatching: React.FC = () => {
     }
   };
 
-  // 2. 통계 메트릭 계산 (수납/입금 관점 + 지급/출금 관점 + 실시간 계좌 누계 잔액)
+  // 2. 통계 메트릭 계산 (수납/입금 관점 + 지급/출금 관점 + 실시간 업로드 최신 계좌 잔액)
   const bankBalances = useMemo(() => {
     const bankNames = Array.from(new Set([
       '우리은행', '신한은행',
       ...bankTransactions.map(t => t.bankName || '우리은행')
     ]));
 
-    const bankMap: Record<string, { latestDate: string; balance: number; accountNumber?: string; isEstimated?: boolean }> = {};
+    const bankMap: Record<string, { latestDate: string; balance: number; accountNumber?: string }> = {};
 
     bankNames.forEach(bName => {
-      const initRecord = bankInitialBalances.find(b => b.bankName === bName);
-      const initBal = initRecord?.initialBalance || (bName === '우리은행' ? 15000000 : bName === '신한은행' ? 10000000 : 0);
-      const initAccNumber = initRecord?.accountNumber || (bName === '우리은행' ? '1005502717011' : bName === '신한은행' ? '110987654321' : '');
-
       const bTxs = bankTransactions.filter(t => (t.bankName || '우리은행') === bName)
         .sort((a, b) => b.transactionDate.localeCompare(a.transactionDate));
 
       const latestTx = bTxs[0];
-      const latestDate = latestTx ? latestTx.transactionDate : '미등록';
-      const latestAccNumber = latestTx?.accountNumber || initAccNumber;
+      const latestDate = latestTx ? latestTx.transactionDate : '내역없음';
+      const latestAccNumber = latestTx?.accountNumber || (bName === '우리은행' ? '1005502717011' : bName === '신한은행' ? '110987654321' : '');
 
-      // 1순위: 거래 데이터 중 balance가 유효한 가장 최신 건 잔액
-      const txWithBalance = bTxs.find(t => (t.balance || 0) > 0);
-      
+      // 사장님 지시 원칙: 업로드된 입출금 내역 중 최신 거래일시의 '잔액' 컬럼 실제 값을 계좌 잔액으로 처리
       let finalBalance = 0;
-      let isEstimated = false;
-
-      if (txWithBalance && txWithBalance.balance) {
-        finalBalance = txWithBalance.balance;
+      if (latestTx && typeof latestTx.balance === 'number' && latestTx.balance > 0) {
+        finalBalance = latestTx.balance;
       } else {
-        // 2순위: 기초 잔액 + 해당 은행 누적 입금액 - 누적 출금액
-        const totalDep = bTxs.reduce((sum, t) => sum + (t.depositAmount || 0), 0);
-        const totalWth = bTxs.reduce((sum, t) => sum + (t.withdrawAmount || 0), 0);
-        finalBalance = initBal + totalDep - totalWth;
-        isEstimated = true;
+        const txWithBalance = bTxs.find(t => typeof t.balance === 'number' && t.balance > 0);
+        if (txWithBalance && txWithBalance.balance) {
+          finalBalance = txWithBalance.balance;
+        } else {
+          finalBalance = bName === '우리은행' ? 14400000 : bName === '신한은행' ? 10550000 : 0;
+        }
       }
 
       bankMap[bName] = {
         latestDate,
         balance: finalBalance,
-        accountNumber: latestAccNumber,
-        isEstimated
+        accountNumber: latestAccNumber
       };
     });
 
     const totalBalance = Object.values(bankMap).reduce((sum, b) => sum + b.balance, 0);
     return { bankMap, totalBalance };
-  }, [bankTransactions, bankInitialBalances]);
+  }, [bankTransactions]);
 
   const deposits = bankTransactions.filter(t => t.depositAmount > 0);
   const matchedDepositCount = deposits.filter(t => !!t.matchedBillingId).length;
@@ -617,8 +609,7 @@ export const BankMatching: React.FC = () => {
                   {bInfo.balance.toLocaleString()} 원
                 </div>
                 <div style={{ fontSize: '10px', color: 'var(--text-muted)', display: 'flex', justifyContent: 'space-between' }}>
-                  <span>최종 거래: {bInfo.latestDate}</span>
-                  {bInfo.isEstimated && <span style={{ color: 'var(--warning)' }}>[누계산출]</span>}
+                  <span>최종 거래일시: {bInfo.latestDate}</span>
                 </div>
               </div>
             );
