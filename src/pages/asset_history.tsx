@@ -10,8 +10,8 @@ export const AssetHistory: React.FC = () => {
     registerInboundAsset, cancelInboundAsset
   } = useApp();
 
-  // 1. 탭 상태: 'OUTBOUND' | 'INBOUND' | 'INBOUND_REGISTER' (신설) | 'REPAIR'
-  const [activeTab, setActiveTab] = useState<'OUTBOUND' | 'INBOUND' | 'INBOUND_REGISTER' | 'REPAIR'>('OUTBOUND');
+  // 1. 탭 상태: 'INBOUND_REGISTER' | 'INBOUND' | 'OUTBOUND' | 'REPAIR'
+  const [activeTab, setActiveTab] = useState<'INBOUND_REGISTER' | 'INBOUND' | 'OUTBOUND' | 'REPAIR'>('INBOUND_REGISTER');
 
   const getTodayStr = () => new Date().toISOString().split('T')[0];
   const todayStr = getTodayStr();
@@ -227,15 +227,15 @@ export const AssetHistory: React.FC = () => {
         </button>
       </div>
 
-      {/* 2. 4대 탭 메뉴 (출고조회 / 입고조회 / 입고등록[신설] / 정비이력조회) */}
+      {/* 2. 4대 탭 메뉴 (입고등록, 입고조회, 출고조회, 정비이력조회) */}
       <div style={{ display: 'flex', gap: '10px', borderBottom: '2px solid var(--border-color)', paddingBottom: '10px' }}>
         <button
           type="button"
-          onClick={() => setActiveTab('OUTBOUND')}
-          className={activeTab === 'OUTBOUND' ? 'btn-primary' : 'btn-secondary'}
+          onClick={() => setActiveTab('INBOUND_REGISTER')}
+          className={activeTab === 'INBOUND_REGISTER' ? 'btn-primary' : 'btn-secondary'}
           style={{ padding: '8px 18px', fontSize: '13.5px', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '6px' }}
         >
-          <ArrowUpRight size={16} /> 출고 조회
+          <CheckCircle2 size={16} /> 입고 등록 (반납)
         </button>
 
         <button
@@ -249,11 +249,11 @@ export const AssetHistory: React.FC = () => {
 
         <button
           type="button"
-          onClick={() => setActiveTab('INBOUND_REGISTER')}
-          className={activeTab === 'INBOUND_REGISTER' ? 'btn-primary' : 'btn-secondary'}
+          onClick={() => setActiveTab('OUTBOUND')}
+          className={activeTab === 'OUTBOUND' ? 'btn-primary' : 'btn-secondary'}
           style={{ padding: '8px 18px', fontSize: '13.5px', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '6px' }}
         >
-          <CheckCircle2 size={16} /> 입고 등록 (반납)
+          <ArrowUpRight size={16} /> 출고 조회
         </button>
 
         <button
