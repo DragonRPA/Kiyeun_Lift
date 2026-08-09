@@ -7,67 +7,90 @@ import {
 } from 'lucide-react';
 
 export const PayrollPage: React.FC = () => {
-  const { currentUser, hasPermission } = useApp();
+  const { users, leaveUsages, overtimeRecords, payrollClosings, currentUser, hasPermission, setPayrollClosingStatus } = useApp();
   const canSave = hasPermission('payroll', 'save');
+  const isAdmin = currentUser?.role === 'ADMIN' || currentUser?.role === 'MANAGER';
 
-  // 상태 관리
-  const [selectedMonth, setSelectedMonth] = useState('2026-07');
+  // 오늘 날짜가 속한 당월 (YYYY-MM) 자동 계산
+  const todayMonth = new Date().toISOString().substring(0, 7);
+
+  // 상태 관리 (기본값: 오늘 날짜가 속한 당월)
+  const [selectedMonth, setSelectedMonth] = useState(todayMonth);
   const [payrollList, setPayrollList] = useState<any[]>([]);
   const [isTaxDataUploaded, setIsTaxDataUploaded] = useState(false);
   const [payrollStatus, setPayrollStatus] = useState<'DRAFT' | 'APPROVED'>('DRAFT');
   const [isSendingEmails, setIsSendingEmails] = useState(false);
 
-  // 초기 직원 데이터 로드
+  // 선택한 월이 변경되면 DB의 월별 마감 상태(payrollClosings) 자동 동기화
   useEffect(() => {
-    // db.users를 임직원 기본 데이터로 로드
-    const activeStaff = db.users.filter(u => u.id !== 'sys-admin');
-    
-    // 모의 급여 기준 정보 주입 (기본급, 시급 등)
-    const staffWithSalaries = activeStaff.map(u => {
-      // 역할 및 직책에 따른 모의 기본급 설정
+    const closing = payrollClosings.find(p => p.month === selectedMonth);
+    setPayrollStatus(closing?.status || 'DRAFT');
+  }, [selectedMonth, payrollClosings]);
+
+  // 사원별 당월 OT시간 및 연차/반차 소진 일수 계산 헬퍼
+  const calculateMonthLeaveOt = (empId: string, month: string) => {
+    const monthOtList = overtimeRecords.filter(ot => 
+      ot.userId === empId && 
+      (ot.startDateTime || '').substring(0, 7) === month
+    );
+    const otHours = monthOtList.reduce((sum, ot) => sum + (ot.hours || 0), 0);
+
+    const monthLeaveList = leaveUsages.filter(l => 
+      l.userId === empId && 
+      (l.startDate || '').substring(0, 7) === month
+    );
+    const leaveDays = monthLeaveList.reduce((sum, l) => sum + (l.usedDays || 0), 0);
+
+    return { otHours, leaveDays };
+  };
+
+  // 당월 급여 데이터 로드 및 leave_ot 자동 연동
+  const loadPayrollData = (month: string) => {
+    const activeStaff = users.filter(u => u.id !== 'sys-admin');
+
+    const list = activeStaff.map(u => {
       let baseSalary = 3000000;
       if (u.role === 'ADMIN') baseSalary = 5500000;
       else if (u.role === 'MANAGER') baseSalary = 4200000;
       else if (u.id.includes('mech')) baseSalary = 3500000;
 
       const ordinaryHourly = Math.round(baseSalary / 209);
+      const { otHours, leaveDays } = calculateMonthLeaveOt(u.id, month);
 
-      return {
-        id: u.id,
+      const pObj = {
+        employeeId: u.id,
         name: u.name,
         deptName: u.department || '미정',
         role: u.role,
         baseSalary,
         ordinaryHourly,
-        email: `${u.loginId}@kiyeunlift.co.kr`,
-        birthDate: '1988-12-05' // 명세서 비밀번호 암호화용 기본값
+        overtimeHours: otHours,  // leave_ot 자동 연동된 OT 시간
+        holidayHours: 0,
+        nightHours: 0,
+        leaveDays: leaveDays,    // leave_ot 자동 연동된 연차/반차 소진 일수
+        unpaidLeaveDays: 0,
+        manualAdjustmentAmount: 0,
+        manualAdjustmentReason: '',
+        nationalPension: 0,
+        healthInsurance: 0,
+        careInsurance: 0,
+        employmentInsurance: 0,
+        earnedIncomeTax: 0,
+        localIncomeTax: 0,
+        netSalary: baseSalary
       };
+
+      recalculateRow(pObj);
+      return pObj;
     });
 
-    // 당월 급여 정산 테이블 빌드
-    const initialPayroll = staffWithSalaries.map(emp => ({
-      employeeId: emp.id,
-      name: emp.name,
-      deptName: emp.deptName,
-      baseSalary: emp.baseSalary,
-      ordinaryHourly: emp.ordinaryHourly,
-      overtimeHours: 0,
-      holidayHours: 0,
-      nightHours: 0,
-      unpaidLeaveDays: 0,
-      manualAdjustmentAmount: 0, // 수동 가감 디폴트 0
-      manualAdjustmentReason: '',
-      nationalPension: 0,
-      healthInsurance: 0,
-      careInsurance: 0,
-      employmentInsurance: 0,
-      earnedIncomeTax: 0,
-      localIncomeTax: 0,
-      netSalary: emp.baseSalary // 실수령액 초기값
-    }));
+    setPayrollList(list);
+  };
 
-    setPayrollList(initialPayroll);
-  }, []);
+  // 초기 로드 및 selectedMonth, leaveUsages, overtimeRecords 변경 시 자동 연동
+  useEffect(() => {
+    loadPayrollData(selectedMonth);
+  }, [selectedMonth, leaveUsages, overtimeRecords, users]);
 
   // 연장/야근/휴가 변경 시 자동 계산 공식 적용
   const handleHoursChange = (empId: string, field: string, val: number) => {
@@ -83,7 +106,7 @@ export const PayrollPage: React.FC = () => {
     }));
   };
 
-  // 수동 가감액 변경 시 계산 (디폴트 0)
+  // 수동 가감액 변경 시 계산
   const handleAdjustmentChange = (empId: string, amount: number, reason: string) => {
     if (payrollStatus === 'APPROVED') return;
 
@@ -121,7 +144,6 @@ export const PayrollPage: React.FC = () => {
     
     // 모의 파싱 및 주입
     setPayrollList(prev => prev.map(p => {
-      // 급여 금액 수준에 맞춰 비례한 보험료/세금 모의 주입
       const base = p.baseSalary;
       const pension = Math.round(base * 0.045);
       const health = Math.round(base * 0.03545);
@@ -147,15 +169,24 @@ export const PayrollPage: React.FC = () => {
     alert('세무회계법인 수취 4대보험/소득세 확정액 데이터가 성공적으로 대조 적재되었습니다.\n(업로드 파일 검증 완료 - Checksum 일치)');
   };
 
-  // 최종 결재 승인 (락 걸기)
-  const handleApprovePayroll = () => {
+  // 최종 결재 승인 (월별 Lock 상태 DB 저장)
+  const handleApprovePayroll = async () => {
     if (!isTaxDataUploaded) {
       alert('세무회계법인의 공제액 엑셀 파일을 먼저 업로드해 주십시오.');
       return;
     }
-    if (confirm('당월 급여 대장을 최종 승인하시겠습니까?\n승인 시 모든 데이터가 암호화 보존되며, 수정 불가능한 읽기 전용 상태로 락이 설정됩니다.')) {
-      setPayrollStatus('APPROVED');
-      alert('급여 정산 대장이 최종 결재 승인 완료되었습니다.');
+    if (confirm(`[${selectedMonth}] 귀속월 급여 대장을 최종 마감 승인하시겠습니까?\n승인 시 해당 월의 급여 데이터가 수정 불가능한 읽기 전용 상태로 락(Lock) 설정됩니다.`)) {
+      await setPayrollClosingStatus(selectedMonth, 'APPROVED', currentUser?.name);
+      alert(`[${selectedMonth}] 귀속월 급여 정산 대장이 최종 승인 마감(Lock)되었습니다.`);
+    }
+  };
+
+  // 마감 락 해제 (최고 관리자 전용)
+  // 마감 락 해제 (최고 관리자 전용)
+  const handleUnlockPayroll = async () => {
+    if (confirm(`[${selectedMonth}] 귀속월의 마감 락을 해제하시겠습니까?\n락 해제 시 급여 데이터 재정산 및 수정을 진행할 수 있습니다.`)) {
+      await setPayrollClosingStatus(selectedMonth, 'DRAFT');
+      alert(`[${selectedMonth}] 귀속월의 마감 락이 성공적으로 해제되었습니다.`);
     }
   };
 
@@ -182,20 +213,32 @@ export const PayrollPage: React.FC = () => {
           <h2 style={{ fontSize: '22px', fontWeight: '800' }}>급여 정산 마스터</h2>
         </div>
         
-        <div style={{ display: 'flex', gap: '10px' }}>
+        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
           {payrollStatus === 'DRAFT' ? (
             <button 
               className="btn-success" 
               onClick={handleApprovePayroll}
-              style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+              style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px', fontSize: '13px', fontWeight: 'bold' }}
               disabled={!canSave}
             >
-              <LockOpen size={16} /> 최종 결재 승인 (Lock)
+              <LockOpen size={16} /> [{selectedMonth}] 결재 마감 승인 (Lock)
             </button>
           ) : (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 12px', backgroundColor: 'var(--danger-light)', borderRadius: '6px', border: '1px solid var(--danger)' }}>
-              <Lock size={16} color="var(--danger)" />
-              <strong style={{ color: 'var(--danger)', fontSize: '13px' }}>결재 승인 잠금 상태</strong>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 12px', backgroundColor: 'rgba(239, 68, 68, 0.15)', color: 'var(--danger)', borderRadius: '6px', border: '1px solid var(--danger)', fontSize: '13px', fontWeight: 'bold' }}>
+                <Lock size={15} color="var(--danger)" /> [{selectedMonth}] 결재 마감 완료 (Locked)
+              </div>
+              {isAdmin && (
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={handleUnlockPayroll}
+                  style={{ fontSize: '12px', padding: '6px 10px', color: 'var(--text-muted)' }}
+                  title="관리자 전용 마감 해제"
+                >
+                  🔓 마감 해제
+                </button>
+              )}
             </div>
           )}
 
@@ -262,6 +305,15 @@ export const PayrollPage: React.FC = () => {
               </div>
             </div>
 
+            <div style={{ padding: '12px', backgroundColor: 'rgba(59, 130, 246, 0.08)', borderRadius: '6px', border: '1px solid rgba(59, 130, 246, 0.3)', fontSize: '12px', lineHeight: '1.6' }}>
+              <div style={{ fontWeight: 'bold', marginBottom: '6px', color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <CheckCircle size={14} /> [연차/OT 관리] 데이터 자동 연동
+              </div>
+              • 귀속 월({selectedMonth}) 총 OT: <strong>{payrollList.reduce((sum, p) => sum + (p.overtimeHours || 0), 0)} 시간</strong><br/>
+              • 귀속 월({selectedMonth}) 총 연차: <strong>{payrollList.reduce((sum, p) => sum + (p.leaveDays || 0), 0)} 일</strong> 소진<br/>
+              <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>* [연차/OT 관리] 등록 시 급여 정산 대장에 실시간 100% 동기화 반영됩니다.</span>
+            </div>
+
             <div style={{ padding: '12px', backgroundColor: 'var(--bg-app)', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '12px', lineHeight: '1.5' }}>
               <div style={{ fontWeight: 'bold', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
                 <AlertTriangle size={14} color="var(--warning)" /> 통상시급 및 1일임금 기준
@@ -308,17 +360,24 @@ export const PayrollPage: React.FC = () => {
                     <td>
                       <strong>{p.name}</strong><br/>
                       <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{p.deptName}</span>
+                      {p.leaveDays > 0 && (
+                        <div style={{ marginTop: '4px' }}>
+                          <span style={{ fontSize: '10.5px', padding: '2px 6px', borderRadius: '4px', backgroundColor: 'rgba(245, 158, 11, 0.15)', color: 'var(--warning)', fontWeight: 'bold' }}>
+                            📅 당월 연차: {p.leaveDays}일 소진
+                          </span>
+                        </div>
+                      )}
                     </td>
                     <td>{p.baseSalary.toLocaleString()}원</td>
                     <td>
                       <div style={{ display: 'flex', gap: '6px' }}>
-                        <div>연장 <input type="number" min="0" max="60" value={p.overtimeHours} onChange={(e) => handleHoursChange(p.employeeId, 'overtimeHours', parseInt(e.target.value) || 0)} disabled={payrollStatus === 'APPROVED'} style={{ width: '40px', padding: '2px 4px', fontSize: '11px' }} />h</div>
-                        <div>휴일 <input type="number" min="0" max="40" value={p.holidayHours} onChange={(e) => handleHoursChange(p.employeeId, 'holidayHours', parseInt(e.target.value) || 0)} disabled={payrollStatus === 'APPROVED'} style={{ width: '40px', padding: '2px 4px', fontSize: '11px' }} />h</div>
-                        <div>야간 <input type="number" min="0" max="40" value={p.nightHours} onChange={(e) => handleHoursChange(p.employeeId, 'nightHours', parseInt(e.target.value) || 0)} disabled={payrollStatus === 'APPROVED'} style={{ width: '40px', padding: '2px 4px', fontSize: '11px' }} />h</div>
+                        <div>연장 <input type="number" min="0" max="60" value={p.overtimeHours} onChange={(e) => handleHoursChange(p.employeeId, 'overtimeHours', parseFloat(e.target.value) || 0)} disabled={payrollStatus === 'APPROVED'} style={{ width: '45px', padding: '2px 4px', fontSize: '11px', fontWeight: p.overtimeHours > 0 ? 'bold' : 'normal', color: p.overtimeHours > 0 ? 'var(--primary)' : 'inherit' }} />h</div>
+                        <div>휴일 <input type="number" min="0" max="40" value={p.holidayHours} onChange={(e) => handleHoursChange(p.employeeId, 'holidayHours', parseFloat(e.target.value) || 0)} disabled={payrollStatus === 'APPROVED'} style={{ width: '40px', padding: '2px 4px', fontSize: '11px' }} />h</div>
+                        <div>야간 <input type="number" min="0" max="40" value={p.nightHours} onChange={(e) => handleHoursChange(p.employeeId, 'nightHours', parseFloat(e.target.value) || 0)} disabled={payrollStatus === 'APPROVED'} style={{ width: '40px', padding: '2px 4px', fontSize: '11px' }} />h</div>
                       </div>
                       {totalAllowances > 0 && (
-                        <div style={{ fontSize: '10px', color: 'var(--primary)', marginTop: '4px' }}>
-                          수당계: +{totalAllowances.toLocaleString()}원
+                        <div style={{ fontSize: '10.5px', color: 'var(--primary)', fontWeight: 'bold', marginTop: '4px' }}>
+                          OT 수당계: +{totalAllowances.toLocaleString()}원 (1.5배)
                         </div>
                       )}
                     </td>

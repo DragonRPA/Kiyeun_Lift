@@ -1,6 +1,6 @@
 // d:\Kiyeun_Lift\src\context\AppContext.tsx
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
-import { db, supabase, User, MenuPermission, createMenuPermission, Customer, CustomerContact, CustomerSite, Product, Asset, Consumable, ConsumableLog, ConsumablePurchaseRequest, Contract, ContractAsset, ContractHistory, Delivery, Billing, BillingDetail, Payment, PaymentDepositLink, Repair, RepairConsumable, Todo, BankTransaction, BankMatchingRule, AssetInOutLog, GoogleConfig, Vendor, CashFlowSnapshot, OutboundInspection, TransportCompany, TransportDriver, DepreciationLog, PurchaseSettlement, PurchaseSettlementItem, ExternalLease, PurchaseSettlementType, PurchaseSettlementStatus, findCustomerByNormalizedName, AnnualLeaveQuota, LeaveUsage, OvertimeRecord } from '../services/db';
+import { db, supabase, User, MenuPermission, createMenuPermission, Customer, CustomerContact, CustomerSite, Product, Asset, Consumable, ConsumableLog, ConsumablePurchaseRequest, Contract, ContractAsset, ContractHistory, Delivery, Billing, BillingDetail, Payment, PaymentDepositLink, Repair, RepairConsumable, Todo, BankTransaction, BankMatchingRule, AssetInOutLog, GoogleConfig, Vendor, CashFlowSnapshot, OutboundInspection, TransportCompany, TransportDriver, DepreciationLog, PurchaseSettlement, PurchaseSettlementItem, ExternalLease, PurchaseSettlementType, PurchaseSettlementStatus, findCustomerByNormalizedName, AnnualLeaveQuota, LeaveUsage, OvertimeRecord, PayrollClosing } from '../services/db';
 import { ErrorModal } from '../components/ErrorModal';
 import { getAllSystemMenuIds } from '../config/menu_config';
 
@@ -84,6 +84,7 @@ interface AppContextType {
   annualLeaveQuotas: AnnualLeaveQuota[];
   leaveUsages: LeaveUsage[];
   overtimeRecords: OvertimeRecord[];
+  payrollClosings: PayrollClosing[];
 
   // Mutators
   updateAnnualLeaveQuota: (userId: string, periodStart: string, periodEnd: string, grantedDays: number, memo?: string) => void;
@@ -91,6 +92,7 @@ interface AppContextType {
   deleteLeaveUsage: (id: string) => void;
   addOvertimeRecord: (record: Omit<OvertimeRecord, 'id' | 'createdAt'>) => void;
   deleteOvertimeRecord: (id: string) => void;
+  setPayrollClosingStatus: (month: string, status: 'DRAFT' | 'APPROVED', approvedBy?: string) => Promise<void>;
   refreshAllData: () => void;
   executeMonthlyDepreciation: (depreciationYm: string, note?: string) => Promise<{ count: number; totalAmount: number }>;
   loadTablesForMenu: (menuId: string) => Promise<void>;
@@ -229,6 +231,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [annualLeaveQuotas, setAnnualLeaveQuotas] = useState<AnnualLeaveQuota[]>([]);
   const [leaveUsages, setLeaveUsages] = useState<LeaveUsage[]>([]);
   const [overtimeRecords, setOvertimeRecords] = useState<OvertimeRecord[]>([]);
+  const [payrollClosings, setPayrollClosings] = useState<PayrollClosing[]>([]);
 
   // Navigation / Routing states
   const [activeTab, setActiveTab] = useState<string>('dashboard');
@@ -306,6 +309,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setAnnualLeaveQuotas([...db.annualLeaveQuotas]);
     setLeaveUsages([...db.leaveUsages]);
     setOvertimeRecords([...db.overtimeRecords]);
+    setPayrollClosings([...db.payrollClosings]);
   };
 
   // 전체 28개 테이블 Supabase pull 후 state 동기화 (초기 로딩 전용)
@@ -2594,6 +2598,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     refreshAllData();
   };
 
+  const setPayrollClosingStatus = async (month: string, status: 'DRAFT' | 'APPROVED', approvedBy?: string) => {
+    const existing = db.payrollClosings.find(p => p.month === month);
+    if (existing) {
+      db.updateRow<PayrollClosing>('payrollClosings', existing.id, {
+        status,
+        approvedAt: status === 'APPROVED' ? new Date().toISOString() : undefined,
+        approvedBy: status === 'APPROVED' ? approvedBy : undefined,
+        updatedAt: new Date().toISOString()
+      } as any);
+    } else {
+      db.insertRow<PayrollClosing>('payrollClosings', {
+        month,
+        status,
+        approvedAt: status === 'APPROVED' ? new Date().toISOString() : undefined,
+        approvedBy: status === 'APPROVED' ? approvedBy : undefined,
+        createdAt: new Date().toISOString()
+      } as any);
+    }
+    await db.awaitPendingWrites();
+    refreshAllData();
+  };
+
   const dispatchDelivery = (
     deliveryId: string, 
     dispatchData: { 
@@ -3226,10 +3252,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       users, permissions, customers, contacts, sites, products, assets, consumables, consumableLogs, consumablePurchases, contracts, contractAssets, contractHistory, deliveries, billings, billingDetails, payments, paymentDepositLinks, repairs, repairConsumables, transportCompanies, transportDrivers, todos,
       bankTransactions, bankMatchingRules, assetInOutLogs, vendors, googleConfigs, cashFlowSnapshots, outboundInspections, depreciationLogs,
       purchaseSettlements, purchaseSettlementItems, externalLeases,
-      annualLeaveQuotas, leaveUsages, overtimeRecords,
+      annualLeaveQuotas, leaveUsages, overtimeRecords, payrollClosings,
       refreshAllData, executeMonthlyDepreciation, loadTablesForMenu, updatePermissions, saveUser, saveCustomer, saveContact, saveSite, saveProduct, saveAsset, updateGoogleConfig,
       saveCashFlowSnapshot, deleteCashFlowSnapshot, saveVendor, deleteVendor,
-      updateAnnualLeaveQuota, addLeaveUsage, deleteLeaveUsage, addOvertimeRecord, deleteOvertimeRecord,
+      updateAnnualLeaveQuota, addLeaveUsage, deleteLeaveUsage, addOvertimeRecord, deleteOvertimeRecord, setPayrollClosingStatus,
       acquireAsset, disposeAsset, registerRentedAsset, returnRentedAsset, changeAssetStatus,
       purchaseConsumable, useConsumable,
       requestConsumablePurchase, acceptConsumablePurchase, completeConsumablePurchase, inboundConsumablePurchase, clearEvidenceFileUrls, updateEvidenceFileUrls,

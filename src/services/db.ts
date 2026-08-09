@@ -76,6 +76,16 @@ export interface OvertimeRecord {
   createdAt: string;
 }
 
+export interface PayrollClosing {
+  id: string;
+  month: string; // YYYY-MM
+  status: 'DRAFT' | 'APPROVED';
+  approvedAt?: string;
+  approvedBy?: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
 export interface Department {
   id: string;
   name: string;
@@ -1215,7 +1225,7 @@ export const ALL_DB_KEYS = [
   'bankTransactions', 'bankMatchingRules', 'googleConfigs', 'assetInOutLogs',
   'cashFlowSnapshots', 'outboundInspections', 'depreciationLogs',
   'purchaseSettlements', 'purchaseSettlementItems', 'externalLeases',
-  'annualLeaveQuotas', 'leaveUsages', 'overtimeRecords'
+  'annualLeaveQuotas', 'leaveUsages', 'overtimeRecords', 'payrollClosings'
 ];
 
 class LocalDB {
@@ -1316,6 +1326,9 @@ class LocalDB {
 
   get overtimeRecords() { return this.get<OvertimeRecord>('overtimeRecords', SEED_OVERTIME_RECORDS); }
   set overtimeRecords(val: OvertimeRecord[]) { this.set('overtimeRecords', val); }
+
+  get payrollClosings() { return this.get<PayrollClosing>('payrollClosings', []); }
+  set payrollClosings(val: PayrollClosing[]) { this.set('payrollClosings', val); }
 
   get repairs() { return this.get<Repair>('repairs', SEED_REPAIRS); }
   set repairs(val: Repair[]) { this.set('repairs', val); }

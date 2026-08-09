@@ -142,7 +142,6 @@ const App: React.FC = () => {
         { id: 'billing', name: '청구 / 수납 관리', icon: <CreditCard size={16} />, component: <Billings /> },
         { id: 'smart_dispatch', name: '출고 요청', icon: <Zap size={16} />, component: <SmartDispatch /> },
         { id: 'smart_return', name: '회수 요청', icon: <Zap size={16} />, component: <SmartReturn /> },
-        { id: 'leave_ot', name: '연차/OT 관리', icon: <Clock size={16} />, component: <LeaveOtPage /> },
       ]
     },
     {
@@ -189,6 +188,7 @@ const App: React.FC = () => {
       name: '경영관리',
       icon: <FolderKanban size={17} />,
       items: [
+        { id: 'leave_ot', name: '연차/OT 관리', icon: <Clock size={16} />, component: <LeaveOtPage /> },
         { id: 'purchase_settlement', name: '월말 매입 정산', icon: <CreditCard size={16} />, component: <PurchaseSettlementPage /> },
         { id: 'vendors', name: '매입처 (공급자 / 외주처) 관리', icon: <Building2 size={16} />, component: <Vendors /> },
         { id: 'bank_matching', name: '은행 입출금 대장', icon: <TrendingUp size={16} />, component: <BankMatching /> },
