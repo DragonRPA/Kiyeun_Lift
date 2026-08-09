@@ -6,9 +6,9 @@ import * as XLSX from 'xlsx';
  */
 export interface VendorStatementRow {
   id: string;
-  assetNo: string;        // 관리번호/장비번호 (예: J0576, H3379 등 / 기타비용의 경우 "기타/청소비", "기타/수리비")
+  assetNo: string;        // 관리번호/장비번호 (예: J0576, H3379, J3043 등 / 기타비용의 경우 "기타/청소비", "기타/수리비")
   serialNo?: string;      // 시리얼/제조번호
-  modelName?: string;     // 모델명/장비명 (예: 1230ES, GS1930 / 기타비용의 경우 "청소비")
+  modelName?: string;     // 모델명/장비명/품명 (예: 1230ES, GS1930, 고소작업대 10M / 기타비용의 경우 "청소비")
   rentStart: string;      // YYYY-MM-DD
   rentEnd: string;        // YYYY-MM-DD
   billedAmount: number;   // 공급가액 (청구금액)
@@ -46,13 +46,13 @@ export function parseSingleDateString(dateStr: string, defaultYm: string): strin
     return `${ymdMatch[1]}-${ymdMatch[2].padStart(2, '0')}-${ymdMatch[3].padStart(2, '0')}`;
   }
 
-  // 패턴 2: YY-MM-DD 또는 YY.MM.DD (예: 26.07.01)
+  // 패턴 2: YY-MM-DD 또는 YY.MM.DD (예: 26.07.01, 26-07-01)
   const yymdMatch = clean.match(/(\d{2})[\.\-\/](\d{1,2})[\.\-\/](\d{1,2})/);
   if (yymdMatch) {
     return `20${yymdMatch[1]}-${yymdMatch[2].padStart(2, '0')}-${yymdMatch[3].padStart(2, '0')}`;
   }
 
-  // 패턴 3: M/D 또는 M.D (예: 7/1, 7/31, 5/26, 9/12 - 하이로드 양식)
+  // 패턴 3: M/D 또는 M.D (예: 7/1, 7/31, 5/26, 9/12)
   const mdMatch = clean.match(/^(\d{1,2})[\.\-\/](\d{1,2})$/);
   if (mdMatch) {
     const m = mdMatch[1].padStart(2, '0');
@@ -64,7 +64,7 @@ export function parseSingleDateString(dateStr: string, defaultYm: string): strin
 }
 
 /**
- * 다양한 기간 문자열(예: "26.07.01 ~26.07.31", "2026.07.01~2026.07.14") 파싱 헬퍼
+ * 다양한 기간 문자열(예: "26.07.01 ~26.07.31", "26-07-01 ~ 26-07-31", "2026.07.01~2026.07.14") 파싱 헬퍼
  */
 export function parsePeriodString(periodStr: string, defaultYm: string): { rentStart: string; rentEnd: string } {
   const [defaultYear, defaultMonth] = defaultYm.split('-');
@@ -120,10 +120,10 @@ function parseString(val: any): string {
 
 /**
  * 임차처 거래명세서 엑셀 범용 파서 엔진
- * - 롯데렌탈(주), (주)하이로드, AJ네트웍스, 한국리프트 등 다중 양식 자동 감지 및 파싱
- * - 동적 헤더 행 자동 탐색 (장비명, 장비번호, 사용시작, 사용종료, V.A.T 등 표준어 매핑)
- * - 중간 청소비/수리비/세척비/도색비/운송비 등 기타 비용 항목 누락 없는 수용 (이미지 2)
- * - 하단 합계 행('소계', '합계', '청구금액', '결제계좌') 및 빈 행 자동 거름 (이미지 3)
+ * - 롯데렌탈(주), (주)하이로드, 하은(주), AJ네트웍스, 한국리프트 등 다중 양식 자동 감지 및 파싱
+ * - 동적 헤더 행 자동 탐색 (품명/장비명, 장비번호/관리번호, 기간, 사용시작, 사용종료, V.A.T 등 표준어 매핑)
+ * - 중간 청소비/수리비/세척비/도색비/운송비 등 기타 비용 항목 누락 없는 수용
+ * - 하단 합계 행('소계', '합계', '청구금액', '결제계좌', '예금주') 및 빈 행 자동 거름
  */
 export function parseVendorStatementExcel(
   worksheet: XLSX.WorkSheet,
@@ -139,7 +139,10 @@ export function parseVendorStatementExcel(
   let detectedVendor: string | undefined = undefined;
   for (let r = 0; r < Math.min(20, matrix.length); r++) {
     const rowStr = matrix[r].map(cell => parseString(cell)).join(' ');
-    if (rowStr.includes('하이로드')) {
+    if (rowStr.includes('하은')) {
+      detectedVendor = '하은(주)';
+      break;
+    } else if (rowStr.includes('하이로드')) {
       detectedVendor = '(주)하이로드';
       break;
     } else if (rowStr.includes('롯데렌탈')) {
@@ -163,7 +166,7 @@ export function parseVendorStatementExcel(
 
   const headerKeywords = [
     '관리번호', '자산번호', '장비번호', '장비No', '시리얼', '제조번호',
-    '모델명', '장비명', '모델', '기간', '사용시작', '사용종료', '투입일자', '철수일지',
+    '모델명', '장비명', '품명', '모델', '기간', '사용시작', '사용종료', '투입일자', '철수일지',
     '월렌탈료', '공급가액', '청구금액', '세액', 'V.A.T', 'VAT', '순번', '계약번호', '일수', '단가', '운반비'
   ];
 
@@ -214,7 +217,7 @@ export function parseVendorStatementExcel(
       colAssetNo = idx;
     } else if (txt.includes('시리얼') || txt.includes('제조번호')) {
       colSerialNo = idx;
-    } else if (txt.includes('장비명') || txt.includes('모델명') || txt === '모델' || txt.includes('규격')) {
+    } else if (txt.includes('장비명') || txt.includes('모델명') || txt.includes('품명') || txt === '모델' || txt.includes('규격')) {
       colModelName = idx;
     } else if (txt.includes('기간') || txt.includes('사용기간') || txt.includes('임차기간')) {
       colPeriod = idx;
@@ -248,9 +251,9 @@ export function parseVendorStatementExcel(
 
     // 행 전체 텍스트 병합
     const rowFullText = rowData.map(c => parseString(c)).join(' ').trim();
-    if (!rowFullText) continue; // 빈 행 무시 (이미지 3 요구사항)
+    if (!rowFullText) continue; // 빈 행 무시
 
-    // 하단 소계/합계 행 및 계좌/연락처 무시 (이미지 3 요구사항)
+    // 하단 소계/합계 행 및 계좌/연락처 무시
     const firstColStr = parseString(rowData[0]).replace(/\s+/g, '');
     const secondColStr = parseString(rowData[1]).replace(/\s+/g, '');
     const cleanFullText = rowFullText.replace(/\s+/g, '');
@@ -267,6 +270,8 @@ export function parseVendorStatementExcel(
       cleanFullText.includes('청구금액') ||
       cleanFullText.includes('결제계좌') ||
       cleanFullText.includes('입금계좌') ||
+      cleanFullText.includes('예금주:') ||
+      cleanFullText.includes('예금주') ||
       cleanFullText.includes('아래와같이청구합니다') ||
       cleanFullText.includes('공급자보관용') ||
       cleanFullText.includes('공급받는자용') ||
@@ -295,7 +300,7 @@ export function parseVendorStatementExcel(
     }
 
     // 헤더 행 재등장 무시
-    if (rawAssetNo === '장비번호' || rawAssetNo === '관리번호' || rawModelName === '장비명' || rawModelName === '모델명') {
+    if (rawAssetNo === '장비번호' || rawAssetNo === '관리번호' || rawModelName === '장비명' || rawModelName === '모델명' || rawModelName === '품명') {
       continue;
     }
 
@@ -317,8 +322,7 @@ export function parseVendorStatementExcel(
     }
 
     // =========================================================
-    // 이미지 2 지원: 장비 임대료 외 청소비/수리비/세척비/도색비/운송비 등 기타 항목
-    // (이미지 3의 더미 행으로 무시하지 않고 정상 항목 수용!)
+    // 비장비 항목 (청소비/수리비/세척비/도색비/운송비 등) 수용 처리
     // =========================================================
     let itemType: 'EQUIPMENT' | 'REPAIR' | 'OTHER_FEE' = 'EQUIPMENT';
     let finalAssetNo = rawAssetNo;
