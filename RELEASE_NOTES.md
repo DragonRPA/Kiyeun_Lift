@@ -50,6 +50,19 @@
 
 ---
 
+# Release Notes (v1.42.0.Build.127 - 2026-08-09 16:47)
+
+## 🐛 [월말 매입정산 - 통장 대사 지급 처리 시 Supabase bankTransactionId 스키마 오류 긴급 조치]
+
+### 주요 개편 사항
+
+1. **`purchase_settlements` 지급 처리 Supabase API 호출 오류 원천 차단 (`services/db.ts` & `schema.sql`)**:
+   - 월말 매입정산 지급 처리 시 발생하던 `Could not find the 'bankTransactionId' column of 'purchase_settlements' in the schema cache` 오류 해결.
+   - `sanitizeSupabasePayload` 메소드에 `purchase_settlements` 테이블 `bankTransactionId` 오염 필터링을 조치하여 Supabase DB 전송 시 API 스키마 거부 오류를 차단.
+   - `schema.sql` DDL에 `"bankTransactionId" TEXT` 컬럼을 명시하여 데이터 정합성 보장.
+
+---
+
 # Release Notes (v1.41.0.Build.126 - 2026-08-09 16:40)
 
 ## 🎨 [전사 UI/UX - 다크 모드 그룹박스/카드 내부 하드코딩 배경색 전사 CSS 변수 통일]

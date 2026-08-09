@@ -1726,6 +1726,10 @@ class LocalDB {
       if (tableName === 'consumables' && key === 'supplier') {
         continue;
       }
+      // DB purchase_settlements 스키마에 없는 bankTransactionId 컬럼 오염 방지 (Audit Log는 settlement_payment_logs에 보관)
+      if (tableName === 'purchase_settlements' && key === 'bankTransactionId') {
+        continue;
+      }
       if (typeof val === 'string' && (key === 'userId' || key === 'salespersonId' || key === 'requesterId' || key === 'accepterId' || key === 'completerId' || key === 'inbounderId' || key === 'createdById' || key === 'updatedById' || key.toLowerCase().includes('user'))) {
         const userExists = this.users.some(u => u.id === val);
         sanitized[key] = userExists ? val : (this.users[0]?.id || null);

@@ -715,6 +715,7 @@ CREATE TABLE purchase_settlements (
     "paymentDate" TEXT,
     "paymentMethod" TEXT,
     "bankAccount" TEXT,
+    "bankTransactionId" TEXT,
     "confirmedAt" TEXT,
     "confirmedBy" TEXT,
     memo TEXT,
