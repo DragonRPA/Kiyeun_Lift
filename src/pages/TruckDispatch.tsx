@@ -6,10 +6,11 @@ import {
   FileText, Copy, Lock, CreditCard, CheckCircle, RefreshCw, X,
   Calendar, RotateCcw, ShieldCheck, CheckSquare, XCircle, Search,
   MessageSquare, User, Edit2, Upload, Download, FileSpreadsheet,
-  CheckCircle2, AlertTriangle, Filter, DollarSign, Send
+  CheckCircle2, AlertTriangle, Filter, DollarSign, Send, Sun, MapPin
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { Delivery, TransportCompany, TransportDriver, db, DeliveryStatus } from '../services/db';
+import { DestinationWeatherModal } from '../components/DestinationWeatherModal';
 
 const VEHICLE_TYPE_OPTIONS = ['1.4T', '2.5T', '3.5T', '5T', '5T장축', '8.5T', '11T', '노배드'];
 
@@ -49,7 +50,7 @@ export interface ReconPairRow {
 
 export const TruckDispatch: React.FC = () => {
   const { 
-    deliveries, contracts, customers, products, 
+    deliveries, contracts, customers, products, sites,
     transportCompanies, transportDrivers, outboundInspections, hasPermission, 
     refreshAllData, showErrorModal 
   } = useApp();
@@ -193,6 +194,44 @@ export const TruckDispatch: React.FC = () => {
   const [unloadingDate, setUnloadingDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [unloadingTimeSlot, setUnloadingTimeSlot] = useState('오전');
   const [unloadingCustomTime, setUnloadingCustomTime] = useState('');
+
+  // --- 하차지 일기예보 모달 state ---
+  const [showDestWeatherModal, setShowDestWeatherModal] = useState(false);
+  const [destWeatherParams, setDestWeatherParams] = useState({
+    customerName: '',
+    siteName: '',
+    rawAddress: ''
+  });
+
+  const handleOpenDestWeatherForDelivery = (del?: Delivery | null, customAddress?: string) => {
+    let customerName = '-';
+    let siteName = '-';
+    let rawAddress = customAddress || destinationAddress || '';
+
+    if (del) {
+      const contract = contracts.find(c => c.id === del.contractId);
+      const customer = customers.find(cust => cust.id === contract?.customerId);
+      const site = sites?.find(s => s.id === contract?.siteId);
+
+      customerName = customer?.name || (del as any).customerName || '-';
+      siteName = site?.name || (typeof site === 'string' ? site : '현장미지정');
+      
+      if (!rawAddress) {
+        rawAddress = site?.address || customer?.address || '';
+        if (!rawAddress && del.memo) {
+          const match = del.memo.match(/주소:\s*(.*?)(?=\||$)/);
+          if (match) rawAddress = match[1].trim();
+        }
+      }
+    }
+
+    setDestWeatherParams({
+      customerName: customerName || '배차 하차지',
+      siteName: siteName || '현장',
+      rawAddress: rawAddress || '경기도 용인시'
+    });
+    setShowDestWeatherModal(true);
+  };
 
   // 실무자 마감 비고
   const [closingMemo, setClosingMemo] = useState('');
@@ -1591,8 +1630,35 @@ export const TruckDispatch: React.FC = () => {
                         <div style={{ fontSize: '14px', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '4px' }}>
                           🏢 {customer?.name || '고객사 미지정'}
                         </div>
-                        <div style={{ fontSize: '12.5px', color: 'var(--text-secondary)', marginBottom: '8px' }}>
-                          📍 {d.destinationAddress || '목적지 미지정'}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                          <div style={{ fontSize: '12.5px', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
+                            📍 {d.destinationAddress || '목적지 미지정'}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleOpenDestWeatherForDelivery(d);
+                            }}
+                            style={{
+                              padding: '2px 6px',
+                              fontSize: '11px',
+                              fontWeight: 700,
+                              borderRadius: '4px',
+                              border: '1px solid rgba(59, 130, 246, 0.4)',
+                              backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                              color: '#3B82F6',
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '3px',
+                              flexShrink: 0,
+                              marginLeft: '6px'
+                            }}
+                            title="해당 하차지 실시간 날씨 및 주간 예보 보기"
+                          >
+                            <Sun size={11} color="#F59E0B" /> 날씨
+                          </button>
                         </div>
 
                         <div style={{ padding: '6px 8px', backgroundColor: 'var(--bg-card)', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '11.5px', color: 'var(--text-muted)' }}>
@@ -1633,7 +1699,7 @@ export const TruckDispatch: React.FC = () => {
                       {getOutboundInspectionBadge(selectedDelivery.contractId)}
                       {getDeliveryStatusBadge(getNormalizedDeliveryStatus(selectedDelivery))}
                       
-                      {/* 💡 [사장님 지시] 하단에 있던 배차/운송완료 액션 버튼을 상단 우측 헤더로 이동 배치! */}
+                      {/* 💡 상단 배차/운송완료/취소 액션 버튼 */}
                       {canSave && (
                         <>
                           <button
@@ -1673,15 +1739,15 @@ export const TruckDispatch: React.FC = () => {
                     return (
                       <div>
 
-                        {/* 배차 세부 설정 폼 (isFormDisabled 시 비활성화 수정 불가!) */}
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '16px' }}>
+                        {/* 배차 세부 설정 폼 (3컬럼: 배차 구분 | 상차일자 & 시간 | 하차일자 & 시간) */}
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.25fr 1.25fr', gap: '14px', marginBottom: '16px' }}>
                           <div>
                             <label style={{ fontSize: '12px', fontWeight: 700, marginBottom: '4px', display: 'block', color: 'var(--text-secondary)' }}>배차 구분</label>
                             <select
                               value={dispatchCategory}
                               disabled={isFormDisabled}
                               onChange={e => setDispatchCategory(e.target.value as any)}
-                              style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: isFormDisabled ? 'var(--bg-card)' : 'var(--bg-body)', fontSize: '12.5px', color: 'var(--text-primary)', opacity: isFormDisabled ? 0.75 : 1, cursor: isFormDisabled ? 'not-allowed' : 'default' }}
+                              style={{ width: '100%', padding: '7px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: isFormDisabled ? 'var(--bg-card)' : 'var(--bg-body)', fontSize: '12.5px', color: 'var(--text-primary)', opacity: isFormDisabled ? 0.75 : 1, cursor: isFormDisabled ? 'not-allowed' : 'default' }}
                             >
                               <option value="출고">출고</option>
                               <option value="입고">입고</option>
@@ -1709,6 +1775,32 @@ export const TruckDispatch: React.FC = () => {
                               >
                                 <option value="오전">오전</option>
                                 <option value="오후">오후</option>
+                                <option value="수시">수시</option>
+                                <option value="희망시간">희망시간</option>
+                              </select>
+                            </div>
+                          </div>
+
+                          <div>
+                            <label style={{ fontSize: '12px', fontWeight: 700, marginBottom: '4px', display: 'block', color: 'var(--text-secondary)' }}>하차일자 & 시간</label>
+                            <div style={{ display: 'flex', gap: '6px' }}>
+                              <input
+                                type="date"
+                                value={unloadingDate}
+                                disabled={isFormDisabled}
+                                onChange={e => setUnloadingDate(e.target.value)}
+                                style={{ flex: 1, padding: '7px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: isFormDisabled ? 'var(--bg-card)' : 'var(--bg-body)', fontSize: '12.5px', color: 'var(--text-primary)', opacity: isFormDisabled ? 0.75 : 1, cursor: isFormDisabled ? 'not-allowed' : 'default' }}
+                              />
+                              <select
+                                value={unloadingTimeSlot}
+                                disabled={isFormDisabled}
+                                onChange={e => setUnloadingTimeSlot(e.target.value)}
+                                style={{ width: '80px', padding: '7px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: isFormDisabled ? 'var(--bg-card)' : 'var(--bg-body)', fontSize: '12.5px', color: 'var(--text-primary)', opacity: isFormDisabled ? 0.75 : 1, cursor: isFormDisabled ? 'not-allowed' : 'default' }}
+                              >
+                                <option value="오전">오전</option>
+                                <option value="오후">오후</option>
+                                <option value="수시">수시</option>
+                                <option value="희망시간">희망시간</option>
                               </select>
                             </div>
                           </div>
@@ -2496,6 +2588,15 @@ export const TruckDispatch: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* ☀️ 운송 하차지 실시간 날씨 및 주간 예보 모달 */}
+      <DestinationWeatherModal
+        isOpen={showDestWeatherModal}
+        onClose={() => setShowDestWeatherModal(false)}
+        customerName={destWeatherParams.customerName}
+        siteName={destWeatherParams.siteName}
+        rawAddress={destWeatherParams.rawAddress}
+      />
     </div>
   );
 };
