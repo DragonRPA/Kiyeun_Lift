@@ -1747,7 +1747,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const oldCustomerName = oldCustomer ? oldCustomer.name : '-';
 
     const nextDay = new Date(new Date(successionDate).getTime() + 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-    const newContractNo = `CT-SUCC-${new Date().toISOString().replace(/[-:T.Z]/g, '').slice(0, 14)}`;
+    const newContractNo = generateNextContractNo();
 
     const newContract = db.insertRow<Contract>('contracts', {
       contractNo: newContractNo,
