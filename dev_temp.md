@@ -1,27 +1,20 @@
 # 개발 지시 및 개편 완료 내역 (dev_temp.md)
 
-## 🎨 [완료] flex 레이아웃 근본 재설계 - 화면 하단 낭비 공간 0px 완전 소멸 + 종스크롤바 두께 확장 (v1.37.0.Build.122)
+## 🎨 [완료] 850px 고정 높이 → 100dvh 동적 뷰포트 근본 수정 + 하단 5px 여백 (v1.38.0.Build.123)
 
-### 1. 사장님 지시사항
-- 화면 하단에 남는 낭비 영역을 모두 테이블이 꽉 채워 활용
-- 종(세로) 스크롤바를 더 두껍게 변경
+### 1. 근본 원인 확인 및 수정
+- **진짜 원인 발견**: `App.tsx`의 최상위 루트 div에 `height: '850px', maxHeight: '850px'`로 픽셀 고정값이 하드코딩되어 있었음.
+  - 어떤 모니터 해상도여도 850px이 상한선이므로, 내부의 flex fill / calc(100vh - N) 등 모든 수식이 무의미했음.
+- **수정**: `height: '100dvh', maxHeight: '100dvh'` — 100% 동적 뷰포트 높이로 변경.
+- **사이드바+메인 래퍼 div**: `height: 'calc(850px - 64px)'` 고정 제거 → `flex: 1, minHeight: 0`으로 변경.
+- **main 하단 여백**: `padding: '16px 20px 5px 20px'` — 하단 5px 여백 확보.
 
-### 2. 근본 원인 분석
-- 기존 방식(`max-height: calc(100vh - Npx)`)은 N값을 일일이 조정해야 하는 임시방편이었음.
-- 진짜 문제: `main-content-area`가 `overflow-y: auto`로 내부가 자유롭게 길어질 수 있어 calc 수식이 의미없었음.
+### 2. 주요 수정 파일
+- `App.tsx`: 루트 div `height: 850px` → `100dvh`, 사이드바 래퍼 `calc(850px-64px)` → `flex:1 minHeight:0`, main paddingBottom 5px 적용.
 
-### 3. 근본 재설계 내용
-- **`App.tsx` `<main>`**: `overflow: hidden` + `display: flex, flexDirection: column`으로 변경 → 자식 컴포넌트 height가 main 높이를 초과할 수 없는 구조로 완전 제어.
-- **`Assets.tsx` 최상위 `<div>`**: `height: 100%, display: flex, flexDirection: column`으로 변경
-- **`.table-container`**: `flex: 1, minHeight: 0, maxHeight: none`으로 변경 → 남은 공간을 100% 자동으로 채움
-- **`index.css`**: `.table-container` `max-height` 제거, 각 페이지의 flex:1이 제어하도록 단일화
-
-### 4. 스크롤바 두께 확장
-- 전사 스크롤바 두께: 12px → **16px** (종/횡 동일하게 확장)
-
-### 5. 빌드 및 검증
+### 3. 빌드 및 검증
 - TypeScript `npx tsc -b` 컴파일 오류 없음 확인 ✅ (Exit code: 0)
 
 ---
-**기록 일시**: 2026-08-09 16:18  
-**작성 버전**: `v1.37.0.Build.122`
+**기록 일시**: 2026-08-09 16:24  
+**작성 버전**: `v1.38.0.Build.123`

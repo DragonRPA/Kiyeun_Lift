@@ -359,7 +359,7 @@ const App: React.FC = () => {
   const userHasViewPerm = hasPermission(activeTab, 'view');
 
   return (
-    <div style={{ display: 'flex', height: '850px', maxHeight: '850px', flexDirection: 'column', overflow: 'hidden' }}>
+    <div style={{ display: 'flex', height: '100dvh', maxHeight: '100dvh', flexDirection: 'column', overflow: 'hidden' }}>
       
       {/* 상단 네비게이션 헤더 */}
       <header style={{
@@ -448,8 +448,8 @@ const App: React.FC = () => {
         </div>
       </header>
 
-      {/* 메인 레이아웃 본문 (850px 헤더 제외 수직 프레임) */}
-      <div style={{ display: 'flex', flex: 1, height: 'calc(850px - 64px)', overflow: 'hidden', position: 'relative' }}>
+      {/* 메인 레이아웃 본문 (헤더 64px 제외 나머지 전체) */}
+      <div style={{ display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden', position: 'relative' }}>
         
         {/* 데스크탑 계층형 아코디언 사이드바 (독자 스크롤) */}
         <aside
@@ -603,8 +603,8 @@ const App: React.FC = () => {
           })}
         </aside>
 
-        {/* 메인 콘텐츠 영역 (독자 스크롤 & 다이나믹 뷰포트 활용) */}
-        <main style={{ flex: 1, height: '100%', minHeight: 0, padding: '16px 20px', overflow: 'hidden', display: 'flex', flexDirection: 'column', backgroundColor: 'var(--bg-app)' }} className="main-content-area">
+        {/* 메인 콘텐츠 영역 (flex fill, 하단 5px 여백 확보) */}
+        <main style={{ flex: 1, height: '100%', minHeight: 0, padding: '16px 20px 5px 20px', overflow: 'hidden', display: 'flex', flexDirection: 'column', backgroundColor: 'var(--bg-app)' }} className="main-content-area">
           {userHasViewPerm ? (
             getActiveComponent()
           ) : (
