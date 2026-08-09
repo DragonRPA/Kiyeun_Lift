@@ -164,15 +164,15 @@ export const TruckDispatch: React.FC = () => {
       setStartDate(todayStr);
       setEndDate(todayStr);
     } else if (type === 'WEEK') {
-      const past = new Date();
-      past.setDate(today.getDate() - 7);
-      setStartDate(past.toISOString().split('T')[0]);
-      setEndDate(todayStr);
+      const future = new Date();
+      future.setDate(today.getDate() + 7);
+      setStartDate(todayStr);
+      setEndDate(future.toISOString().split('T')[0]);
     } else if (type === 'MONTH') {
-      const past = new Date();
-      past.setMonth(today.getMonth() - 1);
-      setStartDate(past.toISOString().split('T')[0]);
-      setEndDate(todayStr);
+      const future = new Date();
+      future.setMonth(today.getMonth() + 1);
+      setStartDate(todayStr);
+      setEndDate(future.toISOString().split('T')[0]);
     } else {
       setStartDate('');
       setEndDate('');
