@@ -1020,10 +1020,8 @@ ${details.map((d, idx) => {
                 <tbody>
                   {filteredBillings.length === 0 ? (
                     <tr>
-                      <td colSpan={6} style={{ textAlign: 'center', padding: '36px 0', color: 'var(--text-muted)' }}>
-                        {billings.length === 0
-                          ? '📭 등록된 청구 내역이 없습니다.'
-                          : '🔍 조회 조건에 맞는 청구 내역이 없습니다. 검색 조건을 변경해 보세요.'}
+                      <td colSpan={6} style={{ textAlign: 'center', padding: '36px 0', color: 'var(--text-muted)', fontSize: '13px' }}>
+                        조회 결과가 없습니다.
                       </td>
                     </tr>
                   ) : filteredBillings.map(b => {

@@ -814,8 +814,8 @@ export const BankMatching: React.FC = () => {
               <tbody>
                 {filteredTransactions.length === 0 ? (
                   <tr>
-                    <td colSpan={11} style={{ padding: '32px', textAlign: 'center', color: 'var(--text-muted)' }}>
-                      조회된 통장 거래 내역이 없습니다.
+                    <td colSpan={11} style={{ padding: '32px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '13px' }}>
+                      조회 결과가 없습니다.
                     </td>
                   </tr>
                 ) : (

@@ -404,22 +404,10 @@ export const Assets: React.FC = () => {
                   ⏳ 자산 관리 데이터를 데이터베이스에서 불러오는 중입니다...
                 </td>
               </tr>
-            ) : !hasQueried ? (
+            ) : (!hasQueried || filtered.length === 0) ? (
               <tr>
-                <td colSpan={35} style={{ textAlign: 'center', padding: '60px 0', color: 'var(--text-muted)' }}>
-                  <div style={{ fontSize: '15px', fontWeight: '800', marginBottom: '8px', color: 'var(--primary)' }}>
-                    💡 자산 관리 메뉴 수동 조회 모드 (초기 진입속도 0초 최적화)
-                  </div>
-                  <div style={{ fontSize: '12.5px', lineHeight: '1.6' }}>
-                    업무시간 데이터 자동 로딩 부담을 방지하기 위해 <strong>메뉴 진입 시 자동 조회를 실행하지 않습니다.</strong><br />
-                    상단 검색 필터를 설정하신 후 <strong style={{ color: 'var(--primary)' }}>[🔍 조회]</strong> 버튼을 누르시면 자산 목록이 불려옵니다.
-                  </div>
-                </td>
-              </tr>
-            ) : filtered.length === 0 ? (
-              <tr>
-                <td colSpan={35} style={{ textAlign: 'center', padding: '40px 0', color: 'var(--text-muted)' }}>
-                    🔍 검색 조건에 맞는 자산이 없습니다.
+                <td colSpan={35} style={{ textAlign: 'center', padding: '36px 0', color: 'var(--text-muted)', fontSize: '13px' }}>
+                  조회 결과가 없습니다.
                 </td>
               </tr>
             ) : (

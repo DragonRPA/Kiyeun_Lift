@@ -820,8 +820,8 @@ export const Contracts: React.FC = () => {
                 <tbody style={{ whiteSpace: 'nowrap' }}>
                   {filteredContracts.length === 0 ? (
                     <tr>
-                      <td colSpan={11} style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>
-                        조회 조건에 일치하는 계약 내역이 없습니다.
+                      <td colSpan={11} style={{ textAlign: 'center', padding: '36px 0', color: 'var(--text-muted)', fontSize: '13px' }}>
+                        조회 결과가 없습니다.
                       </td>
                     </tr>
                   ) : (
