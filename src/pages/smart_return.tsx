@@ -307,9 +307,9 @@ export const SmartReturn: React.FC = () => {
       {/* 타이틀 및 가이드 배너 */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
-          <h2 style={{ fontWeight: '700', marginBottom: '4px' }}>스마트 회수 요청 생성 및 배차 연계</h2>
+          <h2 style={{ fontWeight: '700', marginBottom: '4px' }}>회수 의뢰 등록 및 배차 연계</h2>
           <p style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
-            영업 계약 만료/단축/고장 및 외주정비업체 수리 완료 건에 대한 맞춤형 회수 의뢰(INBOUND) 프로세스를 생성합니다.
+            영업 계약 만료/단축/고장 및 외주정비업체 수리 완료 건에 대한 회수 의뢰(INBOUND) 프로세스를 등록합니다.
           </p>
         </div>
       </div>
@@ -537,7 +537,7 @@ export const SmartReturn: React.FC = () => {
                       전체선택 / 해제
                     </button>
                   </div>
-                  <div style={{ maxHeight: '140px', overflowY: 'auto', border: '1px solid var(--border-color)', padding: '10px', borderRadius: '6px', display: 'flex', flexDirection: 'column', gap: '6px', backgroundColor: 'var(--bg-app)' }}>
+                  <div style={{ maxHeight: '160px', overflowY: 'auto', border: '1px solid var(--border-color)', padding: '8px', borderRadius: '6px', display: 'flex', flexDirection: 'column', gap: '6px', backgroundColor: 'var(--bg-app)' }}>
                     {activeContractAssets.length === 0 ? (
                       <div style={{ fontSize: '12.5px', color: 'var(--text-secondary)', textAlign: 'center', padding: '10px' }}>
                         대여 중인 자산 정보가 없습니다.
@@ -546,14 +546,35 @@ export const SmartReturn: React.FC = () => {
                       activeContractAssets.map(ca => {
                         const asset = assets.find(a => a.id === ca.assetId);
                         if (!asset) return null;
+                        const isChecked = selectedAssetIds.includes(asset.id);
                         return (
-                          <label key={ca.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', cursor: 'pointer', margin: 0 }}>
+                          <label
+                            key={ca.id}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '10px',
+                              fontSize: '12.5px',
+                              cursor: 'pointer',
+                              padding: '8px 10px',
+                              borderRadius: '6px',
+                              border: isChecked ? '1px solid var(--primary)' : '1px solid var(--border-color)',
+                              backgroundColor: isChecked ? 'var(--primary-light)' : 'var(--bg-card)',
+                              transition: 'all 0.15s ease',
+                              margin: 0
+                            }}
+                          >
                             <input
                               type="checkbox"
-                              checked={selectedAssetIds.includes(asset.id)}
+                              checked={isChecked}
                               onChange={() => handleSalesAssetCheckboxChange(asset.id)}
+                              style={{ width: '16px', height: '16px', flexShrink: 0, cursor: 'pointer' }}
                             />
-                            <span><strong>[{asset.assetNo}]</strong> {asset.modelName}</span>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                              <strong style={{ color: 'var(--primary)' }}>[{asset.assetNo}]</strong>
+                              <span style={{ fontWeight: 600 }}>{asset.modelName}</span>
+                              {asset.serialNo && <span style={{ fontSize: '11.5px', color: 'var(--text-muted)' }}>(S/N: {asset.serialNo})</span>}
+                            </div>
                           </label>
                         );
                       })
@@ -658,7 +679,7 @@ export const SmartReturn: React.FC = () => {
                   style={{ width: '100%', padding: '10px', fontSize: '14px', fontWeight: 'bold' }}
                   disabled={!canSave || selectedAssetIds.length === 0}
                 >
-                  <Check size={16} /> 스마트 회수의뢰 등록 확정
+                  <Check size={16} /> 회수 의뢰 등록 확정
                 </button>
 
               </form>
