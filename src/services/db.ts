@@ -1352,15 +1352,6 @@ class LocalDB {
       return item;
     });
 
-    // [v1.68.15 마이그레이션 2] 더미 테스트 데이터 영구 퇴출 (localStorage 포함)
-    // 더미 이름(aaa, bbb, ccc, ddd, eee) 항목만 제거 (ID 기반 필터는 운영 데이터 삭제 위험으로 제거)
-    const DUMMY_NAMES = new Set(['aaa', 'bbb', 'ccc', 'ddd', 'eee']);
-    const cleaned = migrated.filter(item => !DUMMY_NAMES.has(item.name));
-    if (cleaned.length !== migrated.length) {
-      needsSave = true;
-      migrated = cleaned;
-    }
-
     if (needsSave) {
       this.set('inspectionChecklistItems', migrated);
     }
