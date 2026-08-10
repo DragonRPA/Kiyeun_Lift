@@ -162,9 +162,9 @@ export const AssetHistory: React.FC = () => {
   const inboundCustomer = inboundContract ? customers.find(c => c.id === inboundContract.customerId) : null;
   const inboundSite = inboundContract ? sites.find(s => s.id === inboundContract.siteId) : null;
 
-  // 입고 등록 전송 실행
-  const handleSubmitInbound = async (e: React.FormEvent) => {
-    e.preventDefault();
+  // 입고 등록 전송 실행 (HTML form 미사용 독립 버튼 전송으로 모발 새로고침 100% 차단)
+  const handleSubmitInbound = async (e?: React.FormEvent | React.MouseEvent) => {
+    if (e) e.preventDefault();
     if (!inboundTargetAsset) {
       alert('입고 처리할 대상 자산의 정확한 관리번호를 입력해 주세요.');
       return;
@@ -340,7 +340,7 @@ export const AssetHistory: React.FC = () => {
               <ArrowDownLeft size={18} className="text-primary" /> 입고 자산 선택 및 검수 정보 입력
             </h3>
 
-            <form onSubmit={handleSubmitInbound} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
               
               {/* 1. 관리번호 수동/검색 입력 (휴먼에러 교차 검증) */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
@@ -352,6 +352,7 @@ export const AssetHistory: React.FC = () => {
                   onChange={e => {
                     const val = e.target.value;
                     setInboundAssetNoInput(val);
+                    try { sessionStorage.setItem('inbound_draft_assetNo', val); } catch (err) {}
                     const matched = assets.find(a => a.assetNo.toLowerCase() === val.trim().toLowerCase());
                     if (matched) setSelectedInboundAssetId(matched.id);
                   }}
@@ -408,17 +409,20 @@ export const AssetHistory: React.FC = () => {
                               type="checkbox"
                               checked={isChecked}
                               onChange={e => {
+                                let newIds: string[];
                                 if (e.target.checked) {
-                                  setSelectedChecklistIds(prev => [...prev, item.id]);
+                                  newIds = [...selectedChecklistIds, item.id];
                                 } else {
-                                  setSelectedChecklistIds(prev => prev.filter(id => id !== item.id));
-                                  // 체크 해제 시 사진 제거
+                                  newIds = selectedChecklistIds.filter(id => id !== item.id);
                                   setDefectPhotos(prev => {
                                     const next = { ...prev };
                                     delete next[item.id];
+                                    try { sessionStorage.setItem('inbound_draft_photos', JSON.stringify(next)); } catch (err) {}
                                     return next;
                                   });
                                 }
+                                setSelectedChecklistIds(newIds);
+                                try { sessionStorage.setItem('inbound_draft_checklist', JSON.stringify(newIds)); } catch (err) {}
                               }}
                               style={{ width: '16px', height: '16px', accentColor: 'var(--primary)', cursor: 'pointer' }}
                             />
@@ -449,7 +453,6 @@ export const AssetHistory: React.FC = () => {
                               id={`defect-photo-input-${item.id}`}
                               type="file"
                               accept="image/*"
-                              capture="environment"
                               style={{ display: 'none' }}
                               onChange={e => handlePhotoFileChange(item.id, e.target.files?.[0] || null)}
                             />
@@ -463,6 +466,7 @@ export const AssetHistory: React.FC = () => {
                                   onClick={() => setDefectPhotos(prev => {
                                     const next = { ...prev };
                                     delete next[item.id];
+                                    try { sessionStorage.setItem('inbound_draft_photos', JSON.stringify(next)); } catch (err) {}
                                     return next;
                                   })}
                                   style={{ border: 'none', background: 'none', color: 'var(--danger)', fontSize: '11px', cursor: 'pointer', textDecoration: 'underline' }}
@@ -490,13 +494,18 @@ export const AssetHistory: React.FC = () => {
                   rows={2}
                   placeholder="추가적인 특이사항 또는 담당자 비고 입력 (선택)..."
                   value={inboundMemo}
-                  onChange={e => setInboundMemo(e.target.value)}
+                  onChange={e => {
+                    const val = e.target.value;
+                    setInboundMemo(val);
+                    try { sessionStorage.setItem('inbound_draft_memo', val); } catch (err) {}
+                  }}
                   style={{ padding: '8px', fontSize: '12.5px' }}
                 />
               </div>
 
               <button
-                type="submit"
+                type="button"
+                onClick={() => handleSubmitInbound()}
                 className="btn-primary"
                 disabled={isSubmittingInbound || !inboundTargetAsset}
                 style={{ width: '100%', padding: '10px', fontSize: '14px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', marginTop: '6px' }}
@@ -504,7 +513,7 @@ export const AssetHistory: React.FC = () => {
                 <CheckCircle2 size={16} /> 📥 반납 / 입고 등록 확정
               </button>
 
-            </form>
+            </div>
           </div>
 
           {/* 오른쪽: 휴먼에러 오타 방지용 자동 매칭 교차 검증 정보 카드 */}
