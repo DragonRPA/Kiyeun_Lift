@@ -1,3 +1,24 @@
+# Release Notes (v1.68.20.Build.184 - 2026-08-10 19:16)
+
+## 🐛 [DB 삭제 무음 실패 전면 차단 및 에러 명시화] `db.ts` - `deleteRow()` 무음 삼킴(silent swallow) 해결
+
+### 🌟 원인 분석 (Root Cause)
+
+`db.ts`의 `deleteRow()` 메소드에서 Supabase DB DELETE 수행 시 에러가 발생하더라도 `console.error`만 남기고 에러를 `throw`하지 않아 `await db.awaitPendingWrites()`가 성공으로 오판하는 문제가 있었습니다.
+
+1. 사용자가 UI에서 [삭제] 버튼 클릭.
+2. `deleteRow()`가 로컬 스토리지에서는 먼저 삭제하고 Supabase DELETE를 요청.
+3. Supabase RLS 정책 또는 권한 문제로 원격 DB 삭제가 실패했으나, 에러를 삼키고(swallow) 성공으로 넘김.
+4. UI에는 "삭제되었습니다" 알림창이 표출되었으나, 원격 DB에는 행이 그대로 남아있음.
+5. 이후 새로고침 또는 DB 조회가 일어날 때 원격 DB의 행이 다시 불러와져 화면에서 "삭제되는 척만 하고 되살아남".
+
+### ✅ 해결 조치
+
+1. **`deleteRow()` 삭제 실패 시 에러 즉시 표출**: Supabase DB 삭제 실패 시 에러를 예외 없이 즉시 `throw`하여, UI에서 사용자에게 정확한 DB 에러 메시지(RLS/권한/네트워크 등)를 알리도록 수정.
+2. **Supabase RLS Policy 확인 가이드**: `inspection_checklist_items` 테이블의 DELETE 권한 RLS SQL 가이드 제공.
+
+---
+
 # Release Notes (v1.68.19.Build.183 - 2026-08-10 19:12)
 
 ## 🐛 [데이터 부활 / 시드 재주입 근본 원인 완전 해결] `db.ts` - `pullFromSupabase()` 자동 재전송 오동작 제거
