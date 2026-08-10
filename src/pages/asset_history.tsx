@@ -4,6 +4,7 @@ import { useApp } from '../context/AppContext';
 import { Search, Download, Calendar, Layers, Wrench, ArrowUpRight, ArrowDownLeft, CheckCircle2, RotateCcw, AlertTriangle, ShieldCheck, Camera } from 'lucide-react';
 import { exportToExcel } from '../services/excel';
 import { InboundDefectDetail } from '../services/db';
+import { compressImageFile } from '../utils/imageCompressor';
 
 export const AssetHistory: React.FC = () => {
   const { 
@@ -44,16 +45,36 @@ export const AssetHistory: React.FC = () => {
   const calculatedInboundScore = selectedChecklistObjects.reduce((sum, item) => sum + item.score, 0);
   const selectedChecklistSummary = selectedChecklistObjects.map(item => `${item.name}(+${item.score}점)`).join(', ');
 
-  // 사진 업로드 처리 (모바일 촬영 & PC 탐색기 파일 선택 지원)
-  const handlePhotoFileChange = (itemId: string, file: File | null) => {
+  // 💡 모바일 카메라 촬영 앱 전환 후 복귀 시 자동 복원 (SessionStorage Auto Recovery)
+  useEffect(() => {
+    try {
+      const savedAssetNo = sessionStorage.getItem('inbound_draft_assetNo');
+      const savedChecklist = sessionStorage.getItem('inbound_draft_checklist');
+      const savedMemo = sessionStorage.getItem('inbound_draft_memo');
+      const savedPhotos = sessionStorage.getItem('inbound_draft_photos');
+
+      if (savedAssetNo) setInboundAssetNoInput(savedAssetNo);
+      if (savedChecklist) setSelectedChecklistIds(JSON.parse(savedChecklist));
+      if (savedMemo) setInboundMemo(savedMemo);
+      if (savedPhotos) setDefectPhotos(JSON.parse(savedPhotos));
+    } catch (e) {}
+  }, []);
+
+  // 💡 [사진 업로드 처리] (모바일 고해상도 카메라 10MB+ ➔ 100KB 경량화 압축: RAM 부족 탭 새로고침 100% 차단)
+  const handlePhotoFileChange = async (itemId: string, file: File | null) => {
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      if (e.target?.result) {
-        setDefectPhotos(prev => ({ ...prev, [itemId]: e.target!.result as string }));
-      }
-    };
-    reader.readAsDataURL(file);
+    try {
+      const compressedDataUrl = await compressImageFile(file, 1024, 1024, 0.75);
+      setDefectPhotos(prev => {
+        const next = { ...prev, [itemId]: compressedDataUrl };
+        try {
+          sessionStorage.setItem('inbound_draft_photos', JSON.stringify(next));
+        } catch (e) {}
+        return next;
+      });
+    } catch (err) {
+      console.error('Photo compression error:', err);
+    }
   };
 
   // 0. 타 탭 이동 페이로드(특정 자산 이력 조회) 감지
@@ -173,12 +194,18 @@ export const AssetHistory: React.FC = () => {
 
       alert(`✅ [입고 등록 완결]\n\n자산번호: [${inboundTargetAsset.assetNo}] (${inboundTargetAsset.modelName})\n입고 일자: ${inboundDate}\n정비 필요 점수: ${calculatedInboundScore}점\n상태 전환: ${calculatedInboundScore === 0 ? '임대가능 (AVAILABLE)' : '입고반납/검수대기 (RENTED_RETURNED)'}\n\n계약 반납 마감, 입고 고유번호 및 자산 정비수리 이력이 정상 연동 등록되었습니다.`);
       
-      // 폼 초기화 및 입고 조회 탭으로 이동
+      // 폼 초기화 및 임시 저장 세션 소멸
       setSelectedInboundAssetId('');
       setInboundAssetNoInput('');
       setSelectedChecklistIds([]);
       setDefectPhotos({});
       setInboundMemo('');
+      try {
+        sessionStorage.removeItem('inbound_draft_assetNo');
+        sessionStorage.removeItem('inbound_draft_checklist');
+        sessionStorage.removeItem('inbound_draft_memo');
+        sessionStorage.removeItem('inbound_draft_photos');
+      } catch (e) {}
       setActiveTab('INBOUND');
     } catch (err: any) {
       alert(`⚠️ 입고 등록 중 오류 발생: ${err?.message || err}`);
@@ -405,16 +432,27 @@ export const AssetHistory: React.FC = () => {
                         {/* 체크 시 사진 촬영 / PC 업로드 영역 표출 */}
                         {isChecked && (
                           <div style={{ marginTop: '4px', paddingTop: '6px', borderTop: '1px dashed var(--border-color)', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                            <label className="btn-secondary" style={{ padding: '4px 8px', fontSize: '11px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', margin: 0 }}>
+                            <button
+                              type="button"
+                              className="btn-secondary"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                const fileInput = document.getElementById(`defect-photo-input-${item.id}`);
+                                if (fileInput) fileInput.click();
+                              }}
+                              style={{ padding: '4px 8px', fontSize: '11px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', margin: 0 }}
+                            >
                               <Camera size={13} /> 📸 증상 사진 촬영 / PC 선택
-                              <input
-                                type="file"
-                                accept="image/*"
-                                capture="environment"
-                                style={{ display: 'none' }}
-                                onChange={e => handlePhotoFileChange(item.id, e.target.files?.[0] || null)}
-                              />
-                            </label>
+                            </button>
+                            <input
+                              id={`defect-photo-input-${item.id}`}
+                              type="file"
+                              accept="image/*"
+                              capture="environment"
+                              style={{ display: 'none' }}
+                              onChange={e => handlePhotoFileChange(item.id, e.target.files?.[0] || null)}
+                            />
 
                             {photo ? (
                               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
