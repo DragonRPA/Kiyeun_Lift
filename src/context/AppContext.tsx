@@ -391,6 +391,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         localStorage.setItem('seed_v1_8_dummy_contracts_v2', 'true');
       }
     }
+
+    // [v1.68.16] localStorage에 남아있는 구버전 코드 시드(chk-1~5) 강제 퇴출
+    // 모바일 구 캐시 코드가 SEED를 localStorage에 주입해도, 앱 초기화 시 즉시 제거
+    if (!localStorage.getItem('migration_purge_seed_chk_v1')) {
+      try {
+        const raw = localStorage.getItem('erp_inspectionChecklistItems');
+        if (raw) {
+          const items = JSON.parse(raw);
+          if (Array.isArray(items)) {
+            const SEED_IDS = new Set(['chk-1', 'chk-2', 'chk-3', 'chk-4', 'chk-5']);
+            const cleaned = items.filter((item: any) => !SEED_IDS.has(item?.id));
+            if (cleaned.length !== items.length) {
+              localStorage.setItem('erp_inspectionChecklistItems', JSON.stringify(cleaned));
+            }
+          }
+        }
+      } catch (e) {}
+      localStorage.setItem('migration_purge_seed_chk_v1', 'true');
+    }
+
     // 안전한 Google Config 마이그레이션 (기존 정보 보존 및 신규 컬럼 주입)
     const existingConfigsStr = localStorage.getItem('erp_googleConfigs');
     if (existingConfigsStr) {
