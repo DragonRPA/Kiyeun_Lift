@@ -451,7 +451,6 @@ export const AssetHistory: React.FC = () => {
                               id={`defect-photo-input-${item.id}`}
                               type="file"
                               accept="image/*"
-                              capture="environment"
                               style={{ display: 'none' }}
                               onChange={e => handlePhotoFileChange(item.id, e.target.files?.[0] || null)}
                             />

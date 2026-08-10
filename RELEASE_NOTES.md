@@ -1,3 +1,19 @@
+# Release Notes (v1.68.10.Build.172 - 2026-08-10 17:28)
+
+## 📸 [모바일 OOM 완전 해결] `capture="environment"` 완전 제거 → 안드로이드 바텀시트 방식 복귀
+
+### 🌟 원인 재진단 및 최종 수정
+
+1. **`capture="environment"` 속성이 진짜 OOM 원인 (`asset_history.tsx`, `Consumables.tsx`, `Deliveries.tsx`)**
+   - `capture="environment"` 는 Android 네이티브 카메라 앱을 독립 실행시켜 **15~20MB 고화질 원본 사진 파일을 브라우저 메모리에 통째로 한 번에 로딩**하여 OOM 발생.
+   - 이미지 압축 코드가 실행되기 전, 파일을 받는 순간 이미 Android OS가 "메모리 부족" 에러를 발생시키는 구조.
+
+2. **`accept="image/*"` 단독 사용으로 복귀 (촬영 기능은 그대로 유지)**
+   - `accept="image/*"` 만 사용하면 Android 바텀시트 팝업("카메라로 촬영" / "사진 보관함")이 표시됨.
+   - 바텀시트 방식은 Android OS가 자체적으로 **파일 스트림(Stream) 분할 전송**으로 브라우저에 전달하여 OOM 없이 안전.
+
+---
+
 # Release Notes (v1.68.9.Build.171 - 2026-08-10 17:20)
 
 ## 🚀 [모바일 초경량 자원 최적화] 안드로이드 메모리 부족(OOM) 탭 새로고침 방지 엔진 구축
