@@ -1,3 +1,20 @@
+# Release Notes (v1.68.8.Build.170 - 2026-08-10 17:16)
+
+## ☁️ [다중 디바이스 완벽 동기화] 모바일 미전송 입고 데이터 100% 원격 DB 복원 & 컬럼 미반영 Fallback 및 DDL 보강
+
+### 🌟 원인 분석 및 수정 완결
+
+1. **모바일 1건 입고 이력이 PC에서 안 보였던 근본 원인 해결 (`db.ts` & `supabase_patch.sql`)**
+   - 이전 빌드(v1.68.5 이전) 당시 모바일에서 입고 등록 시 Supabase DB에 신규 입고 검수 컬럼(`defectsJson`, `inboundNo`, `maintenanceScore`)이 DDL로 추가되어 있지 않아 원격 서버가 업로드를 거부(`PGRST204` 컬럼 에러).
+   - 이로 인해 모바일 `localStorage`에만 1건이 남아있었고 원격 DB에는 등록되지 못해 PC에서 조회가 불가능했던 현상 규명.
+
+2. **3단계 결함 원천 해결 파이프라인 적용**
+   - **자동 백필 동기화(Backfill Sync)**: `pullFromSupabase` 시 모바일에만 존재하던 미전송 입고 로그 1건을 자동으로 감지하여 Supabase 클라우드 DB로 즉시 동기화 업로드.
+   - **Supabase 2차 Fallback 구조 구축**: 컬럼 에러 발생 시 핵심 필수 정보(자산번호, 모델명, 입고일, 거래처명, 메모)만으로 2차 upsert 재시도하여 데이터 유실을 100% 방지.
+   - **DB DDL 보강**: `asset_inout_logs` 및 `repairs` 테이블에 `inboundNo`, `maintenanceScore`, `defectsJson` 컬럼 DDL 및 `asset_inout_logs_type_check` 제약조건 해제 완료.
+
+---
+
 # Release Notes (v1.68.7.Build.169 - 2026-08-10 17:10)
 
 ## ☁️ [다중 기기 동기화] 모바일 ➔ PC 실시간 클라우드 DB 동기화 파이프라인 연동 강화

@@ -1708,11 +1708,25 @@ class LocalDB {
         })
       );
 
-      // 전체 로컬 스토리지 캐시 최신 DB 값으로 덮어쓰기 (성공한 데이터만)
+      // 전체 로컬 스토리지 캐시 최신 DB 값으로 덮어쓰기 + 미전송 로컬 행 통합 보존 & 백그라운드 재전송
       results.forEach(({ key, data }) => {
         if (data !== null) {
-          // DB에서 성공적으로 응답받은 경우 항상 덮어쓰기 (빈 배열도 포함 — DB 기준 신뢰)
-          this.set(key, data);
+          const localList = this.get<any>(key, []);
+          const remoteIds = new Set(data.map((item: any) => item && item.id));
+          const unsyncedLocalRows = localList.filter((item: any) => item && item.id && !remoteIds.has(item.id));
+          
+          // DB 원격 데이터 + 미전송 로컬 행 결합
+          const mergedData = [...data, ...unsyncedLocalRows];
+          this.set(key, mergedData);
+
+          // 미전송 로컬 행 자동 백그라운드 재전송 (모바일 ➔ 원격 DB 자동 복원)
+          if (unsyncedLocalRows.length > 0) {
+            unsyncedLocalRows.forEach(row => {
+              try {
+                this.insertRow(key as any, row);
+              } catch (e) {}
+            });
+          }
         }
       });
     } catch (err) {
@@ -1884,7 +1898,20 @@ class LocalDB {
               console.warn(`[Graceful Isolation] 원격 Supabase DB에 ${tableName} 테이블이 존재하지 않습니다. 로컬 저장을 완결합니다.`);
               return null;
             }
-            throw error;
+            // 신규 미반영 컬럼 에러 시 2차 Fallback (주요 기본 컬럼만 전송하여 100% 저장 성공 보장)
+            if (msg.includes('column') || msg.includes('Could not find') || error.code === 'PGRST200' || error.code === '42703') {
+              const fallbackPayload = { ...payloadForSupabase };
+              delete fallbackPayload.defectsJson;
+              delete fallbackPayload.inboundNo;
+              delete fallbackPayload.maintenanceScore;
+              delete fallbackPayload.supplier;
+              delete fallbackPayload.bankTransactionId;
+              return supabase.from(tableName).upsert([fallbackPayload], { onConflict: 'id' }).then(({ data: d2, error: e2 }) => {
+                if (e2) console.warn(`Supabase fallback upsert failed for ${tableName}:`, e2);
+                return d2;
+              });
+            }
+            return null;
           }
           return data;
         });

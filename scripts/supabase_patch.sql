@@ -54,6 +54,16 @@ ALTER TABLE billings ADD CONSTRAINT billings_status_check CHECK (status IN ('UNP
 -- [보완 2026-07-30] contract_history 테이블 changeType CHECK 제약 조건 업데이트 ('FEE_CHANGE' 추가)
 ALTER TABLE contract_history DROP CONSTRAINT IF EXISTS contract_history_changeType_check;
 ALTER TABLE contract_history ADD CONSTRAINT contract_history_changeType_check CHECK ("changeType" IN ('REGISTER', 'EXTEND', 'SHORTEN', 'SUCCEED', 'TERMINATE', 'EXCHANGE', 'FEE_CHANGE'));
+
+-- [보완 2026-08-10] asset_inout_logs 및 repairs 테이블 신규 입고 검수 컬럼 및 CHECK 제약조건 보강
+ALTER TABLE asset_inout_logs ADD COLUMN IF NOT EXISTS "inboundNo" TEXT;
+ALTER TABLE asset_inout_logs ADD COLUMN IF NOT EXISTS "maintenanceScore" INTEGER DEFAULT 0;
+ALTER TABLE asset_inout_logs ADD COLUMN IF NOT EXISTS "defectsJson" TEXT;
+ALTER TABLE asset_inout_logs DROP CONSTRAINT IF EXISTS asset_inout_logs_type_check;
+
+ALTER TABLE repairs ADD COLUMN IF NOT EXISTS "inboundNo" TEXT;
+ALTER TABLE repairs ADD COLUMN IF NOT EXISTS "defectsJson" TEXT;
+
 NOTIFY pgrst, 'reload schema';
 
 
