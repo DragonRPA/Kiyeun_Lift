@@ -98,6 +98,7 @@ interface AppContextType {
   deleteOvertimeRecord: (id: string) => void;
   setPayrollClosingStatus: (month: string, status: 'DRAFT' | 'APPROVED', approvedBy?: string) => Promise<void>;
   refreshAllData: () => void;
+  fullRefreshFromServer: () => Promise<void>;
   executeMonthlyDepreciation: (depreciationYm: string, note?: string) => Promise<{ count: number; totalAmount: number }>;
   loadTablesForMenu: (menuId: string) => Promise<void>;
   updatePermissions: (updated: MenuPermission[]) => void;
@@ -3599,7 +3600,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       bankTransactions, bankMatchingRules, bankInitialBalances, assetInOutLogs, vendors, googleConfigs, cashFlowSnapshots, outboundInspections, depreciationLogs,
       purchaseSettlements, purchaseSettlementItems, settlementPaymentLogs: db.settlementPaymentLogs, externalLeases, inspectionChecklistItems,
       annualLeaveQuotas, leaveUsages, overtimeRecords, payrollClosings,
-      refreshAllData, executeMonthlyDepreciation, loadTablesForMenu, updatePermissions, saveUser, saveCustomer, saveContact, saveSite, saveProduct, saveAsset, updateGoogleConfig,
+      refreshAllData, fullRefreshFromServer, executeMonthlyDepreciation, loadTablesForMenu, updatePermissions, saveUser, saveCustomer, saveContact, saveSite, saveProduct, saveAsset, updateGoogleConfig,
       saveCashFlowSnapshot, deleteCashFlowSnapshot, saveVendor, deleteVendor, saveBankInitialBalance, saveInspectionChecklistItem, deleteInspectionChecklistItem,
       updateAnnualLeaveQuota, addLeaveUsage, deleteLeaveUsage, addOvertimeRecord, deleteOvertimeRecord, setPayrollClosingStatus,
       acquireAsset, disposeAsset, registerRentedAsset, returnRentedAsset, changeAssetStatus, registerInboundAsset, cancelInboundAsset,

@@ -9,7 +9,7 @@ import { compressImageFile } from '../utils/imageCompressor';
 export const AssetHistory: React.FC = () => {
   const { 
     assetInOutLogs, assets, customers, sites, contractAssets, contracts, repairs, repairConsumables, consumables, navigationPayload, setNavigationPayload,
-    inspectionChecklistItems, registerInboundAsset, cancelInboundAsset
+    inspectionChecklistItems, registerInboundAsset, cancelInboundAsset, fullRefreshFromServer
   } = useApp();
 
   // 1. 탭 상태: 'INBOUND_REGISTER' | 'INBOUND' | 'OUTBOUND' | 'REPAIR'
@@ -85,8 +85,11 @@ export const AssetHistory: React.FC = () => {
     }
   }, [navigationPayload]);
 
-  // 💡 명시적 [조회] 버튼 실행 헬퍼
-  const handleSearch = (overrideStart?: string, overrideEnd?: string) => {
+  // 💡 명시적 [조회] 버튼 실행 헬퍼 (Supabase 클라우드 원격 DB 실시간 자동 동기화 연동)
+  const handleSearch = async (overrideStart?: string, overrideEnd?: string) => {
+    if (fullRefreshFromServer) {
+      try { await fullRefreshFromServer(); } catch (e) {}
+    }
     setActiveSearchParams({
       startDate: overrideStart !== undefined ? overrideStart : inputStartDate,
       endDate: overrideEnd !== undefined ? overrideEnd : inputEndDate,
