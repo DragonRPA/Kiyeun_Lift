@@ -1,3 +1,26 @@
+# Release Notes (v1.68.15.Build.177 - 2026-08-10 18:25)
+
+## 🗑️ [체크리스트 시드 재주입 근본 차단] `db.ts` - SEED 빈 배열 교체 + 더미 영구 퇴출 마이그레이션
+
+### 🌟 재주입 메커니즘 (근본 원인)
+
+```
+모바일 localStorage 초기화 or 신규 디바이스 접속
+  → localStorage.getItem('erp_inspectionChecklistItems') = null
+  → !null → true → SEED_INSPECTION_CHECKLIST_ITEMS 주입
+  → insertRow 계열 작업 발생 시 Supabase로 upsert → DB 재부활
+```
+
+### ✅ 수정 내용 (`db.ts`)
+
+1. **`SEED_INSPECTION_CHECKLIST_ITEMS` → 빈 배열(`[]`)로 교체**: 코드 레벨 자동 시드 주입 원천 차단. 체크리스트 항목은 앱 UI에서만 등록/관리.
+2. **더미 데이터 영구 퇴출 마이그레이션 추가**:
+   - 과거 시드 ID (`chk-1` ~ `chk-5`) 보유 항목 → localStorage + Supabase 양쪽 삭제
+   - 더미 이름 (`aaa`, `bbb`, `ccc`, `ddd`, `eee`) 보유 항목 → 동일 퇴출
+   - 앱 접속 시 1회 자동 실행 (idempotent)
+
+---
+
 # Release Notes (v1.68.14.Build.176 - 2026-08-10 17:58)
 
 ## 🗄️ [DB 저장 안 되는 근본 원인 해결] 사진 → Supabase Storage URL로 교체 후 DB 저장

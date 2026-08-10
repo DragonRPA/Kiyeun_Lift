@@ -1265,53 +1265,10 @@ const SEED_OVERTIME_RECORDS: OvertimeRecord[] = [
   }
 ];
 
-const SEED_INSPECTION_CHECKLIST_ITEMS: InspectionChecklistItem[] = [
-  {
-    id: 'chk-1',
-    category: '외관/바디',
-    code: 'CHK-0000001',
-    name: 'A 불량 (외관 스크래치/도장 손상)',
-    score: 5,
-    description: '외관 상의 경미한 도장 손상 또는 스크래치 발생',
-    createdAt: new Date().toISOString()
-  },
-  {
-    id: 'chk-2',
-    category: '외관/바디',
-    code: 'CHK-0000002',
-    name: 'B 불량 (섀시 함몰/커버 찌그러짐)',
-    score: 10,
-    description: '외함 판금 찌그러짐 또는 섀시 파손',
-    createdAt: new Date().toISOString()
-  },
-  {
-    id: 'chk-3',
-    category: '유압/동력',
-    code: 'CHK-0000003',
-    name: '유압유 누유 (실린더/호스 누유)',
-    score: 15,
-    description: '유압 호스 피팅부 유압유 누출 파손',
-    createdAt: new Date().toISOString()
-  },
-  {
-    id: 'chk-4',
-    category: '전기/배터리',
-    code: 'CHK-0000004',
-    name: '배터리/전선 단선 및 접촉 불량',
-    score: 20,
-    description: '컨트롤러 배선 단선 또는 배터리 단자 부식',
-    createdAt: new Date().toISOString()
-  },
-  {
-    id: 'chk-5',
-    category: '주행/타이어',
-    code: 'CHK-0000005',
-    name: '타이어 찢어짐 및 이상 마모',
-    score: 10,
-    description: '주행 타이어 찢어짐 또는 편마모 심함',
-    createdAt: new Date().toISOString()
-  }
-];
+// [v1.68.15] 체크리스트 항목은 앱 UI(체크리스트 관리 메뉴)에서만 등록/관리한다.
+// 코드 레벨 자동 시드 주입 시 Supabase DB 삭제 후에도 재부활하는 문제가 있어 빈 배열로 변경.
+// 실제 운영 데이터는 Supabase에 저장되며, 신규 설치 시에는 체크리스트 관리 메뉴에서 직접 등록한다.
+const SEED_INSPECTION_CHECKLIST_ITEMS: InspectionChecklistItem[] = [];
 
 export const SEED_BANK_INITIAL_BALANCES: BankAccountInitialBalance[] = [
   { id: 'bank-init-우리은행', bankName: '우리은행', accountNumber: 'XXXX-XX-XXXXXXX01', initialBalance: 0, updatedAt: new Date().toISOString() },
@@ -1382,18 +1339,30 @@ class LocalDB {
   set assets(val: Asset[]) { this.set('assets', val); }
 
   get inspectionChecklistItems() {
-    const list = this.get<InspectionChecklistItem>('inspectionChecklistItems', SEED_INSPECTION_CHECKLIST_ITEMS);
-    let isMigrated = false;
-    const migrated = list.map(item => {
-      if (item.code === 'DEFECT_A') { isMigrated = true; return { ...item, code: 'CHK-0000001' }; }
-      if (item.code === 'DEFECT_B') { isMigrated = true; return { ...item, code: 'CHK-0000002' }; }
-      if (item.code === 'DEFECT_OIL_LEAK') { isMigrated = true; return { ...item, code: 'CHK-0000003' }; }
-      if (item.code === 'DEFECT_WIRE_CUT') { isMigrated = true; return { ...item, code: 'CHK-0000004' }; }
-      if (item.code === 'DEFECT_TIRE_DAMAGED') { isMigrated = true; return { ...item, code: 'CHK-0000005' }; }
+    const raw = this.get<InspectionChecklistItem>('inspectionChecklistItems', SEED_INSPECTION_CHECKLIST_ITEMS);
+    let needsSave = false;
+
+    // [v1.68.15 마이그레이션 1] 구버전 코드 DEFECT_* → CHK-XXXXXXX 코드 변환
+    let migrated = raw.map(item => {
+      if (item.code === 'DEFECT_A') { needsSave = true; return { ...item, code: 'CHK-0000001' }; }
+      if (item.code === 'DEFECT_B') { needsSave = true; return { ...item, code: 'CHK-0000002' }; }
+      if (item.code === 'DEFECT_OIL_LEAK') { needsSave = true; return { ...item, code: 'CHK-0000003' }; }
+      if (item.code === 'DEFECT_WIRE_CUT') { needsSave = true; return { ...item, code: 'CHK-0000004' }; }
+      if (item.code === 'DEFECT_TIRE_DAMAGED') { needsSave = true; return { ...item, code: 'CHK-0000005' }; }
       return item;
     });
 
-    if (isMigrated) {
+    // [v1.68.15 마이그레이션 2] 더미 테스트 데이터 영구 퇴출 (localStorage 포함)
+    // 과거 시드 ID(chk-1~chk-5) 및 더미 이름(aaa, bbb, ccc, ddd, eee) 항목 제거
+    const DUMMY_IDS = new Set(['chk-1', 'chk-2', 'chk-3', 'chk-4', 'chk-5']);
+    const DUMMY_NAMES = new Set(['aaa', 'bbb', 'ccc', 'ddd', 'eee']);
+    const cleaned = migrated.filter(item => !DUMMY_IDS.has(item.id) && !DUMMY_NAMES.has(item.name));
+    if (cleaned.length !== migrated.length) {
+      needsSave = true;
+      migrated = cleaned;
+    }
+
+    if (needsSave) {
       this.set('inspectionChecklistItems', migrated);
     }
     return migrated;
