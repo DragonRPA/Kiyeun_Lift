@@ -2921,8 +2921,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const asset = db.assets.find(a => a.id === data.assetId);
     if (!asset) throw new Error('해당 자산을 찾을 수 없습니다.');
 
-    // 대여 중인 계약 자산 탐색
-    const ca = db.contractAssets.find(c => c.assetId === data.assetId && c.status === 'RENTED');
+    // 대여 중인 계약 자산 탐색 (유연 매칭: RENTED 우선 탐색 후 미반납 체결 계약 포괄 탐색)
+    const ca = db.contractAssets.find(c => c.assetId === data.assetId && c.status === 'RENTED') ||
+               db.contractAssets.find(c => c.assetId === data.assetId && c.status !== 'RETURNED') ||
+               db.contractAssets.find(c => c.assetId === data.assetId);
     const contract = ca ? db.contracts.find(ct => ct.id === ca.contractId) : null;
     const customer = contract ? db.customers.find(cu => cu.id === contract.customerId) : null;
     const site = contract ? db.sites.find(s => s.id === contract.siteId) : null;

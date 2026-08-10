@@ -130,9 +130,13 @@ export const AssetHistory: React.FC = () => {
     return true;
   }).sort((a, b) => new Date(b.eventDate).getTime() - new Date(a.eventDate).getTime());
 
-  // 💡 [오타방지] 입고 등록용 선택된 자산 정보 및 대여 계약 자동 매칭 탐색
+  // 💡 [오타방지 및 유연매칭] 입고 등록용 선택된 자산 정보 및 대여 계약 자동 매칭 탐색
   const inboundTargetAsset = assets.find(a => a.id === selectedInboundAssetId || a.assetNo.toLowerCase() === inboundAssetNoInput.trim().toLowerCase());
-  const inboundContractAsset = inboundTargetAsset ? contractAssets.find(ca => ca.assetId === inboundTargetAsset.id && ca.status === 'RENTED') : null;
+  const inboundContractAsset = inboundTargetAsset ? (
+    contractAssets.find(ca => ca.assetId === inboundTargetAsset.id && ca.status === 'RENTED') ||
+    contractAssets.find(ca => ca.assetId === inboundTargetAsset.id && ca.status !== 'RETURNED') ||
+    contractAssets.find(ca => ca.assetId === inboundTargetAsset.id)
+  ) : null;
   const inboundContract = inboundContractAsset ? contracts.find(c => c.id === inboundContractAsset.contractId) : null;
   const inboundCustomer = inboundContract ? customers.find(c => c.id === inboundContract.customerId) : null;
   const inboundSite = inboundContract ? sites.find(s => s.id === inboundContract.siteId) : null;
