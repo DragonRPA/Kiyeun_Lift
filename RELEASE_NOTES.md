@@ -1,3 +1,14 @@
+# Release Notes (v1.68.12.Build.174 - 2026-08-10 17:34)
+
+## 🛒 [소모품 구매입고] 사진 첨부 버튼 카메라/갤러리 분리 (`Consumables.tsx`)
+
+- `asset_history.tsx`(자산 입고)에 적용한 것과 동일한 구조로 **`Consumables.tsx`(소모품 구매입고)**에도 사진 첨부 버튼을 분리 적용.
+- **`[📷 촬영]`**: `capture="environment"` → 후면 카메라 직접 실행
+- **`[🖼 갤러리]`**: capture 없음 → 갤러리/파일 선택 (OOM 없이 안전)
+- `galleryInputRef` `useRef` 신규 선언 추가.
+
+---
+
 # Release Notes (v1.68.11.Build.173 - 2026-08-10 17:32)
 
 ## 📸 [모바일 사진 촬영/갤러리 분리] 카메라 직접 촬영 + 갤러리 선택 버튼 각각 독립 제공

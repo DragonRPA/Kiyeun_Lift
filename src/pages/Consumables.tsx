@@ -108,6 +108,7 @@ export const Consumables: React.FC = () => {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
+  const galleryInputRef = useRef<HTMLInputElement>(null);
 
   // --- [4] 소모품 사용(Use) 폼 상태 ---
   const [useConsumableId, setUseConsumableId] = useState('');
@@ -865,7 +866,7 @@ export const Consumables: React.FC = () => {
                         accept="application/pdf,image/*"
                       />
 
-                      {/* 2. 사진 촬영 버튼 */}
+                      {/* 2. 카메라 직접 촬영 버튼 */}
                       <button
                         type="button"
                         className="btn-primary"
@@ -873,13 +874,39 @@ export const Consumables: React.FC = () => {
                           setNoInvoice(true);
                           cameraInputRef.current?.click();
                         }}
-                        style={{ display: 'flex', alignItems: 'center', gap: '6px', height: '42px', padding: '0 16px', fontWeight: '700', flex: '1 1 140px', justifyContent: 'center', background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)', borderColor: '#059669' }}
+                        style={{ display: 'flex', alignItems: 'center', gap: '6px', height: '42px', padding: '0 16px', fontWeight: '700', flex: '1 1 100px', justifyContent: 'center', background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)', borderColor: '#059669' }}
                       >
-                        <Camera size={16} /> 📷 사진촬영
+                        <Camera size={16} /> 📷 촬영
                       </button>
+                      {/* capture=environment: 후면 카메라 직접 실행 */}
                       <input
                         type="file"
                         ref={cameraInputRef}
+                        onChange={(e) => {
+                          setNoInvoice(true);
+                          handleFileChange(e);
+                        }}
+                        style={{ display: 'none' }}
+                        accept="image/*"
+                        capture="environment"
+                      />
+
+                      {/* 3. 갤러리 선택 버튼 (OOM 없이 안전) */}
+                      <button
+                        type="button"
+                        className="btn-secondary"
+                        onClick={() => {
+                          setNoInvoice(true);
+                          if (galleryInputRef.current) galleryInputRef.current.click();
+                        }}
+                        style={{ display: 'flex', alignItems: 'center', gap: '6px', height: '42px', padding: '0 16px', fontWeight: '700', flex: '1 1 100px', justifyContent: 'center' }}
+                      >
+                        🖼 갤러리
+                      </button>
+                      {/* capture 없음: 갤러리/파일 선택 */}
+                      <input
+                        type="file"
+                        ref={galleryInputRef}
                         onChange={(e) => {
                           setNoInvoice(true);
                           handleFileChange(e);
