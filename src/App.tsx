@@ -622,22 +622,39 @@ const App: React.FC = () => {
           )}
         </main>
 
+        {/* 모바일 메인 영역 어두운 백드롭 오버레이 (클릭 시 사이드바 자동 닫힘) */}
+        {mobileMenuOpen && (
+          <div
+            onClick={() => setMobileMenuOpen(false)}
+            style={{
+              position: 'fixed',
+              top: '64px',
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: 'rgba(0, 0, 0, 0.5)',
+              zIndex: 35
+            }}
+          />
+        )}
+
       </div>
 
-      {/* 모바일 스타일 처리를 위한 인라인 Style Tag */}
+      {/* 모바일 다이나믹 반응형 전용 스타일 (PC vs 모바일 분리) */}
       <style>{`
         @media (max-width: 768px) {
           .mobile-burger-btn {
-            display: block !important;
+            display: inline-flex !important;
           }
           .sidebar-nav {
             position: fixed;
             top: 64px;
-            left: -260px;
+            left: -270px;
             bottom: 0;
+            width: 270px;
             z-index: 40;
-            transition: left 0.3s ease;
-            box-shadow: 10px 0 15px -3px rgba(0,0,0,0.1);
+            transition: left 0.25s ease;
+            box-shadow: 4px 0 15px rgba(0,0,0,0.2);
           }
           .sidebar-nav.mobile-open {
             left: 0;
@@ -646,8 +663,10 @@ const App: React.FC = () => {
             display: none !important;
           }
           .main-content-area {
-            padding: 16px !important;
-            overflow: hidden !important;
+            padding: 12px 10px 40px 10px !important;
+            overflow-y: auto !important;
+            -webkit-overflow-scrolling: touch !important;
+            touch-action: pan-x pan-y !important;
           }
         }
       `}</style>
