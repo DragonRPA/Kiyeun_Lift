@@ -1,3 +1,31 @@
+# Release Notes (v1.68.19.Build.183 - 2026-08-10 19:12)
+
+## 🐛 [데이터 부활 / 시드 재주입 근본 원인 완전 해결] `db.ts` - `pullFromSupabase()` 자동 재전송 오동작 제거
+
+### 🌟 근본 원인 분석 (Root Cause)
+
+`db.ts`의 `pullFromSupabase()` 동기화 메소드 내에 아래와 같은 잘못된 로직이 존재했습니다:
+```typescript
+// (구 코드) DB에서 조회한 data에 localList의 ID가 없으면 '미전송 오프라인 데이터'로 오인
+const unsyncedLocalRows = localList.filter(item => !remoteIds.has(item.id));
+// 오프라인 데이터라 판단하여 Supabase로 자동 insertRow() 재전송!
+unsyncedLocalRows.forEach(row => this.insertRow(key, row));
+```
+
+**발생했던 문제의 동작 메커니즘**:
+1. 사용자가 DB (또는 화면)에서 특정 행(`chk-1` ~ `chk-5` 등)을 삭제함.
+2. Supabase DB에는 해당 행이 더 이상 존재하지 않음.
+3. PC/모바일 디바이스에서 앱이 로드되거나 메뉴 이동/새로고침 시 `pullFromSupabase()`가 호출됨.
+4. `pullFromSupabase()`가 해당 디바이스 브라우저의 `localStorage` 캐시에 남아있던 `chk-1` ~ `chk-5` 행을 보고 **"DB에는 없는데 로컬에만 있으니 오프라인 생성 데이터다!"** 라고 잘못 판단함.
+5. `pullFromSupabase()`가 해당 행들을 **Supabase DB로 자동 재전송(`insertRow`)하여 DB로 계속 재부활시킴!**
+
+### ✅ 해결 조치
+
+1. **`pullFromSupabase()` 동기화 원칙 정립**: Supabase가 단일 진실의 원천(SSOT)이므로, DB 조회 성공 시 원격 `data`로 `localStorage` 캐시를 100% 덮어쓰도록 수정 (`this.set(key, data)`).
+2. **삭제된 데이터의 완전한 동기화 보장**: DB에서 삭제된 행은 `pullFromSupabase()` 실행 시 로컬 스토리지 캐시에서도 깔끔하게 자동 제거되며, 절대 DB로 다시 재전송되지 않음.
+
+---
+
 # Release Notes (v1.68.15.Build.177 - 2026-08-10 18:25)
 
 ## 🗑️ [체크리스트 시드 재주입 근본 차단] `db.ts` - SEED 빈 배열 교체 + 더미 영구 퇴출 마이그레이션

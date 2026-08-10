@@ -1652,25 +1652,10 @@ class LocalDB {
         })
       );
 
-      // 전체 로컬 스토리지 캐시 최신 DB 값으로 덮어쓰기 + 미전송 로컬 행 통합 보존 & 백그라운드 재전송
+      // 전체 로컬 스토리지 캐시를 원격 DB(Supabase) 최신 값으로 덮어쓰기 (Supabase가 단일 진실의 원천 SSOT)
       results.forEach(({ key, data }) => {
         if (data !== null) {
-          const localList = this.get<any>(key, []);
-          const remoteIds = new Set(data.map((item: any) => item && item.id));
-          const unsyncedLocalRows = localList.filter((item: any) => item && item.id && !remoteIds.has(item.id));
-          
-          // DB 원격 데이터 + 미전송 로컬 행 결합
-          const mergedData = [...data, ...unsyncedLocalRows];
-          this.set(key, mergedData);
-
-          // 미전송 로컬 행 자동 백그라운드 재전송 (모바일 ➔ 원격 DB 자동 복원)
-          if (unsyncedLocalRows.length > 0) {
-            unsyncedLocalRows.forEach(row => {
-              try {
-                this.insertRow(key as any, row);
-              } catch (e) {}
-            });
-          }
+          this.set(key as keyof LocalDB, data);
         }
       });
     } catch (err) {
