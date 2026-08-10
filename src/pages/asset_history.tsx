@@ -433,22 +433,48 @@ export const AssetHistory: React.FC = () => {
 
                         {/* 체크 시 사진 촬영 / PC 업로드 영역 표출 */}
                         {isChecked && (
-                          <div style={{ marginTop: '4px', paddingTop: '6px', borderTop: '1px dashed var(--border-color)', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                          <div style={{ marginTop: '4px', paddingTop: '6px', borderTop: '1px dashed var(--border-color)', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                            {/* 📸 카메라 직접 촬영 버튼 */}
                             <button
                               type="button"
                               className="btn-secondary"
                               onClick={(e) => {
                                 e.preventDefault();
                                 e.stopPropagation();
-                                const fileInput = document.getElementById(`defect-photo-input-${item.id}`);
+                                const fileInput = document.getElementById(`defect-camera-input-${item.id}`);
                                 if (fileInput) fileInput.click();
                               }}
                               style={{ padding: '4px 8px', fontSize: '11px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', margin: 0 }}
                             >
-                              <Camera size={13} /> 📸 증상 사진 촬영 / PC 선택
+                              <Camera size={13} /> 📸 촬영
                             </button>
+                            {/* capture=environment: 후면 카메라 직접 실행 */}
                             <input
-                              id={`defect-photo-input-${item.id}`}
+                              id={`defect-camera-input-${item.id}`}
+                              type="file"
+                              accept="image/*"
+                              capture="environment"
+                              style={{ display: 'none' }}
+                              onChange={e => handlePhotoFileChange(item.id, e.target.files?.[0] || null)}
+                            />
+
+                            {/* 🖼 갤러리/파일 선택 버튼 */}
+                            <button
+                              type="button"
+                              className="btn-secondary"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                const fileInput = document.getElementById(`defect-gallery-input-${item.id}`);
+                                if (fileInput) fileInput.click();
+                              }}
+                              style={{ padding: '4px 8px', fontSize: '11px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', margin: 0 }}
+                            >
+                              🖼 갤러리
+                            </button>
+                            {/* capture 없음: 갤러리/파일 선택 (OOM 없음) */}
+                            <input
+                              id={`defect-gallery-input-${item.id}`}
                               type="file"
                               accept="image/*"
                               style={{ display: 'none' }}
