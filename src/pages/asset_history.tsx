@@ -64,11 +64,13 @@ export const AssetHistory: React.FC = () => {
   const handlePhotoFileChange = async (itemId: string, file: File | null) => {
     if (!file) return;
     try {
-      // 💡 최대 800px & 60% 품질 초경량 압축 (사진 1장에 30KB~50KB 수준으로 자모 압축 ➔ 0MB RAM 소모)
-      const compressedDataUrl = await compressImageFile(file, 800, 800, 0.6);
-      setDefectPhotos(prev => ({ ...prev, [itemId]: compressedDataUrl }));
-    } catch (err) {
-      console.error('Photo compression error:', err);
+      const compressedDataUrl = await compressImageFile(file);
+      if (compressedDataUrl) {
+        setDefectPhotos(prev => ({ ...prev, [itemId]: compressedDataUrl }));
+      }
+    } catch (err: any) {
+      const msg = err?.message || '사진 처리 중 오류가 발생했습니다.';
+      alert(msg);
     }
   };
 

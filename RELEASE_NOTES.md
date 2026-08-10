@@ -1,3 +1,23 @@
+# Release Notes (v1.68.13.Build.175 - 2026-08-10 17:36)
+
+## 🔧 [OOM 근본 해결] imageCompressor.ts - `createImageBitmap()` 엔진으로 전면 교체
+
+### 🌟 진짜 원인 및 최종 처방
+
+**기존 문제 (new Image + drawImage 방식)**
+- `new Image()` → `img.src = blobUrl` → `img.onload` 시점에 브라우저가 **원본 이미지 전체를 GPU 텍스처로 디코딩**
+- 삼성 S24 (200MP+ 설정) 기준: 비압축 RGB 원본 = **400~600MB 순간 GPU 메모리 할당** → OOM 확정
+- `capture`, `accept` 속성과 무관하게 압축 코드 진입 즉시 폭발
+
+**신규 해결 (`createImageBitmap` 방식)**
+- `createImageBitmap(blob, { resizeWidth: 800, resizeHeight: 800 })`: OS/브라우저 Native API로 **원본을 GPU에 올리기 전에** 800×800으로 리샘플링
+- **메모리 할당 = 800×800×4bytes = 약 2.5MB** (기존 400MB 대비 약 160배 절감)
+- 구형 브라우저(createImageBitmap 미지원) 폴백: 기존 `Image` 방식 유지
+- **20MB 초과 파일 사전 차단**: 압축 시도 자체를 막고 사용자 안내 메세지 표출
+- `asset_history.tsx` catch 블록: 무음 처리 → `alert(err.message)` 로 사용자 명시 안내로 개선
+
+---
+
 # Release Notes (v1.68.12.Build.174 - 2026-08-10 17:34)
 
 ## 🛒 [소모품 구매입고] 사진 첨부 버튼 카메라/갤러리 분리 (`Consumables.tsx`)
