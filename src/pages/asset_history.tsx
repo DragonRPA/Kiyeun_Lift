@@ -5,6 +5,7 @@ import { Search, Download, Calendar, Layers, Wrench, ArrowUpRight, ArrowDownLeft
 import { exportToExcel } from '../services/excel';
 import { InboundDefectDetail } from '../services/db';
 import { compressImageFile } from '../utils/imageCompressor';
+import { uploadToSupabaseStorage } from '../services/supabaseStorage';
 
 export const AssetHistory: React.FC = () => {
   const { 
@@ -176,12 +177,36 @@ export const AssetHistory: React.FC = () => {
         ? `[정비 필요 항목: ${selectedChecklistSummary}] ${inboundMemo}`.trim()
         : (inboundMemo.trim() || '입고 검수 이상 무');
 
+      // 📸 사진을 Supabase Storage에 업로드 → URL로 교체 (base64 통째로 DB에 넣으면 payload 크기 초과로 저장 실패)
+      const uploadedPhotoUrls: Record<string, string> = {};
+      for (const item of selectedChecklistObjects) {
+        const base64 = defectPhotos[item.id];
+        if (!base64) continue;
+        try {
+          // base64 → Blob → File 변환
+          const res = await fetch(base64);
+          const blob = await res.blob();
+          const dateStr = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+          const fileName = `inbound_${inboundTargetAsset.assetNo}_${item.id}_${dateStr}.jpg`;
+          const photoFile = new File([blob], fileName, { type: 'image/jpeg' });
+          const uploadResult = await uploadToSupabaseStorage({
+            file: photoFile,
+            fileName,
+            folder: 'inbound'
+          });
+          uploadedPhotoUrls[item.id] = uploadResult.fileUrl;
+        } catch (uploadErr) {
+          console.warn(`사진 업로드 실패 (${item.id}):`, uploadErr);
+          // 업로드 실패 시 사진 없이 진행 (입고 등록 자체는 차단하지 않음)
+        }
+      }
+
       const defectPayloads: InboundDefectDetail[] = selectedChecklistObjects.map(item => ({
         subNo: '', // AppContext에서 INB-XXXX-01 채번 결합
         checkitemId: item.id,
         checkitemName: item.name,
         score: item.score,
-        photoUrl: defectPhotos[item.id] || undefined
+        photoUrl: uploadedPhotoUrls[item.id] || undefined  // Storage URL (base64 아님)
       }));
 
       await registerInboundAsset({

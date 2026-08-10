@@ -1,3 +1,21 @@
+# Release Notes (v1.68.14.Build.176 - 2026-08-10 17:58)
+
+## 🗄️ [DB 저장 안 되는 근본 원인 해결] 사진 → Supabase Storage URL로 교체 후 DB 저장
+
+### 🌟 진짜 원인 (DB 저장 실패)
+
+- **기존 방식**: `defectsJson` 컬럼에 base64 이미지(100~500KB) JSON 문자열 통째로 삽입 → Supabase REST API payload 크기 제한 초과 → upsert 실패
+- `insertRow` fallback은 `defectsJson`을 제외하고 재전송하지만, 이미 성공 `alert`는 표시됨 → **무음 실패(Silent Failure) 구조**
+- 결과: 모바일 로컬 메모리에는 저장(State), PC에서 조회 시 DB에는 없음
+
+### ✅ 수정 내용 (`asset_history.tsx`)
+
+1. **사진 → Supabase Storage 업로드 우선** (`evidence` 버킷 `inbound/` 폴더)
+2. `defectsJson`에는 **공개 Storage URL만** 담아서 DB 저장 (`photoUrl: "https://...supabase.co/storage/..."`)
+3. Storage 업로드 실패 시에도 입고 등록 자체는 차단하지 않음 (사진 없이 진행, 비파괴적 설계)
+
+---
+
 # Release Notes (v1.68.13.Build.175 - 2026-08-10 17:36)
 
 ## 🔧 [OOM 근본 해결] imageCompressor.ts - `createImageBitmap()` 엔진으로 전면 교체
