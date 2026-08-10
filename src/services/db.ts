@@ -1339,45 +1339,10 @@ class LocalDB {
   set assets(val: Asset[]) { this.set('assets', val); }
 
   get inspectionChecklistItems() {
-    const raw = this.get<InspectionChecklistItem>('inspectionChecklistItems', SEED_INSPECTION_CHECKLIST_ITEMS);
-    let needsSave = false;
-
-    // [v1.68.15 마이그레이션 1] 구버전 코드 DEFECT_* → CHK-XXXXXXX 코드 변환
-    let migrated = raw.map(item => {
-      if (item.code === 'DEFECT_A') { needsSave = true; return { ...item, code: 'CHK-0000001' }; }
-      if (item.code === 'DEFECT_B') { needsSave = true; return { ...item, code: 'CHK-0000002' }; }
-      if (item.code === 'DEFECT_OIL_LEAK') { needsSave = true; return { ...item, code: 'CHK-0000003' }; }
-      if (item.code === 'DEFECT_WIRE_CUT') { needsSave = true; return { ...item, code: 'CHK-0000004' }; }
-      if (item.code === 'DEFECT_TIRE_DAMAGED') { needsSave = true; return { ...item, code: 'CHK-0000005' }; }
-      return item;
-    });
-
-    // [v1.68.17] 구버전 코드 시드 ID(chk-1~chk-5) 발견 시 localStorage + Supabase 양쪽에서 능동 삭제
-    // pullFromSupabase 또는 구 캐시 코드로 인해 어디서 들어와도 getter 호출 시점에 즉시 제거
-    const LEGACY_SEED_IDS = new Set(['chk-1', 'chk-2', 'chk-3', 'chk-4', 'chk-5']);
-    const legacyFound = migrated.filter(item => LEGACY_SEED_IDS.has(item.id));
-    if (legacyFound.length > 0) {
-      migrated = migrated.filter(item => !LEGACY_SEED_IDS.has(item.id));
-      needsSave = true;
-      // Supabase에서도 능동 삭제 (비동기 fire-and-forget)
-      if (supabase) {
-        const idsToDelete = legacyFound.map(i => i.id);
-        supabase.from('inspection_checklist_items')
-          .delete()
-          .in('id', idsToDelete)
-          .then(({ error }) => {
-            if (error) console.warn('[Legacy Seed Purge] Supabase delete failed:', error);
-            else console.info('[Legacy Seed Purge] Supabase에서 구 시드 항목 삭제 완료:', idsToDelete);
-          });
-      }
-    }
-
-    if (needsSave) {
-      this.set('inspectionChecklistItems', migrated);
-    }
-    return migrated;
+    return this.get<InspectionChecklistItem>('inspectionChecklistItems', SEED_INSPECTION_CHECKLIST_ITEMS);
   }
   set inspectionChecklistItems(val: InspectionChecklistItem[]) { this.set('inspectionChecklistItems', val); }
+
 
   get consumables() { return this.get<Consumable>('consumables', SEED_CONSUMABLES); }
   set consumables(val: Consumable[]) { this.set('consumables', val); }
