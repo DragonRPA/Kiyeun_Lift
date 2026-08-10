@@ -886,6 +886,7 @@ export const Consumables: React.FC = () => {
                         }}
                         style={{ display: 'none' }}
                         accept="image/*"
+                        capture="environment"
                       />
                     </div>
 
