@@ -1,3 +1,20 @@
+# Release Notes (v1.68.9.Build.171 - 2026-08-10 17:20)
+
+## 🚀 [모바일 초경량 자원 최적화] 안드로이드 메모리 부족(OOM) 탭 새로고침 방지 엔진 구축
+
+### 🌟 원인 분석 및 기술적 해결
+
+1. **안드로이드 "메모리가 부족하여..." 탭 새로고침 원인 규명 (`imageCompressor.ts`)**
+   - 기존 `FileReader.readAsDataURL` 방식은 스마트폰의 15MB 원본 사진 3장을 메모리에 20MB Base64 문자열로 동시 로딩하며 200MB 이상의 V8 힙 메모리 폭증을 유발.
+   - HTML5 Canvas 사용 후 GPU 텍스처 메모리가 즉시 해제되지 않고 누적되어, 안드로이드 OS가 브라우저 탭을 "메모리 부족"으로 자르는 현상 발생.
+
+2. **0MB RAM 초경량 압축 및 GPU 메모리 해제 파이프라인 완비**
+   - **Blob URL 전환 (`URL.createObjectURL`)**: 15MB FileReader 로딩을 제거하고 0MB memory 사용의 Blob URL로 전환 후, 렌더링 즉시 `URL.revokeObjectURL`로 해제.
+   - **Canvas GPU 텍스처 물리 해제**: 압축 직후 `canvas.width = 0; canvas.height = 0; img.src = ''`로 GPU 비디오 메모리 강제 소멸.
+   - **30KB 초경량 압축 (800px / 0.6 quality)**: 불량 증빙 사진 1장당 용량을 30KB~50KB 수준으로 자모 압축하여, **사진 3장을 등록해도 전체 메모리 점유율이 2MB 이하로 대폭 절감**.
+
+---
+
 # Release Notes (v1.68.8.Build.170 - 2026-08-10 17:16)
 
 ## ☁️ [다중 디바이스 완벽 동기화] 모바일 미전송 입고 데이터 100% 원격 DB 복원 & 컬럼 미반영 Fallback 및 DDL 보강

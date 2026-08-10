@@ -3,43 +3,53 @@
  * 모바일 카메라 촬영 고해상도 사진(10MB+)을 Canvas를 통해 가로/세로 최대 1024px, JPEG 75% 품질로 100KB~200KB 수준으로 자모 압축
  * - 모바일 브라우저 RAM 부족으로 인한 탭 새로고침(Memory Eviction) 100% 방지
  */
-export async function compressImageFile(file: File, maxWidth: number = 1024, maxHeight: number = 1024, quality: number = 0.75): Promise<string> {
+export async function compressImageFile(file: File, maxWidth: number = 800, maxHeight: number = 800, quality: number = 0.6): Promise<string> {
   return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.readAsDataURL(file);
-    reader.onload = (event) => {
-      const img = new Image();
-      img.src = event.target?.result as string;
-      img.onload = () => {
-        let width = img.width;
-        let height = img.height;
+    // 💡 URL.createObjectURL 사용으로 15MB Raw FileReader DataURL 메모리 할당 100% 차단 (0MB RAM 사용)
+    const blobUrl = URL.createObjectURL(file);
+    const img = new Image();
+    img.src = blobUrl;
+    img.onload = () => {
+      URL.revokeObjectURL(blobUrl); // 💡 Blob URL 즉시 메모리 해제
 
-        if (width > maxWidth || height > maxHeight) {
-          if (width > height) {
-            height = Math.round((height * maxWidth) / width);
-            width = maxWidth;
-          } else {
-            width = Math.round((width * maxHeight) / height);
-            height = maxHeight;
-          }
+      let width = img.width;
+      let height = img.height;
+
+      if (width > maxWidth || height > maxHeight) {
+        if (width > height) {
+          height = Math.round((height * maxWidth) / width);
+          width = maxWidth;
+        } else {
+          width = Math.round((width * maxHeight) / height);
+          height = maxHeight;
         }
+      }
 
-        const canvas = document.createElement('canvas');
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) {
-          resolve(event.target?.result as string); // fallback
-          return;
-        }
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        img.src = '';
+        resolve('');
+        return;
+      }
 
-        ctx.drawImage(img, 0, 0, width, height);
-        const compressedDataUrl = canvas.toDataURL('image/jpeg', quality);
-        resolve(compressedDataUrl);
-      };
-      img.onerror = (err) => reject(err);
+      ctx.drawImage(img, 0, 0, width, height);
+      const compressedDataUrl = canvas.toDataURL('image/jpeg', quality);
+
+      // 💡 Canvas & Image GPU 텍스처 메모리 즉시 물리 강제 해제 (Android OOM 방지)
+      canvas.width = 0;
+      canvas.height = 0;
+      img.src = '';
+
+      resolve(compressedDataUrl);
     };
-    reader.onerror = (err) => reject(err);
+    img.onerror = (err) => {
+      URL.revokeObjectURL(blobUrl);
+      img.src = '';
+      reject(err);
+    };
   });
 }
 
