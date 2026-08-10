@@ -1,3 +1,19 @@
+# Release Notes (v1.68.5.Build.167 - 2026-08-10 16:59)
+
+## 🛠️ [입고 이력 관리] 입고 취소 Supabase DB 제약조건 오류 원천 해결 & 중복 버튼 정돈
+
+### 🌟 수정 내역
+
+1. **Supabase Check Constraint (`asset_inout_logs_type_check`) 에러 원천 해결 (`AppContext.tsx`)**
+   - 입고 취소 롤백 실행 시 `asset_inout_logs` 테이블에 미등록 타입(`INBOUND_CANCEL`)을 `insert`하려다 발생하던 Supabase 제약조건 오류(`violates check constraint asset_inout_logs_type_check`) 원인 규명.
+   - 오등록된 입고 로그를 안전 삭제(`deleteRow`)하고 자산/계약 상태를 `RENTED` (대여중)으로 완벽 복원한 뒤, 이력 감사 추적은 `contractHistory` (계약 이력)에 영구 보존하도록 수정하여 Supabase DB 오류 100% 차단.
+
+2. **입고 이력 대장 중복 컬럼 및 중복 버튼 제거 (`asset_history.tsx`)**
+   - 입고 이력 목록 테이블에서 이중으로 렌더링되던 중복 컬럼 블록 및 좌측 중복 버튼(`입고 취소 (롤백)`)을 완전히 제거.
+   - 우측 단일 표준 **`[🔄 입고 취소]`** 버튼으로 깔끔하게 통합 정리.
+
+---
+
 # Release Notes (v1.68.4.Build.166 - 2026-08-10 16:55)
 
 ## 📱 [모바일 카메라 완벽 호환] HTML `<form>` 태그 제거 및 `capture` 속성 최적화로 새로고침 현상 100% 완전 해결

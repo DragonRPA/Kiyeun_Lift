@@ -896,28 +896,6 @@ export const AssetHistory: React.FC = () => {
                             </td>
                             <td style={{ whiteSpace: 'nowrap' }} onClick={e => e.stopPropagation()}>
                               <button
-                                className="btn-secondary"
-                                onClick={() => handleCancelInbound(log)}
-                                style={{ padding: '3px 8px', fontSize: '11px', color: 'var(--danger)', display: 'flex', alignItems: 'center', gap: '3px' }}
-                              >
-                                <RotateCcw size={12} /> 입고 취소 (롤백)
-                              </button>
-                            </td>
-                          </>
-                        )}
-
-                        {activeTab === 'INBOUND' && (
-                          <>
-                            <td style={{ whiteSpace: 'nowrap' }}><strong>{log.customerName || '-'}</strong></td>
-                            <td style={{ whiteSpace: 'nowrap' }}>{log.siteName || '-'}</td>
-                            <td style={{ whiteSpace: 'nowrap' }}>
-                              <span className="badge badge-success">
-                                {log.maintenanceScore !== undefined ? `${log.maintenanceScore}점` : '정상'}
-                              </span>
-                            </td>
-                            <td style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{log.memo || '-'}</td>
-                            <td style={{ whiteSpace: 'nowrap' }} onClick={e => e.stopPropagation()}>
-                              <button
                                 type="button"
                                 className="btn-secondary"
                                 onClick={() => handleCancelInbound(log)}

@@ -3035,22 +3035,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       });
     }
 
-    // 3. 기존 입고 로그 삭제 및 'INBOUND_CANCEL' 롤백 이력 무누락 생성
+    // 3. 기존 오등록 입고 로그 삭제 및 계약 이력에 롤백 로그 무누락 생성
     db.deleteRow('assetInOutLogs', logId);
 
-    db.insertRow<AssetInOutLog>('assetInOutLogs', {
-      assetId: asset.id,
-      assetNo: asset.assetNo,
-      modelName: asset.modelName,
-      type: 'INBOUND_CANCEL',
-      eventDate: new Date().toISOString().split('T')[0],
-      customerId: log.customerId,
-      customerName: log.customerName,
-      siteId: log.siteId,
-      siteName: log.siteName,
-      memo: `[입고 취소 롤백] ${cancelReason || '사용자 휴먼에러 입고 취소 처리'}`,
-      createdAt: new Date().toISOString()
-    });
+    if (ca?.contractId) {
+      db.insertRow<ContractHistory>('contractHistory', {
+        contractId: ca.contractId,
+        changeType: 'TERMINATE',
+        changeDate: new Date().toISOString().split('T')[0],
+        description: `[입고 취소 롤백] 자산(${asset.assetNo}) 오등록 입고 취소 ➔ 대여중(RENTED) 복원 (사유: ${cancelReason || '사용자 휴먼에러 입고 취소'})`,
+        createdAt: new Date().toISOString()
+      });
+    }
 
     await db.awaitPendingWrites();
     refreshAllData();
