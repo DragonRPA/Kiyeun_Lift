@@ -16,7 +16,7 @@ const os = require('os');
 const { spawn, execSync } = require('child_process');
 const { PDFDocument, rgb } = require('pdf-lib');
 
-const VERSION = 'v1.99.0.Build.216';
+const VERSION = 'v1.100.0.Build.217';
 const PORT = process.env.PORT || 5175;
 const CALLSIGN = process.env.AGENT_CALLSIGN || 'admin';
 const MACHINE_NAME = os.hostname();
@@ -50,13 +50,13 @@ if (isExe && path.resolve(currentExePath).toLowerCase() !== path.resolve(TARGET_
     console.log(`📍 현재 실행 위치: ${currentExePath}`);
     console.log(`🎯 표준 정착 경로: ${TARGET_EXE_PATH}`);
 
-    // 기존 구버전 프로세스 자동 종료 (PID 제외)
+    // 기존 구버전 프로세스 및 5175 포트 점유 프로세스 완벽 강제 종료 (PID 제외)
     try {
       console.log('🔄 기존 구버전 프로세스 자동 정리 중...');
-      execSync(`taskkill /f /fi "PID ne ${currentPid}" /im KiyeunAgent.exe`, { stdio: 'ignore' });
+      execSync(`powershell -NoProfile -Command "Get-Process -Name KiyeunAgent -ErrorAction SilentlyContinue | Where-Object { $_.Id -ne ${currentPid} } | Stop-Process -Force; Get-NetTCPConnection -LocalPort ${PORT} -ErrorAction SilentlyContinue | ForEach-Object { if ($_.OwningProcess -ne ${currentPid}) { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue } }"`, { stdio: 'ignore' });
     } catch (kErr) {}
 
-    // 0.5초 대기 후 파일 복사
+    // 0.6초 대기 후 파일 복사
     setTimeout(() => {
       try {
         fs.copyFileSync(currentExePath, TARGET_EXE_PATH);
@@ -76,7 +76,7 @@ if (isExe && path.resolve(currentExePath).toLowerCase() !== path.resolve(TARGET_
       } catch (copyErr) {
         console.error('⚠️ 파일 복사 실패 (현재 위치에서 실행 유지):', copyErr.message);
       }
-    }, 500);
+    }, 600);
     return;
   } catch (err) {
     console.error('⚠️ 자가 설치 중 오류 발생:', err.message);
@@ -86,7 +86,7 @@ if (isExe && path.resolve(currentExePath).toLowerCase() !== path.resolve(TARGET_
 // 2. 정식 위치에서 실행되었으나 이전 잔존 프로세스가 포트를 잡고 있을 경우 정리
 if (isExe) {
   try {
-    execSync(`taskkill /f /fi "PID ne ${currentPid}" /im KiyeunAgent.exe`, { stdio: 'ignore' });
+    execSync(`powershell -NoProfile -Command "Get-Process -Name KiyeunAgent -ErrorAction SilentlyContinue | Where-Object { $_.Id -ne ${currentPid} } | Stop-Process -Force; Get-NetTCPConnection -LocalPort ${PORT} -ErrorAction SilentlyContinue | ForEach-Object { if ($_.OwningProcess -ne ${currentPid}) { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue } }"`, { stdio: 'ignore' });
   } catch (e) {}
 }
 
