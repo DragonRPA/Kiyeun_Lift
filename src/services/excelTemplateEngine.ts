@@ -140,6 +140,8 @@ export interface PreDeliveryChecklistExcelData {
 export interface SafetyInspectionExcelData {
   siteName: string;            // 사업장명
   clientName: string;          // 사용업체
+  manufacturer: string;        // 제 조 사 (ERP [제품관리] 마스터에서 자동 호출, 예: 'GENIE', 'SINOBOOM', 'DINGLI', 'SKYJACK')
+  lessorName?: string;         // 렌탈사 (기본값: '(주)기연리프트')
   modelName: string;           // 모델명
   serialNo: string;            // 차량/장비번호
   weight: string;              // 장비중량
