@@ -27,3 +27,8 @@ dist-ssr
 *.sw?
 
 .vercel
+
+# Agent Standalone Binary artifacts (over 90MB)
+agent/KiyeunAgent.exe
+agent/*.blob
+agent/*bundle.js

@@ -1,0 +1,5 @@
+{
+  "main": "agent/agent-bundle.js",
+  "output": "agent/sea-prep.blob",
+  "disableExperimentalSEAWarning": true
+}

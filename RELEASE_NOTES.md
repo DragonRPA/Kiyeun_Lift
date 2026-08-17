@@ -1,3 +1,16 @@
+# Release Notes (v1.90.0.Build.207 - 2026-08-17 21:37)
+
+## ⚡ [Node.js 무설치 단독 실행 바이너리] `KiyeunAgent.exe` 내장 Standalone 패키지 컴파일 및 원클릭 다운로드 연동
+
+### 🌟 반영 내용
+1. **Node.js SEA (Single Executable Application) 엔진 컴파일**:
+   - Node.js 런타임이 설치되어 있지 않은 일반 사용자 PC에서도 더블클릭 1회로 즉시 실행되는 `KiyeunAgent.exe` 단독 바이너리 빌드 완료.
+   - `public/downloads/KiyeunAgent.zip` (37MB)로 고속 배포.
+2. **프론트엔드 다운로드 직결 (`Dashboard.tsx`, `GoogleConfig.tsx`)**:
+   - `[📥 에이전트 다운로드]` 버튼 클릭 시 런타임 내장형 `KiyeunAgent.zip`이 즉시 다운로드되며, 압축 해제 후 `KiyeunAgent.exe`만 실행하면 즉시 가동.
+
+---
+
 # Release Notes (v1.89.0.Build.206 - 2026-08-17 21:30)
 
 ## 🎯 [대시보드 상단 렌더링 정상 반영] 메인 대시보드 화면에 에이전트 전용 관리 카드 및 원클릭 다운로드 버튼 표출 완료
