@@ -1,3 +1,14 @@
+# Release Notes (v1.93.0.Build.210 - 2026-08-17 21:49)
+
+## 🔏 [디지털 서명(Code Signing) 날인 완료] `ImageScan` 검증 파이프라인 기반 (주)기연리프트 전사 코드 서명 인증서 및 DigiCert 타임스탬프 각인
+
+### 🌟 반영 내용
+1. **(주)기연리프트 전사 코드사인 인증서 파이프라인 구축 (`agent/certs/`)**:
+   - `ImageScan` 프로젝트의 검증된 코드서명 아키텍처를 도입하여 `KiyeunLift_CodeSign.pfx` (10년 유효) 및 DigiCert 글로벌 공인 타임스탬프(`http://timestamp.digicert.com`) 각인 완료.
+   - `KiyeunAgent.exe` 바이너리에 (주)기연리프트 전사 디지털 서명 공식 날인.
+
+---
+
 # Release Notes (v1.92.0.Build.209 - 2026-08-17 21:44)
 
 ## 🚀 [자가 자동 설치(Self-Install) 엔진 탑재] `KiyeunAgent.exe` 최초 실행 시 `C:\KiyeunAgent\` 로 자가 자동 이전 및 백그라운드 전환 완결
