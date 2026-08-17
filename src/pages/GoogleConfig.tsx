@@ -16,6 +16,7 @@ import {
 import { PDFDocument } from 'pdf-lib';
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
+import { EXPECTED_AGENT_VERSION } from '../services/agentService';
 
 export const GoogleConfig: React.FC = () => {
   const { 
@@ -976,7 +977,7 @@ function doGet(e) {
                 }}
               >
                 <Download size={15} />
-                {isDownloadingAgent ? '다운로드 중...' : '2단계: 📥 KiyeunAgent.exe 다운로드'}
+                {isDownloadingAgent ? '다운로드 중...' : `2단계: 📥 KiyeunAgent.exe (${EXPECTED_AGENT_VERSION}) 다운로드`}
               </button>
 
               <button
@@ -1014,9 +1015,15 @@ function doGet(e) {
               {/* 📡 로컬 사이드카 에이전트 연결 상태 표시 */}
               {agentStatus === 'ONLINE' ? (
                 <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-                  <span style={{ fontSize: '11px', padding: '3px 8px', borderRadius: '4px', background: 'rgba(16,185,129,0.2)', color: '#059669', fontWeight: '800', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                    🟢 로컬 에이전트 ({agentCallsign}{agentInfo?.version ? ` · ${agentInfo.version}` : ''})
-                  </span>
+                  {agentInfo?.version === EXPECTED_AGENT_VERSION ? (
+                    <span style={{ fontSize: '11px', padding: '3px 8px', borderRadius: '4px', background: 'rgba(16,185,129,0.2)', color: '#059669', fontWeight: '800', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                      🟢 로컬 에이전트 최신 ({agentCallsign} · {agentInfo?.version})
+                    </span>
+                  ) : (
+                    <span style={{ fontSize: '11px', padding: '3px 8px', borderRadius: '4px', background: '#fef3c7', color: '#b45309', fontWeight: '800', display: 'inline-flex', alignItems: 'center', gap: '4px', border: '1px solid #fcd34d' }}>
+                      🟡 에이전트 업데이트 필요 (현재: {agentInfo?.version || '구버전'} ➔ 최신: {EXPECTED_AGENT_VERSION})
+                    </span>
+                  )}
                   <button
                     type="button"
                     className="btn-secondary"
@@ -1039,7 +1046,7 @@ function doGet(e) {
                   onClick={() => setShowAgentGuideModal(true)}
                   style={{ fontSize: '11px', padding: '3px 8px', borderRadius: '4px', background: 'rgba(239,68,68,0.12)', color: '#dc2626', fontWeight: 'bold', border: '1px solid rgba(239,68,68,0.3)', cursor: 'pointer' }}
                 >
-                  🔴 로컬 에이전트 미연결 (다운로드/가이드)
+                  🔴 로컬 에이전트 미연결 (최신: {EXPECTED_AGENT_VERSION})
                 </button>
               )}
             </div>

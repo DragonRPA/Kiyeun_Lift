@@ -11,6 +11,7 @@ import {
   generateSafetyInspectionPdf 
 } from '../services/excelTemplateEngine';
 import { getDriveReadToken, extractDriveFolderId, listFilesInDriveFolder } from '../services/googleDriveBackup';
+import { EXPECTED_AGENT_VERSION, AGENT_DOWNLOAD_URL, AGENT_CERT_URL, AGENT_INSTALL_BAT_URL, AGENT_KILL_BAT_URL } from '../services/agentService';
 
 export const Dashboard: React.FC = () => {
   const { 
@@ -430,12 +431,12 @@ export const Dashboard: React.FC = () => {
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-          {/* 에이전트 가동 중일 때 미니 배지 & 핫 재시작 버튼 */}
-          {agentStatus === 'ONLINE' && (
+          {/* 🟢 [에이전트 최신 버전 가동 중] */}
+          {agentStatus === 'ONLINE' && agentVersion === EXPECTED_AGENT_VERSION && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
               <span style={{ fontSize: '12px', padding: '5px 12px', borderRadius: '20px', background: '#dcfce7', color: '#15803d', fontWeight: '800', display: 'inline-flex', alignItems: 'center', gap: '6px', border: '1px solid #86efac' }}>
                 <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#22c55e' }}></span>
-                로컬 에이전트 ({agentCallsign}{agentVersion ? ` · ${agentVersion}` : ''})
+                로컬 에이전트 최신 ({agentCallsign} · {agentVersion})
               </span>
               <button
                 type="button"
@@ -445,9 +446,44 @@ export const Dashboard: React.FC = () => {
                 title="에이전트 프로세스를 1초 만에 자동 재시작합니다."
                 style={{ padding: '5px 9px', fontSize: '11.5px', fontWeight: '700', borderRadius: '6px', cursor: isRestartingAgent ? 'wait' : 'pointer' }}
               >
-                {isRestartingAgent ? '재기동 중...' : '🔄 재시작'}
+                {isRestartingAgent ? '재기동...' : '🔄 재시작'}
               </button>
             </div>
+          )}
+
+          {/* 🟡 [에이전트 가동 중이나 구버전인 경우 업데이트 유도] */}
+          {agentStatus === 'ONLINE' && agentVersion !== EXPECTED_AGENT_VERSION && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span style={{ fontSize: '12px', padding: '5px 12px', borderRadius: '20px', background: '#fef3c7', color: '#b45309', fontWeight: '800', display: 'inline-flex', alignItems: 'center', gap: '6px', border: '1px solid #fcd34d' }}>
+                <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#f59e0b' }}></span>
+                에이전트 업데이트 필요 (현재: {agentVersion || '구버전'} ➔ 최신: {EXPECTED_AGENT_VERSION})
+              </span>
+              <button
+                type="button"
+                className="btn-primary"
+                onClick={handleDownloadAgentExe}
+                style={{ padding: '5px 10px', fontSize: '11.5px', fontWeight: '800', borderRadius: '6px', background: '#f59e0b', border: 'none', color: '#fff', cursor: 'pointer' }}
+              >
+                📥 최신 에이전트 받기
+              </button>
+              <button
+                type="button"
+                className="btn-secondary"
+                disabled={isRestartingAgent}
+                onClick={handleRestartAgent}
+                style={{ padding: '5px 9px', fontSize: '11.5px', fontWeight: '700', borderRadius: '6px' }}
+              >
+                {isRestartingAgent ? '재기동...' : '🔄 재시작'}
+              </button>
+            </div>
+          )}
+
+          {/* 🔴 [에이전트 미실행(OFFLINE) 상태 미니 배지] */}
+          {agentStatus === 'OFFLINE' && (
+            <span style={{ fontSize: '12px', padding: '5px 12px', borderRadius: '20px', background: '#fee2e2', color: '#b91c1c', fontWeight: '800', display: 'inline-flex', alignItems: 'center', gap: '6px', border: '1px solid #fca5a5' }}>
+              <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#ef4444' }}></span>
+              로컬 에이전트 미실행 (최신 요구: {EXPECTED_AGENT_VERSION})
+            </span>
           )}
 
           {/* 🚀 계약 서류 14p 원클릭 통합 팩 발행 버튼 (상시 사용 가능) */}
@@ -500,7 +536,7 @@ export const Dashboard: React.FC = () => {
                   로컬 사이드카 에이전트 미실행 상태
                 </h3>
                 <span style={{ fontSize: '11.5px', padding: '2px 8px', borderRadius: '20px', background: '#fee2e2', color: '#b91c1c', fontWeight: '800' }}>
-                  🔴 다운로드 및 실행 필요
+                  🔴 최신 요구 버전: {EXPECTED_AGENT_VERSION}
                 </span>
               </div>
               <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: 'var(--text-secondary)' }}>
@@ -538,7 +574,7 @@ export const Dashboard: React.FC = () => {
                 }}
               >
                 <Download size={15} />
-                {isDownloadingAgent ? '다운로드 중...' : '2단계: 📥 KiyeunAgent.exe 다운로드'}
+                {isDownloadingAgent ? '다운로드 중...' : `2단계: 📥 KiyeunAgent.exe (${EXPECTED_AGENT_VERSION}) 다운로드`}
               </button>
 
               <button
