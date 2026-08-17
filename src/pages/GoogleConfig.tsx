@@ -7,6 +7,8 @@ import { GoogleDrivePickerModal } from '../components/GoogleDrivePickerModal';
 import { downloadEvidenceAsZip, deleteStorageFiles } from '../services/supabaseStorage';
 import { backupToGoogleDrive, getDriveReadToken, extractDriveFileId, extractDriveFolderId, listFilesInDriveFolder } from '../services/googleDriveBackup';
 import { downloadContractDocumentBundlePdf, mergeDriveFilesToPdf } from '../services/pdfBundle';
+import { generateSafetyInspectionPdfFromExcelTemplate } from '../services/excelTemplateEngine';
+import { PDFDocument } from 'pdf-lib';
 
 export const GoogleConfig: React.FC = () => {
   const { googleConfigs, updateGoogleConfig, currentUser, showErrorModal, consumablePurchases, clearEvidenceFileUrls, updateEvidenceFileUrls } = useApp();
@@ -217,6 +219,88 @@ export const GoogleConfig: React.FC = () => {
       alert(`🎉 [${pdfFiles.length}개 파일] 구글 드라이브 폴더 PDF 일괄 병합 완료!\n\n성공: ${result.successCount}건 / 총 ${pdfFiles.length}건\n총 ${result.totalPages}페이지${failMsg}`);
     } catch (err: any) {
       alert(`⚠️ 폴더 파일 병합 실패: ${err?.message || err}`);
+    } finally {
+      setIsMergingDriveFiles(false);
+      setMergeProgressLabel('');
+    }
+  };
+
+  // ── 🧪 엑셀 서식 실시간 데이터 주입 PDF + 구글 드라이브 원본 결합 병합 테스트 ──
+  const handleMergeExcelAndDrivePdf = async () => {
+    const cfg = googleConfigs[0];
+    const folderInput = cfg?.defaultRootFolderId || 'https://drive.google.com/drive/folders/1aBZsZ1KnKhk9Ax6oiM2cb-yKfDHKGRif';
+    const folderId = extractDriveFolderId(folderInput);
+    const clientId = cfg?.oauthClientId?.trim() || oauthClientId?.trim() || '274287991550-7eaeisb14i80315pmlf8390smf58pkbt.apps.googleusercontent.com';
+
+    setIsMergingDriveFiles(true);
+
+    try {
+      // 1. 엑셀 서식에 실시간 데이터 주입하여 안전점검결과서 PDF 1페이지 생성
+      setMergeProgressLabel('1단계: 3.안전점검결과서.xlsx 서식에 실시간 데이터 주입 및 PDF 생성 중...');
+      const excelPdfBytes = await generateSafetyInspectionPdfFromExcelTemplate({
+        siteName: '인천 검단신도시 101 역세권 개발사업 (현대건설)',
+        clientName: '주식회사 우진아이엔에스',
+        modelName: 'GS-1930 (수직상승형)',
+        serialNo: 'G19052 (GS30D-13533)',
+        weight: '1,500 kg',
+        manufactureYear: '2024년',
+        safetyCertDate: '2024-03-01',
+        inspectionDate: new Date().toISOString().split('T')[0],
+        inspectorName: '김관주'
+      });
+
+      const mergedPdf = await PDFDocument.create();
+
+      // 1p: 엑셀에서 생성된 안전점검결과서 페이지 추가
+      const excelDoc = await PDFDocument.load(excelPdfBytes);
+      const [excelPage] = await mergedPdf.copyPages(excelDoc, [0]);
+      mergedPdf.addPage(excelPage);
+      console.log('✅ [1단계 완료] 엑셀 기반 안전점검결과서 1페이지 병합 성공');
+
+      // 2. 구글 드라이브 지정 폴더의 실제 원본 PDF들 가져와서 뒤에 결합
+      setMergeProgressLabel('2단계: 구글 계정 인증 및 드라이브 원본 파일 소집 중...');
+      const token = await getDriveReadToken(clientId);
+
+      if (folderId) {
+        const files = await listFilesInDriveFolder(folderId, token);
+        const pdfFiles = files.filter(f => f.mimeType === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf'));
+
+        for (let i = 0; i < pdfFiles.length; i++) {
+          const file = pdfFiles[i];
+          setMergeProgressLabel(`2단계: [${i + 1}/${pdfFiles.length}] ${file.name} 다운로드 및 결합 중...`);
+          try {
+            const res = await fetch(`https://www.googleapis.com/drive/v3/files/${file.id}?alt=media`, {
+              headers: { Authorization: `Bearer ${token}` }
+            });
+            if (res.ok) {
+              const drivePdfBytes = await res.arrayBuffer();
+              const driveDoc = await PDFDocument.load(drivePdfBytes);
+              const copiedPages = await mergedPdf.copyPages(driveDoc, driveDoc.getPageIndices());
+              copiedPages.forEach(p => mergedPdf.addPage(p));
+              console.log(`✅ [드라이브] ${file.name} - ${copiedPages.length}p 결합 성공`);
+            }
+          } catch (e) {
+            console.warn(`⚠️ ${file.name} 결합 실패:`, e);
+          }
+        }
+      }
+
+      // 3. 최종 완성본 단일 PDF 다운로드
+      const finalBytes = await mergedPdf.save();
+      const blob = new Blob([finalBytes.buffer as ArrayBuffer], { type: 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `[기연리프트]_엑셀주입+드라이브원본통합_${mergedPdf.getPageCount()}p_${new Date().toISOString().split('T')[0]}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      alert(`🎉 엑셀 데이터 주입 서식 + 구글 드라이브 원본 결합 성공!\n\n총 ${mergedPdf.getPageCount()}페이지 단일 PDF로 완벽하게 병합 다운로드되었습니다.`);
+    } catch (err: any) {
+      alert(`⚠️ 엑셀 + 드라이브 통합 병합 실패: ${err?.message || err}`);
     } finally {
       setIsMergingDriveFiles(false);
       setMergeProgressLabel('');
@@ -574,11 +658,22 @@ function doGet(e) {
               type="button"
               className="btn-primary"
               disabled={isMergingDriveFiles}
-              onClick={() => handleMergeFolderPdfs('https://drive.google.com/drive/folders/1aBZsZ1KnKhk9Ax6oiM2cb-yKfDHKGRif')}
-              style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 18px', fontSize: '13.5px', fontWeight: 'bold', whiteSpace: 'nowrap', background: '#2563eb', border: 'none', borderRadius: '8px', color: '#fff', cursor: isMergingDriveFiles ? 'wait' : 'pointer', opacity: isMergingDriveFiles ? 0.7 : 1 }}
+              onClick={handleMergeExcelAndDrivePdf}
+              style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 18px', fontSize: '13.5px', fontWeight: 'bold', whiteSpace: 'nowrap', background: '#059669', border: 'none', borderRadius: '8px', color: '#fff', cursor: isMergingDriveFiles ? 'wait' : 'pointer', opacity: isMergingDriveFiles ? 0.7 : 1 }}
             >
               <Download size={16} />
-              {isMergingDriveFiles ? '폴더 파일 탐색 및 병합 중...' : '📁 지정 폴더(1aBZsZ1...) PDF 전체 병합 다운로드'}
+              {isMergingDriveFiles ? '엑셀 주입 및 드라이브 결합 중...' : '🧪 3.안전점검결과서.xlsx 값 주입 + 드라이브 결합 테스트'}
+            </button>
+
+            <button
+              type="button"
+              className="btn-primary"
+              disabled={isMergingDriveFiles}
+              onClick={() => handleMergeFolderPdfs('https://drive.google.com/drive/folders/1aBZsZ1KnKhk9Ax6oiM2cb-yKfDHKGRif')}
+              style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 14px', fontSize: '12.5px', fontWeight: 'bold', whiteSpace: 'nowrap', background: '#2563eb', border: 'none', borderRadius: '8px', color: '#fff', cursor: isMergingDriveFiles ? 'wait' : 'pointer', opacity: isMergingDriveFiles ? 0.7 : 1 }}
+            >
+              <Download size={14} />
+              {isMergingDriveFiles ? '폴더 파일 탐색 및 병합 중...' : '📁 지정 폴더(1aBZsZ1...) PDF 전체 병합'}
             </button>
 
             <button
@@ -586,9 +681,9 @@ function doGet(e) {
               className="btn-secondary"
               disabled={isMergingDriveFiles}
               onClick={handleRealDriveMergeTest}
-              style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '7px 14px', fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap', cursor: isMergingDriveFiles ? 'wait' : 'pointer' }}
+              style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 12px', fontSize: '11.5px', fontWeight: '600', whiteSpace: 'nowrap', cursor: isMergingDriveFiles ? 'wait' : 'pointer' }}
             >
-              <Download size={14} />
+              <Download size={13} />
               설정 서류 3종 개별 병합
             </button>
           </div>
