@@ -172,8 +172,7 @@ function createTextCanvasLayer(
     const ctx = canvas.getContext('2d');
     if (ctx) {
       ctx.clearRect(0, 0, width, height);
-      ctx.font = 'bold 24px "Malgun Gothic", "Dotum", sans-serif';
-      ctx.fillStyle = '#000000';
+      ctx.textBaseline = 'middle';
       drawFn(ctx);
     }
     canvas.toBlob(async (blob) => {
@@ -189,9 +188,10 @@ function createTextCanvasLayer(
 
 /**
  * 1. 고소작업대 임대차 계약서 PDF 생성 (12줄 수용 및 13개 이상 별지 자동 분기)
+ * - 기존 셀 내 잔존 텍스트 영역을 100% 화이트아웃 마스킹하여 겹침/낙서 현상 완전 제거
  */
 export async function generateContractPdf(data: ContractExcelData): Promise<Uint8Array> {
-  const { PDFDocument } = await import('pdf-lib');
+  const { PDFDocument, rgb } = await import('pdf-lib');
   const res = await fetch('/templates/임대차계약서_양식_원본.pdf');
   if (!res.ok) throw new Error(`계약서 원본 템플릿 로드 실패: HTTP ${res.status}`);
 
@@ -200,67 +200,100 @@ export async function generateContractPdf(data: ContractExcelData): Promise<Uint
   const page = pdfDoc.getPages()[0];
   const { width, height } = page.getSize();
 
-  // 300 DPI 기준 고해상도 캔버스 (가로 2480, 세로 3508)
+  // ── [1단계] 기존 템플릿에 들어있던 잔존 텍스트 영역 순백색(White-out) 마스킹 ──
+  // (pdf-lib 좌표계: 좌측 하단이 0, 0)
+  const white = rgb(1, 1, 1);
+
+  // 상단 계약일자 마스킹
+  page.drawRectangle({ x: 200, y: height - 105, width: 200, height: 16, color: white });
+
+  // 임차인(을) 등록번호, 상호, 대표자 마스킹
+  page.drawRectangle({ x: 380, y: height - 130, width: 180, height: 15, color: white });
+  page.drawRectangle({ x: 380, y: height - 150, width: 180, height: 15, color: white });
+  page.drawRectangle({ x: 380, y: height - 170, width: 180, height: 15, color: white });
+
+  // 인도장소, 인도일시, 상세주소, 담당자, 연락처 마스킹
+  page.drawRectangle({ x: 120, y: height - 222, width: 200, height: 15, color: white });
+  page.drawRectangle({ x: 395, y: height - 222, width: 165, height: 15, color: white });
+  page.drawRectangle({ x: 120, y: height - 240, width: 440, height: 15, color: white });
+  page.drawRectangle({ x: 120, y: height - 276, width: 200, height: 15, color: white });
+  page.drawRectangle({ x: 395, y: height - 276, width: 165, height: 15, color: white });
+
+  // 체결 장비 그리드 12행 전체 화이트아웃 마스킹 (기존 옛날 데이터 전면 삭제)
+  page.drawRectangle({ x: 35, y: height - 528, width: 525, height: 218, color: white });
+
+  // 합계 금액 영역 마스킹
+  page.drawRectangle({ x: 395, y: height - 425, width: 165, height: 18, color: white });
+
+  // 하단 영업담당자 영역 마스킹
+  page.drawRectangle({ x: 375, y: height - 765, width: 180, height: 15, color: white });
+
+  // ── [2단계] 정밀 폰트 텍스트 렌더링 ──
   const scale = 3.5;
   const canvasW = width * scale;
   const canvasH = height * scale;
 
   const overlayPng = await createTextCanvasLayer(canvasW, canvasH, (ctx) => {
-    ctx.fillStyle = '#000000';
+    ctx.fillStyle = '#111827';
 
     // 1. 계약 체결일자 (상단 중앙)
-    ctx.font = 'bold 36px "Malgun Gothic", sans-serif';
+    ctx.font = 'bold 30px "Malgun Gothic", "맑은 고딕", sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText(data.contractDate || new Date().toISOString().split('T')[0], canvasW * 0.5, canvasH * 0.118);
+    ctx.fillText(data.contractDate || new Date().toISOString().split('T')[0], canvasW * 0.5, canvasH * 0.115);
 
     // 2. 임차인(을) 정보
     ctx.textAlign = 'left';
-    ctx.font = '500 28px "Malgun Gothic", sans-serif';
-    ctx.fillText(data.lesseeBizNo || '', canvasW * 0.68, canvasH * 0.148);
-    ctx.fillText(data.lesseeName || '', canvasW * 0.68, canvasH * 0.174);
-    ctx.fillText(data.lesseeCeo || '', canvasW * 0.68, canvasH * 0.198);
+    ctx.font = '500 24px "Malgun Gothic", "맑은 고딕", sans-serif';
+    ctx.fillText(data.lesseeBizNo || '', canvasW * 0.65, canvasH * 0.144);
+    ctx.fillText(data.lesseeName || '', canvasW * 0.65, canvasH * 0.168);
+    ctx.fillText(data.lesseeCeo || '', canvasW * 0.65, canvasH * 0.192);
 
     // 3. 임대차 계약 내용 (현장 및 대리인)
-    ctx.fillText(data.deliveryLocation || '', canvasW * 0.22, canvasH * 0.258);
-    ctx.fillText(data.deliveryDateTime || '', canvasW * 0.68, canvasH * 0.258);
-    ctx.fillText(data.siteAddress || '', canvasW * 0.22, canvasH * 0.280);
-    ctx.fillText(data.managerName || '', canvasW * 0.22, canvasH * 0.324);
-    ctx.fillText(data.managerPhone || '', canvasW * 0.68, canvasH * 0.324);
+    ctx.fillText(data.deliveryLocation || '', canvasW * 0.21, canvasH * 0.254);
+    ctx.fillText(data.deliveryDateTime || '', canvasW * 0.67, canvasH * 0.254);
+    ctx.fillText(data.siteAddress || '', canvasW * 0.21, canvasH * 0.276);
+    ctx.fillText(data.managerName || '', canvasW * 0.21, canvasH * 0.318);
+    ctx.fillText(data.managerPhone || '', canvasW * 0.67, canvasH * 0.318);
 
-    // 4. 품목 및 장비 그리드 (최대 12줄)
+    // 4. 체결 장비 12줄 그리드
     const isOver12 = data.assets.length >= 13;
-    const startY = canvasH * 0.368;
-    const rowHeight = canvasH * 0.0215;
+    const startY = canvasH * 0.380;
+    const rowHeight = canvasH * 0.0216;
 
     if (isOver12) {
-      // 13대 이상 시 1행 요약 표기
       ctx.fillText(`${data.assets[0]?.modelName || '고소작업대'} 외 ${data.assets.length - 1}대 (총 ${data.assets.length}대)`, canvasW * 0.08, startY);
-      ctx.fillText(`${data.assets.length}`, canvasW * 0.21, startY);
+      ctx.textAlign = 'center';
+      ctx.fillText(`${data.assets.length}`, canvasW * 0.22, startY);
+      ctx.textAlign = 'left';
       ctx.fillText('[별지 제1호: 체결 장비 상세 명세표 참조]', canvasW * 0.27, startY);
-      ctx.fillText(data.totalMonthlyFee ? `₩${data.totalMonthlyFee.toLocaleString()}` : '-', canvasW * 0.52, startY);
+      ctx.textAlign = 'right';
+      ctx.fillText(data.totalMonthlyFee ? data.totalMonthlyFee.toLocaleString() : '-', canvasW * 0.58, startY);
     } else {
-      // 12대 이하 1:1 기재
       data.assets.forEach((asset, idx) => {
         if (idx >= 12) return;
         const currentY = startY + idx * rowHeight;
+        ctx.textAlign = 'left';
         ctx.fillText(asset.modelName || '', canvasW * 0.08, currentY);
-        ctx.fillText(`${asset.quantity || 1}`, canvasW * 0.21, currentY);
-        ctx.fillText(asset.serialNo || '', canvasW * 0.27, currentY);
-        ctx.fillText(asset.monthlyFee ? asset.monthlyFee.toLocaleString() : '', canvasW * 0.43, currentY);
-        ctx.fillText(asset.subtotal ? asset.subtotal.toLocaleString() : '', canvasW * 0.52, currentY);
+        ctx.textAlign = 'center';
+        ctx.fillText(`${asset.quantity || 1}`, canvasW * 0.22, currentY);
+        ctx.textAlign = 'left';
+        ctx.fillText(asset.serialNo || '', canvasW * 0.26, currentY);
+        ctx.textAlign = 'right';
+        ctx.fillText(asset.monthlyFee ? asset.monthlyFee.toLocaleString() : '', canvasW * 0.49, currentY);
+        ctx.fillText(asset.subtotal ? asset.subtotal.toLocaleString() : '', canvasW * 0.58, currentY);
       });
     }
 
     // 5. 합계 금액
-    ctx.font = 'bold 32px "Malgun Gothic", sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText(`₩${(data.totalMonthlyFee || 0).toLocaleString()}`, canvasW * 0.74, canvasH * 0.485);
+    ctx.font = 'bold 28px "Malgun Gothic", "맑은 고딕", sans-serif';
+    ctx.textAlign = 'right';
+    ctx.fillText(`₩ ${(data.totalMonthlyFee || 0).toLocaleString()}`, canvasW * 0.92, canvasH * 0.494);
 
     // 6. 영업 담당자 정보
     ctx.textAlign = 'left';
-    ctx.font = '500 28px "Malgun Gothic", sans-serif';
+    ctx.font = '500 24px "Malgun Gothic", "맑은 고딕", sans-serif';
     if (data.managerName) {
-      ctx.fillText(data.managerName, canvasW * 0.64, canvasH * 0.902);
+      ctx.fillText(data.managerName, canvasW * 0.65, canvasH * 0.900);
     }
   });
 
@@ -276,10 +309,11 @@ export async function generateContractPdf(data: ContractExcelData): Promise<Uint
 }
 
 /**
- * 2. 반입 전 CHECK LIST PDF 생성 (상단 모델명, 관리번호(S/N) 2개 항목 동적 주입)
+ * 2. 반입 전 CHECK LIST PDF 생성
+ * - 상단 [모델명], [관리번호(S/N)] 셀 영역 화이트아웃 마스킹 후 정밀 주입
  */
 export async function generateChecklistPdf(data: PreDeliveryChecklistExcelData): Promise<Uint8Array> {
-  const { PDFDocument } = await import('pdf-lib');
+  const { PDFDocument, rgb } = await import('pdf-lib');
   const res = await fetch('/templates/반입전체크리스트_양식_원본.pdf');
   if (!res.ok) throw new Error(`체크리스트 원본 템플릿 로드 실패: HTTP ${res.status}`);
 
@@ -287,6 +321,11 @@ export async function generateChecklistPdf(data: PreDeliveryChecklistExcelData):
   const pdfDoc = await PDFDocument.load(templateBytes);
   const page = pdfDoc.getPages()[0];
   const { width, height } = page.getSize();
+  const white = rgb(1, 1, 1);
+
+  // 상단 모델명 및 관리번호(S/N) 기존 텍스트 셀 화이트아웃 마스킹
+  page.drawRectangle({ x: 180, y: height - 46, width: 140, height: 16, color: white });
+  page.drawRectangle({ x: 410, y: height - 46, width: 150, height: 16, color: white });
 
   const scale = 3.5;
   const canvasW = width * scale;
@@ -294,13 +333,14 @@ export async function generateChecklistPdf(data: PreDeliveryChecklistExcelData):
 
   const overlayPng = await createTextCanvasLayer(canvasW, canvasH, (ctx) => {
     ctx.fillStyle = '#000000';
-    ctx.font = 'bold 30px "Malgun Gothic", sans-serif';
+    ctx.font = 'bold 26px "Malgun Gothic", "맑은 고딕", sans-serif';
 
-    // 1. 상단 모델명
-    ctx.fillText(data.modelName || '', canvasW * 0.32, canvasH * 0.046);
+    // 1. 상단 모델명 (가로/세로 중앙 맞춤)
+    ctx.textAlign = 'left';
+    ctx.fillText(data.modelName || '', canvasW * 0.32, canvasH * 0.045);
 
     // 2. 상단 관리번호 (S/N)
-    ctx.fillText(data.serialNo || '', canvasW * 0.72, canvasH * 0.046);
+    ctx.fillText(data.serialNo || '', canvasW * 0.71, canvasH * 0.045);
   });
 
   const embeddedImage = await pdfDoc.embedPng(overlayPng);
@@ -315,10 +355,12 @@ export async function generateChecklistPdf(data: PreDeliveryChecklistExcelData):
 }
 
 /**
- * 3. 고소작업대(T/L) 안전점검 결과서 PDF 생성 (헤더 제원 및 출고 정보 동적 주입, 점검자 김관주/도장 원본 보존)
+ * 3. 고소작업대(T/L) 안전점검 결과서 PDF 생성
+ * - 상단 헤더 5행의 기존 텍스트 셀 전체 화이트아웃 마스킹 후 ERP 마스터 제원 정밀 주입
+ * - 점검자(김관주) 및 도장 날인은 원본 보존
  */
 export async function generateSafetyInspectionPdf(data: SafetyInspectionExcelData): Promise<Uint8Array> {
-  const { PDFDocument } = await import('pdf-lib');
+  const { PDFDocument, rgb } = await import('pdf-lib');
   const res = await fetch('/templates/안전점검결과서_양식_원본.pdf');
   if (!res.ok) throw new Error(`안전점검결과서 원본 템플릿 로드 실패: HTTP ${res.status}`);
 
@@ -326,36 +368,60 @@ export async function generateSafetyInspectionPdf(data: SafetyInspectionExcelDat
   const pdfDoc = await PDFDocument.load(templateBytes);
   const page = pdfDoc.getPages()[0];
   const { width, height } = page.getSize();
+  const white = rgb(1, 1, 1);
+
+  // 상단 헤더 5개 행의 데이터 영역 화이트아웃 마스킹
+  // Row 1: 사업장명, 제조사
+  page.drawRectangle({ x: 105, y: height - 58, width: 220, height: 14, color: white });
+  page.drawRectangle({ x: 420, y: height - 58, width: 140, height: 14, color: white });
+
+  // Row 2: 사용업체, 모델명
+  page.drawRectangle({ x: 105, y: height - 73, width: 220, height: 14, color: white });
+  page.drawRectangle({ x: 420, y: height - 73, width: 140, height: 14, color: white });
+
+  // Row 3: 장비중량, 운행속도, 작업높이/용량
+  page.drawRectangle({ x: 105, y: height - 88, width: 100, height: 14, color: white });
+  page.drawRectangle({ x: 270, y: height - 88, width: 60, height: 14, color: white });
+  page.drawRectangle({ x: 420, y: height - 88, width: 140, height: 14, color: white });
+
+  // Row 4: 차량(관리)번호, 제조년도, 안전인증년월일
+  page.drawRectangle({ x: 105, y: height - 103, width: 100, height: 14, color: white });
+  page.drawRectangle({ x: 270, y: height - 103, width: 60, height: 14, color: white });
+  page.drawRectangle({ x: 420, y: height - 103, width: 140, height: 14, color: white });
+
+  // Row 5: 안전점검일시
+  page.drawRectangle({ x: 105, y: height - 118, width: 220, height: 14, color: white });
 
   const scale = 3.5;
   const canvasW = width * scale;
   const canvasH = height * scale;
 
   const overlayPng = await createTextCanvasLayer(canvasW, canvasH, (ctx) => {
-    ctx.fillStyle = '#000000';
-    ctx.font = '500 26px "Malgun Gothic", sans-serif';
+    ctx.fillStyle = '#111827';
+    ctx.font = '500 23px "Malgun Gothic", "맑은 고딕", sans-serif';
+    ctx.textAlign = 'left';
 
     // Row 1: 사업장명, 제조사 (렌탈사)
-    ctx.fillText(data.siteName || '', canvasW * 0.20, canvasH * 0.062);
+    ctx.fillText(data.siteName || '', canvasW * 0.19, canvasH * 0.059);
     const mfgText = `${data.manufacturer || 'GENIE'} ${data.lessorName || '(주)기연리프트'}`;
-    ctx.fillText(mfgText, canvasW * 0.73, canvasH * 0.062);
+    ctx.fillText(mfgText, canvasW * 0.72, canvasH * 0.059);
 
     // Row 2: 사용업체, 모델명
-    ctx.fillText(data.clientName || '', canvasW * 0.20, canvasH * 0.080);
-    ctx.fillText(data.modelName || '', canvasW * 0.73, canvasH * 0.080);
+    ctx.fillText(data.clientName || '', canvasW * 0.19, canvasH * 0.076);
+    ctx.fillText(data.modelName || '', canvasW * 0.72, canvasH * 0.076);
 
     // Row 3: 장비중량, 운행속도, 작업높이/적재용량
-    ctx.fillText(data.weight || '', canvasW * 0.20, canvasH * 0.098);
-    ctx.fillText(data.speed || '', canvasW * 0.47, canvasH * 0.098);
-    ctx.fillText(data.maxHeightCapacity || '', canvasW * 0.73, canvasH * 0.098);
+    ctx.fillText(data.weight || '', canvasW * 0.19, canvasH * 0.093);
+    ctx.fillText(data.speed || '', canvasW * 0.46, canvasH * 0.093);
+    ctx.fillText(data.maxHeightCapacity || '', canvasW * 0.72, canvasH * 0.093);
 
     // Row 4: 차량(관리)번호, 제조년도, 안전인증년월일
-    ctx.fillText(data.serialNo || '', canvasW * 0.20, canvasH * 0.116);
-    ctx.fillText(data.manufactureYear || '', canvasW * 0.47, canvasH * 0.116);
-    ctx.fillText(data.safetyCertDate || '', canvasW * 0.73, canvasH * 0.116);
+    ctx.fillText(data.serialNo || '', canvasW * 0.19, canvasH * 0.111);
+    ctx.fillText(data.manufactureYear || '', canvasW * 0.46, canvasH * 0.111);
+    ctx.fillText(data.safetyCertDate || '', canvasW * 0.72, canvasH * 0.111);
 
     // Row 5: 안전점검일시
-    ctx.fillText(data.inspectionDate || new Date().toISOString().split('T')[0], canvasW * 0.20, canvasH * 0.134);
+    ctx.fillText(data.inspectionDate || new Date().toISOString().split('T')[0], canvasW * 0.19, canvasH * 0.129);
   });
 
   const embeddedImage = await pdfDoc.embedPng(overlayPng);
