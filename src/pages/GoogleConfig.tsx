@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
-import { Settings, Mail, FolderOpen, RefreshCw, CheckCircle2, Lock, Eye, EyeOff, ShieldCheck, HelpCircle, AlertTriangle, ExternalLink, Key, Search, Cloud, Folder, File, ArrowLeft, Download, HardDrive, FileText } from 'lucide-react';
+import { Settings, Mail, FolderOpen, RefreshCw, CheckCircle2, Lock, Eye, EyeOff, ShieldCheck, HelpCircle, AlertTriangle, ExternalLink, Key, Search, Cloud, Folder, File, ArrowLeft, Download, HardDrive, FileText, Shield } from 'lucide-react';
 import { GoogleConfig as GoogleConfigType } from '../services/db';
 import { drive, DriveFile, DriveFolder } from '../services/drive';
 import { GoogleDrivePickerModal } from '../components/GoogleDrivePickerModal';
@@ -88,6 +88,29 @@ export const GoogleConfig: React.FC = () => {
       clearInterval(interval);
     };
   }, [currentUser]);
+
+  // ── 📥 사내 보안 인증서 (.cer & .bat) 다운로드 ──
+  const handleDownloadCert = () => {
+    try {
+      const link1 = document.createElement('a');
+      link1.href = '/downloads/KiyeunLift_Root.cer';
+      link1.download = 'KiyeunLift_Root.cer';
+      document.body.appendChild(link1);
+      link1.click();
+      document.body.removeChild(link1);
+
+      setTimeout(() => {
+        const link2 = document.createElement('a');
+        link2.href = '/downloads/인증서_원클릭_자동등록.bat';
+        link2.download = '인증서_원클릭_자동등록.bat';
+        document.body.appendChild(link2);
+        link2.click();
+        document.body.removeChild(link2);
+      }, 500);
+    } catch (err: any) {
+      alert(`⚠️ 인증서 다운로드 실패: ${err?.message || err}`);
+    }
+  };
 
   // ── 📥 Node.js 무설치 단독 실행 파일 (KiyeunAgent.exe) 직접 다운로드 ──
   const [isDownloadingAgent, setIsDownloadingAgent] = useState(false);
@@ -903,7 +926,31 @@ function doGet(e) {
               </p>
             </div>
 
-            <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={handleDownloadCert}
+                title="1회만 PC에 등록하면 모든 보안 경고가 영구히 소멸됩니다."
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '9px 14px',
+                  fontSize: '12.5px',
+                  fontWeight: '800',
+                  whiteSpace: 'nowrap',
+                  background: '#f8fafc',
+                  border: '1.5px solid #0284c7',
+                  color: '#0284c7',
+                  borderRadius: '8px',
+                  cursor: 'pointer'
+                }}
+              >
+                <Shield size={14} color="#0284c7" />
+                1단계: 🛡️ 보안 인증서 등록 (.cer)
+              </button>
+
               <button
                 type="button"
                 className="btn-primary"
@@ -913,7 +960,7 @@ function doGet(e) {
                   display: 'flex',
                   alignItems: 'center',
                   gap: '8px',
-                  padding: '10px 18px',
+                  padding: '9px 16px',
                   fontSize: '13px',
                   fontWeight: '800',
                   whiteSpace: 'nowrap',
@@ -926,7 +973,7 @@ function doGet(e) {
                 }}
               >
                 <Download size={15} />
-                {isDownloadingAgent ? '다운로드 중...' : '📥 KiyeunAgent.exe 다운로드'}
+                {isDownloadingAgent ? '다운로드 중...' : '2단계: 📥 KiyeunAgent.exe 다운로드'}
               </button>
 
               <button

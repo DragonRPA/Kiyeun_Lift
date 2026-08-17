@@ -1,7 +1,7 @@
 // d:\Kiyeun_Lift\src\pages\Dashboard.tsx
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
-import { Activity, ShieldAlert, Users, Layers, ShieldCheck, Wrench, Truck, CreditCard, ShoppingBag, CheckCircle, Bell, AlertTriangle, ArrowRight, Cloud, AlertCircle, Download, FileText, Bot } from 'lucide-react';
+import { Activity, ShieldAlert, Users, Layers, ShieldCheck, Wrench, Truck, CreditCard, ShoppingBag, CheckCircle, Bell, AlertTriangle, ArrowRight, Cloud, AlertCircle, Download, FileText, Bot, Shield } from 'lucide-react';
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
 import { PDFDocument } from 'pdf-lib';
@@ -74,6 +74,29 @@ export const Dashboard: React.FC = () => {
       clearInterval(interval);
     };
   }, [currentUser]);
+
+  // ── 📥 사내 보안 인증서 (.cer & .bat) 다운로드 ──
+  const handleDownloadCert = () => {
+    try {
+      const link1 = document.createElement('a');
+      link1.href = '/downloads/KiyeunLift_Root.cer';
+      link1.download = 'KiyeunLift_Root.cer';
+      document.body.appendChild(link1);
+      link1.click();
+      document.body.removeChild(link1);
+
+      setTimeout(() => {
+        const link2 = document.createElement('a');
+        link2.href = '/downloads/인증서_원클릭_자동등록.bat';
+        link2.download = '인증서_원클릭_자동등록.bat';
+        document.body.appendChild(link2);
+        link2.click();
+        document.body.removeChild(link2);
+      }, 500);
+    } catch (err: any) {
+      alert(`⚠️ 인증서 다운로드 실패: ${err?.message || err}`);
+    }
+  };
 
   // ── 📥 Node.js 무설치 단독 실행 파일 (KiyeunAgent.exe) 직접 다운로드 ──
   const handleDownloadAgentExe = () => {
@@ -455,14 +478,29 @@ export const Dashboard: React.FC = () => {
               </p>
             </div>
 
-            <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={handleDownloadCert}
+                title="1회만 PC에 등록하면 모든 경고가 영구히 소멸됩니다."
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '6px', padding: '9px 14px',
+                  fontSize: '12.5px', fontWeight: '800', whiteSpace: 'nowrap',
+                  background: '#f8fafc', border: '1.5px solid #0284c7', color: '#0284c7', borderRadius: '8px', cursor: 'pointer'
+                }}
+              >
+                <Shield size={14} color="#0284c7" />
+                1단계: 🛡️ 보안 인증서 등록 (.cer)
+              </button>
+
               <button
                 type="button"
                 className="btn-primary"
                 disabled={isDownloadingAgent}
                 onClick={handleDownloadAgentExe}
                 style={{
-                  display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 16px',
+                  display: 'flex', alignItems: 'center', gap: '8px', padding: '9px 16px',
                   fontSize: '13px', fontWeight: '800', whiteSpace: 'nowrap',
                   background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
                   border: 'none', borderRadius: '8px', color: '#fff', cursor: isDownloadingAgent ? 'wait' : 'pointer',
@@ -470,7 +508,7 @@ export const Dashboard: React.FC = () => {
                 }}
               >
                 <Download size={15} />
-                {isDownloadingAgent ? '다운로드 중...' : '📥 KiyeunAgent.exe 다운로드'}
+                {isDownloadingAgent ? '다운로드 중...' : '2단계: 📥 KiyeunAgent.exe 다운로드'}
               </button>
 
               <button
@@ -854,13 +892,18 @@ export const Dashboard: React.FC = () => {
 
               <div style={{ backgroundColor: 'var(--bg-app, #f8fafc)', padding: '14px 16px', borderRadius: '10px', border: '1px solid var(--border)', marginBottom: '16px' }}>
                 <h4 style={{ margin: '0 0 8px 0', fontSize: '14px', fontWeight: '700', color: '#4f46e5' }}>
-                  ⚡ 1초 원클릭 실행 방법:
+                  ⚡ 최초 1회 실행 2단계 순서:
                 </h4>
-                <ol style={{ margin: 0, paddingLeft: '18px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                  <li>우측 상단의 <strong>[📥 KiyeunAgent.exe 다운로드]</strong> 버튼을 누릅니다.</li>
-                  <li>다운로드된 <code>KiyeunAgent.exe</code> 파일을 <code>C:\KiyeunAgent\</code> 에 넣습니다.</li>
-                  <li><strong><code>KiyeunAgent.exe</code></strong> 파일을 더블클릭하여 실행합니다. (Node.js 불필요)</li>
-                  <li>대시보드에 <strong>`🟢 실시간 가동중`</strong> 신호등이 즉시 켜집니다!</li>
+                <ol style={{ margin: 0, paddingLeft: '18px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <li>
+                    <strong>[1단계: 🛡️ 보안 인증서 등록]</strong> 버튼을 누르면 <code>KiyeunLift_Root.cer</code>와 <code>인증서_원클릭_자동등록.bat</code>이 내려옵니다. 배치 파일을 실행하여 PC에 1회 등록합니다. (보안 경고 영구 소멸)
+                  </li>
+                  <li>
+                    <strong>[2단계: 📥 KiyeunAgent.exe 다운로드]</strong> 버튼을 눌러 받은 실행 파일을 더블클릭합니다.
+                  </li>
+                  <li>
+                    에이전트가 알아서 <code>C:\KiyeunAgent\</code> 에 자가 설치되고 백그라운드에서 가동되며, 대시보드에 <strong>`🟢 실시간 가동중`</strong> 신호등이 즉시 켜집니다!
+                  </li>
                 </ol>
               </div>
 
