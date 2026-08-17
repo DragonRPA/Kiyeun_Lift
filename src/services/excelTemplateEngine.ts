@@ -104,6 +104,12 @@ export interface ContractExcelData {
   deliveryDateTime: string;    // 장비 인도 일시
   managerName: string;         // 현장 담당자
   managerPhone: string;        // 현장 담당자 연락처
+  /**
+   * 체결 장비 목록
+   * ⚠️ 비즈니스 룰:
+   * - 12대 이하: 본문 테이블 12줄 내 1:1 직접 표기
+   * - 13대 이상: 본문 1행 요약 ('GS-1930 외 N대 (총 N대)') + [별지 제1호: 체결 장비 상세 명세표] 자동 생성
+   */
   assets: Array<{
     modelName: string;         // 품목(모델명)
     quantity: number;          // 수량
@@ -113,6 +119,7 @@ export interface ContractExcelData {
   }>;
   totalMonthlyFee: number;     // 총 합계
   transportTerms: string;      // 운송료 청구 기준
+  hasAnnexList?: boolean;      // 13대 이상 시 별지 생성 여부 (자동 산출)
 }
 
 /**
