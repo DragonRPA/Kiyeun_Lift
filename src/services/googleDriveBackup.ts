@@ -303,3 +303,29 @@ export async function backupToGoogleDrive(
 
   return result;
 }
+// ─────────────────────────────────────────────────────────────────────────────
+// 2f. 파일 캐시 확인 및 구글 드라이브 다운로드 (브라우저/에이전트 캐시 우선 헬퍼) ───
+// ─────────────────────────────────────────────────────────────────────────────
+export async function fetchDriveFileCacheFirst(fileId: string, fileName: string): Promise<ArrayBuffer> {
+  // 1. 로컬 에이전트(http://127.0.0.1:5175/api/get-file) 캐시 우선 요청 (팝업 0회)
+  try {
+    const res = await fetch(`http://127.0.0.1:5175/api/get-file?fileId=${encodeURIComponent(fileId)}&fileName=${encodeURIComponent(fileName)}`, {
+      signal: AbortSignal.timeout(3000)
+    });
+    if (res.ok) {
+      const buf = await res.arrayBuffer();
+      if (buf.byteLength > 100) return buf;
+    }
+  } catch (e) {
+    // 에이전트 오프라인 또는 연결 실패 시 폴백
+  }
+
+  // 2. 무토큰 공개 다이렉트 다운로드 폴백 (팝업 0회)
+  return await downloadPublicDriveFile(fileId);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 2g. 파일 유틸리티 re-export (SSOT 준수: src/utils/fileUtil.ts)
+// ─────────────────────────────────────────────────────────────────────────────
+export { ensureDirSync, writeBase64ToFile } from '../utils/fileUtil';
+

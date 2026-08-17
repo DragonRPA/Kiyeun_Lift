@@ -682,6 +682,7 @@ export interface GoogleConfig {
   defaultRootFolderId?: string;
   appsScriptUrl?: string;
   oauthClientId?: string;   // 구글 드라이브 백업용 OAuth 2.0 Client ID
+  mirrorRecursive?: boolean; // 하위 폴더 재귀 미러링 여부
   createdAt?: string;
   updatedAt: string;
 }

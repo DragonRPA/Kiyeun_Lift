@@ -403,38 +403,74 @@ export async function mergeDriveFilesToPdf(
     onProgress?.(item.label, i + 1, items.length);
 
     try {
-      let pdfBytes: ArrayBuffer;
+      let pdfBytes: ArrayBuffer | null = null;
+      const fileName = item.label.endsWith('.pdf') ? item.label : `${item.label}.pdf`;
 
-      if (appsScriptUrl?.trim()) {
-        // [방식 C] Google Apps Script 웹앱 프록시 (팝업 0회)
-        const endpoint = `${appsScriptUrl.trim()}?action=downloadFile&fileId=${encodeURIComponent(item.fileId)}`;
-        const res = await fetch(endpoint);
-        if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
-        const data = await res.json();
-        if (!data.success || !data.base64) {
-          throw new Error(data.error || '파일 데이터 수신 실패');
+      // [방식 1] 로컬 에이전트 캐시 우선 + 무토큰 공개 다운로드 (팝업 0회 최우선)
+      try {
+        const localRes = await fetch(`http://127.0.0.1:5175/api/get-file?fileId=${encodeURIComponent(item.fileId)}&fileName=${encodeURIComponent(fileName)}`, {
+          signal: AbortSignal.timeout(3000)
+        });
+        if (localRes.ok) {
+          const ab = await localRes.arrayBuffer();
+          if (ab.byteLength > 100) pdfBytes = ab;
         }
-        const binaryString = atob(data.base64);
-        const len = binaryString.length;
-        const bytes = new Uint8Array(len);
-        for (let k = 0; k < len; k++) {
-          bytes[k] = binaryString.charCodeAt(k);
+      } catch (e) {}
+
+      if (!pdfBytes) {
+        if (appsScriptUrl?.trim()) {
+          // [방식 2] Google Apps Script 웹앱 프록시 (팝업 0회)
+          const endpoint = `${appsScriptUrl.trim()}?action=downloadFile&fileId=${encodeURIComponent(item.fileId)}`;
+          const res = await fetch(endpoint);
+          if (res.ok) {
+            const data = await res.json();
+            if (data.success && data.base64) {
+              const binaryString = atob(data.base64);
+              const len = binaryString.length;
+              const bytes = new Uint8Array(len);
+              for (let k = 0; k < len; k++) {
+                bytes[k] = binaryString.charCodeAt(k);
+              }
+              pdfBytes = bytes.buffer;
+            }
+          }
         }
-        pdfBytes = bytes.buffer;
-      } else if (token?.trim()) {
-        // [방식 B] OAuth Token 직접 호출
+      }
+
+      if (!pdfBytes && token?.trim()) {
+        // [방식 3] OAuth Token 직접 호출 (토큰이 이미 있을 때만)
         const res = await fetch(
           `https://www.googleapis.com/drive/v3/files/${item.fileId}?alt=media`,
           { headers: { Authorization: `Bearer ${token}` } }
         );
-        if (!res.ok) {
-          const errJson = await res.json().catch(() => null);
-          const errDetail = errJson?.error?.message || res.statusText;
-          throw new Error(`HTTP ${res.status}: ${errDetail}`);
+        if (res.ok) {
+          pdfBytes = await res.arrayBuffer();
         }
-        pdfBytes = await res.arrayBuffer();
-      } else {
-        throw new Error('Google Apps Script URL 또는 OAuth 인증 토큰이 필요합니다.');
+      }
+
+      if (!pdfBytes) {
+        // [방식 4] 공개 공유 링크 직접 다운로드 폴백
+        const publicEndpoints = [
+          `https://drive.usercontent.google.com/download?id=${item.fileId}&export=download&authuser=0`,
+          `https://lh3.googleusercontent.com/d/${item.fileId}`,
+          `https://drive.google.com/uc?export=download&id=${item.fileId}`
+        ];
+        for (const dlUrl of publicEndpoints) {
+          try {
+            const res = await fetch(dlUrl);
+            if (res.ok) {
+              const ab = await res.arrayBuffer();
+              if (ab.byteLength > 100) {
+                pdfBytes = ab;
+                break;
+              }
+            }
+          } catch (e) {}
+        }
+      }
+
+      if (!pdfBytes) {
+        throw new Error(`파일 수신 실패 (${item.label})`);
       }
 
       // 실제 원본 바이너리 읽기

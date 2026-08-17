@@ -164,14 +164,6 @@ export const Dashboard: React.FC = () => {
     setIsMergingDoc(true);
 
     try {
-      let token: string | undefined;
-      try {
-        setMergeProgressLabel('구글 계정 인증 중...');
-        token = await getDriveReadToken(clientId);
-      } catch (authErr) {
-        console.warn('구글 인증 건너뜀:', authErr);
-      }
-
       const mergedPdf = await PDFDocument.create();
 
       // 1. 계약서 1p
@@ -240,29 +232,27 @@ export const Dashboard: React.FC = () => {
         mergedPdf.addPage(inspPage);
       }
 
-      // 4. 외부 드라이브 서류 결합
-      if (token && folderId) {
-        setMergeProgressLabel('4단계: 구글 드라이브 원본 파일 결합 중...');
-        try {
-          const files = await listFilesInDriveFolder(folderId, token);
-          const pdfFiles = files.filter(f => f.mimeType === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf'));
+      // 4. 로컬 미러링 문서고 / 원본 서류 결합 (팝업 0회)
+      setMergeProgressLabel('4단계: 로컬 미러링 원본 서류 결합 중...');
+      try {
+        const mirrorRes = await fetch('http://127.0.0.1:5175/api/mirror-status', { signal: AbortSignal.timeout(2000) });
+        if (mirrorRes.ok) {
+          const mirrorData = await mirrorRes.json();
+          const pdfFiles = (mirrorData.files || []).filter((f: any) => f.name.toLowerCase().endsWith('.pdf') && !f.name.includes('임대차계약서') && !f.name.includes('반입전체크리스트') && !f.name.includes('안전점검'));
 
-          for (let i = 0; i < pdfFiles.length; i++) {
-            const file = pdfFiles[i];
+          for (const mFile of pdfFiles) {
             try {
-              const res = await fetch(`https://www.googleapis.com/drive/v3/files/${file.id}?alt=media`, {
-                headers: { Authorization: `Bearer ${token}` }
-              });
-              if (res.ok) {
-                const drivePdfBytes = await res.arrayBuffer();
+              const fileRes = await fetch(`http://127.0.0.1:5175/api/get-file?fileName=${encodeURIComponent(mFile.name)}`);
+              if (fileRes.ok) {
+                const drivePdfBytes = await fileRes.arrayBuffer();
                 const driveDoc = await PDFDocument.load(drivePdfBytes);
                 const copiedPages = await mergedPdf.copyPages(driveDoc, driveDoc.getPageIndices());
                 copiedPages.forEach(p => mergedPdf.addPage(p));
               }
             } catch (e) {}
           }
-        } catch (driveErr) {}
-      }
+        }
+      } catch (mirrorErr) {}
 
       // 5. 다운로드 및 로컬 아카이빙
       const finalBytes = await mergedPdf.save();

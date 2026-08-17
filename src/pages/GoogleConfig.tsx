@@ -50,6 +50,7 @@ export const GoogleConfig: React.FC = () => {
 
   // 신설 필드 상태
   const [oauthClientId, setOauthClientId] = useState('');
+  const [mirrorRecursive, setMirrorRecursive] = useState(true);
 
   // 로컬 사이드카 에이전트 실시간 모니터링 상태
   const [agentStatus, setAgentStatus] = useState<'ONLINE' | 'OFFLINE'>('OFFLINE');
@@ -236,33 +237,23 @@ export const GoogleConfig: React.FC = () => {
     }
 
     setIsMergingDriveFiles(true);
+    setMergeProgressLabel('로컬 에이전트 미러링 캐시 및 원본 파일 수신 중 (팝업 0회)...');
 
     try {
-      let token: string | undefined;
-
-      if (hasAppsScript) {
-        setMergeProgressLabel('⚡ Google Apps Script 웹앱 프록시 연결 중 (팝업 없음)...');
-      } else {
-        setMergeProgressLabel('구글 OAuth 인증 중... (팝업에서 계정 선택)');
-        token = await getDriveReadToken(clientId);
-      }
-
       const result = await mergeDriveFilesToPdf(
         filesToMerge,
         {
-          token,
           appsScriptUrl: hasAppsScript ? cfg.appsScriptUrl : undefined,
           outputFileName: `[기연리프트]_실제원본병합테스트_${filesToMerge.length}건_${new Date().toISOString().split('T')[0]}.pdf`,
           onProgress: (label, idx, total) =>
-            setMergeProgressLabel(`[${idx}/${total}] ${label} 다운로드 및 병합 중...`)
+            setMergeProgressLabel(`[${idx}/${total}] ${label} 로컬 수신 및 병합 중...`)
         }
       );
 
-      const modeText = hasAppsScript ? '⚡ Apps Script 프록시 (팝업 0회)' : '🔑 OAuth 인증';
       const failMsg = result.failedLabels.length > 0
         ? `\n\n⚠️ 실패: ${result.failedLabels.join(', ')}`
         : '';
-      alert(`✅ 구글 드라이브 원본 파일 병합 완료! (${modeText})\n\n성공: ${result.successCount}건 / 총 ${filesToMerge.length}건\n총 ${result.totalPages}페이지${failMsg}`);
+      alert(`✅ 구글 드라이브 원본 파일 병합 완료! (팝업 0회)\n\n성공: ${result.successCount}건 / 총 ${filesToMerge.length}건\n총 ${result.totalPages}페이지${failMsg}`);
     } catch (err: any) {
       alert(`⚠️ 병합 실패: ${err?.message || err}`);
     } finally {
@@ -282,40 +273,35 @@ export const GoogleConfig: React.FC = () => {
       return;
     }
 
-    const clientId = cfg?.oauthClientId?.trim() || oauthClientId?.trim() || '274287991550-7eaeisb14i80315pmlf8390smf58pkbt.apps.googleusercontent.com';
-    const hasAppsScript = !!cfg?.appsScriptUrl?.trim();
-    const hasOAuth = !!clientId;
-
-    if (!hasAppsScript && !hasOAuth) {
-      alert('⚠️ 구글 연동 방식이 설정되지 않았습니다.\n[OAuth Client ID] 또는 [Apps Script URL]을 확인해 주세요.');
-      return;
-    }
-
     setIsMergingDriveFiles(true);
 
     try {
-      setMergeProgressLabel('구글 계정 인증 및 폴더 내 파일 목록 조회 중...');
-      const token = await getDriveReadToken(clientId);
+      setMergeProgressLabel('로컬 미러링 문서고 파일 목록 탐색 중 (팝업 0회)...');
 
-      // 폴더 내 파일 목록 API 조회
-      const files = await listFilesInDriveFolder(folderId, token);
-      const pdfFiles = files.filter(f => f.mimeType === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf'));
+      // 1. 로컬 에이전트 미러링 상태 조회
+      let pdfFiles: Array<{ name: string; fileId?: string }> = [];
+      try {
+        const mirrorRes = await fetch('http://127.0.0.1:5175/api/mirror-status', { signal: AbortSignal.timeout(2000) });
+        if (mirrorRes.ok) {
+          const mirrorData = await mirrorRes.json();
+          pdfFiles = (mirrorData.files || []).filter((f: any) => f.name.toLowerCase().endsWith('.pdf'));
+        }
+      } catch (e) {}
 
       if (pdfFiles.length === 0) {
-        alert(`⚠️ 해당 폴더(${folderId}) 안에 PDF 파일이 발견되지 않았습니다.\n(총 파일 수: ${files.length}개)`);
+        alert(`⚠️ 로컬 미러링 문서고에 PDF 파일이 발견되지 않았습니다.`);
         return;
       }
 
-      setMergeProgressLabel(`총 ${pdfFiles.length}개의 PDF 파일 발견. 다운로드 및 병합 시작...`);
+      setMergeProgressLabel(`총 ${pdfFiles.length}개의 PDF 파일 발견. 로컬 수신 및 병합 시작...`);
 
-      const itemsToMerge = pdfFiles.map(f => ({ label: f.name, fileId: f.id }));
+      const itemsToMerge = pdfFiles.map(f => ({ label: f.name, fileId: f.name }));
       const result = await mergeDriveFilesToPdf(
         itemsToMerge,
         {
-          token,
           outputFileName: `[기연리프트]_폴더원본PDF병합_${pdfFiles.length}건_${new Date().toISOString().split('T')[0]}.pdf`,
           onProgress: (label, idx, total) =>
-            setMergeProgressLabel(`[${idx}/${total}] ${label} 다운로드 및 병합 중...`)
+            setMergeProgressLabel(`[${idx}/${total}] ${label} 결합 중...`)
         }
       );
 
@@ -363,33 +349,32 @@ export const GoogleConfig: React.FC = () => {
       mergedPdf.addPage(excelPage);
       console.log('✅ [1단계 완료] 엑셀 기반 안전점검결과서 1페이지 병합 성공');
 
-      // 2. 구글 드라이브 지정 폴더의 실제 원본 PDF들 가져와서 뒤에 결합
-      setMergeProgressLabel('2단계: 구글 계정 인증 및 드라이브 원본 파일 소집 중...');
-      const token = await getDriveReadToken(clientId);
+      // 2. 로컬 미러링 문서고의 실제 원본 PDF들 가져와서 뒤에 결합 (팝업 0회)
+      setMergeProgressLabel('2단계: 로컬 미러링 원본 파일 결합 중 (팝업 0회)...');
+      try {
+        const mirrorRes = await fetch('http://127.0.0.1:5175/api/mirror-status', { signal: AbortSignal.timeout(2000) });
+        if (mirrorRes.ok) {
+          const mirrorData = await mirrorRes.json();
+          const pdfFiles = (mirrorData.files || []).filter((f: any) => f.name.toLowerCase().endsWith('.pdf') && !f.name.includes('안전점검'));
 
-      if (folderId) {
-        const files = await listFilesInDriveFolder(folderId, token);
-        const pdfFiles = files.filter(f => f.mimeType === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf'));
-
-        for (let i = 0; i < pdfFiles.length; i++) {
-          const file = pdfFiles[i];
-          setMergeProgressLabel(`2단계: [${i + 1}/${pdfFiles.length}] ${file.name} 다운로드 및 결합 중...`);
-          try {
-            const res = await fetch(`https://www.googleapis.com/drive/v3/files/${file.id}?alt=media`, {
-              headers: { Authorization: `Bearer ${token}` }
-            });
-            if (res.ok) {
-              const drivePdfBytes = await res.arrayBuffer();
-              const driveDoc = await PDFDocument.load(drivePdfBytes);
-              const copiedPages = await mergedPdf.copyPages(driveDoc, driveDoc.getPageIndices());
-              copiedPages.forEach(p => mergedPdf.addPage(p));
-              console.log(`✅ [드라이브] ${file.name} - ${copiedPages.length}p 결합 성공`);
+          for (let i = 0; i < pdfFiles.length; i++) {
+            const file = pdfFiles[i];
+            setMergeProgressLabel(`2단계: [${i + 1}/${pdfFiles.length}] ${file.name} 결합 중...`);
+            try {
+              const fileRes = await fetch(`http://127.0.0.1:5175/api/get-file?fileName=${encodeURIComponent(file.name)}`);
+              if (fileRes.ok) {
+                const drivePdfBytes = await fileRes.arrayBuffer();
+                const driveDoc = await PDFDocument.load(drivePdfBytes);
+                const copiedPages = await mergedPdf.copyPages(driveDoc, driveDoc.getPageIndices());
+                copiedPages.forEach(p => mergedPdf.addPage(p));
+                console.log(`✅ [로컬 미러링] ${file.name} - ${copiedPages.length}p 결합 성공`);
+              }
+            } catch (e) {
+              console.warn(`⚠️ ${file.name} 결합 실패:`, e);
             }
-          } catch (e) {
-            console.warn(`⚠️ ${file.name} 결합 실패:`, e);
           }
         }
-      }
+      } catch (mirrorErr) {}
 
       // 3. 최종 완성본 단일 PDF 다운로드
       const finalBytes = await mergedPdf.save();
@@ -445,15 +430,6 @@ export const GoogleConfig: React.FC = () => {
     setIsMergingDriveFiles(true);
 
     try {
-      // ── 0. [가장 먼저] 구글 OAuth 토큰 획득 (브라우저 팝업 차단 방지) ──
-      let token: string | undefined;
-      try {
-        setMergeProgressLabel('구글 계정 인증 중... (팝업 선택)');
-        token = await getDriveReadToken(clientId);
-      } catch (authErr) {
-        console.warn('⚠️ 구글 계정 인증 건너뜀 (3대 서류만 생성 진행):', authErr);
-      }
-
       const mergedPdf = await PDFDocument.create();
 
       // ── 1. [1p] 고소작업대 임대차 계약서 생성 ──
@@ -525,34 +501,27 @@ export const GoogleConfig: React.FC = () => {
       }
       console.log(`✅ [3단계 완료] 안전점검결과서 ${assignedAssets.length}p 생성 결합 성공`);
 
-      // ── 4. 외부 구글 드라이브 원본 서류들 뒤에 결합 ──
-      if (token && folderId) {
-        setMergeProgressLabel('4단계: 구글 드라이브 원본 파일 소집 및 결합 중...');
-        try {
-          const files = await listFilesInDriveFolder(folderId, token);
-          const pdfFiles = files.filter(f => f.mimeType === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf'));
+      // ── 4. 로컬 미러링 문서고 / 원본 서류 결합 (팝업 0회) ──
+      setMergeProgressLabel('4단계: 로컬 미러링 원본 파일 결합 중 (팝업 0회)...');
+      try {
+        const mirrorRes = await fetch('http://127.0.0.1:5175/api/mirror-status', { signal: AbortSignal.timeout(2000) });
+        if (mirrorRes.ok) {
+          const mirrorData = await mirrorRes.json();
+          const pdfFiles = (mirrorData.files || []).filter((f: any) => f.name.toLowerCase().endsWith('.pdf') && !f.name.includes('임대차계약서') && !f.name.includes('반입전체크리스트') && !f.name.includes('안전점검'));
 
-          for (let i = 0; i < pdfFiles.length; i++) {
-            const file = pdfFiles[i];
-            setMergeProgressLabel(`4단계: [${i + 1}/${pdfFiles.length}] ${file.name} 다운로드 및 결합 중...`);
+          for (const mFile of pdfFiles) {
             try {
-              const res = await fetch(`https://www.googleapis.com/drive/v3/files/${file.id}?alt=media`, {
-                headers: { Authorization: `Bearer ${token}` }
-              });
-              if (res.ok) {
-                const drivePdfBytes = await res.arrayBuffer();
+              const fileRes = await fetch(`http://127.0.0.1:5175/api/get-file?fileName=${encodeURIComponent(mFile.name)}`);
+              if (fileRes.ok) {
+                const drivePdfBytes = await fileRes.arrayBuffer();
                 const driveDoc = await PDFDocument.load(drivePdfBytes);
                 const copiedPages = await mergedPdf.copyPages(driveDoc, driveDoc.getPageIndices());
                 copiedPages.forEach(p => mergedPdf.addPage(p));
               }
-            } catch (e) {
-              console.warn(`⚠️ ${file.name} 결합 실패:`, e);
-            }
+            } catch (e) {}
           }
-        } catch (driveErr) {
-          console.warn('⚠️ 구글 드라이브 파일 소집 실패 (3대 서류는 정상 보존):', driveErr);
         }
-      }
+      } catch (mirrorErr) {}
 
       // ── 5. 최종 완성본 단일 PDF 다운로드 및 로컬 에이전트 아카이빙 ──
       const finalBytes = await mergedPdf.save();
@@ -621,6 +590,7 @@ export const GoogleConfig: React.FC = () => {
       setDefaultRootFolderId(currentConfig.defaultRootFolderId || '');
       setAppsScriptUrl(currentConfig.appsScriptUrl || '');
       setOauthClientId(currentConfig.oauthClientId || '274287991550-7eaeisb14i80315pmlf8390smf58pkbt.apps.googleusercontent.com');
+      setMirrorRecursive(currentConfig.mirrorRecursive !== undefined ? currentConfig.mirrorRecursive : true);
       setIsDevMode(currentConfig.isDevMode !== undefined ? currentConfig.isDevMode : true);
     }
   }, [currentConfig]);
@@ -803,6 +773,7 @@ function doGet(e) {
         defaultRootFolderId,
         appsScriptUrl,
         oauthClientId,
+        mirrorRecursive,
         updatedAt: new Date().toISOString()
       };
 
@@ -1299,9 +1270,17 @@ function doGet(e) {
                     <Cloud size={14} /> 드라이브 탐색
                   </button>
                 </div>
-                <span style={{ fontSize: '11.5px', color: 'var(--text-muted)', marginTop: '6px', display: 'block' }}>
-                  💡 여기에 회사 드라이브 최상위 폴더를 지정해 두면, 계약 관리나 자산 대장 등 어떤 메뉴에서 탐색기를 열더라도 엉뚱한 폴더 대신 <strong>해당 회사 폴더에서부터 탐색이 시작</strong>됩니다.
-                </span>
+                <div style={{ marginTop: '10px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '12.5px', fontWeight: '700', color: 'var(--text-primary)', whiteSpace: 'nowrap', flexShrink: 0 }}>
+                    <input
+                      type="checkbox"
+                      checked={mirrorRecursive}
+                      onChange={e => setMirrorRecursive(e.target.checked)}
+                      style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+                    />
+                    하위 폴더 재귀
+                  </label>
+                </div>
               </div>
 
               <div>

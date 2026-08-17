@@ -16,7 +16,7 @@ const os = require('os');
 const { spawn, execSync } = require('child_process');
 const { PDFDocument, rgb } = require('pdf-lib');
 
-const VERSION = 'v1.111.0.Build.228';
+const VERSION = 'v1.115.0.Build.232';
 const PORT = process.env.PORT || 5175;
 const CALLSIGN = process.env.AGENT_CALLSIGN || 'admin';
 const MACHINE_NAME = os.hostname();
@@ -332,7 +332,102 @@ const server = http.createServer(async (req, res) => {
     });
     return;
   }
+  // 5. 파일 캐시 확인 및 구글 드라이브 다운로드 (로컬 미러링 캐시 우선) API
+  if (req.method === 'GET' && pathname === '/api/get-file') {
+    const fileId = searchParams.get('fileId');
+    const fileName = searchParams.get('fileName') || (fileId ? `${fileId}.pdf` : '');
+    if (!fileId && !fileName) {
+      res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
+      res.end(JSON.stringify({ success: false, error: 'fileId or fileName is required' }));
+      return;
+    }
 
+    (async () => {
+      try {
+        const ext = path.extname(fileName).toLowerCase();
+        const mimeTypes = {
+          '.pdf': 'application/pdf',
+          '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          '.xls': 'application/vnd.ms-excel',
+          '.jpg': 'image/jpeg',
+          '.jpeg': 'image/jpeg',
+          '.png': 'image/png',
+          '.txt': 'text/plain',
+          '.json': 'application/json'
+        };
+        const contentType = mimeTypes[ext] || 'application/octet-stream';
+
+        // 1순위: 로컬 미러링 폴더(C:\KiyeunAgent\drive_mirror\)에서 파일 확인
+        let localFilePath = path.join(DRIVE_MIRROR_DIR, fileName);
+        if (fs.existsSync(localFilePath) && fs.statSync(localFilePath).isFile()) {
+          const fileBuf = fs.readFileSync(localFilePath);
+          res.writeHead(200, { 'Content-Type': contentType, 'X-Cache-Source': 'LOCAL_MIRROR' });
+          res.end(fileBuf);
+          return;
+        }
+
+        // 2순위: 하위 폴더 탐색 (fileName이 서브 디렉토리 없이 전달된 경우 대비)
+        const findFileRecursively = (dir, targetName) => {
+          if (!fs.existsSync(dir)) return null;
+          const entries = fs.readdirSync(dir, { withFileTypes: true });
+          for (const ent of entries) {
+            if (ent.name.startsWith('.') || ent.name === 'archive') continue;
+            const full = path.join(dir, ent.name);
+            if (ent.isDirectory()) {
+              const found = findFileRecursively(full, targetName);
+              if (found) return found;
+            } else if (ent.name.toLowerCase() === targetName.toLowerCase()) {
+              return full;
+            }
+          }
+          return null;
+        };
+
+        const foundPath = findFileRecursively(DRIVE_MIRROR_DIR, path.basename(fileName));
+        if (foundPath && fs.existsSync(foundPath)) {
+          const fileBuf = fs.readFileSync(foundPath);
+          res.writeHead(200, { 'Content-Type': contentType, 'X-Cache-Source': 'LOCAL_MIRROR_RECURSIVE' });
+          res.end(fileBuf);
+          return;
+        }
+
+        // 3순위: 로컬에 없으면 구글 드라이브에서 토큰 0회 무인 다운로드 후 로컬 캐싱
+        if (fileId) {
+          const endpoints = [
+            `https://drive.usercontent.google.com/download?id=${fileId}&export=download&authuser=0`,
+            `https://lh3.googleusercontent.com/d/${fileId}`,
+            `https://drive.google.com/uc?export=download&id=${fileId}`
+          ];
+
+          for (const dlUrl of endpoints) {
+            try {
+              const fetchRes = await fetch(dlUrl);
+              if (fetchRes.ok) {
+                const ab = await fetchRes.arrayBuffer();
+                if (ab.byteLength > 100) {
+                  const targetDir = path.dirname(localFilePath);
+                  if (!fs.existsSync(targetDir)) fs.mkdirSync(targetDir, { recursive: true });
+                  fs.writeFileSync(localFilePath, Buffer.from(ab));
+
+                  res.writeHead(200, { 'Content-Type': contentType, 'X-Cache-Source': 'GOOGLE_DRIVE_DOWNLOADED' });
+                  res.end(Buffer.from(ab));
+                  return;
+                }
+              }
+            } catch (dlErr) {}
+          }
+        }
+
+        res.writeHead(404, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify({ success: false, error: `파일을 찾을 수 없습니다: ${fileName}` }));
+      } catch (err) {
+        console.error('❌ /api/get-file 오류:', err);
+        res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify({ success: false, error: err.message }));
+      }
+    })();
+    return;
+  }
   // 4. 계약 서류 팩 무손실 생산 및 로컬 문서고 보관 API
   if (req.method === 'POST' && pathname === '/api/execute-job') {
     let body = '';
