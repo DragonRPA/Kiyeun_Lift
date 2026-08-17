@@ -937,11 +937,11 @@ function doGet(e) {
                 <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
                   {agentInfo?.version === EXPECTED_AGENT_VERSION ? (
                     <span style={{ fontSize: '11px', padding: '3px 8px', borderRadius: '4px', background: 'rgba(16,185,129,0.2)', color: '#059669', fontWeight: '800', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                      🟢 로컬 에이전트 최신 ({agentCallsign} · {agentInfo?.version})
+                      🟢 에이전트 {agentInfo?.version?.match(/v\d+\.\d+/)?.[0] || 'v1.100'}
                     </span>
                   ) : (
                     <span style={{ fontSize: '11px', padding: '3px 8px', borderRadius: '4px', background: '#fef3c7', color: '#b45309', fontWeight: '800', display: 'inline-flex', alignItems: 'center', gap: '4px', border: '1px solid #fcd34d' }}>
-                      🟡 에이전트 업데이트 필요 (현재: {agentInfo?.version || '구버전'} ➔ 최신: {EXPECTED_AGENT_VERSION})
+                      🟡 {agentInfo?.version?.match(/v\d+\.\d+/)?.[0] || '구버전'} ➔ {EXPECTED_AGENT_VERSION.match(/v\d+\.\d+/)?.[0] || 'v1.100'}
                     </span>
                   )}
                   <button
@@ -961,13 +961,9 @@ function doGet(e) {
                   </button>
                 </div>
               ) : (
-                <button
-                  type="button"
-                  onClick={() => setShowAgentGuideModal(true)}
-                  style={{ fontSize: '11px', padding: '3px 8px', borderRadius: '4px', background: 'rgba(239,68,68,0.12)', color: '#dc2626', fontWeight: 'bold', border: '1px solid rgba(239,68,68,0.3)', cursor: 'pointer' }}
-                >
-                  🔴 로컬 에이전트 미연결 (최신: {EXPECTED_AGENT_VERSION})
-                </button>
+                <span style={{ fontSize: '11px', padding: '3px 8px', borderRadius: '4px', background: 'rgba(239,68,68,0.12)', color: '#dc2626', fontWeight: 'bold', border: '1px solid rgba(239,68,68,0.3)' }}>
+                  🔴 에이전트 미실행
+                </span>
               )}
             </div>
             <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-secondary)' }}>

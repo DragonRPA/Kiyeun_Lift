@@ -121,61 +121,71 @@ export const AgentHeaderBadge: React.FC<Props> = ({ currentUser }) => {
     }, 2000);
   };
 
+  // 버전 약식 변환 헬퍼 (예: v1.100.0.Build.217 -> v1.100)
+  const toShortVer = (ver: string) => {
+    if (!ver) return '';
+    const match = ver.match(/v\d+\.\d+/);
+    return match ? match[0] : ver.split('.Build')[0];
+  };
+
+  const shortCurrent = toShortVer(agentVersion);
+  const shortExpected = toShortVer(EXPECTED_AGENT_VERSION);
+
   return (
     <div ref={menuRef} style={{ position: 'relative', display: 'inline-block' }}>
-      {/* 🟢 최신 정상 상태 배지 */}
+      {/* 🟢 최신 정상 상태 배지 (콜사인 생략 & 약식 버전) */}
       {isLatest && (
         <button
           type="button"
           onClick={() => setIsOpenMenu(!isOpenMenu)}
           style={{
-            padding: '5px 12px',
+            padding: '5px 10px',
             borderRadius: '20px',
             background: 'rgba(34, 197, 94, 0.15)',
             border: '1px solid rgba(34, 197, 94, 0.4)',
             color: '#15803d',
             display: 'flex',
             alignItems: 'center',
-            gap: '6px',
+            gap: '5px',
             fontSize: '12px',
             fontWeight: '800',
             cursor: 'pointer',
             whiteSpace: 'nowrap',
             transition: 'all 0.15s ease'
           }}
-          title="로컬 사이드카 에이전트 최신 버전 정상 가동 중 (클릭 시 관리)"
+          title={`에이전트 ${agentVersion} 정상 가동 중 (클릭 시 관리)`}
         >
-          <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: '#22c55e' }}></span>
-          <span>에이전트 {agentVersion}</span>
-          <ChevronDown size={12} />
+          <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#22c55e' }}></span>
+          <span>에이전트 {shortCurrent}</span>
+          <ChevronDown size={11} />
         </button>
       )}
 
-      {/* 🟡 구버전 가동 중 배지 (업데이트 필요) */}
+      {/* 🟡 구버전 가동 중 배지 (버전 차이 약식 표기: v1.98 ➔ v1.100) */}
       {isOutdated && (
         <button
           type="button"
           onClick={() => setIsOpenMenu(!isOpenMenu)}
           style={{
-            padding: '5px 12px',
+            padding: '5px 10px',
             borderRadius: '20px',
             background: 'rgba(245, 158, 11, 0.15)',
             border: '1px solid rgba(245, 158, 11, 0.5)',
             color: '#b45309',
             display: 'flex',
             alignItems: 'center',
-            gap: '6px',
+            gap: '5px',
             fontSize: '12px',
             fontWeight: '800',
             cursor: 'pointer',
             whiteSpace: 'nowrap',
             transition: 'all 0.15s ease'
           }}
-          title="에이전트 구버전 감지 - 최신 버전으로 업데이트 필요"
+          title={`에이전트 업데이트 필요 (현재: ${agentVersion} ➔ 최신: ${EXPECTED_AGENT_VERSION})`}
         >
-          <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: '#f59e0b' }}></span>
-          <span>에이전트 업데이트 ({agentVersion} ➔ {EXPECTED_AGENT_VERSION})</span>
-          <ChevronDown size={12} />
+          <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#f59e0b' }}></span>
+          <span>{shortCurrent || '구버전'} ➔ {shortExpected}</span>
+          <ChevronDown size={11} />
         </button>
       )}
 
@@ -185,25 +195,25 @@ export const AgentHeaderBadge: React.FC<Props> = ({ currentUser }) => {
           type="button"
           onClick={() => setIsOpenMenu(!isOpenMenu)}
           style={{
-            padding: '5px 12px',
+            padding: '5px 10px',
             borderRadius: '20px',
             background: 'rgba(239, 68, 68, 0.15)',
             border: '1px solid rgba(239, 68, 68, 0.4)',
             color: '#b91c1c',
             display: 'flex',
             alignItems: 'center',
-            gap: '6px',
+            gap: '5px',
             fontSize: '12px',
             fontWeight: '800',
             cursor: 'pointer',
             whiteSpace: 'nowrap',
             transition: 'all 0.15s ease'
           }}
-          title="로컬 에이전트 미실행 상태 (클릭 시 다운로드 및 가이드)"
+          title={`로컬 에이전트 미실행 (최신: ${EXPECTED_AGENT_VERSION})`}
         >
-          <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: '#ef4444' }}></span>
+          <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#ef4444' }}></span>
           <span>에이전트 미실행</span>
-          <ChevronDown size={12} />
+          <ChevronDown size={11} />
         </button>
       )}
 
