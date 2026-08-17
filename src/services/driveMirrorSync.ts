@@ -12,6 +12,42 @@ export interface MirrorSyncResult {
   message: string;
 }
 
+export interface MirrorProgressState {
+  isActive: boolean;
+  phase: 'IDLE' | 'SCANNING' | 'DOWNLOADING' | 'TRANSFERRING' | 'COMPLETED' | 'ERROR';
+  currentFile: string;
+  currentIndex: number;
+  totalCount: number;
+  percent: number;
+  message: string;
+}
+
+type MirrorProgressListener = (state: MirrorProgressState) => void;
+const listeners: Set<MirrorProgressListener> = new Set();
+
+let currentState: MirrorProgressState = {
+  isActive: false,
+  phase: 'IDLE',
+  currentFile: '',
+  currentIndex: 0,
+  totalCount: 0,
+  percent: 0,
+  message: ''
+};
+
+export function subscribeMirrorProgress(listener: MirrorProgressListener): () => void {
+  listeners.add(listener);
+  listener(currentState);
+  return () => listeners.delete(listener);
+}
+
+function updateProgress(partial: Partial<MirrorProgressState>) {
+  currentState = { ...currentState, ...partial };
+  listeners.forEach(fn => {
+    try { fn(currentState); } catch (e) {}
+  });
+}
+
 /**
  * ArrayBuffer -> Base64 변환
  */
@@ -36,6 +72,16 @@ export async function executeDriveMirrorSync(
   const folderId = extractDriveFolderId(config?.defaultRootFolderId || '') || (config?.defaultRootFolderId?.includes('/') ? null : config?.defaultRootFolderId?.trim()) || '1aBZsZ1KnKhk9Ax6oiM2cb-yKfDHKGRif';
   const clientId = config?.oauthClientId?.trim() || '274287991550-7eaeisb14i80315pmlf8390smf58pkbt.apps.googleusercontent.com';
 
+  updateProgress({
+    isActive: true,
+    phase: 'SCANNING',
+    currentFile: '구글 드라이브 연결 확인 중...',
+    currentIndex: 0,
+    totalCount: 0,
+    percent: 5,
+    message: '구글 드라이브 폴더 트리 탐색 준비 중...'
+  });
+
   let token: string | undefined;
   if (!appsScriptUrl) {
     try {
@@ -51,13 +97,33 @@ export async function executeDriveMirrorSync(
 
   // ── 1. 🌲 구글 드라이브 루트 폴더 및 모든 하위 폴더(Subdirectories) 재귀 탐색 & 수신 ──
   if (token && folderId && folderId !== 'root') {
-    onProgress?.('구글 드라이브 하위 폴더 트리 재귀 검색 중...', 1, 10);
+    updateProgress({
+      phase: 'SCANNING',
+      currentFile: '하위 폴더 트리 탐색 중...',
+      message: '구글 드라이브 내 모든 파일 목록 검색 중...',
+      percent: 15
+    });
+
     try {
       const driveFiles = await listDriveFolderRecursively(folderId, token);
-      for (let i = 0; i < driveFiles.length; i++) {
+      const totalFiles = driveFiles.length;
+
+      for (let i = 0; i < totalFiles; i++) {
         const file = driveFiles[i];
         const filePath = file.relativePath || file.name;
-        onProgress?.(`구글 드라이브 [${i + 1}/${driveFiles.length}] ${filePath} 수신 중...`, i + 1, driveFiles.length);
+        const pct = Math.round(15 + ((i + 1) / (totalFiles + 5)) * 65);
+
+        updateProgress({
+          phase: 'DOWNLOADING',
+          currentFile: filePath,
+          currentIndex: i + 1,
+          totalCount: totalFiles,
+          percent: pct,
+          message: `[${i + 1}/${totalFiles}] ${filePath} 다운로드 중...`
+        });
+
+        onProgress?.(`구글 드라이브 [${i + 1}/${totalFiles}] ${filePath} 수신 중...`, i + 1, totalFiles);
+
         try {
           const res = await fetch(`https://www.googleapis.com/drive/v3/files/${file.id}?alt=media`, {
             headers: { Authorization: `Bearer ${token}` }
@@ -65,7 +131,7 @@ export async function executeDriveMirrorSync(
           if (res.ok) {
             const buf = await res.arrayBuffer();
             payloadFiles.push({
-              name: filePath, // 하위 폴더 경로 포함
+              name: filePath,
               base64Content: arrayBufferToBase64(buf),
               modifiedTime: new Date().toISOString()
             });
@@ -96,9 +162,14 @@ export async function executeDriveMirrorSync(
     const fileId = item.url ? extractDriveFileId(item.url) : null;
     if (!fileId) continue;
     const fileName = `${item.label}.${item.ext}`;
-    if (payloadFiles.some(f => f.name === fileName)) continue; // 중복 방지
+    if (payloadFiles.some(f => f.name === fileName)) continue;
 
-    onProgress?.(`${item.label} 개별 다운로드 중...`, payloadFiles.length + 1, payloadFiles.length + 5);
+    updateProgress({
+      phase: 'DOWNLOADING',
+      currentFile: fileName,
+      message: `${item.label} 수신 중...`
+    });
+
     try {
       let buf: ArrayBuffer | null = null;
       if (appsScriptUrl) {
@@ -119,12 +190,11 @@ export async function executeDriveMirrorSync(
         successCount++;
       }
     } catch (err) {
-      console.warn(`⚠️ 개별 파일 다운로드 실패 (${item.label}):`, err);
       failCount++;
     }
   }
 
-  // ── 3. 시스템 내장 표준 양식 템플릿 동기화 (실제 존재하는 원본 서식 파일들) ──
+  // ── 3. 시스템 내장 표준 양식 템플릿 동기화 ──
   const builtinTemplates = [
     { name: '반입전체크리스트_양식_원본.pdf', url: '/templates/반입전체크리스트_양식_원본.pdf' },
     { name: '안전점검결과서_양식_원본.pdf', url: '/templates/안전점검결과서_양식_원본.pdf' },
@@ -154,6 +224,11 @@ export async function executeDriveMirrorSync(
   }
 
   if (payloadFiles.length === 0) {
+    updateProgress({
+      isActive: false,
+      phase: 'ERROR',
+      message: '동기화할 대상 파일을 찾지 못했습니다.'
+    });
     return {
       success: false,
       syncedCount: 0,
@@ -163,7 +238,14 @@ export async function executeDriveMirrorSync(
     };
   }
 
-  onProgress?.(`로컬 에이전트(C:\\KiyeunAgent\\drive_mirror\\)로 ${payloadFiles.length}개 파일 전송 중...`, payloadFiles.length, payloadFiles.length);
+  updateProgress({
+    phase: 'TRANSFERRING',
+    currentFile: '로컬 디스크 저장 중...',
+    currentIndex: payloadFiles.length,
+    totalCount: payloadFiles.length,
+    percent: 90,
+    message: `로컬 PC (C:\\KiyeunAgent\\drive_mirror\\)에 ${payloadFiles.length}개 파일 저장 중...`
+  });
 
   try {
     const agentRes = await fetch('http://127.0.0.1:5175/api/sync-drive', {
@@ -172,25 +254,47 @@ export async function executeDriveMirrorSync(
       body: JSON.stringify({ files: payloadFiles })
     });
 
-    if (!agentRes.ok) {
-      throw new Error(`에이전트 응답 오류 HTTP ${agentRes.status}`);
-    }
+    if (!agentRes.ok) throw new Error(`에이전트 응답 오류 HTTP ${agentRes.status}`);
 
     const agentData = await agentRes.json();
+    const finalMsg = `✅ 구글 드라이브 ${payloadFiles.length}개 파일이 C:\\KiyeunAgent\\drive_mirror\\ 에 실시간 미러링되었습니다.`;
+
+    updateProgress({
+      isActive: true,
+      phase: 'COMPLETED',
+      currentFile: '미러링 완료',
+      percent: 100,
+      message: finalMsg
+    });
+
+    // 4초 후 토스트 자동 종료
+    setTimeout(() => {
+      updateProgress({ isActive: false, phase: 'IDLE' });
+    }, 4000);
+
     return {
       success: true,
       syncedCount: agentData.syncedCount || payloadFiles.length,
       failedCount: failCount,
       files: agentData.syncedFiles || payloadFiles.map(f => ({ name: f.name, size: f.base64Content.length })),
-      message: `✅ 구글 드라이브 및 서식 총 ${payloadFiles.length}개 파일이 C:\\KiyeunAgent\\drive_mirror\\ 에 실시간 복제되었습니다.`
+      message: finalMsg
     };
   } catch (err: any) {
+    const errMsg = `로컬 에이전트 미러링 저장 실패: ${err?.message || err}`;
+    updateProgress({
+      isActive: true,
+      phase: 'ERROR',
+      message: errMsg
+    });
+    setTimeout(() => {
+      updateProgress({ isActive: false, phase: 'IDLE' });
+    }, 5000);
     return {
       success: false,
       syncedCount: 0,
       failedCount: payloadFiles.length,
       files: [],
-      message: `로컬 에이전트 미러링 저장 실패: ${err?.message || err}`
+      message: errMsg
     };
   }
 }

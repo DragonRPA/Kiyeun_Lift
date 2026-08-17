@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Bot, Download, RefreshCw, Shield, ChevronDown, CheckCircle2, AlertTriangle, X, Cloud, FolderCheck, HardDrive } from 'lucide-react';
 import { EXPECTED_AGENT_VERSION, AGENT_DOWNLOAD_URL, AGENT_CERT_URL, AGENT_INSTALL_BAT_URL, restartLocalAgent } from '../services/agentService';
-import { executeDriveMirrorSync, getLocalMirrorStatus } from '../services/driveMirrorSync';
+import { executeDriveMirrorSync, getLocalMirrorStatus, subscribeMirrorProgress, MirrorProgressState } from '../services/driveMirrorSync';
 import { useApp } from '../context/AppContext';
 
 interface Props {
@@ -21,11 +21,25 @@ export const AgentHeaderBadge: React.FC<Props> = ({ currentUser }) => {
   const [isOpenMenu, setIsOpenMenu] = useState(false);
 
   // 미러링 상태
+  const [mirrorProgress, setMirrorProgress] = useState<MirrorProgressState>({
+    isActive: false,
+    phase: 'IDLE',
+    currentFile: '',
+    currentIndex: 0,
+    totalCount: 0,
+    percent: 0,
+    message: ''
+  });
   const [mirrorFiles, setMirrorFiles] = useState<Array<{ name: string; size: number; modifiedTime: string }>>([]);
   const [isSyncingDrive, setIsSyncingDrive] = useState(false);
   const [syncMessage, setSyncMessage] = useState('');
   const autoSyncedRef = useRef(false);
   const menuRef = useRef<HTMLDivElement>(null);
+
+  // 미러링 진행상황 구독
+  useEffect(() => {
+    return subscribeMirrorProgress(setMirrorProgress);
+  }, []);
 
   // 3초 주기 헬스체크 및 실시간 콜사인 바인딩
   useEffect(() => {
@@ -157,7 +171,7 @@ export const AgentHeaderBadge: React.FC<Props> = ({ currentUser }) => {
 
   return (
     <div ref={menuRef} style={{ position: 'relative', display: 'inline-block' }}>
-      {/* 🟢 최신 정상 상태 배지 (콜사인 생략 & 약식 버전) */}
+      {/* 🟢 최신 정상 상태 배지 (콜사인 생략 & 약식 버전 & 미러링 진행 중 동적 표시) */}
       {isLatest && (
         <button
           type="button"
@@ -165,9 +179,9 @@ export const AgentHeaderBadge: React.FC<Props> = ({ currentUser }) => {
           style={{
             padding: '5px 10px',
             borderRadius: '20px',
-            background: 'rgba(34, 197, 94, 0.15)',
-            border: '1px solid rgba(34, 197, 94, 0.4)',
-            color: '#15803d',
+            background: mirrorProgress.isActive && mirrorProgress.phase !== 'COMPLETED' ? 'rgba(37, 99, 235, 0.15)' : 'rgba(34, 197, 94, 0.15)',
+            border: `1px solid ${mirrorProgress.isActive && mirrorProgress.phase !== 'COMPLETED' ? 'rgba(37, 99, 235, 0.4)' : 'rgba(34, 197, 94, 0.4)'}`,
+            color: mirrorProgress.isActive && mirrorProgress.phase !== 'COMPLETED' ? '#2563eb' : '#15803d',
             display: 'flex',
             alignItems: 'center',
             gap: '5px',
@@ -179,8 +193,17 @@ export const AgentHeaderBadge: React.FC<Props> = ({ currentUser }) => {
           }}
           title={`에이전트 ${agentVersion} 정상 가동 중 (클릭 시 관리)`}
         >
-          <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#22c55e' }}></span>
-          <span>에이전트 {shortCurrent}</span>
+          {mirrorProgress.isActive && mirrorProgress.phase !== 'COMPLETED' ? (
+            <>
+              <RefreshCw size={11} className="animate-spin" color="#2563eb" />
+              <span>미러링 ({mirrorProgress.currentIndex}/{mirrorProgress.totalCount || '?'})</span>
+            </>
+          ) : (
+            <>
+              <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#22c55e' }}></span>
+              <span>에이전트 {shortCurrent}</span>
+            </>
+          )}
           <ChevronDown size={11} />
         </button>
       )}

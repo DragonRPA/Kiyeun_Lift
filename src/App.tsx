@@ -43,6 +43,7 @@ import { OutboundInspections } from './pages/outbound_inspections';
 import { DepreciationExecution } from './pages/depreciation_execution';
 import { PurchaseSettlementPage } from './pages/PurchaseSettlementPage';
 import { AgentHeaderBadge } from './components/AgentHeaderBadge';
+import { MirrorSyncProgressToast } from './components/MirrorSyncProgressToast';
 
 export interface SubMenuItem {
   id: string;
@@ -674,6 +675,9 @@ const App: React.FC = () => {
           }
         }
       `}</style>
+
+      {/* 🚀 구글 드라이브 실시간 미러링 진행상황 플로팅 토스트 */}
+      <MirrorSyncProgressToast />
 
     </div>
   );
