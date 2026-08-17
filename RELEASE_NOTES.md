@@ -1,3 +1,25 @@
+# Release Notes (v1.71.0.Build.188 - 2026-08-17 18:17)
+
+## 🔗 [구글 드라이브 실연동] 가짜 파일 완전 폐기 및 Google Drive API OAuth `drive.readonly` 실제 원본 파일 바이너리 다운로드·병합 엔진 탑재
+
+### 🌟 개편 배경 및 원칙
+- **임의 생성 가짜 문서 100% 영구 폐기**: 직전 빌드에서 임시 생성되었던 `public/documents/` 내 PDF 7개 및 생성 스크립트를 완전히 삭제 처리.
+- **실제 구글 드라이브 원본 다운로드 연동**: 시스템에 저장된 구글 드라이브 URL에서 File ID를 추출하여 `Google Drive API v3 (drive.readonly)` OAuth 인증을 통해 실제 원본 바이너리를 직접 가져와 `pdf-lib`로 병합하는 실체 엔진 구축.
+
+### ✅ 주요 반영 사항
+1. **가짜 PDF 파일 및 스크립트 완전 삭제**:
+   - `public/documents/` 디렉토리 및 `scripts/generate_original_pdfs.js` 영구 삭제.
+2. **구글 드라이브 파일 읽기 및 바이너리 다운로드 서비스 (`src/services/googleDriveBackup.ts`)**:
+   - `getDriveReadToken()`: `drive.readonly` scope로 Google OAuth 토큰 발급.
+   - `downloadDriveFileAsArrayBuffer()`: Google Drive API v3 `files.get?alt=media` 엔드포인트를 통한 실제 파일 ArrayBuffer 다운로드.
+   - `extractDriveFileId()`: 구글 드라이브 URL에서 File ID 정밀 추출.
+3. **구글 드라이브 실시간 원본 PDF 병합 엔진 (`src/services/pdfBundle.ts`)**:
+   - `mergeDriveFilesToPdf()`: 전달받은 구글 드라이브 파일 ID들을 순차 다운로드하여 `pdf-lib`로 결합 후 단일 PDF로 클라이언트 자동 다운로드.
+4. **구글 관리자 설정 화면 실증 테스트 카드 배치 (`src/pages/GoogleConfig.tsx`)**:
+   - `[🔗 실제 원본 PDF 병합 다운로드]` 초록색 테스트 카드를 추가하여, 설정된 사업자등록증 · 통장사본 · 안전점검결과서 양식의 실제 구글 드라이브 원본을 즉시 병합 다운로드하여 검증 가능.
+
+---
+
 # Release Notes (v1.70.0.Build.187 - 2026-08-17 17:53)
 
 ## 🏛️ [법정 정합성 완결] 타 기관 공식 서류 모방 출력 전면 폐기 및 `pdf-lib` 기반 실제 원본 PDF 파일 바이너리 병합 엔진 전면 교체

@@ -42,9 +42,51 @@ function getBackupToken(clientId: string): Promise<string> {
         resolve(res.access_token);
       }
     });
-    // 백업 실행 시 계정 선택 팝업 표시 (의도적)
     client.requestAccessToken({ prompt: '' });
   });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 2b. 읽기 전용 Access Token 발급 (구글 드라이브 파일 다운로드용)
+// drive.readonly scope: 구글 드라이브 내 모든 파일 읽기 가능
+// ─────────────────────────────────────────────────────────────────────────────
+export function getDriveReadToken(clientId: string): Promise<string> {
+  return new Promise(async (resolve, reject) => {
+    await loadGIS().catch(reject);
+    const client = window.google.accounts.oauth2.initTokenClient({
+      client_id: clientId,
+      scope: 'https://www.googleapis.com/auth/drive.readonly',
+      callback: (res: any) => {
+        if (res.error) { reject(new Error(`구글 인증 오류: ${res.error}`)); return; }
+        resolve(res.access_token);
+      }
+    });
+    client.requestAccessToken({ prompt: '' });
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 2c. 구글 드라이브 파일 바이너리 다운로드 (file ID + access token)
+// ─────────────────────────────────────────────────────────────────────────────
+export async function downloadDriveFileAsArrayBuffer(fileId: string, token: string): Promise<ArrayBuffer> {
+  const res = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  if (!res.ok) {
+    const errText = await res.text().catch(() => res.statusText);
+    throw new Error(`구글 드라이브 파일 다운로드 실패 (${fileId}): ${res.status} ${errText}`);
+  }
+  return res.arrayBuffer();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 2d. 구글 드라이브 URL에서 파일 ID 추출
+// https://drive.google.com/file/d/FILE_ID/view → FILE_ID
+// ─────────────────────────────────────────────────────────────────────────────
+export function extractDriveFileId(url: string): string | null {
+  if (!url) return null;
+  const match = url.match(/\/file\/d\/([^/?#]+)/);
+  return match ? match[1] : null;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -361,3 +361,76 @@ export async function downloadContractDocumentBundlePdf(options?: SampleContract
   document.body.removeChild(link);
   URL.revokeObjectURL(downloadUrl);
 }
+
+// ──────────────────────────────────────────────────────────────────────────────
+// 실제 구글 드라이브 파일 ID 목록을 OAuth token으로 다운로드하여 pdf-lib로 병합
+// ──────────────────────────────────────────────────────────────────────────────
+export interface DriveFileMergeItem {
+  label: string;   // 파일 명칭 (로그용)
+  fileId: string;  // 구글 드라이브 파일 ID
+}
+
+export interface MergeDriveFilesResult {
+  successCount: number;
+  failedLabels: string[];
+  totalPages: number;
+}
+
+export async function mergeDriveFilesToPdf(
+  items: DriveFileMergeItem[],
+  token: string,
+  outputFileName: string,
+  onProgress?: (label: string, index: number, total: number) => void
+): Promise<MergeDriveFilesResult> {
+  const mergedPdf = await PDFDocument.create();
+  const result: MergeDriveFilesResult = { successCount: 0, failedLabels: [], totalPages: 0 };
+
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    onProgress?.(item.label, i + 1, items.length);
+
+    try {
+      const res = await fetch(
+        `https://www.googleapis.com/drive/v3/files/${item.fileId}?alt=media`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status} ${res.statusText}`);
+      }
+
+      // 실제 원본 바이너리 읽기
+      const pdfBytes = await res.arrayBuffer();
+      const srcDoc = await PDFDocument.load(pdfBytes);
+      const copiedPages = await mergedPdf.copyPages(srcDoc, srcDoc.getPageIndices());
+      copiedPages.forEach((page) => mergedPdf.addPage(page));
+
+      result.successCount++;
+      console.log(`✅ [${i + 1}/${items.length}] ${item.label} - ${copiedPages.length}페이지 병합 성공`);
+    } catch (err: any) {
+      result.failedLabels.push(`${item.label} (${err?.message || err})`);
+      console.warn(`⚠️ [${i + 1}/${items.length}] ${item.label} 실패:`, err);
+    }
+  }
+
+  result.totalPages = mergedPdf.getPageCount();
+
+  if (result.totalPages === 0) {
+    throw new Error('병합 가능한 페이지가 없습니다. 모든 파일 다운로드에 실패했습니다.');
+  }
+
+  // 최종 단일 파일 다운로드
+  const mergedBytes = await mergedPdf.save();
+  const blob = new Blob([mergedBytes.buffer as ArrayBuffer], { type: 'application/pdf' });
+  const url = URL.createObjectURL(blob);
+
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = outputFileName;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+
+  return result;
+}

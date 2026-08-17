@@ -5,8 +5,8 @@ import { GoogleConfig as GoogleConfigType } from '../services/db';
 import { drive, DriveFile, DriveFolder } from '../services/drive';
 import { GoogleDrivePickerModal } from '../components/GoogleDrivePickerModal';
 import { downloadEvidenceAsZip, deleteStorageFiles } from '../services/supabaseStorage';
-import { backupToGoogleDrive } from '../services/googleDriveBackup';
-import { downloadContractDocumentBundlePdf } from '../services/pdfBundle';
+import { backupToGoogleDrive, getDriveReadToken, extractDriveFileId } from '../services/googleDriveBackup';
+import { downloadContractDocumentBundlePdf, mergeDriveFilesToPdf } from '../services/pdfBundle';
 
 export const GoogleConfig: React.FC = () => {
   const { googleConfigs, updateGoogleConfig, currentUser, showErrorModal, consumablePurchases, clearEvidenceFileUrls, updateEvidenceFileUrls } = useApp();
@@ -93,6 +93,55 @@ export const GoogleConfig: React.FC = () => {
       alert(`⚠️ 샘플 PDF 생성 실패: ${err?.message || err}`);
     } finally {
       setIsGeneratingSamplePdf(false);
+    }
+  };
+
+  // ── 실제 구글 드라이브 원본 파일 병합 테스트 ──
+  const [isMergingDriveFiles, setIsMergingDriveFiles] = useState(false);
+  const [mergeProgressLabel, setMergeProgressLabel] = useState('');
+
+  const handleRealDriveMergeTest = async () => {
+    const cfg = googleConfigs[0];
+    if (!cfg?.oauthClientId?.trim()) {
+      alert('⚠️ [구글 드라이브 설정]에서 OAuth Client ID를 먼저 등록해 주세요.');
+      return;
+    }
+
+    // 설정된 URL에서 파일 ID 추출 (사업자등록증, 통장사본, 안전점검결과서 양식)
+    const filesToMerge = [
+      { label: '사업자등록증', url: cfg.bizRegCertUrl },
+      { label: '통장사본', url: cfg.bankbookCopyUrl },
+      { label: '안전점검결과서 양식', url: cfg.safetyInspectionTemplateUrl },
+    ]
+      .filter(f => f.url?.includes('drive.google.com'))
+      .map(f => ({ label: f.label, fileId: extractDriveFileId(f.url!) }))
+      .filter((f): f is { label: string; fileId: string } => !!f.fileId);
+
+    if (filesToMerge.length === 0) {
+      alert('⚠️ 병합할 구글 드라이브 파일 URL이 설정에 없습니다.\n사업자등록증, 통장사본, 안전점검결과서 양식 URL을 먼저 등록해 주세요.');
+      return;
+    }
+
+    setIsMergingDriveFiles(true);
+    setMergeProgressLabel(`구글 OAuth 인증 중... (팝업에서 계정 선택)`);
+    try {
+      const token = await getDriveReadToken(cfg.oauthClientId);
+      const result = await mergeDriveFilesToPdf(
+        filesToMerge,
+        token,
+        `[기연리프트]_실제원본병합테스트_${filesToMerge.length}건_${new Date().toISOString().split('T')[0]}.pdf`,
+        (label, idx, total) => setMergeProgressLabel(`[${idx}/${total}] ${label} 다운로드 및 병합 중...`)
+      );
+
+      const failMsg = result.failedLabels.length > 0
+        ? `\n\n⚠️ 실패: ${result.failedLabels.join(', ')}`
+        : '';
+      alert(`✅ 구글 드라이브 원본 파일 병합 완료!\n\n성공: ${result.successCount}건 / 총 ${filesToMerge.length}건\n총 ${result.totalPages}페이지${failMsg}`);
+    } catch (err: any) {
+      alert(`⚠️ 병합 실패: ${err?.message || err}`);
+    } finally {
+      setIsMergingDriveFiles(false);
+      setMergeProgressLabel('');
     }
   };
 
@@ -409,39 +458,33 @@ function doGet(e) {
         </div>
       </div>
 
-      {/* 📄 통합 출고/계약 서류 팩 (14p / 15p 다중 보험 연동 샘플 PDF) 단일 파일 병합 다운로드 테스트 카드 */}
-      <div className="card" style={{ marginBottom: '24px', padding: '20px', background: 'linear-gradient(135deg, rgba(27,101,166,0.08) 0%, rgba(27,101,166,0.02) 100%)', border: '1px solid rgba(27,101,166,0.3)', borderRadius: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
-        <div>
-          <h3 style={{ margin: '0 0 6px 0', fontSize: '16px', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-primary)' }}>
-            <FileText className="text-primary" size={20} />
-            통합 출고/계약 서류 팩 (14p / 15p 다중 보험 연동 PDF) 병합 테스트
-          </h3>
-          <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-secondary)' }}>
-            구글드라이브 및 ERP 서류(계약서, 체크리스트 3장, 안전점검표 3장, 제원표, KCs인증서, 작동법, 비상하강, PL보험, 사업자등록증, 통장사본)를 단일 PDF로 병합합니다.<br/>
-            💡 <strong>보험 유효기간 연동:</strong> 계약 기간이 PL보험 만료일(2027-03-05)을 초과할 경우 <strong>차기 갱신 보험증권이 자동 15페이지로 추가 결합</strong>됩니다.
-          </p>
-        </div>
-        <div style={{ display: 'flex', gap: '8px' }}>
-          <button
-            type="button"
-            className="btn-secondary"
-            disabled={isGeneratingSamplePdf}
-            onClick={() => handleDownloadSampleBundlePdf(false)}
-            style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '9px 14px', fontSize: '12.5px', fontWeight: 'bold', whiteSpace: 'nowrap', cursor: isGeneratingSamplePdf ? 'wait' : 'pointer' }}
-          >
-            <Download size={14} />
-            {isGeneratingSamplePdf ? '생성 중...' : '단기계약 (14p PDF)'}
-          </button>
-
+      {/* 🔗 실제 구글 드라이브 원본 파일 병합 테스트 카드 */}
+      <div className="card" style={{ marginBottom: '24px', padding: '20px', background: 'linear-gradient(135deg, rgba(0,128,0,0.07) 0%, rgba(0,128,0,0.02) 100%)', border: '1px solid rgba(0,128,0,0.35)', borderRadius: '12px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '16px' }}>
+          <div style={{ flex: 1 }}>
+            <h3 style={{ margin: '0 0 6px 0', fontSize: '16px', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-primary)' }}>
+              <FileText size={20} style={{ color: '#16a34a' }} />
+              구글 드라이브 실제 원본 파일 병합 테스트
+            </h3>
+            <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-secondary)' }}>
+              설정에 등록된 <strong>사업자등록증 · 통장사본 · 안전점검결과서 양식</strong>의 실제 구글 드라이브 원본 PDF 파일을 읽어와 단일 PDF로 병합합니다.<br/>
+              OAuth 인증 팝업이 1회 나타납니다. 계정 선택 후 자동 다운로드됩니다.
+            </p>
+            {isMergingDriveFiles && mergeProgressLabel && (
+              <p style={{ margin: '8px 0 0 0', fontSize: '12px', color: '#16a34a', fontWeight: 'bold' }}>
+                ⏳ {mergeProgressLabel}
+              </p>
+            )}
+          </div>
           <button
             type="button"
             className="btn-primary"
-            disabled={isGeneratingSamplePdf}
-            onClick={() => handleDownloadSampleBundlePdf(true)}
-            style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '9px 14px', fontSize: '12.5px', fontWeight: 'bold', whiteSpace: 'nowrap', cursor: isGeneratingSamplePdf ? 'wait' : 'pointer' }}
+            disabled={isMergingDriveFiles}
+            onClick={handleRealDriveMergeTest}
+            style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 18px', fontSize: '13.5px', fontWeight: 'bold', whiteSpace: 'nowrap', background: '#16a34a', border: 'none', borderRadius: '8px', color: '#fff', cursor: isMergingDriveFiles ? 'wait' : 'pointer', opacity: isMergingDriveFiles ? 0.7 : 1 }}
           >
-            <Download size={14} />
-            {isGeneratingSamplePdf ? '생성 중...' : '🚨 만료초과/장기계약 (15p 갱신보험 포함)'}
+            <Download size={16} />
+            {isMergingDriveFiles ? '원본 파일 병합 중...' : '🔗 실제 원본 PDF 병합 다운로드'}
           </button>
         </div>
       </div>
