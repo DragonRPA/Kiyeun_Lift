@@ -65,6 +65,12 @@ if (isExe && path.resolve(currentExePath).toLowerCase() !== path.resolve(TARGET_
   }
 }
 
+// 🔄 윈도우 시작 시 자동 실행(Auto-Startup) 레지스트리 자동 등록
+try {
+  const { execSync } = require('child_process');
+  execSync(`reg add "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run" /v "KiyeunAgent" /t REG_SZ /d "${TARGET_EXE_PATH}" /f`, { stdio: 'ignore' });
+} catch (e) {}
+
 // 디렉토리 자동 생성 (정식 위치 실행 시)
 try {
   if (!fs.existsSync(AGENT_HOME)) fs.mkdirSync(AGENT_HOME, { recursive: true });

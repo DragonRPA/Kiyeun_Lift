@@ -1,3 +1,14 @@
+# Release Notes (v1.97.0.Build.214 - 2026-08-17 22:01)
+
+## 🔄 [Windows 자동 재실행(Auto-Startup) 탑재] PC 재부팅 시 윈도우 시작프로그램 백그라운드 자동 기동 지원
+
+### 🌟 반영 내용
+1. **Windows 시작프로그램 레지스트리 자동 등록 (`agent.js`, `KiyeunAgent.exe`)**:
+   - 에이전트 실행 시 `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`에 `KiyeunAgent = C:\KiyeunAgent\KiyeunAgent.exe` 키를 자동 등록.
+   - 직원이 1회만 실행해 두면, 이후 **PC를 재부팅하거나 껐다 켜도 윈도우 시작과 동시에 에이전트가 백그라운드에서 100% 자동 재실행**되어 상시 가동 상태 유지.
+
+---
+
 # Release Notes (v1.96.0.Build.213 - 2026-08-17 21:57)
 
 ## 🛠️ [Windows 인코딩 오류 완벽 해결] 인증서 자동 등록 배치파일 순수 ASCII 명령어 재작성 (`install-cert.bat`)
