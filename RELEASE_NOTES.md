@@ -1,3 +1,17 @@
+# Release Notes (v1.86.0.Build.203 - 2026-08-17 21:23)
+
+## 📁 [전사 표준 절대경로 통일] 에이전트 홈 및 로컬 문서고 경로를 `C:\KiyeunAgent\` 로 단일화
+
+### 🌟 반영 내용
+1. **에이전트 및 문서고 표준 절대경로 지정 (`agent.js`, `start-agent.bat`)**:
+   - 에이전트 홈 경로: `C:\KiyeunAgent\`
+   - 사내 계약 문서 영구 보관소: `C:\KiyeunAgent\문서고\YYYY-MM\`
+   - 구글 드라이브 복제 미러 경로: `C:\KiyeunAgent\drive_mirror\`
+2. **프론트엔드 연동 & 안내 가이드 경로 일치화 (`GoogleConfig.tsx`)**:
+   - 에이전트 작업 완료 알림 및 가이드 모달에 `C:\KiyeunAgent\` 경로 적용.
+
+---
+
 # Release Notes (v1.85.0.Build.202 - 2026-08-17 21:15)
 
 ## 🤖 [로컬 사이드카 에이전트 & 프론트엔드 실시간 연동] 로그인 아이디 기반 콜사인 체계, 엑셀 직접 조작/PDF 생산 데몬 및 로컬 문서고 자동 아카이빙 탑재

@@ -536,7 +536,7 @@ export const GoogleConfig: React.FC = () => {
           });
           if (agentRes.ok) {
             const agentData = await agentRes.json();
-            localSaveMsg = `\n\n📂 [로컬 에이전트 아카이빙 완료]\n저장 위치: ${agentData.localFilePath || 'D:\\기연리프트_문서고'}`;
+            localSaveMsg = `\n\n📂 [로컬 에이전트 아카이빙 완료]\n저장 위치: ${agentData.localFilePath || 'C:\\KiyeunAgent\\문서고'}`;
           }
         } catch (e) {
           console.warn('로컬 에이전트 아카이빙 통지 실패 (브라우저 다운로드는 정상):', e);
@@ -1907,7 +1907,7 @@ function doGet(e) {
 
               <div style={{ padding: '20px 24px', fontSize: '13.5px', lineHeight: '1.6', color: 'var(--text-primary)' }}>
                 <p style={{ margin: '0 0 14px 0' }}>
-                  <strong>로컬 사이드카 에이전트</strong>를 실행해 두시면, 웹 브라우저의 렌더링 한계를 넘어 <strong>마이크로소프트 엑셀 정품 파일(`.xlsx`)에 직접 데이터를 주입</strong>하고 <strong>100% 무손실 정품 PDF를 생산</strong>하여 사내 로컬 문서고(<code>D:\기연리프트_문서고\</code>)에 자동 아카이빙합니다.
+                  <strong>로컬 사이드카 에이전트</strong>를 실행해 두시면, 웹 브라우저의 렌더링 한계를 넘어 <strong>마이크로소프트 엑셀 정품 파일(`.xlsx`)에 직접 데이터를 주입</strong>하고 <strong>100% 무손실 정품 PDF를 생산</strong>하여 사내 로컬 문서고(<code>C:\KiyeunAgent\문서고\</code>)에 자동 아카이빙합니다.
                 </p>
 
                 <div style={{ backgroundColor: 'var(--bg-app)', padding: '14px 16px', borderRadius: '10px', border: '1px solid var(--border)', marginBottom: '16px' }}>
@@ -1915,7 +1915,7 @@ function doGet(e) {
                     ⚡ 1초 원클릭 실행 방법:
                   </h4>
                   <ol style={{ margin: 0, paddingLeft: '18px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <li>프로젝트 폴더 내 <code>agent/</code> 디렉토리로 이동합니다.</li>
+                    <li>에이전트 프로그램 기본 위치: <code>C:\KiyeunAgent\</code></li>
                     <li><strong><code>start-agent.bat</code></strong> 파일을 더블클릭합니다.</li>
                     <li>로그인 아이디(콜사인)를 확인 후 엔터를 치면 백그라운드에서 가동됩니다.</li>
                     <li>웹 화면 상단에 <strong>`🟢 로컬 에이전트 가동중`</strong> 신호등이 즉시 켜집니다.</li>

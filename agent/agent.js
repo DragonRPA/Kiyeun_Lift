@@ -19,30 +19,26 @@ const PORT = process.env.PORT || 5175;
 const CALLSIGN = process.env.AGENT_CALLSIGN || 'admin';
 const MACHINE_NAME = os.hostname();
 
-// 📁 로컬 문서고 영구 아카이빙 기본 경로 (D: 드라이브 우선, 없으면 C: 또는 에이전트 폴더)
-let ARCHIVE_ROOT = 'D:\\기연리프트_문서고';
-try {
-  if (!fs.existsSync('D:\\')) {
-    ARCHIVE_ROOT = path.join(os.homedir(), '기연리프트_문서고');
-  }
-} catch (e) {
-  ARCHIVE_ROOT = path.join(os.homedir(), '기연리프트_문서고');
-}
-if (!fs.existsSync(ARCHIVE_ROOT)) {
-  try { fs.mkdirSync(ARCHIVE_ROOT, { recursive: true }); } catch (e) {}
-}
+// 📁 전사 표준 절대경로: C:\KiyeunAgent\ 및 하위 문서고
+const AGENT_HOME = 'C:\\KiyeunAgent';
+const ARCHIVE_ROOT = path.join(AGENT_HOME, '문서고');
+const DRIVE_MIRROR_DIR = path.join(AGENT_HOME, 'drive_mirror');
 
-// 📁 구글 드라이브 로컬 미러링 캐시 폴더
-const DRIVE_MIRROR_DIR = path.join(__dirname, 'drive_mirror');
-if (!fs.existsSync(DRIVE_MIRROR_DIR)) {
-  try { fs.mkdirSync(DRIVE_MIRROR_DIR, { recursive: true }); } catch (e) {}
+// 디렉토리 자동 생성
+try {
+  if (!fs.existsSync(AGENT_HOME)) fs.mkdirSync(AGENT_HOME, { recursive: true });
+  if (!fs.existsSync(ARCHIVE_ROOT)) fs.mkdirSync(ARCHIVE_ROOT, { recursive: true });
+  if (!fs.existsSync(DRIVE_MIRROR_DIR)) fs.mkdirSync(DRIVE_MIRROR_DIR, { recursive: true });
+} catch (e) {
+  console.warn('디렉토리 생성 경고:', e.message);
 }
 
 console.log('====================================================');
 console.log('🚀 [기연리프트] 로컬 사이드카 에이전트 가동');
 console.log(`📡 콜사인(Callsign): ${CALLSIGN}`);
 console.log(`💻 컴퓨터 이름: ${MACHINE_NAME}`);
-console.log(`📂 로컬 문서 보관소: ${ARCHIVE_ROOT}`);
+console.log(`📂 에이전트 홈 경로: ${AGENT_HOME}`);
+console.log(`📑 문서 영구 보관소: ${ARCHIVE_ROOT}`);
 console.log(`🌐 로컬 통신 포트: http://127.0.0.1:${PORT}`);
 console.log('====================================================');
 
