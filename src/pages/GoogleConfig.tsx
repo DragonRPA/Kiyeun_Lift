@@ -359,6 +359,15 @@ export const GoogleConfig: React.FC = () => {
     setIsMergingDriveFiles(true);
 
     try {
+      // ── 0. [가장 먼저] 구글 OAuth 토큰 획득 (브라우저 팝업 차단 방지) ──
+      let token: string | undefined;
+      try {
+        setMergeProgressLabel('구글 계정 인증 중... (팝업 선택)');
+        token = await getDriveReadToken(clientId);
+      } catch (authErr) {
+        console.warn('⚠️ 구글 계정 인증 건너뜀 (3대 서류만 생성 진행):', authErr);
+      }
+
       const mergedPdf = await PDFDocument.create();
 
       // ── 1. [1p] 고소작업대 임대차 계약서 생성 ──
@@ -431,29 +440,31 @@ export const GoogleConfig: React.FC = () => {
       console.log(`✅ [3단계 완료] 안전점검결과서 ${assignedAssets.length}p 생성 결합 성공`);
 
       // ── 4. 외부 구글 드라이브 원본 서류들 뒤에 결합 ──
-      setMergeProgressLabel('4단계: 구글 계정 인증 및 드라이브 원본 파일 소집 중...');
-      const token = await getDriveReadToken(clientId);
+      if (token && folderId) {
+        setMergeProgressLabel('4단계: 구글 드라이브 원본 파일 소집 및 결합 중...');
+        try {
+          const files = await listFilesInDriveFolder(folderId, token);
+          const pdfFiles = files.filter(f => f.mimeType === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf'));
 
-      if (folderId) {
-        const files = await listFilesInDriveFolder(folderId, token);
-        const pdfFiles = files.filter(f => f.mimeType === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf'));
-
-        for (let i = 0; i < pdfFiles.length; i++) {
-          const file = pdfFiles[i];
-          setMergeProgressLabel(`4단계: [${i + 1}/${pdfFiles.length}] ${file.name} 다운로드 및 결합 중...`);
-          try {
-            const res = await fetch(`https://www.googleapis.com/drive/v3/files/${file.id}?alt=media`, {
-              headers: { Authorization: `Bearer ${token}` }
-            });
-            if (res.ok) {
-              const drivePdfBytes = await res.arrayBuffer();
-              const driveDoc = await PDFDocument.load(drivePdfBytes);
-              const copiedPages = await mergedPdf.copyPages(driveDoc, driveDoc.getPageIndices());
-              copiedPages.forEach(p => mergedPdf.addPage(p));
+          for (let i = 0; i < pdfFiles.length; i++) {
+            const file = pdfFiles[i];
+            setMergeProgressLabel(`4단계: [${i + 1}/${pdfFiles.length}] ${file.name} 다운로드 및 결합 중...`);
+            try {
+              const res = await fetch(`https://www.googleapis.com/drive/v3/files/${file.id}?alt=media`, {
+                headers: { Authorization: `Bearer ${token}` }
+              });
+              if (res.ok) {
+                const drivePdfBytes = await res.arrayBuffer();
+                const driveDoc = await PDFDocument.load(drivePdfBytes);
+                const copiedPages = await mergedPdf.copyPages(driveDoc, driveDoc.getPageIndices());
+                copiedPages.forEach(p => mergedPdf.addPage(p));
+              }
+            } catch (e) {
+              console.warn(`⚠️ ${file.name} 결합 실패:`, e);
             }
-          } catch (e) {
-            console.warn(`⚠️ ${file.name} 결합 실패:`, e);
           }
+        } catch (driveErr) {
+          console.warn('⚠️ 구글 드라이브 파일 소집 실패 (3대 서류는 정상 보존):', driveErr);
         }
       }
 
