@@ -1,3 +1,14 @@
+# Release Notes (v1.101.0.Build.218 - 2026-08-17 22:28)
+
+## 🛑 [에이전트 원클릭 강제 종료 배치] `kill-agent.bat` 스크립트 프로젝트 루트 및 배포 폴더 탑재
+
+### 🌟 반영 내용
+1. **에이전트 원클릭 강제 종료 스크립트 배포 (`kill-agent.bat`)**:
+   - `KiyeunAgent.exe` 프로세스 및 5175 포트를 점유한 모든 잔존 프로세스를 0.1초 만에 강제 종료(`Stop-Process -Force`)하고 포트를 완전 해제하는 배치 파일 생성.
+   - 프로젝트 루트(`/kill-agent.bat`), `agent/kill-agent.bat`, `public/downloads/kill-agent.bat`에 동시 배치.
+
+---
+
 # Release Notes (v1.100.0.Build.217 - 2026-08-17 22:24)
 
 ## 🛠️ [프로세스 킬 엔진 완전 해결] PowerShell 포트(5175) & 프로세스명 듀얼 강제 킬 및 무인 핫 교체 완결
