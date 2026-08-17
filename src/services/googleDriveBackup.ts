@@ -106,6 +106,7 @@ export interface DriveFolderFileInfo {
   id: string;
   name: string;
   mimeType: string;
+  relativePath?: string;
 }
 
 export async function listFilesInDriveFolder(folderId: string, token: string): Promise<DriveFolderFileInfo[]> {
@@ -120,6 +121,37 @@ export async function listFilesInDriveFolder(folderId: string, token: string): P
   }
   const data = await res.json();
   return data.files || [];
+}
+
+/**
+ * 🌲 구글 드라이브 하위 폴더 전체 재귀 탐색 (상대경로 relativePath 보존)
+ */
+export async function listDriveFolderRecursively(
+  folderId: string,
+  token: string,
+  currentPath: string = ''
+): Promise<DriveFolderFileInfo[]> {
+  const items = await listFilesInDriveFolder(folderId, token);
+  const results: DriveFolderFileInfo[] = [];
+
+  for (const item of items) {
+    const itemPath = currentPath ? `${currentPath}/${item.name}` : item.name;
+    if (item.mimeType === 'application/vnd.google-apps.folder') {
+      // 하위 폴더인 경우 재귀 탐색
+      const subItems = await listDriveFolderRecursively(item.id, token, itemPath);
+      results.push(...subItems);
+    } else {
+      // 일반 파일
+      results.push({
+        id: item.id,
+        name: item.name,
+        mimeType: item.mimeType,
+        relativePath: itemPath
+      });
+    }
+  }
+
+  return results;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -192,20 +192,33 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // 4. 구글 드라이브 로컬 미러링 상태 조회 API
+  // 4. 구글 드라이브 로컬 미러링 상태 조회 API (하위 폴더 재귀 통계)
   if (req.method === 'GET' && pathname === '/api/mirror-status') {
     try {
-      const files = fs.readdirSync(DRIVE_MIRROR_DIR).filter(f => !f.startsWith('.') && f !== 'archive');
-      const stats = files.map(fileName => {
-        const filePath = path.join(DRIVE_MIRROR_DIR, fileName);
-        const st = fs.statSync(filePath);
-        return { name: fileName, size: st.size, modifiedTime: st.mtime.toISOString() };
-      });
+      const getAllFilesRecursively = (dir, rootDir) => {
+        let results = [];
+        if (!fs.existsSync(dir)) return results;
+        const list = fs.readdirSync(dir);
+        list.forEach(file => {
+          if (file.startsWith('.') || file === 'archive') return;
+          const fullPath = path.join(dir, file);
+          const st = fs.statSync(fullPath);
+          if (st.isDirectory()) {
+            results = results.concat(getAllFilesRecursively(fullPath, rootDir));
+          } else {
+            const relPath = path.relative(rootDir, fullPath).replace(/\\/g, '/');
+            results.push({ name: relPath, size: st.size, modifiedTime: st.mtime.toISOString() });
+          }
+        });
+        return results;
+      };
+
+      const stats = getAllFilesRecursively(DRIVE_MIRROR_DIR, DRIVE_MIRROR_DIR);
       res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
       res.end(JSON.stringify({
         success: true,
         mirrorPath: DRIVE_MIRROR_DIR,
-        fileCount: files.length,
+        fileCount: stats.length,
         files: stats
       }));
     } catch (err) {
@@ -215,7 +228,7 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // 3. 구글 드라이브 파일 로컬 미러링 (차분 동기화 & 버전 아카이빙) API
+  // 3. 구글 드라이브 파일 로컬 미러링 (하위 디렉토리 트리 자동 생성 & 차분 동기화 & 버전 아카이빙) API
   if (req.method === 'POST' && pathname === '/api/sync-drive') {
     let body = '';
     req.on('data', chunk => { body += chunk; });
@@ -232,6 +245,11 @@ const server = http.createServer(async (req, res) => {
           if (!file.name || !file.base64Content) continue;
 
           const targetFilePath = path.join(DRIVE_MIRROR_DIR, file.name);
+          const targetDir = path.dirname(targetFilePath);
+          if (!fs.existsSync(targetDir)) {
+            fs.mkdirSync(targetDir, { recursive: true });
+          }
+
           const buffer = Buffer.from(file.base64Content, 'base64');
 
           // 기존 파일 존재 시 버전 아카이빙 (수정일자가 다르거나 크기가 다른 경우)
@@ -239,7 +257,8 @@ const server = http.createServer(async (req, res) => {
             const existingStat = fs.statSync(targetFilePath);
             if (existingStat.size !== buffer.length) {
               const nowIso = new Date().toISOString().replace(/[:.]/g, '-');
-              const backupName = `${nowIso}_${file.name}`;
+              const safeFileName = file.name.replace(/[\/\\]/g, '_');
+              const backupName = `${nowIso}_${safeFileName}`;
               fs.copyFileSync(targetFilePath, path.join(archiveDir, backupName));
               console.log(`📦 [미러링 버전 아카이브] ${file.name} -> archive/${backupName}`);
             }

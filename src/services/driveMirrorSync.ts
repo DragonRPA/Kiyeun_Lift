@@ -2,7 +2,7 @@
 // (주)기연리프트 구글 드라이브 ➔ 로컬 PC (C:\KiyeunAgent\drive_mirror\) 실시간 미러링 동기화 엔진
 
 import { GoogleConfig } from './db';
-import { extractDriveFileId, extractDriveFolderId, listFilesInDriveFolder, getDriveReadToken } from './googleDriveBackup';
+import { extractDriveFileId, extractDriveFolderId, listDriveFolderRecursively, getDriveReadToken } from './googleDriveBackup';
 
 export interface MirrorSyncResult {
   success: boolean;
@@ -26,7 +26,7 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
 }
 
 /**
- * 구글 드라이브 루트 폴더 및 등록된 서식/증빙 파일들을 로컬 에이전트로 일괄 미러링 동기화
+ * 구글 드라이브 루트 폴더 및 하위 폴더 전체와 등록된 서식/증빙 파일들을 로컬 에이전트로 일괄 미러링 동기화
  */
 export async function executeDriveMirrorSync(
   config?: GoogleConfig,
@@ -49,14 +49,15 @@ export async function executeDriveMirrorSync(
   let successCount = 0;
   let failCount = 0;
 
-  // ── 1. 구글 드라이브 루트 폴더 내의 모든 원본 파일 리스팅 및 다운로드 ──
+  // ── 1. 🌲 구글 드라이브 루트 폴더 및 모든 하위 폴더(Subdirectories) 재귀 탐색 & 수신 ──
   if (token && folderId && folderId !== 'root') {
-    onProgress?.('구글 드라이브 폴더 내 원본 파일 목록 검색 중...', 1, 10);
+    onProgress?.('구글 드라이브 하위 폴더 트리 재귀 검색 중...', 1, 10);
     try {
-      const driveFiles = await listFilesInDriveFolder(folderId, token);
+      const driveFiles = await listDriveFolderRecursively(folderId, token);
       for (let i = 0; i < driveFiles.length; i++) {
         const file = driveFiles[i];
-        onProgress?.(`구글 드라이브 [${i + 1}/${driveFiles.length}] ${file.name} 수신 중...`, i + 1, driveFiles.length);
+        const filePath = file.relativePath || file.name;
+        onProgress?.(`구글 드라이브 [${i + 1}/${driveFiles.length}] ${filePath} 수신 중...`, i + 1, driveFiles.length);
         try {
           const res = await fetch(`https://www.googleapis.com/drive/v3/files/${file.id}?alt=media`, {
             headers: { Authorization: `Bearer ${token}` }
@@ -64,19 +65,19 @@ export async function executeDriveMirrorSync(
           if (res.ok) {
             const buf = await res.arrayBuffer();
             payloadFiles.push({
-              name: file.name,
+              name: filePath, // 하위 폴더 경로 포함
               base64Content: arrayBufferToBase64(buf),
               modifiedTime: new Date().toISOString()
             });
             successCount++;
           }
         } catch (err) {
-          console.warn(`⚠️ 구글 파일 다운로드 실패 (${file.name}):`, err);
+          console.warn(`⚠️ 구글 파일 다운로드 실패 (${filePath}):`, err);
           failCount++;
         }
       }
     } catch (e) {
-      console.warn('⚠️ 구글 드라이브 폴더 리스팅 실패:', e);
+      console.warn('⚠️ 구글 드라이브 폴더 재귀 탐색 실패:', e);
     }
   }
 
