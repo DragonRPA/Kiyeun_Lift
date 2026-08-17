@@ -16,7 +16,7 @@ const os = require('os');
 const { spawn, execSync } = require('child_process');
 const { PDFDocument, rgb } = require('pdf-lib');
 
-const VERSION = 'v1.100.0.Build.217';
+const VERSION = 'v1.111.0.Build.228';
 const PORT = process.env.PORT || 5175;
 const CALLSIGN = process.env.AGENT_CALLSIGN || 'admin';
 const MACHINE_NAME = os.hostname();
