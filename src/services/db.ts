@@ -1198,6 +1198,7 @@ const SEED_GOOGLE_CONFIG: GoogleConfig[] = [
     nextInsuranceStartDate: '2027-03-05',
     nextInsuranceEndDate: '2028-03-05',
     defaultRootFolderId: 'root',
+    oauthClientId: '274287991550-7eaeisb14i80315pmlf8390smf58pkbt.apps.googleusercontent.com',
     updatedAt: new Date().toISOString()
   }
 ];

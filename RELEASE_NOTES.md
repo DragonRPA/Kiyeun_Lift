@@ -1,3 +1,15 @@
+# Release Notes (v1.73.0.Build.190 - 2026-08-17 18:40)
+
+## 🔑 [OAuth 실연동] Google Cloud 정식 발급 Client ID 시스템 기본 바인딩 완료
+
+### 🌟 반영 내용
+1. **신규 OAuth 2.0 Client ID 바인딩 (`db.ts`, `GoogleConfig.tsx`)**:
+   - Google Cloud Console에서 신규 발급된 Client ID (`274287991550-7eaeisb14i80315pmlf8390smf58pkbt.apps.googleusercontent.com`)를 전사 SEED 및 시스템 기본값으로 영구 바인딩.
+2. **구글 드라이브 실시간 원본 PDF 병합 연동**:
+   - 등록된 사업자등록증, 통장사본 등 실제 원본 PDF 파일 바이너리 다운로드 및 병합 프로세스 활성화.
+
+---
+
 # Release Notes (v1.72.0.Build.189 - 2026-08-17 18:25)
 
 ## ⚡ [방식 C 탑재] 구글 로그인 팝업 0회(Zero-Popup)를 위한 Google Apps Script 웹앱 프록시 다운로드 & 실시간 원본 PDF 병합 엔진 연동

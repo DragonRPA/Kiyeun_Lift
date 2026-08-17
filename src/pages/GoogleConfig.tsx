@@ -118,8 +118,9 @@ export const GoogleConfig: React.FC = () => {
       return;
     }
 
+    const clientId = cfg?.oauthClientId?.trim() || oauthClientId?.trim() || '274287991550-7eaeisb14i80315pmlf8390smf58pkbt.apps.googleusercontent.com';
     const hasAppsScript = !!cfg?.appsScriptUrl?.trim();
-    const hasOAuth = !!cfg?.oauthClientId?.trim();
+    const hasOAuth = !!clientId;
 
     if (!hasAppsScript && !hasOAuth) {
       alert('⚠️ 구글 연동 방식이 설정되지 않았습니다.\n[Apps Script URL] 또는 [OAuth Client ID] 중 하나를 먼저 등록해 주세요.');
@@ -135,7 +136,7 @@ export const GoogleConfig: React.FC = () => {
         setMergeProgressLabel('⚡ Google Apps Script 웹앱 프록시 연결 중 (팝업 없음)...');
       } else {
         setMergeProgressLabel('구글 OAuth 인증 중... (팝업에서 계정 선택)');
-        token = await getDriveReadToken(cfg.oauthClientId!);
+        token = await getDriveReadToken(clientId);
       }
 
       const result = await mergeDriveFilesToPdf(
@@ -183,7 +184,7 @@ export const GoogleConfig: React.FC = () => {
       setTransactionStatementTemplateUrl(currentConfig.transactionStatementTemplateUrl || '');
       setDefaultRootFolderId(currentConfig.defaultRootFolderId || '');
       setAppsScriptUrl(currentConfig.appsScriptUrl || '');
-      setOauthClientId(currentConfig.oauthClientId || '');
+      setOauthClientId(currentConfig.oauthClientId || '274287991550-7eaeisb14i80315pmlf8390smf58pkbt.apps.googleusercontent.com');
       setIsDevMode(currentConfig.isDevMode !== undefined ? currentConfig.isDevMode : true);
     }
   }, [currentConfig]);
