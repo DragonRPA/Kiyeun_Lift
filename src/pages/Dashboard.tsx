@@ -44,20 +44,24 @@ export const Dashboard: React.FC = () => {
   // ── 🤖 로컬 사이드카 에이전트 실시간 모니터링 상태 ──
   const [agentStatus, setAgentStatus] = useState<'ONLINE' | 'OFFLINE'>('OFFLINE');
   const [agentCallsign, setAgentCallsign] = useState<string>('');
+  const [agentVersion, setAgentVersion] = useState<string>('');
   const [isDownloadingAgent, setIsDownloadingAgent] = useState(false);
+  const [isRestartingAgent, setIsRestartingAgent] = useState(false);
   const [showAgentGuideModal, setShowAgentGuideModal] = useState(false);
 
-  // 에이전트 헬스체크 (3초 주기)
+  // 에이전트 헬스체크 및 실시간 콜사인 동기화 (3초 주기)
   useEffect(() => {
     let isMounted = true;
     const checkAgent = async () => {
       try {
-        const res = await fetch('http://127.0.0.1:5175/health', { method: 'GET', signal: AbortSignal.timeout(1500) });
+        const userCallsign = currentUser?.loginId || currentUser?.name || 'admin';
+        const res = await fetch(`http://127.0.0.1:5175/health?callsign=${encodeURIComponent(userCallsign)}`, { method: 'GET', signal: AbortSignal.timeout(1500) });
         if (res.ok) {
           const data = await res.json();
           if (isMounted) {
             setAgentStatus('ONLINE');
-            setAgentCallsign(data.callsign || currentUser?.loginId || 'admin');
+            setAgentCallsign(data.callsign || userCallsign);
+            setAgentVersion(data.version || '');
           }
           return;
         }
@@ -65,6 +69,7 @@ export const Dashboard: React.FC = () => {
       if (isMounted) {
         setAgentStatus('OFFLINE');
         setAgentCallsign('');
+        setAgentVersion('');
       }
     };
     checkAgent();
@@ -74,6 +79,19 @@ export const Dashboard: React.FC = () => {
       clearInterval(interval);
     };
   }, [currentUser]);
+
+  // ── 🔄 에이전트 원클릭 핫 재시작 ──
+  const handleRestartAgent = async () => {
+    setIsRestartingAgent(true);
+    try {
+      await fetch('http://127.0.0.1:5175/api/restart', { method: 'POST', signal: AbortSignal.timeout(2000) });
+      setTimeout(() => {
+        setIsRestartingAgent(false);
+      }, 2000);
+    } catch (e) {
+      setIsRestartingAgent(false);
+    }
+  };
 
   // ── 📥 사내 보안 인증서 (.cer & .bat) 다운로드 ──
   const handleDownloadCert = () => {
@@ -412,12 +430,24 @@ export const Dashboard: React.FC = () => {
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-          {/* 에이전트 가동 중일 때 미니 배지 */}
+          {/* 에이전트 가동 중일 때 미니 배지 & 핫 재시작 버튼 */}
           {agentStatus === 'ONLINE' && (
-            <span style={{ fontSize: '12px', padding: '5px 12px', borderRadius: '20px', background: '#dcfce7', color: '#15803d', fontWeight: '800', display: 'inline-flex', alignItems: 'center', gap: '6px', border: '1px solid #86efac' }}>
-              <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#22c55e' }}></span>
-              로컬 에이전트 가동중 ({agentCallsign})
-            </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span style={{ fontSize: '12px', padding: '5px 12px', borderRadius: '20px', background: '#dcfce7', color: '#15803d', fontWeight: '800', display: 'inline-flex', alignItems: 'center', gap: '6px', border: '1px solid #86efac' }}>
+                <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#22c55e' }}></span>
+                로컬 에이전트 ({agentCallsign}{agentVersion ? ` · ${agentVersion}` : ''})
+              </span>
+              <button
+                type="button"
+                className="btn-secondary"
+                disabled={isRestartingAgent}
+                onClick={handleRestartAgent}
+                title="에이전트 프로세스를 1초 만에 자동 재시작합니다."
+                style={{ padding: '5px 9px', fontSize: '11.5px', fontWeight: '700', borderRadius: '6px', cursor: isRestartingAgent ? 'wait' : 'pointer' }}
+              >
+                {isRestartingAgent ? '재기동 중...' : '🔄 재시작'}
+              </button>
+            </div>
           )}
 
           {/* 🚀 계약 서류 14p 원클릭 통합 팩 발행 버튼 (상시 사용 가능) */}

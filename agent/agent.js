@@ -13,9 +13,10 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const { spawn } = require('child_process');
+const { spawn, execSync } = require('child_process');
 const { PDFDocument, rgb } = require('pdf-lib');
 
+const VERSION = 'v1.99.0.Build.216';
 const PORT = process.env.PORT || 5175;
 const CALLSIGN = process.env.AGENT_CALLSIGN || 'admin';
 const MACHINE_NAME = os.hostname();
@@ -27,13 +28,17 @@ const ARCHIVE_ROOT = path.join(AGENT_HOME, '문서고');
 const DRIVE_MIRROR_DIR = path.join(AGENT_HOME, 'drive_mirror');
 
 // =========================================================================
-// 🚀 [자가 자동 설치(Self-Install) 엔진]
+// 🚀 [스마트 자가 자동 설치 & 구버전 자동 교체(Auto-Kill & Takeover) 엔진]
 // 사용자가 다운로드 폴더나 바탕화면에서 KiyeunAgent.exe를 실행한 경우,
-// 자동으로 C:\KiyeunAgent\ 를 만들고 자기 자신을 복사한 뒤 정식 위치에서 가동!
+// 1) 기존에 돌고 있던 구버전 KiyeunAgent.exe 프로세스를 조용히 자동 종료!
+// 2) C:\KiyeunAgent\KiyeunAgent.exe 를 최신 바이너리로 안전 덮어쓰기!
+// 3) 표준 위치에서 최신 에이전트를 백그라운드로 즉시 바통 터치 기동!
 // =========================================================================
 const currentExePath = process.execPath;
+const currentPid = process.pid;
 const isExe = currentExePath.toLowerCase().endsWith('.exe') && !currentExePath.toLowerCase().includes('node.exe');
 
+// 1. 다른 경로에서 실행된 경우 (설치/업그레이드 모드)
 if (isExe && path.resolve(currentExePath).toLowerCase() !== path.resolve(TARGET_EXE_PATH).toLowerCase()) {
   try {
     if (!fs.existsSync(AGENT_HOME)) fs.mkdirSync(AGENT_HOME, { recursive: true });
@@ -41,33 +46,52 @@ if (isExe && path.resolve(currentExePath).toLowerCase() !== path.resolve(TARGET_
     if (!fs.existsSync(DRIVE_MIRROR_DIR)) fs.mkdirSync(DRIVE_MIRROR_DIR, { recursive: true });
 
     console.log('====================================================');
-    console.log('📦 [기연리프트] 로컬 사이드카 에이전트 자가 자동 설치 진행');
+    console.log(`📦 [기연리프트] 에이전트 최신 버전(${VERSION}) 자가 교체/설치 진행`);
     console.log(`📍 현재 실행 위치: ${currentExePath}`);
     console.log(`🎯 표준 정착 경로: ${TARGET_EXE_PATH}`);
 
-    fs.copyFileSync(currentExePath, TARGET_EXE_PATH);
-    console.log('✅ C:\\KiyeunAgent\\KiyeunAgent.exe 로 복사 완료!');
-    console.log('🚀 표준 위치에서 백그라운드 에이전트를 자동 기동합니다...');
-    console.log('====================================================');
+    // 기존 구버전 프로세스 자동 종료 (PID 제외)
+    try {
+      console.log('🔄 기존 구버전 프로세스 자동 정리 중...');
+      execSync(`taskkill /f /fi "PID ne ${currentPid}" /im KiyeunAgent.exe`, { stdio: 'ignore' });
+    } catch (kErr) {}
 
-    const child = spawn(TARGET_EXE_PATH, [], {
-      detached: true,
-      stdio: 'ignore',
-      windowsHide: false
-    });
-    child.unref();
+    // 0.5초 대기 후 파일 복사
+    setTimeout(() => {
+      try {
+        fs.copyFileSync(currentExePath, TARGET_EXE_PATH);
+        console.log('✅ C:\\KiyeunAgent\\KiyeunAgent.exe 최신 버전으로 교체 완료!');
+        console.log('🚀 최신 엔진으로 백그라운드 기동합니다...');
+        console.log('====================================================');
 
-    console.log('🎉 설치 및 실행이 완료되었습니다. 이 창은 2초 후 자동으로 닫힙니다.');
-    setTimeout(() => { process.exit(0); }, 2000);
+        const child = spawn(TARGET_EXE_PATH, [], {
+          detached: true,
+          stdio: 'ignore',
+          windowsHide: false
+        });
+        child.unref();
+
+        console.log('🎉 업그레이드가 완료되었습니다. 이 창은 2초 후 자동으로 닫힙니다.');
+        setTimeout(() => { process.exit(0); }, 2000);
+      } catch (copyErr) {
+        console.error('⚠️ 파일 복사 실패 (현재 위치에서 실행 유지):', copyErr.message);
+      }
+    }, 500);
     return;
   } catch (err) {
-    console.error('⚠️ 자가 설치 중 오류 발생 (현재 위치에서 계속 실행합니다):', err.message);
+    console.error('⚠️ 자가 설치 중 오류 발생:', err.message);
   }
+}
+
+// 2. 정식 위치에서 실행되었으나 이전 잔존 프로세스가 포트를 잡고 있을 경우 정리
+if (isExe) {
+  try {
+    execSync(`taskkill /f /fi "PID ne ${currentPid}" /im KiyeunAgent.exe`, { stdio: 'ignore' });
+  } catch (e) {}
 }
 
 // 🔄 윈도우 시작 시 자동 실행(Auto-Startup) 레지스트리 자동 등록
 try {
-  const { execSync } = require('child_process');
   execSync(`reg add "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run" /v "KiyeunAgent" /t REG_SZ /d "${TARGET_EXE_PATH}" /f`, { stdio: 'ignore' });
 } catch (e) {}
 
@@ -81,7 +105,7 @@ try {
 }
 
 console.log('====================================================');
-console.log('🚀 [기연리프트] 로컬 사이드카 에이전트 가동 (C:\\KiyeunAgent)');
+console.log(`🚀 [기연리프트] 로컬 사이드카 에이전트 가동 (${VERSION})`);
 console.log(`📡 콜사인(Callsign): ${CALLSIGN}`);
 console.log(`💻 컴퓨터 이름: ${MACHINE_NAME}`);
 console.log(`📂 에이전트 홈 경로: ${AGENT_HOME}`);
@@ -140,6 +164,7 @@ const server = http.createServer(async (req, res) => {
     res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
     res.end(JSON.stringify({
       status: 'ONLINE',
+      version: VERSION,
       callsign: activeCallsign,
       machineName: MACHINE_NAME,
       archiveRoot: ARCHIVE_ROOT,
@@ -147,6 +172,26 @@ const server = http.createServer(async (req, res) => {
       uptimeSeconds: Math.floor(process.uptime()),
       timestamp: new Date().toISOString()
     }));
+    return;
+  }
+
+  // 2. 에이전트 원클릭 핫 재시작 (Restart) API
+  if (req.method === 'POST' && reqUrl.pathname === '/api/restart') {
+    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+    res.end(JSON.stringify({ success: true, message: '에이전트를 1초 후 자동 재시작합니다.' }));
+    setTimeout(() => {
+      const child = spawn(TARGET_EXE_PATH, [], { detached: true, stdio: 'ignore', windowsHide: false });
+      child.unref();
+      process.exit(0);
+    }, 500);
+    return;
+  }
+
+  // 3. 에이전트 원클릭 셧다운 (Shutdown) API
+  if (req.method === 'POST' && reqUrl.pathname === '/api/shutdown') {
+    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+    res.end(JSON.stringify({ success: true, message: '에이전트를 안전하게 종료합니다.' }));
+    setTimeout(() => { process.exit(0); }, 500);
     return;
   }
 

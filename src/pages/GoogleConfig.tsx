@@ -56,17 +56,20 @@ export const GoogleConfig: React.FC = () => {
   const [agentInfo, setAgentInfo] = useState<any>(null);
   const [showAgentGuideModal, setShowAgentGuideModal] = useState(false);
 
-  // 로컬 에이전트 헬스체크 (3초 주기)
+  const [isRestartingAgent, setIsRestartingAgent] = useState(false);
+
+  // 로컬 에이전트 헬스체크 및 실시간 콜사인 동기화 (3초 주기)
   useEffect(() => {
     let isMounted = true;
     const checkAgent = async () => {
       try {
-        const res = await fetch('http://127.0.0.1:5175/health', { method: 'GET', signal: AbortSignal.timeout(1500) });
+        const userCallsign = currentUser?.loginId || currentUser?.name || 'admin';
+        const res = await fetch(`http://127.0.0.1:5175/health?callsign=${encodeURIComponent(userCallsign)}`, { method: 'GET', signal: AbortSignal.timeout(1500) });
         if (res.ok) {
           const data = await res.json();
           if (isMounted) {
             setAgentStatus('ONLINE');
-            setAgentCallsign(data.callsign || currentUser?.loginId || 'admin');
+            setAgentCallsign(data.callsign || userCallsign);
             setAgentInfo(data);
           }
           return;
@@ -1010,9 +1013,26 @@ function doGet(e) {
 
               {/* 📡 로컬 사이드카 에이전트 연결 상태 표시 */}
               {agentStatus === 'ONLINE' ? (
-                <span style={{ fontSize: '11px', padding: '3px 8px', borderRadius: '4px', background: 'rgba(16,185,129,0.2)', color: '#059669', fontWeight: '800', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                  🟢 로컬 에이전트 가동중 ({agentCallsign})
-                </span>
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                  <span style={{ fontSize: '11px', padding: '3px 8px', borderRadius: '4px', background: 'rgba(16,185,129,0.2)', color: '#059669', fontWeight: '800', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                    🟢 로컬 에이전트 ({agentCallsign}{agentInfo?.version ? ` · ${agentInfo.version}` : ''})
+                  </span>
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    disabled={isRestartingAgent}
+                    onClick={async () => {
+                      setIsRestartingAgent(true);
+                      try {
+                        await fetch('http://127.0.0.1:5175/api/restart', { method: 'POST', signal: AbortSignal.timeout(2000) });
+                      } catch (e) {}
+                      setTimeout(() => setIsRestartingAgent(false), 2000);
+                    }}
+                    style={{ fontSize: '10.5px', padding: '2px 6px', borderRadius: '4px' }}
+                  >
+                    {isRestartingAgent ? '재기동...' : '🔄 재시작'}
+                  </button>
+                </div>
               ) : (
                 <button
                   type="button"
