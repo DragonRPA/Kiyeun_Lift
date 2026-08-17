@@ -553,6 +553,88 @@ server.listen(PORT, '127.0.0.1', () => {
         )}
       </div>
 
+      {/* 🤖 [모든 실무자 공용] 로컬 사이드카 에이전트 & 계약 서류 14p 통합 팩 발행 카드 */}
+      <div className="card" style={{
+        marginBottom: '24px', padding: '20px 24px',
+        background: 'linear-gradient(135deg, rgba(79,70,229,0.08) 0%, rgba(79,70,229,0.02) 100%)',
+        border: '1.5px solid rgba(79,70,229,0.3)', borderRadius: '12px', boxShadow: '0 4px 12px rgba(79,70,229,0.06)'
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
+              <h3 style={{ margin: 0, fontSize: '17px', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-primary)' }}>
+                <Bot size={20} color="#4f46e5" />
+                로컬 사이드카 에이전트 (C:\KiyeunAgent)
+              </h3>
+              {agentStatus === 'ONLINE' ? (
+                <span style={{ fontSize: '12px', padding: '3px 10px', borderRadius: '20px', background: '#dcfce7', color: '#15803d', fontWeight: '800', display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                  <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#22c55e' }}></span>
+                  실시간 가동중 ({agentCallsign})
+                </span>
+              ) : (
+                <span style={{ fontSize: '12px', padding: '3px 10px', borderRadius: '20px', background: '#fee2e2', color: '#b91c1c', fontWeight: '800', display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                  <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#ef4444' }}></span>
+                  에이전트 미실행 (다운로드 필요)
+                </span>
+              )}
+            </div>
+            <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: 'var(--text-secondary)' }}>
+              PC에서 에이전트를 가동해 두시면, <strong>마이크로소프트 엑셀 정품 파일에 직접 값을 주입하여 100% 무손실 PDF를 생산</strong>하고 <code>C:\KiyeunAgent\문서고\</code>에 날짜별로 영구 자동 보관합니다.
+            </p>
+            {isMergingDoc && mergeProgressLabel && (
+              <p style={{ margin: '8px 0 0 0', fontSize: '12.5px', color: '#4f46e5', fontWeight: 'bold' }}>
+                ⏳ {mergeProgressLabel}
+              </p>
+            )}
+          </div>
+
+          <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              className="btn-primary"
+              disabled={isMergingDoc}
+              onClick={() => setShowContractSelectModal(true)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: '8px', padding: '11px 18px',
+                fontSize: '13.5px', fontWeight: '800', whiteSpace: 'nowrap',
+                background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)',
+                border: 'none', borderRadius: '8px', color: '#fff', cursor: isMergingDoc ? 'wait' : 'pointer',
+                boxShadow: '0 4px 10px rgba(37,99,235,0.25)'
+              }}
+            >
+              <Download size={16} />
+              {isMergingDoc ? '서류 팩 생산 중...' : '🚀 계약 서류 14p 원클릭 통합 팩 발행'}
+            </button>
+
+            <button
+              type="button"
+              className="btn-primary"
+              disabled={isDownloadingAgent}
+              onClick={handleDownloadAgentZip}
+              style={{
+                display: 'flex', alignItems: 'center', gap: '8px', padding: '11px 18px',
+                fontSize: '13.5px', fontWeight: '800', whiteSpace: 'nowrap',
+                background: 'linear-gradient(135deg, #4f46e5 0%, #4338ca 100%)',
+                border: 'none', borderRadius: '8px', color: '#fff', cursor: isDownloadingAgent ? 'wait' : 'pointer',
+                boxShadow: '0 4px 10px rgba(79,70,229,0.25)'
+              }}
+            >
+              <Download size={16} />
+              {isDownloadingAgent ? '패키징 중...' : '📥 에이전트 다운로드'}
+            </button>
+
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={() => setShowAgentGuideModal(true)}
+              style={{ padding: '10px 14px', fontSize: '12.5px', fontWeight: '700', whiteSpace: 'nowrap' }}
+            >
+              📖 가이드
+            </button>
+          </div>
+        </div>
+      </div>
+
       {/* ──────────────────────────────────────────────────────── */}
       {/* 권한(Permission) 기반 스마트 카드 피드 렌더링 섹션 */}
       {/* ──────────────────────────────────────────────────────── */}
