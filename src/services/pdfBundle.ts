@@ -444,6 +444,31 @@ export async function mergeDriveFilesToPdf(
 
       result.successCount++;
       console.log(`✅ [${i + 1}/${items.length}] ${item.label} - ${copiedPages.length}페이지 병합 성공`);
+
+      // 🤖 [로컬 에이전트 미러링 연동] C:\KiyeunAgent\drive_mirror\ 에 실시간 자동 복제
+      try {
+        const uint8Arr = new Uint8Array(pdfBytes);
+        let binaryStr = '';
+        const len = uint8Arr.byteLength;
+        for (let bIdx = 0; bIdx < len; bIdx++) {
+          binaryStr += String.fromCharCode(uint8Arr[bIdx]);
+        }
+        const b64 = btoa(binaryStr);
+        const fileName = item.label.endsWith('.pdf') ? item.label : `${item.label}.pdf`;
+        fetch('http://127.0.0.1:5175/api/sync-drive', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            file: {
+              name: fileName,
+              base64Content: b64,
+              modifiedTime: new Date().toISOString()
+            }
+          })
+        }).catch(() => {});
+      } catch (mirrorErr) {
+        // 에이전트 미실행 시 무음 패스
+      }
     } catch (err: any) {
       result.failedLabels.push(`${item.label} [${err?.message || err}]`);
       console.warn(`⚠️ [${i + 1}/${items.length}] ${item.label} 실패:`, err);

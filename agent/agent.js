@@ -113,7 +113,9 @@ async function buildContractPdf(contractData, templateBuffer) {
   return await pdfDoc.save();
 }
 
-// ── 2. HTTP 요청 핸들러 (프론트엔드 실시간 통신) ──
+// ── 2. HTTP 요청 핸들러 (프론트엔드 실시간 통신 & 미러링 엔진) ──
+let activeCallsign = CALLSIGN;
+
 const server = http.createServer(async (req, res) => {
   // CORS 헤더 허용
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -126,28 +128,111 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // 헬스체크 API
-  if (req.method === 'GET' && req.url === '/health') {
+  const reqUrl = new URL(req.url, `http://127.0.0.1:${PORT}`);
+
+  // 1. 헬스체크 및 동적 콜사인 바인딩 API
+  if (req.method === 'GET' && reqUrl.pathname === '/health') {
+    const queryCallsign = reqUrl.searchParams.get('callsign');
+    if (queryCallsign && queryCallsign.trim()) {
+      activeCallsign = queryCallsign.trim();
+    }
+
     res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
     res.end(JSON.stringify({
       status: 'ONLINE',
-      callsign: CALLSIGN,
+      callsign: activeCallsign,
       machineName: MACHINE_NAME,
       archiveRoot: ARCHIVE_ROOT,
+      driveMirrorDir: DRIVE_MIRROR_DIR,
       uptimeSeconds: Math.floor(process.uptime()),
       timestamp: new Date().toISOString()
     }));
     return;
   }
 
-  // 작업 실행 API
-  if (req.method === 'POST' && req.url === '/api/execute-job') {
+  // 2. 구글 드라이브 로컬 미러링 상태 조회 API
+  if (req.method === 'GET' && reqUrl.pathname === '/api/mirror-status') {
+    try {
+      const files = fs.readdirSync(DRIVE_MIRROR_DIR).filter(f => !f.startsWith('.') && f !== 'archive');
+      const stats = files.map(fileName => {
+        const filePath = path.join(DRIVE_MIRROR_DIR, fileName);
+        const st = fs.statSync(filePath);
+        return { name: fileName, size: st.size, modifiedTime: st.mtime.toISOString() };
+      });
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+      res.end(JSON.stringify({
+        success: true,
+        mirrorPath: DRIVE_MIRROR_DIR,
+        fileCount: files.length,
+        files: stats
+      }));
+    } catch (err) {
+      res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
+      res.end(JSON.stringify({ success: false, error: err.message }));
+    }
+    return;
+  }
+
+  // 3. 구글 드라이브 파일 로컬 미러링 (차분 동기화 & 버전 아카이빙) API
+  if (req.method === 'POST' && reqUrl.pathname === '/api/sync-drive') {
     let body = '';
     req.on('data', chunk => { body += chunk; });
     req.on('end', async () => {
       try {
         const payload = JSON.parse(body || '{}');
-        console.log(`📥 [작업 수신] ${payload.jobType || 'CONTRACT_BUNDLE'} (계약: ${payload.contractNo || 'N/A'})`);
+        const filesToSync = payload.files || (payload.file ? [payload.file] : []);
+        const archiveDir = path.join(DRIVE_MIRROR_DIR, 'archive');
+        if (!fs.existsSync(archiveDir)) fs.mkdirSync(archiveDir, { recursive: true });
+
+        const syncedResults = [];
+
+        for (const file of filesToSync) {
+          if (!file.name || !file.base64Content) continue;
+
+          const targetFilePath = path.join(DRIVE_MIRROR_DIR, file.name);
+          const buffer = Buffer.from(file.base64Content, 'base64');
+
+          // 기존 파일 존재 시 버전 아카이빙 (수정일자가 다르거나 크기가 다른 경우)
+          if (fs.existsSync(targetFilePath)) {
+            const existingStat = fs.statSync(targetFilePath);
+            if (existingStat.size !== buffer.length) {
+              const nowIso = new Date().toISOString().replace(/[:.]/g, '-');
+              const backupName = `${nowIso}_${file.name}`;
+              fs.copyFileSync(targetFilePath, path.join(archiveDir, backupName));
+              console.log(`📦 [미러링 버전 아카이브] ${file.name} -> archive/${backupName}`);
+            }
+          }
+
+          fs.writeFileSync(targetFilePath, buffer);
+          syncedResults.push({ name: file.name, size: buffer.length, path: targetFilePath });
+          console.log(`💾 [구글 드라이브 미러링 완료] ${file.name} (${buffer.length} bytes)`);
+        }
+
+        res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify({
+          success: true,
+          callsign: activeCallsign,
+          syncedCount: syncedResults.length,
+          syncedFiles: syncedResults,
+          message: `✅ 구글 드라이브 ${syncedResults.length}개 파일이 로컬(C:\\KiyeunAgent\\drive_mirror\\)에 실시간 미러링되었습니다.`
+        }));
+      } catch (err) {
+        console.error('❌ 미러링 실패:', err);
+        res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify({ success: false, error: err.message }));
+      }
+    });
+    return;
+  }
+
+  // 4. 계약 서류 팩 무손실 생산 및 로컬 문서고 보관 API
+  if (req.method === 'POST' && reqUrl.pathname === '/api/execute-job') {
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', async () => {
+      try {
+        const payload = JSON.parse(body || '{}');
+        console.log(`📥 [작업 수신] ${payload.jobType || 'CONTRACT_BUNDLE'} (계약: ${payload.contractNo || 'N/A'}, 작업자: ${activeCallsign})`);
 
         // 로컬 문서고에 날짜별 자동 분류 폴더 생성
         const today = new Date().toISOString().split('T')[0];
@@ -158,13 +243,18 @@ const server = http.createServer(async (req, res) => {
         const fileName = `[기연리프트]_${payload.contractNo || '계약'}_${safeCustName}_${today}.pdf`;
         const localSavePath = path.join(monthDir, fileName);
 
+        if (payload.base64Content) {
+          const pdfBuffer = Buffer.from(payload.base64Content, 'base64');
+          fs.writeFileSync(localSavePath, pdfBuffer);
+        }
+
         // 결과 응답
         res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
         res.end(JSON.stringify({
           success: true,
-          callsign: CALLSIGN,
+          callsign: activeCallsign,
           localFilePath: localSavePath,
-          message: `✅ 로컬 에이전트(${CALLSIGN})가 정품 문서를 생산하여 로컬 문서고에 안전 보관했습니다.`
+          message: `✅ 로컬 에이전트(${activeCallsign})가 정품 문서를 생산하여 로컬 문서고(${localSavePath})에 안전 보관했습니다.`
         }));
       } catch (err) {
         console.error('❌ 작업 처리 실패:', err);

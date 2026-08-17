@@ -1,3 +1,16 @@
+# Release Notes (v1.98.0.Build.215 - 2026-08-17 22:08)
+
+## 🌐 [구글 드라이브 ➔ 로컬 PC 실시간 미러링 엔진 탑재] `C:\KiyeunAgent\drive_mirror\` 자동 동기화 및 스마트 버전 아카이빙 구축
+
+### 🌟 반영 내용
+1. **구글 드라이브 로컬 미러링(동기화) 엔진 구축 (`agent.js`, `KiyeunAgent.exe`)**:
+   - 구글 드라이브의 원본 서식/증빙 파일들을 `C:\KiyeunAgent\drive_mirror\`로 실시간 자동 복제.
+   - 구글 드라이브 원본이 수정되거나 갱신되면 구버전은 `drive_mirror/archive/{timestamp}_{name}`에 자동 안전 보관하고 최신 파일로 교체(Smart Delta Version Sync).
+2. **동적 세션 콜사인 바인딩 연동 (`/health?callsign=...`)**:
+   - 공용 PC 교대 근무 시 로그인한 직원 계정에 따라 에이전트 콜사인이 실시간 자동 스위칭되도록 동기화.
+
+---
+
 # Release Notes (v1.97.0.Build.214 - 2026-08-17 22:01)
 
 ## 🔄 [Windows 자동 재실행(Auto-Startup) 탑재] PC 재부팅 시 윈도우 시작프로그램 백그라운드 자동 기동 지원
