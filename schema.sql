@@ -17,6 +17,8 @@ DROP TABLE IF EXISTS consumable_purchase_items CASCADE;
 DROP TABLE IF EXISTS consumable_purchase_requests CASCADE;
 DROP TABLE IF EXISTS repair_consumables CASCADE;
 DROP TABLE IF EXISTS repairs CASCADE;
+DROP TABLE IF EXISTS document_jobs CASCADE;
+DROP TABLE IF EXISTS agent_registry CASCADE;
 DROP TABLE IF EXISTS purchase_billing_details CASCADE;
 DROP TABLE IF EXISTS purchase_billings CASCADE;
 DROP TABLE IF EXISTS deliveries CASCADE;
@@ -839,6 +841,39 @@ CREATE POLICY "allow_authenticated_insert" ON payment_deposit_links FOR INSERT T
 CREATE POLICY "allow_authenticated_update" ON payment_deposit_links FOR UPDATE TO authenticated USING (true) WITH CHECK (true);
 
 
+
+-- ==========================================
+-- 35. 로컬 사이드카 에이전트 레지스트리 (agent_registry)
+-- ==========================================
+CREATE TABLE agent_registry (
+    callsign TEXT PRIMARY KEY,          -- 고유 콜사인 (로그인 아이디 기반)
+    "userId" TEXT REFERENCES users(id), -- 연동 사용자 ID
+    "machineName" TEXT,                 -- 컴퓨터 호스트명
+    "isMaster" BOOLEAN DEFAULT FALSE,   -- 모바일/부재 시 대행 마스터 여부
+    status TEXT CHECK (status IN ('ONLINE', 'BUSY', 'OFFLINE')) NOT NULL DEFAULT 'ONLINE',
+    "lastHeartbeat" TIMESTAMPTZ NOT NULL,
+    "createdAt" TIMESTAMPTZ DEFAULT NOW(),
+    "updatedAt" TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- ==========================================
+-- 36. 문서 생산 작업 큐 (document_jobs)
+-- ==========================================
+CREATE TABLE document_jobs (
+    id TEXT PRIMARY KEY,                -- JOB-YYMMDD-0001
+    "jobType" TEXT NOT NULL,            -- CONTRACT_BUNDLE | CHECKLIST | SAFETY_INSPECTION | ZIP_BACKUP
+    "contractId" TEXT REFERENCES contracts(id),
+    "targetCallsign" TEXT,              -- 우선 처리 대상 에이전트 콜사인 (null이면 공용 대행)
+    "assignedCallsign" TEXT REFERENCES agent_registry(callsign), -- 실제 잠금 획득 에이전트
+    status TEXT CHECK (status IN ('PENDING', 'PROCESSING', 'COMPLETED', 'FAILED')) NOT NULL DEFAULT 'PENDING',
+    payload JSONB NOT NULL,             -- 작업 요청 상세 데이터 (고객/현장/장비/옵션)
+    "resultUrl" TEXT,                   -- 생성 완료된 PDF 클라우드 URL
+    "localFilePath" TEXT,               -- 로컬 문서고 저장 경로
+    "errorMessage" TEXT,
+    "createdAt" TIMESTAMPTZ DEFAULT NOW(),
+    "lockedAt" TIMESTAMPTZ,
+    "completedAt" TIMESTAMPTZ
+);
 
 -- ==========================================
 -- 초기 기초 데이터 시딩 (Seed Data)

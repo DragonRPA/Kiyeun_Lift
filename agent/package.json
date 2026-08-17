@@ -1,0 +1,14 @@
+{
+  "name": "kiyeun-local-agent",
+  "version": "1.0.0",
+  "description": "기연리프트 전사 ERP 로컬 사이드카 에이전트 (Excel 직접 조작 및 PDF 고속 생산 데몬)",
+  "main": "agent.js",
+  "scripts": {
+    "start": "node agent.js"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.110.7",
+    "exceljs": "^4.4.0",
+    "pdf-lib": "^1.17.1"
+  }
+}

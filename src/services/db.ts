@@ -828,6 +828,35 @@ export interface ExternalLease {
   updatedAt: string;
 }
 
+/** 로컬 사이드카 에이전트 레지스트리 */
+export interface AgentRegistryItem {
+  callsign: string;                    // 고유 콜사인 (로그인 아이디)
+  userId?: string;                     // 연동 사용자 ID
+  machineName?: string;                // 컴퓨터 이름
+  isMaster?: boolean;                  // 마스터 대행 여부
+  status: 'ONLINE' | 'BUSY' | 'OFFLINE';
+  lastHeartbeat: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+/** 문서 생산 작업 큐 */
+export interface DocumentJob {
+  id: string;                          // JOB-YYMMDD-0001
+  jobType: 'CONTRACT_BUNDLE' | 'CHECKLIST' | 'SAFETY_INSPECTION' | 'ZIP_BACKUP';
+  contractId?: string;
+  targetCallsign?: string;             // 우선 처리 대상 콜사인
+  assignedCallsign?: string;           // 실제 락 획득 에이전트
+  status: 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED';
+  payload: any;                        // 작업 상세 페이로드
+  resultUrl?: string;                  // 클라우드 완성본 URL
+  localFilePath?: string;              // 로컬 문서고 저장 경로
+  errorMessage?: string;
+  createdAt: string;
+  lockedAt?: string;
+  completedAt?: string;
+}
+
 // 초기 로컬 스토리지 데이터 생성
 
 const generateMockProducts = (): Product[] => {

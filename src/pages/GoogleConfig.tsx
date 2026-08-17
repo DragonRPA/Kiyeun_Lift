@@ -48,6 +48,45 @@ export const GoogleConfig: React.FC = () => {
   // 신설 필드 상태
   const [oauthClientId, setOauthClientId] = useState('');
 
+  // 로컬 사이드카 에이전트 실시간 모니터링 상태
+  const [agentStatus, setAgentStatus] = useState<'ONLINE' | 'OFFLINE'>('OFFLINE');
+  const [agentCallsign, setAgentCallsign] = useState<string>('');
+  const [agentInfo, setAgentInfo] = useState<any>(null);
+  const [showAgentGuideModal, setShowAgentGuideModal] = useState(false);
+
+  // 로컬 에이전트 헬스체크 (3초 주기)
+  useEffect(() => {
+    let isMounted = true;
+    const checkAgent = async () => {
+      try {
+        const res = await fetch('http://127.0.0.1:5175/health', { method: 'GET', signal: AbortSignal.timeout(1500) });
+        if (res.ok) {
+          const data = await res.json();
+          if (isMounted) {
+            setAgentStatus('ONLINE');
+            setAgentCallsign(data.callsign || currentUser?.loginId || 'admin');
+            setAgentInfo(data);
+          }
+          return;
+        }
+      } catch (e) {
+        // 미연결
+      }
+      if (isMounted) {
+        setAgentStatus('OFFLINE');
+        setAgentCallsign('');
+        setAgentInfo(null);
+      }
+    };
+
+    checkAgent();
+    const interval = setInterval(checkAgent, 3000);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [currentUser]);
+
   // 백업 상태
   const [isZipBackingUp, setIsZipBackingUp] = useState(false);
   const [isDriveBackingUp, setIsDriveBackingUp] = useState(false);
@@ -468,7 +507,7 @@ export const GoogleConfig: React.FC = () => {
         }
       }
 
-      // ── 5. 최종 완성본 단일 PDF 다운로드 ──
+      // ── 5. 최종 완성본 단일 PDF 다운로드 및 로컬 에이전트 아카이빙 ──
       const finalBytes = await mergedPdf.save();
       const blob = new Blob([finalBytes.buffer as ArrayBuffer], { type: 'application/pdf' });
       const url = URL.createObjectURL(blob);
@@ -481,7 +520,30 @@ export const GoogleConfig: React.FC = () => {
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
 
-      alert(`🎉 [계약: ${targetContract.contractNo}] 3대 핵심 서류 + 드라이브 원본 결합 성공!\n\n총 ${mergedPdf.getPageCount()}페이지 단일 PDF로 완벽하게 병합 다운로드되었습니다.`);
+      // ── 6. 로컬 에이전트 작동 중이면 로컬 문서고 영구 아카이빙 통지 ──
+      let localSaveMsg = '';
+      if (agentStatus === 'ONLINE') {
+        try {
+          const agentRes = await fetch('http://127.0.0.1:5175/api/execute-job', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              jobType: 'CONTRACT_BUNDLE',
+              contractNo: targetContract.contractNo,
+              customerName: customer?.name || '고객사',
+              pageCount: mergedPdf.getPageCount()
+            })
+          });
+          if (agentRes.ok) {
+            const agentData = await agentRes.json();
+            localSaveMsg = `\n\n📂 [로컬 에이전트 아카이빙 완료]\n저장 위치: ${agentData.localFilePath || 'D:\\기연리프트_문서고'}`;
+          }
+        } catch (e) {
+          console.warn('로컬 에이전트 아카이빙 통지 실패 (브라우저 다운로드는 정상):', e);
+        }
+      }
+
+      alert(`🎉 [계약: ${targetContract.contractNo}] 3대 핵심 서류 + 드라이브 원본 결합 성공!\n\n총 ${mergedPdf.getPageCount()}페이지 단일 PDF로 완벽하게 병합 다운로드되었습니다.${localSaveMsg}`);
     } catch (err: any) {
       alert(`⚠️ 통합 팩 생성 실패: ${err?.message || err}`);
     } finally {
@@ -820,6 +882,21 @@ function doGet(e) {
                 <span style={{ fontSize: '11px', padding: '3px 8px', borderRadius: '4px', background: 'rgba(59,130,246,0.15)', color: '#3b82f6', fontWeight: 'bold' }}>
                   🔑 OAuth 팝업 모드
                 </span>
+              )}
+
+              {/* 📡 로컬 사이드카 에이전트 연결 상태 표시 */}
+              {agentStatus === 'ONLINE' ? (
+                <span style={{ fontSize: '11px', padding: '3px 8px', borderRadius: '4px', background: 'rgba(16,185,129,0.2)', color: '#059669', fontWeight: '800', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                  🟢 로컬 에이전트 가동중 ({agentCallsign})
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setShowAgentGuideModal(true)}
+                  style={{ fontSize: '11px', padding: '3px 8px', borderRadius: '4px', background: 'rgba(239,68,68,0.12)', color: '#dc2626', fontWeight: 'bold', border: '1px solid rgba(239,68,68,0.3)', cursor: 'pointer' }}
+                >
+                  🔴 로컬 에이전트 미연결 (다운로드/가이드)
+                </button>
               )}
             </div>
             <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-secondary)' }}>
@@ -1805,6 +1882,59 @@ function doGet(e) {
                   style={{ padding: '8px 16px', fontSize: '13px', fontWeight: '600' }}
                 >
                   닫기
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 🤖 로컬 에이전트 다운로드 및 실행 가이드 모달 */}
+        {showAgentGuideModal && (
+          <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: '20px' }}>
+            <div style={{ backgroundColor: 'var(--card-bg)', borderRadius: '16px', maxWidth: '650px', width: '100%', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.3)', border: '1px solid var(--border)' }}>
+              <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  🤖 로컬 사이드카 에이전트 가동 가이드
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => setShowAgentGuideModal(false)}
+                  style={{ background: 'none', border: 'none', fontSize: '20px', cursor: 'pointer', color: 'var(--text-muted)' }}
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div style={{ padding: '20px 24px', fontSize: '13.5px', lineHeight: '1.6', color: 'var(--text-primary)' }}>
+                <p style={{ margin: '0 0 14px 0' }}>
+                  <strong>로컬 사이드카 에이전트</strong>를 실행해 두시면, 웹 브라우저의 렌더링 한계를 넘어 <strong>마이크로소프트 엑셀 정품 파일(`.xlsx`)에 직접 데이터를 주입</strong>하고 <strong>100% 무손실 정품 PDF를 생산</strong>하여 사내 로컬 문서고(<code>D:\기연리프트_문서고\</code>)에 자동 아카이빙합니다.
+                </p>
+
+                <div style={{ backgroundColor: 'var(--bg-app)', padding: '14px 16px', borderRadius: '10px', border: '1px solid var(--border)', marginBottom: '16px' }}>
+                  <h4 style={{ margin: '0 0 8px 0', fontSize: '14px', fontWeight: '700', color: '#2563eb' }}>
+                    ⚡ 1초 원클릭 실행 방법:
+                  </h4>
+                  <ol style={{ margin: 0, paddingLeft: '18px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <li>프로젝트 폴더 내 <code>agent/</code> 디렉토리로 이동합니다.</li>
+                    <li><strong><code>start-agent.bat</code></strong> 파일을 더블클릭합니다.</li>
+                    <li>로그인 아이디(콜사인)를 확인 후 엔터를 치면 백그라운드에서 가동됩니다.</li>
+                    <li>웹 화면 상단에 <strong>`🟢 로컬 에이전트 가동중`</strong> 신호등이 즉시 켜집니다.</li>
+                  </ol>
+                </div>
+
+                <p style={{ margin: 0, fontSize: '12.5px', color: 'var(--text-secondary)' }}>
+                  💡 에이전트가 꺼져 있어도 웹 브라우저 자체 렌더링 엔진으로 PDF 생성이 100% 정상 작동합니다.
+                </p>
+              </div>
+
+              <div style={{ padding: '14px 24px', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'flex-end', backgroundColor: 'var(--bg-app)', borderBottomLeftRadius: '16px', borderBottomRightRadius: '16px' }}>
+                <button
+                  type="button"
+                  className="btn-primary"
+                  onClick={() => setShowAgentGuideModal(false)}
+                  style={{ padding: '8px 18px', fontSize: '13px', fontWeight: '700' }}
+                >
+                  확인 완료
                 </button>
               </div>
             </div>
