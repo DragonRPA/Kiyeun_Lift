@@ -2,7 +2,7 @@
 // (주)기연리프트 구글 드라이브 ➔ 로컬 PC (C:\KiyeunAgent\drive_mirror\) 실시간 미러링 동기화 엔진
 
 import { GoogleConfig } from './db';
-import { extractDriveFileId, extractDriveFolderId, listDriveFolderRecursively, getDriveReadToken } from './googleDriveBackup';
+import { extractDriveFileId, extractDriveFolderId, downloadPublicDriveFile } from './googleDriveBackup';
 
 export interface MirrorSyncResult {
   success: boolean;
@@ -89,59 +89,8 @@ export async function executeDriveMirrorSync(
   let successCount = 0;
   let failCount = 0;
 
-  // ── 1. 🌲 구글 드라이브 루트 폴더 및 모든 하위 폴더(Subdirectories) 재귀 탐색 & 수신 ──
-  if (token && folderId && folderId !== 'root') {
-    updateProgress({
-      phase: 'SCANNING',
-      currentFile: '하위 폴더 트리 탐색 중...',
-      message: '구글 드라이브 내 모든 파일 목록 검색 중...',
-      percent: 15
-    });
 
-    try {
-      const driveFiles = await listDriveFolderRecursively(folderId, token);
-      const totalFiles = driveFiles.length;
-
-      for (let i = 0; i < totalFiles; i++) {
-        const file = driveFiles[i];
-        const filePath = file.relativePath || file.name;
-        const pct = Math.round(15 + ((i + 1) / (totalFiles + 5)) * 65);
-
-        updateProgress({
-          phase: 'DOWNLOADING',
-          currentFile: filePath,
-          currentIndex: i + 1,
-          totalCount: totalFiles,
-          percent: pct,
-          message: `[${i + 1}/${totalFiles}] ${filePath} 다운로드 중...`
-        });
-
-        onProgress?.(`구글 드라이브 [${i + 1}/${totalFiles}] ${filePath} 수신 중...`, i + 1, totalFiles);
-
-        try {
-          const res = await fetch(`https://www.googleapis.com/drive/v3/files/${file.id}?alt=media`, {
-            headers: { Authorization: `Bearer ${token}` }
-          });
-          if (res.ok) {
-            const buf = await res.arrayBuffer();
-            payloadFiles.push({
-              name: filePath,
-              base64Content: arrayBufferToBase64(buf),
-              modifiedTime: new Date().toISOString()
-            });
-            successCount++;
-          }
-        } catch (err) {
-          console.warn(`⚠️ 구글 파일 다운로드 실패 (${filePath}):`, err);
-          failCount++;
-        }
-      }
-    } catch (e) {
-      console.warn('⚠️ 구글 드라이브 폴더 재귀 탐색 실패:', e);
-    }
-  }
-
-  // ── 2. 개별 URL 지정 파일 다운로드 ──
+  // ── 2. 공개 공유된 증빙/서식 파일 토큰 0회 다운로드 ──
   const specificItems = [
     { label: '사업자등록증', url: config?.bizRegCertUrl, ext: 'pdf' },
     { label: '통장사본', url: config?.bankbookCopyUrl, ext: 'pdf' },
@@ -169,11 +118,9 @@ export async function executeDriveMirrorSync(
       if (appsScriptUrl) {
         const res = await fetch(`${appsScriptUrl}?action=download&fileId=${encodeURIComponent(fileId)}`);
         if (res.ok) buf = await res.arrayBuffer();
-      } else if (token) {
-        const res = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        if (res.ok) buf = await res.arrayBuffer();
+      } else {
+        // 🚀 공개 공유 링크를 통한 토큰 0회 다이렉트 다운로드
+        buf = await downloadPublicDriveFile(fileId);
       }
       if (buf) {
         payloadFiles.push({

@@ -80,6 +80,28 @@ export async function downloadDriveFileAsArrayBuffer(fileId: string, token: stri
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// 2c-2. 토큰/로그인 0회 공개 공유 파일 바이너리 다운로드 (Public Direct Download)
+// ─────────────────────────────────────────────────────────────────────────────
+export async function downloadPublicDriveFile(fileId: string): Promise<ArrayBuffer> {
+  const endpoints = [
+    `https://drive.usercontent.google.com/download?id=${fileId}&export=download&authuser=0`,
+    `https://lh3.googleusercontent.com/d/${fileId}`,
+    `https://drive.google.com/uc?export=download&id=${fileId}`
+  ];
+
+  for (const url of endpoints) {
+    try {
+      const res = await fetch(url);
+      if (res.ok) {
+        const buf = await res.arrayBuffer();
+        if (buf.byteLength > 100) return buf; // 정상 바이너리 확인
+      }
+    } catch (e) {}
+  }
+  throw new Error(`공개 드라이브 파일 다운로드 실패 (${fileId})`);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // 2d. 구글 드라이브 URL에서 파일 ID 추출
 // https://drive.google.com/file/d/FILE_ID/view → FILE_ID
 // ─────────────────────────────────────────────────────────────────────────────
