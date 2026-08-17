@@ -82,13 +82,62 @@ export async function executeDriveMirrorSync(
     message: '구글 드라이브 폴더 트리 탐색 준비 중...'
   });
 
-  let token: string | undefined;
-  // 🚫 사용자를 방해하는 자동 구글 로그인 팝업 호출 영구 금지 (차단 에러 방지)
-
+  const isRecursive = config?.mirrorRecursive !== false;
   const payloadFiles: Array<{ name: string; base64Content: string; modifiedTime: string }> = [];
   let successCount = 0;
   let failCount = 0;
 
+  // ── 1. Google Apps Script 기반 구글 드라이브 하위 폴더 재귀 목록 탐색 및 일괄 수신 ──
+  if (appsScriptUrl && folderId) {
+    updateProgress({
+      phase: 'SCANNING',
+      currentFile: '구글 드라이브 하위 폴더 재귀 탐색 중...',
+      message: isRecursive ? '하위 디렉토리 파일 트리 재귀 탐색 중...' : '루트 폴더 파일 탐색 중...'
+    });
+
+    try {
+      const listAction = isRecursive ? 'listFolderRecursive' : 'listFiles';
+      const listRes = await fetch(`${appsScriptUrl}?action=${listAction}&folderId=${encodeURIComponent(folderId)}`, {
+        signal: AbortSignal.timeout(10000)
+      });
+      if (listRes.ok) {
+        const listData = await listRes.json();
+        if (listData.success && Array.isArray(listData.files)) {
+          const driveFiles: Array<{ id: string; name: string }> = listData.files;
+          for (let i = 0; i < driveFiles.length; i++) {
+            const df = driveFiles[i];
+            updateProgress({
+              phase: 'DOWNLOADING',
+              currentFile: df.name,
+              currentIndex: i + 1,
+              totalCount: driveFiles.length,
+              percent: Math.min(85, Math.round(((i + 1) / driveFiles.length) * 80) + 5),
+              message: `[${i + 1}/${driveFiles.length}] ${df.name} 수신 중...`
+            });
+
+            try {
+              const dlRes = await fetch(`${appsScriptUrl}?action=downloadFile&fileId=${encodeURIComponent(df.id)}`);
+              if (dlRes.ok) {
+                const dlData = await dlRes.json();
+                if (dlData.success && dlData.base64) {
+                  payloadFiles.push({
+                    name: df.name,
+                    base64Content: dlData.base64,
+                    modifiedTime: new Date().toISOString()
+                  });
+                  successCount++;
+                }
+              }
+            } catch (dlErr) {
+              failCount++;
+            }
+          }
+        }
+      }
+    } catch (scanErr) {
+      console.warn('Apps Script 폴더 재귀 탐색 건너뜀 (공개 다운로드로 전환):', scanErr);
+    }
+  }
 
   // ── 2. 공개 공유된 증빙/서식 파일 토큰 0회 다운로드 ──
   const specificItems = [

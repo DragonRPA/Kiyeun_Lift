@@ -651,10 +651,62 @@ function doPost(e) {
   }
 }
 
+// 3. 파일 다운로드 및 하위 폴더 재귀 목록 탐색 엔진
 function doGet(e) {
+  var action = (e && e.parameter && e.parameter.action) || 'status';
+  
+  if (action === 'download' || action === 'downloadFile') {
+    var fileId = e.parameter.fileId;
+    if (!fileId) return ContentService.createTextOutput(JSON.stringify({ success: false, error: 'fileId required' })).setMimeType(ContentService.MimeType.JSON);
+    var file = DriveApp.getFileById(fileId);
+    var bytes = file.getBlob().getBytes();
+    var b64 = Utilities.base64Encode(bytes);
+    return ContentService.createTextOutput(JSON.stringify({
+      success: true,
+      name: file.getName(),
+      mimeType: file.getMimeType(),
+      base64: b64
+    })).setMimeType(ContentService.MimeType.JSON);
+  }
+  
+  if (action === 'listFolderRecursive' || action === 'listFiles') {
+    var folderId = e.parameter.folderId;
+    var root = folderId ? DriveApp.getFolderById(folderId) : DriveApp.getRootFolder();
+    var results = [];
+    
+    function scanFolder(folder, relPath) {
+      var files = folder.getFiles();
+      while (files.hasNext()) {
+        var f = files.next();
+        var fPath = relPath ? (relPath + '/' + f.getName()) : f.getName();
+        results.push({
+          id: f.getId(),
+          name: fPath,
+          size: f.getSize(),
+          mimeType: f.getMimeType()
+        });
+      }
+      var subs = folder.getFolders();
+      while (subs.hasNext()) {
+        var sub = subs.next();
+        var subPath = relPath ? (relPath + '/' + sub.getName()) : sub.getName();
+        scanFolder(sub, subPath);
+      }
+    }
+    
+    scanFolder(root, '');
+    return ContentService.createTextOutput(JSON.stringify({
+      success: true,
+      folderId: root.getId(),
+      folderName: root.getName(),
+      totalCount: results.length,
+      files: results
+    })).setMimeType(ContentService.MimeType.JSON);
+  }
+
   return ContentService.createTextOutput(JSON.stringify({
     status: 'ONLINE',
-    system: '(주)기업엔리프트 구글드라이브 자동 동기화 API 엔진'
+    system: '(주)기연리프트 구글드라이브 하위폴더 재귀 자동 동기화 API 엔진'
   })).setMimeType(ContentService.MimeType.JSON);
 }`;
 
