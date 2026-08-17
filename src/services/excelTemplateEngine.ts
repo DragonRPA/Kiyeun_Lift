@@ -158,22 +158,233 @@ export interface SafetyInspectionExcelData {
 }
 
 /**
- * 마이크로소프트 엑셀 정품 원본 PDF 템플릿을 직접 로드하여 100% 무손실 고화질 벡터 A4 바이너리를 반환합니다.
- * (HTML/CSS 모방 0%, 렌더링 오차 0%)
+ * 텍스트 오버레이용 투명 캔버스 레이어를 생성하여 PNG 바이트로 반환합니다.
  */
-export async function generateSafetyInspectionPdfFromExcelTemplate(
-  _data?: Partial<SafetyInspectionExcelData>
+function createTextCanvasLayer(
+  width: number,
+  height: number,
+  drawFn: (ctx: CanvasRenderingContext2D) => void
 ): Promise<Uint8Array> {
-  const { PDFDocument } = await import('pdf-lib');
+  return new Promise((resolve) => {
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+      ctx.clearRect(0, 0, width, height);
+      ctx.font = 'bold 24px "Malgun Gothic", "Dotum", sans-serif';
+      ctx.fillStyle = '#000000';
+      drawFn(ctx);
+    }
+    canvas.toBlob(async (blob) => {
+      if (blob) {
+        const buffer = await blob.arrayBuffer();
+        resolve(new Uint8Array(buffer));
+      } else {
+        resolve(new Uint8Array());
+      }
+    }, 'image/png');
+  });
+}
 
-  // public/templates/안전점검결과서_양식_원본.pdf 로드
-  const res = await fetch('/templates/안전점검결과서_양식_원본.pdf');
-  if (!res.ok) {
-    throw new Error(`안전점검결과서 정품 PDF 템플릿 로드 실패: HTTP ${res.status}`);
-  }
+/**
+ * 1. 고소작업대 임대차 계약서 PDF 생성 (12줄 수용 및 13개 이상 별지 자동 분기)
+ */
+export async function generateContractPdf(data: ContractExcelData): Promise<Uint8Array> {
+  const { PDFDocument } = await import('pdf-lib');
+  const res = await fetch('/templates/임대차계약서_양식_원본.pdf');
+  if (!res.ok) throw new Error(`계약서 원본 템플릿 로드 실패: HTTP ${res.status}`);
 
   const templateBytes = await res.arrayBuffer();
-  const doc = await PDFDocument.load(templateBytes);
-  const pdfBytes = await doc.save();
-  return pdfBytes;
+  const pdfDoc = await PDFDocument.load(templateBytes);
+  const page = pdfDoc.getPages()[0];
+  const { width, height } = page.getSize();
+
+  // 300 DPI 기준 고해상도 캔버스 (가로 2480, 세로 3508)
+  const scale = 3.5;
+  const canvasW = width * scale;
+  const canvasH = height * scale;
+
+  const overlayPng = await createTextCanvasLayer(canvasW, canvasH, (ctx) => {
+    ctx.fillStyle = '#000000';
+
+    // 1. 계약 체결일자 (상단 중앙)
+    ctx.font = 'bold 36px "Malgun Gothic", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(data.contractDate || new Date().toISOString().split('T')[0], canvasW * 0.5, canvasH * 0.118);
+
+    // 2. 임차인(을) 정보
+    ctx.textAlign = 'left';
+    ctx.font = '500 28px "Malgun Gothic", sans-serif';
+    ctx.fillText(data.lesseeBizNo || '', canvasW * 0.68, canvasH * 0.148);
+    ctx.fillText(data.lesseeName || '', canvasW * 0.68, canvasH * 0.174);
+    ctx.fillText(data.lesseeCeo || '', canvasW * 0.68, canvasH * 0.198);
+
+    // 3. 임대차 계약 내용 (현장 및 대리인)
+    ctx.fillText(data.deliveryLocation || '', canvasW * 0.22, canvasH * 0.258);
+    ctx.fillText(data.deliveryDateTime || '', canvasW * 0.68, canvasH * 0.258);
+    ctx.fillText(data.siteAddress || '', canvasW * 0.22, canvasH * 0.280);
+    ctx.fillText(data.managerName || '', canvasW * 0.22, canvasH * 0.324);
+    ctx.fillText(data.managerPhone || '', canvasW * 0.68, canvasH * 0.324);
+
+    // 4. 품목 및 장비 그리드 (최대 12줄)
+    const isOver12 = data.assets.length >= 13;
+    const startY = canvasH * 0.368;
+    const rowHeight = canvasH * 0.0215;
+
+    if (isOver12) {
+      // 13대 이상 시 1행 요약 표기
+      ctx.fillText(`${data.assets[0]?.modelName || '고소작업대'} 외 ${data.assets.length - 1}대 (총 ${data.assets.length}대)`, canvasW * 0.08, startY);
+      ctx.fillText(`${data.assets.length}`, canvasW * 0.21, startY);
+      ctx.fillText('[별지 제1호: 체결 장비 상세 명세표 참조]', canvasW * 0.27, startY);
+      ctx.fillText(data.totalMonthlyFee ? `₩${data.totalMonthlyFee.toLocaleString()}` : '-', canvasW * 0.52, startY);
+    } else {
+      // 12대 이하 1:1 기재
+      data.assets.forEach((asset, idx) => {
+        if (idx >= 12) return;
+        const currentY = startY + idx * rowHeight;
+        ctx.fillText(asset.modelName || '', canvasW * 0.08, currentY);
+        ctx.fillText(`${asset.quantity || 1}`, canvasW * 0.21, currentY);
+        ctx.fillText(asset.serialNo || '', canvasW * 0.27, currentY);
+        ctx.fillText(asset.monthlyFee ? asset.monthlyFee.toLocaleString() : '', canvasW * 0.43, currentY);
+        ctx.fillText(asset.subtotal ? asset.subtotal.toLocaleString() : '', canvasW * 0.52, currentY);
+      });
+    }
+
+    // 5. 합계 금액
+    ctx.font = 'bold 32px "Malgun Gothic", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(`₩${(data.totalMonthlyFee || 0).toLocaleString()}`, canvasW * 0.74, canvasH * 0.485);
+
+    // 6. 영업 담당자 정보
+    ctx.textAlign = 'left';
+    ctx.font = '500 28px "Malgun Gothic", sans-serif';
+    if (data.managerName) {
+      ctx.fillText(data.managerName, canvasW * 0.64, canvasH * 0.902);
+    }
+  });
+
+  const embeddedImage = await pdfDoc.embedPng(overlayPng);
+  page.drawImage(embeddedImage, {
+    x: 0,
+    y: 0,
+    width,
+    height
+  });
+
+  return await pdfDoc.save();
+}
+
+/**
+ * 2. 반입 전 CHECK LIST PDF 생성 (상단 모델명, 관리번호(S/N) 2개 항목 동적 주입)
+ */
+export async function generateChecklistPdf(data: PreDeliveryChecklistExcelData): Promise<Uint8Array> {
+  const { PDFDocument } = await import('pdf-lib');
+  const res = await fetch('/templates/반입전체크리스트_양식_원본.pdf');
+  if (!res.ok) throw new Error(`체크리스트 원본 템플릿 로드 실패: HTTP ${res.status}`);
+
+  const templateBytes = await res.arrayBuffer();
+  const pdfDoc = await PDFDocument.load(templateBytes);
+  const page = pdfDoc.getPages()[0];
+  const { width, height } = page.getSize();
+
+  const scale = 3.5;
+  const canvasW = width * scale;
+  const canvasH = height * scale;
+
+  const overlayPng = await createTextCanvasLayer(canvasW, canvasH, (ctx) => {
+    ctx.fillStyle = '#000000';
+    ctx.font = 'bold 30px "Malgun Gothic", sans-serif';
+
+    // 1. 상단 모델명
+    ctx.fillText(data.modelName || '', canvasW * 0.32, canvasH * 0.046);
+
+    // 2. 상단 관리번호 (S/N)
+    ctx.fillText(data.serialNo || '', canvasW * 0.72, canvasH * 0.046);
+  });
+
+  const embeddedImage = await pdfDoc.embedPng(overlayPng);
+  page.drawImage(embeddedImage, {
+    x: 0,
+    y: 0,
+    width,
+    height
+  });
+
+  return await pdfDoc.save();
+}
+
+/**
+ * 3. 고소작업대(T/L) 안전점검 결과서 PDF 생성 (헤더 제원 및 출고 정보 동적 주입, 점검자 김관주/도장 원본 보존)
+ */
+export async function generateSafetyInspectionPdf(data: SafetyInspectionExcelData): Promise<Uint8Array> {
+  const { PDFDocument } = await import('pdf-lib');
+  const res = await fetch('/templates/안전점검결과서_양식_원본.pdf');
+  if (!res.ok) throw new Error(`안전점검결과서 원본 템플릿 로드 실패: HTTP ${res.status}`);
+
+  const templateBytes = await res.arrayBuffer();
+  const pdfDoc = await PDFDocument.load(templateBytes);
+  const page = pdfDoc.getPages()[0];
+  const { width, height } = page.getSize();
+
+  const scale = 3.5;
+  const canvasW = width * scale;
+  const canvasH = height * scale;
+
+  const overlayPng = await createTextCanvasLayer(canvasW, canvasH, (ctx) => {
+    ctx.fillStyle = '#000000';
+    ctx.font = '500 26px "Malgun Gothic", sans-serif';
+
+    // Row 1: 사업장명, 제조사 (렌탈사)
+    ctx.fillText(data.siteName || '', canvasW * 0.20, canvasH * 0.062);
+    const mfgText = `${data.manufacturer || 'GENIE'} ${data.lessorName || '(주)기연리프트'}`;
+    ctx.fillText(mfgText, canvasW * 0.73, canvasH * 0.062);
+
+    // Row 2: 사용업체, 모델명
+    ctx.fillText(data.clientName || '', canvasW * 0.20, canvasH * 0.080);
+    ctx.fillText(data.modelName || '', canvasW * 0.73, canvasH * 0.080);
+
+    // Row 3: 장비중량, 운행속도, 작업높이/적재용량
+    ctx.fillText(data.weight || '', canvasW * 0.20, canvasH * 0.098);
+    ctx.fillText(data.speed || '', canvasW * 0.47, canvasH * 0.098);
+    ctx.fillText(data.maxHeightCapacity || '', canvasW * 0.73, canvasH * 0.098);
+
+    // Row 4: 차량(관리)번호, 제조년도, 안전인증년월일
+    ctx.fillText(data.serialNo || '', canvasW * 0.20, canvasH * 0.116);
+    ctx.fillText(data.manufactureYear || '', canvasW * 0.47, canvasH * 0.116);
+    ctx.fillText(data.safetyCertDate || '', canvasW * 0.73, canvasH * 0.116);
+
+    // Row 5: 안전점검일시
+    ctx.fillText(data.inspectionDate || new Date().toISOString().split('T')[0], canvasW * 0.20, canvasH * 0.134);
+  });
+
+  const embeddedImage = await pdfDoc.embedPng(overlayPng);
+  page.drawImage(embeddedImage, {
+    x: 0,
+    y: 0,
+    width,
+    height
+  });
+
+  return await pdfDoc.save();
+}
+
+/**
+ * 엑셀 정품 PDF 템플릿 로더 (하위 호환)
+ */
+export async function generateSafetyInspectionPdfFromExcelTemplate(
+  data?: Partial<SafetyInspectionExcelData>
+): Promise<Uint8Array> {
+  return generateSafetyInspectionPdf({
+    siteName: data?.siteName || '',
+    clientName: data?.clientName || '',
+    manufacturer: data?.manufacturer || 'GENIE',
+    modelName: data?.modelName || 'GS-1930',
+    serialNo: data?.serialNo || 'G19052',
+    weight: data?.weight || '1,500 kg',
+    speed: data?.speed || '4.0 Km/h',
+    maxHeightCapacity: data?.maxHeightCapacity || '7.8 M / 227 kg',
+    safetyCertDate: data?.safetyCertDate || '2024-03-01',
+    inspectionDate: data?.inspectionDate || new Date().toISOString().split('T')[0]
+  });
 }

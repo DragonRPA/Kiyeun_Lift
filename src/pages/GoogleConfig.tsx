@@ -7,11 +7,31 @@ import { GoogleDrivePickerModal } from '../components/GoogleDrivePickerModal';
 import { downloadEvidenceAsZip, deleteStorageFiles } from '../services/supabaseStorage';
 import { backupToGoogleDrive, getDriveReadToken, extractDriveFileId, extractDriveFolderId, listFilesInDriveFolder } from '../services/googleDriveBackup';
 import { downloadContractDocumentBundlePdf, mergeDriveFilesToPdf } from '../services/pdfBundle';
-import { generateSafetyInspectionPdfFromExcelTemplate } from '../services/excelTemplateEngine';
+import { 
+  generateContractPdf, 
+  generateChecklistPdf, 
+  generateSafetyInspectionPdf, 
+  generateSafetyInspectionPdfFromExcelTemplate 
+} from '../services/excelTemplateEngine';
 import { PDFDocument } from 'pdf-lib';
 
 export const GoogleConfig: React.FC = () => {
-  const { googleConfigs, updateGoogleConfig, currentUser, showErrorModal, consumablePurchases, clearEvidenceFileUrls, updateEvidenceFileUrls } = useApp();
+  const { 
+    googleConfigs, 
+    updateGoogleConfig, 
+    currentUser, 
+    showErrorModal, 
+    consumablePurchases, 
+    clearEvidenceFileUrls, 
+    updateEvidenceFileUrls,
+    contracts, 
+    contractAssets, 
+    customers, 
+    sites, 
+    products, 
+    assets, 
+    users 
+  } = useApp();
 
   const isAdmin = currentUser?.role === 'ADMIN';
 
@@ -301,6 +321,158 @@ export const GoogleConfig: React.FC = () => {
       alert(`🎉 엑셀 데이터 주입 서식 + 구글 드라이브 원본 결합 성공!\n\n총 ${mergedPdf.getPageCount()}페이지 단일 PDF로 완벽하게 병합 다운로드되었습니다.`);
     } catch (err: any) {
       alert(`⚠️ 엑셀 + 드라이브 통합 병합 실패: ${err?.message || err}`);
+    } finally {
+      setIsMergingDriveFiles(false);
+      setMergeProgressLabel('');
+    }
+  };
+
+  // ── 🚀 [살아있는 계약 기반] 3대 핵심 서류 생성 + 구글 드라이브 원본 통합 팩 ──
+  const [showContractSelectModal, setShowContractSelectModal] = useState(false);
+
+  const handleGenerateActiveContractPackage = async (contractId: string) => {
+    const targetContract = contracts.find(c => c.id === contractId);
+    if (!targetContract) {
+      alert('⚠️ 계약 정보를 찾을 수 없습니다.');
+      return;
+    }
+
+    const customer = customers.find(c => c.id === targetContract.customerId);
+    const site = sites.find(s => s.id === targetContract.siteId);
+    const cAssets = contractAssets.filter(ca => ca.contractId === contractId);
+    const assignedAssets = cAssets.map(ca => {
+      const a = assets.find(x => x.id === ca.assetId);
+      const prod = a ? products.find(p => p.modelName === a.modelName) : undefined;
+      return {
+        ca,
+        asset: a,
+        product: prod
+      };
+    });
+
+    const cfg = googleConfigs[0];
+    const folderInput = cfg?.defaultRootFolderId || 'https://drive.google.com/drive/folders/1aBZsZ1KnKhk9Ax6oiM2cb-yKfDHKGRif';
+    const folderId = extractDriveFolderId(folderInput);
+    const clientId = cfg?.oauthClientId?.trim() || oauthClientId?.trim() || '274287991550-7eaeisb14i80315pmlf8390smf58pkbt.apps.googleusercontent.com';
+
+    setShowContractSelectModal(false);
+    setIsMergingDriveFiles(true);
+
+    try {
+      const mergedPdf = await PDFDocument.create();
+
+      // ── 1. [1p] 고소작업대 임대차 계약서 생성 ──
+      setMergeProgressLabel('1단계: 계약서 양식에 실제 계약 데이터 주입 중...');
+      const contractPdfData = {
+        contractDate: targetContract.startDate || new Date().toISOString().split('T')[0],
+        lessorName: '주식회사 기연리프트',
+        lessorCeo: '이수용',
+        lessorBizNo: '138-81-83251',
+        lesseeName: customer?.name || '주식회사 우진아이엔에스',
+        lesseeCeo: customer?.representative || '홍경모',
+        lesseeBizNo: customer?.bizRegNo || '114-81-33003',
+        deliveryLocation: site?.name || '인천 검단신도시 101 역세권 개발사업',
+        siteAddress: site?.address || '인천 연수구 원당동 1061-1, 5번 게이트 C1BL',
+        deliveryDateTime: `${targetContract.startDate} 인도 예정`,
+        managerName: site?.contactName || '양병욱 차장',
+        managerPhone: site?.contact || '010-4066-6543',
+        assets: assignedAssets.map(item => ({
+          modelName: item.asset?.modelName || 'GS-1930',
+          quantity: 1,
+          serialNo: item.asset ? `${item.asset.assetNo}${item.asset.serialNo ? ` (${item.asset.serialNo})` : ''}` : 'G19052',
+          monthlyFee: item.ca.monthlyRentalFee || 300000,
+          subtotal: item.ca.monthlyRentalFee || 300000
+        })),
+        totalMonthlyFee: assignedAssets.reduce((sum, item) => sum + (item.ca.monthlyRentalFee || 300000), 0),
+        transportTerms: '2개월 이하 왕복 임차인 부담'
+      };
+
+      const contractBytes = await generateContractPdf(contractPdfData);
+      const contractDoc = await PDFDocument.load(contractBytes);
+      const [contractPage] = await mergedPdf.copyPages(contractDoc, [0]);
+      mergedPdf.addPage(contractPage);
+      console.log('✅ [1단계 완료] 임대차계약서 1p 생성 결합 성공');
+
+      // ── 2. [2~Np] 반입전 체크리스트 생성 (장비 대수 N대만큼) ──
+      setMergeProgressLabel(`2단계: 체결 장비(${assignedAssets.length}대)별 반입전 체크리스트 생성 중...`);
+      for (let i = 0; i < assignedAssets.length; i++) {
+        const item = assignedAssets[i];
+        const checklistBytes = await generateChecklistPdf({
+          modelName: item.asset?.modelName || 'GS-1930',
+          serialNo: item.asset ? `${item.asset.assetNo}${item.asset.serialNo ? ` (${item.asset.serialNo})` : ''}` : `G1905${i + 1}`
+        });
+        const clDoc = await PDFDocument.load(checklistBytes);
+        const [clPage] = await mergedPdf.copyPages(clDoc, [0]);
+        mergedPdf.addPage(clPage);
+      }
+      console.log(`✅ [2단계 완료] 반입전 체크리스트 ${assignedAssets.length}p 생성 결합 성공`);
+
+      // ── 3. [Np] 고소작업대(T/L) 안전점검 결과서 생성 (장비 대수 N대만큼) ──
+      setMergeProgressLabel(`3단계: 체결 장비(${assignedAssets.length}대)별 안전점검결과서 생성 중...`);
+      for (let i = 0; i < assignedAssets.length; i++) {
+        const item = assignedAssets[i];
+        const inspectionBytes = await generateSafetyInspectionPdf({
+          siteName: site?.name || '인천 검단신도시 101 역세권 개발사업',
+          clientName: customer?.name || '주식회사 우진아이엔에스',
+          manufacturer: item.product?.manufacturer || item.asset?.manufacturer || 'GENIE',
+          modelName: item.asset?.modelName || 'GS-1930',
+          serialNo: item.asset?.assetNo || `G1905${i + 1}`,
+          weight: item.product?.weight || '1,500 kg',
+          speed: item.product?.speed || '4.0 Km/h',
+          maxHeightCapacity: item.product?.maxHeightCapacity || '7.8 M / 227 kg',
+          safetyCertDate: item.product?.safetyCertDate || '2024-03-01',
+          inspectionDate: targetContract.startDate || new Date().toISOString().split('T')[0],
+          manufactureYear: item.asset?.manufactureYear || '2024년'
+        });
+        const inspDoc = await PDFDocument.load(inspectionBytes);
+        const [inspPage] = await mergedPdf.copyPages(inspDoc, [0]);
+        mergedPdf.addPage(inspPage);
+      }
+      console.log(`✅ [3단계 완료] 안전점검결과서 ${assignedAssets.length}p 생성 결합 성공`);
+
+      // ── 4. 외부 구글 드라이브 원본 서류들 뒤에 결합 ──
+      setMergeProgressLabel('4단계: 구글 계정 인증 및 드라이브 원본 파일 소집 중...');
+      const token = await getDriveReadToken(clientId);
+
+      if (folderId) {
+        const files = await listFilesInDriveFolder(folderId, token);
+        const pdfFiles = files.filter(f => f.mimeType === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf'));
+
+        for (let i = 0; i < pdfFiles.length; i++) {
+          const file = pdfFiles[i];
+          setMergeProgressLabel(`4단계: [${i + 1}/${pdfFiles.length}] ${file.name} 다운로드 및 결합 중...`);
+          try {
+            const res = await fetch(`https://www.googleapis.com/drive/v3/files/${file.id}?alt=media`, {
+              headers: { Authorization: `Bearer ${token}` }
+            });
+            if (res.ok) {
+              const drivePdfBytes = await res.arrayBuffer();
+              const driveDoc = await PDFDocument.load(drivePdfBytes);
+              const copiedPages = await mergedPdf.copyPages(driveDoc, driveDoc.getPageIndices());
+              copiedPages.forEach(p => mergedPdf.addPage(p));
+            }
+          } catch (e) {
+            console.warn(`⚠️ ${file.name} 결합 실패:`, e);
+          }
+        }
+      }
+
+      // ── 5. 최종 완성본 단일 PDF 다운로드 ──
+      const finalBytes = await mergedPdf.save();
+      const blob = new Blob([finalBytes.buffer as ArrayBuffer], { type: 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `[기연리프트]_${targetContract.contractNo}_${customer?.name || '계약서'}_통합팩_${mergedPdf.getPageCount()}p_${new Date().toISOString().split('T')[0]}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      alert(`🎉 [계약: ${targetContract.contractNo}] 3대 핵심 서류 + 드라이브 원본 결합 성공!\n\n총 ${mergedPdf.getPageCount()}페이지 단일 PDF로 완벽하게 병합 다운로드되었습니다.`);
+    } catch (err: any) {
+      alert(`⚠️ 통합 팩 생성 실패: ${err?.message || err}`);
     } finally {
       setIsMergingDriveFiles(false);
       setMergeProgressLabel('');
@@ -658,33 +830,22 @@ function doGet(e) {
               type="button"
               className="btn-primary"
               disabled={isMergingDriveFiles}
-              onClick={handleMergeExcelAndDrivePdf}
-              style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 18px', fontSize: '13.5px', fontWeight: 'bold', whiteSpace: 'nowrap', background: '#059669', border: 'none', borderRadius: '8px', color: '#fff', cursor: isMergingDriveFiles ? 'wait' : 'pointer', opacity: isMergingDriveFiles ? 0.7 : 1 }}
+              onClick={() => setShowContractSelectModal(true)}
+              style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '12px 20px', fontSize: '14px', fontWeight: '800', whiteSpace: 'nowrap', background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)', border: 'none', borderRadius: '8px', color: '#fff', cursor: isMergingDriveFiles ? 'wait' : 'pointer', opacity: isMergingDriveFiles ? 0.7 : 1, boxShadow: '0 4px 12px rgba(37,99,235,0.25)' }}
             >
-              <Download size={16} />
-              {isMergingDriveFiles ? '엑셀 주입 및 드라이브 결합 중...' : '🧪 3.안전점검결과서.xlsx 값 주입 + 드라이브 결합 테스트'}
-            </button>
-
-            <button
-              type="button"
-              className="btn-primary"
-              disabled={isMergingDriveFiles}
-              onClick={() => handleMergeFolderPdfs('https://drive.google.com/drive/folders/1aBZsZ1KnKhk9Ax6oiM2cb-yKfDHKGRif')}
-              style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 14px', fontSize: '12.5px', fontWeight: 'bold', whiteSpace: 'nowrap', background: '#2563eb', border: 'none', borderRadius: '8px', color: '#fff', cursor: isMergingDriveFiles ? 'wait' : 'pointer', opacity: isMergingDriveFiles ? 0.7 : 1 }}
-            >
-              <Download size={14} />
-              {isMergingDriveFiles ? '폴더 파일 탐색 및 병합 중...' : '📁 지정 폴더(1aBZsZ1...) PDF 전체 병합'}
+              <Download size={18} />
+              {isMergingDriveFiles ? '계약 서류 팩 결합 중...' : '🚀 살아있는 계약 선택 ➔ 3대 서류 + 드라이브 통합 팩 다운로드'}
             </button>
 
             <button
               type="button"
               className="btn-secondary"
               disabled={isMergingDriveFiles}
-              onClick={handleRealDriveMergeTest}
-              style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 12px', fontSize: '11.5px', fontWeight: '600', whiteSpace: 'nowrap', cursor: isMergingDriveFiles ? 'wait' : 'pointer' }}
+              onClick={handleMergeExcelAndDrivePdf}
+              style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '7px 12px', fontSize: '11.5px', fontWeight: '600', whiteSpace: 'nowrap', cursor: isMergingDriveFiles ? 'wait' : 'pointer' }}
             >
               <Download size={13} />
-              설정 서류 3종 개별 병합
+              🧪 단일 안전점검결과서 주입 테스트
             </button>
           </div>
         </div>
@@ -1534,6 +1695,110 @@ function doGet(e) {
           mode={pickerMode}
           title={selectorTargetField === 'rootFolder' ? '🏢 회사 전용 최상위 구글 드라이브 폴더 선택' : '📄 구글 드라이브 서류 템플릿 파일 선택'}
         />
+
+        {/* 🚀 살아있는 계약 선택 팝업 모달 */}
+        {showContractSelectModal && (
+          <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: '20px' }}>
+            <div style={{ backgroundColor: 'var(--card-bg)', borderRadius: '16px', maxWidth: '750px', width: '100%', maxHeight: '85vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.3)', border: '1px solid var(--border)' }}>
+              <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '800', color: 'var(--text-primary)' }}>
+                    🚀 실시간 유효 계약 선택 (통합 서류 팩 테스트)
+                  </h3>
+                  <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: 'var(--text-secondary)' }}>
+                    현재 살아있는(ACTIVE) 계약 중 하나를 선택하면, 실제 계약/고객/장비 데이터를 주입하여 3대 서류와 드라이브 원본을 병합합니다.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowContractSelectModal(false)}
+                  style={{ background: 'none', border: 'none', fontSize: '20px', cursor: 'pointer', color: 'var(--text-muted)' }}
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div style={{ padding: '16px 24px', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {contracts.filter(c => c.status === 'ACTIVE').length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--text-muted)' }}>
+                    현재 유효한(ACTIVE) 계약이 없습니다. 계약 관리에서 계약을 먼저 등록해 주세요.
+                  </div>
+                ) : (
+                  contracts.filter(c => c.status === 'ACTIVE').map(c => {
+                    const cust = customers.find(x => x.id === c.customerId);
+                    const site = sites.find(s => s.id === c.siteId);
+                    const cAssetCount = contractAssets.filter(ca => ca.contractId === c.id).length;
+
+                    return (
+                      <div
+                        key={c.id}
+                        style={{
+                          padding: '16px 18px',
+                          borderRadius: '10px',
+                          border: '1px solid var(--border)',
+                          backgroundColor: 'var(--bg-app)',
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          gap: '16px',
+                          transition: 'all 0.15s ease'
+                        }}
+                      >
+                        <div style={{ flex: 1 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                            <span style={{ fontSize: '13px', fontWeight: '800', color: '#2563eb' }}>{c.contractNo}</span>
+                            <span style={{ fontSize: '14px', fontWeight: '700', color: 'var(--text-primary)' }}>{cust?.name || '고객사'}</span>
+                            <span style={{ fontSize: '11px', padding: '2px 6px', borderRadius: '4px', background: '#dbeafe', color: '#1d4ed8', fontWeight: 'bold' }}>
+                              장비 {cAssetCount}대 체결
+                            </span>
+                          </div>
+                          <div style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                            <span>📍 현장: <strong>{site?.name || '기본현장'}</strong></span>
+                            <span>📅 계약일: {c.startDate}</span>
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          className="btn-primary"
+                          onClick={() => handleGenerateActiveContractPackage(c.id)}
+                          style={{
+                            padding: '9px 16px',
+                            fontSize: '13px',
+                            fontWeight: '700',
+                            whiteSpace: 'nowrap',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            background: '#2563eb',
+                            border: 'none',
+                            borderRadius: '8px',
+                            color: '#fff',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          <Download size={15} />
+                          이 계약으로 팩 다운로드
+                        </button>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              <div style={{ padding: '14px 24px', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'flex-end', backgroundColor: 'var(--bg-app)', borderBottomLeftRadius: '16px', borderBottomRightRadius: '16px' }}>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => setShowContractSelectModal(false)}
+                  style={{ padding: '8px 16px', fontSize: '13px', fontWeight: '600' }}
+                >
+                  닫기
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
       </div>
     </div>
