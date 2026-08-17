@@ -885,68 +885,62 @@ function doGet(e) {
         </div>
       </div>
 
-      {/* 🤖 로컬 사이드카 에이전트 전용 제어 카드 (C:\KiyeunAgent) */}
-      <div className="card" style={{ marginBottom: '20px', padding: '20px 24px', background: 'linear-gradient(135deg, rgba(79,70,229,0.08) 0%, rgba(79,70,229,0.02) 100%)', border: '1.5px solid rgba(79,70,229,0.3)', borderRadius: '12px', boxShadow: '0 4px 12px rgba(79,70,229,0.06)' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
-          <div style={{ flex: 1 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
-              <h3 style={{ margin: 0, fontSize: '17px', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-primary)' }}>
-                🤖 로컬 사이드카 에이전트 (C:\KiyeunAgent)
-              </h3>
-              {agentStatus === 'ONLINE' ? (
-                <span style={{ fontSize: '12px', padding: '3px 10px', borderRadius: '20px', background: '#dcfce7', color: '#15803d', fontWeight: '800', display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
-                  <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#22c55e' }}></span>
-                  실시간 가동중 (콜사인: {agentCallsign})
+      {/* 🤖 로컬 사이드카 에이전트 미실행(OFFLINE) 시에만 노출되는 다운로드 카드 (C:\KiyeunAgent) */}
+      {agentStatus === 'OFFLINE' && (
+        <div className="card" style={{ marginBottom: '20px', padding: '18px 22px', background: 'linear-gradient(135deg, rgba(239,68,68,0.06) 0%, rgba(239,68,68,0.02) 100%)', border: '1.5px solid rgba(239,68,68,0.35)', borderRadius: '12px', boxShadow: '0 4px 12px rgba(239,68,68,0.06)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
+            <div style={{ flex: 1 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
+                <h3 style={{ margin: 0, fontSize: '16px', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '8px', color: '#b91c1c' }}>
+                  🤖 로컬 사이드카 에이전트 미실행 상태
+                </h3>
+                <span style={{ fontSize: '11.5px', padding: '2px 8px', borderRadius: '20px', background: '#fee2e2', color: '#b91c1c', fontWeight: '800' }}>
+                  🔴 다운로드 및 실행 필요
                 </span>
-              ) : (
-                <span style={{ fontSize: '12px', padding: '3px 10px', borderRadius: '20px', background: '#fee2e2', color: '#b91c1c', fontWeight: '800', display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
-                  <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#ef4444' }}></span>
-                  에이전트 미실행 (다운로드 필요)
-                </span>
-              )}
+              </div>
+              <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: 'var(--text-secondary)' }}>
+                PC에서 에이전트를 가동해 두시면, <strong>마이크로소프트 엑셀에 직접 값을 주입하여 100% 무손실 정품 PDF를 생산</strong>하고 <code>C:\KiyeunAgent\문서고\</code>에 날짜별로 영구 자동 보관합니다.
+              </p>
             </div>
-            <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: 'var(--text-secondary)' }}>
-              PC에서 에이전트를 가동해 두시면, <strong>마이크로소프트 엑셀에 직접 값을 주입하여 100% 무손실 정품 PDF를 생산</strong>하고 <code>C:\KiyeunAgent\문서고\</code>에 날짜별로 영구 자동 보관합니다.
-            </p>
-          </div>
 
-          <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-            <button
-              type="button"
-              className="btn-primary"
-              disabled={isDownloadingAgent}
-              onClick={handleDownloadAgentExe}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                padding: '11px 20px',
-                fontSize: '13.5px',
-                fontWeight: '800',
-                whiteSpace: 'nowrap',
-                background: 'linear-gradient(135deg, #4f46e5 0%, #4338ca 100%)',
-                border: 'none',
-                borderRadius: '8px',
-                color: '#fff',
-                cursor: isDownloadingAgent ? 'wait' : 'pointer',
-                boxShadow: '0 4px 10px rgba(79,70,229,0.3)'
-              }}
-            >
-              <Download size={17} />
-              {isDownloadingAgent ? '다운로드 중...' : '📥 KiyeunAgent.exe 다운로드'}
-            </button>
+            <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+              <button
+                type="button"
+                className="btn-primary"
+                disabled={isDownloadingAgent}
+                onClick={handleDownloadAgentExe}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  padding: '10px 18px',
+                  fontSize: '13px',
+                  fontWeight: '800',
+                  whiteSpace: 'nowrap',
+                  background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
+                  border: 'none',
+                  borderRadius: '8px',
+                  color: '#fff',
+                  cursor: isDownloadingAgent ? 'wait' : 'pointer',
+                  boxShadow: '0 4px 10px rgba(239,68,68,0.25)'
+                }}
+              >
+                <Download size={15} />
+                {isDownloadingAgent ? '다운로드 중...' : '📥 KiyeunAgent.exe 다운로드'}
+              </button>
 
-            <button
-              type="button"
-              className="btn-secondary"
-              onClick={() => setShowAgentGuideModal(true)}
-              style={{ padding: '10px 14px', fontSize: '12.5px', fontWeight: '700', whiteSpace: 'nowrap' }}
-            >
-              📖 사용 가이드
-            </button>
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => setShowAgentGuideModal(true)}
+                style={{ padding: '9px 13px', fontSize: '12.5px', fontWeight: '700', whiteSpace: 'nowrap' }}
+              >
+                📖 사용 가이드
+              </button>
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* 🔗 실제 구글 드라이브 원본 파일 병합 테스트 카드 */}
       <div className="card" style={{ marginBottom: '24px', padding: '20px', background: 'linear-gradient(135deg, rgba(0,128,0,0.07) 0%, rgba(0,128,0,0.02) 100%)', border: '1px solid rgba(0,128,0,0.35)', borderRadius: '12px' }}>
