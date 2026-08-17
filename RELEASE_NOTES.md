@@ -1,3 +1,16 @@
+# Release Notes (v1.75.0.Build.192 - 2026-08-17 18:47)
+
+## 📁 [특정 폴더 일괄 병합] 구글 드라이브 지정 폴더 내 PDF 파일 전체 자동 탐색 & 실시간 병합 다운로드 엔진 탑재
+
+### 🌟 반영 내용
+1. **구글 드라이브 폴더 내 파일 목록 자동 조회 (`googleDriveBackup.ts`)**:
+   - `listFilesInDriveFolder()`: 지정된 폴더 ID(`1aBZsZ1KnKhk9Ax6oiM2cb-yKfDHKGRif` 등) 내에 보관된 모든 PDF 파일 목록을 Google Drive API v3로 자동 스캔.
+2. **지정 폴더 PDF 전체 일괄 병합 기능 (`GoogleConfig.tsx`)**:
+   - `[📁 지정 폴더(1aBZsZ1...) PDF 전체 병합 다운로드]` 파란색 전용 액션 버튼 신설.
+   - 폴더 내 모든 PDF 파일 바이너리를 순차 다운로드하여 `pdf-lib`로 하나의 단일 PDF 파일로 완벽 결합 후 자동 내려받기.
+
+---
+
 # Release Notes (v1.74.0.Build.191 - 2026-08-17 18:41)
 
 ## 🔍 [에러 진단 정밀화] 구글 드라이브 API 다운로드 응답 에러 JSON 상세 파싱 및 안내 메시지 보강

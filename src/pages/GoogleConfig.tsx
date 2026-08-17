@@ -5,7 +5,7 @@ import { GoogleConfig as GoogleConfigType } from '../services/db';
 import { drive, DriveFile, DriveFolder } from '../services/drive';
 import { GoogleDrivePickerModal } from '../components/GoogleDrivePickerModal';
 import { downloadEvidenceAsZip, deleteStorageFiles } from '../services/supabaseStorage';
-import { backupToGoogleDrive, getDriveReadToken, extractDriveFileId } from '../services/googleDriveBackup';
+import { backupToGoogleDrive, getDriveReadToken, extractDriveFileId, extractDriveFolderId, listFilesInDriveFolder } from '../services/googleDriveBackup';
 import { downloadContractDocumentBundlePdf, mergeDriveFilesToPdf } from '../services/pdfBundle';
 
 export const GoogleConfig: React.FC = () => {
@@ -157,6 +157,66 @@ export const GoogleConfig: React.FC = () => {
       alert(`✅ 구글 드라이브 원본 파일 병합 완료! (${modeText})\n\n성공: ${result.successCount}건 / 총 ${filesToMerge.length}건\n총 ${result.totalPages}페이지${failMsg}`);
     } catch (err: any) {
       alert(`⚠️ 병합 실패: ${err?.message || err}`);
+    } finally {
+      setIsMergingDriveFiles(false);
+      setMergeProgressLabel('');
+    }
+  };
+
+  // ── 지정 구글 드라이브 폴더 내 PDF 전체 자동 탐색 & 일괄 병합 ──
+  const handleMergeFolderPdfs = async (targetFolderUrlOrId?: string) => {
+    const cfg = googleConfigs[0];
+    const folderInput = targetFolderUrlOrId || cfg?.defaultRootFolderId || 'https://drive.google.com/drive/folders/1aBZsZ1KnKhk9Ax6oiM2cb-yKfDHKGRif';
+    const folderId = extractDriveFolderId(folderInput);
+
+    if (!folderId) {
+      alert('⚠️ 유효한 구글 드라이브 폴더 URL 또는 ID가 아닙니다.');
+      return;
+    }
+
+    const clientId = cfg?.oauthClientId?.trim() || oauthClientId?.trim() || '274287991550-7eaeisb14i80315pmlf8390smf58pkbt.apps.googleusercontent.com';
+    const hasAppsScript = !!cfg?.appsScriptUrl?.trim();
+    const hasOAuth = !!clientId;
+
+    if (!hasAppsScript && !hasOAuth) {
+      alert('⚠️ 구글 연동 방식이 설정되지 않았습니다.\n[OAuth Client ID] 또는 [Apps Script URL]을 확인해 주세요.');
+      return;
+    }
+
+    setIsMergingDriveFiles(true);
+
+    try {
+      setMergeProgressLabel('구글 계정 인증 및 폴더 내 파일 목록 조회 중...');
+      const token = await getDriveReadToken(clientId);
+
+      // 폴더 내 파일 목록 API 조회
+      const files = await listFilesInDriveFolder(folderId, token);
+      const pdfFiles = files.filter(f => f.mimeType === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf'));
+
+      if (pdfFiles.length === 0) {
+        alert(`⚠️ 해당 폴더(${folderId}) 안에 PDF 파일이 발견되지 않았습니다.\n(총 파일 수: ${files.length}개)`);
+        return;
+      }
+
+      setMergeProgressLabel(`총 ${pdfFiles.length}개의 PDF 파일 발견. 다운로드 및 병합 시작...`);
+
+      const itemsToMerge = pdfFiles.map(f => ({ label: f.name, fileId: f.id }));
+      const result = await mergeDriveFilesToPdf(
+        itemsToMerge,
+        {
+          token,
+          outputFileName: `[기연리프트]_폴더원본PDF병합_${pdfFiles.length}건_${new Date().toISOString().split('T')[0]}.pdf`,
+          onProgress: (label, idx, total) =>
+            setMergeProgressLabel(`[${idx}/${total}] ${label} 다운로드 및 병합 중...`)
+        }
+      );
+
+      const failMsg = result.failedLabels.length > 0
+        ? `\n\n⚠️ 실패 파일:\n` + result.failedLabels.join('\n')
+        : '';
+      alert(`🎉 [${pdfFiles.length}개 파일] 구글 드라이브 폴더 PDF 일괄 병합 완료!\n\n성공: ${result.successCount}건 / 총 ${pdfFiles.length}건\n총 ${result.totalPages}페이지${failMsg}`);
+    } catch (err: any) {
+      alert(`⚠️ 폴더 파일 병합 실패: ${err?.message || err}`);
     } finally {
       setIsMergingDriveFiles(false);
       setMergeProgressLabel('');
@@ -509,16 +569,29 @@ function doGet(e) {
               </p>
             )}
           </div>
-          <button
-            type="button"
-            className="btn-primary"
-            disabled={isMergingDriveFiles}
-            onClick={handleRealDriveMergeTest}
-            style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 18px', fontSize: '13.5px', fontWeight: 'bold', whiteSpace: 'nowrap', background: '#16a34a', border: 'none', borderRadius: '8px', color: '#fff', cursor: isMergingDriveFiles ? 'wait' : 'pointer', opacity: isMergingDriveFiles ? 0.7 : 1 }}
-          >
-            <Download size={16} />
-            {isMergingDriveFiles ? '원본 파일 병합 중...' : (currentConfig?.appsScriptUrl ? '⚡ 무팝업 원본 PDF 병합 다운로드' : '🔗 실제 원본 PDF 병합 다운로드')}
-          </button>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'flex-end' }}>
+            <button
+              type="button"
+              className="btn-primary"
+              disabled={isMergingDriveFiles}
+              onClick={() => handleMergeFolderPdfs('https://drive.google.com/drive/folders/1aBZsZ1KnKhk9Ax6oiM2cb-yKfDHKGRif')}
+              style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 18px', fontSize: '13.5px', fontWeight: 'bold', whiteSpace: 'nowrap', background: '#2563eb', border: 'none', borderRadius: '8px', color: '#fff', cursor: isMergingDriveFiles ? 'wait' : 'pointer', opacity: isMergingDriveFiles ? 0.7 : 1 }}
+            >
+              <Download size={16} />
+              {isMergingDriveFiles ? '폴더 파일 탐색 및 병합 중...' : '📁 지정 폴더(1aBZsZ1...) PDF 전체 병합 다운로드'}
+            </button>
+
+            <button
+              type="button"
+              className="btn-secondary"
+              disabled={isMergingDriveFiles}
+              onClick={handleRealDriveMergeTest}
+              style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '7px 14px', fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap', cursor: isMergingDriveFiles ? 'wait' : 'pointer' }}
+            >
+              <Download size={14} />
+              설정 서류 3종 개별 병합
+            </button>
+          </div>
         </div>
       </div>
 

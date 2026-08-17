@@ -90,6 +90,39 @@ export function extractDriveFileId(url: string): string | null {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// 2d-2. 구글 드라이브 URL에서 폴더 ID 추출
+// https://drive.google.com/drive/folders/FOLDER_ID → FOLDER_ID
+// ─────────────────────────────────────────────────────────────────────────────
+export function extractDriveFolderId(url: string): string | null {
+  if (!url) return null;
+  const match = url.match(/\/drive\/folders\/([^/?#]+)/) || url.match(/\/folders\/([^/?#]+)/);
+  return match ? match[1] : (url.includes('/') ? null : url.trim());
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 2d-3. 구글 드라이브 폴더 내 파일 목록 조회 (Google Drive API v3)
+// ─────────────────────────────────────────────────────────────────────────────
+export interface DriveFolderFileInfo {
+  id: string;
+  name: string;
+  mimeType: string;
+}
+
+export async function listFilesInDriveFolder(folderId: string, token: string): Promise<DriveFolderFileInfo[]> {
+  const q = `'${folderId}' in parents and trashed = false`;
+  const url = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,name,mimeType)&orderBy=name`;
+  const res = await fetch(url, {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  if (!res.ok) {
+    const errJson = await res.json().catch(() => null);
+    throw new Error(`폴더 파일 목록 조회 실패 (${folderId}): HTTP ${res.status} ${errJson?.error?.message || res.statusText}`);
+  }
+  const data = await res.json();
+  return data.files || [];
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // 2e. Google Apps Script(GAS) 웹앱 프록시를 통한 무팝업 드라이브 파일 바이너리 다운로드 (방식 C)
 // - 클라이언트 OAuth 팝업 0회
 // - Apps Script가 파일 바이너리를 Base64로 반환하면 브라우저에서 ArrayBuffer로 변환
