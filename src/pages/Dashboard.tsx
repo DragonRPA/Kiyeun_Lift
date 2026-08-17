@@ -75,13 +75,13 @@ export const Dashboard: React.FC = () => {
     };
   }, [currentUser]);
 
-  // ── 📥 Node.js 무설치 단독 실행형 KiyeunAgent.exe 내장 ZIP 다운로드 ──
-  const handleDownloadAgentZip = () => {
+  // ── 📥 Node.js 무설치 단독 실행 파일 (KiyeunAgent.exe) 직접 다운로드 ──
+  const handleDownloadAgentExe = () => {
     setIsDownloadingAgent(true);
     try {
       const link = document.createElement('a');
-      link.href = '/downloads/KiyeunAgent.zip';
-      link.download = 'KiyeunAgent.zip';
+      link.href = '/downloads/KiyeunAgent.exe';
+      link.download = 'KiyeunAgent.exe';
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -461,7 +461,7 @@ export const Dashboard: React.FC = () => {
               type="button"
               className="btn-primary"
               disabled={isDownloadingAgent}
-              onClick={handleDownloadAgentZip}
+              onClick={handleDownloadAgentExe}
               style={{
                 display: 'flex', alignItems: 'center', gap: '8px', padding: '11px 18px',
                 fontSize: '13.5px', fontWeight: '800', whiteSpace: 'nowrap',
@@ -471,7 +471,7 @@ export const Dashboard: React.FC = () => {
               }}
             >
               <Download size={16} />
-              {isDownloadingAgent ? '패키징 중...' : '📥 에이전트 다운로드'}
+              {isDownloadingAgent ? '다운로드 중...' : '📥 KiyeunAgent.exe 다운로드'}
             </button>
 
             <button
@@ -857,10 +857,10 @@ export const Dashboard: React.FC = () => {
                   ⚡ 1초 원클릭 실행 방법:
                 </h4>
                 <ol style={{ margin: 0, paddingLeft: '18px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                  <li>우측 상단의 <strong>[📥 에이전트 다운로드]</strong> 버튼을 눌러 <code>KiyeunAgent.zip</code>을 받습니다.</li>
-                  <li>다운로드된 압축 파일을 <code>C:\KiyeunAgent\</code> 에 풉니다.</li>
-                  <li><strong><code>start-agent.bat</code></strong> 파일을 더블클릭하여 실행합니다.</li>
-                  <li>본인 로그인 아이디를 확인하고 엔터를 치면 대시보드에 <strong>`🟢 실시간 가동중`</strong>이 켜집니다!</li>
+                  <li>우측 상단의 <strong>[📥 KiyeunAgent.exe 다운로드]</strong> 버튼을 누릅니다.</li>
+                  <li>다운로드된 <code>KiyeunAgent.exe</code> 파일을 <code>C:\KiyeunAgent\</code> 에 넣습니다.</li>
+                  <li><strong><code>KiyeunAgent.exe</code></strong> 파일을 더블클릭하여 실행합니다. (Node.js 불필요)</li>
+                  <li>대시보드에 <strong>`🟢 실시간 가동중`</strong> 신호등이 즉시 켜집니다!</li>
                 </ol>
               </div>
 

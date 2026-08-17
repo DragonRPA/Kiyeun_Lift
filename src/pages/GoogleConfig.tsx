@@ -89,14 +89,14 @@ export const GoogleConfig: React.FC = () => {
     };
   }, [currentUser]);
 
-  // ── 📥 Node.js 무설치 단독 실행형 KiyeunAgent.exe 내장 ZIP 다운로드 ──
+  // ── 📥 Node.js 무설치 단독 실행 파일 (KiyeunAgent.exe) 직접 다운로드 ──
   const [isDownloadingAgent, setIsDownloadingAgent] = useState(false);
-  const handleDownloadAgentZip = () => {
+  const handleDownloadAgentExe = () => {
     setIsDownloadingAgent(true);
     try {
       const link = document.createElement('a');
-      link.href = '/downloads/KiyeunAgent.zip';
-      link.download = 'KiyeunAgent.zip';
+      link.href = '/downloads/KiyeunAgent.exe';
+      link.download = 'KiyeunAgent.exe';
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -915,7 +915,7 @@ function doGet(e) {
               type="button"
               className="btn-primary"
               disabled={isDownloadingAgent}
-              onClick={handleDownloadAgentZip}
+              onClick={handleDownloadAgentExe}
               style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -933,7 +933,7 @@ function doGet(e) {
               }}
             >
               <Download size={17} />
-              {isDownloadingAgent ? '에이전트 패키징 중...' : '📥 로컬 에이전트 다운로드 (KiyeunAgent.zip)'}
+              {isDownloadingAgent ? '다운로드 중...' : '📥 KiyeunAgent.exe 다운로드'}
             </button>
 
             <button
@@ -1998,9 +1998,9 @@ function doGet(e) {
                     ⚡ 1초 원클릭 실행 방법:
                   </h4>
                   <ol style={{ margin: 0, paddingLeft: '18px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <li>에이전트 프로그램 기본 위치: <code>C:\KiyeunAgent\</code></li>
-                    <li><strong><code>start-agent.bat</code></strong> 파일을 더블클릭합니다.</li>
-                    <li>로그인 아이디(콜사인)를 확인 후 엔터를 치면 백그라운드에서 가동됩니다.</li>
+                    <li><strong>[📥 KiyeunAgent.exe 다운로드]</strong> 버튼을 누릅니다.</li>
+                    <li>다운로드된 <code>KiyeunAgent.exe</code> 파일을 <code>C:\KiyeunAgent\</code> 에 넣습니다.</li>
+                    <li><strong><code>KiyeunAgent.exe</code></strong> 파일을 더블클릭하여 실행합니다. (Node.js 불필요)</li>
                     <li>웹 화면 상단에 <strong>`🟢 로컬 에이전트 가동중`</strong> 신호등이 즉시 켜집니다.</li>
                   </ol>
                 </div>

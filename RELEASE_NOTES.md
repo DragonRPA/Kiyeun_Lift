@@ -1,3 +1,14 @@
+# Release Notes (v1.91.0.Build.208 - 2026-08-17 21:41)
+
+## 📥 [무압축 원클릭 직결 다운로드] `KiyeunAgent.exe` 단독 실행 파일 직접 다운로드 및 압축 해제 단계 제거
+
+### 🌟 반영 내용
+1. **압축 해제 절차 완전 제거 & `.exe` 직결 다운로드**:
+   - 사용자가 압축을 풀 필요 없이 **`[📥 KiyeunAgent.exe 다운로드]`** 버튼 클릭 즉시 단일 실행 파일(`.exe`)이 내려오도록 변경.
+   - 다운받은 `KiyeunAgent.exe`를 `C:\KiyeunAgent\` 폴더에 넣고 더블클릭만 하면 즉시 백그라운드 가동.
+
+---
+
 # Release Notes (v1.90.0.Build.207 - 2026-08-17 21:37)
 
 ## ⚡ [Node.js 무설치 단독 실행 바이너리] `KiyeunAgent.exe` 내장 Standalone 패키지 컴파일 및 원클릭 다운로드 연동
