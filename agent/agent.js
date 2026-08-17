@@ -50,10 +50,10 @@ if (isExe && path.resolve(currentExePath).toLowerCase() !== path.resolve(TARGET_
     console.log(`📍 현재 실행 위치: ${currentExePath}`);
     console.log(`🎯 표준 정착 경로: ${TARGET_EXE_PATH}`);
 
-    // 기존 구버전 프로세스 및 5175 포트 점유 프로세스 완벽 강제 종료 (PID 제외)
+    // 기존 구버전 프로세스 및 5175 포트 점유 프로세스 완벽 강제 종료 (설치 모드에서만)
     try {
       console.log('🔄 기존 구버전 프로세스 자동 정리 중...');
-      execSync(`powershell -NoProfile -Command "Get-Process -Name KiyeunAgent -ErrorAction SilentlyContinue | Where-Object { $_.Id -ne ${currentPid} } | Stop-Process -Force; Get-NetTCPConnection -LocalPort ${PORT} -ErrorAction SilentlyContinue | ForEach-Object { if ($_.OwningProcess -ne ${currentPid}) { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue } }"`, { stdio: 'ignore' });
+      execSync('powershell -NoProfile -Command "Get-Process -Name KiyeunAgent -ErrorAction SilentlyContinue | Where-Object { $_.Id -ne ' + currentPid + ' } | Stop-Process -Force"', { stdio: 'ignore' });
     } catch (kErr) {}
 
     // 0.6초 대기 후 파일 복사
@@ -81,13 +81,6 @@ if (isExe && path.resolve(currentExePath).toLowerCase() !== path.resolve(TARGET_
   } catch (err) {
     console.error('⚠️ 자가 설치 중 오류 발생:', err.message);
   }
-}
-
-// 2. 정식 위치에서 실행되었으나 이전 잔존 프로세스가 포트를 잡고 있을 경우 정리
-if (isExe) {
-  try {
-    execSync(`powershell -NoProfile -Command "Get-Process -Name KiyeunAgent -ErrorAction SilentlyContinue | Where-Object { $_.Id -ne ${currentPid} } | Stop-Process -Force; Get-NetTCPConnection -LocalPort ${PORT} -ErrorAction SilentlyContinue | ForEach-Object { if ($_.OwningProcess -ne ${currentPid}) { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue } }"`, { stdio: 'ignore' });
-  } catch (e) {}
 }
 
 // 🔄 윈도우 시작 시 자동 실행(Auto-Startup) 레지스트리 자동 등록
@@ -152,11 +145,15 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  const reqUrl = new URL(req.url, `http://127.0.0.1:${PORT}`);
+  const rawUrl = req.url || '';
+  const pathname = rawUrl.split('?')[0];
+  const queryIndex = rawUrl.indexOf('?');
+  const queryString = queryIndex !== -1 ? rawUrl.substring(queryIndex + 1) : '';
+  const searchParams = new URLSearchParams(queryString);
 
   // 1. 헬스체크 및 동적 콜사인 바인딩 API
-  if (req.method === 'GET' && reqUrl.pathname === '/health') {
-    const queryCallsign = reqUrl.searchParams.get('callsign');
+  if (req.method === 'GET' && pathname === '/health') {
+    const queryCallsign = searchParams.get('callsign');
     if (queryCallsign && queryCallsign.trim()) {
       activeCallsign = queryCallsign.trim();
     }
@@ -176,7 +173,7 @@ const server = http.createServer(async (req, res) => {
   }
 
   // 2. 에이전트 원클릭 핫 재시작 (Restart) API
-  if (req.method === 'POST' && reqUrl.pathname === '/api/restart') {
+  if (req.method === 'POST' && pathname === '/api/restart') {
     res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
     res.end(JSON.stringify({ success: true, message: '에이전트를 1초 후 자동 재시작합니다.' }));
     setTimeout(() => {
@@ -188,15 +185,15 @@ const server = http.createServer(async (req, res) => {
   }
 
   // 3. 에이전트 원클릭 셧다운 (Shutdown) API
-  if (req.method === 'POST' && reqUrl.pathname === '/api/shutdown') {
+  if (req.method === 'POST' && pathname === '/api/shutdown') {
     res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
     res.end(JSON.stringify({ success: true, message: '에이전트를 안전하게 종료합니다.' }));
     setTimeout(() => { process.exit(0); }, 500);
     return;
   }
 
-  // 2. 구글 드라이브 로컬 미러링 상태 조회 API
-  if (req.method === 'GET' && reqUrl.pathname === '/api/mirror-status') {
+  // 4. 구글 드라이브 로컬 미러링 상태 조회 API
+  if (req.method === 'GET' && pathname === '/api/mirror-status') {
     try {
       const files = fs.readdirSync(DRIVE_MIRROR_DIR).filter(f => !f.startsWith('.') && f !== 'archive');
       const stats = files.map(fileName => {
@@ -219,7 +216,7 @@ const server = http.createServer(async (req, res) => {
   }
 
   // 3. 구글 드라이브 파일 로컬 미러링 (차분 동기화 & 버전 아카이빙) API
-  if (req.method === 'POST' && reqUrl.pathname === '/api/sync-drive') {
+  if (req.method === 'POST' && pathname === '/api/sync-drive') {
     let body = '';
     req.on('data', chunk => { body += chunk; });
     req.on('end', async () => {
@@ -271,7 +268,7 @@ const server = http.createServer(async (req, res) => {
   }
 
   // 4. 계약 서류 팩 무손실 생산 및 로컬 문서고 보관 API
-  if (req.method === 'POST' && reqUrl.pathname === '/api/execute-job') {
+  if (req.method === 'POST' && pathname === '/api/execute-job') {
     let body = '';
     req.on('data', chunk => { body += chunk; });
     req.on('end', async () => {
@@ -312,6 +309,23 @@ const server = http.createServer(async (req, res) => {
 
   res.writeHead(404, { 'Content-Type': 'text/plain' });
   res.end('Not Found');
+});
+
+server.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    console.warn(`⚠️ 포트 ${PORT} 가 사용 중입니다. 이전 프로세스를 정리하고 1초 후 재시도합니다...`);
+    try {
+      execSync(`powershell -NoProfile -Command "Get-NetTCPConnection -LocalPort ${PORT} -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }"`, { stdio: 'ignore' });
+    } catch (e) {}
+    setTimeout(() => {
+      server.close();
+      server.listen(PORT, '127.0.0.1', () => {
+        console.log(`🟢 로컬 에이전트 서비스 리스닝 시작: http://127.0.0.1:${PORT}`);
+      });
+    }, 1000);
+  } else {
+    console.error('❌ 서버 에러:', err);
+  }
 });
 
 server.listen(PORT, '127.0.0.1', () => {

@@ -1,3 +1,17 @@
+# Release Notes (v1.102.0.Build.219 - 2026-08-17 22:32)
+
+## 🎯 [프론트엔드 실시간 버전 인식 & 서명 동기화 파이프라인 완결] URL 쿼리 파싱 고도화 및 바이너리 자동 동기화
+
+### 🌟 반영 내용
+1. **에이전트 URL 파싱 표준화 (`agent.js`)**:
+   - `new URL` 파싱을 `rawUrl.split('?')` 및 `URLSearchParams` 기반으로 개선하여 쿼리스트링(`?callsign=...`) 유무와 관계없이 `/health`, `/api/restart`, `/api/sync-drive` 100% 정상 매칭.
+2. **서명 스크립트 최신 바이너리 자동 동기화 (`sign-agent.ps1`)**:
+   - 컴파일된 `agent/KiyeunAgent.exe`를 `public/downloads/KiyeunAgent.exe`로 즉시 동기화 복사 후 디지털 서명을 날인하여 구버전 잔존 원천 차단.
+3. **프론트엔드 실시간 버전 표출 검증**:
+   - 대시보드 및 구글 설정 화면에서 `🟢 로컬 에이전트 (admin · v1.100.0.Build.217)` 배지가 실시간으로 정확하게 인식됨을 검증 완료.
+
+---
+
 # Release Notes (v1.101.0.Build.218 - 2026-08-17 22:28)
 
 ## 🛑 [에이전트 원클릭 강제 종료 배치] `kill-agent.bat` 스크립트 프로젝트 루트 및 배포 폴더 탑재

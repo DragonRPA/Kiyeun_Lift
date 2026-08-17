@@ -21,8 +21,11 @@ if ($targetFile -and (Test-Path $targetFile)) {
 } else {
     $agentExe = Join-Path $scriptDir "KiyeunAgent.exe"
     $publicExe = Join-Path (Split-Path -Parent $scriptDir) "public\downloads\KiyeunAgent.exe"
-    if (Test-Path $agentExe) { $filesToSign += $agentExe }
-    if (Test-Path $publicExe) { $filesToSign += $publicExe }
+    if (Test-Path $agentExe) {
+        Copy-Item $agentExe $publicExe -Force
+        $filesToSign += $agentExe
+        $filesToSign += $publicExe
+    }
 }
 
 if ($filesToSign.Count -eq 0) {
