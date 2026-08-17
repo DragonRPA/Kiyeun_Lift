@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { Contract, db, Customer, CustomerContact, CustomerSite, ContractAsset, ContractHistory, Delivery } from '../services/db';
 import { exportToExcel } from '../services/excel';
+import { downloadContractDocumentBundlePdf } from '../services/pdfBundle';
 
 export const Contracts: React.FC = () => {
   const {
@@ -918,6 +919,34 @@ export const Contracts: React.FC = () => {
 
             {/* 실행 버튼 그룹 */}
             <div style={{ display: 'flex', gap: '8px' }}>
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => {
+                  const custName = getCustName(activeContract.customerId);
+                  const siteName = getSiteName(activeContract.siteId);
+                  const mappedAssets = activeContractAssets.map(ca => {
+                    const a = assets.find(ast => ast.id === ca.assetId);
+                    return {
+                      assetNo: a?.assetNo || 'G06119',
+                      modelName: a?.modelName || ca.expectedModel || 'GTJZ0608ME',
+                      sn: a?.serialNo || '0108000379',
+                      rentalFee: ca.monthlyRentalFee || 390000
+                    };
+                  });
+                  downloadContractDocumentBundlePdf({
+                    customerName: custName,
+                    contractDate: activeContract.startDate,
+                    siteName: siteName,
+                    contractNo: activeContract.id,
+                    assets: mappedAssets.length > 0 ? mappedAssets : undefined
+                  });
+                }}
+                style={{ padding: '6px 12px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--primary)', fontWeight: 'bold' }}
+              >
+                <Download size={14} /> 통합 서류 팩 PDF (14p)
+              </button>
+
               {canSave && canModifyContract(activeContract) && (
                 <>
                   <button className="btn-primary" onClick={handleOpenExtendModal} style={{ padding: '6px 12px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px' }}>

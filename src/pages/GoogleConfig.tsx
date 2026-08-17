@@ -1,12 +1,12 @@
-// d:\Kiyeun_Lift\src\pages\GoogleConfig.tsx
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
-import { Settings, Mail, FolderOpen, RefreshCw, CheckCircle2, Lock, Eye, EyeOff, ShieldCheck, HelpCircle, AlertTriangle, ExternalLink, Key, Search, Cloud, Folder, File, ArrowLeft, Download, HardDrive } from 'lucide-react';
+import { Settings, Mail, FolderOpen, RefreshCw, CheckCircle2, Lock, Eye, EyeOff, ShieldCheck, HelpCircle, AlertTriangle, ExternalLink, Key, Search, Cloud, Folder, File, ArrowLeft, Download, HardDrive, FileText } from 'lucide-react';
 import { GoogleConfig as GoogleConfigType } from '../services/db';
 import { drive, DriveFile, DriveFolder } from '../services/drive';
 import { GoogleDrivePickerModal } from '../components/GoogleDrivePickerModal';
 import { downloadEvidenceAsZip, deleteStorageFiles } from '../services/supabaseStorage';
 import { backupToGoogleDrive } from '../services/googleDriveBackup';
+import { downloadContractDocumentBundlePdf } from '../services/pdfBundle';
 
 export const GoogleConfig: React.FC = () => {
   const { googleConfigs, updateGoogleConfig, currentUser, showErrorModal, consumablePurchases, clearEvidenceFileUrls, updateEvidenceFileUrls } = useApp();
@@ -57,6 +57,30 @@ export const GoogleConfig: React.FC = () => {
   const [isTesting, setIsTesting] = useState(false);
   const [testLog, setTestLog] = useState<string[]>([]);
   const [showTestConsole, setShowTestConsole] = useState(false);
+
+  // 샘플 PDF 생성 상태
+  const [isGeneratingSamplePdf, setIsGeneratingSamplePdf] = useState(false);
+
+  const handleDownloadSampleBundlePdf = async () => {
+    setIsGeneratingSamplePdf(true);
+    try {
+      await downloadContractDocumentBundlePdf({
+        customerName: '주식회사 세보엠이씨',
+        contractDate: '2026년 8월 12일',
+        siteName: '용인 SK하이닉스(팹동)',
+        siteAddress: '경기도 용인시 처인구 원삼면 백원로 46번길 33',
+        assets: [
+          { assetNo: 'G06119', modelName: 'GTJZ0608ME', sn: '0108000379', rentalFee: 390000 },
+          { assetNo: 'G06120', modelName: 'GTJZ0608ME', sn: '0108000357', rentalFee: 390000 },
+          { assetNo: 'G06121', modelName: 'GTJZ0608ME', sn: '0108000426', rentalFee: 390000 }
+        ]
+      });
+    } catch (err: any) {
+      alert(`⚠️ 샘플 PDF 생성 실패: ${err?.message || err}`);
+    } finally {
+      setIsGeneratingSamplePdf(false);
+    }
+  };
 
   const currentConfig = googleConfigs[0];
 
@@ -369,6 +393,29 @@ function doGet(e) {
             기연리프트 전사 ERP와 구글 드라이브 및 Gmail SMTP 발송 서버 간의 크레덴셜 정보를 실시간 편집합니다.
           </p>
         </div>
+      </div>
+
+      {/* 📄 통합 출고/계약 서류 팩 (14페이지 샘플 PDF) 단일 파일 병합 다운로드 테스트 카드 */}
+      <div className="card" style={{ marginBottom: '24px', padding: '20px', background: 'linear-gradient(135deg, rgba(27,101,166,0.08) 0%, rgba(27,101,166,0.02) 100%)', border: '1px solid rgba(27,101,166,0.3)', borderRadius: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
+        <div>
+          <h3 style={{ margin: '0 0 6px 0', fontSize: '16px', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-primary)' }}>
+            <FileText className="text-primary" size={20} />
+            통합 출고/계약 서류 팩 (14페이지 샘플 PDF) 단일 파일 병합 테스트
+          </h3>
+          <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-secondary)' }}>
+            구글드라이브 및 ERP 템플릿에 보관된 서류(계약서, 체크리스트 3장, 안전점검표 3장, 제원표, KCs인증서, 작동법, 비상하강, PL보험, 사업자등록증, 통장사본)를 1개의 14페이지 단일 PDF로 병합하여 내려받습니다.
+          </p>
+        </div>
+        <button
+          type="button"
+          className="btn-primary"
+          disabled={isGeneratingSamplePdf}
+          onClick={handleDownloadSampleBundlePdf}
+          style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 18px', fontSize: '13.5px', fontWeight: 'bold', whiteSpace: 'nowrap', cursor: isGeneratingSamplePdf ? 'wait' : 'pointer' }}
+        >
+          <Download size={16} />
+          {isGeneratingSamplePdf ? '14페이지 PDF 병합 중...' : '샘플 단일 PDF 팩 다운로드'}
+        </button>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '24px', alignItems: 'start' }}>
