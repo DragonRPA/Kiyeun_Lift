@@ -52,15 +52,13 @@ export const AgentHeaderBadge: React.FC<Props> = ({ currentUser }) => {
             setMirrorFiles(mStatus.files || []);
           }
 
-          // 에이전트 첫 ONLINE 감지 시 백그라운드 자동 1회 미러링 동기화
-          if (!autoSyncedRef.current && googleConfigs?.[0]) {
+          // 🚀 [100% 무인 자동 백그라운드 미러링] 에이전트 ONLINE 감지 즉시 자동 1회 + 무음 동기화
+          if (!autoSyncedRef.current) {
             autoSyncedRef.current = true;
-            executeDriveMirrorSync(googleConfigs[0]).then((res) => {
-              if (res.success) {
-                getLocalMirrorStatus().then(ms => {
-                  if (isMounted && ms.success) setMirrorFiles(ms.files || []);
-                });
-              }
+            executeDriveMirrorSync(googleConfigs?.[0]).then((res) => {
+              getLocalMirrorStatus().then(ms => {
+                if (isMounted && ms.success) setMirrorFiles(ms.files || []);
+              });
             }).catch(() => {});
           }
 

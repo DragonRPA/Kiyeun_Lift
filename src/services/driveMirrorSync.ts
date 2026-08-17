@@ -123,8 +123,12 @@ export async function executeDriveMirrorSync(
     }
   }
 
-  // ── 3. 시스템 내장 표준 양식 템플릿 동기화 (템플릿 미러링) ──
+  // ── 3. 시스템 내장 표준 양식 템플릿 동기화 (실제 존재하는 원본 서식 파일들) ──
   const builtinTemplates = [
+    { name: '반입전체크리스트_양식_원본.pdf', url: '/templates/반입전체크리스트_양식_원본.pdf' },
+    { name: '안전점검결과서_양식_원본.pdf', url: '/templates/안전점검결과서_양식_원본.pdf' },
+    { name: '임대차계약서_양식_원본.pdf', url: '/templates/임대차계약서_양식_원본.pdf' },
+    { name: '거래명세서양식.xlsx', url: '/거래명세서양식.xlsx' },
     { name: '렌탈견적서_양식.html', url: '/templates/렌탈견적서_양식.html' },
     { name: '고소작업대_임대차계약서_양식.html', url: '/templates/고소작업대_임대차계약서_양식.html' },
     { name: '고소작업대_안전점검결과서_양식.html', url: '/templates/고소작업대_안전점검결과서_양식.html' },
