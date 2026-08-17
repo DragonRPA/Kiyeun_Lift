@@ -1,3 +1,14 @@
+# Release Notes (v1.96.0.Build.213 - 2026-08-17 21:57)
+
+## 🛠️ [Windows 인코딩 오류 완벽 해결] 인증서 자동 등록 배치파일 순수 ASCII 명령어 재작성 (`install-cert.bat`)
+
+### 🌟 반영 내용
+1. **Windows CMD 인코딩(CP949 vs UTF-8) 충돌 원천 해결**:
+   - 한글 주석/문자열 파싱 중 명령어 글자가 잘려나가던 문제를 순수 ASCII 기반의 표준 배치 파일(`install-cert.bat`)로 완벽 재작성.
+   - 관리자 권한 자동 승격(`Start-Process -Verb RunAs`) 및 `CertUtil` 윈도우 신뢰 저장소 등록 100% 정상 작동.
+
+---
+
 # Release Notes (v1.95.0.Build.212 - 2026-08-17 21:53)
 
 ## 🛡️ [사내 보안 인증서 우선 등록 단계 구축] 1단계 인증서 자동 등록(`.cer` & `.bat`) 및 2단계 에이전트 실행 순차 UI 배포

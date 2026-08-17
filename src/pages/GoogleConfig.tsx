@@ -101,8 +101,8 @@ export const GoogleConfig: React.FC = () => {
 
       setTimeout(() => {
         const link2 = document.createElement('a');
-        link2.href = '/downloads/인증서_원클릭_자동등록.bat';
-        link2.download = '인증서_원클릭_자동등록.bat';
+        link2.href = '/downloads/install-cert.bat';
+        link2.download = 'install-cert.bat';
         document.body.appendChild(link2);
         link2.click();
         document.body.removeChild(link2);
