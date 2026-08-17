@@ -42,6 +42,7 @@ import { DelinquencyPage } from './pages/DelinquencyPage';
 import { OutboundInspections } from './pages/outbound_inspections';
 import { DepreciationExecution } from './pages/depreciation_execution';
 import { PurchaseSettlementPage } from './pages/PurchaseSettlementPage';
+import { AgentHeaderBadge } from './components/AgentHeaderBadge';
 
 export interface SubMenuItem {
   id: string;
@@ -395,6 +396,9 @@ const App: React.FC = () => {
 
         {/* 사용자 정보 및 화면 모드 (밝은화면모드 / 어두운화면모드) */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+
+          {/* 🤖 로컬 사이드카 에이전트 실시간 상태 미니 배지 */}
+          <AgentHeaderBadge currentUser={currentUser} />
 
           {/* 화면 모드 전환 버튼 (명시적 텍스트 라벨 적용) */}
           <button

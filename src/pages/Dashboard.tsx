@@ -431,61 +431,6 @@ export const Dashboard: React.FC = () => {
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-          {/* 🟢 [에이전트 최신 버전 가동 중] */}
-          {agentStatus === 'ONLINE' && agentVersion === EXPECTED_AGENT_VERSION && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <span style={{ fontSize: '12px', padding: '5px 12px', borderRadius: '20px', background: '#dcfce7', color: '#15803d', fontWeight: '800', display: 'inline-flex', alignItems: 'center', gap: '6px', border: '1px solid #86efac' }}>
-                <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#22c55e' }}></span>
-                로컬 에이전트 최신 ({agentCallsign} · {agentVersion})
-              </span>
-              <button
-                type="button"
-                className="btn-secondary"
-                disabled={isRestartingAgent}
-                onClick={handleRestartAgent}
-                title="에이전트 프로세스를 1초 만에 자동 재시작합니다."
-                style={{ padding: '5px 9px', fontSize: '11.5px', fontWeight: '700', borderRadius: '6px', cursor: isRestartingAgent ? 'wait' : 'pointer' }}
-              >
-                {isRestartingAgent ? '재기동...' : '🔄 재시작'}
-              </button>
-            </div>
-          )}
-
-          {/* 🟡 [에이전트 가동 중이나 구버전인 경우 업데이트 유도] */}
-          {agentStatus === 'ONLINE' && agentVersion !== EXPECTED_AGENT_VERSION && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <span style={{ fontSize: '12px', padding: '5px 12px', borderRadius: '20px', background: '#fef3c7', color: '#b45309', fontWeight: '800', display: 'inline-flex', alignItems: 'center', gap: '6px', border: '1px solid #fcd34d' }}>
-                <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#f59e0b' }}></span>
-                에이전트 업데이트 필요 (현재: {agentVersion || '구버전'} ➔ 최신: {EXPECTED_AGENT_VERSION})
-              </span>
-              <button
-                type="button"
-                className="btn-primary"
-                onClick={handleDownloadAgentExe}
-                style={{ padding: '5px 10px', fontSize: '11.5px', fontWeight: '800', borderRadius: '6px', background: '#f59e0b', border: 'none', color: '#fff', cursor: 'pointer' }}
-              >
-                📥 최신 에이전트 받기
-              </button>
-              <button
-                type="button"
-                className="btn-secondary"
-                disabled={isRestartingAgent}
-                onClick={handleRestartAgent}
-                style={{ padding: '5px 9px', fontSize: '11.5px', fontWeight: '700', borderRadius: '6px' }}
-              >
-                {isRestartingAgent ? '재기동...' : '🔄 재시작'}
-              </button>
-            </div>
-          )}
-
-          {/* 🔴 [에이전트 미실행(OFFLINE) 상태 미니 배지] */}
-          {agentStatus === 'OFFLINE' && (
-            <span style={{ fontSize: '12px', padding: '5px 12px', borderRadius: '20px', background: '#fee2e2', color: '#b91c1c', fontWeight: '800', display: 'inline-flex', alignItems: 'center', gap: '6px', border: '1px solid #fca5a5' }}>
-              <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#ef4444' }}></span>
-              로컬 에이전트 미실행 (최신 요구: {EXPECTED_AGENT_VERSION})
-            </span>
-          )}
-
           {/* 🚀 계약 서류 14p 원클릭 통합 팩 발행 버튼 (상시 사용 가능) */}
           <button
             type="button"
@@ -520,75 +465,6 @@ export const Dashboard: React.FC = () => {
           )}
         </div>
       </div>
-
-      {/* 🤖 [에이전트 미실행(OFFLINE) 상태일 때만 노출되는 다운로드/가이드 안내 카드] */}
-      {agentStatus === 'OFFLINE' && (
-        <div className="card" style={{
-          marginBottom: '24px', padding: '18px 22px',
-          background: 'linear-gradient(135deg, rgba(239,68,68,0.06) 0%, rgba(239,68,68,0.02) 100%)',
-          border: '1.5px solid rgba(239,68,68,0.35)', borderRadius: '12px', boxShadow: '0 4px 12px rgba(239,68,68,0.06)'
-        }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
-            <div style={{ flex: 1 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
-                <h3 style={{ margin: 0, fontSize: '16px', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '8px', color: '#b91c1c' }}>
-                  <Bot size={19} color="#ef4444" />
-                  로컬 사이드카 에이전트 미실행 상태
-                </h3>
-                <span style={{ fontSize: '11.5px', padding: '2px 8px', borderRadius: '20px', background: '#fee2e2', color: '#b91c1c', fontWeight: '800' }}>
-                  🔴 최신 요구 버전: {EXPECTED_AGENT_VERSION}
-                </span>
-              </div>
-              <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: 'var(--text-secondary)' }}>
-                에이전트를 다운로드하여 실행하시면 <strong>엑셀 서식에 직접 값을 주입하여 100% 무손실 PDF를 생산</strong>하고 <code>C:\KiyeunAgent\문서고\</code>에 영구 자동 보관합니다. (더블클릭 시 자동 설치)
-              </p>
-            </div>
-
-            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
-              <button
-                type="button"
-                className="btn-secondary"
-                onClick={handleDownloadCert}
-                title="1회만 PC에 등록하면 모든 경고가 영구히 소멸됩니다."
-                style={{
-                  display: 'flex', alignItems: 'center', gap: '6px', padding: '9px 14px',
-                  fontSize: '12.5px', fontWeight: '800', whiteSpace: 'nowrap',
-                  background: '#f8fafc', border: '1.5px solid #0284c7', color: '#0284c7', borderRadius: '8px', cursor: 'pointer'
-                }}
-              >
-                <Shield size={14} color="#0284c7" />
-                1단계: 🛡️ 보안 인증서 등록 (.cer)
-              </button>
-
-              <button
-                type="button"
-                className="btn-primary"
-                disabled={isDownloadingAgent}
-                onClick={handleDownloadAgentExe}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: '8px', padding: '9px 16px',
-                  fontSize: '13px', fontWeight: '800', whiteSpace: 'nowrap',
-                  background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
-                  border: 'none', borderRadius: '8px', color: '#fff', cursor: isDownloadingAgent ? 'wait' : 'pointer',
-                  boxShadow: '0 4px 10px rgba(239,68,68,0.25)'
-                }}
-              >
-                <Download size={15} />
-                {isDownloadingAgent ? '다운로드 중...' : `2단계: 📥 KiyeunAgent.exe (${EXPECTED_AGENT_VERSION}) 다운로드`}
-              </button>
-
-              <button
-                type="button"
-                className="btn-secondary"
-                onClick={() => setShowAgentGuideModal(true)}
-                style={{ padding: '9px 13px', fontSize: '12.5px', fontWeight: '700', whiteSpace: 'nowrap' }}
-              >
-                📖 가이드
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* ──────────────────────────────────────────────────────── */}
       {/* 권한(Permission) 기반 스마트 카드 피드 렌더링 섹션 */}
