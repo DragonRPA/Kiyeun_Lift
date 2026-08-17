@@ -123,14 +123,15 @@ export interface ContractExcelData {
 }
 
 /**
- * 반입전 체크리스트 데이터 주입 맵퍼 규격 (설계 참고용 인터페이스)
+ * 반입전 체크리스트 데이터 주입 맵퍼 규격
+ * ⚠️ 실무 규칙:
+ * - 점검자(김관주) 및 점검결과(양호), 충전기 작동값(20.7A)은 원본 템플릿에 고정 인쇄되어 있으므로 편집 불필요.
+ * - 도장 날인하지 않음.
+ * - 오직 상단의 [모델명]과 [관리번호(S/N)] 2개 항목만 동적 주입.
  */
 export interface PreDeliveryChecklistExcelData {
-  modelName: string;           // 모델명
-  serialNo: string;            // 관리번호 (S/N)
-  inspectorName: string;       // 점검자 성명
-  checkDate: string;           // 점검일자
-  results: Record<number, '양호' | '불량' | '해당없음'>; // 1~58번 항목 결과
+  modelName: string;           // 모델명 (예: 'Z-45/25J', 'GS-1930')
+  serialNo: string;            // 관리번호 및 S/N (예: 'G19052 (GS30D-13533)')
 }
 
 /**
