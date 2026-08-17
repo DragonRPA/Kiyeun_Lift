@@ -427,7 +427,11 @@ export async function mergeDriveFilesToPdf(
           `https://www.googleapis.com/drive/v3/files/${item.fileId}?alt=media`,
           { headers: { Authorization: `Bearer ${token}` } }
         );
-        if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
+        if (!res.ok) {
+          const errJson = await res.json().catch(() => null);
+          const errDetail = errJson?.error?.message || res.statusText;
+          throw new Error(`HTTP ${res.status}: ${errDetail}`);
+        }
         pdfBytes = await res.arrayBuffer();
       } else {
         throw new Error('Google Apps Script URL 또는 OAuth 인증 토큰이 필요합니다.');
@@ -441,7 +445,7 @@ export async function mergeDriveFilesToPdf(
       result.successCount++;
       console.log(`✅ [${i + 1}/${items.length}] ${item.label} - ${copiedPages.length}페이지 병합 성공`);
     } catch (err: any) {
-      result.failedLabels.push(`${item.label} (${err?.message || err})`);
+      result.failedLabels.push(`${item.label} [${err?.message || err}]`);
       console.warn(`⚠️ [${i + 1}/${items.length}] ${item.label} 실패:`, err);
     }
   }
@@ -449,7 +453,10 @@ export async function mergeDriveFilesToPdf(
   result.totalPages = mergedPdf.getPageCount();
 
   if (result.totalPages === 0) {
-    throw new Error('병합 가능한 페이지가 없습니다. 모든 파일 다운로드에 실패했습니다.');
+    const errorDetails = result.failedLabels.length > 0
+      ? `\n\n[실패 원인 상세]\n` + result.failedLabels.join('\n')
+      : '';
+    throw new Error(`병합 가능한 페이지가 없습니다. 모든 파일 다운로드에 실패했습니다.${errorDetails}`);
   }
 
   // 최종 단일 파일 다운로드
