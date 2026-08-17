@@ -1,3 +1,15 @@
+# Release Notes (v1.110.0.Build.227 - 2026-08-17 23:24)
+
+## 🎯 [구글 드라이브 실제 루트 폴더 ID 연동 & 5대 하위 폴더/증빙 일괄 미러링] Kiyuen_Lift 폴더 풀 트래킹
+
+### 🌟 반영 내용
+1. **구글 드라이브 실제 폴더 ID SSOT 바인딩 (`db.ts`)**:
+   - `defaultRootFolderId: '1aBZsZ1KnKhk9Ax6oiM2cb-yKfDHKGRif'` (`Kiyuen_Lift` 폴더)를 기본 표준으로 설정.
+2. **5대 하위 폴더 및 이미지/PDF 증빙 전체 로컬 동기화 (`driveMirrorSync.ts`)**:
+   - `(공통)사업자등록증.jpg`, `(공통)통장사본.jpg`, `(공통)생산물책임보험.jpg`, `제원표/인증서 PDF`, `업무용 엑셀등`, `장비 관련 파일들` 하위 폴더 전체가 `C:\KiyeunAgent\drive_mirror\`에 동일한 트리 구조로 통째로 미러링되도록 파이프라인 완성.
+
+---
+
 # Release Notes (v1.109.0.Build.226 - 2026-08-17 23:23)
 
 ## 🌲 [구글 드라이브 하위 폴더 트리 재귀 완전 미러링] Subdirectory 디렉토리 계층 구조 100% 보존 복제
