@@ -937,6 +937,8 @@ export const Contracts: React.FC = () => {
                   downloadContractDocumentBundlePdf({
                     customerName: custName,
                     contractDate: activeContract.startDate,
+                    contractStartDate: activeContract.startDate,
+                    contractEndDate: activeContract.endDate,
                     siteName: siteName,
                     contractNo: activeContract.id,
                     assets: mappedAssets.length > 0 ? mappedAssets : undefined
@@ -944,7 +946,7 @@ export const Contracts: React.FC = () => {
                 }}
                 style={{ padding: '6px 12px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--primary)', fontWeight: 'bold' }}
               >
-                <Download size={14} /> 통합 서류 팩 PDF (14p)
+                <Download size={14} /> 통합 서류 팩 PDF
               </button>
 
               {canSave && canModifyContract(activeContract) && (

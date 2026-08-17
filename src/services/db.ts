@@ -667,6 +667,11 @@ export interface GoogleConfig {
   bizRegCertUrl?: string;
   bankbookCopyUrl?: string;
   transactionStatementTemplateUrl?: string;
+  currentInsuranceStartDate?: string;
+  currentInsuranceEndDate?: string;
+  nextInsuranceCertUrl?: string;
+  nextInsuranceStartDate?: string;
+  nextInsuranceEndDate?: string;
   defaultRootFolderId?: string;
   appsScriptUrl?: string;
   oauthClientId?: string;   // 구글 드라이브 백업용 OAuth 2.0 Client ID
@@ -1188,6 +1193,10 @@ const SEED_GOOGLE_CONFIG: GoogleConfig[] = [
     bizRegCertUrl: '',
     bankbookCopyUrl: '',
     transactionStatementTemplateUrl: 'templates/거래명세서_양식.html',
+    currentInsuranceStartDate: '2026-03-05',
+    currentInsuranceEndDate: '2027-03-05',
+    nextInsuranceStartDate: '2027-03-05',
+    nextInsuranceEndDate: '2028-03-05',
     defaultRootFolderId: 'root',
     updatedAt: new Date().toISOString()
   }

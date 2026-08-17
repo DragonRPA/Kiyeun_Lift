@@ -1,14 +1,20 @@
 // src/services/pdfBundle.ts
-// (주)기연리프트 통합 출고/계약 서류 팩 PDF (14페이지 단일 PDF 파일) 생성 및 병합 서비스
+// (주)기연리프트 통합 출고/계약 서류 팩 PDF (단일 PDF 파일) 생성 및 병합 서비스
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
 
 export interface SampleContractBundleOptions {
   customerName?: string;
   contractDate?: string;
+  contractStartDate?: string;
+  contractEndDate?: string; // 미정이거나 null이면 장기계약으로 간주
   siteName?: string;
   siteAddress?: string;
   contractNo?: string;
+  currentInsuranceStartDate?: string;
+  currentInsuranceEndDate?: string;
+  nextInsuranceStartDate?: string;
+  nextInsuranceEndDate?: string;
   assets?: Array<{
     assetNo: string;
     modelName: string;
@@ -18,14 +24,24 @@ export interface SampleContractBundleOptions {
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
-// HTML 템플릿 생성기 (14페이지 전 세트)
+// HTML 템플릿 생성기 (계약 기간 대 보험 유효기간 자동 검증 및 다중 연동)
 // ──────────────────────────────────────────────────────────────────────────────
-function generate14PageBundleHTML(opts?: SampleContractBundleOptions): string[] {
+function generateBundleHTML(opts?: SampleContractBundleOptions): string[] {
   const cName = opts?.customerName || '주식회사 세보엠이씨';
   const cDate = opts?.contractDate || '2026년 8월 12일';
   const sName = opts?.siteName || '용인 SK하이닉스(팹동)';
   const sAddr = opts?.siteAddress || '경기도 용인시 처인구 원삼면 백원로 46번길 33';
   
+  const cEndDate = opts?.contractEndDate; // 예: '2027-08-30' 또는 undefined
+  const currentInsEnd = opts?.currentInsuranceEndDate || '2027-03-05';
+  const currentInsStart = opts?.currentInsuranceStartDate || '2026-03-05';
+  
+  const nextInsStart = opts?.nextInsuranceStartDate || '2027-03-05';
+  const nextInsEnd = opts?.nextInsuranceEndDate || '2028-03-05';
+
+  // 💡 [보험 유효기간 자동 검증] 계약 만료일이 현재 보험 만료일을 초과하거나 '종료일 미정(장기계약)'인 경우 차기 보험증서 자동 연속 첨부
+  const needsRenewalInsurance = !cEndDate || (cEndDate > currentInsEnd);
+
   const assetList = opts?.assets || [
     { assetNo: 'G06119', modelName: 'GTJZ0608ME', sn: '0108000379', rentalFee: 390000 },
     { assetNo: 'G06120', modelName: 'GTJZ0608ME', sn: '0108000357', rentalFee: 390000 },
@@ -134,7 +150,7 @@ function generate14PageBundleHTML(opts?: SampleContractBundleOptions): string[] 
 
       <div style="border:1px solid #000; padding:8px; font-size:10.5px; line-height:1.5; margin-bottom:12px;">
         <strong>운송료 청구 기준:</strong> ■ 2개월 이하: 왕복 운반비 임차인 부담 &nbsp;■ 4개월 이하: 편도 운반비 임차인 부담 &nbsp;■ 4개월 초과: 왕복 운반비 임대인 부담<br/>
-        <strong>첨부서류:</strong> 계약서, 작동법, 반입전체크리스트, 안전점검결과서, 안전인증서, 보험증권, 사업자등록증, 통장사본
+        <strong>첨부서류:</strong> 계약서, 작동법, 반입전체크리스트, 안전점검결과서, 안전인증서, PL보험증권${needsRenewalInsurance ? '(당해+차기 연속첨부)' : ''}, 사업자등록증, 통장사본
       </div>
 
       <div style="border:1px solid #000; padding:8px; font-size:10px; line-height:1.4; background:#fafafa;">
@@ -369,10 +385,16 @@ function generate14PageBundleHTML(opts?: SampleContractBundleOptions): string[] 
     </div>
   `);
 
-  // 📄 Page 12: 생산물배상책임(PL)보험 증권
+  // 📄 Page 12: 당해 연도 생산물배상책임(PL)보험 증권
   pages.push(`
     <div style="${commonStyle}">
-      <h2 style="text-align:center; font-size:20px; font-weight:bold; margin-bottom:20px;">생산물배상책임(PL)보험 증권</h2>
+      <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:2px solid #000; padding-bottom:8px; margin-bottom:16px;">
+        <h2 style="font-size:20px; font-weight:bold; margin:0;">생산물배상책임(PL)보험 증권 (당해 기간)</h2>
+        <span style="font-size:12px; font-weight:bold; color:#1565c0; border:1px solid #1565c0; padding:3px 8px; borderRadius:4px;">
+          가입기간: ${currentInsStart} ~ ${currentInsEnd}
+        </span>
+      </div>
+
       <table style="width:100%; border-collapse:collapse; border:1px solid #000; font-size:11px; margin-bottom:20px;">
         <tr><td style="padding:6px; background:#f0f0f0; font-weight:bold; width:20%;">계약번호</td><td style="padding:6px;">202602-033</td><td style="padding:6px; background:#f0f0f0; font-weight:bold; width:20%;">계약일자</td><td style="padding:6px;">2026년 02월 04일</td></tr>
         <tr><td style="padding:6px; background:#f0f0f0; font-weight:bold;">보험계약자</td><td style="padding:6px;">(주)기연리프트</td><td style="padding:6px; background:#f0f0f0; font-weight:bold;">사업자번호</td><td style="padding:6px;">138-81-83251</td></tr>
@@ -383,7 +405,35 @@ function generate14PageBundleHTML(opts?: SampleContractBundleOptions): string[] 
     </div>
   `);
 
-  // 📄 Page 13: 사업자등록증
+  // 📄 Page 13 (조건부 추가): 차기/갱신 생산물배상책임(PL)보험 증권 (계약 만료일 초과 시 자동 첨부)
+  if (needsRenewalInsurance) {
+    pages.push(`
+      <div style="${commonStyle}">
+        <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:2px solid #d32f2f; padding-bottom:8px; margin-bottom:16px;">
+          <h2 style="font-size:19px; font-weight:bold; margin:0; color:#b71c1c;">
+            생산물배상책임(PL)보험 증권 (차기 갱신 보장)
+          </h2>
+          <span style="font-size:11px; font-weight:bold; color:#b71c1c; background:#ffebee; border:1px solid #d32f2f; padding:3px 8px; borderRadius:4px;">
+            ⚠️ 계약기간 만료일 초과에 따른 차기 증서 추가 결합
+          </span>
+        </div>
+
+        <div style="padding:10px; background:#fff8e1; border:1px solid #ffe082; borderRadius:6px; font-size:11px; margin-bottom:16px; color:#5d4037;">
+          💡 <strong>안전검토 확인필:</strong> 본 렌탈 계약 기간(${cDate} ~ ${cEndDate || '종료일 미정 장기'})이 당해 보험 만료일(${currentInsEnd})을 초과함에 따라, 전 기간 연속 보장을 증명하는 <strong>차기 갱신 보험증권 (${nextInsStart} ~ ${nextInsEnd})</strong>을 함께 통합 첨부합니다.
+        </div>
+
+        <table style="width:100%; border-collapse:collapse; border:1px solid #000; font-size:11px; margin-bottom:20px;">
+          <tr><td style="padding:6px; background:#f0f0f0; font-weight:bold; width:20%;">계약번호</td><td style="padding:6px;">202702-099 (갱신증권)</td><td style="padding:6px; background:#f0f0f0; font-weight:bold; width:20%;">유효기간</td><td style="padding:6px; font-weight:bold; color:#b71c1c;">${nextInsStart} ~ ${nextInsEnd}</td></tr>
+          <tr><td style="padding:6px; background:#f0f0f0; font-weight:bold;">보험계약자</td><td style="padding:6px;">(주)기연리프트</td><td style="padding:6px; background:#f0f0f0; font-weight:bold;">사업자번호</td><td style="padding:6px;">138-81-83251</td></tr>
+          <tr><td style="padding:6px; background:#f0f0f0; font-weight:bold;">피보험자</td><td colSpan="3" style="padding:6px;">(주)기연리프트 (경기도 용인시 처인구 모현읍 갈담로112번길 21-3)</td></tr>
+          <tr><td style="padding:6px; background:#f0f0f0; font-weight:bold;">보상한도액</td><td colSpan="3" style="padding:6px; font-weight:bold; color:blue;">1청구당 ₩500,000,000 / 총보상한도액 ₩500,000,000 (국내 생산물)</td></tr>
+        </table>
+        <p style="font-size:12px; text-align:center; margin-top:40px; font-weight:bold;">대한상공회의소 PL센터 / 현대해상화재보험(주)</p>
+      </div>
+    `);
+  }
+
+  // 📄 Page 14 (또는 15): 사업자등록증
   pages.push(`
     <div style="${commonStyle}">
       <div style="border:3px double #000; padding:20px; height:92%; box-sizing:border-box; text-align:center;">
@@ -402,7 +452,7 @@ function generate14PageBundleHTML(opts?: SampleContractBundleOptions): string[] 
     </div>
   `);
 
-  // 📄 Page 14: 통장사본
+  // 📄 Page 15 (또는 16): 통장사본
   pages.push(`
     <div style="${commonStyle}">
       <h2 style="text-align:center; font-size:22px; font-weight:bold; margin-bottom:30px; border-bottom:2px solid #000; padding-bottom:8px;">
@@ -426,7 +476,7 @@ function generate14PageBundleHTML(opts?: SampleContractBundleOptions): string[] 
 // 단일 PDF 생성 메인 함수
 // ──────────────────────────────────────────────────────────────────────────────
 export async function downloadContractDocumentBundlePdf(options?: SampleContractBundleOptions): Promise<void> {
-  const pagesHtml = generate14PageBundleHTML(options);
+  const pagesHtml = generateBundleHTML(options);
 
   // 임시 비가시 렌더링 컨테이너 생성
   const container = document.createElement('div');
@@ -464,7 +514,8 @@ export async function downloadContractDocumentBundlePdf(options?: SampleContract
     }
 
     const cName = options?.customerName || '세보엠이씨';
-    const fileName = `[기연리프트]_통합출고계약서류팩_${cName}_샘플.pdf`;
+    const pageCount = pagesHtml.length;
+    const fileName = `[기연리프트]_통합출고계약서류팩_${cName}_(${pageCount}p).pdf`;
     pdf.save(fileName);
   } finally {
     document.body.removeChild(container);
