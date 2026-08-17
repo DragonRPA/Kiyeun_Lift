@@ -1,9 +1,8 @@
-// src/components/AgentHeaderBadge.tsx
-// (주)기연리프트 최상단 글로벌 헤더 에이전트 미니 상태 배지 및 원클릭 드롭다운
-
 import React, { useState, useEffect, useRef } from 'react';
-import { Bot, Download, RefreshCw, Shield, ChevronDown, CheckCircle2, AlertTriangle, X } from 'lucide-react';
+import { Bot, Download, RefreshCw, Shield, ChevronDown, CheckCircle2, AlertTriangle, X, Cloud, FolderCheck, HardDrive } from 'lucide-react';
 import { EXPECTED_AGENT_VERSION, AGENT_DOWNLOAD_URL, AGENT_CERT_URL, AGENT_INSTALL_BAT_URL, restartLocalAgent } from '../services/agentService';
+import { executeDriveMirrorSync, getLocalMirrorStatus } from '../services/driveMirrorSync';
+import { useApp } from '../context/AppContext';
 
 interface Props {
   currentUser?: {
@@ -13,12 +12,19 @@ interface Props {
 }
 
 export const AgentHeaderBadge: React.FC<Props> = ({ currentUser }) => {
+  const { googleConfigs } = useApp();
   const [agentStatus, setAgentStatus] = useState<'ONLINE' | 'OFFLINE'>('OFFLINE');
   const [agentVersion, setAgentVersion] = useState<string>('');
   const [agentCallsign, setAgentCallsign] = useState<string>('');
   const [isRestarting, setIsRestarting] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
   const [isOpenMenu, setIsOpenMenu] = useState(false);
+
+  // 미러링 상태
+  const [mirrorFiles, setMirrorFiles] = useState<Array<{ name: string; size: number; modifiedTime: string }>>([]);
+  const [isSyncingDrive, setIsSyncingDrive] = useState(false);
+  const [syncMessage, setSyncMessage] = useState('');
+  const autoSyncedRef = useRef(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
   // 3초 주기 헬스체크 및 실시간 콜사인 바인딩
@@ -39,6 +45,25 @@ export const AgentHeaderBadge: React.FC<Props> = ({ currentUser }) => {
             setAgentVersion(data.version || '');
             setAgentCallsign(data.callsign || userCallsign);
           }
+
+          // 미러링 상태 조회
+          const mStatus = await getLocalMirrorStatus();
+          if (isMounted && mStatus.success) {
+            setMirrorFiles(mStatus.files || []);
+          }
+
+          // 에이전트 첫 ONLINE 감지 시 백그라운드 자동 1회 미러링 동기화
+          if (!autoSyncedRef.current && googleConfigs?.[0]) {
+            autoSyncedRef.current = true;
+            executeDriveMirrorSync(googleConfigs[0]).then((res) => {
+              if (res.success) {
+                getLocalMirrorStatus().then(ms => {
+                  if (isMounted && ms.success) setMirrorFiles(ms.files || []);
+                });
+              }
+            }).catch(() => {});
+          }
+
           return;
         }
       } catch (e) {}
@@ -46,6 +71,7 @@ export const AgentHeaderBadge: React.FC<Props> = ({ currentUser }) => {
         setAgentStatus('OFFLINE');
         setAgentVersion('');
         setAgentCallsign('');
+        setMirrorFiles([]);
       }
     };
 
@@ -55,7 +81,7 @@ export const AgentHeaderBadge: React.FC<Props> = ({ currentUser }) => {
       isMounted = false;
       clearInterval(interval);
     };
-  }, [currentUser]);
+  }, [currentUser, googleConfigs]);
 
   // 외부 클릭 시 메뉴 닫기
   useEffect(() => {
@@ -265,6 +291,78 @@ export const AgentHeaderBadge: React.FC<Props> = ({ currentUser }) => {
               </div>
             )}
           </div>
+
+          {/* 📁 로컬 미러링(동기화) 현황 섹션 (ONLINE일 때) */}
+          {agentStatus === 'ONLINE' && (
+            <div style={{ background: 'var(--bg-app)', padding: '10px 12px', borderRadius: '8px', marginBottom: '12px', fontSize: '12px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                <span style={{ fontWeight: '800', display: 'flex', alignItems: 'center', gap: '5px', color: '#16a34a' }}>
+                  <HardDrive size={13} />
+                  드라이브 로컬 미러링 ({mirrorFiles.length}개)
+                </span>
+                <button
+                  type="button"
+                  disabled={isSyncingDrive}
+                  onClick={async () => {
+                    if (!googleConfigs?.[0]) {
+                      alert('구글 연동 설정이 등록되지 않았습니다.');
+                      return;
+                    }
+                    setIsSyncingDrive(true);
+                    setSyncMessage('구글 드라이브 동기화 진행 중...');
+                    try {
+                      const res = await executeDriveMirrorSync(googleConfigs[0], (msg) => setSyncMessage(msg));
+                      if (res.success) {
+                        const mStatus = await getLocalMirrorStatus();
+                        if (mStatus.success) setMirrorFiles(mStatus.files || []);
+                        setSyncMessage(res.message);
+                      } else {
+                        setSyncMessage(`⚠️ ${res.message}`);
+                      }
+                    } catch (e: any) {
+                      setSyncMessage(`⚠️ 동기화 실패: ${e?.message || e}`);
+                    } finally {
+                      setIsSyncingDrive(false);
+                      setTimeout(() => setSyncMessage(''), 4000);
+                    }
+                  }}
+                  style={{
+                    padding: '3px 7px',
+                    fontSize: '11px',
+                    fontWeight: '700',
+                    borderRadius: '4px',
+                    background: 'rgba(22,163,74,0.12)',
+                    color: '#16a34a',
+                    border: '1px solid rgba(22,163,74,0.3)',
+                    cursor: isSyncingDrive ? 'wait' : 'pointer'
+                  }}
+                >
+                  {isSyncingDrive ? '동기화 중...' : '⚡ 지금 동기화'}
+                </button>
+              </div>
+
+              {syncMessage && (
+                <div style={{ fontSize: '11px', color: syncMessage.startsWith('⚠️') ? '#ef4444' : '#16a34a', fontWeight: '700', margin: '4px 0' }}>
+                  {syncMessage}
+                </div>
+              )}
+
+              {mirrorFiles.length > 0 ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', maxHeight: '100px', overflowY: 'auto', marginTop: '4px' }}>
+                  {mirrorFiles.map((f, idx) => (
+                    <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: 'var(--text-secondary)' }}>
+                      <span style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', maxWidth: '200px' }}>📄 {f.name}</span>
+                      <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>{(f.size / 1024).toFixed(1)} KB</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                  아직 미러링된 파일이 없습니다. [⚡ 지금 동기화]를 눌러주세요.
+                </div>
+              )}
+            </div>
+          )}
 
           {/* 액션 버튼 그룹 */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
