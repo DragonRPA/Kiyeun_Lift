@@ -13,6 +13,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const { spawn } = require('child_process');
 const { PDFDocument, rgb } = require('pdf-lib');
 
 const PORT = process.env.PORT || 5175;
@@ -21,10 +22,50 @@ const MACHINE_NAME = os.hostname();
 
 // 📁 전사 표준 절대경로: C:\KiyeunAgent\ 및 하위 문서고
 const AGENT_HOME = 'C:\\KiyeunAgent';
+const TARGET_EXE_PATH = path.join(AGENT_HOME, 'KiyeunAgent.exe');
 const ARCHIVE_ROOT = path.join(AGENT_HOME, '문서고');
 const DRIVE_MIRROR_DIR = path.join(AGENT_HOME, 'drive_mirror');
 
-// 디렉토리 자동 생성
+// =========================================================================
+// 🚀 [자가 자동 설치(Self-Install) 엔진]
+// 사용자가 다운로드 폴더나 바탕화면에서 KiyeunAgent.exe를 실행한 경우,
+// 자동으로 C:\KiyeunAgent\ 를 만들고 자기 자신을 복사한 뒤 정식 위치에서 가동!
+// =========================================================================
+const currentExePath = process.execPath;
+const isExe = currentExePath.toLowerCase().endsWith('.exe') && !currentExePath.toLowerCase().includes('node.exe');
+
+if (isExe && path.resolve(currentExePath).toLowerCase() !== path.resolve(TARGET_EXE_PATH).toLowerCase()) {
+  try {
+    if (!fs.existsSync(AGENT_HOME)) fs.mkdirSync(AGENT_HOME, { recursive: true });
+    if (!fs.existsSync(ARCHIVE_ROOT)) fs.mkdirSync(ARCHIVE_ROOT, { recursive: true });
+    if (!fs.existsSync(DRIVE_MIRROR_DIR)) fs.mkdirSync(DRIVE_MIRROR_DIR, { recursive: true });
+
+    console.log('====================================================');
+    console.log('📦 [기연리프트] 로컬 사이드카 에이전트 자가 자동 설치 진행');
+    console.log(`📍 현재 실행 위치: ${currentExePath}`);
+    console.log(`🎯 표준 정착 경로: ${TARGET_EXE_PATH}`);
+
+    fs.copyFileSync(currentExePath, TARGET_EXE_PATH);
+    console.log('✅ C:\\KiyeunAgent\\KiyeunAgent.exe 로 복사 완료!');
+    console.log('🚀 표준 위치에서 백그라운드 에이전트를 자동 기동합니다...');
+    console.log('====================================================');
+
+    const child = spawn(TARGET_EXE_PATH, [], {
+      detached: true,
+      stdio: 'ignore',
+      windowsHide: false
+    });
+    child.unref();
+
+    console.log('🎉 설치 및 실행이 완료되었습니다. 이 창은 2초 후 자동으로 닫힙니다.');
+    setTimeout(() => { process.exit(0); }, 2000);
+    return;
+  } catch (err) {
+    console.error('⚠️ 자가 설치 중 오류 발생 (현재 위치에서 계속 실행합니다):', err.message);
+  }
+}
+
+// 디렉토리 자동 생성 (정식 위치 실행 시)
 try {
   if (!fs.existsSync(AGENT_HOME)) fs.mkdirSync(AGENT_HOME, { recursive: true });
   if (!fs.existsSync(ARCHIVE_ROOT)) fs.mkdirSync(ARCHIVE_ROOT, { recursive: true });
@@ -34,7 +75,7 @@ try {
 }
 
 console.log('====================================================');
-console.log('🚀 [기연리프트] 로컬 사이드카 에이전트 가동');
+console.log('🚀 [기연리프트] 로컬 사이드카 에이전트 가동 (C:\\KiyeunAgent)');
 console.log(`📡 콜사인(Callsign): ${CALLSIGN}`);
 console.log(`💻 컴퓨터 이름: ${MACHINE_NAME}`);
 console.log(`📂 에이전트 홈 경로: ${AGENT_HOME}`);

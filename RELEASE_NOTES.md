@@ -1,3 +1,15 @@
+# Release Notes (v1.92.0.Build.209 - 2026-08-17 21:44)
+
+## 🚀 [자가 자동 설치(Self-Install) 엔진 탑재] `KiyeunAgent.exe` 최초 실행 시 `C:\KiyeunAgent\` 로 자가 자동 이전 및 백그라운드 전환 완결
+
+### 🌟 반영 내용
+1. **자가 자동 설치(Self-Installation) 메커니즘 구축 (`agent.js`, `KiyeunAgent.exe`)**:
+   - 직원이 다운로드 폴더나 바탕화면 등 임의의 경로에서 `KiyeunAgent.exe`를 더블클릭하면,
+   - 에이전트가 `C:\KiyeunAgent\` 및 `문서고\` 폴더를 자동 생성하고, 자기 자신을 `C:\KiyeunAgent\KiyeunAgent.exe`로 자동 복사 후 정식 위치에서 백그라운드 프로세스로 자동 전환 기동!
+   - 직원의 수작업 폴더 생성/파일 이동 단계 완전 소멸 (0-클릭 완전 자동 설치).
+
+---
+
 # Release Notes (v1.91.0.Build.208 - 2026-08-17 21:41)
 
 ## 📥 [무압축 원클릭 직결 다운로드] `KiyeunAgent.exe` 단독 실행 파일 직접 다운로드 및 압축 해제 단계 제거
