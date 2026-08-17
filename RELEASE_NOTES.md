@@ -1,3 +1,23 @@
+# Release Notes (v1.72.0.Build.189 - 2026-08-17 18:25)
+
+## ⚡ [방식 C 탑재] 구글 로그인 팝업 0회(Zero-Popup)를 위한 Google Apps Script 웹앱 프록시 다운로드 & 실시간 원본 PDF 병합 엔진 연동
+
+### 🌟 개편 배경 및 목적
+- **구글 로그인 팝업 완전 제거**: 브라우저 OAuth 인증 팝업 없이 일반 직원 및 영업사원이 단 1초 만에 원클릭으로 구글 드라이브의 실제 원본 PDF를 병합 다운로드할 수 있도록 Google Apps Script(GAS) 웹앱 프록시 다운로드 방식을 연동 구축했습니다.
+- **SSOT(단일 진실의 원천) 유지**: 구글 드라이브에 보관된 실제 원본 PDF(사업자등록증, 통장사본 등)를 실시간 스트리밍으로 가져와 `pdf-lib`로 100% 무손실 결합합니다.
+
+### ✅ 주요 반영 사항
+1. **Google Apps Script 프록시 다운로드 서비스 (`src/services/googleDriveBackup.ts`)**:
+   - `downloadDriveFileViaAppsScript()`: 등록된 GAS 웹앱 엔드포인트(`?action=downloadFile&fileId=...`)를 호출하여 원본 PDF Base64 데이터를 수신 후 ArrayBuffer로 디코딩.
+2. **다중 연동 모드 지원 병합 엔진 (`src/services/pdfBundle.ts`)**:
+   - `mergeDriveFilesToPdf()`: `appsScriptUrl` 등록 시 팝업 0회 무음 다운로드 수행, 미등록 시 OAuth 팝업 모드로 graceful fallback.
+3. **구글 관리자 설정 화면 고도화 (`src/pages/GoogleConfig.tsx`)**:
+   - **`[📋 Apps Script 프록시 코드 클립보드 복사]`** 버튼 제공: 원클릭으로 구글 Apps Script 편집기에 붙여넣을 배포용 코드를 즉시 복사.
+   - **Apps Script 웹 앱 URL 등록 입력란** 신설 및 연동 상태 실시간 배지 표출.
+   - **`[⚡ 무팝업 원본 PDF 병합 다운로드]`** 테스트 카드 연동.
+
+---
+
 # Release Notes (v1.71.0.Build.188 - 2026-08-17 18:17)
 
 ## 🔗 [구글 드라이브 실연동] 가짜 파일 완전 폐기 및 Google Drive API OAuth `drive.readonly` 실제 원본 파일 바이너리 다운로드·병합 엔진 탑재

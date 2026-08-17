@@ -90,6 +90,38 @@ export function extractDriveFileId(url: string): string | null {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// 2e. Google Apps Script(GAS) 웹앱 프록시를 통한 무팝업 드라이브 파일 바이너리 다운로드 (방식 C)
+// - 클라이언트 OAuth 팝업 0회
+// - Apps Script가 파일 바이너리를 Base64로 반환하면 브라우저에서 ArrayBuffer로 변환
+// ─────────────────────────────────────────────────────────────────────────────
+export async function downloadDriveFileViaAppsScript(appsScriptUrl: string, fileId: string): Promise<ArrayBuffer> {
+  if (!appsScriptUrl?.trim()) {
+    throw new Error('Google Apps Script URL이 설정되지 않았습니다.');
+  }
+
+  const endpoint = `${appsScriptUrl.trim()}?action=downloadFile&fileId=${encodeURIComponent(fileId)}`;
+  const res = await fetch(endpoint);
+
+  if (!res.ok) {
+    throw new Error(`Apps Script 호출 실패 (${fileId}): HTTP ${res.status}`);
+  }
+
+  const data = await res.json();
+  if (!data.success || !data.base64) {
+    throw new Error(`구글 드라이브 파일 추출 실패: ${data.error || 'Base64 데이터 없음'}`);
+  }
+
+  // Base64 문자열 -> ArrayBuffer 변환
+  const binaryString = atob(data.base64);
+  const len = binaryString.length;
+  const bytes = new Uint8Array(len);
+  for (let i = 0; i < len; i++) {
+    bytes[i] = binaryString.charCodeAt(i);
+  }
+  return bytes.buffer;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // 3. 구글 드라이브 루트에서 폴더 검색 (없으면 오류)
 // ─────────────────────────────────────────────────────────────────────────────
 async function findDriveFolder(token: string, folderName: string): Promise<string> {

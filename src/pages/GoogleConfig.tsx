@@ -102,16 +102,12 @@ export const GoogleConfig: React.FC = () => {
 
   const handleRealDriveMergeTest = async () => {
     const cfg = googleConfigs[0];
-    if (!cfg?.oauthClientId?.trim()) {
-      alert('⚠️ [구글 드라이브 설정]에서 OAuth Client ID를 먼저 등록해 주세요.');
-      return;
-    }
 
     // 설정된 URL에서 파일 ID 추출 (사업자등록증, 통장사본, 안전점검결과서 양식)
     const filesToMerge = [
-      { label: '사업자등록증', url: cfg.bizRegCertUrl },
-      { label: '통장사본', url: cfg.bankbookCopyUrl },
-      { label: '안전점검결과서 양식', url: cfg.safetyInspectionTemplateUrl },
+      { label: '사업자등록증', url: cfg?.bizRegCertUrl },
+      { label: '통장사본', url: cfg?.bankbookCopyUrl },
+      { label: '안전점검결과서 양식', url: cfg?.safetyInspectionTemplateUrl },
     ]
       .filter(f => f.url?.includes('drive.google.com'))
       .map(f => ({ label: f.label, fileId: extractDriveFileId(f.url!) }))
@@ -122,21 +118,42 @@ export const GoogleConfig: React.FC = () => {
       return;
     }
 
+    const hasAppsScript = !!cfg?.appsScriptUrl?.trim();
+    const hasOAuth = !!cfg?.oauthClientId?.trim();
+
+    if (!hasAppsScript && !hasOAuth) {
+      alert('⚠️ 구글 연동 방식이 설정되지 않았습니다.\n[Apps Script URL] 또는 [OAuth Client ID] 중 하나를 먼저 등록해 주세요.');
+      return;
+    }
+
     setIsMergingDriveFiles(true);
-    setMergeProgressLabel(`구글 OAuth 인증 중... (팝업에서 계정 선택)`);
+
     try {
-      const token = await getDriveReadToken(cfg.oauthClientId);
+      let token: string | undefined;
+
+      if (hasAppsScript) {
+        setMergeProgressLabel('⚡ Google Apps Script 웹앱 프록시 연결 중 (팝업 없음)...');
+      } else {
+        setMergeProgressLabel('구글 OAuth 인증 중... (팝업에서 계정 선택)');
+        token = await getDriveReadToken(cfg.oauthClientId!);
+      }
+
       const result = await mergeDriveFilesToPdf(
         filesToMerge,
-        token,
-        `[기연리프트]_실제원본병합테스트_${filesToMerge.length}건_${new Date().toISOString().split('T')[0]}.pdf`,
-        (label, idx, total) => setMergeProgressLabel(`[${idx}/${total}] ${label} 다운로드 및 병합 중...`)
+        {
+          token,
+          appsScriptUrl: hasAppsScript ? cfg.appsScriptUrl : undefined,
+          outputFileName: `[기연리프트]_실제원본병합테스트_${filesToMerge.length}건_${new Date().toISOString().split('T')[0]}.pdf`,
+          onProgress: (label, idx, total) =>
+            setMergeProgressLabel(`[${idx}/${total}] ${label} 다운로드 및 병합 중...`)
+        }
       );
 
+      const modeText = hasAppsScript ? '⚡ Apps Script 프록시 (팝업 0회)' : '🔑 OAuth 인증';
       const failMsg = result.failedLabels.length > 0
         ? `\n\n⚠️ 실패: ${result.failedLabels.join(', ')}`
         : '';
-      alert(`✅ 구글 드라이브 원본 파일 병합 완료!\n\n성공: ${result.successCount}건 / 총 ${filesToMerge.length}건\n총 ${result.totalPages}페이지${failMsg}`);
+      alert(`✅ 구글 드라이브 원본 파일 병합 완료! (${modeText})\n\n성공: ${result.successCount}건 / 총 ${filesToMerge.length}건\n총 ${result.totalPages}페이지${failMsg}`);
     } catch (err: any) {
       alert(`⚠️ 병합 실패: ${err?.message || err}`);
     } finally {
@@ -462,13 +479,28 @@ function doGet(e) {
       <div className="card" style={{ marginBottom: '24px', padding: '20px', background: 'linear-gradient(135deg, rgba(0,128,0,0.07) 0%, rgba(0,128,0,0.02) 100%)', border: '1px solid rgba(0,128,0,0.35)', borderRadius: '12px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '16px' }}>
           <div style={{ flex: 1 }}>
-            <h3 style={{ margin: '0 0 6px 0', fontSize: '16px', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-primary)' }}>
-              <FileText size={20} style={{ color: '#16a34a' }} />
-              구글 드라이브 실제 원본 파일 병합 테스트
-            </h3>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
+              <h3 style={{ margin: 0, fontSize: '16px', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-primary)' }}>
+                <FileText size={20} style={{ color: '#16a34a' }} />
+                구글 드라이브 실제 원본 파일 병합 테스트
+              </h3>
+              {currentConfig?.appsScriptUrl ? (
+                <span style={{ fontSize: '11px', padding: '3px 8px', borderRadius: '4px', background: 'rgba(22,163,74,0.15)', color: '#16a34a', fontWeight: 'bold' }}>
+                  ⚡ Apps Script 무팝업(0회) 모드
+                </span>
+              ) : (
+                <span style={{ fontSize: '11px', padding: '3px 8px', borderRadius: '4px', background: 'rgba(59,130,246,0.15)', color: '#3b82f6', fontWeight: 'bold' }}>
+                  🔑 OAuth 팝업 모드
+                </span>
+              )}
+            </div>
             <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-secondary)' }}>
               설정에 등록된 <strong>사업자등록증 · 통장사본 · 안전점검결과서 양식</strong>의 실제 구글 드라이브 원본 PDF 파일을 읽어와 단일 PDF로 병합합니다.<br/>
-              OAuth 인증 팝업이 1회 나타납니다. 계정 선택 후 자동 다운로드됩니다.
+              {currentConfig?.appsScriptUrl ? (
+                <span style={{ color: '#16a34a', fontWeight: '600' }}>⚡ Apps Script 프록시가 연동되어 별도 구글 로그인 팝업 없이 즉시 원클릭으로 다운로드됩니다.</span>
+              ) : (
+                <span>💡 OAuth 팝업이 1회 나타납니다. (Apps Script URL을 등록하면 팝업 0회 무음 다운로드로 자동 전환됩니다)</span>
+              )}
             </p>
             {isMergingDriveFiles && mergeProgressLabel && (
               <p style={{ margin: '8px 0 0 0', fontSize: '12px', color: '#16a34a', fontWeight: 'bold' }}>
@@ -484,7 +516,7 @@ function doGet(e) {
             style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 18px', fontSize: '13.5px', fontWeight: 'bold', whiteSpace: 'nowrap', background: '#16a34a', border: 'none', borderRadius: '8px', color: '#fff', cursor: isMergingDriveFiles ? 'wait' : 'pointer', opacity: isMergingDriveFiles ? 0.7 : 1 }}
           >
             <Download size={16} />
-            {isMergingDriveFiles ? '원본 파일 병합 중...' : '🔗 실제 원본 PDF 병합 다운로드'}
+            {isMergingDriveFiles ? '원본 파일 병합 중...' : (currentConfig?.appsScriptUrl ? '⚡ 무팝업 원본 PDF 병합 다운로드' : '🔗 실제 원본 PDF 병합 다운로드')}
           </button>
         </div>
       </div>
@@ -1104,9 +1136,102 @@ function doGet(e) {
 
         </form>
 
-        {/* 오른쪽 영역: 구글 드라이브 용량 모니터링 & 앱 비밀번호 가이드 */}
+        {/* 오른쪽 영역: 구글 드라이브 Apps Script 프록시 & 용량 모니터링 & 앱 비밀번호 가이드 */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
           
+          {/* ⚡ Google Apps Script 웹앱 프록시 설정 (팝업 0회 무음 다운로드) */}
+          <div className="card" style={{ margin: 0, padding: '24px', border: '1px solid #16a34a', backgroundColor: 'var(--card-bg)' }}>
+            <h3 style={{ fontSize: '15px', fontWeight: '800', borderBottom: '1px solid var(--border)', paddingBottom: '12px', marginBottom: '14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <FileText size={18} style={{ color: '#16a34a' }} /> ⚡ Apps Script 웹앱 프록시 (팝업 0회)
+              </span>
+              {appsScriptUrl?.trim() ? (
+                <span style={{ fontSize: '11px', fontWeight: '700', padding: '3px 8px', borderRadius: '4px', background: 'rgba(22,163,74,0.15)', color: '#16a34a' }}>
+                  ✅ 연동 활성화됨
+                </span>
+              ) : (
+                <span style={{ fontSize: '11px', fontWeight: '700', padding: '3px 8px', borderRadius: '4px', background: 'rgba(245,158,11,0.15)', color: '#f59e0b' }}>
+                  미등록 (OAuth 팝업 사용 중)
+                </span>
+              )}
+            </h3>
+
+            <p style={{ fontSize: '12.5px', color: 'var(--text-secondary)', lineHeight: '1.6', margin: '0 0 14px 0' }}>
+              Google Apps Script 웹앱을 1회 배포하여 URL을 등록하면, 전 직원이 <strong>구글 로그인 팝업 0회(Zero-Popup)</strong>로 구글 드라이브 원본 PDF를 실시간 자동 병합할 수 있습니다.
+            </p>
+
+            {/* Apps Script 배포 3단계 가이드 */}
+            <div style={{ background: 'var(--bg-app)', border: '1px solid var(--border)', borderRadius: '8px', padding: '12px', fontSize: '12px', lineHeight: '1.7', marginBottom: '14px' }}>
+              <strong style={{ color: 'var(--text-primary)', display: 'block', marginBottom: '4px' }}>📋 1회성 배포 절차 (약 1분):</strong>
+              <ol style={{ margin: 0, paddingLeft: '16px', color: 'var(--text-secondary)' }}>
+                <li>아래 <strong>[Apps Script 코드 복사]</strong> 버튼 클릭</li>
+                <li><a href="https://script.google.com/home/start" target="_blank" rel="noreferrer" style={{ color: 'var(--primary)', fontWeight: 'bold' }}>script.google.com</a> 접속 → [새 프로젝트]에 붙여넣기</li>
+                <li>우측 상단 <strong>[배포] → [새 배포]</strong> → 유형: <strong>웹 앱</strong> 선택<br/>
+                  • 실행할 사용자: <strong>나(관리자 계정)</strong><br/>
+                  • 액세스 권한: <strong>모든 사용자</strong></li>
+                <li>발급된 <strong>웹 앱 URL</strong>을 아래 입력란에 붙여넣고 저장</li>
+              </ol>
+            </div>
+
+            {/* 코드 복사 버튼 */}
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={() => {
+                const gasCode = `function doGet(e) {
+  var fileId = e.parameter.fileId;
+  var action = e.parameter.action;
+  
+  if (action === 'downloadFile' && fileId) {
+    try {
+      var file = DriveApp.getFileById(fileId);
+      var blob = file.getBlob();
+      var base64 = Utilities.base64Encode(blob.getBytes());
+      return ContentService.createTextOutput(JSON.stringify({
+        success: true,
+        name: file.getName(),
+        mimeType: file.getMimeType(),
+        base64: base64
+      })).setMimeType(ContentService.MimeType.JSON);
+    } catch (err) {
+      return ContentService.createTextOutput(JSON.stringify({
+        success: false,
+        error: err.toString()
+      })).setMimeType(ContentService.MimeType.JSON);
+    }
+  }
+  
+  return ContentService.createTextOutput(JSON.stringify({
+    success: true,
+    message: "Kiyeun Lift Google Drive Proxy Ready"
+  })).setMimeType(ContentService.MimeType.JSON);
+}`;
+                navigator.clipboard.writeText(gasCode);
+                alert('📋 Google Apps Script 프록시 코드가 클립보드에 복사되었습니다!\nscript.google.com에 붙여넣고 배포해 주세요.');
+              }}
+              style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', padding: '9px', fontSize: '12.5px', fontWeight: 'bold', marginBottom: '14px' }}
+            >
+              📋 Apps Script 프록시 코드 클립보드 복사
+            </button>
+
+            {/* Apps Script Web App URL 입력창 */}
+            <div>
+              <label style={{ fontSize: '12.5px', fontWeight: 'bold', display: 'block', marginBottom: '6px' }}>
+                배포된 Apps Script 웹 앱 URL:
+              </label>
+              <input
+                type="url"
+                value={appsScriptUrl}
+                onChange={e => setAppsScriptUrl(e.target.value)}
+                placeholder="https://script.google.com/macros/s/.../exec"
+                style={{ width: '100%', padding: '9px 12px', fontSize: '12px', borderRadius: '6px', border: '1px solid var(--border)', backgroundColor: 'var(--bg-app)', color: 'var(--text-primary)' }}
+              />
+              <small style={{ display: 'block', marginTop: '4px', color: 'var(--text-muted)', fontSize: '11px' }}>
+                ※ 끝이 <code style={{ color: 'var(--primary)' }}>/exec</code>로 끝나는 URL을 입력하세요.
+              </small>
+            </div>
+          </div>
+
           {/* 구글 드라이브 용량 감시 모니터 카드 */}
           <div className="card" style={{ margin: 0, padding: '24px', backgroundColor: 'var(--card-bg)' }}>
             <h3 style={{ fontSize: '15px', fontWeight: '800', borderBottom: '1px solid var(--border)', paddingBottom: '12px', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>

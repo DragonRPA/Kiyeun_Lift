@@ -363,7 +363,7 @@ export async function downloadContractDocumentBundlePdf(options?: SampleContract
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
-// 실제 구글 드라이브 파일 ID 목록을 OAuth token으로 다운로드하여 pdf-lib로 병합
+// 실제 구글 드라이브 파일 ID 목록을 (OAuth token 또는 Apps Script 프록시)로 다운로드하여 pdf-lib로 병합
 // ──────────────────────────────────────────────────────────────────────────────
 export interface DriveFileMergeItem {
   label: string;   // 파일 명칭 (로그용)
@@ -376,31 +376,64 @@ export interface MergeDriveFilesResult {
   totalPages: number;
 }
 
+export interface MergeDriveFilesOptions {
+  token?: string;
+  appsScriptUrl?: string;
+  outputFileName: string;
+  onProgress?: (label: string, index: number, total: number) => void;
+}
+
 export async function mergeDriveFilesToPdf(
   items: DriveFileMergeItem[],
-  token: string,
-  outputFileName: string,
-  onProgress?: (label: string, index: number, total: number) => void
+  options: MergeDriveFilesOptions | string, // 이전 시그니처 호환 (string이면 token)
+  legacyOutputFileName?: string,
+  legacyOnProgress?: (label: string, index: number, total: number) => void
 ): Promise<MergeDriveFilesResult> {
   const mergedPdf = await PDFDocument.create();
   const result: MergeDriveFilesResult = { successCount: 0, failedLabels: [], totalPages: 0 };
+
+  const resolvedOptions: MergeDriveFilesOptions = typeof options === 'string'
+    ? { token: options, outputFileName: legacyOutputFileName || 'merged.pdf', onProgress: legacyOnProgress }
+    : options;
+
+  const { token, appsScriptUrl, outputFileName, onProgress } = resolvedOptions;
 
   for (let i = 0; i < items.length; i++) {
     const item = items[i];
     onProgress?.(item.label, i + 1, items.length);
 
     try {
-      const res = await fetch(
-        `https://www.googleapis.com/drive/v3/files/${item.fileId}?alt=media`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      let pdfBytes: ArrayBuffer;
 
-      if (!res.ok) {
-        throw new Error(`HTTP ${res.status} ${res.statusText}`);
+      if (appsScriptUrl?.trim()) {
+        // [방식 C] Google Apps Script 웹앱 프록시 (팝업 0회)
+        const endpoint = `${appsScriptUrl.trim()}?action=downloadFile&fileId=${encodeURIComponent(item.fileId)}`;
+        const res = await fetch(endpoint);
+        if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
+        const data = await res.json();
+        if (!data.success || !data.base64) {
+          throw new Error(data.error || '파일 데이터 수신 실패');
+        }
+        const binaryString = atob(data.base64);
+        const len = binaryString.length;
+        const bytes = new Uint8Array(len);
+        for (let k = 0; k < len; k++) {
+          bytes[k] = binaryString.charCodeAt(k);
+        }
+        pdfBytes = bytes.buffer;
+      } else if (token?.trim()) {
+        // [방식 B] OAuth Token 직접 호출
+        const res = await fetch(
+          `https://www.googleapis.com/drive/v3/files/${item.fileId}?alt=media`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
+        pdfBytes = await res.arrayBuffer();
+      } else {
+        throw new Error('Google Apps Script URL 또는 OAuth 인증 토큰이 필요합니다.');
       }
 
       // 실제 원본 바이너리 읽기
-      const pdfBytes = await res.arrayBuffer();
       const srcDoc = await PDFDocument.load(pdfBytes);
       const copiedPages = await mergedPdf.copyPages(srcDoc, srcDoc.getPageIndices());
       copiedPages.forEach((page) => mergedPdf.addPage(page));
