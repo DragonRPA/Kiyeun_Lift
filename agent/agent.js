@@ -286,6 +286,53 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // 3-2. 로컬 PC 내 Google Drive 폴더 직결 미러링 API (구글 클라우드 OAuth 403 차단 100% 원천 해결)
+  if (req.method === 'POST' && pathname === '/api/sync-local-path') {
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', async () => {
+      try {
+        const payload = JSON.parse(body || '{}');
+        const sourceDir = payload.sourcePath;
+        if (!sourceDir || !fs.existsSync(sourceDir)) {
+          res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
+          res.end(JSON.stringify({ success: false, message: '지정한 로컬 폴더 경로가 존재하지 않습니다.' }));
+          return;
+        }
+
+        const copyRecursively = (src, dest) => {
+          if (!fs.existsSync(dest)) fs.mkdirSync(dest, { recursive: true });
+          const entries = fs.readdirSync(src, { withFileTypes: true });
+          let count = 0;
+          for (const entry of entries) {
+            if (entry.name.startsWith('.') || entry.name === 'archive') continue;
+            const srcPath = path.join(src, entry.name);
+            const destPath = path.join(dest, entry.name);
+            if (entry.isDirectory()) {
+              count += copyRecursively(srcPath, destPath);
+            } else {
+              fs.copyFileSync(srcPath, destPath);
+              count++;
+            }
+          }
+          return count;
+        };
+
+        const totalCopied = copyRecursively(sourceDir, DRIVE_MIRROR_DIR);
+        res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify({
+          success: true,
+          totalCopied,
+          message: `✅ 로컬 드라이브 (${sourceDir})에서 총 ${totalCopied}개 파일이 C:\\KiyeunAgent\\drive_mirror\\ 로 즉시 복제되었습니다.`
+        }));
+      } catch (err) {
+        res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify({ success: false, error: err.message }));
+      }
+    });
+    return;
+  }
+
   // 4. 계약 서류 팩 무손실 생산 및 로컬 문서고 보관 API
   if (req.method === 'POST' && pathname === '/api/execute-job') {
     let body = '';

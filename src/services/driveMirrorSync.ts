@@ -83,13 +83,7 @@ export async function executeDriveMirrorSync(
   });
 
   let token: string | undefined;
-  if (!appsScriptUrl) {
-    try {
-      token = await getDriveReadToken(clientId);
-    } catch (e: any) {
-      console.warn('구글 토큰 획득 건너뜀 (내장 템플릿 우선 동기화):', e);
-    }
-  }
+  // 🚫 사용자를 방해하는 자동 구글 로그인 팝업 호출 영구 금지 (차단 에러 방지)
 
   const payloadFiles: Array<{ name: string; base64Content: string; modifiedTime: string }> = [];
   let successCount = 0;
