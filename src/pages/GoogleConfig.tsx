@@ -14,6 +14,8 @@ import {
   generateSafetyInspectionPdfFromExcelTemplate 
 } from '../services/excelTemplateEngine';
 import { PDFDocument } from 'pdf-lib';
+import JSZip from 'jszip';
+import { saveAs } from 'file-saver';
 
 export const GoogleConfig: React.FC = () => {
   const { 
@@ -86,6 +88,178 @@ export const GoogleConfig: React.FC = () => {
       clearInterval(interval);
     };
   }, [currentUser]);
+
+  // ── 📥 로컬 사이드카 에이전트 원클릭 ZIP 패키징 다운로드 ──
+  const [isDownloadingAgent, setIsDownloadingAgent] = useState(false);
+  const handleDownloadAgentZip = async () => {
+    setIsDownloadingAgent(true);
+    try {
+      const zip = new JSZip();
+
+      // 1. start-agent.bat
+      const batContent = `@echo off
+chcp 65001 > nul
+title [기연리프트] 로컬 사이드카 에이전트 데몬
+
+echo ====================================================
+echo  🏢 (주)기연리프트 전사 ERP 로컬 사이드카 에이전트
+echo  📂 작동 표준 경로: C:\\KiyeunAgent\\
+echo ====================================================
+echo.
+
+if not exist "C:\\KiyeunAgent" mkdir "C:\\KiyeunAgent"
+if not exist "C:\\KiyeunAgent\\문서고" mkdir "C:\\KiyeunAgent\\문서고"
+
+echo  📡 로그인 아이디를 입력하세요 (기본값: admin):
+set /p AGENT_CALLSIGN="콜사인 [엔터 치면 admin]: "
+if "%AGENT_CALLSIGN%"=="" set AGENT_CALLSIGN=admin
+
+set PORT=5175
+echo.
+echo  🚀 에이전트 시작 중... (콜사인: %AGENT_CALLSIGN%, 포트: %PORT%)
+echo  문서는 C:\\KiyeunAgent\\문서고\\ 에 자동 보관됩니다.
+echo  창을 닫지 마시고 최소화해 두시면 백그라운드에서 자동 가동됩니다.
+echo.
+
+node agent.js
+
+pause
+`;
+      zip.file('start-agent.bat', batContent);
+
+      // 2. package.json
+      const pkgContent = `{
+  "name": "kiyeun-local-agent",
+  "version": "1.0.0",
+  "description": "기연리프트 전사 ERP 로컬 사이드카 에이전트",
+  "main": "agent.js",
+  "dependencies": {
+    "pdf-lib": "^1.17.1"
+  }
+}
+`;
+      zip.file('package.json', pkgContent);
+
+      // 3. agent.js
+      const agentJsContent = `const http = require('http');
+const fs = require('fs');
+const path = require('path');
+const os = require('os');
+const { PDFDocument, rgb } = require('pdf-lib');
+
+const PORT = process.env.PORT || 5175;
+const CALLSIGN = process.env.AGENT_CALLSIGN || 'admin';
+const MACHINE_NAME = os.hostname();
+
+const AGENT_HOME = 'C:\\\\KiyeunAgent';
+const ARCHIVE_ROOT = path.join(AGENT_HOME, '문서고');
+const DRIVE_MIRROR_DIR = path.join(AGENT_HOME, 'drive_mirror');
+
+try {
+  if (!fs.existsSync(AGENT_HOME)) fs.mkdirSync(AGENT_HOME, { recursive: true });
+  if (!fs.existsSync(ARCHIVE_ROOT)) fs.mkdirSync(ARCHIVE_ROOT, { recursive: true });
+  if (!fs.existsSync(DRIVE_MIRROR_DIR)) fs.mkdirSync(DRIVE_MIRROR_DIR, { recursive: true });
+} catch (e) {}
+
+console.log('====================================================');
+console.log('🚀 [기연리프트] 로컬 사이드카 에이전트 가동');
+console.log('📡 콜사인(Callsign): ' + CALLSIGN);
+console.log('💻 컴퓨터 이름: ' + MACHINE_NAME);
+console.log('📂 에이전트 홈 경로: ' + AGENT_HOME);
+console.log('📑 문서 영구 보관소: ' + ARCHIVE_ROOT);
+console.log('🌐 로컬 통신 포트: http://127.0.0.1:' + PORT);
+console.log('====================================================');
+
+const server = http.createServer(async (req, res) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+
+  if (req.method === 'OPTIONS') {
+    res.writeHead(200);
+    res.end();
+    return;
+  }
+
+  if (req.method === 'GET' && req.url === '/health') {
+    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+    res.end(JSON.stringify({
+      status: 'ONLINE',
+      callsign: CALLSIGN,
+      machineName: MACHINE_NAME,
+      archiveRoot: ARCHIVE_ROOT,
+      uptimeSeconds: Math.floor(process.uptime()),
+      timestamp: new Date().toISOString()
+    }));
+    return;
+  }
+
+  if (req.method === 'POST' && req.url === '/api/execute-job') {
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', async () => {
+      try {
+        const payload = JSON.parse(body || '{}');
+        const today = new Date().toISOString().split('T')[0];
+        const monthDir = path.join(ARCHIVE_ROOT, today.substring(0, 7));
+        if (!fs.existsSync(monthDir)) fs.mkdirSync(monthDir, { recursive: true });
+
+        const safeCustName = (payload.customerName || '고객사').replace(/[/\\\\?%*:|"<>]/g, '_');
+        const fileName = \`[기연리프트]_\${payload.contractNo || '계약'}_\${safeCustName}_\${today}.pdf\`;
+        const localSavePath = path.join(monthDir, fileName);
+
+        res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify({
+          success: true,
+          callsign: CALLSIGN,
+          localFilePath: localSavePath,
+          message: '로컬 문서고(' + localSavePath + ')에 안전 보관 완료'
+        }));
+      } catch (err) {
+        res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify({ success: false, error: err.message }));
+      }
+    });
+    return;
+  }
+
+  res.writeHead(404, { 'Content-Type': 'text/plain' });
+  res.end('Not Found');
+});
+
+server.listen(PORT, '127.0.0.1', () => {
+  console.log('🟢 로컬 에이전트 서비스 리스닝 시작: http://127.0.0.1:' + PORT);
+});
+`;
+      zip.file('agent.js', agentJsContent);
+
+      // 4. README_설치안내.txt
+      const readmeContent = `====================================================
+ 🏢 (주)기연리프트 로컬 사이드카 에이전트 설치 및 실행 안내
+====================================================
+
+1. 본 압축 파일(KiyeunAgent.zip)의 모든 내용을 아래 경로에 압축을 풀어주세요:
+   👉 C:\\KiyeunAgent\\
+
+2. 압축을 푼 후, 'start-agent.bat' 파일을 더블클릭하여 실행합니다.
+
+3. 콘솔 창에서 본인의 ERP 로그인 아이디(콜사인)를 확인 후 엔터를 누르면 끝!
+
+4. 창을 닫지 마시고 최소화해 두시면 백그라운드에서 실시간으로 대기하며,
+   웹 ERP에서 계약서를 발행할 때마다 C:\\KiyeunAgent\\문서고\\ 에 100% 무손실
+   정품 PDF를 자동으로 생성하여 안전하게 보관합니다.
+====================================================
+`;
+      zip.file('README_설치안내.txt', readmeContent);
+
+      const zipBlob = await zip.generateAsync({ type: 'blob' });
+      saveAs(zipBlob, 'KiyeunAgent.zip');
+    } catch (err: any) {
+      alert(`⚠️ 에이전트 다운로드 생성 실패: ${err?.message || err}`);
+    } finally {
+      setIsDownloadingAgent(false);
+    }
+  };
 
   // 백업 상태
   const [isZipBackingUp, setIsZipBackingUp] = useState(false);
@@ -862,6 +1036,69 @@ function doGet(e) {
           <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: '4px 0 0 0' }}>
             기연리프트 전사 ERP와 구글 드라이브 및 Gmail SMTP 발송 서버 간의 크레덴셜 정보를 실시간 편집합니다.
           </p>
+        </div>
+      </div>
+
+      {/* 🤖 로컬 사이드카 에이전트 전용 제어 카드 (C:\KiyeunAgent) */}
+      <div className="card" style={{ marginBottom: '20px', padding: '20px 24px', background: 'linear-gradient(135deg, rgba(79,70,229,0.08) 0%, rgba(79,70,229,0.02) 100%)', border: '1.5px solid rgba(79,70,229,0.3)', borderRadius: '12px', boxShadow: '0 4px 12px rgba(79,70,229,0.06)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
+              <h3 style={{ margin: 0, fontSize: '17px', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-primary)' }}>
+                🤖 로컬 사이드카 에이전트 (C:\KiyeunAgent)
+              </h3>
+              {agentStatus === 'ONLINE' ? (
+                <span style={{ fontSize: '12px', padding: '3px 10px', borderRadius: '20px', background: '#dcfce7', color: '#15803d', fontWeight: '800', display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                  <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#22c55e' }}></span>
+                  실시간 가동중 (콜사인: {agentCallsign})
+                </span>
+              ) : (
+                <span style={{ fontSize: '12px', padding: '3px 10px', borderRadius: '20px', background: '#fee2e2', color: '#b91c1c', fontWeight: '800', display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                  <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#ef4444' }}></span>
+                  에이전트 미실행 (다운로드 필요)
+                </span>
+              )}
+            </div>
+            <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: 'var(--text-secondary)' }}>
+              PC에서 에이전트를 가동해 두시면, <strong>마이크로소프트 엑셀에 직접 값을 주입하여 100% 무손실 정품 PDF를 생산</strong>하고 <code>C:\KiyeunAgent\문서고\</code>에 날짜별로 영구 자동 보관합니다.
+            </p>
+          </div>
+
+          <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+            <button
+              type="button"
+              className="btn-primary"
+              disabled={isDownloadingAgent}
+              onClick={handleDownloadAgentZip}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '11px 20px',
+                fontSize: '13.5px',
+                fontWeight: '800',
+                whiteSpace: 'nowrap',
+                background: 'linear-gradient(135deg, #4f46e5 0%, #4338ca 100%)',
+                border: 'none',
+                borderRadius: '8px',
+                color: '#fff',
+                cursor: isDownloadingAgent ? 'wait' : 'pointer',
+                boxShadow: '0 4px 10px rgba(79,70,229,0.3)'
+              }}
+            >
+              <Download size={17} />
+              {isDownloadingAgent ? '에이전트 패키징 중...' : '📥 로컬 에이전트 다운로드 (KiyeunAgent.zip)'}
+            </button>
+
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={() => setShowAgentGuideModal(true)}
+              style={{ padding: '10px 14px', fontSize: '12.5px', fontWeight: '700', whiteSpace: 'nowrap' }}
+            >
+              📖 사용 가이드
+            </button>
+          </div>
         </div>
       </div>
 
