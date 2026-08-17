@@ -135,7 +135,10 @@ export interface PreDeliveryChecklistExcelData {
 }
 
 /**
- * 안전점검 결과서 데이터 주입 맵퍼 규격 (설계 참고용 인터페이스)
+ * 안전점검 결과서 데이터 주입 맵퍼 규격
+ * ⚠️ 실무 규칙:
+ * - 제조사/장비중량/운행속도/작업높이/안전인증일은 ERP [제품관리] 마스터에서 100% 자동 호출.
+ * - 점검자(김관주) 및 도장 날인은 원본 템플릿에 이미 박혀 있으므로 수정 불필요 (100% 원본 보존).
  */
 export interface SafetyInspectionExcelData {
   siteName: string;            // 사업장명
@@ -144,12 +147,13 @@ export interface SafetyInspectionExcelData {
   lessorName?: string;         // 렌탈사 (기본값: '(주)기연리프트')
   modelName: string;           // 모델명
   serialNo: string;            // 차량/장비번호
-  weight: string;              // 장비중량
-  maxHeightCapacity: string;   // 작업최대높이/적재용량
-  safetyCertDate: string;      // 안전인증년월일
-  inspectionDate: string;      // 안전점검일시
-  manufactureYear?: string;    // 제조년도
-  inspectorName: string;       // 점검자
+  weight: string;              // 장비중량 (ERP [제품관리] 마스터에서 자동 호출)
+  speed: string;               // 운행속도 (ERP [제품관리] 마스터에서 자동 호출)
+  maxHeightCapacity: string;   // 작업최대높이/적재용량 (ERP [제품관리] 마스터에서 자동 호출)
+  safetyCertDate: string;      // 안전인증년월일 (ERP [제품관리] 마스터에서 자동 호출)
+  inspectionDate: string;      // 안전점검일시 (출고일자)
+  manufactureYear?: string;    // 제조년도 (ERP [자산대장] 마스터에서 자동 호출)
+  inspectorName?: string;      // 점검자 (상시 '김관주' 고정, 원본 보존)
   results?: Record<string, string>; // 검사결과 목록
 }
 

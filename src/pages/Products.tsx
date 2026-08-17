@@ -70,10 +70,10 @@ export const Products: React.FC = () => {
     
     let simulatedQuery = "";
     if (isEdit) {
-      simulatedQuery = `UPDATE products \nSET "modelName" = '${finalProduct.modelName}', feet = ${finalProduct.feet}, manufacturer = '${finalProduct.manufacturer || ''}', spec = '${finalProduct.spec || ''}' \nWHERE id = '${finalProduct.id}';`;
+      simulatedQuery = `UPDATE products \nSET "modelName" = '${finalProduct.modelName}', feet = ${finalProduct.feet}, manufacturer = '${finalProduct.manufacturer || ''}', spec = '${finalProduct.spec || ''}', weight = '${finalProduct.weight || ''}', speed = '${finalProduct.speed || ''}', "maxHeightCapacity" = '${finalProduct.maxHeightCapacity || ''}', "safetyCertDate" = '${finalProduct.safetyCertDate || ''}' \nWHERE id = '${finalProduct.id}';`;
     } else {
       const nextId = db.generateNextId('products', products);
-      simulatedQuery = `INSERT INTO products (id, "modelName", feet, spec, manufacturer, "createdAt") \nVALUES ('${nextId}', '${finalProduct.modelName}', ${finalProduct.feet}, '${finalProduct.spec || ''}', '${finalProduct.manufacturer || ''}', '${new Date().toISOString()}');`;
+      simulatedQuery = `INSERT INTO products (id, "modelName", feet, spec, manufacturer, weight, speed, "maxHeightCapacity", "safetyCertDate", "createdAt") \nVALUES ('${nextId}', '${finalProduct.modelName}', ${finalProduct.feet}, '${finalProduct.spec || ''}', '${finalProduct.manufacturer || ''}', '${finalProduct.weight || ''}', '${finalProduct.speed || ''}', '${finalProduct.maxHeightCapacity || ''}', '${finalProduct.safetyCertDate || ''}', '${new Date().toISOString()}');`;
     }
 
     alert(`[DB 전송 예정 SQL 쿼리 안내]\n\n${simulatedQuery}\n\n확인을 누르면 Supabase에 전송됩니다.`);
@@ -199,6 +199,10 @@ export const Products: React.FC = () => {
               <th onClick={() => handleSort('manufacturer')} style={{ cursor: 'pointer', userSelect: 'none' }}>
                 제조사 {renderSortArrow('manufacturer')}
               </th>
+              <th style={{ whiteSpace: 'nowrap' }}>장비중량</th>
+              <th style={{ whiteSpace: 'nowrap' }}>운행속도</th>
+              <th style={{ whiteSpace: 'nowrap' }}>작업높이/용량</th>
+              <th style={{ whiteSpace: 'nowrap' }}>안전인증일</th>
               <th onClick={() => handleSort('isActive')} style={{ cursor: 'pointer', userSelect: 'none' }}>
                 사용 여부 {renderSortArrow('isActive')}
               </th>
@@ -214,7 +218,7 @@ export const Products: React.FC = () => {
           <tbody>
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={canSave ? 9 : 8} style={{ textAlign: 'center', padding: '40px 0', color: 'var(--text-muted)' }}>
+                <td colSpan={canSave ? 13 : 12} style={{ textAlign: 'center', padding: '40px 0', color: 'var(--text-muted)' }}>
                   {products.length === 0 ? '📭 등록된 제품 모델이 없습니다.' : '🔍 조회 조건에 맞는 제품 모델이 없습니다. 검색어를 변경해 보세요.'}
                 </td>
               </tr>
@@ -228,6 +232,10 @@ export const Products: React.FC = () => {
                     <td>{p.feet} ft</td>
                     <td>{p.spec}</td>
                     <td>{p.manufacturer}</td>
+                    <td style={{ whiteSpace: 'nowrap' }}>{p.weight || '-'}</td>
+                    <td style={{ whiteSpace: 'nowrap' }}>{p.speed || '-'}</td>
+                    <td style={{ whiteSpace: 'nowrap' }}>{p.maxHeightCapacity || '-'}</td>
+                    <td style={{ whiteSpace: 'nowrap' }}>{p.safetyCertDate || '-'}</td>
                     <td>
                       <span className={`badge ${p.isActive !== false ? 'badge-success' : 'badge-secondary'}`}>
                         {p.isActive !== false ? '사용' : '미사용'}
@@ -291,6 +299,49 @@ export const Products: React.FC = () => {
                   placeholder="예: Skyjack, Genie"
                 />
               </div>
+              
+              {/* 🌟 안전점검결과서 자동 연동 4대 핵심 제원 영역 */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div>
+                  <label>장비중량</label>
+                  <input
+                    type="text"
+                    value={editingProduct.weight || ''}
+                    onChange={e => setEditingProduct({ ...editingProduct, weight: e.target.value })}
+                    placeholder="예: 7,513 kg 또는 1,500 kg"
+                  />
+                </div>
+                <div>
+                  <label>운행속도</label>
+                  <input
+                    type="text"
+                    value={editingProduct.speed || ''}
+                    onChange={e => setEditingProduct({ ...editingProduct, speed: e.target.value })}
+                    placeholder="예: 4.8 Km/h 또는 3.5 Km/h"
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div>
+                  <label>작업최대높이 / 적재용량</label>
+                  <input
+                    type="text"
+                    value={editingProduct.maxHeightCapacity || ''}
+                    onChange={e => setEditingProduct({ ...editingProduct, maxHeightCapacity: e.target.value })}
+                    placeholder="예: 15.9 M / 227 kg"
+                  />
+                </div>
+                <div>
+                  <label>안전인증년월일 (KCs)</label>
+                  <input
+                    type="date"
+                    value={editingProduct.safetyCertDate || ''}
+                    onChange={e => setEditingProduct({ ...editingProduct, safetyCertDate: e.target.value })}
+                  />
+                </div>
+              </div>
+
               <div>
                 <label>제원 및 특징</label>
                 <textarea

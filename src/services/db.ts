@@ -183,6 +183,13 @@ export interface Product {
   spec: string;
   manufacturer: string;
   isActive?: boolean; // 사용/미사용 (단종/매각 등)
+  
+  // 🌟 안전점검결과서 자동 연동 4대 핵심 제원
+  weight?: string;           // 장비중량 (예: '7,513 kg', '1,500 kg')
+  speed?: string;            // 운행속도 (예: '4.8 Km/h', '3.5 Km/h')
+  maxHeightCapacity?: string;// 작업최대높이/적재용량 (예: '15.9 M / 227 kg', '7.8 M / 227 kg')
+  safetyCertDate?: string;   // 안전인증년월일 (예: '2009-09-14', '2024-03-01')
+
   safetyCertUrl?: string;
   specSheetUrl?: string;
   emergencyGuideUrl?: string;
@@ -825,9 +832,10 @@ export interface ExternalLease {
 
 const generateMockProducts = (): Product[] => {
   return [
-    { id: 'prod-1', modelName: 'SKY-800', feet: 8, spec: '배터리형, 8m', manufacturer: 'SKY', isActive: true, createdAt: new Date().toISOString() },
-    { id: 'prod-2', modelName: 'GENIE-1000', feet: 10, spec: '디젤형, 10m', manufacturer: 'GENIE', isActive: true, createdAt: new Date().toISOString() },
-    { id: 'prod-3', modelName: 'LIFT-1200', feet: 12, spec: '전동형, 12m', manufacturer: 'LIFT', isActive: true, createdAt: new Date().toISOString() }
+    { id: 'prod-1', modelName: 'SKY-800', feet: 8, spec: '배터리형, 8m', manufacturer: 'SKY', weight: '1,500 kg', speed: '3.5 Km/h', maxHeightCapacity: '7.8 M / 227 kg', safetyCertDate: '2022-05-10', isActive: true, createdAt: new Date().toISOString() },
+    { id: 'prod-2', modelName: 'GENIE-1000', feet: 10, spec: '디젤형, 10m', manufacturer: 'GENIE', weight: '2,800 kg', speed: '4.0 Km/h', maxHeightCapacity: '10.0 M / 454 kg', safetyCertDate: '2021-08-15', isActive: true, createdAt: new Date().toISOString() },
+    { id: 'prod-3', modelName: 'Z-45/25J', feet: 45, spec: '디젤굴절형, 15.9m', manufacturer: 'GENIE', weight: '7,513 kg', speed: '4.8 Km/h', maxHeightCapacity: '15.9 M / 227 kg', safetyCertDate: '2009-09-14', isActive: true, createdAt: new Date().toISOString() },
+    { id: 'prod-4', modelName: 'GS-1930', feet: 19, spec: '배터리수직형, 7.8m', manufacturer: 'GENIE', weight: '1,500 kg', speed: '4.0 Km/h', maxHeightCapacity: '7.8 M / 227 kg', safetyCertDate: '2024-03-01', isActive: true, createdAt: new Date().toISOString() }
   ];
 };
 
