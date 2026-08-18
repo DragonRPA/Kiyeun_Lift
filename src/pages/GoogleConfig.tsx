@@ -2,8 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { Settings, Mail, FolderOpen, RefreshCw, CheckCircle2, Lock, Eye, EyeOff, ShieldCheck, HelpCircle, AlertTriangle, ExternalLink, Key, Search, Cloud, Folder, File, ArrowLeft, Download, HardDrive, FileText, Shield } from 'lucide-react';
 import { GoogleConfig as GoogleConfigType } from '../services/db';
-import { drive, DriveFile, DriveFolder } from '../services/drive';
-import { GoogleDrivePickerModal } from '../components/GoogleDrivePickerModal';
+import { CloudStoragePickerModal } from '../components/CloudStoragePickerModal';
 import { downloadEvidenceAsZip, deleteStorageFiles } from '../services/supabaseStorage';
 import { backupToGoogleDrive, getDriveReadToken, extractDriveFileId, extractDriveFolderId, listFilesInDriveFolder } from '../services/googleDriveBackup';
 import { downloadContractDocumentBundlePdf, mergeDriveFilesToPdf } from '../services/pdfBundle';
@@ -2114,8 +2113,8 @@ function doGet(e) {
         </div>
         </div>
 
-        {/* 구글 드라이브 스마트 탐색기 공용 모달 */}
-        <GoogleDrivePickerModal
+        {/* 클라우드 스토리지 탐색기 공용 모달 */}
+        <CloudStoragePickerModal
           isOpen={isDriveSelectorOpen}
           onClose={() => {
             setIsDriveSelectorOpen(false);
@@ -2123,7 +2122,7 @@ function doGet(e) {
           }}
           onSelect={handleSelectDriveItem}
           mode={pickerMode}
-          title={selectorTargetField === 'rootFolder' ? '🏢 회사 전용 최상위 구글 드라이브 폴더 선택' : '📄 구글 드라이브 서류 템플릿 파일 선택'}
+          title={selectorTargetField === 'rootFolder' ? '🏢 회사 전용 최상위 스토리지 폴더 선택' : '📄 클라우드 스토리지 서류 파일 선택'}
         />
 
         {/* 🚀 살아있는 계약 선택 팝업 모달 */}

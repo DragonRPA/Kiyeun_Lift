@@ -4,7 +4,7 @@ import { Search, Download, Eye, Layers, Edit2, Save, X, FolderOpen, Wrench } fro
 import { exportToExcel } from '../services/excel';
 import { Asset, calculateAssetDepreciation, AssetInOutLog, Repair } from '../services/db';
 import { ASSET_STATUS_SSOT, getAssetStatusLabel, getAssetStatusBadgeClass } from '../config/asset_status_config';
-import { GoogleDrivePickerModal } from '../components/GoogleDrivePickerModal';
+import { CloudStoragePickerModal } from '../components/CloudStoragePickerModal';
 
 export const Assets: React.FC = () => {
   const { assets, customers, sites, hasPermission, saveAsset, showErrorModal, loadTablesForMenu, assetInOutLogs, repairs } = useApp();
@@ -880,8 +880,8 @@ export const Assets: React.FC = () => {
         </div>
       )}
 
-      {/* 구글 드라이브 탐색 모달 */}
-      <GoogleDrivePickerModal
+      {/* 클라우드 스토리지 탐색 모달 */}
+      <CloudStoragePickerModal
         isOpen={isDrivePickerOpen}
         onClose={() => {
           setIsDrivePickerOpen(false);
@@ -897,7 +897,7 @@ export const Assets: React.FC = () => {
           setDrivePickerTarget(null);
         }}
         mode="file"
-        title="구글 드라이브 점검 서류 파일 탐색기"
+        title="클라우드 스토리지 서류 파일 탐색기"
       />
     </div>
   );

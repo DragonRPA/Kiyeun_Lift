@@ -1,3 +1,19 @@
+# Release Notes (v1.117.0.Build.234 - 2026-08-18 14:26)
+
+## 🗄️ [CloudStoragePickerModal 구축 및 자산/설정 화면 R2 연동 완결] 구글 레거시 모달 전면 교체
+
+### 🌟 반영 내용
+1. **Cloudflare R2 클라우드 스토리지 전용 탐색기 모달 구축 (`CloudStoragePickerModal.tsx`)**:
+   - R2 버킷(`kiyeun-storage`) 내 하위 폴더 계층 브라우징, 상하위 디렉토리 이동(브레드크럼), 실시간 파일 검색 및 선택 기능 탑재.
+   - S3 ListObjectsV2 API와 직결되어 0.1초 만에 최신 파일 트리를 렌더링.
+2. **자산 대장 및 스토리지 설정 화면 연동 교체 (`Assets.tsx`, `GoogleConfig.tsx`)**:
+   - 기존의 불안정한 `GoogleDrivePickerModal`을 신규 `CloudStoragePickerModal`로 전면 교체.
+   - 점검표, 제원표, 사업자등록증 등의 클라우드 서식 경로를 R2 공개 URL로 원클릭 매핑.
+3. **로컬 에이전트 최신 바이너리 컴파일 및 배포 동기화 (`v1.117.0.Build.234`)**:
+   - `public/downloads/KiyeunAgent.exe` 최신 빌드 동기화 완료.
+
+---
+
 # Release Notes (v1.116.0.Build.233 - 2026-08-18 10:08)
 
 ## ☁️ [Cloudflare R2 클라우드 스토리지 전면 전환] 팝업·차단 0% 무인 재귀 미러링 파이프라인 정립
