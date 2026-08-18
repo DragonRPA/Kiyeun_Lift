@@ -15,8 +15,8 @@ import {
 } from '../services/excelTemplateEngine';
 import { PDFDocument } from 'pdf-lib';
 import JSZip from 'jszip';
-import { saveAs } from 'file-saver';
 import { EXPECTED_AGENT_VERSION } from '../services/agentService';
+import { executeR2MirrorSync, testR2Connection } from '../services/r2MirrorSync';
 
 export const GoogleConfig: React.FC = () => {
   const { 
@@ -51,6 +51,19 @@ export const GoogleConfig: React.FC = () => {
   // 신설 필드 상태
   const [oauthClientId, setOauthClientId] = useState('');
   const [mirrorRecursive, setMirrorRecursive] = useState(true);
+
+  // ── Cloudflare R2 클라우드 스토리지 상태 ──
+  const [r2AccountId, setR2AccountId] = useState('');
+  const [r2BucketName, setR2BucketName] = useState('');
+  const [r2AccessKeyId, setR2AccessKeyId] = useState('');
+  const [r2SecretAccessKey, setR2SecretAccessKey] = useState('');
+  const [r2PublicDomain, setR2PublicDomain] = useState('');
+  const [showR2SecretKey, setShowR2SecretKey] = useState(false);
+  const [isTestingR2, setIsTestingR2] = useState(false);
+  const [isSyncingR2, setIsSyncingR2] = useState(false);
+  const [r2FilesList, setR2FilesList] = useState<any[]>([]);
+  const [showR2FileModal, setShowR2FileModal] = useState(false);
+  const [isLoadingR2Files, setIsLoadingR2Files] = useState(false);
 
   // 로컬 사이드카 에이전트 실시간 모니터링 상태
   const [agentStatus, setAgentStatus] = useState<'ONLINE' | 'OFFLINE'>('OFFLINE');
@@ -591,6 +604,11 @@ export const GoogleConfig: React.FC = () => {
       setAppsScriptUrl(currentConfig.appsScriptUrl || '');
       setOauthClientId(currentConfig.oauthClientId || '274287991550-7eaeisb14i80315pmlf8390smf58pkbt.apps.googleusercontent.com');
       setMirrorRecursive(currentConfig.mirrorRecursive !== undefined ? currentConfig.mirrorRecursive : true);
+      setR2AccountId(currentConfig.r2AccountId || '');
+      setR2BucketName(currentConfig.r2BucketName || '');
+      setR2AccessKeyId(currentConfig.r2AccessKeyId || '');
+      setR2SecretAccessKey(currentConfig.r2SecretAccessKey || '');
+      setR2PublicDomain(currentConfig.r2PublicDomain || '');
       setIsDevMode(currentConfig.isDevMode !== undefined ? currentConfig.isDevMode : true);
     }
   }, [currentConfig]);
@@ -826,13 +844,120 @@ function doGet(e) {
         appsScriptUrl,
         oauthClientId,
         mirrorRecursive,
+        r2AccountId,
+        r2BucketName,
+        r2AccessKeyId,
+        r2SecretAccessKey,
+        r2PublicDomain,
         updatedAt: new Date().toISOString()
       };
 
       await updateGoogleConfig(updated);
-      alert('구글 연동 및 클라우드 설정 정보가 안전하게 변경되었습니다.');
+      alert('클라우드 스토리지 및 Cloudflare R2 설정 정보가 안전하게 저장되었습니다.');
     } catch (err: any) {
-      showErrorModal(`⚠️ 구글 설정 원격 DB 저장 실패:\n\n${err?.message || err}`, '구글 설정 저장 오류');
+      showErrorModal(`⚠️ 설정 원격 DB 저장 실패:\n\n${err?.message || err}`, '스토리지 설정 저장 오류');
+    }
+  };
+
+  const handleTestR2Connection = async () => {
+    if (!r2AccountId || !r2BucketName || !r2AccessKeyId || !r2SecretAccessKey) {
+      alert('⚠️ Cloudflare R2 필수 설정값(Account ID, Bucket Name, Access Key, Secret Key)을 모두 입력해 주세요.');
+      return;
+    }
+    setIsTestingR2(true);
+    try {
+      const res = await testR2Connection({
+        id: currentConfig?.id || 'default',
+        googleEmail: googleEmail || '',
+        contractFolder: '',
+        consumableFolder: '',
+        deliveryFolder: '',
+        maintenanceFolder: '',
+        isDevMode: true,
+        r2AccountId,
+        r2BucketName,
+        r2AccessKeyId,
+        r2SecretAccessKey,
+        r2PublicDomain,
+        updatedAt: new Date().toISOString()
+      });
+      if (res.success) {
+        alert(`🎉 ${res.message || 'Cloudflare R2 버킷 연결에 성공했습니다!'}`);
+      } else {
+        alert(`❌ Cloudflare R2 연결 실패:\n${res.message || '자격증명 또는 버킷명을 확인해 주세요.'}`);
+      }
+    } catch (err: any) {
+      alert(`❌ 연결 테스트 중 오류 발생:\n${err?.message || err}`);
+    } finally {
+      setIsTestingR2(false);
+    }
+  };
+
+  const handleSyncR2ToLocal = async () => {
+    if (!r2AccountId || !r2BucketName || !r2AccessKeyId || !r2SecretAccessKey) {
+      alert('⚠️ Cloudflare R2 설정을 먼저 완료하고 저장해 주세요.');
+      return;
+    }
+    setIsSyncingR2(true);
+    try {
+      const res = await executeR2MirrorSync({
+        id: currentConfig?.id || 'default',
+        googleEmail: googleEmail || '',
+        contractFolder: '',
+        consumableFolder: '',
+        deliveryFolder: '',
+        maintenanceFolder: '',
+        isDevMode: true,
+        r2AccountId,
+        r2BucketName,
+        r2AccessKeyId,
+        r2SecretAccessKey,
+        r2PublicDomain,
+        updatedAt: new Date().toISOString()
+      });
+      if (res.success) {
+        alert(res.message);
+      } else {
+        alert(`⚠️ R2 동기화 실패:\n${res.message}`);
+      }
+    } catch (err: any) {
+      alert(`⚠️ R2 동기화 중 오류:\n${err?.message || err}`);
+    } finally {
+      setIsSyncingR2(false);
+    }
+  };
+
+  const handleOpenR2FileList = async () => {
+    if (!r2AccountId || !r2BucketName || !r2AccessKeyId || !r2SecretAccessKey) {
+      alert('⚠️ Cloudflare R2 설정을 먼저 입력해 주세요.');
+      return;
+    }
+    setIsLoadingR2Files(true);
+    setShowR2FileModal(true);
+    try {
+      const res = await fetch('/api/r2', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'list',
+          accountId: r2AccountId,
+          bucketName: r2BucketName,
+          accessKeyId: r2AccessKeyId,
+          secretAccessKey: r2SecretAccessKey
+        })
+      });
+      const data = await res.json();
+      if (data.success && Array.isArray(data.files)) {
+        setR2FilesList(data.files);
+      } else {
+        setR2FilesList([]);
+        alert(`파일 목록 조회 실패: ${data.error || '목록을 가져올 수 없습니다.'}`);
+      }
+    } catch (e: any) {
+      alert(`파일 목록 조회 오류: ${e?.message || e}`);
+      setR2FilesList([]);
+    } finally {
+      setIsLoadingR2Files(false);
     }
   };
 
@@ -1287,6 +1412,119 @@ function doGet(e) {
                   </button>
                 </div>
               </div>
+            </div>
+          </div>
+
+          {/* Cloudflare R2 클라우드 스토리지 설정 패널 */}
+          <div className="card" style={{ margin: 0, padding: '24px', border: '1px solid var(--primary)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border)', paddingBottom: '12px', marginBottom: '16px' }}>
+              <h3 style={{ fontSize: '15px', fontWeight: '700', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Cloud size={18} style={{ color: 'var(--primary)' }} /> Cloudflare R2 클라우드 스토리지 설정
+              </h3>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={handleTestR2Connection}
+                  disabled={isTestingR2}
+                  style={{ padding: '6px 12px', fontSize: '12px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap' }}
+                >
+                  <ShieldCheck size={14} /> {isTestingR2 ? '검증 중...' : 'R2 연결 검증'}
+                </button>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={handleOpenR2FileList}
+                  style={{ padding: '6px 12px', fontSize: '12px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap' }}
+                >
+                  <FolderOpen size={14} /> R2 파일 목록
+                </button>
+                <button
+                  type="button"
+                  className="btn-primary"
+                  onClick={handleSyncR2ToLocal}
+                  disabled={isSyncingR2}
+                  style={{ padding: '6px 14px', fontSize: '12px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap' }}
+                >
+                  <RefreshCw size={14} className={isSyncingR2 ? "animate-spin" : ""} /> {isSyncingR2 ? '미러링 진행 중...' : '로컬 에이전트 동기화'}
+                </button>
+              </div>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <label style={{ fontSize: '12px', fontWeight: '700', color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
+                  Cloudflare 계정 ID (Account ID) *
+                </label>
+                <input
+                  type="text"
+                  value={r2AccountId}
+                  onChange={e => setR2AccountId(e.target.value)}
+                  placeholder="예: 32자리 Cloudflare Account ID"
+                  style={{ padding: '8px 10px', fontSize: '13px', borderRadius: '6px', border: '1px solid var(--border)' }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <label style={{ fontSize: '12px', fontWeight: '700', color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
+                  R2 버킷명 (Bucket Name) *
+                </label>
+                <input
+                  type="text"
+                  value={r2BucketName}
+                  onChange={e => setR2BucketName(e.target.value)}
+                  placeholder="예: kiyeun-storage"
+                  style={{ padding: '8px 10px', fontSize: '13px', borderRadius: '6px', border: '1px solid var(--border)' }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <label style={{ fontSize: '12px', fontWeight: '700', color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
+                  R2 액세스 키 ID (Access Key ID) *
+                </label>
+                <input
+                  type="text"
+                  value={r2AccessKeyId}
+                  onChange={e => setR2AccessKeyId(e.target.value)}
+                  placeholder="예: S3 호환 R2 Access Key ID"
+                  style={{ padding: '8px 10px', fontSize: '13px', borderRadius: '6px', border: '1px solid var(--border)' }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <label style={{ fontSize: '12px', fontWeight: '700', color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
+                  R2 비밀 액세스 키 (Secret Access Key) *
+                </label>
+                <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                  <input
+                    type={showR2SecretKey ? 'text' : 'password'}
+                    value={r2SecretAccessKey}
+                    onChange={e => setR2SecretAccessKey(e.target.value)}
+                    placeholder="S3 호환 R2 Secret Access Key"
+                    style={{ width: '100%', padding: '8px 36px 8px 10px', fontSize: '13px', borderRadius: '6px', border: '1px solid var(--border)' }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowR2SecretKey(!showR2SecretKey)}
+                    style={{ position: 'absolute', right: '8px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}
+                  >
+                    {showR2SecretKey ? <EyeOff size={15} /> : <Eye size={15} />}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <label style={{ fontSize: '12px', fontWeight: '700', color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
+                R2 공개 도메인 URL (Public Domain URL)
+              </label>
+              <input
+                type="text"
+                value={r2PublicDomain}
+                onChange={e => setR2PublicDomain(e.target.value)}
+                placeholder="예: https://pub-xxxx.r2.dev 또는 커스텀 도메인 (버킷 Public Access 활성화 시 발급)"
+                style={{ padding: '8px 10px', fontSize: '13px', borderRadius: '6px', border: '1px solid var(--border)' }}
+              />
             </div>
           </div>
 
@@ -2033,6 +2271,83 @@ function doGet(e) {
                   style={{ padding: '8px 18px', fontSize: '13px', fontWeight: '700' }}
                 >
                   확인 완료
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Cloudflare R2 파일 목록 탐색 모달 */}
+        {showR2FileModal && (
+          <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: '20px' }}>
+            <div className="card" style={{ maxWidth: '800px', width: '100%', maxHeight: '85vh', display: 'flex', flexDirection: 'column', padding: 0, borderRadius: '16px', overflow: 'hidden', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.3)' }}>
+              <div style={{ padding: '16px 24px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'var(--bg-app)' }}>
+                <h3 style={{ margin: 0, fontSize: '16px', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Cloud size={18} style={{ color: 'var(--primary)' }} /> Cloudflare R2 버킷 파일 목록 ({r2FilesList.length}개)
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => setShowR2FileModal(false)}
+                  style={{ background: 'none', border: 'none', fontSize: '20px', cursor: 'pointer', color: 'var(--text-muted)' }}
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div style={{ padding: '16px 24px', flex: 1, overflowY: 'auto' }}>
+                {isLoadingR2Files ? (
+                  <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--text-muted)' }}>
+                    <RefreshCw size={24} className="animate-spin" style={{ margin: '0 auto 12px auto' }} />
+                    <p style={{ margin: 0, fontSize: '13px' }}>Cloudflare R2 버킷 파일 목록을 불러오는 중...</p>
+                  </div>
+                ) : r2FilesList.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--text-muted)' }}>
+                    <FolderOpen size={32} style={{ margin: '0 auto 12px auto', opacity: 0.5 }} />
+                    <p style={{ margin: 0, fontSize: '14px', fontWeight: '600' }}>버킷에 파일이 존재하지 않습니다.</p>
+                    <p style={{ margin: '4px 0 0 0', fontSize: '12px' }}>R2 버킷에 서식 또는 증빙 파일을 업로드해 주세요.</p>
+                  </div>
+                ) : (
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                    <thead>
+                      <tr style={{ borderBottom: '2px solid var(--border)', textAlign: 'left', backgroundColor: 'var(--bg-app)' }}>
+                        <th style={{ padding: '8px 12px', fontWeight: '700', whiteSpace: 'nowrap' }}>파일 경로 (Key)</th>
+                        <th style={{ padding: '8px 12px', fontWeight: '700', whiteSpace: 'nowrap', width: '100px' }}>크기</th>
+                        <th style={{ padding: '8px 12px', fontWeight: '700', whiteSpace: 'nowrap', width: '160px' }}>최종 수정일</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {r2FilesList.map((file, idx) => (
+                        <tr key={idx} style={{ borderBottom: '1px solid var(--border)' }}>
+                          <td style={{ padding: '8px 12px', fontWeight: '600', whiteSpace: 'nowrap' }}>
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                              <FileText size={14} style={{ color: 'var(--primary)', flexShrink: 0 }} />
+                              {file.key}
+                            </span>
+                          </td>
+                          <td style={{ padding: '8px 12px', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
+                            {(file.size / 1024).toFixed(1)} KB
+                          </td>
+                          <td style={{ padding: '8px 12px', color: 'var(--text-secondary)', fontSize: '12px', whiteSpace: 'nowrap' }}>
+                            {file.lastModified ? file.lastModified.replace('T', ' ').substring(0, 19) : '-'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+
+              <div style={{ padding: '12px 24px', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'var(--bg-app)' }}>
+                <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                  총 {r2FilesList.length}개 항목
+                </span>
+                <button
+                  type="button"
+                  className="btn-primary"
+                  onClick={() => setShowR2FileModal(false)}
+                  style={{ padding: '6px 16px', fontSize: '12px', fontWeight: '700' }}
+                >
+                  닫기
                 </button>
               </div>
             </div>

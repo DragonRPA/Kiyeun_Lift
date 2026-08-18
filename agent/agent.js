@@ -16,7 +16,7 @@ const os = require('os');
 const { spawn, execSync } = require('child_process');
 const { PDFDocument, rgb } = require('pdf-lib');
 
-const VERSION = 'v1.115.0.Build.232';
+const VERSION = 'v1.116.0.Build.233';
 const PORT = process.env.PORT || 5175;
 const CALLSIGN = process.env.AGENT_CALLSIGN || 'admin';
 const MACHINE_NAME = os.hostname();
@@ -391,7 +391,27 @@ const server = http.createServer(async (req, res) => {
           return;
         }
 
-        // 3순위: 로컬에 없으면 구글 드라이브에서 토큰 0회 무인 다운로드 후 로컬 캐싱
+        // 3순위: R2 공개 URL 또는 전달된 직결 URL이 있는 경우 다운로드 후 로컬 캐싱
+        const directUrl = searchParams.get('url');
+        if (directUrl && directUrl.startsWith('http')) {
+          try {
+            const fetchRes = await fetch(directUrl);
+            if (fetchRes.ok) {
+              const ab = await fetchRes.arrayBuffer();
+              if (ab.byteLength > 100) {
+                const targetDir = path.dirname(localFilePath);
+                if (!fs.existsSync(targetDir)) fs.mkdirSync(targetDir, { recursive: true });
+                fs.writeFileSync(localFilePath, Buffer.from(ab));
+
+                res.writeHead(200, { 'Content-Type': contentType, 'X-Cache-Source': 'R2_URL_DOWNLOADED' });
+                res.end(Buffer.from(ab));
+                return;
+              }
+            }
+          } catch (urlErr) {}
+        }
+
+        // 4순위: 구글 드라이브 fileId 기반 다운로드 후 로컬 캐싱
         if (fileId) {
           const endpoints = [
             `https://drive.usercontent.google.com/download?id=${fileId}&export=download&authuser=0`,

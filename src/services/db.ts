@@ -683,6 +683,12 @@ export interface GoogleConfig {
   appsScriptUrl?: string;
   oauthClientId?: string;   // 구글 드라이브 백업용 OAuth 2.0 Client ID
   mirrorRecursive?: boolean; // 하위 폴더 재귀 미러링 여부
+  // ── Cloudflare R2 클라우드 스토리지 설정 ──
+  r2AccountId?: string;      // Cloudflare 32자리 Account ID
+  r2BucketName?: string;     // R2 버킷명 (예: kiyeun-storage)
+  r2AccessKeyId?: string;    // R2 S3 Access Key ID
+  r2SecretAccessKey?: string;// R2 S3 Secret Access Key
+  r2PublicDomain?: string;   // R2 공개 URL (예: https://pub-xxxx.r2.dev)
   createdAt?: string;
   updatedAt: string;
 }
