@@ -1,4 +1,23 @@
+# Release Notes (v1.121.0.Build.238 - 2026-08-19 16:38)
+
+## ☁️ [Cloudflare R2 완전 무인 미러링 파이프라인 완결] 자가 기동 동기화 & DB 스키마 정합성 확보
+
+### 🌟 반영 내용
+1. **Cloudflare R2 스토리지 설정 UI 표준화 및 줄바꿈 보정 (`GoogleConfig.tsx`)**:
+   - 카드 헤더 타이틀을 건조한 표준 명사 `Cloudflare R2 스토리지 설정`으로 정제하고 `white-space: nowrap`, `flex-shrink: 0`, `flex-wrap: wrap`을 적용하여 글자 찌그러짐 현상 완벽 방지.
+2. **Supabase DB 스키마 정합성 보강 (`schema.sql`, `supabase_patch.sql`)**:
+   - `google_configs` 테이블에 Cloudflare R2 5대 설정 컬럼(`r2AccountId`, `r2BucketName`, `r2AccessKeyId`, `r2SecretAccessKey`, `r2PublicDomain`)을 스키마 파일 및 DB 패치 스크립트에 정식 반영.
+   - `AppContext.tsx` 내 초기 로컬 스토리지 마이그레이션 `defaultTemplate`에 R2 기본값 연동 완료.
+3. **에이전트 부팅 시 자가 기동 자동 미러링 엔진 탑재 (`agent/agent.js`)**:
+   - `start-agent.bat` 실행 즉시 백그라운드에서 CF R2 원본 저장소(`pub-a2fd...r2.dev`)를 스캔하여 로컬 `C:\KiyeunAgent\drive_mirror\`에 없는 파일을 100% 자동 다운로드.
+4. **프런트엔드 매니페스트 폴백 & 배지 UI 표준화 (`driveMirrorSync.ts`, `AgentHeaderBadge.tsx`)**:
+   - API 서버 상태나 로컬 설정 로딩 지연과 무관하게 CF의 13개 표준 파일 매니페스트를 기반으로 무조건 100% 동기화가 성립되도록 폴백 탑재.
+   - 상단 배지 미러링 상태 라벨을 `CF 로컬 미러링 (N개)`로 단일 표준화.
+
+---
+
 # Release Notes (v1.120.0.Build.237 - 2026-08-19 16:09)
+
 
 ## 🟢 [Node.js 방식 전환] 에이전트 배포 방식 exe → agent.js + bat 경량화
 

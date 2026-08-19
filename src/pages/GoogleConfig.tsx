@@ -1420,13 +1420,13 @@ function doGet(e) {
             </div>
           </div>
 
-          {/* Cloudflare R2 클라우드 스토리지 설정 패널 */}
+          {/* Cloudflare R2 스토리지 설정 패널 */}
           <div className="card" style={{ margin: 0, padding: '24px', border: '1px solid var(--primary)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border)', paddingBottom: '12px', marginBottom: '16px' }}>
-              <h3 style={{ fontSize: '15px', fontWeight: '700', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Cloud size={18} style={{ color: 'var(--primary)' }} /> Cloudflare R2 클라우드 스토리지 설정
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', borderBottom: '1px solid var(--border)', paddingBottom: '12px', marginBottom: '16px' }}>
+              <h3 style={{ fontSize: '15px', fontWeight: '700', margin: 0, display: 'flex', alignItems: 'center', gap: '8px', whiteSpace: 'nowrap', flexShrink: 0 }}>
+                <Cloud size={18} style={{ color: 'var(--primary)' }} /> Cloudflare R2 스토리지 설정
               </h3>
-              <div style={{ display: 'flex', gap: '8px' }}>
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                 <button
                   type="button"
                   className="btn-secondary"

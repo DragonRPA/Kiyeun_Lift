@@ -46,6 +46,13 @@ ALTER TABLE customers ADD COLUMN IF NOT EXISTS "defaultStatementClosingDay" INTE
 -- [보완 2026-07-30] google_configs 테이블 거래명세서 양식 경로 컬럼 추가
 ALTER TABLE google_configs ADD COLUMN IF NOT EXISTS "transactionStatementTemplateUrl" TEXT;
 
+-- [보완 2026-08-18] google_configs 테이블 Cloudflare R2 설정 컬럼 5종 추가
+ALTER TABLE google_configs ADD COLUMN IF NOT EXISTS "r2AccountId" TEXT;
+ALTER TABLE google_configs ADD COLUMN IF NOT EXISTS "r2BucketName" TEXT;
+ALTER TABLE google_configs ADD COLUMN IF NOT EXISTS "r2AccessKeyId" TEXT;
+ALTER TABLE google_configs ADD COLUMN IF NOT EXISTS "r2SecretAccessKey" TEXT;
+ALTER TABLE google_configs ADD COLUMN IF NOT EXISTS "r2PublicDomain" TEXT;
+
 -- [보완 2026-07-30] billings 테이블 contractId 컬럼 및 status CHECK 제약 조건 업데이트 ('REQUESTED', 'REJECTED' 추가)
 ALTER TABLE billings ADD COLUMN IF NOT EXISTS "contractId" TEXT;
 ALTER TABLE billings DROP CONSTRAINT IF EXISTS billings_status_check;

@@ -70,10 +70,16 @@ export const AgentHeaderBadge: React.FC<Props> = ({ currentUser }) => {
           if (!autoSyncedRef.current) {
             autoSyncedRef.current = true;
             executeDriveMirrorSync(googleConfigs?.[0]).then((res) => {
-              getLocalMirrorStatus().then(ms => {
-                if (isMounted && ms.success) setMirrorFiles(ms.files || []);
-              });
-            }).catch(() => {});
+              if (res.success) {
+                getLocalMirrorStatus().then(ms => {
+                  if (isMounted && ms.success) setMirrorFiles(ms.files || []);
+                });
+              } else {
+                autoSyncedRef.current = false; // 실패 시 다음 틱에 재시도
+              }
+            }).catch(() => {
+              autoSyncedRef.current = false;
+            });
           }
 
           return;
@@ -329,20 +335,16 @@ export const AgentHeaderBadge: React.FC<Props> = ({ currentUser }) => {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
                 <span style={{ fontWeight: '800', display: 'flex', alignItems: 'center', gap: '5px', color: '#16a34a' }}>
                   <HardDrive size={13} />
-                  드라이브 로컬 미러링 ({mirrorFiles.length}개)
+                  CF 로컬 미러링 ({mirrorFiles.length}개)
                 </span>
                 <button
                   type="button"
                   disabled={isSyncingDrive}
                   onClick={async () => {
-                    if (!googleConfigs?.[0]) {
-                      alert('구글 연동 설정이 등록되지 않았습니다.');
-                      return;
-                    }
                     setIsSyncingDrive(true);
-                    setSyncMessage('구글 드라이브 동기화 진행 중...');
+                    setSyncMessage('CF 스토리지 동기화 진행 중...');
                     try {
-                      const res = await executeDriveMirrorSync(googleConfigs[0], (msg) => setSyncMessage(msg));
+                      const res = await executeDriveMirrorSync(googleConfigs?.[0], (msg) => setSyncMessage(msg));
                       if (res.success) {
                         const mStatus = await getLocalMirrorStatus();
                         if (mStatus.success) setMirrorFiles(mStatus.files || []);

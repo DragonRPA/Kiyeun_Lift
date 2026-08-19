@@ -630,6 +630,11 @@ CREATE TABLE google_configs (
     "bankbookCopyUrl" TEXT,
     "transactionStatementTemplateUrl" TEXT,
     "defaultRootFolderId" TEXT,
+    "r2AccountId" TEXT,
+    "r2BucketName" TEXT,
+    "r2AccessKeyId" TEXT,
+    "r2SecretAccessKey" TEXT,
+    "r2PublicDomain" TEXT,
     "createdAt" TEXT NOT NULL,
     "updatedAt" TEXT NOT NULL
 );

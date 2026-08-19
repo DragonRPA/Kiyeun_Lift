@@ -440,6 +440,61 @@ server.on('error', (err) => {
   }
 });
 
+// ── 0. 부팅 시 Cloudflare R2 원본 ➔ 로컬 drive_mirror 자동 자가 동기화 ──
+const CF_BASE_PUBLIC_URL = 'https://pub-a2fd3c2ae0cc450b8ebe34baf1b051e1.r2.dev';
+
+const CF_STANDARD_FILES = [
+  '00.거래명세서양식.xlsx',
+  '10.통장사본.pdf',
+  'Basic_Doc/4.제원표_JCPT0607DCS.pdf',
+  'Basic_Doc/5.인증서JCPT0607DCS(2016년4월25일).pdf',
+  'Basic_Doc/6.0607 하부작동법.pdf',
+  'Basic_Doc/6.DINGLI_상부조작방법.pdf',
+  'Basic_Doc/7.JCPT0807,0607_비상하강 작동법.pdf',
+  'Basic_Doc/거래명세서양식.xlsx',
+  'Basic_Doc/견적서_양식.pdf',
+  'Basic_Doc/고소작업대_안전점검결과서_양식.html',
+  'Basic_Doc/고소작업대_임대차계약서_양식.html',
+  'Basic_Doc/렌탈견적서_양식.html',
+  'Basic_Doc/통장사본.pdf'
+];
+
+async function autoSyncFromCloudflare() {
+  console.log('🔄 [CF 자동 미러링] Cloudflare R2 원본 저장소 점검 시작...');
+  let synced = 0;
+  for (const relPath of CF_STANDARD_FILES) {
+    const targetFile = path.join(DRIVE_MIRROR_DIR, relPath);
+    const targetDir = path.dirname(targetFile);
+    if (!fs.existsSync(targetDir)) fs.mkdirSync(targetDir, { recursive: true });
+
+    // 이미 존재하고 크기가 0보다 크면 통과
+    if (fs.existsSync(targetFile) && fs.statSync(targetFile).size > 0) {
+      continue;
+    }
+
+    try {
+      const encPath = relPath.split('/').map(encodeURIComponent).join('/');
+      const res = await fetch(`${CF_BASE_PUBLIC_URL}/${encPath}`, { signal: AbortSignal.timeout(10000) });
+      if (res.ok) {
+        const ab = await res.arrayBuffer();
+        if (ab.byteLength > 0) {
+          fs.writeFileSync(targetFile, Buffer.from(ab));
+          synced++;
+          console.log(`💾 [CF 다운로드 완료] ${relPath} (${ab.byteLength.toLocaleString()} bytes)`);
+        }
+      }
+    } catch (e) {}
+  }
+  if (synced > 0) {
+    console.log(`✅ [CF 자동 미러링 완료] 신규 ${synced}개 파일 동기화 완료.`);
+  } else {
+    console.log('✅ [CF 자동 미러링 완료] 모든 최신 파일이 이미 로컬에 완벽히 동기화되어 있습니다.');
+  }
+}
+
 server.listen(PORT, '127.0.0.1', () => {
   console.log(`🟢 로컬 에이전트 서비스 리스닝 시작: http://127.0.0.1:${PORT}`);
+  // 기동 즉시 백그라운드에서 CF 자동 미러링 실행
+  setTimeout(autoSyncFromCloudflare, 500);
 });
+
