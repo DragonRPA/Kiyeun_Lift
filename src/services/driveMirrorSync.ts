@@ -60,13 +60,13 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
 /**
  * CF R2 버킷 전체 파일 목록을 Vercel /api/r2 프록시를 통해 조회
  */
-async function listR2AllFiles(config: GoogleConfig): Promise<Array<{ key: string; size: number }>> {
+async function listR2AllFiles(config?: GoogleConfig): Promise<Array<{ key: string; size: number }>> {
   const params = new URLSearchParams({
     action: 'list',
-    accountId: config.r2AccountId || '',
-    bucketName: config.r2BucketName || '',
-    accessKeyId: config.r2AccessKeyId || '',
-    secretAccessKey: config.r2SecretAccessKey || ''
+    accountId: config?.r2AccountId || '35014a2514680107d74e1e68d96e6c32',
+    bucketName: config?.r2BucketName || 'kiyeun-storage',
+    accessKeyId: config?.r2AccessKeyId || '03cdb7560d37242de608a5db2a976030',
+    secretAccessKey: config?.r2SecretAccessKey || 'b2407ab4532e02317860bc3d63226fb7bc232e88083b150c15023906ed141986'
   });
 
   const res = await fetch(`/api/r2?${params.toString()}`, {
@@ -136,14 +136,10 @@ export async function executeDriveMirrorSync(
   });
 
   let r2Files: Array<{ key: string; size: number }> = [];
-  if (config && config.r2AccountId && config.r2BucketName && config.r2AccessKeyId && config.r2SecretAccessKey) {
-    try {
-      r2Files = await listR2AllFiles(config);
-    } catch (err: any) {
-      console.warn('Vercel R2 API 목록 조회 실패, 내장 매니페스트로 자동 전환:', err);
-      r2Files = CF_MANIFEST_FILES;
-    }
-  } else {
+  try {
+    r2Files = await listR2AllFiles(config);
+  } catch (err: any) {
+    console.warn('Vercel R2 API 목록 조회 실패, 내장 매니페스트로 자동 전환:', err);
     r2Files = CF_MANIFEST_FILES;
   }
 

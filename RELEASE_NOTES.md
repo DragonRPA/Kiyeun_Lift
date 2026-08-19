@@ -1,4 +1,22 @@
+# Release Notes (v1.122.0.Build.239 - 2026-08-19 16:45)
+
+## 🚀 [Cloudflare R2 100% 동적 실시간 스캔 엔진 탑재] 하드코딩 완전 폐지 & 실시간 버킷 자동 동기화
+
+### 🌟 반영 내용
+1. **정적 파일 목록 완전 폐지 & Zero-Dependency S3 SigV4 실시간 스캐너 구축 (`agent/agent.js`)**:
+   - 기존 하드코딩된 파일 리스트를 전면 삭제.
+   - Node.js 내장 `crypto` 및 `https` 기반으로 Cloudflare R2 S3 `ListObjectsV2` 실시간 재귀 조회 엔진을 구현.
+   - CF 버킷에 파일이 18개든 1,000개든 실시간으로 전수 탐색하여, 로컬(`C:\KiyeunAgent\drive_mirror\`)에 누락되었거나 용량이 변경된 파일만 100% 무인 자동 동기화.
+2. **Cloudflare Account ID 오타 원천 교정**:
+   - `35014a2514680107d74c1c68d96c6c32` ➔ `35014a2514680107d74e1e68d96e6c32` (`e`로 전수 교정하여 S3 TLS 및 REST API 통신 완벽 복구).
+   - `GoogleConfig.tsx`, `AppContext.tsx`, `CloudStoragePickerModal.tsx`, `driveMirrorSync.ts` 전수 반영.
+3. **`start-agent.bat` 인코딩 및 타이틀 실행 오류 수정 (`agent/start-agent.bat`, `public/downloads/`)**:
+   - UTF-8 코드페이지(`chcp 65001 >nul`)를 상단에 명시하여 `'리프트]'은(는) 내부 또는 외부 명령...` 오류 완벽 소멸.
+
+---
+
 # Release Notes (v1.121.0.Build.238 - 2026-08-19 16:38)
+
 
 ## ☁️ [Cloudflare R2 완전 무인 미러링 파이프라인 완결] 자가 기동 동기화 & DB 스키마 정합성 확보
 

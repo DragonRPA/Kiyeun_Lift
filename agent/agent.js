@@ -9,10 +9,13 @@
  */
 
 const http = require('http');
+const https = require('https');
+const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const { spawn, execSync } = require('child_process');
+
 
 const VERSION = 'v1.119.0.Build.236';
 const PORT = process.env.PORT || 5175;
@@ -440,61 +443,144 @@ server.on('error', (err) => {
   }
 });
 
-// ── 0. 부팅 시 Cloudflare R2 원본 ➔ 로컬 drive_mirror 자동 자가 동기화 ──
-const CF_BASE_PUBLIC_URL = 'https://pub-a2fd3c2ae0cc450b8ebe34baf1b051e1.r2.dev';
+// ── 0. Cloudflare R2 실시간 버킷 동적 스캔 및 자동 미러링 엔진 (Zero-Dependency SigV4) ──
+const CF_ACCOUNT_ID = '35014a2514680107d74e1e68d96e6c32';
+const CF_BUCKET_NAME = 'kiyeun-storage';
+const CF_ACCESS_KEY = '03cdb7560d37242de608a5db2a976030';
+const CF_SECRET_KEY = 'b2407ab4532e02317860bc3d63226fb7bc232e88083b150c15023906ed141986';
+const CF_PUBLIC_URL = 'https://pub-a2fd3c2ae0cc450b8ebe34baf1b051e1.r2.dev';
 
-const CF_STANDARD_FILES = [
-  '00.거래명세서양식.xlsx',
-  '10.통장사본.pdf',
-  'Basic_Doc/4.제원표_JCPT0607DCS.pdf',
-  'Basic_Doc/5.인증서JCPT0607DCS(2016년4월25일).pdf',
-  'Basic_Doc/6.0607 하부작동법.pdf',
-  'Basic_Doc/6.DINGLI_상부조작방법.pdf',
-  'Basic_Doc/7.JCPT0807,0607_비상하강 작동법.pdf',
-  'Basic_Doc/거래명세서양식.xlsx',
-  'Basic_Doc/견적서_양식.pdf',
-  'Basic_Doc/고소작업대_안전점검결과서_양식.html',
-  'Basic_Doc/고소작업대_임대차계약서_양식.html',
-  'Basic_Doc/렌탈견적서_양식.html',
-  'Basic_Doc/통장사본.pdf'
-];
+function hmac(key, str) {
+  return crypto.createHmac('sha256', key).update(str, 'utf8').digest();
+}
+function hash(str) {
+  return crypto.createHash('sha256').update(str, 'utf8').digest('hex');
+}
+
+async function fetchR2BucketAllObjects() {
+  const host = CF_ACCOUNT_ID + '.r2.cloudflarestorage.com';
+  const region = 'auto';
+  const service = 's3';
+  let isTruncated = true;
+  let nextContinuationToken = null;
+  const allObjects = [];
+
+  while (isTruncated) {
+    const now = new Date();
+    const amzDate = now.toISOString().replace(/[:-]|\.\d{3}/g, '');
+    const dateStamp = amzDate.substring(0, 8);
+    const canonicalUri = '/' + CF_BUCKET_NAME;
+    let canonicalQuery = 'list-type=2';
+    if (nextContinuationToken) {
+      canonicalQuery += '&continuation-token=' + encodeURIComponent(nextContinuationToken);
+    }
+    const payloadHash = hash('');
+    const canonicalHeaders = 'host:' + host + '\nx-amz-content-sha256:' + payloadHash + '\nx-amz-date:' + amzDate + '\n';
+    const signedHeaders = 'host;x-amz-content-sha256;x-amz-date';
+    const canonicalRequest = 'GET\n' + canonicalUri + '\n' + canonicalQuery + '\n' + canonicalHeaders + '\n' + signedHeaders + '\n' + payloadHash;
+    const credentialScope = dateStamp + '/' + region + '/' + service + '/aws4_request';
+    const stringToSign = 'AWS4-HMAC-SHA256\n' + amzDate + '\n' + credentialScope + '\n' + hash(canonicalRequest);
+
+    const kDate = hmac('AWS4' + CF_SECRET_KEY, dateStamp);
+    const kRegion = hmac(kDate, region);
+    const kService = hmac(kRegion, service);
+    const kSigning = hmac(kService, 'aws4_request');
+    const signature = crypto.createHmac('sha256', kSigning).update(stringToSign, 'utf8').digest('hex');
+
+    const authHeader = 'AWS4-HMAC-SHA256 Credential=' + CF_ACCESS_KEY + '/' + credentialScope + ', SignedHeaders=' + signedHeaders + ', Signature=' + signature;
+
+    const xmlData = await new Promise((resolve, reject) => {
+      const req = https.request({
+        hostname: host,
+        port: 443,
+        path: canonicalUri + '?' + canonicalQuery,
+        method: 'GET',
+        headers: {
+          'Host': host,
+          'x-amz-date': amzDate,
+          'x-amz-content-sha256': payloadHash,
+          'Authorization': authHeader
+        }
+      }, res => {
+        let d = '';
+        res.on('data', c => d += c);
+        res.on('end', () => res.statusCode === 200 ? resolve(d) : reject(new Error('HTTP ' + res.statusCode + ': ' + d)));
+      });
+      req.on('error', reject);
+      req.end();
+    });
+
+    const isTruncatedMatch = /<IsTruncated>(true|false)<\/IsTruncated>/.exec(xmlData);
+    isTruncated = isTruncatedMatch ? isTruncatedMatch[1] === 'true' : false;
+
+    const tokenMatch = /<NextContinuationToken>([^<]+)<\/NextContinuationToken>/.exec(xmlData);
+    nextContinuationToken = tokenMatch ? tokenMatch[1] : null;
+
+    const contentRegex = /<Contents>[\s\S]*?<Key>([^<]+)<\/Key>[\s\S]*?<Size>(\d+)<\/Size>[\s\S]*?<\/Contents>/g;
+    let match;
+    while ((match = contentRegex.exec(xmlData)) !== null) {
+      const key = match[1];
+      const size = parseInt(match[2], 10);
+      if (!key.endsWith('/')) {
+        allObjects.push({ key, size });
+      }
+    }
+  }
+
+  return allObjects;
+}
 
 async function autoSyncFromCloudflare() {
-  console.log('🔄 [CF 자동 미러링] Cloudflare R2 원본 저장소 점검 시작...');
-  let synced = 0;
-  for (const relPath of CF_STANDARD_FILES) {
-    const targetFile = path.join(DRIVE_MIRROR_DIR, relPath);
-    const targetDir = path.dirname(targetFile);
-    if (!fs.existsSync(targetDir)) fs.mkdirSync(targetDir, { recursive: true });
+  console.log('🔄 [CF 실시간 동적 미러링] Cloudflare R2 원본 저장소 실시간 스캔 시작...');
+  try {
+    const objects = await fetchR2BucketAllObjects();
+    console.log(`📦 [CF R2 버킷 파일 목록 확인] 총 ${objects.length}개 발견`);
+    let downloaded = 0;
+    let skipped = 0;
 
-    // 이미 존재하고 크기가 0보다 크면 통과
-    if (fs.existsSync(targetFile) && fs.statSync(targetFile).size > 0) {
-      continue;
-    }
+    for (const obj of objects) {
+      const targetFile = path.join(DRIVE_MIRROR_DIR, obj.key);
+      const targetDir = path.dirname(targetFile);
+      if (!fs.existsSync(targetDir)) fs.mkdirSync(targetDir, { recursive: true });
 
-    try {
-      const encPath = relPath.split('/').map(encodeURIComponent).join('/');
-      const res = await fetch(`${CF_BASE_PUBLIC_URL}/${encPath}`, { signal: AbortSignal.timeout(10000) });
-      if (res.ok) {
-        const ab = await res.arrayBuffer();
-        if (ab.byteLength > 0) {
-          fs.writeFileSync(targetFile, Buffer.from(ab));
-          synced++;
-          console.log(`💾 [CF 다운로드 완료] ${relPath} (${ab.byteLength.toLocaleString()} bytes)`);
+      if (fs.existsSync(targetFile)) {
+        const st = fs.statSync(targetFile);
+        if (st.size === obj.size && st.size > 0) {
+          skipped++;
+          continue;
         }
       }
-    } catch (e) {}
-  }
-  if (synced > 0) {
-    console.log(`✅ [CF 자동 미러링 완료] 신규 ${synced}개 파일 동기화 완료.`);
-  } else {
-    console.log('✅ [CF 자동 미러링 완료] 모든 최신 파일이 이미 로컬에 완벽히 동기화되어 있습니다.');
+
+      try {
+        const encKey = obj.key.split('/').map(encodeURIComponent).join('/');
+        const res = await fetch(`${CF_PUBLIC_URL}/${encKey}`, { signal: AbortSignal.timeout(15000) });
+        if (res.ok) {
+          const ab = await res.arrayBuffer();
+          if (ab.byteLength > 0) {
+            fs.writeFileSync(targetFile, Buffer.from(ab));
+            downloaded++;
+            console.log(`💾 [CF 동기화 완료] ${obj.key} (${ab.byteLength.toLocaleString()} bytes)`);
+          }
+        }
+      } catch (dlErr) {
+        console.error(`❌ [다운로드 실패] ${obj.key}:`, dlErr.message);
+      }
+    }
+
+    if (downloaded > 0) {
+      console.log(`✅ [CF 동적 미러링 완료] 신규/갱신: ${downloaded}개, 최신 유지: ${skipped}개 (총 ${objects.length}개)`);
+    } else {
+      console.log(`✅ [CF 동적 미러링 완료] 모든 파일(${objects.length}개)이 이미 최신 상태로 로컬에 보존되어 있습니다.`);
+    }
+  } catch (err) {
+    console.error('⚠️ CF R2 실시간 버킷 조회 오류:', err.message);
   }
 }
 
 server.listen(PORT, '127.0.0.1', () => {
   console.log(`🟢 로컬 에이전트 서비스 리스닝 시작: http://127.0.0.1:${PORT}`);
-  // 기동 즉시 백그라운드에서 CF 자동 미러링 실행
-  setTimeout(autoSyncFromCloudflare, 500);
+  // 기동 즉시 백그라운드에서 CF 실시간 동적 미러링 실행
+  setTimeout(autoSyncFromCloudflare, 300);
 });
+
 

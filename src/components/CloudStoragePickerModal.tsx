@@ -1,4 +1,4 @@
-﻿// src/components/CloudStoragePickerModal.tsx
+// src/components/CloudStoragePickerModal.tsx
 // (주)기연리프트 Cloudflare R2 클라우드 스토리지 파일/폴더 탐색기 모달
 
 import React, { useState, useEffect, useMemo } from 'react';
@@ -45,7 +45,7 @@ export const CloudStoragePickerModal: React.FC<CloudStoragePickerModalProps> = (
   const [r2Files, setR2Files] = useState<Array<{ key: string; size: number; lastModified: string }>>([]);
   const [rawUrlInput, setRawUrlInput] = useState<string>(initialValue);
 
-  const accountId = config?.r2AccountId || '35014a2514680107d74c1c68d96c6c32';
+  const accountId = config?.r2AccountId || '35014a2514680107d74e1e68d96e6c32';
   const bucketName = config?.r2BucketName || 'kiyeun-storage';
   const accessKeyId = config?.r2AccessKeyId || '03cdb7560d37242de608a5db2a976030';
   const secretAccessKey = config?.r2SecretAccessKey || 'b2407ab4532e02317860bc3d63226fb7bc232e88083b150c15023906ed141986';
