@@ -383,6 +383,54 @@ export async function generateCloudflare6DocBundlePdf(
   options: SampleContractBundleOptions,
   onProgress?: (stepText: string, current: number, total: number) => void
 ): Promise<{ pdfBytes: Uint8Array; blob: Blob; url: string; pageCount: number; fileName: string }> {
+  // 🌟 1순위: 로컬 에이전트 정품 엑셀(MS Excel COM) 자동화 엔진 직접 가동 (100% 원본 서식 보존)
+  try {
+    onProgress?.('로컬 에이전트 MS Excel 정품 서식 데이터 주입 및 PDF 변환 중...', 1, 6);
+    const agentRes = await fetch('http://127.0.0.1:5175/api/generate-contract-bundle', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        customerName: options.customerName,
+        bizRegNo: (options as any).bizRegNo,
+        ceoName: (options as any).ceoName,
+        contractDate: options.contractDate,
+        contractStartDate: options.contractStartDate,
+        contractEndDate: options.contractEndDate,
+        siteName: options.siteName,
+        siteAddress: options.siteAddress,
+        managerName: (options as any).managerName,
+        managerPhone: (options as any).managerPhone,
+        assets: options.assets,
+        optionsText: (options as any).optionsText,
+        remarksText: (options as any).remarksText
+      }),
+      signal: AbortSignal.timeout(30000)
+    });
+
+    if (agentRes.ok) {
+      const data = await agentRes.json();
+      if (data.success && data.base64Content) {
+        onProgress?.('정품 엑셀 기반 6종 통합 서류팩 조립 완료!', 6, 6);
+        const binaryStr = atob(data.base64Content);
+        const bytes = new Uint8Array(binaryStr.length);
+        for (let i = 0; i < binaryStr.length; i++) {
+          bytes[i] = binaryStr.charCodeAt(i);
+        }
+        const blob = new Blob([bytes.buffer], { type: 'application/pdf' });
+        const url = URL.createObjectURL(blob);
+        return {
+          pdfBytes: bytes,
+          blob,
+          url,
+          pageCount: data.pageCount || 6,
+          fileName: data.fileName || `[기연리프트]_정품6종통합계약서류팩_${options.customerName || '고객사'}.pdf`
+        };
+      }
+    }
+  } catch (agentErr) {
+    console.warn('로컬 에이전트 정품 엑셀 변환 실패, 웹 렌더러로 전환:', agentErr);
+  }
+
   const mergedPdf = await PDFDocument.create();
   const totalSteps = 6;
 

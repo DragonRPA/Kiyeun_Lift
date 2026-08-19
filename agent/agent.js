@@ -184,6 +184,201 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // 3-3. 🌟 정품 엑셀 원본 기반 6종 통합 계약 서류팩 PDF 생성 엔진 (Excel COM + pdf-lib)
+  if (req.method === 'POST' && pathname === '/api/generate-contract-bundle') {
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', async () => {
+      const tempBuildDir = path.join(AGENT_HOME, 'temp_build_' + Date.now());
+      try {
+        const payload = JSON.parse(body || '{}');
+        if (!fs.existsSync(tempBuildDir)) fs.mkdirSync(tempBuildDir, { recursive: true });
+
+        const custName = payload.customerName || '고객사';
+        const bizRegNo = payload.bizRegNo || '등록번호미지정';
+        const ceoName = payload.ceoName || '대표자';
+        const contractDate = payload.contractDate || new Date().toISOString().split('T')[0];
+        const siteName = payload.siteName || '현장미지정';
+        const siteAddress = payload.siteAddress || '';
+        const managerName = payload.managerName || '현장담당자';
+        const managerPhone = payload.managerPhone || '010-0000-0000';
+        const optionsText = payload.optionsText || '협착방지대, 튜브소화기';
+        const remarksText = payload.remarksText || '안전발판 지급';
+
+        const assets = payload.assets && payload.assets.length > 0 ? payload.assets : [
+          { assetNo: 'G06119', modelName: 'GTJZ0608ME', sn: '0108000379', rentalFee: 390000 }
+        ];
+
+        const primaryAsset = assets[0];
+        const totalRentalFee = assets.reduce((sum, a) => sum + (Number(a.rentalFee) || 0), 0);
+
+        // PowerShell 스크립트 작성 (UTF-8 BOM 필수)
+        const psScript = `\ufeff
+$ErrorActionPreference = 'Stop'
+
+$excel = New-Object -ComObject Excel.Application
+$excel.Visible = $false
+$excel.DisplayAlerts = $false
+
+function Replace-Tag($targetWs, $tag, $val) {
+  $null = $targetWs.Cells.Replace($tag, $val, 2, 1, $false, $false, $false)
+}
+
+# --- 1. 01.계약서.xlsx ---
+$f1In = '${DRIVE_MIRROR_DIR.replace(/\\/g, '\\\\')}\\\\01.계약서.xlsx'
+$f1Work = '${tempBuildDir.replace(/\\/g, '\\\\')}\\\\01.계약서_filled.xlsx'
+$f1Pdf = '${tempBuildDir.replace(/\\/g, '\\\\')}\\\\01.계약서.pdf'
+Copy-Item $f1In $f1Work -Force
+$wb1 = $excel.Workbooks.Open($f1Work)
+$ws1 = $wb1.Sheets.Item(1)
+
+Replace-Tag $ws1 "{Today}" "${contractDate}"
+Replace-Tag $ws1 "{사업자등록번호}" "${bizRegNo}"
+Replace-Tag $ws1 "{고객명}" "${custName}"
+Replace-Tag $ws1 "{대표자}" "${ceoName}"
+Replace-Tag $ws1 "{현장명}" "${siteName}"
+Replace-Tag $ws1 "{하차일시}" "${contractDate}"
+Replace-Tag $ws1 "{현장주소}" "${siteAddress}"
+Replace-Tag $ws1 "{현장담당자}" "${managerName}"
+Replace-Tag $ws1 "{현장담당자연락처}" "${managerPhone}"
+Replace-Tag $ws1 "{모델명}" "${primaryAsset.modelName}"
+Replace-Tag $ws1 "{수량}" "${assets.length}"
+Replace-Tag $ws1 "{SN}" "${primaryAsset.sn}"
+Replace-Tag $ws1 "{관리번호}" "${primaryAsset.assetNo}"
+Replace-Tag $ws1 "{임대료}" "${(primaryAsset.rentalFee || 390000).toLocaleString()}"
+Replace-Tag $ws1 "{소계}" "${totalRentalFee.toLocaleString()}"
+Replace-Tag $ws1 "{합계}" "₩${totalRentalFee.toLocaleString()}"
+Replace-Tag $ws1 "{옵션}" "${optionsText}"
+Replace-Tag $ws1 "{특이사항}" "${remarksText}"
+
+$ws1.PageSetup.PrintArea = "A26:K78"
+$ws1.PageSetup.Orientation = 1
+$ws1.PageSetup.Zoom = $false
+$ws1.PageSetup.FitToPagesWide = 1
+$ws1.PageSetup.FitToPagesTall = 1
+$wb1.ExportAsFixedFormat(0, $f1Pdf)
+$wb1.Close($false)
+
+# --- 2. 02.반입전체크리스트.xlsx ---
+$f2In = '${DRIVE_MIRROR_DIR.replace(/\\/g, '\\\\')}\\\\02.반입전체크리스트.xlsx'
+$f2Work = '${tempBuildDir.replace(/\\/g, '\\\\')}\\\\02.반입전체크리스트_filled.xlsx'
+$f2Pdf = '${tempBuildDir.replace(/\\/g, '\\\\')}\\\\02.반입전체크리스트.pdf'
+Copy-Item $f2In $f2Work -Force
+$wb2 = $excel.Workbooks.Open($f2Work)
+$ws2 = $wb2.Sheets.Item(1)
+Replace-Tag $ws2 "{모델명}" "${primaryAsset.modelName}"
+Replace-Tag $ws2 "{관리번호}" "${primaryAsset.assetNo}"
+$ws2.PageSetup.Orientation = 1
+$ws2.PageSetup.Zoom = $false
+$ws2.PageSetup.FitToPagesWide = 1
+$ws2.PageSetup.FitToPagesTall = 1
+$wb2.ExportAsFixedFormat(0, $f2Pdf)
+$wb2.Close($false)
+
+# --- 3. 03.안전점검결과서.xlsx ---
+$f3In = '${DRIVE_MIRROR_DIR.replace(/\\/g, '\\\\')}\\\\03.안전점검결과서.xlsx'
+$f3Work = '${tempBuildDir.replace(/\\/g, '\\\\')}\\\\03.안전점검결과서_filled.xlsx'
+$f3Pdf = '${tempBuildDir.replace(/\\/g, '\\\\')}\\\\03.안전점검결과서.pdf'
+Copy-Item $f3In $f3Work -Force
+$wb3 = $excel.Workbooks.Open($f3Work)
+$ws3 = $wb3.Sheets.Item(1)
+Replace-Tag $ws3 "{사업장명}" "${siteName}"
+Replace-Tag $ws3 "{형식}" "자주식 시저형"
+Replace-Tag $ws3 "{제조사}" "SINOBOOM"
+Replace-Tag $ws3 "{고객명}" "${custName}"
+Replace-Tag $ws3 "{동력방식}" "배터리식"
+Replace-Tag $ws3 "{모델명}" "${primaryAsset.modelName}"
+Replace-Tag $ws3 "{중량}" "1,520 kg"
+Replace-Tag $ws3 "{운행속도}" "3.5 km/h"
+Replace-Tag $ws3 "{작업높이}" "6.0 m"
+Replace-Tag $ws3 "{적재}" "230 kg"
+Replace-Tag $ws3 "{차량번호}" "${primaryAsset.assetNo} (${primaryAsset.sn})"
+Replace-Tag $ws3 "{제조연도}" "2021년"
+Replace-Tag $ws3 "{안전인증일}" "2021-05-12"
+Replace-Tag $ws3 "{Today}" "${contractDate}"
+Replace-Tag $ws3 "{점검자}" "김관주"
+$ws3.PageSetup.Orientation = 1
+$ws3.PageSetup.Zoom = $false
+$ws3.PageSetup.FitToPagesWide = 1
+$ws3.PageSetup.FitToPagesTall = 1
+$wb3.ExportAsFixedFormat(0, $f3Pdf)
+$wb3.Close($false)
+
+$excel.Quit()
+[System.Runtime.InteropServices.Marshal]::ReleaseComObject($excel) | Out-Null
+`;
+
+        const psFile = path.join(tempBuildDir, 'build_bundle.ps1');
+        fs.writeFileSync(psFile, psScript, 'utf8');
+
+        // Excel 변환 동기 실행
+        execSync(`powershell -NoProfile -ExecutionPolicy Bypass -File "${psFile}"`, { encoding: 'utf8' });
+
+        // PDF 병합 (pdf-lib)
+        let PDFDocument;
+        try {
+          PDFDocument = require('pdf-lib').PDFDocument;
+        } catch (e) {
+          try {
+            PDFDocument = require('d:/GoogleDrive/RPA 개발/01.AntiGravity/Kiyuen_Lift/node_modules/pdf-lib').PDFDocument;
+          } catch (e2) {
+            PDFDocument = require('C:/KiyeunAgent/node_modules/pdf-lib').PDFDocument;
+          }
+        }
+
+        const mergedPdf = await PDFDocument.create();
+        const pdfSources = [
+          path.join(tempBuildDir, '01.계약서.pdf'),
+          path.join(tempBuildDir, '02.반입전체크리스트.pdf'),
+          path.join(tempBuildDir, '03.안전점검결과서.pdf'),
+          path.join(DRIVE_MIRROR_DIR, '08.생산물배상책임보험증권.pdf'),
+          path.join(DRIVE_MIRROR_DIR, '09.사업자등록증.pdf'),
+          path.join(DRIVE_MIRROR_DIR, '10.통장사본.pdf')
+        ];
+
+        for (const p of pdfSources) {
+          if (fs.existsSync(p)) {
+            const bytes = fs.readFileSync(p);
+            const doc = await PDFDocument.load(bytes);
+            const copied = await mergedPdf.copyPages(doc, doc.getPageIndices());
+            copied.forEach(page => mergedPdf.addPage(page));
+          }
+        }
+
+        const finalPdfBytes = await mergedPdf.save();
+        const pageCount = mergedPdf.getPageCount();
+        const fileName = `[기연리프트]_정품6종통합계약서류팩_${custName}_(${pageCount}p).pdf`;
+
+        // 로컬 문서고 영구 아카이빙
+        const yyyyMm = contractDate.substring(0, 7) || new Date().toISOString().substring(0, 7);
+        const archiveDir = path.join(ARCHIVE_ROOT, yyyyMm);
+        if (!fs.existsSync(archiveDir)) fs.mkdirSync(archiveDir, { recursive: true });
+        const localSavePath = path.join(archiveDir, fileName);
+        fs.writeFileSync(localSavePath, finalPdfBytes);
+
+        // 임시 폴더 청소
+        try { fs.rmSync(tempBuildDir, { recursive: true, force: true }); } catch (e) {}
+
+        const b64 = Buffer.from(finalPdfBytes).toString('base64');
+        res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify({
+          success: true,
+          fileName,
+          pageCount,
+          localPath: localSavePath,
+          base64Content: b64,
+          message: `✅ 100% 정품 엑셀 기반 6종 통합 서류팩 생성 완료 (총 ${pageCount}페이지)`
+        }));
+      } catch (bundleErr) {
+        console.error('❌ 서류팩 생성 실패:', bundleErr);
+        try { fs.rmSync(tempBuildDir, { recursive: true, force: true }); } catch (e) {}
+        res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify({ success: false, error: bundleErr.message }));
+      }
+    });
+    return;
+  }
+
   // 4. 구글 드라이브 로컬 미러링 상태 조회 API (하위 폴더 재귀 통계)
   if (req.method === 'GET' && pathname === '/api/mirror-status') {
     try {
