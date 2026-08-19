@@ -33,7 +33,6 @@ export const AgentHeaderBadge: React.FC<Props> = ({ currentUser }) => {
   const [mirrorFiles, setMirrorFiles] = useState<Array<{ name: string; size: number; modifiedTime: string }>>([]);
   const [isSyncingDrive, setIsSyncingDrive] = useState(false);
   const [syncMessage, setSyncMessage] = useState('');
-  const autoSyncedRef = useRef(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
   // 미러링 진행상황 구독
@@ -60,26 +59,10 @@ export const AgentHeaderBadge: React.FC<Props> = ({ currentUser }) => {
             setAgentCallsign(data.callsign || userCallsign);
           }
 
-          // 미러링 상태 조회
+          // 로컬 미러링 현황 경량 조회 (0.01초 로컬 질의)
           const mStatus = await getLocalMirrorStatus();
           if (isMounted && mStatus.success) {
             setMirrorFiles(mStatus.files || []);
-          }
-
-          // 🚀 [100% 무인 자동 백그라운드 미러링] 에이전트 ONLINE 감지 즉시 자동 1회 + 무음 동기화
-          if (!autoSyncedRef.current) {
-            autoSyncedRef.current = true;
-            executeDriveMirrorSync(googleConfigs?.[0]).then((res) => {
-              if (res.success) {
-                getLocalMirrorStatus().then(ms => {
-                  if (isMounted && ms.success) setMirrorFiles(ms.files || []);
-                });
-              } else {
-                autoSyncedRef.current = false; // 실패 시 다음 틱에 재시도
-              }
-            }).catch(() => {
-              autoSyncedRef.current = false;
-            });
           }
 
           return;
@@ -342,18 +325,28 @@ export const AgentHeaderBadge: React.FC<Props> = ({ currentUser }) => {
                   disabled={isSyncingDrive}
                   onClick={async () => {
                     setIsSyncingDrive(true);
-                    setSyncMessage('CF 스토리지 동기화 진행 중...');
+                    setSyncMessage('CF 버킷 실시간 동기화 중...');
                     try {
-                      const res = await executeDriveMirrorSync(googleConfigs?.[0], (msg) => setSyncMessage(msg));
-                      if (res.success) {
+                      const agentRes = await fetch('http://127.0.0.1:5175/api/trigger-sync', {
+                        method: 'POST',
+                        signal: AbortSignal.timeout(15000)
+                      });
+                      if (agentRes.ok) {
+                        const data = await agentRes.json();
+                        const mStatus = await getLocalMirrorStatus();
+                        if (mStatus.success) setMirrorFiles(mStatus.files || []);
+                        setSyncMessage(data.message || '동기화 완료');
+                      } else {
+                        const res = await executeDriveMirrorSync(googleConfigs?.[0], (msg) => setSyncMessage(msg));
                         const mStatus = await getLocalMirrorStatus();
                         if (mStatus.success) setMirrorFiles(mStatus.files || []);
                         setSyncMessage(res.message);
-                      } else {
-                        setSyncMessage(`⚠️ ${res.message}`);
                       }
                     } catch (e: any) {
-                      setSyncMessage(`⚠️ 동기화 실패: ${e?.message || e}`);
+                      const res = await executeDriveMirrorSync(googleConfigs?.[0], (msg) => setSyncMessage(msg));
+                      const mStatus = await getLocalMirrorStatus();
+                      if (mStatus.success) setMirrorFiles(mStatus.files || []);
+                      setSyncMessage(res.message);
                     } finally {
                       setIsSyncingDrive(false);
                       setTimeout(() => setSyncMessage(''), 4000);

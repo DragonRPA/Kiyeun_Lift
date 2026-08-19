@@ -169,6 +169,21 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // 3-2. Cloudflare R2 원본 실시간 강제 재동기화 API
+  if (req.method === 'POST' && pathname === '/api/trigger-sync') {
+    autoSyncFromCloudflare().then(() => {
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+      res.end(JSON.stringify({
+        success: true,
+        message: 'Cloudflare R2 실시간 버킷 동기화가 완료되었습니다.'
+      }));
+    }).catch(err => {
+      res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
+      res.end(JSON.stringify({ success: false, error: err.message }));
+    });
+    return;
+  }
+
   // 4. 구글 드라이브 로컬 미러링 상태 조회 API (하위 폴더 재귀 통계)
   if (req.method === 'GET' && pathname === '/api/mirror-status') {
     try {
@@ -603,8 +618,10 @@ async function autoSyncFromCloudflare() {
 
 server.listen(PORT, '127.0.0.1', () => {
   console.log(`🟢 로컬 에이전트 서비스 리스닝 시작: http://127.0.0.1:${PORT}`);
-  // 기동 즉시 백그라운드에서 CF 실시간 동적 미러링 실행
+  // 기동 즉시 백그라운드에서 CF 실시간 동적 미러링 실행 (1회)
   setTimeout(autoSyncFromCloudflare, 300);
+  // 이후 1시간마다 백그라운드 자가 점검 (3600000 ms)
+  setInterval(autoSyncFromCloudflare, 3600000);
 });
 
 
