@@ -318,29 +318,43 @@ export async function downloadContractDocumentBundlePdf(options?: SampleContract
     document.body.removeChild(container);
   }
 
-  // 3. 🛡️ 실제 원본 PDF 보관서류 목록 (문서 위변조 0% - 관인/직인/위변조방지마크 바이너리 그대로 복사)
-  const originalPdfUrls: string[] = [
-    '/documents/KCs_안전인증서_GTJZ0608ME.pdf',
-    '/documents/장비작동법_SINOBOOM.pdf',
-    '/documents/비상하강작동법_SINOBOOM.pdf',
-    '/documents/PL보험증권_2026_2027.pdf',
-    ...(needsRenewalInsurance ? ['/documents/PL보험증권_2027_2028.pdf'] : []),
-    '/documents/사업자등록증_기연리프트.pdf',
-    '/documents/통장사본_신한은행.pdf',
+  // 3. 🛡️ 실제 Cloudflare R2 원본 PDF 서류 (08.보험증권, 09.사업자등록증, 10.통장사본)
+  const cfPdfFiles: Array<{ name: string; label: string }> = [
+    { name: '08.생산물배상책임보험증권.pdf', label: '08. 생산물배상책임보험증권' },
+    { name: '09.사업자등록증.pdf', label: '09. 사업자등록증' },
+    { name: '10.통장사본.pdf', label: '10. 통장사본' }
   ];
 
-  for (const url of originalPdfUrls) {
-    try {
-      const pdfBytes = await fetch(url).then((res) => {
-        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-        return res.arrayBuffer();
-      });
+  const publicDomain = 'https://pub-a2fd3c2ae0cc450b8ebe34baf1b051e1.r2.dev';
 
-      const originalDoc = await PDFDocument.load(pdfBytes);
-      const copiedPages = await mergedPdf.copyPages(originalDoc, originalDoc.getPageIndices());
-      copiedPages.forEach((page) => mergedPdf.addPage(page));
+  for (const cfFile of cfPdfFiles) {
+    try {
+      let pdfBytes: ArrayBuffer | null = null;
+      // 1순위: 로컬 에이전트 캐시
+      try {
+        const localRes = await fetch(`http://127.0.0.1:5175/api/get-file?fileName=${encodeURIComponent(cfFile.name)}`, { signal: AbortSignal.timeout(1500) });
+        if (localRes.ok) {
+          const ab = await localRes.arrayBuffer();
+          if (ab.byteLength > 100) pdfBytes = ab;
+        }
+      } catch (e) {}
+
+      // 2순위: CF R2 Public URL
+      if (!pdfBytes) {
+        const cfRes = await fetch(`${publicDomain}/${encodeURIComponent(cfFile.name)}`, { signal: AbortSignal.timeout(10000) });
+        if (cfRes.ok) {
+          const ab = await cfRes.arrayBuffer();
+          if (ab.byteLength > 100) pdfBytes = ab;
+        }
+      }
+
+      if (pdfBytes) {
+        const originalDoc = await PDFDocument.load(pdfBytes);
+        const copiedPages = await mergedPdf.copyPages(originalDoc, originalDoc.getPageIndices());
+        copiedPages.forEach((page) => mergedPdf.addPage(page));
+      }
     } catch (err) {
-      console.warn(`⚠️ 원본 PDF 파일 로드 실패 (${url}):`, err);
+      console.warn(`⚠️ Cloudflare R2 PDF 로드 실패 (${cfFile.name}):`, err);
     }
   }
 
@@ -349,9 +363,9 @@ export async function downloadContractDocumentBundlePdf(options?: SampleContract
   const blob = new Blob([mergedPdfBytes.buffer as ArrayBuffer], { type: 'application/pdf' });
   const downloadUrl = URL.createObjectURL(blob);
 
-  const cName = options?.customerName || '세보엠이씨';
+  const cName = options?.customerName || '고객사';
   const pageCount = mergedPdf.getPageCount();
-  const fileName = `[기연리프트]_통합출고계약서류팩_${cName}_실제원본통합(${pageCount}p).pdf`;
+  const fileName = `[기연리프트]_6종통합계약서류팩_${cName}_CF원본통합(${pageCount}p).pdf`;
 
   const link = document.createElement('a');
   link.href = downloadUrl;
@@ -360,6 +374,141 @@ export async function downloadContractDocumentBundlePdf(options?: SampleContract
   link.click();
   document.body.removeChild(link);
   URL.revokeObjectURL(downloadUrl);
+}
+
+/**
+ * 🌟 Cloudflare R2 6종 통합 계약 서류팩 PDF 생성 엔진 (진행률 콜백 및 Blob 반환 지원)
+ */
+export async function generateCloudflare6DocBundlePdf(
+  options: SampleContractBundleOptions,
+  onProgress?: (stepText: string, current: number, total: number) => void
+): Promise<{ pdfBytes: Uint8Array; blob: Blob; url: string; pageCount: number; fileName: string }> {
+  const mergedPdf = await PDFDocument.create();
+  const totalSteps = 6;
+
+  // Step 1: 01.계약서
+  onProgress?.('01. 고소작업대 임대차계약서 렌더링 중...', 1, totalSteps);
+  const erpPagesHtml = generateInternalErpHTMLPages(options);
+  const container = document.createElement('div');
+  container.style.position = 'absolute';
+  container.style.left = '-9999px';
+  container.style.top = '-9999px';
+  document.body.appendChild(container);
+
+  try {
+    const erpPdfDoc = await PDFDocument.create();
+
+    // 01.계약서
+    container.innerHTML = erpPagesHtml[0];
+    const canvas1 = await html2canvas(container.firstElementChild as HTMLElement, {
+      scale: 1.8, useCORS: true, allowTaint: true, logging: false, backgroundColor: '#ffffff', width: 700, windowWidth: 700
+    });
+    const img1 = await erpPdfDoc.embedJpg(await (await fetch(canvas1.toDataURL('image/jpeg', 0.90))).arrayBuffer());
+    const p1 = erpPdfDoc.addPage([595.28, 841.89]);
+    p1.drawImage(img1, { x: 0, y: 0, width: 595.28, height: 841.89 });
+
+    // Step 2: 02.반입전체크리스트
+    onProgress?.('02. 반입 전 자체점검 체크리스트 렌더링 중...', 2, totalSteps);
+    if (erpPagesHtml[1]) {
+      container.innerHTML = erpPagesHtml[1];
+      const canvas2 = await html2canvas(container.firstElementChild as HTMLElement, {
+        scale: 1.8, useCORS: true, allowTaint: true, logging: false, backgroundColor: '#ffffff', width: 700, windowWidth: 700
+      });
+      const img2 = await erpPdfDoc.embedJpg(await (await fetch(canvas2.toDataURL('image/jpeg', 0.90))).arrayBuffer());
+      const p2 = erpPdfDoc.addPage([595.28, 841.89]);
+      p2.drawImage(img2, { x: 0, y: 0, width: 595.28, height: 841.89 });
+    }
+
+    // Step 3: 03.안전점검결과서
+    onProgress?.('03. 고소작업대 안전점검 결과서 렌더링 중...', 3, totalSteps);
+    if (erpPagesHtml[2]) {
+      container.innerHTML = erpPagesHtml[2];
+      const canvas3 = await html2canvas(container.firstElementChild as HTMLElement, {
+        scale: 1.8, useCORS: true, allowTaint: true, logging: false, backgroundColor: '#ffffff', width: 700, windowWidth: 700
+      });
+      const img3 = await erpPdfDoc.embedJpg(await (await fetch(canvas3.toDataURL('image/jpeg', 0.90))).arrayBuffer());
+      const p3 = erpPdfDoc.addPage([595.28, 841.89]);
+      p3.drawImage(img3, { x: 0, y: 0, width: 595.28, height: 841.89 });
+    }
+
+    const erpCopiedPages = await mergedPdf.copyPages(erpPdfDoc, erpPdfDoc.getPageIndices());
+    erpCopiedPages.forEach((p) => mergedPdf.addPage(p));
+  } finally {
+    document.body.removeChild(container);
+  }
+
+  // Helper: CF R2 PDF 가져오기
+  const publicDomain = 'https://pub-a2fd3c2ae0cc450b8ebe34baf1b051e1.r2.dev';
+  const fetchPdf = async (fileName: string): Promise<ArrayBuffer | null> => {
+    try {
+      const localRes = await fetch(`http://127.0.0.1:5175/api/get-file?fileName=${encodeURIComponent(fileName)}`, { signal: AbortSignal.timeout(1500) });
+      if (localRes.ok) {
+        const ab = await localRes.arrayBuffer();
+        if (ab.byteLength > 100) return ab;
+      }
+    } catch (e) {}
+
+    try {
+      const cfRes = await fetch(`${publicDomain}/${encodeURIComponent(fileName)}`, { signal: AbortSignal.timeout(12000) });
+      if (cfRes.ok) {
+        const ab = await cfRes.arrayBuffer();
+        if (ab.byteLength > 100) return ab;
+      }
+    } catch (e) {}
+    return null;
+  };
+
+  // Step 4: 08.생산물배상책임보험증권
+  onProgress?.('08. 생산물배상책임보험증권 (CF R2) 수신 및 병합 중...', 4, totalSteps);
+  const pdf8Bytes = await fetchPdf('08.생산물배상책임보험증권.pdf');
+  if (pdf8Bytes) {
+    const doc8 = await PDFDocument.load(pdf8Bytes);
+    const pages8 = await mergedPdf.copyPages(doc8, doc8.getPageIndices());
+    pages8.forEach(p => mergedPdf.addPage(p));
+  }
+
+  // Step 5: 09.사업자등록증
+  onProgress?.('09. 사업자등록증 (CF R2) 수신 및 병합 중...', 5, totalSteps);
+  const pdf9Bytes = await fetchPdf('09.사업자등록증.pdf');
+  if (pdf9Bytes) {
+    const doc9 = await PDFDocument.load(pdf9Bytes);
+    const pages9 = await mergedPdf.copyPages(doc9, doc9.getPageIndices());
+    pages9.forEach(p => mergedPdf.addPage(p));
+  }
+
+  // Step 6: 10.통장사본
+  onProgress?.('10. 통장사본 (CF R2) 수신 및 병합 중...', 6, totalSteps);
+  const pdf10Bytes = await fetchPdf('10.통장사본.pdf');
+  if (pdf10Bytes) {
+    const doc10 = await PDFDocument.load(pdf10Bytes);
+    const pages10 = await mergedPdf.copyPages(doc10, doc10.getPageIndices());
+    pages10.forEach(p => mergedPdf.addPage(p));
+  }
+
+  const mergedPdfBytes = await mergedPdf.save();
+  const blob = new Blob([mergedPdfBytes.buffer as ArrayBuffer], { type: 'application/pdf' });
+  const url = URL.createObjectURL(blob);
+  const cName = options?.customerName || '고객사';
+  const pageCount = mergedPdf.getPageCount();
+  const fileName = `[기연리프트]_6종통합계약서류팩_${cName}_CF원본통합(${pageCount}p).pdf`;
+
+  // 로컬 에이전트 문서고 자동 보관 (백그라운드)
+  try {
+    const binaryStr = Array.from(mergedPdfBytes).map(b => String.fromCharCode(b)).join('');
+    const b64 = btoa(binaryStr);
+    fetch('http://127.0.0.1:5175/api/execute-job', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jobType: 'CONTRACT_BUNDLE_6DOC',
+        contractNo: options?.contractNo || '계약',
+        customerName: cName,
+        base64Content: b64
+      })
+    }).catch(() => {});
+  } catch (e) {}
+
+  return { pdfBytes: mergedPdfBytes, blob, url, pageCount, fileName };
 }
 
 // ──────────────────────────────────────────────────────────────────────────────

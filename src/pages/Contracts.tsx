@@ -8,6 +8,8 @@ import {
 import { Contract, db, Customer, CustomerContact, CustomerSite, ContractAsset, ContractHistory, Delivery } from '../services/db';
 import { exportToExcel } from '../services/excel';
 import { downloadContractDocumentBundlePdf } from '../services/pdfBundle';
+import { ContractDocumentBundleModal } from '../components/ContractDocumentBundleModal';
+import { FileText } from 'lucide-react';
 
 export const Contracts: React.FC = () => {
   const {
@@ -17,6 +19,10 @@ export const Contracts: React.FC = () => {
   } = useApp();
 
   const canSave = hasPermission('contract', 'save');
+
+  // 6종 통합 서류팩 모달 상태
+  const [showBundleModal, setShowBundleModal] = useState(false);
+  const [bundleTargetContractId, setBundleTargetContractId] = useState<string | undefined>(undefined);
 
   // 계약 변경 권한 검증 함수
   const canModifyContract = (contract: Contract) => {
@@ -619,6 +625,17 @@ export const Contracts: React.FC = () => {
             >
               계약 목록 ({filteredContracts.length})
             </button>
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={() => {
+                setBundleTargetContractId(undefined);
+                setShowBundleModal(true);
+              }}
+              style={{ padding: '7px 14px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px', color: '#2563eb', fontWeight: 'bold' }}
+            >
+              <FileText size={14} /> 6종 통합 서류팩 PDF
+            </button>
             {canSave && (
               <button
                 className={activeTab === 'CREATE' ? 'btn-success' : 'btn-secondary'}
@@ -923,30 +940,12 @@ export const Contracts: React.FC = () => {
                 type="button"
                 className="btn-secondary"
                 onClick={() => {
-                  const custName = getCustName(activeContract.customerId);
-                  const siteName = getSiteName(activeContract.siteId);
-                  const mappedAssets = activeContractAssets.map(ca => {
-                    const a = assets.find(ast => ast.id === ca.assetId);
-                    return {
-                      assetNo: a?.assetNo || 'G06119',
-                      modelName: a?.modelName || ca.expectedModel || 'GTJZ0608ME',
-                      sn: a?.serialNo || '0108000379',
-                      rentalFee: ca.monthlyRentalFee || 390000
-                    };
-                  });
-                  downloadContractDocumentBundlePdf({
-                    customerName: custName,
-                    contractDate: activeContract.startDate,
-                    contractStartDate: activeContract.startDate,
-                    contractEndDate: activeContract.endDate,
-                    siteName: siteName,
-                    contractNo: activeContract.id,
-                    assets: mappedAssets.length > 0 ? mappedAssets : undefined
-                  });
+                  setBundleTargetContractId(activeContract.id);
+                  setShowBundleModal(true);
                 }}
-                style={{ padding: '6px 12px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--primary)', fontWeight: 'bold' }}
+                style={{ padding: '6px 12px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px', color: '#2563eb', fontWeight: 'bold' }}
               >
-                <Download size={14} /> 통합 서류 팩 PDF
+                <Download size={14} /> 6종 통합 서류팩 PDF
               </button>
 
               {canSave && canModifyContract(activeContract) && (
@@ -1455,6 +1454,13 @@ export const Contracts: React.FC = () => {
           </div>
         </form>
       )}
+
+      {/* 6종 통합 계약 서류팩 모달 */}
+      <ContractDocumentBundleModal
+        isOpen={showBundleModal}
+        onClose={() => setShowBundleModal(false)}
+        initialContractId={bundleTargetContractId}
+      />
 
       {/* 스타일 */}
       <style>{`
