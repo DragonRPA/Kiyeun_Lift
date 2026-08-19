@@ -1,4 +1,18 @@
+# Release Notes (v1.123.0.Build.240 - 2026-08-19 16:54)
+
+## 📁 [Cloudflare R2 빈 폴더(Directory Marker) 자동 감지 및 로컬 폴더 트리 생성 지원]
+
+### 🌟 반영 내용
+1. **Cloudflare R2 빈 폴더 마커(`/` 접미사) 감지 및 로컬 폴더 자동 생성 (`agent/agent.js`, `api/r2.ts`, `driveMirrorSync.ts`)**:
+   - Cloudflare R2 버킷에 파일 없이 생성된 빈 폴더(예: `Contract_doc/`, `Eq_doc/` 등 0-byte 객체)를 자동으로 감지.
+   - 로컬 `C:\KiyeunAgent\drive_mirror\` 하위에 해당 빈 폴더 트리를 실시간으로 자동 생성(`fs.mkdirSync`).
+2. **에이전트 실시간 로그 상세화**:
+   - `📦 [CF R2 버킷 파일 목록 확인] 파일 18개, 빈 폴더 2개 발견` 및 `📁 [CF 빈 폴더 생성]` 진행 로그 표출.
+
+---
+
 # Release Notes (v1.122.0.Build.239 - 2026-08-19 16:45)
+
 
 ## 🚀 [Cloudflare R2 100% 동적 실시간 스캔 엔진 탑재] 하드코딩 완전 폐지 & 실시간 버킷 자동 동기화
 

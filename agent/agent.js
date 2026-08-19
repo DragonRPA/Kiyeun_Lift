@@ -216,7 +216,17 @@ const server = http.createServer(async (req, res) => {
         const syncedResults = [];
 
         for (const file of filesToSync) {
-          if (!file.name || !file.base64Content) continue;
+          if (!file.name) continue;
+
+          // 빈 폴더 마커 처리
+          if (file.isDirectory || file.name.endsWith('/') || !file.base64Content) {
+            const targetDir = path.join(DRIVE_MIRROR_DIR, file.name);
+            if (!fs.existsSync(targetDir)) {
+              fs.mkdirSync(targetDir, { recursive: true });
+            }
+            syncedResults.push({ name: file.name, size: 0, path: targetDir, isDirectory: true });
+            continue;
+          }
 
           const targetFilePath = path.join(DRIVE_MIRROR_DIR, file.name);
           const targetDir = path.dirname(targetFilePath);
@@ -521,9 +531,8 @@ async function fetchR2BucketAllObjects() {
     while ((match = contentRegex.exec(xmlData)) !== null) {
       const key = match[1];
       const size = parseInt(match[2], 10);
-      if (!key.endsWith('/')) {
-        allObjects.push({ key, size });
-      }
+      const isDirectory = key.endsWith('/');
+      allObjects.push({ key, size, isDirectory });
     }
   }
 
@@ -534,11 +543,26 @@ async function autoSyncFromCloudflare() {
   console.log('🔄 [CF 실시간 동적 미러링] Cloudflare R2 원본 저장소 실시간 스캔 시작...');
   try {
     const objects = await fetchR2BucketAllObjects();
-    console.log(`📦 [CF R2 버킷 파일 목록 확인] 총 ${objects.length}개 발견`);
+    const fileCount = objects.filter(o => !o.isDirectory).length;
+    const folderCount = objects.filter(o => o.isDirectory).length;
+    console.log(`📦 [CF R2 버킷 파일 목록 확인] 파일 ${fileCount}개, 빈 폴더 ${folderCount}개 발견`);
     let downloaded = 0;
     let skipped = 0;
+    let foldersCreated = 0;
 
     for (const obj of objects) {
+      // 빈 폴더 또는 디렉토리 마커 처리
+      if (obj.isDirectory) {
+        const targetDir = path.join(DRIVE_MIRROR_DIR, obj.key);
+        if (!fs.existsSync(targetDir)) {
+          fs.mkdirSync(targetDir, { recursive: true });
+          console.log(`📁 [CF 빈 폴더 생성] ${obj.key}`);
+          foldersCreated++;
+        }
+        continue;
+      }
+
+      // 일반 파일 다운로드
       const targetFile = path.join(DRIVE_MIRROR_DIR, obj.key);
       const targetDir = path.dirname(targetFile);
       if (!fs.existsSync(targetDir)) fs.mkdirSync(targetDir, { recursive: true });
@@ -567,10 +591,10 @@ async function autoSyncFromCloudflare() {
       }
     }
 
-    if (downloaded > 0) {
-      console.log(`✅ [CF 동적 미러링 완료] 신규/갱신: ${downloaded}개, 최신 유지: ${skipped}개 (총 ${objects.length}개)`);
+    if (downloaded > 0 || foldersCreated > 0) {
+      console.log(`✅ [CF 동적 미러링 완료] 파일 갱신: ${downloaded}개, 폴더 생성: ${foldersCreated}개, 최신 유지: ${skipped}개`);
     } else {
-      console.log(`✅ [CF 동적 미러링 완료] 모든 파일(${objects.length}개)이 이미 최신 상태로 로컬에 보존되어 있습니다.`);
+      console.log(`✅ [CF 동적 미러링 완료] 모든 파일(${fileCount}개) 및 폴더가 이미 최신 상태로 로컬에 보존되어 있습니다.`);
     }
   } catch (err) {
     console.error('⚠️ CF R2 실시간 버킷 조회 오류:', err.message);

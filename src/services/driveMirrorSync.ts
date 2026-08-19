@@ -170,6 +170,16 @@ export async function executeDriveMirrorSync(
     });
     onProgress?.(`[${i + 1}/${r2Files.length}] ${file.key}`, i + 1, r2Files.length);
 
+    if (file.key.endsWith('/')) {
+      payloadFiles.push({
+        name: file.key,
+        base64Content: '',
+        modifiedTime: new Date().toISOString()
+      });
+      successCount++;
+      continue;
+    }
+
     try {
       const ab = await downloadFromR2(publicDomain, file.key);
       if (ab) {

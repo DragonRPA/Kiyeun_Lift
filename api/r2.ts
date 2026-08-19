@@ -1,4 +1,4 @@
-﻿// api/r2.ts
+// api/r2.ts
 // Vercel Serverless Function — Cloudflare R2 클라우드 스토리지 S3 호환 API
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { 
@@ -96,10 +96,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         
         if (response.Contents) {
           for (const item of response.Contents) {
-            if (item.Key && !item.Key.endsWith('/')) { // 빈 폴더 마커 제외
+            if (item.Key) {
+              const isDir = item.Key.endsWith('/');
               allFiles.push({
                 key: item.Key,
                 size: item.Size || 0,
+                isDirectory: isDir,
                 lastModified: item.LastModified ? item.LastModified.toISOString() : new Date().toISOString(),
                 etag: (item.ETag || '').replace(/"/g, '')
               });
