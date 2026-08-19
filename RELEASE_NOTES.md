@@ -1,4 +1,26 @@
+# Release Notes (v1.118.0.Build.235 - 2026-08-19 15:55)
+
+## 🔁 [CF R2 단방향 미러링 엔진 완전 교체] 구글 드라이브 잔재 전면 제거
+
+### 🌟 반영 내용
+1. **`driveMirrorSync.ts` CF R2 전용 엔진으로 완전 교체**:
+   - 기존 코드에 잔존하던 Google Apps Script 재귀 탐색, 구글 드라이브 공개 공유 URL 다운로드, 시스템 내장 HTML 템플릿 동기화(`/templates/*.html`) 로직을 **완전 제거**.
+   - 미러링 엔진을 **CF R2 버킷 전수 스캔 → CF 공개 도메인 다이렉트 다운로드 → 로컬 에이전트 단방향 전송** 3단계 파이프라인으로 완전 재구축.
+   - Vercel `/api/r2?action=list`로 버킷 내 전체 파일 목록(무제한 폴더 깊이 재귀)을 조회, CF 공개 도메인(`pub-xxx.r2.dev`)에서 파일 직접 수신, 로컬 에이전트 `/api/sync-drive` POST로 단방향 덮어쓰기.
+2. **로컬 에이전트 `agent.js` 구글 드라이브 4순위 폴백 제거 및 R2 자동 다운로드 로직 강화**:
+   - `/api/get-file` 3순위 로직을 CF R2 기본 공개 도메인 자동 fallback으로 교체(파일명만 전달해도 CF에서 자동 수신).
+   - `api/sync-drive` 핸들러에서 `archive/` 폴더 자동 생성 및 구버전 백업 로직 완전 삭제 → CF 원본이 로컬을 무조건 덮어쓰는 단방향 원칙 100% 구현.
+3. **로컬 `drive_mirror` 디렉터리 정합성 정리**:
+   - 구글 드라이브 시절 레거시 파일(`*.html`, `*_원본.pdf`, `(공통)*.jpg` 등) 및 `archive/` 폴더 완전 삭제.
+   - CF 버킷의 현재 상태(`Basic_Doc/`, `Contract_doc/`, `Eq_doc/` + 루트 7개 파일)와 로컬 미러가 1:1 일치.
+4. **에이전트 바이너리 재컴파일 및 배포**:
+   - `esbuild` 번들 시 `--external:pdf-lib` 옵션 제거 → `pdf-lib` 포함 완전 자립형(SEA) 바이너리 재빌드.
+   - `agent/KiyeunAgent.exe`, `public/downloads/KiyeunAgent.exe`, `C:\KiyeunAgent\KiyeunAgent.exe` 동기 배포 완료.
+
+---
+
 # Release Notes (v1.117.0.Build.234 - 2026-08-18 14:26)
+
 
 ## 🗄️ [CloudStoragePickerModal 구축 및 자산/설정 화면 R2 연동 완결] 구글 레거시 모달 전면 교체
 

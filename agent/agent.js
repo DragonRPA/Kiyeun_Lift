@@ -236,9 +236,6 @@ const server = http.createServer(async (req, res) => {
       try {
         const payload = JSON.parse(body || '{}');
         const filesToSync = payload.files || (payload.file ? [payload.file] : []);
-        const archiveDir = path.join(DRIVE_MIRROR_DIR, 'archive');
-        if (!fs.existsSync(archiveDir)) fs.mkdirSync(archiveDir, { recursive: true });
-
         const syncedResults = [];
 
         for (const file of filesToSync) {
@@ -251,22 +248,9 @@ const server = http.createServer(async (req, res) => {
           }
 
           const buffer = Buffer.from(file.base64Content, 'base64');
-
-          // 기존 파일 존재 시 버전 아카이빙 (수정일자가 다르거나 크기가 다른 경우)
-          if (fs.existsSync(targetFilePath)) {
-            const existingStat = fs.statSync(targetFilePath);
-            if (existingStat.size !== buffer.length) {
-              const nowIso = new Date().toISOString().replace(/[:.]/g, '-');
-              const safeFileName = file.name.replace(/[\/\\]/g, '_');
-              const backupName = `${nowIso}_${safeFileName}`;
-              fs.copyFileSync(targetFilePath, path.join(archiveDir, backupName));
-              console.log(`📦 [미러링 버전 아카이브] ${file.name} -> archive/${backupName}`);
-            }
-          }
-
           fs.writeFileSync(targetFilePath, buffer);
           syncedResults.push({ name: file.name, size: buffer.length, path: targetFilePath });
-          console.log(`💾 [구글 드라이브 미러링 완료] ${file.name} (${buffer.length} bytes)`);
+          console.log(`💾 [CF 미러링 완료] ${file.name} (${buffer.length} bytes)`);
         }
 
         res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
@@ -391,8 +375,8 @@ const server = http.createServer(async (req, res) => {
           return;
         }
 
-        // 3순위: R2 공개 URL 또는 전달된 직결 URL이 있는 경우 다운로드 후 로컬 캐싱
-        const directUrl = searchParams.get('url');
+        // 3순위: R2 공개 URL 또는 기본 CF R2 도메인에서 자동 다운로드 후 로컬 캐싱
+        const directUrl = searchParams.get('url') || (fileName ? `https://pub-a2fd3c2ae0cc450b8ebe34baf1b051e1.r2.dev/${fileName.split('/').map(encodeURIComponent).join('/')}` : null);
         if (directUrl && directUrl.startsWith('http')) {
           try {
             const fetchRes = await fetch(directUrl);

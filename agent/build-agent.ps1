@@ -1,4 +1,4 @@
-﻿# agent/build-agent.ps1
+# agent/build-agent.ps1
 # (주)기연리프트 로컬 에이전트 원클릭 컴파일 & 서명 & 동기화 스크립트
 
 $ErrorActionPreference = "Stop"
@@ -12,7 +12,7 @@ Write-Host "========================================================" -Foregroun
 
 # 1. esbuild 번들링
 Write-Host "1. esbuild 번들링 진행 중..." -ForegroundColor Yellow
-cmd /c "npx esbuild `"$scriptDir\agent.js`" --bundle --platform=node --outfile=`"$scriptDir\agent-bundle.js`" --external:pdf-lib"
+cmd /c "npx esbuild `"$scriptDir\agent.js`" --bundle --platform=node --outfile=`"$scriptDir\agent-bundle.js`""
 
 # 2. Node SEA Prep Blob 생성
 Write-Host "2. Node.js SEA Blob 생성 중..." -ForegroundColor Yellow

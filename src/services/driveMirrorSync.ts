@@ -1,8 +1,8 @@
 // src/services/driveMirrorSync.ts
-// (주)기연리프트 구글 드라이브 ➔ 로컬 PC (C:\KiyeunAgent\drive_mirror\) 실시간 미러링 동기화 엔진
+// (주)기연리프트 Cloudflare R2 ➔ 로컬 PC (C:\KiyeunAgent\drive_mirror\) 단방향 미러링 동기화 엔진
+// 원칙: CF R2가 유일한 마스터 원본(SSOT), 로컬 drive_mirror는 항상 CF R2를 따라가는 읽기 전용 사본
 
 import { GoogleConfig } from './db';
-import { extractDriveFileId, extractDriveFolderId, downloadPublicDriveFile } from './googleDriveBackup';
 
 export interface MirrorSyncResult {
   success: boolean;
@@ -48,193 +48,148 @@ function updateProgress(partial: Partial<MirrorProgressState>) {
   });
 }
 
-/**
- * ArrayBuffer -> Base64 변환
- */
 function arrayBufferToBase64(buffer: ArrayBuffer): string {
   const bytes = new Uint8Array(buffer);
   let binary = '';
-  const len = bytes.byteLength;
-  for (let i = 0; i < len; i++) {
+  for (let i = 0; i < bytes.byteLength; i++) {
     binary += String.fromCharCode(bytes[i]);
   }
   return btoa(binary);
 }
 
 /**
- * 구글 드라이브 루트 폴더 및 하위 폴더 전체와 등록된 서식/증빙 파일들을 로컬 에이전트로 일괄 미러링 동기화
+ * CF R2 버킷 전체 파일 목록을 Vercel /api/r2 프록시를 통해 조회
+ */
+async function listR2AllFiles(config: GoogleConfig): Promise<Array<{ key: string; size: number }>> {
+  const params = new URLSearchParams({
+    action: 'list',
+    accountId: config.r2AccountId || '',
+    bucketName: config.r2BucketName || '',
+    accessKeyId: config.r2AccessKeyId || '',
+    secretAccessKey: config.r2SecretAccessKey || ''
+  });
+
+  const res = await fetch(`/api/r2?${params.toString()}`, {
+    signal: AbortSignal.timeout(15000)
+  });
+
+  if (!res.ok) throw new Error(`R2 목록 조회 실패: HTTP ${res.status}`);
+  const data = await res.json();
+  if (!data.success) throw new Error(data.error || 'R2 목록 조회 실패');
+  return data.files || [];
+}
+
+/**
+ * CF R2 공개 URL을 통해 파일 직접 다운로드
+ */
+async function downloadFromR2(publicDomain: string, key: string): Promise<ArrayBuffer | null> {
+  const encodedKey = key.split('/').map(encodeURIComponent).join('/');
+  const url = `${publicDomain.replace(/\/$/, '')}/${encodedKey}`;
+  try {
+    const res = await fetch(url, { signal: AbortSignal.timeout(20000) });
+    if (res.ok) {
+      const ab = await res.arrayBuffer();
+      return ab.byteLength > 0 ? ab : null;
+    }
+  } catch (e) {}
+  return null;
+}
+
+/**
+ * CF R2 버킷 전체 파일을 로컬 에이전트로 미러링
+ * - CF R2가 원본(SSOT), 로컬은 항상 원본을 단방향으로 덮어씌우는 사본
+ * - 구글 드라이브, Apps Script, 내장 HTML 템플릿 일체 사용 안 함
  */
 export async function executeDriveMirrorSync(
   config?: GoogleConfig,
   onProgress?: (msg: string, current: number, total: number) => void
 ): Promise<MirrorSyncResult> {
-  const appsScriptUrl = config?.appsScriptUrl?.trim();
-  const folderId = extractDriveFolderId(config?.defaultRootFolderId || '') || (config?.defaultRootFolderId?.includes('/') ? null : config?.defaultRootFolderId?.trim()) || '1aBZsZ1KnKhk9Ax6oiM2cb-yKfDHKGRif';
-  const clientId = config?.oauthClientId?.trim() || '274287991550-7eaeisb14i80315pmlf8390smf58pkbt.apps.googleusercontent.com';
+  const publicDomain = config?.r2PublicDomain?.trim();
+  const r2AccountId = config?.r2AccountId?.trim();
+  const r2BucketName = config?.r2BucketName?.trim();
+
+  if (!publicDomain || !r2AccountId || !r2BucketName || !config?.r2AccessKeyId || !config?.r2SecretAccessKey) {
+    const msg = 'CF R2 자격증명이 설정되지 않았습니다. [관리자 설정 > CF 스토리지 설정]을 확인하세요.';
+    updateProgress({ isActive: false, phase: 'ERROR', message: msg });
+    return { success: false, syncedCount: 0, failedCount: 0, files: [], message: msg };
+  }
 
   updateProgress({
     isActive: true,
     phase: 'SCANNING',
-    currentFile: '구글 드라이브 연결 확인 중...',
+    currentFile: 'CF R2 버킷 파일 목록 조회 중...',
     currentIndex: 0,
     totalCount: 0,
     percent: 5,
-    message: '구글 드라이브 폴더 트리 탐색 준비 중...'
+    message: `CF R2 [${r2BucketName}] 버킷 전체 목록 스캔 중...`
   });
 
-  const isRecursive = config?.mirrorRecursive !== false;
+  let r2Files: Array<{ key: string; size: number }> = [];
+  try {
+    r2Files = await listR2AllFiles(config!);
+  } catch (err: any) {
+    const msg = `CF R2 목록 조회 실패: ${err?.message || err}`;
+    updateProgress({ isActive: false, phase: 'ERROR', message: msg });
+    return { success: false, syncedCount: 0, failedCount: 0, files: [], message: msg };
+  }
+
+  if (r2Files.length === 0) {
+    const msg = 'CF R2 버킷에 파일이 없습니다.';
+    updateProgress({ isActive: false, phase: 'COMPLETED', message: msg });
+    return { success: true, syncedCount: 0, failedCount: 0, files: [], message: msg };
+  }
+
+  updateProgress({
+    phase: 'DOWNLOADING',
+    totalCount: r2Files.length,
+    percent: 10,
+    message: `CF R2에서 ${r2Files.length}개 파일 수신 시작...`
+  });
+
   const payloadFiles: Array<{ name: string; base64Content: string; modifiedTime: string }> = [];
   let successCount = 0;
   let failCount = 0;
 
-  // ── 1. Google Apps Script 기반 구글 드라이브 하위 폴더 재귀 목록 탐색 및 일괄 수신 ──
-  if (appsScriptUrl && folderId) {
-    updateProgress({
-      phase: 'SCANNING',
-      currentFile: '구글 드라이브 하위 폴더 재귀 탐색 중...',
-      message: isRecursive ? '하위 디렉토리 파일 트리 재귀 탐색 중...' : '루트 폴더 파일 탐색 중...'
-    });
-
-    try {
-      const listAction = isRecursive ? 'listFolderRecursive' : 'listFiles';
-      const listRes = await fetch(`${appsScriptUrl}?action=${listAction}&folderId=${encodeURIComponent(folderId)}`, {
-        signal: AbortSignal.timeout(10000)
-      });
-      if (listRes.ok) {
-        const listData = await listRes.json();
-        if (listData.success && Array.isArray(listData.files)) {
-          const driveFiles: Array<{ id: string; name: string }> = listData.files;
-          for (let i = 0; i < driveFiles.length; i++) {
-            const df = driveFiles[i];
-            updateProgress({
-              phase: 'DOWNLOADING',
-              currentFile: df.name,
-              currentIndex: i + 1,
-              totalCount: driveFiles.length,
-              percent: Math.min(85, Math.round(((i + 1) / driveFiles.length) * 80) + 5),
-              message: `[${i + 1}/${driveFiles.length}] ${df.name} 수신 중...`
-            });
-
-            try {
-              const dlRes = await fetch(`${appsScriptUrl}?action=downloadFile&fileId=${encodeURIComponent(df.id)}`);
-              if (dlRes.ok) {
-                const dlData = await dlRes.json();
-                if (dlData.success && dlData.base64) {
-                  payloadFiles.push({
-                    name: df.name,
-                    base64Content: dlData.base64,
-                    modifiedTime: new Date().toISOString()
-                  });
-                  successCount++;
-                }
-              }
-            } catch (dlErr) {
-              failCount++;
-            }
-          }
-        }
-      }
-    } catch (scanErr) {
-      console.warn('Apps Script 폴더 재귀 탐색 건너뜀 (공개 다운로드로 전환):', scanErr);
-    }
-  }
-
-  // ── 2. 공개 공유된 증빙/서식 파일 토큰 0회 다운로드 ──
-  const specificItems = [
-    { label: '사업자등록증', url: config?.bizRegCertUrl, ext: 'pdf' },
-    { label: '통장사본', url: config?.bankbookCopyUrl, ext: 'pdf' },
-    { label: '안전점검결과서_양식', url: config?.safetyInspectionTemplateUrl, ext: 'xlsx' },
-    { label: '임대차계약서_양식', url: config?.contractTemplateUrl, ext: 'pdf' },
-    { label: '반입전체크리스트_양식', url: config?.preDeliveryChecklistTemplateUrl, ext: 'pdf' },
-    { label: '견적서_양식', url: config?.quotationTemplateUrl, ext: 'pdf' },
-    { label: '거래명세서_양식', url: config?.transactionStatementTemplateUrl, ext: 'pdf' }
-  ];
-
-  for (const item of specificItems) {
-    const fileId = item.url ? extractDriveFileId(item.url) : null;
-    if (!fileId) continue;
-    const fileName = `${item.label}.${item.ext}`;
-    if (payloadFiles.some(f => f.name === fileName)) continue;
-
+  for (let i = 0; i < r2Files.length; i++) {
+    const file = r2Files[i];
     updateProgress({
       phase: 'DOWNLOADING',
-      currentFile: fileName,
-      message: `${item.label} 수신 중...`
+      currentFile: file.key,
+      currentIndex: i + 1,
+      percent: Math.min(85, Math.round(((i + 1) / r2Files.length) * 75) + 10),
+      message: `[${i + 1}/${r2Files.length}] ${file.key} 수신 중...`
     });
+    onProgress?.(`[${i + 1}/${r2Files.length}] ${file.key}`, i + 1, r2Files.length);
 
     try {
-      let buf: ArrayBuffer | null = null;
-      if (appsScriptUrl) {
-        const res = await fetch(`${appsScriptUrl}?action=download&fileId=${encodeURIComponent(fileId)}`);
-        if (res.ok) buf = await res.arrayBuffer();
-      } else {
-        // 🚀 공개 공유 링크를 통한 토큰 0회 다이렉트 다운로드
-        buf = await downloadPublicDriveFile(fileId);
-      }
-      if (buf) {
+      const ab = await downloadFromR2(publicDomain, file.key);
+      if (ab) {
         payloadFiles.push({
-          name: fileName,
-          base64Content: arrayBufferToBase64(buf),
+          name: file.key,
+          base64Content: arrayBufferToBase64(ab),
           modifiedTime: new Date().toISOString()
         });
         successCount++;
+      } else {
+        failCount++;
       }
-    } catch (err) {
+    } catch (e) {
       failCount++;
     }
   }
 
-  // ── 3. 시스템 내장 표준 양식 템플릿 동기화 ──
-  const builtinTemplates = [
-    { name: '반입전체크리스트_양식_원본.pdf', url: '/templates/반입전체크리스트_양식_원본.pdf' },
-    { name: '안전점검결과서_양식_원본.pdf', url: '/templates/안전점검결과서_양식_원본.pdf' },
-    { name: '임대차계약서_양식_원본.pdf', url: '/templates/임대차계약서_양식_원본.pdf' },
-    { name: '거래명세서양식.xlsx', url: '/거래명세서양식.xlsx' },
-    { name: '렌탈견적서_양식.html', url: '/templates/렌탈견적서_양식.html' },
-    { name: '고소작업대_임대차계약서_양식.html', url: '/templates/고소작업대_임대차계약서_양식.html' },
-    { name: '고소작업대_안전점검결과서_양식.html', url: '/templates/고소작업대_안전점검결과서_양식.html' },
-    { name: '반입전_CHECK_LIST_양식.html', url: '/templates/반입전_CHECK_LIST_양식.html' },
-    { name: '거래명세서_양식.html', url: '/templates/거래명세서_양식.html' }
-  ];
-
-  for (const tpl of builtinTemplates) {
-    if (payloadFiles.some(f => f.name === tpl.name)) continue;
-    try {
-      const res = await fetch(tpl.url);
-      if (res.ok) {
-        const buf = await res.arrayBuffer();
-        payloadFiles.push({
-          name: tpl.name,
-          base64Content: arrayBufferToBase64(buf),
-          modifiedTime: new Date().toISOString()
-        });
-        successCount++;
-      }
-    } catch (e) {}
-  }
-
   if (payloadFiles.length === 0) {
-    updateProgress({
-      isActive: false,
-      phase: 'ERROR',
-      message: '동기화할 대상 파일을 찾지 못했습니다.'
-    });
-    return {
-      success: false,
-      syncedCount: 0,
-      failedCount: failCount,
-      files: [],
-      message: '동기화할 대상 파일을 찾지 못했습니다.'
-    };
+    const msg = 'CF R2 파일 다운로드에 모두 실패했습니다.';
+    updateProgress({ isActive: false, phase: 'ERROR', message: msg });
+    return { success: false, syncedCount: 0, failedCount: failCount, files: [], message: msg };
   }
 
+  // 로컬 에이전트로 전송 (CF ➔ 로컬 단방향 덮어쓰기)
   updateProgress({
     phase: 'TRANSFERRING',
-    currentFile: '로컬 디스크 저장 중...',
-    currentIndex: payloadFiles.length,
-    totalCount: payloadFiles.length,
+    currentFile: '로컬 에이전트 전송 중...',
     percent: 90,
-    message: `로컬 PC (C:\\KiyeunAgent\\drive_mirror\\)에 ${payloadFiles.length}개 파일 저장 중...`
+    message: `로컬 C:\\KiyeunAgent\\drive_mirror\\ 에 ${payloadFiles.length}개 저장 중...`
   });
 
   try {
@@ -244,10 +199,10 @@ export async function executeDriveMirrorSync(
       body: JSON.stringify({ files: payloadFiles })
     });
 
-    if (!agentRes.ok) throw new Error(`에이전트 응답 오류 HTTP ${agentRes.status}`);
+    if (!agentRes.ok) throw new Error(`에이전트 오류 HTTP ${agentRes.status}`);
 
     const agentData = await agentRes.json();
-    const finalMsg = `✅ 구글 드라이브 ${payloadFiles.length}개 파일이 C:\\KiyeunAgent\\drive_mirror\\ 에 실시간 미러링되었습니다.`;
+    const finalMsg = `✅ CF R2 ${payloadFiles.length}개 파일이 C:\\KiyeunAgent\\drive_mirror\\ 에 미러링되었습니다.`;
 
     updateProgress({
       isActive: true,
@@ -257,7 +212,6 @@ export async function executeDriveMirrorSync(
       message: finalMsg
     });
 
-    // 4초 후 토스트 자동 종료
     setTimeout(() => {
       updateProgress({ isActive: false, phase: 'IDLE' });
     }, 4000);
@@ -270,12 +224,8 @@ export async function executeDriveMirrorSync(
       message: finalMsg
     };
   } catch (err: any) {
-    const errMsg = `로컬 에이전트 미러링 저장 실패: ${err?.message || err}`;
-    updateProgress({
-      isActive: true,
-      phase: 'ERROR',
-      message: errMsg
-    });
+    const errMsg = `로컬 에이전트 전송 실패: ${err?.message || err}`;
+    updateProgress({ isActive: true, phase: 'ERROR', message: errMsg });
     setTimeout(() => {
       updateProgress({ isActive: false, phase: 'IDLE' });
     }, 5000);
@@ -304,3 +254,5 @@ export async function getLocalMirrorStatus(): Promise<{ success: boolean; files:
   } catch (e) {}
   return { success: false, files: [] };
 }
+
+
