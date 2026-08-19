@@ -1,4 +1,27 @@
+# Release Notes (v1.120.0.Build.237 - 2026-08-19 16:09)
+
+## 🟢 [Node.js 방식 전환] 에이전트 배포 방식 exe → agent.js + bat 경량화
+
+### 🌟 반영 내용
+1. **에이전트 배포 방식 전면 전환 (`agent.js` + `start-agent.bat`)**:
+   - 기존 102 MB `KiyeunAgent.exe` (Node.js SEA 자립형) → **22 KB `agent.js` + 98B `start-agent.bat`** 으로 배포 전환.
+   - PC에 Node.js(LTS) 1회 설치 후 `start-agent.bat` 더블클릭으로 실행. 업데이트 시 `agent.js` 파일만 교체하면 완료.
+2. **프런트엔드 설치 안내 3단계 흐름 전환**:
+   - `AgentHeaderBadge.tsx` OFFLINE 패널: **1단계 Node.js 설치 링크(nodejs.org)** → 2단계 인증서 등록 → 3단계 파일 받기 순으로 개편.
+   - `Dashboard.tsx` 에이전트 안내 모달: 동일한 3단계 안내로 교체, Node.js 공식 사이트 링크 직결.
+3. **`agentService.ts` 상수 정비**:
+   - `AGENT_DOWNLOAD_URL` → `agent.js` 경로로 변경.
+   - `AGENT_LAUNCHER_URL` 신규 추가 (`start-agent.bat`).
+   - `NODEJS_INSTALL_URL` 신규 추가 (`https://nodejs.org/en/download/`).
+   - `EXPECTED_AGENT_VERSION` → `v1.119.0.Build.236`으로 업데이트.
+4. **`.gitignore` 정비**:
+   - `public/downloads/*.exe`, `public/downloads/*.zip` 패턴으로 대용량 바이너리만 제외.
+   - `agent.js`, `start-agent.bat`, `install-cert.bat` 등 소형 서비스 파일은 Git 추적 복원.
+
+---
+
 # Release Notes (v1.119.0.Build.236 - 2026-08-19 16:02)
+
 
 ## 📉 [에이전트 번들 사이즈 99% 감소] 외부 패키지 Zero 의존성 달성
 

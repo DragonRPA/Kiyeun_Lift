@@ -32,4 +32,7 @@ dist-ssr
 agent/KiyeunAgent.exe
 agent/*.blob
 agent/*bundle.js
-public/downloads/
+
+# public/downloads/ 내 대용량 바이너리만 제외, 소형 파일은 추적
+public/downloads/*.exe
+public/downloads/*.zip

@@ -1,0 +1,445 @@
+/**
+ * =========================================================================
+ * 🏢 (주)기연리프트 ERP — 로컬 경량 사이드카 에이전트 (Local Sidecar Agent)
+ * =========================================================================
+ * - 역할: CF R2 파일 로컬 미러링, 로컬 문서고 아카이빙, 프런트 실시간 통신 대행
+ * - 통신: 로컬 HTTP (http://127.0.0.1:5175)
+ * - 의존성: Node.js 내장 모듈만 사용 (외부 npm 패키지 Zero)
+ * =========================================================================
+ */
+
+const http = require('http');
+const fs = require('fs');
+const path = require('path');
+const os = require('os');
+const { spawn, execSync } = require('child_process');
+
+const VERSION = 'v1.119.0.Build.236';
+const PORT = process.env.PORT || 5175;
+const CALLSIGN = process.env.AGENT_CALLSIGN || 'admin';
+const MACHINE_NAME = os.hostname();
+
+// 📁 전사 표준 절대경로: C:\KiyeunAgent\ 및 하위 문서고
+const AGENT_HOME = 'C:\\KiyeunAgent';
+const TARGET_EXE_PATH = path.join(AGENT_HOME, 'KiyeunAgent.exe');
+const ARCHIVE_ROOT = path.join(AGENT_HOME, '문서고');
+const DRIVE_MIRROR_DIR = path.join(AGENT_HOME, 'drive_mirror');
+
+// =========================================================================
+// 🚀 [스마트 자가 자동 설치 & 구버전 자동 교체(Auto-Kill & Takeover) 엔진]
+// 사용자가 다운로드 폴더나 바탕화면에서 KiyeunAgent.exe를 실행한 경우,
+// 1) 기존에 돌고 있던 구버전 KiyeunAgent.exe 프로세스를 조용히 자동 종료!
+// 2) C:\KiyeunAgent\KiyeunAgent.exe 를 최신 바이너리로 안전 덮어쓰기!
+// 3) 표준 위치에서 최신 에이전트를 백그라운드로 즉시 바통 터치 기동!
+// =========================================================================
+const currentExePath = process.execPath;
+const currentPid = process.pid;
+const isExe = currentExePath.toLowerCase().endsWith('.exe') && !currentExePath.toLowerCase().includes('node.exe');
+
+// 1. 다른 경로에서 실행된 경우 (설치/업그레이드 모드)
+if (isExe && path.resolve(currentExePath).toLowerCase() !== path.resolve(TARGET_EXE_PATH).toLowerCase()) {
+  try {
+    if (!fs.existsSync(AGENT_HOME)) fs.mkdirSync(AGENT_HOME, { recursive: true });
+    if (!fs.existsSync(ARCHIVE_ROOT)) fs.mkdirSync(ARCHIVE_ROOT, { recursive: true });
+    if (!fs.existsSync(DRIVE_MIRROR_DIR)) fs.mkdirSync(DRIVE_MIRROR_DIR, { recursive: true });
+
+    console.log('====================================================');
+    console.log(`📦 [기연리프트] 에이전트 최신 버전(${VERSION}) 자가 교체/설치 진행`);
+    console.log(`📍 현재 실행 위치: ${currentExePath}`);
+    console.log(`🎯 표준 정착 경로: ${TARGET_EXE_PATH}`);
+
+    // 기존 구버전 프로세스 및 5175 포트 점유 프로세스 완벽 강제 종료 (설치 모드에서만)
+    try {
+      console.log('🔄 기존 구버전 프로세스 자동 정리 중...');
+      execSync('powershell -NoProfile -Command "Get-Process -Name KiyeunAgent -ErrorAction SilentlyContinue | Where-Object { $_.Id -ne ' + currentPid + ' } | Stop-Process -Force"', { stdio: 'ignore' });
+    } catch (kErr) {}
+
+    // 0.6초 대기 후 파일 복사
+    setTimeout(() => {
+      try {
+        fs.copyFileSync(currentExePath, TARGET_EXE_PATH);
+        console.log('✅ C:\\KiyeunAgent\\KiyeunAgent.exe 최신 버전으로 교체 완료!');
+        console.log('🚀 최신 엔진으로 백그라운드 기동합니다...');
+        console.log('====================================================');
+
+        const child = spawn(TARGET_EXE_PATH, [], {
+          detached: true,
+          stdio: 'ignore',
+          windowsHide: false
+        });
+        child.unref();
+
+        console.log('🎉 업그레이드가 완료되었습니다. 이 창은 2초 후 자동으로 닫힙니다.');
+        setTimeout(() => { process.exit(0); }, 2000);
+      } catch (copyErr) {
+        console.error('⚠️ 파일 복사 실패 (현재 위치에서 실행 유지):', copyErr.message);
+      }
+    }, 600);
+    return;
+  } catch (err) {
+    console.error('⚠️ 자가 설치 중 오류 발생:', err.message);
+  }
+}
+
+// 🔄 윈도우 시작 시 자동 실행(Auto-Startup) 레지스트리 자동 등록
+try {
+  execSync(`reg add "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run" /v "KiyeunAgent" /t REG_SZ /d "${TARGET_EXE_PATH}" /f`, { stdio: 'ignore' });
+} catch (e) {}
+
+// 디렉토리 자동 생성 (정식 위치 실행 시)
+try {
+  if (!fs.existsSync(AGENT_HOME)) fs.mkdirSync(AGENT_HOME, { recursive: true });
+  if (!fs.existsSync(ARCHIVE_ROOT)) fs.mkdirSync(ARCHIVE_ROOT, { recursive: true });
+  if (!fs.existsSync(DRIVE_MIRROR_DIR)) fs.mkdirSync(DRIVE_MIRROR_DIR, { recursive: true });
+} catch (e) {
+  console.warn('디렉토리 생성 경고:', e.message);
+}
+
+console.log('====================================================');
+console.log(`🚀 [기연리프트] 로컬 사이드카 에이전트 가동 (${VERSION})`);
+console.log(`📡 콜사인(Callsign): ${CALLSIGN}`);
+console.log(`💻 컴퓨터 이름: ${MACHINE_NAME}`);
+console.log(`📂 에이전트 홈 경로: ${AGENT_HOME}`);
+console.log(`📑 문서 영구 보관소: ${ARCHIVE_ROOT}`);
+console.log(`🌐 로컬 통신 포트: http://127.0.0.1:${PORT}`);
+console.log('====================================================');
+
+// ── HTTP 요청 핸들러 ──
+let activeCallsign = CALLSIGN;
+
+const server = http.createServer(async (req, res) => {
+  // CORS 헤더 허용
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+
+  if (req.method === 'OPTIONS') {
+    res.writeHead(200);
+    res.end();
+    return;
+  }
+
+  const rawUrl = req.url || '';
+  const pathname = rawUrl.split('?')[0];
+  const queryIndex = rawUrl.indexOf('?');
+  const queryString = queryIndex !== -1 ? rawUrl.substring(queryIndex + 1) : '';
+  const searchParams = new URLSearchParams(queryString);
+
+  // 1. 헬스체크 및 동적 콜사인 바인딩 API
+  if (req.method === 'GET' && pathname === '/health') {
+    const queryCallsign = searchParams.get('callsign');
+    if (queryCallsign && queryCallsign.trim()) {
+      activeCallsign = queryCallsign.trim();
+    }
+
+    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+    res.end(JSON.stringify({
+      status: 'ONLINE',
+      version: VERSION,
+      callsign: activeCallsign,
+      machineName: MACHINE_NAME,
+      archiveRoot: ARCHIVE_ROOT,
+      driveMirrorDir: DRIVE_MIRROR_DIR,
+      uptimeSeconds: Math.floor(process.uptime()),
+      timestamp: new Date().toISOString()
+    }));
+    return;
+  }
+
+  // 2. 에이전트 원클릭 핫 재시작 (Restart) API
+  if (req.method === 'POST' && pathname === '/api/restart') {
+    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+    res.end(JSON.stringify({ success: true, message: '에이전트를 1초 후 자동 재시작합니다.' }));
+    setTimeout(() => {
+      const child = spawn(TARGET_EXE_PATH, [], { detached: true, stdio: 'ignore', windowsHide: false });
+      child.unref();
+      process.exit(0);
+    }, 500);
+    return;
+  }
+
+  // 3. 에이전트 원클릭 셧다운 (Shutdown) API
+  if (req.method === 'POST' && pathname === '/api/shutdown') {
+    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+    res.end(JSON.stringify({ success: true, message: '에이전트를 안전하게 종료합니다.' }));
+    setTimeout(() => { process.exit(0); }, 500);
+    return;
+  }
+
+  // 4. 구글 드라이브 로컬 미러링 상태 조회 API (하위 폴더 재귀 통계)
+  if (req.method === 'GET' && pathname === '/api/mirror-status') {
+    try {
+      const getAllFilesRecursively = (dir, rootDir) => {
+        let results = [];
+        if (!fs.existsSync(dir)) return results;
+        const list = fs.readdirSync(dir);
+        list.forEach(file => {
+          if (file.startsWith('.') || file === 'archive') return;
+          const fullPath = path.join(dir, file);
+          const st = fs.statSync(fullPath);
+          if (st.isDirectory()) {
+            results = results.concat(getAllFilesRecursively(fullPath, rootDir));
+          } else {
+            const relPath = path.relative(rootDir, fullPath).replace(/\\/g, '/');
+            results.push({ name: relPath, size: st.size, modifiedTime: st.mtime.toISOString() });
+          }
+        });
+        return results;
+      };
+
+      const stats = getAllFilesRecursively(DRIVE_MIRROR_DIR, DRIVE_MIRROR_DIR);
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+      res.end(JSON.stringify({
+        success: true,
+        mirrorPath: DRIVE_MIRROR_DIR,
+        fileCount: stats.length,
+        files: stats
+      }));
+    } catch (err) {
+      res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
+      res.end(JSON.stringify({ success: false, error: err.message }));
+    }
+    return;
+  }
+
+  // 3. 구글 드라이브 파일 로컬 미러링 (하위 디렉토리 트리 자동 생성 & 차분 동기화 & 버전 아카이빙) API
+  if (req.method === 'POST' && pathname === '/api/sync-drive') {
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', async () => {
+      try {
+        const payload = JSON.parse(body || '{}');
+        const filesToSync = payload.files || (payload.file ? [payload.file] : []);
+        const syncedResults = [];
+
+        for (const file of filesToSync) {
+          if (!file.name || !file.base64Content) continue;
+
+          const targetFilePath = path.join(DRIVE_MIRROR_DIR, file.name);
+          const targetDir = path.dirname(targetFilePath);
+          if (!fs.existsSync(targetDir)) {
+            fs.mkdirSync(targetDir, { recursive: true });
+          }
+
+          const buffer = Buffer.from(file.base64Content, 'base64');
+          fs.writeFileSync(targetFilePath, buffer);
+          syncedResults.push({ name: file.name, size: buffer.length, path: targetFilePath });
+          console.log(`💾 [CF 미러링 완료] ${file.name} (${buffer.length} bytes)`);
+        }
+
+        res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify({
+          success: true,
+          callsign: activeCallsign,
+          syncedCount: syncedResults.length,
+          syncedFiles: syncedResults,
+          message: `✅ 구글 드라이브 ${syncedResults.length}개 파일이 로컬(C:\\KiyeunAgent\\drive_mirror\\)에 실시간 미러링되었습니다.`
+        }));
+      } catch (err) {
+        console.error('❌ 미러링 실패:', err);
+        res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify({ success: false, error: err.message }));
+      }
+    });
+    return;
+  }
+
+  // 3-2. 로컬 PC 내 Google Drive 폴더 직결 미러링 API (구글 클라우드 OAuth 403 차단 100% 원천 해결)
+  if (req.method === 'POST' && pathname === '/api/sync-local-path') {
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', async () => {
+      try {
+        const payload = JSON.parse(body || '{}');
+        const sourceDir = payload.sourcePath;
+        if (!sourceDir || !fs.existsSync(sourceDir)) {
+          res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
+          res.end(JSON.stringify({ success: false, message: '지정한 로컬 폴더 경로가 존재하지 않습니다.' }));
+          return;
+        }
+
+        const copyRecursively = (src, dest) => {
+          if (!fs.existsSync(dest)) fs.mkdirSync(dest, { recursive: true });
+          const entries = fs.readdirSync(src, { withFileTypes: true });
+          let count = 0;
+          for (const entry of entries) {
+            if (entry.name.startsWith('.') || entry.name === 'archive') continue;
+            const srcPath = path.join(src, entry.name);
+            const destPath = path.join(dest, entry.name);
+            if (entry.isDirectory()) {
+              count += copyRecursively(srcPath, destPath);
+            } else {
+              fs.copyFileSync(srcPath, destPath);
+              count++;
+            }
+          }
+          return count;
+        };
+
+        const totalCopied = copyRecursively(sourceDir, DRIVE_MIRROR_DIR);
+        res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify({
+          success: true,
+          totalCopied,
+          message: `✅ 로컬 드라이브 (${sourceDir})에서 총 ${totalCopied}개 파일이 C:\\KiyeunAgent\\drive_mirror\\ 로 즉시 복제되었습니다.`
+        }));
+      } catch (err) {
+        res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify({ success: false, error: err.message }));
+      }
+    });
+    return;
+  }
+  // 5. 파일 캐시 확인 및 구글 드라이브 다운로드 (로컬 미러링 캐시 우선) API
+  if (req.method === 'GET' && pathname === '/api/get-file') {
+    const fileId = searchParams.get('fileId');
+    const fileName = searchParams.get('fileName') || (fileId ? `${fileId}.pdf` : '');
+    if (!fileId && !fileName) {
+      res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
+      res.end(JSON.stringify({ success: false, error: 'fileId or fileName is required' }));
+      return;
+    }
+
+    (async () => {
+      try {
+        const ext = path.extname(fileName).toLowerCase();
+        const mimeTypes = {
+          '.pdf': 'application/pdf',
+          '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          '.xls': 'application/vnd.ms-excel',
+          '.jpg': 'image/jpeg',
+          '.jpeg': 'image/jpeg',
+          '.png': 'image/png',
+          '.txt': 'text/plain',
+          '.json': 'application/json'
+        };
+        const contentType = mimeTypes[ext] || 'application/octet-stream';
+
+        // 1순위: 로컬 미러링 폴더(C:\KiyeunAgent\drive_mirror\)에서 파일 확인
+        let localFilePath = path.join(DRIVE_MIRROR_DIR, fileName);
+        if (fs.existsSync(localFilePath) && fs.statSync(localFilePath).isFile()) {
+          const fileBuf = fs.readFileSync(localFilePath);
+          res.writeHead(200, { 'Content-Type': contentType, 'X-Cache-Source': 'LOCAL_MIRROR' });
+          res.end(fileBuf);
+          return;
+        }
+
+        // 2순위: 하위 폴더 탐색 (fileName이 서브 디렉토리 없이 전달된 경우 대비)
+        const findFileRecursively = (dir, targetName) => {
+          if (!fs.existsSync(dir)) return null;
+          const entries = fs.readdirSync(dir, { withFileTypes: true });
+          for (const ent of entries) {
+            if (ent.name.startsWith('.') || ent.name === 'archive') continue;
+            const full = path.join(dir, ent.name);
+            if (ent.isDirectory()) {
+              const found = findFileRecursively(full, targetName);
+              if (found) return found;
+            } else if (ent.name.toLowerCase() === targetName.toLowerCase()) {
+              return full;
+            }
+          }
+          return null;
+        };
+
+        const foundPath = findFileRecursively(DRIVE_MIRROR_DIR, path.basename(fileName));
+        if (foundPath && fs.existsSync(foundPath)) {
+          const fileBuf = fs.readFileSync(foundPath);
+          res.writeHead(200, { 'Content-Type': contentType, 'X-Cache-Source': 'LOCAL_MIRROR_RECURSIVE' });
+          res.end(fileBuf);
+          return;
+        }
+
+        // 3순위: R2 공개 URL 또는 기본 CF R2 도메인에서 자동 다운로드 후 로컬 캐싱
+        const directUrl = searchParams.get('url') || (fileName ? `https://pub-a2fd3c2ae0cc450b8ebe34baf1b051e1.r2.dev/${fileName.split('/').map(encodeURIComponent).join('/')}` : null);
+        if (directUrl && directUrl.startsWith('http')) {
+          try {
+            const fetchRes = await fetch(directUrl);
+            if (fetchRes.ok) {
+              const ab = await fetchRes.arrayBuffer();
+              if (ab.byteLength > 100) {
+                const targetDir = path.dirname(localFilePath);
+                if (!fs.existsSync(targetDir)) fs.mkdirSync(targetDir, { recursive: true });
+                fs.writeFileSync(localFilePath, Buffer.from(ab));
+
+                res.writeHead(200, { 'Content-Type': contentType, 'X-Cache-Source': 'R2_URL_DOWNLOADED' });
+                res.end(Buffer.from(ab));
+                return;
+              }
+            }
+          } catch (urlErr) {}
+        }
+
+        res.writeHead(404, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify({ success: false, error: `파일을 찾을 수 없습니다: ${fileName}` }));
+      } catch (err) {
+        console.error('❌ /api/get-file 오류:', err);
+        res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify({ success: false, error: err.message }));
+      }
+    })();
+    return;
+  }
+  // 4. 계약 서류 팩 무손실 생산 및 로컬 문서고 보관 API
+  if (req.method === 'POST' && pathname === '/api/execute-job') {
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', async () => {
+      try {
+        const payload = JSON.parse(body || '{}');
+        console.log(`📥 [작업 수신] ${payload.jobType || 'CONTRACT_BUNDLE'} (계약: ${payload.contractNo || 'N/A'}, 작업자: ${activeCallsign})`);
+
+        // 로컬 문서고에 날짜별 자동 분류 폴더 생성
+        const today = new Date().toISOString().split('T')[0];
+        const monthDir = path.join(ARCHIVE_ROOT, today.substring(0, 7));
+        if (!fs.existsSync(monthDir)) fs.mkdirSync(monthDir, { recursive: true });
+
+        const safeCustName = (payload.customerName || '고객사').replace(/[/\\?%*:|"<>]/g, '_');
+        const fileName = `[기연리프트]_${payload.contractNo || '계약'}_${safeCustName}_${today}.pdf`;
+        const localSavePath = path.join(monthDir, fileName);
+
+        if (payload.base64Content) {
+          const pdfBuffer = Buffer.from(payload.base64Content, 'base64');
+          fs.writeFileSync(localSavePath, pdfBuffer);
+        }
+
+        // 결과 응답
+        res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify({
+          success: true,
+          callsign: activeCallsign,
+          localFilePath: localSavePath,
+          message: `✅ 로컬 에이전트(${activeCallsign})가 정품 문서를 생산하여 로컬 문서고(${localSavePath})에 안전 보관했습니다.`
+        }));
+      } catch (err) {
+        console.error('❌ 작업 처리 실패:', err);
+        res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify({ success: false, error: err.message }));
+      }
+    });
+    return;
+  }
+
+  res.writeHead(404, { 'Content-Type': 'text/plain' });
+  res.end('Not Found');
+});
+
+server.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    console.warn(`⚠️ 포트 ${PORT} 가 사용 중입니다. 이전 프로세스를 정리하고 1초 후 재시도합니다...`);
+    try {
+      execSync(`powershell -NoProfile -Command "Get-NetTCPConnection -LocalPort ${PORT} -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }"`, { stdio: 'ignore' });
+    } catch (e) {}
+    setTimeout(() => {
+      server.close();
+      server.listen(PORT, '127.0.0.1', () => {
+        console.log(`🟢 로컬 에이전트 서비스 리스닝 시작: http://127.0.0.1:${PORT}`);
+      });
+    }, 1000);
+  } else {
+    console.error('❌ 서버 에러:', err);
+  }
+});
+
+server.listen(PORT, '127.0.0.1', () => {
+  console.log(`🟢 로컬 에이전트 서비스 리스닝 시작: http://127.0.0.1:${PORT}`);
+});

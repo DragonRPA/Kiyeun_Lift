@@ -824,20 +824,21 @@ export const Dashboard: React.FC = () => {
 
               <div style={{ backgroundColor: 'var(--bg-app, #f8fafc)', padding: '14px 16px', borderRadius: '10px', border: '1px solid var(--border)', marginBottom: '16px' }}>
                 <h4 style={{ margin: '0 0 8px 0', fontSize: '14px', fontWeight: '700', color: '#4f46e5' }}>
-                  ⚡ 최초 1회 실행 2단계 순서:
+                  ⚡ 최초 1회 실행 3단계 순서:
                 </h4>
                 <ol style={{ margin: 0, paddingLeft: '18px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   <li>
-                    <strong>[1단계: 🛡️ 보안 인증서 등록]</strong> 버튼을 누르면 <code>KiyeunLift_Root.cer</code>와 <code>인증서_원클릭_자동등록.bat</code>이 내려옵니다. 배치 파일을 실행하여 PC에 1회 등록합니다. (보안 경고 영구 소멸)
+                    <a href="https://nodejs.org/en/download/" target="_blank" rel="noreferrer" style={{ color: '#16a34a', fontWeight: '700' }}>🟢 Node.js 공식 사이트</a>에서 LTS 버전을 설치합니다. (최초 1회, PC당 1회)
                   </li>
                   <li>
-                    <strong>[2단계: 📥 KiyeunAgent.exe 다운로드]</strong> 버튼을 눌러 받은 실행 파일을 더블클릭합니다.
+                    <strong>[2단계: 🛡️ 보안 인증서 등록]</strong> 버튼을 누르면 <code>KiyeunLift_Root.cer</code>와 <code>인증서_원클릭_자동등록.bat</code>이 내려옵니다. 배치 파일을 실행하여 PC에 1회 등록합니다.
                   </li>
                   <li>
-                    에이전트가 알아서 <code>C:\KiyeunAgent\</code> 에 자가 설치되고 백그라운드에서 가동되며, 대시보드에 <strong>`🟢 실시간 가동중`</strong> 신호등이 즉시 켜집니다!
+                    <strong>[3단계: 📥 에이전트 파일 받기]</strong> 버튼을 누르면 <code>agent.js</code>와 <code>start-agent.bat</code>이 내려옵니다. 두 파일을 <code>C:\KiyeunAgent\</code>에 넣은 뒤 <code>start-agent.bat</code>을 실행합니다.
                   </li>
                 </ol>
               </div>
+
 
               <p style={{ margin: 0, fontSize: '12.5px', color: 'var(--text-secondary)' }}>
                 💡 에이전트가 꺼져 있어도 웹 브라우저 자체 렌더링 엔진으로 PDF 생성이 100% 정상 작동합니다.

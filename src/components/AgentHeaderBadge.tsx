@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Bot, Download, RefreshCw, Shield, ChevronDown, CheckCircle2, AlertTriangle, X, Cloud, FolderCheck, HardDrive } from 'lucide-react';
-import { EXPECTED_AGENT_VERSION, AGENT_DOWNLOAD_URL, AGENT_CERT_URL, AGENT_INSTALL_BAT_URL, restartLocalAgent } from '../services/agentService';
+import { EXPECTED_AGENT_VERSION, AGENT_DOWNLOAD_URL, AGENT_LAUNCHER_URL, AGENT_CERT_URL, AGENT_INSTALL_BAT_URL, NODEJS_INSTALL_URL, restartLocalAgent } from '../services/agentService';
 import { executeDriveMirrorSync, getLocalMirrorStatus, subscribeMirrorProgress, MirrorProgressState } from '../services/driveMirrorSync';
 import { useApp } from '../context/AppContext';
 
@@ -132,16 +132,26 @@ export const AgentHeaderBadge: React.FC<Props> = ({ currentUser }) => {
     }
   };
 
-  // 2단계: 에이전트 다운로드
-  const handleDownloadExe = () => {
+  // 2단계: 에이전트 파일 다운로드 (agent.js + start-agent.bat)
+  const handleDownloadAgent = () => {
     setIsDownloading(true);
     try {
-      const link = document.createElement('a');
-      link.href = AGENT_DOWNLOAD_URL;
-      link.download = 'KiyeunAgent.exe';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      // agent.js 다운로드
+      const link1 = document.createElement('a');
+      link1.href = AGENT_DOWNLOAD_URL;
+      link1.download = 'agent.js';
+      document.body.appendChild(link1);
+      link1.click();
+      document.body.removeChild(link1);
+      // 배치 파일 다운로드
+      setTimeout(() => {
+        const link2 = document.createElement('a');
+        link2.href = AGENT_LAUNCHER_URL;
+        link2.download = 'start-agent.bat';
+        document.body.appendChild(link2);
+        link2.click();
+        document.body.removeChild(link2);
+      }, 300);
     } catch (e) {
       alert('에이전트 다운로드 실패');
     } finally {
@@ -389,6 +399,15 @@ export const AgentHeaderBadge: React.FC<Props> = ({ currentUser }) => {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
             {agentStatus === 'OFFLINE' && (
               <>
+                {/* Node.js 설치 링크 */}
+                <a
+                  href={NODEJS_INSTALL_URL}
+                  target="_blank"
+                  rel="noreferrer"
+                  style={{ width: '100%', padding: '8px 10px', fontSize: '12px', fontWeight: '700', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', background: '#f0fdf4', border: '1.5px solid #16a34a', borderRadius: '7px', color: '#15803d', textDecoration: 'none', boxSizing: 'border-box' }}
+                >
+                  1단계: 🟢 Node.js 설치 (nodejs.org)
+                </a>
                 <button
                   type="button"
                   className="btn-secondary"
@@ -396,17 +415,17 @@ export const AgentHeaderBadge: React.FC<Props> = ({ currentUser }) => {
                   style={{ width: '100%', padding: '8px 10px', fontSize: '12px', fontWeight: '700', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
                 >
                   <Shield size={13} color="#0284c7" />
-                  1단계: 🛡️ 보안 인증서 등록 (.cer)
+                  2단계: 🛡️ 보안 인증서 등록 (.cer)
                 </button>
                 <button
                   type="button"
                   className="btn-primary"
                   disabled={isDownloading}
-                  onClick={handleDownloadExe}
+                  onClick={handleDownloadAgent}
                   style={{ width: '100%', padding: '9px 10px', fontSize: '12.5px', fontWeight: '800', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)', border: 'none', color: '#fff' }}
                 >
                   <Download size={14} />
-                  {isDownloading ? '다운로드 중...' : `2단계: 📥 KiyeunAgent.exe 다운로드`}
+                  {isDownloading ? '다운로드 중...' : '3단계: 📥 에이전트 파일 받기'}
                 </button>
               </>
             )}
@@ -416,13 +435,14 @@ export const AgentHeaderBadge: React.FC<Props> = ({ currentUser }) => {
                 type="button"
                 className="btn-primary"
                 disabled={isDownloading}
-                onClick={handleDownloadExe}
+                onClick={handleDownloadAgent}
                 style={{ width: '100%', padding: '9px 10px', fontSize: '12.5px', fontWeight: '800', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)', border: 'none', color: '#fff' }}
               >
                 <Download size={14} />
                 {isDownloading ? '다운로드 중...' : `📥 최신 에이전트 (${EXPECTED_AGENT_VERSION}) 받기`}
               </button>
             )}
+
 
             {agentStatus === 'ONLINE' && (
               <button
