@@ -2,10 +2,9 @@
  * =========================================================================
  * 🏢 (주)기연리프트 ERP — 로컬 경량 사이드카 에이전트 (Local Sidecar Agent)
  * =========================================================================
- * - 역할: 브라우저가 직접 처리하기 어려운 엑셀 직접 조작, PDF 무손실 생산,
- *        구글 드라이브 로컬 미러링, 로컬 문서고 영구 아카이빙을 대행 처리.
- * - 콜사인: 로그인 아이디 기반 (기본값: admin)
- * - 통신: 로컬 HTTP (http://127.0.0.1:5175) & Supabase Realtime 메시지 큐
+ * - 역할: CF R2 파일 로컬 미러링, 로컬 문서고 아카이빙, 프런트 실시간 통신 대행
+ * - 통신: 로컬 HTTP (http://127.0.0.1:5175)
+ * - 의존성: Node.js 내장 모듈만 사용 (외부 npm 패키지 Zero)
  * =========================================================================
  */
 
@@ -14,9 +13,8 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const { spawn, execSync } = require('child_process');
-const { PDFDocument, rgb } = require('pdf-lib');
 
-const VERSION = 'v1.116.0.Build.233';
+const VERSION = 'v1.119.0.Build.236';
 const PORT = process.env.PORT || 5175;
 const CALLSIGN = process.env.AGENT_CALLSIGN || 'admin';
 const MACHINE_NAME = os.hostname();
@@ -106,31 +104,7 @@ console.log(`📑 문서 영구 보관소: ${ARCHIVE_ROOT}`);
 console.log(`🌐 로컬 통신 포트: http://127.0.0.1:${PORT}`);
 console.log('====================================================');
 
-// ── 1. 계약서 12줄 정밀 렌더링 ──
-async function buildContractPdf(contractData, templateBuffer) {
-  const pdfDoc = await PDFDocument.load(templateBuffer);
-  const page = pdfDoc.getPages()[0];
-  const { width, height } = page.getSize();
-  const white = rgb(1, 1, 1);
-
-  // 셀 영역 화이트아웃 마스킹 (기존 잔존 텍스트 완전 소멸)
-  page.drawRectangle({ x: 200, y: height - 105, width: 200, height: 16, color: white });
-  page.drawRectangle({ x: 380, y: height - 130, width: 180, height: 15, color: white });
-  page.drawRectangle({ x: 380, y: height - 150, width: 180, height: 15, color: white });
-  page.drawRectangle({ x: 380, y: height - 170, width: 180, height: 15, color: white });
-  page.drawRectangle({ x: 120, y: height - 222, width: 200, height: 15, color: white });
-  page.drawRectangle({ x: 395, y: height - 222, width: 165, height: 15, color: white });
-  page.drawRectangle({ x: 120, y: height - 240, width: 440, height: 15, color: white });
-  page.drawRectangle({ x: 120, y: height - 276, width: 200, height: 15, color: white });
-  page.drawRectangle({ x: 395, y: height - 276, width: 165, height: 15, color: white });
-  page.drawRectangle({ x: 35, y: height - 528, width: 525, height: 218, color: white });
-  page.drawRectangle({ x: 395, y: height - 425, width: 165, height: 18, color: white });
-  page.drawRectangle({ x: 375, y: height - 765, width: 180, height: 15, color: white });
-
-  return await pdfDoc.save();
-}
-
-// ── 2. HTTP 요청 핸들러 (프론트엔드 실시간 통신 & 미러링 엔진) ──
+// ── HTTP 요청 핸들러 ──
 let activeCallsign = CALLSIGN;
 
 const server = http.createServer(async (req, res) => {
@@ -393,33 +367,6 @@ const server = http.createServer(async (req, res) => {
               }
             }
           } catch (urlErr) {}
-        }
-
-        // 4순위: 구글 드라이브 fileId 기반 다운로드 후 로컬 캐싱
-        if (fileId) {
-          const endpoints = [
-            `https://drive.usercontent.google.com/download?id=${fileId}&export=download&authuser=0`,
-            `https://lh3.googleusercontent.com/d/${fileId}`,
-            `https://drive.google.com/uc?export=download&id=${fileId}`
-          ];
-
-          for (const dlUrl of endpoints) {
-            try {
-              const fetchRes = await fetch(dlUrl);
-              if (fetchRes.ok) {
-                const ab = await fetchRes.arrayBuffer();
-                if (ab.byteLength > 100) {
-                  const targetDir = path.dirname(localFilePath);
-                  if (!fs.existsSync(targetDir)) fs.mkdirSync(targetDir, { recursive: true });
-                  fs.writeFileSync(localFilePath, Buffer.from(ab));
-
-                  res.writeHead(200, { 'Content-Type': contentType, 'X-Cache-Source': 'GOOGLE_DRIVE_DOWNLOADED' });
-                  res.end(Buffer.from(ab));
-                  return;
-                }
-              }
-            } catch (dlErr) {}
-          }
         }
 
         res.writeHead(404, { 'Content-Type': 'application/json; charset=utf-8' });

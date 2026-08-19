@@ -1,4 +1,24 @@
+# Release Notes (v1.119.0.Build.236 - 2026-08-19 16:02)
+
+## 📉 [에이전트 번들 사이즈 99% 감소] 외부 패키지 Zero 의존성 달성
+
+### 🌟 반영 내용
+1. **`pdf-lib` 외부 패키지 의존성 완전 제거 (`agent.js`)**:
+   - 미사용 상태로 잔존하던 `require('pdf-lib')` 임포트 및 `buildContractPdf()` 함수 전면 삭제.
+   - 에이전트 번들 용량: **1.28 MB → 11.5 KB** (99% 감소).
+   - 에이전트는 Node.js 내장 모듈(`http`, `fs`, `path`, `os`, `child_process`)만으로 동작하는 완전 Zero-Dependency 구조로 전환.
+2. **구글 드라이브 4순위 폴백 코드 완전 제거 (`agent.js` `/api/get-file`)**:
+   - `drive.usercontent.google.com`, `lh3.googleusercontent.com`, `drive.google.com` 3개 엔드포인트 폴백 로직 삭제.
+   - 파일 조회 순위: ①로컬 미러 직접 → ②재귀 탐색 → ③CF R2 자동 다운로드 (3단계로 단순화).
+3. **`.gitignore` 개편 — 100MB 바이너리 Git 추적 완전 배제**:
+   - `public/downloads/` 폴더 전체를 `.gitignore`에 추가.
+   - 기존에 잘못 추적되던 `public/downloads/KiyeunAgent.exe` (99 MB) Git index에서 삭제(`git rm --cached`).
+   - 이후 푸시부터 바이너리 100MB 가 제외되어 커밋 크기가 정상화됨.
+
+---
+
 # Release Notes (v1.118.0.Build.235 - 2026-08-19 15:55)
+
 
 ## 🔁 [CF R2 단방향 미러링 엔진 완전 교체] 구글 드라이브 잔재 전면 제거
 

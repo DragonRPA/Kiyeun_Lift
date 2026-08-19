@@ -28,7 +28,8 @@ dist-ssr
 
 .vercel
 
-# Agent Standalone Binary artifacts (over 90MB)
+# Agent Standalone Binary artifacts (Node.js SEA, over 90MB) - Git으로 추적 불필요
 agent/KiyeunAgent.exe
 agent/*.blob
 agent/*bundle.js
+public/downloads/
