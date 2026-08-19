@@ -125,6 +125,46 @@ export async function executeDriveMirrorSync(
   const publicDomain = config?.r2PublicDomain?.trim() || DEFAULT_CF_PUBLIC_DOMAIN;
   const r2BucketName = config?.r2BucketName?.trim() || 'kiyeun-storage';
 
+  // 🌟 1순위: 로컬 에이전트 자체 실시간 SigV4 동기화 엔진 직접 가동
+  try {
+    updateProgress({
+      isActive: true,
+      phase: 'SCANNING',
+      currentFile: '로컬 에이전트 실시간 스캔 중...',
+      currentIndex: 0,
+      totalCount: 0,
+      percent: 30,
+      message: '로컬 에이전트가 Cloudflare R2 버킷을 실시간 스캔 및 다운로드 중...'
+    });
+    onProgress?.('로컬 에이전트 실시간 버킷 스캔 및 다운로드 요청 중...', 0, 0);
+
+    const agentRes = await fetch('http://127.0.0.1:5175/api/trigger-sync', {
+      method: 'POST',
+      signal: AbortSignal.timeout(20000)
+    });
+
+    if (agentRes.ok) {
+      const data = await agentRes.json();
+      const statusRes = await getLocalMirrorStatus();
+      updateProgress({
+        isActive: false,
+        phase: 'COMPLETED',
+        percent: 100,
+        message: data.message || '동기화 완료'
+      });
+      return {
+        success: true,
+        syncedCount: statusRes.files?.length || 0,
+        failedCount: 0,
+        files: statusRes.files || [],
+        message: data.message || 'Cloudflare R2 버킷 실시간 동기화가 완료되었습니다.'
+      };
+    }
+  } catch (agentErr) {
+    console.warn('로컬 에이전트 직접 동기화 실패, 브라우저 직접 수신으로 대체:', agentErr);
+  }
+
+  // 2순위: 브라우저 직접 수신 모드 (에이전트 구버전 또는 응답 지연 시 폴백)
   updateProgress({
     isActive: true,
     phase: 'SCANNING',

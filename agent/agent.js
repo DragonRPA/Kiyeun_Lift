@@ -17,7 +17,7 @@ const os = require('os');
 const { spawn, execSync } = require('child_process');
 
 
-const VERSION = 'v1.119.0.Build.236';
+const VERSION = 'v1.125.0.Build.242';
 const PORT = process.env.PORT || 5175;
 const CALLSIGN = process.env.AGENT_CALLSIGN || 'admin';
 const MACHINE_NAME = os.hostname();
@@ -171,9 +171,9 @@ const server = http.createServer(async (req, res) => {
 
   // 3-2. Cloudflare R2 원본 실시간 강제 재동기화 API
   if (req.method === 'POST' && pathname === '/api/trigger-sync') {
-    autoSyncFromCloudflare().then(() => {
+    autoSyncFromCloudflare().then((syncRes) => {
       res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
-      res.end(JSON.stringify({
+      res.end(JSON.stringify(syncRes || {
         success: true,
         message: 'Cloudflare R2 실시간 버킷 동기화가 완료되었습니다.'
       }));
@@ -584,7 +584,9 @@ async function autoSyncFromCloudflare() {
 
       if (fs.existsSync(targetFile)) {
         const st = fs.statSync(targetFile);
-        if (st.size === obj.size && st.size > 0) {
+        if (st.isDirectory()) {
+          fs.rmSync(targetFile, { recursive: true, force: true });
+        } else if (st.size === obj.size && st.size > 0) {
           skipped++;
           continue;
         }
@@ -611,8 +613,22 @@ async function autoSyncFromCloudflare() {
     } else {
       console.log(`✅ [CF 동적 미러링 완료] 모든 파일(${fileCount}개) 및 폴더가 이미 최신 상태로 로컬에 보존되어 있습니다.`);
     }
+
+    return {
+      success: true,
+      downloaded,
+      skipped,
+      foldersCreated,
+      totalFiles: fileCount,
+      message: `✅ Cloudflare R2 동기화 완료 (갱신: ${downloaded}개, 최신 유지: ${skipped}개)`
+    };
   } catch (err) {
     console.error('⚠️ CF R2 실시간 버킷 조회 오류:', err.message);
+    return {
+      success: false,
+      error: err.message,
+      message: `⚠️ Cloudflare R2 버킷 스캔 오류: ${err.message}`
+    };
   }
 }
 
