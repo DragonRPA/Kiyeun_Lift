@@ -12,6 +12,7 @@ DROP TABLE IF EXISTS collaboration_requests CASCADE;
 DROP TABLE IF EXISTS work_instructions CASCADE;
 DROP TABLE IF EXISTS announcement_reads CASCADE;
 DROP TABLE IF EXISTS announcements CASCADE;
+DROP TABLE IF EXISTS mechanic_consumable_stocks CASCADE;
 DROP TABLE IF EXISTS consumable_logs CASCADE;
 DROP TABLE IF EXISTS consumable_purchase_items CASCADE;
 DROP TABLE IF EXISTS consumable_purchase_requests CASCADE;
@@ -231,15 +232,18 @@ CREATE TABLE consumable_purchase_items (
     "updatedAt" TEXT NOT NULL
 );
 
--- 12. 소모품 입출고 로그 (consumable_logs) - 증빙 확장
+-- 12. 소모품 입출고 로그 (consumable_logs) - 기사 차량 불출 및 증빙 확장
 CREATE TABLE consumable_logs (
     id TEXT PRIMARY KEY,
     "consumableId" TEXT REFERENCES consumables(id) ON DELETE CASCADE,
-    type TEXT CHECK (type IN ('INBOUND', 'OUTBOUND', 'ADJUST')) NOT NULL,
+    type TEXT CHECK (type IN ('INBOUND', 'OUTBOUND', 'ADJUST', 'TRANSFER_TO_VEHICLE', 'RETURN_TO_HQ')) NOT NULL,
     quantity DOUBLE PRECISION NOT NULL,
     "unitPrice" DOUBLE PRECISION NOT NULL,
     "vendorId" TEXT REFERENCES vendors(id),
     "userId" TEXT REFERENCES users(id),
+    "mechanicId" TEXT REFERENCES users(id),
+    "fromLocation" TEXT,
+    "toLocation" TEXT,
     "targetAssetId" TEXT REFERENCES assets(id),
     "purchaseItemId" TEXT REFERENCES consumable_purchase_items(id), -- 구매신청 입고 매칭
     "evidenceFileUrl" TEXT, -- 거래명세서 등 매입 증빙 파일
@@ -248,6 +252,33 @@ CREATE TABLE consumable_logs (
     "createdAt" TEXT NOT NULL,
     "updatedAt" TEXT NOT NULL
 );
+
+-- 12-1. 정비사 차량 소모품 적재 재고 테이블 (mechanic_consumable_stocks)
+CREATE TABLE mechanic_consumable_stocks (
+    id TEXT PRIMARY KEY,
+    "mechanicId" TEXT REFERENCES users(id) ON DELETE CASCADE,
+    "consumableId" TEXT REFERENCES consumables(id) ON DELETE CASCADE,
+    "stockQty" DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "updatedAt" TEXT NOT NULL
+);
+
+ALTER TABLE mechanic_consumable_stocks ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "allow_anon_select" ON mechanic_consumable_stocks;
+DROP POLICY IF EXISTS "allow_anon_insert" ON mechanic_consumable_stocks;
+DROP POLICY IF EXISTS "allow_anon_update" ON mechanic_consumable_stocks;
+DROP POLICY IF EXISTS "allow_anon_delete" ON mechanic_consumable_stocks;
+DROP POLICY IF EXISTS "allow_authenticated_select" ON mechanic_consumable_stocks;
+DROP POLICY IF EXISTS "allow_authenticated_insert" ON mechanic_consumable_stocks;
+DROP POLICY IF EXISTS "allow_authenticated_update" ON mechanic_consumable_stocks;
+DROP POLICY IF EXISTS "allow_authenticated_delete" ON mechanic_consumable_stocks;
+CREATE POLICY "allow_anon_select" ON mechanic_consumable_stocks FOR SELECT TO anon USING (true);
+CREATE POLICY "allow_anon_insert" ON mechanic_consumable_stocks FOR INSERT TO anon WITH CHECK (true);
+CREATE POLICY "allow_anon_update" ON mechanic_consumable_stocks FOR UPDATE TO anon USING (true) WITH CHECK (true);
+CREATE POLICY "allow_anon_delete" ON mechanic_consumable_stocks FOR DELETE TO anon USING (true);
+CREATE POLICY "allow_authenticated_select" ON mechanic_consumable_stocks FOR SELECT TO authenticated USING (true);
+CREATE POLICY "allow_authenticated_insert" ON mechanic_consumable_stocks FOR INSERT TO authenticated WITH CHECK (true);
+CREATE POLICY "allow_authenticated_update" ON mechanic_consumable_stocks FOR UPDATE TO authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "allow_authenticated_delete" ON mechanic_consumable_stocks FOR DELETE TO authenticated USING (true);
 
 -- 13. 계약 테이블 (contracts) - 영업사원 추가
 CREATE TABLE contracts (
@@ -392,18 +423,25 @@ CREATE TABLE payments (
     "updatedAt" TEXT NOT NULL
 );
 
--- 21. 자산 수리 테이블 (repairs) - 외주 정비 및 영업 청구 판단 이원화
+-- 21. 자산 수리 테이블 (repairs) - 외주 정비, 긴급AS/예방정비 및 영업 청구 판단 이원화
 CREATE TABLE repairs (
     id TEXT PRIMARY KEY,
     "assetId" TEXT REFERENCES assets(id),
     "mechanicId" TEXT REFERENCES users(id),
     "repairType" TEXT CHECK ("repairType" IN ('INTERNAL', 'EXTERNAL')) NOT NULL DEFAULT 'INTERNAL',
+    "maintenanceType" TEXT, -- EMERGENCY_AS, PREVENTIVE, INHOUSE_REPAIR, EXTERNAL
+    "scheduleDate" TEXT,
     "vendorId" TEXT REFERENCES vendors(id), -- 외주업체
     "estimateFileUrl" TEXT, -- 견적서 첨부
-    status TEXT CHECK (status IN ('PENDING', 'IN_PROGRESS', 'COMPLETED')) NOT NULL,
+    status TEXT CHECK (status IN ('SCHEDULED', 'PENDING', 'IN_PROGRESS', 'COMPLETED', 'UNRESOLVED')) NOT NULL,
     details TEXT,
     "isCustomerFault" BOOLEAN NOT NULL DEFAULT FALSE, -- 입고 시 고객 파손 의심 통지
     "faultImageUrl" TEXT, -- 파손 증빙 사진
+    "unresolvedReason" TEXT,
+    "nextAction" TEXT, -- REVISIT, EXCHANGE_REQUEST, NONE
+    "evidenceImages" TEXT[],
+    "customerName" TEXT,
+    "siteName" TEXT,
     
     -- 비용 및 청구 판단
     "laborHours" DOUBLE PRECISION, -- 메카닉 투입 공수

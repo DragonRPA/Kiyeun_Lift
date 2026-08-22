@@ -1,3 +1,22 @@
+# Release Notes (v1.128.1.Build.252 - 2026-08-23 05:14)
+
+## 📋 [정비사 차량 소모품 적재 재고 모델(DDL) 신설 및 DB 스키마·패치 스크립트 완결]
+
+### 🌟 반영 내용
+
+#### 1. 정비사 차량 소모품 적재 재고 모델 (`mechanic_consumable_stocks`) 신설
+- `schema.sql` 로컬 DDL 및 `src/services/db.ts` 내 `ALL_DB_KEYS`, `mapToSupabaseTable`에 `mechanicConsumableStocks` 매핑 완벽 등록.
+- RLS 정책(anon, authenticated ALL 허용) 적용.
+
+#### 2. 소모품 입출고 이력 및 정비 대장 스키마 확장
+- `consumable_logs`: 기사 차량 불출/반납을 위한 `mechanicId`, `fromLocation`, `toLocation` 컬럼 및 `TRANSFER_TO_VEHICLE`, `RETURN_TO_HQ` CHECK 제약 확장.
+- `repairs`: 긴급 AS/예방정비 및 상세 라이프사이클 관리를 위한 `maintenanceType`, `scheduleDate`, `unresolvedReason`, `nextAction`, `evidenceImages`, `customerName`, `siteName` 컬럼 및 `SCHEDULED`, `UNRESOLVED` CHECK 제약 확장.
+
+#### 3. Supabase 원격 마이그레이션 SQL 패치 스크립트 구축
+- `scripts/patch_v1_128_schema.sql` 및 통합 `scripts/supabase_patch.sql` 갱신.
+
+---
+
 # Release Notes (v1.128.0.Build.251 - 2026-08-23 05:10)
 
 ## 📋 [청구 도래 계약 자동 감지·기본 청구 생성 및 개별 검토·완료·수정재생성 시스템 완결]

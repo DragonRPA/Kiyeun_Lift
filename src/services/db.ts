@@ -1385,7 +1385,7 @@ export const ALL_DB_KEYS = [
   'cashFlowSnapshots', 'outboundInspections', 'depreciationLogs',
   'purchaseSettlements', 'purchaseSettlementItems', 'settlementPaymentLogs', 'externalLeases',
   'annualLeaveQuotas', 'leaveUsages', 'overtimeRecords', 'payrollClosings', 'inspectionChecklistItems',
-  'prepaidTransactions', 'delinquencyActionLogs'
+  'prepaidTransactions', 'delinquencyActionLogs', 'mechanicConsumableStocks'
 ];
 
 class LocalDB {
@@ -1592,7 +1592,8 @@ class LocalDB {
       purchaseSettlements: 'purchase_settlements',
       purchaseSettlementItems: 'purchase_settlement_items',
       externalLeases: 'external_leases',
-      inspectionChecklistItems: 'inspection_checklist_items'
+      inspectionChecklistItems: 'inspection_checklist_items',
+      mechanicConsumableStocks: 'mechanic_consumable_stocks'
     };
     return mapping[key] || key;
   }

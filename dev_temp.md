@@ -1,32 +1,28 @@
 # 개발 지시 및 개편 완료 내역 (dev_temp.md)
 
-## 🚀 [신규 기능] 청구 도래 계약 자동 감지·기본 청구 일괄 생성 및 개별 검토·완료·수정재생성 시스템 구축 (v1.128.0.Build.251)
+## 🚀 [스키마 동기화] 정비사 차량 소모품 적재 재고 모델(DDL) 신설 및 DB 스키마·패치 스크립트 완결 (v1.128.1.Build.252)
 
 ### 1. 사장님 지시사항 완벽 이행
-- **청구 도래 미생성 계약 자동 감지**:
-  - `AppContext.tsx` 내 `getDueContractsForBilling(targetDate)` 구축: 오늘 날짜 기준으로 살아있는 계약 중, 고객 요청 청구기준일(`billingDay`/`statementClosingDay`)이 도래/경과했거나 전월 미청구된 계약을 실시간 자동 감지.
-- **기본 청구 일괄/개별 생성 엔진**:
-  - `generateDueBillings()`, `generateBillingForSingleContract()`: 헌장 4.1에 따른 자산별 정밀 일할 렌탈료 및 완료된 유료 AS 수리비 자동 합산, 선수금(예치금) 자동 상계 차감 반영하여 `REQUESTED` 결재대기 기본 청구서 생성.
-- **개별 검토 / 완료(승인) / 취소·재생성 완결 체계**:
-  - `Billings.tsx` 상단에 `[📢 오늘 기준 청구 도래 미생성: N건]` 알림 바 및 `[도래 계약 기본 청구 일괄 생성]` 원터치 버튼 배치.
-  - 청구서 리스트 `관리` 열에 `[검토]`, `[완료(승인)]`, `[취소/재생성]`, `[취소]` 인터랙션 배치.
-  - `Regenerate Modal`: 품목별 단가/수량/설명 수정, 추가 항목(운송료, 추가비용, 할인 등) 추가/삭제, 청구귀속월/발행일자 조정 후 기존 청구서 안전 취소(`REJECTED`) 및 새 청구서 즉시 발행.
-- **정비 및 소모품 이동 관리 고도화**:
-  - `MechanicConsumableStock` 차량 적재 재고 관리 및 AS 출장 정비 라이프사이클(`SCHEDULED` -> `IN_PROGRESS` -> `COMPLETED`/`UNRESOLVED`) 강화.
+- **정비사 차량 소모품 적재 재고 (`mechanic_consumable_stocks`) DDL 신설**:
+  - `schema.sql` 및 `scripts/supabase_patch.sql`, `scripts/patch_v1_128_schema.sql`에 신규 테이블 DDL 및 RLS 정책 반영.
+  - `src/services/db.ts` 내 `ALL_DB_KEYS` 및 `mapToSupabaseTable`에 `mechanicConsumableStocks` 매핑 등록 완료.
+- **소모품 및 정비 대장 스키마 확장**:
+  - `consumable_logs`: `mechanicId`, `fromLocation`, `toLocation` 컬럼 및 `TRANSFER_TO_VEHICLE`, `RETURN_TO_HQ` CHECK 제약 확장.
+  - `repairs`: `maintenanceType`, `scheduleDate`, `unresolvedReason`, `nextAction`, `evidenceImages`, `customerName`, `siteName` 컬럼 및 `SCHEDULED`, `UNRESOLVED` CHECK 제약 확장.
+- **마이그레이션 SQL 패치 구축**:
+  - 원격 Supabase DB 반영용 단독 패치 스크립트 `scripts/patch_v1_128_schema.sql` 및 통합 패치 `scripts/supabase_patch.sql` 갱신.
 
 ### 2. 주요 수정 파일
-- `src/context/AppContext.tsx`
-- `src/pages/Billings.tsx`
-- `src/pages/Consumables.tsx`
-- `src/pages/Repairs.tsx`
-- `src/pages/smart_dispatch.tsx`
 - `src/services/db.ts`
-- `agent/agent.js`, `public/downloads/agent.js`
+- `schema.sql`
+- `scripts/supabase_patch.sql`
+- `scripts/patch_v1_128_schema.sql`
 
 ### 3. 빌드 및 검증
 - TypeScript `npx tsc -b` 컴파일 오류 0건 무결점 통과 확인 ✅ (Exit code: 0)
 
 ---
-**기록 일시**: 2026-08-23 05:10  
-**작성 버전**: `v1.128.0.Build.251`
+**기록 일시**: 2026-08-23 05:14  
+**작성 버전**: `v1.128.1.Build.252`
+
 
