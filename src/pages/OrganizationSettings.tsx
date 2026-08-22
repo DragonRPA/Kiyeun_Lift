@@ -544,6 +544,30 @@ const enforceManagerPolicies = (usersList: UserNode[], deptList: Department[]) =
         )}
       </div>
 
+      {/* 📊 조직 및 임직원 현황 실시간 요약 바 */}
+      {(() => {
+        const activeUsersCount = users.filter(u => u.status === 'ACTIVE').length;
+        const leaveCount = users.filter(u => u.status === 'LEAVE_OF_ABSENCE').length;
+        const retiredCount = users.filter(u => u.status === 'RETIRED').length;
+
+        return (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '10px' }}>
+            <div style={{ padding: '10px 14px', backgroundColor: 'var(--bg-card)', borderRadius: '6px', border: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '11.5px', color: 'var(--text-secondary)', fontWeight: 600 }}>총 조직 부서</span>
+              <strong style={{ fontSize: '15px', color: 'var(--primary)' }}>{departments.length}개 부서</strong>
+            </div>
+            <div style={{ padding: '10px 14px', backgroundColor: 'var(--bg-card)', borderRadius: '6px', border: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '11.5px', color: 'var(--text-secondary)', fontWeight: 600 }}>재직 임직원</span>
+              <strong style={{ fontSize: '15px', color: '#16a34a' }}>{activeUsersCount}명</strong>
+            </div>
+            <div style={{ padding: '10px 14px', backgroundColor: 'var(--bg-card)', borderRadius: '6px', border: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '11.5px', color: 'var(--text-secondary)', fontWeight: 600 }}>부서 미배치 / 휴·퇴사</span>
+              <strong style={{ fontSize: '15px', color: (unassignedCount + leaveCount + retiredCount) > 0 ? '#d97706' : 'var(--text-muted)' }}>{unassignedCount + leaveCount + retiredCount}명</strong>
+            </div>
+          </div>
+        );
+      })()}
+
       <div style={{ display: 'flex', gap: '20px', alignItems: 'flex-start', flexWrap: 'wrap' }}>
         
         {/* 좌측: 조직 트리 */}

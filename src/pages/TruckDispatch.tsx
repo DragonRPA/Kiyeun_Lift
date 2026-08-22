@@ -52,7 +52,7 @@ export const TruckDispatch: React.FC = () => {
   const { 
     deliveries, contracts, customers, products, sites,
     transportCompanies, transportDrivers, outboundInspections, hasPermission, 
-    refreshAllData, showErrorModal 
+    refreshAllData, showErrorModal, convertReconciledDeliveriesToSettlement
   } = useApp();
 
   const canSave = hasPermission('delivery', 'save');
@@ -1433,6 +1433,34 @@ export const TruckDispatch: React.FC = () => {
       {/* 탭 1: 배차 관리 */}
       {activeTab === 'DISPATCH' && (
         <div>
+          {/* 📊 오늘/내일/이번주 상차 배차 통계 바 */}
+          {(() => {
+            const todayStr = new Date().toISOString().split('T')[0];
+            const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1);
+            const tomorrowStr = tomorrow.toISOString().split('T')[0];
+            
+            const todayCount = deliveries.filter(d => (d.loadingDate || d.scheduledDate) === todayStr).length;
+            const tomorrowCount = deliveries.filter(d => (d.loadingDate || d.scheduledDate) === tomorrowStr).length;
+            const pendingTotal = deliveries.filter(d => getNormalizedDeliveryStatus(d) === 'PENDING').length;
+
+            return (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '10px', marginBottom: '16px' }}>
+                <div style={{ padding: '10px 14px', backgroundColor: 'var(--bg-card)', borderRadius: '6px', border: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '11.5px', color: 'var(--text-secondary)', fontWeight: 600 }}>오늘 상차 예정</span>
+                  <strong style={{ fontSize: '15px', color: todayCount > 0 ? 'var(--primary)' : 'var(--text-muted)' }}>{todayCount}건</strong>
+                </div>
+                <div style={{ padding: '10px 14px', backgroundColor: 'var(--bg-card)', borderRadius: '6px', border: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '11.5px', color: 'var(--text-secondary)', fontWeight: 600 }}>내일 상차 예정</span>
+                  <strong style={{ fontSize: '15px', color: tomorrowCount > 0 ? '#0070C0' : 'var(--text-muted)' }}>{tomorrowCount}건</strong>
+                </div>
+                <div style={{ padding: '10px 14px', backgroundColor: 'var(--bg-card)', borderRadius: '6px', border: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '11.5px', color: 'var(--text-secondary)', fontWeight: 600 }}>배차 대기 (미배정)</span>
+                  <strong style={{ fontSize: '15px', color: pendingTotal > 0 ? '#d97706' : 'var(--text-muted)' }}>{pendingTotal}건</strong>
+                </div>
+              </div>
+            );
+          })()}
+
           {/* 4단계 배차 진행 상태 카운트 탭 */}
           <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', flexWrap: 'wrap' }}>
             {[
@@ -2149,6 +2177,27 @@ export const TruckDispatch: React.FC = () => {
                   style={{ padding: '7px 11px', fontSize: '12px', fontWeight: 700, borderRadius: '7px', border: '1px solid #16a34a', backgroundColor: 'rgba(22,163,74,0.1)', color: '#16a34a', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
                 >
                   <Download size={13} /> 📊 대사 리포트 엑셀 다운로드
+                </button>
+
+                <button
+                  onClick={async () => {
+                    const targetYm = reconStartDate.slice(0, 7);
+                    const compId = selectedReconCompany === 'ALL' ? undefined : transportCompanies.find(c => c.name === selectedReconCompany)?.id;
+                    if (!confirm(`[${targetYm}] 연월의 대사 완료된 배차 운송비 건들을 [월말 매입 정산 대장]으로 자동 집계/이관하시겠습니까?`)) return;
+                    try {
+                      const count = await convertReconciledDeliveriesToSettlement(targetYm, compId);
+                      if (count > 0) {
+                        alert(`✅ 대사 완료 배차 ${count}건이 [월말 매입 정산(Purchase Settlement)] 대장으로 성공적으로 이관되었습니다.`);
+                      } else {
+                        alert(`ℹ️ [${targetYm}] 연월에 대사 완료(RECONCILED) 상태인 미이관 배차건이 없습니다.`);
+                      }
+                    } catch (err: any) {
+                      showErrorModal(`매입 정산 이관 실패: ${err?.message || err}`);
+                    }
+                  }}
+                  style={{ padding: '7px 11px', fontSize: '12px', fontWeight: 800, borderRadius: '7px', border: '1px solid #6366f1', backgroundColor: 'rgba(99,102,241,0.12)', color: '#6366f1', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                >
+                  🚀 대사 완료건 매입정산 대장 이관
                 </button>
               </div>
             </div>

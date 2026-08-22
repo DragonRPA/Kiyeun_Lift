@@ -316,6 +316,30 @@ export const AssetHistory: React.FC = () => {
         </button>
       </div>
 
+      {/* 📊 자산 라이프사이클 이벤트 실시간 요약 바 */}
+      {(() => {
+        const inboundCount = assetInOutLogs.filter(l => l.type === 'INBOUND').length;
+        const outboundCount = assetInOutLogs.filter(l => l.type === 'OUTBOUND').length;
+        const repairCount = assetInOutLogs.filter(l => l.type === 'REPAIR').length;
+
+        return (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '10px' }}>
+            <div style={{ padding: '10px 14px', backgroundColor: 'var(--bg-card)', borderRadius: '6px', border: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '11.5px', color: 'var(--text-secondary)', fontWeight: 600 }}>총 입고(반납) 이력</span>
+              <strong style={{ fontSize: '15px', color: '#16a34a' }}>{inboundCount}건</strong>
+            </div>
+            <div style={{ padding: '10px 14px', backgroundColor: 'var(--bg-card)', borderRadius: '6px', border: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '11.5px', color: 'var(--text-secondary)', fontWeight: 600 }}>총 출고(출하) 이력</span>
+              <strong style={{ fontSize: '15px', color: 'var(--primary)' }}>{outboundCount}건</strong>
+            </div>
+            <div style={{ padding: '10px 14px', backgroundColor: 'var(--bg-card)', borderRadius: '6px', border: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '11.5px', color: 'var(--text-secondary)', fontWeight: 600 }}>총 정비/수리 이력</span>
+              <strong style={{ fontSize: '15px', color: '#d97706' }}>{repairCount}건</strong>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* 2. 4대 탭 메뉴 (입고등록, 입고조회, 출고조회, 정비이력조회) */}
       <div style={{ display: 'flex', gap: '10px', borderBottom: '2px solid var(--border-color)', paddingBottom: '10px' }}>
         <button

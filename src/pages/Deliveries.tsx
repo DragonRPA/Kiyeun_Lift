@@ -96,11 +96,19 @@ export const Deliveries: React.FC = () => {
   const [tempTypeFilter, setTempTypeFilter] = useState('ALL');
   const [tempStatusFilter, setTempStatusFilter] = useState('ALL');
   const [tempSettleFilter, setTempSettleFilter] = useState('ALL');
+  const [tempStartDate, setTempStartDate] = useState('');
+  const [tempEndDate, setTempEndDate] = useState('');
+  const [tempTransportFilter, setTempTransportFilter] = useState('ALL');
+  const [tempSiteFilter, setTempSiteFilter] = useState('ALL');
 
   const [searchTerm, setSearchTerm] = useState('');
   const [typeFilter, setTypeFilter] = useState('ALL');
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [settleFilter, setSettleFilter] = useState('ALL');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [transportFilter, setTransportFilter] = useState('ALL');
+  const [siteFilter, setSiteFilter] = useState('ALL');
 
   // 배차 입력 모달 상태
   const [showDispatchModal, setShowDispatchModal] = useState(false);
@@ -139,6 +147,10 @@ export const Deliveries: React.FC = () => {
     setTypeFilter(tempTypeFilter);
     setStatusFilter(tempStatusFilter);
     setSettleFilter(tempSettleFilter);
+    setStartDate(tempStartDate);
+    setEndDate(tempEndDate);
+    setTransportFilter(tempTransportFilter);
+    setSiteFilter(tempSiteFilter);
   };
 
   const filteredDeliveries = deliveries.filter(d => {
@@ -163,7 +175,14 @@ export const Deliveries: React.FC = () => {
       matchesSettle = d.isCostSettled;
     }
 
-    return matchesSearch && matchesType && matchesStatus && matchesSettle;
+    const deliveryDate = d.scheduledDate || (d.createdAt ? d.createdAt.split('T')[0] : '');
+    const matchesDateStart = !startDate || deliveryDate >= startDate;
+    const matchesDateEnd = !endDate || deliveryDate <= endDate;
+    const matchesTransport = transportFilter === 'ALL' || (d.transportCompany || '').includes(transportFilter);
+    const deliveryContract = contracts.find(c => c.id === d.contractId);
+    const matchesSite = siteFilter === 'ALL' || (deliveryContract?.siteId || '') === siteFilter;
+
+    return matchesSearch && matchesType && matchesStatus && matchesSettle && matchesDateStart && matchesDateEnd && matchesTransport && matchesSite;
   });
 
   const handleExportExcel = () => {
@@ -353,6 +372,9 @@ export const Deliveries: React.FC = () => {
     }));
   };
 
+  const transportOptions = Array.from(new Set(deliveries.map(d => d.transportCompany).filter(Boolean))) as string[];
+  const deliverySiteOptions = sites?.filter(s => contracts.some(c => c.siteId === s.id && deliveries.some(d => d.contractId === c.id))) || [];
+
   return (
     <div>
       <div className="card-header" style={{ marginBottom: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -390,10 +412,10 @@ export const Deliveries: React.FC = () => {
       </div>
 
       {/* 필터 제어부 */}
-      <div className="card" style={{ padding: '20px', marginBottom: '20px' }}>
+      <div className="card" style={{ padding: '20px', marginBottom: '20px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '16px', alignItems: 'end' }}>
-          <div>
-            <label style={{ fontSize: '12px', fontWeight: '600', marginBottom: '6px', display: 'block' }}>검색어 (고객명/의뢰메모)</label>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+            <label style={{ fontSize: '11px', fontWeight: '600', display: 'block', whiteSpace: 'nowrap' }}>검색어</label>
             <input 
               type="text" 
               value={tempSearchTerm} 
@@ -402,39 +424,157 @@ export const Deliveries: React.FC = () => {
               style={{ width: '100%', padding: '8px' }}
             />
           </div>
-          <div>
-            <label style={{ fontSize: '12px', fontWeight: '600', marginBottom: '6px', display: 'block' }}>배차 구분</label>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+            <label style={{ fontSize: '11px', fontWeight: '600', display: 'block', whiteSpace: 'nowrap' }}>구분</label>
             <select value={tempTypeFilter} onChange={e => setTempTypeFilter(e.target.value)} style={{ width: '100%', padding: '8px' }}>
-              <option value="ALL">전체 구분</option>
-              <option value="OUTBOUND">출고 배차 (OUTBOUND)</option>
-              <option value="INBOUND">회수 배차 (INBOUND)</option>
+              <option value="ALL">전체</option>
+              <option value="OUTBOUND">출고 (OUTBOUND)</option>
+              <option value="INBOUND">회수 (INBOUND)</option>
             </select>
           </div>
-          <div>
-            <label style={{ fontSize: '12px', fontWeight: '600', marginBottom: '6px', display: 'block' }}>배송 상태</label>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+            <label style={{ fontSize: '11px', fontWeight: '600', display: 'block', whiteSpace: 'nowrap' }}>상태</label>
             <select value={tempStatusFilter} onChange={e => setTempStatusFilter(e.target.value)} style={{ width: '100%', padding: '8px' }}>
-              <option value="ALL">전체 상태</option>
+              <option value="ALL">전체</option>
               <option value="REQUESTED">의뢰중 (REQUESTED)</option>
               <option value="DISPATCHED">배차완료 (DISPATCHED)</option>
               <option value="COMPLETED">배송완료 (COMPLETED)</option>
             </select>
           </div>
-          <div>
-            <label style={{ fontSize: '12px', fontWeight: '600', marginBottom: '6px', display: 'block' }}>정산 여부</label>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+            <label style={{ fontSize: '11px', fontWeight: '600', display: 'block', whiteSpace: 'nowrap' }}>정산</label>
             <select value={tempSettleFilter} onChange={e => setTempSettleFilter(e.target.value)} style={{ width: '100%', padding: '8px' }}>
-              <option value="ALL">전체 정산상태</option>
+              <option value="ALL">전체</option>
               <option value="UNSETTLED">미정산 (UNSETTLED)</option>
               <option value="SETTLED">정산완료 (SETTLED)</option>
             </select>
           </div>
-          <div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+            <label style={{ fontSize: '11px', fontWeight: '600', display: 'block', whiteSpace: 'nowrap' }}>운송사</label>
+            <select value={tempTransportFilter} onChange={e => setTempTransportFilter(e.target.value)} style={{ width: '100%', padding: '8px' }}>
+              <option value="ALL">전체</option>
+              {transportOptions.map(t => (
+                <option key={t} value={t}>{t}</option>
+              ))}
+            </select>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+            <label style={{ fontSize: '11px', fontWeight: '600', display: 'block', whiteSpace: 'nowrap' }}>현장</label>
+            <select value={tempSiteFilter} onChange={e => setTempSiteFilter(e.target.value)} style={{ width: '100%', padding: '8px' }}>
+              <option value="ALL">전체</option>
+              {deliverySiteOptions.map(s => (
+                <option key={s.id} value={s.id}>{s.name}</option>
+              ))}
+            </select>
+          </div>
+          <div style={{ display: 'flex', gap: '8px' }}>
             <button 
               type="button" 
               className="btn-primary" 
               onClick={handleSearchClick}
-              style={{ width: '100%', height: '38px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', fontWeight: 'bold' }}
+              style={{ flex: 1, height: '38px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', fontWeight: 'bold' }}
             >
               <Search size={16} /> 조회
+            </button>
+            <button 
+              type="button" 
+              className="btn-secondary" 
+              onClick={() => {
+                setTempSearchTerm('');
+                setTempTypeFilter('ALL');
+                setTempStatusFilter('ALL');
+                setTempSettleFilter('ALL');
+                setTempStartDate('');
+                setTempEndDate('');
+                setTempTransportFilter('ALL');
+                setTempSiteFilter('ALL');
+                setSearchTerm('');
+                setTypeFilter('ALL');
+                setStatusFilter('ALL');
+                setSettleFilter('ALL');
+                setStartDate('');
+                setEndDate('');
+                setTransportFilter('ALL');
+                setSiteFilter('ALL');
+              }}
+              style={{ height: '38px', padding: '0 12px', whiteSpace: 'nowrap' }}
+            >
+              초기화
+            </button>
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', alignItems: 'end' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+            <label style={{ fontSize: '11px', fontWeight: '600', display: 'block', whiteSpace: 'nowrap' }}>시작일</label>
+            <input 
+              type="date" 
+              value={tempStartDate} 
+              onChange={e => setTempStartDate(e.target.value)} 
+              style={{ padding: '8px', minWidth: '130px' }}
+            />
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+            <label style={{ fontSize: '11px', fontWeight: '600', display: 'block', whiteSpace: 'nowrap' }}>종료일</label>
+            <input 
+              type="date" 
+              value={tempEndDate} 
+              onChange={e => setTempEndDate(e.target.value)} 
+              style={{ padding: '8px', minWidth: '130px' }}
+            />
+          </div>
+          <div style={{ display: 'flex', gap: '4px', marginBottom: '4px' }}>
+            <button 
+              type="button" 
+              className="btn-secondary" 
+              style={{ padding: '6px 10px', fontSize: '12px' }}
+              onClick={() => {
+                const today = new Date();
+                const ds = today.toISOString().split('T')[0];
+                setTempStartDate(ds);
+                setTempEndDate(ds);
+              }}
+            >
+              오늘
+            </button>
+            <button 
+              type="button" 
+              className="btn-secondary" 
+              style={{ padding: '6px 10px', fontSize: '12px' }}
+              onClick={() => {
+                const end = new Date();
+                const start = new Date();
+                start.setDate(end.getDate() - 7);
+                setTempStartDate(start.toISOString().split('T')[0]);
+                setTempEndDate(end.toISOString().split('T')[0]);
+              }}
+            >
+              1주
+            </button>
+            <button 
+              type="button" 
+              className="btn-secondary" 
+              style={{ padding: '6px 10px', fontSize: '12px' }}
+              onClick={() => {
+                const end = new Date();
+                const start = new Date();
+                start.setMonth(end.getMonth() - 1);
+                setTempStartDate(start.toISOString().split('T')[0]);
+                setTempEndDate(end.toISOString().split('T')[0]);
+              }}
+            >
+              1개월
+            </button>
+            <button 
+              type="button" 
+              className="btn-secondary" 
+              style={{ padding: '6px 10px', fontSize: '12px' }}
+              onClick={() => {
+                setTempStartDate('');
+                setTempEndDate('');
+              }}
+            >
+              전체
             </button>
           </div>
         </div>
@@ -608,6 +748,24 @@ export const Deliveries: React.FC = () => {
             )}
           </tbody>
         </table>
+      </div>
+
+      {/* 📊 배차 건수 및 총 운송비 실시간 집계 요약 바 */}
+      <div style={{
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        padding: '12px 18px', backgroundColor: 'var(--bg-card)',
+        borderRadius: '8px', border: '1px solid var(--border-color)',
+        fontSize: '13px', flexWrap: 'wrap', gap: '12px'
+      }}>
+        <div style={{ display: 'flex', gap: '20px', alignItems: 'center' }}>
+          <div>총 조회 건수: <strong style={{ color: 'var(--primary)' }}>{filteredDeliveries.length}건</strong></div>
+          <div>배차대기: <strong style={{ color: '#d97706' }}>{filteredDeliveries.filter(d => d.status === 'REQUESTED' || d.status === 'PENDING').length}건</strong></div>
+          <div>배송완료: <strong style={{ color: 'var(--success)' }}>{filteredDeliveries.filter(d => d.status === 'COMPLETED').length}건</strong></div>
+        </div>
+        <div style={{ display: 'flex', gap: '20px', alignItems: 'center' }}>
+          <div>예상 운송비 합계: <strong>₩{filteredDeliveries.reduce((sum, d) => sum + (d.deliveryCost || 0), 0).toLocaleString()}원</strong></div>
+          <div>확정 운송비 합계: <strong style={{ color: '#0070C0' }}>₩{filteredDeliveries.reduce((sum, d) => sum + (d.deliveryCostConfirmed || 0), 0).toLocaleString()}원</strong></div>
+        </div>
       </div>
 
       {/* [1] 단일 배차 처리 대체 모달 (백업용) */}

@@ -619,6 +619,34 @@ export interface Todo {
   createdAt: string;
 }
 
+export interface PrepaidTransaction {
+  id: string;
+  customerId: string;
+  type: 'CHARGE' | 'USE_FOR_BILLING' | 'REFUND';
+  amount: number;
+  balanceAfter: number;
+  billingId?: string;
+  paymentId?: string;
+  bankTransactionId?: string;
+  memo?: string;
+  createdAt: string;
+}
+
+export interface DelinquencyActionLog {
+  id: string;
+  customerId: string;
+  actionType: 'CALL' | 'NOTICE_SENT' | 'VISIT' | 'LEGAL';
+  actionDetails: string;
+  proofFileName?: string;
+  recordedBy: string;
+  mandateType: 'CEO_AUTO_MANDATE';
+  promiseDate?: string;
+  promiseAmount?: number;
+  promiseStatus?: 'PENDING' | 'KEPT' | 'BROKEN';
+  promiseContactPerson?: string;
+  createdAt: string;
+}
+
 export interface BankTransaction {
   id: string;
   bankName?: string;       // 은행명 ('우리은행' | '신한은행' 등)
@@ -1334,11 +1362,12 @@ export const ALL_DB_KEYS = [
   'products', 'assets', 'consumables', 'consumableLogs', 'consumablePurchases',
   'contracts', 'contractAssets', 'contractHistory', 'deliveries', 
   'transportCompanies', 'transportDrivers', 'vendors',
-  'billings', 'billingDetails', 'payments', 'repairs', 'repairConsumables', 'todos', 
+  'billings', 'billingDetails', 'payments', 'paymentDepositLinks', 'repairs', 'repairConsumables', 'todos', 
   'bankTransactions', 'bankMatchingRules', 'bankInitialBalances', 'googleConfigs', 'assetInOutLogs',
   'cashFlowSnapshots', 'outboundInspections', 'depreciationLogs',
   'purchaseSettlements', 'purchaseSettlementItems', 'settlementPaymentLogs', 'externalLeases',
-  'annualLeaveQuotas', 'leaveUsages', 'overtimeRecords', 'payrollClosings', 'inspectionChecklistItems'
+  'annualLeaveQuotas', 'leaveUsages', 'overtimeRecords', 'payrollClosings', 'inspectionChecklistItems',
+  'prepaidTransactions', 'delinquencyActionLogs'
 ];
 
 class LocalDB {
@@ -1497,9 +1526,17 @@ class LocalDB {
   get externalLeases() { return this.get<ExternalLease>('externalLeases', []); }
   set externalLeases(val: ExternalLease[]) { this.set('externalLeases', val); }
 
+  get prepaidTransactions() { return this.get<PrepaidTransaction>('prepaidTransactions', []); }
+  set prepaidTransactions(val: PrepaidTransaction[]) { this.set('prepaidTransactions', val); }
+
+  get delinquencyActionLogs() { return this.get<DelinquencyActionLog>('delinquencyActionLogs', []); }
+  set delinquencyActionLogs(val: DelinquencyActionLog[]) { this.set('delinquencyActionLogs', val); }
+
   // Supabase 테이블 맵핑
   private mapToSupabaseTable(key: string): string {
     const mapping: Record<string, string> = {
+      prepaidTransactions: 'prepaid_transactions',
+      delinquencyActionLogs: 'delinquency_action_logs',
       users: 'users',
       departments: 'departments',
       permissions: 'permissions',

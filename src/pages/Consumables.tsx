@@ -88,6 +88,15 @@ export const Consumables: React.FC = () => {
   const [statusQuery, setStatusQuery] = useState<'ALL' | 'INCOMPLETE' | 'COMPLETED'>('ALL');
   const [startDateQuery, setStartDateQuery] = useState(thisMonthStart);
   const [endDateQuery, setEndDateQuery] = useState(thisMonthEnd);
+  const [userQuery, setUserQuery] = useState('ALL');
+
+  // --- [1.1] 추가 필터 상태 ---
+  const [reqUserFilter, setReqUserFilter] = useState('ALL');
+  const [stockSearch, setStockSearch] = useState('');
+  const [logTypeFilter, setLogTypeFilter] = useState('ALL');
+  const [logStartDate, setLogStartDate] = useState('');
+  const [logEndDate, setLogEndDate] = useState('');
+  const [logSearch, setLogSearch] = useState('');
 
   // --- [2] 구매신청 작성(Write) 폼 상태 ---
   const [reqConsumableId, setReqConsumableId] = useState('');
@@ -202,8 +211,10 @@ export const Consumables: React.FC = () => {
 
       const matchesStart = !startDateQuery || p.requestDate >= startDateQuery;
       const matchesEnd = !endDateQuery || p.requestDate <= endDateQuery;
+      
+      const matchesUser = userQuery === 'ALL' || p.requesterId === userQuery;
 
-      return matchesSearch && matchesStatus && matchesStart && matchesEnd;
+      return matchesSearch && matchesStatus && matchesStart && matchesEnd && matchesUser;
     });
   };
 
@@ -328,6 +339,7 @@ export const Consumables: React.FC = () => {
     }
 
     try {
+      // eslint-disable-next-line react-hooks/rules-of-hooks
       await useConsumable({
         consumableId: useConsumableId,
         quantity: useQty,
@@ -426,10 +438,52 @@ export const Consumables: React.FC = () => {
       {/* [TAB 1] 보유 재고 현황 */}
       {activeTab === 'STOCK' && (
         <div className="card" style={{ margin: 0 }}>
-          <div className="card-header">
-            <h3 className="card-title">소모품 보유 수량 목록</h3>
-            <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>* 재고 5개 이하 시 보충 경고</span>
+          <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>
+              <h3 className="card-title">소모품 보유 수량 목록</h3>
+              <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>* 재고 5개 이하 시 보충 경고</span>
+            </div>
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+              <div style={{ position: 'relative' }}>
+                <input
+                  type="text"
+                  value={stockSearch}
+                  onChange={e => setStockSearch(e.target.value)}
+                  placeholder="품목명 검색..."
+                  style={{ paddingLeft: '32px', height: '34px', fontSize: '13px', width: '200px' }}
+                />
+                <Search size={14} style={{ position: 'absolute', left: '10px', top: '10px', color: 'var(--text-muted)' }} />
+              </div>
+            </div>
           </div>
+
+          {/* 📊 소모품 보유 현황 실시간 요약 바 */}
+          {(() => {
+            const totalStockValue = consumables.reduce((sum, c) => sum + (c.stockQty * c.unitPrice), 0);
+            const lowStockCount = consumables.filter(c => c.stockQty < 5).length;
+            const urgentStockCount = consumables.filter(c => c.stockQty <= 2).length;
+
+            return (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '10px', margin: '14px 0' }}>
+                <div style={{ padding: '10px 14px', backgroundColor: 'var(--bg-app)', borderRadius: '6px', border: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '11.5px', color: 'var(--text-muted)', fontWeight: 600 }}>총 관리 품목</span>
+                  <strong style={{ fontSize: '15px', color: 'var(--primary)' }}>{consumables.length}종</strong>
+                </div>
+                <div style={{ padding: '10px 14px', backgroundColor: 'var(--bg-app)', borderRadius: '6px', border: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '11.5px', color: 'var(--text-muted)', fontWeight: 600 }}>총 재고 평가액</span>
+                  <strong style={{ fontSize: '15px', color: '#0070C0' }}>₩{totalStockValue.toLocaleString()}원</strong>
+                </div>
+                <div style={{ padding: '10px 14px', backgroundColor: 'var(--bg-app)', borderRadius: '6px', border: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '11.5px', color: 'var(--text-muted)', fontWeight: 600 }}>보충 필요 (5개 미만)</span>
+                  <strong style={{ fontSize: '15px', color: lowStockCount > 0 ? '#d97706' : 'var(--text-muted)' }}>{lowStockCount}종</strong>
+                </div>
+                <div style={{ padding: '10px 14px', backgroundColor: 'var(--bg-app)', borderRadius: '6px', border: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '11.5px', color: 'var(--text-muted)', fontWeight: 600 }}>재고 긴급 (2개 이하)</span>
+                  <strong style={{ fontSize: '15px', color: urgentStockCount > 0 ? 'var(--danger)' : 'var(--text-muted)' }}>{urgentStockCount}종</strong>
+                </div>
+              </div>
+            );
+          })()}
 
           <div className="table-container" style={{ border: 'none', boxShadow: 'none' }}>
             <table>
@@ -446,7 +500,9 @@ export const Consumables: React.FC = () => {
                 </tr>
               </thead>
               <tbody>
-                {consumables.map(c => {
+                {consumables
+                  .filter(c => !stockSearch || c.modelName.toLowerCase().includes(stockSearch.toLowerCase()))
+                  .map(c => {
                   const logs = consumableLogs.filter(l => l.consumableId === c.id);
                   const totalUsed = logs.filter(l => l.type === 'OUTBOUND').reduce((sum, l) => sum + l.quantity, 0);
                   const totalPurchased = c.stockQty + totalUsed;
@@ -487,12 +543,13 @@ export const Consumables: React.FC = () => {
               e.preventDefault();
               setSearchQuery(reqSearchTerm);
               setStatusQuery(reqStatusFilter);
+              setUserQuery(reqUserFilter);
               setStartDateQuery(reqStartDate);
               setEndDateQuery(reqEndDate);
             }}>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '16px', alignItems: 'end' }}>
-                <div>
-                  <label>품명/판매처 검색</label>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label style={{ fontSize: '11px', fontWeight: '600', display: 'block', whiteSpace: 'nowrap', flexShrink: 0 }}>검색어</label>
                   <div style={{ position: 'relative' }}>
                     <input
                       type="text"
@@ -504,20 +561,29 @@ export const Consumables: React.FC = () => {
                     <Search size={14} style={{ position: 'absolute', left: '10px', top: '12px', color: 'var(--text-muted)' }} />
                   </div>
                 </div>
-                <div>
-                  <label>완료 여부</label>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label style={{ fontSize: '11px', fontWeight: '600', display: 'block', whiteSpace: 'nowrap', flexShrink: 0 }}>완료 여부</label>
                   <select value={reqStatusFilter} onChange={e => setReqStatusFilter(e.target.value as any)}>
                     <option value="ALL">전체 신청 내역</option>
                     <option value="INCOMPLETE">미완료 신청 (신청/접수)</option>
                     <option value="COMPLETED">완료된 신청 (구매완료)</option>
                   </select>
                 </div>
-                <div>
-                  <label>신청시작일</label>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label style={{ fontSize: '11px', fontWeight: '600', display: 'block', whiteSpace: 'nowrap', flexShrink: 0 }}>신청자</label>
+                  <select value={reqUserFilter} onChange={e => setReqUserFilter(e.target.value)}>
+                    <option value="ALL">전체</option>
+                    {Array.from(new Set(consumablePurchases.filter(p => p.requesterId).map(p => p.requesterId))).map(userId => (
+                      <option key={userId} value={userId}>{getUserName(userId)}</option>
+                    ))}
+                  </select>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label style={{ fontSize: '11px', fontWeight: '600', display: 'block', whiteSpace: 'nowrap', flexShrink: 0 }}>신청시작일</label>
                   <input type="date" value={reqStartDate} onChange={e => setReqStartDate(e.target.value)} />
                 </div>
-                <div>
-                  <label>신청종료일</label>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label style={{ fontSize: '11px', fontWeight: '600', display: 'block', whiteSpace: 'nowrap', flexShrink: 0 }}>신청종료일</label>
                   <input type="date" value={reqEndDate} onChange={e => setReqEndDate(e.target.value)} />
                 </div>
                 <div style={{ display: 'flex', gap: '8px' }}>
@@ -530,10 +596,12 @@ export const Consumables: React.FC = () => {
                     onClick={() => {
                       setReqSearchTerm('');
                       setReqStatusFilter('ALL');
+                      setReqUserFilter('ALL');
                       setReqStartDate(thisMonthStart);
                       setReqEndDate(thisMonthEnd);
                       setSearchQuery('');
                       setStatusQuery('ALL');
+                      setUserQuery('ALL');
                       setStartDateQuery(thisMonthStart);
                       setEndDateQuery(thisMonthEnd);
                     }}
@@ -1066,51 +1134,116 @@ export const Consumables: React.FC = () => {
 
       {/* [TAB 7] 입출고 이력 로그 */}
       {activeTab === 'LOGS' && (
-        <div className="card" style={{ margin: 0 }}>
-          <h3 className="card-title" style={{ marginBottom: '20px' }}>입출고 변동 상세 이력</h3>
-          
-          <div className="table-container" style={{ border: 'none', boxShadow: 'none' }}>
-            <table>
-              <thead>
-                <tr>
-                  <th>구분</th>
-                  <th>변동일자</th>
-                  <th>자재 품목명</th>
-                  <th>수량</th>
-                  <th>단가</th>
-                  <th>소계</th>
-                  <th>대상장비</th>
-                  <th>처리담당자</th>
-                  <th>설명</th>
-                </tr>
-              </thead>
-              <tbody>
-                {consumableLogs.map(log => {
-                  const item = consumables.find(c => c.id === log.consumableId);
-                  return (
-                    <tr key={log.id}>
-                      <td>
-                        <span className={`badge ${log.type === 'INBOUND' ? 'badge-success' : 'badge-danger'}`}>
-                          {log.type === 'INBOUND' ? '구입입고' : '자재사용'}
-                        </span>
-                      </td>
-                      <td>{log.actionDate}</td>
-                      <td>{item?.modelName || '삭제된 소모품'}</td>
-                      <td>
-                        {log.type === 'INBOUND' ? '+' : '-'}{log.quantity}
-                      </td>
-                      <td>{log.unitPrice.toLocaleString()}원</td>
-                      <td style={{ fontWeight: '600' }}>
-                        {(log.quantity * log.unitPrice).toLocaleString()}원
-                      </td>
-                      <td>{log.targetAssetId ? getAssetNo(log.targetAssetId) : '-'}</td>
-                      <td>{getUserName(log.userId)}</td>
-                      <td style={{ fontSize: '13px' }}>{log.description}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+        <div>
+          <div className="card" style={{ padding: '20px', marginBottom: '20px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '16px', alignItems: 'end' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <label style={{ fontSize: '11px', fontWeight: '600', display: 'block', whiteSpace: 'nowrap', flexShrink: 0 }}>입출고구분</label>
+                <select value={logTypeFilter} onChange={e => setLogTypeFilter(e.target.value)}>
+                  <option value="ALL">전체</option>
+                  <option value="INBOUND">구입입고</option>
+                  <option value="OUTBOUND">자재사용(출고)</option>
+                </select>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <label style={{ fontSize: '11px', fontWeight: '600', display: 'block', whiteSpace: 'nowrap', flexShrink: 0 }}>시작일</label>
+                <input type="date" value={logStartDate} onChange={e => setLogStartDate(e.target.value)} />
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <label style={{ fontSize: '11px', fontWeight: '600', display: 'block', whiteSpace: 'nowrap', flexShrink: 0 }}>종료일</label>
+                <input type="date" value={logEndDate} onChange={e => setLogEndDate(e.target.value)} />
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <label style={{ fontSize: '11px', fontWeight: '600', display: 'block', whiteSpace: 'nowrap', flexShrink: 0 }}>검색어</label>
+                <div style={{ position: 'relative' }}>
+                  <input type="text" value={logSearch} onChange={e => setLogSearch(e.target.value)} placeholder="품목명, 담당자..." style={{ paddingLeft: '32px' }} />
+                  <Search size={14} style={{ position: 'absolute', left: '10px', top: '12px', color: 'var(--text-muted)' }} />
+                </div>
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: '8px', marginTop: '12px' }}>
+              <button type="button" className="btn-secondary" onClick={() => {
+                const today = new Date().toISOString().split('T')[0];
+                setLogStartDate(today); setLogEndDate(today);
+              }} style={{ fontSize: '12px', padding: '4px 10px' }}>오늘</button>
+              <button type="button" className="btn-secondary" onClick={() => {
+                const d = new Date(); d.setDate(d.getDate() - 7);
+                setLogStartDate(d.toISOString().split('T')[0]);
+                setLogEndDate(new Date().toISOString().split('T')[0]);
+              }} style={{ fontSize: '12px', padding: '4px 10px' }}>1주</button>
+              <button type="button" className="btn-secondary" onClick={() => {
+                const d = new Date(); d.setMonth(d.getMonth() - 1);
+                setLogStartDate(d.toISOString().split('T')[0]);
+                setLogEndDate(new Date().toISOString().split('T')[0]);
+              }} style={{ fontSize: '12px', padding: '4px 10px' }}>1개월</button>
+              <button type="button" className="btn-secondary" onClick={() => {
+                setLogStartDate(''); setLogEndDate('');
+              }} style={{ fontSize: '12px', padding: '4px 10px' }}>전체기간</button>
+              <button type="button" className="btn-secondary" onClick={() => {
+                setLogTypeFilter('ALL'); setLogStartDate(''); setLogEndDate(''); setLogSearch('');
+              }} style={{ fontSize: '12px', padding: '4px 10px', marginLeft: 'auto' }}>초기화</button>
+            </div>
+          </div>
+
+          <div className="card" style={{ margin: 0 }}>
+            <h3 className="card-title" style={{ marginBottom: '20px' }}>입출고 변동 상세 이력</h3>
+            
+            <div className="table-container" style={{ border: 'none', boxShadow: 'none' }}>
+              <table>
+                <thead>
+                  <tr>
+                    <th>구분</th>
+                    <th>변동일자</th>
+                    <th>자재 품목명</th>
+                    <th>수량</th>
+                    <th>단가</th>
+                    <th>소계</th>
+                    <th>대상장비</th>
+                    <th>처리담당자</th>
+                    <th>설명</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {consumableLogs.filter(log => {
+                    const logDate = (log.actionDate || log.createdAt || '').split('T')[0];
+                    const item = consumables.find(c => c.id === log.consumableId);
+                    const userName = getUserName(log.userId);
+                    
+                    const matchType = logTypeFilter === 'ALL' || log.type === logTypeFilter;
+                    const matchStart = !logStartDate || logDate >= logStartDate;
+                    const matchEnd = !logEndDate || logDate <= logEndDate;
+                    const matchSearch = !logSearch || 
+                                        (item?.modelName || '').toLowerCase().includes(logSearch.toLowerCase()) || 
+                                        (userName || '').toLowerCase().includes(logSearch.toLowerCase());
+                                        
+                    return matchType && matchStart && matchEnd && matchSearch;
+                  }).map(log => {
+                    const item = consumables.find(c => c.id === log.consumableId);
+                    return (
+                      <tr key={log.id}>
+                        <td>
+                          <span className={`badge ${log.type === 'INBOUND' ? 'badge-success' : 'badge-danger'}`}>
+                            {log.type === 'INBOUND' ? '구입입고' : '자재사용'}
+                          </span>
+                        </td>
+                        <td>{log.actionDate}</td>
+                        <td>{item?.modelName || '삭제된 소모품'}</td>
+                        <td>
+                          {log.type === 'INBOUND' ? '+' : '-'}{log.quantity}
+                        </td>
+                        <td>{log.unitPrice.toLocaleString()}원</td>
+                        <td style={{ fontWeight: '600' }}>
+                          {(log.quantity * log.unitPrice).toLocaleString()}원
+                        </td>
+                        <td>{log.targetAssetId ? getAssetNo(log.targetAssetId) : '-'}</td>
+                        <td>{getUserName(log.userId)}</td>
+                        <td style={{ fontSize: '13px' }}>{log.description}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       )}

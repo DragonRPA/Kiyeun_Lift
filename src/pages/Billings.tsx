@@ -11,7 +11,8 @@ export const Billings: React.FC = () => {
   const {
     billings, billingDetails, customers, contacts, contracts, contractAssets, assets, sites, users, googleConfigs,
     generateBillingsForMonth, receivePayment, cancelPayment, hasPermission, currentUser, approveBilling, cancelBilling,
-    refreshAllData, showErrorModal, bankTransactions, paymentDepositLinks, saveBankDeposit, deleteBankDeposit, payments
+    refreshAllData, showErrorModal, bankTransactions, paymentDepositLinks, saveBankDeposit, deleteBankDeposit, payments,
+    repairs, linkRepairToBilling, applyPrepaidBalanceForBilling
   } = useApp();
 
 
@@ -103,10 +104,13 @@ export const Billings: React.FC = () => {
   const [payDate, setPayDate] = useState(new Date().toISOString().split('T')[0]);
   const [payMethod, setPayMethod] = useState('BANK_TRANSFER');
   const [payMemo, setPayMemo] = useState('');
-  // v2: 다중 입금건 선택 상태 { txId → usedAmount }
-  const [payMode, setPayMode] = useState<'DEPOSIT' | 'DIRECT'>('DEPOSIT');
+  // v2: 다중 입금건 선택 상태 { txId → usedAmount } + 선수금(예치금) 상계 모드
+  const [payMode, setPayMode] = useState<'DEPOSIT' | 'DIRECT' | 'PREPAID'>('DEPOSIT');
   const [depositLinkDraft, setDepositLinkDraft] = useState<Record<string, number>>({}); // txId -> usedAmount
   const [directAmount, setDirectAmount] = useState(0); // 직접입력 모드 금액
+  const [prepaidAmount, setPrepaidAmount] = useState(0); // 선수금 상계 모드 금액
+  // 마법사 연동 수리비 ID 목록
+  const [selectedRepairIdsForWizard, setSelectedRepairIdsForWizard] = useState<string[]>([]);
   // 통합 검색 필터 (고객명/입금자명/계좌번호/비고)
   const [depSearchQuery, setDepSearchQuery] = useState(''); // 통합 검색어
 
@@ -267,9 +271,25 @@ export const Billings: React.FC = () => {
   };
 
 
-  const handlePaySubmit = (e: React.FormEvent) => {
+  const handlePaySubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!canSave || !payBillingId) return;
+
+    if (payMode === 'PREPAID') {
+      if (prepaidAmount <= 0) {
+        showErrorModal('상계할 선수금 금액을 입력해 주십시오.', '수납 오류');
+        return;
+      }
+      try {
+        await applyPrepaidBalanceForBilling(payBillingId, prepaidAmount, payMemo);
+        alert('선수금(예치금) 상계 수납 처리가 완료되었습니다.');
+        setShowPayModal(false);
+        setPayBillingId('');
+      } catch (err: any) {
+        // applyPrepaidBalanceForBilling 내부에서 showErrorModal 호출됨
+      }
+      return;
+    }
 
     if (payMode === 'DEPOSIT') {
       const links = Object.entries(depositLinkDraft)
@@ -736,12 +756,18 @@ ${details.map((d, idx) => {
         });
       });
 
+      // 연동된 수리비가 있다면 billingId 바인딩
+      for (const rId of selectedRepairIdsForWizard) {
+        await linkRepairToBilling(rId, billing.id);
+      }
+
       // 💡 헌장 5.2 준수: 원격 DB 저장을 동기로 대기하여 데이터 누락 및 무음 실패 100% 방지
       await db.awaitPendingWrites();
 
       refreshAllData();
       setSelectedContractIdForWizard(null);
       setExtraCharges([]);
+      setSelectedRepairIdsForWizard([]);
       alert(`[${getCustName(selectedContractForWizard.customerId)}] 고객사에 대해 청구귀속월(${targetYm}) 기준 총 ${overallTotal.toLocaleString()}원 청구 생성이 DB에 성공적으로 저장되었습니다.`);
     } catch (err: any) {
       showErrorModal(`⚠️ 청구서 DB 저장 실패:\n\n${err?.message || err}`, '청구 생성 오류');
@@ -1004,6 +1030,40 @@ ${details.map((d, idx) => {
                 조회
               </button>
             </div>
+
+            {/* 📊 청구 및 수납 실시간 종합 집계 위젯 */}
+            {(() => {
+              const totalSupply = filteredBillings.reduce((sum, b) => sum + (b.totalAmount || 0), 0);
+              const totalVat = Math.round(totalSupply * 0.1);
+              const totalGrand = totalSupply + totalVat;
+              const totalPaid = filteredBillings.reduce((sum, b) => sum + (b.paidAmount || 0), 0);
+              const totalUnpaid = Math.max(0, totalGrand - totalPaid);
+
+              return (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '12px', marginBottom: '16px' }}>
+                  <div style={{ padding: '12px', backgroundColor: 'var(--bg-card)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                    <div style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 600, marginBottom: '4px' }}>조회 청구건수</div>
+                    <div style={{ fontSize: '16px', fontWeight: 800, color: 'var(--primary)' }}>{filteredBillings.length}건</div>
+                  </div>
+                  <div style={{ padding: '12px', backgroundColor: 'var(--bg-card)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                    <div style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 600, marginBottom: '4px' }}>공급가액 합계</div>
+                    <div style={{ fontSize: '16px', fontWeight: 800 }}>₩{totalSupply.toLocaleString()}</div>
+                  </div>
+                  <div style={{ padding: '12px', backgroundColor: 'var(--bg-card)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                    <div style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 600, marginBottom: '4px' }}>총 청구금액 (VAT포함)</div>
+                    <div style={{ fontSize: '16px', fontWeight: 800, color: '#0070C0' }}>₩{totalGrand.toLocaleString()}</div>
+                  </div>
+                  <div style={{ padding: '12px', backgroundColor: 'var(--bg-card)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                    <div style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 600, marginBottom: '4px' }}>수납 완료액</div>
+                    <div style={{ fontSize: '16px', fontWeight: 800, color: 'var(--success)' }}>₩{totalPaid.toLocaleString()}</div>
+                  </div>
+                  <div style={{ padding: '12px', backgroundColor: 'var(--bg-card)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                    <div style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 600, marginBottom: '4px' }}>미수 채권 잔액</div>
+                    <div style={{ fontSize: '16px', fontWeight: 800, color: totalUnpaid > 0 ? '#dc2626' : 'var(--text-muted)' }}>₩{totalUnpaid.toLocaleString()}</div>
+                  </div>
+                </div>
+              );
+            })()}
 
             <div className="table-container" style={{ border: 'none', boxShadow: 'none', overflowX: 'auto' }}>
               <table style={{ minWidth: '650px', whiteSpace: 'nowrap' }}>
@@ -1446,6 +1506,58 @@ ${details.map((d, idx) => {
 
                 {/* 추가 청구 항목 입력 섹션 */}
                 <div style={{ marginTop: '24px', borderTop: '1px dashed var(--border-color)', paddingTop: '16px', marginBottom: '20px' }}>
+                  
+                  {/* 💡 미청구 고객 과실 수리비 자동 추천 패널 */}
+                  {(() => {
+                    const contractAssetIds = wizardContractAssets.map(ca => ca.assetId).filter(Boolean);
+                    const unbilledRepairs = repairs.filter(r => 
+                      r.billableToCustomer && 
+                      !r.billingId && 
+                      contractAssetIds.includes(r.assetId) &&
+                      !selectedRepairIdsForWizard.includes(r.id)
+                    );
+
+                    if (unbilledRepairs.length === 0) return null;
+
+                    return (
+                      <div style={{ padding: '12px', borderRadius: '8px', backgroundColor: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.25)', marginBottom: '14px' }}>
+                        <div style={{ fontWeight: 'bold', fontSize: '12.5px', color: '#dc2626', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          ⚠️ 고객 부담 미청구 정비/수리비 {unbilledRepairs.length}건 발견
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                          {unbilledRepairs.map(rep => {
+                            const ast = assets.find(a => a.id === rep.assetId);
+                            const cost = rep.totalCost || 0;
+                            return (
+                              <div key={rep.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '12px', backgroundColor: 'var(--bg-card)', padding: '6px 10px', borderRadius: '6px' }}>
+                                <div>
+                                  <strong>{ast?.modelName || '장비'} ({ast?.assetNo})</strong> — {rep.details || '현장 수리'} ({cost.toLocaleString()}원)
+                                </div>
+                                <button
+                                  type="button"
+                                  className="btn-secondary"
+                                  onClick={() => {
+                                    setSelectedRepairIdsForWizard([...selectedRepairIdsForWizard, rep.id]);
+                                    setExtraCharges([...extraCharges, {
+                                      id: `EXTRA-REP-${rep.id}`,
+                                      category: 'REPAIR',
+                                      customName: `[고객부담 수리비] ${ast?.assetNo} ${rep.details || ''}`,
+                                      quantity: 1,
+                                      unitPrice: cost
+                                    }]);
+                                  }}
+                                  style={{ fontSize: '11.5px', padding: '3px 8px', color: 'var(--primary)', fontWeight: 'bold' }}
+                                >
+                                  + 청구 항목에 추가
+                                </button>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })()}
+
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
                     <h4 style={{ margin: 0, fontSize: '14px', fontWeight: '700', color: 'var(--text-primary)' }}>
                       ➕ 추가 청구 등록 (운송료, 수리비 등)
@@ -1702,6 +1814,17 @@ ${details.map((d, idx) => {
                     borderBottom: payMode === 'DEPOSIT' ? '2px solid var(--primary)' : '2px solid transparent',
                     color: payMode === 'DEPOSIT' ? 'var(--primary)' : 'var(--text-secondary)' }}>
                   🏦 통장입금 연동
+                </button>
+                <button type="button" onClick={() => {
+                  setPayMode('PREPAID');
+                  const targetCust = customers.find(c => c.id === custId);
+                  const bal = targetCust?.prepaidBalance || 0;
+                  setPrepaidAmount(Math.min(unpaid, bal));
+                }}
+                  style={{ padding: '7px 16px', fontSize: '13px', fontWeight: '600', border: 'none', background: 'none', cursor: 'pointer',
+                    borderBottom: payMode === 'PREPAID' ? '2px solid var(--primary)' : '2px solid transparent',
+                    color: payMode === 'PREPAID' ? 'var(--primary)' : 'var(--text-secondary)' }}>
+                  💰 선수금(예치금) 상계
                 </button>
                 <button type="button" onClick={() => setPayMode('DIRECT')}
                   style={{ padding: '7px 16px', fontSize: '13px', fontWeight: '600', border: 'none', background: 'none', cursor: 'pointer',

@@ -374,6 +374,29 @@ export const UsersPermissions: React.FC = () => {
         </div>
       </div>
 
+      {/* 📊 사용자 및 권한 현황 실시간 요약 바 */}
+      {(() => {
+        const adminCount = users.filter(u => u.role === 'ADMIN' || u.id === 'u-1' || u.id === 'sys-admin').length;
+        const totalPermRecords = localPermissions.length;
+
+        return (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '10px', marginBottom: '16px' }}>
+            <div style={{ padding: '10px 14px', backgroundColor: 'var(--bg-card)', borderRadius: '6px', border: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '11.5px', color: 'var(--text-secondary)', fontWeight: 600 }}>총 시스템 사용자</span>
+              <strong style={{ fontSize: '15px', color: 'var(--primary)' }}>{users.length}명</strong>
+            </div>
+            <div style={{ padding: '10px 14px', backgroundColor: 'var(--bg-card)', borderRadius: '6px', border: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '11.5px', color: 'var(--text-secondary)', fontWeight: 600 }}>시스템 관리자(ADMIN)</span>
+              <strong style={{ fontSize: '15px', color: '#16a34a' }}>{adminCount}명</strong>
+            </div>
+            <div style={{ padding: '10px 14px', backgroundColor: 'var(--bg-card)', borderRadius: '6px', border: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '11.5px', color: 'var(--text-secondary)', fontWeight: 600 }}>메뉴 권한 레코드</span>
+              <strong style={{ fontSize: '15px', color: '#0070C0' }}>{totalPermRecords}건</strong>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* 💳 급여 관리 권한 소유 임직원 현황 시각화 배너 (1인 강제 제한 제거 & 현황 투명 노출) */}
       <div style={{
         marginBottom: '16px', padding: '10px 16px', backgroundColor: 'var(--bg-card)',

@@ -415,13 +415,10 @@ export const Dashboard: React.FC = () => {
               {badge.text}
             </span>
           </div>
-          <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: '6px 0 0 0' }}>
-            오늘 실시간으로 확인하고 즉시 처리해야 할 직무 전용 할 일 목록입니다.
-          </p>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-          {/* 🚀 계약 서류 14p 원클릭 통합 팩 발행 버튼 (상시 사용 가능) */}
+          {/* 계약 서류 14p 통합 팩 발행 버튼 */}
           <button
             type="button"
             className="btn-primary"
@@ -436,7 +433,7 @@ export const Dashboard: React.FC = () => {
             }}
           >
             <Download size={15} />
-            {isMergingDoc ? '서류 팩 생산 중...' : '🚀 계약 서류 14p 원클릭 통합 팩'}
+            {isMergingDoc ? '서류 팩 생성 중...' : '계약 서류 14p 통합 팩'}
           </button>
 
           {role === 'ADMIN' && (
@@ -717,11 +714,8 @@ export const Dashboard: React.FC = () => {
             <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
                 <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '800', color: 'var(--text-primary)' }}>
-                  🚀 계약 서류 14p 원클릭 통합 팩 발행
+                  계약 서류 14p 통합 팩 발행
                 </h3>
-                <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: 'var(--text-secondary)' }}>
-                  발행할 계약을 선택하면 실제 계약/장비 데이터가 주입된 계약서+체크리스트+안전점검표+드라이브 원본이 1개의 완제본 PDF로 결합됩니다.
-                </p>
               </div>
               <button
                 type="button"

@@ -102,6 +102,30 @@ export const AssetAcquisitionDisposal: React.FC = () => {
     <div>
       <h2 style={{ marginBottom: '24px', fontWeight: '700' }}>당사자산 취득 / 매각 관리</h2>
 
+      {/* 📊 자산 취득 및 매각 현황 실시간 요약 바 */}
+      {(() => {
+        const ownedList = assets.filter(a => a.ownerType === 'OWNED');
+        const soldList = assets.filter(a => a.status === 'SOLD');
+        const totalAcqPrice = ownedList.reduce((sum, a) => sum + (a.acquisitionPrice || 0), 0);
+
+        return (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '10px', marginBottom: '20px' }}>
+            <div style={{ padding: '10px 14px', backgroundColor: 'var(--bg-card)', borderRadius: '6px', border: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '11.5px', color: 'var(--text-secondary)', fontWeight: 600 }}>보유 당사자산</span>
+              <strong style={{ fontSize: '15px', color: 'var(--primary)' }}>{ownedList.length}대</strong>
+            </div>
+            <div style={{ padding: '10px 14px', backgroundColor: 'var(--bg-card)', borderRadius: '6px', border: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '11.5px', color: 'var(--text-secondary)', fontWeight: 600 }}>총 취득원가 합계</span>
+              <strong style={{ fontSize: '15px', color: '#0070C0' }}>₩{totalAcqPrice.toLocaleString()}원</strong>
+            </div>
+            <div style={{ padding: '10px 14px', backgroundColor: 'var(--bg-card)', borderRadius: '6px', border: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '11.5px', color: 'var(--text-secondary)', fontWeight: 600 }}>매각 처분 완료</span>
+              <strong style={{ fontSize: '15px', color: 'var(--text-muted)' }}>{soldList.length}대</strong>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* 탭 네비게이션 */}
       <div style={{ display: 'flex', gap: '10px', marginBottom: '24px' }}>
         <button

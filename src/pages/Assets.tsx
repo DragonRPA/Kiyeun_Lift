@@ -263,6 +263,35 @@ export const Assets: React.FC = () => {
         </div>
       </div>
 
+      {/* 📊 자산 상태별 보유 대수 실시간 요약 바 */}
+      {(() => {
+        const availableCount = assets.filter(a => a.status === 'AVAILABLE').length;
+        const rentedCount = assets.filter(a => a.status === 'RENTED').length;
+        const assignedCount = assets.filter(a => a.status === 'ASSIGNED').length;
+        const repairingCount = assets.filter(a => a.status === 'REPAIRING').length;
+
+        return (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '10px', marginBottom: '12px', flexShrink: 0 }}>
+            <div style={{ padding: '10px 14px', backgroundColor: 'var(--bg-card)', borderRadius: '6px', border: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '11.5px', color: 'var(--text-secondary)', fontWeight: 600 }}>임대 가능</span>
+              <strong style={{ fontSize: '15px', color: '#16a34a' }}>{availableCount}대</strong>
+            </div>
+            <div style={{ padding: '10px 14px', backgroundColor: 'var(--bg-card)', borderRadius: '6px', border: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '11.5px', color: 'var(--text-secondary)', fontWeight: 600 }}>현장 대여중</span>
+              <strong style={{ fontSize: '15px', color: 'var(--primary)' }}>{rentedCount}대</strong>
+            </div>
+            <div style={{ padding: '10px 14px', backgroundColor: 'var(--bg-card)', borderRadius: '6px', border: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '11.5px', color: 'var(--text-secondary)', fontWeight: 600 }}>출고/검수 대기</span>
+              <strong style={{ fontSize: '15px', color: '#0070C0' }}>{assignedCount}대</strong>
+            </div>
+            <div style={{ padding: '10px 14px', backgroundColor: 'var(--bg-card)', borderRadius: '6px', border: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '11.5px', color: 'var(--text-secondary)', fontWeight: 600 }}>수리/정비중</span>
+              <strong style={{ fontSize: '15px', color: 'var(--danger)' }}>{repairingCount}대</strong>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* 필터 카드 */}
       <div className="card" style={{ padding: '12px 16px', marginBottom: '10px', flexShrink: 0 }}>
         <div style={{ display: 'grid', gridTemplateColumns: '2fr 0.8fr 0.9fr 0.9fr 1.4fr 0.7fr', gap: '10px', alignItems: 'end' }}>

@@ -57,6 +57,8 @@ export const RentAssets: React.FC = () => {
   const [statementRows, setStatementRows] = useState<VendorStatementRow[]>([]);
   const [selectedReconcileIds, setSelectedReconcileIds] = useState<string[]>([]);
   const [isSettling, setIsSettling] = useState<boolean>(false);
+  const [reconcileStatusFilter, setReconcileStatusFilter] = useState('ALL');
+  const [reconcileSearch, setReconcileSearch] = useState('');
 
   // 임차 자산(ownerType === 'RENTED') 전체 리스트
   const rentedAssets = assets.filter(a => a.ownerType === 'RENTED');
@@ -212,6 +214,17 @@ export const RentAssets: React.FC = () => {
 
     return results;
   }, [statementRows, rentedAssets, selectedVendor]);
+
+  const filteredReconcileResults = React.useMemo(() => {
+    return reconcileResults.filter(item => {
+      const matchStatus = reconcileStatusFilter === 'ALL' || item.status === reconcileStatusFilter;
+      const term = reconcileSearch.toLowerCase();
+      const assetNo = (item.statementRow?.assetNo || item.matchedAsset?.assetNo || '').toLowerCase();
+      const modelName = (item.statementRow?.modelName || item.matchedAsset?.modelName || '').toLowerCase();
+      const matchSearch = !term || assetNo.includes(term) || modelName.includes(term);
+      return matchStatus && matchSearch;
+    });
+  }, [reconcileResults, reconcileStatusFilter, reconcileSearch]);
 
   // 대사 통계 KPI
   const statsRecon = React.useMemo(() => {
@@ -686,6 +699,30 @@ export const RentAssets: React.FC = () => {
         </button>
       </div>
 
+      {/* 📊 전대/임차 장비 보유 및 월 임차료 실시간 요약 바 */}
+      {(() => {
+        const activeRentedList = rentedAssets.filter(a => !a.actualRentReturnDate);
+        const returnedList = rentedAssets.filter(a => Boolean(a.actualRentReturnDate));
+        const totalMonthlyRentCost = activeRentedList.reduce((sum, a) => sum + (a.monthlyRentFee || 0), 0);
+
+        return (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '10px', marginBottom: '16px' }}>
+            <div style={{ padding: '10px 14px', backgroundColor: 'var(--bg-card)', borderRadius: '6px', border: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '11.5px', color: 'var(--text-secondary)', fontWeight: 600 }}>가동중인 전대장비</span>
+              <strong style={{ fontSize: '15px', color: 'var(--primary)' }}>{activeRentedList.length}대</strong>
+            </div>
+            <div style={{ padding: '10px 14px', backgroundColor: 'var(--bg-card)', borderRadius: '6px', border: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '11.5px', color: 'var(--text-secondary)', fontWeight: 600 }}>월 총 임차료 지출</span>
+              <strong style={{ fontSize: '15px', color: '#EF4444' }}>₩{totalMonthlyRentCost.toLocaleString()}원</strong>
+            </div>
+            <div style={{ padding: '10px 14px', backgroundColor: 'var(--bg-card)', borderRadius: '6px', border: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '11.5px', color: 'var(--text-secondary)', fontWeight: 600 }}>반납 완료 장비</span>
+              <strong style={{ fontSize: '15px', color: 'var(--text-muted)' }}>{returnedList.length}대</strong>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* ========================================================================= */}
       {/* 탭 1: 임차처 거래명세서 대사 & 매입 정산 (Reconciliation) */}
       {/* ========================================================================= */}
@@ -802,20 +839,44 @@ export const RentAssets: React.FC = () => {
             </div>
 
           </div>
+          
+          {/* 필터 UI */}
+          <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-end', flexWrap: 'wrap', backgroundColor: 'var(--bg-card)', padding: '14px', borderRadius: '10px', border: '1px solid var(--border-color)' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <label style={{ fontSize: '11px', fontWeight: '600', whiteSpace: 'nowrap' }}>대사 결과</label>
+              <select value={reconcileStatusFilter} onChange={e => setReconcileStatusFilter(e.target.value)} style={{ padding: '5px', fontSize: '12px' }}>
+                <option value="ALL">전체</option>
+                <option value="MATCHED">완벽 일치</option>
+                <option value="PRICE_MISMATCH">금액 오차</option>
+                <option value="PERIOD_MISMATCH">기간 불일치</option>
+                <option value="UNREGISTERED">미등록 청구</option>
+                <option value="MISSING_BILLING">청구 누락</option>
+              </select>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <label style={{ fontSize: '11px', fontWeight: '600', whiteSpace: 'nowrap' }}>검색</label>
+              <input type="text" value={reconcileSearch} onChange={e => setReconcileSearch(e.target.value)}
+                placeholder="관리번호 / 모델명" style={{ padding: '5px 8px', fontSize: '12px', width: '160px' }} />
+            </div>
+            {(reconcileStatusFilter !== 'ALL' || reconcileSearch) && (
+              <button type="button" onClick={() => { setReconcileStatusFilter('ALL'); setReconcileSearch(''); }}
+                style={{ padding: '5px 10px', fontSize: '11px', background: 'var(--bg-app)', border: '1px solid var(--border)', borderRadius: '4px', cursor: 'pointer', alignSelf: 'flex-end' }}>초기화</button>
+            )}
+          </div>
 
           {/* C. 1:1 대사 교차 대조 테이블 (Reconciliation Table) */}
           <div className="card" style={{ border: '1px solid var(--border-color)', borderRadius: '10px', overflow: 'hidden', backgroundColor: 'var(--bg-card)' }}>
             <div style={{ padding: '12px 16px', backgroundColor: 'var(--bg-card-header)', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                 <h3 style={{ fontSize: '13px', fontWeight: '800', margin: 0, display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-main)' }}>
-                  <CheckCircle size={15} className="text-success" /> 임차처 명세서 ↔ 자사 DB 대조 결과 ({reconcileResults.length}건)
+                  <CheckCircle size={15} className="text-success" /> 임차처 명세서 ↔ 자사 DB 대조 결과 ({filteredReconcileResults.length}건)
                 </h3>
                 
                 {statementRows.length > 0 && (
                   <div style={{ display: 'flex', gap: '6px' }}>
                     <button
                       onClick={() => {
-                        const matchedIds = reconcileResults.filter(r => r.status === 'MATCHED' && r.statementRow).map(r => r.statementRow!.id);
+                        const matchedIds = filteredReconcileResults.filter(r => r.status === 'MATCHED' && r.statementRow).map(r => r.statementRow!.id);
                         setSelectedReconcileIds(matchedIds);
                       }}
                       style={{ padding: '3px 8px', fontSize: '11px', fontWeight: 'bold', backgroundColor: 'rgba(16, 185, 129, 0.15)', color: '#10b981', border: '1px solid rgba(16, 185, 129, 0.3)', borderRadius: '4px', cursor: 'pointer' }}
@@ -851,7 +912,7 @@ export const RentAssets: React.FC = () => {
               )}
             </div>
 
-            {reconcileResults.length === 0 ? (
+            {filteredReconcileResults.length === 0 ? (
               <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '13px' }}>
                 상단 [📄 임차처 거래명세서 엑셀 업로드] 또는 [✨ 샘플 명세서 시연] 버튼을 눌러 교차 대사를 실행해 주세요.
               </div>
@@ -883,7 +944,7 @@ export const RentAssets: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {reconcileResults.map(item => {
+                    {filteredReconcileResults.map(item => {
                       const stmt = item.statementRow;
                       const matched = item.matchedAsset;
                       

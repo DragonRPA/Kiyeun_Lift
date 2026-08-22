@@ -39,6 +39,10 @@ export const BankMatching: React.FC = () => {
   const [editingInitialBalance, setEditingInitialBalance] = useState<number>(15000000);
   const [editingAccountNumber, setEditingAccountNumber] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
+  const [txStartDate, setTxStartDate] = useState('');
+  const [txEndDate, setTxEndDate] = useState('');
+  const [minAmount, setMinAmount] = useState('');
+  const [maxAmount, setMaxAmount] = useState('');
   const [typeFilter, setTypeFilter] = useState<'ALL' | 'DEPOSIT' | 'WITHDRAW'>('ALL');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   
@@ -246,6 +250,16 @@ export const BankMatching: React.FC = () => {
 
     const matchesSearch = sender.includes(searchLower) || memoStr.includes(searchLower) || summaryStr.includes(searchLower);
     if (!matchesSearch) return false;
+
+    const txDate = (t.transactionDate || '').split('T')[0];
+    const matchesTxDateStart = !txStartDate || txDate >= txStartDate;
+    const matchesTxDateEnd = !txEndDate || txDate <= txEndDate;
+    if (!matchesTxDateStart || !matchesTxDateEnd) return false;
+
+    const txAmt = Math.abs((t.depositAmount || 0) + (t.withdrawAmount || 0));
+    const matchesMinAmt = !minAmount || txAmt >= Number(minAmount);
+    const matchesMaxAmt = !maxAmount || txAmt <= Number(maxAmount);
+    if (!matchesMinAmt || !matchesMaxAmt) return false;
 
     // 1) 입금액 / 출금액 구분 필터 (typeFilter)
     if (typeFilter === 'DEPOSIT' && (t.withdrawAmount > 0 && t.depositAmount === 0)) return false;
@@ -561,7 +575,7 @@ export const BankMatching: React.FC = () => {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '6px' }}>
             <Wallet size={16} style={{ color: 'var(--primary)' }} />
-            <span>🏦 [은행별 실시간 계좌 잔액 현황] (최신 거래 시점 & 누계 계산)</span>
+            <span>은행별 계좌 잔액 현황</span>
           </div>
           <button
             onClick={() => {
@@ -673,90 +687,103 @@ export const BankMatching: React.FC = () => {
             </div>
 
             {/* 2열: 입출금 구분 필터 & 검색 필터 및 액션 버튼 */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
-              
-              {/* 입금/출금 구분 버튼 필터 & 은행 선택 */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  <button
-                    className={`btn ${typeFilter === 'ALL' ? 'btn-primary' : 'btn-secondary'}`}
-                    style={{ fontSize: '12px', padding: '4px 10px', whiteSpace: 'nowrap' }}
-                    onClick={() => setTypeFilter('ALL')}
-                  >
-                    입출금 전체
-                  </button>
-                  <button
-                    className={`btn ${typeFilter === 'DEPOSIT' ? 'btn-primary' : 'btn-secondary'}`}
-                    style={{ fontSize: '12px', padding: '4px 10px', whiteSpace: 'nowrap' }}
-                    onClick={() => setTypeFilter('DEPOSIT')}
-                  >
-                    📥 입금액만 보기
-                  </button>
-                  <button
-                    className={`btn ${typeFilter === 'WITHDRAW' ? 'btn-primary' : 'btn-secondary'}`}
-                    style={{ fontSize: '12px', padding: '4px 10px', whiteSpace: 'nowrap' }}
-                    onClick={() => setTypeFilter('WITHDRAW')}
-                  >
-                    💸 출금액만 보기
-                  </button>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div style={{ display: 'flex', gap: '16px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label style={{ fontSize: '11px', fontWeight: '600', display: 'block', whiteSpace: 'nowrap' }}>구분</label>
+                  <div style={{ display: 'flex', gap: '4px' }}>
+                    <button className={`btn ${typeFilter === 'ALL' ? 'btn-primary' : 'btn-secondary'}`} style={{ fontSize: '12px', padding: '4px 10px' }} onClick={() => setTypeFilter('ALL')}>전체</button>
+                    <button className={`btn ${typeFilter === 'DEPOSIT' ? 'btn-primary' : 'btn-secondary'}`} style={{ fontSize: '12px', padding: '4px 10px' }} onClick={() => setTypeFilter('DEPOSIT')}>입금</button>
+                    <button className={`btn ${typeFilter === 'WITHDRAW' ? 'btn-primary' : 'btn-secondary'}`} style={{ fontSize: '12px', padding: '4px 10px' }} onClick={() => setTypeFilter('WITHDRAW')}>출금</button>
+                  </div>
                 </div>
 
-                <div style={{ height: '16px', width: '1px', backgroundColor: 'var(--border-color)' }} />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label style={{ fontSize: '11px', fontWeight: '600', display: 'block', whiteSpace: 'nowrap' }}>은행</label>
+                  <div style={{ display: 'flex', gap: '4px' }}>
+                    <button className={`btn ${selectedBankFilter === 'ALL' ? 'btn-primary' : 'btn-secondary'}`} style={{ fontSize: '12px', padding: '4px 10px' }} onClick={() => setSelectedBankFilter('ALL')}>전체</button>
+                    <button className={`btn ${selectedBankFilter === '우리은행' ? 'btn-primary' : 'btn-secondary'}`} style={{ fontSize: '12px', padding: '4px 10px' }} onClick={() => setSelectedBankFilter('우리은행')}>우리은행</button>
+                    <button className={`btn ${selectedBankFilter === '신한은행' ? 'btn-primary' : 'btn-secondary'}`} style={{ fontSize: '12px', padding: '4px 10px' }} onClick={() => setSelectedBankFilter('신한은행')}>신한은행</button>
+                  </div>
+                </div>
 
-                <span style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--text-muted)', marginRight: '2px', whiteSpace: 'nowrap' }}>
-                  🏦 은행:
-                </span>
-                <button
-                  className={`btn ${selectedBankFilter === 'ALL' ? 'btn-primary' : 'btn-secondary'}`}
-                  style={{ fontSize: '12px', padding: '4px 8px', whiteSpace: 'nowrap' }}
-                  onClick={() => setSelectedBankFilter('ALL')}
-                >
-                  전체
-                </button>
-                <button
-                  className={`btn ${selectedBankFilter === '우리은행' ? 'btn-primary' : 'btn-secondary'}`}
-                  style={{ fontSize: '12px', padding: '4px 8px', whiteSpace: 'nowrap' }}
-                  onClick={() => setSelectedBankFilter('우리은행')}
-                >
-                  우리은행
-                </button>
-                <button
-                  className={`btn ${selectedBankFilter === '신한은행' ? 'btn-primary' : 'btn-secondary'}`}
-                  style={{ fontSize: '12px', padding: '4px 8px', whiteSpace: 'nowrap' }}
-                  onClick={() => setSelectedBankFilter('신한은행')}
-                >
-                  신한은행
-                </button>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label style={{ fontSize: '11px', fontWeight: '600', display: 'block', whiteSpace: 'nowrap' }}>상태</label>
+                  <select value={statusFilter} onChange={(e: any) => setStatusFilter(e.target.value)} className="form-control" style={{ width: '180px', fontSize: '12px' }}>
+                    <option value="ALL">전체 매칭 상태</option>
+                    <option value="UNMATCHED_ALL">⚠️ 전체 미대사건</option>
+                    <option value="MATCHED_ALL">✅ 전체 대사완료건</option>
+                    <option value="DEPOSIT_UNMATCHED">📥 입금 미수납</option>
+                    <option value="DEPOSIT_MATCHED">📥 입금 수납 완료</option>
+                    <option value="WITHDRAW_UNMATCHED">💸 출금 미대사</option>
+                    <option value="WITHDRAW_MATCHED">💸 출금 지급 완료</option>
+                  </select>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label style={{ fontSize: '11px', fontWeight: '600', display: 'block', whiteSpace: 'nowrap' }}>검색어</label>
+                  <div style={{ position: 'relative', width: '200px' }}>
+                    <Search size={14} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+                    <input type="text" placeholder="입금자명 / 기재내용 / 메모" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="form-control" style={{ width: '100%', paddingLeft: '30px', fontSize: '12px' }} />
+                  </div>
+                </div>
               </div>
 
-              {/* 매칭 상태 필터 및 검색창 */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-                <select
-                  value={statusFilter}
-                  onChange={(e: any) => setStatusFilter(e.target.value)}
-                  className="form-control"
-                  style={{ width: '180px', fontSize: '12px', whiteSpace: 'nowrap' }}
-                >
-                  <option value="ALL">전체 매칭 상태</option>
-                  <option value="UNMATCHED_ALL">⚠️ 전체 미대사건 (미수납+미지급대사)</option>
-                  <option value="MATCHED_ALL">✅ 전체 대사완료건</option>
-                  <option value="DEPOSIT_UNMATCHED">📥 입금 미수납 (수납대기)</option>
-                  <option value="DEPOSIT_MATCHED">📥 입금 수납 완료</option>
-                  <option value="WITHDRAW_UNMATCHED">💸 출금 미대사 (지급대기)</option>
-                  <option value="WITHDRAW_MATCHED">💸 출금 지급대사 완료</option>
-                </select>
-
-                <div style={{ position: 'relative', width: '200px' }}>
-                  <Search size={14} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
-                  <input
-                    type="text"
-                    placeholder="입금자명 / 기재내용 / 메모"
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="form-control"
-                    style={{ paddingLeft: '30px', fontSize: '12px' }}
-                  />
+              <div style={{ display: 'flex', gap: '16px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label style={{ fontSize: '11px', fontWeight: '600', display: 'block', whiteSpace: 'nowrap' }}>시작일</label>
+                  <input type="date" value={txStartDate} onChange={e => setTxStartDate(e.target.value)} className="form-control" style={{ fontSize: '12px', minWidth: '130px' }} />
                 </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label style={{ fontSize: '11px', fontWeight: '600', display: 'block', whiteSpace: 'nowrap' }}>종료일</label>
+                  <input type="date" value={txEndDate} onChange={e => setTxEndDate(e.target.value)} className="form-control" style={{ fontSize: '12px', minWidth: '130px' }} />
+                </div>
+                <div style={{ display: 'flex', gap: '4px', marginBottom: '2px' }}>
+                  <button className="btn-secondary" style={{ padding: '6px 10px', fontSize: '12px' }} onClick={() => {
+                    const today = new Date();
+                    const y = today.getFullYear();
+                    const m = String(today.getMonth() + 1).padStart(2, '0');
+                    setTxStartDate(`${y}-${m}-01`);
+                    setTxEndDate(`${y}-${m}-${new Date(y, today.getMonth() + 1, 0).getDate().toString().padStart(2, '0')}`);
+                  }}>당월</button>
+                  <button className="btn-secondary" style={{ padding: '6px 10px', fontSize: '12px' }} onClick={() => {
+                    const today = new Date();
+                    const y = today.getFullYear();
+                    const m = String(today.getMonth()).padStart(2, '0');
+                    if (today.getMonth() === 0) {
+                      setTxStartDate(`${y - 1}-12-01`);
+                      setTxEndDate(`${y - 1}-12-31`);
+                    } else {
+                      setTxStartDate(`${y}-${m}-01`);
+                      setTxEndDate(`${y}-${m}-${new Date(y, today.getMonth(), 0).getDate().toString().padStart(2, '0')}`);
+                    }
+                  }}>전월</button>
+                  <button className="btn-secondary" style={{ padding: '6px 10px', fontSize: '12px' }} onClick={() => { setTxStartDate(''); setTxEndDate(''); }}>전체</button>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label style={{ fontSize: '11px', fontWeight: '600', display: 'block', whiteSpace: 'nowrap' }}>최소금액</label>
+                  <input type="number" value={minAmount} onChange={e => setMinAmount(e.target.value)} className="form-control" placeholder="0" style={{ width: '120px', fontSize: '12px' }} />
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label style={{ fontSize: '11px', fontWeight: '600', display: 'block', whiteSpace: 'nowrap' }}>최대금액</label>
+                  <input type="number" value={maxAmount} onChange={e => setMaxAmount(e.target.value)} className="form-control" placeholder="무제한" style={{ width: '120px', fontSize: '12px' }} />
+                </div>
+
+                <div style={{ display: 'flex', gap: '8px', marginBottom: '2px' }}>
+                  <button className="btn-secondary" style={{ padding: '6px 12px', fontSize: '12px' }} onClick={() => {
+                    setSearchTerm('');
+                    setTxStartDate('');
+                    setTxEndDate('');
+                    setMinAmount('');
+                    setMaxAmount('');
+                    setTypeFilter('ALL');
+                    setStatusFilter('ALL');
+                    setSelectedBankFilter('ALL');
+                  }}>초기화</button>
+                </div>
+
+                <div style={{ flex: 1 }} />
 
                 {/* 다중 은행 엑셀 업로드 */}
                 <label className="btn btn-primary" style={{ fontSize: '12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap' }}>

@@ -168,6 +168,29 @@ export const Products: React.FC = () => {
         </div>
       </div>
 
+      {/* 📊 제품 모델 및 장비 매핑 현황 실시간 요약 바 */}
+      {(() => {
+        const activeProducts = products.filter(p => p.isActive !== false);
+        const mappedAssetCount = assets.filter(a => products.some(p => p.modelName === a.modelName)).length;
+
+        return (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '10px', marginBottom: '16px' }}>
+            <div style={{ padding: '10px 14px', backgroundColor: 'var(--bg-card)', borderRadius: '6px', border: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '11.5px', color: 'var(--text-secondary)', fontWeight: 600 }}>등록 표준 모델</span>
+              <strong style={{ fontSize: '15px', color: 'var(--primary)' }}>{products.length}종</strong>
+            </div>
+            <div style={{ padding: '10px 14px', backgroundColor: 'var(--bg-card)', borderRadius: '6px', border: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '11.5px', color: 'var(--text-secondary)', fontWeight: 600 }}>활성 운용 모델</span>
+              <strong style={{ fontSize: '15px', color: '#16a34a' }}>{activeProducts.length}종</strong>
+            </div>
+            <div style={{ padding: '10px 14px', backgroundColor: 'var(--bg-card)', borderRadius: '6px', border: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '11.5px', color: 'var(--text-secondary)', fontWeight: 600 }}>매핑 보유 자산</span>
+              <strong style={{ fontSize: '15px', color: '#0070C0' }}>{mappedAssetCount}대</strong>
+            </div>
+          </div>
+        );
+      })()}
+
       <div className="card" style={{ padding: '12px 16px', marginBottom: '16px' }}>
         <div style={{ position: 'relative' }}>
           <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />

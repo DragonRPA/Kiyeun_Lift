@@ -239,6 +239,35 @@ export const Vendors: React.FC = () => {
         )}
       </div>
 
+      {/* 📊 매입처 등록 현황 실시간 요약 바 */}
+      {(() => {
+        const rentalCount = vendors.filter(v => JSON.stringify(v.types || v.type || '').includes('RENTAL')).length;
+        const transportCount = vendors.filter(v => JSON.stringify(v.types || v.type || '').includes('TRANSPORT')).length;
+        const repairCount = vendors.filter(v => JSON.stringify(v.types || v.type || '').includes('REPAIR')).length;
+        const purchaseCount = vendors.filter(v => JSON.stringify(v.types || v.type || '').includes('PURCHASE')).length;
+
+        return (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '10px', marginBottom: '16px' }}>
+            <div style={{ padding: '10px 14px', backgroundColor: 'var(--bg-card)', borderRadius: '6px', border: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '11.5px', color: 'var(--text-secondary)', fontWeight: 600 }}>총 매입 협력처</span>
+              <strong style={{ fontSize: '15px', color: 'var(--primary)' }}>{vendors.length}개사</strong>
+            </div>
+            <div style={{ padding: '10px 14px', backgroundColor: 'var(--bg-card)', borderRadius: '6px', border: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '11.5px', color: 'var(--text-secondary)', fontWeight: 600 }}>임차 원사</span>
+              <strong style={{ fontSize: '15px', color: '#2563eb' }}>{rentalCount}개사</strong>
+            </div>
+            <div style={{ padding: '10px 14px', backgroundColor: 'var(--bg-card)', borderRadius: '6px', border: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '11.5px', color: 'var(--text-secondary)', fontWeight: 600 }}>운송 물류사</span>
+              <strong style={{ fontSize: '15px', color: '#d97706' }}>{transportCount}개사</strong>
+            </div>
+            <div style={{ padding: '10px 14px', backgroundColor: 'var(--bg-card)', borderRadius: '6px', border: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '11.5px', color: 'var(--text-secondary)', fontWeight: 600 }}>외주 정비/구매처</span>
+              <strong style={{ fontSize: '15px', color: '#16a34a' }}>{repairCount + purchaseCount}개사</strong>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* 검색 및 필터 바 */}
       <div className="card" style={{ padding: '16px', marginBottom: '16px' }}>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', alignItems: 'center', justifyContent: 'space-between' }}>

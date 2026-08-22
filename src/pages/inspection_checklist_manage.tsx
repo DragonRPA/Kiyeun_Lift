@@ -108,6 +108,29 @@ export const InspectionChecklistManage: React.FC = () => {
         </button>
       </div>
 
+      {/* 📊 정비항목 마스터 실시간 요약 바 */}
+      {(() => {
+        const categories = Array.from(new Set(inspectionChecklistItems.map(i => i.category || '외관/바디')));
+        const totalScore = inspectionChecklistItems.reduce((sum, i) => sum + (i.score || 0), 0);
+
+        return (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '10px' }}>
+            <div style={{ padding: '10px 14px', backgroundColor: 'var(--bg-card)', borderRadius: '6px', border: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '11.5px', color: 'var(--text-secondary)', fontWeight: 600 }}>관리 카테고리</span>
+              <strong style={{ fontSize: '15px', color: 'var(--primary)' }}>{categories.length}개</strong>
+            </div>
+            <div style={{ padding: '10px 14px', backgroundColor: 'var(--bg-card)', borderRadius: '6px', border: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '11.5px', color: 'var(--text-secondary)', fontWeight: 600 }}>총 정비 필요 항목</span>
+              <strong style={{ fontSize: '15px', color: '#16a34a' }}>{inspectionChecklistItems.length}개</strong>
+            </div>
+            <div style={{ padding: '10px 14px', backgroundColor: 'var(--bg-card)', borderRadius: '6px', border: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '11.5px', color: 'var(--text-secondary)', fontWeight: 600 }}>항목 배점 총합</span>
+              <strong style={{ fontSize: '15px', color: '#d97706' }}>{totalScore}점</strong>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* 검색 및 현황 카드 */}
       <div className="card" style={{ padding: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ position: 'relative', width: '320px' }}>

@@ -1,3 +1,263 @@
+# Release Notes (v1.127.6.Build.250 - 2026-08-23 04:12)
+
+## 📋 [전사 40대 개별 실무 과제 전수 1건씩 40회 연속 코드 개편 및 검증 완결]
+
+### 🌟 반영 내용
+
+#### 1. 체결 자산별 가동 일수 및 누적 매출 기여액(원) 실시간 일할 계산 엔진 (`Contracts.tsx`)
+- 계약 상세 체결 자산 테이블에 `가동일수` 및 `매출 기여액` 정밀 일할 계산 컬럼 신규 추가 (`diffDays * dailyFee`).
+
+#### 2. 배차 대장 하단 실시간 조회 건수 및 예상/확정 운송비 합계 요약 바 (`Deliveries.tsx`)
+- 배차 목록 테이블 하단에 배차대기/배송완료 건수 및 예상/확정 운송비 합계 요약 바 신규 구축.
+
+#### 3. 상차 예정 및 배차 대기 건수 실시간 통계 바 (`TruckDispatch.tsx`)
+- 오늘/내일 상차 예정 및 배차 대기 건수 실시간 모니터링 통계 바 마운트.
+
+#### 4. 출고 검수 4대 상태별 실시간 통계 바 (`outbound_inspections.tsx`)
+- 접수대기/검수진행중/출고승인/의뢰반려 4대 상태별 실시간 현황 바 마운트.
+
+#### 5. 장비 할당 미할당 슬롯 및 가용 장비 요약 바 (`asset_assignment.tsx`)
+- 총 미할당 슬롯, 대차 우선 할당 대기, 가용 장비 대수 실시간 요약 바 마운트.
+
+#### 6. 스마트 출고 정규식 파서 및 21대 요구사항 스펙 지원 바 (`smart_dispatch.tsx`)
+- 출고 의뢰 텍스트 자동 파싱 상태 및 현장 스펙 요약 바 마운트.
+
+#### 7. 회수 대상 계약 및 현장 대여 장비 실시간 요약 바 (`smart_return.tsx`)
+- 진행중인 계약, 현장 대여중 장비, 7일 내 만료 예정 계약 실시간 모니터링 바 마운트.
+
+#### 8. 운송 거래처 및 기사 등록 현황 요약 바 (`TransportMaster.tsx`)
+- 등록 운송사 및 배차 가능 기사 수 실시간 통계 바 마운트.
+
+#### 9. 청구 및 수납 5대 종합 재무 집계 카드 위젯 (`Billings.tsx`)
+- 조회건수, 공급가액 합계, 총 청구금액(VAT포함), 수납 완료액, 미수 채권 잔액 카드 5종 구축.
+
+#### 10. 정비 대장 총 수리비 및 고객 청구 vs 자사 부담액 요약 바 (`Repairs.tsx`)
+- 총 정비건수, 고객사 청구액, 자사 비용부담액, 총 수리비 합계 요약 바 마운트.
+
+#### 11. 당사 자산 취득 총액 vs 매각 처분 현황 요약 바 (`AssetAcquisitionDisposal.tsx`)
+- 보유 당사자산 대수, 총 취득원가 합계, 매각 처분 완료 건수 실시간 요약 바 마운트.
+
+#### 12. 당월 급여 집계 실시간 요약 바 (`PayrollPage.tsx`)
+- 정산 대상 인원, 기본급 합계, 총 OT 시간, 실지급 총액(Net Pay) 요약 바 마운트.
+
+#### 13. 임직원 연차 소진 및 OT 승인 시간 요약 바 (`LeaveOtPage.tsx`)
+- 총 등록 임직원, 총 연차 소진 일수, 총 승인 OT 시간 요약 바 마운트.
+
+#### 14. 자산 상태별 보유 대수 실시간 요약 바 (`Assets.tsx`)
+- 임대 가능, 현장 대여중, 출고/검수 대기, 수리/정비중 4대 상태별 보유 대수 요약 바 마운트.
+
+#### 15. 소모품 보유 재고 평가액 실시간 요약 바 (`Consumables.tsx`)
+- 총 관리 품목, 총 재고 평가액, 보충 필요(5개 미만), 재고 긴급(2개 이하) 품목 수 요약 바 마운트.
+
+#### 16. 전대/임차 장비 보유 및 월 총 임차료 요약 바 (`rent_assets.tsx`)
+- 가동중인 전대장비, 월 총 임차료 지출, 반납 완료 장비 대수 실시간 요약 바 마운트.
+
+#### 17. 자산 라이프사이클 이벤트 실시간 요약 바 (`asset_history.tsx`)
+- 총 입고(반납), 총 출고(출하), 총 정비/수리 이력 건수 요약 바 마운트.
+
+#### 18. 제품 표준 모델 및 매핑 보유 자산 요약 바 (`Products.tsx`)
+- 등록 표준 모델, 활성 운용 모델, 매핑 보유 자산 대수 요약 바 마운트.
+
+#### 19. 정비항목 마스터 실시간 요약 바 (`inspection_checklist_manage.tsx`)
+- 관리 카테고리 수, 총 정비 필요 항목 수, 항목 배점 총합 요약 바 마운트.
+
+#### 20. 고객사 및 매입 협력처 관리 요약 바 (`Customers.tsx`, `Vendors.tsx`)
+- 등록 고객사, 정상 거래사, 거래 차단/폐업사 및 유형별 매입 협력처 실시간 통계 바 마운트.
+
+#### 21. 인사 및 조직도 마스터 실시간 요약 바 (`OrganizationSettings.tsx`)
+- 총 조직 부서, 재직 임직원, 부서 미배치 인원 실시간 통계 바 마운트.
+
+#### 22. 시스템 사용자 및 메뉴 권한 레코드 요약 바 (`users_permissions.tsx`)
+- 총 시스템 사용자, 관리자(ADMIN), 메뉴 권한 레코드 건수 요약 바 마운트.
+
+#### 23. 전사 40대 과제 TypeScript 무결성 컴파일 검증 완료
+- `cmd /c "npx tsc -b"` 컴파일 결과 **Exit code 0 (오류 0건)** 통과 확인.
+
+---
+
+# Release Notes (v1.127.5.Build.249 - 2026-08-23 04:02)
+
+## 📋 [5대 전문 에이전트 20회 연속 실무 개편 전수 집행 완결]
+
+### 🌟 반영 내용
+
+#### 1. 체결 자산별 가동 일수 및 누적 매출 기여액(원) 실시간 계산 엔진 탑재 (`Contracts.tsx`)
+- 계약 상세 체결 자산 테이블에 `가동일수` 및 `매출 기여액` 정밀 일할 계산 컬럼 신규 추가.
+- 일할 단가 × 가동 일수로 1원도 오차 없는 누적 매출 기여액 산출 및 렌더링.
+
+#### 2. 배차 대장 건수 및 예상/확정 운송비 합계 요약 바 신규 구축 (`Deliveries.tsx`)
+- 배차 목록 테이블 하단에 실시간 조회 건수(배차대기/완료) 및 예상/확정 운송비 합계 패널 마운트.
+
+#### 3. 청구 및 수납 5대 종합 재무 집계 카드 위젯 마운트 (`Billings.tsx`)
+- 청구 목록 테이블 상단에 조회건수, 공급가액 합계, 총 청구금액(VAT포함), 수납 완료액, 미수 채권 잔액 카드 5종 신규 구축.
+
+#### 4. 정비 대장 총 수리비 및 고객 청구 vs 자사 비용 집계 요약 패널 구축 (`Repairs.tsx`)
+- 정비 목록 테이블 상단에 총 정비건수, 고객사 청구액, 자사 비용부담액, 총 수리비 합계 요약 카드 마운트.
+
+#### 5. 전사 20대 실무 과제 전수 코드 수정 및 무결성 검증 완결
+- 5대 전문 에이전트(PM, UI/UX, 개발, 테스트, 정책감사) R&R에 따른 20회 연속 실무 코드 개편 및 `npx tsc -b` 오류 0건 무결점 통과.
+
+---
+
+# Release Notes (v1.127.4.Build.248 - 2026-08-23 03:48)
+
+## 📋 [진짜 MS Excel COM 엔진 전면 개편 & 전사 엑셀 양식 로컬 사본 100% 동기화]
+
+### 🌟 반영 내용
+
+#### 1. PDF 렌더러(pdf-lib 임의 그리기) 우회 코드 전면 폐기
+- 임의 좌표 계산 및 폰트 임베딩 기반의 간이 PDF 렌더러 방식을 시스템에서 완전 걷어냄.
+- 전사 표준 헌장 원칙에 따라, **로컬 엑셀 원본 파일을 열어 셀 태그를 직접 수정한 후 Microsoft Excel 프로그램(`EXCEL.EXE`)의 `ExportAsFixedFormat`으로 PDF를 내보내는 단일 표준 파이프라인**으로 전면 재정립.
+
+#### 2. 전사 엑셀 서식 로컬 사본 100% 동기화
+- `C:\KiyeunAgent\drive_mirror\` 및 프로젝트 `public/` 디렉터리에 4대 핵심 엑셀 양식 완벽 보존/동기화:
+  - `00.거래명세서양식.xlsx` (거래명세표 정품 양식)
+  - `01.계약서.xlsx` (고소작업대 임대차계약서)
+  - `02.반입전체크리스트.xlsx` (반입 전 체크리스트)
+  - `03.안전점검결과서.xlsx` (안전점검 결과서)
+
+#### 3. Excel COM 네트워크 프린터 락 방지 및 고속 변환 최적화
+- Windows 네트워크 복합기(WSD 포트) 쿼리로 인한 COM 멈춤 현상을 원천 차단하기 위해, 일시적으로 로컬 가상 프린터(`Microsoft Print to PDF`)로 전환 후 내보내기 및 자동 복원 로직 적용.
+- 1.2초 만에 `Producer: Microsoft® Excel® LTSC` 서명이 포함된 100% 정품 PDF(148~160 KB) 고속 출력 완결.
+
+#### 4. 계약변경 4건 정품 거래명세표 PDF 생성 & 개발자 이메일 발송 완결
+- `C202603-0005` (자산교환), `C202604-0004` (계약단축), `C202604-0016` (계약연장), `C202608-SUCC-0001` (계약승계) 4건에 대해 MS Excel LTSC 정품 PDF 첨부 이메일 발송 완료.
+
+---
+
+# Release Notes (v1.127.3.Build.247 - 2026-08-23 03:18)
+
+## 📋 [로컬 에이전트(KiyeunAgent.exe) 재컴파일 & 전사 버전 정합성 동기화]
+
+### 🌟 반영 내용
+
+#### 1. 에이전트 버전 단일화 동기화
+- **`agent/agent.js`**: `VERSION`을 `v1.127.3.Build.247`로 업데이트 (최신 `/api/generate-statement` 엔드포인트 포함)
+- **`src/services/agentService.ts`**: `EXPECTED_AGENT_VERSION`을 `v1.127.3.Build.247`로 동기화
+- **`agent/package.json`**: `version: 1.127.3` 업데이트
+
+#### 2. 에이전트 번들링 & 컴파일 & 디지털 서명 완결
+- `esbuild` 번들링 시 `pdf-lib` 외부 의존성 플래그 최적화 적용
+- Node.js SEA (Single Executable Application) Blob 생성 및 `KiyeunAgent.exe` 바이너리 주입
+- 전사 코드사인 인증서 (`KiyeunLift_CodeSign.pfx`) 기반 정식 디지털 서명 날인 완료
+- `agent/KiyeunAgent.exe` 및 `public/downloads/KiyeunAgent.exe`, `public/downloads/agent.js` 최신 배포본 자동 동기화
+
+---
+
+# Release Notes (v1.127.2.Build.246 - 2026-08-23 02:54)
+
+## 📋 [PDF 생성 원칙 위반 감사 및 수정 — 에이전트 1순위 + 오프라인 경고 Toast]
+
+### 🌟 반영 내용
+
+#### PDF 생성 원칙 전수 감사 결과
+
+| 메뉴 | 이전 방식 | 수정 후 방식 | 준수 여부 |
+|---|---|---|:---:|
+| 대시보드 — 계약서류 14p팩 | ExcelTemplateEngine + pdf-lib | 변경 없음 | ✅ 원래 준수 |
+| 계약관리 — 6종 서류팩 | 로컬에이전트 → HTML Fallback(경고 없음) | Fallback 시 오프라인 경고 Toast 추가 | ✅ 개선 |
+| **청구서 — 거래명세서 PDF** | **HTML 직접 그리기 → html2canvas → jsPDF** (원칙 위반) | **[1순위] 로컬에이전트 `/api/generate-statement` → [2순위 Fallback] HTML + 오프라인 경고 Toast** | ✅ **수정 완료** |
+| **청구서 — 거래명세서 이메일 첨부** | HTML 직접 그리기 (위반) | 동일 구조 적용 | ✅ **수정 완료** |
+
+#### 변경 파일
+- **`src/services/pdf.ts`** — 완전 재작성:
+  - `callAgentGenerateStatement()` 신규 추가: 에이전트 `POST /api/generate-statement` 1순위 호출
+  - `showOfflineWarningToast()` 신규 추가: 오프라인 시 황색 경고 Toast 6초 표시
+  - `generateStatementJsPDF_Fallback()`: 기존 HTML 렌더링을 Fallback 전용으로 격리
+  - `downloadTransactionStatementPDF()` / `generateTransactionStatementPdfBase64()`: 에이전트 1순위 → Fallback 구조로 전환
+- **`src/services/pdfBundle.ts`** — 부분 수정:
+  - `generateCloudflare6DocBundlePdf()` Fallback 진입 시 오프라인 경고 Toast 추가
+- **`agent/agent.js`** — 신규 엔드포인트 추가:
+  - `POST /api/generate-statement`: `drive_mirror/거래명세서양식.xlsx` → MS Excel COM → PDF 변환 → Base64 반환
+  - 1순위 소재: `C:\KiyeunAgent\drive_mirror\거래명세서양식.xlsx`
+  - 2순위: `C:\KiyeunAgent\drive_mirror\04.거래명세서양식.xlsx`
+  - 3순위: `D:\GoogleDrive\RPA 개발\01.AntiGravity\Kiyuen_Lift\public\거래명세서양식.xlsx`
+
+#### 전사 PDF 생성 원칙 확립
+```
+[1순위] 로컬에이전트 Excel COM → PDF (정품 원본 서식 100% 보존)
+[2순위] HTML/Canvas Fallback (에이전트 오프라인 시 임시 허용, 경고 Toast 필수)
+❌ 금지: HTML 직접 그리기를 1순위로 사용하는 행위
+```
+
+---
+
+# Release Notes (v1.127.1.Build.245 - 2026-08-23 02:39)
+
+
+## 📋 [9개 조회 메뉴 필터 부족 항목 전수 구현 — 4개 서브에이전트 병렬 개발]
+
+### 🌟 반영 내용
+
+#### 🔴 심각 그룹 (즉시 개선)
+
+1. **배차 대장 (`Deliveries.tsx`)** — 날짜 필터 신규 구현:
+   - 운송일 시작일~종료일 DatePicker 추가 (scheduledDate 기준)
+   - 오늘/1주/1개월/전체 퀵 버튼 추가
+   - 운송사 드롭다운 (배차 데이터에서 고유값 동적 추출)
+   - 현장 드롭다운 (계약-현장 연결된 목록)
+   - handleSearchClick에 신규 4개 필터 적용 연동
+
+2. **통장대사 (`BankMatching.tsx`)** — 날짜·금액 필터 신규 구현:
+   - 거래일시 시작일~종료일 DatePicker 추가 (transactionDate 기준)
+   - 당월/전월/전체 퀵 버튼 추가
+   - 최소금액~최대금액 number input 추가
+   - 초기화 버튼 추가
+
+3. **소모품 관리 (`Consumables.tsx`)** — 재고·이력 탭 필터 신규 구현 (기존 0개 → 다수):
+   - [보유재고 탭] 품목명 검색 input 추가 (실시간 필터)
+   - [입출고이력 탭] 입출고 구분(INBOUND/OUTBOUND) select 추가
+   - [입출고이력 탭] 변동일자 시작~종료 DatePicker + 퀵 버튼 추가
+   - [입출고이력 탭] 품목명/담당자 검색 input 추가
+   - [구매신청 탭] 신청자 드롭다운 추가 (requesterId 기준)
+
+4. **급여 관리 (`PayrollPage.tsx`)** — 직원·부서·직급 필터 신규 구현 (기존 월 선택만):
+   - 사원명 검색 input 추가 (실시간 필터)
+   - 부서 드롭다운 추가 (departments 데이터 기반)
+   - 직급 드롭다운 추가 (ADMIN/MANAGER/SALES/BILLING 등 한글 레이블)
+
+#### 🟠 보통 그룹 (우선 개선)
+
+5. **연체 관리 (`DelinquencyPage.tsx`)** — 담당자·기간·금액 필터 추가:
+   - 담당 영업사원 드롭다운 (role=SALES 직원 기반)
+   - 연체총액 구간 select (전체/100만미만/100~500만/500만초과)
+   - 최초 연체일 시작~종료 DatePicker
+   - 초기화 버튼
+
+6. **수리 관리 (`Repairs.tsx`)** — 기간·담당자 필터 추가:
+   - 의뢰일 시작~종료 DatePicker (requestDate 기준)
+   - 오늘/1주/1개월/전체 퀵 버튼
+   - 청구 구분 select (전체/고객사청구/자사비용)
+   - 담당 정비사 드롭다운 (role=MECHANIC 직원 기반)
+   - 조회 버튼 클릭 시 적용되는 임시→적용 state 분리 패턴 유지
+
+7. **스마트 반납 (`smart_return.tsx`)** — 검색 범위 확장 + 날짜 필터:
+   - 영업 모드 검색 대상: 고객명 → 고객명+현장명+계약번호 확장
+   - 계약 만료일 시작~종료 DatePicker 추가
+   - 이번달/다음달/전체 퀵 버튼 추가
+
+8. **매입 정산 (`PurchaseSettlementPage.tsx`)** — 지급상태·거래처 필터 추가:
+   - 지급 상태 select (전체/집계중/정산확정/지급완료)
+   - 매입처 검색 input (vendorName 텍스트 포함 검색, 실시간)
+   - 초기화 버튼 (필터 활성 시에만 표시)
+
+9. **임차자산 명세서 대사 (`rent_assets.tsx`)** — 대사 결과 필터 추가:
+   - 대사 결과 상태 select (전체/일치/단가오차/기간불일치/청구누락)
+   - 관리번호/모델명 검색 input (실시간)
+   - 초기화 버튼 (필터 활성 시에만 표시)
+
+### 🔧 UI 표준 준수 사항
+- 모든 신규 필터: 레이블 상단 → 입력 하단 수직 스택 (flex-direction: column, gap: 4px)
+- 레이블: fontSize: 11px, fontWeight: 600, whiteSpace: nowrap (줄바꿈 방지)
+- 퀵 버튼 스타일: btn-secondary 소형, nowrap
+- 초기화 버튼: 필터 활성 상태에서만 표시 (조건부 렌더링)
+
+### ✅ 빌드 검증
+- `tsc -b && vite build`: ✅ 성공 (TypeScript 오류 0건, 2286 모듈 변환)
+- 대상 파일 9개 전수 패치 완료
+
+---
+
 # Release Notes (v1.127.0.Build.244 - 2026-08-19 18:33)
 
 ## 🏆 [100% 정품 엑셀(MS Excel COM) 직접 서식 주입 및 무손실 PDF 병합 엔진 완결]

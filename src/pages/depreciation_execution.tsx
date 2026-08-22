@@ -5,7 +5,7 @@ import { TrendingUp, Calculator, Calendar, CheckCircle2, History, AlertCircle, S
 import { calculateAssetDepreciation } from '../services/db';
 
 export const DepreciationExecution: React.FC = () => {
-  const { assets, depreciationLogs, executeMonthlyDepreciation, currentUser, hasPermission, showErrorModal } = useApp();
+  const { assets, depreciationLogs, executeMonthlyDepreciation, cancelMonthlyDepreciation, currentUser, hasPermission, showErrorModal } = useApp();
   const canExecute = hasPermission('depreciation_execution', 'save') || hasPermission('billing', 'save') || currentUser?.role === 'ADMIN';
 
   const todayYm = new Date().toISOString().substring(0, 7); // 'YYYY-MM'
@@ -103,6 +103,23 @@ export const DepreciationExecution: React.FC = () => {
     }
   };
 
+  const handleCancelExecution = async () => {
+    if (!isAlreadyExecuted) return;
+    if (!confirm(`⚠️ [${selectedYm}] 연월의 감가상각 결산 마감을 취소(롤백)하시겠습니까?\n\n- 취소 시 해당 월의 DepreciationLog가 삭제되고,\n- 모든 당사자산의 장부가치 및 누적상각액이 이전 월말 상태로 복원됩니다.`)) {
+      return;
+    }
+
+    setIsProcessing(true);
+    try {
+      await cancelMonthlyDepreciation(selectedYm);
+      alert(`✅ [${selectedYm}] 감가상각 결산 마감이 성공적으로 취소되고 자산 장부가치가 복원되었습니다.`);
+    } catch (err: any) {
+      // showErrorModal handled in context
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', fontSize: '13px' }}>
       
@@ -139,8 +156,20 @@ export const DepreciationExecution: React.FC = () => {
             </div>
 
             {isAlreadyExecuted ? (
-              <div style={{ padding: '10px 12px', borderRadius: '6px', backgroundColor: 'rgba(34,197,94,0.12)', border: '1px solid rgba(34,197,94,0.3)', color: '#16a34a', fontSize: '12px', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <CheckCircle2 size={16} /> [해당 연월 마감 완료] {executedLog?.executedAt.substring(0, 10)} 마감됨 (상각액: ₩{executedLog?.totalDepreciationAmount.toLocaleString()})
+              <div style={{ padding: '10px 12px', borderRadius: '6px', backgroundColor: 'rgba(34,197,94,0.12)', border: '1px solid rgba(34,197,94,0.3)', color: '#16a34a', fontSize: '12px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <CheckCircle2 size={16} /> [해당 연월 마감 완료] {executedLog?.executedAt.substring(0, 10)} 마감됨 (상각액: ₩{executedLog?.totalDepreciationAmount.toLocaleString()})
+                </div>
+                {canExecute && (
+                  <button
+                    type="button"
+                    onClick={handleCancelExecution}
+                    disabled={isProcessing}
+                    style={{ fontSize: '11px', padding: '3px 8px', borderRadius: '4px', border: '1px solid rgba(239,68,68,0.4)', backgroundColor: 'rgba(239,68,68,0.1)', color: '#dc2626', cursor: 'pointer', fontWeight: 'bold' }}
+                  >
+                    결산 마감 취소 (롤백)
+                  </button>
+                )}
               </div>
             ) : (
               <div style={{ padding: '10px 12px', borderRadius: '6px', backgroundColor: 'rgba(59,130,246,0.1)', border: '1px solid rgba(59,130,246,0.3)', color: '#2563eb', fontSize: '12px' }}>

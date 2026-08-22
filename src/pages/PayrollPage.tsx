@@ -21,6 +21,16 @@ export const PayrollPage: React.FC = () => {
   const [payrollStatus, setPayrollStatus] = useState<'DRAFT' | 'APPROVED'>('DRAFT');
   const [isSendingEmails, setIsSendingEmails] = useState(false);
 
+  const [empSearch, setEmpSearch] = useState('');
+  const [deptFilter, setDeptFilter] = useState('ALL');
+  const [roleFilter, setRoleFilter] = useState('ALL');
+
+  const ROLE_LABELS: Record<string, string> = {
+    'ADMIN': '관리자', 'MANAGER': '매니저', 'SALES': '영업',
+    'BILLING': '청구/수납', 'PURCHASE': '매입', 'DISPATCH': '배차',
+    'MECHANIC': '정비사'
+  };
+
   // 기본급 수정 모달 상태 (급여 정산 권한자 전용)
   const [editingEmpId, setEditingEmpId] = useState<string | null>(null);
   const [inputSalary, setInputSalary] = useState<number>(3000000);
@@ -288,6 +298,34 @@ export const PayrollPage: React.FC = () => {
         </div>
       </div>
 
+      {/* 📊 당월 급여 집계 실시간 요약 바 */}
+      {(() => {
+        const totalBase = payrollList.reduce((sum, p) => sum + (p.baseSalary || 0), 0);
+        const totalNet = payrollList.reduce((sum, p) => sum + (p.netPay || 0), 0);
+        const totalOtHours = payrollList.reduce((sum, p) => sum + (p.overtimeHours || 0), 0);
+
+        return (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px', marginBottom: '20px' }}>
+            <div style={{ padding: '12px 16px', backgroundColor: 'var(--bg-card)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+              <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)', fontWeight: 600, marginBottom: '4px' }}>정산 대상 인원</div>
+              <div style={{ fontSize: '16px', fontWeight: 800, color: 'var(--primary)' }}>{payrollList.length}명</div>
+            </div>
+            <div style={{ padding: '12px 16px', backgroundColor: 'var(--bg-card)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+              <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)', fontWeight: 600, marginBottom: '4px' }}>기본급 합계</div>
+              <div style={{ fontSize: '16px', fontWeight: 800 }}>₩{totalBase.toLocaleString()}원</div>
+            </div>
+            <div style={{ padding: '12px 16px', backgroundColor: 'var(--bg-card)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+              <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)', fontWeight: 600, marginBottom: '4px' }}>총 OT 시간</div>
+              <div style={{ fontSize: '16px', fontWeight: 800, color: '#d97706' }}>{totalOtHours}시간</div>
+            </div>
+            <div style={{ padding: '12px 16px', backgroundColor: 'var(--bg-card)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+              <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)', fontWeight: 600, marginBottom: '4px' }}>실지급 총액 (Net Pay)</div>
+              <div style={{ fontSize: '16px', fontWeight: 800, color: 'var(--success)' }}>₩{totalNet.toLocaleString()}원</div>
+            </div>
+          </div>
+        );
+      })()}
+
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 3fr', gap: '24px', alignItems: 'start' }}>
         {/* 좌측 제어판 */}
         <div className="card" style={{ margin: 0 }}>
@@ -361,6 +399,31 @@ export const PayrollPage: React.FC = () => {
             </span>
           </div>
 
+          <div style={{ padding: '16px', display: 'flex', gap: '16px', borderBottom: '1px solid var(--border-color)', backgroundColor: 'var(--bg-app)', flexWrap: 'wrap', alignItems: 'end' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <label style={{ fontSize: '11px', fontWeight: '600', display: 'block', whiteSpace: 'nowrap', flexShrink: 0 }}>사원명</label>
+              <input type="text" value={empSearch} onChange={e => setEmpSearch(e.target.value)} placeholder="이름 검색" style={{ padding: '6px', fontSize: '12px', width: '120px' }} />
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <label style={{ fontSize: '11px', fontWeight: '600', display: 'block', whiteSpace: 'nowrap', flexShrink: 0 }}>부서</label>
+              <select value={deptFilter} onChange={e => setDeptFilter(e.target.value)} style={{ padding: '6px', fontSize: '12px' }}>
+                <option value="ALL">전체</option>
+                {Array.from(new Set(users.map(u => u.department).filter(Boolean))).map(dept => (
+                  <option key={dept} value={dept as string}>{dept as string}</option>
+                ))}
+              </select>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <label style={{ fontSize: '11px', fontWeight: '600', display: 'block', whiteSpace: 'nowrap', flexShrink: 0 }}>직급(역할)</label>
+              <select value={roleFilter} onChange={e => setRoleFilter(e.target.value)} style={{ padding: '6px', fontSize: '12px' }}>
+                <option value="ALL">전체</option>
+                {Object.entries(ROLE_LABELS).map(([val, label]) => (
+                  <option key={val} value={val}>{label}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
           <table style={{ width: '100%', fontSize: '12.5px' }}>
             <thead>
               <tr>
@@ -374,7 +437,12 @@ export const PayrollPage: React.FC = () => {
               </tr>
             </thead>
             <tbody>
-              {payrollList.map(p => {
+              {payrollList.filter(p => {
+                const matchName = !empSearch || (p.name || '').includes(empSearch);
+                const matchDept = deptFilter === 'ALL' || p.deptName === deptFilter;
+                const matchRole = roleFilter === 'ALL' || p.role === roleFilter;
+                return matchName && matchDept && matchRole;
+              }).map(p => {
                 const overtimeAllowance = Math.round(p.overtimeHours * p.ordinaryHourly * 1.5);
                 const holidayAllowance = Math.round(p.holidayHours * p.ordinaryHourly * 1.5);
                 const nightAllowance = Math.round(p.nightHours * p.ordinaryHourly * 0.5);

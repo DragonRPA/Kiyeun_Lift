@@ -10,6 +10,7 @@ export const AssetAssignment: React.FC = () => {
   const [selectedCaId, setSelectedCaId] = useState<string>('');
   const [selectedAssetId, setSelectedAssetId] = useState<string>('');
   const [searchAssetNo, setSearchAssetNo] = useState('');
+  const [isAssigning, setIsAssigning] = useState(false);
 
   const canEdit = hasPermission('dispatch_assign', 'save');
   const canView = hasPermission('dispatch_assign', 'view');
@@ -33,7 +34,6 @@ export const AssetAssignment: React.FC = () => {
   // 대차 의뢰 건을 제외한 일반 출고 대기 계약
   const pendingContracts = contracts.filter(c => pendingContractIds.includes(c.id) && !exchangeContractIds.includes(c.id));
 
-  const [isAssigning, setIsAssigning] = useState(false);
 
   const handleAssign = async () => {
     // 1. 클릭 즉시 브라우저 포커스 탈출! (Enter 연타에 의한 중복 클릭 차단)
@@ -130,6 +130,30 @@ export const AssetAssignment: React.FC = () => {
           <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>임대가능 장비를 대기 계약에 매핑합니다. 선택된 슬롯과 동일한 모델명만 노출되며 정비 점수 순으로 정렬됩니다.</p>
         </div>
       </div>
+
+      {/* 📊 장비 할당 현황 실시간 요약 바 */}
+      {(() => {
+        const totalPendingSlots = contractAssets.filter(ca => !ca.assetId).length;
+        const totalAvailableAssets = assets.filter(a => a.status === 'AVAILABLE').length;
+        const exchangeSlots = exchangePendingContracts.reduce((sum, c) => sum + contractAssets.filter(ca => ca.contractId === c.id && !ca.assetId).length, 0);
+
+        return (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '10px' }}>
+            <div style={{ padding: '10px 14px', backgroundColor: 'var(--bg-card)', borderRadius: '6px', border: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '11.5px', color: 'var(--text-secondary)', fontWeight: 600 }}>총 미할당 슬롯</span>
+              <strong style={{ fontSize: '15px', color: totalPendingSlots > 0 ? '#d97706' : 'var(--text-muted)' }}>{totalPendingSlots}대</strong>
+            </div>
+            <div style={{ padding: '10px 14px', backgroundColor: 'var(--bg-card)', borderRadius: '6px', border: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '11.5px', color: 'var(--text-secondary)', fontWeight: 600 }}>대차 우선 할당 대기</span>
+              <strong style={{ fontSize: '15px', color: exchangeSlots > 0 ? '#c2410c' : 'var(--text-muted)' }}>{exchangeSlots}대</strong>
+            </div>
+            <div style={{ padding: '10px 14px', backgroundColor: 'var(--bg-card)', borderRadius: '6px', border: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '11.5px', color: 'var(--text-secondary)', fontWeight: 600 }}>가용 장비 (임대가능)</span>
+              <strong style={{ fontSize: '15px', color: '#16a34a' }}>{totalAvailableAssets}대</strong>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* 대차 교체 출고할당 대기 — 최우선 표출 (영업사원 대차 의뢰 접수 건) */}
       {exchangePendingContracts.length > 0 && (

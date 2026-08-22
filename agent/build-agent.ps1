@@ -1,5 +1,5 @@
-# agent/build-agent.ps1
-# (주)기연리프트 로컬 에이전트 원클릭 컴파일 & 서명 & 동기화 스크립트
+﻿# agent/build-agent.ps1
+# (주)기연리프트 로컬 에이전트 원클릭 컴파일 및 서명 스크립트
 
 $ErrorActionPreference = "Stop"
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
@@ -7,32 +7,58 @@ if (-not $scriptDir) { $scriptDir = (Get-Location).Path }
 $rootDir = Split-Path -Parent $scriptDir
 
 Write-Host "========================================================" -ForegroundColor Cyan
-Write-Host "  🏢 (주)기연리프트 로컬 에이전트(KiyeunAgent.exe) 컴파일" -ForegroundColor Cyan
+Write-Host "  [KiyeunAgent.exe] Compilation and Packaging" -ForegroundColor Cyan
 Write-Host "========================================================" -ForegroundColor Cyan
 
+# 0. 기존 실행 중인 프로세스 안전 종료
+Write-Host "0. Stopping existing KiyeunAgent processes..." -ForegroundColor Yellow
+Get-Process -Name "KiyeunAgent" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+Start-Sleep -Milliseconds 500
+
 # 1. esbuild 번들링
-Write-Host "1. esbuild 번들링 진행 중..." -ForegroundColor Yellow
-cmd /c "npx esbuild `"$scriptDir\agent.js`" --bundle --platform=node --outfile=`"$scriptDir\agent-bundle.js`""
+Write-Host "1. Bundling with esbuild..." -ForegroundColor Yellow
+cmd /c "npx esbuild `"$scriptDir\agent.js`" --bundle --platform=node --external:pdf-lib --external:@pdf-lib/* --outfile=`"$scriptDir\agent-bundle.js`""
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "❌ esbuild 번들링 실패!" -ForegroundColor Red
+    exit 1
+}
 
 # 2. Node SEA Prep Blob 생성
-Write-Host "2. Node.js SEA Blob 생성 중..." -ForegroundColor Yellow
+Write-Host "2. Generating Node.js SEA Blob..." -ForegroundColor Yellow
+Set-Location $rootDir
 cmd /c "node --experimental-sea-config `"$scriptDir\sea-config.json`""
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "❌ SEA Blob 생성 실패!" -ForegroundColor Red
+    exit 1
+}
+Set-Location $scriptDir
 
 # 3. node.exe 복제
-Write-Host "3. node.exe 베이스 바이너리 복제 중..." -ForegroundColor Yellow
+Write-Host "3. Copying node.exe binary..." -ForegroundColor Yellow
 $nodeExe = (Get-Command node).Source
-Copy-Item $nodeExe (Join-Path $scriptDir "KiyeunAgent.exe") -Force
+$targetExe = Join-Path $scriptDir "KiyeunAgent.exe"
+Copy-Item $nodeExe $targetExe -Force
+Start-Sleep -Milliseconds 500
 
 # 4. postject SEA Blob 주입
-Write-Host "4. postject 바이너리 주입 중..." -ForegroundColor Yellow
-cmd /c "npx postject `"$scriptDir\KiyeunAgent.exe`" NODE_SEA_BLOB `"$scriptDir\sea-prep.blob`" --sentinel-fuse NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2"
+Write-Host "4. Injecting SEA blob with postject..." -ForegroundColor Yellow
+cmd /c "npx postject `"$targetExe`" NODE_SEA_BLOB `"$scriptDir\sea-prep.blob`" --sentinel-fuse NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2"
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "❌ postject 주입 실패!" -ForegroundColor Red
+    exit 1
+}
+Start-Sleep -Milliseconds 1000
 
 # 5. 디지털 서명 및 public/downloads 동기화
-Write-Host "5. 디지털 서명 및 프로젝트 배포 폴더 동기화..." -ForegroundColor Yellow
+Write-Host "5. Code signing and sync to public/downloads..." -ForegroundColor Yellow
+$publicDownloadsDir = Join-Path $rootDir "public\downloads"
+if (-not (Test-Path $publicDownloadsDir)) { New-Item -ItemType Directory -Path $publicDownloadsDir -Force | Out-Null }
+Copy-Item (Join-Path $scriptDir "agent.js") (Join-Path $publicDownloadsDir "agent.js") -Force
 powershell -ExecutionPolicy Bypass -File (Join-Path $scriptDir "sign-agent.ps1")
 
 Write-Host "========================================================" -ForegroundColor Green
-Write-Host "  ✅ 최신 KiyeunAgent.exe 컴파일 & 서명 & 동기화 완료!" -ForegroundColor Green
-Write-Host "  📁 agent\KiyeunAgent.exe" -ForegroundColor White
-Write-Host "  📁 public\downloads\KiyeunAgent.exe" -ForegroundColor White
+Write-Host "  [OK] KiyeunAgent.exe and agent.js build completed!" -ForegroundColor Green
+Write-Host "  - agent\KiyeunAgent.exe" -ForegroundColor White
+Write-Host "  - public\downloads\KiyeunAgent.exe" -ForegroundColor White
+Write-Host "  - public\downloads\agent.js" -ForegroundColor White
 Write-Host "========================================================" -ForegroundColor Green

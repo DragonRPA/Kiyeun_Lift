@@ -401,6 +401,22 @@ export const Contracts: React.FC = () => {
     e.preventDefault();
     if (!canSave || !selectedContractId) return;
 
+    // 💡 [ERR-003] 중복 대차 방지: 동일 계약에 처리 대기 중인 EXCHANGE 배차/슬롯이 이미 존재하는지 검증
+    const pendingExchangeDelivery = deliveries.find(d => 
+      d.contractId === selectedContractId && 
+      d.type === 'EXCHANGE' && 
+      (d.status === 'REQUESTED' || d.status === 'PENDING' || d.status === 'DISPATCHED')
+    );
+    const unassignedExchangeSlot = contractAssets.find(ca => 
+      ca.contractId === selectedContractId && 
+      !ca.assetId
+    );
+
+    if (pendingExchangeDelivery || unassignedExchangeSlot) {
+      alert(`⚠️ [대차 의뢰 중복 불가]\n\n해당 계약에 이미 처리 대기 중인 대차/교체 배차 또는 미할당 슬롯이 존재합니다.\n기존 대차가 완료된 후 추가 의뢰를 진행해 주십시오.`);
+      return;
+    }
+
     try {
       const oldAssetObj = assets.find(a => a.id === exchangeOldAssetId);
       const targetModelName = exchangeIdentifyType === 'KNOWN' 
@@ -412,12 +428,27 @@ export const Contracts: React.FC = () => {
         ? `[식별됨] 관리번호:${oldAssetObj?.assetNo || '미지정'} / SN:${oldAssetObj?.serialNo || '미지정'}`
         : `[미식별] 모델명(${targetModelName}) 현장 입고 검수 시 자산 확정 필요`;
 
+      // 💡 [ERR-001] 기존 자산 ContractAsset 종료 처리 (endDate 고정, status=RETURNED, actualReturnDate)
+      const targetOldContractAsset = contractAssets.find(ca => 
+        ca.contractId === selectedContractId && 
+        (exchangeOldAssetId ? ca.assetId === exchangeOldAssetId : ca.id === exchangeContractAssetId)
+      );
+
+      if (targetOldContractAsset) {
+        db.updateRow<ContractAsset>('contractAssets', targetOldContractAsset.id, {
+          endDate: exchangeDate,
+          status: 'RETURNED',
+          actualReturnDate: exchangeDate,
+          updatedAt: new Date().toISOString()
+        });
+      }
+
       // 1. contractHistory 기록
       db.insertRow<ContractHistory>('contractHistory', {
         contractId: selectedContractId,
         changeType: 'EXCHANGE',
         changeDate: exchangeDate,
-        description: `[대차/교체 의뢰 접수] ${identifyTag} / 회수모델: ${targetModelName} / 사유: ${exchangeReason || '현장 고장/스펙 변경 요청'} — 기존 계약 조건(렌탈료, 마감일, 현장조건) 100% 자동 상속`,
+        description: `[대차/교체 의뢰 접수] ${identifyTag} / 회수모델: ${targetModelName} / 사유: ${exchangeReason || '현장 고장/스펙 변경 요청'} — 기존 계약 조건(렌탈료, 마감일, 현장조건) 100% 자동 상속 (기존자산 종료일: ${exchangeDate})`,
         createdAt: new Date().toISOString()
       });
 
@@ -446,8 +477,8 @@ export const Contracts: React.FC = () => {
         contractId: selectedContractId,
         assetId: undefined, // 미할당 상태로 생성하여 출고 부서(asset_assignment.tsx)로 할당 요청
         expectedModel: targetModelName,
-        monthlyRentalFee: activeContractAssets[0]?.monthlyRentalFee || 0,
-        dailyRentalFee: activeContractAssets[0]?.dailyRentalFee || 0,
+        monthlyRentalFee: targetOldContractAsset?.monthlyRentalFee || activeContractAssets[0]?.monthlyRentalFee || 0,
+        dailyRentalFee: targetOldContractAsset?.dailyRentalFee || activeContractAssets[0]?.dailyRentalFee || 0,
         startDate: exchangeDate,
         endDate: activeContract?.endDate || '미정',
         createdAt: new Date().toISOString()
@@ -455,7 +486,7 @@ export const Contracts: React.FC = () => {
 
       await db.awaitPendingWrites();
       refreshAllData();
-      alert(`✅ [대차/교체 의뢰 접수 성공]\n\n1. 회수 배차 건이 [배차 관리] 메뉴로 자동 발행되었습니다. (${isKnown ? '자산번호 식별' : '현장 미식별 검수대기'})\n2. 대차 출고 할당 요청이 [장비 할당] 카드 보드 최상단으로 즉시 연동되었습니다.`);
+      alert(`✅ [대차/교체 의뢰 접수 성공]\n\n1. 회수 배차 건이 [배차 관리] 메뉴로 자동 발행되었습니다. (${isKnown ? '자산번호 식별' : '현장 미식별 검수대기'})\n2. 기존 자산은 [${exchangeDate}] 일자로 종료 처리되었습니다.\n3. 대차 출고 할당 요청이 [장비 할당] 카드 보드 최상단으로 즉시 연동되었습니다.`);
 
       setShowExchangeModal(false);
       setExchangeNewAssetId('');
@@ -1037,11 +1068,13 @@ export const Contracts: React.FC = () => {
                 <table>
                   <thead>
                     <tr style={{ backgroundColor: 'var(--bg-app)' }}>
-                      <th>자산번호</th>
-                      <th>모델명</th>
-                      <th>월 렌탈료</th>
-                      <th>일 렌탈료</th>
-                      <th style={{ textAlign: 'center' }}>수정</th>
+                      <th style={{ whiteSpace: 'nowrap' }}>자산번호</th>
+                      <th style={{ whiteSpace: 'nowrap' }}>모델명</th>
+                      <th style={{ whiteSpace: 'nowrap' }}>월 렌탈료</th>
+                      <th style={{ whiteSpace: 'nowrap' }}>일 렌탈료</th>
+                      <th style={{ whiteSpace: 'nowrap' }}>가동일수</th>
+                      <th style={{ whiteSpace: 'nowrap' }}>매출 기여액</th>
+                      <th style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>수정</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1049,19 +1082,34 @@ export const Contracts: React.FC = () => {
                       const asset = assets.find(a => a.id === ca.assetId);
                       const isZero = ca.monthlyRentalFee === 0;
 
+                      // 가동일수 및 매출 기여액 정밀 일할 계산
+                      const sDate = new Date(ca.startDate || activeContract.startDate || todayStr);
+                      const eDateStr = ca.endDate || activeContract.endDate;
+                      const eDate = (!eDateStr || eDateStr === '미정') ? new Date() : new Date(eDateStr);
+                      const diffTime = Math.max(0, eDate.getTime() - sDate.getTime());
+                      const activeDays = Math.max(1, Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1);
+                      const dailyFee = ca.dailyRentalFee || Math.round(ca.monthlyRentalFee / 30);
+                      const revenueContribution = activeDays * dailyFee;
+
                       return (
                         <tr key={ca.id}>
-                          <td><strong style={{ color: 'var(--primary)' }}>{asset?.assetNo || '미지정'}</strong></td>
-                          <td>{asset?.modelName || ca.expectedModel}</td>
-                          <td>
+                          <td style={{ whiteSpace: 'nowrap' }}><strong style={{ color: 'var(--primary)' }}>{asset?.assetNo || '미지정'}</strong></td>
+                          <td style={{ whiteSpace: 'nowrap' }}>{asset?.modelName || ca.expectedModel}</td>
+                          <td style={{ whiteSpace: 'nowrap' }}>
                             {isZero ? (
                               <span style={{ color: 'var(--danger)', fontWeight: 700 }}>0원 (미입력)</span>
                             ) : (
                               <span>{ca.monthlyRentalFee.toLocaleString()}원</span>
                             )}
                           </td>
-                          <td>{(ca.dailyRentalFee || 0).toLocaleString()}원</td>
-                          <td style={{ textAlign: 'center' }}>
+                          <td style={{ whiteSpace: 'nowrap' }}>{(ca.dailyRentalFee || 0).toLocaleString()}원</td>
+                          <td style={{ whiteSpace: 'nowrap' }}>
+                            <span className="badge badge-info" style={{ fontSize: '11px' }}>{activeDays}일</span>
+                          </td>
+                          <td style={{ whiteSpace: 'nowrap' }}>
+                            <strong style={{ color: '#0070C0' }}>₩{revenueContribution.toLocaleString()}</strong>
+                          </td>
+                          <td style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>
                             {canSave && canModifyContract(activeContract) && (
                               <button className="btn-secondary" onClick={() => handleOpenFeeModal(ca)} style={{ padding: '2px 6px', fontSize: '10.5px' }}>
                                 <Edit3 size={11} /> 렌탈료 수정
@@ -1285,9 +1333,9 @@ export const Contracts: React.FC = () => {
               {/* 후속 업무 흐름 연계 시각화 카드 */}
               <div style={{ padding: '10px 12px', backgroundColor: 'var(--info-light)', border: '1px solid var(--info)', borderRadius: '6px', fontSize: '11.5px', color: 'var(--info)' }}>
                 <div style={{ fontWeight: 'bold', marginBottom: '3px' }}>🔄 후속 업무 자동 연계 체인</div>
-                <div>1. <strong>[배차 관리]</strong>에 기존 장비 회수 배차(INBOUND) 자동 등록 ({exchangeIdentifyType === 'KNOWN' ? '자산번호 지정' : '미식별 현장확인'})</div>
+                <div>1. <strong>[배차 관리]</strong>에 교환 왕복 배차(EXCHANGE) 1건 자동 발행 (출고/회수 1:1 통합 관리)</div>
                 <div>2. <strong>[장비 할당]</strong> 보드 최상단 카드로 대차 출고 할당 요청 자동 노출</div>
-                <div>3. <strong>[입고 검수]</strong> 승인 마감 시 자산 상태 `AVAILABLE`(또는 수리) 자동 마감 연동</div>
+                <div>3. <strong>[입고 검수]</strong> 승인 마감 시 회수 자산 `AVAILABLE`(또는 수리) 자동 마감 연동</div>
               </div>
 
               {/* 대차/교체 희망일자 및 희망시간대 (상하 헤더 세로 스택 컨셉) */}

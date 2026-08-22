@@ -429,6 +429,19 @@ export async function generateCloudflare6DocBundlePdf(
     }
   } catch (agentErr) {
     console.warn('로컬 에이전트 정품 엑셀 변환 실패, 웹 렌더러로 전환:', agentErr);
+    // ⚠️ [원칙 준수 경고] 에이전트 오프라인 — HTML 임시 렌더링 모드로 전환
+    try {
+      const toast = document.createElement('div');
+      toast.style.cssText = [
+        'position:fixed','bottom:24px','right:24px','z-index:99999',
+        'background:#f59e0b','color:#fff','padding:12px 18px','border-radius:8px',
+        'font-size:13px','font-weight:600','max-width:420px',
+        'box-shadow:0 4px 16px rgba(0,0,0,0.18)','white-space:pre-wrap','line-height:1.5'
+      ].join(';');
+      toast.textContent = '⚠️ 에이전트 오프라인 — HTML 임시 렌더링 모드로 계약 서류팩을 생성합니다.\n원본 Excel 서식이 완벽히 보존되지 않을 수 있습니다.';
+      document.body.appendChild(toast);
+      setTimeout(() => { try { document.body.removeChild(toast); } catch (_) {} }, 6000);
+    } catch (_) {}
   }
 
   const mergedPdf = await PDFDocument.create();

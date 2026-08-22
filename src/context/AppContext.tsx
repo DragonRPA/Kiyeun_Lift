@@ -1,6 +1,5 @@
-// d:\Kiyeun_Lift\src\context\AppContext.tsx
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
-import { db, supabase, User, MenuPermission, createMenuPermission, Customer, CustomerContact, CustomerSite, Product, Asset, Consumable, ConsumableLog, ConsumablePurchaseRequest, Contract, ContractAsset, ContractHistory, Delivery, Billing, BillingDetail, Payment, PaymentDepositLink, Repair, RepairConsumable, Todo, BankTransaction, BankMatchingRule, BankAccountInitialBalance, AssetInOutLog, GoogleConfig, Vendor, CashFlowSnapshot, OutboundInspection, TransportCompany, TransportDriver, DepreciationLog, PurchaseSettlement, PurchaseSettlementItem, SettlementPaymentLog, ExternalLease, PurchaseSettlementType, PurchaseSettlementStatus, findCustomerByNormalizedName, AnnualLeaveQuota, LeaveUsage, OvertimeRecord, PayrollClosing, InspectionChecklistItem, InboundDefectDetail } from '../services/db';
+import { db, supabase, User, MenuPermission, createMenuPermission, Customer, CustomerContact, CustomerSite, Product, Asset, Consumable, ConsumableLog, ConsumablePurchaseRequest, Contract, ContractAsset, ContractHistory, Delivery, Billing, BillingDetail, Payment, PaymentDepositLink, Repair, RepairConsumable, Todo, BankTransaction, BankMatchingRule, BankAccountInitialBalance, AssetInOutLog, GoogleConfig, Vendor, CashFlowSnapshot, OutboundInspection, TransportCompany, TransportDriver, DepreciationLog, PurchaseSettlement, PurchaseSettlementItem, SettlementPaymentLog, ExternalLease, PurchaseSettlementType, PurchaseSettlementStatus, findCustomerByNormalizedName, AnnualLeaveQuota, LeaveUsage, OvertimeRecord, PayrollClosing, InspectionChecklistItem, InboundDefectDetail, PrepaidTransaction, DelinquencyActionLog, calculateAssetDepreciation } from '../services/db';
 import { ErrorModal } from '../components/ErrorModal';
 import { getAllSystemMenuIds } from '../config/menu_config';
 
@@ -188,6 +187,25 @@ interface AppContextType {
   confirmPurchaseSettlement: (id: string) => Promise<void>;
   recordPurchaseSettlementPayment: (id: string, data: { paidAmount: number; paymentDate: string; paymentMethod: string; bankAccount?: string; bankTransactionId?: string; memo?: string }) => Promise<void>;
   savePurchaseSettlement: (settlement: Partial<PurchaseSettlement>) => Promise<void>;
+  convertReconciledDeliveriesToSettlement: (settlementYm: string, transportCompanyId?: string) => Promise<number>;
+
+  // Depreciation Execution Mutators
+  cancelMonthlyDepreciation: (depreciationYm: string) => Promise<void>;
+
+  // Repair to Billing Linkage
+  linkRepairToBilling: (repairId: string, billingId: string) => Promise<void>;
+  unlinkRepairFromBilling: (repairId: string) => Promise<void>;
+
+  // Prepaid Balance Management
+  prepaidTransactions: PrepaidTransaction[];
+  chargePrepaidBalance: (customerId: string, amount: number, memo?: string) => Promise<void>;
+  applyPrepaidBalanceForBilling: (billingId: string, amount: number, memo?: string) => Promise<void>;
+  refundPrepaidBalance: (customerId: string, amount: number, memo?: string) => Promise<void>;
+
+  // Delinquency Management
+  delinquencyActionLogs: DelinquencyActionLog[];
+  saveDelinquencyAction: (action: Omit<DelinquencyActionLog, 'id' | 'createdAt'>) => Promise<void>;
+  updateDelinquencyActionPromise: (actionId: string, status: 'PENDING' | 'KEPT' | 'BROKEN') => Promise<void>;
 
   // Navigation states (cross-page routing)
   activeTab: string;
@@ -243,6 +261,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [leaveUsages, setLeaveUsages] = useState<LeaveUsage[]>([]);
   const [overtimeRecords, setOvertimeRecords] = useState<OvertimeRecord[]>([]);
   const [payrollClosings, setPayrollClosings] = useState<PayrollClosing[]>([]);
+  const [prepaidTransactions, setPrepaidTransactions] = useState<PrepaidTransaction[]>([]);
+  const [delinquencyActionLogs, setDelinquencyActionLogs] = useState<DelinquencyActionLog[]>([]);
 
   // Navigation / Routing states
   const [activeTab, setActiveTab] = useState<string>('dashboard');
@@ -323,6 +343,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setLeaveUsages([...db.leaveUsages]);
     setOvertimeRecords([...db.overtimeRecords]);
     setPayrollClosings([...db.payrollClosings]);
+    setPrepaidTransactions([...db.prepaidTransactions]);
+    setDelinquencyActionLogs([...db.delinquencyActionLogs]);
   };
 
   // 전체 28개 테이블 Supabase pull 후 state 동기화 (초기 로딩 전용)
@@ -1564,6 +1586,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const createContract = async (contractData: Omit<Contract, 'id' | 'createdAt' | 'updatedAt' | 'contractNo'>, assetsList: { assetId?: string; expectedModel?: string; monthlyRentalFee: number; dailyRentalFee: number }[]) => {
+    const customer = db.customers.find(c => c.id === contractData.customerId);
+    if (customer && customer.transactionStatus === 'BLOCKED') {
+      showErrorModal('⚠️ 해당 고객사는 [거래불가(BLOCKED)] 상태로 설정되어 있어 신규 계약 등록이 불가능합니다.', '계약 등록 제한');
+      throw new Error('거래 불가 고객사입니다.');
+    }
+
     const contractNo = generateNextContractNo();
     
     const contract = db.insertRow<Contract>('contracts', {
@@ -2851,7 +2879,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     refreshAllData();
   };
 
-  const completeInboundDelivery = (
+  const completeInboundDelivery = async (
     deliveryId: string,
     actualReturnDate: string,
     reviews: { assetId: string; status: 'AVAILABLE' | 'REPAIRING'; maintenanceScore: number; memo: string; faultImageUrl?: string }[]
@@ -2919,8 +2947,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         status: 'COMPLETED',
         updatedAt: new Date().toISOString()
       });
+
+      // 💡 [GAP-024] 계약의 모든 ContractAsset 슬롯 일괄 RETURNED 확정
+      const cAssets = db.contractAssets.filter(ca => ca.contractId === delivery.contractId);
+      cAssets.forEach(ca => {
+        db.updateRow<ContractAsset>('contractAssets', ca.id, {
+          status: 'RETURNED',
+          actualReturnDate: ca.actualReturnDate || actualReturnDate,
+          updatedAt: new Date().toISOString()
+        });
+      });
     }
 
+    await db.awaitPendingWrites();
     refreshAllData();
   };
 
@@ -3060,7 +3099,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     refreshAllData();
   };
 
-  const registerRepair = (repairData: Partial<Repair>, usedConsumables: { consumableId: string; quantity: number }[]) => {
+  const registerRepair = async (repairData: Partial<Repair>, usedConsumables: { consumableId: string; quantity: number }[]) => {
     const repairId = repairData.id || db.generateNextId('repairs', db.repairs);
     const totalRepairCost = repairData.totalCost ?? 0;
 
@@ -3141,6 +3180,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       });
     }
 
+    await db.awaitPendingWrites();
     refreshAllData();
   };
 
@@ -3600,13 +3640,309 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     refreshAllData();
   };
 
+  // ── 월말 감가상각 결산 취소 (롤백) ──
+  const cancelMonthlyDepreciation = async (depreciationYm: string): Promise<void> => {
+    try {
+      const log = db.depreciationLogs.find(l => l.depreciationYm === depreciationYm);
+      if (!log) {
+        throw new Error(`[${depreciationYm}] 연월의 감가상각 결산 이력이 존재하지 않습니다.`);
+      }
+
+      // 1. 해당 연월의 DepreciationLog 삭제
+      db.deleteRow('depreciationLogs', log.id);
+
+      // 2. 이전 연월(1개월 전)의 말일 시점으로 각 자산의 감가상각 재계산 및 롤백
+      const [year, month] = depreciationYm.split('-').map(Number);
+      const prevClosingDate = new Date(year, month - 1, 0, 23, 59, 59, 999);
+
+      db.assets.forEach(asset => {
+        if (asset.ownerType === 'OWNED') {
+          const depnInfo = calculateAssetDepreciation(asset, prevClosingDate);
+          db.updateRow<Asset>('assets', asset.id, {
+            accumDepreciation: depnInfo.accumDepreciation,
+            bookValue: depnInfo.bookValue,
+            updatedAt: new Date().toISOString()
+          });
+        }
+      });
+
+      await db.awaitPendingWrites();
+      refreshAllData();
+    } catch (err: any) {
+      showErrorModal(`⚠️ 감가상각 결산 취소 실패:\n${err?.message || err}`);
+      throw err;
+    }
+  };
+
+  // ── 대사 완료 배차 → 월말 매입 정산 자동 집계 ──
+  const convertReconciledDeliveriesToSettlement = async (settlementYm: string, transportCompanyId?: string): Promise<number> => {
+    try {
+      const targetDeliveries = db.deliveries.filter(d => {
+        const dDate = d.loadingDate || d.scheduledDate || d.requestDate || d.createdAt.split('T')[0];
+        const matchYm = dDate.startsWith(settlementYm);
+        const matchStatus = d.reconciliationStatus === 'RECONCILED' || d.reconciliationStatus === 'MATCHED';
+        const matchComp = !transportCompanyId || d.transportCompany === transportCompanyId;
+        return matchYm && matchStatus;
+      });
+
+      if (targetDeliveries.length === 0) return 0;
+
+      // 운송사별 그룹핑
+      const compGroups = new Map<string, Delivery[]>();
+      targetDeliveries.forEach(d => {
+        const comp = d.transportCompany || '기타 운송사';
+        if (!compGroups.has(comp)) compGroups.set(comp, []);
+        compGroups.get(comp)!.push(d);
+      });
+
+      let totalConverted = 0;
+      for (const [compName, dList] of compGroups.entries()) {
+        const compObj = db.transportCompanies.find(c => c.name === compName);
+        const settlementId = `PST-TR-${settlementYm.replace('-', '')}-${(compObj?.id || compName).slice(-6)}`;
+        
+        let existingSettlement = db.purchaseSettlements.find(s => s.id === settlementId);
+        const totalSum = dList.reduce((acc, d) => acc + (d.deliveryCostConfirmed || d.deliveryCost || 0), 0);
+
+        if (!existingSettlement) {
+          db.insertRow<PurchaseSettlement>('purchaseSettlements', {
+            id: settlementId,
+            settlementYm,
+            settlementType: 'TRANSPORT',
+            vendorId: compObj?.id,
+            vendorName: compName,
+            totalAmount: totalSum,
+            paidAmount: 0,
+            status: 'PENDING',
+            bankAccount: compObj?.bankAccount ? `${compObj.bankName || ''} ${compObj.bankAccount} (${compObj.bankHolder || ''})` : undefined,
+            itemCount: dList.length,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+          });
+        } else {
+          db.updateRow<PurchaseSettlement>('purchaseSettlements', settlementId, {
+            totalAmount: existingSettlement.totalAmount + totalSum,
+            itemCount: (existingSettlement.itemCount || 0) + dList.length,
+            updatedAt: new Date().toISOString()
+          });
+        }
+
+        // 아이템 삽입 및 배차 상태 갱신
+        dList.forEach(d => {
+          const cost = d.deliveryCostConfirmed || d.deliveryCost || 0;
+          db.insertRow<PurchaseSettlementItem>('purchaseSettlementItems', {
+            settlementId,
+            sourceType: 'DELIVERY',
+            sourceId: d.id,
+            itemDescription: `[배차 운반비] ${d.originAddress || '상차지'} ➔ ${d.destinationAddress || '하차지'} (${d.vehicleType || '차량'})`,
+            quantity: 1,
+            unitPrice: cost,
+            amount: cost,
+            createdAt: new Date().toISOString()
+          });
+
+          db.updateRow<Delivery>('deliveries', d.id, {
+            reconciliationStatus: 'PAYMENT_REQUESTED',
+            updatedAt: new Date().toISOString()
+          });
+          totalConverted++;
+        });
+      }
+
+      await db.awaitPendingWrites();
+      refreshAllData();
+      return totalConverted;
+    } catch (err: any) {
+      showErrorModal(`⚠️ 매입 정산 이관 오류:\n${err?.message || err}`);
+      throw err;
+    }
+  };
+
+  // ── 고객 과실 수리비 청구서 연동 ──
+  const linkRepairToBilling = async (repairId: string, billingId: string): Promise<void> => {
+    try {
+      db.updateRow<Repair>('repairs', repairId, {
+        billingId,
+        updatedAt: new Date().toISOString()
+      });
+      await db.awaitPendingWrites();
+      refreshAllData();
+    } catch (err: any) {
+      showErrorModal(`⚠️ 수리비 청구 연동 실패:\n${err?.message || err}`);
+    }
+  };
+
+  const unlinkRepairFromBilling = async (repairId: string): Promise<void> => {
+    try {
+      db.updateRow<Repair>('repairs', repairId, {
+        billingId: undefined,
+        updatedAt: new Date().toISOString()
+      });
+      await db.awaitPendingWrites();
+      refreshAllData();
+    } catch (err: any) {
+      showErrorModal(`⚠️ 수리비 청구 연동 해제 실패:\n${err?.message || err}`);
+    }
+  };
+
+  // ── 선수금 (예치금) 관리 ──
+  const chargePrepaidBalance = async (customerId: string, amount: number, memo?: string): Promise<void> => {
+    try {
+      const customer = db.customers.find(c => c.id === customerId);
+      if (!customer) throw new Error('고객사를 찾을 수 없습니다.');
+      if (amount <= 0) throw new Error('유효한 금액을 입력하십시오.');
+
+      const nextBal = (customer.prepaidBalance || 0) + amount;
+      db.updateRow<Customer>('customers', customerId, {
+        prepaidBalance: nextBal
+      });
+
+      db.insertRow<PrepaidTransaction>('prepaidTransactions', {
+        customerId,
+        type: 'CHARGE',
+        amount,
+        balanceAfter: nextBal,
+        memo: memo || '선수금(예치금) 충전/입금',
+        createdAt: new Date().toISOString()
+      });
+
+      await db.awaitPendingWrites();
+      refreshAllData();
+    } catch (err: any) {
+      showErrorModal(`⚠️ 선수금 충전 실패:\n${err?.message || err}`);
+      throw err;
+    }
+  };
+
+  const applyPrepaidBalanceForBilling = async (billingId: string, amount: number, memo?: string): Promise<void> => {
+    try {
+      const billing = db.billings.find(b => b.id === billingId);
+      if (!billing) throw new Error('청구서를 찾을 수 없습니다.');
+      const customer = db.customers.find(c => c.id === billing.customerId);
+      if (!customer) throw new Error('고객사를 찾을 수 없습니다.');
+
+      const currentBal = customer.prepaidBalance || 0;
+      if (currentBal < amount) {
+        throw new Error(`선수금 잔액이 부족합니다. (현재 잔액: ₩${currentBal.toLocaleString()}원, 요청액: ₩${amount.toLocaleString()}원)`);
+      }
+
+      const unpaid = billing.totalAmount - billing.paidAmount;
+      if (amount > unpaid) {
+        throw new Error(`청구서 미수금(₩${unpaid.toLocaleString()}원)을 초과하여 상계할 수 없습니다.`);
+      }
+
+      // 1. 고객 선수금 잔액 차감
+      const nextBal = currentBal - amount;
+      db.updateRow<Customer>('customers', customer.id, {
+        prepaidBalance: nextBal
+      });
+
+      // 2. 수납 (Payment) 레코드 생성
+      const paymentId = `pay-prepaid-${Date.now()}`;
+      db.insertRow<Payment>('payments', {
+        id: paymentId,
+        billingId,
+        paymentDate: new Date().toISOString().split('T')[0],
+        amount,
+        method: 'PREPAID',
+        memo: memo || `선수금(예치금) 상계 수납 (잔여 선수금: ₩${nextBal.toLocaleString()}원)`,
+        createdAt: new Date().toISOString()
+      });
+
+      // 3. 청구서 수납액 및 상태 갱신
+      const newPaid = billing.paidAmount + amount;
+      const newStatus = newPaid >= billing.totalAmount ? 'PAID' : 'PARTIAL';
+      db.updateRow<Billing>('billings', billingId, {
+        paidAmount: newPaid,
+        status: newStatus,
+        updatedAt: new Date().toISOString()
+      });
+
+      // 4. 선수금 사용 이력 기록
+      db.insertRow<PrepaidTransaction>('prepaidTransactions', {
+        customerId: customer.id,
+        type: 'USE_FOR_BILLING',
+        amount,
+        balanceAfter: nextBal,
+        billingId,
+        paymentId,
+        memo: memo || `청구서(${billing.billingYm}) 선수금 상계 수납`,
+        createdAt: new Date().toISOString()
+      });
+
+      await db.awaitPendingWrites();
+      refreshAllData();
+    } catch (err: any) {
+      showErrorModal(`⚠️ 선수금 상계 수납 실패:\n${err?.message || err}`);
+      throw err;
+    }
+  };
+
+  const refundPrepaidBalance = async (customerId: string, amount: number, memo?: string): Promise<void> => {
+    try {
+      const customer = db.customers.find(c => c.id === customerId);
+      if (!customer) throw new Error('고객사를 찾을 수 없습니다.');
+      const currentBal = customer.prepaidBalance || 0;
+      if (currentBal < amount) {
+        throw new Error(`환불 요청 금액이 선수금 잔액을 초과합니다. (잔액: ₩${currentBal.toLocaleString()}원)`);
+      }
+
+      const nextBal = currentBal - amount;
+      db.updateRow<Customer>('customers', customerId, {
+        prepaidBalance: nextBal
+      });
+
+      db.insertRow<PrepaidTransaction>('prepaidTransactions', {
+        customerId,
+        type: 'REFUND',
+        amount,
+        balanceAfter: nextBal,
+        memo: memo || '선수금(예치금) 환불 처리',
+        createdAt: new Date().toISOString()
+      });
+
+      await db.awaitPendingWrites();
+      refreshAllData();
+    } catch (err: any) {
+      showErrorModal(`⚠️ 선수금 환불 실패:\n${err?.message || err}`);
+      throw err;
+    }
+  };
+
+  // ── 연체 조치 및 입금 약속 관리 ──
+  const saveDelinquencyAction = async (action: Omit<DelinquencyActionLog, 'id' | 'createdAt'>): Promise<void> => {
+    try {
+      db.insertRow<DelinquencyActionLog>('delinquencyActionLogs', {
+        ...action,
+        createdAt: new Date().toISOString()
+      });
+      await db.awaitPendingWrites();
+      refreshAllData();
+    } catch (err: any) {
+      showErrorModal(`⚠️ 연체 조치사항 저장 실패:\n${err?.message || err}`);
+      throw err;
+    }
+  };
+
+  const updateDelinquencyActionPromise = async (actionId: string, status: 'PENDING' | 'KEPT' | 'BROKEN'): Promise<void> => {
+    try {
+      db.updateRow<DelinquencyActionLog>('delinquencyActionLogs', actionId, {
+        promiseStatus: status
+      });
+      await db.awaitPendingWrites();
+      refreshAllData();
+    } catch (err: any) {
+      showErrorModal(`⚠️ 입금 약속 상태 변경 실패:\n${err?.message || err}`);
+      throw err;
+    }
+  };
+
   return (
     <AppContext.Provider value={{
       currentUser, theme, toggleTheme, login, logout, hasPermission, showErrorModal,
       users, permissions, customers, contacts, sites, products, assets, consumables, consumableLogs, consumablePurchases, contracts, contractAssets, contractHistory, deliveries, billings, billingDetails, payments, paymentDepositLinks, repairs, repairConsumables, transportCompanies, transportDrivers, todos,
       bankTransactions, bankMatchingRules, bankInitialBalances, assetInOutLogs, vendors, googleConfigs, cashFlowSnapshots, outboundInspections, depreciationLogs,
       purchaseSettlements, purchaseSettlementItems, settlementPaymentLogs: db.settlementPaymentLogs, externalLeases, inspectionChecklistItems,
-      annualLeaveQuotas, leaveUsages, overtimeRecords, payrollClosings,
+      annualLeaveQuotas, leaveUsages, overtimeRecords, payrollClosings, prepaidTransactions, delinquencyActionLogs,
       refreshAllData, fullRefreshFromServer, executeMonthlyDepreciation, loadTablesForMenu, updatePermissions, saveUser, saveCustomer, saveContact, saveSite, saveProduct, saveAsset, updateGoogleConfig,
       saveCashFlowSnapshot, deleteCashFlowSnapshot, saveVendor, deleteVendor, saveBankInitialBalance, saveInspectionChecklistItem, deleteInspectionChecklistItem,
       updateAnnualLeaveQuota, addLeaveUsage, deleteLeaveUsage, addOvertimeRecord, deleteOvertimeRecord, setPayrollClosingStatus,
@@ -3622,7 +3958,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       dispatchDelivery, settleDeliveryCost, completeDelivery, completeInboundDelivery,
       registerRepair,
       saveTransportDataOnFly,
-      generateMonthlyPurchaseSettlements, confirmPurchaseSettlement, recordPurchaseSettlementPayment, savePurchaseSettlement,
+      generateMonthlyPurchaseSettlements, confirmPurchaseSettlement, recordPurchaseSettlementPayment, savePurchaseSettlement, convertReconciledDeliveriesToSettlement,
+      cancelMonthlyDepreciation, linkRepairToBilling, unlinkRepairFromBilling,
+      chargePrepaidBalance, applyPrepaidBalanceForBilling, refundPrepaidBalance,
+      saveDelinquencyAction, updateDelinquencyActionPromise,
       activeTab,
       setActiveTab,
       navigationPayload,

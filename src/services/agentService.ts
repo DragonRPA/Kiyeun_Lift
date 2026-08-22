@@ -1,7 +1,7 @@
 // src/services/agentService.ts
 // (주)기연리프트 로컬 사이드카 에이전트 단일 표준 메타데이터 및 통신 헬퍼
 
-export const EXPECTED_AGENT_VERSION = 'v1.119.0.Build.236';
+export const EXPECTED_AGENT_VERSION = 'v1.127.3.Build.247';
 export const AGENT_DOWNLOAD_URL = '/downloads/agent.js';           // Node.js 설치 필요, 22KB
 export const AGENT_LAUNCHER_URL = '/downloads/start-agent.bat';    // 실행 배치 파일
 export const AGENT_CERT_URL = '/downloads/KiyeunLift_Root.cer';

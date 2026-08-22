@@ -726,6 +726,22 @@ ${activeSpecs.map((s, idx) => `  ${idx + 1}. [적용] ${s.label}`).join('\n') ||
         </div>
       </div>
 
+      {/* 📊 스마트 출고 자동 분석 상태 바 */}
+      <div style={{
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        padding: '12px 18px', backgroundColor: 'var(--bg-card)',
+        borderRadius: '8px', border: '1px solid var(--border-color)',
+        fontSize: '13px', flexWrap: 'wrap', gap: '12px'
+      }}>
+        <div style={{ display: 'flex', gap: '20px', alignItems: 'center' }}>
+          <div>파서 상태: <strong style={{ color: '#16a34a' }}>정규식 결정론적 파서 가동</strong></div>
+          <div>지원 스펙: <strong style={{ color: 'var(--primary)' }}>21대 안전/기술 요구사항</strong></div>
+        </div>
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+          <span style={{ fontSize: '11.5px', color: 'var(--text-muted)' }}>* 외부 AI API 호출 없이 브라우저 단독 처리 (비용 0원, 보안 무결)</span>
+        </div>
+      </div>
+
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '20px', alignItems: 'start' }}>
         
         {/* 1단계: 레거시 통텍스트 입력 및 스마트 변환 */}

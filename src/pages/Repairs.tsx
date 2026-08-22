@@ -17,10 +17,20 @@ export const Repairs: React.FC = () => {
   const [tempSearchTerm, setTempSearchTerm] = useState('');
   const [tempTypeFilter, setTempTypeFilter] = useState('ALL');
   const [tempStatusFilter, setTempStatusFilter] = useState('ALL');
+  
+  const [tempStartDate, setTempStartDate] = useState('');
+  const [tempEndDate, setTempEndDate] = useState('');
+  const [tempBillableFilter, setTempBillableFilter] = useState('ALL');
+  const [tempMechanicFilter, setTempMechanicFilter] = useState('ALL');
 
   const [searchTerm, setSearchTerm] = useState('');
   const [typeFilter, setTypeFilter] = useState('ALL');
   const [statusFilter, setStatusFilter] = useState('ALL');
+  
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [billableFilter, setBillableFilter] = useState('ALL');
+  const [mechanicFilter, setMechanicFilter] = useState('ALL');
 
   // 정비 등록 모달 및 상태
   const [showModal, setShowModal] = useState(false);
@@ -42,6 +52,10 @@ export const Repairs: React.FC = () => {
     setSearchTerm(tempSearchTerm);
     setTypeFilter(tempTypeFilter);
     setStatusFilter(tempStatusFilter);
+    setStartDate(tempStartDate);
+    setEndDate(tempEndDate);
+    setBillableFilter(tempBillableFilter);
+    setMechanicFilter(tempMechanicFilter);
   };
 
   const filteredRepairs = repairs.filter(r => {
@@ -58,7 +72,14 @@ export const Repairs: React.FC = () => {
     const matchesType = typeFilter === 'ALL' || r.repairType === typeFilter;
     const matchesStatus = statusFilter === 'ALL' || r.status === statusFilter;
 
-    return matchesSearch && matchesType && matchesStatus;
+    const matchesDateStart = !startDate || (r.requestDate || '') >= startDate;
+    const matchesDateEnd = !endDate || (r.requestDate || '') <= endDate;
+    const matchesBillable = billableFilter === 'ALL' ||
+      (billableFilter === 'BILLABLE' && r.billableToCustomer) ||
+      (billableFilter === 'INTERNAL' && !r.billableToCustomer);
+    const matchesMechanic = mechanicFilter === 'ALL' || r.mechanicId === mechanicFilter;
+
+    return matchesSearch && matchesType && matchesStatus && matchesDateStart && matchesDateEnd && matchesBillable && matchesMechanic;
   });
 
   const handleExportExcel = () => {
@@ -178,7 +199,7 @@ export const Repairs: React.FC = () => {
         {/* 필터 바 */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr auto', gap: '10px', alignItems: 'end', backgroundColor: 'var(--bg-app)', padding: '12px', borderRadius: '8px' }}>
           <div>
-            <label style={{ fontSize: '11px', fontWeight: '600', marginBottom: '4px', display: 'block' }}>자산/외주업체 검색</label>
+            <label style={{ fontSize: '11px', fontWeight: '600', marginBottom: '4px', display: 'block', whiteSpace: 'nowrap' }}>자산/외주업체 검색</label>
             <input 
               type="text" 
               value={tempSearchTerm} 
@@ -188,7 +209,7 @@ export const Repairs: React.FC = () => {
             />
           </div>
           <div>
-            <label style={{ fontSize: '11px', fontWeight: '600', marginBottom: '4px', display: 'block' }}>정비 구분</label>
+            <label style={{ fontSize: '11px', fontWeight: '600', marginBottom: '4px', display: 'block', whiteSpace: 'nowrap' }}>정비 구분</label>
             <select 
               value={tempTypeFilter} 
               onChange={e => setTempTypeFilter(e.target.value)} 
@@ -200,7 +221,7 @@ export const Repairs: React.FC = () => {
             </select>
           </div>
           <div>
-            <label style={{ fontSize: '11px', fontWeight: '600', marginBottom: '4px', display: 'block' }}>진행 상태</label>
+            <label style={{ fontSize: '11px', fontWeight: '600', marginBottom: '4px', display: 'block', whiteSpace: 'nowrap' }}>진행 상태</label>
             <select 
               value={tempStatusFilter} 
               onChange={e => setTempStatusFilter(e.target.value)} 
@@ -221,6 +242,100 @@ export const Repairs: React.FC = () => {
             조회
           </button>
         </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr 1fr auto', gap: '10px', alignItems: 'end', backgroundColor: 'var(--bg-app)', padding: '12px', borderRadius: '8px', marginTop: '-6px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+            <label style={{ fontSize: '11px', fontWeight: '600', display: 'block', whiteSpace: 'nowrap' }}>의뢰일</label>
+            <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+              <input type="date" value={tempStartDate} onChange={e => setTempStartDate(e.target.value)} style={{ padding: '6px', fontSize: '12.5px' }} />
+              <span>~</span>
+              <input type="date" value={tempEndDate} onChange={e => setTempEndDate(e.target.value)} style={{ padding: '6px', fontSize: '12.5px' }} />
+              
+              <div style={{ display: 'flex', gap: '2px', marginLeft: '4px' }}>
+                <button type="button" className="btn-secondary" style={{ fontSize: '11px', padding: '4px 6px' }} onClick={() => {
+                  const today = new Date().toISOString().split('T')[0];
+                  setTempStartDate(today); setTempEndDate(today);
+                }}>오늘</button>
+                <button type="button" className="btn-secondary" style={{ fontSize: '11px', padding: '4px 6px' }} onClick={() => {
+                  const d = new Date(); d.setDate(d.getDate() - 7);
+                  setTempStartDate(d.toISOString().split('T')[0]); setTempEndDate(new Date().toISOString().split('T')[0]);
+                }}>1주</button>
+                <button type="button" className="btn-secondary" style={{ fontSize: '11px', padding: '4px 6px' }} onClick={() => {
+                  const d = new Date(); d.setMonth(d.getMonth() - 1);
+                  setTempStartDate(d.toISOString().split('T')[0]); setTempEndDate(new Date().toISOString().split('T')[0]);
+                }}>1개월</button>
+                <button type="button" className="btn-secondary" style={{ fontSize: '11px', padding: '4px 6px' }} onClick={() => {
+                  setTempStartDate(''); setTempEndDate('');
+                }}>전체</button>
+              </div>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+            <label style={{ fontSize: '11px', fontWeight: '600', display: 'block', whiteSpace: 'nowrap' }}>청구구분</label>
+            <select value={tempBillableFilter} onChange={e => setTempBillableFilter(e.target.value)} style={{ padding: '6px', fontSize: '12.5px', width: '100%' }}>
+              <option value="ALL">전체</option>
+              <option value="BILLABLE">고객사청구</option>
+              <option value="INTERNAL">자사비용</option>
+            </select>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+            <label style={{ fontSize: '11px', fontWeight: '600', display: 'block', whiteSpace: 'nowrap' }}>담당정비사</label>
+            <select value={tempMechanicFilter} onChange={e => setTempMechanicFilter(e.target.value)} style={{ padding: '6px', fontSize: '12.5px', width: '100%' }}>
+              <option value="ALL">전체</option>
+              {users.filter(u => u.role === 'MECHANIC').map(u => (
+                <option key={u.id} value={u.id}>{u.name}</option>
+              ))}
+            </select>
+          </div>
+
+          <button 
+            type="button" 
+            className="btn-secondary"
+            onClick={() => {
+              setTempSearchTerm('');
+              setTempTypeFilter('ALL');
+              setTempStatusFilter('ALL');
+              setTempStartDate('');
+              setTempEndDate('');
+              setTempBillableFilter('ALL');
+              setTempMechanicFilter('ALL');
+            }}
+            style={{ padding: '6px 12px', height: '33px', fontSize: '12.5px' }}
+          >
+            초기화
+          </button>
+        </div>
+
+        {/* 📊 정비 통계 요약 바 */}
+        {(() => {
+          const totalCount = filteredRepairs.length;
+          const billableTotal = filteredRepairs.filter(r => r.billableToCustomer).reduce((sum, r) => sum + (r.totalCost || 0), 0);
+          const internalTotal = filteredRepairs.filter(r => !r.billableToCustomer).reduce((sum, r) => sum + (r.totalCost || 0), 0);
+          const grandTotal = billableTotal + internalTotal;
+
+          return (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '10px' }}>
+              <div style={{ padding: '10px 14px', backgroundColor: 'var(--bg-app)', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600 }}>총 정비건수</div>
+                <div style={{ fontSize: '15px', fontWeight: 800, color: 'var(--primary)' }}>{totalCount}건</div>
+              </div>
+              <div style={{ padding: '10px 14px', backgroundColor: 'var(--bg-app)', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600 }}>고객사 청구액</div>
+                <div style={{ fontSize: '15px', fontWeight: 800, color: '#0070C0' }}>₩{billableTotal.toLocaleString()}원</div>
+              </div>
+              <div style={{ padding: '10px 14px', backgroundColor: 'var(--bg-app)', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600 }}>자사 비용부담액</div>
+                <div style={{ fontSize: '15px', fontWeight: 800, color: 'var(--danger)' }}>₩{internalTotal.toLocaleString()}원</div>
+              </div>
+              <div style={{ padding: '10px 14px', backgroundColor: 'var(--bg-app)', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600 }}>총 수리비 합계</div>
+                <div style={{ fontSize: '15px', fontWeight: 800 }}>₩{grandTotal.toLocaleString()}원</div>
+              </div>
+            </div>
+          );
+        })()}
 
         <div className="table-container" style={{ border: 'none', boxShadow: 'none' }}>
           <table>

@@ -307,6 +307,29 @@ export const LeaveOtPage: React.FC = () => {
         </div>
       </div>
 
+      {/* 📊 임직원 연차 및 OT 통계 요약 바 */}
+      {(() => {
+        const totalUsedLeave = leaveUsages.reduce((sum, l) => sum + (l.usedDays || 0), 0);
+        const totalOt = overtimeRecords.reduce((sum, ot) => sum + (ot.hours || 0), 0);
+
+        return (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '10px' }}>
+            <div style={{ padding: '10px 14px', backgroundColor: 'var(--bg-card)', borderRadius: '6px', border: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '11.5px', color: 'var(--text-secondary)', fontWeight: 600 }}>총 등록 임직원</span>
+              <strong style={{ fontSize: '15px', color: 'var(--primary)' }}>{users.length}명</strong>
+            </div>
+            <div style={{ padding: '10px 14px', backgroundColor: 'var(--bg-card)', borderRadius: '6px', border: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '11.5px', color: 'var(--text-secondary)', fontWeight: 600 }}>총 연차 소진 일수</span>
+              <strong style={{ fontSize: '15px', color: '#0070C0' }}>{totalUsedLeave}일</strong>
+            </div>
+            <div style={{ padding: '10px 14px', backgroundColor: 'var(--bg-card)', borderRadius: '6px', border: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '11.5px', color: 'var(--text-secondary)', fontWeight: 600 }}>총 승인 OT 시간</span>
+              <strong style={{ fontSize: '15px', color: '#d97706' }}>{totalOt}시간</strong>
+            </div>
+          </div>
+        );
+      })()}
+
       {activeTab === 'QUOTA' && (
         <>
           {/* 안내 배너 */}

@@ -17,7 +17,7 @@ const os = require('os');
 const { spawn, execSync } = require('child_process');
 
 
-const VERSION = 'v1.125.0.Build.242';
+const VERSION = 'v1.127.3.Build.247';
 const PORT = process.env.PORT || 5175;
 const CALLSIGN = process.env.AGENT_CALLSIGN || 'admin';
 const MACHINE_NAME = os.hostname();
@@ -216,9 +216,14 @@ const server = http.createServer(async (req, res) => {
         const psScript = `\ufeff
 $ErrorActionPreference = 'Stop'
 
+$net = New-Object -ComObject WScript.Network
+$origPrinter = "Apeos C2060"
+try { $net.SetDefaultPrinter('Microsoft Print to PDF') } catch {}
+
 $excel = New-Object -ComObject Excel.Application
 $excel.Visible = $false
 $excel.DisplayAlerts = $false
+$excel.ScreenUpdating = $false
 
 function Replace-Tag($targetWs, $tag, $val) {
   $null = $targetWs.Cells.Replace($tag, $val, 2, 1, $false, $false, $false)
@@ -251,6 +256,7 @@ Replace-Tag $ws1 "{합계}" "₩${totalRentalFee.toLocaleString()}"
 Replace-Tag $ws1 "{옵션}" "${optionsText}"
 Replace-Tag $ws1 "{특이사항}" "${remarksText}"
 
+$ws1.PageSetup.PaperSize = 9
 $ws1.PageSetup.PrintArea = "A26:K78"
 $ws1.PageSetup.Orientation = 1
 $ws1.PageSetup.Zoom = $false
@@ -268,6 +274,7 @@ $wb2 = $excel.Workbooks.Open($f2Work)
 $ws2 = $wb2.Sheets.Item(1)
 Replace-Tag $ws2 "{모델명}" "${primaryAsset.modelName}"
 Replace-Tag $ws2 "{관리번호}" "${primaryAsset.assetNo}"
+$ws2.PageSetup.PaperSize = 9
 $ws2.PageSetup.Orientation = 1
 $ws2.PageSetup.Zoom = $false
 $ws2.PageSetup.FitToPagesWide = 1
@@ -297,6 +304,7 @@ Replace-Tag $ws3 "{제조연도}" "2021년"
 Replace-Tag $ws3 "{안전인증일}" "2021-05-12"
 Replace-Tag $ws3 "{Today}" "${contractDate}"
 Replace-Tag $ws3 "{점검자}" "김관주"
+$ws3.PageSetup.PaperSize = 9
 $ws3.PageSetup.Orientation = 1
 $ws3.PageSetup.Zoom = $false
 $ws3.PageSetup.FitToPagesWide = 1
@@ -306,6 +314,8 @@ $wb3.Close($false)
 
 $excel.Quit()
 [System.Runtime.InteropServices.Marshal]::ReleaseComObject($excel) | Out-Null
+
+try { $net.SetDefaultPrinter($origPrinter) } catch {}
 `;
 
         const psFile = path.join(tempBuildDir, 'build_bundle.ps1');
@@ -379,7 +389,196 @@ $excel.Quit()
     return;
   }
 
-  // 4. 구글 드라이브 로컬 미러링 상태 조회 API (하위 폴더 재귀 통계)
+  // 3-4. 🌟 진짜 MS Excel COM 기반 정품 거래명세표 PDF 생성 엔진
+  if (req.method === 'POST' && pathname === '/api/generate-statement') {
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', async () => {
+      const tempBuildDir = path.join(AGENT_HOME, 'temp_stmt_' + Date.now());
+      try {
+        const payload = JSON.parse(body || '{}');
+        if (!fs.existsSync(tempBuildDir)) fs.mkdirSync(tempBuildDir, { recursive: true });
+
+        const billing    = payload.billing    || {};
+        const details    = payload.details    || [];
+        const customer   = payload.customer   || {};
+        const contract   = payload.contract   || {};
+        const site       = payload.site       || {};
+        const salesperson = payload.salesperson || {};
+
+        const billingDate = billing.billingDate || billing.billingYm || new Date().toISOString().split('T')[0];
+        const custName  = customer.name     || '거래처';
+        const siteName  = site.name         || '현장';
+        const billingYm = billing.billingYm || billingDate.substring(0, 7);
+
+        // 1. [로컬 원본 엑셀 사본 확인] (1순위: drive_mirror, 2순위: public)
+        const excelSources = [
+          path.join(DRIVE_MIRROR_DIR, '00.거래명세서양식.xlsx'),
+          path.join(DRIVE_MIRROR_DIR, '거래명세서양식.xlsx'),
+          'D:\\GoogleDrive\\RPA 개발\\01.AntiGravity\\Kiyuen_Lift\\public\\00.거래명세서양식.xlsx',
+          'D:\\GoogleDrive\\RPA 개발\\01.AntiGravity\\Kiyuen_Lift\\public\\거래명세서양식.xlsx'
+        ];
+        const excelSrc = excelSources.find(p => fs.existsSync(p));
+        if (!excelSrc) {
+          throw new Error('00.거래명세서양식.xlsx 를 drive_mirror 또는 public 에서 찾을 수 없습니다.');
+        }
+
+        const workFile = path.join(tempBuildDir, '00.거래명세서_filled.xlsx');
+        const pdfFile  = path.join(tempBuildDir, '00.거래명세서.pdf');
+        fs.copyFileSync(excelSrc, workFile);
+
+        // 2. [품목 행 및 합계 데이터 계산]
+        let itemReplacementsPs = '';
+        let supplyTotal = 0;
+        const validDetails = details.slice(0, 11);
+
+        for (let i = 0; i < 11; i++) {
+          const item = validDetails[i];
+          if (item) {
+            const supply = (item.unitPrice || 0) * (item.quantity || 1);
+            const vat = Math.round(supply * 0.1);
+            supplyTotal += supply;
+            const desc = (item.description || '').replace(/"/g, '`"');
+            const itmName = (item.itemName || '렌탈 장비').replace(/"/g, '`"');
+
+            if (i === 0) {
+              itemReplacementsPs += `
+Replace-Tag $ws "{월}" "${billingDate.split('-')[1] || '8'}"
+Replace-Tag $ws "{일}" "${billingDate.split('-')[2] || '23'}"
+Replace-Tag $ws "{품목} {청구기간}" "${itmName}"
+Replace-Tag $ws "{수량}" "${item.quantity || 1}"
+Replace-Tag $ws "{렌탈료}" "${(item.unitPrice || 0).toLocaleString()}"
+Replace-Tag $ws "{공급가액}" "${supply.toLocaleString()}"
+Replace-Tag $ws "{부가세}" "${vat.toLocaleString()}"
+Replace-Tag $ws "{비고}" "${desc}"
+`;
+            } else {
+              const r = 16 + i;
+              itemReplacementsPs += `
+$ws.Cells.Item(${r}, 2).Value2 = ${i + 1}
+$ws.Cells.Item(${r}, 3).Value2 = "${billingDate.split('-')[1] || '8'}"
+$ws.Cells.Item(${r}, 4).Value2 = "${billingDate.split('-')[2] || '23'}"
+$ws.Cells.Item(${r}, 5).Value2 = "${itmName}"
+$ws.Cells.Item(${r}, 12).Value2 = ${item.quantity || 1}
+$ws.Cells.Item(${r}, 13).Value2 = "${(item.unitPrice || 0).toLocaleString()}"
+$ws.Cells.Item(${r}, 15).Value2 = "${supply.toLocaleString()}"
+$ws.Cells.Item(${r}, 17).Value2 = "${vat.toLocaleString()}"
+$ws.Cells.Item(${r}, 20).Value2 = "${desc}"
+`;
+            }
+          }
+        }
+
+        const vatTotal = Math.round(supplyTotal * 0.1);
+        const grandTotal = supplyTotal + vatTotal;
+
+        // 3. [진짜 MS Excel COM 자동화 PowerShell 스크립트]
+        const psScript = `\ufeff
+$ErrorActionPreference = 'Stop'
+
+$net = New-Object -ComObject WScript.Network
+$origPrinter = "Apeos C2060"
+try { $net.SetDefaultPrinter('Microsoft Print to PDF') } catch {}
+
+$excel = New-Object -ComObject Excel.Application
+$excel.Visible = $false
+$excel.DisplayAlerts = $false
+$excel.ScreenUpdating = $false
+
+function Replace-Tag($targetWs, $tag, $val) {
+  $null = $targetWs.Cells.Replace($tag, $val, 2, 1, $false, $false, $false)
+}
+
+$wb = $excel.Workbooks.Open('${workFile.replace(/\\/g, '\\\\')}')
+$ws = $wb.Sheets.Item(1)
+
+Replace-Tag $ws "{사업자등록번호}" "${(customer.bizRegNo || '-').replace(/"/g, '`"')}"
+Replace-Tag $ws "{고객명}" "${custName.replace(/"/g, '`"')}"
+Replace-Tag $ws "{대표자}" "${(customer.representative || '-').replace(/"/g, '`"')}"
+Replace-Tag $ws "{주소}" "${(customer.address || '-').replace(/"/g, '`"')}"
+Replace-Tag $ws "{업태}" "${(customer.bizType || '건설업').replace(/"/g, '`"')}"
+Replace-Tag $ws "{종목}" "${(customer.bizItem || '토목건축').replace(/"/g, '`"')}"
+Replace-Tag $ws "{영업사원}" "${(salesperson.name || '테스터(영업)').replace(/"/g, '`"')}"
+Replace-Tag $ws "{영업사원연락처}" "${(salesperson.mobile || '010-1111-0002').replace(/"/g, '`"')}"
+Replace-Tag $ws "{현장담당자}" "${(site.managerName || site.contactName || '현장소장').replace(/"/g, '`"')}"
+Replace-Tag $ws "{현장담당자연락처}" "${(site.managerPhone || site.contactPhone || '-').replace(/"/g, '`"')}"
+Replace-Tag $ws "{청구담당자}" "${(customer.billingManagerName || '청구담당').replace(/"/g, '`"')}"
+Replace-Tag $ws "{청구담당자연락처}" "${(customer.billingManagerPhone || '-').replace(/"/g, '`"')}"
+Replace-Tag $ws "{계산서담당자}" "${(customer.taxManagerName || '회계담당').replace(/"/g, '`"')}"
+Replace-Tag $ws "{계산서담당자연락처}" "${(customer.taxManagerPhone || '-').replace(/"/g, '`"')}"
+Replace-Tag $ws "{계산서이메일}" "${(customer.repEmail || customer.email || '77.victor.lee@gmail.com').replace(/"/g, '`"')}"
+Replace-Tag $ws "{현장명}" "${siteName.replace(/"/g, '`"')}"
+$ws.Cells.Item(13, 5).Value2 = "${billingDate}"
+
+${itemReplacementsPs}
+
+Replace-Tag $ws "{공급가합계}" "${supplyTotal.toLocaleString()}"
+Replace-Tag $ws "{부가세합계}" "${vatTotal.toLocaleString()}"
+Replace-Tag $ws "{총액}" "${grandTotal.toLocaleString()}"
+
+# [A4 가로 1페이지 완벽 맞춤 설정]
+try {
+  $ws.PageSetup.PaperSize = 9 # xlPaperA4
+  $ws.PageSetup.Orientation = 2 # xlLandscape (가로)
+  $ws.PageSetup.Zoom = $false
+  $ws.PageSetup.FitToPagesWide = 1
+  $ws.PageSetup.FitToPagesTall = 1
+} catch {}
+
+$wb.ExportAsFixedFormat(0, '${pdfFile.replace(/\\/g, '\\\\')}')
+$wb.Close($false)
+$excel.Quit()
+[System.Runtime.InteropServices.Marshal]::ReleaseComObject($excel) | Out-Null
+
+try { $net.SetDefaultPrinter($origPrinter) } catch {}
+Write-Host "REAL_EXCEL_EXPORT_SUCCESS"
+`;
+
+        const psFile = path.join(tempBuildDir, 'export_stmt.ps1');
+        fs.writeFileSync(psFile, psScript, 'utf8');
+
+        // Excel 변환 실행
+        execSync(`powershell -NoProfile -ExecutionPolicy Bypass -File "${psFile}"`, { encoding: 'utf8', timeout: 30000 });
+
+        if (!fs.existsSync(pdfFile)) {
+          throw new Error('진짜 MS Excel에서 PDF 파일이 생성되지 않았습니다.');
+        }
+
+        const pdfBytes = fs.readFileSync(pdfFile);
+        const b64 = Buffer.from(pdfBytes).toString('base64');
+        const fileName = `거래명세서_${custName}_${siteName}_${billingYm}.pdf`;
+
+        // 4. [문서고 영구 아카이빙 (수정된 엑셀 + 진짜 MS Excel PDF)]
+        try {
+          const archiveDir = path.join(ARCHIVE_ROOT, billingYm);
+          if (!fs.existsSync(archiveDir)) fs.mkdirSync(archiveDir, { recursive: true });
+          fs.writeFileSync(path.join(archiveDir, fileName), pdfBytes);
+          fs.copyFileSync(workFile, path.join(archiveDir, `거래명세서_${custName}_${siteName}_${billingYm}.xlsx`));
+        } catch (archErr) { console.warn('아카이빙 경고(무시):', archErr.message); }
+
+        try { fs.rmSync(tempBuildDir, { recursive: true, force: true }); } catch (e) {}
+
+        res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify({
+          success: true,
+          fileName,
+          base64Content: b64,
+          supplyTotal,
+          vatTotal,
+          totalAmount: grandTotal,
+          message: `✅ 진짜 MS Excel 원본 편집 기반 정품 거래명세표 PDF 생성 완료`
+        }));
+      } catch (stmtErr) {
+        console.error('❌ 거래명세서 생성 실패:', stmtErr);
+        try { fs.rmSync(tempBuildDir, { recursive: true, force: true }); } catch (e) {}
+        res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify({ success: false, error: stmtErr.message }));
+      }
+    });
+    return;
+  }
+
+
   if (req.method === 'GET' && pathname === '/api/mirror-status') {
     try {
       const getAllFilesRecursively = (dir, rootDir) => {

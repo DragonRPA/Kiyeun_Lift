@@ -51,6 +51,8 @@ export const PurchaseSettlementPage: React.FC = () => {
 
   const [selectedYm, setSelectedYm]               = useState(currentYm);
   const [typeFilter, setTypeFilter]                = useState<PurchaseSettlementType | 'ALL'>('ALL');
+  const [payStatusFilter, setPayStatusFilter]      = useState('ALL');
+  const [vendorSearch, setVendorSearch]            = useState('');
   const [expandedId, setExpandedId]                = useState<string | null>(null);
   const [isGenerating, setIsGenerating]            = useState(false);
   const [generateResult, setGenerateResult]        = useState<string | null>(null);
@@ -111,8 +113,10 @@ export const PurchaseSettlementPage: React.FC = () => {
   const filtered = useMemo(() => {
     return purchaseSettlements
       .filter(p => p.settlementYm === selectedYm && (typeFilter === 'ALL' || p.settlementType === typeFilter))
+      .filter(p => payStatusFilter === 'ALL' || p.status === payStatusFilter)
+      .filter(p => !vendorSearch || (p.vendorName || '').toLowerCase().includes(vendorSearch.toLowerCase()))
       .sort((a, b) => a.settlementType.localeCompare(b.settlementType) || a.vendorName.localeCompare(b.vendorName));
-  }, [purchaseSettlements, selectedYm, typeFilter]);
+  }, [purchaseSettlements, selectedYm, typeFilter, payStatusFilter, vendorSearch]);
 
   // 연월 선택지 (최근 12개월)
   const ymOptions = useMemo(() => {
@@ -245,6 +249,27 @@ export const PurchaseSettlementPage: React.FC = () => {
             {t.icon} {t.label}
           </button>
         ))}
+      </div>
+
+      <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-end', flexWrap: 'wrap', marginBottom: '20px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+          <label style={{ fontSize: '11px', fontWeight: '600', whiteSpace: 'nowrap' }}>지급 상태</label>
+          <select value={payStatusFilter} onChange={e => setPayStatusFilter(e.target.value)} style={{ padding: '5px', fontSize: '12px' }}>
+            <option value="ALL">전체</option>
+            <option value="PENDING">집계중</option>
+            <option value="CONFIRMED">정산확정</option>
+            <option value="PAID">지급완료</option>
+          </select>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+          <label style={{ fontSize: '11px', fontWeight: '600', whiteSpace: 'nowrap' }}>매입처</label>
+          <input type="text" value={vendorSearch} onChange={e => setVendorSearch(e.target.value)}
+            placeholder="매입처명 검색" style={{ padding: '5px 8px', fontSize: '12px', width: '160px' }} />
+        </div>
+        {(payStatusFilter !== 'ALL' || vendorSearch) && (
+          <button type="button" onClick={() => { setPayStatusFilter('ALL'); setVendorSearch(''); }}
+            style={{ padding: '5px 10px', fontSize: '11px', background: 'var(--bg-app)', border: '1px solid var(--border)', borderRadius: '4px', cursor: 'pointer', alignSelf: 'flex-end' }}>초기화</button>
+        )}
       </div>
 
       {/* 요약 카드 */}

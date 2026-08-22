@@ -17,6 +17,8 @@ export const SmartReturn: React.FC = () => {
   // [1] 영업사원 모드 (SALES) 상태
   // ==========================================
   const [salesSearch, setSalesSearch] = useState('');
+  const [returnStartDate, setReturnStartDate] = useState('');
+  const [returnEndDate, setReturnEndDate] = useState('');
   const [salesSortBy, setSalesSortBy] = useState<'END_DATE' | 'CUSTOMER_NAME' | 'SITE_NAME'>('END_DATE');
   const [salesSortDesc, setSalesSortDesc] = useState(false);
   const [selectedContractId, setSelectedContractId] = useState('');
@@ -149,7 +151,18 @@ export const SmartReturn: React.FC = () => {
 
   const filteredContracts = activeContracts.filter(c => {
     const custName = customers.find(cust => cust.id === c.customerId)?.name || '';
-    return custName.toLowerCase().includes(salesSearch.toLowerCase());
+    const siteName = sites.find(s => s.id === c.siteId)?.name || '';
+    const matchStr = salesSearch.toLowerCase();
+    
+    const matchesSearch = 
+      custName.toLowerCase().includes(matchStr) || 
+      siteName.toLowerCase().includes(matchStr) || 
+      (c.contractNo && c.contractNo.toLowerCase().includes(matchStr));
+
+    const matchesReturnStart = !returnStartDate || (c.endDate || '') >= returnStartDate;
+    const matchesReturnEnd = !returnEndDate || (c.endDate || '') <= returnEndDate;
+
+    return matchesSearch && matchesReturnStart && matchesReturnEnd;
   });
 
   const sortedContracts = filteredContracts.slice().sort((a, b) => {
@@ -314,6 +327,34 @@ export const SmartReturn: React.FC = () => {
         </div>
       </div>
 
+      {/* 📊 회수 대상 및 계약 만료 현황 요약 바 */}
+      {(() => {
+        const todayStr = getTodayString();
+        const nextWeek = new Date(); nextWeek.setDate(nextWeek.getDate() + 7);
+        const nextWeekStr = nextWeek.toISOString().split('T')[0];
+
+        const expiringSoonContracts = contracts.filter(c => c.status === 'ACTIVE' && c.endDate && c.endDate >= todayStr && c.endDate <= nextWeekStr);
+        const totalRentedAssets = contractAssets.filter(ca => ca.assetId && !ca.actualReturnDate).length;
+        const activeContractsCount = contracts.filter(c => c.status === 'ACTIVE').length;
+
+        return (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '10px' }}>
+            <div style={{ padding: '10px 14px', backgroundColor: 'var(--bg-card)', borderRadius: '6px', border: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '11.5px', color: 'var(--text-secondary)', fontWeight: 600 }}>진행중인 계약</span>
+              <strong style={{ fontSize: '15px', color: 'var(--primary)' }}>{activeContractsCount}건</strong>
+            </div>
+            <div style={{ padding: '10px 14px', backgroundColor: 'var(--bg-card)', borderRadius: '6px', border: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '11.5px', color: 'var(--text-secondary)', fontWeight: 600 }}>현장 대여중 장비</span>
+              <strong style={{ fontSize: '15px', color: '#16a34a' }}>{totalRentedAssets}대</strong>
+            </div>
+            <div style={{ padding: '10px 14px', backgroundColor: 'var(--bg-card)', borderRadius: '6px', border: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '11.5px', color: 'var(--text-secondary)', fontWeight: 600 }}>7일 내 만료예정 계약</span>
+              <strong style={{ fontSize: '15px', color: expiringSoonContracts.length > 0 ? '#d97706' : 'var(--text-muted)' }}>{expiringSoonContracts.length}건</strong>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* 모드 전환 탭 */}
       <div style={{ display: 'flex', gap: '10px', borderBottom: '2px solid var(--border-color)', paddingBottom: '10px' }}>
         <button
@@ -385,64 +426,92 @@ export const SmartReturn: React.FC = () => {
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                 
-                {/* 필터 및 정렬 제어판 */}
-                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                  <input
-                    type="text"
-                    placeholder="고객명 검색..."
-                    value={salesSearch}
-                    onChange={e => setSalesSearch(e.target.value)}
-                    style={{ flex: 1, padding: '6px 10px', fontSize: '13px' }}
-                  />
-                  
-                  {/* 정렬 타겟 버튼 */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (salesSortBy === 'END_DATE') {
-                        setSalesSortDesc(!salesSortDesc);
-                      } else {
-                        setSalesSortBy('END_DATE');
-                        setSalesSortDesc(false);
-                      }
-                    }}
-                    className={salesSortBy === 'END_DATE' ? 'btn-primary' : 'btn-secondary'}
-                    style={{ padding: '6px 8px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '2px' }}
-                  >
-                    <ArrowUpDown size={12} /> 만료일 {salesSortBy === 'END_DATE' && (salesSortDesc ? '▼' : '▲')}
-                  </button>
+                {/* 검색 필터 */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    <input
+                      type="text"
+                      placeholder="고객명, 현장명, 계약번호 검색..."
+                      value={salesSearch}
+                      onChange={e => setSalesSearch(e.target.value)}
+                      style={{ flex: 1, padding: '6px 10px', fontSize: '13px', borderRadius: '6px', border: '1px solid var(--border-color)' }}
+                    />
+                    
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (salesSortBy === 'END_DATE') {
+                          setSalesSortDesc(!salesSortDesc);
+                        } else {
+                          setSalesSortBy('END_DATE');
+                          setSalesSortDesc(false);
+                        }
+                      }}
+                      className={salesSortBy === 'END_DATE' ? 'btn-primary' : 'btn-secondary'}
+                      style={{ padding: '6px 8px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '2px' }}
+                    >
+                      <ArrowUpDown size={12} /> 만료일 {salesSortBy === 'END_DATE' && (salesSortDesc ? '▼' : '▲')}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (salesSortBy === 'CUSTOMER_NAME') {
+                          setSalesSortDesc(!salesSortDesc);
+                        } else {
+                          setSalesSortBy('CUSTOMER_NAME');
+                          setSalesSortDesc(false);
+                        }
+                      }}
+                      className={salesSortBy === 'CUSTOMER_NAME' ? 'btn-primary' : 'btn-secondary'}
+                      style={{ padding: '6px 8px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '2px' }}
+                    >
+                      <ArrowUpDown size={12} /> 고객명 {salesSortBy === 'CUSTOMER_NAME' && (salesSortDesc ? '▼' : '▲')}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (salesSortBy === 'SITE_NAME') {
+                          setSalesSortDesc(!salesSortDesc);
+                        } else {
+                          setSalesSortBy('SITE_NAME');
+                          setSalesSortDesc(false);
+                        }
+                      }}
+                      className={salesSortBy === 'SITE_NAME' ? 'btn-primary' : 'btn-secondary'}
+                      style={{ padding: '6px 8px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '2px' }}
+                    >
+                      <ArrowUpDown size={12} /> 현장명 {salesSortBy === 'SITE_NAME' && (salesSortDesc ? '▼' : '▲')}
+                    </button>
+                  </div>
 
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (salesSortBy === 'CUSTOMER_NAME') {
-                        setSalesSortDesc(!salesSortDesc);
-                      } else {
-                        setSalesSortBy('CUSTOMER_NAME');
-                        setSalesSortDesc(false);
-                      }
-                    }}
-                    className={salesSortBy === 'CUSTOMER_NAME' ? 'btn-primary' : 'btn-secondary'}
-                    style={{ padding: '6px 8px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '2px' }}
-                  >
-                    <ArrowUpDown size={12} /> 고객명 {salesSortBy === 'CUSTOMER_NAME' && (salesSortDesc ? '▼' : '▲')}
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (salesSortBy === 'SITE_NAME') {
-                        setSalesSortDesc(!salesSortDesc);
-                      } else {
-                        setSalesSortBy('SITE_NAME');
-                        setSalesSortDesc(false);
-                      }
-                    }}
-                    className={salesSortBy === 'SITE_NAME' ? 'btn-primary' : 'btn-secondary'}
-                    style={{ padding: '6px 8px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '2px' }}
-                  >
-                    <ArrowUpDown size={12} /> 현장명 {salesSortBy === 'SITE_NAME' && (salesSortDesc ? '▼' : '▲')}
-                  </button>
+                  {/* 날짜 필터 추가 */}
+                  <div style={{ display: 'flex', gap: '10px', backgroundColor: 'var(--bg-app)', padding: '8px', borderRadius: '6px', alignItems: 'flex-end' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flex: 1 }}>
+                      <label style={{ fontSize: '11px', fontWeight: '600', display: 'block', whiteSpace: 'nowrap' }}>계약 만료일 범위</label>
+                      <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                        <input type="date" value={returnStartDate} onChange={e => setReturnStartDate(e.target.value)} style={{ padding: '6px', fontSize: '12.5px', flex: 1, border: '1px solid var(--border-color)', borderRadius: '4px' }} />
+                        <span>~</span>
+                        <input type="date" value={returnEndDate} onChange={e => setReturnEndDate(e.target.value)} style={{ padding: '6px', fontSize: '12.5px', flex: 1, border: '1px solid var(--border-color)', borderRadius: '4px' }} />
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', gap: '2px', paddingBottom: '2px' }}>
+                      <button type="button" className="btn-secondary" style={{ fontSize: '11px', padding: '4px 6px' }} onClick={() => {
+                        const today = new Date();
+                        const firstDay = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().split('T')[0];
+                        const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0).toISOString().split('T')[0];
+                        setReturnStartDate(firstDay); setReturnEndDate(lastDay);
+                      }}>이번달</button>
+                      <button type="button" className="btn-secondary" style={{ fontSize: '11px', padding: '4px 6px' }} onClick={() => {
+                        const today = new Date();
+                        const firstDayNext = new Date(today.getFullYear(), today.getMonth() + 1, 1).toISOString().split('T')[0];
+                        const lastDayNext = new Date(today.getFullYear(), today.getMonth() + 2, 0).toISOString().split('T')[0];
+                        setReturnStartDate(firstDayNext); setReturnEndDate(lastDayNext);
+                      }}>다음달</button>
+                      <button type="button" className="btn-secondary" style={{ fontSize: '11px', padding: '4px 6px' }} onClick={() => {
+                        setReturnStartDate(''); setReturnEndDate('');
+                      }}>전체</button>
+                    </div>
+                  </div>
                 </div>
 
                 {/* 계약 목록 */}
