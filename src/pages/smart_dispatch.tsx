@@ -100,6 +100,46 @@ export const SmartDispatch: React.FC = () => {
   const [note, setNote] = useState('');
   const [isCopied, setIsCopied] = useState(false);
 
+  // 🖨️ [메뉴별 격리] 출고의뢰서 메뉴 전용 로컬 프린터 저장 키 (타 메뉴/타 직원 설정과 100% 독립 격리)
+  const DISPATCH_PRINTER_STORAGE_KEY = 'dedicated_printer_smart_dispatch';
+
+  const [printers, setPrinters] = useState<string[]>([]);
+  const [selectedPrinter, setSelectedPrinter] = useState<string>(() => {
+    return localStorage.getItem(DISPATCH_PRINTER_STORAGE_KEY) || '';
+  });
+  const [isAgentPrinting, setIsAgentPrinting] = useState<boolean>(false);
+  const [agentStatus, setAgentStatus] = useState<'ONLINE' | 'OFFLINE'>('OFFLINE');
+
+  // 로컬 사이드카 에이전트에서 설치된 프린터 목록 자동 로드
+  useEffect(() => {
+    const fetchPrinters = async () => {
+      try {
+        const res = await fetch('http://127.0.0.1:5175/api/printers', { signal: AbortSignal.timeout(2000) });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success && Array.isArray(data.printers)) {
+            setPrinters(data.printers);
+            setAgentStatus('ONLINE');
+            const saved = localStorage.getItem(DISPATCH_PRINTER_STORAGE_KEY);
+            if (!saved || !data.printers.includes(saved)) {
+              const defaultP = data.defaultPrinter || data.printers[0] || 'Apeos C2060';
+              setSelectedPrinter(defaultP);
+              if (defaultP) localStorage.setItem(DISPATCH_PRINTER_STORAGE_KEY, defaultP);
+            }
+          }
+        }
+      } catch (e) {
+        setAgentStatus('OFFLINE');
+      }
+    };
+    fetchPrinters();
+  }, []);
+
+  const handlePrinterChange = (printerName: string) => {
+    setSelectedPrinter(printerName);
+    localStorage.setItem(DISPATCH_PRINTER_STORAGE_KEY, printerName);
+  };
+
   // 유니크 모델명 목록 추출
   const uniqueModels = Array.from(new Set(assets.map(a => a.modelName).filter(Boolean))).sort();
 
@@ -437,9 +477,40 @@ ${activeSpecs.map((s, idx) => `  ${idx + 1}. [적용] ${s.label}`).join('\n') ||
     alert('클립보드에 복사되었습니다.');
   };
 
-  const handlePrint = () => {
+  const handlePrint = async () => {
     const printContent = document.getElementById('dispatch-sheet-print');
     if (!printContent) return;
+
+    // 1순위: 로컬 사이드카 에이전트가 온라인이고 전용 프린터가 지정되어 있으면 0초 무팝업 다이렉트 인쇄!
+    if (agentStatus === 'ONLINE' && selectedPrinter) {
+      setIsAgentPrinting(true);
+      try {
+        const res = await fetch('http://127.0.0.1:5175/api/print-dispatch', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            printerName: selectedPrinter,
+            title: `기연리프트_출고요청서_${customerName || '고객사'}_${siteName || '현장'}`,
+            htmlContent: printContent.innerHTML
+          }),
+          signal: AbortSignal.timeout(6000)
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success) {
+            alert(`🖨️ [전용 프린터: ${selectedPrinter}]\n출고요청서가 지정된 프린터로 즉시 전송되었습니다.`);
+            return;
+          }
+        }
+      } catch (agentErr) {
+        console.warn('로컬 에이전트 다이렉트 인쇄 실패, 브라우저 인쇄로 전환:', agentErr);
+      } finally {
+        setIsAgentPrinting(false);
+      }
+    }
+
+    // 2순위 Fallback: 브라우저 기본 인쇄창 오픈
     const windowUrl = 'about:blank';
     const uniqueName = new Date().getTime();
     const windowName = 'Print' + uniqueName;
@@ -1045,9 +1116,60 @@ ${activeSpecs.map((s, idx) => `  ${idx + 1}. [적용] ${s.label}`).join('\n') ||
         <div style={{ minHeight: '300px', padding: '16px', backgroundColor: 'var(--bg-app)', border: '1px solid var(--border-color)', borderRadius: '8px' }}>
           
           <div>
-              <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '10px' }}>
-                <button type="button" className="btn-primary" onClick={handlePrint} style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '13px', padding: '6px 14px', fontWeight: 'bold' }}>
-                  <Printer size={14} /> 출고요청서 인쇄하기
+              <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '10px', marginBottom: '12px', flexWrap: 'wrap' }}>
+                
+                {/* 🖨️ 전용 프린터 지정 드롭다운 (출력 버튼 바로 좌측 인라인 배치) */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <label style={{ fontSize: '12px', fontWeight: '700', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
+                    전용 프린터:
+                  </label>
+                  <select
+                    value={selectedPrinter}
+                    onChange={(e) => handlePrinterChange(e.target.value)}
+                    style={{
+                      padding: '6px 10px',
+                      fontSize: '12px',
+                      borderRadius: '4px',
+                      border: '1px solid var(--border-color)',
+                      backgroundColor: 'var(--bg-card)',
+                      color: 'var(--text-main)',
+                      fontWeight: '600',
+                      minWidth: '170px',
+                      maxWidth: '240px',
+                      cursor: 'pointer'
+                    }}
+                    title="선택한 전용 프린터는 브라우저를 닫아도 영구 유지됩니다."
+                  >
+                    {printers.length > 0 ? (
+                      printers.map(p => (
+                        <option key={p} value={p}>{p}</option>
+                      ))
+                    ) : (
+                      <option value={selectedPrinter || 'Apeos C2060'}>
+                        {selectedPrinter || 'Apeos C2060 (기본)'}
+                      </option>
+                    )}
+                  </select>
+                </div>
+
+                {/* 🖨️ 출고요청서 인쇄하기 버튼 */}
+                <button
+                  type="button"
+                  className="btn-primary"
+                  onClick={handlePrint}
+                  disabled={isAgentPrinting}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    fontSize: '13px',
+                    padding: '6px 16px',
+                    fontWeight: 'bold',
+                    whiteSpace: 'nowrap'
+                  }}
+                >
+                  <Printer size={14} />
+                  {isAgentPrinting ? '인쇄 전송중...' : '출고요청서 인쇄하기'}
                 </button>
               </div>
 

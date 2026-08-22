@@ -1,89 +1,36 @@
 // d:\Kiyeun_Lift\src\pages\Consumables.tsx
 import React, { useState, useRef } from 'react';
 import { useApp } from '../context/AppContext';
-import { ShoppingCart, Hammer, ListCollapse, Layers, Plus, ClipboardList, PackagePlus, CheckCircle2, XCircle, Search, Download, FileText, Camera, Upload, RefreshCw } from 'lucide-react';
+import { 
+  ShoppingCart, Hammer, ListCollapse, Layers, Plus, ClipboardList, PackagePlus, 
+  CheckCircle2, XCircle, Search, Download, FileText, Camera, Upload, RefreshCw, 
+  Truck, ArrowRightLeft, ArrowUpRight, ArrowDownLeft, User, ShieldCheck, X
+} from 'lucide-react';
 import { exportToExcel } from '../services/excel';
-import { drive } from '../services/drive';
-import { Consumable } from '../services/db';
+import { Consumable, MechanicConsumableStock } from '../services/db';
 import { compressFileIfNeeded } from '../utils/imageCompressor';
-import { uploadToSupabaseStorage, downloadEvidenceAsZip } from '../services/supabaseStorage';
-
-const compressImage = (file: File): Promise<File> => {
-  return new Promise((resolve) => {
-    if (!file.type.startsWith('image/')) {
-      resolve(file);
-      return;
-    }
-    const reader = new FileReader();
-    reader.readAsDataURL(file);
-    reader.onload = (event) => {
-      const img = new Image();
-      img.src = event.target?.result as string;
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        let width = img.width;
-        let height = img.height;
-        const MAX_WIDTH = 1200;
-        if (width > MAX_WIDTH) {
-          height = Math.round((height * MAX_WIDTH) / width);
-          width = MAX_WIDTH;
-        }
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d');
-        ctx?.drawImage(img, 0, 0, width, height);
-        canvas.toBlob((blob) => {
-          if (blob) {
-            const compressedFile = new File([blob], file.name, {
-              type: 'image/jpeg',
-              lastModified: Date.now(),
-            });
-            resolve(compressedFile);
-          } else {
-            resolve(file);
-          }
-        }, 'image/jpeg', 0.7);
-      };
-      img.onerror = () => {
-        resolve(file);
-      };
-    };
-    reader.onerror = () => {
-      resolve(file);
-    };
-  });
-};
-
-const fileToBase64 = (file: File): Promise<string> => {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.readAsDataURL(file);
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = error => reject(error);
-  });
-};
+import { uploadToSupabaseStorage } from '../services/supabaseStorage';
 
 export const Consumables: React.FC = () => {
   const {
-    consumables, consumableLogs, consumablePurchases, assets, purchaseConsumable, useConsumable,
+    consumables, consumableLogs, consumablePurchases, mechanicConsumableStocks, assets, purchaseConsumable, useConsumable,
+    transferConsumableToMechanic, returnConsumableToHq,
     requestConsumablePurchase, acceptConsumablePurchase, completeConsumablePurchase, inboundConsumablePurchase,
-    hasPermission, users, currentUser, googleConfigs, showErrorModal
+    hasPermission, users, currentUser, showErrorModal
   } = useApp();
 
   const canSave = hasPermission('consumable', 'save');
-  // 탭 구성: STOCK (보유 재고), REQ_LIST (신청 내역 조회), REQ_WRITE (구매신청 작성), REQ_INBOUND (구매물품 입고처리), USE (소모품 사용), LOGS (입출고 로그)
-  const [activeTab, setActiveTab] = useState<'STOCK' | 'REQ_LIST' | 'REQ_WRITE' | 'REQ_INBOUND' | 'USE' | 'LOGS'>('STOCK');
+  // 탭 구성: STOCK (본사 재고), VEHICLE_STOCK (차량별 이동재고), REQ_LIST (신청 내역 조회), REQ_WRITE (구매신청 작성), REQ_INBOUND (구매물품 입고처리), USE (소모품 사용), LOGS (입출고 로그)
+  const [activeTab, setActiveTab] = useState<'STOCK' | 'VEHICLE_STOCK' | 'REQ_LIST' | 'REQ_WRITE' | 'REQ_INBOUND' | 'USE' | 'LOGS'>('STOCK');
 
   // --- [1] 구매신청 조회용 필터 상태 ---
   const [reqSearchTerm, setReqSearchTerm] = useState('');
   const [reqStatusFilter, setReqStatusFilter] = useState<'ALL' | 'INCOMPLETE' | 'COMPLETED'>('ALL');
-  // 이번 달 첫날 / 마지막 날 기본값
   const thisMonthStart = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-01`; })();
   const thisMonthEnd   = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(new Date(d.getFullYear(), d.getMonth()+1, 0).getDate()).padStart(2,'0')}`; })();
   const [reqStartDate, setReqStartDate] = useState(thisMonthStart);
   const [reqEndDate, setReqEndDate] = useState(thisMonthEnd);
 
-  // 실제 조회 버튼 클릭 시 확정되어 적용되는 필터 상태
   const [searchQuery, setSearchQuery] = useState('');
   const [statusQuery, setStatusQuery] = useState<'ALL' | 'INCOMPLETE' | 'COMPLETED'>('ALL');
   const [startDateQuery, setStartDateQuery] = useState(thisMonthStart);
@@ -93,6 +40,8 @@ export const Consumables: React.FC = () => {
   // --- [1.1] 추가 필터 상태 ---
   const [reqUserFilter, setReqUserFilter] = useState('ALL');
   const [stockSearch, setStockSearch] = useState('');
+  const [vehicleStockSearch, setVehicleStockSearch] = useState('');
+  const [selectedMechanicFilter, setSelectedMechanicFilter] = useState('ALL');
   const [logTypeFilter, setLogTypeFilter] = useState('ALL');
   const [logStartDate, setLogStartDate] = useState('');
   const [logEndDate, setLogEndDate] = useState('');
@@ -111,7 +60,6 @@ export const Consumables: React.FC = () => {
   const [inboundQty, setInboundQty] = useState(1);
   const [uploadMethod, setUploadMethod] = useState<'PC' | 'MOBILE'>('PC');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [uploadedFileUrl, setUploadedFileUrl] = useState('');
   const [isUploading, setIsUploading] = useState(false);
   const [noInvoice, setNoInvoice] = useState(false);
 
@@ -128,6 +76,21 @@ export const Consumables: React.FC = () => {
   // --- [5] 증빙 미리보기 상태 ---
   const [previewRequest, setPreviewRequest] = useState<any | null>(null);
 
+  // --- [6] 차량 재고 이동 모달 상태 ---
+  const [showTransferModal, setShowTransferModal] = useState(false);
+  const [transferMechanicId, setTransferMechanicId] = useState('');
+  const [transferConsumableId, setTransferConsumableId] = useState('');
+  const [transferQty, setTransferQty] = useState(1);
+  const [transferMemo, setTransferMemo] = useState('');
+
+  const [showReturnModal, setShowReturnModal] = useState(false);
+  const [returnMechanicId, setReturnMechanicId] = useState('');
+  const [returnConsumableId, setReturnConsumableId] = useState('');
+  const [returnQty, setReturnQty] = useState(1);
+  const [returnMemo, setReturnMemo] = useState('');
+
+  const mechanics = users.filter(u => u.role === 'MECHANIC' || u.role === 'ADMIN' || u.role === 'MANAGER');
+
   const getUserName = (id?: string) => {
     if (!id) return '시스템';
     return users.find(u => u.id === id)?.name || '정비 담당자';
@@ -143,60 +106,71 @@ export const Consumables: React.FC = () => {
     const excelData = consumables.map((c, idx) => {
       const logs = consumableLogs.filter(l => l.consumableId === c.id);
       const totalUsed = logs.filter(l => l.type === 'OUTBOUND').reduce((sum, l) => sum + l.quantity, 0);
-      const totalPurchased = c.stockQty + totalUsed;
+      const totalTransferred = logs.filter(l => l.type === 'TRANSFER_TO_VEHICLE').reduce((sum, l) => sum + l.quantity, 0);
+      const totalReturned = logs.filter(l => l.type === 'RETURN_TO_HQ').reduce((sum, l) => sum + l.quantity, 0);
+
+      // 전체 차량에 적재된 재고 수량
+      const totalVehicleQty = (mechanicConsumableStocks || []).filter(ms => ms.consumableId === c.id).reduce((sum, ms) => sum + ms.stockQty, 0);
+
       return {
         'No': idx + 1,
         '자재 품목명': c.modelName,
-        '구입수량': totalPurchased,
-        '사용수량': totalUsed,
-        '현재 재고수량': c.stockQty,
+        '본사 중앙 재고': c.stockQty,
+        '차량 이동 재고': totalVehicleQty,
+        '전사 총 재고': c.stockQty + totalVehicleQty,
         '단위': c.unit,
-        '최근단가': c.unitPrice,
-        '최근 구입처': c.supplier || '-',
-        '안전재고수준': c.stockQty <= 2 ? '재고 부족 (긴급)' : c.stockQty < 5 ? '보충 필요' : '여유'
+        '단가': `${c.unitPrice.toLocaleString()}원`,
+        '본사 재고평가액': `${(c.stockQty * c.unitPrice).toLocaleString()}원`,
+        '차량 재고평가액': `${(totalVehicleQty * c.unitPrice).toLocaleString()}원`,
+        '총 재고평가액': `${((c.stockQty + totalVehicleQty) * c.unitPrice).toLocaleString()}원`,
+        '최근 구입처': c.supplier || '-'
       };
     });
-    exportToExcel(excelData, `소모품_재고현황_${new Date().toISOString().split('T')[0]}`, '재고현황');
+
+    exportToExcel(excelData, `소모품재고대장_${new Date().toISOString().split('T')[0]}`, '소모품재고');
   };
 
-  const handleExportPurchases = () => {
-    const filteredPurchases = getFilteredPurchases();
-    const excelData = filteredPurchases.map((p, idx) => ({
-      'No': idx + 1,
-      '품명': p.modelName,
-      '신청수량': p.requestedQty,
-      '신청단가': p.unitPrice,
-      '신청작성일': p.requestDate,
-      '판매처': p.sellerName,
-      '상태': p.status === 'REQUESTED' ? '신청' : p.status === 'ACCEPTED' ? '접수' : p.status === 'COMPLETED' ? '구매완료' : '취소',
-      '접수일': p.acceptedDate || '-',
-      '완료일': p.completedDate || '-',
-      '누적입고수량': p.receivedQty,
-      '증빙링크': p.statementFileUrl === 'DELETED_AFTER_BACKUP' ? '백업 후 삭제됨' : (p.statementFileUrl || '-'),
-      '신청자': p.requesterName || '-',
-      '접수자': p.accepterName || '-',
-      '입고처리자': p.inbounderName || '-'
-    }));
-    exportToExcel(excelData, `소모품_구매신청내역_${new Date().toISOString().split('T')[0]}`, '구매신청목록');
+  const handleExportVehicleStock = () => {
+    const excelData = (mechanicConsumableStocks || []).map((ms, idx) => {
+      const item = consumables.find(c => c.id === ms.consumableId);
+      const mechanic = users.find(u => u.id === ms.mechanicId);
+      return {
+        'No': idx + 1,
+        '담당 정비사': mechanic?.name || '정비사',
+        '자재 품목명': item?.modelName || '-',
+        '차량 적재 수량': ms.stockQty,
+        '단위': item?.unit || '개',
+        '단가': `${(item?.unitPrice || 0).toLocaleString()}원`,
+        '평가액': `${(ms.stockQty * (item?.unitPrice || 0)).toLocaleString()}원`,
+        '최종 변경일': ms.updatedAt
+      };
+    });
+
+    exportToExcel(excelData, `차량별소모품이동재고_${new Date().toISOString().split('T')[0]}`, '차량재고');
   };
 
   const handleExportLogs = () => {
-    const excelData = consumableLogs.map((log, idx) => {
-      const item = consumables.find(c => c.id === log.consumableId);
+    const excelData = consumableLogs.map((l, idx) => {
+      const item = consumables.find(c => c.id === l.consumableId);
       return {
         'No': idx + 1,
-        '구분': log.type === 'INBOUND' ? '구입입고' : '자재사용',
-        '변동일자': log.actionDate,
-        '자재 품목명': item?.modelName || '삭제된 소모품',
-        '수량': log.quantity,
-        '단가': log.unitPrice,
-        '소계(원)': log.quantity * log.unitPrice,
-        '대상장비': log.targetAssetId ? getAssetNo(log.targetAssetId) : '-',
-        '처리담당자': getUserName(log.userId),
-        '설명': log.description
+        '구분': l.type === 'INBOUND' ? '구매입고' :
+                l.type === 'OUTBOUND' ? '현장소진(출고)' :
+                l.type === 'TRANSFER_TO_VEHICLE' ? '차량불출' :
+                l.type === 'RETURN_TO_HQ' ? '본사반납' : '재고조정',
+        '품목명': item?.modelName || '삭제된 품목',
+        '수량': l.quantity,
+        '단가': `${l.unitPrice.toLocaleString()}원`,
+        '금액': `${(l.quantity * l.unitPrice).toLocaleString()}원`,
+        '출처': l.fromLocation || (l.type === 'INBOUND' ? (l.supplier || '매입처') : '본사 중앙창고'),
+        '이동처/적용': l.toLocation || (l.targetAssetId ? `자산(${getAssetNo(l.targetAssetId)})` : '-'),
+        '담당자': getUserName(l.userId || l.mechanicId),
+        '일자': l.actionDate,
+        '상세 내용': l.description
       };
     });
-    exportToExcel(excelData, `소모품_입출고이력_${new Date().toISOString().split('T')[0]}`, '입출고로그');
+
+    exportToExcel(excelData, `소모품입출고이력_${new Date().toISOString().split('T')[0]}`, '입출고이력');
   };
 
   // --- 구매신청 필터 연동 ---
@@ -204,14 +178,11 @@ export const Consumables: React.FC = () => {
     return consumablePurchases.filter(p => {
       const matchesSearch = p.modelName.toLowerCase().includes(searchQuery.toLowerCase()) || 
                             p.sellerName.toLowerCase().includes(searchQuery.toLowerCase());
-      
       const matchesStatus = statusQuery === 'ALL' ? true :
                             statusQuery === 'COMPLETED' ? p.status === 'COMPLETED' :
                             p.status !== 'COMPLETED';
-
       const matchesStart = !startDateQuery || p.requestDate >= startDateQuery;
       const matchesEnd = !endDateQuery || p.requestDate <= endDateQuery;
-      
       const matchesUser = userQuery === 'ALL' || p.requesterId === userQuery;
 
       return matchesSearch && matchesStatus && matchesStart && matchesEnd && matchesUser;
@@ -240,8 +211,6 @@ export const Consumables: React.FC = () => {
       });
 
       alert('소모품 구매 신청서가 성공적으로 제출 및 저장되었습니다.');
-      
-      // 초기화 및 탭 전환
       setReqConsumableId('');
       setReqModelName('');
       setReqQty(1);
@@ -253,20 +222,7 @@ export const Consumables: React.FC = () => {
     }
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      const file = e.target.files[0];
-      const ext = file.name.split('.').pop()?.toLowerCase() || '';
-      if (!['pdf', 'jpg', 'jpeg', 'png'].includes(ext)) {
-        alert('허용되는 파일 형식이 아닙니다 (PDF, JPG, JPEG, PNG만 가능).');
-        if (e.target) e.target.value = '';
-        return;
-      }
-      setSelectedFile(file);
-    }
-  };
-
-  // --- 입고 확정 처리 (제출 시 업로드 수행) ---
+  // --- 입고 확정 처리 ---
   const handleInboundConfirmSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!canSave) return;
@@ -274,111 +230,169 @@ export const Consumables: React.FC = () => {
       alert('입고할 신청건을 선택하고 입고 수량을 지정해 주세요.');
       return;
     }
-    if (!selectedFile) {
+    if (!selectedFile && !noInvoice) {
       alert('공급자 거래명세서 증빙 파일을 먼저 지정해 주세요.');
       return;
     }
 
     setIsUploading(true);
-
     const targetReq = consumablePurchases.find(p => p.id === selectedReqId);
     const purchaseNo = targetReq ? targetReq.id.toUpperCase() : `CPR-${new Date().getTime()}`;
-    const rawExt = selectedFile.name.split('.').pop()?.toLowerCase() || (selectedFile.type.includes('pdf') ? 'pdf' : 'jpg');
+    const rawExt = selectedFile ? (selectedFile.name.split('.').pop()?.toLowerCase() || 'jpg') : 'jpg';
     const newFileName = `${purchaseNo}.${rawExt}`;
 
     try {
-      // 1. 이미지 자동 고화질 압축 (PDF는 원본 유지)
-      const compressed = await compressFileIfNeeded(selectedFile);
+      let uploadedUrl = '';
+      if (selectedFile) {
+        const compressed = await compressFileIfNeeded(selectedFile);
+        const base64Response = await fetch(compressed.base64);
+        const uploadBlob = await base64Response.blob();
+        const uploadFile = new File([uploadBlob], newFileName, { type: compressed.mimeType });
 
-      // 2. 압축된 Base64 → File 객체 변환
-      const base64Response = await fetch(compressed.base64);
-      const uploadBlob = await base64Response.blob();
-      const uploadFile = new File([uploadBlob], newFileName, { type: compressed.mimeType });
+        const storageResult = await uploadToSupabaseStorage({
+          file: uploadFile,
+          folder: 'consumables',
+          fileName: newFileName
+        });
 
-      // 3. Supabase Storage 버킷 'evidence/consumables/' 에 업로드 (구글 로그인 없음)
-      const storageResult = await uploadToSupabaseStorage({
-        file: uploadFile,
-        fileName: newFileName,
-        folder: 'consumables'
-      });
+        if (!storageResult.success || !storageResult.fileUrl) {
+          throw new Error(storageResult.message || '스토리지 업로드에 실패했습니다.');
+        }
+        uploadedUrl = storageResult.fileUrl;
+      }
 
-      // 4. DB에는 Supabase Storage 공개 URL 저장
-      await inboundConsumablePurchase(selectedReqId, inboundQty, storageResult.fileUrl);
-
-      setIsUploading(false);
-      const compressInfoStr = compressed.isCompressed
-        ? `\n(자동 고화질 압축: ${(compressed.originalSize / 1024).toFixed(0)}KB ➔ ${(compressed.compressedSize / 1024).toFixed(0)}KB)`
-        : '';
-      const docTypeText = noInvoice ? '실물 납품 증빙 사진이' : '거래명세서가';
-      alert(`✅ 소모품 입고 처리 완료!\n${docTypeText} Supabase Storage에 실물 저장 완료되었습니다.${compressInfoStr}\n\n저장 파일명: ${newFileName}`);
-
-      // 리셋
+      await inboundConsumablePurchase(selectedReqId, inboundQty, uploadedUrl);
+      alert('입고 처리가 완료되었습니다. 본사 중앙 창고 재고에 반영되었습니다.');
       setSelectedReqId('');
       setInboundQty(1);
       setSelectedFile(null);
-      setNoInvoice(false);
       setActiveTab('STOCK');
     } catch (err: any) {
+      showErrorModal(`⚠️ 입고 처리 중 오류가 발생했습니다:\n\n${err?.message || err}`, '입고 처리 오류');
+    } finally {
       setIsUploading(false);
-      showErrorModal(`⚠️ 입고 처리 중 오류가 발생했습니다:\n\n${err?.message || err}`, '소모품 입고 오류');
     }
   };
 
-  const handleUseSubmit = async (e: React.FormEvent) => {
+  // --- 본사 ➔ 차량 불출 제출 ---
+  const handleTransferSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!canSave) return;
-    if (!useConsumableId || useQty <= 0 || !useAssetId) {
-      alert('필수 값을 선택해 주세요.');
-      return;
-    }
-
-    const selectedConsumable = consumables.find(c => c.id === useConsumableId);
-    if (!selectedConsumable || selectedConsumable.stockQty < useQty) {
-      alert('재고가 부족하여 소모품을 사용할 수 없습니다.');
+    if (!transferMechanicId || !transferConsumableId || transferQty <= 0) {
+      alert('정비사와 소모품 품목, 불출 수량을 선택해 주세요.');
       return;
     }
 
     try {
-      // eslint-disable-next-line react-hooks/rules-of-hooks
+      await transferConsumableToMechanic(transferMechanicId, transferConsumableId, transferQty, transferMemo);
+      alert('본사 창고에서 정비사 차량으로 소모품 불출 이동이 완료되었습니다.');
+      setShowTransferModal(false);
+      setTransferQty(1);
+      setTransferMemo('');
+    } catch (err: any) {
+      // showErrorModal handled in context
+    }
+  };
+
+  // --- 차량 ➔ 본사 반납 제출 ---
+  const handleReturnSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!returnMechanicId || !returnConsumableId || returnQty <= 0) {
+      alert('정비사와 반납 소모품 품목, 반납 수량을 선택해 주세요.');
+      return;
+    }
+
+    try {
+      await returnConsumableToHq(returnMechanicId, returnConsumableId, returnQty, returnMemo);
+      alert('정비사 차량에서 본사 창고로 소모품 반납이 완료되었습니다.');
+      setShowReturnModal(false);
+      setReturnQty(1);
+      setReturnMemo('');
+    } catch (err: any) {
+      // showErrorModal handled in context
+    }
+  };
+
+  // --- 소모품 수동 출고 ---
+  const handleUseSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!canSave) return;
+    if (!useConsumableId || useQty <= 0) {
+      alert('사용할 품목과 수량을 확인해 주세요.');
+      return;
+    }
+
+    const item = consumables.find(c => c.id === useConsumableId);
+    if (!item || item.stockQty < useQty) {
+      alert('본사 중앙 재고가 부족합니다.');
+      return;
+    }
+
+    try {
       await useConsumable({
         consumableId: useConsumableId,
         quantity: useQty,
         targetAssetId: useAssetId,
-        description: useDesc || '정비 소모품 출고'
+        description: useDesc || '일반 야적장 정비 사용'
       });
 
-      alert('소모품 출고 및 수리 자재 등록이 완료되었습니다.');
+      alert('소모품 출고 및 자산 정비비용 누적이 완료되었습니다.');
       setUseConsumableId('');
       setUseQty(1);
       setUseAssetId('');
       setUseDesc('');
       setActiveTab('STOCK');
     } catch (err: any) {
-      showErrorModal(`⚠️ 소모품 사용 처리 중 오류가 발생했습니다:\n\n${err?.message || err}`, '소모품 출고 오류');
+      showErrorModal(`⚠️ 소모품 출고 오류:\n${err?.message || err}`);
     }
   };
 
-  // 입고 대상 선택 가능한 구매완료 건 목록
-  const activeCompletedPurchases = consumablePurchases.filter(p => p.status === 'COMPLETED' && p.receivedQty < p.requestedQty);
-
   return (
     <div>
-      <div className="card-header" style={{ marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <h2 style={{ fontWeight: '700' }}>소모품 및 자재 관리</h2>
+      {/* 상단 헤더 */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '10px' }}>
+        <div>
+          <h2 style={{ fontWeight: '800', margin: 0 }}>소모품 및 자재 수불 관리</h2>
+          <div style={{ fontSize: '12.5px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+            본사 중앙 창고 재고와 AS 정비 차량별 이동재고(Van Stock) 2-Tier 통합 관리
+          </div>
+        </div>
+
         <div style={{ display: 'flex', gap: '8px' }}>
           {activeTab === 'STOCK' && (
             <button className="btn-secondary" onClick={handleExportStock} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <Download size={14} /> 재고현황 다운로드
+              <Download size={14} /> 본사재고 엑셀
             </button>
           )}
-          {activeTab === 'REQ_LIST' && (
-            <button className="btn-secondary" onClick={handleExportPurchases} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <Download size={14} /> 신청내역 다운로드
-            </button>
+          {activeTab === 'VEHICLE_STOCK' && (
+            <div style={{ display: 'flex', gap: '6px' }}>
+              <button className="btn-primary" onClick={() => {
+                setTransferMechanicId(mechanics[0]?.id || '');
+                setTransferConsumableId(consumables[0]?.id || '');
+                setShowTransferModal(true);
+              }} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <ArrowUpRight size={14} /> 본사 ➔ 차량 불출
+              </button>
+              <button className="btn-secondary" onClick={() => {
+                const stockWithQty = (mechanicConsumableStocks || []).find(ms => ms.stockQty > 0);
+                if (stockWithQty) {
+                  setReturnMechanicId(stockWithQty.mechanicId);
+                  setReturnConsumableId(stockWithQty.consumableId);
+                } else {
+                  setReturnMechanicId(mechanics[0]?.id || '');
+                  setReturnConsumableId(consumables[0]?.id || '');
+                }
+                setShowReturnModal(true);
+              }} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <ArrowDownLeft size={14} /> 차량 ➔ 본사 반납
+              </button>
+              <button className="btn-secondary" onClick={handleExportVehicleStock} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <Download size={14} /> 차량재고 엑셀
+              </button>
+            </div>
           )}
           {activeTab === 'LOGS' && (
             <button className="btn-secondary" onClick={handleExportLogs} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <Download size={14} /> 이력로그 다운로드
+              <Download size={14} /> 수불이력 엑셀
             </button>
           )}
         </div>
@@ -391,14 +405,21 @@ export const Consumables: React.FC = () => {
           onClick={() => setActiveTab('STOCK')}
           style={{ padding: '8px 14px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '4px' }}
         >
-          <Layers size={14} /> 보유 재고 현황
+          <Layers size={14} /> 본사 중앙 재고
+        </button>
+        <button
+          className={activeTab === 'VEHICLE_STOCK' ? 'btn-primary' : 'btn-secondary'}
+          onClick={() => setActiveTab('VEHICLE_STOCK')}
+          style={{ padding: '8px 14px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '4px', position: 'relative' }}
+        >
+          <Truck size={14} /> AS 차량별 이동재고 (Van Stock)
         </button>
         <button
           className={activeTab === 'REQ_LIST' ? 'btn-primary' : 'btn-secondary'}
           onClick={() => setActiveTab('REQ_LIST')}
           style={{ padding: '8px 14px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '4px' }}
         >
-          <ClipboardList size={14} /> 구매 신청 내역 조회
+          <ClipboardList size={14} /> 구매 신청 내역
         </button>
         {canSave && (
           <>
@@ -407,22 +428,21 @@ export const Consumables: React.FC = () => {
               onClick={() => setActiveTab('REQ_WRITE')}
               style={{ padding: '8px 14px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '4px' }}
             >
-              <Plus size={14} /> 소모품 구매 신청
+              <Plus size={14} /> 구매 신청서 작성
             </button>
             <button
               className={activeTab === 'REQ_INBOUND' ? 'btn-primary' : 'btn-secondary'}
               onClick={() => setActiveTab('REQ_INBOUND')}
               style={{ padding: '8px 14px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '4px' }}
             >
-              <PackagePlus size={14} /> 구매품 입고 처리 (증빙 필수)
+              <PackagePlus size={14} /> 구매물품 입고
             </button>
-
             <button
               className={activeTab === 'USE' ? 'btn-primary' : 'btn-secondary'}
               onClick={() => setActiveTab('USE')}
               style={{ padding: '8px 14px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '4px' }}
             >
-              <Hammer size={14} /> 소모품 사용 (출고)
+              <Hammer size={14} /> 소모품 출고(야적장)
             </button>
           </>
         )}
@@ -431,17 +451,19 @@ export const Consumables: React.FC = () => {
           onClick={() => setActiveTab('LOGS')}
           style={{ padding: '8px 14px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '4px' }}
         >
-          <ListCollapse size={14} /> 입출고 이력 로그
+          <ListCollapse size={14} /> 입출고 수불 이력
         </button>
       </div>
 
-      {/* [TAB 1] 보유 재고 현황 */}
+      {/* ──────────────────────────────────────────────────────────────────────── */}
+      {/* [TAB 1] 본사 중앙 재고 현황 */}
+      {/* ──────────────────────────────────────────────────────────────────────── */}
       {activeTab === 'STOCK' && (
         <div className="card" style={{ margin: 0 }}>
           <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div>
-              <h3 className="card-title">소모품 보유 수량 목록</h3>
-              <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>* 재고 5개 이하 시 보충 경고</span>
+              <h3 className="card-title">본사 중앙 창고 재고 현황</h3>
+              <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>* 재고 5개 이하 시 보충 필요 경고</span>
             </div>
             <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
               <div style={{ position: 'relative' }}>
@@ -457,29 +479,37 @@ export const Consumables: React.FC = () => {
             </div>
           </div>
 
-          {/* 📊 소모품 보유 현황 실시간 요약 바 */}
+          {/* 실시간 요약 바 */}
           {(() => {
-            const totalStockValue = consumables.reduce((sum, c) => sum + (c.stockQty * c.unitPrice), 0);
+            const hqStockValue = consumables.reduce((sum, c) => sum + (c.stockQty * c.unitPrice), 0);
+            const totalVehicleStockValue = (mechanicConsumableStocks || []).reduce((sum, ms) => {
+              const item = consumables.find(c => c.id === ms.consumableId);
+              return sum + (ms.stockQty * (item?.unitPrice || 0));
+            }, 0);
+            const totalAssetValue = hqStockValue + totalVehicleStockValue;
             const lowStockCount = consumables.filter(c => c.stockQty < 5).length;
-            const urgentStockCount = consumables.filter(c => c.stockQty <= 2).length;
 
             return (
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '10px', margin: '14px 0' }}>
-                <div style={{ padding: '10px 14px', backgroundColor: 'var(--bg-app)', borderRadius: '6px', border: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: '11.5px', color: 'var(--text-muted)', fontWeight: 600 }}>총 관리 품목</span>
-                  <strong style={{ fontSize: '15px', color: 'var(--primary)' }}>{consumables.length}종</strong>
+                <div style={{ padding: '10px 14px', backgroundColor: 'var(--bg-app)', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
+                  <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600 }}>총 관리 품목</span>
+                  <div style={{ fontSize: '15px', fontWeight: 800, color: 'var(--primary)' }}>{consumables.length}종</div>
                 </div>
-                <div style={{ padding: '10px 14px', backgroundColor: 'var(--bg-app)', borderRadius: '6px', border: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: '11.5px', color: 'var(--text-muted)', fontWeight: 600 }}>총 재고 평가액</span>
-                  <strong style={{ fontSize: '15px', color: '#0070C0' }}>₩{totalStockValue.toLocaleString()}원</strong>
+                <div style={{ padding: '10px 14px', backgroundColor: 'var(--bg-app)', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
+                  <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600 }}>본사 창고 재고액</span>
+                  <div style={{ fontSize: '15px', fontWeight: 800, color: '#0070C0' }}>₩{hqStockValue.toLocaleString()}원</div>
                 </div>
-                <div style={{ padding: '10px 14px', backgroundColor: 'var(--bg-app)', borderRadius: '6px', border: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: '11.5px', color: 'var(--text-muted)', fontWeight: 600 }}>보충 필요 (5개 미만)</span>
-                  <strong style={{ fontSize: '15px', color: lowStockCount > 0 ? '#d97706' : 'var(--text-muted)' }}>{lowStockCount}종</strong>
+                <div style={{ padding: '10px 14px', backgroundColor: 'var(--bg-app)', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
+                  <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600 }}>차량 이동 재고액</span>
+                  <div style={{ fontSize: '15px', fontWeight: 800, color: '#059669' }}>₩{totalVehicleStockValue.toLocaleString()}원</div>
                 </div>
-                <div style={{ padding: '10px 14px', backgroundColor: 'var(--bg-app)', borderRadius: '6px', border: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: '11.5px', color: 'var(--text-muted)', fontWeight: 600 }}>재고 긴급 (2개 이하)</span>
-                  <strong style={{ fontSize: '15px', color: urgentStockCount > 0 ? 'var(--danger)' : 'var(--text-muted)' }}>{urgentStockCount}종</strong>
+                <div style={{ padding: '10px 14px', backgroundColor: 'var(--bg-app)', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
+                  <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600 }}>전사 총 소모품 자산</span>
+                  <div style={{ fontSize: '15px', fontWeight: 800 }}>₩{totalAssetValue.toLocaleString()}원</div>
+                </div>
+                <div style={{ padding: '10px 14px', backgroundColor: 'var(--bg-app)', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
+                  <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600 }}>본사 보충필요</span>
+                  <div style={{ fontSize: '15px', fontWeight: 800, color: lowStockCount > 0 ? 'var(--danger)' : 'var(--text-muted)' }}>{lowStockCount}종</div>
                 </div>
               </div>
             );
@@ -490,11 +520,12 @@ export const Consumables: React.FC = () => {
               <thead>
                 <tr>
                   <th>자재 품목명</th>
-                  <th style={{ textAlign: 'center' }}>구입수량</th>
-                  <th style={{ textAlign: 'center' }}>사용수량</th>
-                  <th style={{ textAlign: 'center' }}>현재 재고수량</th>
+                  <th style={{ textAlign: 'center' }}>본사 중앙재고</th>
+                  <th style={{ textAlign: 'center' }}>차량 이동재고</th>
+                  <th style={{ textAlign: 'center' }}>전사 총재고</th>
                   <th>단위</th>
                   <th>단가</th>
+                  <th>본사 평가금액</th>
                   <th>최근 구입처</th>
                   <th>상태</th>
                 </tr>
@@ -503,26 +534,26 @@ export const Consumables: React.FC = () => {
                 {consumables
                   .filter(c => !stockSearch || c.modelName.toLowerCase().includes(stockSearch.toLowerCase()))
                   .map(c => {
-                  const logs = consumableLogs.filter(l => l.consumableId === c.id);
-                  const totalUsed = logs.filter(l => l.type === 'OUTBOUND').reduce((sum, l) => sum + l.quantity, 0);
-                  const totalPurchased = c.stockQty + totalUsed;
+                  const vehicleQty = (mechanicConsumableStocks || []).filter(ms => ms.consumableId === c.id).reduce((sum, ms) => sum + ms.stockQty, 0);
+                  const totalQty = c.stockQty + vehicleQty;
 
                   return (
                     <tr key={c.id}>
                       <td><strong style={{ color: 'var(--primary)' }}>{c.modelName}</strong></td>
-                      <td style={{ textAlign: 'center' }}>{totalPurchased}</td>
-                      <td style={{ textAlign: 'center', color: 'var(--danger)', fontWeight: '500' }}>{totalUsed}</td>
-                      <td style={{ textAlign: 'center', fontWeight: '700', fontSize: '15px', color: 'var(--success)' }}>{c.stockQty}</td>
+                      <td style={{ textAlign: 'center', fontWeight: '700', fontSize: '14px', color: c.stockQty <= 2 ? 'var(--danger)' : 'var(--text-main)' }}>{c.stockQty}</td>
+                      <td style={{ textAlign: 'center', fontWeight: '600', color: '#059669' }}>{vehicleQty}</td>
+                      <td style={{ textAlign: 'center', fontWeight: '800', color: 'var(--primary)' }}>{totalQty}</td>
                       <td>{c.unit}</td>
                       <td>{c.unitPrice.toLocaleString()}원</td>
+                      <td style={{ fontWeight: '600' }}>{(c.stockQty * c.unitPrice).toLocaleString()}원</td>
                       <td>{c.supplier || '-'}</td>
                       <td>
                         {c.stockQty <= 2 ? (
-                          <span className="badge badge-danger">재고 부족 (긴급)</span>
+                          <span className="badge badge-danger">재고긴급</span>
                         ) : c.stockQty < 5 ? (
-                          <span className="badge badge-warning">보충 필요</span>
+                          <span className="badge badge-warning">보충필요</span>
                         ) : (
-                          <span className="badge badge-success">여유</span>
+                          <span className="badge badge-success">적정</span>
                         )}
                       </td>
                     </tr>
@@ -534,713 +565,181 @@ export const Consumables: React.FC = () => {
         </div>
       )}
 
-      {/* [TAB 2] 구매 신청 내역 조회 */}
-      {activeTab === 'REQ_LIST' && (
-        <div>
-          {/* 조회 필터 */}
-          <div className="card" style={{ padding: '20px', marginBottom: '20px' }}>
-            <form onSubmit={e => {
-              e.preventDefault();
-              setSearchQuery(reqSearchTerm);
-              setStatusQuery(reqStatusFilter);
-              setUserQuery(reqUserFilter);
-              setStartDateQuery(reqStartDate);
-              setEndDateQuery(reqEndDate);
-            }}>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '16px', alignItems: 'end' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <label style={{ fontSize: '11px', fontWeight: '600', display: 'block', whiteSpace: 'nowrap', flexShrink: 0 }}>검색어</label>
-                  <div style={{ position: 'relative' }}>
-                    <input
-                      type="text"
-                      value={reqSearchTerm}
-                      onChange={e => setReqSearchTerm(e.target.value)}
-                      placeholder="품명, 거래처 등..."
-                      style={{ paddingLeft: '32px' }}
-                    />
-                    <Search size={14} style={{ position: 'absolute', left: '10px', top: '12px', color: 'var(--text-muted)' }} />
+      {/* ──────────────────────────────────────────────────────────────────────── */}
+      {/* [TAB 2] AS 차량별 이동재고 (Van Stock) 뷰 (신설!) */}
+      {/* ──────────────────────────────────────────────────────────────────────── */}
+      {activeTab === 'VEHICLE_STOCK' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          
+          {/* 정비사별 차량 이동재고 카드 요약 */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '14px' }}>
+            {mechanics.map(m => {
+              const myStocks = (mechanicConsumableStocks || []).filter(ms => ms.mechanicId === m.id && ms.stockQty > 0);
+              const totalItems = myStocks.reduce((sum, ms) => sum + ms.stockQty, 0);
+              const totalVal = myStocks.reduce((sum, ms) => {
+                const item = consumables.find(c => c.id === ms.consumableId);
+                return sum + (ms.stockQty * (item?.unitPrice || 0));
+              }, 0);
+
+              return (
+                <div key={m.id} className="card" style={{ padding: '14px', borderTop: '3px solid var(--primary)', margin: 0 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <Truck size={16} className="text-primary" />
+                      <strong style={{ fontSize: '13.5px' }}>{m.name} 정비차량</strong>
+                    </div>
+                    <span className="badge badge-info" style={{ fontSize: '10.5px' }}>
+                      {myStocks.length}종 / {totalItems}개
+                    </span>
+                  </div>
+
+                  <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '8px' }}>
+                    적재 평가액: <strong style={{ color: '#0070C0' }}>₩{totalVal.toLocaleString()}원</strong>
+                  </div>
+
+                  {myStocks.length === 0 ? (
+                    <div style={{ padding: '16px 0', textAlign: 'center', color: 'var(--text-muted)', fontSize: '11.5px', backgroundColor: 'var(--bg-app)', borderRadius: '4px' }}>
+                      차량에 적재된 소모품이 없습니다.
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', maxHeight: '180px', overflowY: 'auto' }}>
+                      {myStocks.map(ms => {
+                        const item = consumables.find(c => c.id === ms.consumableId);
+                        return (
+                          <div key={ms.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '5px 8px', backgroundColor: 'var(--bg-app)', borderRadius: '4px', fontSize: '11.5px' }}>
+                            <span>{item?.modelName || '품목'}</span>
+                            <strong>{ms.stockQty} {item?.unit || '개'}</strong>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  <div style={{ display: 'flex', gap: '6px', marginTop: '10px', paddingTop: '8px', borderTop: '1px dashed var(--border-color)' }}>
+                    <button type="button" className="btn-secondary" onClick={() => {
+                      setTransferMechanicId(m.id);
+                      setTransferConsumableId(consumables[0]?.id || '');
+                      setShowTransferModal(true);
+                    }} style={{ flex: 1, padding: '4px 8px', fontSize: '11.5px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
+                      <ArrowUpRight size={12} /> 불출
+                    </button>
+                    <button type="button" className="btn-secondary" onClick={() => {
+                      setReturnMechanicId(m.id);
+                      const myFirstStock = myStocks[0];
+                      setReturnConsumableId(myFirstStock?.consumableId || consumables[0]?.id || '');
+                      setShowReturnModal(true);
+                    }} style={{ flex: 1, padding: '4px 8px', fontSize: '11.5px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
+                      <ArrowDownLeft size={12} /> 반납
+                    </button>
                   </div>
                 </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <label style={{ fontSize: '11px', fontWeight: '600', display: 'block', whiteSpace: 'nowrap', flexShrink: 0 }}>완료 여부</label>
-                  <select value={reqStatusFilter} onChange={e => setReqStatusFilter(e.target.value as any)}>
-                    <option value="ALL">전체 신청 내역</option>
-                    <option value="INCOMPLETE">미완료 신청 (신청/접수)</option>
-                    <option value="COMPLETED">완료된 신청 (구매완료)</option>
-                  </select>
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <label style={{ fontSize: '11px', fontWeight: '600', display: 'block', whiteSpace: 'nowrap', flexShrink: 0 }}>신청자</label>
-                  <select value={reqUserFilter} onChange={e => setReqUserFilter(e.target.value)}>
-                    <option value="ALL">전체</option>
-                    {Array.from(new Set(consumablePurchases.filter(p => p.requesterId).map(p => p.requesterId))).map(userId => (
-                      <option key={userId} value={userId}>{getUserName(userId)}</option>
-                    ))}
-                  </select>
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <label style={{ fontSize: '11px', fontWeight: '600', display: 'block', whiteSpace: 'nowrap', flexShrink: 0 }}>신청시작일</label>
-                  <input type="date" value={reqStartDate} onChange={e => setReqStartDate(e.target.value)} />
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <label style={{ fontSize: '11px', fontWeight: '600', display: 'block', whiteSpace: 'nowrap', flexShrink: 0 }}>신청종료일</label>
-                  <input type="date" value={reqEndDate} onChange={e => setReqEndDate(e.target.value)} />
-                </div>
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  <button type="submit" className="btn-primary" style={{ flex: 1, height: '38px', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '4px' }}>
-                    <Search size={14} /> 조회
-                  </button>
-                  <button
-                    type="button"
-                    className="btn-secondary"
-                    onClick={() => {
-                      setReqSearchTerm('');
-                      setReqStatusFilter('ALL');
-                      setReqUserFilter('ALL');
-                      setReqStartDate(thisMonthStart);
-                      setReqEndDate(thisMonthEnd);
-                      setSearchQuery('');
-                      setStatusQuery('ALL');
-                      setUserQuery('ALL');
-                      setStartDateQuery(thisMonthStart);
-                      setEndDateQuery(thisMonthEnd);
-                    }}
-                    style={{ height: '38px' }}
-                  >
-                    초기화
-                  </button>
-                </div>
-              </div>
-            </form>
+              );
+            })}
           </div>
 
-          {/* 목록 표시 */}
+          {/* 차량 이동재고 전체 통합 상세 대장 */}
           <div className="card" style={{ margin: 0 }}>
-            <h3 className="card-title" style={{ marginBottom: '16px' }}>소모품 자재 구매 신청 내역</h3>
-            <div className="table-container" style={{ border: 'none', boxShadow: 'none' }}>
-              <table>
-                <thead>
-                  <tr>
-                    <th>품명</th>
-                    <th>신청수량</th>
-                    <th>신청단가</th>
-                    <th>신청일</th>
-                    <th>판매처 / 구매URL</th>
-                    <th>상태</th>
-                    <th>접수일 / 완료일</th>
-                    <th>증빙파일</th>
-                    {canSave && <th style={{ textAlign: 'center' }}>결정/관리</th>}
-                  </tr>
-                </thead>
-                <tbody>
-                  {getFilteredPurchases().length === 0 ? (
-                    <tr>
-                      <td colSpan={canSave ? 9 : 8} style={{ textAlign: 'center', padding: '40px 10px', color: 'var(--text-muted)' }}>
-                        {consumablePurchases.length === 0 ? '📭 등록된 구매신청 데이터가 없습니다.' : '🔍 조회 조건에 맞는 구매신청 데이터가 없습니다. 검색 조건을 변경해 보세요.'}
-                      </td>
-                    </tr>
-                  ) : (
-                    getFilteredPurchases().map(p => {
-                      const isUrl = p.sellerName.toLowerCase().startsWith('http') || p.sellerName.toLowerCase().startsWith('www');
-                      return (
-                        <tr key={p.id}>
-                          <td><strong>{p.modelName}</strong></td>
-                          <td>
-                            {p.requestedQty}개 <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>(입고: {p.receivedQty}개)</span>
-                          </td>
-                          <td>{p.unitPrice.toLocaleString()}원</td>
-                          <td>
-                            <div>{p.requestDate}</div>
-                            <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
-                              신청: {p.requesterName}
-                            </div>
-                          </td>
-                          <td>
-                            {isUrl ? (
-                              <a href={p.sellerName.startsWith('http') ? p.sellerName : `https://${p.sellerName}`} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--primary)', textDecoration: 'underline', wordBreak: 'break-all' }}>
-                                온라인 구매 바로가기
-                              </a>
-                            ) : (
-                              p.sellerName
-                            )}
-                          </td>
-                          <td>
-                            <span className={`badge ${
-                              p.status === 'REQUESTED' ? 'badge-warning' :
-                              p.status === 'ACCEPTED' ? 'badge-info' :
-                              p.status === 'COMPLETED' ? 'badge-success' : 'badge-secondary'
-                            }`}>
-                              {p.status === 'REQUESTED' ? '신청완료' : p.status === 'ACCEPTED' ? '접수완료' : p.status === 'COMPLETED' ? '구매완료' : '신청취소'}
-                            </span>
-                          </td>
-                          <td style={{ fontSize: '12px' }}>
-                            <div>접수: {p.acceptedDate || '-'} {p.accepterName ? `(${p.accepterName})` : ''}</div>
-                            <div>완료: {p.completedDate || '-'} {p.inbounderName ? `(입고: ${p.inbounderName})` : ''}</div>
-                          </td>
-                          <td>
-                            {p.statementFileUrl === 'DELETED_AFTER_BACKUP' ? (
-                              <span style={{ fontSize: '11px', color: '#6B7280', background: 'rgba(107,114,128,0.12)', border: '1px solid rgba(107,114,128,0.3)', borderRadius: '4px', padding: '2px 7px', whiteSpace: 'nowrap' }}>
-                                🗂️ 백업 후 삭제됨
-                              </span>
-                            ) : p.statementFileUrl ? (
-                              <button
-                                type="button"
-                                className="btn-secondary"
-                                onClick={() => setPreviewRequest(p)}
-                                style={{ padding: '2px 6px', fontSize: '11px', display: 'inline-flex', alignItems: 'center', gap: '2px', cursor: 'pointer' }}
-                              >
-                                <FileText size={10} /> 명세서 열기
-                              </button>
-                            ) : (
-                              <span style={{ color: 'var(--text-muted)', fontSize: '12px' }}>미제출</span>
-                            )}
-                          </td>
-                          {canSave && (
-                            <td style={{ textAlign: 'center' }}>
-                              <div style={{ display: 'flex', gap: '4px', justifyContent: 'center' }}>
-                                {p.status === 'REQUESTED' && (
-                                  <button
-                                    className="btn-primary"
-                                    onClick={async () => {
-                                      try {
-                                        await acceptConsumablePurchase(p.id);
-                                      } catch (err: any) {
-                                        showErrorModal(`⚠️ 접수 처리 실패:\n\n${err?.message || err}`, '접수 오류');
-                                      }
-                                    }}
-                                    style={{ padding: '2px 6px', fontSize: '11px', backgroundColor: 'var(--info)' }}
-                                  >
-                                    접수
-                                  </button>
-                                )}
-                                {(p.status === 'REQUESTED' || p.status === 'ACCEPTED') && (
-                                  <button
-                                    className="btn-primary"
-                                    onClick={async () => {
-                                      try {
-                                        await completeConsumablePurchase(p.id);
-                                      } catch (err: any) {
-                                        showErrorModal(`⚠️ 구매완료 처리 실패:\n\n${err?.message || err}`, '구매완료 오류');
-                                      }
-                                    }}
-                                    style={{ padding: '2px 6px', fontSize: '11px' }}
-                                  >
-                                    구매완료
-                                  </button>
-                                )}
-                              </div>
-                            </td>
-                          )}
-                        </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* [TAB 3] 구매 신청서 작성 */}
-      {activeTab === 'REQ_WRITE' && (
-        <div className="card" style={{ maxWidth: '600px', margin: 0 }}>
-          <h3 className="card-title" style={{ marginBottom: '20px' }}>소모품 구매 신청서 작성</h3>
-          <form onSubmit={handleRequestSubmit}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginBottom: '24px' }}>
+            <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
               <div>
-                <label>대상 품목 선택 *</label>
-                <select value={reqConsumableId} onChange={e => {
-                  setReqConsumableId(e.target.value);
-                  if (e.target.value !== 'NEW' && e.target.value !== '') {
-                    const item = consumables.find(c => c.id === e.target.value);
-                    if (item) {
-                      setReqModelName(item.modelName);
-                      setReqUnitPrice(item.unitPrice || 0);
-                    }
-                  } else {
-                    setReqModelName('');
-                    setReqUnitPrice(0);
-                  }
-                }} required>
-                  <option value="">-- 품목 선택 --</option>
-                  <option value="NEW">[NEW] -- 신규 품목명 직접 입력 --</option>
-                  {consumables.map(c => (
-                    <option key={c.id} value={c.id}>{c.modelName} (현재고: {c.stockQty}{c.unit})</option>
+                <h3 className="card-title">AS 차량별 소모품 적재 상세 대장</h3>
+                <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>각 정비사 차량에 보관 중인 실시간 이동 재고</span>
+              </div>
+
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <select value={selectedMechanicFilter} onChange={e => setSelectedMechanicFilter(e.target.value)} style={{ padding: '5px 8px', fontSize: '12px' }}>
+                  <option value="ALL">전체 정비사 차량</option>
+                  {mechanics.map(m => (
+                    <option key={m.id} value={m.id}>{m.name} 차량</option>
                   ))}
                 </select>
-              </div>
 
-              {reqConsumableId === 'NEW' && (
-                <div>
-                  <label>신규 소모품 품명 입력 *</label>
-                  <input
-                    type="text"
-                    value={reqModelName}
-                    onChange={e => setReqModelName(e.target.value)}
-                    placeholder="예: SJ3219 교체용 조이스틱 컨트롤러"
-                    required
-                  />
-                </div>
-              )}
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                <div>
-                  <label>신청 수량 *</label>
-                  <input
-                    type="number"
-                    value={reqQty || ''}
-                    onChange={e => setReqQty(parseInt(e.target.value) || 1)}
-                    min={1}
-                    required
-                  />
-                </div>
-                <div>
-                  <label>신청 단가 (원) *</label>
-                  <input
-                    type="number"
-                    value={reqUnitPrice || ''}
-                    onChange={e => setReqUnitPrice(parseInt(e.target.value) || 0)}
-                    placeholder="예상 매입 단가"
-                    required
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label>신청 작성일자 *</label>
-                <input type="date" value={reqDate} onChange={e => setReqDate(e.target.value)} required />
-              </div>
-
-              <div>
-                <label>판매처 또는 구매 URL *</label>
                 <input
                   type="text"
-                  value={reqSellerName}
-                  onChange={e => setReqSellerName(e.target.value)}
-                  placeholder="예: 세방상사 또는 온라인 구매 링크(https://...)"
-                  required
-                />
-                <span style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px', display: 'block' }}>
-                  * 거래처명을 입력하거나 온라인 판매의 경우 상품 상세 URL을 입력해 주세요.
-                </span>
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
-              <button type="button" className="btn-secondary" onClick={() => setActiveTab('REQ_LIST')}>목록보기</button>
-              <button type="submit" className="btn-primary">구매 신청서 제출</button>
-            </div>
-          </form>
-        </div>
-      )}
-
-      {/* [TAB 4] 구매품 입고 처리 (거래명세서 구글드라이브 저장 의무화) */}
-      {activeTab === 'REQ_INBOUND' && (
-        <div className="card" style={{ maxWidth: '700px', width: '100%', margin: '0 0 40px 0', padding: '20px 18px 24px 18px' }}>
-          <h3 className="card-title" style={{ marginBottom: '16px', fontSize: '18px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            📦 구매 완료된 소모품 자재 입고 처리
-          </h3>
-          <form onSubmit={handleInboundConfirmSubmit}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginBottom: '20px' }}>
-              <div>
-                <label style={{ fontWeight: '700', fontSize: '13.5px', marginBottom: '6px', display: 'block' }}>구매 완료된 신청 건 선택 *</label>
-                <select value={selectedReqId} onChange={e => {
-                  setSelectedReqId(e.target.value);
-                  const p = consumablePurchases.find(req => req.id === e.target.value);
-                  if (p) {
-                    setInboundQty(p.requestedQty - p.receivedQty);
-                  } else {
-                    setInboundQty(1);
-                  }
-                  setSelectedFile(null);
-                  setUploadedFileUrl('');
-                }} required style={{ width: '100%', height: '42px', fontSize: '13.5px' }}>
-                  <option value="">-- 입고할 완료된 구매신청 선택 --</option>
-                  {activeCompletedPurchases.map(p => (
-                    <option key={p.id} value={p.id}>
-                      [{p.requestDate}] {p.modelName} (신청: {p.requestedQty}개 / 기입고: {p.receivedQty}개) - {p.sellerName.substring(0,25)}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {selectedReqId && (
-                <>
-                  <div style={{ backgroundColor: 'var(--bg-app)', padding: '14px', borderRadius: '8px', border: '1px solid var(--border)' }}>
-                    <h4 style={{ fontSize: '13px', fontWeight: '700', marginBottom: '8px', color: 'var(--primary)' }}>선택된 구매 신청 상세</h4>
-                    {(() => {
-                      const p = consumablePurchases.find(req => req.id === selectedReqId);
-                      if (!p) return null;
-                      return (
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '8px', fontSize: '12.5px' }}>
-                          <div><strong>품명:</strong> {p.modelName}</div>
-                          <div><strong>신청 수량:</strong> {p.requestedQty}개</div>
-                          <div><strong>기 입고량:</strong> {p.receivedQty}개</div>
-                          <div><strong>미입고 잔량:</strong> <span style={{ color: 'var(--primary)', fontWeight: 'bold' }}>{p.requestedQty - p.receivedQty}개</span></div>
-                          <div><strong>단가:</strong> {p.unitPrice.toLocaleString()}원</div>
-                          <div><strong>판매처:</strong> {p.sellerName}</div>
-                        </div>
-                      );
-                    })()}
-                  </div>
-
-                  <div>
-                    <label style={{ fontWeight: '700', fontSize: '13.5px', marginBottom: '6px', display: 'block' }}>금회 입고 수량 *</label>
-                    <input
-                      type="number"
-                      value={inboundQty || ''}
-                      onChange={e => setInboundQty(parseInt(e.target.value) || 1)}
-                      min={1}
-                      max={(() => {
-                        const p = consumablePurchases.find(req => req.id === selectedReqId);
-                        return p ? (p.requestedQty - p.receivedQty) : 9999;
-                      })()}
-                      required
-                      style={{ width: '100%', height: '40px', fontSize: '14px' }}
-                    />
-                  </div>
-
-                  {/* 공급자 거래명세서 / 사진 촬영 증빙 지정 영역 */}
-                  <div style={{ border: '1px solid var(--border)', borderRadius: '8px', padding: '16px', backgroundColor: 'var(--bg-card)' }}>
-                    <label style={{ fontWeight: '700', fontSize: '13.5px', marginBottom: '6px', display: 'block', color: 'var(--primary)' }}>
-                      📑 납품 증빙 문서 및 사진 첨부 (필수)
-                    </label>
-                    <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '14px', lineHeight: '1.4' }}>
-                      스캔된 거래명세서 문서는 <strong>[📁 파일지정]</strong>을 이용하시고, 현장 실물 자재나 약식 인수표는 <strong>[📷 사진촬영]</strong>을 클릭하여 스마트폰으로 즉시 촬영하여 첨부하세요.
-                    </p>
-
-                    <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap', marginBottom: '12px' }}>
-                      {/* 1. 파일 지정 버튼 */}
-                      <button
-                        type="button"
-                        className="btn-secondary"
-                        onClick={() => {
-                          setNoInvoice(false);
-                          fileInputRef.current?.click();
-                        }}
-                        style={{ display: 'flex', alignItems: 'center', gap: '6px', height: '42px', padding: '0 16px', fontWeight: '700', flex: '1 1 140px', justifyContent: 'center' }}
-                      >
-                        <Upload size={16} /> 📁 파일지정
-                      </button>
-                      <input
-                        type="file"
-                        ref={fileInputRef}
-                        onChange={(e) => {
-                          setNoInvoice(false);
-                          handleFileChange(e);
-                        }}
-                        style={{ display: 'none' }}
-                        accept="application/pdf,image/*"
-                      />
-
-                      {/* 2. 카메라 직접 촬영 버튼 */}
-                      <button
-                        type="button"
-                        className="btn-primary"
-                        onClick={() => {
-                          setNoInvoice(true);
-                          cameraInputRef.current?.click();
-                        }}
-                        style={{ display: 'flex', alignItems: 'center', gap: '6px', height: '42px', padding: '0 16px', fontWeight: '700', flex: '1 1 100px', justifyContent: 'center', background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)', borderColor: '#059669' }}
-                      >
-                        <Camera size={16} /> 📷 촬영
-                      </button>
-                      {/* capture=environment: 후면 카메라 직접 실행 */}
-                      <input
-                        type="file"
-                        ref={cameraInputRef}
-                        onChange={(e) => {
-                          setNoInvoice(true);
-                          handleFileChange(e);
-                        }}
-                        style={{ display: 'none' }}
-                        accept="image/*"
-                        capture="environment"
-                      />
-
-                      {/* 3. 갤러리 선택 버튼 (OOM 없이 안전) */}
-                      <button
-                        type="button"
-                        className="btn-secondary"
-                        onClick={() => {
-                          setNoInvoice(true);
-                          if (galleryInputRef.current) galleryInputRef.current.click();
-                        }}
-                        style={{ display: 'flex', alignItems: 'center', gap: '6px', height: '42px', padding: '0 16px', fontWeight: '700', flex: '1 1 100px', justifyContent: 'center' }}
-                      >
-                        🖼 갤러리
-                      </button>
-                      {/* capture 없음: 갤러리/파일 선택 */}
-                      <input
-                        type="file"
-                        ref={galleryInputRef}
-                        onChange={(e) => {
-                          setNoInvoice(true);
-                          handleFileChange(e);
-                        }}
-                        style={{ display: 'none' }}
-                        accept="image/*"
-                      />
-                    </div>
-
-                    {/* 선택된 파일 명세 안내 */}
-                    {selectedFile && (
-                      <div style={{ padding: '10px 12px', backgroundColor: 'var(--bg-app)', borderRadius: '6px', border: '1px solid var(--border)', fontSize: '13px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
-                        <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          <span style={{ color: 'var(--text-secondary)', marginRight: '6px' }}>
-                            {noInvoice ? '📸 사진촬영' : '📄 문서지정'}:
-                          </span>
-                          <strong>{selectedFile.name}</strong>
-                          <span style={{ fontSize: '11.5px', color: 'var(--text-secondary)', marginLeft: '6px' }}>
-                            ({((selectedFile.size || 0) / 1024).toFixed(1)} KB)
-                          </span>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => setSelectedFile(null)}
-                          style={{ border: 'none', background: 'none', color: 'var(--danger)', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold', flexShrink: 0 }}
-                        >
-                          취소
-                        </button>
-                      </div>
-                    )}
-
-                    <div style={{ marginTop: '12px', display: 'flex', alignItems: 'center', gap: '6px', color: selectedFile ? 'var(--success)' : 'var(--danger)', fontSize: '12.5px', fontWeight: '600' }}>
-                      {selectedFile ? (
-                        <>
-                          <CheckCircle2 size={16} /> {noInvoice ? '실물 납품 사진이 첨부되었습니다.' : '거래명세서 파일이 첨부되었습니다.'}
-                        </>
-                      ) : (
-                        <>
-                          <XCircle size={14} /> [📁 파일지정] 또는 [📷 사진촬영]으로 증빙을 먼저 선택해 주세요.
-                        </>
-                      )}
-                    </div>
-                  </div>
-                </>
-              )}
-            </div>
-
-            {/* 하단 입고 완료 대형 직관 버튼 (모바일 100% 가시성 보장) */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '24px', marginBottom: '20px' }}>
-              <button
-                type="submit"
-                className="btn-primary"
-                disabled={isUploading || inboundQty <= 0 || !selectedFile}
-                style={{
-                  width: '100%',
-                  height: '52px',
-                  fontSize: '16px',
-                  fontWeight: '800',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '8px',
-                  borderRadius: '8px',
-                  background: (isUploading || inboundQty <= 0 || !selectedFile)
-                    ? '#94a3b8'
-                    : 'linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%)',
-                  boxShadow: (isUploading || inboundQty <= 0 || !selectedFile)
-                    ? 'none'
-                    : '0 4px 14px rgba(37, 99, 235, 0.35)',
-                  cursor: (isUploading || inboundQty <= 0 || !selectedFile) ? 'not-allowed' : 'pointer'
-                }}
-              >
-                {isUploading ? (
-                  <>
-                    <RefreshCw size={18} className="animate-spin" /> 입고 처리 중...
-                  </>
-                ) : (
-                  <>
-                    <CheckCircle2 size={20} /> 입고완료 및 증빙 보전 저장
-                  </>
-                )}
-              </button>
-              <button
-                type="button"
-                className="btn-secondary"
-                onClick={() => setActiveTab('STOCK')}
-                style={{ width: '100%', height: '40px', fontSize: '14px', justifyContent: 'center' }}
-              >
-                취소 후 목록으로 이동
-              </button>
-            </div>
-
-            {/* 스마트폰 하단 툴바 가림 방지 폼 내부 초대형 스페이서 (350px) */}
-            <div style={{ height: '350px', width: '100%', minHeight: '350px', clear: 'both' }} aria-hidden="true" />
-          </form>
-          {/* 스마트폰 하단 툴바 가림 방지 카드 하단 스페이서 (350px) */}
-          <div style={{ height: '350px', width: '100%', minHeight: '350px', clear: 'both' }} aria-hidden="true" />
-        </div>
-      )}
-
-
-
-      {/* [TAB 6] 소모품 사용 (출고) */}
-      {activeTab === 'USE' && (
-        <div className="card" style={{ maxWidth: '600px', margin: 0 }}>
-          <h3 className="card-title" style={{ marginBottom: '20px' }}>소모품 수리 정비 사용 등록</h3>
-          <form onSubmit={handleUseSubmit}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '20px' }}>
-              <div>
-                <label>자재 품목 선택 *</label>
-                <select value={useConsumableId} onChange={e => setUseConsumableId(e.target.value)} required>
-                  <option value="">-- 소모품 품목 선택 --</option>
-                  {consumables.map(c => (
-                    <option key={c.id} value={c.id}>{c.modelName} (현재고: {c.stockQty}{c.unit})</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label>사용 수량 *</label>
-                <input
-                  type="number"
-                  value={useQty || ''}
-                  onChange={e => setUseQty(parseInt(e.target.value) || 1)}
-                  min={1}
-                  required
-                />
-              </div>
-
-              <div>
-                <label>장착 자산 (관리번호) *</label>
-                <select value={useAssetId} onChange={e => setUseAssetId(e.target.value)} required>
-                  <option value="">-- 대상 장비 자산 선택 --</option>
-                  {assets.map(a => (
-                    <option key={a.id} value={a.id}>{a.assetNo} ({a.modelName}) - {a.status}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label>사용 내역 설명</label>
-                <textarea
-                  value={useDesc}
-                  onChange={e => setUseDesc(e.target.value)}
-                  placeholder="사용 목적 및 교체 사유 기술..."
-                  rows={2}
+                  value={vehicleStockSearch}
+                  onChange={e => setVehicleStockSearch(e.target.value)}
+                  placeholder="품목명 검색..."
+                  style={{ padding: '5px 8px', fontSize: '12px', width: '160px' }}
                 />
               </div>
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-              <button type="submit" className="btn-primary">사용 확정</button>
-            </div>
-          </form>
-        </div>
-      )}
-
-      {/* [TAB 7] 입출고 이력 로그 */}
-      {activeTab === 'LOGS' && (
-        <div>
-          <div className="card" style={{ padding: '20px', marginBottom: '20px' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '16px', alignItems: 'end' }}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <label style={{ fontSize: '11px', fontWeight: '600', display: 'block', whiteSpace: 'nowrap', flexShrink: 0 }}>입출고구분</label>
-                <select value={logTypeFilter} onChange={e => setLogTypeFilter(e.target.value)}>
-                  <option value="ALL">전체</option>
-                  <option value="INBOUND">구입입고</option>
-                  <option value="OUTBOUND">자재사용(출고)</option>
-                </select>
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <label style={{ fontSize: '11px', fontWeight: '600', display: 'block', whiteSpace: 'nowrap', flexShrink: 0 }}>시작일</label>
-                <input type="date" value={logStartDate} onChange={e => setLogStartDate(e.target.value)} />
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <label style={{ fontSize: '11px', fontWeight: '600', display: 'block', whiteSpace: 'nowrap', flexShrink: 0 }}>종료일</label>
-                <input type="date" value={logEndDate} onChange={e => setLogEndDate(e.target.value)} />
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <label style={{ fontSize: '11px', fontWeight: '600', display: 'block', whiteSpace: 'nowrap', flexShrink: 0 }}>검색어</label>
-                <div style={{ position: 'relative' }}>
-                  <input type="text" value={logSearch} onChange={e => setLogSearch(e.target.value)} placeholder="품목명, 담당자..." style={{ paddingLeft: '32px' }} />
-                  <Search size={14} style={{ position: 'absolute', left: '10px', top: '12px', color: 'var(--text-muted)' }} />
-                </div>
-              </div>
-            </div>
-            <div style={{ display: 'flex', gap: '8px', marginTop: '12px' }}>
-              <button type="button" className="btn-secondary" onClick={() => {
-                const today = new Date().toISOString().split('T')[0];
-                setLogStartDate(today); setLogEndDate(today);
-              }} style={{ fontSize: '12px', padding: '4px 10px' }}>오늘</button>
-              <button type="button" className="btn-secondary" onClick={() => {
-                const d = new Date(); d.setDate(d.getDate() - 7);
-                setLogStartDate(d.toISOString().split('T')[0]);
-                setLogEndDate(new Date().toISOString().split('T')[0]);
-              }} style={{ fontSize: '12px', padding: '4px 10px' }}>1주</button>
-              <button type="button" className="btn-secondary" onClick={() => {
-                const d = new Date(); d.setMonth(d.getMonth() - 1);
-                setLogStartDate(d.toISOString().split('T')[0]);
-                setLogEndDate(new Date().toISOString().split('T')[0]);
-              }} style={{ fontSize: '12px', padding: '4px 10px' }}>1개월</button>
-              <button type="button" className="btn-secondary" onClick={() => {
-                setLogStartDate(''); setLogEndDate('');
-              }} style={{ fontSize: '12px', padding: '4px 10px' }}>전체기간</button>
-              <button type="button" className="btn-secondary" onClick={() => {
-                setLogTypeFilter('ALL'); setLogStartDate(''); setLogEndDate(''); setLogSearch('');
-              }} style={{ fontSize: '12px', padding: '4px 10px', marginLeft: 'auto' }}>초기화</button>
-            </div>
-          </div>
-
-          <div className="card" style={{ margin: 0 }}>
-            <h3 className="card-title" style={{ marginBottom: '20px' }}>입출고 변동 상세 이력</h3>
-            
             <div className="table-container" style={{ border: 'none', boxShadow: 'none' }}>
               <table>
                 <thead>
                   <tr>
-                    <th>구분</th>
-                    <th>변동일자</th>
+                    <th>담당 정비사</th>
                     <th>자재 품목명</th>
-                    <th>수량</th>
+                    <th style={{ textAlign: 'center' }}>차량 적재수량</th>
+                    <th>단위</th>
                     <th>단가</th>
-                    <th>소계</th>
-                    <th>대상장비</th>
-                    <th>처리담당자</th>
-                    <th>설명</th>
+                    <th>평가 금액</th>
+                    <th>최종 갱신일</th>
+                    <th style={{ textAlign: 'center' }}>관리 액션</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {consumableLogs.filter(log => {
-                    const logDate = (log.actionDate || log.createdAt || '').split('T')[0];
-                    const item = consumables.find(c => c.id === log.consumableId);
-                    const userName = getUserName(log.userId);
-                    
-                    const matchType = logTypeFilter === 'ALL' || log.type === logTypeFilter;
-                    const matchStart = !logStartDate || logDate >= logStartDate;
-                    const matchEnd = !logEndDate || logDate <= logEndDate;
-                    const matchSearch = !logSearch || 
-                                        (item?.modelName || '').toLowerCase().includes(logSearch.toLowerCase()) || 
-                                        (userName || '').toLowerCase().includes(logSearch.toLowerCase());
-                                        
-                    return matchType && matchStart && matchEnd && matchSearch;
-                  }).map(log => {
-                    const item = consumables.find(c => c.id === log.consumableId);
-                    return (
-                      <tr key={log.id}>
-                        <td>
-                          <span className={`badge ${log.type === 'INBOUND' ? 'badge-success' : 'badge-danger'}`}>
-                            {log.type === 'INBOUND' ? '구입입고' : '자재사용'}
-                          </span>
-                        </td>
-                        <td>{log.actionDate}</td>
-                        <td>{item?.modelName || '삭제된 소모품'}</td>
-                        <td>
-                          {log.type === 'INBOUND' ? '+' : '-'}{log.quantity}
-                        </td>
-                        <td>{log.unitPrice.toLocaleString()}원</td>
-                        <td style={{ fontWeight: '600' }}>
-                          {(log.quantity * log.unitPrice).toLocaleString()}원
-                        </td>
-                        <td>{log.targetAssetId ? getAssetNo(log.targetAssetId) : '-'}</td>
-                        <td>{getUserName(log.userId)}</td>
-                        <td style={{ fontSize: '13px' }}>{log.description}</td>
-                      </tr>
-                    );
-                  })}
+                  {(() => {
+                    const filteredList = (mechanicConsumableStocks || []).filter(ms => {
+                      if (ms.stockQty <= 0) return false;
+                      const matchMech = selectedMechanicFilter === 'ALL' || ms.mechanicId === selectedMechanicFilter;
+                      const item = consumables.find(c => c.id === ms.consumableId);
+                      const matchSearch = !vehicleStockSearch || (item?.modelName || '').toLowerCase().includes(vehicleStockSearch.toLowerCase());
+                      return matchMech && matchSearch;
+                    });
+
+                    if (filteredList.length === 0) {
+                      return (
+                        <tr>
+                          <td colSpan={8} style={{ textAlign: 'center', padding: '30px 0', color: 'var(--text-muted)' }}>
+                            차량에 적재된 이동 재고 내역이 없습니다.
+                          </td>
+                        </tr>
+                      );
+                    }
+
+                    return filteredList.map(ms => {
+                      const item = consumables.find(c => c.id === ms.consumableId);
+                      const mech = users.find(u => u.id === ms.mechanicId);
+                      const unitPrice = item?.unitPrice || 0;
+
+                      return (
+                        <tr key={ms.id}>
+                          <td>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontWeight: '700' }}>
+                              <Truck size={13} className="text-primary" /> {mech?.name || '정비사'}
+                            </div>
+                          </td>
+                          <td><strong style={{ color: 'var(--primary)' }}>{item?.modelName || '-'}</strong></td>
+                          <td style={{ textAlign: 'center', fontWeight: '800', fontSize: '14px', color: '#059669' }}>
+                            {ms.stockQty}
+                          </td>
+                          <td>{item?.unit || '개'}</td>
+                          <td>{unitPrice.toLocaleString()}원</td>
+                          <td style={{ fontWeight: '600' }}>{(ms.stockQty * unitPrice).toLocaleString()}원</td>
+                          <td style={{ fontSize: '11.5px', color: 'var(--text-muted)' }}>{ms.updatedAt}</td>
+                          <td style={{ textAlign: 'center' }}>
+                            <div style={{ display: 'inline-flex', gap: '4px' }}>
+                              <button type="button" className="btn-secondary" onClick={() => {
+                                setTransferMechanicId(ms.mechanicId);
+                                setTransferConsumableId(ms.consumableId);
+                                setShowTransferModal(true);
+                              }} style={{ padding: '2px 6px', fontSize: '11px' }}>
+                                추가불출
+                              </button>
+                              <button type="button" className="btn-secondary" onClick={() => {
+                                setReturnMechanicId(ms.mechanicId);
+                                setReturnConsumableId(ms.consumableId);
+                                setReturnQty(Math.min(ms.stockQty, 1));
+                                setShowReturnModal(true);
+                              }} style={{ padding: '2px 6px', fontSize: '11px' }}>
+                                본사반납
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    });
+                  })()}
                 </tbody>
               </table>
             </div>
@@ -1248,209 +747,457 @@ export const Consumables: React.FC = () => {
         </div>
       )}
 
-      {/* [MODAL] 증빙 거래명세서 미리보기 모달 */}
-      {previewRequest && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
-          <div style={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '12px', width: '100%', maxWidth: '900px', display: 'flex', flexDirection: 'column', maxHeight: '92vh', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.15)' }}>
-            
-            {/* 모달 헤더 */}
-            <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h3 style={{ margin: 0, fontSize: '15px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <FileText size={16} style={{ color: 'var(--primary)' }} /> 거래명세서 증빙 미리보기
-              </h3>
-              <button 
-                type="button" 
-                onClick={() => setPreviewRequest(null)}
-                style={{ background: 'none', border: 'none', fontSize: '18px', color: 'var(--text-secondary)', cursor: 'pointer', fontWeight: '700' }}
-              >
-                &times;
-              </button>
-            </div>
+      {/* ──────────────────────────────────────────────────────────────────────── */}
+      {/* [TAB 3] 구매 신청 내역 조회 */}
+      {/* ──────────────────────────────────────────────────────────────────────── */}
+      {activeTab === 'REQ_LIST' && (
+        <div className="card" style={{ margin: 0 }}>
+          <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <h3 className="card-title">소모품 구매 신청 대장</h3>
+          </div>
 
-            {/* 모달 바디 */}
-            <div style={{ padding: '20px', overflowY: 'auto', flex: 1 }}>
-              {previewRequest.statementFileUrl.startsWith('data:image/') ? (
-                // 실제 업로드된 이미지 파일 (Data URL)
-                <div style={{ textAlign: 'center' }}>
-                  <img 
-                    src={previewRequest.statementFileUrl} 
-                    alt="거래명세서 증빙 이미지" 
-                    style={{ maxWidth: '100%', maxHeight: '580px', borderRadius: '6px', border: '1px solid var(--border)', boxShadow: 'var(--shadow-sm)', marginBottom: '16px' }} 
-                  />
-                  <div>
-                    <a 
-                      href={previewRequest.statementFileUrl} 
-                      download={`${previewRequest.id.toUpperCase()}_증빙.jpg`}
-                      className="btn-primary" 
-                      style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '9px 18px', borderRadius: '6px', textDecoration: 'none', fontSize: '13.5px', fontWeight: '700' }}
-                    >
-                      <Download size={15} /> 원본 사진 파일 저장 ({previewRequest.id.toUpperCase()}.jpg)
-                    </a>
-                  </div>
-                </div>
-              ) : previewRequest.statementFileUrl.startsWith('data:') ? (
-                // PDF Data URL
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', background: 'var(--bg-app)', borderRadius: '6px', border: '1px solid var(--border)' }}>
-                    <span style={{ fontSize: '13px', fontWeight: '700', color: 'var(--text-primary)', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-                      <FileText size={16} color="var(--primary)" />
-                      PDF 증빙 문서 실물 미리보기
-                    </span>
-                    <a 
-                      href={previewRequest.statementFileUrl} 
-                      download={`${previewRequest.id.toUpperCase()}_증빙.pdf`}
-                      className="btn-primary" 
-                      style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '6px 14px', borderRadius: '6px', textDecoration: 'none', fontWeight: '700', fontSize: '12.5px' }}
-                    >
-                      <Download size={14} /> PDF 파일 저장 ({previewRequest.id.toUpperCase()}.pdf)
-                    </a>
-                  </div>
-                  <div style={{ height: '600px', borderRadius: '8px', overflow: 'hidden', border: '1px solid var(--border)', background: '#525659' }}>
-                    <object
-                      data={previewRequest.statementFileUrl}
-                      type="application/pdf"
-                      width="100%"
-                      height="100%"
-                    >
-                      <iframe 
-                        src={previewRequest.statementFileUrl} 
-                        title="PDF 증빙 문서 미리보기" 
-                        style={{ width: '100%', height: '100%', border: 'none' }} 
-                      />
-                    </object>
-                  </div>
-                </div>
+          <div style={{ display: 'flex', gap: '10px', alignItems: 'center', backgroundColor: 'var(--bg-app)', padding: '12px', borderRadius: '8px', marginBottom: '14px', flexWrap: 'wrap' }}>
+            <input
+              type="text"
+              value={reqSearchTerm}
+              onChange={e => setReqSearchTerm(e.target.value)}
+              placeholder="품목명, 공급사 검색"
+              style={{ padding: '6px', fontSize: '12.5px', width: '180px' }}
+            />
+            <select value={reqStatusFilter} onChange={e => setReqStatusFilter(e.target.value as any)} style={{ padding: '6px', fontSize: '12.5px' }}>
+              <option value="ALL">전체 상태</option>
+              <option value="INCOMPLETE">미완료</option>
+              <option value="COMPLETED">입고완료</option>
+            </select>
+            <input type="date" value={reqStartDate} onChange={e => setReqStartDate(e.target.value)} style={{ padding: '6px', fontSize: '12.5px' }} />
+            <span>~</span>
+            <input type="date" value={reqEndDate} onChange={e => setReqEndDate(e.target.value)} style={{ padding: '6px', fontSize: '12.5px' }} />
+            <button className="btn-primary" onClick={() => {
+              setSearchQuery(reqSearchTerm);
+              setStatusQuery(reqStatusFilter);
+              setStartDateQuery(reqStartDate);
+              setEndDateQuery(reqEndDate);
+              setUserQuery(reqUserFilter);
+            }} style={{ padding: '6px 14px', fontSize: '12.5px' }}>조회</button>
+          </div>
 
-              ) : previewRequest.statementFileUrl.startsWith('https://') ? (
-                // ☁️ 구글 드라이브 실물 파일 URL
-                (() => {
-                  // webViewLink → previewLink 변환
-                  // https://drive.google.com/file/d/FILE_ID/view?... → https://drive.google.com/file/d/FILE_ID/preview
-                  const driveUrl = previewRequest.statementFileUrl;
-                  const fileIdMatch = driveUrl.match(/\/file\/d\/([^/]+)/);
-                  const previewUrl = fileIdMatch
-                    ? `https://drive.google.com/file/d/${fileIdMatch[1]}/preview`
-                    : driveUrl;
-                  const openUrl = fileIdMatch
-                    ? `https://drive.google.com/file/d/${fileIdMatch[1]}/view`
-                    : driveUrl;
-                  return (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: 'rgba(16,185,129,0.08)', borderRadius: '8px', border: '1px solid rgba(16,185,129,0.3)' }}>
-                        <span style={{ fontSize: '13px', fontWeight: '700', color: '#10B981', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-                          <Upload size={15} /> 구글 드라이브 실물 저장 파일
+          <div className="table-container" style={{ border: 'none', boxShadow: 'none' }}>
+            <table>
+              <thead>
+                <tr>
+                  <th>신청번호</th>
+                  <th>품명</th>
+                  <th style={{ textAlign: 'center' }}>수량</th>
+                  <th>예상단가</th>
+                  <th>합계금액</th>
+                  <th>공급처</th>
+                  <th>신청자</th>
+                  <th>신청일</th>
+                  <th>진행상태</th>
+                </tr>
+              </thead>
+              <tbody>
+                {getFilteredPurchases().length === 0 ? (
+                  <tr>
+                    <td colSpan={9} style={{ textAlign: 'center', padding: '30px 0', color: 'var(--text-muted)' }}>
+                      조회 조건에 맞는 구매 신청 내역이 없습니다.
+                    </td>
+                  </tr>
+                ) : (
+                  getFilteredPurchases().map(p => (
+                    <tr key={p.id}>
+                      <td><span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{p.id}</span></td>
+                      <td><strong>{p.modelName}</strong></td>
+                      <td style={{ textAlign: 'center' }}>{p.requestedQty}</td>
+                      <td>{p.unitPrice.toLocaleString()}원</td>
+                      <td style={{ fontWeight: '600' }}>{(p.requestedQty * p.unitPrice).toLocaleString()}원</td>
+                      <td>{p.sellerName}</td>
+                      <td>{p.requesterName}</td>
+                      <td>{p.requestDate}</td>
+                      <td>
+                        <span className={`badge ${
+                          p.status === 'COMPLETED' ? 'badge-success' :
+                          p.status === 'ACCEPTED' ? 'badge-primary' : 'badge-warning'
+                        }`}>
+                          {p.status === 'COMPLETED' ? '입고완료' :
+                           p.status === 'ACCEPTED' ? '접수완료' : '신청접수'}
                         </span>
-                        <a
-                          href={openUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="btn-primary"
-                          style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '6px 14px', borderRadius: '6px', textDecoration: 'none', fontWeight: '700', fontSize: '12.5px' }}
-                        >
-                          <FileText size={14} /> 구글 드라이브에서 열기
-                        </a>
-                      </div>
-                      <div style={{ height: '600px', borderRadius: '8px', overflow: 'hidden', border: '1px solid var(--border)', background: '#525659' }}>
-                        <iframe
-                          src={previewUrl}
-                          title="구글 드라이브 증빙 파일"
-                          style={{ width: '100%', height: '100%', border: 'none' }}
-                          allow="autoplay"
-                        />
-                      </div>
-                    </div>
-                  );
-                })()
-              ) : (
-                // 모의(Seed) 데이터용 거래명세서 템플릿
-                <div style={{ border: '2px solid #333', padding: '24px', fontFamily: 'monospace', color: '#000', backgroundColor: '#fff', borderRadius: '4px', lineHeight: '1.5', boxShadow: 'inset 0 0 10px rgba(0,0,0,0.05)' }}>
-                  <h2 style={{ textAlign: 'center', letterSpacing: '8px', textDecoration: 'underline', marginBottom: '24px', fontWeight: 'bold', fontSize: '20px', color: '#000' }}>거 래 명 세 서</h2>
-                  
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', border: '1px solid #333', marginBottom: '16px', color: '#000' }}>
-                    <tbody>
-                      <tr>
-                        <td style={{ border: '1px solid #333', padding: '6px', fontWeight: 'bold', width: '15%', backgroundColor: '#f2f2f2' }}>거래일자</td>
-                        <td style={{ border: '1px solid #333', padding: '6px' }}>{previewRequest.completedDate || previewRequest.requestDate}</td>
-                        <td style={{ border: '1px solid #333', padding: '6px', fontWeight: 'bold', width: '15%', backgroundColor: '#f2f2f2' }}>증빙코드</td>
-                        <td style={{ border: '1px solid #333', padding: '6px' }}>{previewRequest.statementFileUrl.split('/').pop()}</td>
-                      </tr>
-                    </tbody>
-                  </table>
-
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '16px' }}>
-                    <div style={{ border: '1px solid #333', padding: '10px', fontSize: '12px', color: '#000' }}>
-                      <div style={{ fontWeight: 'bold', borderBottom: '1px solid #333', paddingBottom: '4px', marginBottom: '6px' }}>■ 공급자 (Supplier)</div>
-                      <div><strong>상호:</strong> {previewRequest.sellerName}</div>
-                      <div><strong>대표자:</strong> 김협력 (인)</div>
-                      <div><strong>소재지:</strong> 서울시 영등포구 경인로 12</div>
-                    </div>
-                    <div style={{ border: '1px solid #333', padding: '10px', fontSize: '12px', color: '#000' }}>
-                      <div style={{ fontWeight: 'bold', borderBottom: '1px solid #333', paddingBottom: '4px', marginBottom: '6px' }}>■ 공급받는자 (Receiver)</div>
-                      <div><strong>상호:</strong> (주)기윤리프트</div>
-                      <div><strong>대표자:</strong> 이정용 (인)</div>
-                      <div><strong>소재지:</strong> 경기도 시흥시 번영로 123</div>
-                    </div>
-                  </div>
-
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', border: '1px solid #333', marginBottom: '16px', color: '#000' }}>
-                    <thead>
-                      <tr style={{ backgroundColor: '#f2f2f2' }}>
-                        <th style={{ border: '1px solid #333', padding: '6px' }}>품목명 / 규격</th>
-                        <th style={{ border: '1px solid #333', padding: '6px', width: '12%', textAlign: 'center' }}>수량</th>
-                        <th style={{ border: '1px solid #333', padding: '6px', width: '22%', textAlign: 'right' }}>단가</th>
-                        <th style={{ border: '1px solid #333', padding: '6px', width: '25%', textAlign: 'right' }}>공급가액</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr>
-                        <td style={{ border: '1px solid #333', padding: '6px' }}>{previewRequest.modelName}</td>
-                        <td style={{ border: '1px solid #333', padding: '6px', textAlign: 'center' }}>{previewRequest.requestedQty}개</td>
-                        <td style={{ border: '1px solid #333', padding: '6px', textAlign: 'right' }}>{previewRequest.unitPrice.toLocaleString()}원</td>
-                        <td style={{ border: '1px solid #333', padding: '6px', textAlign: 'right', fontWeight: 'bold' }}>{(previewRequest.requestedQty * previewRequest.unitPrice).toLocaleString()}원</td>
-                      </tr>
-                      <tr>
-                        <td colSpan={3} style={{ border: '1px solid #333', padding: '6px', fontWeight: 'bold', backgroundColor: '#f2f2f2', textAlign: 'right' }}>공급가액 소계</td>
-                        <td style={{ border: '1px solid #333', padding: '6px', textAlign: 'right', fontWeight: 'bold' }}>{(previewRequest.requestedQty * previewRequest.unitPrice).toLocaleString()}원</td>
-                      </tr>
-                      <tr>
-                        <td colSpan={3} style={{ border: '1px solid #333', padding: '6px', fontWeight: 'bold', backgroundColor: '#f2f2f2', textAlign: 'right' }}>부가가치세 (10%)</td>
-                        <td style={{ border: '1px solid #333', padding: '6px', textAlign: 'right' }}>{(previewRequest.requestedQty * previewRequest.unitPrice * 0.1).toLocaleString()}원</td>
-                      </tr>
-                      <tr style={{ backgroundColor: '#f9f9f9' }}>
-                        <td colSpan={3} style={{ border: '1px solid #333', padding: '6px', fontWeight: 'bold', textAlign: 'right' }}>총 합계금액 (V.A.T 포함)</td>
-                        <td style={{ border: '1px solid #333', padding: '6px', textAlign: 'right', fontWeight: 'bold', fontSize: '13px' }}>{(previewRequest.requestedQty * previewRequest.unitPrice * 1.1).toLocaleString()}원</td>
-                      </tr>
-                    </tbody>
-                  </table>
-                  
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '24px' }}>
-                    <div style={{ fontSize: '10px', color: '#666' }}>
-                      ※ 본 명세서는 시스템 내부 모의 증빙 데이터이며, 실제 세무 용도로는 세금계산서를 참조해 주십시오.
-                    </div>
-                    <div style={{ border: '2px solid red', padding: '4px 8px', color: 'red', borderRadius: '4px', transform: 'rotate(-5deg)', fontWeight: 'bold', fontSize: '11px', display: 'inline-block' }}>
-                      (주)기윤리프트 영수/인
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* 모달 푸터 */}
-            <div style={{ padding: '12px 20px', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'flex-end', backgroundColor: 'var(--bg-app)' }}>
-              <button 
-                type="button" 
-                className="btn-secondary" 
-                onClick={() => setPreviewRequest(null)}
-                style={{ padding: '6px 14px', fontSize: '13px' }}
-              >
-                닫기
-              </button>
-            </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
           </div>
         </div>
       )}
-      {/* 모바일 화면 하단 스크롤 여유 350px 스페이서 */}
-      <div style={{ height: '350px', width: '100%', minHeight: '350px', clear: 'both' }} aria-hidden="true" />
+
+      {/* ──────────────────────────────────────────────────────────────────────── */}
+      {/* [TAB 4] 소모품 구매 신청서 작성 */}
+      {/* ──────────────────────────────────────────────────────────────────────── */}
+      {activeTab === 'REQ_WRITE' && (
+        <div className="card" style={{ maxWidth: '600px', margin: '0 auto' }}>
+          <h3 className="card-title" style={{ marginBottom: '16px' }}>소모품 구매 신청서 작성</h3>
+          <form onSubmit={handleRequestSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <div>
+              <label style={{ fontSize: '11.5px', fontWeight: '600', display: 'block', marginBottom: '4px' }}>기존 품목 선택 또는 신규</label>
+              <select value={reqConsumableId} onChange={e => {
+                setReqConsumableId(e.target.value);
+                const item = consumables.find(c => c.id === e.target.value);
+                if (item) {
+                  setReqModelName(item.modelName);
+                  setReqUnitPrice(item.unitPrice);
+                  setReqSellerName(item.supplier || '');
+                }
+              }} style={{ width: '100%', padding: '7px' }}>
+                <option value="NEW">-- 신규 품목 직접 입력 --</option>
+                {consumables.map(c => (
+                  <option key={c.id} value={c.id}>{c.modelName} (현재고: {c.stockQty}개, 단가: ₩{c.unitPrice.toLocaleString()})</option>
+                ))}
+              </select>
+            </div>
+
+            {reqConsumableId === 'NEW' && (
+              <div>
+                <label style={{ fontSize: '11.5px', fontWeight: '600', display: 'block', marginBottom: '4px' }}>신규 품목명 *</label>
+                <input type="text" value={reqModelName} onChange={e => setReqModelName(e.target.value)} placeholder="예: 유압호스 1/4 2W" required style={{ width: '100%', padding: '7px' }} />
+              </div>
+            )}
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+              <div>
+                <label style={{ fontSize: '11.5px', fontWeight: '600', display: 'block', marginBottom: '4px' }}>신청 수량 *</label>
+                <input type="number" value={reqQty} onChange={e => setReqQty(parseInt(e.target.value) || 1)} min={1} required style={{ width: '100%', padding: '7px' }} />
+              </div>
+              <div>
+                <label style={{ fontSize: '11.5px', fontWeight: '600', display: 'block', marginBottom: '4px' }}>예상 단가 (원) *</label>
+                <input type="number" value={reqUnitPrice} onChange={e => setReqUnitPrice(parseInt(e.target.value) || 0)} min={0} required style={{ width: '100%', padding: '7px' }} />
+              </div>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+              <div>
+                <label style={{ fontSize: '11.5px', fontWeight: '600', display: 'block', marginBottom: '4px' }}>신청 일자 *</label>
+                <input type="date" value={reqDate} onChange={e => setReqDate(e.target.value)} required style={{ width: '100%', padding: '7px' }} />
+              </div>
+              <div>
+                <label style={{ fontSize: '11.5px', fontWeight: '600', display: 'block', marginBottom: '4px' }}>구매처/공급사 *</label>
+                <input type="text" value={reqSellerName} onChange={e => setReqSellerName(e.target.value)} placeholder="예: (주)한국유압상사" required style={{ width: '100%', padding: '7px' }} />
+              </div>
+            </div>
+
+            <div style={{ padding: '12px', backgroundColor: 'var(--bg-app)', borderRadius: '6px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>예상 총 구매비용:</span>
+              <strong style={{ fontSize: '15px', color: 'var(--primary)' }}>₩{(reqQty * reqUnitPrice).toLocaleString()}원</strong>
+            </div>
+
+            <button type="submit" className="btn-primary" style={{ padding: '10px', marginTop: '6px' }}>구매 신청서 제출</button>
+          </form>
+        </div>
+      )}
+
+      {/* ──────────────────────────────────────────────────────────────────────── */}
+      {/* [TAB 5] 구매물품 입고 처리 */}
+      {/* ──────────────────────────────────────────────────────────────────────── */}
+      {activeTab === 'REQ_INBOUND' && (
+        <div className="card" style={{ maxWidth: '600px', margin: '0 auto' }}>
+          <h3 className="card-title" style={{ marginBottom: '16px' }}>구매 소모품 본사 창고 입고 처리</h3>
+          <form onSubmit={handleInboundConfirmSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            <div>
+              <label style={{ fontSize: '11.5px', fontWeight: '600', display: 'block', marginBottom: '4px' }}>입고 대상 구매 신청건 *</label>
+              <select value={selectedReqId} onChange={e => {
+                setSelectedReqId(e.target.value);
+                const req = consumablePurchases.find(p => p.id === e.target.value);
+                if (req) setInboundQty(req.requestedQty);
+              }} required style={{ width: '100%', padding: '7px' }}>
+                <option value="">-- 입고 대기 신청건 선택 --</option>
+                {consumablePurchases.filter(p => p.status !== 'COMPLETED').map(p => (
+                  <option key={p.id} value={p.id}>[{p.requestDate}] {p.modelName} ({p.requestedQty}개) - {p.sellerName}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label style={{ fontSize: '11.5px', fontWeight: '600', display: 'block', marginBottom: '4px' }}>실제 입고 수량 *</label>
+              <input type="number" value={inboundQty} onChange={e => setInboundQty(parseInt(e.target.value) || 1)} min={1} required style={{ width: '100%', padding: '7px' }} />
+            </div>
+
+            <div>
+              <label style={{ fontSize: '11.5px', fontWeight: '600', display: 'block', marginBottom: '4px' }}>거래명세서 증빙 파일 첨부</label>
+              <input type="file" accept="image/*,.pdf" onChange={e => setSelectedFile(e.target.files?.[0] || null)} style={{ width: '100%', padding: '7px' }} />
+              {selectedFile && <div style={{ fontSize: '12px', color: 'var(--primary)', marginTop: '4px' }}>선택된 파일: {selectedFile.name}</div>}
+            </div>
+
+            <button type="submit" className="btn-primary" disabled={isUploading} style={{ padding: '10px' }}>
+              {isUploading ? '업로드 및 입고 처리중...' : '본사 창고 입고 확정'}
+            </button>
+          </form>
+        </div>
+      )}
+
+      {/* ──────────────────────────────────────────────────────────────────────── */}
+      {/* [TAB 6] 소모품 출고(사용) */}
+      {/* ──────────────────────────────────────────────────────────────────────── */}
+      {activeTab === 'USE' && (
+        <div className="card" style={{ maxWidth: '600px', margin: '0 auto' }}>
+          <h3 className="card-title" style={{ marginBottom: '16px' }}>소모품 직접 출고 (본사 야적장 정비)</h3>
+          <form onSubmit={handleUseSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <div>
+              <label style={{ fontSize: '11.5px', fontWeight: '600', display: 'block', marginBottom: '4px' }}>출고 품목 *</label>
+              <select value={useConsumableId} onChange={e => setUseConsumableId(e.target.value)} required style={{ width: '100%', padding: '7px' }}>
+                <option value="">-- 품목 선택 --</option>
+                {consumables.map(c => (
+                  <option key={c.id} value={c.id}>{c.modelName} (본사재고: {c.stockQty}개, ₩{c.unitPrice.toLocaleString()})</option>
+                ))}
+              </select>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+              <div>
+                <label style={{ fontSize: '11.5px', fontWeight: '600', display: 'block', marginBottom: '4px' }}>출고 수량 *</label>
+                <input type="number" value={useQty} onChange={e => setUseQty(parseInt(e.target.value) || 1)} min={1} required style={{ width: '100%', padding: '7px' }} />
+              </div>
+              <div>
+                <label style={{ fontSize: '11.5px', fontWeight: '600', display: 'block', marginBottom: '4px' }}>적용 대상 자산</label>
+                <select value={useAssetId} onChange={e => setUseAssetId(e.target.value)} style={{ width: '100%', padding: '7px' }}>
+                  <option value="">-- 자산 선택 (선택사항) --</option>
+                  {assets.map(a => (
+                    <option key={a.id} value={a.id}>{a.assetNo} ({a.modelName})</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label style={{ fontSize: '11.5px', fontWeight: '600', display: 'block', marginBottom: '4px' }}>사용 목적 및 상세</label>
+              <input type="text" value={useDesc} onChange={e => setUseDesc(e.target.value)} placeholder="예: 입고 장비 정기 점검 유압유 보충" style={{ width: '100%', padding: '7px' }} />
+            </div>
+
+            <button type="submit" className="btn-primary" style={{ padding: '10px', marginTop: '6px' }}>소모품 출고 저장</button>
+          </form>
+        </div>
+      )}
+
+      {/* ──────────────────────────────────────────────────────────────────────── */}
+      {/* [TAB 7] 입출고 수불 이력 로그 */}
+      {/* ──────────────────────────────────────────────────────────────────────── */}
+      {activeTab === 'LOGS' && (
+        <div className="card" style={{ margin: 0 }}>
+          <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <h3 className="card-title">소모품 입출고 및 이동 수불 로그</h3>
+          </div>
+
+          <div style={{ display: 'flex', gap: '10px', alignItems: 'center', backgroundColor: 'var(--bg-app)', padding: '12px', borderRadius: '8px', marginBottom: '14px', flexWrap: 'wrap' }}>
+            <input
+              type="text"
+              value={logSearch}
+              onChange={e => setLogSearch(e.target.value)}
+              placeholder="품목명, 비고 검색..."
+              style={{ padding: '6px', fontSize: '12.5px', width: '180px' }}
+            />
+            <select value={logTypeFilter} onChange={e => setLogTypeFilter(e.target.value)} style={{ padding: '6px', fontSize: '12.5px' }}>
+              <option value="ALL">전체 구분</option>
+              <option value="INBOUND">구매입고</option>
+              <option value="OUTBOUND">현장소진(출고)</option>
+              <option value="TRANSFER_TO_VEHICLE">차량불출</option>
+              <option value="RETURN_TO_HQ">본사반납</option>
+              <option value="ADJUST">재고조정</option>
+            </select>
+            <input type="date" value={logStartDate} onChange={e => setLogStartDate(e.target.value)} style={{ padding: '6px', fontSize: '12.5px' }} />
+            <span>~</span>
+            <input type="date" value={logEndDate} onChange={e => setLogEndDate(e.target.value)} style={{ padding: '6px', fontSize: '12.5px' }} />
+          </div>
+
+          <div className="table-container" style={{ border: 'none', boxShadow: 'none' }}>
+            <table>
+              <thead>
+                <tr>
+                  <th>구분</th>
+                  <th>품목명</th>
+                  <th style={{ textAlign: 'center' }}>수량</th>
+                  <th>단가</th>
+                  <th>총금액</th>
+                  <th>출처</th>
+                  <th>이동처 / 적용</th>
+                  <th>담당자</th>
+                  <th>일자</th>
+                  <th>비고</th>
+                </tr>
+              </thead>
+              <tbody>
+                {consumableLogs
+                  .filter(l => {
+                    const matchType = logTypeFilter === 'ALL' || l.type === logTypeFilter;
+                    const matchStart = !logStartDate || l.actionDate >= logStartDate;
+                    const matchEnd = !logEndDate || l.actionDate <= logEndDate;
+                    const item = consumables.find(c => c.id === l.consumableId);
+                    const matchSearch = !logSearch || (item?.modelName || '').toLowerCase().includes(logSearch.toLowerCase()) || (l.description || '').toLowerCase().includes(logSearch.toLowerCase());
+                    return matchType && matchStart && matchEnd && matchSearch;
+                  })
+                  .map(l => {
+                  const item = consumables.find(c => c.id === l.consumableId);
+                  return (
+                    <tr key={l.id}>
+                      <td>
+                        <span className={`badge ${
+                          l.type === 'INBOUND' ? 'badge-success' :
+                          l.type === 'OUTBOUND' ? 'badge-danger' :
+                          l.type === 'TRANSFER_TO_VEHICLE' ? 'badge-primary' :
+                          l.type === 'RETURN_TO_HQ' ? 'badge-warning' : 'badge-secondary'
+                        }`}>
+                          {l.type === 'INBOUND' ? '구매입고' :
+                           l.type === 'OUTBOUND' ? '현장소진' :
+                           l.type === 'TRANSFER_TO_VEHICLE' ? '차량불출' :
+                           l.type === 'RETURN_TO_HQ' ? '본사반납' : '재고조정'}
+                        </span>
+                      </td>
+                      <td><strong>{item?.modelName || '품목'}</strong></td>
+                      <td style={{ textAlign: 'center', fontWeight: '700' }}>{l.quantity}</td>
+                      <td>{l.unitPrice.toLocaleString()}원</td>
+                      <td style={{ fontWeight: '600' }}>{(l.quantity * l.unitPrice).toLocaleString()}원</td>
+                      <td>{l.fromLocation || (l.type === 'INBOUND' ? (l.supplier || '매입처') : '본사 중앙창고')}</td>
+                      <td>{l.toLocation || (l.targetAssetId ? `자산(${getAssetNo(l.targetAssetId)})` : '-')}</td>
+                      <td>{getUserName(l.userId || l.mechanicId)}</td>
+                      <td>{l.actionDate}</td>
+                      <td style={{ fontSize: '11.5px', color: 'var(--text-secondary)' }}>{l.description}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ──────────────────────────────────────────────────────────────────────── */}
+      {/* 본사 ➔ 차량 불출 모달 */}
+      {/* ──────────────────────────────────────────────────────────────────────── */}
+      {showTransferModal && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000
+        }}>
+          <form onSubmit={handleTransferSubmit} className="card" style={{ width: '90%', maxWidth: '450px', backgroundColor: 'var(--bg-card)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-color)', paddingBottom: '10px', marginBottom: '14px' }}>
+              <h3 className="card-title" style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--primary)' }}>
+                <ArrowUpRight size={16} /> 본사 ➔ AS 차량 소모품 불출
+              </h3>
+              <button type="button" className="btn-secondary" onClick={() => setShowTransferModal(false)} style={{ padding: '3px 8px' }}>
+                <X size={14} />
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '16px' }}>
+              <div>
+                <label style={{ fontSize: '11.5px', fontWeight: '600', display: 'block', marginBottom: '4px' }}>불출 대상 정비사 (차량) *</label>
+                <select value={transferMechanicId} onChange={e => setTransferMechanicId(e.target.value)} required style={{ width: '100%', padding: '6px' }}>
+                  {mechanics.map(m => (
+                    <option key={m.id} value={m.id}>{m.name} 정비차량</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label style={{ fontSize: '11.5px', fontWeight: '600', display: 'block', marginBottom: '4px' }}>불출 소모품 품목 *</label>
+                <select value={transferConsumableId} onChange={e => setTransferConsumableId(e.target.value)} required style={{ width: '100%', padding: '6px' }}>
+                  {consumables.map(c => (
+                    <option key={c.id} value={c.id}>{c.modelName} (본사 가용재고: {c.stockQty}개, 단가: ₩{c.unitPrice.toLocaleString()})</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label style={{ fontSize: '11.5px', fontWeight: '600', display: 'block', marginBottom: '4px' }}>불출 수량 *</label>
+                <input type="number" value={transferQty} onChange={e => setTransferQty(parseInt(e.target.value) || 1)} min={1} required style={{ width: '100%', padding: '6px' }} />
+              </div>
+
+              <div>
+                <label style={{ fontSize: '11.5px', fontWeight: '600', display: 'block', marginBottom: '4px' }}>비고 / 메모</label>
+                <input type="text" value={transferMemo} onChange={e => setTransferMemo(e.target.value)} placeholder="예: 주간 정기 순회 정비용 적재" style={{ width: '100%', padding: '6px' }} />
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', borderTop: '1px solid var(--border-color)', paddingTop: '10px' }}>
+              <button type="button" className="btn-secondary" onClick={() => setShowTransferModal(false)}>취소</button>
+              <button type="submit" className="btn-primary">차량 불출 실행</button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* ──────────────────────────────────────────────────────────────────────── */}
+      {/* 차량 ➔ 본사 반납 모달 */}
+      {/* ──────────────────────────────────────────────────────────────────────── */}
+      {showReturnModal && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000
+        }}>
+          <form onSubmit={handleReturnSubmit} className="card" style={{ width: '90%', maxWidth: '450px', backgroundColor: 'var(--bg-card)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-color)', paddingBottom: '10px', marginBottom: '14px' }}>
+              <h3 className="card-title" style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '6px', color: '#d97706' }}>
+                <ArrowDownLeft size={16} /> AS 차량 ➔ 본사 창고 반납
+              </h3>
+              <button type="button" className="btn-secondary" onClick={() => setShowReturnModal(false)} style={{ padding: '3px 8px' }}>
+                <X size={14} />
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '16px' }}>
+              <div>
+                <label style={{ fontSize: '11.5px', fontWeight: '600', display: 'block', marginBottom: '4px' }}>반납 정비사 (차량) *</label>
+                <select value={returnMechanicId} onChange={e => {
+                  setReturnMechanicId(e.target.value);
+                  const firstStock = (mechanicConsumableStocks || []).find(ms => ms.mechanicId === e.target.value && ms.stockQty > 0);
+                  if (firstStock) setReturnConsumableId(firstStock.consumableId);
+                }} required style={{ width: '100%', padding: '6px' }}>
+                  {mechanics.map(m => (
+                    <option key={m.id} value={m.id}>{m.name} 정비차량</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label style={{ fontSize: '11.5px', fontWeight: '600', display: 'block', marginBottom: '4px' }}>반납 소모품 품목 *</label>
+                <select value={returnConsumableId} onChange={e => setReturnConsumableId(e.target.value)} required style={{ width: '100%', padding: '6px' }}>
+                  {(() => {
+                    const mechStocks = (mechanicConsumableStocks || []).filter(ms => ms.mechanicId === returnMechanicId && ms.stockQty > 0);
+                    if (mechStocks.length === 0) {
+                      return <option value="">-- 차량 내 보유 재고 없음 --</option>;
+                    }
+                    return mechStocks.map(ms => {
+                      const item = consumables.find(c => c.id === ms.consumableId);
+                      return (
+                        <option key={ms.consumableId} value={ms.consumableId}>
+                          {item?.modelName || '품목'} (차량 보유: {ms.stockQty}개)
+                        </option>
+                      );
+                    });
+                  })()}
+                </select>
+              </div>
+
+              <div>
+                <label style={{ fontSize: '11.5px', fontWeight: '600', display: 'block', marginBottom: '4px' }}>반납 수량 *</label>
+                <input type="number" value={returnQty} onChange={e => setReturnQty(parseInt(e.target.value) || 1)} min={1} required style={{ width: '100%', padding: '6px' }} />
+              </div>
+
+              <div>
+                <label style={{ fontSize: '11.5px', fontWeight: '600', display: 'block', marginBottom: '4px' }}>비고 / 메모</label>
+                <input type="text" value={returnMemo} onChange={e => setReturnMemo(e.target.value)} placeholder="예: 잔여분 본사 회수" style={{ width: '100%', padding: '6px' }} />
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', borderTop: '1px solid var(--border-color)', paddingTop: '10px' }}>
+              <button type="button" className="btn-secondary" onClick={() => setShowReturnModal(false)}>취소</button>
+              <button type="submit" className="btn-primary" style={{ backgroundColor: '#d97706', borderColor: '#d97706' }}>본사 반납 실행</button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* 모바일 화면 하단 여유 스페이서 */}
+      <div style={{ height: '100px', width: '100%' }} aria-hidden="true" />
     </div>
   );
 };

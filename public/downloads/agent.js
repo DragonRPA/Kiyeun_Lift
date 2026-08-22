@@ -841,6 +841,102 @@ Write-Host "REAL_EXCEL_EXPORT_SUCCESS"
     return;
   }
 
+  // 6. 로컬 설치 프린터 목록 조회 API
+  if (req.method === 'GET' && pathname === '/api/printers') {
+    try {
+      const psCmd = 'Get-CimInstance -ClassName Win32_Printer | Select-Object Name, Default | ConvertTo-Json';
+      const output = execSync(`powershell -NoProfile -Command "${psCmd}"`, { encoding: 'utf8' }).trim();
+      let printerData = [];
+      try {
+        const parsed = JSON.parse(output || '[]');
+        printerData = Array.isArray(parsed) ? parsed : [parsed];
+      } catch (e) {
+        printerData = [];
+      }
+
+      const printers = printerData.map(p => p.Name).filter(Boolean);
+      const defaultPrinterObj = printerData.find(p => p.Default);
+      const defaultPrinter = defaultPrinterObj ? defaultPrinterObj.Name : (printers[0] || '');
+
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+      res.end(JSON.stringify({
+        success: true,
+        printers,
+        defaultPrinter,
+        count: printers.length
+      }));
+    } catch (err) {
+      console.error('❌ /api/printers 오류:', err);
+      res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
+      res.end(JSON.stringify({ success: false, error: err.message, printers: [], defaultPrinter: '' }));
+    }
+    return;
+  }
+
+  // 7. 출고요청서 전용 프린터 0초 다이렉트 인쇄 API
+  if (req.method === 'POST' && pathname === '/api/print-dispatch') {
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', async () => {
+      try {
+        const payload = JSON.parse(body || '{}');
+        const printerName = payload.printerName || 'Apeos C2060';
+        const htmlContent = payload.htmlContent || '';
+        const title = payload.title || '기연리프트_출고요청서';
+
+        if (!htmlContent) {
+          res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
+          res.end(JSON.stringify({ success: false, error: 'htmlContent is required' }));
+          return;
+        }
+
+        // 임시 인쇄용 HTML 파일 작성 (UTF-8)
+        const tempPrintHtml = path.join(AGENT_HOME, `temp_dispatch_print_${Date.now()}.html`);
+        fs.writeFileSync(tempPrintHtml, `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>${title}</title>
+  <style>
+    body { font-family: 'Malgun Gothic', 'Noto Sans KR', sans-serif; padding: 20px; color: #111; }
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+    th, td { border: 1px solid #ddd; padding: 8px 10px; font-size: 13px; text-align: left; }
+    th { background-color: #f9fafb; font-weight: bold; width: 130px; }
+    .header { text-align: center; border-bottom: 2px solid #312e81; padding-bottom: 12px; margin-bottom: 20px; }
+    .header h1 { margin: 0; font-size: 24px; font-weight: 800; color: #1e1b4b; letter-spacing: 2px; }
+    .section-title { font-size: 14px; font-weight: bold; border-left: 4px solid #312e81; padding-left: 8px; margin: 16px 0 8px 0; color: #312e81; }
+  </style>
+</head>
+<body>
+  ${htmlContent}
+</body>
+</html>`, 'utf8');
+
+        console.log(`🖨️ [다이렉트 인쇄] 대상 프린터: [${printerName}], 임시파일: ${tempPrintHtml}`);
+
+        const printCmd = `Start-Process rundll32.exe -ArgumentList 'mshtml.dll,PrintHTML "${tempPrintHtml}" "${printerName}"' -NoNewWindow`;
+        execSync(`powershell -NoProfile -Command "${printCmd}"`, { stdio: 'ignore' });
+
+        // 10초 후 임시 파일 자동 정리
+        setTimeout(() => {
+          try { if (fs.existsSync(tempPrintHtml)) fs.unlinkSync(tempPrintHtml); } catch (e) {}
+        }, 10000);
+
+        res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify({
+          success: true,
+          printer: printerName,
+          message: `✅ 전용 프린터 [${printerName}] 로 출고요청서가 즉시 전송되었습니다.`
+        }));
+      } catch (err) {
+        console.error('❌ /api/print-dispatch 인쇄 오류:', err);
+        res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify({ success: false, error: err.message }));
+      }
+    });
+    return;
+  }
+
   res.writeHead(404, { 'Content-Type': 'text/plain' });
   res.end('Not Found');
 });

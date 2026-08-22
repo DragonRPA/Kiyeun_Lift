@@ -330,7 +330,7 @@ export function calculateAssetDepreciation(asset: Asset, asOfDate: Date = new Da
 export interface Consumable {
   id: string;
   modelName: string;
-  stockQty: number;
+  stockQty: number; // 본사 중앙 창고 재고
   unit: string; // '개' | '박스' 등
   unitPrice: number;
   supplier: string;
@@ -338,14 +338,25 @@ export interface Consumable {
   updatedAt: string;
 }
 
+export interface MechanicConsumableStock {
+  id: string;
+  mechanicId: string; // 담당 정비사 ID
+  consumableId: string; // 소모품 ID
+  stockQty: number; // 기사 차량 내 현재 적재 수량
+  updatedAt: string;
+}
+
 export interface ConsumableLog {
   id: string;
   consumableId: string;
-  type: 'INBOUND' | 'OUTBOUND' | 'ADJUST';
+  type: 'INBOUND' | 'OUTBOUND' | 'ADJUST' | 'TRANSFER_TO_VEHICLE' | 'RETURN_TO_HQ';
   quantity: number;
   unitPrice: number;
   supplier?: string;
   userId?: string;
+  mechanicId?: string; // 차량 재고 이동 정비사
+  fromLocation?: string; // 출처 (예: '본사 중앙창고', '김정비 차량')
+  toLocation?: string; // 이동처 (예: '김정비 차량', '본사 중앙창고', '현장장비')
   targetAssetId?: string;
   actionDate: string;
   description: string;
@@ -576,13 +587,17 @@ export interface Repair {
   assetId: string;
   mechanicId?: string;
   repairType?: 'INTERNAL' | 'EXTERNAL';
+  maintenanceType?: 'EMERGENCY_AS' | 'PREVENTIVE' | 'INHOUSE_REPAIR' | 'EXTERNAL'; // AS 출장 4대 유형
   vendorId?: string;
   outboundDate?: string;
   completedDate?: string;
   estimateFileUrl?: string;
   requestDate: string;
+  scheduleDate?: string; // AS 출장/예방정비 방문 예정일시
   repairDate?: string;
-  status: 'PENDING' | 'IN_PROGRESS' | 'COMPLETED';
+  status: 'SCHEDULED' | 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'UNRESOLVED'; // 상태 머신
+  unresolvedReason?: string; // 미완료 사유 (부품수급대기, 현장수리불가 등)
+  nextAction?: 'REVISIT' | 'EXCHANGE_REQUEST' | 'NONE'; // 미완료 후속 조치
   details: string;
   totalCost: number;
   billableToCustomer: boolean;
@@ -590,6 +605,9 @@ export interface Repair {
   purchaseBillId?: string;
   isCustomerFault?: boolean;
   faultImageUrl?: string;
+  evidenceImages?: string[]; // 현장 정비 전/후 증빙 사진 배열
+  customerName?: string; // 출장 현장 고객사명
+  siteName?: string; // 출장 현장명
   inboundNo?: string;
   defectsJson?: string;
   createdAt: string;
@@ -1435,6 +1453,9 @@ class LocalDB {
 
   get consumablePurchases() { return this.get<ConsumablePurchaseRequest>('consumablePurchases', SEED_CONSUMABLE_PURCHASES); }
   set consumablePurchases(val: ConsumablePurchaseRequest[]) { this.set('consumablePurchases', val); }
+
+  get mechanicConsumableStocks() { return this.get<MechanicConsumableStock>('mechanicConsumableStocks', []); }
+  set mechanicConsumableStocks(val: MechanicConsumableStock[]) { this.set('mechanicConsumableStocks', val); }
 
   get contracts() { return this.get<Contract>('contracts', SEED_CONTRACTS); }
   set contracts(val: Contract[]) { this.set('contracts', val); }

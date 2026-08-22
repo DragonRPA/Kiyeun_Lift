@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { db, Asset, Billing, BillingDetail } from '../services/db';
-import { Plus, Download, Mail, CheckCircle, Search, DollarSign, Calendar, FileText, Send, Edit3 } from 'lucide-react';
+import { Plus, Download, Mail, CheckCircle, Search, DollarSign, Calendar, FileText, Send, Edit3, RotateCcw, AlertTriangle, Check } from 'lucide-react';
 import { emailService } from '../services/email';
 import { exportToExcel, exportTransactionStatementExcel, exportTransactionStatementExcelBuffer, calcServicePeriod } from '../services/excel';
 import { downloadTransactionStatementPDF, generateTransactionStatementPdfBase64 } from '../services/pdf';
@@ -10,7 +10,8 @@ import { downloadTransactionStatementPDF, generateTransactionStatementPdfBase64 
 export const Billings: React.FC = () => {
   const {
     billings, billingDetails, customers, contacts, contracts, contractAssets, assets, sites, users, googleConfigs,
-    generateBillingsForMonth, receivePayment, cancelPayment, hasPermission, currentUser, approveBilling, cancelBilling,
+    generateBillingsForMonth, getDueContractsForBilling, generateDueBillings, regenerateBilling, generateBillingForSingleContract,
+    receivePayment, cancelPayment, hasPermission, currentUser, approveBilling, cancelBilling,
     refreshAllData, showErrorModal, bankTransactions, paymentDepositLinks, saveBankDeposit, deleteBankDeposit, payments,
     repairs, linkRepairToBilling, applyPrepaidBalanceForBilling
   } = useApp();
@@ -190,6 +191,74 @@ export const Billings: React.FC = () => {
     
     alert(`${billingYm} 마감일 기준 청구 데이터가 성공적으로 생성되었습니다.`);
     setActiveTab('LIST');
+  };
+
+  // 도래 계약 청구 일괄 생성 상태 & 핸들러
+  const [isGeneratingDue, setIsGeneratingDue] = useState(false);
+  const handleGenerateDue = async () => {
+    if (isGeneratingDue) return;
+    setIsGeneratingDue(true);
+    try {
+      const count = await generateDueBillings();
+      if (count > 0) {
+        alert(`🎉 ${count}건의 도래 계약 기본 청구서가 성공적으로 생성되었습니다.`);
+      } else {
+        alert('생성할 도래 계약이 없거나 이미 모두 생성되었습니다.');
+      }
+    } catch (err: any) {
+      showErrorModal(`⚠️ 일괄 생성 오류:\n\n${err?.message || err}`, '도래 계약 청구 생성 실패');
+    } finally {
+      setIsGeneratingDue(false);
+    }
+  };
+
+  // 청구 수정 재생성 모달 상태 & 핸들러
+  const [showRegenerateModal, setShowRegenerateModal] = useState(false);
+  const [regenBillingId, setRegenBillingId] = useState('');
+  const [regenBillingYm, setRegenBillingYm] = useState('');
+  const [regenBillingDate, setRegenBillingDate] = useState('');
+  const [regenMemo, setRegenMemo] = useState('');
+  const [regenDetails, setRegenDetails] = useState<Omit<BillingDetail, 'id' | 'billingId' | 'createdAt'>[]>([]);
+  const [isRegenerating, setIsRegenerating] = useState(false);
+
+  const handleOpenRegenerate = (billingId: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    const targetB = billings.find(b => b.id === billingId);
+    if (!targetB) return;
+    const targetDetails = billingDetails.filter(bd => bd.billingId === billingId);
+    setRegenBillingId(billingId);
+    setRegenBillingYm(targetB.billingYm);
+    setRegenBillingDate(targetB.billingDate || new Date().toISOString().split('T')[0]);
+    setRegenMemo('담당자 검토 후 단가/항목 수정 재생성');
+    setRegenDetails(targetDetails.map(td => ({
+      contractAssetId: td.contractAssetId,
+      itemName: td.itemName,
+      quantity: td.quantity || 1,
+      unitPrice: td.unitPrice || 0,
+      amount: td.amount || ((td.quantity || 1) * (td.unitPrice || 0)),
+      description: td.description || ''
+    })));
+    setShowRegenerateModal(true);
+  };
+
+  const handleRegenerateSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!regenBillingId || regenDetails.length === 0) return;
+    setIsRegenerating(true);
+    try {
+      const newId = await regenerateBilling(regenBillingId, regenDetails, {
+        billingYm: regenBillingYm,
+        billingDate: regenBillingDate,
+        memo: regenMemo
+      });
+      setShowRegenerateModal(false);
+      setSelectedBillingId(newId);
+      alert('✅ 수정사항이 반영되어 새 청구서가 발행되었습니다. (기존 건은 취소 마감)');
+    } catch (err: any) {
+      showErrorModal(`⚠️ 청구서 수정 재생성 실패:\n\n${err?.message || err}`, '재생성 오류');
+    } finally {
+      setIsRegenerating(false);
+    }
   };
 
   const handleApprove = (id: string, e: React.MouseEvent) => {
@@ -953,9 +1022,69 @@ ${details.map((d, idx) => {
         );
       })()}
 
-      {activeTab === 'LIST' && (
+      {activeTab === 'LIST' && (() => {
+        const dueContracts = getDueContractsForBilling();
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '24px', alignItems: 'flex-start' }}>
+        return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          {/* 📢 청구 도래 미생성 계약 실시간 감지 알림 바 */}
+          {dueContracts.length > 0 && (
+            <div style={{
+              padding: '14px 18px',
+              borderRadius: '8px',
+              backgroundColor: 'rgba(239,68,68,0.06)',
+              border: '1px solid rgba(239,68,68,0.25)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '10px'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ fontSize: '16px' }}>📢</span>
+                  <strong style={{ color: '#dc2626', fontSize: '14px' }}>
+                    오늘 기준 청구 도래 미생성 계약: {dueContracts.length}건
+                  </strong>
+                  <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                    (고객 요청 청구기준일 도래 및 전월 미청구 건 실시간 감지)
+                  </span>
+                </div>
+                {canSave && (
+                  <button
+                    type="button"
+                    className="btn-primary"
+                    onClick={handleGenerateDue}
+                    disabled={isGeneratingDue}
+                    style={{ padding: '6px 14px', fontSize: '12.5px', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '6px' }}
+                  >
+                    <Plus size={14} />
+                    {isGeneratingDue ? '기본 청구 생성 중...' : `도래 계약 기본 청구 일괄 생성 (${dueContracts.length}건)`}
+                  </button>
+                )}
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '8px' }}>
+                {dueContracts.slice(0, 6).map((item, idx) => (
+                  <div key={idx} style={{ padding: '8px 12px', backgroundColor: 'var(--bg-card)', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                      <strong>{item.customer.name}</strong> <span style={{ color: 'var(--text-muted)' }}>({item.contract.contractNo})</span>
+                      <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
+                        {item.site?.name || '직납'} | 매월 {item.billingDay}일
+                      </div>
+                    </div>
+                    <span style={{ fontSize: '11px', color: '#dc2626', fontWeight: '600', padding: '2px 6px', backgroundColor: 'rgba(239,68,68,0.1)', borderRadius: '4px', whiteSpace: 'nowrap' }}>
+                      {item.dueReason}
+                    </span>
+                  </div>
+                ))}
+              </div>
+              {dueContracts.length > 6 && (
+                <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)', textAlign: 'right' }}>
+                  외 {dueContracts.length - 6}건 더 있음
+                </div>
+              )}
+            </div>
+          )}
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '24px', alignItems: 'flex-start' }}>
           
           {/* 청구 목록 */}
           <div className="card" style={{ margin: 0, display: 'flex', flexDirection: 'column', gap: '16px' }}>
@@ -1089,22 +1218,65 @@ ${details.map((d, idx) => {
                     return (
                       <tr key={b.id} style={{ cursor: 'pointer' }} onClick={() => setSelectedBillingId(b.id)}>
                         <td onClick={e => e.stopPropagation()} style={{ whiteSpace: 'nowrap' }}>
-                          <div style={{ display: 'flex', gap: '4px' }}>
-                            {isAdmin && b.status === 'REQUESTED' && (
+                          <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                            {b.status === 'REQUESTED' ? (
                               <>
-                                <button className="btn-success" onClick={(e) => handleApprove(b.id, e)} style={{ padding: '3px 6px', fontSize: '11px' }}>승인</button>
-                                <button className="btn-danger" onClick={(e) => handleCancel(b.id, e)} style={{ padding: '3px 6px', fontSize: '11px' }}>취소</button>
+                                <button 
+                                  type="button"
+                                  className="btn-secondary" 
+                                  onClick={() => setSelectedBillingId(b.id)} 
+                                  style={{ padding: '3px 6px', fontSize: '11px', whiteSpace: 'nowrap' }}
+                                  title="상세 내역 검토"
+                                >
+                                  검토
+                                </button>
+                                {isAdmin && (
+                                  <button 
+                                    type="button"
+                                    className="btn-success" 
+                                    onClick={(e) => handleApprove(b.id, e)} 
+                                    style={{ padding: '3px 6px', fontSize: '11px', whiteSpace: 'nowrap' }}
+                                    title="청구 완료 (승인)"
+                                  >
+                                    완료
+                                  </button>
+                                )}
+                                {canSave && (
+                                  <button 
+                                    type="button"
+                                    className="btn-secondary" 
+                                    onClick={(e) => handleOpenRegenerate(b.id, e)} 
+                                    style={{ padding: '3px 6px', fontSize: '11px', color: 'var(--primary)', fontWeight: '600', whiteSpace: 'nowrap' }}
+                                    title="내역 수정 및 재생성"
+                                  >
+                                    취소/재생성
+                                  </button>
+                                )}
+                                {isAdmin && (
+                                  <button 
+                                    type="button"
+                                    className="btn-danger" 
+                                    onClick={(e) => handleCancel(b.id, e)} 
+                                    style={{ padding: '3px 6px', fontSize: '11px', whiteSpace: 'nowrap' }}
+                                    title="청구 취소"
+                                  >
+                                    취소
+                                  </button>
+                                )}
                               </>
-                            )}
-                            {canSave && (b.status === 'UNPAID' || b.status === 'PARTIAL') && (
-                              <button className="btn-success" onClick={() => handleOpenPay(b.id, unpaid)} style={{ padding: '3px 6px', fontSize: '11px' }}>
-                                수납
-                              </button>
-                            )}
-                            {(b.status === 'UNPAID' || b.status === 'PARTIAL' || b.status === 'PAID') && (
-                              <button className="btn-secondary" onClick={() => handleOpenMail(b.id)} style={{ padding: '3px 6px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '2px' }}>
-                                <Mail size={10} /> 발송
-                              </button>
+                            ) : (
+                              <>
+                                {canSave && (b.status === 'UNPAID' || b.status === 'PARTIAL') && (
+                                  <button className="btn-success" onClick={() => handleOpenPay(b.id, unpaid)} style={{ padding: '3px 6px', fontSize: '11px', whiteSpace: 'nowrap' }}>
+                                    수납
+                                  </button>
+                                )}
+                                {(b.status === 'UNPAID' || b.status === 'PARTIAL' || b.status === 'PAID') && (
+                                  <button className="btn-secondary" onClick={() => handleOpenMail(b.id)} style={{ padding: '3px 6px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '2px', whiteSpace: 'nowrap' }}>
+                                    <Mail size={10} /> 발송
+                                  </button>
+                                )}
+                              </>
                             )}
                           </div>
                         </td>
@@ -1223,7 +1395,9 @@ ${details.map((d, idx) => {
           </div>
 
         </div>
-      )}
+        </div>
+        );
+      })()}
 
 
 
@@ -2119,6 +2293,194 @@ ${details.map((d, idx) => {
                   {isSending ? '발송 중...' : <><Send size={14} /> 거래명세서 이메일 전송</>}
                 </button>
               </div>
+            </form>
+          </div>
+        );
+      })()}
+
+      {/* 🔄 청구 수정 및 재생성 모달 (Regenerate Modal) */}
+      {showRegenerateModal && (() => {
+        const targetB = billings.find(b => b.id === regenBillingId);
+        const targetCust = customers.find(c => c.id === targetB?.customerId);
+        const totalCalcAmount = regenDetails.reduce((sum, d) => sum + (d.amount || ((d.quantity || 1) * (d.unitPrice || 0))), 0);
+
+        return (
+          <div style={{
+            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+            backgroundColor: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '16px'
+          }}>
+            <form onSubmit={handleRegenerateSubmit} className="card" style={{ width: '100%', maxWidth: '780px', backgroundColor: 'var(--bg-card)', maxHeight: '92vh', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '16px', borderRadius: '12px' }}>
+              
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-color)', paddingBottom: '12px' }}>
+                <div>
+                  <h3 className="card-title" style={{ margin: 0, fontSize: '17px', fontWeight: '700' }}>
+                    🔄 청구서 내역 수정 및 재생성
+                  </h3>
+                  <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                    고객사: <strong>{targetCust?.name || '고객사'}</strong> | 기존 청구: <strong style={{ color: 'var(--text-muted)' }}>{targetB?.id}</strong> ({targetB?.billingYm})
+                  </div>
+                </div>
+                <span className="badge badge-warning">기존 건 자동 취소 후 재발행</span>
+              </div>
+
+              {/* 청구 연월 및 발행일자 수정 패널 */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.5fr', gap: '12px', padding: '12px', backgroundColor: 'var(--bg-app)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-secondary)' }}>청구귀속월 (YYYY-MM)</label>
+                  <input
+                    type="month"
+                    value={regenBillingYm}
+                    onChange={e => setRegenBillingYm(e.target.value)}
+                    required
+                    style={{ width: '100%', padding: '6px 8px', fontSize: '12.5px', borderRadius: '5px', border: '1px solid var(--border-color)' }}
+                  />
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-secondary)' }}>청구 발행일자</label>
+                  <input
+                    type="date"
+                    value={regenBillingDate}
+                    onChange={e => setRegenBillingDate(e.target.value)}
+                    required
+                    style={{ width: '100%', padding: '6px 8px', fontSize: '12.5px', borderRadius: '5px', border: '1px solid var(--border-color)' }}
+                  />
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-secondary)' }}>수정 재생성 사유</label>
+                  <input
+                    type="text"
+                    value={regenMemo}
+                    onChange={e => setRegenMemo(e.target.value)}
+                    placeholder="예: 고객 요청에 따른 운송료 할인 조정"
+                    style={{ width: '100%', padding: '6px 8px', fontSize: '12.5px', borderRadius: '5px', border: '1px solid var(--border-color)' }}
+                  />
+                </div>
+              </div>
+
+              {/* 세부 청구 품목 리스트 & 수정 */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <label style={{ fontSize: '13px', fontWeight: '700', margin: 0 }}>
+                    📋 청구 항목 목록 ({regenDetails.length}건)
+                  </label>
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    onClick={() => {
+                      setRegenDetails([...regenDetails, {
+                        contractAssetId: undefined,
+                        itemName: '기타 추가/할인 항목',
+                        quantity: 1,
+                        unitPrice: 0,
+                        amount: 0,
+                        description: '수동 추가 항목'
+                      }]);
+                    }}
+                    style={{ padding: '4px 10px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px' }}
+                  >
+                    <Plus size={12} /> + 항목 추가
+                  </button>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '280px', overflowY: 'auto', paddingRight: '4px' }}>
+                  {regenDetails.map((det, idx) => (
+                    <div key={idx} style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr auto', gap: '8px', alignItems: 'center', padding: '10px 12px', backgroundColor: 'var(--bg-app)', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                        <input
+                          type="text"
+                          value={det.itemName}
+                          onChange={e => {
+                            const updated = [...regenDetails];
+                            updated[idx].itemName = e.target.value;
+                            setRegenDetails(updated);
+                          }}
+                          placeholder="항목명"
+                          style={{ padding: '4px 8px', fontSize: '12px', fontWeight: '600', borderRadius: '4px', border: '1px solid var(--border-color)' }}
+                        />
+                        <input
+                          type="text"
+                          value={det.description || ''}
+                          onChange={e => {
+                            const updated = [...regenDetails];
+                            updated[idx].description = e.target.value;
+                            setRegenDetails(updated);
+                          }}
+                          placeholder="적용 기간/상세 설명"
+                          style={{ padding: '3px 6px', fontSize: '11px', color: 'var(--text-secondary)', borderRadius: '4px', border: '1px solid var(--border-color)' }}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ fontSize: '10px', color: 'var(--text-muted)', display: 'block' }}>수량</label>
+                        <input
+                          type="number"
+                          value={det.quantity || 1}
+                          onChange={e => {
+                            const q = parseInt(e.target.value) || 1;
+                            const updated = [...regenDetails];
+                            updated[idx].quantity = q;
+                            updated[idx].amount = q * (updated[idx].unitPrice || 0);
+                            setRegenDetails(updated);
+                          }}
+                          style={{ width: '100%', padding: '4px 6px', fontSize: '12px', textAlign: 'right', borderRadius: '4px', border: '1px solid var(--border-color)' }}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ fontSize: '10px', color: 'var(--text-muted)', display: 'block' }}>단가(원)</label>
+                        <input
+                          type="number"
+                          value={det.unitPrice ?? 0}
+                          onChange={e => {
+                            const p = parseInt(e.target.value) || 0;
+                            const updated = [...regenDetails];
+                            updated[idx].unitPrice = p;
+                            updated[idx].amount = (updated[idx].quantity || 1) * p;
+                            setRegenDetails(updated);
+                          }}
+                          style={{ width: '100%', padding: '4px 6px', fontSize: '12px', textAlign: 'right', borderRadius: '4px', border: '1px solid var(--border-color)' }}
+                        />
+                      </div>
+                      <div style={{ textAlign: 'right' }}>
+                        <label style={{ fontSize: '10px', color: 'var(--text-muted)', display: 'block' }}>금액</label>
+                        <strong style={{ fontSize: '13px', color: (det.amount || 0) < 0 ? '#dc2626' : 'var(--text-primary)' }}>
+                          {(det.amount || ((det.quantity || 1) * (det.unitPrice || 0))).toLocaleString()}원
+                        </strong>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setRegenDetails(regenDetails.filter((_, i) => i !== idx));
+                        }}
+                        style={{ padding: '4px 8px', background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '16px' }}
+                        title="항목 삭제"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* 총액 요약 바 */}
+              <div style={{ padding: '14px 18px', backgroundColor: 'var(--bg-app)', borderRadius: '8px', border: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>재생성 최종 청구 합계</span>
+                  <span style={{ marginLeft: '6px', fontSize: '11px', color: 'var(--text-muted)' }}>(VAT 별도 공급가액 기준)</span>
+                </div>
+                <div style={{ fontSize: '18px', fontWeight: '800', color: 'var(--primary)' }}>
+                  {totalCalcAmount.toLocaleString()}원
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', borderTop: '1px solid var(--border-color)', paddingTop: '12px' }}>
+                <button type="button" className="btn-secondary" onClick={() => setShowRegenerateModal(false)}>
+                  취소
+                </button>
+                <button type="submit" className="btn-primary" disabled={isRegenerating || regenDetails.length === 0} style={{ fontWeight: '700', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <RotateCcw size={14} />
+                  {isRegenerating ? '재생성 처리 중...' : '수정사항 반영 청구서 재생성'}
+                </button>
+              </div>
+
             </form>
           </div>
         );
