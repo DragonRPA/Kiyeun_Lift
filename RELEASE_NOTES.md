@@ -1,3 +1,15 @@
+# Release Notes (v1.128.2.Build.253 - 2026-08-23 17:03)
+
+## 📋 [Vercel DragonRPA 팀 슬러그 전환 지원 및 Auto-Purge 파이프라인 최적화]
+
+### 🌟 반영 내용
+
+#### 1. Vercel DragonRPA 팀 슬러그 전환 지원
+- `DragonRPA` 팀 전환에 맞추어 `scripts/auto_purge_vercel.cjs` 및 `scripts/auto_purge_vercel.js` 정규식 패턴 확장.
+- 신규 배포 트리거를 통해 `kiyuen-lift-[hash]-dragonrpa.vercel.app` 도메인 자동 발행 파이프라인 검증 및 갱신.
+
+---
+
 # Release Notes (v1.128.1.Build.252 - 2026-08-23 05:14)
 
 ## 📋 [정비사 차량 소모품 적재 재고 모델(DDL) 신설 및 DB 스키마·패치 스크립트 완결]
