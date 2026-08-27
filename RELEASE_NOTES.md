@@ -1,3 +1,24 @@
+# Release Notes (v1.129.0.Build.254 - 2026-08-27 16:22)
+
+## 📋 [장비 모델 53종 제원표 PDF 자동 파싱·DB 일괄 주입 및 실물 서식 뷰어 완결]
+
+### 🌟 반영 내용
+
+#### 1. 장비 제원표 13대 상세 규격 스키마 및 DDL 확장
+- `products` 테이블에 13대 상세 규격 컬럼 신설 (`powerSource`, `workingHeight`, `platformHeight`, `weight`, `machineDimensions`, `platformDimensions`, `gradeability`, `speed`, `asContact`, `capacityPreExt`, `capacityPostExtMain`, `capacityPostExtDeck`, `maxWindSpeed`).
+- `schema.sql`, `scripts/supabase_patch.sql`, `scripts/patch_v1_129_product_spec_schema.sql` 마이그레이션 패치 완결.
+
+#### 2. 보유 장비 모델 53종 제원표 PDF 전수 자동 파싱 및 일괄 주입 (Bulk Upsert)
+- `정규문서\00.제품별문서` 하위 53개 제원표 PDF 전수 탐색 및 정밀 파싱(기하학적 좌표 추출 및 OCR) 완료.
+- DINGLI (13종), GENIE (16종), JLG (8종), LGMG (6종), Sinoboom (6종), HAULOTTE (2종), MANLIFT (2종) 총 53종 전 모델 데이터 표준화.
+- `scripts/seed_products_spec_53.sql` 멱등성 Upsert 스크립트 생성 및 `src/services/db.ts` 시드 데이터 탑재.
+
+#### 3. 제품 관리 화면 실물 서식 팝업 뷰어 탑재 (`Products.tsx`)
+- 제품 등록/수정 모달에 제원표 13대 항목 2열 스택 입력 폼 반영.
+- 제품 목록에 **`[제원표]`** 뷰어 버튼 탑재 (실물 제원표와 100% 동일한 하중 다이어그램 및 규격표 즉시 팝업).
+
+---
+
 # Release Notes (v1.128.2.Build.253 - 2026-08-23 17:03)
 
 ## 📋 [Vercel DragonRPA 팀 슬러그 전환 지원 및 Auto-Purge 파이프라인 최적화]

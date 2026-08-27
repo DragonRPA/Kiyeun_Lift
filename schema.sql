@@ -162,6 +162,20 @@ CREATE TABLE products (
     "specSheetUrl" TEXT,
     "emergencyGuideUrl" TEXT,
     "isActive" BOOLEAN DEFAULT TRUE NOT NULL,
+    
+    -- 🌟 [신규 확장] 장비 제원표 상세 규격 (1대1 매핑)
+    "powerSource" TEXT,
+    "workingHeight" TEXT,
+    "platformHeight" TEXT,
+    "machineDimensions" TEXT,
+    "platformDimensions" TEXT,
+    "gradeability" TEXT,
+    "asContact" TEXT DEFAULT '031-334-5296',
+    "capacityPreExt" TEXT,
+    "capacityPostExtMain" TEXT,
+    "capacityPostExtDeck" TEXT,
+    "maxWindSpeed" TEXT DEFAULT '12.5 m/s 이내',
+
     "createdAt" TEXT NOT NULL,
     "updatedAt" TEXT NOT NULL
 );

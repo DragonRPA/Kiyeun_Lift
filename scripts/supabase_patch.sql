@@ -114,7 +114,21 @@ ALTER TABLE repairs ADD COLUMN IF NOT EXISTS "siteName" TEXT;
 ALTER TABLE repairs DROP CONSTRAINT IF EXISTS repairs_status_check;
 ALTER TABLE repairs ADD CONSTRAINT repairs_status_check CHECK (status IN ('SCHEDULED', 'PENDING', 'IN_PROGRESS', 'COMPLETED', 'UNRESOLVED'));
 
+-- [보완 2026-08-27 v1.129] products 테이블 장비 제원표 13대 상세 규격 컬럼 신설
+ALTER TABLE products ADD COLUMN IF NOT EXISTS "powerSource" TEXT;
+ALTER TABLE products ADD COLUMN IF NOT EXISTS "workingHeight" TEXT;
+ALTER TABLE products ADD COLUMN IF NOT EXISTS "platformHeight" TEXT;
+ALTER TABLE products ADD COLUMN IF NOT EXISTS "machineDimensions" TEXT;
+ALTER TABLE products ADD COLUMN IF NOT EXISTS "platformDimensions" TEXT;
+ALTER TABLE products ADD COLUMN IF NOT EXISTS "gradeability" TEXT;
+ALTER TABLE products ADD COLUMN IF NOT EXISTS "asContact" TEXT DEFAULT '031-334-5296';
+ALTER TABLE products ADD COLUMN IF NOT EXISTS "capacityPreExt" TEXT;
+ALTER TABLE products ADD COLUMN IF NOT EXISTS "capacityPostExtMain" TEXT;
+ALTER TABLE products ADD COLUMN IF NOT EXISTS "capacityPostExtDeck" TEXT;
+ALTER TABLE products ADD COLUMN IF NOT EXISTS "maxWindSpeed" TEXT DEFAULT '12.5 m/s 이내';
+
 NOTIFY pgrst, 'reload schema';
+
 
 
 
