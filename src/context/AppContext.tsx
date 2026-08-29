@@ -148,6 +148,7 @@ interface AppContextType {
   
   // 장비 할당 및 출고전 교체
   assignAssetToContract: (contractAssetId: string, assetId: string) => Promise<void>;
+  batchAssignAssetsToContract: (pairs: { contractAssetId: string; assetId: string }[]) => Promise<void>;
   exchangeOutboundAsset: (contractAssetId: string, oldAssetId: string, newAssetId: string, reason?: string, markOldAsRepairing?: boolean, customPenaltyScore?: number) => Promise<void>;
   saveSmartDispatch: (data: SmartDispatchData, autoRegister: boolean, onProgress?: (log: string, percent: number) => void) => Promise<{ success: boolean; requiresConfirm?: boolean; missingFields?: string[]; errorMessage?: string }>;
   saveSmartReturn: (data: SmartReturnData) => void;
@@ -1984,10 +1985,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       const nowIso = new Date().toISOString();
 
-      // 1. ContractAsset 업데이트 (실물 장비 ID 할당)
+      // 1. ContractAsset 업데이트 (실물 장비 ID 할당, 기존 계약의 expectedModel 보존)
       db.updateRow<ContractAsset>('contractAssets', contractAssetId, {
         assetId: assetId,
-        ...(origAsset?.modelName ? { expectedModel: origAsset.modelName } : {})
+        expectedModel: origCa.expectedModel || origAsset?.modelName
       });
 
       // 2. Asset 상태 업데이트 (ASSIGNED 출고대기로 전환)
@@ -2036,15 +2037,94 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       showErrorModal(
         `⚠️ 장비 할당 저장 중 DB 동기화 오류가 발생했습니다:\n\n` +
         `■ [안내]: 저장 실패로 인해 장비 할당 상태가 이전 미할당 상태로 안전하게 롤백(자동 원복)되었습니다. 할당 대상 목록에서 계속 작업하실 수 있습니다.\n\n` +
-        `■ [실패 원인]: ${errMsg}\n\n` +
-        `■ [조치 방법]: 아래 버튼 [DB 패치 실행] 을 누르시거나 개발자 도구에서 패치를 실행해 주십시오:\n\n` +
-        `ALTER TABLE "assets" ADD COLUMN IF NOT EXISTS "contractStart" TEXT;\n` +
-        `ALTER TABLE "assets" ADD COLUMN IF NOT EXISTS "contractEnd" TEXT;\n` +
-        `ALTER TABLE "assets" ADD COLUMN IF NOT EXISTS "currentCustomerId" TEXT;\n` +
-        `ALTER TABLE "assets" ADD COLUMN IF NOT EXISTS "currentSiteId" TEXT;\n` +
-        `NOTIFY pgrst, 'reload schema';`,
+        `■ [실패 원인]: ${errMsg}`,
         '장비 할당 DB 동기화 오류 (자동 롤백 원복 완료)'
       );
+      throw err;
+    }
+  };
+
+  // 🚀 다중 장비 원자적 일괄 할당 트랜잭션 메소드 (중간 리렌더링 및 레이스 컨디션 원천 차단)
+  const batchAssignAssetsToContract = async (pairs: { contractAssetId: string; assetId: string }[]) => {
+    if (!pairs || pairs.length === 0) return;
+
+    // 롤백용 전체 스냅샷 준비
+    const caSnapshots: { id: string; snapshot: ContractAsset }[] = [];
+    const assetSnapshots: { id: string; snapshot: Asset }[] = [];
+    const createdInspectionIds: string[] = [];
+
+    const nowIso = new Date().toISOString();
+
+    try {
+      // 1. 사전 검증 및 스냅샷 백업
+      for (const pair of pairs) {
+        const origCa = db.contractAssets.find(c => c.id === pair.contractAssetId);
+        if (!origCa) throw new Error(`계약 슬롯(${pair.contractAssetId})을 찾을 수 없습니다.`);
+        caSnapshots.push({ id: origCa.id, snapshot: { ...origCa } });
+
+        const origAsset = db.assets.find(a => a.id === pair.assetId);
+        if (!origAsset) throw new Error(`대상 장비(${pair.assetId})를 찾을 수 없습니다.`);
+        assetSnapshots.push({ id: origAsset.id, snapshot: { ...origAsset } });
+      }
+
+      // 2. 전체 슬롯 및 자산 일괄 메모리 업데이트 (단일 원자적 배치)
+      for (const pair of pairs) {
+        const origCa = db.contractAssets.find(c => c.id === pair.contractAssetId)!;
+        const origAsset = db.assets.find(a => a.id === pair.assetId)!;
+        const contract = db.contracts.find(c => c.id === origCa.contractId);
+
+        // 2-1. contractAssets 업데이트 (기존 계약의 expectedModel 절대 보존)
+        db.updateRow<ContractAsset>('contractAssets', origCa.id, {
+          assetId: origAsset.id,
+          expectedModel: origCa.expectedModel || origAsset.modelName
+        });
+
+        // 2-2. assets 업데이트
+        const assetUpdatePayload: Partial<Asset> = {
+          status: 'ASSIGNED',
+          updatedAt: nowIso
+        };
+        if (contract?.customerId) assetUpdatePayload.currentCustomerId = contract.customerId;
+        if (contract?.siteId) assetUpdatePayload.currentSiteId = contract.siteId;
+        if (contract?.startDate) assetUpdatePayload.contractStart = contract.startDate;
+        if (contract?.endDate) assetUpdatePayload.contractEnd = contract.endDate;
+
+        db.updateRow<Asset>('assets', origAsset.id, assetUpdatePayload);
+
+        // 2-3. 출고 검수 의뢰 생성
+        const createdInsp = db.insertRow<OutboundInspection>('outboundInspections', {
+          contractId: origCa.contractId,
+          contractAssetId: origCa.id,
+          assetId: origAsset.id,
+          status: 'PENDING',
+          createdAt: nowIso,
+          updatedAt: nowIso
+        });
+        createdInspectionIds.push(createdInsp.id);
+      }
+
+      // 3. 단 1회의 원격 DB 쓰기 완결 동기 대기 & 단 1회의 전역 리렌더링!
+      await db.awaitPendingWrites();
+      refreshAllData();
+
+    } catch (err: any) {
+      console.error('batchAssignAssetsToContract error & Rollback:', err);
+
+      // 💥 일괄 롤백
+      caSnapshots.forEach(item => {
+        db.updateRow<ContractAsset>('contractAssets', item.id, item.snapshot);
+      });
+      assetSnapshots.forEach(item => {
+        db.updateRow<Asset>('assets', item.id, item.snapshot);
+      });
+      createdInspectionIds.forEach(id => {
+        db.deleteRow('outboundInspections', id);
+      });
+
+      refreshAllData();
+
+      const errMsg = err?.message || err?.details || JSON.stringify(err);
+      showErrorModal(`⚠️ 일괄 장비 할당 중 오류가 발생하여 모든 작업이 안전하게 원복되었습니다:\n\n${errMsg}`, '일괄 장비 할당 실패');
       throw err;
     }
   };
@@ -4543,7 +4623,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       purchaseConsumable, useConsumable, transferConsumableToMechanic, returnConsumableToHq,
       requestConsumablePurchase, acceptConsumablePurchase, completeConsumablePurchase, inboundConsumablePurchase, clearEvidenceFileUrls, updateEvidenceFileUrls,
       createContract, extendContract, shortenContract, succeedContract, exchangeAsset,
-      assignAssetToContract, exchangeOutboundAsset,
+      assignAssetToContract, batchAssignAssetsToContract, exchangeOutboundAsset,
       saveSmartDispatch, saveSmartReturn,
       completeTodo,
       generateBillingsForMonth, getDueContractsForBilling, generateDueBillings, generateBillingForSingleContract, regenerateBilling, approveBilling, cancelBilling, receivePayment, cancelPayment, saveBankDeposit, deleteBankDeposit,

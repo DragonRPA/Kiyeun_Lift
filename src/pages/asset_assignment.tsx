@@ -4,7 +4,7 @@ import { useApp } from '../context/AppContext';
 import { Wrench, CheckCircle, PackageSearch, Layers, Truck, ChevronDown, Check, Activity, Search, AlertTriangle, CheckSquare, Square, Zap, X } from 'lucide-react';
 
 export const AssetAssignment: React.FC = () => {
-  const { hasPermission, contractAssets, contracts, customers, assets, assignAssetToContract, contractHistory } = useApp();
+  const { hasPermission, contractAssets, contracts, customers, assets, assignAssetToContract, batchAssignAssetsToContract, contractHistory } = useApp();
   
   const [selectedContractId, setSelectedContractId] = useState<string>('');
   
@@ -38,23 +38,34 @@ export const AssetAssignment: React.FC = () => {
   const pendingContractIds = Array.from(new Set(pendingCaList.map(ca => ca.contractId)));
   const pendingContracts = contracts.filter(c => pendingContractIds.includes(c.id) && !exchangeContractIds.includes(c.id));
 
+  // 모델명 정규화 키 (하이픈/공백/대소문자 무시 통일)
+  const normalizeModelKey = (name?: string): string => {
+    if (!name) return '미지정';
+    return name.replace(/[\s\-_]/g, '').toUpperCase();
+  };
+
   // 선택된 계약의 하위 슬롯들 (미할당 + 기할당)
   const currentSlots = useMemo(() => {
     return selectedContractId ? contractAssets.filter(ca => ca.contractId === selectedContractId) : [];
   }, [contractAssets, selectedContractId]);
 
-  // 모델별 그룹핑 집계
+  // 모델별 그룹핑 집계 (정규화 키 기반 동일 모델 100% 통합)
   const modelGroups = useMemo(() => {
-    const map = new Map<string, { modelName: string; total: number; pending: number; caIds: string[] }>();
+    const map = new Map<string, { modelKey: string; modelName: string; total: number; pending: number; caIds: string[] }>();
     currentSlots.forEach(ca => {
-      const model = ca.expectedModel || '미지정';
-      const existing = map.get(model) || { modelName: model, total: 0, pending: 0, caIds: [] };
+      const rawModel = ca.expectedModel || '미지정';
+      const key = normalizeModelKey(rawModel);
+      const existing = map.get(key) || { modelKey: key, modelName: rawModel, total: 0, pending: 0, caIds: [] };
       existing.total += 1;
       if (!ca.assetId) {
         existing.pending += 1;
         existing.caIds.push(ca.id);
       }
-      map.set(model, existing);
+      // 하이픈이 있는 표준 표기가 있으면 대표 라벨로 우선 사용
+      if (rawModel.includes('-') && !existing.modelName.includes('-')) {
+        existing.modelName = rawModel;
+      }
+      map.set(key, existing);
     });
     return Array.from(map.values());
   }, [currentSlots]);
@@ -223,7 +234,7 @@ export const AssetAssignment: React.FC = () => {
     }
   };
 
-  // ⚡ 다중 선택 일괄 할당 실행
+  // ⚡ 다중 선택 일괄 할당 실행 (단일 원자적 배치 트랜잭션)
   const handleBatchAssign = async () => {
     if (document.activeElement instanceof HTMLElement) {
       document.activeElement.blur();
@@ -251,14 +262,14 @@ export const AssetAssignment: React.FC = () => {
 
     setIsAssigning(true);
     try {
-      // 1:1 순서대로 일괄 할당 트랜잭션 실행
-      for (let i = 0; i < selectedCaIds.length; i++) {
-        const caId = selectedCaIds[i];
-        const aId = selectedAssetIds[i];
-        await assignAssetToContract(caId, aId);
-      }
+      const pairs = selectedCaIds.map((caId, i) => ({
+        contractAssetId: caId,
+        assetId: selectedAssetIds[i]
+      }));
 
-      alert(`✅ 총 ${selectedCaIds.length}대 장비 일괄 할당 완료!\n자산 상태가 [출고대기(ASSIGNED)]로 즉시 전환되고 출고 검수 의뢰가 발행되었습니다.`);
+      await batchAssignAssetsToContract(pairs);
+
+      alert(`✅ 총 ${pairs.length}대 장비 일괄 할당 완료!\n자산 상태가 [출고대기(ASSIGNED)]로 즉시 전환되고 출고 검수 의뢰가 발행되었습니다.`);
       setSelectedCaIds([]);
       setSelectedAssetIds([]);
     } catch (err: any) {
@@ -484,7 +495,7 @@ export const AssetAssignment: React.FC = () => {
               {modelGroups.map(grp => {
                 const isAllSelected = grp.caIds.length > 0 && grp.caIds.every(id => selectedCaIds.includes(id));
                 const isPartiallySelected = grp.caIds.some(id => selectedCaIds.includes(id)) && !isAllSelected;
-                const assignedSlots = currentSlots.filter(ca => (ca.expectedModel === grp.modelName || (!ca.expectedModel && grp.modelName === '미지정')) && !!ca.assetId);
+                const assignedSlots = currentSlots.filter(ca => normalizeModelKey(ca.expectedModel) === grp.modelKey && !!ca.assetId);
 
                 return (
                   <div
