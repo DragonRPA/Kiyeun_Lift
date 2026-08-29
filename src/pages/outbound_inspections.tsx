@@ -117,7 +117,7 @@ export const OutboundInspections: React.FC = () => {
 
   const canEdit = hasPermission('repair', 'save') || hasPermission('delivery', 'save') || hasPermission('contract', 'save');
 
-  const [activeTabStatus, setActiveTabStatus] = useState<string>('ALL');
+  const [activeTabStatus, setActiveTabStatus] = useState<string>('PENDING');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
 
