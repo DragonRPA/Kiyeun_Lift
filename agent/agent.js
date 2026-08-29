@@ -255,7 +255,7 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // 3-3. 🌟 정품 엑셀 원본 기반 6종 통합 계약 서류팩 PDF 생성 엔진 (Excel COM + pdf-lib)
+  // 3-3. 🌟 정품 엑셀 원본 기반 7종 통합 계약 서류팩 PDF 생성 엔진 (Excel COM + pdf-lib)
   if (req.method === 'POST' && pathname === '/api/generate-contract-bundle') {
     let body = '';
     req.on('data', chunk => { body += chunk; });
@@ -265,26 +265,37 @@ const server = http.createServer(async (req, res) => {
         const payload = JSON.parse(body || '{}');
         if (!fs.existsSync(tempBuildDir)) fs.mkdirSync(tempBuildDir, { recursive: true });
 
-        const custName = payload.customerName || '고객사';
-        const bizRegNo = payload.bizRegNo || '등록번호미지정';
-        const ceoName = payload.ceoName || '대표자';
+        const custName = payload.customerName || '주식회사 세보엠이씨';
+        const bizRegNo = payload.bizRegNo || '118-81-00241';
+        const ceoName = payload.ceoName || '김우영, 이원하';
         const contractDate = payload.contractDate || new Date().toISOString().split('T')[0];
-        const siteName = payload.siteName || '현장미지정';
-        const siteAddress = payload.siteAddress || '';
-        const managerName = payload.managerName || '현장담당자';
-        const managerPhone = payload.managerPhone || '010-0000-0000';
-        const optionsText = payload.optionsText || '협착방지대, 튜브소화기';
+        const siteName = payload.siteName || '평택삼성전자 P4';
+        const siteAddress = payload.siteAddress || '경기 평택시 고덕면 여염리 산 157';
+        const managerName = payload.managerName || payload.siteManagerName || '장효준 선임';
+        const managerPhone = payload.managerPhone || payload.siteManagerPhone || '010-7723-0285';
+        const optionsText = payload.optionsText || '옵션 협착난간대, 튜브소화기 외';
         const remarksText = payload.remarksText || '안전발판 지급';
 
         const assets = payload.assets && payload.assets.length > 0 ? payload.assets : [
-          { assetNo: 'G06119', modelName: 'GTJZ0608ME', sn: '0108000379', rentalFee: 390000 }
+          {
+            assetNo: 'G26006',
+            modelName: 'GS-2646',
+            sn: 'GS46D-13045',
+            rentalFee: 480000,
+            manufacturer: 'GENIE (주)기연리프트',
+            manufactureYear: '2018',
+            weight: '1,956 kg',
+            workingHeight: '9.92 M',
+            capacityPreExt: '454 kg',
+            certDate: '2010-12-29'
+          }
         ];
 
         const primaryAsset = assets[0];
         const totalRentalFee = assets.reduce((sum, a) => sum + (Number(a.rentalFee) || 0), 0);
 
-        // PowerShell 스크립트 작성 (UTF-8 BOM 필수)
-        const psScript = `\ufeff
+        // PowerShell 스크립트 작성 (다중 자산 N대 엑셀 COM 배치 엔진)
+        let psScript = `\ufeff
 $ErrorActionPreference = 'Stop'
 
 $net = New-Object -ComObject WScript.Network
@@ -300,7 +311,7 @@ function Replace-Tag($targetWs, $tag, $val) {
   $null = $targetWs.Cells.Replace($tag, $val, 2, 1, $false, $false, $false)
 }
 
-# --- 1. 01.계약서.xlsx ---
+# ─── 1. 01.계약서.xlsx (1 page) ───
 $f1In = '${DRIVE_MIRROR_DIR.replace(/\\/g, '\\\\')}\\\\01.계약서.xlsx'
 $f1Work = '${tempBuildDir.replace(/\\/g, '\\\\')}\\\\01.계약서_filled.xlsx'
 $f1Pdf = '${tempBuildDir.replace(/\\/g, '\\\\')}\\\\01.계약서.pdf'
@@ -321,7 +332,7 @@ Replace-Tag $ws1 "{모델명}" "${primaryAsset.modelName}"
 Replace-Tag $ws1 "{수량}" "${assets.length}"
 Replace-Tag $ws1 "{SN}" "${primaryAsset.sn}"
 Replace-Tag $ws1 "{관리번호}" "${primaryAsset.assetNo}"
-Replace-Tag $ws1 "{임대료}" "${(primaryAsset.rentalFee || 390000).toLocaleString()}"
+Replace-Tag $ws1 "{임대료}" "${(primaryAsset.rentalFee || 480000).toLocaleString()}"
 Replace-Tag $ws1 "{소계}" "${totalRentalFee.toLocaleString()}"
 Replace-Tag $ws1 "{합계}" "₩${totalRentalFee.toLocaleString()}"
 Replace-Tag $ws1 "{옵션}" "${optionsText}"
@@ -335,57 +346,83 @@ $ws1.PageSetup.FitToPagesWide = 1
 $ws1.PageSetup.FitToPagesTall = 1
 $wb1.ExportAsFixedFormat(0, $f1Pdf)
 $wb1.Close($false)
+`;
 
-# --- 2. 02.반입전체크리스트.xlsx ---
-$f2In = '${DRIVE_MIRROR_DIR.replace(/\\/g, '\\\\')}\\\\02.반입전체크리스트.xlsx'
-$f2Work = '${tempBuildDir.replace(/\\/g, '\\\\')}\\\\02.반입전체크리스트_filled.xlsx'
-$f2Pdf = '${tempBuildDir.replace(/\\/g, '\\\\')}\\\\02.반입전체크리스트.pdf'
-Copy-Item $f2In $f2Work -Force
-$wb2 = $excel.Workbooks.Open($f2Work)
-$ws2 = $wb2.Sheets.Item(1)
-Replace-Tag $ws2 "{모델명}" "${primaryAsset.modelName}"
-Replace-Tag $ws2 "{관리번호}" "${primaryAsset.assetNo}"
-$ws2.PageSetup.PaperSize = 9
-$ws2.PageSetup.Orientation = 1
-$ws2.PageSetup.Zoom = $false
-$ws2.PageSetup.FitToPagesWide = 1
-$ws2.PageSetup.FitToPagesTall = 1
-$wb2.ExportAsFixedFormat(0, $f2Pdf)
-$wb2.Close($false)
+        // ─── 2. 02.반입전체크리스트.xlsx (자산 N대 루프) ───
+        for (let i = 0; i < assets.length; i++) {
+          const ast = assets[i];
+          const cModel = ast.modelName || 'GS-2646';
+          const cAssetNo = ast.assetNo || 'G26006';
 
-# --- 3. 03.안전점검결과서.xlsx ---
-$f3In = '${DRIVE_MIRROR_DIR.replace(/\\/g, '\\\\')}\\\\03.안전점검결과서.xlsx'
-$f3Work = '${tempBuildDir.replace(/\\/g, '\\\\')}\\\\03.안전점검결과서_filled.xlsx'
-$f3Pdf = '${tempBuildDir.replace(/\\/g, '\\\\')}\\\\03.안전점검결과서.pdf'
-Copy-Item $f3In $f3Work -Force
-$wb3 = $excel.Workbooks.Open($f3Work)
-$ws3 = $wb3.Sheets.Item(1)
-Replace-Tag $ws3 "{사업장명}" "${siteName}"
-Replace-Tag $ws3 "{형식}" "자주식 시저형"
-Replace-Tag $ws3 "{제조사}" "SINOBOOM"
-Replace-Tag $ws3 "{고객명}" "${custName}"
-Replace-Tag $ws3 "{동력방식}" "배터리식"
-Replace-Tag $ws3 "{모델명}" "${primaryAsset.modelName}"
-Replace-Tag $ws3 "{중량}" "1,520 kg"
-Replace-Tag $ws3 "{운행속도}" "3.5 km/h"
-Replace-Tag $ws3 "{작업높이}" "6.0 m"
-Replace-Tag $ws3 "{적재}" "230 kg"
-Replace-Tag $ws3 "{차량번호}" "${primaryAsset.assetNo} (${primaryAsset.sn})"
-Replace-Tag $ws3 "{제조연도}" "2021년"
-Replace-Tag $ws3 "{안전인증일}" "2021-05-12"
-Replace-Tag $ws3 "{Today}" "${contractDate}"
-Replace-Tag $ws3 "{점검자}" "김관주"
-$ws3.PageSetup.PaperSize = 9
-$ws3.PageSetup.Orientation = 1
-$ws3.PageSetup.Zoom = $false
-$ws3.PageSetup.FitToPagesWide = 1
-$ws3.PageSetup.FitToPagesTall = 1
-$wb3.ExportAsFixedFormat(0, $f3Pdf)
-$wb3.Close($false)
+          psScript += `
+# --- 2-${i+1}. 체크리스트: ${cAssetNo} (${cModel}) ---
+$f2In_${i} = '${DRIVE_MIRROR_DIR.replace(/\\/g, '\\\\')}\\\\02.반입전체크리스트.xlsx'
+$f2Work_${i} = '${tempBuildDir.replace(/\\/g, '\\\\')}\\\\02.체크리스트_${i}.xlsx'
+$f2Pdf_${i} = '${tempBuildDir.replace(/\\/g, '\\\\')}\\\\02.체크리스트_${i}.pdf'
+Copy-Item $f2In_${i} $f2Work_${i} -Force
+$wb2_${i} = $excel.Workbooks.Open($f2Work_${i})
+$ws2_${i} = $wb2_${i}.Sheets.Item(1)
+Replace-Tag $ws2_${i} "{모델명}" "${cModel}"
+Replace-Tag $ws2_${i} "{관리번호}" "${cAssetNo}"
+$ws2_${i}.PageSetup.PaperSize = 9
+$ws2_${i}.PageSetup.Orientation = 1
+$ws2_${i}.PageSetup.Zoom = $false
+$ws2_${i}.PageSetup.FitToPagesWide = 1
+$ws2_${i}.PageSetup.FitToPagesTall = 1
+$wb2_${i}.ExportAsFixedFormat(0, $f2Pdf_${i})
+$wb2_${i}.Close($false)
+`;
+        }
 
+        // ─── 3. 03.안전점검결과서.xlsx (자산 N대 루프) ───
+        for (let i = 0; i < assets.length; i++) {
+          const ast = assets[i];
+          const aModel = ast.modelName || 'GS-2646';
+          const aAssetNo = ast.assetNo || 'G26006';
+          const aSn = ast.sn || '';
+          const aMfg = ast.manufacturer || 'GENIE (주)기연리프트';
+          const aYear = ast.manufactureYear ? `${ast.manufactureYear}년` : '2018년';
+          const aWeight = ast.weight || '1,956 kg';
+          const aHeight = ast.workingHeight || '9.92 m';
+          const aCap = ast.capacityPreExt || '454 kg';
+          const aCertDate = ast.certDate || '2010-12-29';
+
+          psScript += `
+# --- 3-${i+1}. 안전점검표: ${aAssetNo} (${aModel}) ---
+$f3In_${i} = '${DRIVE_MIRROR_DIR.replace(/\\/g, '\\\\')}\\\\03.안전점검결과서.xlsx'
+$f3Work_${i} = '${tempBuildDir.replace(/\\/g, '\\\\')}\\\\03.안전점검_${i}.xlsx'
+$f3Pdf_${i} = '${tempBuildDir.replace(/\\/g, '\\\\')}\\\\03.안전점검_${i}.pdf'
+Copy-Item $f3In_${i} $f3Work_${i} -Force
+$wb3_${i} = $excel.Workbooks.Open($f3Work_${i})
+$ws3_${i} = $wb3_${i}.Sheets.Item(1)
+Replace-Tag $ws3_${i} "{사업장명}" "${siteName}"
+Replace-Tag $ws3_${i} "{형식}" "자주식 시저형"
+Replace-Tag $ws3_${i} "{제조사}" "${aMfg}"
+Replace-Tag $ws3_${i} "{고객명}" "${custName}"
+Replace-Tag $ws3_${i} "{동력방식}" "배터리식"
+Replace-Tag $ws3_${i} "{모델명}" "${aModel}"
+Replace-Tag $ws3_${i} "{중량}" "${aWeight}"
+Replace-Tag $ws3_${i} "{운행속도}" "3.5 km/h"
+Replace-Tag $ws3_${i} "{작업높이}" "${aHeight}"
+Replace-Tag $ws3_${i} "{적재}" "${aCap}"
+Replace-Tag $ws3_${i} "{차량번호}" "${aAssetNo}${aSn ? ` (${aSn})` : ''}"
+Replace-Tag $ws3_${i} "{제조연도}" "${aYear}"
+Replace-Tag $ws3_${i} "{안전인증일}" "${aCertDate}"
+Replace-Tag $ws3_${i} "{Today}" "${contractDate}"
+Replace-Tag $ws3_${i} "{점검자}" "김동우 팀장"
+$ws3_${i}.PageSetup.PaperSize = 9
+$ws3_${i}.PageSetup.Orientation = 1
+$ws3_${i}.PageSetup.Zoom = $false
+$ws3_${i}.PageSetup.FitToPagesWide = 1
+$ws3_${i}.PageSetup.FitToPagesTall = 1
+$wb3_${i}.ExportAsFixedFormat(0, $f3Pdf_${i})
+$wb3_${i}.Close($false)
+`;
+        }
+
+        psScript += `
 $excel.Quit()
 [System.Runtime.InteropServices.Marshal]::ReleaseComObject($excel) | Out-Null
-
 try { $net.SetDefaultPrinter($origPrinter) } catch {}
 `;
 
@@ -401,34 +438,94 @@ try { $net.SetDefaultPrinter($origPrinter) } catch {}
           PDFDocument = require('pdf-lib').PDFDocument;
         } catch (e) {
           try {
-            PDFDocument = require('d:/GoogleDrive/RPA 개발/01.AntiGravity/Kiyuen_Lift/node_modules/pdf-lib').PDFDocument;
+            PDFDocument = require(path.join(__dirname, '../node_modules/pdf-lib')).PDFDocument;
           } catch (e2) {
             PDFDocument = require('C:/KiyeunAgent/node_modules/pdf-lib').PDFDocument;
           }
         }
 
         const mergedPdf = await PDFDocument.create();
-        const pdfSources = [
-          path.join(tempBuildDir, '01.계약서.pdf'),
-          path.join(tempBuildDir, '02.반입전체크리스트.pdf'),
-          path.join(tempBuildDir, '03.안전점검결과서.pdf'),
-          path.join(DRIVE_MIRROR_DIR, '08.생산물배상책임보험증권.pdf'),
-          path.join(DRIVE_MIRROR_DIR, '09.사업자등록증.pdf'),
-          path.join(DRIVE_MIRROR_DIR, '10.통장사본.pdf')
-        ];
 
-        for (const p of pdfSources) {
-          if (fs.existsSync(p)) {
-            const bytes = fs.readFileSync(p);
-            const doc = await PDFDocument.load(bytes);
-            const copied = await mergedPdf.copyPages(doc, doc.getPageIndices());
-            copied.forEach(page => mergedPdf.addPage(page));
+        // 1. 계약서 1p 병합
+        const f1PdfPath = path.join(tempBuildDir, '01.계약서.pdf');
+        if (fs.existsSync(f1PdfPath)) {
+          const doc = await PDFDocument.load(fs.readFileSync(f1PdfPath));
+          const pages = await mergedPdf.copyPages(doc, doc.getPageIndices());
+          pages.forEach(p => mergedPdf.addPage(p));
+        }
+
+        // 2. 체크리스트 Np 병합
+        for (let i = 0; i < assets.length; i++) {
+          const f2PdfPath = path.join(tempBuildDir, `02.체크리스트_${i}.pdf`);
+          if (fs.existsSync(f2PdfPath)) {
+            const doc = await PDFDocument.load(fs.readFileSync(f2PdfPath));
+            const pages = await mergedPdf.copyPages(doc, doc.getPageIndices());
+            pages.forEach(p => mergedPdf.addPage(p));
           }
+        }
+
+        // 3. 안전점검표 Np 병합
+        for (let i = 0; i < assets.length; i++) {
+          const f3PdfPath = path.join(tempBuildDir, `03.안전점검_${i}.pdf`);
+          if (fs.existsSync(f3PdfPath)) {
+            const doc = await PDFDocument.load(fs.readFileSync(f3PdfPath));
+            const pages = await mergedPdf.copyPages(doc, doc.getPageIndices());
+            pages.forEach(p => mergedPdf.addPage(p));
+          }
+        }
+
+        // 4. 모델별 Eq_doc/{모델명}/ 정규 문서 일체 병합
+        const uniqueModels = [];
+        assets.forEach(a => {
+          if (a.modelName && !uniqueModels.includes(a.modelName)) uniqueModels.push(a.modelName);
+        });
+
+        for (const mName of uniqueModels) {
+          const eqDocDir = path.join(DRIVE_MIRROR_DIR, 'Eq_doc', mName);
+          if (fs.existsSync(eqDocDir)) {
+            const files = fs.readdirSync(eqDocDir).filter(f => f.toLowerCase().endsWith('.pdf')).sort();
+            for (const f of files) {
+              const docBytes = fs.readFileSync(path.join(eqDocDir, f));
+              const doc = await PDFDocument.load(docBytes);
+              const pages = await mergedPdf.copyPages(doc, doc.getPageIndices());
+              pages.forEach(p => mergedPdf.addPage(p));
+            }
+          }
+        }
+
+        // 5. 생산물배상책임보험증권 (2025~2026, 2026~2027 연속 보증)
+        const p2025 = path.join(DRIVE_MIRROR_DIR, '08.생산물배상책임보험증권_2025-2026.pdf');
+        if (fs.existsSync(p2025)) {
+          const doc = await PDFDocument.load(fs.readFileSync(p2025));
+          const pages = await mergedPdf.copyPages(doc, doc.getPageIndices());
+          pages.forEach(p => mergedPdf.addPage(p));
+        }
+        const p2026 = path.join(DRIVE_MIRROR_DIR, '08.생산물배상책임보험증권_2026-2027.pdf');
+        if (fs.existsSync(p2026)) {
+          const doc = await PDFDocument.load(fs.readFileSync(p2026));
+          const pages = await mergedPdf.copyPages(doc, doc.getPageIndices());
+          pages.forEach(p => mergedPdf.addPage(p));
+        }
+
+        // 6. 사업자등록증 (1p)
+        const pBiz = path.join(DRIVE_MIRROR_DIR, '09.사업자등록증.pdf');
+        if (fs.existsSync(pBiz)) {
+          const doc = await PDFDocument.load(fs.readFileSync(pBiz));
+          const pages = await mergedPdf.copyPages(doc, doc.getPageIndices());
+          pages.forEach(p => mergedPdf.addPage(p));
+        }
+
+        // 7. 통장사본 (1p)
+        const pBank = path.join(DRIVE_MIRROR_DIR, '10.통장사본.pdf');
+        if (fs.existsSync(pBank)) {
+          const doc = await PDFDocument.load(fs.readFileSync(pBank));
+          const pages = await mergedPdf.copyPages(doc, doc.getPageIndices());
+          pages.forEach(p => mergedPdf.addPage(p));
         }
 
         const finalPdfBytes = await mergedPdf.save();
         const pageCount = mergedPdf.getPageCount();
-        const fileName = `[기연리프트]_정품6종통합계약서류팩_${custName}_(${pageCount}p).pdf`;
+        const fileName = `[기연리프트]_계약서류팩_${custName}_${siteName}(${pageCount}p).pdf`;
 
         // 로컬 문서고 영구 아카이빙
         const yyyyMm = contractDate.substring(0, 7) || new Date().toISOString().substring(0, 7);
@@ -448,13 +545,14 @@ try { $net.SetDefaultPrinter($origPrinter) } catch {}
           pageCount,
           localPath: localSavePath,
           base64Content: b64,
-          message: `✅ 100% 정품 엑셀 기반 6종 통합 서류팩 생성 완료 (총 ${pageCount}페이지)`
+          message: `정품 엑셀 기반 7종 통합 계약 서류팩(${pageCount}페이지) 생성이 완료되었습니다.`
         }));
-      } catch (bundleErr) {
-        console.error('❌ 서류팩 생성 실패:', bundleErr);
+
+      } catch (err) {
+        console.error('Agent contract bundle error:', err);
         try { fs.rmSync(tempBuildDir, { recursive: true, force: true }); } catch (e) {}
         res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
-        res.end(JSON.stringify({ success: false, error: bundleErr.message }));
+        res.end(JSON.stringify({ success: false, error: err.message }));
       }
     });
     return;

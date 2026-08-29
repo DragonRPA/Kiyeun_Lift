@@ -1,5 +1,5 @@
 // d:\Kiyeun_Lift\src\services\email.ts
-// 실 구글 연동 계정 (googleEmail + gmailAppPassword) 기반 real Gmail SMTP 발송 서비스
+// 실 구글 연동 계정 (googleEmail + gmailAppPassword) 기반 real Gmail SMTP 발송 서비스 (로컬 에이전트 1순위 + Vercel 폴백)
 import { db } from './db';
 
 export interface SentEmail {
@@ -34,7 +34,7 @@ class RealGmailService {
 
   /**
    * 구글 연동 설정(db.googleConfigs 또는 localStorage 'erp_googleConfigs')의
-   * 최신 계정 정보를 실시간으로 읽어와서 Gmail SMTP 서버(/api/send-email)로 전송
+   * 최신 계정 정보를 실시간으로 읽어와서 로컬 에이전트(1순위) 또는 Vercel(/api/send-email)로 전송
    */
   async sendEmail(
     to: string,
@@ -137,27 +137,22 @@ class RealGmailService {
       throw new Error(lastError || '이메일 발송에 실패했습니다. 구글 앱 비밀번호 및 네트워크 상태를 확인해 주세요.');
     }
 
-      // 3. 발송 성공 기록
-      const newEmail: SentEmail = {
-        id: `mail-${Math.random().toString(36).substr(2, 9)}`,
-        to,
-        cc,
-        subject,
-        body,
-        sentAt: new Date().toISOString(),
-        success: true
-      };
+    // 3. 발송 성공 기록
+    const newEmail: SentEmail = {
+      id: `mail-${Math.random().toString(36).substr(2, 9)}`,
+      to,
+      cc,
+      subject,
+      body,
+      sentAt: new Date().toISOString(),
+      success: true
+    };
 
-      const history = this.getEmails();
-      history.unshift(newEmail);
-      this.setEmails(history);
+    const history = this.getEmails();
+    history.unshift(newEmail);
+    this.setEmails(history);
 
-      return newEmail;
-
-    } catch (err: any) {
-      console.error('Email sending error:', err);
-      throw new Error(err?.message || '이메일 발송 도중 오류가 발생했습니다.');
-    }
+    return newEmail;
   }
 }
 

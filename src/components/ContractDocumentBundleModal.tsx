@@ -99,48 +99,92 @@ export const ContractDocumentBundleModal: React.FC<Props> = ({ isOpen, onClose, 
     const siteAddress = site?.address || customer?.address || '경기 평택시 고덕면 여염리 산 157';
 
     try {
-      const result = await generateContractFullDocumentBundlePdf(
-        {
-          customerName: custName,
-          bizRegNo: customer?.bizRegNo || '118-81-00241',
-          ceoName: customer?.representative || '김우영, 이원하',
-          contractDate: selectedContract.startDate,
-          contractStartDate: selectedContract.startDate,
-          contractEndDate: selectedContract.endDate,
-          deliveryDate: selectedContract.startDate ? `${selectedContract.startDate} 예정` : undefined,
-          siteName: siteName,
-          siteAddress: siteAddress,
-          contractNo: selectedContract.id,
-          managerName: customer?.representative || '장효준 선임',
-          managerPhone: customer?.repContact || '010-7723-0285',
-          siteManagerName: site?.contactName || '장효준 선임',
-          siteManagerPhone: site?.contact || '010-7723-0285',
-          salesRepName: '김동우 팀장',
-          salesRepPhone: '010-9402-5296',
-          optionsText: (selectedContract as any).optionsText || (selectedContract as any).remarks || '옵션 협착난간대, 튜브소화기 외',
-          assets: mappedAssets.length > 0 ? mappedAssets : undefined
-        },
-        (stepText, current, total) => {
-          const percent = Math.round((current / total) * 95);
-          setProgressPercent(percent);
-          setProgressText('[' + current + '/' + total + '] ' + stepText);
+      const bundleOptions = {
+        customerName: custName,
+        bizRegNo: customer?.bizRegNo || '118-81-00241',
+        ceoName: customer?.representative || '김우영, 이원하',
+        contractDate: selectedContract.startDate,
+        contractStartDate: selectedContract.startDate,
+        contractEndDate: selectedContract.endDate,
+        deliveryDate: selectedContract.startDate ? `${selectedContract.startDate} 예정` : undefined,
+        siteName: siteName,
+        siteAddress: siteAddress,
+        contractNo: selectedContract.id,
+        managerName: customer?.representative || '장효준 선임',
+        managerPhone: customer?.repContact || '010-7723-0285',
+        siteManagerName: site?.contactName || '장효준 선임',
+        siteManagerPhone: site?.contact || '010-7723-0285',
+        salesRepName: '김동우 팀장',
+        salesRepPhone: '010-9402-5296',
+        optionsText: (selectedContract as any).optionsText || (selectedContract as any).remarks || '옵션 협착난간대, 튜브소화기 외',
+        assets: mappedAssets.length > 0 ? mappedAssets : undefined
+      };
+
+      let finalResult: { url: string; fileName: string; pageCount: number; blob?: Blob } | null = null;
+
+      // 1순위: 로컬 사이드카 에이전트 (정품 엑셀 COM 자동화) 호출
+      try {
+        setProgressText('로컬 에이전트 정품 엑셀 엔진 가동 중...');
+        setProgressPercent(30);
+
+        const agentResp = await fetch('http://127.0.0.1:5175/api/generate-contract-bundle', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(bundleOptions)
+        });
+
+        if (agentResp.ok) {
+          const agentRes = await agentResp.json();
+          if (agentRes.success && agentRes.base64Content) {
+            setProgressPercent(90);
+            const binaryStr = atob(agentRes.base64Content);
+            const bytes = new Uint8Array(binaryStr.length);
+            for (let i = 0; i < binaryStr.length; i++) {
+              bytes[i] = binaryStr.charCodeAt(i);
+            }
+            const blob = new Blob([bytes.buffer], { type: 'application/pdf' });
+            const url = URL.createObjectURL(blob);
+
+            finalResult = {
+              url,
+              fileName: agentRes.fileName || `[기연리프트]_계약서류팩_${custName}_${siteName}(${agentRes.pageCount}p).pdf`,
+              pageCount: agentRes.pageCount || 37,
+              blob
+            };
+          }
         }
-      );
+      } catch (agentErr) {
+        console.warn('로컬 에이전트 미연결, 브라우저 렌더러로 폴백:', agentErr);
+      }
+
+      // 2순위: 로컬 에이전트 미응답 시 브라우저 엔진으로 폴백
+      if (!finalResult) {
+        setProgressText('브라우저 엔진으로 서류팩 조립 중...');
+        const result = await generateContractFullDocumentBundlePdf(
+          bundleOptions,
+          (stepText, current, total) => {
+            const percent = Math.round((current / total) * 95);
+            setProgressPercent(percent);
+            setProgressText('[' + current + '/' + total + '] ' + stepText);
+          }
+        );
+        finalResult = { url: result.url, fileName: result.fileName, pageCount: result.pageCount, blob: result.blob };
+      }
 
       setProgressPercent(100);
-      setProgressText('✅ 총 ' + result.pageCount + '페이지 7종 통합 서류팩 완성!');
-      setGeneratedResult({ url: result.url, fileName: result.fileName, pageCount: result.pageCount, blob: result.blob });
+      setProgressText('✅ 총 ' + finalResult.pageCount + '페이지 정품 7종 통합 서류팩 완성!');
+      setGeneratedResult(finalResult);
 
       // 이메일 수신자/제목 기본값 세팅
       setEmailRecipient(customer?.repEmail || site?.email || '');
       setEmailSubject(`[기연리프트] ${custName} - ${siteName} 고소작업대 임대차 계약서 및 7종 필수서류 묶음`);
 
       if (openPreview) {
-        window.open(result.url, '_blank');
+        window.open(finalResult.url, '_blank');
       } else if (autoDownload) {
         const link = document.createElement('a');
-        link.href = result.url;
-        link.download = result.fileName;
+        link.href = finalResult.url;
+        link.download = finalResult.fileName;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
