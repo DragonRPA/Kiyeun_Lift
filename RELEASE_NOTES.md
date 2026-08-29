@@ -1,3 +1,24 @@
+# Release Notes (v1.129.0.Build.255 - 2026-08-29 13:00)
+
+## 📋 [제원표 PDF 이미지 주입 오류 수정 & 생성/열기 UX 개선]
+
+### 🌟 반영 내용
+
+#### 1. 제원표 이미지 주입 방식 근본 교체 (`specImages.ts`)
+- Base64 인라인 내장(385KB) → `public/images/` public URL 참조 방식으로 전환.
+- 번들 크기 **-384KB** 감소, 브라우저 캐싱 활용, `lift_retracted.png` / `lift_extended.png` git 등록 완료.
+
+#### 2. html2canvas 캡처 전 이미지 로딩 대기 보장 (`specSheetPdf.ts`)
+- `iDoc.write(html)` 후 iframe 내 `<img>` 요소 전체의 `onload`를 `Promise.all`로 대기한 뒤 캡처.
+- 기존 고정 타임아웃(850ms)에 의한 이미지 미로딩 상태 캡처 문제 해결.
+
+#### 3. 제원표 버튼 동작 개선 (`Products.tsx`)
+- `specSheetUrl`이 이미 저장된 모델: 버튼 즉시 클릭 → 새 탭에서 PDF 열기 (초록 버튼)
+- `specSheetUrl`이 없는 모델: 생성 → R2 저장 → 자동 열기 → DB 갱신 (파랑 버튼)
+- 테이블 행 / 제원표 미리보기 모달 / R2 문서 모달 하단 3곳 모두 일괄 적용.
+
+---
+
 # Release Notes (v1.129.0.Build.254 - 2026-08-27 16:22)
 
 ## 📋 [장비 모델 53종 제원표 PDF 자동 파싱·DB 일괄 주입 및 실물 서식 뷰어 완결]
