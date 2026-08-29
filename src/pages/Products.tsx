@@ -192,16 +192,18 @@ export const Products: React.FC = () => {
       setEditingProduct(null);
       refreshAllData();
 
-      // 저장 성공 즉시 제원표 자동 생성 (백그라운드 — 사용자 흐름 차단 없음)
-      setGeneratingModelId(productSnapshot.modelName);
-      generateAndUploadSpecSheetToR2(productSnapshot, googleConfigs[0])
-        .then(res => {
-          if (!res.success) console.error('[제원표 자동생성] 실패:', res.error);
-        })
-        .finally(() => {
-          setGeneratingModelId(null);
-          refreshAllData();
-        });
+      // 기존 제원표 PDF가 없는 모델인 경우에만 백그라운드 자동 생성 (기존 원형 PDF 100% 보존)
+      if (!productSnapshot.specSheetUrl) {
+        setGeneratingModelId(productSnapshot.modelName);
+        generateAndUploadSpecSheetToR2(productSnapshot, googleConfigs[0])
+          .then(res => {
+            if (!res.success) console.error('[제원표 자동생성] 실패:', res.error);
+          })
+          .finally(() => {
+            setGeneratingModelId(null);
+            refreshAllData();
+          });
+      }
 
     } catch (err: any) {
       alert(`저장 실패: ${err?.message || JSON.stringify(err)}`);
