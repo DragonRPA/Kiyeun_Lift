@@ -742,18 +742,33 @@ export const OutboundInspections: React.FC = () => {
                       📍 {group.siteName}
                     </div>
 
-                    <div style={{ padding: '8px', backgroundColor: 'var(--bg-card)', borderRadius: '6px', border: '1px solid var(--border-color)', marginBottom: '8px' }}>
+                    {/* 포함 장비 요약 및 할당 장비 관리번호 */}
+                    <div style={{ padding: '8px 10px', backgroundColor: 'var(--bg-card)', borderRadius: '6px', border: '1px solid var(--border-color)', marginBottom: '8px' }}>
                       <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        <Layers size={13} color="var(--primary)" /> 총 {group.assets.length}대 포함: {group.equipmentsSummary}
+                        <Layers size={13} color="var(--primary)" /> 총 {group.assets.length}대: {group.equipmentsSummary}
                       </div>
+                      {group.assets.length > 0 && (
+                        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '4px', marginTop: '6px', paddingTop: '6px', borderTop: '1px dashed var(--border-color)' }}>
+                          <span style={{ fontSize: '10.5px', color: 'var(--text-muted)', fontWeight: 600 }}>할당 장비:</span>
+                          {group.assets.map(a => (
+                            <span key={a.id} style={{ padding: '1px 5px', borderRadius: '4px', backgroundColor: 'var(--bg-app)', border: '1px solid var(--border-color)', color: 'var(--text-primary)', fontSize: '10.5px', fontWeight: 700 }}>
+                              {a.assetNo}
+                            </span>
+                          ))}
+                        </div>
+                      )}
                     </div>
 
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11px', color: 'var(--text-muted)' }}>
-                      <span>요구 스펙: {group.requestedSpecs.length}개 항목</span>
-                      <div style={{ display: 'flex', gap: '4px' }}>
-                        {group.assets.slice(0, 3).map(a => (
-                          <span key={a.id} style={{ padding: '1px 5px', borderRadius: '4px', backgroundColor: 'rgba(59,130,246,0.1)', color: 'var(--primary)', fontWeight: 700 }}>
-                            {a.assetNo}
+                    {/* 요구 스펙 실제 체크리스트 항목 태그 */}
+                    <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                      <div style={{ marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <ShieldCheck size={12} color="var(--primary)" />
+                        <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>요구 스펙 ({group.requestedSpecs.length}개 항목):</span>
+                      </div>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                        {group.requestedSpecs.map(spec => (
+                          <span key={spec.id} style={{ padding: '2px 6px', borderRadius: '4px', backgroundColor: 'rgba(59,130,246,0.1)', color: 'var(--primary)', fontWeight: 600, fontSize: '10.5px' }}>
+                            {getDynamicSpecLabel(spec, group.rawText || '')}
                           </span>
                         ))}
                       </div>
