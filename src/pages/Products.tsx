@@ -1150,7 +1150,9 @@ export const Products: React.FC = () => {
         }}>
           <div className="card" style={{
             width: '100%', maxWidth: '680px', maxHeight: '90vh', overflowY: 'auto',
-            backgroundColor: '#ffffff', color: '#111827', padding: '24px', borderRadius: '12px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.3)'
+            backgroundColor: '#ffffff', color: '#111827', padding: '24px', borderRadius: '12px',
+            boxShadow: '0 20px 25px -5px rgba(0,0,0,0.3)',
+            colorScheme: 'light'
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', borderBottom: '1px solid #e5e7eb', paddingBottom: '12px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -1214,20 +1216,20 @@ export const Products: React.FC = () => {
                   );
                 }
                 return (
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
-                    <thead style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e5e7eb' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', backgroundColor: '#ffffff', color: '#111827' }}>
+                    <thead style={{ backgroundColor: '#f1f5f9', borderBottom: '1px solid #e5e7eb' }}>
                       <tr>
-                        <th style={{ padding: '8px 12px', textAlign: 'left' }}>문서명</th>
-                        <th style={{ padding: '8px 12px', width: '80px', textAlign: 'right' }}>용량</th>
-                        <th style={{ padding: '8px 12px', width: '120px', textAlign: 'center' }}>동작</th>
+                        <th style={{ padding: '8px 12px', textAlign: 'left', color: '#374151', fontWeight: '600' }}>문서명</th>
+                        <th style={{ padding: '8px 12px', width: '80px', textAlign: 'right', color: '#374151', fontWeight: '600' }}>용량</th>
+                        <th style={{ padding: '8px 12px', width: '120px', textAlign: 'center', color: '#374151', fontWeight: '600' }}>동작</th>
                       </tr>
                     </thead>
                     <tbody>
                       {docs.map((doc, i) => (
-                        <tr key={doc.key} style={{ borderBottom: i < docs.length - 1 ? '1px solid #f1f5f9' : 'none' }}>
-                          <td style={{ padding: '8px 12px', fontWeight: '500', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <tr key={doc.key} style={{ borderBottom: i < docs.length - 1 ? '1px solid #f1f5f9' : 'none', backgroundColor: '#ffffff' }}>
+                          <td style={{ padding: '8px 12px', fontWeight: '500', display: 'flex', alignItems: 'center', gap: '6px', color: '#111827' }}>
                             <FileText size={14} color="#64748b" />
-                            <span>{doc.name}</span>
+                            <span style={{ color: '#111827' }}>{doc.name}</span>
                           </td>
                           <td style={{ padding: '8px 12px', textAlign: 'right', color: '#64748b' }}>
                             {(doc.size / 1024).toFixed(0)} KB
