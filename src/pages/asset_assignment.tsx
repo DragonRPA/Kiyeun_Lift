@@ -4,7 +4,7 @@ import { useApp } from '../context/AppContext';
 import { Wrench, CheckCircle, PackageSearch, Layers, Truck, ChevronDown, Check, Activity, Search, AlertTriangle, CheckSquare, Square, Zap, X } from 'lucide-react';
 
 export const AssetAssignment: React.FC = () => {
-  const { hasPermission, contractAssets, contracts, customers, assets, assignAssetToContract, batchAssignAssetsToContract, contractHistory } = useApp();
+  const { hasPermission, contractAssets, contracts, customers, assets, assignAssetToContract, batchAssignAssetsToContract, unassignAssetFromContract, contractHistory } = useApp();
   
   const [selectedContractId, setSelectedContractId] = useState<string>('');
   
@@ -280,6 +280,56 @@ export const AssetAssignment: React.FC = () => {
     }
   };
 
+  // 🔄 단일 장비 할당 취소 (임대가능 상태 복원)
+  const handleUnassignSlot = async (caId: string, assetNo?: string) => {
+    if (isAssigning) return;
+    if (!canEdit) {
+      alert('장비 할당 권한이 없습니다.');
+      return;
+    }
+
+    if (!confirm(`[${assetNo || '해당 장비'}]의 할당을 취소하고 다시 [임대가능] 가용 재고로 원복하시겠습니까?`)) {
+      return;
+    }
+
+    setIsAssigning(true);
+    try {
+      await unassignAssetFromContract(caId);
+      alert(`🔄 [${assetNo || '장비'}] 할당이 취소되었습니다.\n자산이 [임대가능] 상태로 복원되었습니다.`);
+    } catch (err: any) {
+      console.error('할당 취소 실패:', err);
+      alert(`⚠️ 할당 취소 실패: ${err?.message || err}`);
+    } finally {
+      setIsAssigning(false);
+    }
+  };
+
+  // 🔄 특정 모델 할당 장비 전체 일괄 취소
+  const handleBatchUnassignModelSlots = async (modelName: string, caIdsWithAsset: string[]) => {
+    if (isAssigning || caIdsWithAsset.length === 0) return;
+    if (!canEdit) {
+      alert('장비 할당 권한이 없습니다.');
+      return;
+    }
+
+    if (!confirm(`[${modelName}] 모델에 이미 할당된 ${caIdsWithAsset.length}대의 장비 할당을 모두 취소하시겠습니까?`)) {
+      return;
+    }
+
+    setIsAssigning(true);
+    try {
+      for (const caId of caIdsWithAsset) {
+        await unassignAssetFromContract(caId);
+      }
+      alert(`🔄 [${modelName}] ${caIdsWithAsset.length}대 장비 할당 취소 완료!\n모든 장비가 [임대가능] 상태로 복원되었습니다.`);
+    } catch (err: any) {
+      console.error('모델 일괄 할당 취소 실패:', err);
+      alert(`⚠️ 할당 취소 실패: ${err?.message || err}`);
+    } finally {
+      setIsAssigning(false);
+    }
+  };
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', fontSize: '13px' }}>
       
@@ -544,29 +594,77 @@ export const AssetAssignment: React.FC = () => {
                       )}
                     </div>
 
-                    {/* 기할당된 장비가 있는 경우 태그 표시 */}
+                    {/* 기할당된 장비가 있는 경우 태그 및 취소 버튼 표시 */}
                     {assignedSlots.length > 0 && (
                       <div style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px dashed var(--border-color)' }}>
-                        <div style={{ fontSize: '10.5px', fontWeight: 700, color: 'var(--success)', marginBottom: '4px' }}>
-                          ✓ 할당 완료 장비 ({assignedSlots.length}대):
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                          <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--success)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <CheckCircle size={12} /> 할당 완료 장비 ({assignedSlots.length}대)
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleBatchUnassignModelSlots(grp.modelName, assignedSlots.map(s => s.id))}
+                            style={{
+                              background: 'none',
+                              border: 'none',
+                              color: '#ef4444',
+                              fontSize: '10.5px',
+                              fontWeight: 700,
+                              cursor: 'pointer',
+                              padding: '2px 4px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '2px',
+                              textDecoration: 'underline'
+                            }}
+                          >
+                            <X size={11} /> 이 모델 할당 전체 취소
+                          </button>
                         </div>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
                           {assignedSlots.map(ca => {
                             const a = assets.find(ast => ast.id === ca.assetId);
                             return (
                               <span
                                 key={ca.id}
                                 style={{
-                                  padding: '2px 6px',
+                                  padding: '3px 8px',
                                   borderRadius: '4px',
                                   backgroundColor: 'var(--success-light)',
                                   border: '1px solid var(--success)',
                                   color: 'var(--success)',
                                   fontSize: '11px',
-                                  fontWeight: 600
+                                  fontWeight: 600,
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '6px'
                                 }}
                               >
-                                {a?.assetNo || '장비'} ({a?.serialNo || 'S/N미상'})
+                                <span>{a?.assetNo || '장비'} ({a?.serialNo || 'S/N미상'})</span>
+                                <button
+                                  type="button"
+                                  title="할당 취소 (임대가능 재고로 복원)"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleUnassignSlot(ca.id, a?.assetNo);
+                                  }}
+                                  style={{
+                                    background: 'rgba(239, 68, 68, 0.15)',
+                                    border: '1px solid rgba(239, 68, 68, 0.4)',
+                                    borderRadius: '3px',
+                                    color: '#ef4444',
+                                    cursor: 'pointer',
+                                    padding: '1px 3px',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    fontSize: '10px',
+                                    fontWeight: 800,
+                                    lineHeight: 1
+                                  }}
+                                >
+                                  <X size={10} /> 취소
+                                </button>
                               </span>
                             );
                           })}

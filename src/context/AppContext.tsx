@@ -146,9 +146,10 @@ interface AppContextType {
   succeedContract: (contractId: string, successorCustomerId: string, successorContactId: string, successorSiteId: string, successionDate: string, description: string) => void;
   exchangeAsset: (contractId: string, oldAssetId: string, newAssetId: string, exchangeDate: string) => void;
   
-  // 장비 할당 및 출고전 교체
+  // 장비 할당 및 출고전 교체 / 할당 취소
   assignAssetToContract: (contractAssetId: string, assetId: string) => Promise<void>;
   batchAssignAssetsToContract: (pairs: { contractAssetId: string; assetId: string }[]) => Promise<void>;
+  unassignAssetFromContract: (contractAssetId: string) => Promise<void>;
   exchangeOutboundAsset: (contractAssetId: string, oldAssetId: string, newAssetId: string, reason?: string, markOldAsRepairing?: boolean, customPenaltyScore?: number) => Promise<void>;
   saveSmartDispatch: (data: SmartDispatchData, autoRegister: boolean, onProgress?: (log: string, percent: number) => void) => Promise<{ success: boolean; requiresConfirm?: boolean; missingFields?: string[]; errorMessage?: string }>;
   saveSmartReturn: (data: SmartReturnData) => void;
@@ -2125,6 +2126,61 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       const errMsg = err?.message || err?.details || JSON.stringify(err);
       showErrorModal(`⚠️ 일괄 장비 할당 중 오류가 발생하여 모든 작업이 안전하게 원복되었습니다:\n\n${errMsg}`, '일괄 장비 할당 실패');
+      throw err;
+    }
+  };
+
+  // 🔄 장비 할당 취소 메소드 (출고 검수 전 슬롯 할당 해제 및 장비 AVAILABLE 복원)
+  const unassignAssetFromContract = async (contractAssetId: string) => {
+    const origCa = db.contractAssets.find(c => c.id === contractAssetId);
+    if (!origCa || !origCa.assetId) return;
+
+    const origAssetId = origCa.assetId;
+    const origAsset = db.assets.find(a => a.id === origAssetId);
+
+    const caSnapshot = { ...origCa };
+    const assetSnapshot = origAsset ? { ...origAsset } : null;
+
+    try {
+      const nowIso = new Date().toISOString();
+
+      // 1. ContractAsset 에서 assetId 제거
+      db.updateRow<ContractAsset>('contractAssets', contractAssetId, {
+        assetId: undefined
+      });
+
+      // 2. Asset 상태를 AVAILABLE (임대가능) 로 복원 및 계약 연결 해제
+      if (origAsset) {
+        db.updateRow<Asset>('assets', origAssetId, {
+          status: 'AVAILABLE',
+          currentCustomerId: undefined,
+          currentSiteId: undefined,
+          contractStart: undefined,
+          contractEnd: undefined,
+          updatedAt: nowIso
+        });
+      }
+
+      // 3. 아직 대기 중(PENDING)인 출고 검수 의뢰건 삭제
+      const pendingInsp = db.outboundInspections.find(
+        i => (i.contractAssetId === contractAssetId || (i.contractId === origCa.contractId && i.assetId === origAssetId)) && i.status === 'PENDING'
+      );
+      if (pendingInsp) {
+        db.deleteRow('outboundInspections', pendingInsp.id);
+      }
+
+      // 4. DB 완결 동기 대기 & 전역 리렌더링
+      await db.awaitPendingWrites();
+      refreshAllData();
+
+    } catch (err: any) {
+      console.error('unassignAssetFromContract error & Rollback:', err);
+      // 롤백
+      if (caSnapshot) db.updateRow<ContractAsset>('contractAssets', contractAssetId, caSnapshot);
+      if (assetSnapshot && origAssetId) db.updateRow<Asset>('assets', origAssetId, assetSnapshot);
+      refreshAllData();
+
+      showErrorModal(`⚠️ 장비 할당 취소 중 오류가 발생했습니다:\n\n${err?.message || err}`, '할당 취소 실패');
       throw err;
     }
   };
@@ -4623,7 +4679,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       purchaseConsumable, useConsumable, transferConsumableToMechanic, returnConsumableToHq,
       requestConsumablePurchase, acceptConsumablePurchase, completeConsumablePurchase, inboundConsumablePurchase, clearEvidenceFileUrls, updateEvidenceFileUrls,
       createContract, extendContract, shortenContract, succeedContract, exchangeAsset,
-      assignAssetToContract, batchAssignAssetsToContract, exchangeOutboundAsset,
+      assignAssetToContract, batchAssignAssetsToContract, unassignAssetFromContract, exchangeOutboundAsset,
       saveSmartDispatch, saveSmartReturn,
       completeTodo,
       generateBillingsForMonth, getDueContractsForBilling, generateDueBillings, generateBillingForSingleContract, regenerateBilling, approveBilling, cancelBilling, receivePayment, cancelPayment, saveBankDeposit, deleteBankDeposit,
