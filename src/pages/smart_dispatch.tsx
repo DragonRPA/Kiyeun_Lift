@@ -1441,7 +1441,7 @@ ${activeSpecs.map((s, idx) => `  ${idx + 1}. [적용] ${s.label}`).join('\n') ||
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px 12px', fontSize: '11.5px' }}>
                         {appliedSpecs.map((s, idx) => (
                           <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: '5px', fontWeight: 600, color: '#111827', wordBreak: 'break-all' }}>
-                            <span style={{ color: '#16a34a', fontWeight: 800 }}>☑</span>
+                            <span style={{ fontSize: '13px', color: '#475569', fontWeight: 400, lineHeight: 1 }}>□</span>
                             <span>{idx + 1}. {getDynamicSpecLabel(s, rawText)}</span>
                           </div>
                         ))}
