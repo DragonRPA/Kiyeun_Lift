@@ -1,3 +1,18 @@
+# Release Notes (v1.130.0.Build.264 - 2026-08-29 15:56)
+
+## 📋 [계약서 7종 서류팩 이메일 발송 Gmail SMTP 다이렉트 연동 및 타입 정합성 완결]
+
+### 🌟 반영 내용
+
+#### 1. 계약 서류팩 모달 시스템 Gmail SMTP 실시간 발송 연동 (`ContractDocumentBundleModal.tsx`)
+- 조립된 7종 통합 PDF(37p) Blob을 Base64로 자동 변환하여 시스템 Gmail SMTP API(`/api/send-email`)로 다이렉트 전송하는 실체화 기능 구현.
+- `Customer`, `CustomerSite`, `Asset`, `Contract` 엔티티 타입 정합성 100% 동기화.
+
+#### 2. Vercel 배포 최적화 및 빌드 검증 (`pdfBundle.ts`)
+- GoogleConfig에서 사용하는 레거시 구글 드라이브 병합 함수(`mergeDriveFilesToPdf`) 인터페이스 복원 및 Vite 프로덕션 번들 빌드 검증 통과.
+
+---
+
 # Release Notes (v1.130.0.Build.263 - 2026-08-29 15:16)
 
 ## 📋 [계약서 7종 통합 서류팩 PDF 자동 조립 & 이메일 연동 엔진 구축]

@@ -41,6 +41,10 @@ export interface ContractFullBundleOptions {
   salesRepPhone?: string;
   optionsText?: string;
   remarksText?: string;
+  currentInsuranceStartDate?: string;
+  currentInsuranceEndDate?: string;
+  nextInsuranceStartDate?: string;
+  nextInsuranceEndDate?: string;
   assets?: ContractBundleAssetItem[];
   r2Config?: {
     accountId?: string;
@@ -801,3 +805,80 @@ export async function downloadContractDocumentBundlePdf(options?: SampleContract
   document.body.removeChild(link);
   URL.revokeObjectURL(result.url);
 }
+
+// ──────────────────────────────────────────────────────────────────────────────
+// 구글 드라이브 파일 병합 호환 인터페이스 및 함수
+// ──────────────────────────────────────────────────────────────────────────────
+
+export interface DriveFileMergeItem {
+  label: string;
+  fileId: string;
+}
+
+export interface MergeDriveFilesResult {
+  successCount: number;
+  failedLabels: string[];
+  totalPages: number;
+}
+
+export interface MergeDriveFilesOptions {
+  token?: string;
+  appsScriptUrl?: string;
+  outputFileName: string;
+  onProgress?: (label: string, index: number, total: number) => void;
+}
+
+export async function mergeDriveFilesToPdf(
+  items: DriveFileMergeItem[],
+  options: MergeDriveFilesOptions | string,
+  _legacyOutputFileName?: string,
+  _legacyOnProgress?: (label: string, index: number, total: number) => void
+): Promise<MergeDriveFilesResult> {
+  const opts: MergeDriveFilesOptions = typeof options === 'string'
+    ? { token: options, outputFileName: _legacyOutputFileName || 'merged.pdf', onProgress: _legacyOnProgress }
+    : options;
+
+  const mergedPdf = await PDFDocument.create();
+  let successCount = 0;
+  const failedLabels: string[] = [];
+
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    opts.onProgress?.(item.label, i + 1, items.length);
+
+    try {
+      let arrayBuffer: ArrayBuffer | null = null;
+      if (opts.appsScriptUrl) {
+        const res = await fetch(`${opts.appsScriptUrl}?action=download&fileId=${item.fileId}`);
+        if (res.ok) arrayBuffer = await res.arrayBuffer();
+      }
+      if (arrayBuffer) {
+        const doc = await PDFDocument.load(arrayBuffer);
+        const pages = await mergedPdf.copyPages(doc, doc.getPageIndices());
+        pages.forEach(p => mergedPdf.addPage(p));
+        successCount++;
+      } else {
+        failedLabels.push(item.label);
+      }
+    } catch (e) {
+      failedLabels.push(item.label);
+    }
+  }
+
+  const totalPages = mergedPdf.getPageCount();
+  if (totalPages > 0) {
+    const bytes = await mergedPdf.save();
+    const blob = new Blob([bytes.buffer as ArrayBuffer], { type: 'application/pdf' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = opts.outputFileName;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }
+
+  return { successCount, failedLabels, totalPages };
+}
+

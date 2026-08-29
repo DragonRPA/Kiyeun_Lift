@@ -61,7 +61,7 @@ export const ContractDocumentBundleModal: React.FC<Props> = ({ isOpen, onClose, 
         sn: a?.serialNo || 'GS46D-13045',
         rentalFee: ca.monthlyRentalFee || 480000,
         manufacturer: prod?.manufacturer || a?.manufacturer || 'GENIE (주)기연리프트',
-        manufactureYear: a?.year || '2018',
+        manufactureYear: a?.manufactureYear || '2018',
         weight: prod?.weight || '1,956 kg',
         workingHeight: prod?.workingHeight || '9.92 M',
         platformHeight: prod?.platformHeight || '7.92 M',
@@ -111,13 +111,13 @@ export const ContractDocumentBundleModal: React.FC<Props> = ({ isOpen, onClose, 
           siteName: siteName,
           siteAddress: siteAddress,
           contractNo: selectedContract.id,
-          managerName: customer?.contactPerson || '장효준 선임',
-          managerPhone: customer?.phone || '010-7723-0285',
-          siteManagerName: site?.contactPerson || '장효준 선임',
-          siteManagerPhone: site?.contactPhone || '010-7723-0285',
+          managerName: customer?.representative || '장효준 선임',
+          managerPhone: customer?.repContact || '010-7723-0285',
+          siteManagerName: site?.contactName || '장효준 선임',
+          siteManagerPhone: site?.contact || '010-7723-0285',
           salesRepName: '김동우 팀장',
           salesRepPhone: '010-9402-5296',
-          optionsText: selectedContract.remarks || '옵션 협착난간대, 튜브소화기 외',
+          optionsText: (selectedContract as any).optionsText || (selectedContract as any).remarks || '옵션 협착난간대, 튜브소화기 외',
           assets: mappedAssets.length > 0 ? mappedAssets : undefined
         },
         (stepText, current, total) => {
@@ -132,7 +132,7 @@ export const ContractDocumentBundleModal: React.FC<Props> = ({ isOpen, onClose, 
       setGeneratedResult({ url: result.url, fileName: result.fileName, pageCount: result.pageCount, blob: result.blob });
 
       // 이메일 수신자/제목 기본값 세팅
-      setEmailRecipient(customer?.email || customer?.repEmail || '');
+      setEmailRecipient(customer?.repEmail || site?.email || '');
       setEmailSubject(`[기연리프트] ${custName} - ${siteName} 고소작업대 임대차 계약서 및 7종 필수서류 묶음`);
 
       if (openPreview) {
@@ -165,14 +165,13 @@ export const ContractDocumentBundleModal: React.FC<Props> = ({ isOpen, onClose, 
 
     setIsSendingEmail(true);
     try {
-      // 1순위: emailService 호출
       const custName = customer?.name || '고객사';
       const siteName = site?.name || '현장';
       const body = `
 안녕하십니까, ${custName} 담당자님.
 (주)기연리프트 영업팀입니다.
 
-요청하신 [${siteName}] 현장 고소작업대 임대차 계약서 및 법정/필수 7종 서류 묶음(총 ${generatedResult.pageCount}페이지)을 송부드립니다.
+요청하신 [${siteName}] 현장 고소작업대 임대차 계약서 및 법정/필수 7종 서류 묶음(총 ${generatedResult.pageCount}페이지)을 첨부 파일로 송부드립니다.
 
 ■ 첨부 서류 구성 (단일 통합 PDF):
 1. 고소작업대 임대차 계약서
@@ -190,12 +189,28 @@ export const ContractDocumentBundleModal: React.FC<Props> = ({ isOpen, onClose, 
 전화: 031-334-5296 / 영업담당: 010-9402-5296
       `.trim();
 
-      // mailto 폴백 URL 준비
-      const mailtoUrl = `mailto:${encodeURIComponent(emailRecipient)}?subject=${encodeURIComponent(emailSubject)}&body=${encodeURIComponent(body)}`;
-      window.open(mailtoUrl, '_blank');
+      // PDF Blob -> Base64 변환
+      let base64Content = '';
+      if (generatedResult.blob) {
+        const arrayBuffer = await generatedResult.blob.arrayBuffer();
+        const bytes = new Uint8Array(arrayBuffer);
+        let binary = '';
+        for (let i = 0; i < bytes.byteLength; i++) {
+          binary += String.fromCharCode(bytes[i]);
+        }
+        base64Content = btoa(binary);
+      }
+
+      // 시스템 Gmail SMTP API (/api/send-email) 호출
+      await emailService.sendEmail(
+        emailRecipient,
+        emailSubject,
+        body,
+        base64Content ? [{ filename: generatedResult.fileName, content: base64Content }] : []
+      );
 
       setEmailSentSuccess(true);
-      alert(`✅ 이메일 클라이언트가 실행되었습니다.\n수신인: ${emailRecipient}\nPDF 파일(${generatedResult.fileName})을 메일에 첨부하여 발송해 주세요.`);
+      alert(`✅ 이메일이 성공적으로 발송되었습니다!\n\n• 수신인: ${emailRecipient}\n• 제목: ${emailSubject}\n• 첨부파일: ${generatedResult.fileName} (${generatedResult.pageCount}페이지)`);
     } catch (err: any) {
       console.error('이메일 발송 실패:', err);
       alert(`이메일 발송 실패: ${err?.message || err}`);
