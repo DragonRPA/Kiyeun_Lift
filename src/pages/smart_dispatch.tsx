@@ -1267,8 +1267,8 @@ ${activeSpecs.map((s, idx) => `  ${idx + 1}. [적용] ${s.label}`).join('\n') ||
                 </button>
               </div>
 
-              {/* 실제 인쇄 타겟 컨테이너 */}
-              <div id="dispatch-sheet-print" style={{ padding: '24px', backgroundColor: '#ffffff', color: '#111111', borderRadius: '4px', border: '1px solid #ddd', maxWidth: '800px', margin: '0 auto' }}>
+              {/* 실제 인쇄 타겟 컨테이너 (다크모드에서도 항상 백색 용지 + 검정 텍스트로 100% 선명하게 렌더링) */}
+              <div id="dispatch-sheet-print" style={{ padding: '24px', backgroundColor: '#ffffff', color: '#111827', borderRadius: '4px', border: '1px solid #cbd5e1', maxWidth: '800px', margin: '0 auto', boxShadow: '0 4px 16px rgba(0,0,0,0.1)' }}>
                 <div style={{ textAlign: 'center', borderBottom: '2px solid #312e81', paddingBottom: '12px', marginBottom: '24px' }}>
                   <h1 style={{ margin: 0, fontSize: '24px', fontWeight: '800', color: '#1e1b4b', letterSpacing: '2px' }}>기연리프트 출고요청서</h1>
                 </div>
@@ -1277,14 +1277,14 @@ ${activeSpecs.map((s, idx) => `  ${idx + 1}. [적용] ${s.label}`).join('\n') ||
                 <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '20px' }}>
                   <tbody>
                     <tr>
-                      <th style={{ border: '1px solid #ddd', padding: '10px', backgroundColor: '#f9fafb', width: '130px', fontWeight: 'bold', fontSize: '13px' }}>고객사명</th>
-                      <td style={{ border: '1px solid #ddd', padding: '10px', fontSize: '13px' }}>{customerName || '-'}</td>
-                      <th style={{ border: '1px solid #ddd', padding: '10px', backgroundColor: '#f9fafb', width: '130px', fontWeight: 'bold', fontSize: '13px' }}>현장명</th>
-                      <td style={{ border: '1px solid #ddd', padding: '10px', fontSize: '13px' }}>{siteName || '-'}</td>
+                      <th style={{ border: '1px solid #cbd5e1', padding: '10px', backgroundColor: '#f8fafc', color: '#334155', width: '130px', fontWeight: 'bold', fontSize: '13px' }}>고객사명</th>
+                      <td style={{ border: '1px solid #cbd5e1', padding: '10px', backgroundColor: '#ffffff', color: '#111827', fontSize: '13px', fontWeight: '600' }}>{customerName || '-'}</td>
+                      <th style={{ border: '1px solid #cbd5e1', padding: '10px', backgroundColor: '#f8fafc', color: '#334155', width: '130px', fontWeight: 'bold', fontSize: '13px' }}>현장명</th>
+                      <td style={{ border: '1px solid #cbd5e1', padding: '10px', backgroundColor: '#ffffff', color: '#111827', fontSize: '13px', fontWeight: '600' }}>{siteName || '-'}</td>
                     </tr>
                     <tr>
-                      <th style={{ border: '1px solid #ddd', padding: '10px', backgroundColor: '#f9fafb', fontWeight: 'bold', fontSize: '13px' }}>상세 현장주소</th>
-                      <td colSpan={3} style={{ border: '1px solid #ddd', padding: '10px', fontSize: '13px' }}>{siteAddress || '-'}</td>
+                      <th style={{ border: '1px solid #cbd5e1', padding: '10px', backgroundColor: '#f8fafc', color: '#334155', fontWeight: 'bold', fontSize: '13px' }}>상세 현장주소</th>
+                      <td colSpan={3} style={{ border: '1px solid #cbd5e1', padding: '10px', backgroundColor: '#ffffff', color: '#111827', fontSize: '13px' }}>{siteAddress || '-'}</td>
                     </tr>
                   </tbody>
                 </table>
@@ -1293,16 +1293,16 @@ ${activeSpecs.map((s, idx) => `  ${idx + 1}. [적용] ${s.label}`).join('\n') ||
                 <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '20px' }}>
                   <tbody>
                     <tr>
-                      <th style={{ border: '1px solid #ddd', padding: '10px', backgroundColor: '#f9fafb', width: '130px', fontWeight: 'bold', fontSize: '13px' }}>현장담당자</th>
-                      <td style={{ border: '1px solid #ddd', padding: '10px', fontSize: '13px' }}>{siteContactName || '-'} (연락처: {siteContactPhone || '-'})</td>
-                      <th style={{ border: '1px solid #ddd', padding: '10px', backgroundColor: '#f9fafb', width: '130px', fontWeight: 'bold', fontSize: '13px' }}>담당 메일</th>
-                      <td style={{ border: '1px solid #ddd', padding: '10px', fontSize: '13px' }}>{siteContactEmail || '-'}</td>
+                      <th style={{ border: '1px solid #cbd5e1', padding: '10px', backgroundColor: '#f8fafc', color: '#334155', width: '130px', fontWeight: 'bold', fontSize: '13px' }}>현장담당자</th>
+                      <td style={{ border: '1px solid #cbd5e1', padding: '10px', backgroundColor: '#ffffff', color: '#111827', fontSize: '13px' }}>{siteContactName || '-'} (연락처: {siteContactPhone || '-'})</td>
+                      <th style={{ border: '1px solid #cbd5e1', padding: '10px', backgroundColor: '#f8fafc', color: '#334155', width: '130px', fontWeight: 'bold', fontSize: '13px' }}>담당 메일</th>
+                      <td style={{ border: '1px solid #cbd5e1', padding: '10px', backgroundColor: '#ffffff', color: '#111827', fontSize: '13px' }}>{siteContactEmail || '-'}</td>
                     </tr>
                     <tr>
-                      <th style={{ border: '1px solid #ddd', padding: '10px', backgroundColor: '#f9fafb', fontWeight: 'bold', fontSize: '13px' }}>청구담당자</th>
-                      <td style={{ border: '1px solid #ddd', padding: '10px', fontSize: '13px' }}>{billingContactName || '-'} (연락처: {billingContactPhone || '-'})</td>
-                      <th style={{ border: '1px solid #ddd', padding: '10px', backgroundColor: '#f9fafb', fontWeight: 'bold', fontSize: '13px' }}>명세서 수신처</th>
-                      <td style={{ border: '1px solid #ddd', padding: '10px', fontSize: '13px' }}>{statementEmail || '-'}</td>
+                      <th style={{ border: '1px solid #cbd5e1', padding: '10px', backgroundColor: '#f8fafc', color: '#334155', fontWeight: 'bold', fontSize: '13px' }}>청구담당자</th>
+                      <td style={{ border: '1px solid #cbd5e1', padding: '10px', backgroundColor: '#ffffff', color: '#111827', fontSize: '13px' }}>{billingContactName || '-'} (연락처: {billingContactPhone || '-'})</td>
+                      <th style={{ border: '1px solid #cbd5e1', padding: '10px', backgroundColor: '#f8fafc', color: '#334155', fontWeight: 'bold', fontSize: '13px' }}>명세서 수신처</th>
+                      <td style={{ border: '1px solid #cbd5e1', padding: '10px', backgroundColor: '#ffffff', color: '#111827', fontSize: '13px' }}>{statementEmail || '-'}</td>
                     </tr>
                   </tbody>
                 </table>
@@ -1311,14 +1311,14 @@ ${activeSpecs.map((s, idx) => `  ${idx + 1}. [적용] ${s.label}`).join('\n') ||
                 <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '20px' }}>
                   <tbody>
                     <tr>
-                      <th style={{ border: '1px solid #ddd', padding: '10px', backgroundColor: '#f9fafb', width: '130px', fontWeight: 'bold', fontSize: '13px' }}>상차스케줄</th>
-                      <td style={{ border: '1px solid #ddd', padding: '10px', fontSize: '13px' }}>{loadingTime || '-'}</td>
-                      <th style={{ border: '1px solid #ddd', padding: '10px', backgroundColor: '#f9fafb', width: '130px', fontWeight: 'bold', fontSize: '13px' }}>하차스케줄</th>
-                      <td style={{ border: '1px solid #ddd', padding: '10px', fontSize: '13px' }}>{unloadingTime || '-'}</td>
+                      <th style={{ border: '1px solid #cbd5e1', padding: '10px', backgroundColor: '#f8fafc', color: '#334155', width: '130px', fontWeight: 'bold', fontSize: '13px' }}>상차스케줄</th>
+                      <td style={{ border: '1px solid #cbd5e1', padding: '10px', backgroundColor: '#ffffff', color: '#111827', fontSize: '13px' }}>{loadingTime || '-'}</td>
+                      <th style={{ border: '1px solid #cbd5e1', padding: '10px', backgroundColor: '#f8fafc', color: '#334155', width: '130px', fontWeight: 'bold', fontSize: '13px' }}>하차스케줄</th>
+                      <td style={{ border: '1px solid #cbd5e1', padding: '10px', backgroundColor: '#ffffff', color: '#111827', fontSize: '13px' }}>{unloadingTime || '-'}</td>
                     </tr>
                     <tr>
-                      <th style={{ border: '1px solid #ddd', padding: '10px', backgroundColor: '#f9fafb', fontWeight: 'bold', fontSize: '13px' }}>임대 투입 장비</th>
-                      <td colSpan={3} style={{ border: '1px solid #ddd', padding: '10px', fontSize: '13px', fontWeight: '600' }}>
+                      <th style={{ border: '1px solid #cbd5e1', padding: '10px', backgroundColor: '#f8fafc', color: '#334155', fontWeight: 'bold', fontSize: '13px' }}>임대 투입 장비</th>
+                      <td colSpan={3} style={{ border: '1px solid #cbd5e1', padding: '10px', backgroundColor: '#ffffff', color: '#111827', fontSize: '13px', fontWeight: '700' }}>
                         {equipments.map(e => `${e.modelName || '미지정'} * ${e.qty}대`).join(', ')}
                       </td>
                     </tr>
@@ -1326,12 +1326,12 @@ ${activeSpecs.map((s, idx) => `  ${idx + 1}. [적용] ${s.label}`).join('\n') ||
                 </table>
 
                 <div style={{ fontSize: '14px', fontWeight: 'bold', borderLeft: '4px solid #312e81', paddingLeft: '8px', marginBottom: '10px', color: '#312e81' }}>4. 장비 출하 스펙 요구사항 (현장 요청 검수 항목)</div>
-                <div style={{ padding: '12px', border: '1px solid #ddd', borderRadius: '4px', marginBottom: '20px', backgroundColor: '#fcfcfd' }}>
+                <div style={{ padding: '12px', border: '1px solid #cbd5e1', borderRadius: '4px', marginBottom: '20px', backgroundColor: '#f8fafc', color: '#111827' }}>
                   {(() => {
                     const appliedSpecs = STANDARD_SPECS.filter(s => !!checkedSpecs[s.id]);
                     if (appliedSpecs.length === 0) {
                       return (
-                        <div style={{ fontSize: '12.5px', color: '#6b7280', padding: '4px 0' }}>
+                        <div style={{ fontSize: '12.5px', color: '#64748b', padding: '4px 0' }}>
                           • 별도 특수 요청 스펙 없음 (기본 출하 표준 검수 적용)
                         </div>
                       );
@@ -1353,14 +1353,14 @@ ${activeSpecs.map((s, idx) => `  ${idx + 1}. [적용] ${s.label}`).join('\n') ||
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                   <tbody>
                     <tr>
-                      <th style={{ border: '1px solid #ddd', padding: '10px', backgroundColor: '#f9fafb', width: '130px', fontWeight: 'bold', fontSize: '13px' }}>마감 마감일</th>
-                      <td style={{ border: '1px solid #ddd', padding: '10px', fontSize: '13px' }}>{closingDay || '-'}</td>
-                      <th style={{ border: '1px solid #ddd', padding: '10px', backgroundColor: '#f9fafb', width: '130px', fontWeight: 'bold', fontSize: '13px' }}>결제 지급일</th>
-                      <td style={{ border: '1px solid #ddd', padding: '10px', fontSize: '13px' }}>{paymentDay || '-'}</td>
+                      <th style={{ border: '1px solid #cbd5e1', padding: '10px', backgroundColor: '#f8fafc', color: '#334155', width: '130px', fontWeight: 'bold', fontSize: '13px' }}>마감 마감일</th>
+                      <td style={{ border: '1px solid #cbd5e1', padding: '10px', backgroundColor: '#ffffff', color: '#111827', fontSize: '13px' }}>{closingDay || '-'}</td>
+                      <th style={{ border: '1px solid #cbd5e1', padding: '10px', backgroundColor: '#f8fafc', color: '#334155', width: '130px', fontWeight: 'bold', fontSize: '13px' }}>결제 지급일</th>
+                      <td style={{ border: '1px solid #cbd5e1', padding: '10px', backgroundColor: '#ffffff', color: '#111827', fontSize: '13px' }}>{paymentDay || '-'}</td>
                     </tr>
                     <tr>
-                      <th style={{ border: '1px solid #ddd', padding: '10px', backgroundColor: '#f9fafb', fontWeight: 'bold', fontSize: '13px' }}>특이사항</th>
-                      <td colSpan={3} style={{ border: '1px solid #ddd', padding: '10px', fontSize: '13px' }}>{note || '특이사항 없음'}</td>
+                      <th style={{ border: '1px solid #cbd5e1', padding: '10px', backgroundColor: '#f8fafc', color: '#334155', fontWeight: 'bold', fontSize: '13px' }}>특이사항</th>
+                      <td colSpan={3} style={{ border: '1px solid #cbd5e1', padding: '10px', backgroundColor: '#ffffff', color: '#111827', fontSize: '13px' }}>{note || '특이사항 없음'}</td>
                     </tr>
                   </tbody>
                 </table>
