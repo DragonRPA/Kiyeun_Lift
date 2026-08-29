@@ -2144,19 +2144,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     try {
       const nowIso = new Date().toISOString();
 
-      // 1. ContractAsset 에서 assetId 제거
+      // 1. ContractAsset 에서 assetId 명시적 NULL 제거 (Supabase DB 반영 보장)
       db.updateRow<ContractAsset>('contractAssets', contractAssetId, {
-        assetId: undefined
+        assetId: null as any
       });
 
-      // 2. Asset 상태를 AVAILABLE (임대가능) 로 복원 및 계약 연결 해제
+      // 2. Asset 상태를 AVAILABLE (임대가능) 로 복원 및 계약 연결 명시적 NULL 해제
       if (origAsset) {
         db.updateRow<Asset>('assets', origAssetId, {
           status: 'AVAILABLE',
-          currentCustomerId: undefined,
-          currentSiteId: undefined,
-          contractStart: undefined,
-          contractEnd: undefined,
+          currentCustomerId: null as any,
+          currentSiteId: null as any,
+          contractStart: null as any,
+          contractEnd: null as any,
           updatedAt: nowIso
         });
       }

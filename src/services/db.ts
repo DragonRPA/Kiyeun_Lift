@@ -3157,6 +3157,13 @@ class LocalDB {
       const tableName = this.mapToSupabaseTable(key as string);
       let payloadForSupabase = this.sanitizeSupabasePayload(updatedPayload, tableName);
 
+      // 💡 [NULL 컬럼 갱신 보장]: updates에 명시적으로 전달된 undefined/null 필드를 Supabase null로 정확히 반영
+      for (const updateKey in updates) {
+        if (updates[updateKey] === undefined || updates[updateKey] === null) {
+          payloadForSupabase[updateKey] = null;
+        }
+      }
+
       // 🛡️ [FK 위반 원천 차단] consumable_purchases 테이블 업데이트 시,
       // 기존 레코드에 남아있는 consumableId가 유효하지 않으면 consumableId = null을 명시하여 Supabase FK 오류를 완벽하게 예방
       if (tableName === 'consumable_purchases') {

@@ -1,3 +1,16 @@
+# Release Notes (v1.130.0.Build.275 - 2026-08-29 17:38)
+
+## 📋 [장비 할당 취소 시 원격 DB(Supabase) NULL 동기화 누락 버그 수정 및 지속성 완비]
+
+### 🌟 반영 내용
+
+#### 1. Supabase NULL 필드 갱신 동기화 보장 (`db.ts`, `AppContext.tsx`)
+- **버그 원인 규명**: `assetId: undefined`로 전달 시 `sanitizeSupabasePayload`에서 키 자체가 제외되어 Supabase SQL 쿼리(`UPDATE SET "assetId" = null`)가 전송되지 않고 로컬 메모리에만 일시 반영되었던 문제 해결.
+- **NULL 명시 전송 엔진 구축**: `updateRow`에서 `null`/`undefined`로 지정된 컬럼을 Supabase에 `null`로 정확히 전송하도록 수정하여, 메뉴 이동 및 재진입(`loadTablesForMenu`) 후에도 할당 취소 상태가 100% 영구 보존됨.
+- **자산 참조 정보 클리어**: `assets` 테이블의 `currentCustomerId`, `currentSiteId`, `contractStart`, `contractEnd` 컬럼도 원격 DB에서 완벽하게 `NULL`로 클리어.
+
+---
+
 # Release Notes (v1.130.0.Build.274 - 2026-08-29 17:31)
 
 ## 📋 [장비선택 오버플로우 방지 모델별 요구수량 기준 정밀화 및 모델 단일 포커스 완비]
