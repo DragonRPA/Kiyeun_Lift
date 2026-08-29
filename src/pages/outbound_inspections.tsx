@@ -111,7 +111,8 @@ export const OutboundInspections: React.FC = () => {
     refreshAllData,
     hasPermission,
     showErrorModal,
-    exchangeOutboundAsset
+    exchangeOutboundAsset,
+    inspectionChecklistItems
   } = useApp();
 
   const canEdit = hasPermission('repair', 'save') || hasPermission('delivery', 'save') || hasPermission('contract', 'save');
@@ -162,6 +163,7 @@ export const OutboundInspections: React.FC = () => {
   // 🔄 장비 교체 모달 상태
   const [exchangeModalAsset, setExchangeModalAsset] = useState<Asset | null>(null);
   const [targetNewAssetId, setTargetNewAssetId] = useState<string>('');
+  const [selectedChecklistId, setSelectedChecklistId] = useState<string>(''); // 💡 마스터 등록 정비사유 ID
   const [exchangeReason, setExchangeReason] = useState<string>('');
   const [exchangeToRepairing, setExchangeToRepairing] = useState<boolean>(false); // 💡 기본값: false (수리 미전환)
   const [exchangeSearchQuery, setExchangeSearchQuery] = useState<string>(''); // 🔍 대체 장비 관리번호 검색어
@@ -450,12 +452,11 @@ export const OutboundInspections: React.FC = () => {
     }
 
     // 💡 수리정비중 전환 시에만 사유 입력 필수, 수리 미전환 시 사유 입력은 선택 사항 (빈값 허용!)
-    if (exchangeToRepairing && !exchangeReason.trim()) {
-      showErrorModal('기존 장비를 [수리정비중]으로 전환 시에는 사유를 입력해 주세요.');
-      return;
-    }
-
-    const finalReason = exchangeReason.trim(); // 빈값이면 빈값 그대로 전달 (비고 업서트 생략!)
+    const matchedChecklist = inspectionChecklistItems.find(item => item.id === selectedChecklistId);
+    const customPenaltyScore = matchedChecklist ? Number(matchedChecklist.score) : undefined;
+    const finalReason = matchedChecklist
+      ? (exchangeReason.trim() ? `${matchedChecklist.name} (${exchangeReason.trim()})` : matchedChecklist.name)
+      : exchangeReason.trim();
 
     setIsProcessing(true);
     try {
@@ -468,16 +469,21 @@ export const OutboundInspections: React.FC = () => {
         exchangeModalAsset.id,
         targetNewAssetId,
         finalReason,
-        exchangeToRepairing // 사용자 선택 전송!
+        exchangeToRepairing, // 사용자 선택 전송!
+        customPenaltyScore // 💡 관리 정비사유 점수 (지정 시 기본 5점 제외)
       );
 
       await db.awaitPendingWrites();
       refreshAllData();
       const statusText = exchangeToRepairing ? '[수리정비중]으로 전환되었습니다.' : '[임대가능] 재고로 유지되었습니다.';
-      alert(`🔄 [장비 교체 완료]\n장비가 대체 장비로 스왑되었으며 기존 장비는 ${statusText}`);
+      const scoreMsg = typeof customPenaltyScore === 'number' && customPenaltyScore > 0
+        ? `정비사유 [${matchedChecklist?.name}] 지정으로 정비점수 +${customPenaltyScore}점 부과 (기본 5점 제외)`
+        : `기본 벌점 +5점 부과`;
+      alert(`🔄 [장비 교체 완료]\n• 장비가 대체 장비로 스왑되었으며 기존 장비는 ${statusText}\n• ${scoreMsg}`);
       setExchangeModalAsset(null);
       setTargetNewAssetId('');
       setExchangeReason('');
+      setSelectedChecklistId('');
       setSelectedGroupId(null);
     } catch (err: any) {
       showErrorModal(`⚠️ 장비 교체 실패: ${err?.message || err}`);
@@ -1081,20 +1087,61 @@ export const OutboundInspections: React.FC = () => {
               />
             </div>
 
-            {/* 정비점수 가산 전사 정책 안내 */}
-            <div style={{ marginBottom: '14px', padding: '8px 12px', backgroundColor: 'var(--warning-light, rgba(245,158,11,0.08))', border: '1px solid var(--warning, #f59e0b)', borderRadius: '6px', fontSize: '11.5px', color: '#b45309', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <AlertTriangle size={13} style={{ flexShrink: 0 }} />
-              <span>출고 검수 교체 시 기존 장비(탈락 장비)의 정비점수가 사유 유무와 무관하게 자동으로 <strong>+5점</strong> 가산됩니다.</span>
+            {/* 📋 관리 정비사유 마스터 선택 */}
+            <div style={{ marginBottom: '14px' }}>
+              <label style={{ fontSize: '12.5px', fontWeight: 700, marginBottom: '6px', display: 'block' }}>
+                관리 정비 사유 선택
+              </label>
+              <select
+                value={selectedChecklistId}
+                onChange={e => setSelectedChecklistId(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '8px 12px',
+                  borderRadius: '8px',
+                  border: '1px solid var(--border-color)',
+                  backgroundColor: 'var(--bg-body)',
+                  fontSize: '13px',
+                  color: 'var(--text-primary)',
+                  outline: 'none'
+                }}
+              >
+                <option value="">-- 직접 입력 / 미지정 (기본 벌점 +5점 부과) --</option>
+                {inspectionChecklistItems.map(item => (
+                  <option key={item.id} value={item.id}>
+                    [{item.category}] {item.name} (+{item.score}점)
+                  </option>
+                ))}
+              </select>
             </div>
 
-            {/* 교체사유 */}
+            {/* 💡 정비점수 가산 실시간 안내 배너 */}
+            {(() => {
+              const matched = inspectionChecklistItems.find(item => item.id === selectedChecklistId);
+              if (matched) {
+                return (
+                  <div style={{ marginBottom: '14px', padding: '8px 12px', backgroundColor: 'rgba(59,130,246,0.08)', border: '1px solid var(--primary)', borderRadius: '6px', fontSize: '11.5px', color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <ShieldCheck size={14} style={{ flexShrink: 0 }} />
+                    <span>관리 정비사유 <strong>[{matched.name}]</strong> 지정됨 ➔ 정비점수 <strong>+{matched.score}점</strong> 부여 (기본 벌점 5점 제외)</span>
+                  </div>
+                );
+              }
+              return (
+                <div style={{ marginBottom: '14px', padding: '8px 12px', backgroundColor: 'var(--warning-light, rgba(245,158,11,0.08))', border: '1px solid var(--warning, #f59e0b)', borderRadius: '6px', fontSize: '11.5px', color: '#b45309', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <AlertTriangle size={13} style={{ flexShrink: 0 }} />
+                  <span>관리 정비사유 미지정 교체 ➔ 기본 벌점 <strong>+5점</strong> 자동 가산</span>
+                </div>
+              );
+            })()}
+
+            {/* 상세 교체사유/메모 */}
             <div style={{ marginBottom: '16px' }}>
               <label style={{ fontSize: '12.5px', fontWeight: 700, marginBottom: '6px', display: 'block' }}>
-                교체 사유 {exchangeToRepairing ? <span style={{ color: '#ef4444' }}>(수리정비중 전환 시 필수)</span> : <span style={{ color: 'var(--text-muted)' }}>(수리 미전환 시 선택 사항 - 입력 생략 가능)</span>}
+                상세 교체 사유 / 추가 메모 {exchangeToRepairing && !selectedChecklistId ? <span style={{ color: '#ef4444' }}>(수리전환 시 필수)</span> : <span style={{ color: 'var(--text-muted)' }}>(선택 사항)</span>}
               </label>
               <input
                 type="text"
-                placeholder={exchangeToRepairing ? "예: 배터리 방전 발생, 조이스틱 모듈 작동 불량 등" : "사유 미입력 시 '단순 장비 교체'로 등록됩니다 (입력 생략 가능)"}
+                placeholder={selectedChecklistId ? "추가 메모가 있을 경우 입력하세요 (생략 가능)" : "사유 미입력 시 기본 벌점 +5점과 함께 등록됩니다"}
                 value={exchangeReason}
                 onChange={e => setExchangeReason(e.target.value)}
                 style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-body)', fontSize: '13px', color: 'var(--text-primary)', outline: 'none' }}

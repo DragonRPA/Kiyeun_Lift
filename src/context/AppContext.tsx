@@ -148,7 +148,7 @@ interface AppContextType {
   
   // 장비 할당 및 출고전 교체
   assignAssetToContract: (contractAssetId: string, assetId: string) => Promise<void>;
-  exchangeOutboundAsset: (contractAssetId: string, oldAssetId: string, newAssetId: string, reason: string, markOldAsRepairing?: boolean) => Promise<void>;
+  exchangeOutboundAsset: (contractAssetId: string, oldAssetId: string, newAssetId: string, reason?: string, markOldAsRepairing?: boolean, customPenaltyScore?: number) => Promise<void>;
   saveSmartDispatch: (data: SmartDispatchData, autoRegister: boolean, onProgress?: (log: string, percent: number) => void) => Promise<{ success: boolean; requiresConfirm?: boolean; missingFields?: string[]; errorMessage?: string }>;
   saveSmartReturn: (data: SmartReturnData) => void;
   
@@ -2050,7 +2050,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   // 💡 출고 진행 중 장비 교체 및 수리전환 트랜잭션 메소드 (contractAssetId 또는 contractId 2중 자동추적 지원)
-  const exchangeOutboundAsset = async (contractAssetIdOrContractId: string, oldAssetId: string, newAssetId: string, reason: string, markOldAsRepairing: boolean = true) => {
+  const exchangeOutboundAsset = async (
+    contractAssetIdOrContractId: string,
+    oldAssetId: string,
+    newAssetId: string,
+    reason?: string,
+    markOldAsRepairing: boolean = true,
+    customPenaltyScore?: number
+  ) => {
     // 롤백용 스냅샷 준비
     const oldAssetOrig = db.assets.find(a => a.id === oldAssetId);
     const newAssetOrig = db.assets.find(a => a.id === newAssetId);
