@@ -2081,27 +2081,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const nowIso = new Date().toISOString();
 
       // 1. 기존 장비: 수리정비중(REPAIRING) 선택 시 REPAIRING 전환, 아니면 임대가능(AVAILABLE) 유지!
+      // 💡 [전사 정책]: 출고검수 탈락 교체 시 사유 유무와 무관하게 정비점수 +5점 무조건 가산 (신중한 할당 강제 및 사유 누락 방어)
       const targetStatus = markOldAsRepairing ? 'REPAIRING' : 'AVAILABLE';
+      const updatedScore = (Number(oldAssetOrig.maintenanceScore) || 0) + 5;
       
+      const cleanReason = reason && reason.trim() ? reason.trim() : '출고검수 탈락 교체(사유미기재)';
+      const oldNote = oldAssetOrig.memo1 || oldAssetOrig.note || oldAssetOrig.memo || '';
+      const appendedNote = oldNote
+        ? `${oldNote}\n[출고검수 교체(벌점+5, 총점:${updatedScore}점)] ${today}: ${cleanReason}`
+        : `[출고검수 교체(벌점+5, 총점:${updatedScore}점)] ${today}: ${cleanReason}`;
+
       const oldPayload: Partial<Asset> = {
         status: targetStatus,
+        maintenanceScore: updatedScore,
         currentCustomerId: undefined,
         currentSiteId: undefined,
         contractStart: undefined,
         contractEnd: undefined,
+        memo1: appendedNote,
+        note: appendedNote,
+        memo: appendedNote,
         updatedAt: nowIso
       };
-
-      // 💡 사유(reason)가 적혀 있을 때만 기존 비고에 업서트! 비고가 안 적혀 있으면 업서트하지 않음.
-      if (reason && reason.trim()) {
-        const oldNote = oldAssetOrig.memo1 || oldAssetOrig.note || oldAssetOrig.memo || '';
-        const appendedNote = oldNote
-          ? `${oldNote}\n[출고전 교체(${targetStatus})] ${today}: ${reason.trim()}`
-          : `[출고전 교체(${targetStatus})] ${today}: ${reason.trim()}`;
-        oldPayload.memo1 = appendedNote;
-        oldPayload.note = appendedNote;
-        oldPayload.memo = appendedNote;
-      }
 
       db.updateRow<Asset>('assets', oldAssetId, oldPayload);
 

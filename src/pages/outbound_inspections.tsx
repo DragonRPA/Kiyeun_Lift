@@ -1081,6 +1081,12 @@ export const OutboundInspections: React.FC = () => {
               />
             </div>
 
+            {/* 정비점수 가산 전사 정책 안내 */}
+            <div style={{ marginBottom: '14px', padding: '8px 12px', backgroundColor: 'var(--warning-light, rgba(245,158,11,0.08))', border: '1px solid var(--warning, #f59e0b)', borderRadius: '6px', fontSize: '11.5px', color: '#b45309', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <AlertTriangle size={13} style={{ flexShrink: 0 }} />
+              <span>출고 검수 교체 시 기존 장비(탈락 장비)의 정비점수가 사유 유무와 무관하게 자동으로 <strong>+5점</strong> 가산됩니다.</span>
+            </div>
+
             {/* 교체사유 */}
             <div style={{ marginBottom: '16px' }}>
               <label style={{ fontSize: '12.5px', fontWeight: 700, marginBottom: '6px', display: 'block' }}>
