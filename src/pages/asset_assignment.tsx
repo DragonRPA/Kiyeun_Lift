@@ -146,29 +146,44 @@ export const AssetAssignment: React.FC = () => {
     }
   };
 
-  // 개별 장비 선택 토글
+  // 🔒 장비 선택 최대 상한 계산 (선택된 슬롯 수 또는 전체 미할당 슬롯 수)
+  const maxSelectableCount = useMemo(() => {
+    if (selectedCaIds.length > 0) return selectedCaIds.length;
+    return currentSlots.filter(ca => !ca.assetId).length;
+  }, [selectedCaIds, currentSlots]);
+
+  // 개별 장비 선택 토글 (오버플로우 원천 차단!)
   const handleToggleAsset = (assetId: string) => {
     if (selectedAssetIds.includes(assetId)) {
       setSelectedAssetIds(selectedAssetIds.filter(id => id !== assetId));
     } else {
+      if (selectedAssetIds.length >= maxSelectableCount) {
+        alert(`⚠️ 선택 가능한 최대 수량(${maxSelectableCount}대)을 초과할 수 없습니다.\n\n• 필요 수량: ${maxSelectableCount}대\n• 현재 선택: ${selectedAssetIds.length}대\n\n다른 장비를 선택하려면 기존 선택을 먼저 해제해 주세요.`);
+        return;
+      }
       setSelectedAssetIds([...selectedAssetIds, assetId]);
     }
   };
 
-  // 🚀 스마트 자동 추천 선택 (선택된 슬롯 개수만큼 상위 장비 자동 체크)
+  // 🚀 스마트 자동 추천 선택 (최대 상한 수량만큼만 선택)
   const handleAutoSelectTopAssets = () => {
-    const needCount = selectedCaIds.length > 0 ? selectedCaIds.length : currentSlots.filter(ca => !ca.assetId).length;
-    if (needCount <= 0) {
-      alert('할당할 대상 슬롯을 먼저 선택해 주세요.');
+    if (maxSelectableCount <= 0) {
+      alert('할당할 대상 슬롯이 없습니다.');
       return;
     }
-    const topAssetIds = availableAssets.slice(0, needCount).map(a => a.id);
+    const topAssetIds = availableAssets.slice(0, maxSelectableCount).map(a => a.id);
     setSelectedAssetIds(topAssetIds);
   };
 
-  // ⌨️ 관리번호 빠른 입력 처리 (쉼표, 공백, 엔터 분리 다중 매칭)
+  // ⌨️ 관리번호 빠른 입력 처리 (오버플로우 방지)
   const handleQuickInputSubmit = () => {
     if (!quickInputText.trim()) return;
+
+    const availableQuota = maxSelectableCount - selectedAssetIds.length;
+    if (availableQuota <= 0) {
+      alert(`⚠️ 이미 최대 선택 가능 수량(${maxSelectableCount}대)을 모두 선택했습니다.`);
+      return;
+    }
 
     const tokens = quickInputText
       .split(/[\s,]+/)
@@ -177,27 +192,32 @@ export const AssetAssignment: React.FC = () => {
 
     const matchedAssetIds: string[] = [];
 
-    tokens.forEach(token => {
-      // 1순위: 관리번호 일치 (전체 또는 뒷자리 부분 일치)
+    for (const token of tokens) {
+      if (matchedAssetIds.length >= availableQuota) break;
+
       const found = assets.find(a =>
         a.status === 'AVAILABLE' &&
+        !selectedAssetIds.includes(a.id) &&
+        !matchedAssetIds.includes(a.id) &&
         (
           (a.assetNo && a.assetNo.toLowerCase() === token) ||
           (a.assetNo && a.assetNo.toLowerCase().endsWith(token)) ||
           (a.serialNo && a.serialNo.toLowerCase().includes(token))
-        ) &&
-        !matchedAssetIds.includes(a.id)
+        )
       );
 
       if (found) {
         matchedAssetIds.push(found.id);
       }
-    });
+    }
 
     if (matchedAssetIds.length > 0) {
-      const combined = Array.from(new Set([...selectedAssetIds, ...matchedAssetIds]));
+      const combined = [...selectedAssetIds, ...matchedAssetIds];
       setSelectedAssetIds(combined);
       setQuickInputText('');
+      if (matchedAssetIds.length < tokens.length) {
+        alert(`입력하신 ${tokens.length}개 중 ${matchedAssetIds.length}대만 잔여 할당 한도(${availableQuota}대) 내에서 추가되었습니다.`);
+      }
     } else {
       alert(`입력하신 번호(${tokens.join(', ')})와 일치하는 가용 장비를 찾을 수 없습니다.`);
     }
@@ -421,29 +441,29 @@ export const AssetAssignment: React.FC = () => {
       {selectedContractId && (
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', alignItems: 'start' }}>
           
-          {/* 2-A: 매핑 대상 슬롯 (모델별 × 수량 그룹 & 개별 슬롯 멀티셀렉트) */}
+          {/* 2-A: 매핑 대상 슬롯 (모델명 × 수량 그룹 뷰) */}
           <div className="card" style={{ height: '540px', display: 'flex', flexDirection: 'column', backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)' }}>
             
             {/* 슬롯 헤더 */}
             <div style={{ padding: '12px 14px', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'var(--bg-app)' }}>
               <div>
                 <h3 style={{ margin: 0, fontSize: '13px', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  <ChevronDown size={14} /> 매핑 대상 슬롯 ({currentSlots.length}대)
+                  <Layers size={14} color="var(--primary)" /> 모델별 요구 수량 ({modelGroups.length}개 모델 / 총 {currentSlots.length}대)
                 </h3>
                 <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                  선택됨: <strong style={{ color: 'var(--primary)' }}>{selectedCaIds.length}개</strong> / 미할당: {currentSlots.filter(c => !c.assetId).length}개
+                  선택됨: <strong style={{ color: 'var(--primary)' }}>{selectedCaIds.length}대</strong> / 미할당: {currentSlots.filter(c => !c.assetId).length}대
                 </span>
               </div>
               <button
                 type="button"
                 onClick={handleSelectAllPendingSlots}
                 style={{
-                  padding: '4px 8px',
+                  padding: '5px 10px',
                   borderRadius: '4px',
                   border: '1px solid var(--border-color)',
                   backgroundColor: 'var(--bg-card)',
                   color: 'var(--text-main)',
-                  fontSize: '11px',
+                  fontSize: '11.5px',
                   fontWeight: 600,
                   cursor: 'pointer',
                   display: 'flex',
@@ -452,93 +472,95 @@ export const AssetAssignment: React.FC = () => {
                 }}
               >
                 {selectedCaIds.length === currentSlots.filter(c => !c.assetId).length && selectedCaIds.length > 0 ? (
-                  <><CheckSquare size={12} color="var(--primary)" /> 전체 해제</>
+                  <><CheckSquare size={13} color="var(--primary)" /> 전체 해제</>
                 ) : (
-                  <><Square size={12} /> 미할당 전체 선택</>
+                  <><Square size={13} /> 미할당 전체 선택 ({currentSlots.filter(c => !c.assetId).length}대)</>
                 )}
               </button>
             </div>
 
-            {/* 모델별 요약 칩 바 */}
-            <div style={{ padding: '8px 12px', borderBottom: '1px solid var(--border-color)', backgroundColor: 'var(--bg-card)', display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+            {/* 모델명 × 수량 그룹 카드 리스트 (개별 N줄 나열 제거) */}
+            <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '10px', padding: '12px' }}>
               {modelGroups.map(grp => {
                 const isAllSelected = grp.caIds.length > 0 && grp.caIds.every(id => selectedCaIds.includes(id));
-                return (
-                  <button
-                    key={grp.modelName}
-                    type="button"
-                    onClick={() => handleSelectModelGroupSlots(grp.caIds)}
-                    disabled={grp.pending === 0}
-                    style={{
-                      padding: '4px 10px',
-                      borderRadius: '6px',
-                      border: `1.5px solid ${isAllSelected ? 'var(--primary)' : 'var(--border-color)'}`,
-                      backgroundColor: isAllSelected ? 'var(--primary-light)' : 'var(--bg-app)',
-                      color: isAllSelected ? 'var(--primary)' : 'var(--text-main)',
-                      fontSize: '11.5px',
-                      fontWeight: 700,
-                      cursor: grp.pending === 0 ? 'not-allowed' : 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '4px',
-                      opacity: grp.pending === 0 ? 0.5 : 1
-                    }}
-                  >
-                    <span>{grp.modelName} × {grp.total}대</span>
-                    <span style={{ fontSize: '10px', color: grp.pending > 0 ? '#d97706' : 'var(--success)' }}>
-                      (미할당 {grp.pending})
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
+                const isPartiallySelected = grp.caIds.some(id => selectedCaIds.includes(id)) && !isAllSelected;
+                const assignedSlots = currentSlots.filter(ca => (ca.expectedModel === grp.modelName || (!ca.expectedModel && grp.modelName === '미지정')) && !!ca.assetId);
 
-            {/* 슬롯 리스트 */}
-            <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '6px', padding: '12px' }}>
-              {currentSlots.map((ca, idx) => {
-                const isAssigned = !!ca.assetId;
-                const assignedAsset = isAssigned ? assets.find(a => a.id === ca.assetId) : null;
-                const isSelected = selectedCaIds.includes(ca.id);
-                
                 return (
-                  <div 
-                    key={ca.id}
-                    onClick={() => { if (!isAssigned) handleToggleSlot(ca.id); }}
+                  <div
+                    key={grp.modelName}
                     style={{
-                      padding: '8px 10px',
-                      borderRadius: '6px',
-                      border: `1.5px solid ${isAssigned ? 'var(--border-color)' : (isSelected ? 'var(--primary)' : 'var(--border-color)')}`,
-                      backgroundColor: isAssigned ? 'var(--bg-app)' : (isSelected ? 'var(--primary-light)' : 'var(--bg-card)'),
-                      cursor: isAssigned ? 'default' : 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      transition: 'all 0.15s ease'
+                      padding: '14px',
+                      borderRadius: '8px',
+                      border: `2px solid ${isAllSelected ? 'var(--primary)' : 'var(--border-color)'}`,
+                      backgroundColor: isAllSelected ? 'var(--primary-light)' : 'var(--bg-card)',
+                      transition: 'all 0.15s ease',
+                      boxShadow: isAllSelected ? '0 2px 8px rgba(59,130,246,0.15)' : 'none'
                     }}
                   >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <div style={{
-                        width: '20px', height: '20px', borderRadius: '4px',
-                        backgroundColor: isAssigned ? 'var(--success)' : (isSelected ? 'var(--primary)' : 'var(--bg-app)'),
-                        border: `1px solid ${isAssigned ? 'var(--success)' : (isSelected ? 'var(--primary)' : 'var(--border-color)')}`,
-                        color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '10px'
-                      }}>
-                        {isAssigned ? <Check size={12} /> : (isSelected ? <Check size={12} /> : idx + 1)}
-                      </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
                       <div>
-                        <div style={{ fontWeight: '700', fontSize: '12px', color: isAssigned ? 'var(--success)' : 'var(--text-main)' }}>
-                          {isAssigned ? `${assignedAsset?.assetNo} (${assignedAsset?.modelName})` : `[대기] ${ca.expectedModel || '미지정'}`}
+                        <div style={{ fontSize: '15px', fontWeight: 800, color: isAllSelected ? 'var(--primary)' : 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <span>{grp.modelName}</span>
+                          <span style={{ fontSize: '13px', color: 'var(--text-secondary)', fontWeight: 700 }}>× {grp.total}대</span>
                         </div>
-                        <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
-                          {isAssigned ? `S/N: ${assignedAsset?.serialNo || '미기재'}` : '가용 장비를 선택하여 할당하세요.'}
+                        <div style={{ fontSize: '11.5px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                          미할당: <strong style={{ color: grp.pending > 0 ? '#d97706' : 'var(--text-muted)' }}>{grp.pending}대</strong> / 할당완료: <strong style={{ color: 'var(--success)' }}>{assignedSlots.length}대</strong>
                         </div>
                       </div>
+
+                      {grp.pending > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => handleSelectModelGroupSlots(grp.caIds)}
+                          style={{
+                            padding: '6px 12px',
+                            borderRadius: '6px',
+                            border: `1.5px solid ${isAllSelected ? 'var(--primary)' : 'var(--border-color)'}`,
+                            backgroundColor: isAllSelected ? 'var(--primary)' : 'var(--bg-app)',
+                            color: isAllSelected ? '#ffffff' : 'var(--text-main)',
+                            fontSize: '11.5px',
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px'
+                          }}
+                        >
+                          {isAllSelected ? <CheckSquare size={13} /> : <Square size={13} />}
+                          {isAllSelected ? `${grp.modelName} ${grp.pending}대 선택됨` : `${grp.modelName} ${grp.pending}대 선택`}
+                        </button>
+                      )}
                     </div>
 
-                    {!isAssigned && (
-                      <span style={{ fontSize: '11px', fontWeight: 600, color: isSelected ? 'var(--primary)' : 'var(--text-muted)' }}>
-                        {isSelected ? '선택됨' : '선택'}
-                      </span>
+                    {/* 기할당된 장비가 있는 경우 태그 표시 */}
+                    {assignedSlots.length > 0 && (
+                      <div style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px dashed var(--border-color)' }}>
+                        <div style={{ fontSize: '10.5px', fontWeight: 700, color: 'var(--success)', marginBottom: '4px' }}>
+                          ✓ 할당 완료 장비 ({assignedSlots.length}대):
+                        </div>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                          {assignedSlots.map(ca => {
+                            const a = assets.find(ast => ast.id === ca.assetId);
+                            return (
+                              <span
+                                key={ca.id}
+                                style={{
+                                  padding: '2px 6px',
+                                  borderRadius: '4px',
+                                  backgroundColor: 'var(--success-light)',
+                                  border: '1px solid var(--success)',
+                                  color: 'var(--success)',
+                                  fontSize: '11px',
+                                  fontWeight: 600
+                                }}
+                              >
+                                {a?.assetNo || '장비'} ({a?.serialNo || 'S/N미상'})
+                              </span>
+                            );
+                          })}
+                        </div>
+                      </div>
                     )}
                   </div>
                 );
