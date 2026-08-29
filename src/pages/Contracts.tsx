@@ -663,9 +663,9 @@ export const Contracts: React.FC = () => {
                 setBundleTargetContractId(undefined);
                 setShowBundleModal(true);
               }}
-              style={{ padding: '7px 14px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px', color: '#2563eb', fontWeight: 'bold' }}
+              style={{ padding: '7px 14px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--primary)', fontWeight: 'bold' }}
             >
-              <FileText size={14} /> 6종 통합 서류팩 PDF
+              <FileText size={14} /> 7종 통합 서류팩 PDF / 이메일
             </button>
             {canSave && (
               <button
@@ -974,9 +974,9 @@ export const Contracts: React.FC = () => {
                   setBundleTargetContractId(activeContract.id);
                   setShowBundleModal(true);
                 }}
-                style={{ padding: '6px 12px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px', color: '#2563eb', fontWeight: 'bold' }}
+                style={{ padding: '6px 12px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--primary)', fontWeight: 'bold' }}
               >
-                <Download size={14} /> 6종 통합 서류팩 PDF
+                <Download size={14} /> 7종 통합 서류팩 PDF / 이메일
               </button>
 
               {canSave && canModifyContract(activeContract) && (
