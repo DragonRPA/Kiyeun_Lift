@@ -1142,6 +1142,7 @@ export const Products: React.FC = () => {
       )}
 
       {/* 🌟 Cloudflare R2 제품 문서함 팝업 모달 */}
+      {/* 🌟 R2 클라우드 문서함 모달 */}
       {showR2DocModal && selectedProductForDocs && (
         <div style={{
           position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
@@ -1150,35 +1151,34 @@ export const Products: React.FC = () => {
         }}>
           <div className="card" style={{
             width: '100%', maxWidth: '680px', maxHeight: '90vh', overflowY: 'auto',
-            backgroundColor: '#ffffff', color: '#111827', padding: '24px', borderRadius: '12px',
-            boxShadow: '0 20px 25px -5px rgba(0,0,0,0.3)',
-            colorScheme: 'light'
+            backgroundColor: 'var(--bg-card)', color: 'var(--text-main)', padding: '24px', borderRadius: '12px',
+            boxShadow: 'var(--shadow-lg)', border: '1px solid var(--border-color)'
           }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', borderBottom: '1px solid #e5e7eb', paddingBottom: '12px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', borderBottom: '1px solid var(--border-color)', paddingBottom: '12px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Folder size={20} color="#2563eb" />
-                <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 'bold', color: '#111827' }}>
+                <Folder size={20} color="var(--primary)" />
+                <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 'bold', color: 'var(--text-main)' }}>
                   [{selectedProductForDocs.modelName}] 클라우드 문서함
                 </h3>
               </div>
               <button
                 type="button"
                 onClick={() => setShowR2DocModal(false)}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#6b7280', padding: '4px' }}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: '4px' }}
               >
                 <X size={20} />
               </button>
             </div>
 
-            <div style={{ marginBottom: '16px', backgroundColor: '#f8fafc', padding: '12px', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '13px' }}>
+            <div style={{ marginBottom: '16px', backgroundColor: 'var(--bg-app)', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-color)', fontSize: '13px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
                 <div>
-                  <span style={{ fontWeight: 'bold', color: '#334155' }}>R2 보관 경로: </span>
-                  <code style={{ color: '#2563eb', fontWeight: 'bold' }}>Eq_doc/{selectedProductForDocs.modelName}/</code>
+                  <span style={{ fontWeight: 'bold', color: 'var(--text-secondary)' }}>R2 보관 경로: </span>
+                  <code style={{ color: 'var(--primary)', fontWeight: 'bold' }}>Eq_doc/{selectedProductForDocs.modelName}/</code>
                 </div>
                 <label
                   style={{
-                    backgroundColor: '#2563eb',
+                    backgroundColor: 'var(--primary)',
                     color: '#ffffff',
                     padding: '6px 12px',
                     borderRadius: '6px',
@@ -1203,35 +1203,35 @@ export const Products: React.FC = () => {
             </div>
 
             {/* 파일 목록 */}
-            <div style={{ maxHeight: '360px', overflowY: 'auto', border: '1px solid #e5e7eb', borderRadius: '8px', marginBottom: '20px' }}>
+            <div style={{ maxHeight: '360px', overflowY: 'auto', border: '1px solid var(--border-color)', borderRadius: '8px', marginBottom: '20px', backgroundColor: 'var(--bg-card)' }}>
               {(() => {
                 const docs = r2FilesByModelMap.get(selectedProductForDocs.id) || [];
                 if (docs.length === 0) {
                   return (
-                    <div style={{ textAlign: 'center', padding: '40px 20px', color: '#94a3b8' }}>
+                    <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text-muted)' }}>
                       <Folder size={36} style={{ margin: '0 auto 8px auto', opacity: 0.4 }} />
-                      <p style={{ margin: 0, fontSize: '14px' }}>Cloudflare R2에 등록된 문서가 없습니다.</p>
-                      <p style={{ margin: '4px 0 0 0', fontSize: '12px' }}>[제원표 PDF 자동 생성] 버튼을 누르거나 새 문서를 업로드해 주세요.</p>
+                      <p style={{ margin: 0, fontSize: '14px', color: 'var(--text-secondary)' }}>Cloudflare R2에 등록된 문서가 없습니다.</p>
+                      <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: 'var(--text-muted)' }}>[제원표 PDF 자동 생성] 버튼을 누르거나 새 문서를 업로드해 주세요.</p>
                     </div>
                   );
                 }
                 return (
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', backgroundColor: '#ffffff', color: '#111827' }}>
-                    <thead style={{ backgroundColor: '#f1f5f9', borderBottom: '1px solid #e5e7eb' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', backgroundColor: 'transparent', color: 'var(--text-main)' }}>
+                    <thead style={{ backgroundColor: 'var(--bg-app)', borderBottom: '1px solid var(--border-color)' }}>
                       <tr>
-                        <th style={{ padding: '8px 12px', textAlign: 'left', color: '#374151', fontWeight: '600' }}>문서명</th>
-                        <th style={{ padding: '8px 12px', width: '80px', textAlign: 'right', color: '#374151', fontWeight: '600' }}>용량</th>
-                        <th style={{ padding: '8px 12px', width: '120px', textAlign: 'center', color: '#374151', fontWeight: '600' }}>동작</th>
+                        <th style={{ padding: '8px 12px', textAlign: 'left', color: 'var(--text-secondary)', fontWeight: '600', borderBottom: '1px solid var(--border-color)' }}>문서명</th>
+                        <th style={{ padding: '8px 12px', width: '80px', textAlign: 'right', color: 'var(--text-secondary)', fontWeight: '600', borderBottom: '1px solid var(--border-color)' }}>용량</th>
+                        <th style={{ padding: '8px 12px', width: '120px', textAlign: 'center', color: 'var(--text-secondary)', fontWeight: '600', borderBottom: '1px solid var(--border-color)' }}>동작</th>
                       </tr>
                     </thead>
                     <tbody>
                       {docs.map((doc, i) => (
-                        <tr key={doc.key} style={{ borderBottom: i < docs.length - 1 ? '1px solid #f1f5f9' : 'none', backgroundColor: '#ffffff' }}>
-                          <td style={{ padding: '8px 12px', fontWeight: '500', display: 'flex', alignItems: 'center', gap: '6px', color: '#111827' }}>
-                            <FileText size={14} color="#64748b" />
-                            <span style={{ color: '#111827' }}>{doc.name}</span>
+                        <tr key={doc.key} style={{ borderBottom: i < docs.length - 1 ? '1px solid var(--border-color)' : 'none' }}>
+                          <td style={{ padding: '8px 12px', fontWeight: '500', display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-main)' }}>
+                            <FileText size={14} color="var(--text-muted)" />
+                            <span style={{ color: 'var(--text-main)' }}>{doc.name}</span>
                           </td>
-                          <td style={{ padding: '8px 12px', textAlign: 'right', color: '#64748b' }}>
+                          <td style={{ padding: '8px 12px', textAlign: 'right', color: 'var(--text-muted)' }}>
                             {(doc.size / 1024).toFixed(0)} KB
                           </td>
                           <td style={{ padding: '8px 12px', textAlign: 'center' }}>
@@ -1243,14 +1243,15 @@ export const Products: React.FC = () => {
                                 style={{
                                   padding: '3px 8px',
                                   fontSize: '11px',
-                                  backgroundColor: '#eff6ff',
-                                  color: '#2563eb',
+                                  backgroundColor: 'var(--primary-light)',
+                                  color: 'var(--primary)',
                                   borderRadius: '4px',
                                   textDecoration: 'none',
                                   display: 'inline-flex',
                                   alignItems: 'center',
                                   gap: '2px',
-                                  fontWeight: 'bold'
+                                  fontWeight: 'bold',
+                                  border: '1px solid var(--border-color)'
                                 }}
                               >
                                 <ExternalLink size={12} />
@@ -1263,9 +1264,9 @@ export const Products: React.FC = () => {
                                   style={{
                                     padding: '3px 6px',
                                     fontSize: '11px',
-                                    backgroundColor: '#fef2f2',
-                                    color: '#dc2626',
-                                    border: '1px solid #fee2e2',
+                                    backgroundColor: 'var(--danger-light)',
+                                    color: 'var(--danger)',
+                                    border: '1px solid var(--danger-light)',
                                     borderRadius: '4px',
                                     cursor: 'pointer'
                                   }}
@@ -1285,7 +1286,7 @@ export const Products: React.FC = () => {
             </div>
 
             {/* 모달 하단 액션 */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid #e5e7eb', paddingTop: '16px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid var(--border-color)', paddingTop: '16px' }}>
               {canSave && (
                 <button
                   type="button"
@@ -1298,7 +1299,7 @@ export const Products: React.FC = () => {
                   style={{
                     padding: '6px 14px', fontSize: '13px',
                     display: 'inline-flex', alignItems: 'center', gap: '6px',
-                    backgroundColor: selectedProductForDocs.specSheetUrl ? '#16a34a' : '#2563eb'
+                    backgroundColor: selectedProductForDocs.specSheetUrl ? 'var(--success)' : 'var(--primary)'
                   }}
                 >
                   {selectedProductForDocs.specSheetUrl
