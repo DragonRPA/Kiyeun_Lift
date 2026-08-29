@@ -895,19 +895,16 @@ ${activeSpecs.map((s, idx) => `  ${idx + 1}. [적용] ${s.label}`).join('\n') ||
         </div>
       </div>
 
-      {/* 📊 스마트 출고 자동 분석 상태 바 */}
+      {/* 출고 의뢰 분석 상태 바 */}
       <div style={{
         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-        padding: '12px 18px', backgroundColor: 'var(--bg-card)',
+        padding: '10px 16px', backgroundColor: 'var(--bg-card)',
         borderRadius: '8px', border: '1px solid var(--border-color)',
-        fontSize: '13px', flexWrap: 'wrap', gap: '12px'
+        fontSize: '12.5px', flexWrap: 'wrap', gap: '12px'
       }}>
         <div style={{ display: 'flex', gap: '20px', alignItems: 'center' }}>
-          <div>파서 상태: <strong style={{ color: '#16a34a' }}>정규식 결정론적 파서 가동</strong></div>
-          <div>지원 스펙: <strong style={{ color: 'var(--primary)' }}>21대 안전/기술 요구사항</strong></div>
-        </div>
-        <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-          <span style={{ fontSize: '11.5px', color: 'var(--text-muted)' }}>* 외부 AI API 호출 없이 브라우저 단독 처리 (비용 0원, 보안 무결)</span>
+          <div>파서 상태: <strong style={{ color: '#16a34a' }}>정규식 파서 가동</strong></div>
+          <div>분석 모드: <strong style={{ color: 'var(--primary)' }}>의뢰별 맞춤 스펙 추출</strong></div>
         </div>
       </div>
 
@@ -1328,19 +1325,28 @@ ${activeSpecs.map((s, idx) => `  ${idx + 1}. [적용] ${s.label}`).join('\n') ||
                   </tbody>
                 </table>
 
-                <div style={{ fontSize: '14px', fontWeight: 'bold', borderLeft: '4px solid #312e81', paddingLeft: '8px', marginBottom: '10px', color: '#312e81' }}>4. 장비 출하 필수 스펙 체크리스트 (검수원 확인용)</div>
-                <div style={{ padding: '12px', border: '1px solid #ddd', borderRadius: '4px', marginBottom: '20px' }}>
-                  <div className="spec-grid">
-                    {STANDARD_SPECS.map(s => {
-                      const isChecked = !!checkedSpecs[s.id];
+                <div style={{ fontSize: '14px', fontWeight: 'bold', borderLeft: '4px solid #312e81', paddingLeft: '8px', marginBottom: '10px', color: '#312e81' }}>4. 장비 출하 스펙 요구사항 (현장 요청 검수 항목)</div>
+                <div style={{ padding: '12px', border: '1px solid #ddd', borderRadius: '4px', marginBottom: '20px', backgroundColor: '#fcfcfd' }}>
+                  {(() => {
+                    const appliedSpecs = STANDARD_SPECS.filter(s => !!checkedSpecs[s.id]);
+                    if (appliedSpecs.length === 0) {
                       return (
-                        <div key={s.id} className={`spec-item ${isChecked ? 'checked' : 'unchecked'}`}>
-                          <span>{isChecked ? '☑' : '☐'}</span>
-                          <span>{s.label} ({isChecked ? '적용' : '미적용'})</span>
+                        <div style={{ fontSize: '12.5px', color: '#6b7280', padding: '4px 0' }}>
+                          • 별도 특수 요청 스펙 없음 (기본 출하 표준 검수 적용)
                         </div>
                       );
-                    })}
-                  </div>
+                    }
+                    return (
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '12.5px' }}>
+                        {appliedSpecs.map((s, idx) => (
+                          <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 600, color: '#111827' }}>
+                            <span style={{ color: '#16a34a', fontWeight: 800 }}>☑</span>
+                            <span>{idx + 1}. {getDynamicSpecLabel(s, rawText)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })()}
                 </div>
 
                 <div style={{ fontSize: '14px', fontWeight: 'bold', borderLeft: '4px solid #312e81', paddingLeft: '8px', marginBottom: '10px', color: '#312e81' }}>5. 정산 및 특이사항</div>
