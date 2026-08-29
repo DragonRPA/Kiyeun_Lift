@@ -787,13 +787,89 @@ ${activeSpecs.map((s, idx) => `  ${idx + 1}. [적용] ${s.label}`).join('\n') ||
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '20px' }}>
       
-      {/* 타이틀 및 가이드 배너 */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      {/* 타이틀 및 상단 프린터 제어 툴바 */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
         <div>
           <h2 style={{ fontWeight: '700', marginBottom: '4px' }}>출고 요청 입력</h2>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <p style={{ fontSize: '13px', color: 'var(--text-muted)', margin: 0 }}>카카오톡/메신저로 전송받은 비정형 출고 의뢰 텍스트를 브라우저 단독 정규식으로 안전하게 분할 분석합니다.</p>
+            <p style={{ fontSize: '13px', color: 'var(--text-muted)', margin: 0 }}>메신저/카카오톡 출고 의뢰 줄글을 정규식으로 안전하게 분석하여 데이터화합니다.</p>
           </div>
+        </div>
+
+        {/* 🖨️ 상단 로컬 프린터 지정 및 출고의뢰서 인쇄 컨트롤 패널 */}
+        <div style={{
+          display: 'flex',
+          alignItems: 'flex-end',
+          gap: '10px',
+          padding: '8px 12px',
+          backgroundColor: 'var(--bg-card)',
+          borderRadius: '8px',
+          border: '1px solid var(--border-color)',
+          flexWrap: 'wrap'
+        }}>
+          {/* 레이블-입력창 세로 스택 (전사 표준 헌장 3.4 준수) */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
+              <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
+                로컬 프린터 지정
+              </label>
+              <span style={{
+                fontSize: '10px',
+                fontWeight: 700,
+                color: agentStatus === 'ONLINE' ? '#16a34a' : '#9ca3af',
+                backgroundColor: agentStatus === 'ONLINE' ? 'rgba(22, 163, 74, 0.1)' : 'var(--bg-app)',
+                padding: '1px 6px',
+                borderRadius: '4px'
+              }}>
+                {agentStatus === 'ONLINE' ? '에이전트 연결됨' : '브라우저 인쇄'}
+              </span>
+            </div>
+            <select
+              value={selectedPrinter}
+              onChange={(e) => handlePrinterChange(e.target.value)}
+              style={{
+                padding: '6px 10px',
+                fontSize: '12px',
+                borderRadius: '4px',
+                border: '1px solid var(--border-color)',
+                backgroundColor: 'var(--bg-app)',
+                color: 'var(--text-main)',
+                fontWeight: '600',
+                minWidth: '200px',
+                cursor: 'pointer'
+              }}
+            >
+              {printers.length > 0 ? (
+                printers.map(p => (
+                  <option key={p} value={p}>{p}</option>
+                ))
+              ) : (
+                <option value={selectedPrinter || 'Apeos C2060'}>
+                  {selectedPrinter || 'Apeos C2060 (기본)'}
+                </option>
+              )}
+            </select>
+          </div>
+
+          <button
+            type="button"
+            className="btn-primary"
+            onClick={handlePrint}
+            disabled={isAgentPrinting}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              fontSize: '12.5px',
+              padding: '7px 14px',
+              fontWeight: 'bold',
+              whiteSpace: 'nowrap',
+              height: '33px'
+            }}
+          >
+            <Printer size={14} />
+            {isAgentPrinting ? '인쇄 전송중...' : '출고의뢰서 인쇄'}
+          </button>
         </div>
       </div>
 
@@ -1116,12 +1192,12 @@ ${activeSpecs.map((s, idx) => `  ${idx + 1}. [적용] ${s.label}`).join('\n') ||
         <div style={{ minHeight: '300px', padding: '16px', backgroundColor: 'var(--bg-app)', border: '1px solid var(--border-color)', borderRadius: '8px' }}>
           
           <div>
-              <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '10px', marginBottom: '12px', flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'flex-end', gap: '10px', marginBottom: '16px', flexWrap: 'wrap' }}>
                 
-                {/* 🖨️ 전용 프린터 지정 드롭다운 (출력 버튼 바로 좌측 인라인 배치) */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <label style={{ fontSize: '12px', fontWeight: '700', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
-                    전용 프린터:
+                {/* 🖨️ 로컬 프린터 지정 드롭다운 */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
+                    로컬 프린터 지정
                   </label>
                   <select
                     value={selectedPrinter}
@@ -1134,11 +1210,9 @@ ${activeSpecs.map((s, idx) => `  ${idx + 1}. [적용] ${s.label}`).join('\n') ||
                       backgroundColor: 'var(--bg-card)',
                       color: 'var(--text-main)',
                       fontWeight: '600',
-                      minWidth: '170px',
-                      maxWidth: '240px',
+                      minWidth: '200px',
                       cursor: 'pointer'
                     }}
-                    title="선택한 전용 프린터는 브라우저를 닫아도 영구 유지됩니다."
                   >
                     {printers.length > 0 ? (
                       printers.map(p => (
@@ -1152,7 +1226,7 @@ ${activeSpecs.map((s, idx) => `  ${idx + 1}. [적용] ${s.label}`).join('\n') ||
                   </select>
                 </div>
 
-                {/* 🖨️ 출고요청서 인쇄하기 버튼 */}
+                {/* 🖨️ 출고의뢰서 인쇄 버튼 */}
                 <button
                   type="button"
                   className="btn-primary"
@@ -1162,14 +1236,15 @@ ${activeSpecs.map((s, idx) => `  ${idx + 1}. [적용] ${s.label}`).join('\n') ||
                     display: 'flex',
                     alignItems: 'center',
                     gap: '6px',
-                    fontSize: '13px',
-                    padding: '6px 16px',
+                    fontSize: '12.5px',
+                    padding: '7px 14px',
                     fontWeight: 'bold',
-                    whiteSpace: 'nowrap'
+                    whiteSpace: 'nowrap',
+                    height: '33px'
                   }}
                 >
                   <Printer size={14} />
-                  {isAgentPrinting ? '인쇄 전송중...' : '출고요청서 인쇄하기'}
+                  {isAgentPrinting ? '인쇄 전송중...' : '출고의뢰서 인쇄'}
                 </button>
               </div>
 
