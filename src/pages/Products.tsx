@@ -690,14 +690,14 @@ export const Products: React.FC = () => {
                     {previewProduct.capacityPreExt || '272 kg'}
                   </div>
                   <div style={{ fontSize: '18px', color: '#3b82f6', marginBottom: '4px' }}>⬇️</div>
-                  <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '115px', margin: '6px 0' }}>
+                  <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '80px', margin: '4px 0' }}>
                     <img
                       src={LIFT_RETRACTED_IMG}
                       alt="작업대 확장 전 리프트 형상"
-                      style={{ maxHeight: '110px', maxWidth: '100%', objectFit: 'contain' }}
+                      style={{ maxHeight: '76px', maxWidth: '100%', objectFit: 'contain' }}
                     />
                   </div>
-                  <div style={{ fontSize: '13px', fontWeight: 'bold', color: '#374151', backgroundColor: '#e5e7eb', padding: '6px', borderRadius: '4px' }}>
+                  <div style={{ fontSize: '12px', fontWeight: 'bold', color: '#374151', backgroundColor: '#e5e7eb', padding: '4px', borderRadius: '3px' }}>
                     작업대 확장 전 (작업자 2인)
                   </div>
                 </div>
@@ -720,14 +720,14 @@ export const Products: React.FC = () => {
                       <div style={{ fontSize: '11px', color: '#6b7280', fontWeight: 'bold' }}>확장부</div>
                     </div>
                   </div>
-                  <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '115px', margin: '6px 0' }}>
+                  <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '80px', margin: '4px 0' }}>
                     <img
                       src={LIFT_EXTENDED_IMG}
                       alt="작업대 확장 후 리프트 형상"
-                      style={{ maxHeight: '110px', maxWidth: '100%', objectFit: 'contain' }}
+                      style={{ maxHeight: '76px', maxWidth: '100%', objectFit: 'contain' }}
                     />
                   </div>
-                  <div style={{ fontSize: '13px', fontWeight: 'bold', color: '#374151', backgroundColor: '#e5e7eb', padding: '6px', borderRadius: '4px' }}>
+                  <div style={{ fontSize: '12px', fontWeight: 'bold', color: '#374151', backgroundColor: '#e5e7eb', padding: '4px', borderRadius: '3px' }}>
                     작업대 확장 후 (각 1인)
                   </div>
                 </div>
@@ -745,47 +745,47 @@ export const Products: React.FC = () => {
             <div style={{ textAlign: 'center', fontWeight: 'bold', fontSize: '16px', marginBottom: '8px', letterSpacing: '2px' }}>
               장 비 제 원 표
             </div>
-            <table style={{ width: '100%', borderCollapse: 'collapse', border: '2px solid #111827', fontSize: '13px', color: '#111827', textAlign: 'center' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', border: '2px solid #111827', fontSize: '12px', color: '#111827', textAlign: 'center' }}>
               <tbody>
                 <tr style={{ borderBottom: '1px solid #111827' }}>
-                  <td style={{ backgroundColor: '#f3f4f6', fontWeight: 'bold', width: '22%', padding: '8px', borderRight: '1px solid #111827' }}>사용업체명</td>
-                  <td style={{ width: '28%', padding: '8px', borderRight: '1px solid #111827', color: '#6b7280' }}>(계약처 자동출력)</td>
-                  <td style={{ backgroundColor: '#f3f4f6', fontWeight: 'bold', width: '22%', padding: '8px', borderRight: '1px solid #111827' }}>임대업체명</td>
-                  <td style={{ width: '28%', padding: '8px', fontWeight: 'bold' }}>㈜ 기연리프트</td>
+                  <td style={{ backgroundColor: '#f3f4f6', fontWeight: 'bold', width: '22%', padding: '5px', borderRight: '1px solid #111827' }}>사용업체명</td>
+                  <td style={{ width: '28%', padding: '5px', borderRight: '1px solid #111827', color: '#6b7280' }}>(계약처 자동출력)</td>
+                  <td style={{ backgroundColor: '#f3f4f6', fontWeight: 'bold', width: '22%', padding: '5px', borderRight: '1px solid #111827' }}>임대업체명</td>
+                  <td style={{ width: '28%', padding: '5px', fontWeight: 'bold' }}>㈜ 기연리프트</td>
                 </tr>
                 <tr style={{ borderBottom: '1px solid #111827' }}>
-                  <td style={{ backgroundColor: '#f3f4f6', fontWeight: 'bold', padding: '8px', borderRight: '1px solid #111827' }}>장 비 명</td>
-                  <td style={{ padding: '8px', borderRight: '1px solid #111827', fontWeight: 'bold' }}>{previewProduct.modelName}</td>
-                  <td style={{ backgroundColor: '#f3f4f6', fontWeight: 'bold', padding: '8px', borderRight: '1px solid #111827' }}>동 력</td>
-                  <td style={{ padding: '8px' }}>{previewProduct.powerSource || '배터리'}</td>
+                  <td style={{ backgroundColor: '#f3f4f6', fontWeight: 'bold', padding: '5px', borderRight: '1px solid #111827' }}>장 비 명</td>
+                  <td style={{ padding: '5px', borderRight: '1px solid #111827', fontWeight: 'bold' }}>{previewProduct.modelName}</td>
+                  <td style={{ backgroundColor: '#f3f4f6', fontWeight: 'bold', padding: '5px', borderRight: '1px solid #111827' }}>동 력</td>
+                  <td style={{ padding: '5px' }}>{previewProduct.powerSource || '배터리'}</td>
                 </tr>
                 <tr style={{ borderBottom: '1px solid #111827' }}>
-                  <td style={{ backgroundColor: '#f3f4f6', fontWeight: 'bold', padding: '8px', borderRight: '1px solid #111827' }}>작업 높이</td>
-                  <td style={{ padding: '8px', borderRight: '1px solid #111827' }}>{previewProduct.workingHeight || '-'}</td>
-                  <td style={{ backgroundColor: '#f3f4f6', fontWeight: 'bold', padding: '8px', borderRight: '1px solid #111827' }}>발판 높이</td>
-                  <td style={{ padding: '8px' }}>{previewProduct.platformHeight || '-'}</td>
+                  <td style={{ backgroundColor: '#f3f4f6', fontWeight: 'bold', padding: '5px', borderRight: '1px solid #111827' }}>작업 높이</td>
+                  <td style={{ padding: '5px', borderRight: '1px solid #111827' }}>{previewProduct.workingHeight || '-'}</td>
+                  <td style={{ backgroundColor: '#f3f4f6', fontWeight: 'bold', padding: '5px', borderRight: '1px solid #111827' }}>발판 높이</td>
+                  <td style={{ padding: '5px' }}>{previewProduct.platformHeight || '-'}</td>
                 </tr>
                 <tr style={{ borderBottom: '1px solid #111827' }}>
-                  <td style={{ backgroundColor: '#f3f4f6', fontWeight: 'bold', padding: '8px', borderRight: '1px solid #111827' }}>장비 중량</td>
-                  <td style={{ padding: '8px', borderRight: '1px solid #111827' }}>{previewProduct.weight || '-'}</td>
-                  <td style={{ backgroundColor: '#f3f4f6', fontWeight: 'bold', padding: '8px', borderRight: '1px solid #111827' }}>적재 중량</td>
-                  <td style={{ padding: '8px' }}>{previewProduct.capacityPreExt || '-'}</td>
+                  <td style={{ backgroundColor: '#f3f4f6', fontWeight: 'bold', padding: '5px', borderRight: '1px solid #111827' }}>장비 중량</td>
+                  <td style={{ padding: '5px', borderRight: '1px solid #111827' }}>{previewProduct.weight || '-'}</td>
+                  <td style={{ backgroundColor: '#f3f4f6', fontWeight: 'bold', padding: '5px', borderRight: '1px solid #111827' }}>적재 중량</td>
+                  <td style={{ padding: '5px' }}>{previewProduct.capacityPreExt || '-'}</td>
                 </tr>
                 <tr style={{ borderBottom: '1px solid #111827' }}>
-                  <td style={{ backgroundColor: '#f3f4f6', fontWeight: 'bold', padding: '8px', borderRight: '1px solid #111827' }}>장비 크기</td>
-                  <td style={{ padding: '8px', borderRight: '1px solid #111827' }}>{previewProduct.machineDimensions || '-'}</td>
-                  <td style={{ backgroundColor: '#f3f4f6', fontWeight: 'bold', padding: '8px', borderRight: '1px solid #111827' }}>등판 능력</td>
-                  <td style={{ padding: '8px' }}>{previewProduct.gradeability || '-'}</td>
+                  <td style={{ backgroundColor: '#f3f4f6', fontWeight: 'bold', padding: '5px', borderRight: '1px solid #111827' }}>장비 크기</td>
+                  <td style={{ padding: '5px', borderRight: '1px solid #111827' }}>{previewProduct.machineDimensions || '-'}</td>
+                  <td style={{ backgroundColor: '#f3f4f6', fontWeight: 'bold', padding: '5px', borderRight: '1px solid #111827' }}>등판 능력</td>
+                  <td style={{ padding: '5px' }}>{previewProduct.gradeability || '-'}</td>
                 </tr>
                 <tr style={{ borderBottom: '1px solid #111827' }}>
-                  <td style={{ backgroundColor: '#f3f4f6', fontWeight: 'bold', padding: '8px', borderRight: '1px solid #111827' }}>플랫폼크기</td>
-                  <td style={{ padding: '8px', borderRight: '1px solid #111827' }}>{previewProduct.platformDimensions || '-'}</td>
-                  <td style={{ backgroundColor: '#f3f4f6', fontWeight: 'bold', padding: '8px', borderRight: '1px solid #111827' }}>주행 속도</td>
-                  <td style={{ padding: '8px' }}>{previewProduct.speed || '-'}</td>
+                  <td style={{ backgroundColor: '#f3f4f6', fontWeight: 'bold', padding: '5px', borderRight: '1px solid #111827' }}>플랫폼크기</td>
+                  <td style={{ padding: '5px', borderRight: '1px solid #111827' }}>{previewProduct.platformDimensions || '-'}</td>
+                  <td style={{ backgroundColor: '#f3f4f6', fontWeight: 'bold', padding: '5px', borderRight: '1px solid #111827' }}>주행 속도</td>
+                  <td style={{ padding: '5px' }}>{previewProduct.speed || '-'}</td>
                 </tr>
                 <tr>
-                  <td style={{ backgroundColor: '#f3f4f6', fontWeight: 'bold', padding: '8px', borderRight: '1px solid #111827' }}>A/S 접수</td>
-                  <td colSpan={3} style={{ padding: '8px', fontWeight: 'bold', letterSpacing: '1px' }}>
+                  <td style={{ backgroundColor: '#f3f4f6', fontWeight: 'bold', padding: '5px', borderRight: '1px solid #111827' }}>A/S 접수</td>
+                  <td colSpan={3} style={{ padding: '5px', fontWeight: 'bold', letterSpacing: '1px' }}>
                     {previewProduct.asContact || '031-334-5296'}
                   </td>
                 </tr>

@@ -88,7 +88,7 @@ export function buildSpecSheetHTML(
     * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     body {
       margin: 0;
-      padding: 30px 40px;
+      padding: 16px 28px;
       font-family: "Malgun Gothic", "맑은 고딕", "Apple SD Gothic Neo", sans-serif;
       background-color: #ffffff !important;
       color: #111827 !important;
@@ -98,104 +98,104 @@ export function buildSpecSheetHTML(
     }
     .main-title {
       text-align: center;
-      font-size: 24px;
+      font-size: 20px;
       font-weight: 800;
       letter-spacing: 1px;
-      margin-top: 10px;
-      margin-bottom: 8px;
+      margin-top: 4px;
+      margin-bottom: 4px;
       color: #111827;
     }
     .sub-title {
       text-align: center;
-      font-size: 15px;
+      font-size: 13px;
       font-weight: bold;
       color: #1e3a8a;
-      margin-bottom: 25px;
+      margin-bottom: 10px;
     }
     .diagram-container {
       border: 1px solid #d1d5db;
-      border-radius: 8px;
-      padding: 16px;
+      border-radius: 6px;
+      padding: 10px 12px;
       background-color: #fafafa;
-      margin-bottom: 20px;
+      margin-bottom: 10px;
     }
     .diagram-flex {
       display: flex;
       justify-content: space-around;
       align-items: center;
-      gap: 20px;
+      gap: 12px;
     }
     .diagram-card {
       flex: 1;
       border: 1px solid #e5e7eb;
-      border-radius: 6px;
+      border-radius: 4px;
       background-color: #ffffff;
-      padding: 12px;
+      padding: 8px;
       text-align: center;
     }
     .diagram-weight {
-      font-size: 16px;
+      font-size: 14px;
       font-weight: 800;
       color: #111827;
-      margin-bottom: 4px;
+      margin-bottom: 2px;
     }
     .arrow-icon {
-      font-size: 18px;
+      font-size: 14px;
       color: #2563eb;
       font-weight: 900;
-      margin-bottom: 4px;
+      margin-bottom: 2px;
     }
     .diagram-img-box {
       display: flex;
       justify-content: center;
       align-items: center;
-      height: 120px;
-      margin: 6px 0;
+      height: 90px;
+      margin: 4px 0;
     }
     .diagram-img-box img {
-      max-height: 115px;
+      max-height: 86px;
       max-width: 100%;
       object-fit: contain;
     }
     .diagram-label {
-      font-size: 13px;
+      font-size: 11px;
       font-weight: bold;
       color: #374151;
       background-color: #f3f4f6;
-      padding: 6px 10px;
-      border-radius: 4px;
+      padding: 4px 6px;
+      border-radius: 3px;
     }
     .wind-banner-wrap {
       display: flex;
       justify-content: flex-end;
-      margin-top: 14px;
+      margin-top: 8px;
     }
     .wind-banner {
       background-color: #dc2626;
       color: #ffffff;
       font-weight: 800;
-      font-size: 13px;
-      padding: 6px 16px;
-      border-radius: 4px;
+      font-size: 12px;
+      padding: 4px 12px;
+      border-radius: 3px;
     }
     .spec-table-title {
       text-align: center;
-      font-size: 20px;
+      font-size: 17px;
       font-weight: 800;
       letter-spacing: 3px;
-      margin: 24px 0 10px 0;
+      margin: 8px 0 6px 0;
       color: #111827;
     }
     .spec-table {
       width: 100%;
       border-collapse: collapse;
       border: 2px solid #111827;
-      font-size: 13.5px;
+      font-size: 12px;
       text-align: center;
     }
     .spec-table th, .spec-table td {
       border: 1px solid #111827;
-      padding: 10px 8px;
+      padding: 6px 5px;
       color: #111827;
       background-color: #ffffff;
     }
