@@ -607,24 +607,7 @@ export const Products: React.FC = () => {
                           <FileText size={12} />
                           제원표
                         </button>
-                        {canSave && (
-                          <button
-                            className="btn-primary"
-                            onClick={() => handleGenerateAndUploadR2(p)}
-                            disabled={generatingModelId === (p.id || p.modelName)}
-                            style={{
-                              padding: '3px 8px', fontSize: '11px',
-                              display: 'inline-flex', alignItems: 'center', gap: '2px',
-                              backgroundColor: p.specSheetUrl ? '#16a34a' : '#2563eb'
-                            }}
-                            title={p.specSheetUrl ? '저장된 제원표 PDF 열기' : 'Cloudflare R2에 제원표 PDF 자동 생성 및 저장'}
-                          >
-                            {p.specSheetUrl
-                              ? <><FileText size={12} /> 제원표 열기</>
-                              : <><CloudUpload size={12} /> {generatingModelId === (p.id || p.modelName) ? '생성중...' : '제원표 생성'}</>
-                            }
-                          </button>
-                        )}
+
                         {canSave && (
                           <button
                             className="btn-secondary"
@@ -798,24 +781,6 @@ export const Products: React.FC = () => {
                   <Download size={14} />
                   PDF 다운로드
                 </button>
-                {canSave && (
-                  <button
-                    type="button"
-                    className="btn-primary"
-                    onClick={() => handleGenerateAndUploadR2(previewProduct)}
-                    disabled={generatingModelId === (previewProduct.id || previewProduct.modelName)}
-                    style={{
-                      padding: '6px 14px', fontSize: '13px',
-                      display: 'inline-flex', alignItems: 'center', gap: '6px',
-                      backgroundColor: previewProduct.specSheetUrl ? '#16a34a' : '#2563eb'
-                    }}
-                  >
-                    {previewProduct.specSheetUrl
-                      ? <><FileText size={14} /> 제원표 PDF 열기</>
-                      : <><CloudUpload size={14} /> {generatingModelId === (previewProduct.id || previewProduct.modelName) ? 'R2 생성중...' : 'R2 제원표 PDF 생성 & 저장'}</>
-                    }
-                  </button>
-                )}
               </div>
               <button
                 type="button"
