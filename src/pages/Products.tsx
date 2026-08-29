@@ -177,23 +177,37 @@ export const Products: React.FC = () => {
     e.preventDefault();
     if (!editingProduct || !editingProduct.modelName) return;
 
-    // 피트(Feet) 실수 제약 조건 검증
     const feetValue = Number(editingProduct.feet);
     if (isNaN(feetValue) || feetValue <= 0) {
       alert("피트 규격은 0보다 큰 숫자(실수 가능, 예: 3.6, 12, 19 등)로 입력해야 합니다.");
       return;
     }
 
+    // 클로저 캡처 (setState 초기화 전에 저장)
+    const productSnapshot = { ...editingProduct } as Product;
+
     try {
       await saveProduct(editingProduct as Omit<Product, 'id' | 'createdAt'>);
-      alert("데이터 저장 및 동기화 완료");
       setShowModal(false);
       setEditingProduct(null);
+      refreshAllData();
+
+      // 저장 성공 즉시 제원표 자동 생성 (백그라운드 — 사용자 흐름 차단 없음)
+      setGeneratingModelId(productSnapshot.modelName);
+      generateAndUploadSpecSheetToR2(productSnapshot, googleConfigs[0])
+        .then(res => {
+          if (!res.success) console.error('[제원표 자동생성] 실패:', res.error);
+        })
+        .finally(() => {
+          setGeneratingModelId(null);
+          refreshAllData();
+        });
+
     } catch (err: any) {
-      const errMsg = err?.message || JSON.stringify(err);
-      alert(`저장 실패: ${errMsg}`);
+      alert(`저장 실패: ${err?.message || JSON.stringify(err)}`);
     }
   };
+
 
   const [assetFilter, setAssetFilter] = useState<'ALL' | 'WITH_ASSETS' | 'NO_ASSETS'>('ALL');
 
@@ -599,13 +613,21 @@ export const Products: React.FC = () => {
                     <td style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>
                       <div style={{ display: 'flex', gap: '4px', justifyContent: 'center' }}>
                         <button
-                          className="btn-secondary"
-                          onClick={() => handleOpenPreview(p)}
-                          style={{ padding: '3px 8px', fontSize: '11px', display: 'inline-flex', alignItems: 'center', gap: '2px' }}
-                          title="제원표 보기"
+                          className={p.specSheetUrl ? 'btn-secondary' : 'btn-secondary'}
+                          onClick={() => p.specSheetUrl ? window.open(p.specSheetUrl, '_blank') : undefined}
+                          disabled={!p.specSheetUrl || generatingModelId === (p.id || p.modelName)}
+                          style={{
+                            padding: '3px 8px', fontSize: '11px',
+                            display: 'inline-flex', alignItems: 'center', gap: '2px',
+                            opacity: p.specSheetUrl ? 1 : 0.4,
+                            cursor: p.specSheetUrl ? 'pointer' : 'not-allowed',
+                          }}
+                          title={p.specSheetUrl ? '저장된 제원표 PDF 열기' : '제원표 없음 — 수정 저장 시 자동 생성됩니다'}
                         >
                           <FileText size={12} />
-                          제원표
+                          {generatingModelId === (p.id || p.modelName)
+                            ? '생성중...'
+                            : p.specSheetUrl ? '제원표' : '제원표 없음'}
                         </button>
 
                         {canSave && (
