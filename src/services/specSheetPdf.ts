@@ -1,5 +1,14 @@
 // src/services/specSheetPdf.ts
-// (주)기연리프트 장비 제원표 실물 규격 PDF 실시간 자동 생성 및 Cloudflare R2 자동 업로드 엔진
+// (주)기연리프트 장비 제원표 PDF 자동 생성 및 Cloudflare R2 업로드 엔진
+//
+// [이미지 주입 전략]
+//   iframe 내 src="/images/..." 경로 방식은 브라우저가 off-screen iframe의
+//   이미지를 lazy 처리하여 html2canvas 캡처 시 빈 영역이 발생함 (근본적 한계).
+//   → 이미지를 먼저 fetch() → Data URL 변환 → HTML에 인라인 삽입하면
+//     HTTP 요청 없음 = lazy 없음 = 100% 안정적 렌더링 보장.
+//
+// [다크모드 대응]
+//   body에 color-scheme: light 명시 → OS 다크모드와 무관하게 흰 배경/검은 글씨 유지.
 
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
@@ -13,42 +22,79 @@ const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYm
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 /**
- * 장비 제원표 실물 규격과 100% 동일한 HTML 문자열 생성
+ * URL → Data URL 변환 헬퍼
+ * fetch()로 이미지를 받아 FileReader로 Data URL(base64 인라인)로 변환.
+ * 변환된 Data URL을 HTML에 inline으로 삽입하면 iframe 내 lazy loading 문제 없음.
  */
-export function buildSpecSheetHTML(product: Partial<Product>): string {
-  const modelName = product.modelName || '장비모델';
-  const preExt = product.capacityPreExt || '227 kg';
-  const postExtMain = product.capacityPostExtMain || '114 kg';
-  const postExtDeck = product.capacityPostExtDeck || '113 kg';
-  const maxWindSpeed = product.maxWindSpeed || '12.5 m/s 이내';
+async function fetchAsDataUrl(url: string): Promise<string> {
+  try {
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`fetch ${url} failed: ${response.status}`);
+    const blob = await response.blob();
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  } catch (e) {
+    console.warn(`[specSheetPdf] 이미지 로드 실패: ${url}`, e);
+    return ''; // 실패 시 빈 문자열 → img 태그에서 alt 표시
+  }
+}
 
-  const powerSource = product.powerSource || '배터리';
-  const workingHeight = product.workingHeight || '-';
-  const platformHeight = product.platformHeight || '-';
-  const weight = product.weight || '-';
-  const machineDimensions = product.machineDimensions || '-';
-  const gradeability = product.gradeability || '-';
+/**
+ * 장비 제원표 HTML 빌더
+ * retractedDataUrl, extendedDataUrl: pre-fetch된 Data URL (인라인 삽입)
+ * → iframe 내에서 추가 HTTP 요청 없이 즉시 렌더링됨
+ */
+export function buildSpecSheetHTML(
+  product: Partial<Product>,
+  retractedDataUrl: string,
+  extendedDataUrl: string
+): string {
+  const modelName      = product.modelName          || '장비모델';
+  const preExt         = product.capacityPreExt     || '227 kg';
+  const postExtMain    = product.capacityPostExtMain || '114 kg';
+  const postExtDeck    = product.capacityPostExtDeck || '113 kg';
+  const maxWindSpeed   = product.maxWindSpeed        || '12.5 m/s 이내';
+  const powerSource    = product.powerSource         || '배터리';
+  const workingHeight  = product.workingHeight       || '-';
+  const platformHeight = product.platformHeight      || '-';
+  const weight         = product.weight              || '-';
+  const machineDimensions  = product.machineDimensions  || '-';
+  const gradeability       = product.gradeability       || '-';
   const platformDimensions = product.platformDimensions || '-';
-  const speed = product.speed || '-';
-  const asContact = product.asContact || '031-334-5296';
+  const speed          = product.speed               || '-';
+  const asContact      = product.asContact           || '031-334-5296';
 
-  return `
-<!DOCTYPE html>
+  const retractedSrc = retractedDataUrl
+    ? `<img src="${retractedDataUrl}" alt="확장 전 리프트 형상" />`
+    : '<div style="color:#9ca3af;font-size:11px">이미지 없음</div>';
+
+  const extendedSrc = extendedDataUrl
+    ? `<img src="${extendedDataUrl}" alt="확장 후 리프트 형상" />`
+    : '<div style="color:#9ca3af;font-size:11px">이미지 없음</div>';
+
+  return `<!DOCTYPE html>
 <html lang="ko">
 <head>
   <meta charset="UTF-8">
   <title>장비제원표 - ${modelName}</title>
   <style>
+    /* 다크모드 강제 무력화 — color-scheme: light 명시 */
+    :root { color-scheme: light; }
     @page { size: A4 portrait; margin: 0; }
     * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     body {
       margin: 0;
       padding: 30px 40px;
       font-family: "Malgun Gothic", "맑은 고딕", "Apple SD Gothic Neo", sans-serif;
-      background-color: #ffffff;
-      color: #111827;
+      background-color: #ffffff !important;
+      color: #111827 !important;
       width: 794px;
       height: 1123px;
+      color-scheme: light;
     }
     .main-title {
       text-align: center;
@@ -57,6 +103,7 @@ export function buildSpecSheetHTML(product: Partial<Product>): string {
       letter-spacing: 1px;
       margin-top: 10px;
       margin-bottom: 8px;
+      color: #111827;
     }
     .sub-title {
       text-align: center;
@@ -137,6 +184,7 @@ export function buildSpecSheetHTML(product: Partial<Product>): string {
       font-weight: 800;
       letter-spacing: 3px;
       margin: 24px 0 10px 0;
+      color: #111827;
     }
     .spec-table {
       width: 100%;
@@ -148,9 +196,11 @@ export function buildSpecSheetHTML(product: Partial<Product>): string {
     .spec-table th, .spec-table td {
       border: 1px solid #111827;
       padding: 10px 8px;
+      color: #111827;
+      background-color: #ffffff;
     }
     .spec-table .th-bg {
-      background-color: #f3f4f6;
+      background-color: #f3f4f6 !important;
       font-weight: bold;
       width: 20%;
     }
@@ -178,7 +228,7 @@ export function buildSpecSheetHTML(product: Partial<Product>): string {
         <div class="diagram-weight">${preExt}</div>
         <div class="arrow-icon">▼</div>
         <div class="diagram-img-box">
-          <img src="${LIFT_RETRACTED_IMG}" alt="작업대 확장 전 리프트 형상 (작업자 2인)" />
+          ${retractedSrc}
         </div>
         <div class="diagram-label">작업대 확장 전 (작업자 2인)</div>
       </div>
@@ -198,7 +248,7 @@ export function buildSpecSheetHTML(product: Partial<Product>): string {
           </div>
         </div>
         <div class="diagram-img-box">
-          <img src="${LIFT_EXTENDED_IMG}" alt="작업대 확장 후 리프트 형상 (각 1인)" />
+          ${extendedSrc}
         </div>
         <div class="diagram-label">작업대 확장 후 (각 1인)</div>
       </div>
@@ -217,40 +267,34 @@ export function buildSpecSheetHTML(product: Partial<Product>): string {
   <table class="spec-table">
     <tbody>
       <tr>
-        <td class="th-bg">사용업체명</td>
-        <td class="td-val" style="color: #6b7280;">(계약처 자동출력)</td>
-        <td class="th-bg">임대업체명</td>
-        <td class="td-val" style="font-weight: bold;">㈜ 기연리프트</td>
-      </tr>
-      <tr>
-        <td class="th-bg">장 비 명</td>
-        <td class="td-val" style="font-weight: 800; color: #1e3a8a;">${modelName}</td>
-        <td class="th-bg">동 력</td>
+        <td class="th-bg">동력</td>
         <td class="td-val">${powerSource}</td>
-      </tr>
-      <tr>
         <td class="th-bg">작업 높이</td>
         <td class="td-val">${workingHeight}</td>
-        <td class="th-bg">발판 높이</td>
-        <td class="td-val">${platformHeight}</td>
       </tr>
       <tr>
-        <td class="th-bg">장비 중량</td>
+        <td class="th-bg">플랫폼 높이</td>
+        <td class="td-val">${platformHeight}</td>
+        <td class="th-bg">무게</td>
         <td class="td-val">${weight}</td>
+      </tr>
+      <tr>
         <td class="th-bg">적재 중량</td>
         <td class="td-val">${preExt}</td>
-      </tr>
-      <tr>
         <td class="th-bg">장비 크기</td>
         <td class="td-val">${machineDimensions}</td>
-        <td class="th-bg">등판 능력</td>
-        <td class="td-val">${gradeability}</td>
       </tr>
       <tr>
+        <td class="th-bg">등판 능력</td>
+        <td class="td-val">${gradeability}</td>
         <td class="th-bg">플랫폼 크기</td>
         <td class="td-val">${platformDimensions}</td>
+      </tr>
+      <tr>
         <td class="th-bg">주행 속도</td>
         <td class="td-val">${speed}</td>
+        <td class="th-bg"></td>
+        <td class="td-val"></td>
       </tr>
       <tr>
         <td class="th-bg">A/S 접수</td>
@@ -266,12 +310,31 @@ export function buildSpecSheetHTML(product: Partial<Product>): string {
 }
 
 /**
- * 브라우저에서 HTML을 기반으로 고화질 A4 PDF jsPDF 인스턴스 생성
+ * 제원표 PDF 렌더링 (브라우저)
+ *
+ * [핵심 변경]
+ * 1. 이미지를 iframe 생성 전에 fetch() → Data URL 변환
+ * 2. buildSpecSheetHTML()에 Data URL 전달 → HTML 인라인 삽입
+ * 3. iframe 내 외부 이미지 요청 없음 → lazy loading 없음 → 캡처 100% 안정
+ * 4. color-scheme: light 적용 → 다크모드 무관
  */
-export async function renderSpecSheetJsPdf(product: Partial<Product>): Promise<{ pdf: jsPDF; fileName: string }> {
-  const html = buildSpecSheetHTML(product);
+export async function renderSpecSheetJsPdf(
+  product: Partial<Product>
+): Promise<{ pdf: jsPDF; fileName: string }> {
+
+  // Step 1: 이미지 Data URL 사전 변환 (iframe 생성 전)
+  const [retractedDataUrl, extendedDataUrl] = await Promise.all([
+    fetchAsDataUrl(LIFT_RETRACTED_IMG),
+    fetchAsDataUrl(LIFT_EXTENDED_IMG),
+  ]);
+
+  // Step 2: Data URL이 인라인으로 삽입된 HTML 생성
+  const html = buildSpecSheetHTML(product, retractedDataUrl, extendedDataUrl);
+
+  // Step 3: 화면 밖 iframe 생성 후 HTML 쓰기
   const iframe = document.createElement('iframe');
-  iframe.style.cssText = 'position:absolute;top:-9999px;left:0;width:794px;height:1123px;border:none;visibility:hidden;';
+  iframe.style.cssText =
+    'position:absolute;top:-9999px;left:0;width:794px;height:1123px;border:none;visibility:hidden;';
   document.body.appendChild(iframe);
 
   try {
@@ -280,28 +343,15 @@ export async function renderSpecSheetJsPdf(product: Partial<Product>): Promise<{
     iDoc.write(html);
     iDoc.close();
 
+    // iframe 로드 완료 대기
     await new Promise<void>(resolve => {
       if (iDoc.readyState === 'complete') return resolve();
       iframe.addEventListener('load', () => resolve(), { once: true });
-      setTimeout(resolve, 600);
+      setTimeout(resolve, 500);
     });
 
-    await new Promise(r => setTimeout(r, 250));
-
-    // iframe 내 모든 <img> 요소의 로딩 완료 대기 (Base64 data URI 이미지 포함)
-    const imgs = Array.from(iDoc.querySelectorAll('img'));
-    if (imgs.length > 0) {
-      await Promise.all(imgs.map(img => {
-        if (img.complete) return Promise.resolve();
-        return new Promise<void>(resolve => {
-          img.onload = () => resolve();
-          img.onerror = () => resolve(); // 오류 시에도 진행
-          setTimeout(resolve, 3000); // 최대 3초 대기
-        });
-      }));
-      // 이미지 완전 렌더링 보장 추가 대기
-      await new Promise(r => setTimeout(r, 200));
-    }
+    // 렌더링 안정화 대기 (Data URL 인라인이므로 img.onload 대기 불필요)
+    await new Promise(r => setTimeout(r, 300));
 
     const iBody = iDoc.body;
     iBody.style.margin = '0';
@@ -316,7 +366,7 @@ export async function renderSpecSheetJsPdf(product: Partial<Product>): Promise<{
       logging: false,
       backgroundColor: '#ffffff',
       width: 794,
-      windowWidth: 794
+      windowWidth: 794,
     });
 
     const imgData = canvas.toDataURL('image/png');
@@ -326,8 +376,8 @@ export async function renderSpecSheetJsPdf(product: Partial<Product>): Promise<{
 
     pdf.addImage(imgData, 'PNG', 0, 0, pageW, pageH);
 
-    const modelName = (product.modelName || '장비모델').replace(/[\/\\:*?"<>|]/g, '_');
-    const fileName = `4.제원표_${modelName}.pdf`;
+    const safeModel = (product.modelName || '장비모델').replace(/[\/\\:*?"<>|]/g, '_');
+    const fileName = `4.제원표_${safeModel}.pdf`;
 
     return { pdf, fileName };
   } finally {
@@ -336,26 +386,26 @@ export async function renderSpecSheetJsPdf(product: Partial<Product>): Promise<{
 }
 
 /**
- * 제원표 PDF를 즉시 생성하여 Cloudflare R2 버킷 (Eq_doc/{modelName}/)에 자동 업로드하고 DB 갱신
+ * 제원표 PDF 생성 → Cloudflare R2 업로드 → Supabase DB specSheetUrl 자동 갱신
  */
 export async function generateAndUploadSpecSheetToR2(
   product: Product,
   config?: GoogleConfig
 ): Promise<{ success: boolean; url: string; error?: string }> {
   try {
-    const accountId = config?.r2AccountId || '35014a2514680107d74e1e68d96e6c32';
-    const bucketName = config?.r2BucketName || 'kiyeun-storage';
-    const accessKeyId = config?.r2AccessKeyId || '03cdb7560d37242de608a5db2a976030';
+    const accountId       = config?.r2AccountId       || '35014a2514680107d74e1e68d96e6c32';
+    const bucketName      = config?.r2BucketName      || 'kiyeun-storage';
+    const accessKeyId     = config?.r2AccessKeyId     || '03cdb7560d37242de608a5db2a976030';
     const secretAccessKey = config?.r2SecretAccessKey || 'b2407ab4532e02317860bc3d63226fb7bc232e88083b150c15023906ed141986';
-    const publicDomain = config?.r2PublicDomain || 'https://pub-a2fd3c2ae0cc450b8ebe34baf1b051e1.r2.dev';
+    const publicDomain    = config?.r2PublicDomain    || 'https://pub-a2fd3c2ae0cc450b8ebe34baf1b051e1.r2.dev';
 
     // 1. PDF 렌더링
     const { pdf, fileName } = await renderSpecSheetJsPdf(product);
-    const pdfBase64 = pdf.output('datauristring'); // data:application/pdf;filename=...;base64,...
+    const pdfBase64 = pdf.output('datauristring');
 
     const key = `Eq_doc/${product.modelName}/${fileName}`;
 
-    // 2. Cloudflare R2 업로드 API 호출
+    // 2. Cloudflare R2 업로드
     const res = await fetch('/api/r2', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -367,8 +417,8 @@ export async function generateAndUploadSpecSheetToR2(
         secretAccessKey,
         key,
         base64Content: pdfBase64,
-        contentType: 'application/pdf'
-      })
+        contentType: 'application/pdf',
+      }),
     });
 
     const resJson = await res.json();
@@ -378,20 +428,17 @@ export async function generateAndUploadSpecSheetToR2(
 
     const publicUrl = `${publicDomain.replace(/\/$/, '')}/${encodeURIComponent(key).replace(/%2F/g, '/')}`;
 
-    // 3. Supabase DB specSheetUrl 컬럼 자동 갱신
+    // 3. Supabase DB specSheetUrl 자동 갱신
     if (product.id) {
       await supabase
         .from('products')
-        .update({
-          specSheetUrl: publicUrl,
-          updatedAt: new Date().toISOString()
-        })
+        .update({ specSheetUrl: publicUrl, updatedAt: new Date().toISOString() })
         .eq('id', product.id);
     }
 
     return { success: true, url: publicUrl };
   } catch (err: any) {
-    console.error('Failed to generate and upload spec sheet to R2:', err);
+    console.error('[specSheetPdf] generateAndUploadSpecSheetToR2 실패:', err);
     return { success: false, url: '', error: err?.message || '제원표 PDF 생성 및 R2 업로드 실패' };
   }
 }
