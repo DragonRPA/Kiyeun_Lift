@@ -1,15 +1,21 @@
 // src/pages/asset_assignment.tsx
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
-import { Wrench, CheckCircle, PackageSearch, Layers, Truck, ChevronDown, Check, Activity, Search, AlertTriangle } from 'lucide-react';
+import { Wrench, CheckCircle, PackageSearch, Layers, Truck, ChevronDown, Check, Activity, Search, AlertTriangle, CheckSquare, Square, Zap, X } from 'lucide-react';
 
 export const AssetAssignment: React.FC = () => {
   const { hasPermission, contractAssets, contracts, customers, assets, assignAssetToContract, contractHistory } = useApp();
   
   const [selectedContractId, setSelectedContractId] = useState<string>('');
-  const [selectedCaId, setSelectedCaId] = useState<string>('');
-  const [selectedAssetId, setSelectedAssetId] = useState<string>('');
-  const [searchAssetNo, setSearchAssetNo] = useState('');
+  
+  // 멀티 슬롯 선택 (ContractAsset ID 배열)
+  const [selectedCaIds, setSelectedCaIds] = useState<string[]>([]);
+  // 멀티 장비 선택 (Asset ID 배열)
+  const [selectedAssetIds, setSelectedAssetIds] = useState<string[]>([]);
+  
+  // 검색 및 직접 입력 상태
+  const [searchQuery, setSearchQuery] = useState('');
+  const [quickInputText, setQuickInputText] = useState('');
   const [isAssigning, setIsAssigning] = useState(false);
 
   const canEdit = hasPermission('dispatch_assign', 'save');
@@ -21,54 +27,39 @@ export const AssetAssignment: React.FC = () => {
 
   // 대차 교체 의뢰 접수 건 (EXCHANGE 이력 기반)
   const exchangeRequests = (contractHistory || []).filter(h => h.changeType === 'EXCHANGE');
-  // 아직 미할당 슬롯이 있는 대차 의뢰 계약만 추출
   const exchangeContractIds = Array.from(new Set(exchangeRequests.map(h => h.contractId)));
   const exchangePendingContracts = contracts.filter(c =>
     exchangeContractIds.includes(c.id) &&
     contractAssets.some(ca => ca.contractId === c.id && !ca.assetId)
   );
 
-  // 1. 미할당된 ContractAsset을 포함하고 있는 Contract 들을 찾는다.
+  // 일반 미할당 계약 목록
   const pendingCaList = contractAssets.filter(ca => !ca.assetId);
   const pendingContractIds = Array.from(new Set(pendingCaList.map(ca => ca.contractId)));
-  // 대차 의뢰 건을 제외한 일반 출고 대기 계약
   const pendingContracts = contracts.filter(c => pendingContractIds.includes(c.id) && !exchangeContractIds.includes(c.id));
 
+  // 선택된 계약의 하위 슬롯들 (미할당 + 기할당)
+  const currentSlots = useMemo(() => {
+    return selectedContractId ? contractAssets.filter(ca => ca.contractId === selectedContractId) : [];
+  }, [contractAssets, selectedContractId]);
 
-  const handleAssign = async () => {
-    // 1. 클릭 즉시 브라우저 포커스 탈출! (Enter 연타에 의한 중복 클릭 차단)
-    if (document.activeElement instanceof HTMLElement) {
-      document.activeElement.blur();
-    }
+  // 모델별 그룹핑 집계
+  const modelGroups = useMemo(() => {
+    const map = new Map<string, { modelName: string; total: number; pending: number; caIds: string[] }>();
+    currentSlots.forEach(ca => {
+      const model = ca.expectedModel || '미지정';
+      const existing = map.get(model) || { modelName: model, total: 0, pending: 0, caIds: [] };
+      existing.total += 1;
+      if (!ca.assetId) {
+        existing.pending += 1;
+        existing.caIds.push(ca.id);
+      }
+      map.set(model, existing);
+    });
+    return Array.from(map.values());
+  }, [currentSlots]);
 
-    if (isAssigning) return; // 2. 이미 처리 중이면 원천 거부!
-
-    if (!canEdit) {
-      alert('장비 할당 권한이 없습니다.');
-      return;
-    }
-    if (!selectedCaId || !selectedAssetId) {
-      alert('출고 건과 할당할 장비를 모두 선택해주세요.');
-      return;
-    }
-
-    setIsAssigning(true);
-    try {
-      await assignAssetToContract(selectedCaId, selectedAssetId);
-      alert('✅ 장비 할당이 성공적으로 완결되었습니다!\n자산 상태가 [출고대기(ASSIGNED)]로 즉시 전환되어 타 계약 이중 할당이 차단되었으며, 출고 검수 의뢰가 발행되었습니다.');
-      setSelectedCaId('');
-      setSelectedAssetId('');
-    } catch (err: any) {
-      alert(`⚠️ 장비 할당 실패: ${err?.message || err}`);
-    } finally {
-      setIsAssigning(false);
-    }
-  };
-
-  // 선택된 계약의 하위 슬롯들 (미할당 + 기할당 모두 보여주기)
-  const slots = selectedContractId ? contractAssets.filter(ca => ca.contractId === selectedContractId) : [];
-
-  // 축약어(예: '1212') 지원용 유사 모델 매칭 헬퍼
+  // 축약어 지원 유사 모델 매칭 헬퍼
   const isModelMatch = (assetModel: string, expectedModel: string): boolean => {
     if (!assetModel || !expectedModel) return false;
     if (assetModel === expectedModel) return true;
@@ -83,55 +74,195 @@ export const AssetAssignment: React.FC = () => {
     return false;
   };
 
-  // 가용 장비 필터링 및 정렬 로직 (스마트 매핑 & Score 우선순위)
-  let availableAssets = assets.filter(a => a.status === 'AVAILABLE');
+  // 가용 장비 풀 필터링
+  const availableAssets = useMemo(() => {
+    let list = assets.filter(a => a.status === 'AVAILABLE');
 
-  if (selectedCaId) {
-    // [슬롯 선택 시] 해당 슬롯의 expectedModel로 좁힘 (완전일치 + 유사매칭 포함)
-    const selectedSlot = slots.find(ca => ca.id === selectedCaId);
-    if (selectedSlot?.expectedModel) {
-      const expModel = selectedSlot.expectedModel;
-      availableAssets = availableAssets.filter(a => isModelMatch(a.modelName, expModel));
+    // 선택된 슬롯들의 요구 모델 기준 필터링
+    if (selectedCaIds.length > 0) {
+      const selectedSlots = currentSlots.filter(ca => selectedCaIds.includes(ca.id));
+      const reqModels = Array.from(new Set(selectedSlots.map(ca => ca.expectedModel).filter(Boolean)));
+      if (reqModels.length > 0) {
+        list = list.filter(a => reqModels.some(req => isModelMatch(a.modelName, req!)));
+      }
+    } else if (selectedContractId) {
+      const pendingSlots = currentSlots.filter(ca => !ca.assetId);
+      const reqModels = Array.from(new Set(pendingSlots.map(ca => ca.expectedModel).filter(Boolean)));
+      if (reqModels.length > 0) {
+        list = list.filter(a => reqModels.some(req => isModelMatch(a.modelName, req!)));
+      }
     }
-  } else if (selectedContractId) {
-    // [계약 선택 시] 미할당 슬롯들이 요구하는 모델 목록 기반 1차 필터
-    const pendingSlots = slots.filter(ca => !ca.assetId);
-    const requiredModels = pendingSlots.map(ca => ca.expectedModel).filter((m): m is string => Boolean(m));
-    if (requiredModels.length > 0) {
-      availableAssets = availableAssets.filter(a => requiredModels.some(req => isModelMatch(a.modelName, req)));
+
+    // 검색어 필터링
+    if (searchQuery.trim()) {
+      const q = searchQuery.trim().toLowerCase();
+      list = list.filter(a =>
+        (a.assetNo && a.assetNo.toLowerCase().includes(q)) ||
+        (a.serialNo && a.serialNo.toLowerCase().includes(q)) ||
+        (a.modelName && a.modelName.toLowerCase().includes(q))
+      );
     }
-  }
 
-  // 🔍 관리번호(assetNo) / 제조번호(serialNo) / 모델명 검색 필터 적용
-  if (searchAssetNo.trim()) {
-    const q = searchAssetNo.trim().toLowerCase();
-    availableAssets = availableAssets.filter(a =>
-      (a.assetNo && a.assetNo.toLowerCase().includes(q)) ||
-      (a.serialNo && a.serialNo.toLowerCase().includes(q)) ||
-      (a.modelName && a.modelName.toLowerCase().includes(q))
-    );
-  }
+    // 정비 점수 기준 오름차순 정렬 (0에 가까울수록 최상)
+    list.sort((a, b) => (a.maintenanceScore || 0) - (b.maintenanceScore || 0));
 
-  // Maintenance Score 기준 오름차순 정렬 (0에 가까울수록 우선)
-  availableAssets.sort((a, b) => (a.maintenanceScore || 0) - (b.maintenanceScore || 0));
+    return list;
+  }, [assets, selectedCaIds, currentSlots, selectedContractId, searchQuery]);
 
-  // 점수에 따른 뱃지 컬러 렌더링 도우미
+  // 점수 뱃지 스타일
   const getScoreBadgeColor = (score: number = 0) => {
-    if (score === 0) return { bg: '#dcfce7', color: '#166534', border: '#bbf7d0' }; // 매우 좋음 (녹색)
-    if (score <= 20) return { bg: '#fef3c7', color: '#92400e', border: '#fde68a' }; // 보통 (노란색)
-    return { bg: '#fee2e2', color: '#991b1b', border: '#fecaca' }; // 나쁨 (빨간색)
+    if (score === 0) return { bg: 'var(--success-light)', color: 'var(--success)', border: 'var(--success)' };
+    if (score <= 20) return { bg: 'var(--warning-light)', color: 'var(--warning)', border: 'var(--warning)' };
+    return { bg: 'var(--danger-light)', color: 'var(--danger)', border: 'var(--danger)' };
+  };
+
+  // 슬롯 전체 선택/해제
+  const handleSelectAllPendingSlots = () => {
+    const pendingIds = currentSlots.filter(ca => !ca.assetId).map(ca => ca.id);
+    if (selectedCaIds.length === pendingIds.length) {
+      setSelectedCaIds([]);
+    } else {
+      setSelectedCaIds(pendingIds);
+    }
+  };
+
+  // 특정 모델 그룹 슬롯 일괄 선택
+  const handleSelectModelGroupSlots = (caIds: string[]) => {
+    const allSelected = caIds.every(id => selectedCaIds.includes(id));
+    if (allSelected) {
+      setSelectedCaIds(selectedCaIds.filter(id => !caIds.includes(id)));
+    } else {
+      const combined = Array.from(new Set([...selectedCaIds, ...caIds]));
+      setSelectedCaIds(combined);
+    }
+  };
+
+  // 개별 슬롯 토글
+  const handleToggleSlot = (caId: string) => {
+    if (selectedCaIds.includes(caId)) {
+      setSelectedCaIds(selectedCaIds.filter(id => id !== caId));
+    } else {
+      setSelectedCaIds([...selectedCaIds, caId]);
+    }
+  };
+
+  // 개별 장비 선택 토글
+  const handleToggleAsset = (assetId: string) => {
+    if (selectedAssetIds.includes(assetId)) {
+      setSelectedAssetIds(selectedAssetIds.filter(id => id !== assetId));
+    } else {
+      setSelectedAssetIds([...selectedAssetIds, assetId]);
+    }
+  };
+
+  // 🚀 스마트 자동 추천 선택 (선택된 슬롯 개수만큼 상위 장비 자동 체크)
+  const handleAutoSelectTopAssets = () => {
+    const needCount = selectedCaIds.length > 0 ? selectedCaIds.length : currentSlots.filter(ca => !ca.assetId).length;
+    if (needCount <= 0) {
+      alert('할당할 대상 슬롯을 먼저 선택해 주세요.');
+      return;
+    }
+    const topAssetIds = availableAssets.slice(0, needCount).map(a => a.id);
+    setSelectedAssetIds(topAssetIds);
+  };
+
+  // ⌨️ 관리번호 빠른 입력 처리 (쉼표, 공백, 엔터 분리 다중 매칭)
+  const handleQuickInputSubmit = () => {
+    if (!quickInputText.trim()) return;
+
+    const tokens = quickInputText
+      .split(/[\s,]+/)
+      .map(t => t.trim().toLowerCase())
+      .filter(Boolean);
+
+    const matchedAssetIds: string[] = [];
+
+    tokens.forEach(token => {
+      // 1순위: 관리번호 일치 (전체 또는 뒷자리 부분 일치)
+      const found = assets.find(a =>
+        a.status === 'AVAILABLE' &&
+        (
+          (a.assetNo && a.assetNo.toLowerCase() === token) ||
+          (a.assetNo && a.assetNo.toLowerCase().endsWith(token)) ||
+          (a.serialNo && a.serialNo.toLowerCase().includes(token))
+        ) &&
+        !matchedAssetIds.includes(a.id)
+      );
+
+      if (found) {
+        matchedAssetIds.push(found.id);
+      }
+    });
+
+    if (matchedAssetIds.length > 0) {
+      const combined = Array.from(new Set([...selectedAssetIds, ...matchedAssetIds]));
+      setSelectedAssetIds(combined);
+      setQuickInputText('');
+    } else {
+      alert(`입력하신 번호(${tokens.join(', ')})와 일치하는 가용 장비를 찾을 수 없습니다.`);
+    }
+  };
+
+  // ⚡ 다중 선택 일괄 할당 실행
+  const handleBatchAssign = async () => {
+    if (document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur();
+    }
+    if (isAssigning) return;
+
+    if (!canEdit) {
+      alert('장비 할당 권한이 없습니다.');
+      return;
+    }
+
+    if (selectedCaIds.length === 0 || selectedAssetIds.length === 0) {
+      alert('할당할 슬롯과 장비를 모두 선택해 주세요.');
+      return;
+    }
+
+    if (selectedCaIds.length !== selectedAssetIds.length) {
+      alert(`⚠️ 선택된 수량이 일치하지 않습니다.\n\n• 선택된 슬롯: ${selectedCaIds.length}개\n• 선택된 장비: ${selectedAssetIds.length}대\n\n수량을 동일하게 맞추어 주세요.`);
+      return;
+    }
+
+    if (!confirm(`선택된 ${selectedCaIds.length}대의 장비를 계약 슬롯에 일괄 할당하시겠습니까?`)) {
+      return;
+    }
+
+    setIsAssigning(true);
+    try {
+      // 1:1 순서대로 일괄 할당 트랜잭션 실행
+      for (let i = 0; i < selectedCaIds.length; i++) {
+        const caId = selectedCaIds[i];
+        const aId = selectedAssetIds[i];
+        await assignAssetToContract(caId, aId);
+      }
+
+      alert(`✅ 총 ${selectedCaIds.length}대 장비 일괄 할당 완료!\n자산 상태가 [출고대기(ASSIGNED)]로 즉시 전환되고 출고 검수 의뢰가 발행되었습니다.`);
+      setSelectedCaIds([]);
+      setSelectedAssetIds([]);
+    } catch (err: any) {
+      console.error('일괄 할당 실패:', err);
+      alert(`⚠️ 장비 할당 실패: ${err?.message || err}`);
+    } finally {
+      setIsAssigning(false);
+    }
   };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', fontSize: '13px' }}>
+      
+      {/* 타이틀 및 설명 헤더 */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
           <h2 style={{ fontWeight: '800', marginBottom: '4px', fontSize: '18px', letterSpacing: '-0.5px' }}>장비 할당</h2>
-          <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>임대가능 장비를 대기 계약에 매핑합니다. 선택된 슬롯과 동일한 모델명만 노출되며 정비 점수 순으로 정렬됩니다.</p>
+          <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+            계약의 모델명 × 수량별 요구 슬롯에 가용 장비를 다중 선택 및 관리번호 빠른 입력으로 일괄 매핑합니다.
+          </p>
         </div>
       </div>
 
-      {/* 📊 장비 할당 현황 실시간 요약 바 */}
+      {/* 📊 현황 요약 바 */}
       {(() => {
         const totalPendingSlots = contractAssets.filter(ca => !ca.assetId).length;
         const totalAvailableAssets = assets.filter(a => a.status === 'AVAILABLE').length;
@@ -149,18 +280,18 @@ export const AssetAssignment: React.FC = () => {
             </div>
             <div style={{ padding: '10px 14px', backgroundColor: 'var(--bg-card)', borderRadius: '6px', border: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <span style={{ fontSize: '11.5px', color: 'var(--text-secondary)', fontWeight: 600 }}>가용 장비 (임대가능)</span>
-              <strong style={{ fontSize: '15px', color: '#16a34a' }}>{totalAvailableAssets}대</strong>
+              <strong style={{ fontSize: '15px', color: 'var(--success)' }}>{totalAvailableAssets}대</strong>
             </div>
           </div>
         );
       })()}
 
-      {/* 대차 교체 출고할당 대기 — 최우선 표출 (영업사원 대차 의뢰 접수 건) */}
+      {/* 대차 교체 출고할당 대기 (최우선 표출) */}
       {exchangePendingContracts.length > 0 && (
-        <div style={{ backgroundColor: 'var(--warning-light)', padding: '14px', borderRadius: '10px', border: '2px solid var(--warning)', boxShadow: '0 2px 8px rgba(0,0,0,0.12)' }}>
+        <div style={{ backgroundColor: 'var(--warning-light)', padding: '14px', borderRadius: '10px', border: '2px solid var(--warning)' }}>
           <h3 style={{ fontSize: '14px', fontWeight: '700', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px', color: '#c2410c' }}>
             <AlertTriangle size={14} /> 대차 교체 출고할당 대기 ({exchangePendingContracts.length}건)
-            <span style={{ fontSize: '11px', fontWeight: '500', color: '#9a3412', marginLeft: '4px' }}>— 영업사원 대차 의뢰 접수 건. 자사 자산 또는 전대 장비를 선택하여 할당하세요.</span>
+            <span style={{ fontSize: '11px', fontWeight: '500', color: '#9a3412', marginLeft: '4px' }}>— 영업사원 대차 의뢰 접수 건</span>
           </h3>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '12px' }}>
             {exchangePendingContracts.map(contract => {
@@ -171,12 +302,11 @@ export const AssetAssignment: React.FC = () => {
               return (
                 <div
                   key={contract.id}
-                  onClick={() => { setSelectedContractId(contract.id); setSelectedCaId(''); }}
+                  onClick={() => { setSelectedContractId(contract.id); setSelectedCaIds([]); setSelectedAssetIds([]); }}
                   style={{
                     padding: '12px', backgroundColor: isSelected ? 'var(--warning-light)' : 'var(--bg-card)',
                     border: `2px solid ${isSelected ? 'var(--warning)' : 'var(--border-color)'}`, borderRadius: '10px',
-                    cursor: 'pointer', boxShadow: isSelected ? '0 4px 8px rgba(249,115,22,0.2)' : '0 1px 3px rgba(0,0,0,0.05)',
-                    transition: 'all 0.2s ease'
+                    cursor: 'pointer', transition: 'all 0.2s ease'
                   }}
                   className="hover-lift"
                 >
@@ -197,20 +327,16 @@ export const AssetAssignment: React.FC = () => {
         </div>
       )}
 
-      {/* 1단계: 일반 출고 대기 중인 계약(기안) 카드 바둑판 뷰 */}
-      <div style={{ backgroundColor: 'var(--bg-card)', padding: '14px', borderRadius: '10px', border: '1px solid var(--border-color)', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
+      {/* 1단계: 출고 대기 계약(기안) 카드 바둑판 뷰 */}
+      <div style={{ backgroundColor: 'var(--bg-card)', padding: '14px', borderRadius: '10px', border: '1px solid var(--border-color)' }}>
         <h3 style={{ fontSize: '14px', fontWeight: '700', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <PackageSearch size={14} className="text-warning" /> 출고 대기 요청 건 ({pendingContracts.length}건)
+          <PackageSearch size={14} color="var(--primary)" /> 출고 대기 요청 건 ({pendingContracts.length}건)
         </h3>
         
         {pendingContracts.length === 0 ? (
-          <div style={{ padding: '24px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '12px' }}>대기 중인 지시가 없습니다.</div>
+          <div style={{ padding: '24px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '12px' }}>대기 중인 출고 요청이 없습니다.</div>
         ) : (
-          <div style={{ 
-            display: 'grid', 
-            gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', 
-            gap: '12px' 
-          }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: '12px' }}>
             {pendingContracts.map(contract => {
               const cust = customers.find(c => c.id === contract.customerId);
               const cas = contractAssets.filter(ca => ca.contractId === contract.id);
@@ -219,28 +345,28 @@ export const AssetAssignment: React.FC = () => {
               const isSelected = selectedContractId === contract.id;
               const progress = totalCount > 0 ? Math.round((assignedCount / totalCount) * 100) : 0;
 
-              // 요구 장비 문자열 집계
+              // 모델별 × 수량 문자열 집계
               const reqSummary = cas.reduce((acc, curr) => {
                 const model = curr.expectedModel || '미지정';
                 acc[model] = (acc[model] || 0) + 1;
                 return acc;
               }, {} as Record<string, number>);
-              const reqText = Object.entries(reqSummary).map(([k, v]) => `${k} ${v}대`).join(', ');
+              const reqText = Object.entries(reqSummary).map(([k, v]) => `${k} × ${v}대`).join(', ');
 
               return (
                 <div 
                   key={contract.id}
                   onClick={() => {
                     setSelectedContractId(contract.id);
-                    setSelectedCaId('');
+                    setSelectedCaIds([]);
+                    setSelectedAssetIds([]);
                   }}
                   style={{
                     padding: '12px',
-                    backgroundColor: isSelected ? 'var(--primary-light)' : 'var(--bg-card)',
+                    backgroundColor: isSelected ? 'var(--primary-light)' : 'var(--bg-app)',
                     border: `2px solid ${isSelected ? 'var(--primary)' : 'var(--border-color)'}`,
                     borderRadius: '10px',
                     cursor: 'pointer',
-                    boxShadow: isSelected ? '0 4px 8px rgba(59,130,246,0.15)' : '0 1px 3px rgba(0,0,0,0.05)',
                     transition: 'all 0.2s ease',
                     position: 'relative',
                     overflow: 'hidden'
@@ -255,8 +381,12 @@ export const AssetAssignment: React.FC = () => {
                   </div>
                   
                   <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginBottom: '12px', display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><Layers size={11} /> 장비: <span style={{ fontWeight: '600', color: 'var(--text-main)' }}>{reqText}</span></div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><Truck size={11} /> 출고: {contract.startDate}</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <Layers size={11} /> 요구: <strong style={{ color: 'var(--primary)' }}>{reqText}</strong>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <Truck size={11} /> 출고예정: {contract.startDate}
+                    </div>
                   </div>
 
                   {/* 프로그레스 바 */}
@@ -289,117 +419,263 @@ export const AssetAssignment: React.FC = () => {
 
       {/* 2단계: 선택된 계약의 장비 할당 상세 워크보드 */}
       {selectedContractId && (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', alignItems: 'start', animation: 'fadeIn 0.3s ease' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', alignItems: 'start' }}>
           
-          {/* 2-A: 계약의 장비 슬롯 리스트 */}
-          <div className="card" style={{ height: '400px', display: 'flex', flexDirection: 'column' }}>
-            <div className="card-header" style={{ padding: '12px' }}>
-              <h3 className="card-title" style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '13px' }}>
-                <ChevronDown size={14} /> 매핑 대상 슬롯 ({slots.length}대)
-              </h3>
+          {/* 2-A: 매핑 대상 슬롯 (모델별 × 수량 그룹 & 개별 슬롯 멀티셀렉트) */}
+          <div className="card" style={{ height: '540px', display: 'flex', flexDirection: 'column', backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)' }}>
+            
+            {/* 슬롯 헤더 */}
+            <div style={{ padding: '12px 14px', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'var(--bg-app)' }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '13px', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <ChevronDown size={14} /> 매핑 대상 슬롯 ({currentSlots.length}대)
+                </h3>
+                <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                  선택됨: <strong style={{ color: 'var(--primary)' }}>{selectedCaIds.length}개</strong> / 미할당: {currentSlots.filter(c => !c.assetId).length}개
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={handleSelectAllPendingSlots}
+                style={{
+                  padding: '4px 8px',
+                  borderRadius: '4px',
+                  border: '1px solid var(--border-color)',
+                  backgroundColor: 'var(--bg-card)',
+                  color: 'var(--text-main)',
+                  fontSize: '11px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px'
+                }}
+              >
+                {selectedCaIds.length === currentSlots.filter(c => !c.assetId).length && selectedCaIds.length > 0 ? (
+                  <><CheckSquare size={12} color="var(--primary)" /> 전체 해제</>
+                ) : (
+                  <><Square size={12} /> 미할당 전체 선택</>
+                )}
+              </button>
             </div>
-            <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px', padding: '12px' }}>
-              {slots.map((ca, idx) => {
+
+            {/* 모델별 요약 칩 바 */}
+            <div style={{ padding: '8px 12px', borderBottom: '1px solid var(--border-color)', backgroundColor: 'var(--bg-card)', display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+              {modelGroups.map(grp => {
+                const isAllSelected = grp.caIds.length > 0 && grp.caIds.every(id => selectedCaIds.includes(id));
+                return (
+                  <button
+                    key={grp.modelName}
+                    type="button"
+                    onClick={() => handleSelectModelGroupSlots(grp.caIds)}
+                    disabled={grp.pending === 0}
+                    style={{
+                      padding: '4px 10px',
+                      borderRadius: '6px',
+                      border: `1.5px solid ${isAllSelected ? 'var(--primary)' : 'var(--border-color)'}`,
+                      backgroundColor: isAllSelected ? 'var(--primary-light)' : 'var(--bg-app)',
+                      color: isAllSelected ? 'var(--primary)' : 'var(--text-main)',
+                      fontSize: '11.5px',
+                      fontWeight: 700,
+                      cursor: grp.pending === 0 ? 'not-allowed' : 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      opacity: grp.pending === 0 ? 0.5 : 1
+                    }}
+                  >
+                    <span>{grp.modelName} × {grp.total}대</span>
+                    <span style={{ fontSize: '10px', color: grp.pending > 0 ? '#d97706' : 'var(--success)' }}>
+                      (미할당 {grp.pending})
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* 슬롯 리스트 */}
+            <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '6px', padding: '12px' }}>
+              {currentSlots.map((ca, idx) => {
                 const isAssigned = !!ca.assetId;
                 const assignedAsset = isAssigned ? assets.find(a => a.id === ca.assetId) : null;
-                const isSelectedCa = selectedCaId === ca.id;
+                const isSelected = selectedCaIds.includes(ca.id);
                 
                 return (
                   <div 
                     key={ca.id}
-                    onClick={() => { if (!isAssigned) setSelectedCaId(ca.id); }}
+                    onClick={() => { if (!isAssigned) handleToggleSlot(ca.id); }}
                     style={{
-                      padding: '10px',
-                      borderRadius: '8px',
-                      border: `2px dashed ${isAssigned ? 'transparent' : (isSelectedCa ? 'var(--primary)' : '#cbd5e1')}`,
-                      backgroundColor: isAssigned ? '#f0fdf4' : (isSelectedCa ? 'var(--primary-light)' : '#f8fafc'),
+                      padding: '8px 10px',
+                      borderRadius: '6px',
+                      border: `1.5px solid ${isAssigned ? 'var(--border-color)' : (isSelected ? 'var(--primary)' : 'var(--border-color)')}`,
+                      backgroundColor: isAssigned ? 'var(--bg-app)' : (isSelected ? 'var(--primary-light)' : 'var(--bg-card)'),
                       cursor: isAssigned ? 'default' : 'pointer',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'space-between',
-                      transition: 'all 0.2s ease'
+                      transition: 'all 0.15s ease'
                     }}
                   >
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <div style={{ 
-                        width: '22px', height: '22px', borderRadius: '50%', 
-                        backgroundColor: isAssigned ? 'var(--success)' : (isSelectedCa ? 'var(--primary)' : '#cbd5e1'), 
-                        color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '11px' 
+                      <div style={{
+                        width: '20px', height: '20px', borderRadius: '4px',
+                        backgroundColor: isAssigned ? 'var(--success)' : (isSelected ? 'var(--primary)' : 'var(--bg-app)'),
+                        border: `1px solid ${isAssigned ? 'var(--success)' : (isSelected ? 'var(--primary)' : 'var(--border-color)')}`,
+                        color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '10px'
                       }}>
-                        {isAssigned ? <Check size={12} /> : idx + 1}
+                        {isAssigned ? <Check size={12} /> : (isSelected ? <Check size={12} /> : idx + 1)}
                       </div>
                       <div>
                         <div style={{ fontWeight: '700', fontSize: '12px', color: isAssigned ? 'var(--success)' : 'var(--text-main)' }}>
                           {isAssigned ? `${assignedAsset?.assetNo} (${assignedAsset?.modelName})` : `[대기] ${ca.expectedModel || '미지정'}`}
                         </div>
                         <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
-                          {isAssigned ? '할당 완료됨' : '우측 목록에서 가용 장비를 선택해주세요.'}
+                          {isAssigned ? `S/N: ${assignedAsset?.serialNo || '미기재'}` : '가용 장비를 선택하여 할당하세요.'}
                         </div>
                       </div>
                     </div>
+
+                    {!isAssigned && (
+                      <span style={{ fontSize: '11px', fontWeight: 600, color: isSelected ? 'var(--primary)' : 'var(--text-muted)' }}>
+                        {isSelected ? '선택됨' : '선택'}
+                      </span>
+                    )}
                   </div>
                 );
               })}
             </div>
           </div>
 
-          {/* 2-B: 가용 장비 선택 풀 */}
-          <div className="card" style={{ height: '400px', display: 'flex', flexDirection: 'column', border: '2px solid var(--success-light)' }}>
-            <div className="card-header" style={{ padding: '10px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'var(--success-light)' }}>
-              <h3 className="card-title" style={{ display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--success)', fontSize: '13px' }}>
-                <CheckCircle size={14} /> 필터링된 임대가능 장비 ({availableAssets.length})
-                {selectedCaId && (() => {
-                  const sel = slots.find(ca => ca.id === selectedCaId);
-                  return sel?.expectedModel ? <span style={{ fontSize: '10px', fontWeight: '600', color: 'var(--text-muted)', marginLeft: '4px' }}>— {sel.expectedModel} 전용</span> : null;
-                })()}
-                {!selectedCaId && selectedContractId && (() => {
-                  const pendingSlots = slots.filter(ca => !ca.assetId);
-                  const models = [...new Set(pendingSlots.map(ca => ca.expectedModel).filter(Boolean))];
-                  return models.length > 0 ? <span style={{ fontSize: '10px', fontWeight: '600', color: 'var(--text-muted)', marginLeft: '4px' }}>— {models.join(', ')} 모델만</span> : null;
-                })()}
-              </h3>
+          {/* 2-B: 가용 장비 선택 풀 (멀티셀렉트 & 관리번호 빠른 입력) */}
+          <div className="card" style={{ height: '540px', display: 'flex', flexDirection: 'column', backgroundColor: 'var(--bg-card)', border: '2px solid var(--success-light)' }}>
+            
+            {/* 가용 장비 헤더 & 일괄 할당 버튼 */}
+            <div style={{ padding: '10px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'var(--success-light)', borderBottom: '1px solid var(--border-color)' }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '13px', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--success)' }}>
+                  <CheckCircle size={14} /> 필터링된 임대가능 장비 ({availableAssets.length}대)
+                </h3>
+                <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
+                  선택됨: <strong style={{ color: 'var(--success)' }}>{selectedAssetIds.length}대</strong> / 필요 슬롯: {selectedCaIds.length}개
+                </span>
+              </div>
+
               {canEdit && (
                 <button 
+                  type="button"
                   className="btn-primary" 
-                  onClick={handleAssign} 
-                  disabled={!selectedCaId || !selectedAssetId || isAssigning} 
-                  style={{ padding: '6px 12px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 'bold', borderRadius: '6px' }}
+                  onClick={handleBatchAssign} 
+                  disabled={selectedCaIds.length === 0 || selectedAssetIds.length === 0 || selectedCaIds.length !== selectedAssetIds.length || isAssigning} 
+                  style={{
+                    padding: '6px 14px',
+                    fontSize: '12px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    fontWeight: 'bold',
+                    borderRadius: '6px',
+                    backgroundColor: selectedCaIds.length > 0 && selectedCaIds.length === selectedAssetIds.length ? 'var(--primary)' : 'var(--border-color)',
+                    color: '#ffffff',
+                    cursor: selectedCaIds.length > 0 && selectedCaIds.length === selectedAssetIds.length ? 'pointer' : 'not-allowed'
+                  }}
                 >
-                  <Wrench size={12} /> 슬롯 연결
+                  <Wrench size={13} />
+                  {isAssigning ? '일괄 할당 중...' : `선택 장비 일괄 할당 (${selectedAssetIds.length}대)`}
                 </button>
               )}
             </div>
 
-            {/* 🔍 관리번호 / 제조번호 검색 필터 바 */}
-            <div style={{ padding: '6px 10px', borderBottom: '1px solid var(--border-color)', backgroundColor: 'var(--bg-app)', flexShrink: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <Search size={13} color="#22c55e" style={{ flexShrink: 0 }} />
+            {/* ⌨️ 관리번호 빠른 입력 바 (실무자 요구: 쉼표/엔터 다중 연속 입력) */}
+            <div style={{ padding: '8px 12px', borderBottom: '1px solid var(--border-color)', backgroundColor: 'var(--bg-app)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
+                관리번호 빠른 입력 (쉼표 또는 엔터로 다중 연속 입력)
+              </label>
+              <div style={{ display: 'flex', gap: '6px' }}>
+                <input
+                  type="text"
+                  placeholder="예: K10437, K10438, 10439 (번호 입력 후 엔터)"
+                  value={quickInputText}
+                  onChange={e => setQuickInputText(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') handleQuickInputSubmit(); }}
+                  style={{
+                    flex: 1,
+                    padding: '6px 10px',
+                    borderRadius: '4px',
+                    border: '1px solid var(--border-color)',
+                    fontSize: '12px',
+                    fontWeight: 600,
+                    backgroundColor: 'var(--bg-card)',
+                    color: 'var(--text-main)'
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={handleQuickInputSubmit}
+                  style={{
+                    padding: '6px 12px',
+                    borderRadius: '4px',
+                    border: 'none',
+                    backgroundColor: 'var(--primary)',
+                    color: '#ffffff',
+                    fontSize: '11.5px',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    whiteSpace: 'nowrap'
+                  }}
+                >
+                  추가
+                </button>
+                <button
+                  type="button"
+                  onClick={handleAutoSelectTopAssets}
+                  style={{
+                    padding: '6px 10px',
+                    borderRadius: '4px',
+                    border: '1px solid var(--success)',
+                    backgroundColor: 'var(--success-light)',
+                    color: 'var(--success)',
+                    fontSize: '11.5px',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    whiteSpace: 'nowrap',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px'
+                  }}
+                  title="슬롯 수량만큼 최상위 정비점수 장비 자동 선택"
+                >
+                  <Zap size={13} />
+                  추천순 자동선택
+                </button>
+              </div>
+            </div>
+
+            {/* 🔍 검색 필터 바 */}
+            <div style={{ padding: '6px 12px', borderBottom: '1px solid var(--border-color)', backgroundColor: 'var(--bg-card)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <Search size={13} color="var(--text-muted)" />
               <input
                 type="text"
-                placeholder="관리번호 또는 제조번호 검색 (예: G19013, SN-12345...)"
-                value={searchAssetNo}
-                onChange={e => setSearchAssetNo(e.target.value)}
+                placeholder="목록 내 검색 (관리번호, 모델명, S/N...)"
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
                 style={{
                   flex: 1,
-                  padding: '5px 8px',
-                  borderRadius: '5px',
-                  border: `1.5px solid ${searchAssetNo ? '#22c55e' : '#e2e8f0'}`,
+                  padding: '4px 8px',
+                  borderRadius: '4px',
+                  border: '1px solid var(--border-color)',
                   fontSize: '11.5px',
-                  fontWeight: 600,
-                  outline: 'none',
-                  color: '#111',
-                  backgroundColor: 'var(--primary-light)',
-                  transition: 'border-color 0.2s'
+                  backgroundColor: 'var(--bg-app)',
+                  color: 'var(--text-main)'
                 }}
               />
-              {searchAssetNo && (
-                <button
-                  onClick={() => setSearchAssetNo('')}
-                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', fontSize: '14px', lineHeight: 1, padding: '2px 4px', borderRadius: '3px' }}
-                  title="검색어 초기화"
-                >✕</button>
+              {searchQuery && (
+                <button onClick={() => setSearchQuery('')} style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}>
+                  <X size={13} />
+                </button>
               )}
             </div>
 
+            {/* 가용 장비 그리드 (멀티 셀렉트) */}
             <div style={{ flex: 1, overflowY: 'auto', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: '8px', padding: '12px', alignContent: 'start' }}>
               {availableAssets.length === 0 ? (
                 <div style={{ gridColumn: '1 / -1', padding: '30px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '12px' }}>
@@ -407,34 +683,46 @@ export const AssetAssignment: React.FC = () => {
                 </div>
               ) : (
                 availableAssets.map(a => {
-                  const isSelectedAsset = selectedAssetId === a.id;
+                  const isSelected = selectedAssetIds.includes(a.id);
+                  const selectOrder = selectedAssetIds.indexOf(a.id) + 1;
                   const scoreInfo = getScoreBadgeColor(a.maintenanceScore);
                   
                   return (
                     <div 
                       key={a.id} 
-                      onClick={() => setSelectedAssetId(a.id)}
+                      onClick={() => handleToggleAsset(a.id)}
                       style={{ 
-                        padding: '12px 8px', 
-                        border: `2px solid ${isSelectedAsset ? 'var(--success)' : 'var(--border-color)'}`, 
+                        padding: '10px 8px', 
+                        border: `2px solid ${isSelected ? 'var(--success)' : 'var(--border-color)'}`, 
                         borderRadius: '8px', 
                         cursor: 'pointer', 
-                        backgroundColor: isSelectedAsset ? '#ecfdf5' : '#fff',
+                        backgroundColor: isSelected ? 'var(--success-light)' : 'var(--bg-card)',
                         textAlign: 'center',
-                        transition: 'all 0.2s ease',
-                        boxShadow: isSelectedAsset ? '0 4px 8px rgba(16, 185, 129, 0.15)' : 'none',
+                        transition: 'all 0.15s ease',
                         position: 'relative'
                       }}
                       className="hover-lift"
                     >
-                      <div style={{ fontWeight: '800', fontSize: '13px', color: isSelectedAsset ? 'var(--success)' : 'var(--text-main)', marginBottom: '2px' }}>
+                      {/* 선택 순서 배지 */}
+                      {isSelected && (
+                        <div style={{
+                          position: 'absolute', top: '4px', right: '4px',
+                          width: '18px', height: '18px', borderRadius: '50%',
+                          backgroundColor: 'var(--success)', color: '#ffffff',
+                          fontSize: '10px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center'
+                        }}>
+                          {selectOrder}
+                        </div>
+                      )}
+
+                      <div style={{ fontWeight: '800', fontSize: '13px', color: isSelected ? 'var(--success)' : 'var(--text-main)', marginBottom: '2px' }}>
                         {a.assetNo}
                       </div>
                       <div style={{ fontSize: '10px', color: 'var(--text-secondary)', fontWeight: '600', marginBottom: '6px' }}>
                         {a.modelName}
                       </div>
                       
-                      {/* Maintenance Score Badge */}
+                      {/* 정비 점수 배지 */}
                       <div style={{ 
                         display: 'inline-flex', alignItems: 'center', gap: '2px', 
                         backgroundColor: scoreInfo.bg, color: scoreInfo.color, border: `1px solid ${scoreInfo.border}`, 
@@ -451,14 +739,9 @@ export const AssetAssignment: React.FC = () => {
         </div>
       )}
 
-      {/* 글로벌 스타일 추가 (호버 이펙트 등) */}
       <style>{`
         .hover-lift:hover {
           transform: translateY(-2px);
-        }
-        @keyframes fadeIn {
-          from { opacity: 0; transform: translateY(10px); }
-          to { opacity: 1; transform: translateY(0); }
         }
       `}</style>
     </div>
