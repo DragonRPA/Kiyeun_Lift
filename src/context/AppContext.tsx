@@ -150,6 +150,7 @@ interface AppContextType {
   assignAssetToContract: (contractAssetId: string, assetId: string) => Promise<void>;
   batchAssignAssetsToContract: (pairs: { contractAssetId: string; assetId: string }[]) => Promise<void>;
   unassignAssetFromContract: (contractAssetId: string) => Promise<void>;
+  batchUnassignAssetsFromContract: (contractAssetIds: string[]) => Promise<void>;
   exchangeOutboundAsset: (contractAssetId: string, oldAssetId: string, newAssetId: string, reason?: string, markOldAsRepairing?: boolean, customPenaltyScore?: number) => Promise<void>;
   saveSmartDispatch: (data: SmartDispatchData, autoRegister: boolean, onProgress?: (log: string, percent: number) => void) => Promise<{ success: boolean; requiresConfirm?: boolean; missingFields?: string[]; errorMessage?: string }>;
   saveSmartReturn: (data: SmartReturnData) => void;
@@ -2181,6 +2182,83 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       refreshAllData();
 
       showErrorModal(`⚠️ 장비 할당 취소 중 오류가 발생했습니다:\n\n${err?.message || err}`, '할당 취소 실패');
+      throw err;
+    }
+  };
+
+  // 🔄 다중 장비 원자적 일괄 할당 취소 트랜잭션 메소드 (중간 리렌더링 및 레이스 컨디션 원천 차단)
+  const batchUnassignAssetsFromContract = async (contractAssetIds: string[]) => {
+    if (!contractAssetIds || contractAssetIds.length === 0) return;
+
+    const caSnapshots: { id: string; snapshot: ContractAsset }[] = [];
+    const assetSnapshots: { id: string; snapshot: Asset }[] = [];
+    const deletedInspectionIds: { id: string; row: OutboundInspection }[] = [];
+
+    const nowIso = new Date().toISOString();
+
+    try {
+      // 1. 사전 검증 및 스냅샷 백업
+      for (const caId of contractAssetIds) {
+        const origCa = db.contractAssets.find(c => c.id === caId);
+        if (origCa && origCa.assetId) {
+          caSnapshots.push({ id: origCa.id, snapshot: { ...origCa } });
+          const origAsset = db.assets.find(a => a.id === origCa.assetId);
+          if (origAsset) {
+            assetSnapshots.push({ id: origAsset.id, snapshot: { ...origAsset } });
+          }
+          const pendingInsp = db.outboundInspections.find(
+            i => (i.contractAssetId === caId || (i.contractId === origCa.contractId && i.assetId === origCa.assetId)) && i.status === 'PENDING'
+          );
+          if (pendingInsp) {
+            deletedInspectionIds.push({ id: pendingInsp.id, row: { ...pendingInsp } });
+          }
+        }
+      }
+
+      // 2. 일괄 메모리 업데이트 (단일 원자적 배치)
+      for (const caId of contractAssetIds) {
+        const origCa = db.contractAssets.find(c => c.id === caId);
+        if (origCa && origCa.assetId) {
+          const origAssetId = origCa.assetId;
+          db.updateRow<ContractAsset>('contractAssets', caId, {
+            assetId: null as any
+          });
+          db.updateRow<Asset>('assets', origAssetId, {
+            status: 'AVAILABLE',
+            currentCustomerId: null as any,
+            currentSiteId: null as any,
+            contractStart: null as any,
+            contractEnd: null as any,
+            updatedAt: nowIso
+          });
+          const pendingInsp = db.outboundInspections.find(
+            i => (i.contractAssetId === caId || (i.contractId === origCa.contractId && i.assetId === origAssetId)) && i.status === 'PENDING'
+          );
+          if (pendingInsp) {
+            db.deleteRow('outboundInspections', pendingInsp.id);
+          }
+        }
+      }
+
+      // 3. 단 1회의 원격 DB 쓰기 완결 동기 대기 & 단 1회의 전역 리렌더링!
+      await db.awaitPendingWrites();
+      refreshAllData();
+
+    } catch (err: any) {
+      console.error('batchUnassignAssetsFromContract error & Rollback:', err);
+      // 💥 일괄 롤백
+      caSnapshots.forEach(item => {
+        db.updateRow<ContractAsset>('contractAssets', item.id, item.snapshot);
+      });
+      assetSnapshots.forEach(item => {
+        db.updateRow<Asset>('assets', item.id, item.snapshot);
+      });
+      deletedInspectionIds.forEach(item => {
+        db.insertRow<OutboundInspection>('outboundInspections', item.row);
+      });
+      refreshAllData();
+
+      showErrorModal(`⚠️ 일괄 장비 할당 취소 중 오류가 발생하여 모든 작업이 안전하게 원복되었습니다:\n\n${err?.message || err}`, '일괄 할당 취소 실패');
       throw err;
     }
   };
@@ -4679,7 +4757,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       purchaseConsumable, useConsumable, transferConsumableToMechanic, returnConsumableToHq,
       requestConsumablePurchase, acceptConsumablePurchase, completeConsumablePurchase, inboundConsumablePurchase, clearEvidenceFileUrls, updateEvidenceFileUrls,
       createContract, extendContract, shortenContract, succeedContract, exchangeAsset,
-      assignAssetToContract, batchAssignAssetsToContract, unassignAssetFromContract, exchangeOutboundAsset,
+      assignAssetToContract, batchAssignAssetsToContract, unassignAssetFromContract, batchUnassignAssetsFromContract, exchangeOutboundAsset,
       saveSmartDispatch, saveSmartReturn,
       completeTodo,
       generateBillingsForMonth, getDueContractsForBilling, generateDueBillings, generateBillingForSingleContract, regenerateBilling, approveBilling, cancelBilling, receivePayment, cancelPayment, saveBankDeposit, deleteBankDeposit,

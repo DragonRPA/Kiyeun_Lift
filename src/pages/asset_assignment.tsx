@@ -5,7 +5,7 @@ import { Asset } from '../services/db';
 import { Wrench, CheckCircle, PackageSearch, Layers, Truck, ChevronDown, Check, Activity, Search, AlertTriangle, CheckSquare, Square, Zap, X } from 'lucide-react';
 
 export const AssetAssignment: React.FC = () => {
-  const { hasPermission, contractAssets, contracts, customers, assets, assignAssetToContract, batchAssignAssetsToContract, unassignAssetFromContract, contractHistory } = useApp();
+  const { hasPermission, contractAssets, contracts, customers, assets, assignAssetToContract, batchAssignAssetsToContract, unassignAssetFromContract, batchUnassignAssetsFromContract, contractHistory } = useApp();
   
   const [selectedContractId, setSelectedContractId] = useState<string>('');
   
@@ -330,15 +330,11 @@ export const AssetAssignment: React.FC = () => {
     }
   };
 
-  // 🔄 단일 장비 할당 취소 (임대가능 상태 복원)
+  // 🔄 단일 장비 할당 취소 (즉시 실행 ➔ 완료 시 1회 알림)
   const handleUnassignSlot = async (caId: string, assetNo?: string) => {
     if (isAssigning) return;
     if (!canEdit) {
       alert('장비 할당 권한이 없습니다.');
-      return;
-    }
-
-    if (!confirm(`[${assetNo || '해당 장비'}]의 할당을 취소하고 다시 [임대가능] 가용 재고로 원복하시겠습니까?`)) {
       return;
     }
 
@@ -354,7 +350,7 @@ export const AssetAssignment: React.FC = () => {
     }
   };
 
-  // 🔄 특정 모델 할당 장비 전체 일괄 취소
+  // 🔄 특정 모델 할당 장비 전체 원자적 일괄 취소 (즉시 실행 ➔ 완료 시 1회 알림)
   const handleBatchUnassignModelSlots = async (modelName: string, caIdsWithAsset: string[]) => {
     if (isAssigning || caIdsWithAsset.length === 0) return;
     if (!canEdit) {
@@ -362,15 +358,9 @@ export const AssetAssignment: React.FC = () => {
       return;
     }
 
-    if (!confirm(`[${modelName}] 모델에 이미 할당된 ${caIdsWithAsset.length}대의 장비 할당을 모두 취소하시겠습니까?`)) {
-      return;
-    }
-
     setIsAssigning(true);
     try {
-      for (const caId of caIdsWithAsset) {
-        await unassignAssetFromContract(caId);
-      }
+      await batchUnassignAssetsFromContract(caIdsWithAsset);
       alert(`🔄 [${modelName}] ${caIdsWithAsset.length}대 장비 할당 취소 완료!\n모든 장비가 [임대가능] 상태로 복원되었습니다.`);
     } catch (err: any) {
       console.error('모델 일괄 할당 취소 실패:', err);
