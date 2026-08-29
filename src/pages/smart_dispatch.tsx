@@ -1298,49 +1298,59 @@ ${activeSpecs.map((s, idx) => `  ${idx + 1}. [적용] ${s.label}`).join('\n') ||
               {/* 실제 인쇄 타겟 컨테이너 (다크모드에서도 항상 백색 용지 + 검정 텍스트로 100% 선명하게 렌더링) */}
               <div id="dispatch-sheet-print" style={{ padding: '16px 20px', backgroundColor: '#ffffff', color: '#111827', borderRadius: '4px', border: '1px solid #cbd5e1', maxWidth: '800px', width: '100%', margin: '0 auto', boxShadow: '0 4px 16px rgba(0,0,0,0.1)', boxSizing: 'border-box', overflow: 'hidden' }}>
                 
-                {/* 상단 헤더: 좌측 계약번호 및 출력일시 / 중앙 타이틀 / 우측 출고 완료자 날인칸 */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '2px solid #1e1b4b', paddingBottom: '8px', marginBottom: '12px' }}>
-                  
-                  {/* 좌측: 계약번호 및 출력일시 */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', minWidth: '180px' }}>
-                    <div style={{ fontSize: '13px', fontWeight: '800', color: '#312e81', letterSpacing: '-0.2px' }}>
-                      계약번호: <span style={{ color: contractNo ? '#0f172a' : '#64748b', fontWeight: '800' }}>{contractNo || '(출고 요청 저장 시 자동 채번)'}</span>
+                {/* 상단 헤더: 좌측 계약번호+출력일시 / 중앙 타이틀 / 우측 날인란 — flex 3분할 */}
+                <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', borderBottom: '2px solid #1e1b4b', paddingBottom: '8px', marginBottom: '12px', gap: '8px' }}>
+
+                  {/* 좌측: 계약번호 및 출력일시 (flex-shrink:0 고정, 공간 차지 최소화) */}
+                  <div style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                    <div style={{ fontSize: '12px', fontWeight: '800', color: '#312e81', whiteSpace: 'nowrap' }}>
+                      계약번호: <span style={{ color: contractNo ? '#0f172a' : '#94a3b8', fontWeight: '800' }}>{contractNo || '(저장 후 채번)'}</span>
                     </div>
-                    <div style={{ fontSize: '11px', color: '#64748b' }}>
+                    <div style={{ fontSize: '10.5px', color: '#64748b', whiteSpace: 'nowrap' }}>
                       출력일시: {(() => {
                         const now = new Date();
                         const y = now.getFullYear();
-                        const m = String(now.getMonth() + 1).padStart(2, '0');
+                        const mo = String(now.getMonth() + 1).padStart(2, '0');
                         const d = String(now.getDate()).padStart(2, '0');
                         const hh = String(now.getHours()).padStart(2, '0');
-                        const mm = String(now.getMinutes()).padStart(2, '0');
+                        const mi = String(now.getMinutes()).padStart(2, '0');
                         const ss = String(now.getSeconds()).padStart(2, '0');
-                        return `${y}.${m}.${d} ${hh}:${mm}:${ss}`;
+                        return `${y}.${mo}.${d} ${hh}:${mi}:${ss}`;
                       })()}
                     </div>
                   </div>
 
-                  {/* 중앙: 문서 타이틀 */}
-                  <div style={{ textAlign: 'center', flex: 1 }}>
-                    <h1 style={{ margin: 0, fontSize: '21px', fontWeight: '800', color: '#1e1b4b', letterSpacing: '3px' }}>기연리프트 출고요청서</h1>
+                  {/* 중앙: 문서 타이틀 (flex:1, 좌우 공간 자동 분배) */}
+                  <div style={{ flex: 1, textAlign: 'center', minWidth: 0 }}>
+                    <h1 style={{ margin: 0, fontSize: '20px', fontWeight: '800', color: '#1e1b4b', letterSpacing: '3px', whiteSpace: 'nowrap' }}>기연리프트 출고요청서</h1>
                   </div>
 
-                  {/* 우측: 출고 완료자 결재/날인란 */}
-                  <div style={{ minWidth: '100px', display: 'flex', justifyContent: 'flex-end' }}>
-                    <table style={{ borderCollapse: 'collapse', width: '90px', textAlign: 'center', border: '1.5px solid #334155', margin: 0 }}>
-                      <tbody>
-                        <tr>
-                          <th style={{ backgroundColor: '#f1f5f9', color: '#1e293b', fontSize: '10.5px', fontWeight: 'bold', padding: '2px 0', borderBottom: '1px solid #334155' }}>
-                            출고 완료자
-                          </th>
-                        </tr>
-                        <tr>
-                          <td style={{ height: '38px', backgroundColor: '#ffffff', color: '#94a3b8', fontSize: '10.5px', verticalAlign: 'middle', fontWeight: '600' }}>
-                            ( 서 명 )
-                          </td>
-                        </tr>
-                      </tbody>
-                    </table>
+                  {/* 우측: 출고 완료자 날인란 — div 기반으로 flex 충돌 완전 해소 */}
+                  <div style={{ flexShrink: 0, width: '76px', border: '1.5px solid #334155', overflow: 'hidden', borderRadius: '2px' }}>
+                    <div style={{
+                      backgroundColor: '#f1f5f9',
+                      borderBottom: '1px solid #334155',
+                      textAlign: 'center',
+                      fontSize: '10px',
+                      fontWeight: 'bold',
+                      color: '#1e293b',
+                      padding: '2px 0',
+                      whiteSpace: 'nowrap',
+                    }}>
+                      출고 완료자
+                    </div>
+                    <div style={{
+                      height: '38px',
+                      backgroundColor: '#ffffff',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: '10px',
+                      color: '#94a3b8',
+                      fontWeight: '600',
+                    }}>
+                      (서 명)
+                    </div>
                   </div>
                 </div>
 
