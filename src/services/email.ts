@@ -73,35 +73,69 @@ class RealGmailService {
       );
     }
 
-    // 2. Vercel Serverless API (/api/send-email) 호출
+    // 2. 이메일 발송 실행: 로컬 에이전트(http://127.0.0.1:5175/api/send-email) 우선 ➔ 실패 시 Vercel (/api/send-email) 폴백
+    const emailPayload = {
+      to,
+      cc,
+      subject,
+      body,
+      googleEmail,
+      gmailAppPassword,
+      attachments
+    };
+
+    let sendSuccess = false;
+    let lastError = '';
+
+    // 2-1. 로컬 에이전트 시도
     try {
-      const resp = await fetch('/api/send-email', {
+      const localResp = await fetch('http://127.0.0.1:5175/api/send-email', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          to,
-          cc,
-          subject,
-          body,
-          googleEmail,
-          gmailAppPassword,
-          attachments
-        })
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(emailPayload)
       });
+      if (localResp.ok) {
+        const localRes = await localResp.json();
+        if (localRes.success) {
+          sendSuccess = true;
+        } else {
+          lastError = localRes.error || '';
+        }
+      }
+    } catch (localErr: any) {
+      // 로컬 에이전트 미구동 시 조용히 Vercel로 폴백
+    }
 
-      const rawText = await resp.text();
-      let result: any = {};
+    // 2-2. 로컬 에이전트 미성공 시 Vercel 서버리스 API 호출
+    if (!sendSuccess) {
       try {
-        result = JSON.parse(rawText);
-      } catch (_) {
-        throw new Error(`서버 응답 오류 (${resp.status}): ${rawText.slice(0, 150)}`);
-      }
+        const resp = await fetch('/api/send-email', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(emailPayload)
+        });
 
-      if (!resp.ok || !result.success) {
-        throw new Error(result.error || 'Gmail 서버 메일 전송에 실패했습니다.');
+        const rawText = await resp.text();
+        let result: any = {};
+        try {
+          result = JSON.parse(rawText);
+        } catch (_) {
+          throw new Error(`서버 응답 오류 (${resp.status}): ${rawText.slice(0, 150)}`);
+        }
+
+        if (resp.ok && result.success) {
+          sendSuccess = true;
+        } else {
+          lastError = result.error || lastError || 'Gmail 서버 메일 전송에 실패했습니다.';
+        }
+      } catch (vercelErr: any) {
+        lastError = vercelErr.message || lastError;
       }
+    }
+
+    if (!sendSuccess) {
+      throw new Error(lastError || '이메일 발송에 실패했습니다. 구글 앱 비밀번호 및 네트워크 상태를 확인해 주세요.');
+    }
 
       // 3. 발송 성공 기록
       const newEmail: SentEmail = {

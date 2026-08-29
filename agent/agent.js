@@ -184,6 +184,77 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // 3-2-2. 📧 실시간 Gmail SMTP 이메일 발송 API (/api/send-email)
+  if (req.method === 'POST' && pathname === '/api/send-email') {
+    let bodyData = '';
+    req.on('data', chunk => { bodyData += chunk; });
+    req.on('end', async () => {
+      try {
+        const payload = JSON.parse(bodyData || '{}');
+        const { to, cc, subject, body, googleEmail, gmailAppPassword, attachments } = payload;
+
+        if (!to || !subject || !body) {
+          res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
+          res.end(JSON.stringify({ success: false, error: '수신자(to), 제목(subject), 본문(body)은 필수 항목입니다.' }));
+          return;
+        }
+
+        const cleanEmail = String(googleEmail || '').trim();
+        const cleanPass = String(gmailAppPassword || '').replace(/\s+/g, '').trim();
+
+        if (!cleanEmail || !cleanPass) {
+          res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
+          res.end(JSON.stringify({ success: false, error: '구글 계정 이메일과 16자리 앱 비밀번호가 필요합니다.' }));
+          return;
+        }
+
+        let nodemailer;
+        try {
+          nodemailer = require('nodemailer');
+        } catch (e) {
+          try {
+            nodemailer = require(path.join(__dirname, '../node_modules/nodemailer'));
+          } catch (e2) {
+            throw new Error('nodemailer 모듈을 로드할 수 없습니다.');
+          }
+        }
+
+        const transporter = nodemailer.createTransport({
+          host: 'smtp.gmail.com',
+          port: 465,
+          secure: true,
+          auth: { user: cleanEmail, pass: cleanPass }
+        });
+
+        const parsedAttachments = Array.isArray(attachments) ? attachments.map((att) => {
+          const base64Data = String(att.content || '').replace(/^data:.*?;base64,/, '');
+          return {
+            filename: att.filename || '계약서류팩.pdf',
+            content: Buffer.from(base64Data, 'base64'),
+            contentType: att.contentType || 'application/pdf'
+          };
+        }) : undefined;
+
+        const info = await transporter.sendMail({
+          from: `"(주)기연리프트" <${cleanEmail}>`,
+          to: String(to).trim(),
+          cc: cc ? String(cc).trim() : undefined,
+          subject: String(subject).trim(),
+          text: String(body),
+          attachments: parsedAttachments
+        });
+
+        res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify({ success: true, messageId: info.messageId, accepted: info.accepted }));
+      } catch (err) {
+        console.error('Agent email send error:', err);
+        res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify({ success: false, error: err.message || '이메일 발송에 실패했습니다.' }));
+      }
+    });
+    return;
+  }
+
   // 3-3. 🌟 정품 엑셀 원본 기반 6종 통합 계약 서류팩 PDF 생성 엔진 (Excel COM + pdf-lib)
   if (req.method === 'POST' && pathname === '/api/generate-contract-bundle') {
     let body = '';
