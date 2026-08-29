@@ -813,6 +813,9 @@ ${activeSpecs.map((s, idx) => `  ${idx + 1}. [적용] ${s.label}`).join('\n') ||
 
     if (result.success) {
       setIsProcessCompleted(true);
+      if (result.contractNo) {
+        setContractNo(result.contractNo);
+      }
       setRawText('');
     }
     } catch (err: any) {
@@ -1293,74 +1296,119 @@ ${activeSpecs.map((s, idx) => `  ${idx + 1}. [적용] ${s.label}`).join('\n') ||
               </div>
 
               {/* 실제 인쇄 타겟 컨테이너 (다크모드에서도 항상 백색 용지 + 검정 텍스트로 100% 선명하게 렌더링) */}
-              <div id="dispatch-sheet-print" style={{ padding: '20px 24px', backgroundColor: '#ffffff', color: '#111827', borderRadius: '4px', border: '1px solid #cbd5e1', maxWidth: '800px', width: '100%', margin: '0 auto', boxShadow: '0 4px 16px rgba(0,0,0,0.1)', boxSizing: 'border-box' }}>
+              <div id="dispatch-sheet-print" style={{ padding: '16px 20px', backgroundColor: '#ffffff', color: '#111827', borderRadius: '4px', border: '1px solid #cbd5e1', maxWidth: '800px', width: '100%', margin: '0 auto', boxShadow: '0 4px 16px rgba(0,0,0,0.1)', boxSizing: 'border-box', overflow: 'hidden' }}>
                 
-                {/* 상단 헤더: 좌측 계약번호, 중앙 타이틀, 우측 발행일 */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', borderBottom: '2px solid #1e1b4b', paddingBottom: '10px', marginBottom: '16px' }}>
-                  <div style={{ fontSize: '13px', fontWeight: 'bold', color: '#312e81', minWidth: '160px' }}>
-                    계약번호: <span style={{ color: '#0f172a', fontWeight: '800' }}>{contractNo || 'CT-신규의뢰'}</span>
+                {/* 상단 헤더: 좌측 계약번호 및 출력일시 / 중앙 타이틀 / 우측 출고 완료자 날인칸 */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '2px solid #1e1b4b', paddingBottom: '8px', marginBottom: '12px' }}>
+                  
+                  {/* 좌측: 계약번호 및 출력일시 */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', minWidth: '180px' }}>
+                    <div style={{ fontSize: '13px', fontWeight: '800', color: '#312e81', letterSpacing: '-0.2px' }}>
+                      계약번호: <span style={{ color: contractNo ? '#0f172a' : '#64748b', fontWeight: '800' }}>{contractNo || '(출고 요청 저장 시 자동 채번)'}</span>
+                    </div>
+                    <div style={{ fontSize: '11px', color: '#64748b' }}>
+                      출력일시: {(() => {
+                        const now = new Date();
+                        const y = now.getFullYear();
+                        const m = String(now.getMonth() + 1).padStart(2, '0');
+                        const d = String(now.getDate()).padStart(2, '0');
+                        const hh = String(now.getHours()).padStart(2, '0');
+                        const mm = String(now.getMinutes()).padStart(2, '0');
+                        const ss = String(now.getSeconds()).padStart(2, '0');
+                        return `${y}.${m}.${d} ${hh}:${mm}:${ss}`;
+                      })()}
+                    </div>
                   </div>
+
+                  {/* 중앙: 문서 타이틀 */}
                   <div style={{ textAlign: 'center', flex: 1 }}>
-                    <h1 style={{ margin: 0, fontSize: '22px', fontWeight: '800', color: '#1e1b4b', letterSpacing: '3px' }}>기연리프트 출고요청서</h1>
+                    <h1 style={{ margin: 0, fontSize: '21px', fontWeight: '800', color: '#1e1b4b', letterSpacing: '3px' }}>기연리프트 출고요청서</h1>
                   </div>
-                  <div style={{ fontSize: '11.5px', color: '#64748b', textAlign: 'right', minWidth: '160px' }}>
-                    발행일: {new Date().toLocaleDateString('ko-KR')}
+
+                  {/* 우측: 출고 완료자 결재/날인란 */}
+                  <div style={{ minWidth: '100px', display: 'flex', justifyContent: 'flex-end' }}>
+                    <table style={{ borderCollapse: 'collapse', width: '90px', textAlign: 'center', border: '1.5px solid #334155', margin: 0 }}>
+                      <tbody>
+                        <tr>
+                          <th style={{ backgroundColor: '#f1f5f9', color: '#1e293b', fontSize: '10.5px', fontWeight: 'bold', padding: '2px 0', borderBottom: '1px solid #334155' }}>
+                            출고 완료자
+                          </th>
+                        </tr>
+                        <tr>
+                          <td style={{ height: '38px', backgroundColor: '#ffffff', color: '#94a3b8', fontSize: '10.5px', verticalAlign: 'middle', fontWeight: '600' }}>
+                            ( 서 명 )
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
                   </div>
                 </div>
 
                 {/* 1. 거래처 및 현장 기본정보 */}
-                <div style={{ fontSize: '13px', fontWeight: 'bold', borderLeft: '3.5px solid #312e81', paddingLeft: '6px', marginBottom: '6px', color: '#312e81' }}>1. 거래처 및 현장 정보</div>
-                <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '14px', tableLayout: 'fixed' }}>
+                <div style={{ fontSize: '12.5px', fontWeight: 'bold', borderLeft: '3.5px solid #312e81', paddingLeft: '6px', marginBottom: '4px', color: '#312e81' }}>1. 거래처 및 현장 정보</div>
+                <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '10px', tableLayout: 'fixed', boxSizing: 'border-box' }}>
+                  <colgroup>
+                    <col style={{ width: '16%' }} />
+                    <col style={{ width: '34%' }} />
+                    <col style={{ width: '16%' }} />
+                    <col style={{ width: '34%' }} />
+                  </colgroup>
                   <tbody>
                     <tr>
-                      <th style={{ border: '1px solid #cbd5e1', padding: '7px 10px', backgroundColor: '#f8fafc', color: '#334155', width: '110px', fontWeight: 'bold', fontSize: '12.5px' }}>고객사명</th>
-                      <td style={{ border: '1px solid #cbd5e1', padding: '7px 10px', backgroundColor: '#ffffff', color: '#111827', fontSize: '12.5px', fontWeight: '700', wordBreak: 'break-all' }}>{customerName || '-'}</td>
-                      <th style={{ border: '1px solid #cbd5e1', padding: '7px 10px', backgroundColor: '#f8fafc', color: '#334155', width: '110px', fontWeight: 'bold', fontSize: '12.5px' }}>현장명</th>
-                      <td style={{ border: '1px solid #cbd5e1', padding: '7px 10px', backgroundColor: '#ffffff', color: '#111827', fontSize: '12.5px', fontWeight: '700', wordBreak: 'break-all' }}>{siteName || '-'}</td>
+                      <th style={{ border: '1px solid #cbd5e1', padding: '5px 8px', backgroundColor: '#f8fafc', color: '#334155', fontWeight: 'bold', fontSize: '12px', boxSizing: 'border-box' }}>고객사명</th>
+                      <td style={{ border: '1px solid #cbd5e1', padding: '5px 8px', backgroundColor: '#ffffff', color: '#111827', fontSize: '12px', fontWeight: '700', wordBreak: 'break-all', boxSizing: 'border-box' }}>{customerName || '-'}</td>
+                      <th style={{ border: '1px solid #cbd5e1', padding: '5px 8px', backgroundColor: '#f8fafc', color: '#334155', fontWeight: 'bold', fontSize: '12px', boxSizing: 'border-box' }}>현장명</th>
+                      <td style={{ border: '1px solid #cbd5e1', padding: '5px 8px', backgroundColor: '#ffffff', color: '#111827', fontSize: '12px', fontWeight: '700', wordBreak: 'break-all', boxSizing: 'border-box' }}>{siteName || '-'}</td>
                     </tr>
                     <tr>
-                      <th style={{ border: '1px solid #cbd5e1', padding: '7px 10px', backgroundColor: '#f8fafc', color: '#334155', fontWeight: 'bold', fontSize: '12.5px' }}>상세 현장주소</th>
-                      <td colSpan={3} style={{ border: '1px solid #cbd5e1', padding: '7px 10px', backgroundColor: '#ffffff', color: '#111827', fontSize: '12.5px', wordBreak: 'break-all' }}>{siteAddress || '-'}</td>
+                      <th style={{ border: '1px solid #cbd5e1', padding: '5px 8px', backgroundColor: '#f8fafc', color: '#334155', fontWeight: 'bold', fontSize: '12px', boxSizing: 'border-box' }}>상세 현장주소</th>
+                      <td colSpan={3} style={{ border: '1px solid #cbd5e1', padding: '5px 8px', backgroundColor: '#ffffff', color: '#111827', fontSize: '12px', wordBreak: 'break-all', boxSizing: 'border-box' }}>{siteAddress || '-'}</td>
                     </tr>
                   </tbody>
                 </table>
 
-                {/* 2. 업무 관계자 정보 */}
-                <div style={{ fontSize: '13px', fontWeight: 'bold', borderLeft: '3.5px solid #312e81', paddingLeft: '6px', marginBottom: '6px', color: '#312e81' }}>2. 업무 관계자 정보</div>
-                <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '14px', tableLayout: 'fixed' }}>
+                {/* 2. 업무 관계자 정보 (청구담당자 제거, 영업/현장 1줄 50:50 대칭) */}
+                <div style={{ fontSize: '12.5px', fontWeight: 'bold', borderLeft: '3.5px solid #312e81', paddingLeft: '6px', marginBottom: '4px', color: '#312e81' }}>2. 업무 관계자 정보</div>
+                <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '10px', tableLayout: 'fixed', boxSizing: 'border-box' }}>
+                  <colgroup>
+                    <col style={{ width: '16%' }} />
+                    <col style={{ width: '34%' }} />
+                    <col style={{ width: '16%' }} />
+                    <col style={{ width: '34%' }} />
+                  </colgroup>
                   <tbody>
                     <tr>
-                      <th style={{ border: '1px solid #cbd5e1', padding: '7px 10px', backgroundColor: '#f8fafc', color: '#334155', width: '110px', fontWeight: 'bold', fontSize: '12.5px' }}>영업담당자</th>
-                      <td style={{ border: '1px solid #cbd5e1', padding: '7px 10px', backgroundColor: '#ffffff', color: '#111827', fontSize: '12.5px', fontWeight: '600', wordBreak: 'break-all' }}>
+                      <th style={{ border: '1px solid #cbd5e1', padding: '5px 8px', backgroundColor: '#f8fafc', color: '#334155', fontWeight: 'bold', fontSize: '12px', boxSizing: 'border-box' }}>영업담당자</th>
+                      <td style={{ border: '1px solid #cbd5e1', padding: '5px 8px', backgroundColor: '#ffffff', color: '#111827', fontSize: '12px', fontWeight: '600', wordBreak: 'break-all', boxSizing: 'border-box' }}>
                         {salespersonName || currentUser?.name || '-'} {salespersonPhone || currentUser?.phone ? `(${salespersonPhone || currentUser?.phone})` : ''}
                       </td>
-                      <th style={{ border: '1px solid #cbd5e1', padding: '7px 10px', backgroundColor: '#f8fafc', color: '#334155', width: '110px', fontWeight: 'bold', fontSize: '12.5px' }}>현장담당자</th>
-                      <td style={{ border: '1px solid #cbd5e1', padding: '7px 10px', backgroundColor: '#ffffff', color: '#111827', fontSize: '12.5px', fontWeight: '600', wordBreak: 'break-all' }}>
+                      <th style={{ border: '1px solid #cbd5e1', padding: '5px 8px', backgroundColor: '#f8fafc', color: '#334155', fontWeight: 'bold', fontSize: '12px', boxSizing: 'border-box' }}>현장담당자</th>
+                      <td style={{ border: '1px solid #cbd5e1', padding: '5px 8px', backgroundColor: '#ffffff', color: '#111827', fontSize: '12px', fontWeight: '600', wordBreak: 'break-all', boxSizing: 'border-box' }}>
                         {siteContactName || '-'} {siteContactPhone ? `(${siteContactPhone})` : ''}
-                      </td>
-                    </tr>
-                    <tr>
-                      <th style={{ border: '1px solid #cbd5e1', padding: '7px 10px', backgroundColor: '#f8fafc', color: '#334155', fontWeight: 'bold', fontSize: '12.5px' }}>청구담당자</th>
-                      <td colSpan={3} style={{ border: '1px solid #cbd5e1', padding: '7px 10px', backgroundColor: '#ffffff', color: '#111827', fontSize: '12.5px', wordBreak: 'break-all' }}>
-                        {billingContactName || '-'} {billingContactPhone ? `(${billingContactPhone})` : ''}
                       </td>
                     </tr>
                   </tbody>
                 </table>
 
                 {/* 3. 배송 배차 및 리프트 모델 */}
-                <div style={{ fontSize: '13px', fontWeight: 'bold', borderLeft: '3.5px solid #312e81', paddingLeft: '6px', marginBottom: '6px', color: '#312e81' }}>3. 배송 배차 및 투입 장비</div>
-                <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '14px', tableLayout: 'fixed' }}>
+                <div style={{ fontSize: '12.5px', fontWeight: 'bold', borderLeft: '3.5px solid #312e81', paddingLeft: '6px', marginBottom: '4px', color: '#312e81' }}>3. 배송 배차 및 투입 장비</div>
+                <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '10px', tableLayout: 'fixed', boxSizing: 'border-box' }}>
+                  <colgroup>
+                    <col style={{ width: '16%' }} />
+                    <col style={{ width: '34%' }} />
+                    <col style={{ width: '16%' }} />
+                    <col style={{ width: '34%' }} />
+                  </colgroup>
                   <tbody>
                     <tr>
-                      <th style={{ border: '1px solid #cbd5e1', padding: '7px 10px', backgroundColor: '#f8fafc', color: '#334155', width: '110px', fontWeight: 'bold', fontSize: '12.5px' }}>상차스케줄</th>
-                      <td style={{ border: '1px solid #cbd5e1', padding: '7px 10px', backgroundColor: '#ffffff', color: '#111827', fontSize: '12.5px', wordBreak: 'break-all' }}>{loadingTime || '-'}</td>
-                      <th style={{ border: '1px solid #cbd5e1', padding: '7px 10px', backgroundColor: '#f8fafc', color: '#334155', width: '110px', fontWeight: 'bold', fontSize: '12.5px' }}>하차스케줄</th>
-                      <td style={{ border: '1px solid #cbd5e1', padding: '7px 10px', backgroundColor: '#ffffff', color: '#111827', fontSize: '12.5px', wordBreak: 'break-all' }}>{unloadingTime || '-'}</td>
+                      <th style={{ border: '1px solid #cbd5e1', padding: '5px 8px', backgroundColor: '#f8fafc', color: '#334155', fontWeight: 'bold', fontSize: '12px', boxSizing: 'border-box' }}>상차스케줄</th>
+                      <td style={{ border: '1px solid #cbd5e1', padding: '5px 8px', backgroundColor: '#ffffff', color: '#111827', fontSize: '12px', wordBreak: 'break-all', boxSizing: 'border-box' }}>{loadingTime || '-'}</td>
+                      <th style={{ border: '1px solid #cbd5e1', padding: '5px 8px', backgroundColor: '#f8fafc', color: '#334155', fontWeight: 'bold', fontSize: '12px', boxSizing: 'border-box' }}>하차스케줄</th>
+                      <td style={{ border: '1px solid #cbd5e1', padding: '5px 8px', backgroundColor: '#ffffff', color: '#111827', fontSize: '12px', wordBreak: 'break-all', boxSizing: 'border-box' }}>{unloadingTime || '-'}</td>
                     </tr>
                     <tr>
-                      <th style={{ border: '1px solid #cbd5e1', padding: '7px 10px', backgroundColor: '#f8fafc', color: '#334155', fontWeight: 'bold', fontSize: '12.5px' }}>임대 투입 장비</th>
-                      <td colSpan={3} style={{ border: '1px solid #cbd5e1', padding: '7px 10px', backgroundColor: '#ffffff', color: '#111827', fontSize: '12.5px', fontWeight: '700', wordBreak: 'break-all' }}>
+                      <th style={{ border: '1px solid #cbd5e1', padding: '5px 8px', backgroundColor: '#f8fafc', color: '#334155', fontWeight: 'bold', fontSize: '12px', boxSizing: 'border-box' }}>임대 투입 장비</th>
+                      <td colSpan={3} style={{ border: '1px solid #cbd5e1', padding: '5px 8px', backgroundColor: '#ffffff', color: '#111827', fontSize: '12px', fontWeight: '700', wordBreak: 'break-all', boxSizing: 'border-box' }}>
                         {equipments.map(e => `${e.modelName || '미지정'} * ${e.qty}대`).join(', ')} (총 {equipments.reduce((sum, e) => sum + (e.qty || 1), 0)}대)
                       </td>
                     </tr>
@@ -1368,21 +1416,21 @@ ${activeSpecs.map((s, idx) => `  ${idx + 1}. [적용] ${s.label}`).join('\n') ||
                 </table>
 
                 {/* 4. 장비 출하 스펙 요구사항 */}
-                <div style={{ fontSize: '13px', fontWeight: 'bold', borderLeft: '3.5px solid #312e81', paddingLeft: '6px', marginBottom: '6px', color: '#312e81' }}>4. 장비 출하 스펙 요구사항 (현장 요청 검수 항목)</div>
-                <div style={{ padding: '10px 12px', border: '1px solid #cbd5e1', borderRadius: '4px', marginBottom: '14px', backgroundColor: '#f8fafc', color: '#111827', boxSizing: 'border-box' }}>
+                <div style={{ fontSize: '12.5px', fontWeight: 'bold', borderLeft: '3.5px solid #312e81', paddingLeft: '6px', marginBottom: '4px', color: '#312e81' }}>4. 장비 출하 스펙 요구사항 (현장 요청 검수 항목)</div>
+                <div style={{ padding: '7px 10px', border: '1px solid #cbd5e1', borderRadius: '4px', marginBottom: '10px', backgroundColor: '#f8fafc', color: '#111827', boxSizing: 'border-box' }}>
                   {(() => {
                     const appliedSpecs = STANDARD_SPECS.filter(s => !!checkedSpecs[s.id]);
                     if (appliedSpecs.length === 0) {
                       return (
-                        <div style={{ fontSize: '12px', color: '#64748b', padding: '2px 0' }}>
+                        <div style={{ fontSize: '11.5px', color: '#64748b', padding: '2px 0' }}>
                           • 별도 특수 요청 스펙 없음 (기본 출하 표준 검수 적용)
                         </div>
                       );
                     }
                     return (
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px 16px', fontSize: '12px' }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px 12px', fontSize: '11.5px' }}>
                         {appliedSpecs.map((s, idx) => (
-                          <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 600, color: '#111827', wordBreak: 'break-all' }}>
+                          <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: '5px', fontWeight: 600, color: '#111827', wordBreak: 'break-all' }}>
                             <span style={{ color: '#16a34a', fontWeight: 800 }}>☑</span>
                             <span>{idx + 1}. {getDynamicSpecLabel(s, rawText)}</span>
                           </div>
@@ -1393,12 +1441,16 @@ ${activeSpecs.map((s, idx) => `  ${idx + 1}. [적용] ${s.label}`).join('\n') ||
                 </div>
 
                 {/* 5. 현장 특이사항 및 작업 지시 메모 */}
-                <div style={{ fontSize: '13px', fontWeight: 'bold', borderLeft: '3.5px solid #312e81', paddingLeft: '6px', marginBottom: '6px', color: '#312e81' }}>5. 현장 특이사항 및 작업 지시</div>
-                <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
+                <div style={{ fontSize: '12.5px', fontWeight: 'bold', borderLeft: '3.5px solid #312e81', paddingLeft: '6px', marginBottom: '4px', color: '#312e81' }}>5. 현장 특이사항 및 작업 지시</div>
+                <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed', boxSizing: 'border-box' }}>
+                  <colgroup>
+                    <col style={{ width: '16%' }} />
+                    <col style={{ width: '84%' }} />
+                  </colgroup>
                   <tbody>
                     <tr>
-                      <th style={{ border: '1px solid #cbd5e1', padding: '7px 10px', backgroundColor: '#f8fafc', color: '#334155', width: '110px', fontWeight: 'bold', fontSize: '12.5px' }}>지시사항</th>
-                      <td style={{ border: '1px solid #cbd5e1', padding: '7px 10px', backgroundColor: '#ffffff', color: '#111827', fontSize: '12.5px', wordBreak: 'break-all' }}>{note || '특이사항 없음'}</td>
+                      <th style={{ border: '1px solid #cbd5e1', padding: '5px 8px', backgroundColor: '#f8fafc', color: '#334155', fontWeight: 'bold', fontSize: '12px', boxSizing: 'border-box' }}>지시사항</th>
+                      <td style={{ border: '1px solid #cbd5e1', padding: '5px 8px', backgroundColor: '#ffffff', color: '#111827', fontSize: '12px', wordBreak: 'break-all', boxSizing: 'border-box' }}>{note || '특이사항 없음'}</td>
                     </tr>
                   </tbody>
                 </table>

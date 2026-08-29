@@ -152,7 +152,7 @@ interface AppContextType {
   unassignAssetFromContract: (contractAssetId: string) => Promise<void>;
   batchUnassignAssetsFromContract: (contractAssetIds: string[]) => Promise<void>;
   exchangeOutboundAsset: (contractAssetId: string, oldAssetId: string, newAssetId: string, reason?: string, markOldAsRepairing?: boolean, customPenaltyScore?: number) => Promise<void>;
-  saveSmartDispatch: (data: SmartDispatchData, autoRegister: boolean, onProgress?: (log: string, percent: number) => void) => Promise<{ success: boolean; requiresConfirm?: boolean; missingFields?: string[]; errorMessage?: string }>;
+  saveSmartDispatch: (data: SmartDispatchData, autoRegister: boolean, onProgress?: (log: string, percent: number) => void) => Promise<{ success: boolean; requiresConfirm?: boolean; missingFields?: string[]; errorMessage?: string; contractId?: string; contractNo?: string }>;
   saveSmartReturn: (data: SmartReturnData) => void;
   
   // Todos
@@ -1118,7 +1118,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     await notify('🎉 [완료] 출고의뢰 생성을 성공적으로 완료하였습니다!', 100, 300);
 
     refreshAllData();
-    return { success: true };
+    return { success: true, contractId: contract.id, contractNo: contract.contractNo };
   };
 
   const saveSmartReturn = (data: SmartReturnData) => {
