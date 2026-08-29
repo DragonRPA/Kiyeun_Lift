@@ -328,22 +328,46 @@ Replace-Tag $ws1 "{하차일시}" "${contractDate}"
 Replace-Tag $ws1 "{현장주소}" "${siteAddress}"
 Replace-Tag $ws1 "{현장담당자}" "${managerName}"
 Replace-Tag $ws1 "{현장담당자연락처}" "${managerPhone}"
-Replace-Tag $ws1 "{모델명}" "${primaryAsset.modelName}"
-Replace-Tag $ws1 "{수량}" "${assets.length}"
-Replace-Tag $ws1 "{SN}" "${primaryAsset.sn}"
-Replace-Tag $ws1 "{관리번호}" "${primaryAsset.assetNo}"
-Replace-Tag $ws1 "{임대료}" "${(primaryAsset.rentalFee || 480000).toLocaleString()}"
-Replace-Tag $ws1 "{소계}" "${totalRentalFee.toLocaleString()}"
 Replace-Tag $ws1 "{합계}" "₩${totalRentalFee.toLocaleString()}"
 Replace-Tag $ws1 "{옵션}" "${optionsText}"
 Replace-Tag $ws1 "{특이사항}" "${remarksText}"
 
+# ── 자산별 행(Row 44부터) 1대당 1줄씩 명시적 기입 ──
+` + assets.map((ast, idx) => {
+  const row = 44 + idx;
+  const aModel = ast.modelName || 'GS-2646';
+  const aSn = ast.sn ? String(ast.sn) : '';
+  const aNo = ast.assetNo || '';
+  const aFee = (ast.rentalFee || 480000).toLocaleString();
+  return `
+$ws1.Cells.Item(${row}, 1).Value2 = "${aModel}"
+$ws1.Cells.Item(${row}, 3).Value2 = "1"
+$ws1.Cells.Item(${row}, 4).Value2 = "${aSn}\`r\`n${aNo}"
+$ws1.Cells.Item(${row}, 5).Value2 = "${aFee}"
+$ws1.Cells.Item(${row}, 7).Value2 = "${aFee}"
+`;
+}).join('') + (assets.length < 12 ? Array.from({ length: 12 - assets.length }, (_, k) => {
+  const row = 44 + assets.length + k;
+  return `
+$ws1.Cells.Item(${row}, 1).Value2 = ""
+$ws1.Cells.Item(${row}, 3).Value2 = ""
+$ws1.Cells.Item(${row}, 4).Value2 = ""
+$ws1.Cells.Item(${row}, 5).Value2 = ""
+$ws1.Cells.Item(${row}, 7).Value2 = ""
+`;
+}).join('') : '') + `
+
 $ws1.PageSetup.PaperSize = 9
-$ws1.PageSetup.PrintArea = "A26:K78"
 $ws1.PageSetup.Orientation = 1
 $ws1.PageSetup.Zoom = $false
 $ws1.PageSetup.FitToPagesWide = 1
-$ws1.PageSetup.FitToPagesTall = 1
+if (${assets.length} -le 12) {
+  $ws1.PageSetup.PrintArea = "A26:K78"
+  $ws1.PageSetup.FitToPagesTall = 1
+} else {
+  $ws1.PageSetup.PrintArea = ""
+  $ws1.PageSetup.FitToPagesTall = $false
+}
 $wb1.ExportAsFixedFormat(0, $f1Pdf)
 $wb1.Close($false)
 `;
