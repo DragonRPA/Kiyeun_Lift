@@ -284,7 +284,7 @@ export const AssetAssignment: React.FC = () => {
     }
   };
 
-  // ⚡ 다중 선택 일괄 할당 실행 (단일 원자적 배치 트랜잭션)
+  // ⚡ 장비 할당 실행 (부분 수량 할당 완벽 지원: N대 요구 중 1대만 선택해도 즉시 할당)
   const handleBatchAssign = async () => {
     if (document.activeElement instanceof HTMLElement) {
       document.activeElement.blur();
@@ -296,34 +296,53 @@ export const AssetAssignment: React.FC = () => {
       return;
     }
 
-    if (selectedCaIds.length === 0 || selectedAssetIds.length === 0) {
-      alert('할당할 슬롯과 장비를 모두 선택해 주세요.');
+    if (selectedAssetIds.length === 0) {
+      alert('할당할 장비를 1대 이상 선택해 주세요.');
       return;
     }
 
-    if (selectedCaIds.length !== selectedAssetIds.length) {
-      alert(`⚠️ 선택된 수량이 일치하지 않습니다.\n\n• 선택된 슬롯: ${selectedCaIds.length}개\n• 선택된 장비: ${selectedAssetIds.length}대\n\n수량을 동일하게 맞추어 주세요.`);
-      return;
+    // 할당할 대상 슬롯 산출 (선택된 슬롯 우선, 부족 시 동일 모델 미할당 슬롯 자동 탐색)
+    let targetCaIds: string[] = [];
+
+    if (selectedCaIds.length > 0) {
+      targetCaIds = selectedCaIds.slice(0, selectedAssetIds.length);
+    } else {
+      // 선택된 슬롯이 없는 경우 장비 모델과 일치하는 미할당 슬롯들을 순차 매핑
+      for (const assetId of selectedAssetIds) {
+        const asset = assets.find(a => a.id === assetId);
+        if (!asset) continue;
+        const availableSlot = currentSlots.find(ca =>
+          !ca.assetId &&
+          !targetCaIds.includes(ca.id) &&
+          isModelMatch(asset.modelName, ca.expectedModel || '')
+        );
+        if (availableSlot) {
+          targetCaIds.push(availableSlot.id);
+        }
+      }
     }
 
-    if (!confirm(`선택된 ${selectedCaIds.length}대의 장비를 계약 슬롯에 일괄 할당하시겠습니까?`)) {
+    if (targetCaIds.length !== selectedAssetIds.length) {
+      alert(`⚠️ 선택된 장비(${selectedAssetIds.length}대)에 매핑할 수 있는 미할당 슬롯(${targetCaIds.length}개)이 부족합니다.`);
       return;
     }
 
     setIsAssigning(true);
     try {
-      const pairs = selectedCaIds.map((caId, i) => ({
+      const pairs = targetCaIds.map((caId, i) => ({
         contractAssetId: caId,
         assetId: selectedAssetIds[i]
       }));
 
       await batchAssignAssetsToContract(pairs);
 
-      alert(`✅ 총 ${pairs.length}대 장비 일괄 할당 완료!\n자산 상태가 [출고대기(ASSIGNED)]로 즉시 전환되고 출고 검수 의뢰가 발행되었습니다.`);
-      setSelectedCaIds([]);
+      alert(`✅ 총 ${pairs.length}대 장비 할당 완료!\n자산 상태가 [출고대기(ASSIGNED)]로 즉시 전환되고 출고 검수 의뢰가 발행되었습니다.`);
+      
+      // 할당 완료된 슬롯 제외한 잔여 슬롯 유지 & 선택 장비 초기화
+      setSelectedCaIds(selectedCaIds.filter(id => !targetCaIds.includes(id)));
       setSelectedAssetIds([]);
     } catch (err: any) {
-      console.error('일괄 할당 실패:', err);
+      console.error('장비 할당 실패:', err);
       alert(`⚠️ 장비 할당 실패: ${err?.message || err}`);
     } finally {
       setIsAssigning(false);
@@ -712,7 +731,7 @@ export const AssetAssignment: React.FC = () => {
                   type="button"
                   className="btn-primary" 
                   onClick={handleBatchAssign} 
-                  disabled={selectedCaIds.length === 0 || selectedAssetIds.length === 0 || selectedCaIds.length !== selectedAssetIds.length || isAssigning} 
+                  disabled={selectedAssetIds.length === 0 || isAssigning} 
                   style={{
                     padding: '6px 14px',
                     fontSize: '12px',
@@ -721,13 +740,13 @@ export const AssetAssignment: React.FC = () => {
                     gap: '4px',
                     fontWeight: 'bold',
                     borderRadius: '6px',
-                    backgroundColor: selectedCaIds.length > 0 && selectedCaIds.length === selectedAssetIds.length ? 'var(--primary)' : 'var(--border-color)',
+                    backgroundColor: selectedAssetIds.length > 0 ? 'var(--primary)' : 'var(--border-color)',
                     color: '#ffffff',
-                    cursor: selectedCaIds.length > 0 && selectedCaIds.length === selectedAssetIds.length ? 'pointer' : 'not-allowed'
+                    cursor: selectedAssetIds.length > 0 ? 'pointer' : 'not-allowed'
                   }}
                 >
                   <Wrench size={13} />
-                  {isAssigning ? '일괄 할당 중...' : `선택 장비 일괄 할당 (${selectedAssetIds.length}대)`}
+                  {isAssigning ? '할당 처리 중...' : (selectedAssetIds.length > 1 ? `선택 장비 일괄 할당 (${selectedAssetIds.length}대)` : `선택 장비 할당 (${selectedAssetIds.length}대)`)}
                 </button>
               )}
             </div>
