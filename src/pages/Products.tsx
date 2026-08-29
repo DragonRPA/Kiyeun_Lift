@@ -1,12 +1,22 @@
 // d:\Kiyeun_Lift\src\pages\Products.tsx
-import React, { useState } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
-import { Plus, Download, Search, RefreshCw, FileText, X } from 'lucide-react';
+import { Plus, Download, Search, RefreshCw, FileText, X, CloudUpload, Sparkles, Folder, Trash2, ExternalLink, Upload } from 'lucide-react';
 import { exportToExcel } from '../services/excel';
 import { db, Product } from '../services/db';
+import { renderSpecSheetJsPdf, generateAndUploadSpecSheetToR2 } from '../services/specSheetPdf';
+import { LIFT_RETRACTED_IMG, LIFT_EXTENDED_IMG } from '../services/specImages';
+
+interface R2DocFile {
+  key: string;
+  name: string;
+  size: number;
+  lastModified: string;
+  url: string;
+}
 
 export const Products: React.FC = () => {
-  const { products, saveProduct, hasPermission, assets, refreshAllData } = useApp();
+  const { products, saveProduct, hasPermission, assets, refreshAllData, googleConfigs } = useApp();
   const canSave = hasPermission('product', 'save');
 
   const [searchTerm, setSearchTerm] = useState('');
@@ -15,17 +25,111 @@ export const Products: React.FC = () => {
   const [previewProduct, setPreviewProduct] = useState<Product | null>(null);
   const [editingProduct, setEditingProduct] = useState<Partial<Product> | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [generatingModelId, setGeneratingModelId] = useState<string | null>(null);
+
+  // Cloudflare R2 제품별 문서함 상태
+  const [r2Files, setR2Files] = useState<R2DocFile[]>([]);
+  const [loadingR2Docs, setLoadingR2Docs] = useState<boolean>(false);
+  const [showR2DocModal, setShowR2DocModal] = useState<boolean>(false);
+  const [selectedProductForDocs, setSelectedProductForDocs] = useState<Product | null>(null);
+  const [uploadingDoc, setUploadingDoc] = useState<boolean>(false);
+
+  const fetchR2Files = async () => {
+    const config = googleConfigs[0];
+    const accountId = config?.r2AccountId || '35014a2514680107d74e1e68d96e6c32';
+    const bucketName = config?.r2BucketName || 'kiyeun-storage';
+    const accessKeyId = config?.r2AccessKeyId || '03cdb7560d37242de608a5db2a976030';
+    const secretAccessKey = config?.r2SecretAccessKey || 'b2407ab4532e02317860bc3d63226fb7bc232e88083b150c15023906ed141986';
+    const publicDomain = config?.r2PublicDomain || 'https://pub-a2fd3c2ae0cc450b8ebe34baf1b051e1.r2.dev';
+
+    setLoadingR2Docs(true);
+    try {
+      const res = await fetch('/api/r2', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'list',
+          prefix: 'Eq_doc/',
+          accountId,
+          bucketName,
+          accessKeyId,
+          secretAccessKey
+        })
+      });
+      const data = await res.json();
+      if (data.success && Array.isArray(data.files)) {
+        const mapped: R2DocFile[] = data.files
+          .filter((f: any) => !f.isDirectory && f.key !== 'Eq_doc/')
+          .map((f: any) => {
+            const parts = f.key.split('/');
+            const name = parts[parts.length - 1];
+            return {
+              key: f.key,
+              name,
+              size: f.size,
+              lastModified: f.lastModified,
+              url: `${publicDomain.replace(/\/$/, '')}/${encodeURIComponent(f.key).replace(/%2F/g, '/')}`
+            };
+          });
+        setR2Files(mapped);
+      }
+    } catch (err) {
+      console.warn('R2 docs fetch error:', err);
+    } finally {
+      setLoadingR2Docs(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchR2Files();
+  }, [googleConfigs]);
 
   const handleRefresh = async () => {
     setRefreshing(true);
     try {
       await refreshAllData();
+      await fetchR2Files();
       alert("최신 데이터를 성공적으로 불러왔습니다.");
     } catch (err: any) {
       console.error("Failed to sync from Supabase:", err);
       alert("최신 데이터를 가져오는 데 실패했습니다.");
     } finally {
       setRefreshing(false);
+    }
+  };
+
+  // specSheetUrl이 이미 있으면 바로 열기, 없으면 생성 후 저장
+  const handleGenerateAndUploadR2 = async (product: Product) => {
+    if (!product.modelName) return;
+    if (product.specSheetUrl) {
+      window.open(product.specSheetUrl, '_blank');
+      return;
+    }
+    setGeneratingModelId(product.id || product.modelName);
+    try {
+      const res = await generateAndUploadSpecSheetToR2(product, googleConfigs[0]);
+      if (res.success) {
+        alert(`✅ 제원표 PDF 생성 완료\n- 모델명: ${product.modelName}\n- 이후에는 버튼 클릭 즉시 열립니다.`);
+        await refreshAllData();
+        window.open(res.url, '_blank');
+      } else {
+        alert(`❌ 제원표 PDF 생성 실패: ${res.error}`);
+      }
+    } catch (err: any) {
+      console.error('R2 Generate error:', err);
+      alert(`오류 발생: ${err.message}`);
+    } finally {
+      setGeneratingModelId(null);
+    }
+  };
+
+  const handleDownloadPdf = async (product: Partial<Product>) => {
+    try {
+      const { pdf, fileName } = await renderSpecSheetJsPdf(product);
+      pdf.save(fileName);
+    } catch (err: any) {
+      console.error('PDF Download error:', err);
+      alert('PDF 다운로드 중 오류가 발생했습니다.');
     }
   };
 
@@ -91,9 +195,138 @@ export const Products: React.FC = () => {
     }
   };
 
+  const [assetFilter, setAssetFilter] = useState<'ALL' | 'WITH_ASSETS' | 'NO_ASSETS'>('ALL');
+
+  const clean = (s?: string) => (s || '').replace(/[- _/]/g, '').toUpperCase().trim();
+
+  const assetStatsMap = useMemo(() => {
+    const map = new Map<string, { total: number; owned: number; leased: number; available: number; rented: number }>();
+    for (const p of products) {
+      const pClean = clean(p.modelName);
+      const matched = assets.filter(a => {
+        const aClean = clean(a.modelName);
+        return a.modelName === p.modelName || aClean === pClean;
+      });
+      const owned = matched.filter(a => a.ownerType === 'OWNED' || !a.ownerType).length;
+      const leased = matched.filter(a => a.ownerType === 'RENTED').length;
+      const available = matched.filter(a => a.status === 'AVAILABLE').length;
+      const rented = matched.filter(a => a.status === 'RENTED').length;
+      map.set(p.id, { total: matched.length, owned, leased, available, rented });
+    }
+    return map;
+  }, [products, assets]);
+
+  const r2FilesByModelMap = useMemo(() => {
+    const map = new Map<string, R2DocFile[]>();
+    for (const p of products) {
+      const pClean = clean(p.modelName);
+      const matched = r2Files.filter(f => {
+        const parts = f.key.split('/');
+        if (parts.length < 3) return false;
+        const folderModel = parts[1];
+        const fClean = clean(folderModel);
+        return folderModel === p.modelName || fClean === pClean || fClean.includes(pClean) || pClean.includes(fClean);
+      });
+      map.set(p.id, matched);
+    }
+    return map;
+  }, [products, r2Files]);
+
+  const handleOpenR2DocModal = (p: Product) => {
+    setSelectedProductForDocs(p);
+    setShowR2DocModal(true);
+  };
+
+  const handleUploadCustomDoc = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !selectedProductForDocs) return;
+
+    setUploadingDoc(true);
+    try {
+      const config = googleConfigs[0];
+      const accountId = config?.r2AccountId || '35014a2514680107d74e1e68d96e6c32';
+      const bucketName = config?.r2BucketName || 'kiyeun-storage';
+      const accessKeyId = config?.r2AccessKeyId || '03cdb7560d37242de608a5db2a976030';
+      const secretAccessKey = config?.r2SecretAccessKey || 'b2407ab4532e02317860bc3d63226fb7bc232e88083b150c15023906ed141986';
+
+      const reader = new FileReader();
+      reader.onload = async (event) => {
+        const base64Content = event.target?.result as string;
+        const key = `Eq_doc/${selectedProductForDocs.modelName}/${file.name}`;
+
+        const res = await fetch('/api/r2', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'upload',
+            accountId,
+            bucketName,
+            accessKeyId,
+            secretAccessKey,
+            key,
+            base64Content,
+            contentType: file.type || 'application/pdf'
+          })
+        });
+
+        const resJson = await res.json();
+        if (resJson.success) {
+          alert(`✅ 파일 [${file.name}] 업로드 완료!`);
+          await fetchR2Files();
+        } else {
+          alert(`❌ 업로드 실패: ${resJson.error}`);
+        }
+        setUploadingDoc(false);
+      };
+      reader.readAsDataURL(file);
+    } catch (err: any) {
+      console.error('File upload error:', err);
+      alert(`업로드 실패: ${err.message}`);
+      setUploadingDoc(false);
+    }
+  };
+
+  const handleDeleteDoc = async (key: string) => {
+    if (!confirm(`이 문서를 Cloudflare R2에서 정말 삭제하시겠습니까?\n\n${key}`)) return;
+
+    try {
+      const config = googleConfigs[0];
+      const accountId = config?.r2AccountId || '35014a2514680107d74e1e68d96e6c32';
+      const bucketName = config?.r2BucketName || 'kiyeun-storage';
+      const accessKeyId = config?.r2AccessKeyId || '03cdb7560d37242de608a5db2a976030';
+      const secretAccessKey = config?.r2SecretAccessKey || 'b2407ab4532e02317860bc3d63226fb7bc232e88083b150c15023906ed141986';
+
+      const res = await fetch('/api/r2', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'delete',
+          accountId,
+          bucketName,
+          accessKeyId,
+          secretAccessKey,
+          key
+        })
+      });
+      const resJson = await res.json();
+      if (resJson.success) {
+        alert("✅ 삭제되었습니다.");
+        await fetchR2Files();
+      } else {
+        alert(`❌ 삭제 실패: ${resJson.error}`);
+      }
+    } catch (err: any) {
+      alert(`삭제 오류: ${err.message}`);
+    }
+  };
+
+  const totalModelsCount = products.length;
+  const withAssetsCount = useMemo(() => products.filter(p => (assetStatsMap.get(p.id)?.total || 0) > 0).length, [products, assetStatsMap]);
+  const noAssetsCount = useMemo(() => products.filter(p => (assetStatsMap.get(p.id)?.total || 0) === 0).length, [products, assetStatsMap]);
+
   const handleExport = () => {
     const excelData = filtered.map((p, idx) => {
-      const count = assets.filter(a => a.modelName === p.modelName).length;
+      const stats = assetStatsMap.get(p.id) || { total: 0, owned: 0, leased: 0, available: 0, rented: 0 };
       return {
         '번호': idx + 1,
         '모델명': p.modelName,
@@ -113,7 +346,11 @@ export const Products: React.FC = () => {
         'A/S접수': p.asContact || '031-334-5296',
         '제조사': p.manufacturer || '-',
         '사용여부': p.isActive !== false ? '사용' : '미사용',
-        '보유대수': `${count}대`,
+        '총보유대수': stats.total,
+        '당사자산대수': stats.owned,
+        '외부임차대수': stats.leased,
+        '임대가능대수': stats.available,
+        '대여중대수': stats.rented,
         '등록일': p.createdAt.substring(0, 10)
       };
     });
@@ -122,19 +359,25 @@ export const Products: React.FC = () => {
   };
 
   const filtered = products
-    .filter(p => 
-      (p.modelName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (p.manufacturer || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (p.spec || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (p.powerSource || '').toLowerCase().includes(searchTerm.toLowerCase())
-    )
+    .filter(p => {
+      const stats = assetStatsMap.get(p.id) || { total: 0, owned: 0, leased: 0, available: 0, rented: 0 };
+      if (assetFilter === 'WITH_ASSETS' && stats.total === 0) return false;
+      if (assetFilter === 'NO_ASSETS' && stats.total > 0) return false;
+
+      return (
+        (p.modelName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (p.manufacturer || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (p.spec || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (p.powerSource || '').toLowerCase().includes(searchTerm.toLowerCase())
+      );
+    })
     .sort((a, b) => {
       let aVal: any = a[sortField as keyof Product];
       let bVal: any = b[sortField as keyof Product];
 
       if (sortField === 'assetCount') {
-        aVal = assets.filter(x => x.modelName === a.modelName).length;
-        bVal = assets.filter(x => x.modelName === b.modelName).length;
+        aVal = assetStatsMap.get(a.id)?.total || 0;
+        bVal = assetStatsMap.get(b.id)?.total || 0;
       } else if (sortField === 'isActive') {
         aVal = a.isActive !== false ? 1 : 0;
         bVal = b.isActive !== false ? 1 : 0;
@@ -183,8 +426,8 @@ export const Products: React.FC = () => {
         </div>
       </div>
 
-      <div style={{ display: 'flex', gap: '12px', marginBottom: '16px', alignItems: 'center' }}>
-        <div style={{ position: 'relative', flex: 1, maxWidth: '400px' }}>
+      <div style={{ display: 'flex', gap: '12px', marginBottom: '16px', alignItems: 'center', flexWrap: 'wrap' }}>
+        <div style={{ position: 'relative', flex: 1, minWidth: '280px', maxWidth: '380px' }}>
           <Search size={18} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
           <input
             type="text"
@@ -193,6 +436,61 @@ export const Products: React.FC = () => {
             placeholder="모델명, 제조사, 동력, 제원 검색..."
             style={{ paddingLeft: '36px' }}
           />
+        </div>
+
+        {/* 자산 보유 여부 필터 탭 */}
+        <div style={{ display: 'inline-flex', backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '6px', padding: '2px', gap: '2px' }}>
+          <button
+            type="button"
+            onClick={() => setAssetFilter('ALL')}
+            style={{
+              padding: '6px 12px',
+              fontSize: '12px',
+              fontWeight: assetFilter === 'ALL' ? 'bold' : 'normal',
+              color: assetFilter === 'ALL' ? '#fff' : 'var(--text-muted)',
+              backgroundColor: assetFilter === 'ALL' ? 'var(--primary)' : 'transparent',
+              borderRadius: '4px',
+              border: 'none',
+              cursor: 'pointer',
+              whiteSpace: 'nowrap'
+            }}
+          >
+            전체 ({totalModelsCount})
+          </button>
+          <button
+            type="button"
+            onClick={() => setAssetFilter('WITH_ASSETS')}
+            style={{
+              padding: '6px 12px',
+              fontSize: '12px',
+              fontWeight: assetFilter === 'WITH_ASSETS' ? 'bold' : 'normal',
+              color: assetFilter === 'WITH_ASSETS' ? '#fff' : 'var(--text-muted)',
+              backgroundColor: assetFilter === 'WITH_ASSETS' ? 'var(--primary)' : 'transparent',
+              borderRadius: '4px',
+              border: 'none',
+              cursor: 'pointer',
+              whiteSpace: 'nowrap'
+            }}
+          >
+            자산 보유 ({withAssetsCount})
+          </button>
+          <button
+            type="button"
+            onClick={() => setAssetFilter('NO_ASSETS')}
+            style={{
+              padding: '6px 12px',
+              fontSize: '12px',
+              fontWeight: assetFilter === 'NO_ASSETS' ? 'bold' : 'normal',
+              color: assetFilter === 'NO_ASSETS' ? '#fff' : 'var(--text-muted)',
+              backgroundColor: assetFilter === 'NO_ASSETS' ? '#ef4444' : 'transparent',
+              borderRadius: '4px',
+              border: 'none',
+              cursor: 'pointer',
+              whiteSpace: 'nowrap'
+            }}
+          >
+            자산 미보유 ({noAssetsCount})
+          </button>
         </div>
       </div>
 
@@ -208,6 +506,10 @@ export const Products: React.FC = () => {
               <th onClick={() => handleSort('feet')} style={{ cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}>
                 피트 (FEET) {renderSortArrow('feet')}
               </th>
+              <th onClick={() => handleSort('assetCount')} style={{ cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}>
+                자산현황 (당사/임차) {renderSortArrow('assetCount')}
+              </th>
+              <th style={{ whiteSpace: 'nowrap', textAlign: 'center' }}>클라우드 문서 (R2)</th>
               <th style={{ whiteSpace: 'nowrap' }}>동력</th>
               <th style={{ whiteSpace: 'nowrap' }}>작업높이</th>
               <th style={{ whiteSpace: 'nowrap' }}>발판높이</th>
@@ -221,9 +523,6 @@ export const Products: React.FC = () => {
               <th onClick={() => handleSort('isActive')} style={{ cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}>
                 사용 여부 {renderSortArrow('isActive')}
               </th>
-              <th onClick={() => handleSort('assetCount')} style={{ cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}>
-                보유 대수 {renderSortArrow('assetCount')}
-              </th>
               <th onClick={() => handleSort('createdAt')} style={{ width: '110px', cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}>
                 등록일 {renderSortArrow('createdAt')}
               </th>
@@ -233,18 +532,56 @@ export const Products: React.FC = () => {
           <tbody>
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={15} style={{ textAlign: 'center', padding: '40px 0', color: 'var(--text-muted)' }}>
+                <td colSpan={16} style={{ textAlign: 'center', padding: '40px 0', color: 'var(--text-muted)' }}>
                   {products.length === 0 ? '등록된 제품 모델이 없습니다.' : '조회 조건에 맞는 제품 모델이 없습니다.'}
                 </td>
               </tr>
             ) : (
               filtered.map((p, idx) => {
-                const count = assets.filter(a => a.modelName === p.modelName).length;
+                const stats = assetStatsMap.get(p.id) || { total: 0, owned: 0, leased: 0, available: 0, rented: 0 };
+                const docList = r2FilesByModelMap.get(p.id) || [];
                 return (
                   <tr key={p.id} style={{ opacity: p.isActive !== false ? 1 : 0.6 }}>
                     <td style={{ textAlign: 'center', fontWeight: 'bold', whiteSpace: 'nowrap' }}>{idx + 1}</td>
                     <td style={{ whiteSpace: 'nowrap' }}><strong style={{ color: 'var(--primary)' }}>{p.modelName}</strong></td>
                     <td style={{ whiteSpace: 'nowrap' }}>{p.feet} ft</td>
+                    <td style={{ whiteSpace: 'nowrap' }}>
+                      {stats.total > 0 ? (
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }} title={`가동현황: 임대가능 ${stats.available}대, 대여중 ${stats.rented}대`}>
+                          <span className="badge badge-primary" style={{ fontWeight: 'bold' }}>
+                            총 {stats.total}대
+                          </span>
+                          <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                            (자사 {stats.owned} · 임차 {stats.leased})
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="badge badge-secondary" style={{ opacity: 0.6, fontSize: '11px' }}>
+                          미보유 (0대)
+                        </span>
+                      )}
+                    </td>
+                    <td style={{ whiteSpace: 'nowrap', textAlign: 'center' }}>
+                      <button
+                        type="button"
+                        onClick={() => handleOpenR2DocModal(p)}
+                        className={`badge ${docList.length > 0 ? 'badge-primary' : 'badge-secondary'}`}
+                        style={{
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          padding: '3px 8px',
+                          fontSize: '11px',
+                          border: 'none',
+                          opacity: docList.length > 0 ? 1 : 0.6
+                        }}
+                        title="Cloudflare R2 제품 문서함 열기"
+                      >
+                        <Folder size={12} />
+                        {docList.length}건
+                      </button>
+                    </td>
                     <td style={{ whiteSpace: 'nowrap' }}>{p.powerSource || '-'}</td>
                     <td style={{ whiteSpace: 'nowrap' }}>{p.workingHeight || '-'}</td>
                     <td style={{ whiteSpace: 'nowrap' }}>{p.platformHeight || '-'}</td>
@@ -258,9 +595,6 @@ export const Products: React.FC = () => {
                         {p.isActive !== false ? '사용' : '미사용'}
                       </span>
                     </td>
-                    <td style={{ whiteSpace: 'nowrap' }}>
-                      <strong style={{ color: count > 0 ? 'var(--primary)' : 'var(--text-muted)' }}>{count}대</strong>
-                    </td>
                     <td style={{ whiteSpace: 'nowrap' }}>{p.createdAt.substring(0, 10)}</td>
                     <td style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>
                       <div style={{ display: 'flex', gap: '4px', justifyContent: 'center' }}>
@@ -273,6 +607,24 @@ export const Products: React.FC = () => {
                           <FileText size={12} />
                           제원표
                         </button>
+                        {canSave && (
+                          <button
+                            className="btn-primary"
+                            onClick={() => handleGenerateAndUploadR2(p)}
+                            disabled={generatingModelId === (p.id || p.modelName)}
+                            style={{
+                              padding: '3px 8px', fontSize: '11px',
+                              display: 'inline-flex', alignItems: 'center', gap: '2px',
+                              backgroundColor: p.specSheetUrl ? '#16a34a' : '#2563eb'
+                            }}
+                            title={p.specSheetUrl ? '저장된 제원표 PDF 열기' : 'Cloudflare R2에 제원표 PDF 자동 생성 및 저장'}
+                          >
+                            {p.specSheetUrl
+                              ? <><FileText size={12} /> 제원표 열기</>
+                              : <><CloudUpload size={12} /> {generatingModelId === (p.id || p.modelName) ? '생성중...' : '제원표 생성'}</>
+                            }
+                          </button>
+                        )}
                         {canSave && (
                           <button
                             className="btn-secondary"
@@ -332,7 +684,14 @@ export const Products: React.FC = () => {
                   <div style={{ fontSize: '15px', fontWeight: 'bold', color: '#111827', marginBottom: '4px' }}>
                     {previewProduct.capacityPreExt || '272 kg'}
                   </div>
-                  <div style={{ fontSize: '20px', color: '#3b82f6', marginBottom: '4px' }}>⬇️</div>
+                  <div style={{ fontSize: '18px', color: '#3b82f6', marginBottom: '4px' }}>⬇️</div>
+                  <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '115px', margin: '6px 0' }}>
+                    <img
+                      src={LIFT_RETRACTED_IMG}
+                      alt="작업대 확장 전 리프트 형상"
+                      style={{ maxHeight: '110px', maxWidth: '100%', objectFit: 'contain' }}
+                    />
+                  </div>
                   <div style={{ fontSize: '13px', fontWeight: 'bold', color: '#374151', backgroundColor: '#e5e7eb', padding: '6px', borderRadius: '4px' }}>
                     작업대 확장 전 (작업자 2인)
                   </div>
@@ -346,15 +705,22 @@ export const Products: React.FC = () => {
                         {previewProduct.capacityPostExtMain || '159 kg'}
                       </div>
                       <div style={{ fontSize: '16px', color: '#3b82f6' }}>⬇️</div>
-                      <div style={{ fontSize: '11px', color: '#6b7280' }}>본체</div>
+                      <div style={{ fontSize: '11px', color: '#6b7280', fontWeight: 'bold' }}>본체</div>
                     </div>
                     <div>
                       <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#111827' }}>
                         {previewProduct.capacityPostExtDeck || '113 kg'}
                       </div>
                       <div style={{ fontSize: '16px', color: '#3b82f6' }}>⬇️</div>
-                      <div style={{ fontSize: '11px', color: '#6b7280' }}>확장부</div>
+                      <div style={{ fontSize: '11px', color: '#6b7280', fontWeight: 'bold' }}>확장부</div>
                     </div>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '115px', margin: '6px 0' }}>
+                    <img
+                      src={LIFT_EXTENDED_IMG}
+                      alt="작업대 확장 후 리프트 형상"
+                      style={{ maxHeight: '110px', maxWidth: '100%', objectFit: 'contain' }}
+                    />
                   </div>
                   <div style={{ fontSize: '13px', fontWeight: 'bold', color: '#374151', backgroundColor: '#e5e7eb', padding: '6px', borderRadius: '4px' }}>
                     작업대 확장 후 (각 1인)
@@ -421,7 +787,36 @@ export const Products: React.FC = () => {
               </tbody>
             </table>
 
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '20px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '20px', flexWrap: 'wrap', gap: '8px' }}>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => handleDownloadPdf(previewProduct)}
+                  style={{ padding: '6px 14px', fontSize: '13px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                >
+                  <Download size={14} />
+                  PDF 다운로드
+                </button>
+                {canSave && (
+                  <button
+                    type="button"
+                    className="btn-primary"
+                    onClick={() => handleGenerateAndUploadR2(previewProduct)}
+                    disabled={generatingModelId === (previewProduct.id || previewProduct.modelName)}
+                    style={{
+                      padding: '6px 14px', fontSize: '13px',
+                      display: 'inline-flex', alignItems: 'center', gap: '6px',
+                      backgroundColor: previewProduct.specSheetUrl ? '#16a34a' : '#2563eb'
+                    }}
+                  >
+                    {previewProduct.specSheetUrl
+                      ? <><FileText size={14} /> 제원표 PDF 열기</>
+                      : <><CloudUpload size={14} /> {generatingModelId === (previewProduct.id || previewProduct.modelName) ? 'R2 생성중...' : 'R2 제원표 PDF 생성 & 저장'}</>
+                    }
+                  </button>
+                )}
+              </div>
               <button
                 type="button"
                 className="btn-secondary"
@@ -661,12 +1056,45 @@ export const Products: React.FC = () => {
                     />
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                    <label style={{ fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap' }}>제원표 원본 파일 링크</label>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <label style={{ fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap' }}>제원표 클라우드 파일 링크</label>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          if (!editingProduct.modelName) {
+                            alert("먼저 모델명을 입력해 주세요.");
+                            return;
+                          }
+                          const res = await generateAndUploadSpecSheetToR2(editingProduct as Product, googleConfigs[0]);
+                          if (res.success) {
+                            setEditingProduct(prev => prev ? ({ ...prev, specSheetUrl: res.url }) : null);
+                            alert("✅ Cloudflare R2에 제원표 PDF가 생성되어 링크가 자동 입력되었습니다!");
+                          } else {
+                            alert("❌ 생성 실패: " + res.error);
+                          }
+                        }}
+                        style={{
+                          fontSize: '11px',
+                          padding: '2px 8px',
+                          backgroundColor: '#eff6ff',
+                          color: '#2563eb',
+                          border: '1px solid #bfdbfe',
+                          borderRadius: '4px',
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px'
+                        }}
+                      >
+                        <Sparkles size={12} />
+                        R2 제원표 자동 생성 & 링크 입력
+                      </button>
+                    </div>
                     <input
                       type="text"
                       value={editingProduct.specSheetUrl || ''}
                       onChange={e => setEditingProduct({ ...editingProduct, specSheetUrl: e.target.value })}
-                      placeholder="예: https://..."
+                      placeholder="예: https://pub-xxx.r2.dev/Eq_doc/..."
                     />
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
@@ -723,6 +1151,183 @@ export const Products: React.FC = () => {
               <button type="submit" className="btn-primary">저장</button>
             </div>
           </form>
+        </div>
+      )}
+
+      {/* 🌟 Cloudflare R2 제품 문서함 팝업 모달 */}
+      {showR2DocModal && selectedProductForDocs && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.65)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1150,
+          padding: '20px'
+        }}>
+          <div className="card" style={{
+            width: '100%', maxWidth: '680px', maxHeight: '90vh', overflowY: 'auto',
+            backgroundColor: '#ffffff', color: '#111827', padding: '24px', borderRadius: '12px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.3)'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', borderBottom: '1px solid #e5e7eb', paddingBottom: '12px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Folder size={20} color="#2563eb" />
+                <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 'bold', color: '#111827' }}>
+                  [{selectedProductForDocs.modelName}] 클라우드 문서함
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowR2DocModal(false)}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#6b7280', padding: '4px' }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div style={{ marginBottom: '16px', backgroundColor: '#f8fafc', padding: '12px', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '13px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                <div>
+                  <span style={{ fontWeight: 'bold', color: '#334155' }}>R2 보관 경로: </span>
+                  <code style={{ color: '#2563eb', fontWeight: 'bold' }}>Eq_doc/{selectedProductForDocs.modelName}/</code>
+                </div>
+                <label
+                  style={{
+                    backgroundColor: '#2563eb',
+                    color: '#ffffff',
+                    padding: '6px 12px',
+                    borderRadius: '6px',
+                    fontSize: '12px',
+                    fontWeight: 'bold',
+                    cursor: uploadingDoc ? 'not-allowed' : 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px'
+                  }}
+                >
+                  <Upload size={14} />
+                  {uploadingDoc ? '업로드중...' : '새 문서 업로드'}
+                  <input
+                    type="file"
+                    onChange={handleUploadCustomDoc}
+                    disabled={uploadingDoc}
+                    style={{ display: 'none' }}
+                  />
+                </label>
+              </div>
+            </div>
+
+            {/* 파일 목록 */}
+            <div style={{ maxHeight: '360px', overflowY: 'auto', border: '1px solid #e5e7eb', borderRadius: '8px', marginBottom: '20px' }}>
+              {(() => {
+                const docs = r2FilesByModelMap.get(selectedProductForDocs.id) || [];
+                if (docs.length === 0) {
+                  return (
+                    <div style={{ textAlign: 'center', padding: '40px 20px', color: '#94a3b8' }}>
+                      <Folder size={36} style={{ margin: '0 auto 8px auto', opacity: 0.4 }} />
+                      <p style={{ margin: 0, fontSize: '14px' }}>Cloudflare R2에 등록된 문서가 없습니다.</p>
+                      <p style={{ margin: '4px 0 0 0', fontSize: '12px' }}>[제원표 PDF 자동 생성] 버튼을 누르거나 새 문서를 업로드해 주세요.</p>
+                    </div>
+                  );
+                }
+                return (
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                    <thead style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e5e7eb' }}>
+                      <tr>
+                        <th style={{ padding: '8px 12px', textAlign: 'left' }}>문서명</th>
+                        <th style={{ padding: '8px 12px', width: '80px', textAlign: 'right' }}>용량</th>
+                        <th style={{ padding: '8px 12px', width: '120px', textAlign: 'center' }}>동작</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {docs.map((doc, i) => (
+                        <tr key={doc.key} style={{ borderBottom: i < docs.length - 1 ? '1px solid #f1f5f9' : 'none' }}>
+                          <td style={{ padding: '8px 12px', fontWeight: '500', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <FileText size={14} color="#64748b" />
+                            <span>{doc.name}</span>
+                          </td>
+                          <td style={{ padding: '8px 12px', textAlign: 'right', color: '#64748b' }}>
+                            {(doc.size / 1024).toFixed(0)} KB
+                          </td>
+                          <td style={{ padding: '8px 12px', textAlign: 'center' }}>
+                            <div style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
+                              <a
+                                href={doc.url}
+                                target="_blank"
+                                rel="noreferrer"
+                                style={{
+                                  padding: '3px 8px',
+                                  fontSize: '11px',
+                                  backgroundColor: '#eff6ff',
+                                  color: '#2563eb',
+                                  borderRadius: '4px',
+                                  textDecoration: 'none',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '2px',
+                                  fontWeight: 'bold'
+                                }}
+                              >
+                                <ExternalLink size={12} />
+                                보기
+                              </a>
+                              {canSave && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteDoc(doc.key)}
+                                  style={{
+                                    padding: '3px 6px',
+                                    fontSize: '11px',
+                                    backgroundColor: '#fef2f2',
+                                    color: '#dc2626',
+                                    border: '1px solid #fee2e2',
+                                    borderRadius: '4px',
+                                    cursor: 'pointer'
+                                  }}
+                                  title="삭제"
+                                >
+                                  <Trash2 size={12} />
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                );
+              })()}
+            </div>
+
+            {/* 모달 하단 액션 */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid #e5e7eb', paddingTop: '16px' }}>
+              {canSave && (
+                <button
+                  type="button"
+                  className="btn-primary"
+                  onClick={async () => {
+                    await handleGenerateAndUploadR2(selectedProductForDocs);
+                    if (!selectedProductForDocs.specSheetUrl) await fetchR2Files();
+                  }}
+                  disabled={generatingModelId === (selectedProductForDocs.id || selectedProductForDocs.modelName)}
+                  style={{
+                    padding: '6px 14px', fontSize: '13px',
+                    display: 'inline-flex', alignItems: 'center', gap: '6px',
+                    backgroundColor: selectedProductForDocs.specSheetUrl ? '#16a34a' : '#2563eb'
+                  }}
+                >
+                  {selectedProductForDocs.specSheetUrl
+                    ? <><FileText size={14} /> 제원표 PDF 열기</>
+                    : <><Sparkles size={14} /> {generatingModelId === (selectedProductForDocs.id || selectedProductForDocs.modelName) ? '생성중...' : '제원표 PDF 생성 & 저장'}</>
+                  }
+                </button>
+              )}
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => setShowR2DocModal(false)}
+                style={{ padding: '6px 16px', fontSize: '13px' }}
+              >
+                닫기
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
