@@ -477,77 +477,99 @@ ${activeSpecs.map((s, idx) => `  ${idx + 1}. [적용] ${s.label}`).join('\n') ||
     alert('클립보드에 복사되었습니다.');
   };
 
-  const handlePrint = async () => {
+  // 🖨️ 브라우저 고품질 인쇄 모달 실행 메소드
+  const handlePrint = () => {
     const printContent = document.getElementById('dispatch-sheet-print');
-    if (!printContent) return;
-
-    // 1순위: 로컬 사이드카 에이전트가 온라인이고 전용 프린터가 지정되어 있으면 0초 무팝업 다이렉트 인쇄!
-    if (agentStatus === 'ONLINE' && selectedPrinter) {
-      setIsAgentPrinting(true);
-      try {
-        const res = await fetch('http://127.0.0.1:5175/api/print-dispatch', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            printerName: selectedPrinter,
-            title: `기연리프트_출고요청서_${customerName || '고객사'}_${siteName || '현장'}`,
-            htmlContent: printContent.innerHTML
-          }),
-          signal: AbortSignal.timeout(6000)
-        });
-
-        if (res.ok) {
-          const data = await res.json();
-          if (data.success) {
-            alert(`🖨️ [전용 프린터: ${selectedPrinter}]\n출고요청서가 지정된 프린터로 즉시 전송되었습니다.`);
-            return;
-          }
-        }
-      } catch (agentErr) {
-        console.warn('로컬 에이전트 다이렉트 인쇄 실패, 브라우저 인쇄로 전환:', agentErr);
-      } finally {
-        setIsAgentPrinting(false);
-      }
+    if (!printContent) {
+      alert('인쇄할 출고의뢰서 콘텐츠를 찾을 수 없습니다.');
+      return;
     }
 
-    // 2순위 Fallback: 브라우저 기본 인쇄창 오픈
-    const windowUrl = 'about:blank';
     const uniqueName = new Date().getTime();
-    const windowName = 'Print' + uniqueName;
-    const printWindow = window.open(windowUrl, windowName, 'left=100,top=100,width=800,height=900');
+    const printWindow = window.open('', `Print_${uniqueName}`, 'left=150,top=100,width=880,height=950,menubar=no,toolbar=no,location=no,status=no');
     
-    if (printWindow) {
-      printWindow.document.write(`
-        <html>
-          <head>
-            <title>기연리프트 출고요청서 - ${customerName}</title>
-            <style>
-              body { font-family: 'Malgun Gothic', sans-serif; padding: 20px; color: #333; }
-              table { width: 100%; border-collapse: collapse; margin-top: 15px; }
-              th, td { border: 1px solid #ddd; padding: 10px; text-align: left; font-size: 13px; }
-              th { background-color: #f5f5f5; font-weight: bold; width: 130px; }
-              .header { text-align: center; margin-bottom: 30px; }
-              .header h1 { margin: 0; font-size: 24px; font-weight: 800; color: #1e1b4b; border-bottom: 2px solid #1e1b4b; padding-bottom: 10px; }
-              .section-title { font-size: 15px; font-weight: bold; margin-top: 20px; margin-bottom: 8px; color: #312e81; border-left: 4px solid #312e81; padding-left: 8px; }
-              .spec-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 12px; margin-top: 5px; }
-              .spec-item { display: flex; align-items: center; gap: 6px; }
-              .checked { font-weight: bold; color: #059669; }
-              .unchecked { color: #9ca3af; text-decoration: line-through; }
-            </style>
-          </head>
-          <body>
-            ${printContent.innerHTML}
-            <script>
-              window.onload = function() {
-                window.print();
-                window.close();
-              }
-            </script>
-          </body>
-        </html>
-      `);
-      printWindow.document.close();
+    if (!printWindow) {
+      alert('⚠️ 브라우저 팝업이 차단되었습니다. 팝업 차단을 해제한 후 다시 시도해 주세요.');
+      return;
     }
+
+    const htmlDoc = `
+      <!DOCTYPE html>
+      <html lang="ko">
+        <head>
+          <meta charset="utf-8">
+          <title>출고의뢰서_${customerName || '고객사'}_${siteName || '현장'}</title>
+          <style>
+            @page {
+              size: A4 portrait;
+              margin: 12mm 15mm 15mm 15mm;
+            }
+            @media print {
+              body {
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+              }
+              .no-print {
+                display: none !important;
+              }
+            }
+            * {
+              box-sizing: border-box;
+            }
+            body {
+              font-family: -apple-system, BlinkMacSystemFont, "Malgun Gothic", "맑은 고딕", "Apple SD Gothic Neo", sans-serif;
+              padding: 0;
+              margin: 0 auto;
+              color: #111827;
+              background-color: #ffffff;
+              width: 100%;
+              max-width: 210mm;
+              -webkit-print-color-adjust: exact !important;
+              print-color-adjust: exact !important;
+            }
+            table {
+              width: 100%;
+              border-collapse: collapse;
+              margin-bottom: 16px;
+            }
+            th, td {
+              border: 1px solid #cbd5e1;
+              padding: 8px 10px;
+              text-align: left;
+              font-size: 12px;
+              line-height: 1.4;
+            }
+            th {
+              background-color: #f8fafc !important;
+              font-weight: 700;
+              color: #334155;
+              -webkit-print-color-adjust: exact !important;
+              print-color-adjust: exact !important;
+            }
+          </style>
+        </head>
+        <body>
+          <div style="padding: 10px 0;">
+            ${printContent.innerHTML}
+          </div>
+          <script>
+            window.onload = function() {
+              setTimeout(function() {
+                window.focus();
+                window.print();
+              }, 250);
+            };
+            window.onafterprint = function() {
+              window.close();
+            };
+          </script>
+        </body>
+      </html>
+    `;
+
+    printWindow.document.open();
+    printWindow.document.write(htmlDoc);
+    printWindow.document.close();
   };
 
   // 컴포넌트 마운트 시 자동 예제 파싱 실행
