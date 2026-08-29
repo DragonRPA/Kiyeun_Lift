@@ -1,6 +1,7 @@
 // src/pages/asset_assignment.tsx
 import React, { useState, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
+import { Asset } from '../services/db';
 import { Wrench, CheckCircle, PackageSearch, Layers, Truck, ChevronDown, Check, Activity, Search, AlertTriangle, CheckSquare, Square, Zap, X } from 'lucide-react';
 
 export const AssetAssignment: React.FC = () => {
@@ -127,56 +128,98 @@ export const AssetAssignment: React.FC = () => {
     return { bg: 'var(--danger-light)', color: 'var(--danger)', border: 'var(--danger)' };
   };
 
-  // 슬롯 전체 선택/해제
-  const handleSelectAllPendingSlots = () => {
-    const pendingIds = currentSlots.filter(ca => !ca.assetId).map(ca => ca.id);
-    if (selectedCaIds.length === pendingIds.length) {
+  // 🎯 계약 선택 핸들러 (첫 번째 미할당 모델 자동 단일 포커스)
+  const handleSelectContract = (contractId: string) => {
+    setSelectedContractId(contractId);
+    setSelectedAssetIds([]);
+
+    const slots = contractAssets.filter(ca => ca.contractId === contractId);
+    const pendingSlots = slots.filter(ca => !ca.assetId);
+    if (pendingSlots.length > 0) {
+      const firstModelKey = normalizeModelKey(pendingSlots[0].expectedModel);
+      const firstModelPendingSlotIds = pendingSlots
+        .filter(ca => normalizeModelKey(ca.expectedModel) === firstModelKey)
+        .map(ca => ca.id);
+      setSelectedCaIds(firstModelPendingSlotIds);
+    } else {
       setSelectedCaIds([]);
-    } else {
-      setSelectedCaIds(pendingIds);
     }
   };
 
-  // 특정 모델 그룹 슬롯 일괄 선택
+  // 🎯 특정 모델 그룹 단일 선택 (모델별 집중 매핑 표준)
   const handleSelectModelGroupSlots = (caIds: string[]) => {
-    const allSelected = caIds.every(id => selectedCaIds.includes(id));
-    if (allSelected) {
-      setSelectedCaIds(selectedCaIds.filter(id => !caIds.includes(id)));
+    const isCurrentlySelected = caIds.length > 0 && caIds.every(id => selectedCaIds.includes(id)) && selectedCaIds.length === caIds.length;
+    if (isCurrentlySelected) {
+      // 이미 단독 선택된 모델이면 선택 해제
+      setSelectedCaIds([]);
+      setSelectedAssetIds([]);
     } else {
-      const combined = Array.from(new Set([...selectedCaIds, ...caIds]));
-      setSelectedCaIds(combined);
+      // 새로운 모델 선택 시 해당 모델 슬롯만 단독 활성화 & 기존 선택 장비 초기화
+      setSelectedCaIds(caIds);
+      setSelectedAssetIds([]);
     }
   };
 
-  // 개별 슬롯 토글
-  const handleToggleSlot = (caId: string) => {
-    if (selectedCaIds.includes(caId)) {
-      setSelectedCaIds(selectedCaIds.filter(id => id !== caId));
-    } else {
-      setSelectedCaIds([...selectedCaIds, caId]);
-    }
+  // 🔒 특정 장비의 모델에 해당하는 슬롯 요구수량 및 잔여 쿼터 계산 (모델별 오버플로우 원천 차단)
+  const getModelQuotaForAsset = (asset: Asset) => {
+    // 1. 현재 선택된 슬롯이 있는 경우: 선택된 슬롯 중에서 이 장비 모델과 매칭되는 슬롯 수
+    // 2. 선택된 슬롯이 없는 경우: 전체 미할당 슬롯 중에서 이 장비 모델과 매칭되는 슬롯 수
+    const targetSlots = selectedCaIds.length > 0
+      ? currentSlots.filter(ca => selectedCaIds.includes(ca.id))
+      : currentSlots.filter(ca => !ca.assetId);
+
+    const matchingSlots = targetSlots.filter(ca => isModelMatch(asset.modelName, ca.expectedModel || ''));
+    const maxQuotaForThisModel = matchingSlots.length;
+
+    // 이미 선택된 장비들 중 이 모델과 일치하는 장비 수
+    const currentSelectedCountForThisModel = selectedAssetIds.filter(id => {
+      const a = assets.find(ast => ast.id === id);
+      return a && isModelMatch(a.modelName, asset.modelName);
+    }).length;
+
+    return {
+      maxQuota: maxQuotaForThisModel,
+      currentCount: currentSelectedCountForThisModel,
+      isFull: currentSelectedCountForThisModel >= maxQuotaForThisModel
+    };
   };
 
-  // 🔒 장비 선택 최대 상한 계산 (선택된 슬롯 수 또는 전체 미할당 슬롯 수)
+  // 🔒 전체 선택 상한
   const maxSelectableCount = useMemo(() => {
     if (selectedCaIds.length > 0) return selectedCaIds.length;
     return currentSlots.filter(ca => !ca.assetId).length;
   }, [selectedCaIds, currentSlots]);
 
-  // 개별 장비 선택 토글 (오버플로우 원천 차단!)
+  // 개별 장비 선택 토글 (모델별 요구수량 기준 오버플로우 원천 차단!)
   const handleToggleAsset = (assetId: string) => {
     if (selectedAssetIds.includes(assetId)) {
       setSelectedAssetIds(selectedAssetIds.filter(id => id !== assetId));
     } else {
-      if (selectedAssetIds.length >= maxSelectableCount) {
-        alert(`⚠️ 선택 가능한 최대 수량(${maxSelectableCount}대)을 초과할 수 없습니다.\n\n• 필요 수량: ${maxSelectableCount}대\n• 현재 선택: ${selectedAssetIds.length}대\n\n다른 장비를 선택하려면 기존 선택을 먼저 해제해 주세요.`);
+      const targetAsset = assets.find(a => a.id === assetId);
+      if (!targetAsset) return;
+
+      const quota = getModelQuotaForAsset(targetAsset);
+
+      if (quota.maxQuota === 0) {
+        alert(`⚠️ 선택된 슬롯(또는 미할당 계약)에 [${targetAsset.modelName}] 모델의 요구 수량이 없습니다.`);
         return;
       }
+
+      if (quota.isFull) {
+        alert(`⚠️ [${targetAsset.modelName}] 모델의 요구 수량(${quota.maxQuota}대)을 초과하여 선택할 수 없습니다.\n\n• 필요 수량: ${quota.maxQuota}대\n• 현재 선택: ${quota.currentCount}대\n\n다른 장비로 변경하시려면 기존 선택된 장비를 먼저 해제해 주세요.`);
+        return;
+      }
+
+      if (selectedAssetIds.length >= maxSelectableCount) {
+        alert(`⚠️ 전체 선택 가능한 최대 수량(${maxSelectableCount}대)을 초과할 수 없습니다.`);
+        return;
+      }
+
       setSelectedAssetIds([...selectedAssetIds, assetId]);
     }
   };
 
-  // 🚀 스마트 자동 추천 선택 (최대 상한 수량만큼만 선택)
+  // 🚀 스마트 자동 추천 선택 (현재 활성화된 모델의 요구수량만큼만 자동 선택)
   const handleAutoSelectTopAssets = () => {
     if (maxSelectableCount <= 0) {
       alert('할당할 대상 슬롯이 없습니다.');
@@ -186,15 +229,9 @@ export const AssetAssignment: React.FC = () => {
     setSelectedAssetIds(topAssetIds);
   };
 
-  // ⌨️ 관리번호 빠른 입력 처리 (오버플로우 방지)
+  // ⌨️ 관리번호 빠른 입력 처리 (모델별 요구수량 엄격 준수)
   const handleQuickInputSubmit = () => {
     if (!quickInputText.trim()) return;
-
-    const availableQuota = maxSelectableCount - selectedAssetIds.length;
-    if (availableQuota <= 0) {
-      alert(`⚠️ 이미 최대 선택 가능 수량(${maxSelectableCount}대)을 모두 선택했습니다.`);
-      return;
-    }
 
     const tokens = quickInputText
       .split(/[\s,]+/)
@@ -202,10 +239,9 @@ export const AssetAssignment: React.FC = () => {
       .filter(Boolean);
 
     const matchedAssetIds: string[] = [];
+    const skippedOverQuota: string[] = [];
 
     for (const token of tokens) {
-      if (matchedAssetIds.length >= availableQuota) break;
-
       const found = assets.find(a =>
         a.status === 'AVAILABLE' &&
         !selectedAssetIds.includes(a.id) &&
@@ -218,7 +254,17 @@ export const AssetAssignment: React.FC = () => {
       );
 
       if (found) {
-        matchedAssetIds.push(found.id);
+        const quota = getModelQuotaForAsset(found);
+        const alreadyMatchedForThisModel = matchedAssetIds.filter(id => {
+          const a = assets.find(ast => ast.id === id);
+          return a && isModelMatch(a.modelName, found.modelName);
+        }).length;
+
+        if (quota.currentCount + alreadyMatchedForThisModel < quota.maxQuota) {
+          matchedAssetIds.push(found.id);
+        } else {
+          skippedOverQuota.push(`${found.assetNo}(${found.modelName})`);
+        }
       }
     }
 
@@ -226,11 +272,15 @@ export const AssetAssignment: React.FC = () => {
       const combined = [...selectedAssetIds, ...matchedAssetIds];
       setSelectedAssetIds(combined);
       setQuickInputText('');
-      if (matchedAssetIds.length < tokens.length) {
-        alert(`입력하신 ${tokens.length}개 중 ${matchedAssetIds.length}대만 잔여 할당 한도(${availableQuota}대) 내에서 추가되었습니다.`);
+      if (skippedOverQuota.length > 0) {
+        alert(`입력하신 장비 중 ${matchedAssetIds.length}대가 추가되었으나,\n다음 장비는 모델별 요구수량을 초과하여 제외되었습니다:\n• ${skippedOverQuota.join(', ')}`);
       }
     } else {
-      alert(`입력하신 번호(${tokens.join(', ')})와 일치하는 가용 장비를 찾을 수 없습니다.`);
+      if (skippedOverQuota.length > 0) {
+        alert(`입력하신 장비(${skippedOverQuota.join(', ')})는 해당 모델의 요구수량을 초과하여 추가할 수 없습니다.`);
+      } else {
+        alert(`입력하신 번호(${tokens.join(', ')})와 일치하는 가용 장비를 찾을 수 없습니다.`);
+      }
     }
   };
 
@@ -383,7 +433,7 @@ export const AssetAssignment: React.FC = () => {
               return (
                 <div
                   key={contract.id}
-                  onClick={() => { setSelectedContractId(contract.id); setSelectedCaIds([]); setSelectedAssetIds([]); }}
+                  onClick={() => handleSelectContract(contract.id)}
                   style={{
                     padding: '12px', backgroundColor: isSelected ? 'var(--warning-light)' : 'var(--bg-card)',
                     border: `2px solid ${isSelected ? 'var(--warning)' : 'var(--border-color)'}`, borderRadius: '10px',
@@ -437,11 +487,7 @@ export const AssetAssignment: React.FC = () => {
               return (
                 <div 
                   key={contract.id}
-                  onClick={() => {
-                    setSelectedContractId(contract.id);
-                    setSelectedCaIds([]);
-                    setSelectedAssetIds([]);
-                  }}
+                  onClick={() => handleSelectContract(contract.id)}
                   style={{
                     padding: '12px',
                     backgroundColor: isSelected ? 'var(--primary-light)' : 'var(--bg-app)',
@@ -512,32 +558,12 @@ export const AssetAssignment: React.FC = () => {
                   <Layers size={14} color="var(--primary)" /> 모델별 요구 수량 ({modelGroups.length}개 모델 / 총 {currentSlots.length}대)
                 </h3>
                 <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                  선택됨: <strong style={{ color: 'var(--primary)' }}>{selectedCaIds.length}대</strong> / 미할당: {currentSlots.filter(c => !c.assetId).length}대
+                  선택된 모델 필요 슬롯: <strong style={{ color: 'var(--primary)' }}>{selectedCaIds.length}대</strong> / 미할당: {currentSlots.filter(c => !c.assetId).length}대
                 </span>
               </div>
-              <button
-                type="button"
-                onClick={handleSelectAllPendingSlots}
-                style={{
-                  padding: '5px 10px',
-                  borderRadius: '4px',
-                  border: '1px solid var(--border-color)',
-                  backgroundColor: 'var(--bg-card)',
-                  color: 'var(--text-main)',
-                  fontSize: '11.5px',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '4px'
-                }}
-              >
-                {selectedCaIds.length === currentSlots.filter(c => !c.assetId).length && selectedCaIds.length > 0 ? (
-                  <><CheckSquare size={13} color="var(--primary)" /> 전체 해제</>
-                ) : (
-                  <><Square size={13} /> 미할당 전체 선택 ({currentSlots.filter(c => !c.assetId).length}대)</>
-                )}
-              </button>
+              <div style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 600 }}>
+                💡 모델 카드를 클릭하여 대상 변경
+              </div>
             </div>
 
             {/* 모델명 × 수량 그룹 카드 리스트 (개별 N줄 나열 제거) */}
@@ -687,7 +713,7 @@ export const AssetAssignment: React.FC = () => {
                   <CheckCircle size={14} /> 필터링된 임대가능 장비 ({availableAssets.length}대)
                 </h3>
                 <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
-                  선택됨: <strong style={{ color: 'var(--success)' }}>{selectedAssetIds.length}대</strong> / 필요 슬롯: {selectedCaIds.length}개
+                  선택됨: <strong style={{ color: 'var(--success)' }}>{selectedAssetIds.length}대</strong> / 대상 모델 요구 수량: <strong style={{ color: 'var(--primary)' }}>{selectedCaIds.length}대</strong>
                 </span>
               </div>
 
