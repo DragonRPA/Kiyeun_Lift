@@ -1453,6 +1453,25 @@ function doGet(e) {
                 >
                   <RefreshCw size={14} className={isSyncingR2 ? "animate-spin" : ""} /> {isSyncingR2 ? '미러링 진행 중...' : '로컬 에이전트 동기화'}
                 </button>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => {
+                    const accountId = r2AccountId?.trim();
+                    const bucketName = r2BucketName?.trim();
+                    if (!accountId || !bucketName) {
+                      alert('계정 ID와 버킷명을 먼저 입력하세요.');
+                      return;
+                    }
+                    window.open(
+                      `https://dash.cloudflare.com/${accountId}/r2/default/buckets/${bucketName}`,
+                      '_blank'
+                    );
+                  }}
+                  style={{ padding: '6px 12px', fontSize: '12px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap' }}
+                >
+                  <ExternalLink size={14} /> 내 버킷 열기
+                </button>
               </div>
             </div>
 
