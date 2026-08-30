@@ -161,6 +161,9 @@ export const Billings: React.FC = () => {
   };
 
   const filteredBillings = billings.filter(b => {
+    // 취소된 청구서(REJECTED)는 청구 및 수납 목록에서 제외하여 미청구 정산 마법사로 이관
+    if (b.status === 'REJECTED') return false;
+
     const custName = getCustName(b.customerId).toLowerCase();
     const contractObj = contracts.find(c => c.id === b.contractId);
     const contractNoStr = (contractObj?.contractNo || b.contractId || '').toLowerCase();
@@ -844,7 +847,8 @@ ${items.map((item, idx) => {
     const isNotExpired = normalizeEndDate(c.endDate) >= todayStr;
     if (!isNotExpired) return false;
 
-    const hasBillingThisMonth = billings.some(b => b.contractId === c.id && b.billingYm === currentYm);
+    // 취소(REJECTED)된 청구서는 제외하고, 현재 유효한 청구서가 없는 계약만 마법사 정산 대상에 노출
+    const hasBillingThisMonth = billings.some(b => b.contractId === c.id && b.billingYm === currentYm && b.status !== 'REJECTED');
     return !hasBillingThisMonth;
   });
 
@@ -1225,62 +1229,7 @@ ${items.map((item, idx) => {
             </div>
           )}
 
-          {/* 📢 청구 도래 미생성 계약 실시간 감지 알림 바 */}
-          {dueContracts.length > 0 && (
-            <div style={{
-              padding: '14px 18px',
-              borderRadius: '8px',
-              backgroundColor: 'rgba(239,68,68,0.06)',
-              border: '1px solid rgba(239,68,68,0.25)',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '10px'
-            }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span style={{ fontSize: '16px' }}>📢</span>
-                  <strong style={{ color: '#dc2626', fontSize: '14px' }}>
-                    오늘 기준 청구 도래 미생성 계약: {dueContracts.length}건
-                  </strong>
-                  <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-                    (고객 요청 청구기준일 도래 및 전월 미청구 건 실시간 감지)
-                  </span>
-                </div>
-                {canSave && (
-                  <button
-                    type="button"
-                    className="btn-primary"
-                    onClick={handleGenerateDue}
-                    disabled={isGeneratingDue}
-                    style={{ padding: '6px 14px', fontSize: '12.5px', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '6px' }}
-                  >
-                    <Plus size={14} />
-                    {isGeneratingDue ? '기본 청구 생성 중...' : `도래 계약 기본 청구 일괄 생성 (${dueContracts.length}건)`}
-                  </button>
-                )}
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '8px' }}>
-                {dueContracts.slice(0, 6).map((item, idx) => (
-                  <div key={idx} style={{ padding: '8px 12px', backgroundColor: 'var(--bg-card)', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div>
-                      <strong>{item.customer.name}</strong> <span style={{ color: 'var(--text-muted)' }}>({item.contract.contractNo})</span>
-                      <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
-                        {item.site?.name || '직납'} | 매월 {item.billingDay}일
-                      </div>
-                    </div>
-                    <span style={{ fontSize: '11px', color: '#dc2626', fontWeight: '600', padding: '2px 6px', backgroundColor: 'rgba(239,68,68,0.1)', borderRadius: '4px', whiteSpace: 'nowrap' }}>
-                      {item.dueReason}
-                    </span>
-                  </div>
-                ))}
-              </div>
-              {dueContracts.length > 6 && (
-                <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)', textAlign: 'right' }}>
-                  외 {dueContracts.length - 6}건 더 있음
-                </div>
-              )}
-            </div>
-          )}
+
 
           <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '24px', alignItems: 'flex-start' }}>
           
