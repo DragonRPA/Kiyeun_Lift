@@ -22,6 +22,7 @@ import { InspectionChecklistManage } from './pages/inspection_checklist_manage';
 import { Consumables } from './pages/Consumables';
 import { Contracts } from './pages/Contracts';
 import { Billings } from './pages/Billings';
+import { Receivables } from './pages/Receivables';
 import { BankMatching } from './pages/BankMatching';
 import { TruckDispatch } from './pages/TruckDispatch';
 import { TransportMaster } from './pages/TransportMaster';
@@ -143,6 +144,7 @@ const App: React.FC = () => {
         { id: 'customer', name: '고객 관리', icon: <Users size={16} />, component: <Customers /> },
         { id: 'contract', name: '계약 관리', icon: <UserCheck size={16} />, component: <Contracts /> },
         { id: 'billing', name: '청구 / 수납 관리', icon: <CreditCard size={16} />, component: <Billings /> },
+        { id: 'receivable', name: '외상미수금 대장', icon: <CreditCard size={16} />, component: <Receivables /> },
         { id: 'smart_dispatch', name: '출고 요청', icon: <Zap size={16} />, component: <SmartDispatch /> },
         { id: 'smart_return', name: '회수 요청', icon: <Zap size={16} />, component: <SmartReturn /> },
       ]

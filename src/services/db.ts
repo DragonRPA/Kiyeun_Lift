@@ -423,8 +423,10 @@ export interface Contract {
   siteId?: string;
   startDate: string;
   endDate: string;
-  billingDay: number; // 마감일 (예: 30)
-  statementClosingDay?: number; // 거래명세서 마감일 (예: 25)
+  billingDay: number; // 청구서 발행일 (예: 25 → 매월 25일 발행, 청구기간: 전월26~당월25)
+  statementClosingDay?: number; // 거래명세서 마감일 (구버전 호환)
+  lateInterestRate: number; // 연체이자율 (%), 기본값 0 = 미발생
+  paymentDueDay?: number; // 납기일: 세금계산서 발행 익월 N일 (계약별 개별 지정)
   status: 'ACTIVE' | 'EXTENDED' | 'SHORTENED' | 'SUCCEEDED' | 'COMPLETED';
   successorContractId?: string;
   predecessorContractId?: string; // 승계 전 이전 계약 ID
@@ -454,12 +456,17 @@ export interface BillingDetail {
   id: string;
   billingId: string;
   contractAssetId?: string;
+  assetId?: string;
+  receivableId?: string; // 외상미수금 연동 ID
   itemName: string;
   quantity: number;
   unitPrice: number;
   amount: number;
-  description: string;
+  description?: string; // 구버전 호환
+  internalDescription?: string; // 내부 장부 기재명 (실제 발생 내용)
+  displayName?: string; // 거래명세서 표기명 (NULL이면 itemName 사용)
   createdAt: string;
+  updatedAt?: string;
 }
 
 export interface Billing {
@@ -476,6 +483,24 @@ export interface Billing {
   updatedAt: string;
   // 가상필드
   details?: BillingDetail[];
+}
+
+/** 외상미수금 대장 — 운송료·수리비·청소비 분할 청산 관리 */
+export interface Receivable {
+  id: string;
+  contractId?: string;
+  customerId?: string;
+  type: 'TRANSPORT' | 'REPAIR' | 'CLEANING' | 'OTHER';
+  totalAmount: number;        // 외상 총액
+  billedAmount: number;       // 청구된 누적 금액
+  // remainingAmount = totalAmount - billedAmount (계산값)
+  internalDescription: string; // 내부 장부 기재명
+  displayName?: string;        // 명세서 표기명 (NULL이면 internalDescription 사용)
+  occurredDate: string;        // 발생일
+  status: 'PENDING' | 'PARTIAL' | 'CLEARED';
+  repairId?: string;           // 수리비 연동 시 repairs.id
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface Payment {
@@ -2641,6 +2666,9 @@ class LocalDB {
   get billingDetails() { return this.get<BillingDetail>('billingDetails', SEED_BILLING_DETAILS); }
   set billingDetails(val: BillingDetail[]) { this.set('billingDetails', val); }
 
+  get receivables() { return this.get<Receivable>('receivables', []); }
+  set receivables(val: Receivable[]) { this.set('receivables', val); }
+
   get payments() { return this.get<Payment>('payments', SEED_PAYMENTS); }
   set payments(val: Payment[]) { this.set('payments', val); }
 
@@ -2753,7 +2781,8 @@ class LocalDB {
       purchaseSettlementItems: 'purchase_settlement_items',
       externalLeases: 'external_leases',
       inspectionChecklistItems: 'inspection_checklist_items',
-      mechanicConsumableStocks: 'mechanic_consumable_stocks'
+      mechanicConsumableStocks: 'mechanic_consumable_stocks',
+      receivables: 'receivables'
     };
     return mapping[key] || key;
   }
@@ -3011,6 +3040,7 @@ class LocalDB {
       case 'outboundInspections':prefix = 'OIN-';    break;
       case 'inspectionChecklistItems': prefix = 'CHK-'; break;
       case 'depreciationLogs':   prefix = 'DEP-';    break;
+      case 'receivables':        prefix = 'RCV-';    break;
       default:
         prefix = key.slice(0, 4).toUpperCase() + '-';
     }

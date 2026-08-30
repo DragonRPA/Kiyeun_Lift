@@ -12,7 +12,8 @@ export const Billings: React.FC = () => {
     generateBillingsForMonth, getDueContractsForBilling, generateDueBillings, regenerateBilling, generateBillingForSingleContract,
     receivePayment, cancelPayment, hasPermission, currentUser, approveBilling, cancelBilling,
     refreshAllData, showErrorModal, bankTransactions, paymentDepositLinks, saveBankDeposit, deleteBankDeposit, payments,
-    repairs, linkRepairToBilling, applyPrepaidBalanceForBilling
+    repairs, linkRepairToBilling, applyPrepaidBalanceForBilling,
+    receivables, linkReceivableToBilling
   } = useApp();
 
 
@@ -67,6 +68,11 @@ export const Billings: React.FC = () => {
   // 마법사 청구귀속월 & 청구발행일자 수동 지정 상태 (기본값: 생성 연월/오늘)
   const [wizardBillingYm, setWizardBillingYm] = useState(() => new Date().toISOString().slice(0, 7));
   const [wizardBillingDate, setWizardBillingDate] = useState(() => new Date().toISOString().split('T')[0]);
+  
+  // 마법사 연동 수리비 ID 목록
+  const [selectedRepairIdsForWizard, setSelectedRepairIdsForWizard] = useState<string[]>([]);
+  // 마법사 연동 미수금 목록
+  const [selectedReceivablesForWizard, setSelectedReceivablesForWizard] = useState<{ receivableId: string; amount: number; displayName: string }[]>([]);
 
   // 청구 생성 입력
   const [billingYm, setBillingYm] = useState(() => new Date().toISOString().slice(0, 7));
@@ -160,10 +166,11 @@ export const Billings: React.FC = () => {
         '청구 금액': `${b.totalAmount.toLocaleString()}원`,
         '수납 금액': `${b.paidAmount.toLocaleString()}원`,
         '미납 금액': `${unpaid.toLocaleString()}원`,
-        '결제 상태': b.status === 'REQUESTED' ? '결재대기' : 
-                   b.status === 'REJECTED' ? '취소됨' : 
-                   b.status === 'PAID' ? '완납' : 
-                   b.status === 'PARTIAL' ? '일부납' : '승인(미납)',
+        '결제 상태': b.status === 'UNPAID'     ? '미발송' :
+                   b.status === 'REQUESTED' ? '발송완료(미납)' :
+                   b.status === 'REJECTED'  ? '이의제기(취소)' :
+                   b.status === 'PAID'      ? '완납' :
+                   b.status === 'PARTIAL'   ? '일부납' : b.status,
         '수납 최종일': b.status === 'PAID' ? b.updatedAt.split('T')[0] : '-',
         '등록일': b.createdAt ? b.createdAt.split('T')[0] : '-'
       };
@@ -194,15 +201,23 @@ export const Billings: React.FC = () => {
 
   // 도래 계약 청구 일괄 생성 상태 & 핸들러
   const [isGeneratingDue, setIsGeneratingDue] = useState(false);
+  const [skippedContracts, setSkippedContracts] = useState<{ contractId: string; customerId: string; reason: string }[]>([]);
+
   const handleGenerateDue = async () => {
     if (isGeneratingDue) return;
     setIsGeneratingDue(true);
     try {
-      const count = await generateDueBillings();
-      if (count > 0) {
-        alert(`🎉 ${count}건의 도래 계약 기본 청구서가 성공적으로 생성되었습니다.`);
-      } else {
+      const result = await generateDueBillings();
+      setSkippedContracts(result.skippedContracts || []);
+
+      if (result.successCount > 0) {
+        alert(`✅ ${result.successCount}건의 도래 계약 기본 청구서가 성공적으로 생성되었습니다.`);
+      } else if (result.skippedContracts.length === 0) {
         alert('생성할 도래 계약이 없거나 이미 모두 생성되었습니다.');
+      }
+
+      if (result.skippedContracts.length > 0) {
+        alert(`⚠️ 외상미수금 존재 등으로 인해 ${result.skippedContracts.length}건의 청구가 보류(SKIP)되었습니다.\n상단의 [일괄 청구 보류 대시보드]를 확인하여 단건 처리하세요.`);
       }
     } catch (err: any) {
       showErrorModal(`⚠️ 일괄 생성 오류:\n\n${err?.message || err}`, '도래 계약 청구 생성 실패');
@@ -260,15 +275,29 @@ export const Billings: React.FC = () => {
     }
   };
 
+  // 거래명세서 발송: UNPAID → REQUESTED (F-2 원칙)
   const handleApprove = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
     approveBilling(id);
   };
 
+  // 청구 취소: 환불/비환불 2-path (J-2 원칙)
   const handleCancel = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (confirm('이 청구를 취소하시겠습니까?\n취소 시 해당 청구서는 완전히 삭제되고, 정산 이전 상태로 계약이 복구됩니다.')) {
-      cancelBilling(id);
+    const billing = billings.find(b => b.id === id);
+    const hasPaid = billing && billing.paidAmount > 0;
+
+    if (!confirm('이 청구를 취소하시겠습니까?\n취소된 청구서는 REJECTED 상태로 이력이 보존됩니다.')) return;
+
+    if (hasPaid) {
+      const refund = confirm(
+        `수납 금액(${billing.paidAmount.toLocaleString()}원)이 있습니다.\n\n` +
+        `[확인] 환불 처리 — 수납 취소 + 입금잔액 소멸\n` +
+        `[취소] 비환불 처리 — 청구만 취소, 입금잔액 잔류`
+      );
+      cancelBilling(id, refund);
+    } else {
+      cancelBilling(id, false);
     }
   };
 
@@ -704,6 +733,25 @@ ${details.map((d, idx) => {
     }
 
     setIsWizardGenerating(true);
+
+    // 중복 청구 경고 (6단계)
+    const existing = billings.find(b => 
+      b.contractId === selectedContractForWizard.id && 
+      b.billingYm === wizardBillingYm && 
+      b.status !== 'REJECTED'
+    );
+    if (existing) {
+      const confirmDuplicate = confirm(
+        `⚠️ 중복 발행 경고\n\n` +
+        `해당 계약의 ${wizardBillingYm} 귀속월 청구서가 이미 존재합니다.\n` +
+        `이대로 추가 청구서를 생성하시겠습니까?`
+      );
+      if (!confirmDuplicate) {
+        setIsWizardGenerating(false);
+        return;
+      }
+    }
+
     const detailsList: any[] = [];
     
     // 1. 기본 장비 렌탈료 정산 (논리적 기간/방식 계산 적용)
@@ -814,6 +862,13 @@ ${details.map((d, idx) => {
         await linkRepairToBilling(rId, billing.id);
       }
 
+      // K-3: 연동된 미수금이 있다면, 위자드에서 최종 수정된 단가(amount)를 정확히 추출하여 연동
+      for (const r of selectedReceivablesForWizard) {
+        const ec = extraCharges.find(c => c.id === `EXTRA-RCV-${r.receivableId}`);
+        const finalAmount = ec ? (ec.unitPrice * ec.quantity) : r.amount;
+        await linkReceivableToBilling(billing.id, r.receivableId, finalAmount, r.displayName);
+      }
+
       // 💡 헌장 5.2 준수: 원격 DB 저장을 동기로 대기하여 데이터 누락 및 무음 실패 100% 방지
       await db.awaitPendingWrites();
 
@@ -821,6 +876,7 @@ ${details.map((d, idx) => {
       setSelectedContractIdForWizard(null);
       setExtraCharges([]);
       setSelectedRepairIdsForWizard([]);
+      setSelectedReceivablesForWizard([]);
       alert(`[${getCustName(selectedContractForWizard.customerId)}] 고객사에 대해 청구귀속월(${targetYm}) 기준 총 ${overallTotal.toLocaleString()}원 청구 생성이 DB에 성공적으로 저장되었습니다.`);
     } catch (err: any) {
       showErrorModal(`⚠️ 청구서 DB 저장 실패:\n\n${err?.message || err}`, '청구 생성 오류');
@@ -1011,6 +1067,73 @@ ${details.map((d, idx) => {
 
         return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          {/* ⚠️ K-1: 일괄 청구 보류(SKIP) 대시보드 (1행 1건 컴팩트 테이블 형태) */}
+          {skippedContracts.length > 0 && (
+            <div style={{
+              padding: '14px 18px',
+              borderRadius: '8px',
+              backgroundColor: 'rgba(245, 158, 11, 0.08)',
+              border: '1px solid rgba(245, 158, 11, 0.4)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '12px'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ fontSize: '16px' }}>⚠️</span>
+                <strong style={{ color: '#d97706', fontSize: '14px' }}>
+                  일괄 청구 보류 (Action Required) - {skippedContracts.length}건
+                </strong>
+                <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                  미수금 존재 등 수동 확인이 필요하여 일괄 생성에서 제외된 계약입니다.
+                </span>
+                <button
+                  type="button"
+                  className="btn btn-sm btn-outline-secondary ms-auto"
+                  style={{ fontSize: '11px', padding: '2px 8px' }}
+                  onClick={() => setSkippedContracts([])}
+                >
+                  닫기
+                </button>
+              </div>
+              <table className="table table-sm table-bordered mb-0 align-middle" style={{ backgroundColor: 'white', fontSize: '12.5px' }}>
+                <thead className="table-light">
+                  <tr>
+                    <th style={{ width: '20%' }}>고객사</th>
+                    <th style={{ width: '25%' }}>계약명(현장)</th>
+                    <th style={{ width: '40%' }}>보류 사유</th>
+                    <th style={{ width: '15%', textAlign: 'center' }}>조치</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {skippedContracts.map((skip, idx) => {
+                    const c = contracts.find(ct => ct.id === skip.contractId);
+                    if (!c) return null;
+                    return (
+                      <tr key={idx}>
+                        <td className="fw-bold text-primary">{getCustName(skip.customerId)}</td>
+                        <td>{c.name}</td>
+                        <td className="text-danger fw-bold">{skip.reason}</td>
+                        <td className="text-center">
+                          <button
+                            type="button"
+                            className="btn btn-primary btn-sm py-0"
+                            style={{ fontSize: '11px', height: '24px' }}
+                            onClick={() => {
+                              setSelectedContractIdForWizard(skip.contractId);
+                              setActiveTab('WIZARD');
+                            }}
+                          >
+                            수동 병합 발행 ➔
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+
           {/* 📢 청구 도래 미생성 계약 실시간 감지 알림 바 */}
           {dueContracts.length > 0 && (
             <div style={{
@@ -1272,15 +1395,17 @@ ${details.map((d, idx) => {
                         </td>
                         <td style={{ whiteSpace: 'nowrap' }}>
                           <span className={`badge ${
+                            b.status === 'UNPAID'    ? 'badge-secondary' :
                             b.status === 'REQUESTED' ? 'badge-warning' :
-                            b.status === 'REJECTED' ? 'badge-danger' :
-                            b.status === 'PAID' ? 'badge-success' :
-                            b.status === 'PARTIAL' ? 'badge-warning' : 'badge-info'
+                            b.status === 'REJECTED'  ? 'badge-danger' :
+                            b.status === 'PAID'      ? 'badge-success' :
+                            b.status === 'PARTIAL'   ? 'badge-info' : 'badge-secondary'
                           }`}>
-                            {b.status === 'REQUESTED' ? '결재대기' : 
-                             b.status === 'REJECTED' ? '취소됨' : 
-                             b.status === 'PAID' ? '완납' : 
-                             b.status === 'PARTIAL' ? '일부납' : '승인(미납)'}
+                            {b.status === 'UNPAID'    ? '미발송' :
+                             b.status === 'REQUESTED' ? '발송완료' :
+                             b.status === 'REJECTED'  ? '이의제기' :
+                             b.status === 'PAID'      ? '완납' :
+                             b.status === 'PARTIAL'   ? '일부납' : b.status}
                           </span>
                         </td>
                       </tr>
@@ -1679,8 +1804,33 @@ ${details.map((d, idx) => {
 
                     return (
                       <div style={{ padding: '12px', borderRadius: '8px', backgroundColor: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.25)', marginBottom: '14px' }}>
-                        <div style={{ fontWeight: 'bold', fontSize: '12.5px', color: '#dc2626', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          ⚠️ 고객 부담 미청구 정비/수리비 {unbilledRepairs.length}건 발견
+                        <div style={{ fontWeight: 'bold', fontSize: '12.5px', color: '#dc2626', marginBottom: '6px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>⚠️ 고객 부담 미청구 정비/수리비 {unbilledRepairs.length}건 발견</span>
+                          {unbilledRepairs.length > 1 && (
+                            <button
+                              type="button"
+                              className="btn btn-sm btn-primary"
+                              style={{ fontSize: '11px', padding: '2px 8px', backgroundColor: '#dc2626', borderColor: '#dc2626' }}
+                              onClick={() => {
+                                const newRepairIds = unbilledRepairs.map(r => r.id);
+                                const newCharges = unbilledRepairs.map(rep => {
+                                  const ast = assets.find(a => a.id === rep.assetId);
+                                  const cost = rep.totalCost || 0;
+                                  return {
+                                    id: `EXTRA-REP-${rep.id}`,
+                                    category: 'REPAIR',
+                                    customName: `[고객부담 수리비] ${ast?.assetNo} ${rep.details || ''}`,
+                                    quantity: 1,
+                                    unitPrice: cost
+                                  };
+                                });
+                                setSelectedRepairIdsForWizard([...selectedRepairIdsForWizard, ...newRepairIds]);
+                                setExtraCharges([...extraCharges, ...newCharges]);
+                              }}
+                            >
+                              전체 일괄 추가
+                            </button>
+                          )}
                         </div>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                           {unbilledRepairs.map(rep => {
@@ -1702,6 +1852,90 @@ ${details.map((d, idx) => {
                                       customName: `[고객부담 수리비] ${ast?.assetNo} ${rep.details || ''}`,
                                       quantity: 1,
                                       unitPrice: cost
+                                    }]);
+                                  }}
+                                  style={{ fontSize: '11.5px', padding: '3px 8px', color: 'var(--primary)', fontWeight: 'bold' }}
+                                >
+                                  + 청구 항목에 추가
+                                </button>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  {/* 💡 미청구 외상미수금 대장 자동 추천 패널 */}
+                  {(() => {
+                    const unbilledReceivables = receivables.filter(r => 
+                      r.status !== 'CLEARED' &&
+                      (r.contractId === selectedContractForWizard.id || r.contractId === undefined) &&
+                      r.customerId === selectedContractForWizard.customerId &&
+                      !selectedReceivablesForWizard.find(sr => sr.receivableId === r.id)
+                    );
+
+                    if (unbilledReceivables.length === 0) return null;
+
+                    return (
+                      <div style={{ padding: '12px', borderRadius: '8px', backgroundColor: 'rgba(59,130,246,0.06)', border: '1px solid rgba(59,130,246,0.25)', marginBottom: '14px' }}>
+                        <div style={{ fontWeight: 'bold', fontSize: '12.5px', color: '#2563eb', marginBottom: '6px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>ℹ️ 이 계약/고객사의 미청구 외상미수금 {unbilledReceivables.length}건 발견</span>
+                          {unbilledReceivables.length > 1 && (
+                            <button
+                              type="button"
+                              className="btn btn-sm btn-primary"
+                              style={{ fontSize: '11px', padding: '2px 8px' }}
+                              onClick={() => {
+                                const newReceivables = unbilledReceivables.map(rcv => {
+                                  const remaining = rcv.totalAmount - rcv.billedAmount;
+                                  return {
+                                    receivableId: rcv.id,
+                                    amount: remaining,
+                                    displayName: rcv.displayName || rcv.internalDescription
+                                  };
+                                });
+                                const newCharges = unbilledReceivables.map(rcv => {
+                                  const remaining = rcv.totalAmount - rcv.billedAmount;
+                                  return {
+                                    id: `EXTRA-RCV-${rcv.id}`,
+                                    category: rcv.type === 'TRANSPORT' ? 'TRANSPORT_ONEWAY' : rcv.type === 'REPAIR' ? 'REPAIR' : 'OTHER',
+                                    customName: `[외상청구] ${rcv.displayName || rcv.internalDescription}`,
+                                    quantity: 1,
+                                    unitPrice: remaining
+                                  };
+                                });
+                                setSelectedReceivablesForWizard([...selectedReceivablesForWizard, ...newReceivables]);
+                                setExtraCharges([...extraCharges, ...newCharges]);
+                              }}
+                            >
+                              전체 일괄 추가
+                            </button>
+                          )}
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                          {unbilledReceivables.map(rcv => {
+                            const remaining = rcv.totalAmount - rcv.billedAmount;
+                            return (
+                              <div key={rcv.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '12px', backgroundColor: 'var(--bg-card)', padding: '6px 10px', borderRadius: '6px' }}>
+                                <div>
+                                  <strong>[{rcv.type}]</strong> {rcv.internalDescription} <span className="text-muted">(잔액: {remaining.toLocaleString()}원)</span>
+                                </div>
+                                <button
+                                  type="button"
+                                  className="btn-secondary"
+                                  onClick={() => {
+                                    setSelectedReceivablesForWizard([...selectedReceivablesForWizard, {
+                                      receivableId: rcv.id,
+                                      amount: remaining,
+                                      displayName: rcv.displayName || rcv.internalDescription
+                                    }]);
+                                    setExtraCharges([...extraCharges, {
+                                      id: `EXTRA-RCV-${rcv.id}`,
+                                      category: rcv.type === 'TRANSPORT' ? 'TRANSPORT_ONEWAY' : rcv.type === 'REPAIR' ? 'REPAIR' : 'OTHER',
+                                      customName: `[외상청구] ${rcv.displayName || rcv.internalDescription}`,
+                                      quantity: 1,
+                                      unitPrice: remaining
                                     }]);
                                   }}
                                   style={{ fontSize: '11.5px', padding: '3px 8px', color: 'var(--primary)', fontWeight: 'bold' }}
@@ -1819,7 +2053,16 @@ ${details.map((d, idx) => {
                           <button
                             type="button"
                             onClick={() => {
-                              setExtraCharges(extraCharges.filter(item => item.id !== ec.id));
+                              const newCharges = extraCharges.filter(item => item.id !== ec.id);
+                              setExtraCharges(newCharges);
+                              
+                              if (ec.id.startsWith('EXTRA-REP-')) {
+                                const rId = ec.id.replace('EXTRA-REP-', '');
+                                setSelectedRepairIdsForWizard(selectedRepairIdsForWizard.filter(id => id !== rId));
+                              } else if (ec.id.startsWith('EXTRA-RCV-')) {
+                                const rcvId = ec.id.replace('EXTRA-RCV-', '');
+                                setSelectedReceivablesForWizard(selectedReceivablesForWizard.filter(r => r.receivableId !== rcvId));
+                              }
                             }}
                             style={{
                               padding: '2px 8px',

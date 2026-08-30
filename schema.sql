@@ -303,6 +303,8 @@ CREATE TABLE contracts (
     "contactId" TEXT REFERENCES customer_contacts(id),
     "siteId" TEXT REFERENCES customer_sites(id),
     "billingDay" INTEGER NOT NULL DEFAULT 30,
+    "lateInterestRate" DOUBLE PRECISION NOT NULL DEFAULT 0, -- 연체이자율 (%), 기본값 0 = 미발생
+    "paymentDueDay" INTEGER, -- 납기일: 세금계산서 발행 익월 N일 (계약별 개별 지정)
     status TEXT CHECK (status IN ('ACTIVE', 'EXTENDED', 'SHORTENED', 'SUCCEEDED', 'COMPLETED')) NOT NULL,
     "successorContractId" TEXT REFERENCES contracts(id),
     "predecessorContractId" TEXT REFERENCES contracts(id),
@@ -391,11 +393,14 @@ CREATE TABLE billing_details (
     "billingId" TEXT REFERENCES billings(id) ON DELETE CASCADE,
     "contractAssetId" TEXT REFERENCES contract_assets(id),
     "assetId" TEXT REFERENCES assets(id), -- 손익 분석용 자산 직접 연결
+    "receivableId" TEXT, -- 외상미수금 연동 ID (receivables.id)
     "itemName" TEXT NOT NULL,
     quantity DOUBLE PRECISION NOT NULL DEFAULT 1,
     "unitPrice" DOUBLE PRECISION NOT NULL DEFAULT 0,
     amount DOUBLE PRECISION NOT NULL DEFAULT 0,
-    description TEXT,
+    description TEXT, -- 구버전 호환 유지
+    "internalDescription" TEXT, -- 내부 장부 기재명 (실제 발생 내용)
+    "displayName" TEXT, -- 거래명세서 표기명 (고객 노출용, NULL이면 itemName 사용)
     "createdAt" TEXT NOT NULL,
     "updatedAt" TEXT NOT NULL
 );
@@ -931,6 +936,45 @@ CREATE TABLE document_jobs (
     "lockedAt" TIMESTAMPTZ,
     "completedAt" TIMESTAMPTZ
 );
+
+
+-- ==========================================
+-- 42. 외상미수금 대장 (receivables) - 신설
+-- 렌탈료 외 부대 청구항목(운송료/수리비/청소비) 분할 청산 관리
+-- ==========================================
+CREATE TABLE IF NOT EXISTS receivables (
+    id                    TEXT PRIMARY KEY,
+    "contractId"          TEXT REFERENCES contracts(id) ON DELETE SET NULL,
+    "customerId"          TEXT REFERENCES customers(id) ON DELETE SET NULL,
+    type                  TEXT CHECK (type IN ('TRANSPORT', 'REPAIR', 'CLEANING', 'OTHER')) NOT NULL,
+    "totalAmount"         DOUBLE PRECISION NOT NULL DEFAULT 0,   -- 외상 총액
+    "billedAmount"        DOUBLE PRECISION NOT NULL DEFAULT 0,   -- 청구된 누적 금액
+    "internalDescription" TEXT NOT NULL,   -- 내부 장부 기재명 (실제 발생 내용)
+    "displayName"         TEXT,            -- 명세서 표기명 (NULL이면 internalDescription 사용)
+    "occurredDate"        TEXT NOT NULL,   -- 발생일
+    status                TEXT CHECK (status IN ('PENDING', 'PARTIAL', 'CLEARED')) NOT NULL DEFAULT 'PENDING',
+    "repairId"            TEXT REFERENCES repairs(id) ON DELETE SET NULL, -- 수리비 연동
+    "createdAt"           TEXT NOT NULL,
+    "updatedAt"           TEXT NOT NULL
+);
+
+ALTER TABLE receivables ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "allow_anon_select" ON receivables;
+DROP POLICY IF EXISTS "allow_anon_insert" ON receivables;
+DROP POLICY IF EXISTS "allow_anon_update" ON receivables;
+DROP POLICY IF EXISTS "allow_anon_delete" ON receivables;
+DROP POLICY IF EXISTS "allow_authenticated_select" ON receivables;
+DROP POLICY IF EXISTS "allow_authenticated_insert" ON receivables;
+DROP POLICY IF EXISTS "allow_authenticated_update" ON receivables;
+DROP POLICY IF EXISTS "allow_authenticated_delete" ON receivables;
+CREATE POLICY "allow_anon_select" ON receivables FOR SELECT TO anon USING (true);
+CREATE POLICY "allow_anon_insert" ON receivables FOR INSERT TO anon WITH CHECK (true);
+CREATE POLICY "allow_anon_update" ON receivables FOR UPDATE TO anon USING (true) WITH CHECK (true);
+CREATE POLICY "allow_anon_delete" ON receivables FOR DELETE TO anon USING (true);
+CREATE POLICY "allow_authenticated_select" ON receivables FOR SELECT TO authenticated USING (true);
+CREATE POLICY "allow_authenticated_insert" ON receivables FOR INSERT TO authenticated WITH CHECK (true);
+CREATE POLICY "allow_authenticated_update" ON receivables FOR UPDATE TO authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "allow_authenticated_delete" ON receivables FOR DELETE TO authenticated USING (true);
 
 -- ==========================================
 -- 초기 기초 데이터 시딩 (Seed Data)

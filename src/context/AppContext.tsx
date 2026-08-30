@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
-import { db, supabase, User, MenuPermission, createMenuPermission, Customer, CustomerContact, CustomerSite, Product, Asset, Consumable, ConsumableLog, ConsumablePurchaseRequest, MechanicConsumableStock, Contract, ContractAsset, ContractHistory, Delivery, Billing, BillingDetail, Payment, PaymentDepositLink, Repair, RepairConsumable, Todo, BankTransaction, BankMatchingRule, BankAccountInitialBalance, AssetInOutLog, GoogleConfig, Vendor, CashFlowSnapshot, OutboundInspection, TransportCompany, TransportDriver, DepreciationLog, PurchaseSettlement, PurchaseSettlementItem, SettlementPaymentLog, ExternalLease, PurchaseSettlementType, PurchaseSettlementStatus, findCustomerByNormalizedName, AnnualLeaveQuota, LeaveUsage, OvertimeRecord, PayrollClosing, InspectionChecklistItem, InboundDefectDetail, PrepaidTransaction, DelinquencyActionLog, calculateAssetDepreciation } from '../services/db';
+import { db, supabase, User, MenuPermission, createMenuPermission, Customer, CustomerContact, CustomerSite, Product, Asset, Consumable, ConsumableLog, ConsumablePurchaseRequest, MechanicConsumableStock, Contract, ContractAsset, ContractHistory, Delivery, Billing, BillingDetail, Receivable, Payment, PaymentDepositLink, Repair, RepairConsumable, Todo, BankTransaction, BankMatchingRule, BankAccountInitialBalance, AssetInOutLog, GoogleConfig, Vendor, CashFlowSnapshot, OutboundInspection, TransportCompany, TransportDriver, DepreciationLog, PurchaseSettlement, PurchaseSettlementItem, SettlementPaymentLog, ExternalLease, PurchaseSettlementType, PurchaseSettlementStatus, findCustomerByNormalizedName, AnnualLeaveQuota, LeaveUsage, OvertimeRecord, PayrollClosing, InspectionChecklistItem, InboundDefectDetail, PrepaidTransaction, DelinquencyActionLog, calculateAssetDepreciation } from '../services/db';
 import { ErrorModal } from '../components/ErrorModal';
 import { getAllSystemMenuIds } from '../config/menu_config';
 
@@ -161,11 +161,14 @@ interface AppContextType {
   // Billings
   generateBillingsForMonth: (billingYm: string, billingDate: string) => Promise<void>;
   getDueContractsForBilling: (targetDate?: string) => { contract: Contract; customer: Customer; site?: CustomerSite; billingDay: number; dueReason: string }[];
-  generateDueBillings: (targetDate?: string, targetYm?: string) => Promise<number>;
+  generateDueBillings: (targetDate?: string, targetYm?: string) => Promise<{ successCount: number; skippedContracts: { contractId: string; customerId: string; reason: string }[] }>;
   generateBillingForSingleContract: (contractId: string, billingYm: string, billingDate: string) => Promise<string | null>;
   regenerateBilling: (billingId: string, customDetails?: Omit<BillingDetail, 'id' | 'billingId' | 'createdAt'>[], options?: { billingYm?: string; billingDate?: string; memo?: string }) => Promise<string>;
-  approveBilling: (billingId: string) => void;
-  cancelBilling: (billingId: string) => void;
+  approveBilling: (billingId: string) => void; // UNPAID → REQUESTED (거래명세서 발송)
+  cancelBilling: (billingId: string, refund?: boolean) => void; // 환불=true, 비환불=false(기본)
+  addReceivable: (data: Omit<Receivable, 'id' | 'createdAt' | 'updatedAt'>) => string;
+  generateStandaloneBillingForReceivable: (receivableId: string, reason: string) => Promise<string>;
+  linkReceivableToBilling: (billingId: string, receivableId: string, amount: number, displayName?: string) => Promise<void>;
   receivePayment: (billingId: string, data: {
     paymentDate: string;
     amount: number;
@@ -2470,165 +2473,65 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const startOfMonth = new Date(year, month - 1, 1);
       const endOfMonth = new Date(year, month, 0);
 
+      // 해당 월에 활성 상태인 계약 전체 탐색 (계약 단위 독립 생성 - E-1 원칙)
       const activeContracts = db.contracts.filter(c => {
+        if (c.status === 'COMPLETED') return false;
         const contractStart = new Date(c.startDate);
         const contractEnd = c.endDate ? new Date(c.endDate) : null;
-        
         if (contractStart > endOfMonth) return false;
         if (contractEnd && contractEnd < startOfMonth) return false;
-        
         return true;
       });
-      
-      const customerContractsMap: Record<string, Contract[]> = {};
-      activeContracts.forEach(c => {
-        if (!customerContractsMap[c.customerId]) {
-          customerContractsMap[c.customerId] = [];
-        }
-        customerContractsMap[c.customerId].push(c);
-      });
 
-      for (const [customerId, custContracts] of Object.entries(customerContractsMap)) {
-        const existing = db.billings.find(b => b.customerId === customerId && b.billingYm === billingYm);
-        if (existing) continue;
+      let createdCount = 0;
+      const errors: string[] = [];
 
-        let billingDetailsList: Omit<BillingDetail, 'id' | 'billingId' | 'createdAt'>[] = [];
-        let customerTotalAmount = 0;
-        const mainContractId = custContracts[0]?.id;
-
-        custContracts.forEach(c => {
-          const cAssets = db.contractAssets.filter(ca => ca.contractId === c.id);
-          
-          cAssets.forEach(ca => {
-            const assetStart = new Date(ca.startDate);
-            const rawEndDate = ca.endDate || c.endDate;
-            const assetEnd = rawEndDate ? new Date(rawEndDate) : endOfMonth;
-            
-            const calcStart = assetStart > startOfMonth ? assetStart : startOfMonth;
-            const calcEnd = assetEnd < endOfMonth ? assetEnd : endOfMonth;
-
-            if (calcStart <= calcEnd) {
-              const diffTime = Math.abs(calcEnd.getTime() - calcStart.getTime());
-              const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
-              
-              const assetInfo = db.assets.find(a => a.id === ca.assetId);
-              const assetName = assetInfo ? `${assetInfo.modelName} (관리번호: ${assetInfo.assetNo})` : '렌탈 장비';
-              
-              let rentalCost = 0;
-              let calcDesc = '';
-              
-              const isFullMonth = calcStart.getDate() === 1 && calcEnd.getDate() === endOfMonth.getDate();
-              if (isFullMonth) {
-                rentalCost = ca.monthlyRentalFee;
-                calcDesc = `${billingYm} 정기 월렌탈료`;
-              } else {
-                rentalCost = ca.dailyRentalFee * diffDays;
-                calcDesc = `${calcStart.toISOString().split('T')[0]} ~ ${calcEnd.toISOString().split('T')[0]} 일할 청구 (${diffDays}일)`;
-              }
-
-              if (rentalCost > 0) {
-                billingDetailsList.push({
-                  contractAssetId: ca.id,
-                  itemName: `${assetName} 렌탈료`,
-                  quantity: 1,
-                  unitPrice: rentalCost,
-                  amount: rentalCost,
-                  description: calcDesc
-                });
-                customerTotalAmount += rentalCost;
-
-                if (assetInfo) {
-                  db.updateRow<Asset>('assets', assetInfo.id, {
-                    cumRentalFee: (assetInfo.cumRentalFee || 0) + rentalCost,
-                    updatedAt: new Date().toISOString()
-                  });
-                }
-              }
-            }
-          });
-        });
-
-        const customerAssets = db.assets.filter(a => a.currentCustomerId === customerId);
-        customerAssets.forEach(asset => {
-          const repairList = db.repairs.filter(r => 
-            r.assetId === asset.id && 
-            r.status === 'COMPLETED' && 
-            r.billableToCustomer && 
-            !r.billingId &&
-            r.repairDate && 
-            new Date(r.repairDate) >= startOfMonth && 
-            new Date(r.repairDate) <= endOfMonth
-          );
-
-          repairList.forEach(repair => {
-            billingDetailsList.push({
-              itemName: `${asset.modelName} (관리번호: ${asset.assetNo}) 수리 비용 청구`,
-              quantity: 1,
-              unitPrice: repair.totalCost,
-              amount: repair.totalCost,
-              description: `정비 완료 건 청구 연동 (${repair.repairDate}) - ${repair.details}`
-            });
-            customerTotalAmount += repair.totalCost;
-          });
-        });
-
-        if (billingDetailsList.length > 0) {
-          const billing = db.insertRow<Billing>('billings', {
-            customerId,
-            contractId: mainContractId,
-            billingYm,
-            billingDate,
-            totalAmount: customerTotalAmount,
-            paidAmount: 0,
-            status: 'REQUESTED',
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString()
-          });
-
-          billingDetailsList.forEach(detail => {
-            db.insertRow<BillingDetail>('billingDetails', {
-              ...detail,
-              billingId: billing.id,
-              createdAt: new Date().toISOString()
-            });
-          });
-
-          customerAssets.forEach(asset => {
-            const repairList = db.repairs.filter(r => 
-              r.assetId === asset.id && 
-              r.status === 'COMPLETED' && 
-              r.billableToCustomer && 
-              !r.billingId && 
-              r.repairDate && 
-              new Date(r.repairDate) >= startOfMonth && 
-              new Date(r.repairDate) <= endOfMonth
-            );
-            repairList.forEach(repair => {
-              db.updateRow<Repair>('repairs', repair.id, { billingId: billing.id });
-            });
-          });
+      for (const c of activeContracts) {
+        try {
+          const bId = await generateBillingForSingleContract(c.id, billingYm, billingDate);
+          if (bId) createdCount++;
+        } catch (err: any) {
+          // 중복 경고는 조용히 skip (이미 존재하는 청구서)
+          if (err?.message?.includes('[중복 경고]')) continue;
+          errors.push(err?.message || String(err));
         }
       }
 
-      // 💡 헌장 5.2 준수: 원격 DB 저장을 동기로 대기하여 데이터 무음 생략 방지
       await db.awaitPendingWrites();
       refreshAllData();
+
+      if (errors.length > 0) {
+        showErrorModal(`⚠️ 일부 청구서 생성 실패 (${errors.length}건):\n\n${errors.slice(0, 5).join('\n')}`, '청구서 생성 일부 실패');
+      }
     } catch (err: any) {
       showErrorModal(`⚠️ 일괄 청구서 DB 저장 실패:\n\n${err?.message || err}`, '청구서 생성 실패');
     }
   };
 
+  // 거래명세서 발송: UNPAID → REQUESTED (F-2 원칙)
   const approveBilling = (billingId: string) => {
-    db.updateRow<Billing>('billings', billingId, { status: 'UNPAID' });
+    const billing = db.billings.find(b => b.id === billingId);
+    if (!billing) return;
+    if (billing.status === 'UNPAID') {
+      // 발송 처리: REQUESTED로 전환
+      db.updateRow<Billing>('billings', billingId, {
+        status: 'REQUESTED',
+        updatedAt: new Date().toISOString()
+      });
+    }
     refreshAllData();
   };
 
-  const cancelBilling = (billingId: string) => {
+  // 청구 취소 (J-1, J-2 원칙)
+  // refund=true: 수납 취소 + 입금잔액 소멸 (환불 케이스)
+  // refund=false: 청구만 취소, 수납·입금잔액 잔류 (비환불 케이스 → 새 청구에 연결)
+  const cancelBilling = (billingId: string, refund: boolean = false) => {
     const billing = db.billings.find(b => b.id === billingId);
     if (!billing) return;
 
     const details = db.billingDetails.filter(bd => bd.billingId === billingId);
 
+    // 선수금·누적렌탈료 롤백
     details.forEach(bd => {
       if (bd.itemName === '선수금(예치금) 차감 반영') {
         const customer = db.customers.find(c => c.id === billing.customerId);
@@ -2651,15 +2554,139 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           }
         }
       }
+      // 외상미수금 연동 해제 (billedAmount 롤백)
+      if (bd.receivableId) {
+        const rcv = db.receivables.find(r => r.id === bd.receivableId);
+        if (rcv) {
+          const newBilled = Math.max(0, rcv.billedAmount - bd.amount);
+          db.updateRow<Receivable>('receivables', rcv.id, {
+            billedAmount: newBilled,
+            status: newBilled <= 0 ? 'PENDING' : newBilled < rcv.totalAmount ? 'PARTIAL' : 'CLEARED',
+            updatedAt: new Date().toISOString()
+          });
+        }
+      }
     });
 
-    details.forEach(bd => {
-      db.deleteRow('billingDetails', bd.id);
-    });
+    if (refund) {
+      // 환불 케이스: 수납 취소 + payment_deposit_links 해제
+      const linkedPayments = db.payments.filter(p => p.billingId === billingId);
+      linkedPayments.forEach(p => {
+        db.paymentDepositLinks
+          .filter(l => l.paymentId === p.id)
+          .forEach(l => db.deleteRow('paymentDepositLinks', l.id));
+        db.deleteRow('payments', p.id);
+      });
+    }
+    // 비환불 케이스: 수납·입금잔액 그대로 유지 → 새 청구 생성 시 FIFO로 자동 연결
 
-    db.deleteRow('billings', billingId);
+    // 공통: 청구 상세 삭제 후 청구 REJECTED 처리 (완전 삭제 대신 이력 보존)
+    details.forEach(bd => db.deleteRow('billingDetails', bd.id));
+    db.updateRow<Billing>('billings', billingId, {
+      status: 'REJECTED',
+      updatedAt: new Date().toISOString()
+    });
 
     refreshAllData();
+  };
+
+  // ─── 외상미수금 CRUD (4단계) ──────────────────────────────────────────────
+
+  /** 외상미수금 신규 등록 */
+  const addReceivable = (data: Omit<Receivable, 'id' | 'createdAt' | 'updatedAt'>) => {
+    const now = new Date().toISOString();
+    const newRcv = db.insertRow<Receivable>('receivables', {
+      ...data,
+      createdAt: now,
+      updatedAt: now
+    });
+    refreshAllData();
+    return newRcv.id;
+  };
+
+  /** 외상미수금 → 청구 상세 연동 (이번 달 청구할 금액 지정) */
+    const linkReceivableToBilling = async (
+    billingId: string,
+    receivableId: string,
+    amount: number,
+    displayName?: string
+  ) => {
+    const rcv = db.receivables.find(r => r.id === receivableId);
+    if (!rcv) throw new Error('외상미수금 항목을 찾을 수 없습니다.');
+
+    const remaining = rcv.totalAmount - rcv.billedAmount;
+    if (amount > remaining + 1) { // 부동소수점 오차 허용
+      throw new Error(`청구 금액(${amount.toLocaleString()}원)이 미청구 잔액(${remaining.toLocaleString()}원)을 초과합니다.`);
+    }
+
+    const newBilled = rcv.billedAmount + amount;
+    const newRemaining = rcv.totalAmount - newBilled;
+    
+    // K-3: 고객 투명성 확보를 위한 강제 트래커 텍스트 생성
+    const trackerText = `[총 청구대상: ${rcv.totalAmount.toLocaleString()}원 / 금회 청구: ${amount.toLocaleString()}원 / 미청구 잔액: ${Math.max(0, newRemaining).toLocaleString()}원]`;
+
+    const now = new Date().toISOString();
+    db.insertRow<BillingDetail>('billingDetails', {
+      billingId,
+      receivableId,
+      itemName: displayName || rcv.internalDescription,
+      quantity: 1,
+      unitPrice: amount,
+      amount,
+      description: trackerText,
+      internalDescription: rcv.internalDescription,
+      displayName: displayName || rcv.displayName,
+      createdAt: now,
+      updatedAt: now
+    });
+
+    db.updateRow<Receivable>('receivables', receivableId, {
+      billedAmount: newBilled,
+      status: newBilled >= rcv.totalAmount ? 'CLEARED' : 'PARTIAL',
+      updatedAt: now
+    });
+
+    // 청구서 총액 갱신
+    const billing = db.billings.find(b => b.id === billingId);
+    if (billing) {
+      db.updateRow<Billing>('billings', billingId, {
+        totalAmount: billing.totalAmount + amount,
+        updatedAt: now
+      });
+    }
+
+    await db.awaitPendingWrites();
+    refreshAllData();
+  };
+
+  /** K-2: 외상미수금 단독 청구서 발행 (수금 기동성 및 진상고객 방어) */
+  const generateStandaloneBillingForReceivable = async (receivableId: string, reason: string): Promise<string> => {
+    const rcv = db.receivables.find(r => r.id === receivableId);
+    if (!rcv) throw new Error('외상미수금 항목을 찾을 수 없습니다.');
+    if (rcv.status === 'CLEARED') throw new Error('이미 청구가 완료된 건입니다.');
+    if (!rcv.customerId) throw new Error('고객 정보가 없는 미수금은 단독 청구할 수 없습니다.');
+
+    const remaining = rcv.totalAmount - rcv.billedAmount;
+    const now = new Date().toISOString();
+    const billingYm = now.substring(0, 7);
+    const billingDate = now.split('T')[0];
+
+    const newBilling = db.insertRow<Billing>('billings', {
+      customerId: rcv.customerId,
+      contractId: rcv.contractId || (null as any),
+      billingYm,
+      billingDate,
+      totalAmount: 0, // linkReceivableToBilling이 갱신함
+      paidAmount: 0,
+      status: 'UNPAID',
+      createdAt: now,
+      updatedAt: now
+    });
+
+    const standaloneTitle = `[단독 청구 - ${reason}] ${rcv.displayName || rcv.internalDescription}`;
+    await linkReceivableToBilling(newBilling.id, rcv.id, remaining, standaloneTitle);
+    
+    return newBilling.id;
   };
 
   const getDueContractsForBilling = (targetDate?: string) => {
@@ -2724,95 +2751,134 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return dueList;
   };
 
+  /**
+   * billingDay 기반 청구 기간 계산 (인터뷰 원칙 A-1 ~ A-5, B-1 ~ B-4)
+   * - billingDay = 청구서 발행일 (예: 25 → 전월26~당월25)
+   * - 첫 달 / 마지막 달만 일할, 중간 달 정액
+   * - billingDay > 월말이면 월말로 자동 보정
+   */
+  const calcBillingPeriod = (
+    billingYm: string,
+    billingDay: number,
+    contractStartDate: string,
+    contractEndDate?: string
+  ) => {
+    const [year, month] = billingYm.split('-').map(Number);
+
+    // 당월 billingDay 보정 (A-5)
+    const lastDayOfCurrent = new Date(year, month, 0).getDate();
+    const effectiveBillingDay = Math.min(billingDay, lastDayOfCurrent);
+
+    // 청구 기간 끝: 당월 billingDay
+    const periodEnd = new Date(year, month - 1, effectiveBillingDay);
+
+    // 청구 기간 시작: 전월 (billingDay+1)일
+    const prevMonth = month === 1 ? 12 : month - 1;
+    const prevYear = month === 1 ? year - 1 : year;
+    const lastDayOfPrev = new Date(prevYear, prevMonth, 0).getDate();
+    const prevEffectiveBillingDay = Math.min(billingDay, lastDayOfPrev);
+    const periodStart = new Date(prevYear, prevMonth - 1, prevEffectiveBillingDay + 1);
+
+    // 실제 자산 사용 기간: 계약 startDate 보정 (A-2)
+    const contractStart = new Date(contractStartDate);
+    const actualStart = contractStart > periodStart ? contractStart : periodStart;
+
+    // 실제 자산 사용 기간: 계약 endDate 보정 (A-3)
+    const contractEnd = contractEndDate ? new Date(contractEndDate) : null;
+    const actualEnd = contractEnd && contractEnd < periodEnd ? contractEnd : periodEnd;
+
+    // 첫 달 / 마지막 달 판단 → 일할 계산 여부 (B-2)
+    const isFirstMonth = contractStart > periodStart && contractStart <= periodEnd;
+    const isLastMonth = contractEnd
+      ? contractEnd >= periodStart && contractEnd <= periodEnd
+      : false;
+    const isProRata = isFirstMonth || isLastMonth;
+
+    return { actualStart, actualEnd, periodStart, periodEnd, isProRata };
+  };
+
+  /**
+   * 일할 금액 계산 (B-1: 30일 고정, 역일 기준)
+   */
+  const calcProRataAmount = (monthlyFee: number, dailyFee: number, days: number): number => {
+    const dailyRate = dailyFee > 0 ? dailyFee : monthlyFee / 30;
+    return Math.round(dailyRate * days);
+  };
+
   const generateBillingForSingleContract = async (contractId: string, billingYm: string, billingDate: string): Promise<string | null> => {
     const c = db.contracts.find(x => x.id === contractId);
     if (!c) return null;
 
-    const [year, month] = billingYm.split('-').map(Number);
-    const startOfMonth = new Date(year, month - 1, 1);
-    const endOfMonth = new Date(year, month, 0);
+    // 중복 발행 감지 (J-3): 동일 계약 + 동일 귀속월 활성 청구 존재 시 throw
+    const existingActive = db.billings.find(
+      b => b.contractId === c.id && b.billingYm === billingYm && b.status !== 'REJECTED'
+    );
+    if (existingActive) {
+      throw new Error(`[중복 경고] 계약 ${c.contractNo}의 ${billingYm} 청구서가 이미 존재합니다.\n상태: ${existingActive.status} / ID: ${existingActive.id}`);
+    }
 
+    const billingDay = c.billingDay || 25;
     const cAssets = db.contractAssets.filter(ca => ca.contractId === c.id);
     let detailsList: Omit<BillingDetail, 'id' | 'billingId' | 'createdAt'>[] = [];
     let totalAmount = 0;
 
-    // 1. 자산별 렌탈료 정밀 일할/월단가 계산 (헌장 4.1 준수)
+    // 1. 자산별 렌탈료 계산 (인터뷰 원칙 A, B, C 통합 적용)
     cAssets.forEach(ca => {
-      const assetStart = new Date(ca.startDate);
-      const rawEndDate = ca.endDate || c.endDate;
-      const assetEnd = rawEndDate ? new Date(rawEndDate) : endOfMonth;
+      const { actualStart, actualEnd, isProRata } = calcBillingPeriod(
+        billingYm,
+        billingDay,
+        ca.startDate,
+        ca.endDate || c.endDate
+      );
 
-      const calcStart = assetStart > startOfMonth ? assetStart : startOfMonth;
-      const calcEnd = assetEnd < endOfMonth ? assetEnd : endOfMonth;
+      if (actualStart > actualEnd) return; // 청구 기간 외 자산
 
-      if (calcStart <= calcEnd) {
-        const diffTime = Math.abs(calcEnd.getTime() - calcStart.getTime());
-        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+      const assetInfo = db.assets.find(a => a.id === ca.assetId);
+      const assetName = assetInfo
+        ? `${assetInfo.modelName} (관리번호: ${assetInfo.assetNo})`
+        : '렌탈 장비';
 
-        const assetInfo = db.assets.find(a => a.id === ca.assetId);
-        const assetName = assetInfo ? `${assetInfo.modelName} (관리번호: ${assetInfo.assetNo})` : '렌탈 장비';
+      let rentalCost = 0;
+      let calcDesc = '';
 
-        let rentalCost = 0;
-        let calcDesc = '';
-
-        const isFullMonth = calcStart.getDate() === 1 && calcEnd.getDate() === endOfMonth.getDate();
-        if (isFullMonth) {
-          rentalCost = ca.monthlyRentalFee;
-          calcDesc = `${billingYm} 정기 월렌탈료 (월단가 기준)`;
-        } else {
-          rentalCost = ca.dailyRentalFee * diffDays;
-          calcDesc = `${calcStart.toISOString().split('T')[0]} ~ ${calcEnd.toISOString().split('T')[0]} 일할 청구 (${diffDays}일)`;
-        }
-
-        if (rentalCost > 0) {
-          detailsList.push({
-            contractAssetId: ca.id,
-            itemName: `${assetName} 렌탈료`,
-            quantity: 1,
-            unitPrice: rentalCost,
-            amount: rentalCost,
-            description: calcDesc
-          });
-          totalAmount += rentalCost;
-
-          if (assetInfo) {
-            db.updateRow<Asset>('assets', assetInfo.id, {
-              cumRentalFee: (assetInfo.cumRentalFee || 0) + rentalCost,
-              updatedAt: new Date().toISOString()
-            });
-          }
-        }
+      if (isProRata) {
+        // 일할 계산: 30일 고정 (B-1), 역일 기준 (B-4)
+        const diffMs = actualEnd.getTime() - actualStart.getTime();
+        const days = Math.floor(diffMs / (1000 * 60 * 60 * 24)) + 1;
+        rentalCost = calcProRataAmount(ca.monthlyRentalFee, ca.dailyRentalFee, days);
+        calcDesc = `${actualStart.toISOString().split('T')[0]} ~ ${actualEnd.toISOString().split('T')[0]} 일할 청구 (${days}일 × ${(ca.dailyRentalFee > 0 ? ca.dailyRentalFee : ca.monthlyRentalFee / 30).toLocaleString()}원)`;
+      } else {
+        // 중간 달: 월 정액 (B-2)
+        rentalCost = ca.monthlyRentalFee;
+        calcDesc = `${billingYm} 정기 월렌탈료`;
       }
-    });
 
-    // 2. 미청구 유료 수리비 자동 합산
-    const assetIds = cAssets.map(ca => ca.assetId).filter(Boolean);
-    const unbilledRepairs = db.repairs.filter(r =>
-      r.billableToCustomer &&
-      !r.billingId &&
-      assetIds.includes(r.assetId) &&
-      r.status === 'COMPLETED'
-    );
-
-    const linkedRepairIds: string[] = [];
-    unbilledRepairs.forEach(repair => {
-      const ast = db.assets.find(a => a.id === repair.assetId);
-      const cost = repair.totalCost || 0;
-      if (cost > 0) {
+      if (rentalCost > 0) {
         detailsList.push({
-          contractAssetId: undefined,
-          itemName: `[수리비] ${ast?.modelName || '장비'} (${ast?.assetNo || '-'}) ${repair.details || '정비 완료'}`,
+          contractAssetId: ca.id,
+          assetId: ca.assetId,
+          itemName: `${assetName} 렌탈료`,
           quantity: 1,
-          unitPrice: cost,
-          amount: cost,
-          description: `고객부담 정비 수리비 (${repair.repairDate || repair.requestDate || ''})`
+          unitPrice: rentalCost,
+          amount: rentalCost,
+          internalDescription: calcDesc,
+          displayName: undefined
         });
-        totalAmount += cost;
-        linkedRepairIds.push(repair.id);
+        totalAmount += rentalCost;
+
+        if (assetInfo) {
+          db.updateRow<Asset>('assets', assetInfo.id, {
+            cumRentalFee: (assetInfo.cumRentalFee || 0) + rentalCost,
+            updatedAt: new Date().toISOString()
+          });
+        }
       }
     });
 
-    // 3. 선수금(예치금) 차감 반영
+    // 2. 수리비 자동 합산 제거 (H-1 원칙: 수리비는 외상미수금 대장으로 분리 관리)
+    // → 담당자가 외상미수금 화면에서 수동으로 청구에 포함
+
+    // 3. 선수금(예치금) 차감 반영 (I-1 원칙: 청구 발생 시 자동 차감)
     const cust = db.customers.find(cu => cu.id === c.customerId);
     let finalBillingAmount = totalAmount;
     if (cust && (cust.prepaidBalance || 0) > 0 && totalAmount > 0) {
@@ -2825,7 +2891,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           quantity: 1,
           unitPrice: -applied,
           amount: -applied,
-          description: `보유 선수금 중 ${applied.toLocaleString()}원 차감 반영`
+          internalDescription: `보유 선수금 중 ${applied.toLocaleString()}원 자동 차감`,
+          displayName: undefined
         });
         db.updateRow<Customer>('customers', cust.id, {
           prepaidBalance: prepaid - applied,
@@ -2837,6 +2904,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     if (detailsList.length === 0) return null;
 
+    // 4. 청구서 생성 — 초기 상태 UNPAID (F-2 원칙: 거래명세서 발송 후 REQUESTED로 전환)
     const newBilling = db.insertRow<Billing>('billings', {
       customerId: c.customerId,
       contractId: c.id,
@@ -2844,7 +2912,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       billingDate,
       totalAmount: finalBillingAmount,
       paidAmount: 0,
-      status: 'REQUESTED',
+      status: 'UNPAID',
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     });
@@ -2853,35 +2921,48 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       db.insertRow<BillingDetail>('billingDetails', {
         ...det,
         billingId: newBilling.id,
-        createdAt: new Date().toISOString()
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
       });
-    });
-
-    linkedRepairIds.forEach(rId => {
-      db.updateRow<Repair>('repairs', rId, { billingId: newBilling.id });
     });
 
     return newBilling.id;
   };
 
-  const generateDueBillings = async (targetDate?: string, targetYm?: string): Promise<number> => {
+  const generateDueBillings = async (targetDate?: string, targetYm?: string): Promise<{ successCount: number; skippedContracts: { contractId: string; customerId: string; reason: string }[] }> => {
     try {
       const todayStr = targetDate || new Date().toISOString().split('T')[0];
       const ym = targetYm || todayStr.slice(0, 7);
       const dueContracts = getDueContractsForBilling(todayStr);
 
       let createdCount = 0;
+      const skippedContracts: { contractId: string; customerId: string; reason: string }[] = [];
+
       for (const item of dueContracts) {
+        // K-1: 미청구 외상미수금 존재 여부 체크 (일괄 청구 방어 로직)
+        const hasPendingReceivables = db.receivables.some(r => 
+          r.contractId === item.contract.id && r.status !== 'CLEARED'
+        );
+
+        if (hasPendingReceivables) {
+          skippedContracts.push({
+            contractId: item.contract.id,
+            customerId: item.customer.id,
+            reason: '미청구 외상미수금 존재'
+          });
+          continue; // 해당 계약은 청구 건너뜀 (SKIP)
+        }
+
         const bId = await generateBillingForSingleContract(item.contract.id, ym, todayStr);
         if (bId) createdCount++;
       }
 
       await db.awaitPendingWrites();
       refreshAllData();
-      return createdCount;
+      return { successCount: createdCount, skippedContracts };
     } catch (err: any) {
       showErrorModal(`⚠️ 도래 계약 청구 일괄 생성 실패:\n\n${err?.message || err}`, '청구 생성 오류');
-      return 0;
+      return { successCount: 0, skippedContracts: [] };
     }
   };
 
@@ -4761,6 +4842,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       saveSmartDispatch, saveSmartReturn,
       completeTodo,
       generateBillingsForMonth, getDueContractsForBilling, generateDueBillings, generateBillingForSingleContract, regenerateBilling, approveBilling, cancelBilling, receivePayment, cancelPayment, saveBankDeposit, deleteBankDeposit,
+      addReceivable, generateStandaloneBillingForReceivable, linkReceivableToBilling,
       uploadBankTransactions, matchTransactionManual, unmatchTransaction, saveMatchingRule, deleteMatchingRule,
       dispatchDelivery, settleDeliveryCost, completeDelivery, completeInboundDelivery,
       registerRepair, updateRepairStatus,
