@@ -6,7 +6,7 @@ import {
   Plus, Calendar, Search, Download, Edit3, Repeat, Clock, Wrench, ChevronLeft,
   Building2, ArrowLeftRight
 } from 'lucide-react';
-import { Contract, db, Customer, CustomerContact, CustomerSite, ContractAsset, ContractHistory, Delivery } from '../services/db';
+import { Contract, db, Customer, CustomerContact, CustomerSite, ContractAsset, ContractHistory, Delivery, normalizeEndDate } from '../services/db';
 import { exportToExcel } from '../services/excel';
 import { ContractDocumentBundleModal } from '../components/ContractDocumentBundleModal';
 import { FileText } from 'lucide-react';
@@ -167,7 +167,7 @@ export const Contracts: React.FC = () => {
       const matchesCustomer = customerFilter === 'ALL' || c.customerId === customerFilter;
       const matchesSite = siteFilter === 'ALL' || c.siteId === siteFilter;
       const matchesStartDate = !startDateFilter || (c.startDate && c.startDate <= (endDateFilter || '9999-12-31'));
-      const matchesEndDate = !endDateFilter || (!c.endDate || c.endDate === '미정' || c.endDate >= startDateFilter);
+      const matchesEndDate = !endDateFilter || normalizeEndDate(c.endDate) >= startDateFilter;
 
       let matchesChip = true;
       if (quickChipFilter === 'ACTIVE') matchesChip = c.status === 'ACTIVE' || c.status === 'EXTENDED';

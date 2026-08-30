@@ -24,6 +24,12 @@ export function findCustomerByNormalizedName(customers: Customer[], targetName: 
   return customers.find(c => normalizeCustomerName(c.name) === targetKey);
 }
 
+/** 계약 종료일 정규화: '미정' / null / undefined → '9999-12-31' 처리 */
+export function normalizeEndDate(endDate?: string | null): string {
+  if (!endDate || endDate === '미정') return '9999-12-31';
+  return endDate;
+}
+
 export interface User {
   id: string;
   loginId?: string;

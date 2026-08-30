@@ -2,7 +2,7 @@
 // d:\Kiyeun_Lift\src\pages\Billings.tsx
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { db, Asset, Billing, BillingDetail } from '../services/db';
+import { db, Asset, Billing, BillingDetail, normalizeEndDate } from '../services/db';
 import { Plus, Download, Mail, CheckCircle, Search, DollarSign, Calendar, FileText, Send, Edit3, RotateCcw, AlertTriangle, Check } from 'lucide-react';
 import { emailService } from '../services/email';
 import { exportToExcel, exportTransactionStatementExcel, exportTransactionStatementExcelBuffer, calcServicePeriod } from '../services/excel';
@@ -610,7 +610,7 @@ ${details.map((d, idx) => {
   const currentYm = getCurrentYm();
   
   const activeContractsForWizard = contracts.filter(c => {
-    const isNotExpired = !c.endDate || c.endDate >= todayStr;
+    const isNotExpired = normalizeEndDate(c.endDate) >= todayStr;
     if (!isNotExpired) return false;
 
     const hasBillingThisMonth = billings.some(b => b.contractId === c.id && b.billingYm === currentYm);
@@ -686,12 +686,13 @@ ${details.map((d, idx) => {
     const endStr = lastOfM.toISOString().split('T')[0];
     
     const calcStart = c.startDate > startStr ? c.startDate : startStr;
-    const calcEnd = c.endDate && c.endDate < endStr ? c.endDate : endStr;
+    const normalEnd = normalizeEndDate(c.endDate);
+    const calcEnd = normalEnd < endStr ? normalEnd : endStr;
     
     setWizardStartDate(calcStart);
     setWizardEndDate(calcEnd);
     
-    if (calcStart > startStr || (c.endDate && c.endDate < endStr)) {
+    if (calcStart > startStr || normalEnd < endStr) {
       setCalcMethod('PRORATED');
     } else {
       setCalcMethod('MONTHLY');
