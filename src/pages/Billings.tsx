@@ -2,7 +2,7 @@
 // d:\Kiyeun_Lift\src\pages\Billings.tsx
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { db, Asset, Billing, BillingDetail, normalizeEndDate } from '../services/db';
+import { db, Asset, Billing, BillingDetail, ContractHistory, normalizeEndDate } from '../services/db';
 import { Plus, Download, Mail, CheckCircle, Search, DollarSign, Calendar, FileText, Send, Edit3, RotateCcw, AlertTriangle, Check } from 'lucide-react';
 import { emailService } from '../services/email';
 import { exportToExcel, exportTransactionStatementExcel, exportTransactionStatementExcelBuffer, calcServicePeriod } from '../services/excel';
@@ -872,6 +872,16 @@ ${details.map((d, idx) => {
       }
 
       // 💡 헌장 5.2 준수: 원격 DB 저장을 동기로 대기하여 데이터 누락 및 무음 실패 100% 방지
+      await db.awaitPendingWrites();
+
+      // 계약이력 기록
+      db.insertRow<ContractHistory>('contractHistory', {
+        contractId: selectedContractForWizard.id,
+        changeType: 'BILLING_CREATED',
+        changeDate: targetDate,
+        description: `청구 생성: ${targetYm} / ${finalBillingAmount.toLocaleString()}원 (청구번호: ${billing.id})`,
+        createdAt: new Date().toISOString()
+      });
       await db.awaitPendingWrites();
 
       refreshAllData();

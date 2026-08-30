@@ -2524,6 +2524,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         status: 'REQUESTED',
         updatedAt: new Date().toISOString()
       });
+      // 계약이력 기록
+      if (billing.contractId) {
+        db.insertRow<ContractHistory>('contractHistory', {
+          contractId: billing.contractId,
+          changeType: 'BILLING_SENT',
+          changeDate: new Date().toISOString().split('T')[0],
+          description: `청구서 발송: ${billing.billingYm} / ${billing.totalAmount.toLocaleString()}원 (청구번호: ${billingId})`,
+          createdAt: new Date().toISOString()
+        });
+      }
     }
     refreshAllData();
   };
@@ -2592,6 +2602,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       status: 'REJECTED',
       updatedAt: new Date().toISOString()
     });
+
+    // 계약이력 기록
+    if (billing.contractId) {
+      db.insertRow<ContractHistory>('contractHistory', {
+        contractId: billing.contractId,
+        changeType: 'BILLING_CANCELLED',
+        changeDate: new Date().toISOString().split('T')[0],
+        description: `청구 취소: ${billing.billingYm} / ${billing.totalAmount.toLocaleString()}원 (${refund ? '환불 처리' : '비환불 처리'}, 청구번호: ${billingId})`,
+        createdAt: new Date().toISOString()
+      });
+    }
 
     refreshAllData();
   };
@@ -3067,6 +3088,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     });
 
+    // 계약이력 기록 (재생성)
+    if (oldBilling.contractId) {
+      db.insertRow<ContractHistory>('contractHistory', {
+        contractId: oldBilling.contractId,
+        changeType: 'BILLING_REGENERATED',
+        changeDate: new Date().toISOString().split('T')[0],
+        description: `청구 재생성: ${newYm} / ${newTotalAmount.toLocaleString()}원 (기존 ${billingId} → 신규 ${newBilling.id}, 사유: ${options?.memo || '수정사항 반영'})`,
+        createdAt: new Date().toISOString()
+      });
+    }
+
     await db.awaitPendingWrites();
     refreshAllData();
     return newBilling.id;
@@ -3121,6 +3153,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       status: nextStatus,
       updatedAt: new Date().toISOString()
     });
+
+    // 계약이력 기록
+    if (billing.contractId) {
+      db.insertRow<ContractHistory>('contractHistory', {
+        contractId: billing.contractId,
+        changeType: 'PAYMENT_RECEIVED',
+        changeDate: data.paymentDate,
+        description: `수납 처리: ${billing.billingYm} / ${data.amount.toLocaleString()}원 수납 (누적: ${nextPaid.toLocaleString()}/${billing.totalAmount.toLocaleString()}원, 상태: ${nextStatus})`,
+        createdAt: new Date().toISOString()
+      });
+    }
 
     refreshAllData();
   };
