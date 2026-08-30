@@ -1057,8 +1057,17 @@ ${items.map((item, idx) => {
     if (isWizardGenerating) return;
     if (!selectedContractForWizard || !wizardStartDate || !wizardEndDate) return;
 
-    const extraChargesTotal = extraCharges.reduce((sum, ec) => sum + (ec.quantity * ec.unitPrice), 0);
-    const overallTotal = totalAmountForWizard + extraChargesTotal;
+    // 순수 추가 청구 항목 (외상미수금 연동분 제외)
+    const pureExtraCharges = extraCharges.filter(ec => !ec.id.startsWith('EXTRA-RCV-'));
+    const pureExtraChargesTotal = pureExtraCharges.reduce((sum, ec) => sum + (ec.quantity * ec.unitPrice), 0);
+
+    // 연동된 외상미수금 총액 계산
+    const receivablesTotal = selectedReceivablesForWizard.reduce((sum, r) => {
+      const ec = extraCharges.find(c => c.id === `EXTRA-RCV-${r.receivableId}`);
+      return sum + (ec ? (ec.unitPrice * ec.quantity) : r.amount);
+    }, 0);
+
+    const overallTotal = totalAmountForWizard + pureExtraChargesTotal + receivablesTotal;
 
     if (overallTotal <= 0) {
       alert('청구 금액이 0원 이하이므로 청구서를 발행할 수 없습니다.');
@@ -1067,7 +1076,7 @@ ${items.map((item, idx) => {
 
     setIsWizardGenerating(true);
 
-    // 중복 청구 경고 (6단계)
+    // 중복 청구 경고
     const existing = billings.find(b => 
       b.contractId === selectedContractForWizard.id && 
       b.billingYm === wizardBillingYm && 
@@ -1119,8 +1128,8 @@ ${items.map((item, idx) => {
       }
     });
 
-    // 2. 추가 청구 항목 정산 (계산로직 없이 입력 값 그대로 적용)
-    extraCharges.forEach(ec => {
+    // 2. 순수 추가 청구 항목 정산 (수기 추가분 - 외상미수금은 linkReceivableToBilling이 전담)
+    pureExtraCharges.forEach(ec => {
       let itemName = '';
       if (ec.category === 'TRANSPORT_ONEWAY') itemName = '운송료 (편도)';
       else if (ec.category === 'TRANSPORT_ROUNDTRIP') itemName = '운송료 (왕복)';
@@ -1141,11 +1150,12 @@ ${items.map((item, idx) => {
 
     // 선수금(예치금) 차감 연동
     const customerInfo = customers.find(c => c.id === selectedContractForWizard.customerId);
-    let finalBillingAmount = overallTotal;
+    const baseTotalBeforeReceivables = totalAmountForWizard + pureExtraChargesTotal;
+    let initialBillingAmount = baseTotalBeforeReceivables;
     
     if (customerInfo && (customerInfo.prepaidBalance || 0) > 0) {
       const prepaid = customerInfo.prepaidBalance || 0;
-      const appliedPrepaid = Math.min(overallTotal, prepaid);
+      const appliedPrepaid = Math.min(baseTotalBeforeReceivables, prepaid);
       
       if (appliedPrepaid > 0) {
         detailsList.push({
@@ -1162,7 +1172,7 @@ ${items.map((item, idx) => {
           updatedAt: new Date().toISOString()
         });
         
-        finalBillingAmount = overallTotal - appliedPrepaid;
+        initialBillingAmount = baseTotalBeforeReceivables - appliedPrepaid;
       }
     }
 
@@ -1170,18 +1180,20 @@ ${items.map((item, idx) => {
       const targetYm = wizardBillingYm.trim() || currentYm;
       const targetDate = wizardBillingDate.trim() || todayStr;
 
+      // 1) 기본 청구서 생성 (초기 금액: 렌탈료 + 순수 추가청구 - 선수금)
       const billing = db.insertRow<Billing>('billings', {
         customerId: selectedContractForWizard.customerId,
         contractId: selectedContractForWizard.id,
         billingYm: targetYm,
         billingDate: targetDate,
-        totalAmount: finalBillingAmount,
+        totalAmount: initialBillingAmount,
         paidAmount: 0,
         status: 'REQUESTED',
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       });
 
+      // 2) 기본 세부내역 저장
       detailsList.forEach(det => {
         db.insertRow<BillingDetail>('billingDetails', {
           ...det,
@@ -1190,12 +1202,12 @@ ${items.map((item, idx) => {
         });
       });
 
-      // 연동된 수리비가 있다면 billingId 바인딩
+      // 3) 연동된 수리비가 있다면 billingId 바인딩
       for (const rId of selectedRepairIdsForWizard) {
         await linkRepairToBilling(rId, billing.id);
       }
 
-      // K-3: 연동된 미수금이 있다면, 위자드에서 최종 수정된 단가(amount)를 정확히 추출하여 연동
+      // 4) 외상미수금 정식 바인딩 (linkReceivableToBilling이 billingDetails 생성 및 totalAmount 누적을 단일 전담)
       for (const r of selectedReceivablesForWizard) {
         const ec = extraCharges.find(c => c.id === `EXTRA-RCV-${r.receivableId}`);
         const finalAmount = ec ? (ec.unitPrice * ec.quantity) : r.amount;
@@ -1210,7 +1222,7 @@ ${items.map((item, idx) => {
         contractId: selectedContractForWizard.id,
         changeType: 'BILLING_CREATED',
         changeDate: targetDate,
-        description: `청구 생성: ${targetYm} / ${finalBillingAmount.toLocaleString()}원 (청구번호: ${billing.id})`,
+        description: `청구 생성: ${targetYm} / ${overallTotal.toLocaleString()}원 (청구번호: ${billing.id})`,
         createdAt: new Date().toISOString()
       });
       await db.awaitPendingWrites();
@@ -1468,7 +1480,8 @@ ${items.map((item, idx) => {
                     <th style={{ whiteSpace: 'nowrap' }}>관리</th>
                     <th style={{ whiteSpace: 'nowrap' }}>청구월</th>
                     <th style={{ whiteSpace: 'nowrap' }}>고객사</th>
-                    <th style={{ whiteSpace: 'nowrap' }}>청구액</th>
+                    <th style={{ whiteSpace: 'nowrap' }}>공급가액</th>
+                    <th style={{ whiteSpace: 'nowrap' }}>청구합계(VAT포함)</th>
                     <th style={{ whiteSpace: 'nowrap' }}>미납액</th>
                     <th style={{ whiteSpace: 'nowrap' }}>상태</th>
                   </tr>
@@ -1476,14 +1489,27 @@ ${items.map((item, idx) => {
                 <tbody>
                   {filteredBillings.length === 0 ? (
                     <tr>
-                      <td colSpan={6} style={{ textAlign: 'center', padding: '36px 0', color: 'var(--text-muted)', fontSize: '13px' }}>
+                      <td colSpan={7} style={{ textAlign: 'center', padding: '36px 0', color: 'var(--text-muted)', fontSize: '13px' }}>
                         조회 결과가 없습니다.
                       </td>
                     </tr>
                   ) : filteredBillings.map(b => {
-                    const unpaid = b.totalAmount - b.paidAmount;
+                    const supply = b.totalAmount || 0;
+                    const vat = Math.round(supply * 0.1);
+                    const grandTotal = supply + vat;
+                    const unpaid = Math.max(0, grandTotal - (b.paidAmount || 0));
+                    const isSelected = selectedBillingId === b.id;
+
                     return (
-                      <tr key={b.id} style={{ cursor: 'pointer' }} onClick={() => setSelectedBillingId(b.id)}>
+                      <tr 
+                        key={b.id} 
+                        style={{ 
+                          cursor: 'pointer',
+                          backgroundColor: isSelected ? 'rgba(59, 130, 246, 0.08)' : undefined,
+                          fontWeight: isSelected ? 600 : undefined
+                        }} 
+                        onClick={() => setSelectedBillingId(b.id)}
+                      >
                         <td onClick={e => e.stopPropagation()} style={{ whiteSpace: 'nowrap' }}>
                           <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
                             {b.status === 'REQUESTED' ? (
@@ -1549,9 +1575,10 @@ ${items.map((item, idx) => {
                         </td>
                         <td style={{ whiteSpace: 'nowrap' }}><strong>{b.billingYm}</strong></td>
                         <td style={{ whiteSpace: 'nowrap' }}>{getCustName(b.customerId)}</td>
-                        <td style={{ whiteSpace: 'nowrap' }}>{b.totalAmount.toLocaleString()}원</td>
+                        <td style={{ whiteSpace: 'nowrap' }}>₩{supply.toLocaleString()}</td>
+                        <td style={{ whiteSpace: 'nowrap', fontWeight: 700, color: 'var(--primary)' }}>₩{grandTotal.toLocaleString()}</td>
                         <td style={{ whiteSpace: 'nowrap', color: unpaid > 0 ? 'var(--danger)' : 'var(--text-secondary)' }}>
-                          {unpaid.toLocaleString()}원
+                          ₩{unpaid.toLocaleString()}
                         </td>
                         <td style={{ whiteSpace: 'nowrap' }}>
                           <span className={`badge ${
