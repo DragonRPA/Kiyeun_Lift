@@ -722,7 +722,7 @@ export const Contracts: React.FC = () => {
             </div>
 
             {/* 2행: 고객사, 현장, 시작일, 종료일 세부 상세 필터 (레이블 상단 헤더 세로 스택 구조) */}
-            <div style={{ display: 'flex', gap: '16px', alignItems: 'flex-end', flexWrap: 'wrap', backgroundColor: 'var(--bg-app)', padding: '10px 14px', borderRadius: '8px', border: '1px solid var(--border-color)', overflowX: 'auto' }}>
+            <div style={{ display: 'flex', gap: '16px', alignItems: 'flex-start', flexWrap: 'wrap', backgroundColor: 'var(--bg-app)', padding: '10px 14px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
               {/* 고객사 콤보박스 */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flexShrink: 0, position: 'relative' }}>
                 <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>고객사 선택</label>
@@ -738,7 +738,7 @@ export const Contracts: React.FC = () => {
                     onFocus={() => setCustomerDropdownOpen(true)}
                     onBlur={() => setTimeout(() => setCustomerDropdownOpen(false), 150)}
                     placeholder="전체 고객사"
-                    style={{ padding: '6px 28px 6px 10px', borderRadius: '6px', fontSize: '12.5px', border: '1px solid var(--border-color)', outline: 'none', backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)', whiteSpace: 'nowrap', minWidth: '150px', width: '100%' }}
+                    style={{ padding: '6px 28px 6px 10px', borderRadius: '6px', fontSize: '12.5px', border: '1px solid var(--border-color)', outline: 'none', backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)', whiteSpace: 'nowrap', minWidth: '160px', width: '100%' }}
                   />
                   {customerInputText && (
                     <button
@@ -747,10 +747,10 @@ export const Contracts: React.FC = () => {
                     >✕</button>
                   )}
                   {customerDropdownOpen && (
-                    <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 999, backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '6px', marginTop: '2px', maxHeight: '200px', overflowY: 'auto', boxShadow: '0 4px 12px rgba(0,0,0,0.2)' }}>
+                    <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 9999, backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '6px', marginTop: '2px', minHeight: '44px', maxHeight: '220px', overflowY: 'auto', boxShadow: '0 4px 12px rgba(0,0,0,0.25)' }}>
                       <div
                         onMouseDown={() => { setCustomerFilter('ALL'); setCustomerInputText(''); setSiteFilter('ALL'); setSiteInputText(''); setCustomerDropdownOpen(false); }}
-                        style={{ padding: '7px 12px', fontSize: '12.5px', cursor: 'pointer', color: customerFilter === 'ALL' ? 'var(--primary)' : 'var(--text-primary)', fontWeight: customerFilter === 'ALL' ? 700 : 400 }}
+                        style={{ padding: '8px 12px', fontSize: '12.5px', cursor: 'pointer', color: customerFilter === 'ALL' ? 'var(--primary)' : 'var(--text-primary)', fontWeight: customerFilter === 'ALL' ? 700 : 400 }}
                       >전체 고객사</div>
                       {customers
                         .filter(c => !customerInputText || c.name.toLowerCase().includes(customerInputText.toLowerCase()))
@@ -758,7 +758,7 @@ export const Contracts: React.FC = () => {
                           <div
                             key={c.id}
                             onMouseDown={() => { setCustomerFilter(c.id); setCustomerInputText(c.name); setSiteFilter('ALL'); setSiteInputText(''); setCustomerDropdownOpen(false); }}
-                            style={{ padding: '7px 12px', fontSize: '12.5px', cursor: 'pointer', color: customerFilter === c.id ? 'var(--primary)' : 'var(--text-primary)', fontWeight: customerFilter === c.id ? 700 : 400, borderTop: '1px solid var(--border-color)' }}
+                            style={{ padding: '8px 12px', fontSize: '12.5px', cursor: 'pointer', color: customerFilter === c.id ? 'var(--primary)' : 'var(--text-primary)', fontWeight: customerFilter === c.id ? 700 : 400, borderTop: '1px solid var(--border-color)' }}
                           >{c.name}</div>
                         ))
                       }
@@ -782,7 +782,7 @@ export const Contracts: React.FC = () => {
                     onFocus={() => setSiteDropdownOpen(true)}
                     onBlur={() => setTimeout(() => setSiteDropdownOpen(false), 150)}
                     placeholder="전체 현장"
-                    style={{ padding: '6px 28px 6px 10px', borderRadius: '6px', fontSize: '12.5px', border: '1px solid var(--border-color)', outline: 'none', backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)', whiteSpace: 'nowrap', minWidth: '150px', width: '100%' }}
+                    style={{ padding: '6px 28px 6px 10px', borderRadius: '6px', fontSize: '12.5px', border: '1px solid var(--border-color)', outline: 'none', backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)', whiteSpace: 'nowrap', minWidth: '160px', width: '100%' }}
                   />
                   {siteInputText && (
                     <button
@@ -791,10 +791,10 @@ export const Contracts: React.FC = () => {
                     >✕</button>
                   )}
                   {siteDropdownOpen && (
-                    <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 999, backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '6px', marginTop: '2px', maxHeight: '200px', overflowY: 'auto', boxShadow: '0 4px 12px rgba(0,0,0,0.2)' }}>
+                    <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 9999, backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '6px', marginTop: '2px', minHeight: '44px', maxHeight: '220px', overflowY: 'auto', boxShadow: '0 4px 12px rgba(0,0,0,0.25)' }}>
                       <div
                         onMouseDown={() => { setSiteFilter('ALL'); setSiteInputText(''); setSiteDropdownOpen(false); }}
-                        style={{ padding: '7px 12px', fontSize: '12.5px', cursor: 'pointer', color: siteFilter === 'ALL' ? 'var(--primary)' : 'var(--text-primary)', fontWeight: siteFilter === 'ALL' ? 700 : 400 }}
+                        style={{ padding: '8px 12px', fontSize: '12.5px', cursor: 'pointer', color: siteFilter === 'ALL' ? 'var(--primary)' : 'var(--text-primary)', fontWeight: siteFilter === 'ALL' ? 700 : 400 }}
                       >전체 현장</div>
                       {(customerFilter === 'ALL' ? sites : sites.filter(s => s.customerId === customerFilter))
                         .filter(s => !siteInputText || s.name.toLowerCase().includes(siteInputText.toLowerCase()))
@@ -802,7 +802,7 @@ export const Contracts: React.FC = () => {
                           <div
                             key={s.id}
                             onMouseDown={() => { setSiteFilter(s.id); setSiteInputText(s.name); setSiteDropdownOpen(false); }}
-                            style={{ padding: '7px 12px', fontSize: '12.5px', cursor: 'pointer', color: siteFilter === s.id ? 'var(--primary)' : 'var(--text-primary)', fontWeight: siteFilter === s.id ? 700 : 400, borderTop: '1px solid var(--border-color)' }}
+                            style={{ padding: '8px 12px', fontSize: '12.5px', cursor: 'pointer', color: siteFilter === s.id ? 'var(--primary)' : 'var(--text-primary)', fontWeight: siteFilter === s.id ? 700 : 400, borderTop: '1px solid var(--border-color)' }}
                           >{s.name}</div>
                         ))
                       }
@@ -847,6 +847,7 @@ export const Contracts: React.FC = () => {
                   whiteSpace: 'nowrap',
                   flexShrink: 0,
                   height: '33px',
+                  marginTop: '19px',
                   display: 'flex',
                   alignItems: 'center',
                   gap: '4px'
@@ -879,7 +880,8 @@ export const Contracts: React.FC = () => {
                     fontWeight: 600,
                     whiteSpace: 'nowrap',
                     flexShrink: 0,
-                    height: '33px'
+                    height: '33px',
+                    marginTop: '19px'
                   }}
                 >
                   필터 초기화 ✕
