@@ -186,11 +186,19 @@ export const exportTransactionStatementExcel = async (
   const ITEM_START_ROW = 16;
   const ITEM_MAX = 11;
 
+  const sortedDetails = [...details].sort((a, b) => {
+    const aIsAsset = Boolean(a.contractAssetId);
+    const bIsAsset = Boolean(b.contractAssetId);
+    if (aIsAsset && !bIsAsset) return -1;
+    if (!aIsAsset && bIsAsset) return 1;
+    return 0;
+  });
+
   let totalSupply = 0;
   let totalVat = 0;
 
   for (let i = 0; i < ITEM_MAX; i++) {
-    const d = details[i];
+    const d = sortedDetails[i];
     const row = ITEM_START_ROW + i;
 
     if (d) {
@@ -335,11 +343,19 @@ export const exportTransactionStatementExcelBuffer = async (
   const ITEM_START_ROW = 16;
   const ITEM_MAX = 11;
 
+  const sortedDetails = [...details].sort((a, b) => {
+    const aIsAsset = Boolean(a.contractAssetId);
+    const bIsAsset = Boolean(b.contractAssetId);
+    if (aIsAsset && !bIsAsset) return -1;
+    if (!aIsAsset && bIsAsset) return 1;
+    return 0;
+  });
+
   let totalSupply = 0;
   let totalVat = 0;
 
   for (let i = 0; i < ITEM_MAX; i++) {
-    const d = details[i];
+    const d = sortedDetails[i];
     const row = ITEM_START_ROW + i;
     if (d) {
       const unitPrice = d.unitPrice || 0;

@@ -218,9 +218,11 @@ export const Billings: React.FC = () => {
   const activeBilling = billings.find(b => b.id === selectedBillingId);
   const activeBillingDetails = selectedBillingId 
     ? [...billingDetails.filter(bd => bd.billingId === selectedBillingId)].sort((a, b) => {
-        const aIsRental = (a.contractAssetId || a.itemName?.includes('렌탈료')) ? 0 : 1;
-        const bIsRental = (b.contractAssetId || b.itemName?.includes('렌탈료')) ? 0 : 1;
-        return aIsRental - bIsRental;
+        const aIsAsset = Boolean(a.contractAssetId);
+        const bIsAsset = Boolean(b.contractAssetId);
+        if (aIsAsset && !bIsAsset) return -1;
+        if (!aIsAsset && bIsAsset) return 1;
+        return 0;
       })
     : [];
 
@@ -500,7 +502,13 @@ export const Billings: React.FC = () => {
   const downloadStatementPdf = async (billingId?: string) => {
     const targetBillingId = billingId || mailBillingId || selectedBillingId;
     const billing = billings.find(b => b.id === targetBillingId);
-    const rawDetails = billingDetails.filter(d => d.billingId === targetBillingId);
+    const rawDetails = [...billingDetails.filter(d => d.billingId === targetBillingId)].sort((a, b) => {
+      const aIsAsset = Boolean(a.contractAssetId);
+      const bIsAsset = Boolean(b.contractAssetId);
+      if (aIsAsset && !bIsAsset) return -1;
+      if (!aIsAsset && bIsAsset) return 1;
+      return 0;
+    });
     const customer = customers.find(c => c.id === billing?.customerId);
     const contract = contracts.find(c => c.id === billing?.contractId);
     const site = sites.find(s => s.id === contract?.siteId);
@@ -602,7 +610,13 @@ export const Billings: React.FC = () => {
   const downloadStatementExcel = async (billingId?: string) => {
     const targetBillingId = billingId || mailBillingId || selectedBillingId;
     const billing = billings.find(b => b.id === targetBillingId);
-    const rawDetails = billingDetails.filter(d => d.billingId === targetBillingId);
+    const rawDetails = [...billingDetails.filter(d => d.billingId === targetBillingId)].sort((a, b) => {
+      const aIsAsset = Boolean(a.contractAssetId);
+      const bIsAsset = Boolean(b.contractAssetId);
+      if (aIsAsset && !bIsAsset) return -1;
+      if (!aIsAsset && bIsAsset) return 1;
+      return 0;
+    });
     const customer = customers.find(c => c.id === billing?.customerId);
     const contract = contracts.find(c => c.id === billing?.contractId);
     const site = sites.find(s => s.id === contract?.siteId);
@@ -1868,7 +1882,7 @@ ${items.map((item, idx) => {
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       {(() => {
-                        const rentalCount = activeBillingDetails.filter(bd => bd.contractAssetId || bd.itemName?.includes('렌탈')).length;
+                        const rentalCount = activeBillingDetails.filter(bd => Boolean(bd.contractAssetId)).length;
                         const extraCount = activeBillingDetails.length - rentalCount;
                         return (
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -1911,10 +1925,10 @@ ${items.map((item, idx) => {
                                 ? assets.find(a => a.id === ca.assetId) 
                                 : (bd.assetId ? assets.find(a => a.id === bd.assetId) : null);
                               
-                              const modelName = asset?.modelName || ca?.expectedModel || (bd.itemName !== '렌탈 장비 렌탈료' ? bd.itemName : '장비');
+                              const modelName = asset?.modelName || ca?.expectedModel || (bd.displayName || bd.itemName || '추가청구');
                               const assetNo = asset?.assetNo ? asset.assetNo : (ca?.assetId ? ca.assetId : '-');
-                              const isRental = Boolean(bd.contractAssetId || bd.itemName?.includes('렌탈'));
-                              const category = isRental ? '렌탈료' : (bd.itemName || '부대비용');
+                              const isAssetRental = Boolean(bd.contractAssetId);
+                              const category = isAssetRental ? '렌탈료' : (bd.displayName || bd.itemName || '추가청구');
                               
                               const supply = bd.amount || 0;
                               const vat = Math.round(supply * 0.1);
@@ -1930,8 +1944,8 @@ ${items.map((item, idx) => {
                                       borderRadius: '4px', 
                                       fontSize: '10.5px', 
                                       fontWeight: 600,
-                                      backgroundColor: isRental ? 'rgba(59, 130, 246, 0.1)' : 'rgba(16, 185, 129, 0.1)',
-                                      color: isRental ? '#2563eb' : '#059669'
+                                      backgroundColor: isAssetRental ? 'rgba(59, 130, 246, 0.1)' : 'rgba(245, 158, 11, 0.1)',
+                                      color: isAssetRental ? '#2563eb' : '#d97706'
                                     }}>
                                       {category}
                                     </span>
