@@ -895,14 +895,14 @@ ${details.map((d, idx) => {
 
       {/* 탭 */}
       <div style={{ display: 'flex', gap: '8px', marginBottom: '24px', flexWrap: 'wrap' }}>
-        <button className={activeTab === 'LIST' ? 'btn-primary' : 'btn-secondary'} onClick={() => setActiveTab('LIST')}>
-          청구 및 수납 내역
-        </button>
         {canSave && (
           <button className={activeTab === 'WIZARD' ? 'btn-primary' : 'btn-secondary'} onClick={() => setActiveTab('WIZARD')}>
             <Calendar size={14} /> 미청구 계약 정산 마법사
           </button>
         )}
+        <button className={activeTab === 'LIST' ? 'btn-primary' : 'btn-secondary'} onClick={() => setActiveTab('LIST')}>
+          청구 및 수납 내역
+        </button>
       </div>
 
       {activeTab === 'LIST' && (() => {
