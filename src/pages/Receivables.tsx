@@ -22,7 +22,7 @@ export const Receivables: React.FC = () => {
   const [formDisplayName, setFormDisplayName] = useState('');
   const [formOccurredDate, setFormOccurredDate] = useState(new Date().toISOString().split('T')[0]);
 
-  const canWrite = hasPermission('BILLING', 'WRITE');
+  const canWrite = hasPermission('BILLING', 'save');
 
   const filtered = receivables.filter(r => {
     // 텍스트 검색
@@ -49,7 +49,7 @@ export const Receivables: React.FC = () => {
     }
 
     return true;
-  }).sort((a, b) => new Date(b.occurredDate).getTime() - new Date(a.occurredDate).getTime());
+  }).sort((a: any, b: any) => new Date(b.occurredDate).getTime() - new Date(a.occurredDate).getTime());
 
   const [continuousMode, setContinuousMode] = useState(false);
 

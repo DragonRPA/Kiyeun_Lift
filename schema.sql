@@ -25,6 +25,7 @@ DROP TABLE IF EXISTS purchase_billings CASCADE;
 DROP TABLE IF EXISTS deliveries CASCADE;
 DROP TABLE IF EXISTS payments CASCADE;
 DROP TABLE IF EXISTS billing_details CASCADE;
+DROP TABLE IF EXISTS receivables CASCADE;
 DROP TABLE IF EXISTS billings CASCADE;
 DROP TABLE IF EXISTS contract_history CASCADE;
 DROP TABLE IF EXISTS contract_assets CASCADE;
@@ -405,6 +406,23 @@ CREATE TABLE billing_details (
     "updatedAt" TEXT NOT NULL
 );
 
+-- 17-2. 외상미수금 대장 (receivables) - 부대 청구 항목 관리
+CREATE TABLE receivables (
+    id TEXT PRIMARY KEY,
+    "contractId" TEXT REFERENCES contracts(id),
+    "customerId" TEXT REFERENCES customers(id),
+    type TEXT CHECK (type IN ('TRANSPORT', 'REPAIR', 'CLEANING', 'OTHER')) NOT NULL,
+    "totalAmount" DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "billedAmount" DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "internalDescription" TEXT NOT NULL,
+    "displayName" TEXT,
+    "occurredDate" TEXT NOT NULL,
+    status TEXT CHECK (status IN ('PENDING', 'PARTIAL', 'CLEARED')) NOT NULL DEFAULT 'PENDING',
+    CONSTRAINT chk_billed_amount CHECK ("billedAmount" <= "totalAmount"),
+    "createdAt" TEXT NOT NULL,
+    "updatedAt" TEXT NOT NULL
+);
+
 -- 18. 매입 청구 마스터 (purchase_billings) - 신설
 CREATE TABLE purchase_billings (
     id TEXT PRIMARY KEY,
@@ -621,7 +639,8 @@ CREATE TABLE consumable_purchases (
     "statementFileUrl" TEXT,
     "requestDate" TEXT NOT NULL,
     "acceptedDate" TEXT,
-    "completedDate" TEXT,
+    "actualReturnDate" TEXT,
+    
     "createdAt" TEXT NOT NULL,
     "updatedAt" TEXT NOT NULL
 );
