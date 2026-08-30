@@ -175,51 +175,48 @@ export async function injectMasterXlsxToBundle(
   const N = assetList.length;
   const totalSteps = 1 + 1 + N + N; // fetch + 계약서 + 체크리스트N + 안전점검N
 
-  // ── 1. 마스터 xlsx 1회 fetch ───────────────────────────────────────────────
-  onProgress?.('마스터 xlsx 1회 fetch 중...', 1, totalSteps);
+  // ── 1. 마스터 xlsx fetch (우선순위: 로컬 미러 → R2 공개 URL → /api/r2 서버리스) ──
+  onProgress?.('마스터 xlsx 로드 중...', 1, totalSteps);
 
   let masterBytes: ArrayBuffer | null = null;
   const masterFileName = '01.계약서패키지_마스터.xlsx';
   const masterFileNameEncoded = encodeURIComponent(masterFileName);
 
-  // 1-A. R2 공개 URL 시도
+  // ── 내부 유틸: ArrayBuffer ZIP 시그니처 검증 ──
+  function isValidZip(bytes: ArrayBuffer): boolean {
+    const view = new Uint8Array(bytes, 0, 2);
+    return view[0] === 0x50 && view[1] === 0x4B;
+  }
+
+  // 1-A. 로컬 에이전트 drive_mirror 캐시 — 1순위 (가장 빠름, 네트워크 없음)
   try {
-    const res = await fetch(`${publicDomain.replace(/\/$/, '')}/${masterFileNameEncoded}`, {
-      signal: AbortSignal.timeout(20000),
-    });
+    const res = await fetch(
+      `http://127.0.0.1:5175/api/get-file?fileName=${masterFileNameEncoded}`,
+      { signal: AbortSignal.timeout(2000) },   // 로컬이므로 2초 내 응답 보장
+    );
     if (res.ok) {
-      const ct = res.headers.get('content-type') || '';
-      // XLSX는 application/vnd.openxmlformats 또는 application/octet-stream
-      // HTML 에러 페이지는 text/html — 걸러냄
-      if (!ct.includes('text/html')) {
-        const bytes = await res.arrayBuffer();
-        // XLSX 최소 사이즈 검증 (ZIP 시그니처: 0x50 0x4B)
-        const view = new Uint8Array(bytes, 0, 2);
-        if (view[0] === 0x50 && view[1] === 0x4B) {
-          masterBytes = bytes;
-        }
-      }
+      const bytes = await res.arrayBuffer();
+      if (isValidZip(bytes)) masterBytes = bytes;
     }
   } catch (_) {}
 
-  // 1-B. 로컬 에이전트 fallback (get-file API — drive_mirror 캐시)
+  // 1-B. R2 공개 URL — 2순위 (공개 버킷 설정 시 작동)
   if (!masterBytes) {
     try {
-      const res = await fetch(
-        `http://127.0.0.1:5175/api/get-file?fileName=${masterFileNameEncoded}`,
-        { signal: AbortSignal.timeout(10000) },
-      );
+      const res = await fetch(`${publicDomain.replace(/\/$/, '')}/${masterFileNameEncoded}`, {
+        signal: AbortSignal.timeout(8000),     // 원격이므로 8초
+      });
       if (res.ok) {
-        const bytes = await res.arrayBuffer();
-        const view = new Uint8Array(bytes, 0, 2);
-        if (view[0] === 0x50 && view[1] === 0x4B) {
-          masterBytes = bytes;
+        const ct = res.headers.get('content-type') || '';
+        if (!ct.includes('text/html')) {
+          const bytes = await res.arrayBuffer();
+          if (isValidZip(bytes)) masterBytes = bytes;
         }
       }
     } catch (_) {}
   }
 
-  // 1-C. /api/r2 서버리스 경유 — R2에서 직접 다운로드 (Vercel 환경)
+  // 1-C. /api/r2 서버리스 경유 — 3순위 (Vercel 환경, S3 API 직접 접근)
   if (!masterBytes && options.r2Config) {
     try {
       const { accountId, bucketName, accessKeyId, secretAccessKey } = options.r2Config;
@@ -236,16 +233,13 @@ export async function injectMasterXlsxToBundle(
       });
       if (res.ok) {
         const bytes = await res.arrayBuffer();
-        const view = new Uint8Array(bytes, 0, 2);
-        if (view[0] === 0x50 && view[1] === 0x4B) {
-          masterBytes = bytes;
-        }
+        if (isValidZip(bytes)) masterBytes = bytes;
       }
     } catch (_) {}
   }
 
   if (!masterBytes) {
-    throw new Error('[masterXlsxBundle] 마스터 xlsx 로드 실패 — R2 및 로컬 에이전트 모두 응답 없음');
+    throw new Error('[masterXlsxBundle] 마스터 xlsx 로드 실패 — 로컬 에이전트·R2 공개 URL·서버리스 모두 응답 없음');
   }
 
   const today = (() => {
