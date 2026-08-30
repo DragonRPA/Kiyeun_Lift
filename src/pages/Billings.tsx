@@ -492,7 +492,7 @@ export const Billings: React.FC = () => {
   // 거래명세서 엑셀 다운로드 (시스템 엑셀 양식 기반)
   const printStatementAsPdf = async () => {
     const billing = billings.find(b => b.id === mailBillingId);
-    const details = billingDetails.filter(d => d.billingId === mailBillingId);
+    const rawDetails = billingDetails.filter(d => d.billingId === mailBillingId);
     const customer = customers.find(c => c.id === billing?.customerId);
     const contract = contracts.find(c => c.id === billing?.contractId);
     const site = sites.find(s => s.id === contract?.siteId);
@@ -501,6 +501,18 @@ export const Billings: React.FC = () => {
     const sName = site?.name || '현장';
     const ym = billing?.billingYm || '';
     const fileName = `거래명세서_${custName}_${sName}_${ym}`;
+
+    const details = rawDetails.map(d => {
+      const ca = contractAssets.find(cAsset => cAsset.id === d.contractAssetId);
+      const asset = ca?.assetId 
+        ? assets.find(a => a.id === ca.assetId) 
+        : (d.assetId ? assets.find(a => a.id === d.assetId) : null);
+      return {
+        ...d,
+        modelName: asset?.modelName || ca?.expectedModel || d.itemName,
+        assetNo: asset?.assetNo ? asset.assetNo : (ca?.assetId ? ca.assetId : (d.assetNo || ''))
+      };
+    });
 
     try {
       await exportTransactionStatementExcel(
@@ -535,11 +547,23 @@ export const Billings: React.FC = () => {
 
     setIsSending(true);
     const billing = billings.find(b => b.id === mailBillingId);
-    const details = billingDetails.filter(d => d.billingId === mailBillingId);
+    const rawDetails = billingDetails.filter(d => d.billingId === mailBillingId);
     const customer = customers.find(c => c.id === billing?.customerId);
     const contract = contracts.find(c => c.id === billing?.contractId);
     const site = sites.find(s => s.id === contract?.siteId);
     const salesperson = users.find((u: any) => u.id === contract?.salespersonId);
+
+    const details = rawDetails.map(d => {
+      const ca = contractAssets.find(cAsset => cAsset.id === d.contractAssetId);
+      const asset = ca?.assetId 
+        ? assets.find(a => a.id === ca.assetId) 
+        : (d.assetId ? assets.find(a => a.id === d.assetId) : null);
+      return {
+        ...d,
+        modelName: asset?.modelName || ca?.expectedModel || d.itemName,
+        assetNo: asset?.assetNo ? asset.assetNo : (ca?.assetId ? ca.assetId : (d.assetNo || ''))
+      };
+    });
 
     const details_supply = details.reduce((sum, d) => sum + (d.unitPrice || 0) * (d.quantity || 1), 0);
     const details_vat = Math.round(details_supply * 0.1);
@@ -2578,12 +2602,22 @@ ${details.map((d, idx) => {
                     const sName = site?.name || '현장';
                     const ym = targetBilling?.billingYm || '';
                     const fileName = `${custName}_${sName}_${ym}`;
-                    // Supabase google_configs 에 저장된 구글 드라이브 양식 URL 사용
-                    const templateUrl = undefined /* CF R2 마스터 xlsx로 대체됨 */;
+                    const enrichedDetails = targetDetails.map(d => {
+                      const ca = contractAssets.find(cAsset => cAsset.id === d.contractAssetId);
+                      const asset = ca?.assetId 
+                        ? assets.find(a => a.id === ca.assetId) 
+                        : (d.assetId ? assets.find(a => a.id === d.assetId) : null);
+                      return {
+                        ...d,
+                        modelName: asset?.modelName || ca?.expectedModel || d.itemName,
+                        assetNo: asset?.assetNo ? asset.assetNo : (ca?.assetId ? ca.assetId : (d.assetNo || ''))
+                      };
+                    });
+
                     try {
                       await exportTransactionStatementExcel(
                         targetBilling,
-                        targetDetails,
+                        enrichedDetails,
                         targetCust,
                         targetContract,
                         site,
