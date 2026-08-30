@@ -290,6 +290,9 @@ $ErrorActionPreference = 'Stop'
 $excel = New-Object -ComObject Excel.Application
 $excel.Visible = $false
 $excel.DisplayAlerts = $false
+$excel.ScreenUpdating = $false
+$excel.EnableEvents = $false
+$excel.Interactive = $false
 
 function Replace-Tag($targetWs, $tag, $val) {
   $null = $targetWs.Cells.Replace($tag, $val, 2, 1, $false, $false, $false)
