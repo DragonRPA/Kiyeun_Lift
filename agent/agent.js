@@ -336,11 +336,42 @@ Replace-Tag $wsContract "{합계}" "₩${totalRentalFee.toLocaleString()}"
 Replace-Tag $wsContract "{옵션}" "${optionsText}"
 Replace-Tag $wsContract "{특이사항}" "${remarksText}"
 
-$wsContract.PageSetup.PrintArea = "A26:K78"
+# ── 자산별 행(Row 44부터) 1대당 1줄씩 명시적 기입 ──
+` + assets.map((ast, idx) => {
+  const row = 44 + idx;
+  const aModel = ast.modelName || 'GS-2646';
+  const aSn = ast.sn ? String(ast.sn) : '';
+  const aNo = ast.assetNo || '';
+  const aFee = (ast.rentalFee || 480000).toLocaleString();
+  return `
+$wsContract.Cells.Item(${row}, 1).Value2 = "${aModel}"
+$wsContract.Cells.Item(${row}, 3).Value2 = "1"
+$wsContract.Cells.Item(${row}, 4).Value2 = "${aSn}\`r\`n${aNo}"
+$wsContract.Cells.Item(${row}, 5).Value2 = "${aFee}"
+$wsContract.Cells.Item(${row}, 7).Value2 = "${aFee}"
+`;
+}).join('') + (assets.length < 12 ? Array.from({ length: 12 - assets.length }, (_, k) => {
+  const row = 44 + assets.length + k;
+  return `
+$wsContract.Cells.Item(${row}, 1).Value2 = ""
+$wsContract.Cells.Item(${row}, 3).Value2 = ""
+$wsContract.Cells.Item(${row}, 4).Value2 = ""
+$wsContract.Cells.Item(${row}, 5).Value2 = ""
+$wsContract.Cells.Item(${row}, 7).Value2 = ""
+`;
+}).join('') : '') + `
+
+$wsContract.PageSetup.PaperSize = 9
 $wsContract.PageSetup.Orientation = 1
 $wsContract.PageSetup.Zoom = $false
 $wsContract.PageSetup.FitToPagesWide = 1
-$wsContract.PageSetup.FitToPagesTall = 1
+if (${assets.length} -le 12) {
+  $wsContract.PageSetup.PrintArea = "A26:K78"
+  $wsContract.PageSetup.FitToPagesTall = 1
+} else {
+  $wsContract.PageSetup.PrintArea = ""
+  $wsContract.PageSetup.FitToPagesTall = $false
+}
 
 # --- 3. 체크리스트 및 안전점검결과서 시트 복제 및 데이터 주입 ---
 # JSON 배열 데이터를 PowerShell 객체로 파싱
