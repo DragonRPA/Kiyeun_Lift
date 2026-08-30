@@ -88,7 +88,7 @@ export const ContractDocumentBundleModal: React.FC<Props> = ({ isOpen, onClose, 
 
     setIsGenerating(true);
     setProgressPercent(5);
-    setProgressText('7종 통합 서류팩 조립 시작...');
+    setProgressText('계약서패키지 조립 시작...');
     setErrorMessage(null);
     setGeneratedResult(null);
     setEmailSentSuccess(false);
@@ -154,7 +154,7 @@ export const ContractDocumentBundleModal: React.FC<Props> = ({ isOpen, onClose, 
 
             finalResult = {
               url,
-              fileName: agentRes.fileName || `[기연리프트]_계약서류팩_${custName}_${siteName}(${agentRes.pageCount}p).pdf`,
+              fileName: agentRes.fileName || `[기연리프트]_계약서패키지_${custName}_${siteName}(${agentRes.pageCount}p).pdf`,
               pageCount: agentRes.pageCount || 37,
               blob
             };
@@ -173,12 +173,12 @@ export const ContractDocumentBundleModal: React.FC<Props> = ({ isOpen, onClose, 
       }
 
       setProgressPercent(100);
-      setProgressText('✅ 총 ' + finalResult.pageCount + '페이지 정품 7종 통합 서류팩 완성!');
+      setProgressText('✅ 총 ' + finalResult.pageCount + '페이지 정품 계약서패키지 완성!');
       setGeneratedResult(finalResult);
 
       // 이메일 수신자/제목 기본값 세팅
       setEmailRecipient(customer?.repEmail || site?.email || '');
-      setEmailSubject(`[기연리프트] ${custName} - ${siteName} 고소작업대 임대차 계약서 및 7종 필수서류 묶음`);
+      setEmailSubject(`[기연리프트] ${custName} - ${siteName} 고소작업대 임대차 계약서패키지`);
 
       if (openPreview) {
         window.open(finalResult.url, '_blank');
@@ -204,7 +204,7 @@ export const ContractDocumentBundleModal: React.FC<Props> = ({ isOpen, onClose, 
       return;
     }
     if (!generatedResult) {
-      alert('먼저 계약 서류팩 PDF를 생성해 주세요.');
+      alert('먼저 계약서패키지 PDF를 생성해 주세요.');
       return;
     }
 
@@ -216,7 +216,7 @@ export const ContractDocumentBundleModal: React.FC<Props> = ({ isOpen, onClose, 
 안녕하십니까, ${custName} 담당자님.
 (주)기연리프트 영업팀입니다.
 
-요청하신 [${siteName}] 현장 고소작업대 임대차 계약서 및 법정/필수 7종 서류 묶음(총 ${generatedResult.pageCount}페이지)을 첨부 파일로 송부드립니다.
+요청하신 [${siteName}] 현장 고소작업대 임대차 계약서패키지(총 ${generatedResult.pageCount}페이지)를 첨부 파일로 송부드립니다.
 
 ■ 첨부 서류 구성 (단일 통합 PDF):
 1. 고소작업대 임대차 계약서
@@ -311,7 +311,7 @@ export const ContractDocumentBundleModal: React.FC<Props> = ({ isOpen, onClose, 
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <FileText size={20} color="var(--primary)" />
             <h3 style={{ margin: 0, fontSize: '17px', fontWeight: 'bold', color: 'var(--text-main)', whiteSpace: 'nowrap' }}>
-              계약 서류 7종 통합 PDF 생성 및 이메일 발송
+              계약서패키지 PDF 생성 및 이메일 발송
             </h3>
           </div>
           <button
@@ -397,10 +397,10 @@ export const ContractDocumentBundleModal: React.FC<Props> = ({ isOpen, onClose, 
             </div>
           )}
 
-          {/* 3. 엮을 7종 서류 확인 그리드 */}
+          {/* 3. 계약서패키지 구성 그리드 */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
             <label style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
-              자동 조립 7종 서류 묶음 구성 (첨부 실물 표준 순서)
+              계약서패키지 서류 구성 (첨부 실물 표준 순서)
             </label>
             <div
               style={{
@@ -528,7 +528,7 @@ export const ContractDocumentBundleModal: React.FC<Props> = ({ isOpen, onClose, 
                 <div style={{ padding: '14px', backgroundColor: 'var(--bg-app)', border: '1px solid var(--border-color)', borderRadius: '8px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
                   <div style={{ fontWeight: 'bold', fontSize: '13px', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <Mail size={16} color="var(--primary)" />
-                    고객사 계약서류팩 이메일 발송
+                    고객사 계약서패키지 이메일 발송
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: '80px 1fr', gap: '8px', alignItems: 'center', fontSize: '12.5px' }}>
                     <span style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>수신인:</span>
@@ -648,7 +648,7 @@ export const ContractDocumentBundleModal: React.FC<Props> = ({ isOpen, onClose, 
             }}
           >
             {isGenerating ? <RefreshCw size={15} className="animate-spin" /> : <Download size={15} />}
-            7종 통합 PDF 다운로드
+            계약서패키지 PDF 다운로드
           </button>
         </div>
       </div>

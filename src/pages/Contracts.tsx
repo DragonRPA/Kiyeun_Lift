@@ -20,7 +20,7 @@ export const Contracts: React.FC = () => {
 
   const canSave = hasPermission('contract', 'save');
 
-  // 6종 통합 서류팩 모달 상태
+  // 계약서패키지 모달 상태
   const [showBundleModal, setShowBundleModal] = useState(false);
   const [bundleTargetContractId, setBundleTargetContractId] = useState<string | undefined>(undefined);
 
@@ -676,7 +676,7 @@ export const Contracts: React.FC = () => {
               }}
               style={{ padding: '7px 14px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--primary)', fontWeight: 'bold' }}
             >
-              <FileText size={14} /> 7종 통합 서류팩 PDF / 이메일
+              <FileText size={14} /> 계약서패키지 PDF / 이메일
             </button>
             {canSave && (
               <button
@@ -1086,7 +1086,7 @@ export const Contracts: React.FC = () => {
                 }}
                 style={{ padding: '6px 12px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--primary)', fontWeight: 'bold' }}
               >
-                <Download size={14} /> 7종 통합 서류팩 PDF / 이메일
+                <Download size={14} /> 계약서패키지 PDF / 이메일
               </button>
 
               {canSave && canModifyContract(activeContract) && (
@@ -1242,7 +1242,7 @@ export const Contracts: React.FC = () => {
                       <span>로컬 문서고 및 발송 서류 보관함</span>
                     </div>
                     <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
-                      발송 서류 색인: <strong>{activeCustomer?.name}_{activeSite?.name || '현장'}_{activeContract.contractNo}</strong>
+                      발송 서류 색인: <strong>{getCustName(activeContract.customerId)}_{getSiteName(activeContract.siteId)}_{activeContract.contractNo}</strong>
                     </div>
                   </div>
 
@@ -1251,7 +1251,7 @@ export const Contracts: React.FC = () => {
                       type="button"
                       className="btn-secondary"
                       onClick={() => {
-                        const indexName = `${activeCustomer?.name || '고객'}_${activeSite?.name || '현장'}_${activeContract.contractNo}`;
+                        const indexName = `${getCustName(activeContract.customerId)}_${getSiteName(activeContract.siteId)}_${activeContract.contractNo}`;
                         navigator.clipboard.writeText(indexName);
                         alert(`색인 명칭이 클립보드에 복사되었습니다:\n\n${indexName}`);
                       }}
@@ -1286,7 +1286,7 @@ export const Contracts: React.FC = () => {
                       }}
                       style={{ padding: '4px 10px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px' }}
                     >
-                      <FileText size={12} /> 7종 서류팩 생성
+                      <FileText size={12} /> 계약서패키지 생성
                     </button>
                   </div>
                 </div>
@@ -1833,7 +1833,7 @@ export const Contracts: React.FC = () => {
         </form>
       )}
 
-      {/* 6종 통합 계약 서류팩 모달 */}
+      {/* 계약서패키지 모달 */}
       <ContractDocumentBundleModal
         isOpen={showBundleModal}
         onClose={() => setShowBundleModal(false)}

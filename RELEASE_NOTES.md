@@ -1,3 +1,15 @@
+# Release Notes (v0.5.3.Build.42 - 2026-08-30 23:13)
+
+## 💡 [계약 상세 화면 암전 ReferenceError 원천 수정 및 전사 "7종서류팩" ➔ "계약서패키지" 명칭 전면 통일]
+
+### ✨ 반영 내용
+- **계약 상세 화면 암전 버그 원천 해결 (`Contracts.tsx`)**
+  - 로컬 문서고 색인 표시 부에서 미정의 변수 참조(`activeCustomer`, `activeSite`)로 발생하던 ReferenceError를 `getCustName()`, `getSiteName()` 정식 함수로 교체하여 암전 현상 원천 해결.
+- **전사 시스템 "7종서류팩" ➔ "계약서패키지" 단일 명칭 통일 (`Contracts.tsx`, `ContractDocumentBundleModal.tsx`)**
+  - 모든 타이틀, 버튼, 안내 문구, 메일 본문, 다운로드 파일명 표기를 **`계약서패키지`** 단일 명칭으로 전면 통일.
+
+---
+
 # Release Notes (v0.5.3.Build.41 - 2026-08-30 23:08)
 
 ## 💡 [계약 상세 로컬 문서고 및 발송 서류 보관함 색인 열기 & 계약 귀속 외상미수금 현황 패널 구축]
