@@ -28,6 +28,7 @@ export const Receivables: React.FC = () => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [modalSearchTerm, setModalSearchTerm] = useState('');
   const [modalSelectedCustId, setModalSelectedCustId] = useState('');
+  const [modalSelectedSiteId, setModalSelectedSiteId] = useState('');
 
   // 폼 상태
   const [formContractId, setFormContractId] = useState('');
@@ -36,6 +37,107 @@ export const Receivables: React.FC = () => {
   const [formInternalDescription, setFormInternalDescription] = useState('');
   const [formDisplayName, setFormDisplayName] = useState('');
   const [formOccurredDate, setFormOccurredDate] = useState(new Date().toISOString().split('T')[0]);
+
+  // ── 양방향 계약/고객/현장 자동 확정 핸들러 ──
+  // 1. 빠른 검색창 입력 핸들러 (계약번호/고객사명/현장명)
+  const handleModalSearchChange = (val: string) => {
+    setModalSearchTerm(val);
+    const term = val.trim().toLowerCase();
+    if (!term) return;
+
+    // 계약번호 완전 일치 우선
+    const exactContract = contracts.find(c => c.contractNo.toLowerCase() === term && c.status !== 'COMPLETED')
+      || contracts.find(c => c.contractNo.toLowerCase() === term);
+
+    if (exactContract) {
+      setFormContractId(exactContract.id);
+      setModalSelectedCustId(exactContract.customerId);
+      setModalSelectedSiteId(exactContract.siteId || '');
+      return;
+    }
+
+    // 부분 일치 진행 계약이 1건으로 특정되는 경우
+    const matchedContracts = contracts.filter(c => {
+      if (c.status === 'COMPLETED') return false;
+      const cu = customers.find(x => x.id === c.customerId);
+      const s = sites.find(x => x.id === c.siteId);
+      return (
+        c.contractNo.toLowerCase().includes(term) ||
+        (cu?.name || '').toLowerCase().includes(term) ||
+        (s?.name || '').toLowerCase().includes(term)
+      );
+    });
+
+    if (matchedContracts.length === 1) {
+      const single = matchedContracts[0];
+      setFormContractId(single.id);
+      setModalSelectedCustId(single.customerId);
+      setModalSelectedSiteId(single.siteId || '');
+    }
+  };
+
+  // 2. 고객사 선택 핸들러
+  const handleCustomerSelect = (custId: string) => {
+    setModalSelectedCustId(custId);
+    if (!custId) {
+      setFormContractId('');
+      setModalSelectedSiteId('');
+      return;
+    }
+
+    // 해당 고객사의 진행 계약이 1건인 경우 계약 및 현장 자동 확정
+    const custContracts = contracts.filter(c => c.customerId === custId && c.status !== 'COMPLETED');
+    if (custContracts.length === 1) {
+      const single = custContracts[0];
+      setFormContractId(single.id);
+      setModalSelectedSiteId(single.siteId || '');
+    } else {
+      setFormContractId('');
+      setModalSelectedSiteId('');
+    }
+  };
+
+  // 3. 현장 선택 핸들러 (고객사와 현장이 픽스되면 계약번호 자동 확정)
+  const handleSiteSelect = (siteId: string) => {
+    setModalSelectedSiteId(siteId);
+    if (!siteId) {
+      setFormContractId('');
+      return;
+    }
+
+    // 고객사 + 현장에 해당하는 계약 자동 매핑
+    const matched = contracts.find(c => 
+      c.customerId === modalSelectedCustId && 
+      c.siteId === siteId && 
+      c.status !== 'COMPLETED'
+    ) || contracts.find(c => 
+      c.customerId === modalSelectedCustId && 
+      c.siteId === siteId
+    );
+
+    if (matched) {
+      setFormContractId(matched.id);
+    }
+  };
+
+  // 4. 계약 직접 선택 핸들러 (계약 특정 시 고객명과 현장 자동 확정)
+  const handleContractSelect = (cId: string) => {
+    setFormContractId(cId);
+    if (!cId) return;
+    const c = contracts.find(x => x.id === cId);
+    if (c) {
+      setModalSelectedCustId(c.customerId);
+      setModalSelectedSiteId(c.siteId || '');
+    }
+  };
+
+  // 5. 선택 전체 해제
+  const handleResetSelection = () => {
+    setFormContractId('');
+    setModalSelectedCustId('');
+    setModalSelectedSiteId('');
+    setModalSearchTerm('');
+  };
 
   const canWrite = hasPermission('BILLING', 'save');
 
@@ -110,8 +212,6 @@ export const Receivables: React.FC = () => {
   const totalBilledSum = filtered.reduce((sum, r) => sum + (r.billedAmount || 0), 0);
   const totalRemainingSum = Math.max(0, totalReceivableSum - totalBilledSum);
 
-  const [continuousMode, setContinuousMode] = useState(false);
-
   const handleStandaloneIssue = async (receivableId: string) => {
     if (!hasPermission('billing', 'save')) {
       alert('청구 권한이 없습니다.');
@@ -151,10 +251,11 @@ export const Receivables: React.FC = () => {
     }
 
     const c = contracts.find(x => x.id === formContractId);
+    const resolvedCustId = c ? c.customerId : (modalSelectedCustId || undefined);
     
     addReceivable({
       contractId: formContractId || undefined,
-      customerId: c ? c.customerId : undefined,
+      customerId: resolvedCustId,
       type: formType,
       totalAmount: formTotalAmount,
       billedAmount: 0,
@@ -164,20 +265,13 @@ export const Receivables: React.FC = () => {
       status: 'PENDING'
     });
 
-    if (!continuousMode) {
-      alert('외상미수금이 등록되었습니다.');
-      setShowAddModal(false);
-    } else {
-      const toast = document.createElement('div');
-      toast.innerText = '✅ 등록 완료 (연속 등록 모드)';
-      toast.style.cssText = 'position:fixed; bottom:20px; right:20px; background:#4ade80; color:white; padding:10px 20px; border-radius:8px; z-index:9999; font-weight:bold;';
-      document.body.appendChild(toast);
-      setTimeout(() => document.body.removeChild(toast), 2000);
-    }
+    alert('✅ 외상미수금이 정상 등록되었습니다.');
+    setShowAddModal(false);
     
     // 폼 초기화
     setFormContractId('');
     setModalSelectedCustId('');
+    setModalSelectedSiteId('');
     setModalSearchTerm('');
     setFormType('OTHER');
     setFormTotalAmount(0);
@@ -491,7 +585,7 @@ export const Receivables: React.FC = () => {
                 />
               </div>
 
-              {/* 2. 귀속 고객사 및 살아있는 계약/현장 검색 & 선택 패널 */}
+              {/* 2. 귀속 계약 / 고객사 / 현장 조회 & 양방향 자동 확정 패널 */}
               <div style={{
                 padding: '14px',
                 borderRadius: '8px',
@@ -512,36 +606,23 @@ export const Receivables: React.FC = () => {
                     <Search size={14} style={{ position: 'absolute', left: '8px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
                     <input
                       type="text"
-                      placeholder="계약번호, 고객사명, 현장명 검색..."
+                      placeholder="계약번호(예: C202603-0005), 고객사명, 현장명 검색..."
                       value={modalSearchTerm}
-                      onChange={e => setModalSearchTerm(e.target.value)}
+                      onChange={e => handleModalSearchChange(e.target.value)}
                       style={{ width: '100%', padding: '6px 8px 6px 28px', fontSize: '12px' }}
                     />
                   </div>
                 </div>
 
-                {/* 고객사 선택 & 현장/계약 선택 2단 드롭다운 */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.3fr', gap: '10px' }}>
+                {/* 고객사 선택 / 현장 선택 / 계약번호 직접 선택 3단 드롭다운 */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.2fr', gap: '10px' }}>
                   
-                  {/* 고객사 선택 */}
+                  {/* (1) 고객사 선택 */}
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                    <label style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600 }}>고객사 필터</label>
+                    <label style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600 }}>고객사 필터/선택</label>
                     <select
                       value={modalSelectedCustId}
-                      onChange={e => {
-                        const custId = e.target.value;
-                        setModalSelectedCustId(custId);
-                        if (!custId) {
-                          setFormContractId('');
-                        } else {
-                          const custContracts = contracts.filter(c => c.customerId === custId && c.status !== 'COMPLETED');
-                          if (custContracts.length === 1) {
-                            setFormContractId(custContracts[0].id);
-                          } else {
-                            setFormContractId('');
-                          }
-                        }
-                      }}
+                      onChange={e => handleCustomerSelect(e.target.value)}
                       style={{ padding: '6px 8px', fontSize: '12px', width: '100%' }}
                     >
                       <option value="">전체 고객사</option>
@@ -549,33 +630,54 @@ export const Receivables: React.FC = () => {
                         const activeCount = contracts.filter(c => c.customerId === cu.id && c.status !== 'COMPLETED').length;
                         return (
                           <option key={cu.id} value={cu.id}>
-                            {cu.name} {activeCount > 0 ? `(진행중 ${activeCount}건)` : '(진행계약 없음)'}
+                            {cu.name} {activeCount > 0 ? `(${activeCount}건)` : '(없음)'}
                           </option>
                         );
                       })}
                     </select>
                   </div>
 
-                  {/* 해당 고객사의 현재 살아있는 계약/현장 선택 */}
+                  {/* (2) 계약 현장 선택 */}
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                    <label style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600 }}>현재 살아있는 계약 / 현장 선택</label>
+                    <label style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600 }}>계약 현장 선택</label>
                     <select
-                      value={formContractId}
-                      onChange={e => {
-                        const cId = e.target.value;
-                        setFormContractId(cId);
-                        if (cId) {
-                          const c = contracts.find(x => x.id === cId);
-                          if (c?.customerId) setModalSelectedCustId(c.customerId);
-                        }
-                      }}
+                      value={modalSelectedSiteId}
+                      onChange={e => handleSiteSelect(e.target.value)}
                       style={{ padding: '6px 8px', fontSize: '12px', width: '100%' }}
                     >
-                      <option value="">계약 미지정 (고객사 공통 외상)</option>
+                      <option value="">현장 선택</option>
+                      {sites
+                        .filter(s => {
+                          if (modalSelectedCustId) {
+                            // 해당 고객사의 계약에 포함된 현장인지 확인
+                            const hasCustContract = contracts.some(c => c.customerId === modalSelectedCustId && c.siteId === s.id);
+                            const isDirectCustSite = s.customerId === modalSelectedCustId;
+                            return hasCustContract || isDirectCustSite;
+                          }
+                          return true;
+                        })
+                        .map(s => (
+                          <option key={s.id} value={s.id}>
+                            {s.name}
+                          </option>
+                        ))}
+                    </select>
+                  </div>
+
+                  {/* (3) 계약번호 직접 선택 */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <label style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600 }}>계약번호 선택</label>
+                    <select
+                      value={formContractId}
+                      onChange={e => handleContractSelect(e.target.value)}
+                      style={{ padding: '6px 8px', fontSize: '12px', width: '100%' }}
+                    >
+                      <option value="">계약 미지정 (고객사 공통)</option>
                       {contracts
                         .filter(c => c.status !== 'COMPLETED')
                         .filter(c => {
                           if (modalSelectedCustId && c.customerId !== modalSelectedCustId) return false;
+                          if (modalSelectedSiteId && c.siteId !== modalSelectedSiteId) return false;
                           if (modalSearchTerm) {
                             const cu = customers.find(x => x.id === c.customerId);
                             const s = sites.find(x => x.id === c.siteId);
@@ -594,7 +696,7 @@ export const Receivables: React.FC = () => {
                           const s = sites.find(x => x.id === c.siteId);
                           return (
                             <option key={c.id} value={c.id}>
-                              [{c.contractNo}] {cu?.name || '고객사'} - {s?.name || '현장미지정'} ({c.startDate}~)
+                              [{c.contractNo}] {cu?.name || '고객사'} - {s?.name || '현장미지정'}
                             </option>
                           );
                         })}
@@ -637,11 +739,7 @@ export const Receivables: React.FC = () => {
                       </div>
                       <button
                         type="button"
-                        onClick={() => {
-                          setFormContractId('');
-                          setModalSelectedCustId('');
-                          setModalSearchTerm('');
-                        }}
+                        onClick={handleResetSelection}
                         style={{
                           background: 'none',
                           border: '1px solid var(--border-color)',
@@ -725,34 +823,23 @@ export const Receivables: React.FC = () => {
                 </div>
               </div>
 
-              {/* 하단 모드 스위치 & 버튼 그룹 */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '10px', borderTop: '1px solid var(--border-color)', paddingTop: '14px' }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', cursor: 'pointer' }}>
-                  <input
-                    type="checkbox"
-                    checked={continuousMode}
-                    onChange={e => setContinuousMode(e.target.checked)}
-                  />
-                  <span>저장 후 계속 등록 (연속 등록 모드)</span>
-                </label>
-                
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  <button
-                    type="button"
-                    className="btn-secondary"
-                    onClick={() => setShowAddModal(false)}
-                    style={{ padding: '6px 14px', fontSize: '12px' }}
-                  >
-                    닫기
-                  </button>
-                  <button
-                    type="submit"
-                    className="btn-primary"
-                    style={{ padding: '6px 18px', fontSize: '12px', fontWeight: 700 }}
-                  >
-                    외상 등록 완료
-                  </button>
-                </div>
+              {/* 하단 버튼 그룹 */}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '8px', marginTop: '10px', borderTop: '1px solid var(--border-color)', paddingTop: '14px' }}>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => setShowAddModal(false)}
+                  style={{ padding: '6px 14px', fontSize: '12px' }}
+                >
+                  닫기
+                </button>
+                <button
+                  type="submit"
+                  className="btn-primary"
+                  style={{ padding: '6px 18px', fontSize: '12px', fontWeight: 700 }}
+                >
+                  외상 등록 완료
+                </button>
               </div>
 
             </form>
