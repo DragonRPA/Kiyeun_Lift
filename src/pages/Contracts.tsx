@@ -4,7 +4,7 @@ import React, { useState, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
 import {
   Plus, Calendar, Search, Download, Edit3, Repeat, Clock, Wrench, ChevronLeft,
-  Building2, ArrowLeftRight, Receipt
+  Building2, ArrowLeftRight, Receipt, FolderOpen, AlertCircle, ExternalLink, Copy
 } from 'lucide-react';
 import { Contract, db, Customer, CustomerContact, CustomerSite, ContractAsset, ContractHistory, Delivery, normalizeEndDate } from '../services/db';
 import { exportToExcel } from '../services/excel';
@@ -15,7 +15,7 @@ export const Contracts: React.FC = () => {
   const {
     contracts, contractAssets, contractHistory, customers, contacts, sites, assets, users, currentUser,
     createContract, extendContract, shortenContract, succeedContract, exchangeAsset, hasPermission,
-    products, refreshAllData, deliveries, repairs, outboundInspections, billings
+    products, refreshAllData, deliveries, repairs, outboundInspections, billings, receivables
   } = useApp();
 
   const canSave = hasPermission('contract', 'save');
@@ -1157,24 +1157,139 @@ export const Contracts: React.FC = () => {
                 </div>
               )}
 
-              {/* 구글 드라이브 문서함 연동 */}
-              <div style={{ marginTop: '16px', padding: '12px', backgroundColor: 'var(--bg-app)', borderRadius: '6px', border: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div>
-                  <div style={{ fontWeight: 600, fontSize: '12px' }}>구글 드라이브 문서함 연동</div>
-                  <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>스캔 계약서 및 관련 파일 보관 폴더</div>
+              {/* 계약 귀속 외상미수금 (수리비/운송비/부대비용) 현황 */}
+              {(() => {
+                const contractReceivables = (receivables || []).filter(r => 
+                  r.contractId === activeContract.id || (r.customerId === activeContract.customerId && !r.contractId)
+                );
+                const recTotal = contractReceivables.reduce((sum, r) => sum + (r.totalAmount || 0), 0);
+                const recBilled = contractReceivables.reduce((sum, r) => sum + (r.billedAmount || 0), 0);
+                const recRemaining = Math.max(0, recTotal - recBilled);
+                const unbilledCount = contractReceivables.filter(r => r.status !== 'CLEARED').length;
+
+                return (
+                  <div style={{
+                    marginTop: '14px',
+                    padding: '12px 14px',
+                    backgroundColor: unbilledCount > 0 ? 'rgba(239, 68, 68, 0.05)' : 'var(--bg-app)',
+                    borderRadius: '8px',
+                    border: `1px solid ${unbilledCount > 0 ? 'rgba(239, 68, 68, 0.3)' : 'var(--border-color)'}`
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                      <div style={{ fontWeight: 700, fontSize: '12.5px', display: 'flex', alignItems: 'center', gap: '6px', color: unbilledCount > 0 ? 'var(--danger)' : 'var(--text-primary)' }}>
+                        <AlertCircle size={15} />
+                        <span>외상미수금 (수리비/부대비용)</span>
+                        {unbilledCount > 0 ? (
+                          <span className="badge badge-danger" style={{ fontSize: '10px' }}>미청구 {unbilledCount}건</span>
+                        ) : (
+                          <span className="badge badge-secondary" style={{ fontSize: '10px' }}>미청구 없음</span>
+                        )}
+                      </div>
+                      <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                        총 {contractReceivables.length}건 발생
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', marginBottom: contractReceivables.length > 0 ? '10px' : '0' }}>
+                      <div style={{ padding: '6px 8px', borderRadius: '4px', backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)' }}>
+                        <div style={{ fontSize: '10.5px', color: 'var(--text-muted)' }}>외상 총액</div>
+                        <div style={{ fontSize: '12px', fontWeight: 700 }}>{recTotal.toLocaleString()}원</div>
+                      </div>
+                      <div style={{ padding: '6px 8px', borderRadius: '4px', backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)' }}>
+                        <div style={{ fontSize: '10.5px', color: 'var(--text-muted)' }}>기청구액</div>
+                        <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--success)' }}>{recBilled.toLocaleString()}원</div>
+                      </div>
+                      <div style={{ padding: '6px 8px', borderRadius: '4px', backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)' }}>
+                        <div style={{ fontSize: '10.5px', color: 'var(--text-muted)' }}>미청구 잔액</div>
+                        <div style={{ fontSize: '12px', fontWeight: 800, color: recRemaining > 0 ? 'var(--danger)' : 'var(--text-primary)' }}>{recRemaining.toLocaleString()}원</div>
+                      </div>
+                    </div>
+
+                    {/* 최근 미청구 외상 항목 간략 리스트 */}
+                    {contractReceivables.length > 0 && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '11px', maxHeight: '100px', overflowY: 'auto' }}>
+                        {contractReceivables.slice(0, 3).map(r => (
+                          <div key={r.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 6px', borderRadius: '3px', backgroundColor: 'var(--bg-card)' }}>
+                            <span style={{ color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '180px' }}>
+                              [{r.occurredDate}] {r.internalDescription}
+                            </span>
+                            <span style={{ fontWeight: 600, color: r.status === 'CLEARED' ? 'var(--success)' : 'var(--danger)', flexShrink: 0 }}>
+                              {r.totalAmount.toLocaleString()}원 ({r.status === 'CLEARED' ? '청구완료' : '미청구'})
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
+              {/* 로컬 문서고 및 발송 서류 보관함 (색인 & 다시 열기) */}
+              <div style={{
+                marginTop: '12px',
+                padding: '12px 14px',
+                backgroundColor: 'var(--bg-app)',
+                borderRadius: '8px',
+                border: '1px solid var(--border-color)',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '10px'
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <div style={{ fontWeight: 700, fontSize: '12.5px', display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-primary)' }}>
+                      <FolderOpen size={15} color="var(--primary)" />
+                      <span>로컬 문서고 및 발송 서류 보관함</span>
+                    </div>
+                    <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                      발송 서류 색인: <strong>{activeCustomer?.name}_{activeSite?.name || '현장'}_{activeContract.contractNo}</strong>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', gap: '6px' }}>
+                    <button
+                      type="button"
+                      className="btn-secondary"
+                      onClick={() => {
+                        const indexName = `${activeCustomer?.name || '고객'}_${activeSite?.name || '현장'}_${activeContract.contractNo}`;
+                        navigator.clipboard.writeText(indexName);
+                        alert(`색인 명칭이 클립보드에 복사되었습니다:\n\n${indexName}`);
+                      }}
+                      style={{ padding: '4px 8px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px' }}
+                      title="색인 명칭 복사"
+                    >
+                      <Copy size={12} /> 색인 복사
+                    </button>
+                    
+                    <label className="btn-secondary" style={{ padding: '4px 8px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer', margin: 0 }}>
+                      <ExternalLink size={12} /> 로컬 서류 열기
+                      <input
+                        type="file"
+                        accept=".pdf,.xlsx,.xls,.zip,.png,.jpg"
+                        style={{ display: 'none' }}
+                        onChange={e => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            const url = URL.createObjectURL(file);
+                            window.open(url, '_blank');
+                          }
+                        }}
+                      />
+                    </label>
+
+                    <button
+                      type="button"
+                      className="btn-primary"
+                      onClick={() => {
+                        setBundleTargetContractId(activeContract.id);
+                        setShowBundleModal(true);
+                      }}
+                      style={{ padding: '4px 10px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px' }}
+                    >
+                      <FileText size={12} /> 7종 서류팩 생성
+                    </button>
+                  </div>
                 </div>
-                <button
-                  type="button"
-                  className="btn-secondary"
-                  onClick={() => {
-                    const link = activeContract.driveFolderId?.trim();
-                    if (!link) { alert('등록된 구글 드라이브 폴더 링크가 없습니다.'); return; }
-                    window.open(link.startsWith('http') ? link : `https://drive.google.com/drive/folders/${link}`, '_blank');
-                  }}
-                  style={{ padding: '4px 10px', fontSize: '11px' }}
-                >
-                  폴더 열기 🔗
-                </button>
               </div>
             </div>
 
