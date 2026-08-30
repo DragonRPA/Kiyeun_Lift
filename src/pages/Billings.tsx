@@ -25,17 +25,18 @@ export const Billings: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'LIST' | 'GENERATE' | 'WIZARD'>('LIST');
 
   // --- 청구 조회 필터 상태 ---
+  const initialYm = new Date().toISOString().slice(0, 7);
   const [tempSearchTerm, setTempSearchTerm] = useState('');
   const [tempContractNoFilter, setTempContractNoFilter] = useState('');
-  const [tempStartBillingYmFilter, setTempStartBillingYmFilter] = useState('');
-  const [tempEndBillingYmFilter, setTempEndBillingYmFilter] = useState('');
+  const [tempStartBillingYmFilter, setTempStartBillingYmFilter] = useState(initialYm);
+  const [tempEndBillingYmFilter, setTempEndBillingYmFilter] = useState(initialYm);
   const [tempPaymentFilter, setTempPaymentFilter] = useState<'ALL' | 'PAID' | 'UNPAID_ANY'>('ALL');
   const [tempMailSentFilter, setTempMailSentFilter] = useState<'ALL' | 'SENT' | 'UNSENT'>('ALL');
 
   const [searchTerm, setSearchTerm] = useState('');
   const [contractNoFilter, setContractNoFilter] = useState('');
-  const [startBillingYmFilter, setStartBillingYmFilter] = useState('');
-  const [endBillingYmFilter, setEndBillingYmFilter] = useState('');
+  const [startBillingYmFilter, setStartBillingYmFilter] = useState(initialYm);
+  const [endBillingYmFilter, setEndBillingYmFilter] = useState(initialYm);
   const [paymentFilter, setPaymentFilter] = useState<'ALL' | 'PAID' | 'UNPAID_ANY'>('ALL');
   const [mailSentFilter, setMailSentFilter] = useState<'ALL' | 'SENT' | 'UNSENT'>('ALL');
 
@@ -143,17 +144,18 @@ export const Billings: React.FC = () => {
   };
 
   const handleResetFilters = () => {
+    const nowYm = new Date().toISOString().slice(0, 7);
     setTempSearchTerm('');
     setTempContractNoFilter('');
-    setTempStartBillingYmFilter('');
-    setTempEndBillingYmFilter('');
+    setTempStartBillingYmFilter(nowYm);
+    setTempEndBillingYmFilter(nowYm);
     setTempPaymentFilter('ALL');
     setTempMailSentFilter('ALL');
 
     setSearchTerm('');
     setContractNoFilter('');
-    setStartBillingYmFilter('');
-    setEndBillingYmFilter('');
+    setStartBillingYmFilter(nowYm);
+    setEndBillingYmFilter(nowYm);
     setPaymentFilter('ALL');
     setMailSentFilter('ALL');
   };
@@ -1281,8 +1283,8 @@ ${items.map((item, idx) => {
 
           <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '24px', alignItems: 'flex-start' }}>
           
-          {/* 청구 목록 */}
-          <div className="card" style={{ margin: 0, display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          {/* 청구 목록 (좌측 독립 스크롤) */}
+          <div className="card" style={{ margin: 0, display: 'flex', flexDirection: 'column', gap: '16px', maxHeight: 'calc(100vh - 160px)', overflowY: 'auto' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <h3 className="card-title" style={{ margin: 0 }}>청구서 리스트</h3>
               <button 
@@ -1537,8 +1539,8 @@ ${items.map((item, idx) => {
             </div>
           </div>
 
-          {/* 청구 상세 정보 (거래명세서 고밀도 정밀 데이터 테이블) */}
-          <div>
+          {/* 청구 상세 정보 (우측 독립 스크롤 & 고정) */}
+          <div style={{ position: 'sticky', top: '16px', maxHeight: 'calc(100vh - 160px)', overflowY: 'auto' }}>
             {activeBilling ? (() => {
               const contractObj = contracts.find(c => c.id === activeBilling.contractId);
               const siteObj = sites.find(s => s.id === contractObj?.siteId);
