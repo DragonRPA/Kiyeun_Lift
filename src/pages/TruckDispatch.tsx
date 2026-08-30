@@ -9,7 +9,7 @@ import {
   CheckCircle2, AlertTriangle, Filter, DollarSign, Send, Sun, MapPin, Printer
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
-import { Delivery, TransportCompany, TransportDriver, db, DeliveryStatus } from '../services/db';
+import { Delivery, TransportCompany, TransportDriver, db, DeliveryStatus, Asset } from '../services/db';
 import { DestinationWeatherModal } from '../components/DestinationWeatherModal';
 
 const VEHICLE_TYPE_OPTIONS = ['1.4T', '2.5T', '3.5T', '5T', '5T장축', '8.5T', '11T', '노배드'];
@@ -114,7 +114,7 @@ export const TruckDispatch: React.FC = () => {
         .filter(ca => ca.contractId === delivery.contractId)
         .map(ca => {
           const asset = assets.find(a => a.id === ca.assetId);
-          return asset ? { modelName: asset.modelName || ca.modelName || '-', assetNo: asset.assetNo || '-', id: asset.id } : null;
+          return asset ? { modelName: asset.modelName || ca.expectedModel || '-', assetNo: asset.assetNo || '-', id: asset.id } : null;
         })
         .filter(Boolean) as { modelName: string; assetNo: string; id: string }[];
     }
