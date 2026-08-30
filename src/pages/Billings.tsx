@@ -1573,6 +1573,17 @@ ${items.map((item, idx) => {
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                       <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>발행일자: {activeBilling.billingDate}</span>
+                      {canSave && activeBilling.status !== 'REJECTED' && (
+                        <button 
+                          type="button" 
+                          className="btn-danger"
+                          onClick={(e) => handleCancel(activeBilling.id, e)}
+                          style={{ padding: '5px 12px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 'bold' }}
+                          title="이 청구서를 취소하고 계약의 최근 청구 정보를 직전 유효 상태로 롤백합니다."
+                        >
+                          <RotateCcw size={13} /> 청구 취소
+                        </button>
+                      )}
                       <button 
                         type="button" 
                         className="btn-secondary"
