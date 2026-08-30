@@ -1,3 +1,32 @@
+# Release Notes (v1.130.0.Build.292 - 2026-08-30 11:34)
+
+## 📋 [마스터 xlsx 로드 실패 → ZIP 파싱 오류 수정]
+
+### 🌟 반영 내용
+
+#### 1. 원인 진단
+- R2 공개 도메인(`pub-a2fd3c2ae0cc450b8ebe34baf1b051e1.r2.dev`)에 `01.계약서패키지_마스터.xlsx` 미업로드 상태 → fetch 시 HTML 404 응답 수신
+- 기존 코드는 `res.ok` 체크 없이 무조건 `arrayBuffer()` 수신 → HTML을 XLSX로 파싱 시도 → **"Can't find end of central directory" ZIP 파싱 오류**
+- 로컬 에이전트 fallback URL도 `/api/local-agent?action=readFile`로 틀려있어 작동 불가
+
+#### 2. 수정 사항 (`masterXlsxBundle.ts`)
+- **1-A (R2 공개 URL)**: `Content-Type` 검증 + ZIP 시그니처(`0x50 0x4B`) 확인으로 무효 응답 차단
+- **1-B (로컬 에이전트)**: `/api/get-file?fileName=...` 올바른 API로 수정 + ZIP 시그니처 검증
+- **1-C (신규) `/api/r2?action=download`**: 로컬 에이전트 실패 시 Vercel 서버리스 함수를 통해 R2 S3 API로 직접 다운로드
+
+#### 3. `/api/r2` 서버리스 기능 확장 (`api/r2.ts`)
+- `GetObjectCommand` 임포트 추가
+- `action=download`: R2에서 파일을 stream → Buffer 변환 → binary 응답 반환 (신규)
+
+#### 4. `ContractDocumentBundleModal.tsx` — r2Config 전달 누락 수정
+- `bundleOptions`에 `r2Config` 필드가 빠져있어 `/api/r2` fallback이 작동 불가했음
+- `googleConfigs[0]`의 R2 설정값(`r2AccountId`, `r2BucketName`, `r2AccessKeyId`, `r2SecretAccessKey`, `r2PublicDomain`)을 `bundleOptions.r2Config`로 전달
+
+#### 5. R2 버킷 업로드
+- `01.계약서패키지_마스터.xlsx` → `kiyeun-storage` 버킷에 업로드 완료 (112,703 bytes)
+
+---
+
 # Release Notes (v1.130.0.Build.291 - 2026-08-30 11:24)
 
 ## 📋 [CF R2 중심 설계 전환 — 구글 드라이브 관련 UI/스키마/함수 전면 제거]

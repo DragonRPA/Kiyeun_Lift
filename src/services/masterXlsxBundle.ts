@@ -1,4 +1,4 @@
-﻿// src/services/masterXlsxBundle.ts
+// src/services/masterXlsxBundle.ts
 // ─────────────────────────────────────────────────────────────────────────────
 // 01.계약서패키지_마스터.xlsx 기반 계약서류 일괄 생성 엔진
 //
@@ -179,23 +179,68 @@ export async function injectMasterXlsxToBundle(
   onProgress?.('마스터 xlsx 1회 fetch 중...', 1, totalSteps);
 
   let masterBytes: ArrayBuffer | null = null;
-  const masterFileName = '01.%EA%B3%84%EC%95%BD%EC%84%9C%ED%8C%A8%ED%82%A4%EC%A7%80_%EB%A7%88%EC%8A%A4%ED%84%B0.xlsx';
+  const masterFileName = '01.계약서패키지_마스터.xlsx';
+  const masterFileNameEncoded = encodeURIComponent(masterFileName);
 
+  // 1-A. R2 공개 URL 시도
   try {
-    const res = await fetch(`${publicDomain.replace(/\/$/, '')}/${masterFileName}`, {
+    const res = await fetch(`${publicDomain.replace(/\/$/, '')}/${masterFileNameEncoded}`, {
       signal: AbortSignal.timeout(20000),
     });
-    if (res.ok) masterBytes = await res.arrayBuffer();
+    if (res.ok) {
+      const ct = res.headers.get('content-type') || '';
+      // XLSX는 application/vnd.openxmlformats 또는 application/octet-stream
+      // HTML 에러 페이지는 text/html — 걸러냄
+      if (!ct.includes('text/html')) {
+        const bytes = await res.arrayBuffer();
+        // XLSX 최소 사이즈 검증 (ZIP 시그니처: 0x50 0x4B)
+        const view = new Uint8Array(bytes, 0, 2);
+        if (view[0] === 0x50 && view[1] === 0x4B) {
+          masterBytes = bytes;
+        }
+      }
+    }
   } catch (_) {}
 
-  // 로컬 에이전트 fallback
+  // 1-B. 로컬 에이전트 fallback (get-file API — drive_mirror 캐시)
   if (!masterBytes) {
     try {
       const res = await fetch(
-        `/api/local-agent?action=readFile&path=${encodeURIComponent('C:/KiyeunAgent/drive_mirror/01.계약서패키지_마스터.xlsx')}`,
+        `http://127.0.0.1:5175/api/get-file?fileName=${masterFileNameEncoded}`,
         { signal: AbortSignal.timeout(10000) },
       );
-      if (res.ok) masterBytes = await res.arrayBuffer();
+      if (res.ok) {
+        const bytes = await res.arrayBuffer();
+        const view = new Uint8Array(bytes, 0, 2);
+        if (view[0] === 0x50 && view[1] === 0x4B) {
+          masterBytes = bytes;
+        }
+      }
+    } catch (_) {}
+  }
+
+  // 1-C. /api/r2 서버리스 경유 — R2에서 직접 다운로드 (Vercel 환경)
+  if (!masterBytes && options.r2Config) {
+    try {
+      const { accountId, bucketName, accessKeyId, secretAccessKey } = options.r2Config;
+      const params = new URLSearchParams({
+        action: 'download',
+        key: masterFileName,
+        accountId: accountId || '',
+        bucketName: bucketName || '',
+        accessKeyId: accessKeyId || '',
+        secretAccessKey: secretAccessKey || '',
+      });
+      const res = await fetch(`/api/r2?${params.toString()}`, {
+        signal: AbortSignal.timeout(20000),
+      });
+      if (res.ok) {
+        const bytes = await res.arrayBuffer();
+        const view = new Uint8Array(bytes, 0, 2);
+        if (view[0] === 0x50 && view[1] === 0x4B) {
+          masterBytes = bytes;
+        }
+      }
     } catch (_) {}
   }
 

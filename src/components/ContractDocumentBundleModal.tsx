@@ -12,7 +12,7 @@ interface Props {
 }
 
 export const ContractDocumentBundleModal: React.FC<Props> = ({ isOpen, onClose, initialContractId }) => {
-  const { contracts, customers, sites, assets, contractAssets, products } = useApp();
+  const { contracts, customers, sites, assets, contractAssets, products, googleConfigs } = useApp();
 
   const [selectedContractId, setSelectedContractId] = useState<string>(
     initialContractId || contracts[0]?.id || ''
@@ -117,7 +117,14 @@ export const ContractDocumentBundleModal: React.FC<Props> = ({ isOpen, onClose, 
         salesRepName: '김동우 팀장',
         salesRepPhone: '010-9402-5296',
         optionsText: (selectedContract as any).optionsText || (selectedContract as any).remarks || '옵션 협착난간대, 튜브소화기 외',
-        assets: mappedAssets.length > 0 ? mappedAssets : undefined
+        assets: mappedAssets.length > 0 ? mappedAssets : undefined,
+        r2Config: googleConfigs[0] ? {
+          accountId: googleConfigs[0].r2AccountId,
+          bucketName: googleConfigs[0].r2BucketName,
+          accessKeyId: googleConfigs[0].r2AccessKeyId,
+          secretAccessKey: googleConfigs[0].r2SecretAccessKey,
+          publicDomain: googleConfigs[0].r2PublicDomain,
+        } : undefined,
       };
 
       let finalResult: { url: string; fileName: string; pageCount: number; blob?: Blob } | null = null;

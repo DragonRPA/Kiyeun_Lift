@@ -6,8 +6,10 @@ import {
   ListObjectsV2Command, 
   PutObjectCommand, 
   DeleteObjectCommand, 
-  HeadBucketCommand 
+  HeadBucketCommand,
+  GetObjectCommand
 } from '@aws-sdk/client-s3';
+
 
 export const config = {
   api: {
@@ -168,6 +170,37 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         key: key.trim(),
         message: `파일 [${key}] 삭제 완료.`
       });
+    }
+
+    // 5. 파일 다운로드 — binary 응답 (GetObject)
+    if (action === 'download') {
+      const key = (req.query.key as string) || (req.body && req.body.key);
+      if (!key) {
+        return res.status(400).json({ success: false, error: 'key is required' });
+      }
+
+      const cmd = new GetObjectCommand({
+        Bucket: bucketName.trim(),
+        Key: key.trim(),
+      });
+      const response = await s3.send(cmd);
+      if (!response.Body) {
+        return res.status(404).json({ success: false, error: `파일 [${key}] 없음` });
+      }
+
+      // stream → Buffer 변환
+      const chunks: Uint8Array[] = [];
+      const stream = response.Body as any;
+      await new Promise<void>((resolve, reject) => {
+        stream.on('data', (chunk: Uint8Array) => chunks.push(chunk));
+        stream.on('end', resolve);
+        stream.on('error', reject);
+      });
+      const buffer = Buffer.concat(chunks);
+
+      res.setHeader('Content-Type', response.ContentType || 'application/octet-stream');
+      res.setHeader('Content-Length', buffer.length);
+      return res.status(200).send(buffer);
     }
 
     return res.status(400).json({ success: false, error: `지원하지 않는 action: ${action}` });
