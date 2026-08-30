@@ -1,3 +1,23 @@
+# Release Notes (v0.5.3.Build.56 - 2026-08-31 00:30)
+
+## 💡 [거래명세서 A4 용지 자동 맞춤(PageSetup) 및 11개 초과 품목 다중 페이지 자동 분할 엔진 탑재]
+
+### 🐛 문제점 및 원인 분석
+- **현상**: 거래명세서 PDF 생성 시 가로 3열 × 세로 2행으로 쪼개져 총 6페이지로 분할(찢어짐) 출력되는 현상.
+- **원인**:
+  - `00.거래명세서양식.xlsx` 범위(`$A$1:$U$28`) 인쇄 시 `PageSetup.Zoom = $false` 설정이 누락되어 100% 배율로 인쇄되며 A4 용지 가로 폭을 초과.
+  - 고정 11행 템플릿 한계로 인해 14건(장비 13대 + 추가청구 1건) 등 11개 초과 품목 인쇄 시 서식 왜곡 발생.
+
+### 🛠️ 개편 조치 내역
+1. **Excel COM A4 맞춤 PageSetup 표준화 (`agent.js`)**:
+   - `PageSetup.PaperSize = 9 (A4)`, `Orientation = 1 (세로)`, `PrintArea = "A1:U28"`, `Zoom = $false`, `FitToPagesWide = 1`, `FitToPagesTall = 1`, `CenterHorizontally = $true`를 전사 표준으로 강제 적용하여 어떤 경우에도 A4 1장에 완벽하게 들어맞도록 조치.
+2. **다건 거래(11개 초과) 다중 페이지 자동 분할 발행 엔진 (`agent.js`, `excelTemplateEngine.ts`)**:
+   - 11개 단위로 자동 청크 분할 (1~11번: 1쪽, 12~14번: 2쪽).
+   - 각 페이지 상단에 `( 1 / 2 쪽 )`, `( 2 / 2 쪽 )` 페이지 마킹 자동 주입.
+   - 전체 워크북 1회 Export로 완벽한 2페이지 정품 A4 PDF로 생성/다운로드.
+
+---
+
 # Release Notes (v0.5.3.Build.55 - 2026-08-31 00:25)
 
 ## 💡 [청구 상세 렌더링 참조 오류(ReferenceError: isRental) 핫픽스]

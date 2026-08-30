@@ -520,7 +520,7 @@ $excel.Quit()
     return;
   }
 
-  // 3-4. 🌟 정품 엑셀 원본 기반 거래명세서 A4 PDF 생성 엔진 (Excel COM)
+  // 3-4. 🌟 정품 엑셀 원본 기반 거래명세서 A4 PDF 생성 엔진 (Excel COM & 다중 페이지 자동 분할)
   if (req.method === 'POST' && pathname === '/api/generate-statement') {
     let body = '';
     req.on('data', chunk => { body += chunk; });
@@ -554,6 +554,15 @@ $excel.Quit()
         const totalVat = payload.totalVat || 0;
         const totalGrand = payload.totalGrand || 0;
 
+        // 11개 단위 분할 (다중 페이지 거래명세서 엔진)
+        const chunkSize = 11;
+        const chunks = [];
+        for (let i = 0; i < items.length; i += chunkSize) {
+          chunks.push(items.slice(i, i + chunkSize));
+        }
+        if (chunks.length === 0) chunks.push([]);
+        const totalPages = chunks.length;
+
         const psScript = `\ufeff
 $ErrorActionPreference = 'Stop'
 
@@ -568,6 +577,20 @@ function Replace-Tag($targetWs, $tag, $val) {
   $null = $targetWs.Cells.Replace($tag, $val, 2, 1, $false, $false, $false)
 }
 
+function Setup-Sheet-Page($targetWs) {
+  $targetWs.PageSetup.PaperSize = 9
+  $targetWs.PageSetup.Orientation = 1
+  $targetWs.PageSetup.PrintArea = "A1:U28"
+  $targetWs.PageSetup.Zoom = $false
+  $targetWs.PageSetup.FitToPagesWide = 1
+  $targetWs.PageSetup.FitToPagesTall = 1
+  $targetWs.PageSetup.CenterHorizontally = $true
+  $targetWs.PageSetup.LeftMargin = $excel.InchesToPoints(0.2)
+  $targetWs.PageSetup.RightMargin = $excel.InchesToPoints(0.2)
+  $targetWs.PageSetup.TopMargin = $excel.InchesToPoints(0.25)
+  $targetWs.PageSetup.BottomMargin = $excel.InchesToPoints(0.25)
+}
+
 # --- 1. 거래명세서 마스터 템플릿 복사 및 열기 ---
 $masterIn = '${DRIVE_MIRROR_DIR.replace(/\\/g, '\\\\')}\\\\00.거래명세서양식.xlsx'
 $statementWork = '${tempBuildDir.replace(/\\/g, '\\\\')}\\\\거래명세서_작업용.xlsx'
@@ -575,80 +598,107 @@ $statementPdf = '${tempBuildDir.replace(/\\/g, '\\\\')}\\\\거래명세서.pdf'
 
 Copy-Item $masterIn $statementWork -Force
 $wb = $excel.Workbooks.Open($statementWork)
-$ws = $wb.Sheets.Item(1)
+$wsBase = $wb.Sheets.Item(1)
 
-# --- 2. 공급자 / 공급받는자 태그 데이터 치환 ---
-Replace-Tag $ws "{사업자등록번호}" "${bizRegNo}"
-Replace-Tag $ws "{고객명}" "${custName}"
-Replace-Tag $ws "{대표자}" "${ceoName}"
-Replace-Tag $ws "{주소}" "${siteAddress}"
-Replace-Tag $ws "{업태}" "${custBizType}"
-Replace-Tag $ws "{종목}" "${custBizItem}"
-Replace-Tag $ws "{현장담당자}" "${siteManagerName}"
-Replace-Tag $ws "{현장담당자연락처}" "${siteManagerPhone}"
-Replace-Tag $ws "{계산서담당자}" "${custBillingName}"
-Replace-Tag $ws "{계산서담당자연락처}" "${custBillingPhone}"
-Replace-Tag $ws "{계산서이메일}" "${custBillingEmail}"
-Replace-Tag $ws "{현장명}" "${siteName}"
+` + chunks.map((chunk, pageIdx) => {
+  const pageNum = pageIdx + 1;
+  const pageTag = totalPages > 1 ? ` ( ${pageNum} / ${totalPages} 쪽 )` : '';
+  const isFirst = pageIdx === 0;
+  const startGlobalIdx = pageIdx * chunkSize;
 
-Replace-Tag $ws "{영업사원}" "${salespersonName}"
-Replace-Tag $ws "{영업사원연락처}" "${salespersonPhone}"
-Replace-Tag $ws "{청구담당자}" "${billingManagerName}"
-Replace-Tag $ws "{청구담당자연락처}" "${billingManagerPhone}"
-
-# 작성일자 셀 (E13)
-$ws.Cells.Item(13, 5).Value2 = "${billingDate}"
-
-# --- 3. 품목 내역 11줄 기입 (Row 16 ~ Row 26) ---
-` + items.map((item, idx) => {
-  const row = 16 + idx;
-  if (row > 26) return '';
-  const m = item.month || '';
-  const d = item.day || '';
-  const desc = (item.itemDescription || '').replace(/"/g, '""');
-  const qty = item.quantity || 1;
-  const price = (item.unitPrice || 0).toLocaleString();
-  const supply = (item.supplyAmount || 0).toLocaleString();
-  const vat = (item.vatAmount || 0).toLocaleString();
-  const notes = (item.notes || '').replace(/"/g, '""');
-
-  return `
-$ws.Cells.Item(${row}, 2).Value2 = "${idx + 1}"
-$ws.Cells.Item(${row}, 3).Value2 = "${m}"
-$ws.Cells.Item(${row}, 4).Value2 = "${d}"
-$ws.Cells.Item(${row}, 5).Value2 = "${desc}"
-$ws.Cells.Item(${row}, 12).Value2 = "${qty}"
-$ws.Cells.Item(${row}, 13).Value2 = "${price}"
-$ws.Cells.Item(${row}, 15).Value2 = "${supply}"
-$ws.Cells.Item(${row}, 17).Value2 = "${vat}"
-$ws.Cells.Item(${row}, 20).Value2 = "${notes}"
+  let s = '';
+  if (isFirst) {
+    s += `\n$curWs = $wsBase\n`;
+  } else {
+    s += `
+$wsBase.Copy([Type]::Missing, $wb.Sheets.Item($wb.Sheets.Count))
+$curWs = $wb.Sheets.Item($wb.Sheets.Count)
 `;
-}).join('') + (items.length < 11 ? Array.from({ length: 11 - items.length }, (_, k) => {
-  const row = 16 + items.length + k;
-  return `
-$ws.Cells.Item(${row}, 2).Value2 = ""
-$ws.Cells.Item(${row}, 3).Value2 = ""
-$ws.Cells.Item(${row}, 4).Value2 = ""
-$ws.Cells.Item(${row}, 5).Value2 = ""
-$ws.Cells.Item(${row}, 12).Value2 = ""
-$ws.Cells.Item(${row}, 13).Value2 = ""
-$ws.Cells.Item(${row}, 15).Value2 = ""
-$ws.Cells.Item(${row}, 17).Value2 = ""
-$ws.Cells.Item(${row}, 20).Value2 = ""
+  }
+
+  s += `
+# 페이지 ${pageNum} 공급자 / 공급받는자 데이터 주입
+Replace-Tag $curWs "{사업자등록번호}" "${bizRegNo}"
+Replace-Tag $curWs "{고객명}" "${custName}"
+Replace-Tag $curWs "{대표자}" "${ceoName}"
+Replace-Tag $curWs "{주소}" "${siteAddress}"
+Replace-Tag $curWs "{업태}" "${custBizType}"
+Replace-Tag $curWs "{종목}" "${custBizItem}"
+Replace-Tag $curWs "{현장담당자}" "${siteManagerName}"
+Replace-Tag $curWs "{현장담당자연락처}" "${siteManagerPhone}"
+Replace-Tag $curWs "{계산서담당자}" "${custBillingName}"
+Replace-Tag $curWs "{계산서담당자연락처}" "${custBillingPhone}"
+Replace-Tag $curWs "{계산서이메일}" "${custBillingEmail}"
+Replace-Tag $curWs "{현장명}" "${siteName}${pageTag}"
+
+Replace-Tag $curWs "{영업사원}" "${salespersonName}"
+Replace-Tag $curWs "{영업사원연락처}" "${salespersonPhone}"
+Replace-Tag $curWs "{청구담당자}" "${billingManagerName}"
+Replace-Tag $curWs "{청구담당자연락처}" "${billingManagerPhone}"
+
+$curWs.Cells.Item(13, 5).Value2 = "${billingDate}${pageTag}"
+
 `;
-}).join('') : '') + `
 
-# --- 4. 합계 행 치환 ---
-Replace-Tag $ws "{공급가합계}" "${totalSupply.toLocaleString()}"
-Replace-Tag $ws "{부가세합계}" "${totalVat.toLocaleString()}"
-Replace-Tag $ws "{총액}" "${totalGrand.toLocaleString()}"
+  // 품목 기입 (Row 16 ~ Row 26)
+  for (let r = 0; r < 11; r++) {
+    const item = chunk[r];
+    const rowNum = 16 + r;
+    if (item) {
+      const globalNo = startGlobalIdx + r + 1;
+      const m = item.month || '';
+      const d = item.day || '';
+      const desc = (item.itemDescription || '').replace(/"/g, '""');
+      const qty = item.quantity || 1;
+      const price = (item.unitPrice || 0).toLocaleString();
+      const supply = (item.supplyAmount || 0).toLocaleString();
+      const vat = (item.vatAmount || 0).toLocaleString();
+      const notes = (item.notes || '').replace(/"/g, '""');
 
-# --- 5. 정품 PDF 내보내기 (xlTypePDF = 0) ---
-$ws.ExportAsFixedFormat(0, $statementPdf, 0, $true, $false, [System.Reflection.Missing]::Value, [System.Reflection.Missing]::Value, $false)
+      s += `
+$curWs.Cells.Item(${rowNum}, 2).Value2 = "${globalNo}"
+$curWs.Cells.Item(${rowNum}, 3).Value2 = "${m}"
+$curWs.Cells.Item(${rowNum}, 4).Value2 = "${d}"
+$curWs.Cells.Item(${rowNum}, 5).Value2 = "${desc}"
+$curWs.Cells.Item(${rowNum}, 12).Value2 = "${qty}"
+$curWs.Cells.Item(${rowNum}, 13).Value2 = "${price}"
+$curWs.Cells.Item(${rowNum}, 15).Value2 = "${supply}"
+$curWs.Cells.Item(${rowNum}, 17).Value2 = "${vat}"
+$curWs.Cells.Item(${rowNum}, 20).Value2 = "${notes}"
+`;
+    } else {
+      s += `
+$curWs.Cells.Item(${rowNum}, 2).Value2 = ""
+$curWs.Cells.Item(${rowNum}, 3).Value2 = ""
+$curWs.Cells.Item(${rowNum}, 4).Value2 = ""
+$curWs.Cells.Item(${rowNum}, 5).Value2 = ""
+$curWs.Cells.Item(${rowNum}, 12).Value2 = ""
+$curWs.Cells.Item(${rowNum}, 13).Value2 = ""
+$curWs.Cells.Item(${rowNum}, 15).Value2 = ""
+$curWs.Cells.Item(${rowNum}, 17).Value2 = ""
+$curWs.Cells.Item(${rowNum}, 20).Value2 = ""
+`;
+    }
+  }
+
+  s += `
+# 합계 행 치환
+Replace-Tag $curWs "{공급가합계}" "${totalSupply.toLocaleString()}"
+Replace-Tag $curWs "{부가세합계}" "${totalVat.toLocaleString()}"
+Replace-Tag $curWs "{총액}" "${totalGrand.toLocaleString()}"
+
+Setup-Sheet-Page $curWs
+`;
+
+  return s;
+}).join('\n') + `
+
+# --- 5. 전체 워크북 1회 Export (모든 시트가 1개의 단일 다중 페이지 PDF로) ---
+$wb.ExportAsFixedFormat(0, $statementPdf, 0, $true, $false, [System.Reflection.Missing]::Value, [System.Reflection.Missing]::Value, $false)
 
 $wb.Close($false)
 $excel.Quit()
-[System.Runtime.Interopservices.Marshal]::ReleaseComObject($excel) | Out-Null
+[System.Runtime.InteropServices.Marshal]::ReleaseComObject($excel) | Out-Null
 [System.GC]::Collect()
 [System.GC]::WaitForPendingFinalizers()
 `;
@@ -658,6 +708,7 @@ $excel.Quit()
 
         execSync(`powershell -NoProfile -ExecutionPolicy Bypass -File "${psFile}"`, {
           cwd: tempBuildDir,
+          encoding: 'utf8',
           timeout: 60000,
           windowsHide: true
         });

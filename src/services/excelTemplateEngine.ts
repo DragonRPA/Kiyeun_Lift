@@ -438,6 +438,17 @@ export async function generateSafetyInspectionPdf(data: SafetyInspectionExcelDat
 /**
  * 거래명세서 정품 A4 PDF 렌더링 규격 인터페이스
  */
+export interface TransactionStatementItem {
+  month: number;
+  day: number;
+  itemDescription: string; // {모델명}[{관리번호}]_{청구시작일}~{청구종료일}
+  quantity: number;
+  unitPrice: number;
+  supplyAmount: number;
+  vatAmount: number;
+  notes?: string;
+}
+
 export interface TransactionStatementPdfData {
   billingDate: string; // YYYY-MM-DD
   billingYm: string;   // YYYY-MM
@@ -470,16 +481,7 @@ export interface TransactionStatementPdfData {
   bankAccount?: string;
 
   // 품목 내역 (최대 11행)
-  items: Array<{
-    month: number;
-    day: number;
-    itemDescription: string; // {모델명}[{관리번호}]_{청구시작일}~{청구종료일}
-    quantity: number;
-    unitPrice: number;
-    supplyAmount: number;
-    vatAmount: number;
-    notes?: string;
-  }>;
+  items: TransactionStatementItem[];
 
   totalSupply: number;
   totalVat: number;
@@ -536,73 +538,102 @@ export async function generateTransactionStatementExcel(data: TransactionStateme
 
   const workbook = new ExcelJS.Workbook();
   await workbook.xlsx.load(templateBytes);
-  const ws = workbook.worksheets[0];
-  if (!ws) throw new Error('엑셀 템플릿 워크시트를 찾을 수 없습니다.');
+  const baseWs = workbook.worksheets[0];
+  if (!baseWs) throw new Error('엑셀 템플릿 워크시트를 찾을 수 없습니다.');
 
-  // 태그 치환 헬퍼
-  const replaceTagInSheet = (tag: string, val: string) => {
-    ws.eachRow((row) => {
-      row.eachCell((cell) => {
-        if (cell.value && typeof cell.value === 'string' && cell.value.includes(tag)) {
-          cell.value = cell.value.replace(tag, val);
-        }
-      });
-    });
-  };
-
-  // 1. 공급자/공급받는자 태그 치환
-  replaceTagInSheet('{사업자등록번호}', data.customerBizNo || '-');
-  replaceTagInSheet('{고객명}', data.customerName || '-');
-  replaceTagInSheet('{대표자}', data.customerCeo || '-');
-  replaceTagInSheet('{주소}', data.customerAddress || '-');
-  replaceTagInSheet('{업태}', data.customerBizType || '-');
-  replaceTagInSheet('{종목}', data.customerBizItem || '-');
-  replaceTagInSheet('{현장담당자}', data.siteManagerName || '-');
-  replaceTagInSheet('{현장담당자연락처}', data.siteManagerPhone || '-');
-  replaceTagInSheet('{계산서담당자}', data.custBillingManagerName || '-');
-  replaceTagInSheet('{계산서담당자연락처}', data.custBillingManagerPhone || '-');
-  replaceTagInSheet('{계산서이메일}', data.custBillingEmail || '-');
-  replaceTagInSheet('{현장명}', data.siteName || '-');
-
-  replaceTagInSheet('{영업사원}', data.salespersonName || '-');
-  replaceTagInSheet('{영업사원연락처}', data.salespersonPhone || '-');
-  replaceTagInSheet('{청구담당자}', data.billingManagerName || '정수아');
-  replaceTagInSheet('{청구담당자연락처}', data.billingManagerPhone || '031-334-5295');
-
-  // 작성일자 (E13)
-  ws.getCell('E13').value = data.billingDate || new Date().toISOString().split('T')[0];
-
-  // 2. 품목 11행 기입 (Row 16 ~ Row 26)
-  for (let i = 0; i < 11; i++) {
-    const rowNum = 16 + i;
-    const item = data.items[i];
-    if (item) {
-      ws.getCell(`B${rowNum}`).value = i + 1;
-      ws.getCell(`C${rowNum}`).value = item.month || '';
-      ws.getCell(`D${rowNum}`).value = item.day || '';
-      ws.getCell(`E${rowNum}`).value = item.itemDescription || '';
-      ws.getCell(`L${rowNum}`).value = item.quantity || 1;
-      ws.getCell(`M${rowNum}`).value = item.unitPrice ? item.unitPrice.toLocaleString() : '';
-      ws.getCell(`O${rowNum}`).value = item.supplyAmount ? item.supplyAmount.toLocaleString() : '';
-      ws.getCell(`Q${rowNum}`).value = item.vatAmount ? item.vatAmount.toLocaleString() : '';
-      ws.getCell(`T${rowNum}`).value = item.notes || '';
-    } else {
-      ws.getCell(`B${rowNum}`).value = '';
-      ws.getCell(`C${rowNum}`).value = '';
-      ws.getCell(`D${rowNum}`).value = '';
-      ws.getCell(`E${rowNum}`).value = '';
-      ws.getCell(`L${rowNum}`).value = '';
-      ws.getCell(`M${rowNum}`).value = '';
-      ws.getCell(`O${rowNum}`).value = '';
-      ws.getCell(`Q${rowNum}`).value = '';
-      ws.getCell(`T${rowNum}`).value = '';
-    }
+  // 11개 단위 분할
+  const items = data.items || [];
+  const chunkSize = 11;
+  const chunks: TransactionStatementItem[][] = [];
+  for (let i = 0; i < items.length; i += chunkSize) {
+    chunks.push(items.slice(i, i + chunkSize));
   }
+  if (chunks.length === 0) chunks.push([]);
+  const totalPages = chunks.length;
 
-  // 3. 합계 치환
-  replaceTagInSheet('{공급가합계}', data.totalSupply.toLocaleString());
-  replaceTagInSheet('{부가세합계}', data.totalVat.toLocaleString());
-  replaceTagInSheet('{총액}', data.totalGrand.toLocaleString());
+  for (let pageIdx = 0; pageIdx < totalPages; pageIdx++) {
+    const chunk = chunks[pageIdx];
+    const pageNum = pageIdx + 1;
+    const pageTag = totalPages > 1 ? ` ( ${pageNum} / ${totalPages} 쪽 )` : '';
+    const startGlobalIdx = pageIdx * chunkSize;
+
+    // 첫 번째 시트는 기존 시트 사용, 이후 시트는 복제
+    let ws: ExcelJS.Worksheet;
+    if (pageIdx === 0) {
+      ws = baseWs;
+      ws.name = totalPages > 1 ? `거래명세서_1` : '거래명세서';
+    } else {
+      // 시트 복제 및 서식 유지 (또는 신규 시트에 복사)
+      ws = workbook.addWorksheet(`거래명세서_${pageNum}`);
+      ws.model = JSON.parse(JSON.stringify(baseWs.model));
+      ws.name = `거래명세서_${pageNum}`;
+    }
+
+    // 태그 치환 헬퍼
+    const replaceTagInSheet = (tag: string, val: string) => {
+      ws.eachRow((row) => {
+        row.eachCell((cell) => {
+          if (cell.value && typeof cell.value === 'string' && cell.value.includes(tag)) {
+            cell.value = cell.value.replace(tag, val);
+          }
+        });
+      });
+    };
+
+    // 1. 공급자/공급받는자 태그 치환
+    replaceTagInSheet('{사업자등록번호}', data.customerBizNo || '-');
+    replaceTagInSheet('{고객명}', data.customerName || '-');
+    replaceTagInSheet('{대표자}', data.customerCeo || '-');
+    replaceTagInSheet('{주소}', data.customerAddress || '-');
+    replaceTagInSheet('{업태}', data.customerBizType || '-');
+    replaceTagInSheet('{종목}', data.customerBizItem || '-');
+    replaceTagInSheet('{현장담당자}', data.siteManagerName || '-');
+    replaceTagInSheet('{현장담당자연락처}', data.siteManagerPhone || '-');
+    replaceTagInSheet('{계산서담당자}', data.custBillingManagerName || '-');
+    replaceTagInSheet('{계산서담당자연락처}', data.custBillingManagerPhone || '-');
+    replaceTagInSheet('{계산서이메일}', data.custBillingEmail || '-');
+    replaceTagInSheet('{현장명}', `${data.siteName || '-'}${pageTag}`);
+
+    replaceTagInSheet('{영업사원}', data.salespersonName || '-');
+    replaceTagInSheet('{영업사원연락처}', data.salespersonPhone || '-');
+    replaceTagInSheet('{청구담당자}', data.billingManagerName || '정수아');
+    replaceTagInSheet('{청구담당자연락처}', data.billingManagerPhone || '031-334-5295');
+
+    // 작성일자 (E13)
+    ws.getCell('E13').value = `${data.billingDate || new Date().toISOString().split('T')[0]}${pageTag}`;
+
+    // 2. 품목 11행 기입 (Row 16 ~ Row 26)
+    for (let i = 0; i < 11; i++) {
+      const rowNum = 16 + i;
+      const item = chunk[i];
+      if (item) {
+        ws.getCell(`B${rowNum}`).value = startGlobalIdx + i + 1;
+        ws.getCell(`C${rowNum}`).value = item.month || '';
+        ws.getCell(`D${rowNum}`).value = item.day || '';
+        ws.getCell(`E${rowNum}`).value = item.itemDescription || '';
+        ws.getCell(`L${rowNum}`).value = item.quantity || 1;
+        ws.getCell(`M${rowNum}`).value = item.unitPrice ? item.unitPrice.toLocaleString() : '';
+        ws.getCell(`O${rowNum}`).value = item.supplyAmount ? item.supplyAmount.toLocaleString() : '';
+        ws.getCell(`Q${rowNum}`).value = item.vatAmount ? item.vatAmount.toLocaleString() : '';
+        ws.getCell(`T${rowNum}`).value = item.notes || '';
+      } else {
+        ws.getCell(`B${rowNum}`).value = '';
+        ws.getCell(`C${rowNum}`).value = '';
+        ws.getCell(`D${rowNum}`).value = '';
+        ws.getCell(`E${rowNum}`).value = '';
+        ws.getCell(`L${rowNum}`).value = '';
+        ws.getCell(`M${rowNum}`).value = '';
+        ws.getCell(`O${rowNum}`).value = '';
+        ws.getCell(`Q${rowNum}`).value = '';
+        ws.getCell(`T${rowNum}`).value = '';
+      }
+    }
+
+    // 3. 합계 치환
+    replaceTagInSheet('{공급가합계}', data.totalSupply.toLocaleString());
+    replaceTagInSheet('{부가세합계}', data.totalVat.toLocaleString());
+    replaceTagInSheet('{총액}', data.totalGrand.toLocaleString());
+  }
 
   const buffer = await workbook.xlsx.writeBuffer();
   return buffer;
