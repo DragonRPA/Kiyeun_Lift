@@ -4,7 +4,7 @@ import React, { useState, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
 import {
   Plus, Calendar, Search, Download, Edit3, Repeat, Clock, Wrench, ChevronLeft,
-  Building2, ArrowLeftRight
+  Building2, ArrowLeftRight, Receipt
 } from 'lucide-react';
 import { Contract, db, Customer, CustomerContact, CustomerSite, ContractAsset, ContractHistory, Delivery, normalizeEndDate } from '../services/db';
 import { exportToExcel } from '../services/excel';
@@ -15,7 +15,7 @@ export const Contracts: React.FC = () => {
   const {
     contracts, contractAssets, contractHistory, customers, contacts, sites, assets, users, currentUser,
     createContract, extendContract, shortenContract, succeedContract, exchangeAsset, hasPermission,
-    products, refreshAllData, deliveries, repairs, outboundInspections
+    products, refreshAllData, deliveries, repairs, outboundInspections, billings
   } = useApp();
 
   const canSave = hasPermission('contract', 'save');
@@ -932,6 +932,7 @@ export const Contracts: React.FC = () => {
                     <th style={{ whiteSpace: 'nowrap' }}>체결 자산</th>
                     <th style={{ whiteSpace: 'nowrap' }}>월 렌탈료</th>
                     <th style={{ whiteSpace: 'nowrap' }}>계약 기간</th>
+                    <th style={{ whiteSpace: 'nowrap' }}>청구 건수</th>
                     <th style={{ whiteSpace: 'nowrap' }}>만료 D-Day</th>
                     <th style={{ whiteSpace: 'nowrap' }}>청구 마감일</th>
                     <th style={{ whiteSpace: 'nowrap' }}>영업담당</th>
@@ -941,7 +942,7 @@ export const Contracts: React.FC = () => {
                 <tbody style={{ whiteSpace: 'nowrap' }}>
                   {filteredContracts.length === 0 ? (
                     <tr>
-                      <td colSpan={11} style={{ textAlign: 'center', padding: '36px 0', color: 'var(--text-muted)', fontSize: '13px' }}>
+                      <td colSpan={12} style={{ textAlign: 'center', padding: '36px 0', color: 'var(--text-muted)', fontSize: '13px' }}>
                         조회 결과가 없습니다.
                       </td>
                     </tr>
@@ -963,6 +964,10 @@ export const Contracts: React.FC = () => {
                       const modelSummaryText = Object.entries(modelCountMap)
                         .map(([model, count]) => `${model} ${count}대`)
                         .join(', ');
+
+                      // 💡 계약별 청구 건수 집계 (휴먼에러 및 청구 누락 방지 교차 검증)
+                      const cBillings = (billings || []).filter(b => b.contractId === c.id && b.status !== 'REJECTED');
+                      const unpaidCount = cBillings.filter(b => b.status !== 'PAID').length;
 
                       return (
                         <tr
@@ -994,6 +999,22 @@ export const Contracts: React.FC = () => {
                             )}
                           </td>
                           <td style={{ whiteSpace: 'nowrap' }}>{c.startDate} ~ {c.endDate || '미정'}</td>
+                          <td style={{ whiteSpace: 'nowrap' }}>
+                            {cBillings.length === 0 ? (
+                              <span className="badge badge-danger" style={{ fontSize: '10.5px' }}>0건 (미청구)</span>
+                            ) : (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                <span className="badge badge-info" style={{ fontSize: '10.5px', fontWeight: 700 }}>
+                                  총 {cBillings.length}건
+                                </span>
+                                {unpaidCount > 0 && (
+                                  <span style={{ fontSize: '10.5px', color: 'var(--danger)', fontWeight: 600 }}>
+                                    (미수 {unpaidCount})
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                          </td>
                           <td style={{ whiteSpace: 'nowrap' }}>
                             {dday.isWarning ? (
                               <span className="badge badge-danger" style={{ fontSize: '10px' }}>{dday.text}</span>
@@ -1197,14 +1218,95 @@ export const Contracts: React.FC = () => {
             </div>
           </div>
 
-          {/* 하단 그리드: 계약 변경 및 이력 */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            <div className="card" style={{ margin: 0 }}>
+          {/* 하단 그리드: 계약 관련 청구 발행 현황 & 계약 변경 이력 2분할 */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '16px', alignItems: 'start' }}>
+            
+            {/* 섹션 3: 청구 발행 현황 */}
+            <div className="card" style={{ margin: 0, height: '100%' }}>
+              {(() => {
+                const contractBillings = (billings || [])
+                  .filter(b => b.contractId === activeContract?.id)
+                  .sort((a, b) => (b.billingYm || '').localeCompare(a.billingYm || ''));
+
+                const totalBilled = contractBillings.reduce((sum, b) => sum + (b.totalAmount || 0), 0);
+                const totalPaid = contractBillings.reduce((sum, b) => sum + (b.paidAmount || 0), 0);
+                const totalUnpaid = Math.max(0, totalBilled - totalPaid);
+
+                return (
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', flexWrap: 'wrap', gap: '6px' }}>
+                      <h3 className="card-title" style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <Receipt size={16} color="var(--primary)" /> 청구 발행 현황 ({contractBillings.length}건)
+                      </h3>
+                      <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                        누적청구: <strong style={{ color: 'var(--text-primary)' }}>₩{totalBilled.toLocaleString()}</strong> | 
+                        미수잔액: <strong style={{ color: totalUnpaid > 0 ? 'var(--danger)' : 'var(--success)' }}>₩{totalUnpaid.toLocaleString()}</strong>
+                      </div>
+                    </div>
+
+                    <div className="table-container" style={{ border: 'none', maxHeight: '320px', overflowY: 'auto' }}>
+                      {contractBillings.length === 0 ? (
+                        <div style={{ color: 'var(--danger)', textAlign: 'center', padding: '30px 0', fontSize: '12.5px', fontWeight: 600 }}>
+                          ⚠️ 발행된 청구 내역이 없습니다. (미청구 계약)
+                        </div>
+                      ) : (
+                        <table style={{ width: '100%', fontSize: '12px', whiteSpace: 'nowrap' }}>
+                          <thead>
+                            <tr style={{ backgroundColor: 'var(--bg-app)' }}>
+                              <th style={{ padding: '6px 8px' }}>청구귀속월</th>
+                              <th style={{ padding: '6px 8px' }}>발행일자</th>
+                              <th style={{ padding: '6px 8px', textAlign: 'right' }}>청구금액</th>
+                              <th style={{ padding: '6px 8px', textAlign: 'right' }}>수납액</th>
+                              <th style={{ padding: '6px 8px', textAlign: 'right' }}>미수잔액</th>
+                              <th style={{ padding: '6px 8px', textAlign: 'center' }}>상태</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {contractBillings.map(b => {
+                              const unpaid = Math.max(0, (b.totalAmount || 0) - (b.paidAmount || 0));
+                              return (
+                                <tr key={b.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                                  <td style={{ padding: '6px 8px' }}><strong>{b.billingYm}</strong></td>
+                                  <td style={{ padding: '6px 8px', color: 'var(--text-muted)' }}>{b.billingDate || '-'}</td>
+                                  <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 600 }}>{(b.totalAmount || 0).toLocaleString()}원</td>
+                                  <td style={{ padding: '6px 8px', textAlign: 'right', color: 'var(--success)' }}>{(b.paidAmount || 0).toLocaleString()}원</td>
+                                  <td style={{ padding: '6px 8px', textAlign: 'right', color: unpaid > 0 ? 'var(--danger)' : 'var(--text-muted)', fontWeight: unpaid > 0 ? 700 : 400 }}>
+                                    {unpaid.toLocaleString()}원
+                                  </td>
+                                  <td style={{ padding: '6px 8px', textAlign: 'center' }}>
+                                    <span className={`badge ${
+                                      b.status === 'UNPAID' ? 'badge-secondary' :
+                                      b.status === 'REQUESTED' ? 'badge-warning' :
+                                      b.status === 'REJECTED' ? 'badge-danger' :
+                                      b.status === 'PAID' ? 'badge-success' :
+                                      b.status === 'PARTIAL' ? 'badge-info' : 'badge-secondary'
+                                    }`} style={{ fontSize: '10px' }}>
+                                      {b.status === 'UNPAID' ? '미발송' :
+                                       b.status === 'REQUESTED' ? '발송완료' :
+                                       b.status === 'REJECTED' ? '이의제기' :
+                                       b.status === 'PAID' ? '완납' :
+                                       b.status === 'PARTIAL' ? '일부납' : b.status}
+                                    </span>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+
+            {/* 섹션 4: 계약 변경 및 이력 */}
+            <div className="card" style={{ margin: 0, height: '100%' }}>
               <h3 className="card-title" style={{ marginBottom: '14px', display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <Clock size={16} color="var(--primary)" /> 계약 변경 및 이력 ({activeTimeline.length}건)
               </h3>
 
-              <div style={{ maxHeight: '360px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px', paddingRight: '4px' }}>
+              <div style={{ maxHeight: '320px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px', paddingRight: '4px' }}>
                 {activeTimeline.length === 0 ? (
                   <div style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '20px' }}>기록된 이력이 없습니다.</div>
                 ) : (
