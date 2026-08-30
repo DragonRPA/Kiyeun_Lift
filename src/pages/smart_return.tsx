@@ -82,11 +82,13 @@ export const SmartReturn: React.FC = () => {
   const [contactPhone, setContactPhone] = useState('');
   const [note, setNote] = useState('');
 
-  // 💡 [사장님 지시] 계약 선택 시 최초 출고/현장에 등록되었던 담당자 정보 자동 기본값 세팅 (수정 가능)
+  // 💡 [사장님 지시] 계약 선택 시 회수예정일자 오늘날짜 세팅 및 담당자 정보 자동 기본값 세팅 (수정 가능)
   useEffect(() => {
     if (!selectedContractId) return;
     const contract = contracts.find(c => c.id === selectedContractId);
     if (!contract) return;
+
+    setReturnDate(getTodayString());
 
     const outboundDelivery = (deliveries || []).find((d: any) => d.contractId === selectedContractId);
     const site = (sites || []).find((s: any) => s.id === contract.siteId);
@@ -286,8 +288,8 @@ export const SmartReturn: React.FC = () => {
     alert('영업 계약 장비 스마트 회수의뢰 등록이 성공적으로 완료되었습니다.\n배차관리 화면에 회수(INBOUND) 건이 대기열에 추가되었습니다.');
     setSelectedContractId('');
     setSelectedAssetIds([]);
-    setReturnDate('');
-    setLoadingTime('');
+    setReturnDate(getTodayString());
+    setLoadingTime('오전');
     setContactName('');
     setContactPhone('');
     setNote('');
