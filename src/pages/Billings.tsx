@@ -1043,12 +1043,55 @@ ${items.map((item, idx) => {
 
   const diffDaysForWizard = getDiffDays();
 
-  const totalAmountForWizard = wizardContractAssets.reduce((sum, ca) => {
-    if (calcMethod === 'MONTHLY') {
-      return sum + ca.monthlyRentalFee;
-    } else {
-      return sum + (ca.dailyRentalFee * diffDaysForWizard);
+  // 💡 헌장 4.1 준수: 계약 내 개별 자산의 대차/회수/투입 기간을 반영한 정밀 일할/월정액 계산
+  const calculateAssetFeeForWizard = (ca: any) => {
+    if (!wizardStartDate || !wizardEndDate) return { amount: 0, days: 0, desc: '', active: false, isExchangeProRata: false };
+
+    // 계약 내 자산의 개별 유효 기간
+    const caStart = ca.startDate || wizardStartDate;
+    const caEnd = ca.endDate && ca.endDate !== '미정' ? ca.endDate : wizardEndDate;
+
+    // 청구 대상 기간과 자산 유효 기간의 교집합(실제 가동 기간) 계산
+    const effectiveStart = caStart > wizardStartDate ? caStart : wizardStartDate;
+    const effectiveEnd = caEnd < wizardEndDate ? caEnd : wizardEndDate;
+
+    // 만약 청구 기간 외인 경우 (예: 이미 이전 달에 종료된 자산이 이번 청구에 걸린 경우 등)
+    if (effectiveStart > effectiveEnd) {
+      return { amount: 0, days: 0, desc: '청구 기간 외 (가동 없음)', active: false, isExchangeProRata: false };
     }
+
+    const d1 = new Date(effectiveStart);
+    const d2 = new Date(effectiveEnd);
+    const diff = Math.abs(d2.getTime() - d1.getTime());
+    const days = isNaN(diff) ? 0 : Math.ceil(diff / (1000 * 60 * 60 * 24)) + 1;
+
+    // 청구 기간 전체와 100% 일치하고 월정액 방식인 경우
+    const isFullPeriod = (effectiveStart === wizardStartDate && effectiveEnd === wizardEndDate);
+    if (calcMethod === 'MONTHLY' && isFullPeriod) {
+      return {
+        amount: ca.monthlyRentalFee,
+        days,
+        desc: `${wizardStartDate.substring(0, 7)} 정기 월렌탈료 (월단가 기준)`,
+        active: true,
+        isExchangeProRata: false
+      };
+    } else {
+      // 대차 교체로 중도 회수/투입되었거나 일할 정산인 경우
+      const daily = ca.dailyRentalFee > 0 ? ca.dailyRentalFee : Math.round(ca.monthlyRentalFee / 30);
+      const amount = daily * days;
+      return {
+        amount,
+        days,
+        desc: `${effectiveStart} ~ ${effectiveEnd} 일할 청구 (${days}일)`,
+        active: true,
+        isExchangeProRata: !isFullPeriod
+      };
+    }
+  };
+
+  const totalAmountForWizard = wizardContractAssets.reduce((sum, ca) => {
+    const feeInfo = calculateAssetFeeForWizard(ca);
+    return sum + feeInfo.amount;
   }, 0);
 
   const [isWizardGenerating, setIsWizardGenerating] = useState(false);
@@ -1096,33 +1139,26 @@ ${items.map((item, idx) => {
 
     const detailsList: any[] = [];
     
-    // 1. 기본 장비 렌탈료 정산 (논리적 기간/방식 계산 적용)
+    // 1. 기본 장비 렌탈료 정산 (자산별 가동 기간 및 대차 교체 일할 계산 정밀 적용)
     wizardContractAssets.forEach(ca => {
+      const feeInfo = calculateAssetFeeForWizard(ca);
+      if (!feeInfo.active || feeInfo.amount <= 0) return; // 청구 대상 외 자산 제외
+
       const assetInfo = assets.find(a => a.id === ca.assetId);
       const assetName = assetInfo ? `${assetInfo.modelName} (관리번호: ${assetInfo.assetNo})` : '렌탈 장비';
-      
-      let amount = 0;
-      let desc = '';
-      if (calcMethod === 'MONTHLY') {
-        amount = ca.monthlyRentalFee;
-        desc = `${wizardStartDate.substring(0, 7)} 정기 월렌탈료 (월단가 기준)`;
-      } else {
-        amount = ca.dailyRentalFee * diffDaysForWizard;
-        desc = `${wizardStartDate} ~ ${wizardEndDate} 일할 청구 (${diffDaysForWizard}일)`;
-      }
 
       detailsList.push({
         contractAssetId: ca.id,
         itemName: `${assetName} 렌탈료`,
         quantity: 1,
-        unitPrice: amount,
-        amount: amount,
-        description: desc
+        unitPrice: feeInfo.amount,
+        amount: feeInfo.amount,
+        description: feeInfo.desc
       });
 
       if (assetInfo) {
         db.updateRow<Asset>('assets', assetInfo.id, {
-          cumRentalFee: (assetInfo.cumRentalFee || 0) + amount,
+          cumRentalFee: (assetInfo.cumRentalFee || 0) + feeInfo.amount,
           updatedAt: new Date().toISOString()
         });
       }
@@ -1719,7 +1755,18 @@ ${items.map((item, idx) => {
                   {/* 명세서 본문 테이블 (거래명세서 고밀도 그리드) */}
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <h4 style={{ fontSize: '13px', fontWeight: '700', margin: 0 }}>세부 청구 명세 ({activeBillingDetails.length}건)</h4>
+                      {(() => {
+                        const rentalCount = activeBillingDetails.filter(bd => bd.contractAssetId || bd.itemName?.includes('렌탈')).length;
+                        const extraCount = activeBillingDetails.length - rentalCount;
+                        return (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <h4 style={{ fontSize: '13px', fontWeight: '700', margin: 0 }}>세부 청구 명세 (총 {activeBillingDetails.length}건)</h4>
+                            <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 500 }}>
+                              [장비 렌탈료: {rentalCount}대{extraCount > 0 ? ` / 부대·미수금: ${extraCount}건` : ''}]
+                            </span>
+                          </div>
+                        );
+                      })()}
                       <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>단위: 원 / VAT별도 기준 산출</span>
                     </div>
 
@@ -2169,18 +2216,34 @@ ${items.map((item, idx) => {
                     <tbody>
                       {wizardContractAssets.map(ca => {
                         const assetInfo = assets.find(a => a.id === ca.assetId);
-                        const calculatedItemFee = calcMethod === 'MONTHLY' ? ca.monthlyRentalFee : ca.dailyRentalFee * diffDaysForWizard;
+                        const feeInfo = calculateAssetFeeForWizard(ca);
 
                         return (
-                          <tr key={ca.id}>
-                            <td>{assetInfo ? `${assetInfo.modelName} (${assetInfo.assetNo})` : ca.expectedModel}</td>
+                          <tr key={ca.id} style={{ opacity: feeInfo.active ? 1 : 0.45 }}>
+                            <td>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <span>{assetInfo ? `${assetInfo.modelName} (${assetInfo.assetNo})` : ca.expectedModel}</span>
+                                {feeInfo.isExchangeProRata && (
+                                  <span className="badge badge-warning" style={{ fontSize: '10px', padding: '1px 5px' }}>
+                                    대차/일할
+                                  </span>
+                                )}
+                                {!feeInfo.active && (
+                                  <span className="badge badge-secondary" style={{ fontSize: '10px', padding: '1px 5px' }}>
+                                    제외
+                                  </span>
+                                )}
+                              </div>
+                            </td>
                             <td>{ca.monthlyRentalFee.toLocaleString()}원</td>
                             <td>{ca.dailyRentalFee.toLocaleString()}원</td>
                             <td>
-                              {calcMethod === 'MONTHLY' ? '정기월렌탈료' : `일할정산 (${diffDaysForWizard}일)`}
+                              <span style={{ fontSize: '11.5px', color: feeInfo.isExchangeProRata ? 'var(--primary)' : undefined, fontWeight: feeInfo.isExchangeProRata ? 600 : undefined }}>
+                                {feeInfo.desc}
+                              </span>
                             </td>
-                            <td style={{ textAlign: 'right', fontWeight: '700', color: 'var(--text-primary)' }}>
-                              {calculatedItemFee.toLocaleString()}원
+                            <td style={{ textAlign: 'right', fontWeight: '700', color: feeInfo.active ? 'var(--text-primary)' : 'var(--text-muted)' }}>
+                              {feeInfo.amount.toLocaleString()}원
                             </td>
                           </tr>
                         );
