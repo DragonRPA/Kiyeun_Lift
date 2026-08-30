@@ -2721,6 +2721,36 @@ class LocalDB {
   get outboundInspections() { return this.get<OutboundInspection>('outboundInspections', []); }
   set outboundInspections(val: OutboundInspection[]) { this.set('outboundInspections', val); }
 
+  // 💡 [Zero Silent Failures / 1000-Row Pagination Bug Fix]
+  // Supabase의 기본 select('*')는 최대 1000건까지만 반환합니다.
+  // 데이터가 1000건을 초과하면 이후 생성된 데이터가 프론트엔드에 동기화되지 않고 무음 누락(Silent Drop)되는 심각한 결함이 있었습니다.
+  // 이를 해결하기 위해 while 문과 range()를 사용하여 테이블의 모든 레코드를 페이지네이션으로 100% 무누락 조회합니다.
+  private async fetchAllFromSupabase(tableName: string): Promise<any[]> {
+    if (!supabase) return [];
+    let allData: any[] = [];
+    let page = 0;
+    const pageSize = 1000;
+    while (true) {
+      const { data, error } = await supabase
+        .from(tableName)
+        .select('*')
+        .range(page * pageSize, (page + 1) * pageSize - 1);
+        
+      if (error) {
+        throw error;
+      }
+      if (!data || data.length === 0) {
+        break;
+      }
+      allData = allData.concat(data);
+      if (data.length < pageSize) {
+        break;
+      }
+      page++;
+    }
+    return allData;
+  }
+
   get depreciationLogs() { return this.get<DepreciationLog>('depreciationLogs', []); }
   set depreciationLogs(val: DepreciationLog[]) { this.set('depreciationLogs', val); }
 
