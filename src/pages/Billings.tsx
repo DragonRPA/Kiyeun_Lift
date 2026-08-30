@@ -905,19 +905,48 @@ ${items.map((item, idx) => {
     return matchesDue && matchesCustomer && matchesContractNo && matchesSite;
   });
 
+  // 특정 계약에 연동 가능한 미청구 외상미수금 목록 조회
+  const getUnbilledReceivablesForContract = (c: any) => {
+    if (!c) return [];
+    return receivables.filter(r => 
+      r.status !== 'CLEARED' &&
+      ((r.totalAmount || 0) - (r.billedAmount || 0)) > 0 &&
+      r.customerId === c.customerId &&
+      (r.contractId === c.id || !r.contractId)
+    );
+  };
+
+  // 일괄 생성 가능 계약(외상미수금 없는 일반 계약) vs 수동 검토 계약(외상미수금 보유 계약) 분리
+  const contractsWithoutReceivables = filteredWizardContracts.filter(c => getUnbilledReceivablesForContract(c).length === 0);
+  const contractsWithReceivables = filteredWizardContracts.filter(c => getUnbilledReceivablesForContract(c).length > 0);
+
   const handleBulkGenerateWizard = async () => {
     if (filteredWizardContracts.length === 0) {
       alert('정산 대상 계약이 없습니다.');
       return;
     }
 
-    const count = filteredWizardContracts.length;
-    const ok = confirm(
-      `현재 조회된 정산 대상 계약 총 ${count}건에 대해 청구서를 일괄 생성하시겠습니까?\n\n` +
-      `- 청구일자: ${todayStr}\n` +
-      `- 청구귀속월: ${currentYm}\n\n` +
-      `생성된 청구서는 [청구 및 수납내역] 탭에서 확인 및 출력하실 수 있습니다.`
-    );
+    if (contractsWithoutReceivables.length === 0) {
+      alert(
+        `⚠️ 현재 조회된 정산 대상 계약(${contractsWithReceivables.length}건)은 모두 미청구 외상미수금(수리비/운송비 등)이 존재합니다.\n\n` +
+        `외상미수금 포함 여부를 검토/반영하기 위해 개별 카드를 클릭하여 수동으로 청구를 생성해 주세요.`
+      );
+      return;
+    }
+
+    const hasExcluded = contractsWithReceivables.length > 0;
+    const confirmMessage = hasExcluded
+      ? `현재 조회된 정산 대상 계약 총 ${filteredWizardContracts.length}건 중,\n\n` +
+        `✅ 일괄 생성 대상: ${contractsWithoutReceivables.length}건 (외상미수금 없음)\n` +
+        `⚠️ 일괄 생성 제외: ${contractsWithReceivables.length}건 (외상미수금 존재 → 수동 검토 필요)\n\n` +
+        `외상미수금이 없는 ${contractsWithoutReceivables.length}건에 대해 청구서를 일괄 생성하시겠습니까?\n` +
+        `(제외된 ${contractsWithReceivables.length}건은 담당자가 직접 카드를 클릭하여 외상미수금을 선택 후 생성하실 수 있습니다.)`
+      : `현재 조회된 정산 대상 계약 총 ${contractsWithoutReceivables.length}건에 대해 청구서를 일괄 생성하시겠습니까?\n\n` +
+        `- 청구일자: ${todayStr}\n` +
+        `- 청구귀속월: ${currentYm}\n\n` +
+        `생성된 청구서는 [청구 및 수납내역] 탭에서 확인 및 출력하실 수 있습니다.`;
+
+    const ok = confirm(confirmMessage);
     if (!ok) return;
 
     setIsBulkGenerating(true);
@@ -926,7 +955,7 @@ ${items.map((item, idx) => {
     const errorDetails: string[] = [];
 
     try {
-      for (const c of filteredWizardContracts) {
+      for (const c of contractsWithoutReceivables) {
         try {
           await generateBillingForSingleContract(c.id, currentYm, todayStr);
           successCount++;
@@ -939,15 +968,21 @@ ${items.map((item, idx) => {
       refreshAllData();
       await db.awaitPendingWrites();
 
+      let resultMsg = `✅ 외상미수금이 없는 ${successCount}건의 계약에 대해 청구서가 성공적으로 일괄 생성되었습니다!`;
+      if (hasExcluded) {
+        resultMsg += `\n\n⚠️ 외상미수금이 있는 ${contractsWithReceivables.length}건은 수동 검토를 위해 남아있습니다. 개별 카드를 확인해 주세요.`;
+      }
+
       if (failCount === 0) {
-        alert(`✅ 총 ${successCount}건의 정산 대상 계약에 대해 청구서가 성공적으로 일괄 생성되었습니다!`);
-        setActiveTab('LIST');
+        alert(resultMsg);
+        if (contractsWithReceivables.length === 0) {
+          setActiveTab('LIST');
+        }
       } else {
         showErrorModal(
           `일괄 생성 결과:\n- 성공: ${successCount}건\n- 실패: ${failCount}건\n\n[실패 내역]\n${errorDetails.join('\n')}`,
           '일괄 청구 생성 알림'
         );
-        if (successCount > 0) setActiveTab('LIST');
       }
     } catch (err: any) {
       showErrorModal('일괄 청구 생성 중 오류가 발생했습니다: ' + (err?.message || String(err)));
@@ -1850,7 +1885,7 @@ ${items.map((item, idx) => {
                     type="button"
                     className="btn-primary"
                     onClick={handleBulkGenerateWizard}
-                    disabled={isBulkGenerating || filteredWizardContracts.length === 0}
+                    disabled={isBulkGenerating || contractsWithoutReceivables.length === 0}
                     style={{
                       padding: '5px 14px',
                       height: '30px',
@@ -1860,12 +1895,17 @@ ${items.map((item, idx) => {
                       flexShrink: 0,
                       display: 'flex',
                       alignItems: 'center',
-                      gap: '4px'
+                      gap: '4px',
+                      backgroundColor: contractsWithoutReceivables.length === 0 ? 'var(--text-muted)' : 'var(--primary)'
                     }}
-                    title="현재 조회된 모든 정산 대상 계약에 대해 청구서를 일괄 생성합니다."
+                    title={
+                      contractsWithoutReceivables.length === 0
+                        ? '조회된 계약 중 외상미수금이 없는 일반 계약이 없습니다. (외상미수금 계약은 수동 검토 필요)'
+                        : `외상미수금이 없는 일반 계약 ${contractsWithoutReceivables.length}건을 일괄 생성합니다.`
+                    }
                   >
                     <Plus size={13} />
-                    {isBulkGenerating ? '생성 중...' : `일괄청구생성 (${filteredWizardContracts.length}건)`}
+                    {isBulkGenerating ? '생성 중...' : `일괄청구생성 (${contractsWithoutReceivables.length}건)`}
                   </button>
                 )}
               </div>
@@ -1882,6 +1922,7 @@ ${items.map((item, idx) => {
                   const siteName = getSiteName(c.siteId);
                   const isSelected = selectedContractIdForWizard === c.id;
                   const due = isDuePeriod(c);
+                  const unbilledRcvList = getUnbilledReceivablesForContract(c);
 
                   return (
                     <div
@@ -1899,11 +1940,18 @@ ${items.map((item, idx) => {
                     >
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
                         <span style={{ fontSize: '12px', color: 'var(--primary)', fontWeight: '700' }}>계약번호: {c.contractNo}</span>
-                        {due && (
-                          <span className="badge badge-danger">
-                            🔥 마감 도래
-                          </span>
-                        )}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap' }}>
+                          {unbilledRcvList.length > 0 && (
+                            <span className="badge" style={{ backgroundColor: 'rgba(245, 158, 11, 0.15)', color: '#d97706', border: '1px solid rgba(245, 158, 11, 0.3)', fontWeight: 'bold' }}>
+                              ⚠️ 외상미수금 {unbilledRcvList.length}건 (수동정산)
+                            </span>
+                          )}
+                          {due && (
+                            <span className="badge badge-danger">
+                              🔥 마감 도래
+                            </span>
+                          )}
+                        </div>
                       </div>
                       <h4 style={{ margin: '0 0 6px 0', fontSize: '15px', fontWeight: '700', color: 'var(--text-primary)' }}>
                         {customerName}
