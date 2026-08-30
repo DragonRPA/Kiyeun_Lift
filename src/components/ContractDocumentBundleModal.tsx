@@ -129,7 +129,7 @@ export const ContractDocumentBundleModal: React.FC<Props> = ({ isOpen, onClose, 
 
       let finalResult: { url: string; fileName: string; pageCount: number; blob?: Blob } | null = null;
 
-      // 1순위: 로컬 사이드카 에이전트 (정품 엑셀 COM 자동화) 호출
+      // 오직 로컬 사이드카 에이전트(정품 엑셀 COM 엔진)만 사용
       try {
         setProgressText('로컬 에이전트 정품 엑셀 엔진 가동 중...');
         setProgressPercent(30);
@@ -158,24 +158,18 @@ export const ContractDocumentBundleModal: React.FC<Props> = ({ isOpen, onClose, 
               pageCount: agentRes.pageCount || 37,
               blob
             };
+          } else {
+            throw new Error(agentRes.error || '에이전트에서 생성에 실패했습니다.');
           }
+        } else {
+          throw new Error(`에이전트 오류: HTTP ${agentResp.status}`);
         }
-      } catch (agentErr) {
-        console.warn('로컬 에이전트 미연결, 브라우저 렌더러로 폴백:', agentErr);
+      } catch (agentErr: any) {
+        throw new Error('정품 엑셀 생성 엔진(로컬 에이전트)에 연결할 수 없거나 오류가 발생했습니다.\n로컬 에이전트가 실행 중인지 확인해주세요.\n\n상세: ' + agentErr.message);
       }
 
-      // 2순위: 로컬 에이전트 미응답 시 브라우저 엔진으로 폴백
       if (!finalResult) {
-        setProgressText('브라우저 엔진으로 서류팩 조립 중...');
-        const result = await generateContractFullDocumentBundlePdf(
-          bundleOptions,
-          (stepText, current, total) => {
-            const percent = Math.round((current / total) * 95);
-            setProgressPercent(percent);
-            setProgressText('[' + current + '/' + total + '] ' + stepText);
-          }
-        );
-        finalResult = { url: result.url, fileName: result.fileName, pageCount: result.pageCount, blob: result.blob };
+        throw new Error('문서 생성 결과를 받을 수 없습니다.');
       }
 
       setProgressPercent(100);
