@@ -128,7 +128,8 @@ export const ContractDocumentBundleModal: React.FC<Props> = ({ isOpen, onClose, 
 
       let finalResult: { url: string; fileName: string; pageCount: number; blob?: Blob } | null = null;
 
-      // 오직 로컬 사이드카 에이전트(정품 엑셀 COM 엔진)만 사용
+      // 🚨 절대 HTML2CANVAS 사용하지 말것 (저수준 문서 출력의 주범임)
+      // 오직 로컬 사이드카 에이전트(정품 엑셀 COM 엔진)만 사용하여 품질을 100% 보장해야 함.
       try {
         setProgressText('로컬 에이전트 정품 엑셀 엔진 가동 중...');
         setProgressPercent(30);
