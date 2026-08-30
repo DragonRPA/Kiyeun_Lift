@@ -12,7 +12,7 @@ export const Billings: React.FC = () => {
     billings, billingDetails, customers, contacts, contracts, contractAssets, assets, sites, users, googleConfigs,
     generateBillingsForMonth, getDueContractsForBilling, generateDueBillings, regenerateBilling, generateBillingForSingleContract,
     receivePayment, cancelPayment, hasPermission, currentUser, approveBilling, cancelBilling,
-    refreshAllData, showErrorModal, bankTransactions, paymentDepositLinks, saveBankDeposit, deleteBankDeposit, payments,
+    refreshAllData, showErrorModal, bankTransactions, paymentDepositLinks, payments,
     repairs, linkRepairToBilling, applyPrepaidBalanceForBilling,
     receivables, linkReceivableToBilling
   } = useApp();
@@ -21,15 +21,7 @@ export const Billings: React.FC = () => {
   const canSave = hasPermission('billing', 'save');
   const isAdmin = currentUser?.role === 'ADMIN';
 
-  const [activeTab, setActiveTab] = useState<'LIST' | 'GENERATE' | 'WIZARD' | 'DEPOSIT_MGMT'>('LIST');
-
-  // 통장입금 관리 탭 폼 상태
-  const [depDate, setDepDate] = useState(new Date().toISOString().split('T')[0]);
-  const [depSender, setDepSender] = useState('');
-  const [depSenderAccount, setDepSenderAccount] = useState(''); // 입금자 계좌번호
-  const [depCustomerId, setDepCustomerId] = useState('');
-  const [depAmount, setDepAmount] = useState(0);
-  const [depMemo, setDepMemo] = useState('');
+  const [activeTab, setActiveTab] = useState<'LIST' | 'GENERATE' | 'WIZARD'>('LIST');
 
   // --- 청구 조회 필터 상태 ---
   const [tempSearchTerm, setTempSearchTerm] = useState('');
@@ -906,173 +898,12 @@ ${details.map((d, idx) => {
         <button className={activeTab === 'LIST' ? 'btn-primary' : 'btn-secondary'} onClick={() => setActiveTab('LIST')}>
           청구 및 수납 내역
         </button>
-        <button className={activeTab === 'DEPOSIT_MGMT' ? 'btn-primary' : 'btn-secondary'} onClick={() => setActiveTab('DEPOSIT_MGMT')}>
-          🏦 통장입금 관리
-        </button>
         {canSave && (
           <button className={activeTab === 'WIZARD' ? 'btn-primary' : 'btn-secondary'} onClick={() => setActiveTab('WIZARD')}>
             <Calendar size={14} /> 미청구 계약 정산 마법사
           </button>
         )}
       </div>
-
-      {/* ═══ 통장입금 관리 탭 ═══ */}
-      {activeTab === 'DEPOSIT_MGMT' && (() => {
-        // 모든 입금 건 (isDeposit=true)
-        const allDeposits = bankTransactions.filter(t => t.isDeposit);
-        // 입금건별 잔액 계산 (PaymentDepositLinks 기반 — v2)
-        const depositsWithBalance = allDeposits.map(dep => {
-          const usedSoFar = paymentDepositLinks
-            .filter(l => l.bankTransactionId === dep.id)
-            .reduce((s, l) => s + l.usedAmount, 0);
-          return { ...dep, usedAmount: usedSoFar, balance: dep.depositAmount - usedSoFar };
-        }).sort((a, b) => b.transactionDate.localeCompare(a.transactionDate));
-
-
-        const handleDepositSubmit = (e: React.FormEvent) => {
-          e.preventDefault();
-          if (!depSender.trim() || depAmount <= 0) return;
-          saveBankDeposit({
-            transactionDate: depDate,
-            senderName: depSender,
-            senderAccount: depSenderAccount || undefined,
-            depositAmount: depAmount,
-            memo: depMemo,
-            customerId: depCustomerId || undefined,
-            isDeposit: true,
-            matchedBillingId: undefined,
-          });
-          setDepSender('');
-          setDepSenderAccount('');
-          setDepAmount(0);
-          setDepMemo('');
-          setDepCustomerId('');
-          alert('✅ 입금 내역이 등록되었습니다.');
-        };
-
-        return (
-          <div style={{ display: 'grid', gridTemplateColumns: '380px 1fr', gap: '24px', alignItems: 'flex-start' }}>
-            {/* 입금 등록 폼 */}
-            <div className="card" style={{ margin: 0 }}>
-              <h3 className="card-title" style={{ marginBottom: '16px' }}>통장입금 등록</h3>
-              <form onSubmit={handleDepositSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                <div>
-                  <label>입금일</label>
-                  <input type="date" value={depDate} onChange={e => setDepDate(e.target.value)} required />
-                </div>
-                <div>
-                  <label>입금인명 (통장 표시명) *</label>
-                  <input type="text" value={depSender} onChange={e => setDepSender(e.target.value)} placeholder="예: 세보엠이씨" required />
-                </div>
-                <div>
-                  <label>입금자 계좌번호 (선택)</label>
-                  <input type="text" value={depSenderAccount} onChange={e => setDepSenderAccount(e.target.value)} placeholder="예: 110-123-456789" />
-                </div>
-                <div>
-                  <label>고객사 매핑</label>
-                  <select value={depCustomerId} onChange={e => setDepCustomerId(e.target.value)}>
-                    <option value="">— 선택 안함 —</option>
-                    {customers.map(c => <option key={c.id} value={c.id}>{c.contractNo}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label>입금액 (원) *</label>
-                  <input type="number" value={depAmount || ''} onChange={e => setDepAmount(parseInt(e.target.value) || 0)} required />
-                </div>
-                <div>
-                  <label>메모</label>
-                  <input type="text" value={depMemo} onChange={e => setDepMemo(e.target.value)} placeholder="예: 7월 렌탈료" />
-                </div>
-                <button type="submit" className="btn-primary" style={{ marginTop: '4px' }}>
-                  <Plus size={14} /> 입금 등록
-                </button>
-              </form>
-            </div>
-
-            {/* 입금 목록 + 잔액 */}
-            <div className="card" style={{ margin: 0 }}>
-              <h3 className="card-title" style={{ marginBottom: '16px' }}>
-                입금 내역 및 잔액 현황
-                <span style={{ marginLeft: '8px', fontSize: '12px', fontWeight: '400', color: 'var(--text-secondary)' }}>
-                  총 {depositsWithBalance.length}건 | 미소진 잔액 합계: {depositsWithBalance.reduce((s, d) => s + d.balance, 0).toLocaleString()}원
-                </span>
-              </h3>
-              {depositsWithBalance.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-secondary)', fontSize: '14px' }}>
-                  등록된 통장 입금 내역이 없습니다.
-                </div>
-              ) : (
-                <div style={{ overflowX: 'auto' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
-                    <thead>
-                      <tr style={{ borderBottom: '1px solid var(--border)' }}>
-                        {['입금일', '입금인', '계좌번호', '고객사', '입금액', '소진액', '잔액', '연결 청구번호', '상태', '삭제'].map(h => (
-                          <th key={h} style={{ padding: '8px 10px', textAlign: 'left', fontWeight: '600', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>{h}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {depositsWithBalance.map(dep => {
-                        const custName = customers.find(c => c.id === dep.customerId)?.name || '미매핑';
-                        const isExhausted = dep.balance <= 0;
-                        // 이 입금건에 연결된 청구번호 목록 (PDL → Payment → Billing)
-                        const linkedBillingNos = paymentDepositLinks
-                          .filter(l => l.bankTransactionId === dep.id)
-                          .map(l => payments.find(p => p.id === l.paymentId)?.billingId)
-                          .map(bId => billings.find(b => b.id === bId)?.id || bId)
-                          .filter((v, i, a): v is string => Boolean(v) && a.indexOf(v) === i); // 중복 제거
-                        return (
-                          <tr key={dep.id} style={{ borderBottom: '1px solid var(--border)', opacity: isExhausted ? 0.6 : 1 }}>
-                            <td style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>{dep.transactionDate.split(' ')[0]}</td>
-                            <td style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>
-                              <div style={{ fontWeight: '600' }}>{dep.senderName}</div>
-                              {dep.memo && <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>{dep.memo}</div>}
-                            </td>
-                            <td style={{ padding: '8px 10px', whiteSpace: 'nowrap', fontSize: '12px', color: 'var(--text-secondary)' }}>
-                              {dep.senderAccount || <span style={{ color: 'var(--text-muted)' }}>-</span>}
-                            </td>
-                            <td style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>{custName}</td>
-                            <td style={{ padding: '8px 10px', whiteSpace: 'nowrap', textAlign: 'right' }}>{dep.depositAmount.toLocaleString()}원</td>
-                            <td style={{ padding: '8px 10px', whiteSpace: 'nowrap', textAlign: 'right', color: '#EF4444' }}>
-                              {dep.usedAmount > 0 ? `-${dep.usedAmount.toLocaleString()}원` : '-'}
-                            </td>
-                            <td style={{ padding: '8px 10px', whiteSpace: 'nowrap', textAlign: 'right', fontWeight: '700', color: isExhausted ? 'var(--text-muted)' : '#10B981' }}>
-                              {dep.balance.toLocaleString()}원
-                            </td>
-                            <td style={{ padding: '8px 10px', minWidth: '100px' }}>
-                              {linkedBillingNos.length > 0
-                                ? linkedBillingNos.map(no => (
-                                    <span key={no} style={{ fontSize: '11px', display: 'inline-block', marginRight: '4px', padding: '1px 6px', borderRadius: '4px', background: 'rgba(99,102,241,0.1)', color: 'var(--primary)', border: '1px solid rgba(99,102,241,0.25)' }}>{no}</span>
-                                  ))
-                                : <span style={{ color: 'var(--text-muted)', fontSize: '12px' }}>-</span>
-                              }
-                            </td>
-                            <td style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>
-                              {isExhausted
-                                ? <span style={{ fontSize: '11px', color: 'var(--text-muted)', background: 'var(--bg-app)', border: '1px solid var(--border)', borderRadius: '4px', padding: '2px 7px' }}>소진완료</span>
-                                : <span style={{ fontSize: '11px', color: '#10B981', background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.3)', borderRadius: '4px', padding: '2px 7px' }}>잔액있음</span>
-                              }
-                            </td>
-                            <td style={{ padding: '8px 10px' }}>
-                              {canSave && (
-                                <button type="button"
-                                  onClick={() => { try { deleteBankDeposit(dep.id); } catch (err: any) { showErrorModal(err.message, '삭제 불가'); } }}
-                                  style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '4px', border: '1px solid rgba(239,68,68,0.3)', background: 'rgba(239,68,68,0.07)', color: '#EF4444', cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                                  삭제
-                                </button>
-                              )}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          </div>
-        );
-      })()}
 
       {activeTab === 'LIST' && (() => {
         const dueContracts = getDueContractsForBilling();
