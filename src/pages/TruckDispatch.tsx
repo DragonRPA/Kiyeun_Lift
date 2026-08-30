@@ -173,7 +173,7 @@ export const TruckDispatch: React.FC = () => {
   <tbody>${assetRows || '<tr><td colspan="5" style="text-align:center;color:#999;">장비 정보 없음</td></tr>'}</tbody>
 </table>
 <div class="sign-row">
-  <div class="sign-box"><div class="sign-label">${isOutbound ? '출고' : '회수'} 담당자 확인</div></div>
+  <div class="sign-box"><div class="sign-label">${isOutbound ? '출고 완료자' : '입고 등록자'} 확인</div></div>
   <div class="sign-box"><div class="sign-label">현장 수령인 서명</div></div>
   <div class="sign-box"><div class="sign-label">운송 기사 서명</div></div>
 </div>

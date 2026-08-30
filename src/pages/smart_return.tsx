@@ -1027,7 +1027,7 @@ export const SmartReturn: React.FC = () => {
                     <h1 style={{ margin: 0, fontSize: '20px', fontWeight: '800', color: '#1e1b4b', letterSpacing: '3px', whiteSpace: 'nowrap' }}>기연리프트 입고요청서</h1>
                   </div>
 
-                  {/* 우측: 회수 완료자 날인란 */}
+                  {/* 우측: 입고 등록자 날인란 */}
                   <div style={{ flexShrink: 0, width: '76px', border: '1.5px solid #334155', overflow: 'hidden', borderRadius: '2px' }}>
                     <div style={{
                       backgroundColor: '#f1f5f9',
@@ -1039,7 +1039,7 @@ export const SmartReturn: React.FC = () => {
                       padding: '2px 0',
                       whiteSpace: 'nowrap',
                     }}>
-                      회수 완료자
+                      입고 등록자
                     </div>
                     <div style={{
                       height: '38px',
