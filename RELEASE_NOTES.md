@@ -1,3 +1,35 @@
+# Release Notes (v1.130.0.Build.291 - 2026-08-30 11:24)
+
+## 📋 [CF R2 중심 설계 전환 — 구글 드라이브 관련 UI/스키마/함수 전면 제거]
+
+### 🌟 반영 내용
+
+#### 1. 제거된 UI 섹션 (`GoogleConfig.tsx`)
+- **이메일 자동 첨부 서류 로컬 절대경로 설정** 카드 전체 제거 (견적서/계약서/안전점검/체크리스트/사업자등록증/통장사본/거래명세서 구글드라이브 URL 7개 입력란 + 드라이브 탐색 버튼)
+- **파일 유형별 구글 드라이브 폴더명 맵핑** 카드 전체 제거 (렌탈계약서/소모품납품증빙/출고의뢰/정비보고서 폴더 + OAuth 2.0 Client ID)
+- **Apps Script 웹앱 프록시** 카드 전체 제거 (GAS 코드 복사, 배포 절차 안내, Apps Script URL 입력란)
+- **구글 드라이브 용량 감시 모니터** 카드 전체 제거
+- **구글 드라이브 실제 원본 파일 병합 테스트** 카드 전체 제거
+
+#### 2. 제거된 함수 및 상태 (`GoogleConfig.tsx`)
+- `handleRealDriveMergeTest()`, `handleMergeFolderPdfs()`, `handleGenerateActiveContractPackage()`, `handleCopyGasCode()`, `handleTestWebAppConnection()` 5개 함수 제거
+- `showContractSelectModal` 팝업 모달 전체 제거
+- state: `quotationTemplateUrl`, `contractTemplateUrl`, `safetyInspectionTemplateUrl`, `preDeliveryChecklistTemplateUrl`, `bizRegCertUrl`, `bankbookCopyUrl`, `transactionStatementTemplateUrl`, `defaultRootFolderId`, `appsScriptUrl`, `oauthClientId` 10개 제거
+
+#### 3. DB 스키마 변경 (`db.ts` + DDL 패치)
+- `GoogleConfig` 인터페이스에서 구글 드라이브 관련 10개 필드 제거
+- Seed 데이터에서 해당 초기값 제거
+- **DDL**: `sql/patch_291_drop_google_drive_columns.sql` 생성 — Supabase `google_configs` 테이블 10개 컬럼 `DROP COLUMN IF EXISTS` 실행 필요
+
+#### 4. 타 파일 참조 정리
+- `GoogleDrivePickerModal.tsx`: `defaultRootFolderId` 참조 → `'root'` 하드코딩으로 대체
+- `Dashboard.tsx`: `cfg?.defaultRootFolderId`, `cfg?.oauthClientId` 참조 제거
+- `Billings.tsx`: `transactionStatementTemplateUrl` 참조 3곳 → `undefined`로 대체
+
+> ⚠️ **DDL 적용 필요**: Supabase SQL Editor에서 `sql/patch_291_drop_google_drive_columns.sql` 실행
+
+---
+
 # Release Notes (v1.130.0.Build.286 - 2026-08-29 21:05)
 
 ## 📋 [출고의뢰서 계약번호 자동연동 트리거 & 4컬럼 균등배분 및 출고 완료자 날인란 탑재 완비]

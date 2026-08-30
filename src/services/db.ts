@@ -728,21 +728,12 @@ export interface GoogleConfig {
   deliveryFolder: string;
   maintenanceFolder: string;
   isDevMode: boolean;
-  quotationTemplateUrl?: string;
-  contractTemplateUrl?: string;
-  safetyInspectionTemplateUrl?: string;
-  preDeliveryChecklistTemplateUrl?: string;
-  bizRegCertUrl?: string;
-  bankbookCopyUrl?: string;
-  transactionStatementTemplateUrl?: string;
   currentInsuranceStartDate?: string;
   currentInsuranceEndDate?: string;
   nextInsuranceCertUrl?: string;
   nextInsuranceStartDate?: string;
   nextInsuranceEndDate?: string;
-  defaultRootFolderId?: string;
-  appsScriptUrl?: string;
-  oauthClientId?: string;   // 구글 드라이브 백업용 OAuth 2.0 Client ID
+
   mirrorRecursive?: boolean; // 하위 폴더 재귀 미러링 여부
   // ── Cloudflare R2 클라우드 스토리지 설정 ──
   r2AccountId?: string;      // Cloudflare 32자리 Account ID
@@ -2453,20 +2444,12 @@ const SEED_GOOGLE_CONFIG: GoogleConfig[] = [
     deliveryFolder: '출고의뢰_증빙',
     maintenanceFolder: '정비보고서_증빙',
     isDevMode: false,
-    quotationTemplateUrl: 'templates/렌탈견적서_양식.html',
-    contractTemplateUrl: 'templates/고소작업대_임대차계약서_양식.html',
-    safetyInspectionTemplateUrl: 'templates/고소작업대_안전점검결과서_양식.html',
-    preDeliveryChecklistTemplateUrl: 'templates/반입전_CHECK_LIST_양식.html',
-    bizRegCertUrl: '',
-    bankbookCopyUrl: '',
-    transactionStatementTemplateUrl: 'templates/거래명세서_양식.html',
     currentInsuranceStartDate: '2026-03-05',
     currentInsuranceEndDate: '2027-03-05',
     nextInsuranceStartDate: '2027-03-05',
     nextInsuranceEndDate: '2028-03-05',
-    defaultRootFolderId: '1aBZsZ1KnKhk9Ax6oiM2cb-yKfDHKGRif',
-    oauthClientId: '274287991550-7eaeisb14i80315pmlf8390smf58pkbt.apps.googleusercontent.com',
     updatedAt: new Date().toISOString()
+
   }
 ];
 

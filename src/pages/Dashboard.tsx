@@ -156,9 +156,9 @@ export const Dashboard: React.FC = () => {
     });
 
     const cfg = googleConfigs[0];
-    const folderInput = cfg?.defaultRootFolderId || 'https://drive.google.com/drive/folders/1aBZsZ1KnKhk9Ax6oiM2cb-yKfDHKGRif';
+    const folderInput = '';
     const folderId = extractDriveFolderId(folderInput);
-    const clientId = cfg?.oauthClientId?.trim() || '274287991550-7eaeisb14i80315pmlf8390smf58pkbt.apps.googleusercontent.com';
+    const clientId = '';
 
     setShowContractSelectModal(false);
     setIsMergingDoc(true);

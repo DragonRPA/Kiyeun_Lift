@@ -440,7 +440,7 @@ export const Billings: React.FC = () => {
     const contract = contracts.find(c => c.id === billing?.contractId);
     const site = sites.find(s => s.id === contract?.siteId);
     const salesperson = users.find((u: any) => u.id === contract?.salespersonId);
-    const templateUrl = googleConfigs[0]?.transactionStatementTemplateUrl;
+    const templateUrl = undefined /* CF R2 마스터 xlsx로 대체됨 */;
     const custName = customer?.name || '고객사';
     const sName = site?.name || '현장';
     const ym = billing?.billingYm || '';
@@ -478,7 +478,7 @@ export const Billings: React.FC = () => {
     const contract = contracts.find(c => c.id === billing?.contractId);
     const site = sites.find(s => s.id === contract?.siteId);
     const salesperson = users.find((u: any) => u.id === contract?.salespersonId);
-    const templateUrl = googleConfigs[0]?.transactionStatementTemplateUrl;
+    const templateUrl = undefined /* CF R2 마스터 xlsx로 대체됨 */;
 
     const details_supply = details.reduce((sum, d) => sum + (d.unitPrice || 0) * (d.quantity || 1), 0);
     const details_vat = Math.round(details_supply * 0.1);
@@ -2261,7 +2261,7 @@ ${details.map((d, idx) => {
                     const ym = targetBilling?.billingYm || '';
                     const fileName = `${custName}_${sName}_${ym}`;
                     // Supabase google_configs 에 저장된 구글 드라이브 양식 URL 사용
-                    const templateUrl = googleConfigs[0]?.transactionStatementTemplateUrl;
+                    const templateUrl = undefined /* CF R2 마스터 xlsx로 대체됨 */;
                     try {
                       await exportTransactionStatementExcel(
                         targetBilling,

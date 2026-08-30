@@ -37,10 +37,11 @@ export const GoogleDrivePickerModal: React.FC<GoogleDrivePickerModalProps> = ({
   initialFolderId
 }) => {
   const { googleConfigs } = useApp();
-  const defaultRoot = googleConfigs[0]?.defaultRootFolderId || 'root';
+  const defaultRoot = 'root';
 
   const [activeTab, setActiveTab] = useState<'browse' | 'url'>('browse');
-  const [currentFolderId, setCurrentFolderId] = useState<string>(initialFolderId || defaultRoot || 'root');
+  const [currentFolderId, setCurrentFolderId] = useState<string>(initialFolderId || 'root');
+
   const [searchQuery, setSearchQuery] = useState<string>('');
   
   // URL 입력 탭 상태
