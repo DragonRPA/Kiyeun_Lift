@@ -1,3 +1,16 @@
+# Release Notes (v0.5.3.Build.44 - 2026-08-30 23:22)
+
+## 💡 [거래명세서 PDF 생성 엔진을 100% 정품 MS Excel COM 기반으로 전면 전환]
+
+### ✨ 반영 내용
+- **거래명세서 정품 MS Excel COM 엔진 탑재 (`agent.js`, `excelTemplateEngine.ts`)**
+  - 기존 브라우저 Canvas 그래픽 드로잉 방식을 사장님의 실제 `00.거래명세서양식.xlsx` 템플릿 기반 **정품 MS Excel COM 엔진(`/api/generate-statement`)**으로 전면 전환.
+  - Windows에 설치된 실제 MS Excel 프로세스가 엑셀 원본 양식에 공급자/공급받는자/품목/금액/작성일자 셀을 정밀 주입하고 `ExportAsFixedFormat(PDF)`로 직접 변환하여, **실제 엑셀과 100% 동일한 A4 인쇄 품질 및 서식 무왜곡 보존**.
+- **KiyeunAgent 최신 바이너리 컴파일 및 코드 서명 동기화 (`public/downloads/KiyeunAgent.exe`)**
+  - 최신 로컬 에이전트 엔진 빌드 및 디지털 서명 완료.
+
+---
+
 # Release Notes (v0.5.3.Build.43 - 2026-08-30 23:18)
 
 ## 💡 [청구 조회 기본값 현재월 자동 세팅 및 좌측/우측 독립 스크롤 듀얼 패널 레이아웃 적용]

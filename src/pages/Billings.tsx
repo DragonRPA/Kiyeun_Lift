@@ -493,9 +493,10 @@ export const Billings: React.FC = () => {
   };
 
   // 거래명세서 정품 A4 PDF 생성 및 다운로드
-  const downloadStatementPdf = async () => {
-    const billing = billings.find(b => b.id === mailBillingId);
-    const rawDetails = billingDetails.filter(d => d.billingId === mailBillingId);
+  const downloadStatementPdf = async (billingId?: string) => {
+    const targetBillingId = billingId || mailBillingId || selectedBillingId;
+    const billing = billings.find(b => b.id === targetBillingId);
+    const rawDetails = billingDetails.filter(d => d.billingId === targetBillingId);
     const customer = customers.find(c => c.id === billing?.customerId);
     const contract = contracts.find(c => c.id === billing?.contractId);
     const site = sites.find(s => s.id === contract?.siteId);
@@ -503,7 +504,7 @@ export const Billings: React.FC = () => {
     const custName = customer?.name || '고객사';
     const sName = site?.name || '현장';
     const ym = billing?.billingYm || '';
-    const fileName = `거래명세서_${custName}_${sName}_${ym}.pdf`;
+    const fileName = `[기연리프트]_거래명세서_${custName}_${sName}_${ym}.pdf`;
 
     const details = rawDetails.map(d => {
       const ca = contractAssets.find(cAsset => cAsset.id === d.contractAssetId);

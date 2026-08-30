@@ -488,9 +488,34 @@ export interface TransactionStatementPdfData {
 
 /**
  * 4. (주)기연리프트 공식 표준 거래명세서 정품 A4 PDF 생성 엔진
- * - 00.거래명세서양식.xlsx 템플릿과 100% 동일한 A4 레이아웃 및 폰트/표/직인 렌더링
+ * - 1순위: 로컬 사이드카 에이전트의 MS Excel COM 엔진(00.거래명세서양식.xlsx 정품 원본 기반)
+ * - 2순위: 브라우저 고정밀 Canvas 2D 렌더러 (에이전트 미연결 시 Fallback)
  */
 export async function generateTransactionStatementPdf(data: TransactionStatementPdfData): Promise<Uint8Array> {
+  // 1순위: 로컬 사이드카 에이전트 (정품 MS Excel COM 엔진) 호출
+  try {
+    const agentResp = await fetch('http://127.0.0.1:5175/api/generate-statement', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+
+    if (agentResp.ok) {
+      const agentRes = await agentResp.json();
+      if (agentRes.success && agentRes.base64Content) {
+        const binaryStr = atob(agentRes.base64Content);
+        const bytes = new Uint8Array(binaryStr.length);
+        for (let i = 0; i < binaryStr.length; i++) {
+          bytes[i] = binaryStr.charCodeAt(i);
+        }
+        return bytes;
+      }
+    }
+  } catch (agentErr) {
+    console.warn('⚠️ 로컬 에이전트 연결 불가 또는 오류 발생, 브라우저 렌더러로 전환합니다:', agentErr);
+  }
+
+  // 2순위: 브라우저 고정밀 Canvas 2D 렌더러 (Fallback)
   const { PDFDocument, rgb } = await import('pdf-lib');
   
   // A4 표준 규격: 595.28 x 841.89 pt
