@@ -1959,7 +1959,7 @@ ${items.map((item, idx) => {
                                     )}
                                   </td>
                                   <td style={{ padding: '6px 8px', color: 'var(--text-secondary)' }}>
-                                    {isRental ? (
+                                    {isAssetRental ? (
                                       <span>
                                         <strong style={{ color: 'var(--text-primary)' }}>{calcServicePeriod(bd, activeBilling, contractObj)}</strong>
                                         {bd.description && !bd.description.includes('정기') && (
