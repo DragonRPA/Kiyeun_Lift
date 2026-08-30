@@ -446,11 +446,30 @@ $excel.Quit()
 
         const mergedPdf = await PDFDocument.create();
         const pdfSources = [
-          path.join(tempBuildDir, '01.계약서패키지.pdf'),
-          path.join(DRIVE_MIRROR_DIR, '08.생산물배상책임보험증권.pdf'),
-          path.join(DRIVE_MIRROR_DIR, '09.사업자등록증.pdf'),
-          path.join(DRIVE_MIRROR_DIR, '10.통장사본.pdf')
+          path.join(tempBuildDir, '01.계약서패키지.pdf')
         ];
+
+        // 중복 모델 제거
+        const uniqueModels = [...new Set((assets || []).map(a => a.modelName).filter(Boolean))];
+        
+        // Eq_doc 내의 모델 폴더에서 PDF 파일들 추가
+        for (const model of uniqueModels) {
+          const eqDocDir = path.join(DRIVE_MIRROR_DIR, 'Eq_doc', model);
+          if (fs.existsSync(eqDocDir)) {
+            const files = fs.readdirSync(eqDocDir).filter(f => f.toLowerCase().endsWith('.pdf'));
+            // 정렬해서 넣기 (예: 01.제원표, 02.등록증 등)
+            files.sort();
+            for (const f of files) {
+              pdfSources.push(path.join(eqDocDir, f));
+            }
+          }
+        }
+
+        // 공통 서류 추가
+        pdfSources.push(path.join(DRIVE_MIRROR_DIR, '08.생산물배상책임보험증권.pdf'));
+        pdfSources.push(path.join(DRIVE_MIRROR_DIR, '09.사업자등록증.pdf'));
+        pdfSources.push(path.join(DRIVE_MIRROR_DIR, '10.통장사본.pdf'));
+
 
         for (const p of pdfSources) {
           if (fs.existsSync(p)) {
@@ -463,8 +482,10 @@ $excel.Quit()
 
         const finalPdfBytes = await mergedPdf.save();
         const pageCount = mergedPdf.getPageCount();
-        const safeCustName = (payload.customerName || '고객사').replace(/[/\\?%*:|"<>]/g, '_');
-        const fileName = `[기연리프트]_정품7종통합계약서류팩_${safeCustName}_(${pageCount}p).pdf`;
+        const safeCustName = (payload.customerName || '고객').replace(/[\\/:*?"<>|]/g, '');
+        const safeSiteName = String(payload.siteName || '현장').replace(/[\\/:*?"<>|]/g, '');
+        const contractStartDateStr = String(payload.contractStartDate || payload.contractDate || '').replace(/[\\/:*?"<>|]/g, '');
+        const fileName = `[기연리프트계약서]_${safeCustName}_${safeSiteName}_${contractStartDateStr}.pdf`;
 
         // 로컬 문서고 영구 아카이빙
         const yyyyMm = contractDate.substring(0, 7) || new Date().toISOString().substring(0, 7);
