@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { Receivable } from '../services/db';
-import { Plus, Search, DollarSign, Calendar, FileText, CheckCircle, AlertTriangle } from 'lucide-react';
+import { Plus, Search, DollarSign, Calendar, FileText, CheckCircle, AlertTriangle, RotateCcw } from 'lucide-react';
 
 export const Receivables: React.FC = () => {
   const {
@@ -9,9 +9,22 @@ export const Receivables: React.FC = () => {
     addReceivable, generateStandaloneBillingForReceivable, hasPermission
   } = useApp();
 
+  // 임시 필터 상태
+  const [tempSearchTerm, setTempSearchTerm] = useState('');
+  const [tempFilterType, setTempFilterType] = useState<string>('ALL');
+  const [tempFilterStatus, setTempFilterStatus] = useState<string>('PENDING_PARTIAL'); // 미청구+일부청구
+  const [tempCustomerId, setTempCustomerId] = useState<string>('ALL');
+  const [tempStartDate, setTempStartDate] = useState<string>('');
+  const [tempEndDate, setTempEndDate] = useState<string>('');
+
+  // 적용된 필터 상태
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState<string>('ALL');
-  const [filterStatus, setFilterStatus] = useState<string>('PENDING_PARTIAL'); // 미청구+일부청구
+  const [filterStatus, setFilterStatus] = useState<string>('PENDING_PARTIAL');
+  const [customerId, setCustomerId] = useState<string>('ALL');
+  const [startDate, setStartDate] = useState<string>('');
+  const [endDate, setEndDate] = useState<string>('');
+
   const [showAddModal, setShowAddModal] = useState(false);
 
   // 폼 상태
@@ -24,18 +37,53 @@ export const Receivables: React.FC = () => {
 
   const canWrite = hasPermission('BILLING', 'save');
 
+  const handleApplyFilter = () => {
+    setSearchTerm(tempSearchTerm);
+    setFilterType(tempFilterType);
+    setFilterStatus(tempFilterStatus);
+    setCustomerId(tempCustomerId);
+    setStartDate(tempStartDate);
+    setEndDate(tempEndDate);
+  };
+
+  const handleResetFilter = () => {
+    setTempSearchTerm('');
+    setTempFilterType('ALL');
+    setTempFilterStatus('PENDING_PARTIAL');
+    setTempCustomerId('ALL');
+    setTempStartDate('');
+    setTempEndDate('');
+
+    setSearchTerm('');
+    setFilterType('ALL');
+    setFilterStatus('PENDING_PARTIAL');
+    setCustomerId('ALL');
+    setStartDate('');
+    setEndDate('');
+  };
+
   const filtered = receivables.filter(r => {
     // 텍스트 검색
     if (searchTerm) {
       const c = contracts.find(x => x.id === r.contractId);
       const cu = customers.find(x => x.id === r.customerId);
+      const s = c?.siteId ? sites.find(x => x.id === c.siteId) : null;
+      const term = searchTerm.toLowerCase();
       const matchText = (
-        r.internalDescription.includes(searchTerm) ||
-        (r.displayName || '').includes(searchTerm) ||
-        (c?.contractNo || '').includes(searchTerm) ||
-        (cu?.name || '').includes(searchTerm)
+        r.internalDescription.toLowerCase().includes(term) ||
+        (r.displayName || '').toLowerCase().includes(term) ||
+        (c?.contractNo || '').toLowerCase().includes(term) ||
+        (cu?.name || '').toLowerCase().includes(term) ||
+        (s?.name || '').toLowerCase().includes(term)
       );
       if (!matchText) return false;
+    }
+
+    // 고객사 필터
+    if (customerId !== 'ALL') {
+      const c = contracts.find(x => x.id === r.contractId);
+      const actualCustId = r.customerId || c?.customerId;
+      if (actualCustId !== customerId) return false;
     }
 
     // 유형 필터
@@ -48,8 +96,17 @@ export const Receivables: React.FC = () => {
       if (r.status !== filterStatus) return false;
     }
 
+    // 기간 필터 (발생일 기준)
+    if (startDate && r.occurredDate < startDate) return false;
+    if (endDate && r.occurredDate > endDate) return false;
+
     return true;
   }).sort((a: any, b: any) => new Date(b.occurredDate).getTime() - new Date(a.occurredDate).getTime());
+
+  // 집계 데이터
+  const totalReceivableSum = filtered.reduce((sum, r) => sum + (r.totalAmount || 0), 0);
+  const totalBilledSum = filtered.reduce((sum, r) => sum + (r.billedAmount || 0), 0);
+  const totalRemainingSum = Math.max(0, totalReceivableSum - totalBilledSum);
 
   const [continuousMode, setContinuousMode] = useState(false);
 
@@ -109,7 +166,6 @@ export const Receivables: React.FC = () => {
       alert('외상미수금이 등록되었습니다.');
       setShowAddModal(false);
     } else {
-      // 연속 등록 모드일 때는 간단한 피드백만 제공하고 폼만 초기화
       const toast = document.createElement('div');
       toast.innerText = '✅ 등록 완료 (연속 등록 모드)';
       toast.style.cssText = 'position:fixed; bottom:20px; right:20px; background:#4ade80; color:white; padding:10px 20px; border-radius:8px; z-index:9999; font-weight:bold;';
@@ -127,42 +183,91 @@ export const Receivables: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="d-flex justify-content-between align-items-center">
+    <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+      
+      {/* 상단 타이틀 & 등록 버튼 */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
         <div>
-          <h2 className="mb-1 text-2xl font-bold">외상미수금 대장</h2>
-          <p className="text-gray-500 text-sm mb-0">렌탈료 외 부대비용(운송료, 수리비 등) 분할 청산 관리</p>
+          <h2 style={{ margin: 0, fontSize: '20px', fontWeight: 800 }}>외상미수금 대장</h2>
+          <p style={{ margin: '4px 0 0', fontSize: '13px', color: 'var(--text-muted)' }}>
+            렌탈료 외 부대비용 (운송료, 수리비, 청소비 등) 분할 청산 관리
+          </p>
         </div>
         <div>
           {canWrite && (
-            <button className="btn btn-primary d-flex align-items-center" onClick={() => setShowAddModal(true)}>
-              <Plus className="w-4 h-4 mr-2" />
-              외상 건 등록
+            <button className="btn-primary" onClick={() => setShowAddModal(true)} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <Plus size={16} /> 신규 외상 등록
             </button>
           )}
         </div>
       </div>
 
-      <div className="card">
-        <div className="card-body">
-          {/* 필터부 */}
-          <div className="row g-3 mb-4">
-            <div className="col-md-3">
-              <label className="form-label text-xs fw-bold text-gray-500 mb-1">통합 검색</label>
-              <div className="input-group input-group-sm">
-                <span className="input-group-text bg-white"><Search className="w-4 h-4 text-gray-400" /></span>
-                <input 
-                  type="text" 
-                  className="form-control" 
-                  placeholder="계약번호, 고객명, 내용..." 
-                  value={searchTerm}
-                  onChange={e => setSearchTerm(e.target.value)}
-                />
-              </div>
+      {/* 요약 현황 카드 */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '14px' }}>
+        <div className="card" style={{ padding: '14px 18px', margin: 0 }}>
+          <div style={{ fontSize: '11.5px', color: 'var(--text-muted)', fontWeight: 600 }}>조회 건수</div>
+          <div style={{ fontSize: '18px', fontWeight: 800, marginTop: '4px' }}>{filtered.length}건</div>
+        </div>
+        <div className="card" style={{ padding: '14px 18px', margin: 0 }}>
+          <div style={{ fontSize: '11.5px', color: 'var(--text-muted)', fontWeight: 600 }}>외상 총액</div>
+          <div style={{ fontSize: '18px', fontWeight: 800, marginTop: '4px', color: 'var(--text-primary)' }}>₩{totalReceivableSum.toLocaleString()}</div>
+        </div>
+        <div className="card" style={{ padding: '14px 18px', margin: 0 }}>
+          <div style={{ fontSize: '11.5px', color: 'var(--text-muted)', fontWeight: 600 }}>기청구액</div>
+          <div style={{ fontSize: '18px', fontWeight: 800, marginTop: '4px', color: 'var(--success)' }}>₩{totalBilledSum.toLocaleString()}</div>
+        </div>
+        <div className="card" style={{ padding: '14px 18px', margin: 0 }}>
+          <div style={{ fontSize: '11.5px', color: 'var(--text-muted)', fontWeight: 600 }}>미청구 잔액</div>
+          <div style={{ fontSize: '18px', fontWeight: 800, marginTop: '4px', color: totalRemainingSum > 0 ? 'var(--danger)' : 'var(--text-primary)' }}>
+            ₩{totalRemainingSum.toLocaleString()}
+          </div>
+        </div>
+      </div>
+
+      {/* 조회 필터 패널 (카테고리 III 레이블 상하 스택 표준) */}
+      <div className="card" style={{ margin: 0, padding: '16px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+          
+          {/* 통합 검색창 */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+            <label style={{ fontSize: '11.5px', fontWeight: 700, color: 'var(--text-muted)' }}>통합 검색</label>
+            <div style={{ position: 'relative' }}>
+              <Search size={15} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+              <input
+                type="text"
+                placeholder="계약번호, 고객사명, 현장명, 내부 기재명..."
+                value={tempSearchTerm}
+                onChange={e => setTempSearchTerm(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') handleApplyFilter(); }}
+                style={{ width: '100%', padding: '7px 10px 7px 32px', fontSize: '12.5px' }}
+              />
             </div>
-            <div className="col-md-2">
-              <label className="form-label text-xs fw-bold text-gray-500 mb-1">유형</label>
-              <select className="form-select form-select-sm" value={filterType} onChange={e => setFilterType(e.target.value)}>
+          </div>
+
+          {/* 세부 필터 그리드 (상하 세로 스택 & 기간 추가) */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '10px', alignItems: 'flex-end' }}>
+            
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <label style={{ fontSize: '11.5px', fontWeight: 700, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>고객사</label>
+              <select
+                value={tempCustomerId}
+                onChange={e => setTempCustomerId(e.target.value)}
+                style={{ padding: '6px 8px', fontSize: '12px', width: '100%' }}
+              >
+                <option value="ALL">전체 고객사</option>
+                {customers.map(cu => (
+                  <option key={cu.id} value={cu.id}>{cu.name}</option>
+                ))}
+              </select>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <label style={{ fontSize: '11.5px', fontWeight: 700, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>비용 유형</label>
+              <select
+                value={tempFilterType}
+                onChange={e => setTempFilterType(e.target.value)}
+                style={{ padding: '6px 8px', fontSize: '12px', width: '100%' }}
+              >
                 <option value="ALL">전체 유형</option>
                 <option value="TRANSPORT">운송료</option>
                 <option value="REPAIR">수리비</option>
@@ -170,95 +275,163 @@ export const Receivables: React.FC = () => {
                 <option value="OTHER">기타</option>
               </select>
             </div>
-            <div className="col-md-2">
-              <label className="form-label text-xs fw-bold text-gray-500 mb-1">상태</label>
-              <select className="form-select form-select-sm" value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
-                <option value="ALL">전체 상태</option>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <label style={{ fontSize: '11.5px', fontWeight: 700, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>청구 상태</label>
+              <select
+                value={tempFilterStatus}
+                onChange={e => setTempFilterStatus(e.target.value)}
+                style={{ padding: '6px 8px', fontSize: '12px', width: '100%' }}
+              >
                 <option value="PENDING_PARTIAL">미청구 잔액 있음</option>
+                <option value="ALL">전체 상태</option>
                 <option value="PENDING">미청구</option>
                 <option value="PARTIAL">일부청구</option>
                 <option value="CLEARED">청구완료 (전액)</option>
               </select>
             </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <label style={{ fontSize: '11.5px', fontWeight: 700, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>발생 시작일 (이후)</label>
+              <input
+                type="date"
+                value={tempStartDate}
+                onChange={e => setTempStartDate(e.target.value)}
+                style={{ padding: '5px 8px', fontSize: '12px', width: '100%' }}
+              />
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <label style={{ fontSize: '11.5px', fontWeight: 700, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>발생 종료일 (이전)</label>
+              <input
+                type="date"
+                value={tempEndDate}
+                onChange={e => setTempEndDate(e.target.value)}
+                style={{ padding: '5px 8px', fontSize: '12px', width: '100%' }}
+              />
+            </div>
+
+            {/* 조회 & 초기화 액션 버튼 */}
+            <div style={{ display: 'flex', gap: '6px' }}>
+              <button
+                type="button"
+                className="btn-primary"
+                onClick={handleApplyFilter}
+                style={{ padding: '6px 14px', fontSize: '12px', flex: 1, whiteSpace: 'nowrap' }}
+              >
+                조회
+              </button>
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={handleResetFilter}
+                style={{ padding: '6px 10px', fontSize: '12px', whiteSpace: 'nowrap' }}
+                title="필터 초기화"
+              >
+                <RotateCcw size={13} />
+              </button>
+            </div>
+
           </div>
+        </div>
+      </div>
 
-          <div className="table-responsive">
-            <table className="table table-hover table-bordered mb-0 align-middle text-sm">
-              <thead className="table-light text-center">
-                <tr>
-                  <th style={{ whiteSpace: 'nowrap' }}>발생일</th>
-                  <th style={{ whiteSpace: 'nowrap' }}>고객사 / 계약</th>
-                  <th style={{ whiteSpace: 'nowrap' }}>유형</th>
-                  <th style={{ whiteSpace: 'nowrap' }}>내부 기재명 (실제 내역)</th>
-                  <th style={{ whiteSpace: 'nowrap' }}>명세서 표기명</th>
-                  <th style={{ whiteSpace: 'nowrap' }}>외상 총액</th>
-                  <th style={{ whiteSpace: 'nowrap' }}>기청구액</th>
-                  <th style={{ whiteSpace: 'nowrap' }}>미청구 잔액</th>
-                  <th style={{ whiteSpace: 'nowrap' }}>상태</th>
-                  <th style={{ whiteSpace: 'nowrap' }}>조치</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map(r => {
-                  const c = contracts.find(x => x.id === r.contractId);
-                  const cu = customers.find(x => x.id === r.customerId);
-                  const s = c?.siteId ? sites.find(x => x.id === c.siteId) : null;
-                  const remaining = r.totalAmount - r.billedAmount;
+      {/* 데이터 테이블 카드 */}
+      <div className="card" style={{ padding: 0, margin: 0, overflowX: 'auto' }}>
+        <div className="table-container" style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', minWidth: '1100px', borderCollapse: 'collapse', whiteSpace: 'nowrap' }}>
+            <thead>
+              <tr style={{ backgroundColor: 'var(--bg-app)', whiteSpace: 'nowrap' }}>
+                <th style={{ whiteSpace: 'nowrap', textAlign: 'center', width: '90px' }}>발생일</th>
+                <th style={{ whiteSpace: 'nowrap' }}>고객사명</th>
+                <th style={{ whiteSpace: 'nowrap' }}>계약번호 / 현장</th>
+                <th style={{ whiteSpace: 'nowrap', textAlign: 'center' }}>유형</th>
+                <th style={{ whiteSpace: 'nowrap' }}>내부 기재명 (실제 내역)</th>
+                <th style={{ whiteSpace: 'nowrap' }}>명세서 표기명</th>
+                <th style={{ whiteSpace: 'nowrap', textAlign: 'right' }}>외상 총액</th>
+                <th style={{ whiteSpace: 'nowrap', textAlign: 'right' }}>기청구액</th>
+                <th style={{ whiteSpace: 'nowrap', textAlign: 'right' }}>미청구 잔액</th>
+                <th style={{ whiteSpace: 'nowrap', textAlign: 'center' }}>상태</th>
+                <th style={{ whiteSpace: 'nowrap', textAlign: 'center' }}>조치</th>
+              </tr>
+            </thead>
+            <tbody style={{ whiteSpace: 'nowrap' }}>
+              {filtered.map(r => {
+                const c = contracts.find(x => x.id === r.contractId);
+                const cu = customers.find(x => x.id === (r.customerId || c?.customerId));
+                const s = c?.siteId ? sites.find(x => x.id === c.siteId) : null;
+                const remaining = r.totalAmount - r.billedAmount;
 
-                  return (
-                    <tr key={r.id}>
-                      <td className="text-center">{r.occurredDate}</td>
-                      <td>
-                        {cu ? (
-                          <>
-                            <div className="fw-bold text-gray-800">{cu.name}</div>
-                            <div className="text-xs text-gray-500">{c?.contractNo || '-'} {s ? `(${s.name})` : ''}</div>
-                          </>
-                        ) : (
-                          <span className="text-muted text-xs">고객 미지정</span>
-                        )}
-                      </td>
-                      <td className="text-center">
+                return (
+                  <tr key={r.id}>
+                    <td style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>{r.occurredDate}</td>
+                    <td style={{ whiteSpace: 'nowrap' }}>
+                      <strong style={{ color: 'var(--text-primary)' }}>{cu?.name || '고객 미지정'}</strong>
+                    </td>
+                    <td style={{ whiteSpace: 'nowrap' }}>
+                      {c ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '1px' }}>
+                          <span style={{ color: 'var(--primary)', fontWeight: 600 }}>{c.contractNo}</span>
+                          {s && <span style={{ fontSize: '10.5px', color: 'var(--text-muted)' }}>{s.name}</span>}
+                        </div>
+                      ) : (
+                        <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>-</span>
+                      )}
+                    </td>
+                    <td style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>
+                      <span className={`badge ${
+                        r.type === 'REPAIR' ? 'badge-danger' :
+                        r.type === 'TRANSPORT' ? 'badge-info' :
+                        r.type === 'CLEANING' ? 'badge-warning' : 'badge-secondary'
+                      }`} style={{ fontSize: '10.5px' }}>
                         {r.type === 'TRANSPORT' ? '운송료' :
                          r.type === 'REPAIR' ? '수리비' :
                          r.type === 'CLEANING' ? '청소비' : '기타'}
-                      </td>
-                      <td>{r.internalDescription}</td>
-                      <td className="text-gray-500">{r.displayName || '-'}</td>
-                      <td className="text-end fw-bold">{r.totalAmount.toLocaleString()}원</td>
-                      <td className="text-end text-success">{r.billedAmount.toLocaleString()}원</td>
-                      <td className="text-end text-danger fw-bold">{remaining.toLocaleString()}원</td>
-                      <td className="text-center">
-                        <span className={`badge ${
-                          r.status === 'PENDING' ? 'badge-secondary' :
-                          r.status === 'PARTIAL' ? 'badge-warning' : 'badge-success'
-                        }`}>
-                          {r.status === 'PENDING' ? '미청구' :
-                           r.status === 'PARTIAL' ? '일부청구' : '청구완료'}
-                        </span>
-                      </td>
-                      <td className="text-center">
-                        {r.status !== 'CLEARED' && (
-                          <button
-                            className="btn btn-sm btn-outline-primary"
-                            style={{ fontSize: '11px', padding: '2px 6px' }}
-                            onClick={() => handleStandaloneIssue(r.id)}
-                          >
-                            단독 청구
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-                {filtered.length === 0 && (
-                  <tr>
-                    <td colSpan={10} className="text-center text-muted py-5">조회된 내역이 없습니다.</td>
+                      </span>
+                    </td>
+                    <td style={{ whiteSpace: 'nowrap' }}>{r.internalDescription}</td>
+                    <td style={{ whiteSpace: 'nowrap', color: 'var(--text-muted)' }}>{r.displayName || '-'}</td>
+                    <td style={{ textAlign: 'right', whiteSpace: 'nowrap', fontWeight: 600 }}>
+                      {r.totalAmount.toLocaleString()}원
+                    </td>
+                    <td style={{ textAlign: 'right', whiteSpace: 'nowrap', color: 'var(--success)' }}>
+                      {r.billedAmount.toLocaleString()}원
+                    </td>
+                    <td style={{ textAlign: 'right', whiteSpace: 'nowrap', fontWeight: 700, color: remaining > 0 ? 'var(--danger)' : 'var(--text-muted)' }}>
+                      {remaining.toLocaleString()}원
+                    </td>
+                    <td style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>
+                      <span className={`badge ${
+                        r.status === 'PENDING' ? 'badge-secondary' :
+                        r.status === 'PARTIAL' ? 'badge-warning' : 'badge-success'
+                      }`} style={{ fontSize: '10.5px' }}>
+                        {r.status === 'PENDING' ? '미청구' :
+                         r.status === 'PARTIAL' ? '일부청구' : '청구완료'}
+                      </span>
+                    </td>
+                    <td style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>
+                      {r.status !== 'CLEARED' && (
+                        <button
+                          className="btn-secondary"
+                          style={{ fontSize: '11px', padding: '2px 8px', color: 'var(--primary)', fontWeight: 600 }}
+                          onClick={() => handleStandaloneIssue(r.id)}
+                        >
+                          단독 청구
+                        </button>
+                      )}
+                    </td>
                   </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+                );
+              })}
+              {filtered.length === 0 && (
+                <tr>
+                  <td colSpan={11} style={{ textAlign: 'center', padding: '40px 0', color: 'var(--text-muted)', fontSize: '13px' }}>
+                    조회된 외상미수금 내역이 없습니다.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
 
