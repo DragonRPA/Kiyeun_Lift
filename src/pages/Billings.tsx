@@ -1328,13 +1328,25 @@ ${details.map((d, idx) => {
             </div>
           </div>
 
-          {/* 청구 상세 정보 */}
+          {/* 청구 상세 정보 (거래명세서 고밀도 정밀 데이터 테이블) */}
           <div>
-            {activeBilling ? (
-              <div className="card" style={{ margin: 0 }}>
-                <div className="card-header" style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '12px', marginBottom: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            {activeBilling ? (() => {
+              const contractObj = contracts.find(c => c.id === activeBilling.contractId);
+              const siteObj = sites.find(s => s.id === contractObj?.siteId);
+              const custObj = customers.find(cu => cu.id === activeBilling.customerId);
+
+              const totalSupply = activeBillingDetails.reduce((sum, bd) => sum + (bd.amount || 0), 0);
+              const totalVat = Math.round(totalSupply * 0.1);
+              const totalGrand = totalSupply + totalVat;
+              const paidAmt = activeBilling.paidAmount || 0;
+              const unpaidAmt = Math.max(0, totalGrand - paidAmt);
+
+              return (
+                <div className="card" style={{ margin: 0, padding: '16px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                  {/* 상단 헤더: 타이틀, 발행일자, 버튼 */}
+                  <div style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <h3 className="card-title" style={{ margin: 0 }}>청구 명세서 ({activeBilling.billingYm})</h3>
+                      <h3 className="card-title" style={{ margin: 0, fontSize: '16px' }}>청구 명세서 ({activeBilling.billingYm})</h3>
                       {canSave && (
                         <button
                           type="button"
@@ -1347,68 +1359,167 @@ ${details.map((d, idx) => {
                         </button>
                       )}
                     </div>
-                    <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>발행일자: {activeBilling.billingDate}</span>
-                  <button 
-                    type="button" 
-                    className="btn-primary"
-                    onClick={() => handleOpenMail(activeBilling.id)}
-                    style={{ padding: '6px 12px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 'bold' }}
-                  >
-                    <Mail size={13} /> 거래명세서 메일 발송
-                  </button>
-                </div>
-                {activeBilling.status === 'REJECTED' && (
-                  <div style={{ padding: '12px', backgroundColor: 'var(--bg-app)', borderLeft: '4px solid var(--danger)', marginBottom: '16px', borderRadius: '4px' }}>
-                    <strong style={{ color: 'var(--danger)', fontSize: '14px', display: 'block', marginBottom: '4px' }}>[취소 사유]</strong>
-                    <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>{activeBilling.rejectReason || '사유 미기재'}</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>발행일자: {activeBilling.billingDate}</span>
+                      <button 
+                        type="button" 
+                        className="btn-primary"
+                        onClick={() => handleOpenMail(activeBilling.id)}
+                        style={{ padding: '5px 12px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 'bold' }}
+                      >
+                        <Mail size={13} /> 거래명세서 메일 발송
+                      </button>
+                    </div>
                   </div>
-                )}
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', fontSize: '14px', marginBottom: '20px' }}>
-                  <div><label style={{ fontSize: '11px', color: 'var(--text-muted)' }}>고객사명</label><strong>{getCustName(activeBilling.customerId)}</strong></div>
-                  <div><label style={{ fontSize: '11px', color: 'var(--text-muted)' }}>총 청구 금액</label><strong className="text-primary">{activeBilling.totalAmount.toLocaleString()}원</strong></div>
-                  <div><label style={{ fontSize: '11px', color: 'var(--text-muted)' }}>기수금액 (수납)</label>{activeBilling.paidAmount.toLocaleString()}원</div>
-                  <div><label style={{ fontSize: '11px', color: 'var(--text-muted)' }}>미수금 잔액</label><strong style={{ color: 'var(--danger)' }}>{(activeBilling.totalAmount - activeBilling.paidAmount).toLocaleString()}원</strong></div>
-                </div>
+                  {/* 반려/취소 사유 알림 */}
+                  {activeBilling.status === 'REJECTED' && (
+                    <div style={{ padding: '10px 12px', backgroundColor: 'rgba(239, 68, 68, 0.1)', borderLeft: '4px solid var(--danger)', borderRadius: '4px' }}>
+                      <strong style={{ color: 'var(--danger)', fontSize: '13px', display: 'block', marginBottom: '2px' }}>[취소/이의제기 사유]</strong>
+                      <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{activeBilling.rejectReason || '사유 미기재'}</span>
+                    </div>
+                  )}
 
-                <h4 style={{ fontSize: '14px', fontWeight: '600', marginBottom: '10px' }}>세부 청구 내역 및 생성 기준값</h4>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                  {activeBillingDetails.map(bd => {
-                    const ca = contractAssets.find(cAsset => cAsset.id === bd.contractAssetId);
-                    const isMonthly = bd.description?.includes('월렌탈');
-                    
-                    return (
-                      <div key={bd.id} style={{ padding: '12px 14px', border: '1px solid var(--border-color)', borderRadius: '8px', fontSize: '13px', backgroundColor: 'var(--bg-card)' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: '700', fontSize: '14px', marginBottom: '6px' }}>
-                          <span>{bd.itemName}</span>
-                          <span style={{ color: 'var(--primary)' }}>{bd.amount.toLocaleString()}원</span>
-                        </div>
-                        
-                        {/* 청구 생성 기준값 명시적 표기 */}
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', padding: '8px 10px', backgroundColor: 'var(--bg-app)', borderRadius: '6px', fontSize: '12px', border: '1px solid #e2e8f0' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <span style={{ color: 'var(--text-muted)', fontWeight: '600' }}>📅 적용 기간/날짜:</span>
-                            <span style={{ fontWeight: '600', color: 'var(--text-primary)' }}>{bd.description || '정기 렌탈 기간'}</span>
-                          </div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <span style={{ color: 'var(--text-muted)', fontWeight: '600' }}>💰 적용 렌탈 단가:</span>
-                            {ca ? (
-                              <span style={{ fontWeight: '600', color: isMonthly ? '#2563eb' : '#059669' }}>
-                                {isMonthly
-                                  ? `월단가 ${ca.monthlyRentalFee.toLocaleString()}원 적용 (월 정기)`
-                                  : `일단가 ${ca.dailyRentalFee.toLocaleString()}원 적용 (일할 계산)`}
-                              </span>
-                            ) : (
-                              <span style={{ color: 'var(--text-secondary)' }}>{isMonthly ? '월단가 적용' : '일단가 일할 적용'}</span>
-                            )}
-                          </div>
-                        </div>
+                  {/* 기본 계약/고객 정보 프로필 */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '8px', padding: '10px 12px', backgroundColor: 'var(--bg-app)', borderRadius: '6px', fontSize: '12px' }}>
+                    <div>
+                      <span style={{ fontSize: '10.5px', color: 'var(--text-muted)', display: 'block' }}>고객사명</span>
+                      <strong style={{ fontSize: '12.5px' }}>{custObj?.name || getCustName(activeBilling.customerId)}</strong>
+                    </div>
+                    <div>
+                      <span style={{ fontSize: '10.5px', color: 'var(--text-muted)', display: 'block' }}>현장명</span>
+                      <strong style={{ fontSize: '12.5px' }}>{siteObj?.name || '-'}</strong>
+                    </div>
+                    <div>
+                      <span style={{ fontSize: '10.5px', color: 'var(--text-muted)', display: 'block' }}>계약번호</span>
+                      <strong style={{ fontSize: '12.5px' }}>{contractObj?.contractNo || activeBilling.contractId || '-'}</strong>
+                    </div>
+                    <div>
+                      <span style={{ fontSize: '10.5px', color: 'var(--text-muted)', display: 'block' }}>사업자번호</span>
+                      <strong style={{ fontSize: '12.5px' }}>{custObj?.businessNo || '-'}</strong>
+                    </div>
+                  </div>
+
+                  {/* 4분할 회계 지표 바 */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px' }}>
+                    <div style={{ padding: '8px 10px', backgroundColor: 'var(--bg-card)', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
+                      <div style={{ fontSize: '10px', color: 'var(--text-muted)', fontWeight: 600 }}>공급가액 계</div>
+                      <div style={{ fontSize: '14px', fontWeight: 800 }}>₩{totalSupply.toLocaleString()}</div>
+                    </div>
+                    <div style={{ padding: '8px 10px', backgroundColor: 'var(--bg-card)', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
+                      <div style={{ fontSize: '10px', color: 'var(--text-muted)', fontWeight: 600 }}>부가세 (10%)</div>
+                      <div style={{ fontSize: '14px', fontWeight: 800, color: '#0070C0' }}>₩{totalVat.toLocaleString()}</div>
+                    </div>
+                    <div style={{ padding: '8px 10px', backgroundColor: 'var(--bg-card)', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
+                      <div style={{ fontSize: '10px', color: 'var(--text-muted)', fontWeight: 600 }}>총 청구금액 (VAT포함)</div>
+                      <div style={{ fontSize: '14px', fontWeight: 800, color: 'var(--primary)' }}>₩{totalGrand.toLocaleString()}</div>
+                    </div>
+                    <div style={{ padding: '8px 10px', backgroundColor: 'var(--bg-card)', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
+                      <div style={{ fontSize: '10px', color: 'var(--text-muted)', fontWeight: 600 }}>미수 잔액 (미납액)</div>
+                      <div style={{ fontSize: '14px', fontWeight: 800, color: unpaidAmt > 0 ? '#dc2626' : 'var(--success)' }}>
+                        ₩{unpaidAmt.toLocaleString()}
                       </div>
-                    );
-                  })}
+                    </div>
+                  </div>
+
+                  {/* 명세서 본문 테이블 (거래명세서 고밀도 그리드) */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <h4 style={{ fontSize: '13px', fontWeight: '700', margin: 0 }}>세부 청구 명세 ({activeBillingDetails.length}건)</h4>
+                      <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>단위: 원 / VAT별도 기준 산출</span>
+                    </div>
+
+                    <div className="table-container" style={{ border: '1px solid var(--border-color)', borderRadius: '6px', overflowX: 'auto', margin: 0, maxHeight: '420px', overflowY: 'auto' }}>
+                      <table style={{ width: '100%', fontSize: '11.5px', whiteSpace: 'nowrap', borderCollapse: 'collapse' }}>
+                        <thead style={{ position: 'sticky', top: 0, zIndex: 1, backgroundColor: 'var(--bg-app)' }}>
+                          <tr>
+                            <th style={{ padding: '6px 8px', textAlign: 'center', width: '32px' }}>No</th>
+                            <th style={{ padding: '6px 8px' }}>구분</th>
+                            <th style={{ padding: '6px 8px' }}>모델명 / 자산번호</th>
+                            <th style={{ padding: '6px 8px' }}>적용 기간 / 산출 근거</th>
+                            <th style={{ padding: '6px 8px', textAlign: 'right' }}>수량</th>
+                            <th style={{ padding: '6px 8px', textAlign: 'right' }}>단가</th>
+                            <th style={{ padding: '6px 8px', textAlign: 'right' }}>공급가액</th>
+                            <th style={{ padding: '6px 8px', textAlign: 'right' }}>세액</th>
+                            <th style={{ padding: '6px 8px', textAlign: 'right' }}>합계</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {activeBillingDetails.length === 0 ? (
+                            <tr>
+                              <td colSpan={9} style={{ textAlign: 'center', padding: '24px 0', color: 'var(--text-muted)' }}>
+                                등록된 세부 청구 내역이 없습니다.
+                              </td>
+                            </tr>
+                          ) : (
+                            activeBillingDetails.map((bd, idx) => {
+                              const ca = contractAssets.find(cAsset => cAsset.id === bd.contractAssetId);
+                              const asset = ca?.assetId 
+                                ? assets.find(a => a.id === ca.assetId) 
+                                : (bd.assetId ? assets.find(a => a.id === bd.assetId) : null);
+                              
+                              const modelName = asset?.modelName || ca?.expectedModel || (bd.itemName !== '렌탈 장비 렌탈료' ? bd.itemName : '장비');
+                              const assetNo = asset?.assetNo ? asset.assetNo : (ca?.assetId ? ca.assetId : '-');
+                              const isRental = Boolean(bd.contractAssetId || bd.itemName?.includes('렌탈'));
+                              const category = isRental ? '렌탈료' : (bd.itemName || '부대비용');
+                              
+                              const supply = bd.amount || 0;
+                              const vat = Math.round(supply * 0.1);
+                              const lineTotal = supply + vat;
+                              const unitPrice = bd.unitPrice || (ca?.monthlyRentalFee) || supply;
+
+                              return (
+                                <tr key={bd.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                                  <td style={{ padding: '6px 8px', textAlign: 'center', color: 'var(--text-muted)' }}>{idx + 1}</td>
+                                  <td style={{ padding: '6px 8px' }}>
+                                    <span style={{ 
+                                      padding: '2px 6px', 
+                                      borderRadius: '4px', 
+                                      fontSize: '10.5px', 
+                                      fontWeight: 600,
+                                      backgroundColor: isRental ? 'rgba(59, 130, 246, 0.1)' : 'rgba(16, 185, 129, 0.1)',
+                                      color: isRental ? '#2563eb' : '#059669'
+                                    }}>
+                                      {category}
+                                    </span>
+                                  </td>
+                                  <td style={{ padding: '6px 8px' }}>
+                                    <strong>{modelName}</strong>
+                                    {assetNo !== '-' && (
+                                      <span style={{ marginLeft: '6px', color: 'var(--text-muted)', fontSize: '11px' }}>
+                                        ({assetNo})
+                                      </span>
+                                    )}
+                                  </td>
+                                  <td style={{ padding: '6px 8px', color: 'var(--text-secondary)' }}>
+                                    {bd.description || (isRental ? '2026-08 정기 월렌탈' : bd.itemName)}
+                                  </td>
+                                  <td style={{ padding: '6px 8px', textAlign: 'right' }}>{bd.quantity || 1}</td>
+                                  <td style={{ padding: '6px 8px', textAlign: 'right' }}>{unitPrice.toLocaleString()}원</td>
+                                  <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 600 }}>{supply.toLocaleString()}원</td>
+                                  <td style={{ padding: '6px 8px', textAlign: 'right', color: 'var(--text-muted)' }}>{vat.toLocaleString()}원</td>
+                                  <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 700, color: 'var(--primary)' }}>{lineTotal.toLocaleString()}원</td>
+                                </tr>
+                              );
+                            })
+                          )}
+                        </tbody>
+                        <tfoot style={{ position: 'sticky', bottom: 0, backgroundColor: 'var(--bg-app)', borderTop: '2px solid var(--border-color)', fontWeight: 800 }}>
+                          <tr>
+                            <td colSpan={4} style={{ padding: '8px', textAlign: 'center' }}>합계 ({activeBillingDetails.length}건)</td>
+                            <td style={{ padding: '8px', textAlign: 'right' }}>{activeBillingDetails.reduce((s, bd) => s + (bd.quantity || 1), 0)}</td>
+                            <td style={{ padding: '8px' }}>-</td>
+                            <td style={{ padding: '8px', textAlign: 'right' }}>₩{totalSupply.toLocaleString()}</td>
+                            <td style={{ padding: '8px', textAlign: 'right', color: '#0070C0' }}>₩{totalVat.toLocaleString()}</td>
+                            <td style={{ padding: '8px', textAlign: 'right', color: 'var(--primary)' }}>₩{totalGrand.toLocaleString()}</td>
+                          </tr>
+                        </tfoot>
+                      </table>
+                    </div>
+                  </div>
                 </div>
-              </div>
-            ) : (
+              );
+            })() : (
               <div className="card" style={{ textAlign: 'center', padding: '60px 0', color: 'var(--text-muted)', margin: 0 }}>
                 상세 청구 항목을 조회할 청구서를 왼쪽 목록에서 선택해 주세요.
               </div>
