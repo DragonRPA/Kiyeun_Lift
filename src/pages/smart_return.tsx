@@ -1,12 +1,45 @@
-// src/pages/smart_return.tsx
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
-import { Zap, Clipboard, FileText, Check, Search, ArrowUpDown, Shield, AlertTriangle } from 'lucide-react';
+import { Zap, Clipboard, FileText, Check, Search, ArrowUpDown, Shield, AlertTriangle, Printer, RotateCcw, Copy } from 'lucide-react';
 import { SmartReturnData } from '../context/AppContext';
 
 export const SmartReturn: React.FC = () => {
-  const { hasPermission, saveSmartReturn, contracts, customers, sites, contacts, deliveries, contractAssets, assets, repairs, vendors } = useApp();
+  const { hasPermission, saveSmartReturn, contracts, customers, sites, contacts, deliveries, contractAssets, assets, repairs, vendors, currentUser, users } = useApp();
   const canSave = hasPermission('delivery', 'save');
+
+  // 전용 로컬 프린터 드라이버 스토리지 키
+  const RETURN_PRINTER_STORAGE_KEY = 'dedicated_printer_smart_return';
+  const [printers, setPrinters] = useState<string[]>([]);
+  const [selectedPrinter, setSelectedPrinter] = useState<string>(() => {
+    return localStorage.getItem(RETURN_PRINTER_STORAGE_KEY) || '';
+  });
+  const [isAgentPrinting, setIsAgentPrinting] = useState<boolean>(false);
+
+  useEffect(() => {
+    const fetchPrinters = async () => {
+      try {
+        const res = await fetch('http://127.0.0.1:5175/api/printers', { signal: AbortSignal.timeout(2000) });
+        const data = await res.json();
+        if (data.success && Array.isArray(data.printers)) {
+          setPrinters(data.printers);
+          const saved = localStorage.getItem(RETURN_PRINTER_STORAGE_KEY);
+          if (!saved || !data.printers.includes(saved)) {
+            const defaultP = data.defaultPrinter || data.printers[0] || 'Apeos C2060';
+            setSelectedPrinter(defaultP);
+            if (defaultP) localStorage.setItem(RETURN_PRINTER_STORAGE_KEY, defaultP);
+          }
+        }
+      } catch (e) {
+        // 백그라운드 인쇄 에이전트 미구동 시 조용히 무시 (웹 브라우저 인쇄 지원)
+      }
+    };
+    fetchPrinters();
+  }, []);
+
+  const handlePrinterChange = (printerName: string) => {
+    setSelectedPrinter(printerName);
+    localStorage.setItem(RETURN_PRINTER_STORAGE_KEY, printerName);
+  };
 
   // 모드 상태: 'SALES' (영업사원 - Case 1,2,3) | 'MAINTENANCE' (정비직원 - Case 4)
   const [activeMode, setActiveMode] = useState<'SALES' | 'MAINTENANCE'>('SALES');
@@ -240,6 +273,105 @@ export const SmartReturn: React.FC = () => {
     setNote('');
   };
 
+  // 🖨️ 브라우저 고품질 인쇄 메소드
+  const handlePrint = () => {
+    const printContent = document.getElementById('return-sheet-print');
+    if (!printContent) {
+      alert('인쇄할 입고(회수)의뢰서 콘텐츠를 찾을 수 없습니다.');
+      return;
+    }
+
+    const uniqueName = new Date().getTime();
+    const printWindow = window.open('', `Print_${uniqueName}`, 'left=150,top=100,width=880,height=950,menubar=no,toolbar=no,location=no,status=no');
+    
+    if (!printWindow) {
+      alert('⚠️ 브라우저 팝업이 차단되었습니다. 팝업 차단을 해제한 후 다시 시도해 주세요.');
+      return;
+    }
+
+    const selContract = contracts.find(c => c.id === selectedContractId);
+    const selCust = customers.find(c => c.id === selContract?.customerId);
+    const selSite = sites.find(s => s.id === selContract?.siteId);
+
+    const htmlDoc = `
+      <!DOCTYPE html>
+      <html lang="ko">
+        <head>
+          <meta charset="utf-8">
+          <title>입고요청서_${selCust?.name || '고객사'}_${selSite?.name || '현장'}</title>
+          <style>
+            @page {
+              size: A4 portrait;
+              margin: 12mm 15mm 15mm 15mm;
+            }
+            @media print {
+              body {
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+              }
+              .no-print {
+                display: none !important;
+              }
+            }
+            * {
+              box-sizing: border-box;
+            }
+            body {
+              font-family: -apple-system, BlinkMacSystemFont, "Malgun Gothic", "맑은 고딕", "Apple SD Gothic Neo", sans-serif;
+              padding: 0;
+              margin: 0 auto;
+              color: #111827;
+              background-color: #ffffff;
+              width: 100%;
+              max-width: 210mm;
+              -webkit-print-color-adjust: exact !important;
+              print-color-adjust: exact !important;
+            }
+            table {
+              width: 100%;
+              border-collapse: collapse;
+              margin-bottom: 16px;
+            }
+            th, td {
+              border: 1px solid #cbd5e1;
+              padding: 8px 10px;
+              text-align: left;
+              font-size: 12px;
+              line-height: 1.4;
+            }
+            th {
+              background-color: #f8fafc !important;
+              font-weight: 700;
+              color: #334155;
+              -webkit-print-color-adjust: exact !important;
+              print-color-adjust: exact !important;
+            }
+          </style>
+        </head>
+        <body>
+          <div style="padding: 10px 0;">
+            ${printContent.innerHTML}
+          </div>
+          <script>
+            window.onload = function() {
+              setTimeout(function() {
+                window.focus();
+                window.print();
+              }, 250);
+            };
+            window.onafterprint = function() {
+              window.close();
+            };
+          </script>
+        </body>
+      </html>
+    `;
+
+    printWindow.document.open();
+    printWindow.document.write(htmlDoc);
+    printWindow.document.close();
+  };
+
   // ==========================================
   // [5] 정비용 데이터 가공 (외주 정비 자산)
   // ==========================================
@@ -385,7 +517,8 @@ export const SmartReturn: React.FC = () => {
 
       {/* [1] 영업사용자 모드 UI */}
       {activeMode === 'SALES' && (
-        <div style={{ display: 'grid', gridTemplateColumns: '4.5fr 5.5fr', gap: '20px', alignItems: 'start' }}>
+        <>
+          <div style={{ display: 'grid', gridTemplateColumns: '4.5fr 5.5fr', gap: '20px', alignItems: 'start' }}>
           
           {/* 왼쪽: 계약 목록 / 검색 / 파서 */}
           <div className="card" style={{ padding: '16px', minHeight: '520px' }}>
@@ -776,6 +909,248 @@ export const SmartReturn: React.FC = () => {
           </div>
 
         </div>
+
+        {/* 3단계: 실시간 프리뷰 및 출력 (A4 서식) */}
+        {(() => {
+          const selectedContract = contracts.find(c => c.id === selectedContractId);
+          const selectedCustomer = customers.find(c => c.id === selectedContract?.customerId);
+          const selectedSite = sites.find(s => s.id === selectedContract?.siteId);
+          const selectedSalesperson = users?.find(u => u.id === selectedContract?.salespersonId) || currentUser;
+          const selectedReturnAssets = assets.filter(a => selectedAssetIds.includes(a.id));
+
+          return (
+            <div className="card" style={{ marginTop: '20px', padding: '20px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
+                <h4 style={{ margin: 0, fontWeight: '800', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <FileText size={18} className="text-primary" />
+                  실시간 프리뷰 및 출력
+                </h4>
+
+                {/* 로컬 프린터 연동 및 인쇄 액션 바 */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span style={{ fontSize: '11.5px', color: 'var(--text-secondary)', fontWeight: '600' }}>로컬 프린터 지정:</span>
+                    <select
+                      value={selectedPrinter}
+                      onChange={(e) => handlePrinterChange(e.target.value)}
+                      style={{
+                        padding: '4px 8px',
+                        borderRadius: '4px',
+                        fontSize: '12px',
+                        border: '1px solid var(--border-color)',
+                        backgroundColor: 'var(--bg-app)',
+                        color: 'var(--text-primary)',
+                        minWidth: '150px'
+                      }}
+                    >
+                      {printers.length > 0 ? (
+                        printers.map(p => (
+                          <option key={p} value={p}>{p}</option>
+                        ))
+                      ) : (
+                        <option value="Apeos C2060">Apeos C2060 (기본)</option>
+                      )}
+                    </select>
+                  </div>
+
+                  <button
+                    type="button"
+                    className="btn-primary"
+                    onClick={handlePrint}
+                    disabled={isAgentPrinting}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      fontSize: '12.5px',
+                      padding: '7px 14px',
+                      fontWeight: 'bold',
+                      whiteSpace: 'nowrap',
+                      height: '33px'
+                    }}
+                  >
+                    <Printer size={14} />
+                    {isAgentPrinting ? '인쇄 전송중...' : '입고의뢰서 인쇄'}
+                  </button>
+                </div>
+              </div>
+
+              {/* 실제 인쇄 타겟 컨테이너 */}
+              <div id="return-sheet-print" style={{ padding: '16px 20px', backgroundColor: '#ffffff', color: '#111827', borderRadius: '4px', border: '1px solid #cbd5e1', maxWidth: '800px', width: '100%', margin: '0 auto', boxShadow: '0 4px 16px rgba(0,0,0,0.1)', boxSizing: 'border-box', overflow: 'hidden' }}>
+                
+                {/* 상단 헤더: 좌측 계약번호+출력일시 / 중앙 타이틀 / 우측 날인란 */}
+                <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', borderBottom: '2px solid #1e1b4b', paddingBottom: '8px', marginBottom: '12px', gap: '8px' }}>
+
+                  {/* 좌측: 계약번호 및 출력일시 */}
+                  <div style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                    <div style={{ fontSize: '12px', fontWeight: '800', color: '#312e81', whiteSpace: 'nowrap' }}>
+                      계약번호: <span style={{ color: selectedContract?.contractNo ? '#0f172a' : '#94a3b8', fontWeight: '800' }}>{selectedContract?.contractNo || '(계약 선택)'}</span>
+                    </div>
+                    <div style={{ fontSize: '10.5px', color: '#64748b', whiteSpace: 'nowrap' }}>
+                      출력일시: {(() => {
+                        const now = new Date();
+                        const y = now.getFullYear();
+                        const mo = String(now.getMonth() + 1).padStart(2, '0');
+                        const d = String(now.getDate()).padStart(2, '0');
+                        const hh = String(now.getHours()).padStart(2, '0');
+                        const mi = String(now.getMinutes()).padStart(2, '0');
+                        const ss = String(now.getSeconds()).padStart(2, '0');
+                        return `${y}.${mo}.${d} ${hh}:${mi}:${ss}`;
+                      })()}
+                    </div>
+                  </div>
+
+                  {/* 중앙: 문서 타이틀 */}
+                  <div style={{ flex: 1, textAlign: 'center', minWidth: 0 }}>
+                    <h1 style={{ margin: 0, fontSize: '20px', fontWeight: '800', color: '#1e1b4b', letterSpacing: '3px', whiteSpace: 'nowrap' }}>기연리프트 입고요청서</h1>
+                  </div>
+
+                  {/* 우측: 회수 완료자 날인란 */}
+                  <div style={{ flexShrink: 0, width: '76px', border: '1.5px solid #334155', overflow: 'hidden', borderRadius: '2px' }}>
+                    <div style={{
+                      backgroundColor: '#f1f5f9',
+                      borderBottom: '1px solid #334155',
+                      textAlign: 'center',
+                      fontSize: '10px',
+                      fontWeight: 'bold',
+                      color: '#1e293b',
+                      padding: '2px 0',
+                      whiteSpace: 'nowrap',
+                    }}>
+                      회수 완료자
+                    </div>
+                    <div style={{
+                      height: '38px',
+                      backgroundColor: '#ffffff',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: '10px',
+                      color: '#94a3b8',
+                      fontWeight: '600',
+                    }}>
+                      (서 명)
+                    </div>
+                  </div>
+                </div>
+
+                {/* 1. 거래처 및 현장 정보 */}
+                <div style={{ fontSize: '12.5px', fontWeight: 'bold', borderLeft: '3.5px solid #312e81', paddingLeft: '6px', marginBottom: '4px', color: '#312e81' }}>1. 거래처 및 현장 정보</div>
+                <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '10px', tableLayout: 'fixed', boxSizing: 'border-box' }}>
+                  <colgroup>
+                    <col style={{ width: '16%' }} />
+                    <col style={{ width: '34%' }} />
+                    <col style={{ width: '16%' }} />
+                    <col style={{ width: '34%' }} />
+                  </colgroup>
+                  <tbody>
+                    <tr>
+                      <th style={{ border: '1px solid #cbd5e1', padding: '5px 8px', backgroundColor: '#f8fafc', color: '#334155', fontWeight: 'bold', fontSize: '12px', boxSizing: 'border-box' }}>고객사명</th>
+                      <td style={{ border: '1px solid #cbd5e1', padding: '5px 8px', backgroundColor: '#ffffff', color: '#111827', fontSize: '12px', fontWeight: '700', wordBreak: 'break-all', boxSizing: 'border-box' }}>{selectedCustomer?.name || '-'}</td>
+                      <th style={{ border: '1px solid #cbd5e1', padding: '5px 8px', backgroundColor: '#f8fafc', color: '#334155', fontWeight: 'bold', fontSize: '12px', boxSizing: 'border-box' }}>현장명</th>
+                      <td style={{ border: '1px solid #cbd5e1', padding: '5px 8px', backgroundColor: '#ffffff', color: '#111827', fontSize: '12px', fontWeight: '700', wordBreak: 'break-all', boxSizing: 'border-box' }}>{selectedSite?.name || '-'}</td>
+                    </tr>
+                    <tr>
+                      <th style={{ border: '1px solid #cbd5e1', padding: '5px 8px', backgroundColor: '#f8fafc', color: '#334155', fontWeight: 'bold', fontSize: '12px', boxSizing: 'border-box' }}>상세 회수주소</th>
+                      <td colSpan={3} style={{ border: '1px solid #cbd5e1', padding: '5px 8px', backgroundColor: '#ffffff', color: '#111827', fontSize: '12px', wordBreak: 'break-all', boxSizing: 'border-box' }}>{selectedSite?.address || selectedCustomer?.address || '-'}</td>
+                    </tr>
+                  </tbody>
+                </table>
+
+                {/* 2. 업무 관계자 정보 */}
+                <div style={{ fontSize: '12.5px', fontWeight: 'bold', borderLeft: '3.5px solid #312e81', paddingLeft: '6px', marginBottom: '4px', color: '#312e81' }}>2. 업무 관계자 정보</div>
+                <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '10px', tableLayout: 'fixed', boxSizing: 'border-box' }}>
+                  <colgroup>
+                    <col style={{ width: '16%' }} />
+                    <col style={{ width: '34%' }} />
+                    <col style={{ width: '16%' }} />
+                    <col style={{ width: '34%' }} />
+                  </colgroup>
+                  <tbody>
+                    <tr>
+                      <th style={{ border: '1px solid #cbd5e1', padding: '5px 8px', backgroundColor: '#f8fafc', color: '#334155', fontWeight: 'bold', fontSize: '12px', boxSizing: 'border-box' }}>영업담당자</th>
+                      <td style={{ border: '1px solid #cbd5e1', padding: '5px 8px', backgroundColor: '#ffffff', color: '#111827', fontSize: '12px', fontWeight: '600', wordBreak: 'break-all', boxSizing: 'border-box' }}>
+                        {selectedSalesperson?.name || currentUser?.name || '-'} {selectedSalesperson?.phone || currentUser?.phone ? `(${selectedSalesperson?.phone || currentUser?.phone})` : ''}
+                      </td>
+                      <th style={{ border: '1px solid #cbd5e1', padding: '5px 8px', backgroundColor: '#f8fafc', color: '#334155', fontWeight: 'bold', fontSize: '12px', boxSizing: 'border-box' }}>방문지 고객담당</th>
+                      <td style={{ border: '1px solid #cbd5e1', padding: '5px 8px', backgroundColor: '#ffffff', color: '#111827', fontSize: '12px', fontWeight: '600', wordBreak: 'break-all', boxSizing: 'border-box' }}>
+                        {contactName || '-'} {contactPhone ? `(${contactPhone})` : ''}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+
+                {/* 3. 회수 배차 및 대상 장비 */}
+                <div style={{ fontSize: '12.5px', fontWeight: 'bold', borderLeft: '3.5px solid #312e81', paddingLeft: '6px', marginBottom: '4px', color: '#312e81' }}>3. 회수 배차 및 대상 장비</div>
+                <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '10px', tableLayout: 'fixed', boxSizing: 'border-box' }}>
+                  <colgroup>
+                    <col style={{ width: '16%' }} />
+                    <col style={{ width: '34%' }} />
+                    <col style={{ width: '16%' }} />
+                    <col style={{ width: '34%' }} />
+                  </colgroup>
+                  <tbody>
+                    <tr>
+                      <th style={{ border: '1px solid #cbd5e1', padding: '5px 8px', backgroundColor: '#f8fafc', color: '#334155', fontWeight: 'bold', fontSize: '12px', boxSizing: 'border-box' }}>회수예정일자</th>
+                      <td style={{ border: '1px solid #cbd5e1', padding: '5px 8px', backgroundColor: '#ffffff', color: '#111827', fontSize: '12px', fontWeight: '700', wordBreak: 'break-all', boxSizing: 'border-box' }}>{returnDate || '-'}</td>
+                      <th style={{ border: '1px solid #cbd5e1', padding: '5px 8px', backgroundColor: '#f8fafc', color: '#334155', fontWeight: 'bold', fontSize: '12px', boxSizing: 'border-box' }}>상차 희망시간</th>
+                      <td style={{ border: '1px solid #cbd5e1', padding: '5px 8px', backgroundColor: '#ffffff', color: '#111827', fontSize: '12px', wordBreak: 'break-all', boxSizing: 'border-box' }}>{loadingTime || '-'}</td>
+                    </tr>
+                    <tr>
+                      <th style={{ border: '1px solid #cbd5e1', padding: '5px 8px', backgroundColor: '#f8fafc', color: '#334155', fontWeight: 'bold', fontSize: '12px', boxSizing: 'border-box' }}>회수 대상 장비</th>
+                      <td colSpan={3} style={{ border: '1px solid #cbd5e1', padding: '5px 8px', backgroundColor: '#ffffff', color: '#111827', fontSize: '12px', fontWeight: '700', wordBreak: 'break-all', boxSizing: 'border-box' }}>
+                        {selectedReturnAssets.length > 0 ? (
+                          selectedReturnAssets.map(a => `${a.modelName} {${a.assetNo}}`).join(', ') + ` (총 ${selectedReturnAssets.length}대)`
+                        ) : (
+                          <span style={{ color: '#94a3b8' }}>회수할 장비를 선택해 주세요</span>
+                        )}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+
+                {/* 4. 장비 반납/회수 확인사항 (현장 점검 항목) */}
+                <div style={{ fontSize: '12.5px', fontWeight: 'bold', borderLeft: '3.5px solid #312e81', paddingLeft: '6px', marginBottom: '4px', color: '#312e81' }}>4. 장비 반납/회수 확인사항 (현장 인계 점검 항목)</div>
+                <div style={{ padding: '7px 10px', border: '1px solid #cbd5e1', borderRadius: '4px', marginBottom: '10px', backgroundColor: '#f8fafc', color: '#111827', boxSizing: 'border-box' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px 12px', fontSize: '11.5px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontWeight: 600, color: '#111827' }}>
+                      <span style={{ fontSize: '13px', color: '#475569', fontWeight: 400, lineHeight: 1 }}>□</span>
+                      <span>1. 장비 외관 파손 및 도색 손상 점검</span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontWeight: 600, color: '#111827' }}>
+                      <span style={{ fontSize: '13px', color: '#475569', fontWeight: 400, lineHeight: 1 }}>□</span>
+                      <span>2. 상하부 조종기 및 키 스위치 이상 유무</span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontWeight: 600, color: '#111827' }}>
+                      <span style={{ fontSize: '13px', color: '#475569', fontWeight: 400, lineHeight: 1 }}>□</span>
+                      <span>3. 충전기 및 전원 인입선 회수 확인</span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontWeight: 600, color: '#111827' }}>
+                      <span style={{ fontSize: '13px', color: '#475569', fontWeight: 400, lineHeight: 1 }}>□</span>
+                      <span>4. 유압유 누유 및 리프트 승하강 정상 동작</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 5. 현장 특이사항 및 인계 메모 */}
+                <div style={{ fontSize: '12.5px', fontWeight: 'bold', borderLeft: '3.5px solid #312e81', paddingLeft: '6px', marginBottom: '4px', color: '#312e81' }}>5. 현장 특이사항 및 인계 메모</div>
+                <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed', boxSizing: 'border-box' }}>
+                  <colgroup>
+                    <col style={{ width: '16%' }} />
+                    <col style={{ width: '84%' }} />
+                  </colgroup>
+                  <tbody>
+                    <tr>
+                      <th style={{ border: '1px solid #cbd5e1', padding: '5px 8px', backgroundColor: '#f8fafc', color: '#334155', fontWeight: 'bold', fontSize: '12px', boxSizing: 'border-box' }}>지시/비고사항</th>
+                      <td style={{ border: '1px solid #cbd5e1', padding: '5px 8px', backgroundColor: '#ffffff', color: '#111827', fontSize: '12px', wordBreak: 'break-all', boxSizing: 'border-box' }}>{note || '특이사항 없음'}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          );
+        })()}
+        </>
       )}
 
       {/* [2] 정비직원 모드 UI */}

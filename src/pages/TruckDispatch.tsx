@@ -51,6 +51,7 @@ export interface ReconPairRow {
 export const TruckDispatch: React.FC = () => {
   const { 
     deliveries, contracts, customers, products, sites,
+    contractAssets, assets,
     transportCompanies, transportDrivers, outboundInspections, hasPermission, 
     refreshAllData, showErrorModal, convertReconciledDeliveriesToSettlement
   } = useApp();
@@ -97,6 +98,93 @@ export const TruckDispatch: React.FC = () => {
 
   const getContract = (contractId?: string) => contracts.find(c => c.id === contractId);
   const getCustomer = (customerId?: string) => customers.find(c => c.id === customerId);
+
+  // 회수 배차 대상 자산 조회 (delivery.assetIds 우선 매핑, 없으면 contractId 기준)
+  const getReturnAssets = (delivery: Delivery) => {
+    if (!delivery) return [];
+    if (delivery.assetIds) {
+      const ids = delivery.assetIds.split(',').map(id => id.trim()).filter(Boolean);
+      const found = ids.map(id => assets.find(a => a.id === id)).filter(Boolean) as Asset[];
+      if (found.length > 0) {
+        return found.map(a => ({ modelName: a.modelName || '-', assetNo: a.assetNo || '-', id: a.id }));
+      }
+    }
+    if (delivery.contractId) {
+      return contractAssets
+        .filter(ca => ca.contractId === delivery.contractId)
+        .map(ca => {
+          const asset = assets.find(a => a.id === ca.assetId);
+          return asset ? { modelName: asset.modelName || ca.modelName || '-', assetNo: asset.assetNo || '-', id: asset.id } : null;
+        })
+        .filter(Boolean) as { modelName: string; assetNo: string; id: string }[];
+    }
+    return [];
+  };
+
+  // 출고/입고 요청서 인쇄
+  const handlePrintDispatchRequest = (delivery: Delivery, docType: 'OUTBOUND' | 'INBOUND') => {
+    const contract = getContract(delivery.contractId);
+    const customer = contract ? getCustomer(contract.customerId) : null;
+    const site = sites?.find(s => s.id === contract?.siteId);
+    const cargoItems = parseCargoItems(delivery);
+    const returnAssets = getReturnAssets(delivery);
+    const isOutbound = docType === 'OUTBOUND';
+    const title = isOutbound ? '출고요청서' : '입고요청서';
+    const today = new Date().toISOString().split('T')[0];
+
+    const assetRows = isOutbound
+      ? cargoItems.map((c, i) => `<tr><td>${i + 1}</td><td>${c.modelName}</td><td>${c.count}대</td><td></td><td></td></tr>`).join('')
+      : returnAssets.map((a, i) => `<tr><td>${i + 1}</td><td>${a.modelName}</td><td>{${a.assetNo}}</td><td>1대</td><td></td></tr>`).join('');
+
+    const fromLabel = isOutbound ? '상차지 (출발)' : '상차지 (회수지)';
+    const toLabel   = isOutbound ? '하차지 (현장)' : '하차지 (반납지)';
+    const fromAddr  = isOutbound ? (delivery.originAddress || '당사 창고') : (delivery.destinationAddress || site?.address || '-');
+    const toAddr    = isOutbound ? (delivery.destinationAddress || site?.address || '-') : (delivery.originAddress || '당사 창고');
+
+    const html = `<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8">
+<title>${title}</title>
+<style>
+  body { font-family: 'Malgun Gothic', sans-serif; font-size: 12px; margin: 24px; color: #111; }
+  h1 { text-align: center; font-size: 20px; font-weight: 900; margin-bottom: 4px; }
+  .sub { text-align: center; font-size: 11px; color: #666; margin-bottom: 20px; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
+  th, td { border: 1px solid #888; padding: 6px 8px; }
+  th { background: #f0f0f0; font-weight: 700; text-align: left; width: 120px; }
+  .asset-table th { text-align: center; background: #e8eef8; }
+  .asset-table td { text-align: center; }
+  .sign-row { display: flex; gap: 16px; margin-top: 24px; }
+  .sign-box { flex: 1; border: 1px solid #888; border-radius: 4px; padding: 10px 14px; min-height: 60px; }
+  .sign-label { font-weight: 700; font-size: 11px; color: #555; margin-bottom: 8px; }
+  @media print { body { margin: 10px; } button { display: none; } }
+</style>
+</head><body>
+<h1>기연리프트 ${title}</h1>
+<div class="sub">문서번호: ${delivery.id} | 발행일자: ${today}</div>
+<table>
+  <tr><th>계약번호</th><td>${contract?.contractNo || '-'}</td><th>배차구분</th><td>${delivery.dispatchCategory || (isOutbound ? '출고' : '입고')}</td></tr>
+  <tr><th>고객사</th><td>${customer?.name || '-'}</td><th>현장</th><td>${site?.name || '-'}</td></tr>
+  <tr><th>요청일</th><td>${delivery.requestDate || '-'}</td><th>배차일</th><td>${delivery.loadingDate || '-'}</td></tr>
+  <tr><th>${fromLabel}</th><td>${fromAddr}</td><th>${toLabel}</th><td>${toAddr}</td></tr>
+  <tr><th>담당 기사</th><td>${delivery.driverName || '(미배정)'}</td><th>차량번호</th><td>${delivery.vehicleNo || '-'}</td></tr>
+  <tr><th>비고</th><td colspan="3">${delivery.memo || ''}</td></tr>
+</table>
+<table class="asset-table">
+  <thead><tr><th>No</th><th>모델명</th>${isOutbound ? '<th>수량</th><th>비고</th><th>서명</th>' : '<th>관리번호</th><th>수량</th><th>비고</th>'}</tr></thead>
+  <tbody>${assetRows || '<tr><td colspan="5" style="text-align:center;color:#999;">장비 정보 없음</td></tr>'}</tbody>
+</table>
+<div class="sign-row">
+  <div class="sign-box"><div class="sign-label">${isOutbound ? '출고' : '회수'} 담당자 확인</div></div>
+  <div class="sign-box"><div class="sign-label">현장 수령인 서명</div></div>
+  <div class="sign-box"><div class="sign-label">운송 기사 서명</div></div>
+</div>
+<div style="margin-top:16px;text-align:center">
+  <button onclick="window.print()" style="padding:8px 24px;font-size:13px;cursor:pointer;">🖨️ 인쇄</button>
+</div>
+</body></html>`;
+
+    const w = window.open('', '_blank', 'width=800,height=900');
+    if (w) { w.document.write(html); w.document.close(); }
+  };
 
   // 1. 배차 4단계 진행 상태 판정 헬퍼
   const getNormalizedDeliveryStatus = (d: Delivery): 'PENDING' | 'DISPATCHED' | 'DELIVERED' | 'CANCELLED' => {
@@ -1689,9 +1777,21 @@ export const TruckDispatch: React.FC = () => {
                           </button>
                         </div>
 
-                        <div style={{ padding: '6px 8px', backgroundColor: 'var(--bg-card)', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '11.5px', color: 'var(--text-muted)' }}>
-                          📦 화물: {cargoItems.map(c => `${c.modelName} ${c.count}대`).join(', ')}
-                        </div>
+                        {/* 화물/자산 정보 표시 */}
+                        {(d.type === 'INBOUND' || d.dispatchCategory === '입고' || d.dispatchCategory === '반납') ? (
+                          // 회수 배차: 계약/회수 자산 목록 표시 (모델명 {관리번호})
+                          <div style={{ padding: '6px 8px', backgroundColor: 'rgba(239,68,68,0.05)', borderRadius: '6px', border: '1px solid rgba(239,68,68,0.2)', fontSize: '11.5px', color: 'var(--text-secondary)' }}>
+                            🔄 회수 대상:&nbsp;
+                            {getReturnAssets(d).length > 0
+                              ? getReturnAssets(d).map(a => `${a.modelName} {${a.assetNo}}`).join(' / ')
+                              : (cargoItems.length > 0 ? cargoItems.map(c => `${c.modelName} ${c.count}대`).join(', ') : '자산 정보 미확인')}
+                          </div>
+                        ) : (
+                          // 출고 배차: 화물 cargoItems 표시
+                          <div style={{ padding: '6px 8px', backgroundColor: 'var(--bg-card)', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '11.5px', color: 'var(--text-muted)' }}>
+                            📦 화물: {cargoItems.map(c => `${c.modelName} ${c.count}대`).join(', ')}
+                          </div>
+                        )}
 
                         {d.driverName && (
                           <div style={{ marginTop: '6px', fontSize: '11.5px', fontWeight: 700, color: '#16a34a' }}>
