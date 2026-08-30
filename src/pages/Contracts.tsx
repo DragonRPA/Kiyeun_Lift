@@ -40,7 +40,11 @@ export const Contracts: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [customerFilter, setCustomerFilter] = useState('ALL');
+  const [customerInputText, setCustomerInputText] = useState('');
+  const [customerDropdownOpen, setCustomerDropdownOpen] = useState(false);
   const [siteFilter, setSiteFilter] = useState('ALL');
+  const [siteInputText, setSiteInputText] = useState('');
+  const [siteDropdownOpen, setSiteDropdownOpen] = useState(false);
   const [startDateFilter, setStartDateFilter] = useState('');
   const [endDateFilter, setEndDateFilter] = useState('');
   const [quickChipFilter, setQuickChipFilter] = useState<'ALL' | 'ACTIVE' | 'ASSIGNED' | 'D3' | 'ZERO_FEE' | 'SUCCEEDED' | 'COMPLETED'>('ALL');
@@ -712,37 +716,92 @@ export const Contracts: React.FC = () => {
 
             {/* 2행: 고객사, 현장, 시작일, 종료일 세부 상세 필터 (레이블 상단 헤더 세로 스택 구조) */}
             <div style={{ display: 'flex', gap: '16px', alignItems: 'flex-end', flexWrap: 'wrap', backgroundColor: 'var(--bg-app)', padding: '10px 14px', borderRadius: '8px', border: '1px solid var(--border-color)', overflowX: 'auto' }}>
-              {/* 고객사 기준 */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flexShrink: 0 }}>
+              {/* 고객사 콤보박스 */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flexShrink: 0, position: 'relative' }}>
                 <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>고객사 선택</label>
-                <select
-                  value={customerFilter}
-                  onChange={e => {
-                    setCustomerFilter(e.target.value);
-                    setSiteFilter('ALL');
-                  }}
-                  style={{ padding: '6px 10px', borderRadius: '6px', fontSize: '12.5px', border: '1px solid var(--border-color)', outline: 'none', backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)', whiteSpace: 'nowrap', minWidth: '150px' }}
-                >
-                  <option value="ALL">전체 고객사</option>
-                  {customers.map(c => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
-                  ))}
-                </select>
+                <div style={{ position: 'relative' }}>
+                  <input
+                    type="text"
+                    value={customerInputText}
+                    onChange={e => {
+                      setCustomerInputText(e.target.value);
+                      setCustomerFilter('ALL');
+                      setCustomerDropdownOpen(true);
+                    }}
+                    onFocus={() => setCustomerDropdownOpen(true)}
+                    onBlur={() => setTimeout(() => setCustomerDropdownOpen(false), 150)}
+                    placeholder="전체 고객사"
+                    style={{ padding: '6px 28px 6px 10px', borderRadius: '6px', fontSize: '12.5px', border: '1px solid var(--border-color)', outline: 'none', backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)', whiteSpace: 'nowrap', minWidth: '150px', width: '100%' }}
+                  />
+                  {customerInputText && (
+                    <button
+                      onMouseDown={e => { e.preventDefault(); setCustomerInputText(''); setCustomerFilter('ALL'); setSiteFilter('ALL'); setSiteInputText(''); }}
+                      style={{ position: 'absolute', right: '6px', top: '50%', transform: 'translateY(-50%)', border: 'none', background: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '13px', padding: 0 }}
+                    >✕</button>
+                  )}
+                  {customerDropdownOpen && (
+                    <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 999, backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '6px', marginTop: '2px', maxHeight: '200px', overflowY: 'auto', boxShadow: '0 4px 12px rgba(0,0,0,0.2)' }}>
+                      <div
+                        onMouseDown={() => { setCustomerFilter('ALL'); setCustomerInputText(''); setSiteFilter('ALL'); setSiteInputText(''); setCustomerDropdownOpen(false); }}
+                        style={{ padding: '7px 12px', fontSize: '12.5px', cursor: 'pointer', color: customerFilter === 'ALL' ? 'var(--primary)' : 'var(--text-primary)', fontWeight: customerFilter === 'ALL' ? 700 : 400 }}
+                      >전체 고객사</div>
+                      {customers
+                        .filter(c => !customerInputText || c.name.toLowerCase().includes(customerInputText.toLowerCase()))
+                        .map(c => (
+                          <div
+                            key={c.id}
+                            onMouseDown={() => { setCustomerFilter(c.id); setCustomerInputText(c.name); setSiteFilter('ALL'); setSiteInputText(''); setCustomerDropdownOpen(false); }}
+                            style={{ padding: '7px 12px', fontSize: '12.5px', cursor: 'pointer', color: customerFilter === c.id ? 'var(--primary)' : 'var(--text-primary)', fontWeight: customerFilter === c.id ? 700 : 400, borderTop: '1px solid var(--border-color)' }}
+                          >{c.name}</div>
+                        ))
+                      }
+                    </div>
+                  )}
+                </div>
               </div>
 
-              {/* 현장 기준 */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flexShrink: 0 }}>
+              {/* 현장 콤보박스 */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flexShrink: 0, position: 'relative' }}>
                 <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>현장 선택</label>
-                <select
-                  value={siteFilter}
-                  onChange={e => setSiteFilter(e.target.value)}
-                  style={{ padding: '6px 10px', borderRadius: '6px', fontSize: '12.5px', border: '1px solid var(--border-color)', outline: 'none', backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)', whiteSpace: 'nowrap', minWidth: '150px' }}
-                >
-                  <option value="ALL">전체 현장</option>
-                  {(customerFilter === 'ALL' ? sites : sites.filter(s => s.customerId === customerFilter)).map(s => (
-                    <option key={s.id} value={s.id}>{s.name}</option>
-                  ))}
-                </select>
+                <div style={{ position: 'relative' }}>
+                  <input
+                    type="text"
+                    value={siteInputText}
+                    onChange={e => {
+                      setSiteInputText(e.target.value);
+                      setSiteFilter('ALL');
+                      setSiteDropdownOpen(true);
+                    }}
+                    onFocus={() => setSiteDropdownOpen(true)}
+                    onBlur={() => setTimeout(() => setSiteDropdownOpen(false), 150)}
+                    placeholder="전체 현장"
+                    style={{ padding: '6px 28px 6px 10px', borderRadius: '6px', fontSize: '12.5px', border: '1px solid var(--border-color)', outline: 'none', backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)', whiteSpace: 'nowrap', minWidth: '150px', width: '100%' }}
+                  />
+                  {siteInputText && (
+                    <button
+                      onMouseDown={e => { e.preventDefault(); setSiteInputText(''); setSiteFilter('ALL'); }}
+                      style={{ position: 'absolute', right: '6px', top: '50%', transform: 'translateY(-50%)', border: 'none', background: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '13px', padding: 0 }}
+                    >✕</button>
+                  )}
+                  {siteDropdownOpen && (
+                    <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 999, backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '6px', marginTop: '2px', maxHeight: '200px', overflowY: 'auto', boxShadow: '0 4px 12px rgba(0,0,0,0.2)' }}>
+                      <div
+                        onMouseDown={() => { setSiteFilter('ALL'); setSiteInputText(''); setSiteDropdownOpen(false); }}
+                        style={{ padding: '7px 12px', fontSize: '12.5px', cursor: 'pointer', color: siteFilter === 'ALL' ? 'var(--primary)' : 'var(--text-primary)', fontWeight: siteFilter === 'ALL' ? 700 : 400 }}
+                      >전체 현장</div>
+                      {(customerFilter === 'ALL' ? sites : sites.filter(s => s.customerId === customerFilter))
+                        .filter(s => !siteInputText || s.name.toLowerCase().includes(siteInputText.toLowerCase()))
+                        .map(s => (
+                          <div
+                            key={s.id}
+                            onMouseDown={() => { setSiteFilter(s.id); setSiteInputText(s.name); setSiteDropdownOpen(false); }}
+                            style={{ padding: '7px 12px', fontSize: '12.5px', cursor: 'pointer', color: siteFilter === s.id ? 'var(--primary)' : 'var(--text-primary)', fontWeight: siteFilter === s.id ? 700 : 400, borderTop: '1px solid var(--border-color)' }}
+                          >{s.name}</div>
+                        ))
+                      }
+                    </div>
+                  )}
+                </div>
               </div>
 
               {/* 계약 시작일 (이후) */}
