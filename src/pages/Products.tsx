@@ -4,7 +4,6 @@ import { useApp } from '../context/AppContext';
 import { Plus, Download, Search, RefreshCw, FileText, X, CloudUpload, Sparkles, Folder, Trash2, ExternalLink, Upload } from 'lucide-react';
 import { exportToExcel } from '../services/excel';
 import { db, Product } from '../services/db';
-import { renderSpecSheetJsPdf, generateAndUploadSpecSheetToR2 } from '../services/specSheetPdf';
 import { LIFT_RETRACTED_IMG, LIFT_EXTENDED_IMG } from '../services/specImages';
 
 interface R2DocFile {
@@ -107,30 +106,17 @@ export const Products: React.FC = () => {
     }
     setGeneratingModelId(product.id || product.modelName);
     try {
-      const res = await generateAndUploadSpecSheetToR2(product, googleConfigs[0]);
-      if (res.success) {
-        alert(`✅ 제원표 PDF 생성 완료\n- 모델명: ${product.modelName}\n- 이후에는 버튼 클릭 즉시 열립니다.`);
-        await refreshAllData();
-        window.open(res.url, '_blank');
-      } else {
-        alert(`❌ 제원표 PDF 생성 실패: ${res.error}`);
-      }
+      throw new Error('브라우저 기반 PDF 렌더러가 사용 중단되었습니다. 향후 정품 엑셀 기반 렌더러로 교체 예정입니다.');
     } catch (err: any) {
-      console.error('R2 Generate error:', err);
-      alert(`오류 발생: ${err.message}`);
+      console.error('PDF error:', err);
+      alert('브라우저 기반 PDF 렌더러가 사용 중단되었습니다.');
     } finally {
       setGeneratingModelId(null);
     }
   };
 
   const handleDownloadPdf = async (product: Partial<Product>) => {
-    try {
-      const { pdf, fileName } = await renderSpecSheetJsPdf(product);
-      pdf.save(fileName);
-    } catch (err: any) {
-      console.error('PDF Download error:', err);
-      alert('PDF 다운로드 중 오류가 발생했습니다.');
-    }
+    alert('브라우저 기반 PDF 렌더러가 폐기되었습니다. 정품 엑셀 엔진으로 개편 대기 중입니다.');
   };
 
   type ProductSortField = 'modelName' | 'feet' | 'spec' | 'manufacturer' | 'isActive' | 'assetCount' | 'createdAt';
@@ -192,19 +178,7 @@ export const Products: React.FC = () => {
       setEditingProduct(null);
       refreshAllData();
 
-      // 기존 제원표 PDF가 없는 모델인 경우에만 백그라운드 자동 생성 (기존 원형 PDF 100% 보존)
-      if (!productSnapshot.specSheetUrl) {
-        setGeneratingModelId(productSnapshot.modelName);
-        generateAndUploadSpecSheetToR2(productSnapshot, googleConfigs[0])
-          .then(res => {
-            if (!res.success) console.error('[제원표 자동생성] 실패:', res.error);
-          })
-          .finally(() => {
-            setGeneratingModelId(null);
-            refreshAllData();
-          });
-      }
-
+      // 기존 제원표 PDF가 없는 모델인 경우에만 백그라운드 자동 생성 -> 브라우저 렌더러 폐기로 삭제됨
     } catch (err: any) {
       alert(`저장 실패: ${err?.message || JSON.stringify(err)}`);
     }
@@ -1050,17 +1024,7 @@ export const Products: React.FC = () => {
                       <button
                         type="button"
                         onClick={async () => {
-                          if (!editingProduct.modelName) {
-                            alert("먼저 모델명을 입력해 주세요.");
-                            return;
-                          }
-                          const res = await generateAndUploadSpecSheetToR2(editingProduct as Product, googleConfigs[0]);
-                          if (res.success) {
-                            setEditingProduct(prev => prev ? ({ ...prev, specSheetUrl: res.url }) : null);
-                            alert("✅ Cloudflare R2에 제원표 PDF가 생성되어 링크가 자동 입력되었습니다!");
-                          } else {
-                            alert("❌ 생성 실패: " + res.error);
-                          }
+                          alert("브라우저 렌더러가 폐기되어 자동 생성 기능을 사용할 수 없습니다. 향후 정품 엑셀 기반으로 개편될 예정입니다.");
                         }}
                         style={{
                           fontSize: '11px',

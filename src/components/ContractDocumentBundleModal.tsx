@@ -2,7 +2,6 @@
 import React, { useState, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
 import { X, FileText, Download, Eye, CheckCircle2, AlertCircle, RefreshCw, FileCheck, Mail, Send } from 'lucide-react';
-import { generateContractFullDocumentBundlePdf } from '../services/pdfBundle';
 import { emailService } from '../services/email';
 
 interface Props {

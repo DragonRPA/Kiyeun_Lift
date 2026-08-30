@@ -5,7 +5,6 @@ import { db, Asset, Billing, BillingDetail } from '../services/db';
 import { Plus, Download, Mail, CheckCircle, Search, DollarSign, Calendar, FileText, Send, Edit3, RotateCcw, AlertTriangle, Check } from 'lucide-react';
 import { emailService } from '../services/email';
 import { exportToExcel, exportTransactionStatementExcel, exportTransactionStatementExcelBuffer, calcServicePeriod } from '../services/excel';
-import { downloadTransactionStatementPDF, generateTransactionStatementPdfBase64 } from '../services/pdf';
 
 export const Billings: React.FC = () => {
   const {
@@ -446,10 +445,7 @@ export const Billings: React.FC = () => {
     const ym = billing?.billingYm || '';
 
     try {
-      await downloadTransactionStatementPDF(
-        billing, details, customer, contract, site, salesperson, templateUrl,
-        `${custName}_${sName}_${ym}`
-      );
+      showErrorModal('브라우저 렌더러가 폐기되었습니다. 향후 거래명세서도 정품 엑셀(로컬 에이전트) 기반으로 일괄 개편될 예정입니다.');
     } catch (err: any) {
       showErrorModal('PDF 생성 실패: ' + (err?.message || String(err)));
     }
@@ -542,21 +538,9 @@ ${details.map((d, idx) => {
       const toList = mailTo.split(',').map(e => e.trim()).filter(Boolean);
       const ccList = mailCc ? mailCc.split(',').map(e => e.trim()).filter(Boolean) : [];
 
-      // 💡 100% 동일한 거래명세서 PDF 파일 자동 생성 (첨부파일용 Base64)
-      const pdfResult = await generateTransactionStatementPdfBase64(
-        billing, details, customer, contract, site, salesperson, templateUrl
-      );
+      // 💡 브라우저 렌더러 폐기로 인해 현재 거래명세서 첨부 이메일 발송 중단
+      throw new Error("브라우저 렌더러가 폐기되었습니다. 향후 거래명세서도 정품 엑셀 엔진으로 개편된 후 재활성화됩니다.");
 
-      await emailService.sendEmail(
-        toList.join(', '),
-        mailSubject,
-        body,
-        [{ filename: pdfResult.filename, content: pdfResult.base64 }],
-        ccList.join(', ')
-      );
-
-      alert(`🎉 [${toList.join(', ')}] 수신자에게 거래명세서 PDF 파일이 첨부되어 성공적으로 실제 발송되었습니다.`);
-      setShowMailModal(false);
     } catch (err: any) {
       showErrorModal(`⚠️ 이메일 발송 실패:\n\n${err?.message || err}`, '메일 발송 오류');
     } finally {

@@ -5,7 +5,6 @@ import { GoogleConfig as GoogleConfigType } from '../services/db';
 import { CloudStoragePickerModal } from '../components/CloudStoragePickerModal';
 import { downloadEvidenceAsZip, deleteStorageFiles } from '../services/supabaseStorage';
 import { backupToGoogleDrive, getDriveReadToken, extractDriveFileId, extractDriveFolderId, listFilesInDriveFolder } from '../services/googleDriveBackup';
-import { downloadContractDocumentBundlePdf, mergeDriveFilesToPdf } from '../services/pdfBundle';
 import { 
   generateContractPdf, 
   generateChecklistPdf, 
@@ -181,37 +180,6 @@ export const GoogleConfig: React.FC = () => {
   const [nextInsuranceStartDate, setNextInsuranceStartDate] = useState('2027-03-05');
   const [nextInsuranceEndDate, setNextInsuranceEndDate] = useState('2028-03-05');
   const [nextInsuranceCertUrl, setNextInsuranceCertUrl] = useState('');
-
-  // 샘플 PDF 생성 상태
-  const [isGeneratingSamplePdf, setIsGeneratingSamplePdf] = useState(false);
-
-  const handleDownloadSampleBundlePdf = async (exceedInsurancePeriod: boolean = true) => {
-    setIsGeneratingSamplePdf(true);
-    try {
-      await downloadContractDocumentBundlePdf({
-        customerName: '주식회사 세보엠이씨',
-        contractDate: '2026년 8월 12일',
-        contractStartDate: '2026-08-12',
-        // exceedInsurancePeriod가 true면 계약 만료일을 2027-08-30으로 설정하여 현재 보험 만료일(2027-03-05) 초과 ➔ 차기 갱신 보험증권 2장 자동 연동!
-        contractEndDate: exceedInsurancePeriod ? '2027-08-30' : '2026-11-30',
-        siteName: '용인 SK하이닉스(팹동)',
-        siteAddress: '경기도 용인시 처인구 원삼면 백원로 46번길 33',
-        currentInsuranceStartDate,
-        currentInsuranceEndDate,
-        nextInsuranceStartDate,
-        nextInsuranceEndDate,
-        assets: [
-          { assetNo: 'G06119', modelName: 'GTJZ0608ME', sn: '0108000379', rentalFee: 390000 },
-          { assetNo: 'G06120', modelName: 'GTJZ0608ME', sn: '0108000357', rentalFee: 390000 },
-          { assetNo: 'G06121', modelName: 'GTJZ0608ME', sn: '0108000426', rentalFee: 390000 }
-        ]
-      });
-    } catch (err: any) {
-      alert(`⚠️ 샘플 PDF 생성 실패: ${err?.message || err}`);
-    } finally {
-      setIsGeneratingSamplePdf(false);
-    }
-  };
 
   // ── 🚀 [살아있는 계약 기반] 3대 핵심 서류 생성 + 구글 드라이브 원본 통합 팩 ──
 
