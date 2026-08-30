@@ -1700,7 +1700,16 @@ ${items.map((item, idx) => {
                                     )}
                                   </td>
                                   <td style={{ padding: '6px 8px', color: 'var(--text-secondary)' }}>
-                                    {bd.description || (isRental ? '2026-08 정기 월렌탈' : bd.itemName)}
+                                    {isRental ? (
+                                      <span>
+                                        <strong style={{ color: 'var(--text-primary)' }}>{calcServicePeriod(bd, activeBilling, contractObj)}</strong>
+                                        {bd.description && !bd.description.includes('정기') && (
+                                          <span style={{ marginLeft: '6px', fontSize: '11px', color: 'var(--text-muted)' }}>({bd.description})</span>
+                                        )}
+                                      </span>
+                                    ) : (
+                                      bd.description || bd.itemName
+                                    )}
                                   </td>
                                   <td style={{ padding: '6px 8px', textAlign: 'right' }}>{bd.quantity || 1}</td>
                                   <td style={{ padding: '6px 8px', textAlign: 'right' }}>{unitPrice.toLocaleString()}원</td>

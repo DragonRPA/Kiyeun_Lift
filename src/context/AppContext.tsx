@@ -2889,7 +2889,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       } else {
         // 중간 달: 월 정액 (B-2)
         rentalCost = ca.monthlyRentalFee;
-        calcDesc = `${billingYm} 정기 월렌탈료`;
+        const startStr = actualStart.toISOString().split('T')[0];
+        const endStr = actualEnd.toISOString().split('T')[0];
+        calcDesc = `${startStr} ~ ${endStr} 정기 월렌탈료`;
       }
 
       if (rentalCost > 0) {
