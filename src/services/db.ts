@@ -2571,7 +2571,7 @@ export const ALL_DB_KEYS = [
   'cashFlowSnapshots', 'outboundInspections', 'depreciationLogs',
   'purchaseSettlements', 'purchaseSettlementItems', 'settlementPaymentLogs', 'externalLeases',
   'annualLeaveQuotas', 'leaveUsages', 'overtimeRecords', 'payrollClosings', 'inspectionChecklistItems',
-  'prepaidTransactions', 'delinquencyActionLogs', 'mechanicConsumableStocks'
+  'prepaidTransactions', 'delinquencyActionLogs', 'mechanicConsumableStocks', 'receivables'
 ];
 
 class LocalDB {
