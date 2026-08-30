@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
-import { Settings, Mail, FolderOpen, RefreshCw, CheckCircle2, Lock, Eye, EyeOff, ShieldCheck, HelpCircle, AlertTriangle, ExternalLink, Key, Search, Cloud, Folder, File, ArrowLeft, Download, HardDrive, FileText, Shield } from 'lucide-react';
+import { Settings, Mail, FolderOpen, RefreshCw, CheckCircle2, Lock, Eye, EyeOff, ShieldCheck, HelpCircle, AlertTriangle, ExternalLink, Key, Search, Cloud, Folder, File, ArrowLeft, Download, HardDrive, FileText, Shield, Save } from 'lucide-react';
 import { GoogleConfig as GoogleConfigType } from '../services/db';
 import { CloudStoragePickerModal } from '../components/CloudStoragePickerModal';
 import { downloadEvidenceAsZip, deleteStorageFiles } from '../services/supabaseStorage';
@@ -494,10 +494,10 @@ export const GoogleConfig: React.FC = () => {
       </div>
 
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '24px', alignItems: 'start' }}>
+      <div style={{ width: '100%' }}>
         
-        {/* 왼쪽 영역: 설정 폼 */}
-        <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+        {/* 영역: 전체 설정 폼 (바둑판식 2열 배열) */}
+        <form onSubmit={handleSave} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(550px, 1fr))', gap: '24px', alignItems: 'start', width: '100%' }}>
           
           {/* 구글 서비스 계정 인증 */}
           <div className="card" style={{ margin: 0, padding: '24px' }}>
@@ -954,6 +954,17 @@ export const GoogleConfig: React.FC = () => {
             </div>
           </div>
         </div>
+          {/* 저장 버튼 (바둑판 전체 폭 차지) */}
+          <div style={{ gridColumn: '1 / -1', display: 'flex', justifyContent: 'flex-end', marginTop: '12px' }}>
+            <button
+              type="submit"
+              className="btn-primary"
+              style={{ padding: '12px 32px', fontSize: '15px', fontWeight: '800', borderRadius: '8px', boxShadow: '0 4px 6px -1px rgba(37, 99, 235, 0.2)' }}
+            >
+              <Save size={18} style={{ marginRight: '8px', verticalAlign: 'text-bottom' }} />
+              클라우드 연계 설정 최종 저장
+            </button>
+          </div>
         </form>
 
         {/* 클라우드 스토리지 탐색기 공용 모달 */}
