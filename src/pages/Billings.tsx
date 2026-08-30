@@ -5,7 +5,8 @@ import { useApp } from '../context/AppContext';
 import { db, Asset, Billing, BillingDetail, ContractHistory, normalizeEndDate } from '../services/db';
 import { Plus, Download, Mail, CheckCircle, Search, DollarSign, Calendar, FileText, Send, Edit3, RotateCcw, AlertTriangle, Check } from 'lucide-react';
 import { emailService } from '../services/email';
-import { exportToExcel, exportTransactionStatementExcel, exportTransactionStatementExcelBuffer, calcServicePeriod } from '../services/excel';
+import { exportToExcel, exportTransactionStatementExcel, exportTransactionStatementExcelBuffer, calcServicePeriod, formatStatementItemName } from '../services/excel';
+import { generateTransactionStatementPdf } from '../services/excelTemplateEngine';
 
 export const Billings: React.FC = () => {
   const {
@@ -489,8 +490,8 @@ export const Billings: React.FC = () => {
     setShowMailModal(true);
   };
 
-  // 거래명세서 엑셀 다운로드 (시스템 엑셀 양식 기반)
-  const printStatementAsPdf = async () => {
+  // 거래명세서 정품 A4 PDF 생성 및 다운로드
+  const downloadStatementPdf = async () => {
     const billing = billings.find(b => b.id === mailBillingId);
     const rawDetails = billingDetails.filter(d => d.billingId === mailBillingId);
     const customer = customers.find(c => c.id === billing?.customerId);
@@ -500,7 +501,7 @@ export const Billings: React.FC = () => {
     const custName = customer?.name || '고객사';
     const sName = site?.name || '현장';
     const ym = billing?.billingYm || '';
-    const fileName = `거래명세서_${custName}_${sName}_${ym}`;
+    const fileName = `거래명세서_${custName}_${sName}_${ym}.pdf`;
 
     const details = rawDetails.map(d => {
       const ca = contractAssets.find(cAsset => cAsset.id === d.contractAssetId);
@@ -514,18 +515,80 @@ export const Billings: React.FC = () => {
       };
     });
 
+    const billingDate = billing?.billingDate || new Date().toISOString().split('T')[0];
+    const parts = billingDate.split('-');
+    const dateM = parts[1] ? Number(parts[1]) : 0;
+    const dateD = parts[2] ? Number(parts[2]) : 0;
+
+    let totalSupply = 0;
+    let totalVat = 0;
+
+    const items = details.map(d => {
+      const unitPrice = d.unitPrice || 0;
+      const quantity = d.quantity || 1;
+      const supplyAmount = unitPrice * quantity;
+      const vatAmount = Math.round(supplyAmount * 0.1);
+      totalSupply += supplyAmount;
+      totalVat += vatAmount;
+
+      return {
+        month: dateM,
+        day: dateD,
+        itemDescription: formatStatementItemName(d, billing, contract),
+        quantity,
+        unitPrice,
+        supplyAmount,
+        vatAmount,
+        notes: d.memo || d.notes || ''
+      };
+    });
+
     try {
-      await exportTransactionStatementExcel(
-        billing,
-        details,
-        customer,
-        contract,
-        site,
-        salesperson,
-        fileName
-      );
+      const pdfBytes = await generateTransactionStatementPdf({
+        billingDate,
+        billingYm: ym,
+        contractNo: contract?.contractNo,
+        lessorBizNo: '138-81-83251',
+        lessorName: '(주)기연리프트',
+        lessorCeo: '이수용',
+        lessorAddress: '경기도 용인시 처인구 모현읍 갈담로112번길 21-3',
+        salespersonName: salesperson?.name || (contract as any)?.salespersonName || '-',
+        salespersonPhone: (salesperson as any)?.mobile || salesperson?.phone || '-',
+        billingManagerName: '정수아',
+        billingManagerPhone: '031-334-5295',
+        lessorEmail: 'giyeonlift@naver.com',
+
+        customerBizNo: customer?.bizRegNo || '-',
+        customerName: customer?.name || '-',
+        customerCeo: customer?.representative || '-',
+        customerAddress: customer?.address || '-',
+        customerBizType: customer?.bizType || '-',
+        customerBizItem: customer?.bizItem || '-',
+        siteManagerName: (site as any)?.managerName || (site as any)?.contactPerson || (customer as any)?.managerName || '-',
+        siteManagerPhone: (site as any)?.managerPhone || (site as any)?.contactPhone || (customer as any)?.phone || '-',
+        custBillingManagerName: (customer as any)?.billingManagerName || (customer as any)?.managerName || '-',
+        custBillingManagerPhone: (customer as any)?.billingManagerPhone || (customer as any)?.phone || '-',
+        custBillingEmail: (customer as any)?.billingEmail || (customer as any)?.email || '-',
+        siteName: site?.name || '-',
+        bankAccount: '신한은행 140-010-007060 , 주식회사 기연리프트',
+
+        items,
+        totalSupply,
+        totalVat,
+        totalGrand: totalSupply + totalVat
+      });
+
+      const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
     } catch (err: any) {
-      showErrorModal('거래명세서 엑셀 다운로드 실패: ' + (err?.message || String(err)));
+      showErrorModal('거래명세서 PDF 생성 및 다운로드 실패: ' + (err?.message || String(err)));
     }
   };
 
@@ -565,8 +628,33 @@ export const Billings: React.FC = () => {
       };
     });
 
-    const details_supply = details.reduce((sum, d) => sum + (d.unitPrice || 0) * (d.quantity || 1), 0);
-    const details_vat = Math.round(details_supply * 0.1);
+    const billingDate = billing?.billingDate || new Date().toISOString().split('T')[0];
+    const parts = billingDate.split('-');
+    const dateM = parts[1] ? Number(parts[1]) : 0;
+    const dateD = parts[2] ? Number(parts[2]) : 0;
+
+    let totalSupply = 0;
+    let totalVat = 0;
+
+    const items = details.map(d => {
+      const unitPrice = d.unitPrice || 0;
+      const quantity = d.quantity || 1;
+      const supplyAmount = unitPrice * quantity;
+      const vatAmount = Math.round(supplyAmount * 0.1);
+      totalSupply += supplyAmount;
+      totalVat += vatAmount;
+
+      return {
+        month: dateM,
+        day: dateD,
+        itemDescription: formatStatementItemName(d, billing, contract),
+        quantity,
+        unitPrice,
+        supplyAmount,
+        vatAmount,
+        notes: d.memo || d.notes || ''
+      };
+    });
 
     const spName = salesperson?.name || (contract as any)?.salespersonName || '-';
     const spPhone = (salesperson as any)?.mobile || salesperson?.phone || '-';
@@ -600,27 +688,22 @@ export const Billings: React.FC = () => {
 
 [3. 거래 세부 내역]
 ----------------------------------------------------------------------------------------
-${details.map((d, idx) => {
-  const itemSupply = (d.unitPrice || 0) * (d.quantity || 1);
-  const itemVat = Math.round(itemSupply * 0.1);
-  const category = (d as any).billingCategory || (d as any).itemType || '렌탈료';
-  const period = calcServicePeriod(d, billing, contract);
-  return `${idx + 1}. [${category}] ${d.itemName} (관리번호: ${(d as any).assetNo || '-'})
-   - 현장투입일: ${(d as any).siteInputDate || contract?.startDate || '-'} | 정산사용기간: ${period}
-   - 공급가액: ${itemSupply.toLocaleString()}원 | 부가세: ${itemVat.toLocaleString()}원 | 합계: ${(itemSupply + itemVat).toLocaleString()}원`;
+${items.map((item, idx) => {
+  return `${idx + 1}. ${item.itemDescription}
+   - 수량: ${item.quantity}대 | 단가: ${item.unitPrice.toLocaleString()}원 | 공급가액: ${item.supplyAmount.toLocaleString()}원 | 부가세: ${item.vatAmount.toLocaleString()}원 | 합계: ${(item.supplyAmount + item.vatAmount).toLocaleString()}원`;
 }).join('\n----------------------------------------------------------------------------------------\n')}
 ----------------------------------------------------------------------------------------
 
 [4. 청구 합계 금액]
-- 공급가액: ${details_supply.toLocaleString()}원
-- 부가가치세(10%): ${details_vat.toLocaleString()}원
-- 최종 청구 총액: ${(details_supply + details_vat).toLocaleString()}원 (기수금: ${(billing?.paidAmount || 0).toLocaleString()}원 / 미수잔액: ${(details_supply + details_vat - (billing?.paidAmount || 0)).toLocaleString()}원)
+- 공급가액: ${totalSupply.toLocaleString()}원
+- 부가가치세(10%): ${totalVat.toLocaleString()}원
+- 최종 청구 총액: ${(totalSupply + totalVat).toLocaleString()}원 (기수금: ${(billing?.paidAmount || 0).toLocaleString()}원 / 미수잔액: ${(totalSupply + totalVat - (billing?.paidAmount || 0)).toLocaleString()}원)
 
 [5. 입금 계좌 안내]
 - 신한은행 140-010-007060 (주)기연리프트
 
 [6. 첨부 파일 안내]
-- 본 이메일에는 (주)기연리프트 공식 엑셀 서식으로 생성된 거래명세서(.xlsx) 파일이 자동 첨부되었습니다.
+- 본 이메일에는 (주)기연리프트 공식 전자 거래명세서(.pdf) 파일이 자동 첨부되었습니다.
 
 감사합니다.
 (주)기연리프트 올림
@@ -630,33 +713,58 @@ ${details.map((d, idx) => {
       const toList = mailTo.split(',').map(e => e.trim()).filter(Boolean);
       const ccList = mailCc ? mailCc.split(',').map(e => e.trim()).filter(Boolean) : [];
 
-      // 1. 엑셀 거래명세서 바이너리 생성
+      // 1. 거래명세서 정품 PDF 생성
       let attachments: { filename: string; content: string }[] = [];
       try {
         const custName = customer?.name || '고객사';
         const sName = site?.name || '현장';
         const ym = billing?.billingYm || '';
-        const buffer = await exportTransactionStatementExcelBuffer(
-          billing,
-          details,
-          customer,
-          contract,
-          site,
-          salesperson
-        );
-        // ArrayBuffer -> Base64 변환
+        const pdfBytes = await generateTransactionStatementPdf({
+          billingDate,
+          billingYm: ym,
+          contractNo: contract?.contractNo,
+          lessorBizNo: '138-81-83251',
+          lessorName: '(주)기연리프트',
+          lessorCeo: '이수용',
+          lessorAddress: '경기도 용인시 처인구 모현읍 갈담로112번길 21-3',
+          salespersonName: spName,
+          salespersonPhone: spPhone,
+          billingManagerName: '정수아',
+          billingManagerPhone: '031-334-5295',
+          lessorEmail: 'giyeonlift@naver.com',
+
+          customerBizNo: customer?.bizRegNo || '-',
+          customerName: customer?.name || '-',
+          customerCeo: customer?.representative || '-',
+          customerAddress: customer?.address || '-',
+          customerBizType: customer?.bizType || '-',
+          customerBizItem: customer?.bizItem || '-',
+          siteManagerName,
+          siteManagerPhone,
+          custBillingManagerName: billingManagerName,
+          custBillingManagerPhone: billingManagerPhone,
+          custBillingEmail: billingEmail,
+          siteName: site?.name || '-',
+          bankAccount: '신한은행 140-010-007060 , 주식회사 기연리프트',
+
+          items,
+          totalSupply,
+          totalVat,
+          totalGrand: totalSupply + totalVat
+        });
+
+        // Uint8Array -> Base64 변환
         let binary = '';
-        const bytes = new Uint8Array(buffer);
-        for (let i = 0; i < bytes.byteLength; i++) {
-          binary += String.fromCharCode(bytes[i]);
+        for (let i = 0; i < pdfBytes.byteLength; i++) {
+          binary += String.fromCharCode(pdfBytes[i]);
         }
         const base64Content = window.btoa(binary);
         attachments.push({
-          filename: `거래명세서_${custName}_${sName}_${ym}.xlsx`,
+          filename: `거래명세서_${custName}_${sName}_${ym}.pdf`,
           content: base64Content
         });
       } catch (attachErr) {
-        console.warn('[Billings] 엑셀 거래명세서 첨부파일 생성 실패 (본문만 발송):', attachErr);
+        console.warn('[Billings] PDF 거래명세서 첨부파일 생성 실패 (본문만 발송):', attachErr);
       }
 
       // 2. 이메일 발송
@@ -681,14 +789,14 @@ ${details.map((d, idx) => {
           contractId: billing.contractId,
           changeType: 'TERMINATE',
           changeDate: new Date().toISOString().split('T')[0],
-          description: `[거래명세서 발송] ${billing.billingYm} 거래명세서 및 청구서 이메일 발송 완료 (수신: ${mailTo})`
+          description: `[거래명세서 발송] ${billing.billingYm} PDF 거래명세서 및 청구서 이메일 발송 완료 (수신: ${mailTo})`
         });
       }
 
       refreshAllData();
       await db.awaitPendingWrites();
 
-      alert(`✅ 거래명세서 및 청구서 이메일이 성공적으로 발송되었습니다.\n\n수신: ${mailTo}`);
+      alert(`✅ PDF 거래명세서 및 청구서 이메일이 성공적으로 발송되었습니다.\n\n수신: ${mailTo}`);
       setShowMailModal(false);
 
     } catch (err: any) {
@@ -1453,6 +1561,14 @@ ${details.map((d, idx) => {
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                       <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>발행일자: {activeBilling.billingDate}</span>
+                      <button 
+                        type="button" 
+                        className="btn-secondary"
+                        onClick={() => downloadStatementPdf(activeBilling.id)}
+                        style={{ padding: '5px 12px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 'bold' }}
+                      >
+                        <Download size={13} /> PDF 다운로드
+                      </button>
                       <button 
                         type="button" 
                         className="btn-primary"
@@ -2636,13 +2752,13 @@ ${details.map((d, idx) => {
                 <button
                   type="button"
                   className="btn-secondary"
-                  onClick={printStatementAsPdf}
+                  onClick={() => downloadStatementPdf()}
                   style={{ display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 'bold' }}
                 >
-                  <Download size={14} /> PDF 다운로드
+                  <Download size={14} /> PDF 거래명세서 다운로드
                 </button>
                 <button type="submit" className="btn-success" disabled={isSending} style={{ fontWeight: 'bold' }}>
-                  {isSending ? '발송 중...' : <><Send size={14} /> 거래명세서 이메일 전송</>}
+                  {isSending ? '발송 중...' : <><Send size={14} /> PDF 거래명세서 이메일 전송</>}
                 </button>
               </div>
             </form>

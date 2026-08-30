@@ -46,16 +46,34 @@ export function calcServicePeriod(d: any, billing: any, contract: any): string {
 }
 
 /**
+ * 💡 [새 서식 표준] 품목 포맷 헬퍼: {모델명}[{관리번호}]_{청구시작일}~{청구종료일}
+ * 예: JCPT1012AC[K10304]_2026-08-01~2026-08-31
+ */
+export function formatStatementItemName(d: any, billing: any, contract: any): string {
+  const period = calcServicePeriod(d, billing, contract);
+  const compactPeriod = period.replace(/\s*~\s*/, '~');
+
+  const modelName = d.modelName || d.itemName || '장비';
+  const assetNo = d.assetNo ? String(d.assetNo).trim() : '';
+
+  if (assetNo) {
+    return `${modelName}[${assetNo}]_${compactPeriod}`;
+  } else {
+    return `${modelName}_${compactPeriod}`;
+  }
+}
+
+/**
  * 신규 표준 거래명세서 양식 파일(구글 드라이브 또는 public/)을 ExcelJS로 읽어서
  * 실제 청구 데이터를 셀 값만 채워넣고 다운로드.
  *
  * 신규 셀 주소 매핑 (2026-08 개편):
- * - 공급자: E9=계약담당자(영업사원명), L9=연락처(영업사원전화)
- * - 공급받는자: S5=등록번호, S6=상호, Z6=대표, S7=주소, S8=업태, Z8=종목
- *              S9=현장담당자, Z9=연락처, S10=계산서담당자, Z10=연락처, S11=계산서메일, S12=현장명
- * - 작성일자: E13
- * - 데이터 행 (row 16~25):
- *   B=순번, C=월, D=일, E=모델/높이, I=관리번호, K=현장투입일, M=사용기간, Q=청구구분, S=수량, U=단가, X=공급가액, AA=세액, AD=비고
+ * - 공급자: E9=계약담당자, J9=연락처, E10=계산서담당자, J10=연락처, E13=작성일자
+ * - 공급받는자: O5=등록번호, O6=상호, T6=대표, O7=주소, O8=업태, T8=종목
+ *              O9=현장담당자, T9=연락처, O10=계산서담당자, T10=연락처, O11=계산서메일, O12=현장명
+ * - 데이터 행 (row 16~26, 최대 11행):
+ *   B=순번, C=월, D=일, E=품목({모델명}[{관리번호}]_{시작일}~{종료일}), L=수량, M=단가, O=공급가액, Q=부가세, T=비고
+ * - 합계 행 (row 27): E27=공급가합계, J27=부가세합계, O27=총합계
  */
 export const exportTransactionStatementExcel = async (
   billing: any,
@@ -183,15 +201,8 @@ export const exportTransactionStatementExcel = async (
       totalSupply += itemSupply;
       totalVat += itemVat;
 
-      // 사용 기간 (정산 시작일~종료일 YYYY-MM-DD ~ YYYY-MM-DD 형식 계산)
-      const servicePeriod = calcServicePeriod(d, billing, contract);
-      const modelName = d.modelName || d.itemName || '장비';
-      const assetNoStr = d.assetNo ? ` ${d.assetNo}` : '';
-      
-      // 💡 [새 서식 표준] 품목: {모델명} {관리번호} {청구시작일} ~ {청구종료일}
-      const itemDescription = (d.contractAssetId || d.itemName?.includes('렌탈'))
-        ? `${modelName}${assetNoStr} ${servicePeriod}`
-        : (d.description ? `${d.itemName} ${d.description}` : d.itemName);
+      // 💡 [새 서식 표준] 품목: {모델명}[{관리번호}]_{청구시작일}~{청구종료일}
+      const itemDescription = formatStatementItemName(d, billing, contract);
 
       setCenterVal(`B${row}`, i + 1);                     // 순번
       setCenterVal(`C${row}`, dateM);                     // 월
@@ -338,14 +349,8 @@ export const exportTransactionStatementExcelBuffer = async (
       totalSupply += itemSupply;
       totalVat += itemVat;
 
-      const servicePeriod = calcServicePeriod(d, billing, contract);
-      const modelName = d.modelName || d.itemName || '장비';
-      const assetNoStr = d.assetNo ? ` ${d.assetNo}` : '';
-
-      // 💡 [새 서식 표준] 품목: {모델명} {관리번호} {청구시작일} ~ {청구종료일}
-      const itemDescription = (d.contractAssetId || d.itemName?.includes('렌탈'))
-        ? `${modelName}${assetNoStr} ${servicePeriod}`
-        : (d.description ? `${d.itemName} ${d.description}` : d.itemName);
+      // 💡 [새 서식 표준] 품목: {모델명}[{관리번호}]_{청구시작일}~{청구종료일}
+      const itemDescription = formatStatementItemName(d, billing, contract);
 
       setCenterVal(`B${row}`, i + 1);
       setCenterVal(`C${row}`, dateM);
