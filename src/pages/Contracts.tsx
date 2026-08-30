@@ -931,6 +931,7 @@ export const Contracts: React.FC = () => {
                     <th style={{ whiteSpace: 'nowrap' }}>현장명</th>
                     <th style={{ whiteSpace: 'nowrap' }}>월 렌탈료</th>
                     <th style={{ whiteSpace: 'nowrap' }}>계약 기간</th>
+                    <th style={{ whiteSpace: 'nowrap' }}>최근 청구 기간</th>
                     <th style={{ whiteSpace: 'nowrap' }}>청구 건수</th>
                     <th style={{ whiteSpace: 'nowrap' }}>만료 D-Day</th>
                     <th style={{ whiteSpace: 'nowrap' }}>청구 마감일</th>
@@ -996,23 +997,32 @@ export const Contracts: React.FC = () => {
                           </td>
                           <td style={{ whiteSpace: 'nowrap' }}>{c.startDate} ~ {c.endDate || '미정'}</td>
                           <td style={{ whiteSpace: 'nowrap' }}>
+                            {c.lastBilledPeriodStart && c.lastBilledPeriodEnd ? (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                <strong style={{ color: 'var(--primary)', fontSize: '12px' }}>
+                                  {c.lastBilledPeriodStart} ~ {c.lastBilledPeriodEnd}
+                                </strong>
+                                {c.lastBillingDate && (
+                                  <span style={{ fontSize: '10.5px', color: 'var(--text-muted)' }}>
+                                    ({c.lastBilledYm || ''}월분 / {c.lastBillingDate} 발행)
+                                  </span>
+                                )}
+                              </div>
+                            ) : (
+                              <span style={{ fontSize: '11.5px', color: 'var(--text-muted)' }}>- (미청구)</span>
+                            )}
+                          </td>
+                          <td style={{ whiteSpace: 'nowrap' }}>
                             {cBillings.length === 0 ? (
                               <span className="badge badge-danger" style={{ fontSize: '10.5px' }}>0건 (미청구)</span>
                             ) : (
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                  <span className="badge badge-info" style={{ fontSize: '10.5px', fontWeight: 700 }}>
-                                    총 {cBillings.length}건
-                                  </span>
-                                  {unpaidCount > 0 && (
-                                    <span style={{ fontSize: '10.5px', color: 'var(--danger)', fontWeight: 600 }}>
-                                      (미수 {unpaidCount})
-                                    </span>
-                                  )}
-                                </div>
-                                {c.lastBilledPeriodEnd && (
-                                  <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
-                                    최근: ~{c.lastBilledPeriodEnd}
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                <span className="badge badge-info" style={{ fontSize: '10.5px', fontWeight: 700 }}>
+                                  총 {cBillings.length}건
+                                </span>
+                                {unpaidCount > 0 && (
+                                  <span style={{ fontSize: '10.5px', color: 'var(--danger)', fontWeight: 600 }}>
+                                    (미수 {unpaidCount})
                                   </span>
                                 )}
                               </div>
@@ -1114,6 +1124,23 @@ export const Contracts: React.FC = () => {
                   <label style={{ color: 'var(--text-muted)', fontSize: '11px', display: 'block' }}>계약 만료일</label>
                   <span>{activeContract.endDate || '미정'}</span>
                   <span className="badge badge-danger" style={{ marginLeft: '6px', fontSize: '10px' }}>{getDDayText(activeContract.endDate).text}</span>
+                </div>
+
+                <div>
+                  <label style={{ color: 'var(--text-muted)', fontSize: '11px', display: 'block' }}>최근 청구 기간</label>
+                  {activeContract.lastBilledPeriodStart && activeContract.lastBilledPeriodEnd ? (
+                    <strong style={{ color: 'var(--primary)', fontSize: '13px' }}>
+                      {activeContract.lastBilledPeriodStart} ~ {activeContract.lastBilledPeriodEnd}
+                    </strong>
+                  ) : (
+                    <span style={{ color: 'var(--text-muted)' }}>- (미청구 계약)</span>
+                  )}
+                </div>
+                <div>
+                  <label style={{ color: 'var(--text-muted)', fontSize: '11px', display: 'block' }}>최근 청구 발행일 / 누적 건수</label>
+                  <span>
+                    {activeContract.lastBillingDate ? `${activeContract.lastBillingDate} (${activeContract.lastBilledYm || ''}월분) / 총 ${activeContract.billingCount || 0}건` : '발행 이력 없음'}
+                  </span>
                 </div>
               </div>
 
