@@ -41,6 +41,26 @@ export const SmartReturn: React.FC = () => {
     localStorage.setItem(RETURN_PRINTER_STORAGE_KEY, printerName);
   };
 
+  // 출고 시 장착 옵션 회수 상속 검수 마스터
+  const RETURN_CHECK_SPECS = [
+    { id: 'spec1', label: '철망 / 함석 설치 부속품 (판넬/볼트)', keywords: ['철망', '함석', '사면철망', '1면', '2면', '3면', '4면', '5면', '망'] },
+    { id: 'spec2', label: '확장대 철망 / 함석 부속품', keywords: ['확장대 철망', '확장대 함석', '확장대철망', '확장대함석'] },
+    { id: 'spec3', label: '상단 감지봉 / 협착 방지 센서 (4EA)', keywords: ['감지봉', '감지봉 4ea', '상단감지', '협착', '센서', '4ea', '감지봉4ea'] },
+    { id: 'spec4', label: '원판 부착물', keywords: ['원판설치', '원판'] },
+    { id: 'spec9', label: '소화기함 및 거치대 / 소화기', keywords: ['소화기함', '기타 스티커물', '소화기'] },
+    { id: 'spec10', label: '조이스틱 보호 커버', keywords: ['조이스틱 커버', '커버 연장'] },
+    { id: 'spec14', label: '전용 충전기 및 전원선', keywords: ['충전기', '전원선', '릴선'] }
+  ];
+
+  const getInheritedOutboundSpecs = (contractId?: string) => {
+    if (!contractId) return [];
+    const outboundDel = (deliveries || []).find((d: any) => d.contractId === contractId && d.type === 'OUTBOUND');
+    const contract = contracts.find(c => c.id === contractId);
+    const text = `${outboundDel?.rawText || ''} ${outboundDel?.memo || ''} ${outboundDel?.closingMemo || ''} ${(contract as any)?.memo || ''}`.toLowerCase();
+    
+    return RETURN_CHECK_SPECS.filter(s => s.keywords.some(kw => text.includes(kw.toLowerCase())));
+  };
+
   // 모드 상태: 'SALES' (영업사원 - Case 1,2,3) | 'MAINTENANCE' (정비직원 - Case 4)
   const [activeMode, setActiveMode] = useState<'SALES' | 'MAINTENANCE'>('SALES');
 
@@ -1109,27 +1129,53 @@ export const SmartReturn: React.FC = () => {
                   </tbody>
                 </table>
 
-                {/* 4. 장비 반납/회수 확인사항 (현장 점검 항목) */}
-                <div style={{ fontSize: '12.5px', fontWeight: 'bold', borderLeft: '3.5px solid #312e81', paddingLeft: '6px', marginBottom: '4px', color: '#312e81' }}>4. 장비 반납/회수 확인사항 (현장 인계 점검 항목)</div>
+                {/* 4. 장비 반납/회수 확인사항 (출고 옵션 상속 + 현장 점검 항목) */}
+                <div style={{ fontSize: '12.5px', fontWeight: 'bold', borderLeft: '3.5px solid #312e81', paddingLeft: '6px', marginBottom: '4px', color: '#312e81' }}>
+                  4. 장비 반납/회수 확인사항 (출고 장착 옵션 상속 점검)
+                </div>
                 <div style={{ padding: '7px 10px', border: '1px solid #cbd5e1', borderRadius: '4px', marginBottom: '10px', backgroundColor: '#f8fafc', color: '#111827', boxSizing: 'border-box' }}>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px 12px', fontSize: '11.5px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontWeight: 600, color: '#111827' }}>
-                      <span style={{ fontSize: '13px', color: '#475569', fontWeight: 400, lineHeight: 1 }}>□</span>
-                      <span>1. 장비 외관 파손 및 도색 손상 점검</span>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontWeight: 600, color: '#111827' }}>
-                      <span style={{ fontSize: '13px', color: '#475569', fontWeight: 400, lineHeight: 1 }}>□</span>
-                      <span>2. 상하부 조종기 및 키 스위치 이상 유무</span>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontWeight: 600, color: '#111827' }}>
-                      <span style={{ fontSize: '13px', color: '#475569', fontWeight: 400, lineHeight: 1 }}>□</span>
-                      <span>3. 충전기 및 전원 인입선 회수 확인</span>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontWeight: 600, color: '#111827' }}>
-                      <span style={{ fontSize: '13px', color: '#475569', fontWeight: 400, lineHeight: 1 }}>□</span>
-                      <span>4. 유압유 누유 및 리프트 승하강 정상 동작</span>
-                    </div>
-                  </div>
+                  {/* 출고 당시 부착되었던 특수 옵션 상속 목록 */}
+                  {(() => {
+                    const inheritedSpecs = getInheritedOutboundSpecs(selectedContractId);
+                    return (
+                      <>
+                        {inheritedSpecs.length > 0 && (
+                          <div style={{ marginBottom: '8px', paddingBottom: '6px', borderBottom: '1px dashed #cbd5e1' }}>
+                            <div style={{ fontSize: '11px', fontWeight: '800', color: '#b91c1c', marginBottom: '4px' }}>
+                              ⚠️ [출고 장착 옵션 필수 회수/점검] — 미반납 및 분실 위험 방어 항목
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px 12px', fontSize: '11.5px' }}>
+                              {inheritedSpecs.map((s, idx) => (
+                                <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: '5px', fontWeight: '700', color: '#b91c1c' }}>
+                                  <span style={{ fontSize: '13px', color: '#dc2626', fontWeight: 700, lineHeight: 1 }}>□</span>
+                                  <span>[출고옵션 {idx + 1}] {s.label} 분실/파손 확인 및 회수</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px 12px', fontSize: '11.5px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontWeight: 600, color: '#111827' }}>
+                            <span style={{ fontSize: '13px', color: '#475569', fontWeight: 400, lineHeight: 1 }}>□</span>
+                            <span>1. 장비 외관 파손 및 도색 손상 점검</span>
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontWeight: 600, color: '#111827' }}>
+                            <span style={{ fontSize: '13px', color: '#475569', fontWeight: 400, lineHeight: 1 }}>□</span>
+                            <span>2. 상하부 조종기 및 키 스위치 이상 유무</span>
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontWeight: 600, color: '#111827' }}>
+                            <span style={{ fontSize: '13px', color: '#475569', fontWeight: 400, lineHeight: 1 }}>□</span>
+                            <span>3. 전용 충전기 및 전원 인입선 회수 확인</span>
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontWeight: 600, color: '#111827' }}>
+                            <span style={{ fontSize: '13px', color: '#475569', fontWeight: 400, lineHeight: 1 }}>□</span>
+                            <span>4. 유압유 누유 및 리프트 승하강 정상 동작</span>
+                          </div>
+                        </div>
+                      </>
+                    );
+                  })()}
                 </div>
 
                 {/* 5. 현장 특이사항 및 인계 메모 */}
