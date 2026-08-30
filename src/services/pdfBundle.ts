@@ -7,6 +7,7 @@
 
 import html2canvas from 'html2canvas';
 import { PDFDocument } from 'pdf-lib';
+import { injectMasterXlsxToBundle } from './masterXlsxBundle';
 
 export interface ContractBundleAssetItem {
   assetNo: string;
@@ -582,88 +583,14 @@ export async function generateContractFullDocumentBundlePdf(
   const totalSteps = 7;
 
   // ----------------------------------------------------------------------------
-  // 📑 Step 1: 01. 계약서 (1 page)
+  // 📑 Step 1~3: 마스터 xlsx 1회 fetch → 계약서(1p) + 체크리스트(Np) + 안전점검(Np)
+  //
+  // [최적화 적용] 기존: fetch (2N+1)회, PDFDocument (2N+1)번 생성/소멸
+  //              신규: fetch 1회, PDFDocument 0번 추가 생성 (mergedPdf 직접 삽입)
   // ----------------------------------------------------------------------------
-  onProgress?.('01. 고소작업대 임대차 계약서 렌더링 중...', 1, totalSteps);
-
-  const container = document.createElement('div');
-  container.style.position = 'absolute';
-  container.style.left = '-9999px';
-  container.style.top = '-9999px';
-  document.body.appendChild(container);
-
-  try {
-    const contractHtml = buildContractPageHtml(options);
-    container.innerHTML = contractHtml;
-
-    const contractCanvas = await html2canvas(container.firstElementChild as HTMLElement, {
-      scale: 2.0,
-      useCORS: true,
-      allowTaint: true,
-      logging: false,
-      backgroundColor: '#ffffff',
-      width: 794,
-      windowWidth: 794,
-    });
-
-    const contractJpgBytes = await (await fetch(contractCanvas.toDataURL('image/jpeg', 0.92))).arrayBuffer();
-    const contractDoc = await PDFDocument.create();
-    const embeddedContract = await contractDoc.embedJpg(contractJpgBytes);
-    const p1 = contractDoc.addPage([595.28, 841.89]);
-    p1.drawImage(embeddedContract, { x: 0, y: 0, width: 595.28, height: 841.89 });
-
-    const [copiedContract] = await mergedPdf.copyPages(contractDoc, [0]);
-    mergedPdf.addPage(copiedContract);
-
-    // ----------------------------------------------------------------------------
-    // 📑 Step 2: 02. 자산별 반입 전 CHECK LIST (N pages)
-    // ----------------------------------------------------------------------------
-    onProgress?.(`02. 자산별 반입 전 자체점검 체크리스트(${assetList.length}대) 렌더링 중...`, 2, totalSteps);
-
-    for (let i = 0; i < assetList.length; i++) {
-      const ast = assetList[i];
-      container.innerHTML = buildChecklistPageHtml(ast);
-
-      const chkCanvas = await html2canvas(container.firstElementChild as HTMLElement, {
-        scale: 2.0, useCORS: true, allowTaint: true, logging: false, backgroundColor: '#ffffff', width: 794, windowWidth: 794
-      });
-
-      const chkJpgBytes = await (await fetch(chkCanvas.toDataURL('image/jpeg', 0.92))).arrayBuffer();
-      const chkDoc = await PDFDocument.create();
-      const embeddedChk = await chkDoc.embedJpg(chkJpgBytes);
-      const chkPage = chkDoc.addPage([595.28, 841.89]);
-      chkPage.drawImage(embeddedChk, { x: 0, y: 0, width: 595.28, height: 841.89 });
-
-      const [copiedChk] = await mergedPdf.copyPages(chkDoc, [0]);
-      mergedPdf.addPage(copiedChk);
-    }
-
-    // ----------------------------------------------------------------------------
-    // 📑 Step 3: 03. 자산별 안전점검 결과서 (N pages)
-    // ----------------------------------------------------------------------------
-    onProgress?.(`03. 자산별 안전점검 결과서(${assetList.length}대) 렌더링 중...`, 3, totalSteps);
-
-    for (let i = 0; i < assetList.length; i++) {
-      const ast = assetList[i];
-      container.innerHTML = buildInspectionPageHtml(ast, options);
-
-      const insCanvas = await html2canvas(container.firstElementChild as HTMLElement, {
-        scale: 2.0, useCORS: true, allowTaint: true, logging: false, backgroundColor: '#ffffff', width: 794, windowWidth: 794
-      });
-
-      const insJpgBytes = await (await fetch(insCanvas.toDataURL('image/jpeg', 0.92))).arrayBuffer();
-      const insDoc = await PDFDocument.create();
-      const embeddedIns = await insDoc.embedJpg(insJpgBytes);
-      const insPage = insDoc.addPage([595.28, 841.89]);
-      insPage.drawImage(embeddedIns, { x: 0, y: 0, width: 595.28, height: 841.89 });
-
-      const [copiedIns] = await mergedPdf.copyPages(insDoc, [0]);
-      mergedPdf.addPage(copiedIns);
-    }
-
-  } finally {
-    document.body.removeChild(container);
-  }
+  await injectMasterXlsxToBundle(options, mergedPdf, (msg, step, total) => {
+    onProgress?.(msg, step, totalSteps);
+  });
 
   // ----------------------------------------------------------------------------
   // 📑 Step 4: 04. 모델별 Eq_doc/{모델명}/ 하위 정규 서류 일체 (각 1부씩)
