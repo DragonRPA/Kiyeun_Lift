@@ -45,8 +45,15 @@ export const Contracts: React.FC = () => {
   const [siteFilter, setSiteFilter] = useState('ALL');
   const [siteInputText, setSiteInputText] = useState('');
   const [siteDropdownOpen, setSiteDropdownOpen] = useState(false);
-  const [startDateFilter, setStartDateFilter] = useState('');
-  const [endDateFilter, setEndDateFilter] = useState('');
+  const [startDateFilter, setStartDateFilter] = useState<string>(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+  });
+  const [endDateFilter, setEndDateFilter] = useState<string>(() => {
+    const now = new Date();
+    const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+  });
   const [quickChipFilter, setQuickChipFilter] = useState<'ALL' | 'ACTIVE' | 'ASSIGNED' | 'D3' | 'ZERO_FEE' | 'SUCCEEDED' | 'COMPLETED'>('ALL');
 
   // 선택된 계약 ID
@@ -159,8 +166,8 @@ export const Contracts: React.FC = () => {
       const matchesStatus = statusFilter === 'ALL' || c.status === statusFilter;
       const matchesCustomer = customerFilter === 'ALL' || c.customerId === customerFilter;
       const matchesSite = siteFilter === 'ALL' || c.siteId === siteFilter;
-      const matchesStartDate = !startDateFilter || (c.startDate && c.startDate >= startDateFilter);
-      const matchesEndDate = !endDateFilter || (c.endDate && c.endDate !== '미정' && c.endDate <= endDateFilter);
+      const matchesStartDate = !startDateFilter || (c.startDate && c.startDate <= (endDateFilter || '9999-12-31'));
+      const matchesEndDate = !endDateFilter || (!c.endDate || c.endDate === '미정' || c.endDate >= startDateFilter);
 
       let matchesChip = true;
       if (quickChipFilter === 'ACTIVE') matchesChip = c.status === 'ACTIVE' || c.status === 'EXTENDED';
@@ -849,13 +856,17 @@ export const Contracts: React.FC = () => {
               </button>
 
               {/* 필터 초기화 버튼 */}
-              {(customerFilter !== 'ALL' || siteFilter !== 'ALL' || startDateFilter || endDateFilter) && (
+                  {(customerFilter !== 'ALL' || siteFilter !== 'ALL' || startDateFilter || endDateFilter) && (
                 <button
                   onClick={() => {
                     setCustomerFilter('ALL');
+                    setCustomerInputText('');
                     setSiteFilter('ALL');
-                    setStartDateFilter('');
-                    setEndDateFilter('');
+                    setSiteInputText('');
+                    const now = new Date();
+                    const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+                    setStartDateFilter(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`);
+                    setEndDateFilter(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`);
                   }}
                   style={{
                     padding: '6px 12px',
