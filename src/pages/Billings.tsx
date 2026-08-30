@@ -489,7 +489,7 @@ export const Billings: React.FC = () => {
     setShowMailModal(true);
   };
 
-  // 거래명세서 PDF 직접 생성 (시스템 Excel→PDF 변환)
+  // 거래명세서 엑셀 다운로드 (시스템 엑셀 양식 기반)
   const printStatementAsPdf = async () => {
     const billing = billings.find(b => b.id === mailBillingId);
     const details = billingDetails.filter(d => d.billingId === mailBillingId);
@@ -497,15 +497,23 @@ export const Billings: React.FC = () => {
     const contract = contracts.find(c => c.id === billing?.contractId);
     const site = sites.find(s => s.id === contract?.siteId);
     const salesperson = users.find((u: any) => u.id === contract?.salespersonId);
-    const templateUrl = undefined /* CF R2 마스터 xlsx로 대체됨 */;
     const custName = customer?.name || '고객사';
     const sName = site?.name || '현장';
     const ym = billing?.billingYm || '';
+    const fileName = `거래명세서_${custName}_${sName}_${ym}`;
 
     try {
-      showErrorModal('브라우저 렌더러가 폐기되었습니다. 향후 거래명세서도 정품 엑셀(로컬 에이전트) 기반으로 일괄 개편될 예정입니다.');
+      await exportTransactionStatementExcel(
+        billing,
+        details,
+        customer,
+        contract,
+        site,
+        salesperson,
+        fileName
+      );
     } catch (err: any) {
-      showErrorModal('PDF 생성 실패: ' + (err?.message || String(err)));
+      showErrorModal('거래명세서 엑셀 다운로드 실패: ' + (err?.message || String(err)));
     }
   };
 
@@ -532,7 +540,6 @@ export const Billings: React.FC = () => {
     const contract = contracts.find(c => c.id === billing?.contractId);
     const site = sites.find(s => s.id === contract?.siteId);
     const salesperson = users.find((u: any) => u.id === contract?.salespersonId);
-    const templateUrl = undefined /* CF R2 마스터 xlsx로 대체됨 */;
 
     const details_supply = details.reduce((sum, d) => sum + (d.unitPrice || 0) * (d.quantity || 1), 0);
     const details_vat = Math.round(details_supply * 0.1);
@@ -588,6 +595,9 @@ ${details.map((d, idx) => {
 [5. 입금 계좌 안내]
 - 신한은행 140-010-007060 (주)기연리프트
 
+[6. 첨부 파일 안내]
+- 본 이메일에는 (주)기연리프트 공식 엑셀 서식으로 생성된 거래명세서(.xlsx) 파일이 자동 첨부되었습니다.
+
 감사합니다.
 (주)기연리프트 올림
 ========================================================================================`;
@@ -596,8 +606,66 @@ ${details.map((d, idx) => {
       const toList = mailTo.split(',').map(e => e.trim()).filter(Boolean);
       const ccList = mailCc ? mailCc.split(',').map(e => e.trim()).filter(Boolean) : [];
 
-      // 💡 브라우저 렌더러 폐기로 인해 현재 거래명세서 첨부 이메일 발송 중단
-      throw new Error("브라우저 렌더러가 폐기되었습니다. 향후 거래명세서도 정품 엑셀 엔진으로 개편된 후 재활성화됩니다.");
+      // 1. 엑셀 거래명세서 바이너리 생성
+      let attachments: { filename: string; content: string }[] = [];
+      try {
+        const custName = customer?.name || '고객사';
+        const sName = site?.name || '현장';
+        const ym = billing?.billingYm || '';
+        const buffer = await exportTransactionStatementExcelBuffer(
+          billing,
+          details,
+          customer,
+          contract,
+          site,
+          salesperson
+        );
+        // ArrayBuffer -> Base64 변환
+        let binary = '';
+        const bytes = new Uint8Array(buffer);
+        for (let i = 0; i < bytes.byteLength; i++) {
+          binary += String.fromCharCode(bytes[i]);
+        }
+        const base64Content = window.btoa(binary);
+        attachments.push({
+          filename: `거래명세서_${custName}_${sName}_${ym}.xlsx`,
+          content: base64Content
+        });
+      } catch (attachErr) {
+        console.warn('[Billings] 엑셀 거래명세서 첨부파일 생성 실패 (본문만 발송):', attachErr);
+      }
+
+      // 2. 이메일 발송
+      await emailService.sendEmail(
+        toList.join(', '),
+        mailSubject,
+        body,
+        attachments,
+        ccList.join(', ')
+      );
+
+      // 3. 청구 상태 및 이력 업데이트
+      if (billing && billing.status === 'UNPAID') {
+        db.updateRow<Billing>('billings', billing.id, {
+          status: 'REQUESTED',
+          updatedAt: new Date().toISOString()
+        });
+      }
+
+      if (billing?.contractId) {
+        db.insertRow<ContractHistory>('contractHistory', {
+          contractId: billing.contractId,
+          changeType: 'TERMINATE',
+          changeDate: new Date().toISOString().split('T')[0],
+          description: `[거래명세서 발송] ${billing.billingYm} 거래명세서 및 청구서 이메일 발송 완료 (수신: ${mailTo})`
+        });
+      }
+
+      refreshAllData();
+      await db.awaitPendingWrites();
+
+      alert(`✅ 거래명세서 및 청구서 이메일이 성공적으로 발송되었습니다.\n\n수신: ${mailTo}`);
+      setShowMailModal(false);
 
     } catch (err: any) {
       showErrorModal(`⚠️ 이메일 발송 실패:\n\n${err?.message || err}`, '메일 발송 오류');
