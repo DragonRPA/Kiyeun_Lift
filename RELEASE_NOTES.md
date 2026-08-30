@@ -1,4 +1,29 @@
-﻿# Release Notes (v1.133.0.Build.295 - 2026-08-30 15:45)
+# Release Notes (v0.5.3.Build.36 - 2026-08-30 22:21)
+
+## 💡 [계약별 직전 청구 마일스톤 메타데이터 자동 트리거 갱신 & 청구 생성 자동 산정 연동]
+
+### ✨ 반영 내용
+- **계약(Contract) 직전 청구 마일스톤 메타데이터 스키마 추가 (`db.ts`)**
+  - `lastBillingDate`: 최근 렌탈료 청구 발행일자 (YYYY-MM-DD)
+  - `lastBilledPeriodStart`: 최근 청구 시작일자 (YYYY-MM-DD)
+  - `lastBilledPeriodEnd`: 최근 청구 종료일자 (YYYY-MM-DD)
+  - `lastBilledYm`: 최근 청구 귀속월 (YYYY-MM)
+  - `billingCount`: 누적 발행 청구 건수
+- **청구 발행/취소 시 계약 메타데이터 실시간 자동 동기화 트리거 (`AppContext.tsx`)**
+  - `generateBillingForSingleContract`, `generateBillingsForMonth`, `generateDueBillings` 실행 시 즉시 해당 계약의 직전 청구 기간과 건수를 자동 갱신.
+  - `cancelBilling` 실행 시 이전 청구 건으로 메타데이터 자동 롤백.
+  - 앱 초기 로딩 시 기존 DB 데이터에 대해 자동 백필(마이그레이션) 실행.
+- **청구 생성 화면(정산 마법사) 마일스톤 가이드 & 당월 시작일 자동 산정 연동 (`Billings.tsx`)**
+  - 청구 대상 계약 카드에 `[직전 청구: YYYY-MM-DD ~ YYYY-MM-DD]` 및 `[발행 이력: 총 N회 (최근발행: YYYY-MM-DD)]`를 표출.
+  - 정산 계산기에서 계약 선택 시, 직전 청구 종료일 익일(`lastBilledPeriodEnd + 1일`)을 **당월 청구 시작일(`wizardStartDate`)로 100% 자동 산정/세팅**하여 공백/중복 휴먼에러 원천 방지.
+  - 직전 청구 마일스톤 안내 박스를 통해 실무자가 청구 기간을 한눈에 판단할 수 있도록 보조.
+- **계약 관리 화면 직전 청구 기간 서브 텍스트 표기 (`Contracts.tsx`)**
+  - 계약 목록 테이블 청구 건수 컬럼에 `최근: ~YYYY-MM-DD` 종료일 표시.
+  - 계약 상세 보기 화면의 `청구 발행 현황` 헤더에 직전 청구 마일스톤 요약 라인 연동.
+
+---
+
+# Release Notes (v1.133.0.Build.295 - 2026-08-30 15:45)
 
 ## 💡 [외상미수금 청구 연동 고도화 및 고객 투명성 강화]
 

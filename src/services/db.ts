@@ -442,6 +442,12 @@ export interface Contract {
   predecessorCustomerName?: string; // 승계 전 양도 고객사명
   driveFolderId?: string;
   salespersonId?: string; // 계약담당자 (영업사원 ID)
+  // 💡 직전 청구 마일스톤 메타데이터 (청구 발행 시 자동 트리거 갱신)
+  lastBillingDate?: string; // 최근 렌탈료 청구 발행일 (YYYY-MM-DD)
+  lastBilledPeriodStart?: string; // 최근 청구 시작일 (YYYY-MM-DD)
+  lastBilledPeriodEnd?: string; // 최근 청구 종료일 (YYYY-MM-DD)
+  lastBilledYm?: string; // 최근 청구 귀속월 (YYYY-MM)
+  billingCount?: number; // 누적 발행 청구 건수
   createdAt: string;
   updatedAt: string;
   // 가상필드 (조인 시)

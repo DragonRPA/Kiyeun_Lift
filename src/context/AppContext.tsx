@@ -2624,6 +2624,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         description: `청구 취소: ${billing.billingYm} / ${billing.totalAmount.toLocaleString()}원 (${refund ? '환불 처리' : '비환불 처리'}, 청구번호: ${billingId})`,
         createdAt: new Date().toISOString()
       });
+      // 💡 청구 취소 시 계약 메타데이터 이전 상태로 롤백 동기화
+      syncContractBillingMilestones(billing.contractId);
     }
 
     refreshAllData();
@@ -2844,6 +2846,60 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return Math.round(dailyRate * days);
   };
 
+  /**
+   * 💡 계약별 직전 청구 마일스톤 메타데이터 동기화 (트리거 갱신 및 백필)
+   * - 최근 렌탈료 청구 발행일 (lastBillingDate)
+   * - 최근 청구 시작일 (lastBilledPeriodStart)
+   * - 최근 청구 종료일 (lastBilledPeriodEnd)
+   * - 최근 청구 귀속월 (lastBilledYm)
+   * - 누적 발행 청구 건수 (billingCount)
+   */
+  const syncContractBillingMilestones = (contractId?: string) => {
+    const targetContracts = contractId 
+      ? db.contracts.filter(c => c.id === contractId) 
+      : db.contracts;
+
+    targetContracts.forEach(c => {
+      const activeBillings = db.billings
+        .filter(b => b.contractId === c.id && b.status !== 'REJECTED')
+        .sort((a, b) => (b.billingYm || '').localeCompare(a.billingYm || ''));
+
+      const count = activeBillings.length;
+      if (count === 0) {
+        db.updateRow<Contract>('contracts', c.id, {
+          lastBillingDate: undefined,
+          lastBilledPeriodStart: undefined,
+          lastBilledPeriodEnd: undefined,
+          lastBilledYm: undefined,
+          billingCount: 0,
+          updatedAt: new Date().toISOString()
+        } as any);
+        return;
+      }
+
+      const latestBilling = activeBillings[0];
+      const billingDay = c.billingDay || 25;
+      const { actualStart, actualEnd } = calcBillingPeriod(
+        latestBilling.billingYm,
+        billingDay,
+        c.startDate,
+        c.endDate
+      );
+
+      const startIso = actualStart.toISOString().split('T')[0];
+      const endIso = actualEnd.toISOString().split('T')[0];
+
+      db.updateRow<Contract>('contracts', c.id, {
+        lastBillingDate: latestBilling.billingDate || latestBilling.createdAt?.split('T')[0],
+        lastBilledPeriodStart: startIso,
+        lastBilledPeriodEnd: endIso,
+        lastBilledYm: latestBilling.billingYm,
+        billingCount: count,
+        updatedAt: new Date().toISOString()
+      });
+    });
+  };
+
   const generateBillingForSingleContract = async (contractId: string, billingYm: string, billingDate: string): Promise<string | null> => {
     const c = db.contracts.find(x => x.id === contractId);
     if (!c) return null;
@@ -2966,6 +3022,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updatedAt: new Date().toISOString()
       });
     });
+
+    // 💡 계약 메타데이터 트리거 자동 갱신 (최근 청구 발행일, 시작일, 종료일, 청구건수)
+    syncContractBillingMilestones(c.id);
 
     return newBilling.id;
   };

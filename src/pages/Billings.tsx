@@ -913,7 +913,16 @@ ${items.map((item, idx) => {
     const startStr = firstOfM.toISOString().split('T')[0];
     const endStr = lastOfM.toISOString().split('T')[0];
     
-    const calcStart = c.startDate > startStr ? c.startDate : startStr;
+    // 💡 직전 청구 종료일이 있으면 익일부터 시작, 없으면 계약시작일 또는 당월 1일 적용
+    let calcStart = startStr;
+    if (c.lastBilledPeriodEnd) {
+      const prevEndObj = new Date(c.lastBilledPeriodEnd);
+      prevEndObj.setDate(prevEndObj.getDate() + 1);
+      calcStart = prevEndObj.toISOString().split('T')[0];
+    } else if (c.startDate > startStr) {
+      calcStart = c.startDate;
+    }
+
     const normalEnd = normalizeEndDate(c.endDate);
     const calcEnd = normalEnd < endStr ? normalEnd : endStr;
     
@@ -1871,6 +1880,24 @@ ${items.map((item, idx) => {
                         <div>청구 마감: <strong>매월 {c.billingDay}일</strong></div>
                         <div>명세서 마감: <strong>매월 {c.statementClosingDay || '-'}일</strong></div>
                       </div>
+
+                      {/* 💡 직전 청구 마일스톤 뱃지 바 */}
+                      <div style={{ padding: '6px 8px', backgroundColor: 'var(--bg-app)', borderRadius: '4px', fontSize: '11.5px', marginTop: '8px', border: '1px solid var(--border-color)' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ color: 'var(--text-muted)' }}>직전 청구:</span>
+                          {c.lastBilledPeriodStart && c.lastBilledPeriodEnd ? (
+                            <strong style={{ color: 'var(--primary)' }}>
+                              {c.lastBilledPeriodStart} ~ {c.lastBilledPeriodEnd}
+                            </strong>
+                          ) : (
+                            <span className="badge badge-secondary" style={{ fontSize: '10px' }}>최초 청구 대상</span>
+                          )}
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '3px', fontSize: '10.5px', color: 'var(--text-muted)' }}>
+                          <span>발행 이력: <strong>{c.billingCount ? `총 ${c.billingCount}회` : '미발행'}</strong></span>
+                          <span>{c.lastBillingDate ? `최근발행: ${c.lastBillingDate}` : ''}</span>
+                        </div>
+                      </div>
                     </div>
                   );
                 })
@@ -1945,17 +1972,38 @@ ${items.map((item, idx) => {
                     </div>
                   </div>
 
-                  {/* 이전 청구 기간 정보 */}
+                  {/* 💡 직전 청구 마일스톤 및 권장 청구 기간 안내 박스 */}
                   <div style={{
-                    padding: '10px 14px',
+                    padding: '12px 14px',
                     backgroundColor: 'var(--bg-app)',
                     borderLeft: '4px solid var(--primary)',
                     borderRadius: '4px',
-                    fontSize: '12.5px',
+                    fontSize: '12px',
                     color: 'var(--text-secondary)',
-                    marginTop: '4px'
+                    marginTop: '4px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '4px'
                   }}>
-                    ℹ️ <strong>이전 회차 청구 내역:</strong> {getLatestBillingPeriod()}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span>ℹ️ <strong>직전 청구 마일스톤:</strong></span>
+                      <span className="badge badge-info" style={{ fontSize: '10.5px' }}>
+                        누적 발행: {selectedContractForWizard.billingCount ? `총 ${selectedContractForWizard.billingCount}회` : '최초 청구'}
+                      </span>
+                    </div>
+                    <div>
+                      {selectedContractForWizard.lastBilledPeriodStart && selectedContractForWizard.lastBilledPeriodEnd ? (
+                        <>
+                          • 직전 청구 기간: <strong style={{ color: 'var(--text-primary)' }}>{selectedContractForWizard.lastBilledPeriodStart} ~ {selectedContractForWizard.lastBilledPeriodEnd}</strong> ({selectedContractForWizard.lastBilledYm || ''}월분 / {selectedContractForWizard.lastBillingDate || ''} 발행)<br />
+                          • 💡 <strong>권장 당월 시작일:</strong> 직전 청구 종료 익일인 <strong style={{ color: 'var(--primary)' }}>{wizardStartDate}</strong>부터 자동 산정됨.
+                        </>
+                      ) : (
+                        <>
+                          • 직전 청구 이력이 없는 <strong>최초 청구 계약</strong>입니다.<br />
+                          • 계약 시작일인 <strong style={{ color: 'var(--primary)' }}>{selectedContractForWizard.startDate}</strong>부터 자동 산정됨.
+                        </>
+                      )}
+                    </div>
                   </div>
 
                   {/* 계산 방식 라디오 버튼 */}

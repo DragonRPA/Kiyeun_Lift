@@ -1003,13 +1003,20 @@ export const Contracts: React.FC = () => {
                             {cBillings.length === 0 ? (
                               <span className="badge badge-danger" style={{ fontSize: '10.5px' }}>0건 (미청구)</span>
                             ) : (
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                <span className="badge badge-info" style={{ fontSize: '10.5px', fontWeight: 700 }}>
-                                  총 {cBillings.length}건
-                                </span>
-                                {unpaidCount > 0 && (
-                                  <span style={{ fontSize: '10.5px', color: 'var(--danger)', fontWeight: 600 }}>
-                                    (미수 {unpaidCount})
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                  <span className="badge badge-info" style={{ fontSize: '10.5px', fontWeight: 700 }}>
+                                    총 {cBillings.length}건
+                                  </span>
+                                  {unpaidCount > 0 && (
+                                    <span style={{ fontSize: '10.5px', color: 'var(--danger)', fontWeight: 600 }}>
+                                      (미수 {unpaidCount})
+                                    </span>
+                                  )}
+                                </div>
+                                {c.lastBilledPeriodEnd && (
+                                  <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
+                                    최근: ~{c.lastBilledPeriodEnd}
                                   </span>
                                 )}
                               </div>
@@ -1235,9 +1242,16 @@ export const Contracts: React.FC = () => {
                 return (
                   <div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', flexWrap: 'wrap', gap: '6px' }}>
-                      <h3 className="card-title" style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <Receipt size={16} color="var(--primary)" /> 청구 발행 현황 ({contractBillings.length}건)
-                      </h3>
+                      <div>
+                        <h3 className="card-title" style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <Receipt size={16} color="var(--primary)" /> 청구 발행 현황 ({contractBillings.length}건)
+                        </h3>
+                        {c.lastBilledPeriodStart && c.lastBilledPeriodEnd && (
+                          <div style={{ fontSize: '11px', color: 'var(--primary)', marginTop: '2px', fontWeight: 600 }}>
+                            ※ 직전 청구 마일스톤: {c.lastBilledPeriodStart} ~ {c.lastBilledPeriodEnd} ({c.lastBillingDate ? `${c.lastBillingDate} 발행` : ''})
+                          </div>
+                        )}
+                      </div>
                       <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
                         누적청구: <strong style={{ color: 'var(--text-primary)' }}>₩{totalBilled.toLocaleString()}</strong> | 
                         미수잔액: <strong style={{ color: totalUnpaid > 0 ? 'var(--danger)' : 'var(--success)' }}>₩{totalUnpaid.toLocaleString()}</strong>
