@@ -929,7 +929,6 @@ export const Contracts: React.FC = () => {
                     <th style={{ whiteSpace: 'nowrap' }}>계약번호</th>
                     <th style={{ whiteSpace: 'nowrap' }}>고객사명</th>
                     <th style={{ whiteSpace: 'nowrap' }}>현장명</th>
-                    <th style={{ whiteSpace: 'nowrap' }}>체결 자산</th>
                     <th style={{ whiteSpace: 'nowrap' }}>월 렌탈료</th>
                     <th style={{ whiteSpace: 'nowrap' }}>계약 기간</th>
                     <th style={{ whiteSpace: 'nowrap' }}>청구 건수</th>
@@ -937,6 +936,7 @@ export const Contracts: React.FC = () => {
                     <th style={{ whiteSpace: 'nowrap' }}>청구 마감일</th>
                     <th style={{ whiteSpace: 'nowrap' }}>영업담당</th>
                     <th style={{ whiteSpace: 'nowrap' }}>상태</th>
+                    <th style={{ whiteSpace: 'nowrap' }}>체결 자산</th>
                   </tr>
                 </thead>
                 <tbody style={{ whiteSpace: 'nowrap' }}>
@@ -988,10 +988,6 @@ export const Contracts: React.FC = () => {
                           <td style={{ whiteSpace: 'nowrap' }}><strong>{getCustName(c.customerId)}</strong></td>
                           <td style={{ whiteSpace: 'nowrap' }}>{getSiteName(c.siteId)}</td>
                           <td style={{ whiteSpace: 'nowrap' }}>
-                            <strong style={{ color: 'var(--text-primary)' }}>{modelSummaryText || '미지정'}</strong>
-                            <span style={{ fontSize: '11px', color: 'var(--text-muted)', marginLeft: '4px' }}>(총 {cas.length}대)</span>
-                          </td>
-                          <td style={{ whiteSpace: 'nowrap' }}>
                             {hasZeroFee ? (
                               <span style={{ color: 'var(--danger)', fontWeight: 700 }}>0원 (미입력)</span>
                             ) : (
@@ -1038,6 +1034,10 @@ export const Contracts: React.FC = () => {
                             }>
                               {c.status === 'ACTIVE' ? '진행중' : c.status === 'EXTENDED' ? '연장됨' : c.status === 'SUCCEEDED' ? '승계됨' : '종료'}
                             </span>
+                          </td>
+                          <td style={{ whiteSpace: 'nowrap' }}>
+                            <strong style={{ color: 'var(--text-primary)' }}>{modelSummaryText || '미지정'}</strong>
+                            <span style={{ fontSize: '11px', color: 'var(--text-muted)', marginLeft: '4px' }}>(총 {cas.length}대)</span>
                           </td>
                         </tr>
                       );
@@ -1246,9 +1246,9 @@ export const Contracts: React.FC = () => {
                         <h3 className="card-title" style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
                           <Receipt size={16} color="var(--primary)" /> 청구 발행 현황 ({contractBillings.length}건)
                         </h3>
-                        {c.lastBilledPeriodStart && c.lastBilledPeriodEnd && (
+                        {activeContract?.lastBilledPeriodStart && activeContract?.lastBilledPeriodEnd && (
                           <div style={{ fontSize: '11px', color: 'var(--primary)', marginTop: '2px', fontWeight: 600 }}>
-                            ※ 직전 청구 마일스톤: {c.lastBilledPeriodStart} ~ {c.lastBilledPeriodEnd} ({c.lastBillingDate ? `${c.lastBillingDate} 발행` : ''})
+                            ※ 직전 청구 마일스톤: {activeContract.lastBilledPeriodStart} ~ {activeContract.lastBilledPeriodEnd} ({activeContract.lastBillingDate ? `${activeContract.lastBillingDate} 발행` : ''})
                           </div>
                         )}
                       </div>
