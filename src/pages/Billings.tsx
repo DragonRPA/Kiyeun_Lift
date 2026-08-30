@@ -26,13 +26,17 @@ export const Billings: React.FC = () => {
   // --- 청구 조회 필터 상태 ---
   const [tempSearchTerm, setTempSearchTerm] = useState('');
   const [tempContractNoFilter, setTempContractNoFilter] = useState('');
-  const [tempBillingYmFilter, setTempBillingYmFilter] = useState('ALL');
-  const [tempStatusFilter, setTempStatusFilter] = useState('ALL');
+  const [tempStartBillingYmFilter, setTempStartBillingYmFilter] = useState('');
+  const [tempEndBillingYmFilter, setTempEndBillingYmFilter] = useState('');
+  const [tempPaymentFilter, setTempPaymentFilter] = useState<'ALL' | 'PAID' | 'UNPAID_ANY'>('ALL');
+  const [tempMailSentFilter, setTempMailSentFilter] = useState<'ALL' | 'SENT' | 'UNSENT'>('ALL');
 
   const [searchTerm, setSearchTerm] = useState('');
   const [contractNoFilter, setContractNoFilter] = useState('');
-  const [billingYmFilter, setBillingYmFilter] = useState('ALL');
-  const [statusFilter, setStatusFilter] = useState('ALL');
+  const [startBillingYmFilter, setStartBillingYmFilter] = useState('');
+  const [endBillingYmFilter, setEndBillingYmFilter] = useState('');
+  const [paymentFilter, setPaymentFilter] = useState<'ALL' | 'PAID' | 'UNPAID_ANY'>('ALL');
+  const [mailSentFilter, setMailSentFilter] = useState<'ALL' | 'SENT' | 'UNSENT'>('ALL');
 
   // --- 청구 마법사 상태 ---
   const [wizardSearchStartDate, setWizardSearchStartDate] = useState(() => {
@@ -131,8 +135,26 @@ export const Billings: React.FC = () => {
   const handleSearchClick = () => {
     setSearchTerm(tempSearchTerm);
     setContractNoFilter(tempContractNoFilter);
-    setBillingYmFilter(tempBillingYmFilter);
-    setStatusFilter(tempStatusFilter);
+    setStartBillingYmFilter(tempStartBillingYmFilter);
+    setEndBillingYmFilter(tempEndBillingYmFilter);
+    setPaymentFilter(tempPaymentFilter);
+    setMailSentFilter(tempMailSentFilter);
+  };
+
+  const handleResetFilters = () => {
+    setTempSearchTerm('');
+    setTempContractNoFilter('');
+    setTempStartBillingYmFilter('');
+    setTempEndBillingYmFilter('');
+    setTempPaymentFilter('ALL');
+    setTempMailSentFilter('ALL');
+
+    setSearchTerm('');
+    setContractNoFilter('');
+    setStartBillingYmFilter('');
+    setEndBillingYmFilter('');
+    setPaymentFilter('ALL');
+    setMailSentFilter('ALL');
   };
 
   const filteredBillings = billings.filter(b => {
@@ -140,12 +162,26 @@ export const Billings: React.FC = () => {
     const contractObj = contracts.find(c => c.id === b.contractId);
     const contractNoStr = (contractObj?.contractNo || b.contractId || '').toLowerCase();
 
-    const matchesSearch = custName.includes(searchTerm.toLowerCase());
-    const matchesContractNo = !contractNoFilter || contractNoStr.includes(contractNoFilter.trim().toLowerCase());
-    const matchesBillingYm = billingYmFilter === 'ALL' || b.billingYm === billingYmFilter;
-    const matchesStatus = statusFilter === 'ALL' || b.status === statusFilter;
+    // 1. 고객사명 검색
+    if (searchTerm && !custName.includes(searchTerm.toLowerCase())) return false;
+    // 2. 계약번호 검색
+    if (contractNoFilter && !contractNoStr.includes(contractNoFilter.trim().toLowerCase())) return false;
+    // 3. 청구 시작월 ~ 종료월 범위 (YYYY-MM)
+    if (startBillingYmFilter && b.billingYm < startBillingYmFilter) return false;
+    if (endBillingYmFilter && b.billingYm > endBillingYmFilter) return false;
 
-    return matchesSearch && matchesContractNo && matchesBillingYm && matchesStatus;
+    // 4. 수납 상태 필터 (완료: PAID 또는 미납액 0 이하 / 미완료: PAID가 아니거나 미납액 > 0)
+    const unpaid = (b.totalAmount || 0) - (b.paidAmount || 0);
+    const isPaid = b.status === 'PAID' || unpaid <= 0;
+    if (paymentFilter === 'PAID' && !isPaid) return false;
+    if (paymentFilter === 'UNPAID_ANY' && isPaid) return false;
+
+    // 5. 청구서메일 발송 여부 필터 (발송: UNPAID가 아닌 상태 즉 REQUESTED/PARTIAL/PAID 등 / 미발송: UNPAID)
+    const isMailSent = b.status !== 'UNPAID';
+    if (mailSentFilter === 'SENT' && !isMailSent) return false;
+    if (mailSentFilter === 'UNSENT' && isMailSent) return false;
+
+    return true;
   });
 
   const handleExportExcel = () => {
@@ -1050,64 +1086,97 @@ ${details.map((d, idx) => {
               </button>
             </div>
 
-            {/* 필터 바 (상하 헤더 세로 스택 및 5열 배치) */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr auto', gap: '10px', alignItems: 'end', backgroundColor: 'var(--bg-app)', padding: '12px', borderRadius: '8px', overflowX: 'auto' }}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flexShrink: 0 }}>
+            {/* 필터 바 (상하 헤더 세로 스택 및 다중 정밀 필터) */}
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-end', flexWrap: 'wrap', backgroundColor: 'var(--bg-app)', padding: '12px', borderRadius: '8px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flex: 1, minWidth: '120px' }}>
                 <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>고객사 검색</label>
                 <input 
                   type="text" 
                   value={tempSearchTerm} 
                   onChange={e => setTempSearchTerm(e.target.value)} 
-                  placeholder="고객사명 검색..."
-                  style={{ width: '100%', padding: '6px 8px', fontSize: '12.5px', borderRadius: '5px', border: '1px solid var(--border-color)' }}
+                  placeholder="고객사명..."
+                  style={{ width: '100%', padding: '6px 8px', fontSize: '12px', borderRadius: '5px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-card)', color: 'var(--text-main)' }}
                 />
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flexShrink: 0 }}>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flex: 1, minWidth: '110px' }}>
                 <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>계약번호 검색</label>
                 <input 
                   type="text" 
                   value={tempContractNoFilter} 
                   onChange={e => setTempContractNoFilter(e.target.value)} 
-                  placeholder="계약번호 검색..."
-                  style={{ width: '100%', padding: '6px 8px', fontSize: '12.5px', borderRadius: '5px', border: '1px solid var(--border-color)' }}
+                  placeholder="계약번호..."
+                  style={{ width: '100%', padding: '6px 8px', fontSize: '12px', borderRadius: '5px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-card)', color: 'var(--text-main)' }}
                 />
               </div>
+
+              {/* 📅 청구 시작월 ~ 종료월 */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flexShrink: 0 }}>
-                <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>청구 월</label>
+                <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>청구 시작월</label>
+                <input 
+                  type="month"
+                  value={tempStartBillingYmFilter} 
+                  onChange={e => setTempStartBillingYmFilter(e.target.value)} 
+                  style={{ width: '120px', padding: '6px 8px', fontSize: '12px', borderRadius: '5px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-card)', color: 'var(--text-main)' }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flexShrink: 0 }}>
+                <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>청구 종료월</label>
+                <input 
+                  type="month"
+                  value={tempEndBillingYmFilter} 
+                  onChange={e => setTempEndBillingYmFilter(e.target.value)} 
+                  style={{ width: '120px', padding: '6px 8px', fontSize: '12px', borderRadius: '5px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-card)', color: 'var(--text-main)' }}
+                />
+              </div>
+
+              {/* 💰 수납 상태 (완료 / 미완료) */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flexShrink: 0 }}>
+                <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>수납 상태</label>
                 <select 
-                  value={tempBillingYmFilter} 
-                  onChange={e => setTempBillingYmFilter(e.target.value)} 
-                  style={{ width: '100%', padding: '6px 8px', fontSize: '12.5px', borderRadius: '5px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-card)', color: 'var(--text-main)' }}
+                  value={tempPaymentFilter} 
+                  onChange={e => setTempPaymentFilter(e.target.value as any)} 
+                  style={{ width: '110px', padding: '6px 8px', fontSize: '12px', borderRadius: '5px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-card)', color: 'var(--text-main)' }}
                 >
-                  <option value="ALL">전체 월</option>
-                  {billingMonths.map(ym => (
-                    <option key={ym} value={ym}>{ym}</option>
-                  ))}
+                  <option value="ALL">전체</option>
+                  <option value="PAID">수납 완료</option>
+                  <option value="UNPAID_ANY">수납 미완료</option>
                 </select>
               </div>
+
+              {/* ✉️ 메일 발송 상태 (발송 / 미발송) */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flexShrink: 0 }}>
-                <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>결제 상태</label>
+                <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>메일 발송</label>
                 <select 
-                  value={tempStatusFilter} 
-                  onChange={e => setTempStatusFilter(e.target.value)} 
-                  style={{ width: '100%', padding: '6px 8px', fontSize: '12.5px', borderRadius: '5px', border: '1px solid var(--border-color)', backgroundColor: '#fff' }}
+                  value={tempMailSentFilter} 
+                  onChange={e => setTempMailSentFilter(e.target.value as any)} 
+                  style={{ width: '100px', padding: '6px 8px', fontSize: '12px', borderRadius: '5px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-card)', color: 'var(--text-main)' }}
                 >
-                  <option value="ALL">전체 상태</option>
-                  <option value="REQUESTED">결재대기 (REQUESTED)</option>
-                  <option value="UNPAID">미납 (UNPAID)</option>
-                  <option value="PARTIAL">일부납 (PARTIAL)</option>
-                  <option value="PAID">완납 (PAID)</option>
-                  <option value="REJECTED">취소됨 (REJECTED)</option>
+                  <option value="ALL">전체</option>
+                  <option value="SENT">발송</option>
+                  <option value="UNSENT">미발송</option>
                 </select>
               </div>
-              <button 
-                type="button" 
-                className="btn-primary" 
-                onClick={handleSearchClick}
-                style={{ padding: '6px 14px', height: '33px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '12.5px', whiteSpace: 'nowrap', flexShrink: 0 }}
-              >
-                조회
-              </button>
+
+              <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexShrink: 0 }}>
+                <button 
+                  type="button" 
+                  className="btn-primary" 
+                  onClick={handleSearchClick}
+                  style={{ padding: '6px 14px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '12px', whiteSpace: 'nowrap' }}
+                >
+                  조회
+                </button>
+                <button 
+                  type="button" 
+                  className="btn-secondary" 
+                  onClick={handleResetFilters}
+                  style={{ padding: '6px 10px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '12px', whiteSpace: 'nowrap' }}
+                >
+                  초기화
+                </button>
+              </div>
             </div>
 
             {/* 📊 청구 및 수납 실시간 종합 집계 위젯 */}
