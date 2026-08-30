@@ -313,6 +313,11 @@ CREATE TABLE contracts (
     "predecessorCustomerId" TEXT REFERENCES customers(id),
     "predecessorCustomerName" TEXT,
     "driveFolderId" TEXT,
+    "lastBillingDate" TEXT, -- 최근 렌탈료 청구 발행일 (YYYY-MM-DD)
+    "lastBilledPeriodStart" TEXT, -- 최근 청구 시작일 (YYYY-MM-DD)
+    "lastBilledPeriodEnd" TEXT, -- 최근 청구 종료일 (YYYY-MM-DD)
+    "lastBilledYm" TEXT, -- 최근 청구 귀속월 (YYYY-MM)
+    "billingCount" INTEGER NOT NULL DEFAULT 0, -- 누적 발행 청구 건수
     "startDate" TEXT NOT NULL,
     "endDate" TEXT NOT NULL,
     "createdAt" TEXT NOT NULL,
