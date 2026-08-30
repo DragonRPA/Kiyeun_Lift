@@ -911,7 +911,7 @@ export const Contracts: React.FC = () => {
                           <td style={{ whiteSpace: 'nowrap' }}><strong>{getCustName(c.customerId)}</strong></td>
                           <td style={{ whiteSpace: 'nowrap' }}>{getSiteName(c.siteId)}</td>
                           <td style={{ whiteSpace: 'nowrap' }}>
-                            <strong style={{ color: '#1e293b' }}>{modelSummaryText || '미지정'}</strong>
+                            <strong style={{ color: 'var(--text-primary)' }}>{modelSummaryText || '미지정'}</strong>
                             <span style={{ fontSize: '11px', color: 'var(--text-muted)', marginLeft: '4px' }}>(총 {cas.length}대)</span>
                           </td>
                           <td style={{ whiteSpace: 'nowrap' }}>
