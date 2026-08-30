@@ -2937,21 +2937,49 @@ class LocalDB {
   }
 
   // 단일 테이블만 Supabase에서 pull (메뉴 전환 시 관련 테이블만 선택적 로딩용)
+  /**
+   * Supabase PostgREST 기본 1,000건 제한을 극복하여 대용량 테이블(billing_details 등)의 전체 레코드를 무누락 전수 로드합니다.
+   */
+  private async fetchAllRowsFromSupabase(tableName: string): Promise<any[] | null> {
+    if (!supabase) return null;
+    const PAGE_SIZE = 1000;
+    let allRows: any[] = [];
+    let from = 0;
+
+    while (true) {
+      const { data, error } = await supabase
+        .from(tableName)
+        .select('*')
+        .range(from, from + PAGE_SIZE - 1);
+
+      if (error) {
+        console.warn(`[db.ts] Supabase fetchAllRows failed for ${tableName} (range ${from}-${from + PAGE_SIZE - 1}):`, error);
+        if (allRows.length > 0) return allRows;
+        return null;
+      }
+
+      if (!data || data.length === 0) break;
+      allRows.push(...data);
+
+      if (data.length < PAGE_SIZE) break;
+      from += PAGE_SIZE;
+    }
+
+    return allRows;
+  }
+
+  // 단일 테이블만 Supabase에서 pull (메뉴 전환 시 관련 테이블만 선택적 로딩용)
   async pullTableFromSupabase(key: string): Promise<any[] | null> {
     if (!supabase) return null;
     try {
       const tableName = this.mapToSupabaseTable(key);
-      const { data, error } = await supabase.from(tableName).select('*');
-      if (error) {
-        console.warn(`pullTableFromSupabase failed for ${tableName}:`, error);
-        return null;
-      }
+      const data = await this.fetchAllRowsFromSupabase(tableName);
       if (data !== null) {
         const normalizedData = this.normalizePayloadKeys(data);
         this.set(key as keyof LocalDB, normalizedData);
         return normalizedData;
       }
-      return data;
+      return null;
     } catch (e) {
       console.warn(`pullTableFromSupabase exception for ${key}:`, e);
       return null;
@@ -2983,11 +3011,9 @@ class LocalDB {
         tables.map(async (key) => {
           try {
             const tableName = this.mapToSupabaseTable(key);
-            const { data, error } = await supabase!
-              .from(tableName)
-              .select('*');
-            if (error) {
-              console.warn(`Supabase pull failed for table ${tableName}:`, error);
+            const data = await this.fetchAllRowsFromSupabase(tableName);
+            if (data === null) {
+              console.warn(`Supabase pull failed for table ${tableName}`);
               return { key, data: null };
             }
             return { key, data: this.normalizePayloadKeys(data) };
