@@ -6,7 +6,7 @@ import {
   FileText, Copy, Lock, CreditCard, CheckCircle, RefreshCw, X,
   Calendar, RotateCcw, ShieldCheck, CheckSquare, XCircle, Search,
   MessageSquare, User, Edit2, Upload, Download, FileSpreadsheet,
-  CheckCircle2, AlertTriangle, Filter, DollarSign, Send, Sun, MapPin
+  CheckCircle2, AlertTriangle, Filter, DollarSign, Send, Sun, MapPin, Printer
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { Delivery, TransportCompany, TransportDriver, db, DeliveryStatus } from '../services/db';
@@ -1827,6 +1827,29 @@ export const TruckDispatch: React.FC = () => {
                       {getOutboundInspectionBadge(selectedDelivery.contractId)}
                       {getDeliveryStatusBadge(getNormalizedDeliveryStatus(selectedDelivery))}
                       
+                      {/* 🖨️ 요청서/지시서 인쇄 버튼 */}
+                      <button
+                        type="button"
+                        onClick={() => handlePrintDispatchRequest(selectedDelivery, (selectedDelivery.type === 'INBOUND' || selectedDelivery.dispatchCategory === '입고' || selectedDelivery.dispatchCategory === '반납') ? 'INBOUND' : 'OUTBOUND')}
+                        style={{
+                          padding: '6px 12px',
+                          borderRadius: '7px',
+                          backgroundColor: 'var(--bg-app)',
+                          color: 'var(--text-primary)',
+                          border: '1px solid var(--border-color)',
+                          fontSize: '12px',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '5px',
+                          boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+                        }}
+                      >
+                        <Printer size={13} className="text-primary" />
+                        {(selectedDelivery.type === 'INBOUND' || selectedDelivery.dispatchCategory === '입고' || selectedDelivery.dispatchCategory === '반납') ? '입고요청서 출력' : '출고요청서 출력'}
+                      </button>
+
                       {/* 💡 상단 배차/운송완료/취소 액션 버튼 */}
                       {canSave && (
                         <>
