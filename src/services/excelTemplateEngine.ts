@@ -487,12 +487,11 @@ export interface TransactionStatementPdfData {
 }
 
 /**
- * 4. (주)기연리프트 공식 표준 거래명세서 정품 A4 PDF 생성 엔진
- * - 1순위: 로컬 사이드카 에이전트의 MS Excel COM 엔진(00.거래명세서양식.xlsx 정품 원본 기반)
- * - 2순위: 브라우저 고정밀 Canvas 2D 렌더러 (에이전트 미연결 시 Fallback)
+/**
+ * 4. (주)기연리프트 공식 표준 거래명세서 정품 A4 PDF 생성 엔진 (MS Excel COM 전용)
+ * ⚠️ 원칙: 2D Canvas 눈대중 모방을 100% 영구 배제하고, 로컬 사이드카 에이전트의 정품 MS Excel COM 엔진(00.거래명세서양식.xlsx 정품 원본 기반)만을 사용합니다.
  */
 export async function generateTransactionStatementPdf(data: TransactionStatementPdfData): Promise<Uint8Array> {
-  // 1순위: 로컬 사이드카 에이전트 (정품 MS Excel COM 엔진) 호출
   try {
     const agentResp = await fetch('http://127.0.0.1:5175/api/generate-statement', {
       method: 'POST',
@@ -510,268 +509,103 @@ export async function generateTransactionStatementPdf(data: TransactionStatement
         }
         return bytes;
       }
+      throw new Error(agentRes.error || '엑셀 COM 엔진 PDF 변환 실패');
     }
-  } catch (agentErr) {
-    console.warn('⚠️ 로컬 에이전트 연결 불가 또는 오류 발생, 브라우저 렌더러로 전환합니다:', agentErr);
+    throw new Error(`에이전트 응답 오류 (HTTP ${agentResp.status})`);
+  } catch (agentErr: any) {
+    throw new Error(
+      `⚠️ 로컬 엑셀 COM 에이전트(KiyeunAgent.exe) 연결 불가:\n\n` +
+      `거래명세서 PDF는 정품 MS Excel COM 엔진을 통해서만 생성됩니다.\n` +
+      `C:\\KiyeunAgent\\KiyeunAgent.exe 가 실행 중인지 확인해 주세요.\n` +
+      `(원인: ${agentErr?.message || agentErr})`
+    );
+  }
+}
+
+/**
+ * 5. (주)기연리프트 거래명세서 정품 엑셀 파일(.xlsx) 원본 생성 엔진
+ * - 템플릿: public/00.거래명세서양식.xlsx
+ * - ExcelJS를 통해 셀 단위로 데이터를 주입한 정품 .xlsx 바이너리 반환
+ */
+export async function generateTransactionStatementExcel(data: TransactionStatementPdfData): Promise<ArrayBuffer> {
+  const resp = await fetch('/00.거래명세서양식.xlsx');
+  if (!resp.ok) {
+    throw new Error('거래명세서 엑셀 마스터 템플릿(00.거래명세서양식.xlsx)을 불러올 수 없습니다.');
+  }
+  const templateBytes = await resp.arrayBuffer();
+
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.load(templateBytes);
+  const ws = workbook.worksheets[0];
+  if (!ws) throw new Error('엑셀 템플릿 워크시트를 찾을 수 없습니다.');
+
+  // 태그 치환 헬퍼
+  const replaceTagInSheet = (tag: string, val: string) => {
+    ws.eachRow((row) => {
+      row.eachCell((cell) => {
+        if (cell.value && typeof cell.value === 'string' && cell.value.includes(tag)) {
+          cell.value = cell.value.replace(tag, val);
+        }
+      });
+    });
+  };
+
+  // 1. 공급자/공급받는자 태그 치환
+  replaceTagInSheet('{사업자등록번호}', data.customerBizNo || '-');
+  replaceTagInSheet('{고객명}', data.customerName || '-');
+  replaceTagInSheet('{대표자}', data.customerCeo || '-');
+  replaceTagInSheet('{주소}', data.customerAddress || '-');
+  replaceTagInSheet('{업태}', data.customerBizType || '-');
+  replaceTagInSheet('{종목}', data.customerBizItem || '-');
+  replaceTagInSheet('{현장담당자}', data.siteManagerName || '-');
+  replaceTagInSheet('{현장담당자연락처}', data.siteManagerPhone || '-');
+  replaceTagInSheet('{계산서담당자}', data.custBillingManagerName || '-');
+  replaceTagInSheet('{계산서담당자연락처}', data.custBillingManagerPhone || '-');
+  replaceTagInSheet('{계산서이메일}', data.custBillingEmail || '-');
+  replaceTagInSheet('{현장명}', data.siteName || '-');
+
+  replaceTagInSheet('{영업사원}', data.salespersonName || '-');
+  replaceTagInSheet('{영업사원연락처}', data.salespersonPhone || '-');
+  replaceTagInSheet('{청구담당자}', data.billingManagerName || '정수아');
+  replaceTagInSheet('{청구담당자연락처}', data.billingManagerPhone || '031-334-5295');
+
+  // 작성일자 (E13)
+  ws.getCell('E13').value = data.billingDate || new Date().toISOString().split('T')[0];
+
+  // 2. 품목 11행 기입 (Row 16 ~ Row 26)
+  for (let i = 0; i < 11; i++) {
+    const rowNum = 16 + i;
+    const item = data.items[i];
+    if (item) {
+      ws.getCell(`B${rowNum}`).value = i + 1;
+      ws.getCell(`C${rowNum}`).value = item.month || '';
+      ws.getCell(`D${rowNum}`).value = item.day || '';
+      ws.getCell(`E${rowNum}`).value = item.itemDescription || '';
+      ws.getCell(`L${rowNum}`).value = item.quantity || 1;
+      ws.getCell(`M${rowNum}`).value = item.unitPrice ? item.unitPrice.toLocaleString() : '';
+      ws.getCell(`O${rowNum}`).value = item.supplyAmount ? item.supplyAmount.toLocaleString() : '';
+      ws.getCell(`Q${rowNum}`).value = item.vatAmount ? item.vatAmount.toLocaleString() : '';
+      ws.getCell(`T${rowNum}`).value = item.notes || '';
+    } else {
+      ws.getCell(`B${rowNum}`).value = '';
+      ws.getCell(`C${rowNum}`).value = '';
+      ws.getCell(`D${rowNum}`).value = '';
+      ws.getCell(`E${rowNum}`).value = '';
+      ws.getCell(`L${rowNum}`).value = '';
+      ws.getCell(`M${rowNum}`).value = '';
+      ws.getCell(`O${rowNum}`).value = '';
+      ws.getCell(`Q${rowNum}`).value = '';
+      ws.getCell(`T${rowNum}`).value = '';
+    }
   }
 
-  // 2순위: 브라우저 고정밀 Canvas 2D 렌더러 (Fallback)
-  const { PDFDocument, rgb } = await import('pdf-lib');
-  
-  // A4 표준 규격: 595.28 x 841.89 pt
-  const pdfDoc = await PDFDocument.create();
-  const page = pdfDoc.addPage([595.28, 841.89]);
-  const { width, height } = page.getSize();
+  // 3. 합계 치환
+  replaceTagInSheet('{공급가합계}', data.totalSupply.toLocaleString());
+  replaceTagInSheet('{부가세합계}', data.totalVat.toLocaleString());
+  replaceTagInSheet('{총액}', data.totalGrand.toLocaleString());
 
-  const scale = 3.5;
-  const canvasW = width * scale;   // 2083 px
-  const canvasH = height * scale;  // 2946 px
-
-  const overlayPng = await createTextCanvasLayer(canvasW, canvasH, (ctx) => {
-    // 배경 흰색
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, canvasW, canvasH);
-
-    const marginX = canvasW * 0.05; // 좌우 5% 마진 (약 104px)
-    const contentW = canvasW - marginX * 2;
-    const startY = canvasH * 0.045;
-
-    // ── 1. 상단 메인 타이틀 ──
-    ctx.fillStyle = '#0284c7';
-    ctx.font = 'bold 58px "Malgun Gothic", "맑은 고딕", sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText('거  래  명  세  서', canvasW * 0.5, startY + 40);
-
-    ctx.fillStyle = '#64748b';
-    ctx.font = '500 24px "Malgun Gothic", "맑은 고딕", sans-serif';
-    ctx.fillText('( 공급받는자 보관용 )', canvasW * 0.5, startY + 80);
-
-    // ── 2. 공급자 (좌) / 공급받는자 (우) 2분할 테이블 ──
-    const partyY = startY + 110;
-    const halfW = (contentW - 20) / 2;
-    const boxH = 430;
-
-    // 공통 테두리 스타일
-    ctx.lineWidth = 3;
-    ctx.strokeStyle = '#0284c7';
-
-    // (1) 공급자 박스
-    ctx.strokeRect(marginX, partyY, halfW, boxH);
-    // (2) 공급받는자 박스
-    ctx.strokeRect(marginX + halfW + 20, partyY, halfW, boxH);
-
-    // 내부 헤더 밴드
-    ctx.fillStyle = 'rgba(2, 132, 199, 0.08)';
-    ctx.fillRect(marginX, partyY, halfW, 44);
-    ctx.fillRect(marginX + halfW + 20, partyY, halfW, 44);
-
-    ctx.fillStyle = '#0369a1';
-    ctx.font = 'bold 26px "Malgun Gothic", "맑은 고딕", sans-serif';
-    ctx.textAlign = 'left';
-    ctx.fillText('  [ 공  급  자 ]', marginX + 10, partyY + 28);
-    ctx.fillText('  [ 공 급 받 는 자 ]', marginX + halfW + 30, partyY + 28);
-
-    // 공급자 텍스트 렌더링
-    const rowH = 46;
-    let curY = partyY + 70;
-    ctx.font = '500 22px "Malgun Gothic", "맑은 고딕", sans-serif';
-
-    const drawInfoRow = (x: number, label: string, val: string, w: number, isBoldVal = false) => {
-      ctx.fillStyle = '#64748b';
-      ctx.font = 'bold 21px "Malgun Gothic", "맑은 고딕", sans-serif';
-      ctx.textAlign = 'left';
-      ctx.fillText(label, x + 15, curY);
-
-      ctx.fillStyle = '#0f172a';
-      ctx.font = isBoldVal ? 'bold 22px "Malgun Gothic", "맑은 고딕", sans-serif' : '500 21px "Malgun Gothic", "맑은 고딕", sans-serif';
-      ctx.fillText(val, x + 130, curY);
-    };
-
-    // 공급자 상세
-    drawInfoRow(marginX, '등록번호', data.lessorBizNo || '138-81-83251', halfW, true);
-    curY += rowH;
-    drawInfoRow(marginX, '상      호', `${data.lessorName || '(주)기연리프트'}   대표: ${data.lessorCeo || '이수용'} (인)`, halfW, true);
-    curY += rowH;
-    drawInfoRow(marginX, '주      소', data.lessorAddress || '경기도 용인시 처인구 모현읍 갈담로112번길 21-3', halfW);
-    curY += rowH;
-    drawInfoRow(marginX, '업태/종목', '임대서비스업 외 / 고소장비임대업 외', halfW);
-    curY += rowH;
-    drawInfoRow(marginX, '계약담당', `${data.salespersonName || '-'} (${data.salespersonPhone || '-'})`, halfW);
-    curY += rowH;
-    drawInfoRow(marginX, '계산서담당', `${data.billingManagerName || '정수아'} (${data.billingManagerPhone || '031-334-5295'})`, halfW);
-    curY += rowH;
-    drawInfoRow(marginX, '이 메 일', data.lessorEmail || 'giyeonlift@naver.com', halfW);
-    curY += rowH;
-    drawInfoRow(marginX, '작성일자', data.billingDate || new Date().toISOString().split('T')[0], halfW, true);
-
-    // 공급받는자 상세
-    curY = partyY + 70;
-    const rightX = marginX + halfW + 20;
-    drawInfoRow(rightX, '등록번호', data.customerBizNo || '-', halfW, true);
-    curY += rowH;
-    drawInfoRow(rightX, '상      호', `${data.customerName || '-'}   대표: ${data.customerCeo || '-'}`, halfW, true);
-    curY += rowH;
-    drawInfoRow(rightX, '주      소', data.customerAddress || '-', halfW);
-    curY += rowH;
-    drawInfoRow(rightX, '업태/종목', `${data.customerBizType || '-'} / ${data.customerBizItem || '-'}`, halfW);
-    curY += rowH;
-    drawInfoRow(rightX, '현장담당', `${data.siteManagerName || '-'} (${data.siteManagerPhone || '-'})`, halfW);
-    curY += rowH;
-    drawInfoRow(rightX, '계산서담당', `${data.custBillingManagerName || '-'} (${data.custBillingManagerPhone || '-'})`, halfW);
-    curY += rowH;
-    drawInfoRow(rightX, '계산서메일', data.custBillingEmail || '-', halfW);
-    curY += rowH;
-    drawInfoRow(rightX, '작업현장', data.siteName || '-', halfW, true);
-
-    // ── 3. 메인 거래 내역 테이블 (11행) ──
-    const tableY = partyY + boxH + 30;
-    const colDefs = [
-      { key: 'no', label: '순번', w: 80, align: 'center' },
-      { key: 'm', label: '월', w: 60, align: 'center' },
-      { key: 'd', label: '일', w: 60, align: 'center' },
-      { key: 'item', label: '품      목', w: 860, align: 'left' },
-      { key: 'qty', label: '수량', w: 80, align: 'center' },
-      { key: 'price', label: '단  가', w: 180, align: 'right' },
-      { key: 'supply', label: '공 급 가 액', w: 200, align: 'right' },
-      { key: 'vat', label: '부 가 세', w: 180, align: 'right' },
-      { key: 'note', label: '비  고', w: contentW - (80 + 60 + 60 + 860 + 80 + 180 + 200 + 180), align: 'center' }
-    ];
-
-    // 헤더 그리기
-    const headerH = 50;
-    ctx.fillStyle = '#0284c7';
-    ctx.fillRect(marginX, tableY, contentW, headerH);
-    ctx.strokeStyle = '#0284c7';
-    ctx.strokeRect(marginX, tableY, contentW, headerH);
-
-    let curColX = marginX;
-    ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 22px "Malgun Gothic", "맑은 고딕", sans-serif';
-    colDefs.forEach(col => {
-      ctx.textAlign = 'center';
-      ctx.fillText(col.label, curColX + col.w / 2, tableY + 32);
-      ctx.beginPath();
-      ctx.moveTo(curColX + col.w, tableY);
-      ctx.lineTo(curColX + col.w, tableY + headerH);
-      ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 1.5;
-      ctx.stroke();
-      curColX += col.w;
-    });
-
-    // 11개 데이터 행 그리기
-    const dataRowH = 62;
-    const maxRows = 11;
-    let curRowY = tableY + headerH;
-
-    for (let i = 0; i < maxRows; i++) {
-      const item = data.items[i];
-      
-      // 행 배경 교차색
-      ctx.fillStyle = i % 2 === 0 ? '#ffffff' : '#f8fafc';
-      ctx.fillRect(marginX, curRowY, contentW, dataRowH);
-
-      // 행 테두리
-      ctx.strokeStyle = '#cbd5e1';
-      ctx.lineWidth = 1.5;
-      ctx.strokeRect(marginX, curRowY, contentW, dataRowH);
-
-      curColX = marginX;
-      colDefs.forEach(col => {
-        // 세로 구분선
-        ctx.beginPath();
-        ctx.moveTo(curColX + col.w, curRowY);
-        ctx.lineTo(curColX + col.w, curRowY + dataRowH);
-        ctx.stroke();
-
-        if (item) {
-          ctx.fillStyle = '#0f172a';
-          ctx.font = '500 20px "Malgun Gothic", "맑은 고딕", sans-serif';
-
-          let valStr = '';
-          if (col.key === 'no') valStr = String(i + 1);
-          else if (col.key === 'm') valStr = String(item.month || '');
-          else if (col.key === 'd') valStr = String(item.day || '');
-          else if (col.key === 'item') {
-            valStr = item.itemDescription || '';
-            ctx.font = 'bold 20px "Malgun Gothic", "맑은 고딕", sans-serif';
-          }
-          else if (col.key === 'qty') valStr = String(item.quantity || 1);
-          else if (col.key === 'price') valStr = item.unitPrice ? item.unitPrice.toLocaleString() : '-';
-          else if (col.key === 'supply') valStr = item.supplyAmount ? item.supplyAmount.toLocaleString() : '-';
-          else if (col.key === 'vat') valStr = item.vatAmount ? item.vatAmount.toLocaleString() : '-';
-          else if (col.key === 'note') valStr = item.notes || '';
-
-          if (col.align === 'center') {
-            ctx.textAlign = 'center';
-            ctx.fillText(valStr, curColX + col.w / 2, curRowY + 38);
-          } else if (col.align === 'right') {
-            ctx.textAlign = 'right';
-            ctx.fillText(valStr, curColX + col.w - 15, curRowY + 38);
-          } else {
-            ctx.textAlign = 'left';
-            ctx.fillText(valStr, curColX + 15, curRowY + 38);
-          }
-        }
-        curColX += col.w;
-      });
-
-      curRowY += dataRowH;
-    }
-
-    // ── 4. 하단 합계 행 (Row 27 대응) ──
-    const totalRowH = 65;
-    ctx.fillStyle = '#f0fdf4';
-    ctx.fillRect(marginX, curRowY, contentW, totalRowH);
-    ctx.strokeStyle = '#0284c7';
-    ctx.lineWidth = 2.5;
-    ctx.strokeRect(marginX, curRowY, contentW, totalRowH);
-
-    ctx.fillStyle = '#0f172a';
-    ctx.font = 'bold 24px "Malgun Gothic", "맑은 고딕", sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText('합     계', marginX + (colDefs[0].w + colDefs[1].w + colDefs[2].w + colDefs[3].w + colDefs[4].w) / 2, curRowY + 41);
-
-    // 공급가합계
-    ctx.textAlign = 'right';
-    ctx.fillStyle = '#0284c7';
-    ctx.fillText(`₩ ${data.totalSupply.toLocaleString()}`, marginX + 1460, curRowY + 41);
-
-    // 세액합계
-    ctx.fillText(`₩ ${data.totalVat.toLocaleString()}`, marginX + 1660, curRowY + 41);
-
-    // 총합계 (굵은 강조)
-    ctx.fillStyle = '#1e3a8a';
-    ctx.font = 'bold 26px "Malgun Gothic", "맑은 고딕", sans-serif';
-    ctx.fillText(`₩ ${data.totalGrand.toLocaleString()}`, marginX + contentW - 20, curRowY + 41);
-
-    // ── 5. 하단 입금계좌 및 안내 ──
-    const footerY = curRowY + totalRowH + 35;
-    ctx.fillStyle = '#f8fafc';
-    ctx.fillRect(marginX, footerY, contentW, 110);
-    ctx.strokeStyle = '#cbd5e1';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(marginX, footerY, contentW, 110);
-
-    ctx.fillStyle = '#0369a1';
-    ctx.font = 'bold 22px "Malgun Gothic", "맑은 고딕", sans-serif';
-    ctx.textAlign = 'left';
-    ctx.fillText(`💳 입금계좌: ${data.bankAccount || '신한은행 140-010-007060 , 주식회사 기연리프트'}`, marginX + 25, footerY + 40);
-
-    ctx.fillStyle = '#64748b';
-    ctx.font = '500 19px "Malgun Gothic", "맑은 고딕", sans-serif';
-    ctx.fillText('• 본 거래명세서는 (주)기연리프트 전산시스템을 통해 자동 발행된 공식 전자문서입니다.', marginX + 25, footerY + 80);
-  });
-
-  const embeddedImage = await pdfDoc.embedPng(overlayPng);
-  page.drawImage(embeddedImage, {
-    x: 0,
-    y: 0,
-    width,
-    height
-  });
-
-  return await pdfDoc.save();
+  const buffer = await workbook.xlsx.writeBuffer();
+  return buffer;
 }
 
 /**

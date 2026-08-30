@@ -1,3 +1,17 @@
+# Release Notes (v0.5.3.Build.52 - 2026-08-31 00:05)
+
+## 💡 [거래명세서 2D Canvas 모방 렌더러 100% 영구 삭제 및 순수 MS Excel COM 엔진/정품 엑셀 생성 일원화]
+
+### 🐛 원인 분석 및 개편
+- **기존 문제점**:
+  - `excelTemplateEngine.ts` 내에 2D Canvas 기반 거래명세서 렌더링 코드(`createTextCanvasLayer`, `ctx.fillText` 등)가 남아있어, 로컬 에이전트 미연결 시 어설픈 Canvas 이미지 기반 PDF가 생성되던 결함 발견.
+- **개편 조치 (`excelTemplateEngine.ts`, `Billings.tsx`)**:
+  - **2D Canvas 렌더러 영구 삭제**: `createTextCanvasLayer` 및 2D Canvas 거래명세서 드로잉 코드를 100% 영구 제거.
+  - **순수 MS Excel COM 엔진 전담**: 거래명세서 PDF는 오직 `00.거래명세서양식.xlsx` 마스터 서식과 로컬 에이전트의 MS Excel COM 엔진(`Excel.Application` / `ExportAsFixedFormat`)만을 통해 100% 정품 인쇄되도록 일원화.
+  - **정품 엑셀 원본 파일(.xlsx) 생성 엔진 탑재**: `generateTransactionStatementExcel` 엔진을 구축하여 웹 화면에서 `[엑셀 다운로드]` 클릭 시 `00.거래명세서양식.xlsx` 정품 서식에 데이터가 셀 단위로 완벽히 주입된 `.xlsx` 원본 파일을 즉시 다운로드 지원.
+
+---
+
 # Release Notes (v0.5.3.Build.51 - 2026-08-31 00:00)
 
 ## 💡 [대차 교체 자산 정밀 일할 계산(헌장 4.1) 엔진 탑재 및 세부 명세 항목별 건수 요약 체계 구축]

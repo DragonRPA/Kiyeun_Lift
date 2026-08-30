@@ -6,7 +6,7 @@ import { db, Asset, Billing, BillingDetail, ContractHistory, normalizeEndDate } 
 import { Plus, Download, Mail, CheckCircle, Search, DollarSign, Calendar, FileText, Send, Edit3, RotateCcw, AlertTriangle, Check } from 'lucide-react';
 import { emailService } from '../services/email';
 import { exportToExcel, exportTransactionStatementExcel, exportTransactionStatementExcelBuffer, calcServicePeriod, formatStatementItemName } from '../services/excel';
-import { generateTransactionStatementPdf } from '../services/excelTemplateEngine';
+import { generateTransactionStatementPdf, generateTransactionStatementExcel } from '../services/excelTemplateEngine';
 
 export const Billings: React.FC = () => {
   const {
@@ -595,7 +595,109 @@ export const Billings: React.FC = () => {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
     } catch (err: any) {
-      showErrorModal('거래명세서 PDF 생성 및 다운로드 실패: ' + (err?.message || String(err)));
+      showErrorModal('거래명세서 PDF 생성 및 다운로드 실패:\n\n' + (err?.message || String(err)));
+    }
+  };
+
+  const downloadStatementExcel = async (billingId?: string) => {
+    const targetBillingId = billingId || mailBillingId || selectedBillingId;
+    const billing = billings.find(b => b.id === targetBillingId);
+    const rawDetails = billingDetails.filter(d => d.billingId === targetBillingId);
+    const customer = customers.find(c => c.id === billing?.customerId);
+    const contract = contracts.find(c => c.id === billing?.contractId);
+    const site = sites.find(s => s.id === contract?.siteId);
+    const salesperson = users.find((u: any) => u.id === contract?.salespersonId);
+    const custName = customer?.name || '고객사';
+    const sName = site?.name || '현장';
+    const ym = billing?.billingYm || '';
+    const fileName = `[기연리프트]_거래명세서_${custName}_${sName}_${ym}.xlsx`;
+
+    const details = rawDetails.map(d => {
+      const ca = contractAssets.find(cAsset => cAsset.id === d.contractAssetId);
+      const asset = ca?.assetId 
+        ? assets.find(a => a.id === ca.assetId) 
+        : (d.assetId ? assets.find(a => a.id === d.assetId) : null);
+      return {
+        ...d,
+        modelName: asset?.modelName || ca?.expectedModel || d.itemName,
+        assetNo: asset?.assetNo ? asset.assetNo : (ca?.assetId ? ca.assetId : (d.assetNo || ''))
+      };
+    });
+
+    const billingDate = billing?.billingDate || new Date().toISOString().split('T')[0];
+    const parts = billingDate.split('-');
+    const dateM = parts[1] ? Number(parts[1]) : 0;
+    const dateD = parts[2] ? Number(parts[2]) : 0;
+
+    let totalSupply = 0;
+    let totalVat = 0;
+
+    const items = details.map(d => {
+      const unitPrice = d.unitPrice || 0;
+      const quantity = d.quantity || 1;
+      const supplyAmount = unitPrice * quantity;
+      const vatAmount = Math.round(supplyAmount * 0.1);
+      totalSupply += supplyAmount;
+      totalVat += vatAmount;
+
+      return {
+        month: dateM,
+        day: dateD,
+        itemDescription: formatStatementItemName(d, billing, contract),
+        quantity,
+        unitPrice,
+        supplyAmount,
+        vatAmount,
+        notes: d.memo || d.notes || ''
+      };
+    });
+
+    try {
+      const excelBuffer = await generateTransactionStatementExcel({
+        billingDate,
+        billingYm: ym,
+        contractNo: contract?.contractNo,
+        lessorBizNo: '138-81-83251',
+        lessorName: '(주)기연리프트',
+        lessorCeo: '이수용',
+        lessorAddress: '경기도 용인시 처인구 모현읍 갈담로112번길 21-3',
+        salespersonName: salesperson?.name || (contract as any)?.salespersonName || '-',
+        salespersonPhone: (salesperson as any)?.mobile || salesperson?.phone || '-',
+        billingManagerName: '정수아',
+        billingManagerPhone: '031-334-5295',
+        lessorEmail: 'giyeonlift@naver.com',
+
+        customerBizNo: customer?.bizRegNo || '-',
+        customerName: customer?.name || '-',
+        customerCeo: customer?.representative || '-',
+        customerAddress: customer?.address || '-',
+        customerBizType: customer?.bizType || '-',
+        customerBizItem: customer?.bizItem || '-',
+        siteManagerName: (site as any)?.managerName || (site as any)?.contactPerson || (customer as any)?.managerName || '-',
+        siteManagerPhone: (site as any)?.managerPhone || (site as any)?.contactPhone || (customer as any)?.phone || '-',
+        custBillingManagerName: (customer as any)?.billingManagerName || (customer as any)?.managerName || '-',
+        custBillingManagerPhone: (customer as any)?.billingManagerPhone || (customer as any)?.phone || '-',
+        custBillingEmail: (customer as any)?.billingEmail || (customer as any)?.email || '-',
+        siteName: site?.name || '-',
+        bankAccount: '신한은행 140-010-007060 , 주식회사 기연리프트',
+
+        items,
+        totalSupply,
+        totalVat,
+        totalGrand: totalSupply + totalVat
+      });
+
+      const blob = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err: any) {
+      showErrorModal('거래명세서 엑셀 원본 생성 실패:\n\n' + (err?.message || String(err)));
     }
   };
 
@@ -1686,8 +1788,18 @@ ${items.map((item, idx) => {
                       <button 
                         type="button" 
                         className="btn-secondary"
+                        onClick={() => downloadStatementExcel(activeBilling.id)}
+                        style={{ padding: '5px 10px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 'bold' }}
+                        title="00.거래명세서양식.xlsx 정품 엑셀 원본 파일 다운로드"
+                      >
+                        <FileText size={13} /> 엑셀 다운로드
+                      </button>
+                      <button 
+                        type="button" 
+                        className="btn-secondary"
                         onClick={() => downloadStatementPdf(activeBilling.id)}
-                        style={{ padding: '5px 12px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 'bold' }}
+                        style={{ padding: '5px 10px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 'bold' }}
+                        title="로컬 에이전트 MS Excel COM 엔진 기반 정품 A4 PDF 다운로드"
                       >
                         <Download size={13} /> PDF 다운로드
                       </button>
