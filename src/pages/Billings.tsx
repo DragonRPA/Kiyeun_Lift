@@ -1636,10 +1636,10 @@ ${items.map((item, idx) => {
             })()}
 
             <div className="table-container" style={{ border: 'none', boxShadow: 'none', overflowX: 'auto' }}>
-              <table style={{ minWidth: '580px', whiteSpace: 'nowrap' }}>
+              <table style={{ minWidth: '650px', whiteSpace: 'nowrap' }}>
                 <thead>
                   <tr>
-                    <th style={{ whiteSpace: 'nowrap', width: '130px' }}>관리</th>
+                    <th style={{ whiteSpace: 'nowrap', width: '190px' }}>관리</th>
                     <th style={{ whiteSpace: 'nowrap' }}>청구월</th>
                     <th style={{ whiteSpace: 'nowrap' }}>고객사</th>
                     <th style={{ whiteSpace: 'nowrap' }}>공급가액</th>
@@ -1674,55 +1674,56 @@ ${items.map((item, idx) => {
                       >
                         <td onClick={e => e.stopPropagation()} style={{ whiteSpace: 'nowrap' }}>
                           <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
-                            {b.status === 'REQUESTED' ? (
-                              <>
-                                {isAdmin && (
-                                  <button 
-                                    type="button"
-                                    className="btn-success" 
-                                    onClick={(e) => handleApprove(b.id, e)} 
-                                    style={{ padding: '3px 6px', fontSize: '11px', whiteSpace: 'nowrap' }}
-                                    title="청구 완료 (승인)"
-                                  >
-                                    완료
-                                  </button>
-                                )}
-                                {canSave && (
-                                  <button 
-                                    type="button"
-                                    className="btn-secondary" 
-                                    onClick={(e) => handleOpenRegenerate(b.id, e)} 
-                                    style={{ padding: '3px 6px', fontSize: '11px', color: 'var(--primary)', fontWeight: '600', whiteSpace: 'nowrap' }}
-                                    title="내역 수정 및 재생성"
-                                  >
-                                    취소/재생성
-                                  </button>
-                                )}
-                                {isAdmin && (
-                                  <button 
-                                    type="button"
-                                    className="btn-danger" 
-                                    onClick={(e) => handleCancel(b.id, e)} 
-                                    style={{ padding: '3px 6px', fontSize: '11px', whiteSpace: 'nowrap' }}
-                                    title="청구 취소"
-                                  >
-                                    취소
-                                  </button>
-                                )}
-                              </>
-                            ) : (
-                              <>
-                                {canSave && (b.status === 'UNPAID' || b.status === 'PARTIAL') && (
-                                  <button className="btn-success" onClick={() => handleOpenPay(b.id, unpaid)} style={{ padding: '3px 6px', fontSize: '11px', whiteSpace: 'nowrap' }}>
-                                    수납
-                                  </button>
-                                )}
-                                {(b.status === 'UNPAID' || b.status === 'PARTIAL' || b.status === 'PAID') && (
-                                  <button className="btn-secondary" onClick={() => handleOpenMail(b.id)} style={{ padding: '3px 6px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '2px', whiteSpace: 'nowrap' }}>
-                                    <Mail size={10} /> 발송
-                                  </button>
-                                )}
-                              </>
+                            {/* 1. 수납 버튼: 미납 잔액이 있는 상태 (UNPAID, REQUESTED, PARTIAL) */}
+                            {canSave && unpaid > 0 && b.status !== 'REJECTED' && (
+                              <button 
+                                type="button"
+                                className="btn-success" 
+                                onClick={() => handleOpenPay(b.id, unpaid)} 
+                                style={{ padding: '3px 6px', fontSize: '11px', whiteSpace: 'nowrap', fontWeight: 'bold' }}
+                                title="수납 등록"
+                              >
+                                수납
+                              </button>
+                            )}
+
+                            {/* 2. 발송 버튼: REJECTED가 아닌 모든 청구서에서 거래명세서 메일 발송 */}
+                            {b.status !== 'REJECTED' && (
+                              <button 
+                                type="button"
+                                className="btn-secondary" 
+                                onClick={() => handleOpenMail(b.id)} 
+                                style={{ padding: '3px 6px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '2px', whiteSpace: 'nowrap' }}
+                                title="거래명세서 이메일 발송"
+                              >
+                                <Mail size={10} /> 발송
+                              </button>
+                            )}
+
+                            {/* 3. 취소/재생성 버튼: 완납(PAID)이 아닌 상태에서 수정/재생성 */}
+                            {canSave && b.status !== 'PAID' && (
+                              <button 
+                                type="button"
+                                className="btn-secondary" 
+                                onClick={(e) => handleOpenRegenerate(b.id, e)} 
+                                style={{ padding: '3px 6px', fontSize: '11px', color: 'var(--primary)', fontWeight: '600', whiteSpace: 'nowrap' }}
+                                title="내역 수정 및 재생성"
+                              >
+                                {b.status === 'REJECTED' ? '재생성' : '취소/재생성'}
+                              </button>
+                            )}
+
+                            {/* 4. 청구 취소 버튼: 완납(PAID) 또는 이미 취소(REJECTED)가 아닌 상태 */}
+                            {isAdmin && b.status !== 'PAID' && b.status !== 'REJECTED' && (
+                              <button 
+                                type="button"
+                                className="btn-danger" 
+                                onClick={(e) => handleCancel(b.id, e)} 
+                                style={{ padding: '3px 6px', fontSize: '11px', whiteSpace: 'nowrap' }}
+                                title="청구 취소"
+                              >
+                                취소
+                              </button>
                             )}
                           </div>
                         </td>
