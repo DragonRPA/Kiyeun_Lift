@@ -15,7 +15,7 @@ export const Contracts: React.FC = () => {
   const {
     contracts, contractAssets, contractHistory, customers, contacts, sites, assets, users, currentUser,
     createContract, extendContract, shortenContract, succeedContract, exchangeAsset, hasPermission,
-    products, refreshAllData, deliveries, repairs, outboundInspections, billings, receivables
+    products, refreshAllData, deliveries, repairs, outboundInspections, billings, billingDetails, receivables
   } = useApp();
 
   const canSave = hasPermission('contract', 'save');
@@ -1307,8 +1307,8 @@ export const Contracts: React.FC = () => {
                       <th style={{ whiteSpace: 'nowrap' }}>모델명</th>
                       <th style={{ whiteSpace: 'nowrap' }}>월 렌탈료</th>
                       <th style={{ whiteSpace: 'nowrap' }}>일 렌탈료</th>
-                      <th style={{ whiteSpace: 'nowrap' }}>가동일수</th>
-                      <th style={{ whiteSpace: 'nowrap' }}>매출 기여액</th>
+                      <th style={{ whiteSpace: 'nowrap' }}>확정 기여액</th>
+                      <th style={{ whiteSpace: 'nowrap' }}>월 기대 기여</th>
                       <th style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>수정</th>
                     </tr>
                   </thead>
@@ -1317,18 +1317,14 @@ export const Contracts: React.FC = () => {
                       const asset = assets.find(a => a.id === ca.assetId);
                       const isZero = ca.monthlyRentalFee === 0;
 
-                      // 가동일수 및 매출 기여액 정밀 일할 계산
-                      // 원칙: 매출 기여액 = 과거에 기발생한 확정 기여액만 집계
-                      // 9999-12-31 등 미확정 미래 sentinel 값은 오늘로 cap → 진행 중 계약은 "오늘까지" 기준
-                      const today = new Date(); today.setHours(23, 59, 59, 999);
-                      const sDate = new Date(ca.startDate || activeContract.startDate || todayStr);
-                      const eDateStr = ca.endDate || activeContract.endDate;
-                      const rawEDate = (!eDateStr || eDateStr === '미정') ? today : new Date(eDateStr);
-                      const eDate = rawEDate > today ? today : rawEDate; // ← 미래 sentinel cap
-                      const diffTime = Math.max(0, eDate.getTime() - sDate.getTime());
-                      const activeDays = Math.max(1, Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1);
-                      const dailyFee = ca.dailyRentalFee || Math.round(ca.monthlyRentalFee / 30);
-                      const revenueContribution = activeDays * dailyFee;
+                      // ── 확정 기여액: 해당 CA에 실제 발행된 청구 명세의 합 (과거 확정분만)
+                      // billing_details.contractAssetId === ca.id 로 직접 집계
+                      const confirmedContribution = (billingDetails || [])
+                        .filter(bd => bd.contractAssetId === ca.id)
+                        .reduce((sum, bd) => sum + (bd.amount || 0), 0);
+
+                      // ── 월 기대 기여: 향후 1개월 기준 정기 렌탈료 (미래 불확정 기대값, 단순 참고용)
+                      const monthlyExpected = ca.monthlyRentalFee || 0;
 
                       return (
                         <tr key={ca.id}>
@@ -1343,10 +1339,18 @@ export const Contracts: React.FC = () => {
                           </td>
                           <td style={{ whiteSpace: 'nowrap' }}>{(ca.dailyRentalFee || 0).toLocaleString()}원</td>
                           <td style={{ whiteSpace: 'nowrap' }}>
-                            <span className="badge badge-info" style={{ fontSize: '11px' }}>{activeDays}일</span>
+                            {/* 실청구 발행 누계 — billing_details 기반 확정값 */}
+                            {confirmedContribution > 0 ? (
+                              <strong style={{ color: '#0070C0' }}>₩{confirmedContribution.toLocaleString()}</strong>
+                            ) : (
+                              <span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>청구 없음</span>
+                            )}
                           </td>
                           <td style={{ whiteSpace: 'nowrap' }}>
-                            <strong style={{ color: '#0070C0' }}>₩{revenueContribution.toLocaleString()}</strong>
+                            {/* 향후 1개월 기준 기대액 — 참고용, 미확정 */}
+                            <span style={{ color: 'var(--text-secondary)', fontSize: '12px' }}>
+                              {monthlyExpected > 0 ? `${monthlyExpected.toLocaleString()}원/월` : '-'}
+                            </span>
                           </td>
                           <td style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>
                             {canSave && canModifyContract(activeContract) && (
