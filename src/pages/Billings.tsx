@@ -160,10 +160,12 @@ export const Billings: React.FC = () => {
 
       const supply = b.totalAmount || 0;
       const grand = supply + Math.round(supply * 0.1);
-      const unpaid = Math.max(0, grand - (b.paidAmount || 0));
-      const isPaid = b.status === 'PAID' || unpaid <= 0;
-      if (pFilter === 'PAID' && !isPaid) return false;
-      if (pFilter === 'UNPAID_ANY' && isPaid) return false;
+      const isPaid = b.status === 'PAID';
+      const actualPaid = isPaid ? grand : (b.paidAmount || 0);
+      const unpaid = isPaid ? 0 : Math.max(0, grand - actualPaid);
+      const isFullyPaid = isPaid || unpaid <= 0;
+      if (pFilter === 'PAID' && !isFullyPaid) return false;
+      if (pFilter === 'UNPAID_ANY' && isFullyPaid) return false;
 
       const isMailSent = b.status !== 'UNPAID';
       if (mFilter === 'SENT' && !isMailSent) return false;
@@ -234,14 +236,19 @@ export const Billings: React.FC = () => {
 
   const handleExportExcel = () => {
     const excelData = filteredBillings.map((b, idx) => {
-      const unpaid = b.totalAmount - b.paidAmount;
+      const supply = b.totalAmount || 0;
+      const grand = supply + Math.round(supply * 0.1);
+      const isPaid = b.status === 'PAID';
+      const actualPaid = isPaid ? grand : (b.paidAmount || 0);
+      const unpaid = isPaid ? 0 : Math.max(0, grand - actualPaid);
       return {
         'No': idx + 1,
         '청구월': b.billingYm,
         '고객사': getCustName(b.customerId),
         '청구 일자': b.billingDate || '-',
-        '청구 금액': `${b.totalAmount.toLocaleString()}원`,
-        '수납 금액': `${b.paidAmount.toLocaleString()}원`,
+        '공급가액': `${supply.toLocaleString()}원`,
+        '청구 금액(VAT포함)': `${grand.toLocaleString()}원`,
+        '수납 금액': `${actualPaid.toLocaleString()}원`,
         '미납 금액': `${unpaid.toLocaleString()}원`,
         '결제 상태': b.status === 'UNPAID'     ? '미발송' :
                    b.status === 'REQUESTED' ? '발송완료(미납)' :
@@ -1636,7 +1643,10 @@ ${items.map((item, idx) => {
               const totalSupply = filteredBillings.reduce((sum, b) => sum + (b.totalAmount || 0), 0);
               const totalVat = Math.round(totalSupply * 0.1);
               const totalGrand = totalSupply + totalVat;
-              const totalPaid = filteredBillings.reduce((sum, b) => sum + (b.paidAmount || 0), 0);
+              const totalPaid = filteredBillings.reduce((sum, b) => {
+                const g = (b.totalAmount || 0) + Math.round((b.totalAmount || 0) * 0.1);
+                return sum + (b.status === 'PAID' ? g : (b.paidAmount || 0));
+              }, 0);
               const totalUnpaid = Math.max(0, totalGrand - totalPaid);
 
               // 💰 미수납 통장잔액 (검색된 고객사 기준, 전체 검색 시 전사 미사용 입금 잔액 총합)
@@ -1703,7 +1713,9 @@ ${items.map((item, idx) => {
                     const supply = b.totalAmount || 0;
                     const vat = Math.round(supply * 0.1);
                     const grandTotal = supply + vat;
-                    const unpaid = Math.max(0, grandTotal - (b.paidAmount || 0));
+                    const isPaid = b.status === 'PAID';
+                    const actualPaid = isPaid ? grandTotal : (b.paidAmount || 0);
+                    const unpaid = isPaid ? 0 : Math.max(0, grandTotal - actualPaid);
                     const isSelected = selectedBillingId === b.id;
 
                     return (
@@ -1719,7 +1731,7 @@ ${items.map((item, idx) => {
                         <td onClick={e => e.stopPropagation()} style={{ whiteSpace: 'nowrap' }}>
                           <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
                             {/* 1. 수납 버튼: 미납 잔액이 있는 상태 (UNPAID, REQUESTED, PARTIAL) */}
-                            {canSave && unpaid > 0 && b.status !== 'REJECTED' && (
+                            {canSave && !isPaid && unpaid > 0 && b.status !== 'REJECTED' && (
                               <button 
                                 type="button"
                                 className="btn-success" 
@@ -1811,8 +1823,9 @@ ${items.map((item, idx) => {
               const totalSupply = activeBillingDetails.reduce((sum, bd) => sum + (bd.amount || 0), 0);
               const totalVat = Math.round(totalSupply * 0.1);
               const totalGrand = totalSupply + totalVat;
-              const paidAmt = activeBilling.paidAmount || 0;
-              const unpaidAmt = Math.max(0, totalGrand - paidAmt);
+              const isPaid = activeBilling.status === 'PAID';
+              const paidAmt = isPaid ? totalGrand : (activeBilling.paidAmount || 0);
+              const unpaidAmt = isPaid ? 0 : Math.max(0, totalGrand - paidAmt);
 
               return (
                 <div className="card" style={{ margin: 0, padding: '16px', display: 'flex', flexDirection: 'column', gap: '14px' }}>

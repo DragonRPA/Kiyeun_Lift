@@ -3212,10 +3212,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     }
 
-    // Billing.paidAmount / status 자동 갱신
+    // Billing.paidAmount / status 자동 갱신 (VAT 포함 총액 기준)
     const nextPaid = billing.paidAmount + data.amount;
+    const supply = billing.totalAmount || 0;
+    const grandTotal = supply + Math.round(supply * 0.1);
     let nextStatus: Billing['status'] = 'UNPAID';
-    if (nextPaid >= billing.totalAmount) {
+    if (nextPaid >= grandTotal) {
       nextStatus = 'PAID';
     } else if (nextPaid > 0) {
       nextStatus = 'PARTIAL';
@@ -3233,7 +3235,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         contractId: billing.contractId,
         changeType: 'PAYMENT_RECEIVED',
         changeDate: data.paymentDate,
-        description: `수납 처리: ${billing.billingYm} / ${data.amount.toLocaleString()}원 수납 (누적: ${nextPaid.toLocaleString()}/${billing.totalAmount.toLocaleString()}원, 상태: ${nextStatus})`,
+        description: `수납 처리: ${billing.billingYm} / ${data.amount.toLocaleString()}원 수납 (누적: ${nextPaid.toLocaleString()}/${grandTotal.toLocaleString()}원, 상태: ${nextStatus})`,
         createdAt: new Date().toISOString()
       });
     }
@@ -3259,8 +3261,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const billing = db.billings.find(b => b.id === payment.billingId);
     if (billing) {
       const newPaid = Math.max(0, billing.paidAmount - payment.amount);
+      const bSupply = billing.totalAmount || 0;
+      const bGrand = bSupply + Math.round(bSupply * 0.1);
       let newStatus: Billing['status'] = 'UNPAID';
-      if (newPaid >= billing.totalAmount) newStatus = 'PAID';
+      if (newPaid >= bGrand) newStatus = 'PAID';
       else if (newPaid > 0) newStatus = 'PARTIAL';
       db.updateRow<Billing>('billings', billing.id, {
         paidAmount: newPaid,
@@ -3318,7 +3322,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     for (const billing of activeBillings) {
       if (remainingDeposit <= 0) break;
 
-      const unpaidAmount = billing.totalAmount - billing.paidAmount;
+      const bSup = billing.totalAmount || 0;
+      const bGrand = bSup + Math.round(bSup * 0.1);
+      const unpaidAmount = Math.max(0, bGrand - (billing.paidAmount || 0));
       if (unpaidAmount <= 0) continue;
 
       const paymentAmount = Math.min(unpaidAmount, remainingDeposit);
@@ -3336,9 +3342,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         createdAt: new Date().toISOString()
       });
 
-      // 청구서 납부금액 및 상태 업데이트
+      // 청구서 납부금액 및 상태 업데이트 (VAT 포함 총액 기준)
       const nextPaid = billing.paidAmount + paymentAmount;
-      const nextStatus: Billing['status'] = nextPaid >= billing.totalAmount ? 'PAID' : 'PARTIAL';
+      const nextStatus: Billing['status'] = nextPaid >= bGrand ? 'PAID' : 'PARTIAL';
       db.updateRow<Billing>('billings', billing.id, {
         paidAmount: nextPaid,
         status: nextStatus,
@@ -3468,8 +3474,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         // 청구서 수납 잔액 롤백
         const billing = db.billings.find(b => b.id === pay.billingId);
         if (billing) {
+          const bSup = billing.totalAmount || 0;
+          const bGrand = bSup + Math.round(bSup * 0.1);
           const nextPaid = Math.max(0, billing.paidAmount - pay.amount);
-          const nextStatus: Billing['status'] = nextPaid === 0 ? 'UNPAID' : (nextPaid >= billing.totalAmount ? 'PAID' : 'PARTIAL');
+          const nextStatus: Billing['status'] = nextPaid === 0 ? 'UNPAID' : (nextPaid >= bGrand ? 'PAID' : 'PARTIAL');
           db.updateRow<Billing>('billings', billing.id, {
             paidAmount: nextPaid,
             status: nextStatus,
@@ -4835,7 +4843,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         throw new Error(`선수금 잔액이 부족합니다. (현재 잔액: ₩${currentBal.toLocaleString()}원, 요청액: ₩${amount.toLocaleString()}원)`);
       }
 
-      const unpaid = billing.totalAmount - billing.paidAmount;
+      const bSup = billing.totalAmount || 0;
+      const bGrand = bSup + Math.round(bSup * 0.1);
+      const unpaid = Math.max(0, bGrand - (billing.paidAmount || 0));
       if (amount > unpaid) {
         throw new Error(`청구서 미수금(₩${unpaid.toLocaleString()}원)을 초과하여 상계할 수 없습니다.`);
       }
@@ -4858,9 +4868,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         createdAt: new Date().toISOString()
       });
 
-      // 3. 청구서 수납액 및 상태 갱신
+      // 3. 청구서 수납액 및 상태 갱신 (VAT 포함 총액 기준)
       const newPaid = billing.paidAmount + amount;
-      const newStatus = newPaid >= billing.totalAmount ? 'PAID' : 'PARTIAL';
+      const newStatus = newPaid >= bGrand ? 'PAID' : 'PARTIAL';
       db.updateRow<Billing>('billings', billingId, {
         paidAmount: newPaid,
         status: newStatus,
