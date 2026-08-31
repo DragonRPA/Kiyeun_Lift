@@ -1307,8 +1307,10 @@ export const Contracts: React.FC = () => {
                       <th style={{ whiteSpace: 'nowrap' }}>모델명</th>
                       <th style={{ whiteSpace: 'nowrap' }}>월 렌탈료</th>
                       <th style={{ whiteSpace: 'nowrap' }}>일 렌탈료</th>
-                      <th style={{ whiteSpace: 'nowrap' }}>확정 기여액</th>
-                      <th style={{ whiteSpace: 'nowrap' }}>월 기대 기여</th>
+                      {/* 기수(旣遂): 이미 발행된 청구서 기반 확정 성과 → 기여로 인정 */}
+                      <th style={{ whiteSpace: 'nowrap' }}>기여액 <span style={{ fontSize: '10px', color: 'var(--text-muted)', fontWeight: 400 }}>(기수)</span></th>
+                      {/* 미수(未遂): 아직 도래하지 않은 기일의 계획 → 기여 아님, 예정 청구로만 표기 */}
+                      <th style={{ whiteSpace: 'nowrap' }}>월 청구 예정 <span style={{ fontSize: '10px', color: 'var(--text-muted)', fontWeight: 400 }}>(미수)</span></th>
                       <th style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>수정</th>
                     </tr>
                   </thead>
@@ -1317,14 +1319,16 @@ export const Contracts: React.FC = () => {
                       const asset = assets.find(a => a.id === ca.assetId);
                       const isZero = ca.monthlyRentalFee === 0;
 
-                      // ── 확정 기여액: 해당 CA에 실제 발행된 청구 명세의 합 (과거 확정분만)
-                      // billing_details.contractAssetId === ca.id 로 직접 집계
-                      const confirmedContribution = (billingDetails || [])
+                      // ── 기여액 (기수): 이미 발행된 청구 명세 합계만
+                      // "기수된 성과 = 기여" 원칙 — billing_details.contractAssetId로 실청구 누계 집계
+                      // 아직 발행되지 않은 미래 청구는 포함 불가 (미수 → 기여 아님)
+                      const accrualContribution = (billingDetails || [])
                         .filter(bd => bd.contractAssetId === ca.id)
                         .reduce((sum, bd) => sum + (bd.amount || 0), 0);
 
-                      // ── 월 기대 기여: 향후 1개월 기준 정기 렌탈료 (미래 불확정 기대값, 단순 참고용)
-                      const monthlyExpected = ca.monthlyRentalFee || 0;
+                      // ── 월 청구 예정 (미수): 계약상 약정된 월 렌탈료
+                      // 아직 도래하지 않은 기일의 계획 — 기여로 판단하지 않으며, 예정 정보로만 표시
+                      const monthlyScheduled = ca.monthlyRentalFee || 0;
 
                       return (
                         <tr key={ca.id}>
@@ -1339,17 +1343,17 @@ export const Contracts: React.FC = () => {
                           </td>
                           <td style={{ whiteSpace: 'nowrap' }}>{(ca.dailyRentalFee || 0).toLocaleString()}원</td>
                           <td style={{ whiteSpace: 'nowrap' }}>
-                            {/* 실청구 발행 누계 — billing_details 기반 확정값 */}
-                            {confirmedContribution > 0 ? (
-                              <strong style={{ color: '#0070C0' }}>₩{confirmedContribution.toLocaleString()}</strong>
+                            {/* 기수: 실발행 청구 누계 — 이것만이 기여로 인정되는 확정 성과 */}
+                            {accrualContribution > 0 ? (
+                              <strong style={{ color: '#0070C0' }}>₩{accrualContribution.toLocaleString()}</strong>
                             ) : (
                               <span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>청구 없음</span>
                             )}
                           </td>
                           <td style={{ whiteSpace: 'nowrap' }}>
-                            {/* 향후 1개월 기준 기대액 — 참고용, 미확정 */}
-                            <span style={{ color: 'var(--text-secondary)', fontSize: '12px' }}>
-                              {monthlyExpected > 0 ? `${monthlyExpected.toLocaleString()}원/월` : '-'}
+                            {/* 미수: 계획된 정기 청구 예정액 — 기여 아님, 단순 약정 참고 */}
+                            <span style={{ color: 'var(--text-muted)', fontSize: '12px' }}>
+                              {monthlyScheduled > 0 ? `${monthlyScheduled.toLocaleString()}원` : '-'}
                             </span>
                           </td>
                           <td style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>
