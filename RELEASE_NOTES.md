@@ -1,3 +1,12 @@
+# Release Notes (v0.5.3.Build.66 - 2026-08-31 15:28)
+
+## 🐛 [긴급 패치: Billings.tsx React Hook 임포트 누락 런타임 에러 수정]
+
+### 🛠️ 버그 수정
+- **React Hook 임포트 복구**: `Billings.tsx`에서 `useEffect`, `useMemo` 임포트 누락으로 인해 발생했던 브라우저 런타임 ReferenceError 및 화면 블랙아웃 현상을 즉시 수정.
+
+---
+
 # Release Notes (v0.5.3.Build.65 - 2026-08-31 15:26)
 
 ## 💡 [청구 및 수납 대시보드 KPI 카드 추가: 미수납 통장잔액 카드 신설]

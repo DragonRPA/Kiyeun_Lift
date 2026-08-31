@@ -1,6 +1,6 @@
 // @ts-nocheck
 // d:\Kiyeun_Lift\src\pages\Billings.tsx
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
 import { db, Asset, Billing, BillingDetail, ContractHistory, normalizeEndDate } from '../services/db';
 import { Plus, Download, Mail, CheckCircle, Search, DollarSign, Calendar, FileText, Send, Edit3, RotateCcw, AlertTriangle, Check } from 'lucide-react';
