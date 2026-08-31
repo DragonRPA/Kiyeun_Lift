@@ -2815,6 +2815,7 @@ class LocalDB {
       repairConsumables: 'repair_consumables',
       bankTransactions: 'bank_transactions',
       bankMatchingRules: 'bank_matching_rules',
+      bankInitialBalances: 'bank_initial_balances',
       assetInOutLogs: 'asset_inout_logs',
       googleConfigs: 'google_configs',
       vendors: 'vendors',
@@ -2823,10 +2824,15 @@ class LocalDB {
       depreciationLogs: 'depreciation_logs',
       purchaseSettlements: 'purchase_settlements',
       purchaseSettlementItems: 'purchase_settlement_items',
+      settlementPaymentLogs: 'settlement_payment_logs',
       externalLeases: 'external_leases',
       inspectionChecklistItems: 'inspection_checklist_items',
       mechanicConsumableStocks: 'mechanic_consumable_stocks',
-      receivables: 'receivables'
+      receivables: 'receivables',
+      annualLeaveQuotas: 'annual_leave_quotas',
+      leaveUsages: 'leave_usages',
+      overtimeRecords: 'overtime_records',
+      payrollClosings: 'payroll_closings',
     };
     return mapping[key] || key;
   }
@@ -3000,9 +3006,12 @@ class LocalDB {
       this.pendingWrites = [];
     }
 
-    // googleConfigs는 SEED 오염 방지를 위해 Supabase pull 직전 로컬 캐시를 항상 비움
-    // (이전에 SEED 데이터가 localStorage에 캐싱된 경우도 완전히 초기화)
-    this.set('googleConfigs', []);
+    // ✅ [SSOT 원칙] Supabase pull 직전, 모든 테이블의 로컬 캐시를 빈 배열로 초기화한다.
+    // 이전 세션의 구버전 데이터(테스트 데이터, 삭제된 DB 데이터 등)가 로컬에 잔류하여
+    // Supabase fetch 실패 테이블 영역에서 stale 데이터로 오염되는 현상을 원천 차단한다.
+    ALL_DB_KEYS.forEach(key => {
+      this.set(key as keyof LocalDB, []);
+    });
 
     const tables = ALL_DB_KEYS;
 

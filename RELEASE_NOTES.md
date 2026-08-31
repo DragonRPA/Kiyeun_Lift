@@ -1,3 +1,25 @@
+# Release Notes (v0.6.0.Build.4 - 2026-08-31 19:05)
+
+## 🐛 [계약 상세 자산 미표출 버그: LocalStorage 구버전 캐시 오염 및 Supabase 테이블 매핑 누락 수정]
+
+### 🔍 근본 원인 분석
+1. **`mapToSupabaseTable` 매핑 8개 누락**: `bankInitialBalances`, `settlementPaymentLogs`, `annualLeaveQuotas`, `leaveUsages`, `overtimeRecords`, `payrollClosings` 등 6개 키가 `mapToSupabaseTable`에 등록되지 않아 Supabase 조회 시 camelCase 이름 그대로 테이블명으로 사용 → `Could not find the table` 에러.
+2. **`pullFromSupabase` stale 캐시 오염**: 에러 발생 테이블은 localStorage 덮어쓰기를 skip하기 때문에, 이전 세션(테스트/개발 중)에 캐싱된 구버전 `contractAssets` 데이터가 localStorage에 잔류 → 계약 상세 화면에서 테스트 자산이 매핑된 구버전 데이터 또는 아무것도 없는 빈 상태로 표출됨.
+
+### ✅ 수정 내용
+- **`src/services/db.ts` — `mapToSupabaseTable`에 누락된 8개 테이블 매핑 추가**:
+  - `bankInitialBalances` → `bank_initial_balances`
+  - `settlementPaymentLogs` → `settlement_payment_logs`
+  - `annualLeaveQuotas` → `annual_leave_quotas`
+  - `leaveUsages` → `leave_usages`
+  - `overtimeRecords` → `overtime_records`
+  - `payrollClosings` → `payroll_closings`
+- **`pullFromSupabase` SSOT 원칙 강화 (stale 캐시 원천 차단)**:
+  - Supabase pull 직전 `ALL_DB_KEYS` 전체에 대해 localStorage를 빈 배열 `[]`로 선제 초기화하여, 구버전 테스트 데이터가 신규 Supabase 데이터를 오염시키는 현상을 원천 차단.
+  - 이제 새로고침(F5) 시 항상 Supabase에서 최신 데이터만 로드됨.
+
+---
+
 # Release Notes (v0.6.0.Build.3 - 2026-08-31 18:55)
 
 ## 💡 [초기DB 업로드: R2 실물 제원문서 연동 및 자산-계약 양방향 동기화 엔진 정식 내재화]
