@@ -92,6 +92,7 @@ export const SYSTEM_MENU_CONFIG: MenuGroupConfig[] = [
     id: 'grp_system_dev',
     name: '시스템관리 - 개발자',
     items: [
+      { id: 'initial_db_upload', name: '초기DB 업로드' },
       { id: 'google_config', name: '구글 관리자 설정' },
       { id: 'dev_uploader', name: '[개발] DB 데이터 업로더' }
     ]

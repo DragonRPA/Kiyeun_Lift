@@ -43,6 +43,7 @@ import { DelinquencyPage } from './pages/DelinquencyPage';
 import { OutboundInspections } from './pages/outbound_inspections';
 import { DepreciationExecution } from './pages/depreciation_execution';
 import { PurchaseSettlementPage } from './pages/PurchaseSettlementPage';
+import { InitialDbUploader } from './pages/InitialDbUploader';
 import { AgentHeaderBadge } from './components/AgentHeaderBadge';
 import { MirrorSyncProgressToast } from './components/MirrorSyncProgressToast';
 
@@ -219,6 +220,7 @@ const App: React.FC = () => {
       name: '시스템관리 - 개발자',
       icon: <Terminal size={17} />,
       items: [
+        { id: 'initial_db_upload', name: '초기DB 업로드', icon: <DatabaseIcon size={16} />, component: <InitialDbUploader /> },
         { id: 'google_config', name: '구글 관리자 설정', icon: <Settings size={16} />, component: <GoogleConfig /> },
         { id: 'dev_uploader', name: '[개발] DB 데이터 업로더', icon: <DatabaseIcon size={16} />, component: <DevDataUploader /> },
       ]
