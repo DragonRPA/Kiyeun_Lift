@@ -478,6 +478,8 @@ export const Billings: React.FC = () => {
     if (!billing) return;
 
     const customer = customers.find(c => c.id === billing.customerId);
+    const contract = contracts.find(c => c.id === billing.contractId);
+    const site = sites.find(s => s.id === contract?.siteId);
     
     // 💡 수신인 후보군 자동 추출 (고객사 대표 이메일 + 해당 고객사 담당자 이메일 목록)
     const emails: string[] = [];
@@ -492,9 +494,14 @@ export const Billings: React.FC = () => {
       }
     });
 
+    const custName = customer?.name || '고객명';
+    const siteName = site?.name || '현장명';
+    const contractNo = contract?.contractNo || billing.contractId || '계약번호';
+    const ym = billing.billingYm || '';
+
     setMailTo(emails.join(', '));
     setMailCc('');
-    setMailSubject(`[(주)기연엘리베이터] ${getCustName(billing.customerId)} ${billing.billingYm} 거래명세서 및 청구서 안내`);
+    setMailSubject(`[기연리프트] 거래명세서_${ym}_${contractNo}_${custName}_${siteName}`);
     setShowMailModal(true);
   };
 
@@ -515,8 +522,9 @@ export const Billings: React.FC = () => {
     const salesperson = users.find((u: any) => u.id === contract?.salespersonId);
     const custName = customer?.name || '고객사';
     const sName = site?.name || '현장';
+    const contractNo = contract?.contractNo || billing?.contractId || '계약번호';
     const ym = billing?.billingYm || '';
-    const fileName = `[기연리프트]_거래명세서_${custName}_${sName}_${ym}.pdf`;
+    const fileName = `[기연리프트]_거래명세서_${ym}_${contractNo}_${custName}_${sName}.pdf`;
 
     const details = rawDetails.map(d => {
       const ca = contractAssets.find(cAsset => cAsset.id === d.contractAssetId);
@@ -623,8 +631,9 @@ export const Billings: React.FC = () => {
     const salesperson = users.find((u: any) => u.id === contract?.salespersonId);
     const custName = customer?.name || '고객사';
     const sName = site?.name || '현장';
+    const contractNo = contract?.contractNo || billing?.contractId || '계약번호';
     const ym = billing?.billingYm || '';
-    const fileName = `[기연리프트]_거래명세서_${custName}_${sName}_${ym}.xlsx`;
+    const fileName = `[기연리프트]_거래명세서_${ym}_${contractNo}_${custName}_${sName}.xlsx`;
 
     const details = rawDetails.map(d => {
       const ca = contractAssets.find(cAsset => cAsset.id === d.contractAssetId);
@@ -882,8 +891,9 @@ ${items.map((item, idx) => {
           binary += String.fromCharCode(pdfBytes[i]);
         }
         const base64Content = window.btoa(binary);
+        const contractNo = contract?.contractNo || billing?.contractId || '계약번호';
         attachments.push({
-          filename: `거래명세서_${custName}_${sName}_${ym}.pdf`,
+          filename: `[기연리프트]_거래명세서_${ym}_${contractNo}_${custName}_${sName}.pdf`,
           content: base64Content
         });
       } catch (attachErr) {
