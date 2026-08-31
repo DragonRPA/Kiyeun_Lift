@@ -110,11 +110,11 @@ export const Billings: React.FC = () => {
   const [payDate, setPayDate] = useState(new Date().toISOString().split('T')[0]);
   const [payMethod, setPayMethod] = useState('BANK_TRANSFER');
   const [payMemo, setPayMemo] = useState('');
-  // v2: 다중 입금건 선택 상태 { txId → usedAmount } + 선수금(예치금) 상계 모드
-  const [payMode, setPayMode] = useState<'DEPOSIT' | 'DIRECT' | 'PREPAID'>('DEPOSIT');
+  // 2대 전용 탭: 통장입금액 수납 / 카드결제
+  const [payMode, setPayMode] = useState<'DEPOSIT' | 'CARD'>('DEPOSIT');
   const [depositLinkDraft, setDepositLinkDraft] = useState<Record<string, number>>({}); // txId -> usedAmount
-  const [directAmount, setDirectAmount] = useState(0); // 직접입력 모드 금액
-  const [prepaidAmount, setPrepaidAmount] = useState(0); // 선수금 상계 모드 금액
+  const [cardApprovalNo, setCardApprovalNo] = useState(''); // 카드전표번호(승인번호)
+  const [cardAmount, setCardAmount] = useState(0); // 카드 결제금액
   // 마법사 연동 수리비 ID 목록
   const [selectedRepairIdsForWizard, setSelectedRepairIdsForWizard] = useState<string[]>([]);
   // 통합 검색 필터 (고객명/입금자명/계좌번호/비고)
@@ -360,9 +360,10 @@ export const Billings: React.FC = () => {
     setPayMethod('BANK_TRANSFER');
     setPayMemo('');
     setPayMode('DEPOSIT');
-    setDirectAmount(unpaidAmount);
+    setCardApprovalNo('');
+    setCardAmount(unpaidAmount);
 
-    // 고객명 기준 검색 및 등록 계좌 일치 건 매핑 후 오래된 것부터 자동 할당
+    // 고객명 기준 검색 및 등록 계좌 일치 건 매핑 후 오래된 것부터 자동 할당 (선입선출)
     const targetCust = customers.find(c => c.id === custId);
     const regAccounts = targetCust?.bankAccounts || [];
     const query = custName.trim().toLowerCase();
@@ -371,7 +372,7 @@ export const Billings: React.FC = () => {
       .filter(t => {
         if (!t.isDeposit) return false;
 
-        // 1) 고객사 등록 계좌번호와 일치 여부 검화
+        // 1) 고객사 등록 계좌번호와 일치 여부 검사
         const senderAccNorm = (t.senderAccount || '').replace(/[^0-9]/g, '');
         const isRegAccMatch = senderAccNorm && regAccounts.some(a => {
           const norm = a.accountNumber.replace(/[^0-9]/g, '');
@@ -392,7 +393,6 @@ export const Billings: React.FC = () => {
       .filter(t => t.balance > 0)
       .sort((a, b) => a.transactionDate.localeCompare(b.transactionDate));
 
-
     const draft: Record<string, number> = {};
     let remaining = unpaidAmount;
     for (const dep of matchedDeposits) {
@@ -405,26 +405,9 @@ export const Billings: React.FC = () => {
     setShowPayModal(true);
   };
 
-
   const handlePaySubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!canSave || !payBillingId) return;
-
-    if (payMode === 'PREPAID') {
-      if (prepaidAmount <= 0) {
-        showErrorModal('상계할 선수금 금액을 입력해 주십시오.', '수납 오류');
-        return;
-      }
-      try {
-        await applyPrepaidBalanceForBilling(payBillingId, prepaidAmount, payMemo);
-        alert('선수금(예치금) 상계 수납 처리가 완료되었습니다.');
-        setShowPayModal(false);
-        setPayBillingId('');
-      } catch (err: any) {
-        // applyPrepaidBalanceForBilling 내부에서 showErrorModal 호출됨
-      }
-      return;
-    }
 
     if (payMode === 'DEPOSIT') {
       const links = Object.entries(depositLinkDraft)
@@ -457,13 +440,20 @@ export const Billings: React.FC = () => {
         memo: payMemo || `통장입금 연동 ${links.length}건 합산`,
         depositLinks: links
       });
-    } else {
-      if (directAmount <= 0) return;
+    } else if (payMode === 'CARD') {
+      if (!cardApprovalNo.trim()) {
+        showErrorModal('카드전표번호(승인번호)를 입력해 주십시오.', '수납 오류');
+        return;
+      }
+      if (cardAmount <= 0) {
+        showErrorModal('결제금액을 1원 이상 입력해 주십시오.', '수납 오류');
+        return;
+      }
       receivePayment(payBillingId, {
         paymentDate: payDate,
-        amount: directAmount,
-        method: payMethod,
-        memo: payMemo
+        amount: cardAmount,
+        method: 'CARD',
+        memo: payMemo ? `${payMemo} [카드승인: ${cardApprovalNo.trim()}]` : `카드결제 [승인번호: ${cardApprovalNo.trim()}]`
       });
     }
 
@@ -2715,11 +2705,21 @@ ${items.map((item, idx) => {
       {/* 수납 입력 모달 */}
       {showPayModal && (() => {
         const payBilling = billings.find(b => b.id === payBillingId);
-        const unpaid = payBilling ? Math.max(0, (payBilling.totalAmount || 0) - (payBilling.paidAmount || 0)) : 0;
         const custId = payBilling?.customerId;
-        const targetCust = customers.find(c => c.id === custId);
-        const custPrepaidBal = targetCust?.prepaidBalance || 0;
+        const billingSupply = payBilling?.totalAmount || 0;
+        const billingVat = Math.round(billingSupply * 0.1);
+        const billingGrandTotal = billingSupply + billingVat; // 당월 청구 총액 (VAT포함)
+        const unpaid = payBilling ? Math.max(0, billingGrandTotal - (payBilling.paidAmount || 0)) : 0; // 이번 청구서 미납액
         const billingNo = payBillingId;
+
+        // 고객사 전체 미수납 잔액 (해당 고객사의 모든 청구서 미수잔액 합계)
+        const customerTotalUnpaid = billings
+          .filter(b => b.customerId === custId && b.status !== 'REJECTED')
+          .reduce((sum, b) => {
+            const s = b.totalAmount || 0;
+            const grand = s + Math.round(s * 0.1);
+            return sum + Math.max(0, grand - (b.paidAmount || 0));
+          }, 0);
 
         // ── 통합 검색 필터: 고객명 / 입금자명 / 계좌번호 / 비고 ──
         const searchQ = depSearchQuery.trim().toLowerCase();
@@ -2736,27 +2736,35 @@ ${items.map((item, idx) => {
             );
           })
           .map(dep => ({ ...dep, balance: getDepositBalance(dep.id) }))
-          .sort((a, b) => a.transactionDate.localeCompare(b.transactionDate)); // 오래된 입금 우선
+          .sort((a, b) => a.transactionDate.localeCompare(b.transactionDate)); // 오래된 입금 우선 (FIFO)
 
-        // 실시간 이번 수납 합계 계산
+        // 이번 수납 합계 계산
         let payAmount = 0;
         if (payMode === 'DEPOSIT') {
           payAmount = Object.values(depositLinkDraft).reduce((s, v) => s + (Number(v) || 0), 0);
-        } else if (payMode === 'PREPAID') {
-          payAmount = Number(prepaidAmount) || 0;
         } else {
-          payAmount = Number(directAmount) || 0;
+          payAmount = Number(cardAmount) || 0;
         }
 
-        // 실시간 수납 후 잔액 및 초과 수치
-        const remainingUnpaid = Math.max(0, unpaid - payAmount);
-        const overAmount = Math.max(0, payAmount - unpaid);
+        // 수납 후 계산 수치들
+        const remainingBilling = Math.max(0, unpaid - payAmount); // 수납후 청구잔액
+        const remainingCustUnpaid = Math.max(0, customerTotalUnpaid - payAmount); // 수납 후 미수납 잔액
+        const isOverMatch = payAmount > unpaid;
         const isExactMatch = payAmount === unpaid && unpaid > 0;
         const isPartialMatch = payAmount > 0 && payAmount < unpaid;
-        const isOverMatch = payAmount > unpaid;
-        const availableTotal = filteredDeposits.filter(d => d.balance > 0).reduce((s, d) => s + d.balance, 0);
 
-        // 개별 입금건 [전액] 적용 핸들러 (남은 미수납 필요액 또는 해당 건 잔액 한도 자동 맞춤)
+        // 통장 가용 잔액 합계 및 수납 후 잔액 합계
+        const availableTotal = filteredDeposits.filter(d => d.balance > 0).reduce((s, d) => s + d.balance, 0);
+        const totalPostDepositBalance = filteredDeposits.reduce((s, d) => {
+          const alloc = depositLinkDraft[d.id] || 0;
+          return s + Math.max(0, d.balance - alloc);
+        }, 0);
+
+        // 카드 결제 공급가 / 부가세 자동 분리 계산
+        const cardSupply = Math.round(payAmount / 1.1);
+        const cardVat = payAmount - cardSupply;
+
+        // 개별 입금건 [전액] 적용 핸들러 (남은 청구 필요액 또는 해당 건 잔액 한도 자동 채움)
         const applyFullDeposit = (depId: string, depBalance: number) => {
           if (depBalance <= 0) return;
           const otherAlloc = Object.entries(depositLinkDraft)
@@ -2767,7 +2775,7 @@ ${items.map((item, idx) => {
           setDepositLinkDraft(prev => ({ ...prev, [depId]: alloc }));
         };
 
-        // 개별 입금건 [0원/제외] 핸들러
+        // 개별 입금건 [0원] 핸들러
         const removeDeposit = (depId: string) => {
           setDepositLinkDraft(prev => {
             const next = { ...prev };
@@ -2776,7 +2784,7 @@ ${items.map((item, idx) => {
           });
         };
 
-        // 전체 입금 선입선출 자동 완납 배분
+        // 오래된 순 선입선출(FIFO) 자동 완납 배분
         const autoDistributeFifo = () => {
           const next: Record<string, number> = {};
           let rem = unpaid;
@@ -2789,338 +2797,268 @@ ${items.map((item, idx) => {
           setDepositLinkDraft(next);
         };
 
-        // 매핑 근거 판별
-        const getMatchReason = (dep: typeof filteredDeposits[0]) => {
-          const regAccs = targetCust?.bankAccounts || [];
-          const senderAccNorm = (dep.senderAccount || '').replace(/[^0-9]/g, '');
-
-          const matchedRegAcc = senderAccNorm ? regAccs.find(a => {
-            const norm = a.accountNumber.replace(/[^0-9]/g, '');
-            return norm && (norm === senderAccNorm || senderAccNorm.includes(norm) || norm.includes(senderAccNorm));
-          }) : null;
-          if (matchedRegAcc) return { label: `등록계좌(${matchedRegAcc.bankName})`, color: '#EC4899' };
-
-          const mappedCustName = customers.find(c => c.id === dep.customerId)?.name || '';
-          if (dep.customerId === custId) return { label: '고객사 매핑', color: '#10B981' };
-          const custName = targetCust?.name?.toLowerCase() || '';
-          if (dep.senderName.toLowerCase().includes(custName) || (custName && custName.includes(dep.senderName.toLowerCase()))) return { label: '입금자명 일치', color: '#6366F1' };
-          if (searchQ && mappedCustName.toLowerCase().includes(searchQ)) return { label: '고객명 검색', color: '#F59E0B' };
-          if (searchQ && (dep.senderAccount || '').toLowerCase().includes(searchQ)) return { label: '계좌번호 검색', color: '#8B5CF6' };
-          return { label: '비고 검색', color: '#64748B' };
-        };
-
         return (
           <div style={{
             position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-            backgroundColor: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '16px'
+            backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '16px'
           }}>
-            <form onSubmit={handlePaySubmit} className="card" style={{ width: '100%', maxWidth: '640px', backgroundColor: 'var(--bg-card)', maxHeight: '92vh', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0' }}>
+            <form onSubmit={handlePaySubmit} className="card" style={{ width: '100%', maxWidth: '820px', backgroundColor: 'var(--bg-card)', maxHeight: '92vh', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0', padding: '20px' }}>
 
               {/* 헤더 */}
-              <div style={{ marginBottom: '14px' }}>
-                <h3 className="card-title" style={{ marginBottom: '4px' }}>수납 처리</h3>
-                <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
-                  {getCustName(custId || '')} — 청구번호: <strong>{billingNo}</strong>
-                </div>
-              </div>
-
-              {/* 🌟 3단 핵심 정산 수치 대시보드 바 (미수납잔액 - 수납액 = 수납 후 잔액) */}
-              <div style={{
-                display: 'grid',
-                gridTemplateColumns: '1fr 1fr 1fr',
-                gap: '10px',
-                padding: '12px 16px',
-                borderRadius: '8px',
-                background: isOverMatch ? 'rgba(239,68,68,0.08)' : isExactMatch ? 'rgba(16,185,129,0.08)' : 'var(--bg-app)',
-                border: `1px solid ${isOverMatch ? '#EF4444' : isExactMatch ? '#10B981' : isPartialMatch ? '#F59E0B' : 'var(--border)'}`,
-                marginBottom: '16px'
-              }}>
-                {/* 1. 미수납 잔액 */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                  <span style={{ fontSize: '11px', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>미수납 잔액</span>
-                  <span style={{ fontSize: '16px', fontWeight: '700', color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
-                    {unpaid.toLocaleString()}원
-                  </span>
-                </div>
-
-                {/* 2. 이번 수납액 */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                  <span style={{ fontSize: '11px', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>이번 수납액 (차감)</span>
-                  <span style={{
-                    fontSize: '16px',
-                    fontWeight: '700',
-                    color: isOverMatch ? '#EF4444' : isExactMatch ? '#10B981' : isPartialMatch ? '#F59E0B' : 'var(--text-secondary)',
-                    whiteSpace: 'nowrap'
-                  }}>
-                    {payAmount.toLocaleString()}원
-                  </span>
-                </div>
-
-                {/* 3. 수납 후 잔액 & 상태 배지 */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', alignItems: 'flex-end' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    <span style={{ fontSize: '11px', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>수납 후 잔액</span>
-                    {isExactMatch && <span style={{ fontSize: '10px', padding: '1px 5px', borderRadius: '4px', background: '#10B98125', color: '#10B981', fontWeight: '700', whiteSpace: 'nowrap' }}>✅ 완납</span>}
-                    {isPartialMatch && <span style={{ fontSize: '10px', padding: '1px 5px', borderRadius: '4px', background: '#F59E0B25', color: '#F59E0B', fontWeight: '700', whiteSpace: 'nowrap' }}>⚡ 부분수납</span>}
-                    {isOverMatch && <span style={{ fontSize: '10px', padding: '1px 5px', borderRadius: '4px', background: '#EF444425', color: '#EF4444', fontWeight: '700', whiteSpace: 'nowrap' }}>⚠️ 초과</span>}
+              <div style={{ marginBottom: '14px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <div>
+                  <h3 className="card-title" style={{ marginBottom: '4px', fontSize: '18px' }}>수납 처리</h3>
+                  <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
+                    고객사: <strong style={{ color: 'var(--text-primary)' }}>{getCustName(custId || '')}</strong> — 청구번호: <strong>{billingNo}</strong>
                   </div>
-                  <span style={{
-                    fontSize: '16px',
-                    fontWeight: '700',
-                    color: isOverMatch ? '#EF4444' : remainingUnpaid === 0 ? '#10B981' : '#F59E0B',
-                    whiteSpace: 'nowrap'
-                  }}>
-                    {isOverMatch ? `+${overAmount.toLocaleString()}원 초과` : `${remainingUnpaid.toLocaleString()}원`}
-                  </span>
                 </div>
               </div>
 
-              {/* 모드 탭 */}
+              {/* 🌟 2개 탭 버튼 단일화: 통장입금액 수납 / 카드결제 */}
               <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', marginBottom: '16px' }}>
                 <button type="button" onClick={() => setPayMode('DEPOSIT')}
-                  style={{ padding: '7px 16px', fontSize: '13px', fontWeight: '600', border: 'none', background: 'none', cursor: 'pointer',
-                    borderBottom: payMode === 'DEPOSIT' ? '2px solid var(--primary)' : '2px solid transparent',
-                    color: payMode === 'DEPOSIT' ? 'var(--primary)' : 'var(--text-secondary)' }}>
-                  🏦 통장입금 연동
+                  style={{
+                    padding: '8px 20px', fontSize: '13px', fontWeight: '700', border: 'none', background: 'none', cursor: 'pointer',
+                    borderBottom: payMode === 'DEPOSIT' ? '3px solid var(--primary)' : '3px solid transparent',
+                    color: payMode === 'DEPOSIT' ? 'var(--primary)' : 'var(--text-secondary)'
+                  }}>
+                  통장입금액 수납 (Tab)
                 </button>
                 <button type="button" onClick={() => {
-                  setPayMode('PREPAID');
-                  setPrepaidAmount(Math.min(unpaid, custPrepaidBal));
+                  setPayMode('CARD');
+                  setCardAmount(unpaid);
                 }}
-                  style={{ padding: '7px 16px', fontSize: '13px', fontWeight: '600', border: 'none', background: 'none', cursor: 'pointer',
-                    borderBottom: payMode === 'PREPAID' ? '2px solid var(--primary)' : '2px solid transparent',
-                    color: payMode === 'PREPAID' ? 'var(--primary)' : 'var(--text-secondary)' }}>
-                  💰 선수금(예치금) 상계
-                </button>
-                <button type="button" onClick={() => {
-                  setPayMode('DIRECT');
-                  if (!directAmount) setDirectAmount(unpaid);
-                }}
-                  style={{ padding: '7px 16px', fontSize: '13px', fontWeight: '600', border: 'none', background: 'none', cursor: 'pointer',
-                    borderBottom: payMode === 'DIRECT' ? '2px solid var(--primary)' : '2px solid transparent',
-                    color: payMode === 'DIRECT' ? 'var(--primary)' : 'var(--text-secondary)' }}>
-                  ✏️ 직접 입력
+                  style={{
+                    padding: '8px 20px', fontSize: '13px', fontWeight: '700', border: 'none', background: 'none', cursor: 'pointer',
+                    borderBottom: payMode === 'CARD' ? '3px solid var(--primary)' : '3px solid transparent',
+                    color: payMode === 'CARD' ? 'var(--primary)' : 'var(--text-secondary)'
+                  }}>
+                  카드결제 (Tab)
                 </button>
               </div>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '20px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', marginBottom: '20px' }}>
 
+                {/* ═══════════════ [탭 1: 통장입금액 수납] ═══════════════ */}
                 {payMode === 'DEPOSIT' && (
                   <>
-                    {/* ── 통합 검색 필터 ── */}
-                    <div style={{ padding: '12px', borderRadius: '8px', background: 'rgba(99,102,241,0.06)', border: '1px solid rgba(99,102,241,0.2)' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                        <label style={{ fontSize: '12px', color: 'var(--text-secondary)', margin: 0, display: 'block' }}>
-                          통합 검색 — 고객명 · 입금자명 · 계좌번호 · 비고
-                        </label>
-                        {filteredDeposits.filter(d => d.balance > 0).length > 0 && (
-                          <button type="button" onClick={autoDistributeFifo}
-                            style={{ padding: '2px 8px', borderRadius: '4px', background: 'var(--primary)', color: '#fff', border: 'none', cursor: 'pointer', fontSize: '11px', fontWeight: '600' }}>
-                            ⚡ 선입선출 자동 완납 채우기
-                          </button>
-                        )}
-                      </div>
-                      <div style={{ display: 'flex', gap: '8px' }}>
+                    {/* 🌟 1. 상단 5단 실시간 정산 서머리 테이블 (이미지 1 표준) */}
+                    <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'center', border: '1px solid var(--border)', background: 'var(--bg-app)', borderRadius: '6px', overflow: 'hidden' }}>
+                      <thead>
+                        <tr style={{ background: 'rgba(255,255,255,0.03)', borderBottom: '1px solid var(--border)' }}>
+                          <th style={{ padding: '8px 6px', fontSize: '12px', whiteSpace: 'nowrap', borderRight: '1px solid var(--border)' }}>미수납 잔액</th>
+                          <th style={{ padding: '8px 6px', fontSize: '12px', whiteSpace: 'nowrap', borderRight: '1px solid var(--border)' }}>청구액</th>
+                          <th style={{ padding: '8px 6px', fontSize: '12px', whiteSpace: 'nowrap', borderRight: '1px solid var(--border)', color: 'var(--primary)' }}>이번 수납액</th>
+                          <th style={{ padding: '8px 6px', fontSize: '12px', whiteSpace: 'nowrap', borderRight: '1px solid var(--border)' }}>수납후 청구잔액</th>
+                          <th style={{ padding: '8px 6px', fontSize: '12px', whiteSpace: 'nowrap' }}>수납 후 미수납 잔액</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr style={{ fontWeight: '700', fontSize: '14px' }}>
+                          <td style={{ padding: '10px 6px', borderRight: '1px solid var(--border)' }}>{customerTotalUnpaid.toLocaleString()} 원</td>
+                          <td style={{ padding: '10px 6px', borderRight: '1px solid var(--border)' }}>{billingGrandTotal.toLocaleString()} 원</td>
+                          <td style={{ padding: '10px 6px', borderRight: '1px solid var(--border)', color: isOverMatch ? '#EF4444' : 'var(--primary)' }}>
+                            {payAmount.toLocaleString()} 원
+                          </td>
+                          <td style={{ padding: '10px 6px', borderRight: '1px solid var(--border)', color: remainingBilling === 0 ? '#10B981' : isOverMatch ? '#EF4444' : 'var(--text-primary)' }}>
+                            {isOverMatch ? `+${(payAmount - unpaid).toLocaleString()}원 초과` : `${remainingBilling.toLocaleString()} 원`}
+                            {remainingBilling === 0 && !isOverMatch && <span style={{ fontSize: '11px', color: '#10B981', marginLeft: '4px' }}> (0 원)</span>}
+                          </td>
+                          <td style={{ padding: '10px 6px', color: '#F59E0B' }}>{remainingCustUnpaid.toLocaleString()} 원</td>
+                        </tr>
+                      </tbody>
+                    </table>
+
+                    {/* ── 검색 필터 & 선입선출 자동수납 ── */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px' }}>
+                      <div style={{ display: 'flex', gap: '8px', flex: 1, maxWidth: '450px' }}>
                         <input type="text" value={depSearchQuery} onChange={e => {
                           setDepSearchQuery(e.target.value);
                           setDepositLinkDraft({});
                         }}
-                          placeholder="예: 세보엠이씨 / 123-456-789012 / 7월 렌탈료"
-                          style={{ flex: 1 }} />
+                          placeholder="고객명 · 입금자명 · 계좌번호 · 비고 검색"
+                          style={{ flex: 1, padding: '6px 10px', fontSize: '12px' }} />
                         <button type="button" onClick={() => { setDepSearchQuery(''); setDepositLinkDraft({}); }}
                           style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid var(--border)', background: 'var(--bg-app)', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '12px', whiteSpace: 'nowrap' }}>
                           초기화
                         </button>
                       </div>
-                      <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '5px' }}>
-                        검색 결과: <strong>{filteredDeposits.length}건</strong>
-                        {filteredDeposits.filter(d => d.balance > 0).length > 0 && (
-                          <span> / 사용가능 잔액 합계: <strong style={{ color: '#10B981' }}>{availableTotal.toLocaleString()}원</strong></span>
-                        )}
-                      </div>
+
+                      {filteredDeposits.filter(d => d.balance > 0).length > 0 && (
+                        <button type="button" onClick={autoDistributeFifo}
+                          style={{ padding: '6px 12px', borderRadius: '6px', background: 'var(--primary)', color: '#fff', border: 'none', cursor: 'pointer', fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap' }}>
+                          ⚡ 선입선출 자동수납
+                        </button>
+                      )}
                     </div>
 
-                    {/* ── 입금 목록 ── */}
+                    {/* 🌟 2. 입금 내역 대사 그리드 테이블 (이미지 1 표준) */}
                     {filteredDeposits.length === 0 ? (
-                      <div style={{ padding: '20px', borderRadius: '8px', background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.2)', color: '#EF4444', fontSize: '13px', textAlign: 'center' }}>
-                        검색 결과가 없습니다.<br />
-                        <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>고객명, 입금자명, 계좌번호, 비고 등으로 검색하거나 직접 입력 탭을 사용하세요.</span>
+                      <div style={{ padding: '24px', borderRadius: '8px', background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.2)', color: '#EF4444', fontSize: '13px', textAlign: 'center' }}>
+                        조회된 통장 입금 내역이 없습니다.<br />
+                        <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>검색어를 초기화하거나 카드결제 탭을 이용해 주십시오.</span>
                       </div>
                     ) : (
-                      <div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                          <label style={{ margin: 0, fontSize: '12px', fontWeight: '600' }}>입금건별 수납액 지정 (전액 / 부분 / 0원)</label>
-                          {Object.keys(depositLinkDraft).length > 0 && (
-                            <button type="button" onClick={() => setDepositLinkDraft({})}
-                              style={{ fontSize: '11px', color: 'var(--text-secondary)', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>
-                              선택 전체 초기화
-                            </button>
-                          )}
-                        </div>
+                      <div style={{ border: '1px solid var(--border)', borderRadius: '6px', overflow: 'hidden' }}>
+                        <div style={{ maxHeight: '280px', overflowY: 'auto' }}>
+                          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+                            <thead>
+                              <tr style={{ background: 'var(--bg-app)', borderBottom: '1px solid var(--border)', position: 'sticky', top: 0, zIndex: 1 }}>
+                                <th style={{ padding: '8px 10px', textAlign: 'center', whiteSpace: 'nowrap', borderRight: '1px solid var(--border)', width: '95px' }}>입금일</th>
+                                <th style={{ padding: '8px 10px', textAlign: 'left', whiteSpace: 'nowrap', borderRight: '1px solid var(--border)' }}>비고</th>
+                                <th style={{ padding: '8px 10px', textAlign: 'right', whiteSpace: 'nowrap', borderRight: '1px solid var(--border)', width: '110px' }}>입금액</th>
+                                <th style={{ padding: '8px 10px', textAlign: 'center', whiteSpace: 'nowrap', borderRight: '1px solid var(--border)', width: '90px' }}>버튼배치</th>
+                                <th style={{ padding: '8px 10px', textAlign: 'right', whiteSpace: 'nowrap', borderRight: '1px solid var(--border)', width: '120px' }}>수납액</th>
+                                <th style={{ padding: '8px 10px', textAlign: 'right', whiteSpace: 'nowrap', width: '110px' }}>수납후잔액</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {filteredDeposits.map(dep => {
+                                const allocatedAmt = depositLinkDraft[dep.id] || 0;
+                                const postBal = Math.max(0, dep.balance - allocatedAmt);
+                                const isAllocated = allocatedAmt > 0;
 
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '270px', overflowY: 'auto', paddingRight: '4px' }}>
-                          {filteredDeposits.map(dep => {
-                            const isAllocated = depositLinkDraft[dep.id] !== undefined && depositLinkDraft[dep.id] > 0;
-                            const inputVal = depositLinkDraft[dep.id] ?? 0;
-                            const isExhausted = dep.balance <= 0;
-                            const matchReason = getMatchReason(dep);
-                            const mappedCustName = customers.find(c => c.id === dep.customerId)?.name;
-
-                            return (
-                              <div key={dep.id} style={{
-                                display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', padding: '10px 12px', borderRadius: '8px',
-                                border: `1px solid ${isAllocated ? 'var(--primary)' : isExhausted ? 'var(--border)' : 'var(--border)'}`,
-                                background: isAllocated ? 'rgba(99,102,241,0.08)' : isExhausted ? 'rgba(0,0,0,0.02)' : 'var(--bg-app)',
-                                opacity: isExhausted && !isAllocated ? 0.45 : 1
-                              }}>
-                                {/* 좌측 입금 정보 */}
-                                <div style={{ flex: 1, minWidth: 0 }}>
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                                    <span style={{ fontSize: '13px', fontWeight: '700', whiteSpace: 'nowrap' }}>{dep.senderName}</span>
-                                    <span style={{ fontSize: '10px', padding: '1px 6px', borderRadius: '10px', fontWeight: '600', whiteSpace: 'nowrap',
-                                      background: `${matchReason.color}18`, color: matchReason.color, border: `1px solid ${matchReason.color}40` }}>
-                                      {matchReason.label}
-                                    </span>
-                                    {mappedCustName && (
-                                      <span style={{ fontSize: '11px', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>({mappedCustName})</span>
-                                    )}
-                                  </div>
-                                  <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                                    <span>입금일: {dep.transactionDate.split(' ')[0]}</span>
-                                    <span>원금: {dep.depositAmount.toLocaleString()}원</span>
-                                    {dep.senderAccount && <span>계좌: {dep.senderAccount}</span>}
-                                    {dep.memo && <span>비고: {dep.memo}</span>}
-                                  </div>
-                                </div>
-
-                                {/* 우측 잔액 및 [전액]/[0원]/[입력창] 액션 */}
-                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px', flexShrink: 0 }}>
-                                  <span style={{ fontSize: '12px', fontWeight: '700', color: isExhausted ? 'var(--text-muted)' : '#10B981', whiteSpace: 'nowrap' }}>
-                                    {isExhausted ? '소진완료' : `가용잔액 ${dep.balance.toLocaleString()}원`}
-                                  </span>
-
-                                  {!isExhausted && (
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                      <button type="button"
-                                        onClick={() => applyFullDeposit(dep.id, dep.balance)}
-                                        style={{ padding: '3px 6px', fontSize: '11px', borderRadius: '4px', background: 'var(--primary)', color: '#fff', border: 'none', cursor: 'pointer', fontWeight: '600', whiteSpace: 'nowrap' }}
-                                        title="남은 미수납 필요액 또는 전액 자동 입력">
-                                        전액
-                                      </button>
-                                      <button type="button"
-                                        onClick={() => removeDeposit(dep.id)}
-                                        style={{ padding: '3px 6px', fontSize: '11px', borderRadius: '4px', background: 'var(--bg-app)', color: 'var(--text-secondary)', border: '1px solid var(--border)', cursor: 'pointer', whiteSpace: 'nowrap' }}
-                                        title="수납 적용 제외">
-                                        0원
-                                      </button>
+                                return (
+                                  <tr key={dep.id} style={{ borderBottom: '1px solid var(--border)', background: isAllocated ? 'rgba(99,102,241,0.06)' : undefined }}>
+                                    {/* 입금일 */}
+                                    <td style={{ padding: '7px 10px', textAlign: 'center', whiteSpace: 'nowrap', borderRight: '1px solid var(--border)' }}>
+                                      {dep.transactionDate.split(' ')[0]}
+                                    </td>
+                                    {/* 비고 */}
+                                    <td style={{ padding: '7px 10px', textAlign: 'left', borderRight: '1px solid var(--border)' }}>
+                                      <span style={{ fontWeight: '600' }}>{dep.senderName}</span>
+                                      {dep.memo && <span style={{ color: 'var(--text-secondary)', marginLeft: '6px', fontSize: '11px' }}>({dep.memo})</span>}
+                                    </td>
+                                    {/* 입금액 (가용잔액) */}
+                                    <td style={{ padding: '7px 10px', textAlign: 'right', borderRight: '1px solid var(--border)', fontWeight: '600', whiteSpace: 'nowrap' }}>
+                                      {dep.balance.toLocaleString()} 원
+                                    </td>
+                                    {/* 버튼배치 (전액 / 0원) */}
+                                    <td style={{ padding: '7px 10px', textAlign: 'center', borderRight: '1px solid var(--border)', whiteSpace: 'nowrap' }}>
+                                      <div style={{ display: 'inline-flex', gap: '4px' }}>
+                                        <button type="button"
+                                          onClick={() => applyFullDeposit(dep.id, dep.balance)}
+                                          disabled={dep.balance <= 0}
+                                          style={{ padding: '2px 6px', fontSize: '11px', borderRadius: '4px', background: 'var(--primary)', color: '#fff', border: 'none', cursor: 'pointer', fontWeight: '600' }}>
+                                          전액
+                                        </button>
+                                        <button type="button"
+                                          onClick={() => removeDeposit(dep.id)}
+                                          style={{ padding: '2px 6px', fontSize: '11px', borderRadius: '4px', background: 'var(--bg-app)', color: 'var(--text-secondary)', border: '1px solid var(--border)', cursor: 'pointer' }}>
+                                          0원
+                                        </button>
+                                      </div>
+                                    </td>
+                                    {/* 수납액 인풋 */}
+                                    <td style={{ padding: '4px 8px', textAlign: 'right', borderRight: '1px solid var(--border)', whiteSpace: 'nowrap' }}>
                                       <input type="number"
-                                        value={inputVal || ''}
+                                        value={allocatedAmt || ''}
                                         max={dep.balance}
                                         min={0}
                                         onChange={e => {
                                           const v = Math.min(parseInt(e.target.value) || 0, dep.balance);
-                                          if (v <= 0) {
-                                            removeDeposit(dep.id);
-                                          } else {
-                                            setDepositLinkDraft(prev => ({ ...prev, [dep.id]: v }));
-                                          }
+                                          if (v <= 0) removeDeposit(dep.id);
+                                          else setDepositLinkDraft(prev => ({ ...prev, [dep.id]: v }));
                                         }}
-                                        style={{ width: '105px', padding: '3px 6px', fontSize: '12px', textAlign: 'right', borderRadius: '4px', border: `1px solid ${isAllocated ? 'var(--primary)' : 'var(--border)'}` }}
-                                        placeholder="금액입력(원)"
+                                        style={{ width: '100px', padding: '3px 6px', fontSize: '12px', textAlign: 'right', borderRadius: '4px', border: `1px solid ${isAllocated ? 'var(--primary)' : 'var(--border)'}` }}
+                                        placeholder="0"
                                       />
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-                            );
-                          })}
+                                    </td>
+                                    {/* 수납후잔액 */}
+                                    <td style={{ padding: '7px 10px', textAlign: 'right', fontWeight: '600', color: postBal === 0 ? 'var(--text-secondary)' : '#10B981', whiteSpace: 'nowrap' }}>
+                                      {postBal.toLocaleString()} 원
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                            <tfoot>
+                              <tr style={{ background: 'var(--bg-app)', borderTop: '2px solid var(--border)', fontWeight: '700' }}>
+                                <td colSpan={2} style={{ padding: '8px 10px', textAlign: 'center', borderRight: '1px solid var(--border)' }}>합계</td>
+                                <td style={{ padding: '8px 10px', textAlign: 'right', borderRight: '1px solid var(--border)' }}>{availableTotal.toLocaleString()} 원</td>
+                                <td style={{ borderRight: '1px solid var(--border)' }}></td>
+                                <td style={{ padding: '8px 10px', textAlign: 'right', borderRight: '1px solid var(--border)', color: 'var(--primary)' }}>{payAmount.toLocaleString()} 원</td>
+                                <td style={{ padding: '8px 10px', textAlign: 'right', color: '#10B981' }}>{totalPostDepositBalance.toLocaleString()} 원</td>
+                              </tr>
+                            </tfoot>
+                          </table>
                         </div>
                       </div>
                     )}
                   </>
                 )}
 
-                {payMode === 'PREPAID' && (
-                  <div style={{ padding: '16px', borderRadius: '8px', background: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.2)' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                      <div>
-                        <span style={{ fontSize: '13px', fontWeight: '600', display: 'block' }}>고객사 보유 선수금(예치금)</span>
-                        <span style={{ fontSize: '18px', fontWeight: '700', color: '#F59E0B' }}>{custPrepaidBal.toLocaleString()}원</span>
-                      </div>
-                      <div style={{ display: 'flex', gap: '6px' }}>
-                        <button type="button" onClick={() => setPrepaidAmount(Math.min(unpaid, custPrepaidBal))}
-                          style={{ padding: '4px 10px', borderRadius: '4px', background: '#F59E0B', color: '#fff', border: 'none', cursor: 'pointer', fontSize: '12px', fontWeight: '600' }}>
-                          전액 상계
-                        </button>
-                        <button type="button" onClick={() => setPrepaidAmount(0)}
-                          style={{ padding: '4px 10px', borderRadius: '4px', background: 'var(--bg-app)', color: 'var(--text-secondary)', border: '1px solid var(--border)', cursor: 'pointer', fontSize: '12px' }}>
-                          0원
-                        </button>
-                      </div>
-                    </div>
-                    <div>
-                      <label style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '4px', display: 'block' }}>상계 처리할 금액 (원)</label>
-                      <input type="number"
-                        value={prepaidAmount || ''}
-                        max={Math.min(unpaid, custPrepaidBal)}
-                        min={0}
-                        onChange={e => setPrepaidAmount(Math.min(parseInt(e.target.value) || 0, Math.min(unpaid, custPrepaidBal)))}
-                        style={{ width: '100%', fontSize: '14px', fontWeight: '600', padding: '8px 12px' }}
-                        placeholder="상계 금액 입력" />
-                    </div>
+                {/* ═══════════════ [탭 2: 카드결제] ═══════════════ */}
+                {payMode === 'CARD' && (
+                  <div style={{ border: '1px solid var(--border)', borderRadius: '6px', overflow: 'hidden' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                      <tbody>
+                        <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                          <th style={{ padding: '10px 14px', background: 'var(--bg-app)', width: '170px', textAlign: 'left', fontSize: '13px', borderRight: '1px solid var(--border)', whiteSpace: 'nowrap' }}>
+                            결제일
+                          </th>
+                          <td style={{ padding: '8px 14px' }}>
+                            <input type="date" value={payDate} onChange={e => setPayDate(e.target.value)} required style={{ padding: '6px 10px', fontSize: '13px' }} />
+                          </td>
+                        </tr>
+                        <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                          <th style={{ padding: '10px 14px', background: 'var(--bg-app)', textAlign: 'left', fontSize: '13px', borderRight: '1px solid var(--border)', whiteSpace: 'nowrap' }}>
+                            카드전표번호(승인번호) *
+                          </th>
+                          <td style={{ padding: '8px 14px' }}>
+                            <input type="text" value={cardApprovalNo} onChange={e => setCardApprovalNo(e.target.value)} placeholder="승인번호 8자리 입력 (예: 30012345)" required style={{ width: '100%', maxWidth: '320px', padding: '6px 10px', fontSize: '13px' }} />
+                          </td>
+                        </tr>
+                        <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                          <th style={{ padding: '10px 14px', background: 'var(--bg-app)', textAlign: 'left', fontSize: '13px', borderRight: '1px solid var(--border)', whiteSpace: 'nowrap' }}>
+                            결제금액 *
+                          </th>
+                          <td style={{ padding: '8px 14px' }}>
+                            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', maxWidth: '320px' }}>
+                              <input type="number" value={cardAmount || ''} onChange={e => setCardAmount(parseInt(e.target.value) || 0)} required style={{ flex: 1, padding: '6px 10px', fontSize: '14px', fontWeight: '700' }} />
+                              <button type="button" onClick={() => setCardAmount(unpaid)} style={{ padding: '6px 10px', fontSize: '11px', borderRadius: '4px', background: 'var(--primary)', color: '#fff', border: 'none', cursor: 'pointer', whiteSpace: 'nowrap', fontWeight: '600' }}>
+                                전액
+                              </button>
+                              <button type="button" onClick={() => setCardAmount(0)} style={{ padding: '6px 10px', fontSize: '11px', borderRadius: '4px', background: 'var(--bg-app)', color: 'var(--text-secondary)', border: '1px solid var(--border)', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                                0원
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                        <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                          <th style={{ padding: '10px 14px', background: 'var(--bg-app)', textAlign: 'left', fontSize: '13px', borderRight: '1px solid var(--border)', whiteSpace: 'nowrap' }}>
+                            공급가 (자동)
+                          </th>
+                          <td style={{ padding: '10px 14px', fontSize: '14px', fontWeight: '600' }}>
+                            {cardSupply.toLocaleString()} 원
+                          </td>
+                        </tr>
+                        <tr>
+                          <th style={{ padding: '10px 14px', background: 'var(--bg-app)', textAlign: 'left', fontSize: '13px', borderRight: '1px solid var(--border)', whiteSpace: 'nowrap' }}>
+                            부가세 (자동)
+                          </th>
+                          <td style={{ padding: '10px 14px', fontSize: '14px', fontWeight: '600', color: 'var(--text-secondary)' }}>
+                            {cardVat.toLocaleString()} 원
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
                   </div>
                 )}
 
-                {payMode === 'DIRECT' && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                    <div>
-                      <label style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '4px', display: 'block' }}>수납 방법</label>
-                      <select value={payMethod} onChange={e => setPayMethod(e.target.value)}>
-                        <option value="BANK_TRANSFER">통장 송금 (Bank Transfer)</option>
-                        <option value="CARD">카드 결제</option>
-                        <option value="CASH">현금 수납</option>
-                      </select>
-                    </div>
-                    <div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                        <label style={{ fontSize: '12px', color: 'var(--text-secondary)', margin: 0 }}>수납 처리액 (원) *</label>
-                        <div style={{ display: 'flex', gap: '4px' }}>
-                          <button type="button" onClick={() => setDirectAmount(unpaid)}
-                            style={{ padding: '2px 8px', borderRadius: '4px', background: 'var(--primary)', color: '#fff', border: 'none', cursor: 'pointer', fontSize: '11px', fontWeight: '600' }}>
-                            전액 수납
-                          </button>
-                          <button type="button" onClick={() => setDirectAmount(0)}
-                            style={{ padding: '2px 8px', borderRadius: '4px', background: 'var(--bg-app)', color: 'var(--text-secondary)', border: '1px solid var(--border)', cursor: 'pointer', fontSize: '11px' }}>
-                            0원
-                          </button>
-                        </div>
-                      </div>
-                      <input type="number"
-                        value={directAmount || ''}
-                        onChange={e => setDirectAmount(parseInt(e.target.value) || 0)}
-                        style={{ width: '100%', fontSize: '14px', fontWeight: '600', padding: '8px 12px' }}
-                        placeholder="수납 금액 입력" required />
-                    </div>
-                  </div>
-                )}
-
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                  <div>
-                    <label style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '4px', display: 'block' }}>수납 일자</label>
-                    <input type="date" value={payDate} onChange={e => setPayDate(e.target.value)} required />
-                  </div>
-                  <div>
-                    <label style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '4px', display: 'block' }}>비고</label>
-                    <input type="text" value={payMemo} onChange={e => setPayMemo(e.target.value)}
-                      placeholder={payMode === 'DEPOSIT' ? '(자동 입력됨)' : '예: 김민수 현금 납부'} />
-                  </div>
+                {/* 공통 비고 */}
+                <div>
+                  <label style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '4px', display: 'block' }}>비고</label>
+                  <input type="text" value={payMemo} onChange={e => setPayMemo(e.target.value)}
+                    placeholder={payMode === 'DEPOSIT' ? '(통장입금 연동 자동 기록)' : '예: 법인카드 결제'} />
                 </div>
               </div>
 
+              {/* 푸터 액션 버튼 */}
               <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', paddingTop: '12px', borderTop: '1px solid var(--border)' }}>
                 <button type="button" className="btn-secondary" onClick={() => setShowPayModal(false)}>취소</button>
                 <button type="submit" className="btn-primary"
-                  disabled={payAmount <= 0 || isOverMatch}>
+                  disabled={payAmount <= 0 || (payMode === 'DEPOSIT' && isOverMatch) || (payMode === 'CARD' && !cardApprovalNo.trim())}>
                   {isExactMatch ? '완납 처리 완료' : isPartialMatch ? '부분 수납 처리' : '수납 완료 처리'}
                 </button>
               </div>
