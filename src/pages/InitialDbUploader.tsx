@@ -33,7 +33,7 @@ import {
 } from 'lucide-react';
 
 export const InitialDbUploader: React.FC = () => {
-  const { showSuccessToast, showErrorModal } = useApp();
+  const { showSuccessToast, showErrorModal, fullRefreshFromServer } = useApp();
 
   // 상태 관리
   const [activeTab, setActiveTab] = useState<'INGEST' | 'BACKUP' | 'RESET'>('INGEST');
@@ -53,7 +53,7 @@ export const InitialDbUploader: React.FC = () => {
   const [isIngesting, setIsIngesting] = useState(false);
   const [progressInfo, setProgressInfo] = useState<{ step: number; total: number; message: string }>({
     step: 0,
-    total: 12,
+    total: 13,
     message: ''
   });
   const [reconciliationReport, setReconciliationReport] = useState<ReconciliationReport | null>(null);
@@ -100,6 +100,8 @@ export const InitialDbUploader: React.FC = () => {
         setShowResetConfirmModal(false);
         setResetConfirmInput('');
         showSuccessToast?.(res.message);
+        // ✅ DB 초기화 완료 후 localStorage stale 캐시 차단 + Supabase 최신 상태로 React state 즉시 동기화
+        await fullRefreshFromServer();
       } else {
         showErrorModal?.(res.message);
       }
@@ -145,7 +147,7 @@ export const InitialDbUploader: React.FC = () => {
     }
 
     setIsIngesting(true);
-    setProgressInfo({ step: 1, total: 12, message: '초기 DB 적재 파이프라인 시작...' });
+    setProgressInfo({ step: 0, total: 13, message: '초기 DB 적재 파이프라인 시작...' });
 
     try {
       const result = await ingestExcelInitialData(parsedData, (step, total, message) => {
@@ -155,9 +157,15 @@ export const InitialDbUploader: React.FC = () => {
       if (result.success) {
         setReconciliationReport(result.report);
         showSuccessToast?.(result.message);
+        // ✅ 적재 완료 후 localStorage stale 캐시 전체 차단 + Supabase 최신 데이터로 React state 즉시 동기화
+        // (db.ts의 pullFromSupabase가 ALL_DB_KEYS 전체를 선제 초기화한 뒤 Supabase pull을 수행함)
+        setProgressInfo({ step: 12, total: 12, message: 'Supabase 최신 데이터 동기화 중...' });
+        await fullRefreshFromServer();
       } else {
         setReconciliationReport(result.report);
         showErrorModal?.(result.message);
+        // 실패 시에도 Supabase 현재 상태로 동기화 (부분 적재 결과 반영)
+        await fullRefreshFromServer();
       }
     } catch (e: any) {
       showErrorModal?.(`적재 실행 오류: ${e.message}`);
@@ -422,7 +430,7 @@ export const InitialDbUploader: React.FC = () => {
                       라이프사이클 체인 & 시작점 데이터 일괄 적재 실행
                     </div>
                     <div style={{ fontSize: '12px', color: '#64748b', whiteSpace: 'nowrap' }}>
-                      12단계 순차 DAG 배치 적재: 출고/회수 배차 + 검수 + 과거 소급 청구 + 8월 청구 + 매입 정산
+                      13단계 순차 DAG 배치 적재: 구버전 삭제 → 출고/회수 배차 + 검수 + 과거 소급 청구 + 8월 청구 + 매입 정산
                     </div>
                   </div>
 

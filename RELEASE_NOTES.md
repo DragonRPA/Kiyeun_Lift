@@ -1,3 +1,28 @@
+# Release Notes (v0.6.0.Build.5 - 2026-08-31 19:11)
+
+## 🐛 [초기DB 업로드 메뉴: stale 캐시 차단 로직 전면 적용]
+
+### 🔍 문제
+- `ingestExcelInitialData` 완료 후 **`fullRefreshFromServer()` 미호출** → React 상태가 신규 적재 데이터를 즉시 반영하지 못하고, 브라우저 새로고침 전까지 구버전 데이터를 표출.
+- 반복 적재 시 **upsert만으로는 ID가 다른 구버전 행 잔류** → 계약 상세 화면에서 orphan 자산 데이터 혼재 발생.
+- `handleReset` 완료 후에도 동일하게 `fullRefreshFromServer()` 미호출로 stale 상태 지속.
+
+### ✅ 수정 내용 3가지
+
+#### 1. `ingestExcelInitialData` — Step 0 사전 정리(pre-truncate) 추가 (`migrationEngine.ts`)
+- 적재 실행 전 **FK 역순**으로 16개 비즈니스 테이블 전체 DELETE 후 신규 INSERT 수행.
+- 이전 적재 세션의 ID가 다른 orphan 행이 완전히 제거되어 **매번 깨끗한 상태에서 재적재**.
+- TRUNCATE 순서: `asset_inout_logs` → `outbound_inspections` → `deliveries` → `receivables` → `billing_details` → `billings` → `contract_assets` → `external_leases` → `contract_history` → `contracts` → `assets` → `products` → `vendors` → `customer_contacts` → `customer_sites` → `customers`
+
+#### 2. `handleIngest` 완료 후 `fullRefreshFromServer()` 자동 호출 (`InitialDbUploader.tsx`)
+- 성공/실패 양쪽 모두 `fullRefreshFromServer()` 호출 → `pullFromSupabase()`가 ALL_DB_KEYS 전체 선제 초기화 후 Supabase 최신 데이터 pull → React state 즉시 동기화.
+- **적재 완료 즉시 F5 없이 계약 목록, 자산 목록, 청구서 등 모든 화면에 신규 데이터 표출**.
+
+#### 3. `handleReset` 완료 후 `fullRefreshFromServer()` 자동 호출 (`InitialDbUploader.tsx`)
+- DB 초기화 완료 즉시 로컬 stale 캐시도 완전 차단되어 빈 상태로 리셋.
+
+---
+
 # Release Notes (v0.6.0.Build.4 - 2026-08-31 19:05)
 
 ## 🐛 [계약 상세 자산 미표출 버그: LocalStorage 구버전 캐시 오염 및 Supabase 테이블 매핑 누락 수정]

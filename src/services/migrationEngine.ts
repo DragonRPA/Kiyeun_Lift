@@ -1435,57 +1435,91 @@ export async function ingestExcelInitialData(
   onProgress?: (step: number, total: number, message: string) => void
 ): Promise<{ success: boolean; report: ReconciliationReport; message: string }> {
   try {
-    const totalSteps = 12;
-    
+    const totalSteps = 13;
+
+    // Step 0: 기존 비즈니스 데이터 전체 삭제 (stale 데이터 완전 차단)
+    // upsert만으로는 ID가 다른 구버전 행이 잔류하므로, 재적재 전 FK 역순으로 DELETE ALL 수행
+    onProgress?.(0, totalSteps, '0/13: 기존 비즈니스 데이터 정리 중 (stale 행 완전 삭제)...');
+    if (supabase) {
+      const TRUNCATE_ORDER = [
+        'asset_inout_logs',
+        'outbound_inspections',
+        'deliveries',
+        'receivables',
+        'billing_details',
+        'billings',
+        'contract_assets',
+        'external_leases',
+        'contract_history',
+        'contracts',
+        'assets',
+        'products',
+        'vendors',
+        'customer_contacts',
+        'customer_sites',
+        'customers',
+      ];
+      for (const table of TRUNCATE_ORDER) {
+        try {
+          const { error } = await supabase.from(table).delete().neq('id', '____IMPOSSIBLE____');
+          if (error) {
+            console.warn(`[Ingest] pre-truncate warning for ${table}:`, error.message);
+          }
+        } catch (e) {
+          console.warn(`[Ingest] pre-truncate exception for ${table}:`, e);
+        }
+      }
+    }
+
     // Step 1: Products & R2 Docs
-    onProgress?.(1, totalSteps, `1/12: 장비 모델 마스터 (${parsed.products.length}종 & R2 제원표 연동) 적재 중...`);
+    onProgress?.(1, totalSteps, `1/13: 장비 모델 마스터 (${parsed.products.length}종 & R2 제원표 연동) 적재 중...`);
     await batchUpsertChunked('products', parsed.products, 100);
 
     // Step 2: Vendors
-    onProgress?.(2, totalSteps, `2/12: 매입 및 임대 거래처 (${parsed.vendors.length}개사) 적재 중...`);
+    onProgress?.(2, totalSteps, `2/13: 매입 및 임대 거래처 (${parsed.vendors.length}개사) 적재 중...`);
     await batchUpsertChunked('vendors', parsed.vendors, 100);
 
     // Step 3: Customers
-    onProgress?.(3, totalSteps, `3/12: 고객사 마스터 (${parsed.customers.length}개사) 적재 중...`);
+    onProgress?.(3, totalSteps, `3/13: 고객사 마스터 (${parsed.customers.length}개사) 적재 중...`);
     await batchUpsertChunked('customers', parsed.customers, 100);
 
     // Step 4: Customer Sites & Contacts
-    onProgress?.(4, totalSteps, `4/12: 고객 현장 (${parsed.customerSites.length}개) 및 담당자 적재 중...`);
+    onProgress?.(4, totalSteps, `4/13: 고객 현장 (${parsed.customerSites.length}개) 및 담당자 적재 중...`);
     await batchUpsertChunked('customer_sites', parsed.customerSites, 100);
     await batchUpsertChunked('customer_contacts', parsed.customerContacts, 100);
 
     // Step 5: Assets (양방향 계약정보 & 누적매출액 동기화)
-    onProgress?.(5, totalSteps, `5/12: 자산 대장 (${parsed.assets.length}대 & 계약연동 100%) 적재 중...`);
+    onProgress?.(5, totalSteps, `5/13: 자산 대장 (${parsed.assets.length}대 & 계약연동 100%) 적재 중...`);
     await batchUpsertChunked('assets', parsed.assets, 100);
 
     // Step 6: Contracts & Contract History
-    onProgress?.(6, totalSteps, `6/12: 렌탈 계약 (${parsed.contracts.length}건) 및 타임라인 이력 적재 중...`);
+    onProgress?.(6, totalSteps, `6/13: 렌탈 계약 (${parsed.contracts.length}건) 및 타임라인 이력 적재 중...`);
     await batchUpsertChunked('contracts', parsed.contracts, 200);
     await batchUpsertChunked('contract_history', parsed.contractHistories, 200);
 
     // Step 7: Contract Assets & External Leases
-    onProgress?.(7, totalSteps, `7/12: 계약 투입 자산 및 전대 대장 (${parsed.contractAssets.length}건) 적재 중...`);
+    onProgress?.(7, totalSteps, `7/13: 계약 투입 자산 및 전대 대장 (${parsed.contractAssets.length}건) 적재 중...`);
     await batchUpsertChunked('contract_assets', parsed.contractAssets, 200);
     if (parsed.externalLeases.length > 0) {
       await batchUpsertChunked('external_leases', parsed.externalLeases, 100);
     }
 
     // Step 8: 출고/회수 배차 체인
-    onProgress?.(8, totalSteps, `8/12: 출고 및 회수 배차 대장 (${parsed.deliveries.length}건) 적재 중...`);
+    onProgress?.(8, totalSteps, `8/13: 출고 및 회수 배차 대장 (${parsed.deliveries.length}건) 적재 중...`);
     await batchUpsertChunked('deliveries', parsed.deliveries, 200);
 
     // Step 9: 출고 검수 및 자산 입출고 일지
-    onProgress?.(9, totalSteps, `9/12: 출고 검수 및 입출고 일지 (${parsed.assetInOutLogs.length}건) 적재 중...`);
+    onProgress?.(9, totalSteps, `9/13: 출고 검수 및 입출고 일지 (${parsed.assetInOutLogs.length}건) 적재 중...`);
     await batchUpsertChunked('outbound_inspections', parsed.outboundInspections, 200);
     await batchUpsertChunked('asset_inout_logs', parsed.assetInOutLogs, 200);
 
     // Step 10: 과거 및 당월 매출 청구서 (Billings & Details)
-    onProgress?.(10, totalSteps, `10/12: 과거 전체 및 8월 청구서 (${parsed.billings.length}건) 적재 중...`);
+    onProgress?.(10, totalSteps, `10/13: 과거 전체 및 8월 청구서 (${parsed.billings.length}건) 적재 중...`);
     await batchUpsertChunked('billings', parsed.billings, 200);
     await batchUpsertChunked('billing_details', parsed.billingDetails, 200);
 
     // Step 11: 매입 청구서 및 외상미수금 대장
-    onProgress?.(11, totalSteps, `11/12: 전대 매입 정산 및 외상미수금 대장 적재 중...`);
+    onProgress?.(11, totalSteps, `11/13: 전대 매입 정산 및 외상미수금 대장 적재 중...`);
     if (parsed.purchaseBillings.length > 0) {
       await batchUpsertChunked('purchase_billings', parsed.purchaseBillings, 100);
       await batchUpsertChunked('purchase_billing_details', parsed.purchaseBillingDetails, 200);
@@ -1495,8 +1529,11 @@ export async function ingestExcelInitialData(
     }
 
     // Step 12: 4대 대차대조 검증
-    onProgress?.(12, totalSteps, '12/12: 4대 대차대조(Reconciliation) 정밀 검증 중...');
+    onProgress?.(12, totalSteps, '12/13: 4대 대차대조(Reconciliation) 정밀 검증 중...');
     await db.awaitPendingWrites?.();
+
+    // Step 13: Supabase → LocalStorage 동기화 (stale 캐시 차단)
+    onProgress?.(13, totalSteps, '13/13: localStorage 동기화 완료 중...');
 
     const report = runReconciliationAudit(parsed);
     return { success: true, report, message: '과거 라이프사이클 복원 및 초기 DB 마이그레이션 완료' };
