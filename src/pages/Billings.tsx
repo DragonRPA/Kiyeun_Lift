@@ -1,6 +1,6 @@
 // @ts-nocheck
 // d:\Kiyeun_Lift\src\pages\Billings.tsx
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useApp } from '../context/AppContext';
 import { db, Asset, Billing, BillingDetail, ContractHistory, normalizeEndDate } from '../services/db';
 import { Plus, Download, Mail, CheckCircle, Search, DollarSign, Calendar, FileText, Send, Edit3, RotateCcw, AlertTriangle, Check } from 'lucide-react';
@@ -122,6 +122,30 @@ export const Billings: React.FC = () => {
   // 통합 검색 필터 (고객명/입금자명/계좌번호/비고)
   const [depSearchQuery, setDepSearchQuery] = useState(''); // 통합 검색어
 
+  // 🌟 수납 모달 완료 버튼 포커스 Ref 및 ESC 키 취소 이벤트
+  const paySubmitBtnRef = useRef<HTMLButtonElement | null>(null);
+
+  useEffect(() => {
+    if (!showPayModal) return;
+
+    // 모달 렌더링 직후 완료처리 버튼으로 자동 포커스
+    const timer = setTimeout(() => {
+      paySubmitBtnRef.current?.focus();
+    }, 60);
+
+    // ESC 키 입력 시 취소(닫기) 이벤트
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setShowPayModal(false);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [showPayModal]);
 
   // 메일 전송 모달 (거래명세서 메일 발송)
   const [showMailModal, setShowMailModal] = useState(false);
@@ -3212,9 +3236,14 @@ ${items.map((item, idx) => {
 
               {/* 푸터 액션 버튼 */}
               <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', paddingTop: '12px', borderTop: '1px solid var(--border)' }}>
-                <button type="button" className="btn-secondary" onClick={() => setShowPayModal(false)}>취소</button>
-                <button type="submit" className="btn-primary"
-                  disabled={payAmount <= 0 || (payMode === 'DEPOSIT' && isOverMatch) || (payMode === 'CARD' && !cardApprovalNo.trim())}>
+                <button type="button" className="btn-secondary" onClick={() => setShowPayModal(false)}>취소 (ESC)</button>
+                <button 
+                  ref={paySubmitBtnRef}
+                  type="submit" 
+                  className="btn-primary"
+                  disabled={payAmount <= 0 || (payMode === 'DEPOSIT' && isOverMatch) || (payMode === 'CARD' && !cardApprovalNo.trim())}
+                  style={{ fontWeight: 'bold' }}
+                >
                   {isExactMatch ? '완납 처리 완료' : isPartialMatch ? '부분 수납 처리' : '수납 완료 처리'}
                 </button>
               </div>
