@@ -1626,10 +1626,10 @@ ${items.map((item, idx) => {
             })()}
 
             <div className="table-container" style={{ border: 'none', boxShadow: 'none', overflowX: 'auto' }}>
-              <table style={{ minWidth: '650px', whiteSpace: 'nowrap' }}>
+              <table style={{ minWidth: '580px', whiteSpace: 'nowrap' }}>
                 <thead>
                   <tr>
-                    <th style={{ whiteSpace: 'nowrap' }}>관리</th>
+                    <th style={{ whiteSpace: 'nowrap', width: '130px' }}>관리</th>
                     <th style={{ whiteSpace: 'nowrap' }}>청구월</th>
                     <th style={{ whiteSpace: 'nowrap' }}>고객사</th>
                     <th style={{ whiteSpace: 'nowrap' }}>공급가액</th>
@@ -1666,15 +1666,6 @@ ${items.map((item, idx) => {
                           <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
                             {b.status === 'REQUESTED' ? (
                               <>
-                                <button 
-                                  type="button"
-                                  className="btn-secondary" 
-                                  onClick={() => setSelectedBillingId(b.id)} 
-                                  style={{ padding: '3px 6px', fontSize: '11px', whiteSpace: 'nowrap' }}
-                                  title="상세 내역 검토"
-                                >
-                                  검토
-                                </button>
                                 {isAdmin && (
                                   <button 
                                     type="button"
