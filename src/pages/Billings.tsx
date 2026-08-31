@@ -39,6 +39,8 @@ export const Billings: React.FC = () => {
   const [endBillingYmFilter, setEndBillingYmFilter] = useState(initialYm);
   const [paymentFilter, setPaymentFilter] = useState<'ALL' | 'PAID' | 'UNPAID_ANY'>('ALL');
   const [mailSentFilter, setMailSentFilter] = useState<'ALL' | 'SENT' | 'UNSENT'>('ALL');
+  // --- 명시적 조회(Snapshot) 상태: [조회] 버튼을 누를 때만 목록 갱신 ---
+  const [searchedBillingIds, setSearchedBillingIds] = useState<string[] | null>(null);
 
   // --- 청구 마법사 상태 ---
   const [wizardSearchStartDate, setWizardSearchStartDate] = useState(() => {
@@ -135,6 +137,50 @@ export const Billings: React.FC = () => {
   // 고유 청구월 목록 추출
   const billingMonths = Array.from(new Set(billings.map(b => b.billingYm))).sort().reverse();
 
+  // 필터 조건을 기반으로 일치하는 billingId 목록 계산 함수
+  const computeMatchedBillingIds = (
+    sTerm: string,
+    cFilter: string,
+    startYm: string,
+    endYm: string,
+    pFilter: 'ALL' | 'PAID' | 'UNPAID_ANY',
+    mFilter: 'ALL' | 'SENT' | 'UNSENT'
+  ) => {
+    return billings.filter(b => {
+      if (b.status === 'REJECTED') return false;
+
+      const custName = getCustName(b.customerId).toLowerCase();
+      const contractObj = contracts.find(c => c.id === b.contractId);
+      const contractNoStr = (contractObj?.contractNo || b.contractId || '').toLowerCase();
+
+      if (sTerm && !custName.includes(sTerm.toLowerCase())) return false;
+      if (cFilter && !contractNoStr.includes(cFilter.trim().toLowerCase())) return false;
+      if (startYm && b.billingYm < startYm) return false;
+      if (endYm && b.billingYm > endYm) return false;
+
+      const supply = b.totalAmount || 0;
+      const grand = supply + Math.round(supply * 0.1);
+      const unpaid = Math.max(0, grand - (b.paidAmount || 0));
+      const isPaid = b.status === 'PAID' || unpaid <= 0;
+      if (pFilter === 'PAID' && !isPaid) return false;
+      if (pFilter === 'UNPAID_ANY' && isPaid) return false;
+
+      const isMailSent = b.status !== 'UNPAID';
+      if (mFilter === 'SENT' && !isMailSent) return false;
+      if (mFilter === 'UNSENT' && isMailSent) return false;
+
+      return true;
+    }).map(b => b.id);
+  };
+
+  // 최초 1회 초기 필터 조건으로 조회 스냅샷 생성
+  useEffect(() => {
+    if (searchedBillingIds === null && billings.length > 0) {
+      const ids = computeMatchedBillingIds(searchTerm, contractNoFilter, startBillingYmFilter, endBillingYmFilter, paymentFilter, mailSentFilter);
+      setSearchedBillingIds(ids);
+    }
+  }, [billings.length]);
+
   const handleSearchClick = () => {
     setSearchTerm(tempSearchTerm);
     setContractNoFilter(tempContractNoFilter);
@@ -142,6 +188,17 @@ export const Billings: React.FC = () => {
     setEndBillingYmFilter(tempEndBillingYmFilter);
     setPaymentFilter(tempPaymentFilter);
     setMailSentFilter(tempMailSentFilter);
+
+    // [조회] 버튼을 누를 때만 최신 조건으로 스냅샷 갱신
+    const matched = computeMatchedBillingIds(
+      tempSearchTerm,
+      tempContractNoFilter,
+      tempStartBillingYmFilter,
+      tempEndBillingYmFilter,
+      tempPaymentFilter,
+      tempMailSentFilter
+    );
+    setSearchedBillingIds(matched);
   };
 
   const handleResetFilters = () => {
@@ -159,37 +216,21 @@ export const Billings: React.FC = () => {
     setEndBillingYmFilter(nowYm);
     setPaymentFilter('ALL');
     setMailSentFilter('ALL');
+
+    const matched = computeMatchedBillingIds('', '', nowYm, nowYm, 'ALL', 'ALL');
+    setSearchedBillingIds(matched);
   };
 
-  const filteredBillings = billings.filter(b => {
-    // 취소된 청구서(REJECTED)는 청구 및 수납 목록에서 제외하여 미청구 정산 마법사로 이관
-    if (b.status === 'REJECTED') return false;
-
-    const custName = getCustName(b.customerId).toLowerCase();
-    const contractObj = contracts.find(c => c.id === b.contractId);
-    const contractNoStr = (contractObj?.contractNo || b.contractId || '').toLowerCase();
-
-    // 1. 고객사명 검색
-    if (searchTerm && !custName.includes(searchTerm.toLowerCase())) return false;
-    // 2. 계약번호 검색
-    if (contractNoFilter && !contractNoStr.includes(contractNoFilter.trim().toLowerCase())) return false;
-    // 3. 청구 시작월 ~ 종료월 범위 (YYYY-MM)
-    if (startBillingYmFilter && b.billingYm < startBillingYmFilter) return false;
-    if (endBillingYmFilter && b.billingYm > endBillingYmFilter) return false;
-
-    // 4. 수납 상태 필터 (완료: PAID 또는 미납액 0 이하 / 미완료: PAID가 아니거나 미납액 > 0)
-    const unpaid = (b.totalAmount || 0) - (b.paidAmount || 0);
-    const isPaid = b.status === 'PAID' || unpaid <= 0;
-    if (paymentFilter === 'PAID' && !isPaid) return false;
-    if (paymentFilter === 'UNPAID_ANY' && isPaid) return false;
-
-    // 5. 청구서메일 발송 여부 필터 (발송: UNPAID가 아닌 상태 즉 REQUESTED/PARTIAL/PAID 등 / 미발송: UNPAID)
-    const isMailSent = b.status !== 'UNPAID';
-    if (mailSentFilter === 'SENT' && !isMailSent) return false;
-    if (mailSentFilter === 'UNSENT' && isMailSent) return false;
-
-    return true;
-  });
+  // 🌟 조회 버튼으로 고정된 스냅샷에 해당하는 청구서만 렌더링 (수납 처리 시 자동 재조회/행 삭제 없이 안정적으로 유지)
+  const filteredBillings = useMemo(() => {
+    if (searchedBillingIds === null) {
+      return billings.filter(b => b.status !== 'REJECTED');
+    }
+    const billingMap = new Map(billings.map(b => [b.id, b]));
+    return searchedBillingIds
+      .map(id => billingMap.get(id))
+      .filter((b): b is Billing => !!b && b.status !== 'REJECTED');
+  }, [searchedBillingIds, billings]);
 
   const handleExportExcel = () => {
     const excelData = filteredBillings.map((b, idx) => {
@@ -457,7 +498,6 @@ export const Billings: React.FC = () => {
       });
     }
 
-    alert('수납 등록 처리가 완료되었습니다.');
     setShowPayModal(false);
     setPayBillingId('');
   };
