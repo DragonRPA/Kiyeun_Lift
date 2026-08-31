@@ -1881,22 +1881,6 @@ ${items.map((item, idx) => {
                               </button>
                             )}
 
-                            {/* 1-2. 수납 취소 버튼: 수납액이 있거나 완납인 경우 수납 취소/롤백 */}
-                            {canSave && (b.paidAmount > 0 || isPaid) && b.status !== 'REJECTED' && (
-                              <button 
-                                type="button"
-                                className="btn-danger" 
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleCancelAllPayments(b.id, isPaid ? grandTotal : (b.paidAmount || 0));
-                                }}
-                                style={{ padding: '3px 6px', fontSize: '11px', whiteSpace: 'nowrap', backgroundColor: '#dc2626', color: '#fff', border: 'none', fontWeight: 'bold' }}
-                                title="수납 취소 및 롤백 (통장 잔액/미수금 복원)"
-                              >
-                                수납취소
-                              </button>
-                            )}
-
                             {/* 2. 발송 버튼: REJECTED가 아닌 모든 청구서에서 거래명세서 메일 발송 */}
                             {b.status !== 'REJECTED' && (
                               <button 
@@ -1945,19 +1929,46 @@ ${items.map((item, idx) => {
                           ₩{unpaid.toLocaleString()}
                         </td>
                         <td style={{ whiteSpace: 'nowrap' }}>
-                          <span className={`badge ${
-                            b.status === 'UNPAID'    ? 'badge-secondary' :
-                            b.status === 'REQUESTED' ? 'badge-warning' :
-                            b.status === 'REJECTED'  ? 'badge-danger' :
-                            b.status === 'PAID'      ? 'badge-success' :
-                            b.status === 'PARTIAL'   ? 'badge-info' : 'badge-secondary'
-                          }`}>
-                            {b.status === 'UNPAID'    ? '미발송' :
-                             b.status === 'REQUESTED' ? '발송완료' :
-                             b.status === 'REJECTED'  ? '이의제기' :
-                             b.status === 'PAID'      ? '완납' :
-                             b.status === 'PARTIAL'   ? '일부납' : b.status}
-                          </span>
+                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                            <span className={`badge ${
+                              b.status === 'UNPAID'    ? 'badge-secondary' :
+                              b.status === 'REQUESTED' ? 'badge-warning' :
+                              b.status === 'REJECTED'  ? 'badge-danger' :
+                              b.status === 'PAID'      ? 'badge-success' :
+                              b.status === 'PARTIAL'   ? 'badge-info' : 'badge-secondary'
+                            }`}>
+                              {b.status === 'UNPAID'    ? '미발송' :
+                               b.status === 'REQUESTED' ? '발송완료' :
+                               b.status === 'REJECTED'  ? '이의제기' :
+                               b.status === 'PAID'      ? '완납' :
+                               b.status === 'PARTIAL'   ? '일부납' : b.status}
+                            </span>
+
+                            {/* 🌟 완납/일부납 배지 오른쪽 바로 옆 수납취소 버튼 */}
+                            {canSave && (b.paidAmount > 0 || isPaid) && b.status !== 'REJECTED' && (
+                              <button 
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleCancelAllPayments(b.id, isPaid ? grandTotal : (b.paidAmount || 0));
+                                }}
+                                style={{
+                                  padding: '2px 6px',
+                                  fontSize: '10.5px',
+                                  fontWeight: '600',
+                                  backgroundColor: '#fee2e2',
+                                  color: '#b91c1c',
+                                  border: '1px solid #fca5a5',
+                                  borderRadius: '4px',
+                                  cursor: 'pointer',
+                                  whiteSpace: 'nowrap'
+                                }}
+                                title="수납 취소 및 롤백 (통장 잔액/미수금 복원)"
+                              >
+                                수납취소
+                              </button>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     );
