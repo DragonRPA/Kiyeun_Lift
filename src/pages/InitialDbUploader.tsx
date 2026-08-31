@@ -327,10 +327,25 @@ export const InitialDbUploader: React.FC = () => {
                   <div style={{ fontSize: '20px', fontWeight: 700, color: '#0f172a', marginTop: '4px' }}>
                     {parsedData.stats.assetsCount} 대
                   </div>
-                  <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px' }}>자사 726대 + 가상/임시 31대</div>
+                  <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px' }}>
+                    대여중 계약연동 {parsedData.stats.activeRentedAssetsCount || 0}대 100% 매핑
+                  </div>
                 </div>
 
-                {/* 2. 렌탈 계약 */}
+                {/* 2. 장비 모델 & 제원문서 */}
+                <div style={{ backgroundColor: '#f0fdfa', padding: '14px', borderRadius: '8px', border: '1px solid #ccfbf1' }}>
+                  <div style={{ fontSize: '12px', color: '#0f766e', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <FileText size={14} /> 모델 & 실물 제원표 (products)
+                  </div>
+                  <div style={{ fontSize: '20px', fontWeight: 700, color: '#115e59', marginTop: '4px' }}>
+                    {parsedData.stats.productsCount} 종
+                  </div>
+                  <div style={{ fontSize: '11px', color: '#0d9488', marginTop: '2px' }}>
+                    R2 제원표/안전문서 {parsedData.stats.docLinkedProductsCount || 0}종 자동 연동
+                  </div>
+                </div>
+
+                {/* 3. 렌탈 계약 */}
                 <div style={{ backgroundColor: '#f8fafc', padding: '14px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
                   <div style={{ fontSize: '12px', color: '#64748b', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '4px' }}>
                     <FileCheck size={14} /> 렌탈 계약 (contracts)
@@ -341,7 +356,7 @@ export const InitialDbUploader: React.FC = () => {
                   <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px' }}>고객사 {parsedData.stats.customersCount}사 / 현장 {parsedData.stats.sitesCount}개소</div>
                 </div>
 
-                {/* 3. 출고 배차 체인 */}
+                {/* 4. 출고 배차 체인 */}
                 <div style={{ backgroundColor: '#eff6ff', padding: '14px', borderRadius: '8px', border: '1px solid #bfdbfe' }}>
                   <div style={{ fontSize: '12px', color: '#1d4ed8', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '4px' }}>
                     <Truck size={14} /> 출고 배차 (deliveries)
@@ -352,7 +367,7 @@ export const InitialDbUploader: React.FC = () => {
                   <div style={{ fontSize: '11px', color: '#3b82f6', marginTop: '2px' }}>출고검수 {parsedData.stats.outboundInspectionsCount}건 자동 승인</div>
                 </div>
 
-                {/* 4. 회수 배차 체인 */}
+                {/* 5. 회수 배차 체인 */}
                 <div style={{ backgroundColor: '#f0fdf4', padding: '14px', borderRadius: '8px', border: '1px solid #bbf7d0' }}>
                   <div style={{ fontSize: '12px', color: '#15803d', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '4px' }}>
                     <RotateCcw size={14} /> 회수 배차 (deliveries)
@@ -363,7 +378,7 @@ export const InitialDbUploader: React.FC = () => {
                   <div style={{ fontSize: '11px', color: '#22c55e', marginTop: '2px' }}>종료 계약 입고 등록 100% 매핑</div>
                 </div>
 
-                {/* 5. 과거 소급 청구서 */}
+                {/* 6. 과거 소급 청구서 */}
                 <div style={{ backgroundColor: '#faf5ff', padding: '14px', borderRadius: '8px', border: '1px solid #e9d5ff' }}>
                   <div style={{ fontSize: '12px', color: '#7e22ce', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '4px' }}>
                     <History size={14} /> 과거 소급 청구서 (billings)
@@ -374,7 +389,7 @@ export const InitialDbUploader: React.FC = () => {
                   <div style={{ fontSize: '11px', color: '#9333ea', marginTop: '2px' }}>누적 ₩{parsedData.stats.totalHistoricalBillingAmount.toLocaleString()}</div>
                 </div>
 
-                {/* 6. 2026-08 당월 청구서 */}
+                {/* 7. 2026-08 당월 청구서 */}
                 <div style={{ backgroundColor: '#fefce8', padding: '14px', borderRadius: '8px', border: '1px solid #fef08a' }}>
                   <div style={{ fontSize: '12px', color: '#a16207', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '4px' }}>
                     <Receipt size={14} /> 2026-08 당월 청구 합계
@@ -383,6 +398,19 @@ export const InitialDbUploader: React.FC = () => {
                     ₩{parsedData.stats.currentMonthBillingAmount.toLocaleString()}
                   </div>
                   <div style={{ fontSize: '11px', color: '#ca8a04', marginTop: '2px' }}>71개사 청구서 (차액 ₩0 일치)</div>
+                </div>
+
+                {/* 8. 전대 매입 & 외상미수금 */}
+                <div style={{ backgroundColor: '#fff7ed', padding: '14px', borderRadius: '8px', border: '1px solid #ffedd5' }}>
+                  <div style={{ fontSize: '12px', color: '#c2410c', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <TrendingUp size={14} /> 전대 매입 & 부대비
+                  </div>
+                  <div style={{ fontSize: '18px', fontWeight: 700, color: '#9a3412', marginTop: '4px' }}>
+                    ₩{parsedData.stats.totalPurchaseBillingAmount.toLocaleString()}
+                  </div>
+                  <div style={{ fontSize: '11px', color: '#ea580c', marginTop: '2px' }}>
+                    외상미수금 {parsedData.stats.receivablesCount}건 (운반비 등)
+                  </div>
                 </div>
               </div>
 
