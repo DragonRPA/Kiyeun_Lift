@@ -435,7 +435,7 @@ export const Assets: React.FC = () => {
               <th style={{ whiteSpace: 'nowrap', padding: '8px 6px', fontSize: '12px', textAlign: 'center' }}>상각개월수</th>
               <th style={{ whiteSpace: 'nowrap', padding: '8px 6px', fontSize: '12px', textAlign: 'center' }}>잔존가치율</th>
               <th style={{ whiteSpace: 'nowrap', padding: '8px 6px', fontSize: '12px', textAlign: 'right' }}>장부가치</th>
-              <th style={{ whiteSpace: 'nowrap', padding: '8px 6px', fontSize: '12px', textAlign: 'right' }}>누적렌탈수익</th>
+              <th style={{ whiteSpace: 'nowrap', padding: '8px 6px', fontSize: '12px', textAlign: 'right' }}>기여액(기수)</th>
               <th style={{ whiteSpace: 'nowrap', padding: '8px 6px', fontSize: '12px', textAlign: 'right' }}>누적수리비</th>
               <th style={{ whiteSpace: 'nowrap', padding: '8px 6px', fontSize: '12px' }}>임차처</th>
               <th style={{ whiteSpace: 'nowrap', padding: '8px 6px', fontSize: '12px', textAlign: 'center' }}>임차개시일</th>
@@ -760,21 +760,21 @@ export const Assets: React.FC = () => {
 
               <hr style={{ border: 'none', borderTop: '1px solid var(--border-color)' }} />
 
-              {/* 4. 누적 손익 */}
+              {/* 4. 기수 기여 / 수리비 */}
               <section>
-                <h4 style={{ fontWeight: '600', marginBottom: '12px', color: 'var(--text-main)', fontSize: '14px' }}>4. 누적 손익 현황</h4>
+                <h4 style={{ fontWeight: '600', marginBottom: '12px', color: 'var(--text-main)', fontSize: '14px' }}>4. 기여액 (기수) / 수리비 현황</h4>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '12px' }}>
                   {isEditing ? (
                     <>
-                      <div><label style={labelStyle}>누적 렌탈 수익 (원)</label><input type="number" style={inputStyle} value={editForm.cumRentalFee ?? ''} onChange={ef('cumRentalFee')} /></div>
+                      <div><label style={labelStyle}>기여액 기수 누계 (원)</label><input type="number" style={inputStyle} value={editForm.cumRentalFee ?? ''} onChange={ef('cumRentalFee')} /></div>
                       <div><label style={labelStyle}>누적 수리비 (원)</label><input type="number" style={inputStyle} value={editForm.cumRepairCost ?? ''} onChange={ef('cumRepairCost')} /></div>
                     </>
                   ) : (
                     <>
-                      <InfoItem label="누적 렌탈 수익" value={<span className="text-primary" style={{ fontWeight: '600' }}>{(selectedAsset.cumRentalFee || 0).toLocaleString()}원</span>} />
+                      <InfoItem label="기여액 (기수)" value={<span className="text-primary" style={{ fontWeight: '600' }}>{(selectedAsset.cumRentalFee || 0).toLocaleString()}원</span>} />
                       <InfoItem label="누적 수리비" value={<span className="text-danger" style={{ fontWeight: '600' }}>{(selectedAsset.cumRepairCost || 0).toLocaleString()}원</span>} />
                       <InfoItem
-                        label="누적 순익"
+                        label="기수 순익"
                         value={<strong style={{ color: ((selectedAsset.cumRentalFee || 0) - (selectedAsset.cumRepairCost || 0)) >= 0 ? 'var(--success)' : 'var(--danger)' }}>
                           {((selectedAsset.cumRentalFee || 0) - (selectedAsset.cumRepairCost || 0)).toLocaleString()}원
                         </strong>}

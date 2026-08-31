@@ -1139,6 +1139,7 @@ export function parseInitialExcelWorkbook(fileBuffer: ArrayBuffer | Uint8Array |
         const histBillAmount = daysInPeriod === 30 ? rowMonthlyFee : Math.round(rowDailyFee * daysInPeriod);
 
         if (matchedAsset) {
+          // 기수 원칙: 과거 소급 청구서 발행 금액(histBillAmount)만 누적 — 실발행된 청구의 기수 성과
           matchedAsset.cumRentalFee = (matchedAsset.cumRentalFee || 0) + histBillAmount;
         }
 
@@ -1190,6 +1191,7 @@ export function parseInitialExcelWorkbook(fileBuffer: ArrayBuffer | Uint8Array |
     excelTotalBillingSum += rowBillingTotal;
 
     if (matchedAsset) {
+      // 기수 원칙: 당월 실청구 금액(monthRentFee 또는 rowBillingTotal)만 누적 — 기수된 성과
       matchedAsset.cumRentalFee = (matchedAsset.cumRentalFee || 0) + (monthRentFee || rowBillingTotal);
     }
 

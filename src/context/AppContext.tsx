@@ -2971,6 +2971,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         totalAmount += rentalCost;
 
         if (assetInfo) {
+          // 기수 원칙: 청구서 발행(기수) 시점에만 cumRentalFee 누적 — 미수(미발행) 금액 절대 포함 금지
           db.updateRow<Asset>('assets', assetInfo.id, {
             cumRentalFee: (assetInfo.cumRentalFee || 0) + rentalCost,
             updatedAt: new Date().toISOString()

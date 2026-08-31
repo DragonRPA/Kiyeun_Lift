@@ -806,7 +806,7 @@ export const AssetHistory: React.FC = () => {
               <div><strong>제조번호 (SN):</strong> {selectedAsset.serialNo || '-'}</div>
               <div><strong>소유 형태:</strong> {selectedAsset.ownerType === 'OWNED' ? '자사자산' : '외부임차장비'}</div>
               <hr style={{ border: 'none', borderTop: '1px solid var(--border-color)', margin: '4px 0' }} />
-              <div><strong>누적 렌탈 기여액:</strong> {(selectedAsset.cumRentalFee || 0).toLocaleString()}원</div>
+              <div><strong>기여액 (기수):</strong> {(selectedAsset.cumRentalFee || 0).toLocaleString()}원</div>
               <div><strong>누적 수리비 지출:</strong> {(selectedAsset.cumRepairCost || 0).toLocaleString()}원</div>
             </div>
 
