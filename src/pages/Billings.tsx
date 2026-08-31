@@ -12,7 +12,7 @@ export const Billings: React.FC = () => {
   const {
     billings, billingDetails, customers, contacts, contracts, contractAssets, assets, sites, users, googleConfigs,
     generateBillingsForMonth, getDueContractsForBilling, generateDueBillings, regenerateBilling, generateBillingForSingleContract,
-    receivePayment, cancelPayment, hasPermission, currentUser, approveBilling, cancelBilling,
+    receivePayment, cancelPayment, cancelAllPaymentsForBilling, hasPermission, currentUser, approveBilling, cancelBilling,
     refreshAllData, showErrorModal, bankTransactions, paymentDepositLinks, payments,
     repairs, linkRepairToBilling, applyPrepaidBalanceForBilling,
     receivables, linkReceivableToBilling
@@ -462,6 +462,32 @@ export const Billings: React.FC = () => {
       cancelBilling(id, refund);
     } else {
       cancelBilling(id, false);
+    }
+  };
+
+  // 🌟 수납 내역 1건 취소 (개별 롤백)
+  const handleCancelPayment = async (paymentId: string, amount: number) => {
+    if (!confirm(`이 수납 내역(${amount.toLocaleString()}원)을 취소하시겠습니까?\n\n- 연결된 통장 거래 입금잔액이 자동 복원됩니다.\n- 청구서 미수 잔액 및 상태가 롤백됩니다.`)) {
+      return;
+    }
+    try {
+      await cancelPayment(paymentId);
+      alert('✅ 수납이 정상적으로 취소(롤백)되었습니다.');
+    } catch (err: any) {
+      showErrorModal(`⚠️ 수납 취소 실패:\n${err?.message || err}`);
+    }
+  };
+
+  // 🌟 청구서 전체 수납 일괄 취소 (일괄 롤백)
+  const handleCancelAllPayments = async (billingId: string, totalPaid: number) => {
+    if (!confirm(`이 청구서의 모든 수납 내역(총 ${totalPaid.toLocaleString()}원)을 일괄 취소하시겠습니까?\n\n- 연결된 통장 거래 입금잔액이 전액 복원됩니다.\n- 청구서가 미수납(미발송) 상태로 롤백됩니다.`)) {
+      return;
+    }
+    try {
+      await cancelAllPaymentsForBilling(billingId);
+      alert('✅ 모든 수납 내역이 취소(롤백)되었습니다.');
+    } catch (err: any) {
+      showErrorModal(`⚠️ 수납 일괄 취소 실패:\n${err?.message || err}`);
     }
   };
 
@@ -1855,6 +1881,22 @@ ${items.map((item, idx) => {
                               </button>
                             )}
 
+                            {/* 1-2. 수납 취소 버튼: 수납액이 있거나 완납인 경우 수납 취소/롤백 */}
+                            {canSave && (b.paidAmount > 0 || isPaid) && b.status !== 'REJECTED' && (
+                              <button 
+                                type="button"
+                                className="btn-danger" 
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleCancelAllPayments(b.id, isPaid ? grandTotal : (b.paidAmount || 0));
+                                }}
+                                style={{ padding: '3px 6px', fontSize: '11px', whiteSpace: 'nowrap', backgroundColor: '#dc2626', color: '#fff', border: 'none', fontWeight: 'bold' }}
+                                title="수납 취소 및 롤백 (통장 잔액/미수금 복원)"
+                              >
+                                수납취소
+                              </button>
+                            )}
+
                             {/* 2. 발송 버튼: REJECTED가 아닌 모든 청구서에서 거래명세서 메일 발송 */}
                             {b.status !== 'REJECTED' && (
                               <button 
@@ -2164,6 +2206,110 @@ ${items.map((item, idx) => {
                       </table>
                     </div>
                   </div>
+
+                  {/* 💰 수납 및 결제 이력 (Payment History & 수납 취소) */}
+                  {(() => {
+                    const billingPayments = payments.filter(p => p.billingId === activeBilling.id);
+                    if (billingPayments.length === 0) return null;
+
+                    return (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '6px', paddingTop: '12px', borderTop: '1px solid var(--border-color)' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <h4 style={{ fontSize: '13px', fontWeight: '700', margin: 0, color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            💰 수납 및 결제 이력 ({billingPayments.length}건)
+                          </h4>
+                          {canSave && (
+                            <button
+                              type="button"
+                              onClick={() => handleCancelAllPayments(activeBilling.id, paidAmt)}
+                              style={{
+                                padding: '3px 8px',
+                                fontSize: '11px',
+                                fontWeight: '700',
+                                backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                                color: '#dc2626',
+                                border: '1px solid rgba(239, 68, 68, 0.3)',
+                                borderRadius: '4px',
+                                cursor: 'pointer'
+                              }}
+                              title="모든 수납 내역 일괄 취소 및 통장 잔액/청구서 롤백"
+                            >
+                              전체 수납 취소 (롤백)
+                            </button>
+                          )}
+                        </div>
+
+                        <div className="table-container" style={{ border: '1px solid var(--border-color)', borderRadius: '6px', overflowX: 'auto', margin: 0 }}>
+                          <table style={{ width: '100%', fontSize: '11.5px', whiteSpace: 'nowrap', borderCollapse: 'collapse' }}>
+                            <thead style={{ backgroundColor: 'var(--bg-app)' }}>
+                              <tr>
+                                <th style={{ padding: '6px 8px', textAlign: 'center', width: '32px' }}>No</th>
+                                <th style={{ padding: '6px 8px' }}>수납일자</th>
+                                <th style={{ padding: '6px 8px' }}>수납방식</th>
+                                <th style={{ padding: '6px 8px', textAlign: 'right' }}>수납금액</th>
+                                <th style={{ padding: '6px 8px' }}>메모 / 승인정보</th>
+                                <th style={{ padding: '6px 8px', textAlign: 'center' }}>취소</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {billingPayments.map((p, pIdx) => {
+                                const methodLabel = 
+                                  p.method === 'BANK_TRANSFER' ? '통장입금' :
+                                  p.method === 'CARD' ? '카드결제' :
+                                  p.method === 'PREPAID' ? '선수금상계' : p.method;
+
+                                return (
+                                  <tr key={p.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                                    <td style={{ padding: '6px 8px', textAlign: 'center', color: 'var(--text-muted)' }}>{pIdx + 1}</td>
+                                    <td style={{ padding: '6px 8px' }}>{p.paymentDate || p.createdAt?.slice(0, 10)}</td>
+                                    <td style={{ padding: '6px 8px' }}>
+                                      <span style={{
+                                        padding: '2px 6px',
+                                        borderRadius: '4px',
+                                        fontSize: '10px',
+                                        fontWeight: 600,
+                                        backgroundColor: p.method === 'BANK_TRANSFER' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(59, 130, 246, 0.1)',
+                                        color: p.method === 'BANK_TRANSFER' ? '#059669' : '#2563eb'
+                                      }}>
+                                        {methodLabel}
+                                      </span>
+                                    </td>
+                                    <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 700, color: 'var(--primary)' }}>
+                                      ₩{p.amount.toLocaleString()}
+                                    </td>
+                                    <td style={{ padding: '6px 8px', color: 'var(--text-secondary)' }}>
+                                      {p.memo || '-'}
+                                    </td>
+                                    <td style={{ padding: '6px 8px', textAlign: 'center' }}>
+                                      {canSave && (
+                                        <button
+                                          type="button"
+                                          onClick={() => handleCancelPayment(p.id, p.amount)}
+                                          style={{
+                                            padding: '2px 6px',
+                                            fontSize: '10.5px',
+                                            fontWeight: '600',
+                                            backgroundColor: '#fee2e2',
+                                            color: '#b91c1c',
+                                            border: '1px solid #fca5a5',
+                                            borderRadius: '4px',
+                                            cursor: 'pointer'
+                                          }}
+                                          title="이 수납 건 취소 및 통장 잔액/청구서 롤백"
+                                        >
+                                          수납취소
+                                        </button>
+                                      )}
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
               );
             })() : (

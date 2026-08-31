@@ -179,7 +179,8 @@ interface AppContextType {
     memo: string;
     depositLinks?: { bankTransactionId: string; usedAmount: number }[]; // 통장입금 연동 (N건)
   }) => void;
-  cancelPayment: (paymentId: string) => void;  // 수납 취소 + PDL 연쉬 삭제 + Billing 롤백
+  cancelPayment: (paymentId: string) => Promise<void>;  // 수납 취소 + PDL 연쇄 삭제 + Billing 롤백 + 선수금 환원
+  cancelAllPaymentsForBilling: (billingId: string) => Promise<void>; // 청구서 전체 수납 일괄 취소 및 롤백
   saveBankDeposit: (data: Omit<BankTransaction, 'id' | 'createdAt' | 'withdrawAmount'>) => void;  // 통장입금 등록/수정
   deleteBankDeposit: (txId: string) => void;  // 통장입금 삭제 (연결 수납 없을 때만)
   uploadBankTransactions: (txs: Omit<BankTransaction, 'id' | 'createdAt'>[]) => void;
@@ -3243,37 +3244,69 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     refreshAllData();
   };
 
-  // 수납 취소: Payment 삭제 + 연결된 PDL 전체 삭제 + Billing.paidAmount 롤백
-  const cancelPayment = (paymentId: string) => {
+  // 수납 취소: Payment 삭제 + 연결된 PDL 전체 삭제 + Billing.paidAmount 롤백 + 선수금 환원 + 계약 이력 보존
+  const cancelPayment = async (paymentId: string) => {
     const payment = db.payments.find(p => p.id === paymentId);
     if (!payment) return;
 
-    // 연결된 PDL 모두 삭제 (입금잔액 자동 복원 — 계산 필드이므로)
+    // 1. 연결된 PDL 모두 삭제 (통장 입금잔액 자동 복원)
     const linkedLinks = db.paymentDepositLinks.filter(l => l.paymentId === paymentId);
     for (const link of linkedLinks) {
       db.deleteRow('paymentDepositLinks', link.id);
     }
 
-    // Payment 삭제
+    // 2. 선수금 상계 수납 건인 경우 고객 선수금 잔액 자동 환원
+    const billing = db.billings.find(b => b.id === payment.billingId);
+    if (payment.method === 'PREPAID' && billing) {
+      const cust = db.customers.find(c => c.id === billing.customerId);
+      if (cust) {
+        db.updateRow<Customer>('customers', cust.id, {
+          prepaidBalance: (cust.prepaidBalance || 0) + payment.amount,
+          updatedAt: new Date().toISOString()
+        });
+      }
+    }
+
+    // 3. Payment 삭제
     db.deleteRow('payments', paymentId);
 
-    // Billing paidAmount 롤백
-    const billing = db.billings.find(b => b.id === payment.billingId);
+    // 4. Billing paidAmount 및 상태 롤백
     if (billing) {
-      const newPaid = Math.max(0, billing.paidAmount - payment.amount);
+      const newPaid = Math.max(0, (billing.paidAmount || 0) - payment.amount);
       const bSupply = billing.totalAmount || 0;
       const bGrand = bSupply + Math.round(bSupply * 0.1);
       let newStatus: Billing['status'] = 'UNPAID';
       if (newPaid >= bGrand) newStatus = 'PAID';
       else if (newPaid > 0) newStatus = 'PARTIAL';
+
       db.updateRow<Billing>('billings', billing.id, {
         paidAmount: newPaid,
         status: newStatus,
         updatedAt: new Date().toISOString()
       });
+
+      // 5. 계약 이력(ContractHistory) 무누락 기록
+      if (billing.contractId) {
+        db.insertRow<ContractHistory>('contractHistory', {
+          contractId: billing.contractId,
+          changeType: 'PAYMENT_CANCELLED',
+          changeDate: new Date().toISOString().split('T')[0],
+          description: `수납 취소 (롤백): ${billing.billingYm} 청구분 / ${payment.amount.toLocaleString()}원 수납 취소 (${payment.method}) (수납후 잔액: ${newPaid.toLocaleString()}원, 상태: ${newStatus})`,
+          createdAt: new Date().toISOString()
+        });
+      }
     }
 
     refreshAllData();
+    await db.awaitPendingWrites();
+  };
+
+  // 특정 청구서의 모든 수납 내역 일괄 취소 및 완전 롤백
+  const cancelAllPaymentsForBilling = async (billingId: string) => {
+    const targetPayments = db.payments.filter(p => p.billingId === billingId);
+    for (const p of targetPayments) {
+      await cancelPayment(p.id);
+    }
   };
 
   // 통장입금 등록 (입금내역으로 수납 재원 등록)
@@ -4973,7 +5006,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       assignAssetToContract, batchAssignAssetsToContract, unassignAssetFromContract, batchUnassignAssetsFromContract, exchangeOutboundAsset,
       saveSmartDispatch, saveSmartReturn,
       completeTodo,
-      generateBillingsForMonth, getDueContractsForBilling, generateDueBillings, generateBillingForSingleContract, regenerateBilling, approveBilling, cancelBilling, receivePayment, cancelPayment, saveBankDeposit, deleteBankDeposit,
+      generateBillingsForMonth, getDueContractsForBilling, generateDueBillings, generateBillingForSingleContract, regenerateBilling, approveBilling, cancelBilling, receivePayment, cancelPayment, cancelAllPaymentsForBilling, saveBankDeposit, deleteBankDeposit,
       addReceivable, generateStandaloneBillingForReceivable, linkReceivableToBilling,
       uploadBankTransactions, matchTransactionManual, unmatchTransaction, saveMatchingRule, deleteMatchingRule,
       dispatchDelivery, settleDeliveryCost, completeDelivery, completeInboundDelivery,
