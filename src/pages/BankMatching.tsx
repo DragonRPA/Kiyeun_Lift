@@ -209,14 +209,35 @@ export const BankMatching: React.FC = () => {
     return { bankMap, totalBalance };
   }, [bankTransactions]);
 
+  // v2: 통장 입금 사용 금액 계산
+  const getDepositUsedAmount = (txId: string) => {
+    const linkUsed = (paymentDepositLinks || [])
+      .filter(l => l.bankTransactionId === txId)
+      .reduce((s, l) => s + l.usedAmount, 0);
+    const legacyUsed = payments
+      .filter(p => p.id.startsWith(`pay-matching-${txId}`))
+      .reduce((s, p) => s + p.amount, 0);
+    return linkUsed + legacyUsed;
+  };
+
+  // v2: 통장 출금 매입정산 대사 금액 계산
+  const getWithdrawMatchedAmount = (txId: string) => {
+    const matched = purchaseSettlements.filter(s => s.bankTransactionId === txId);
+    return matched.reduce((s, st) => s + (st.paidAmount || st.totalAmount || 0), 0);
+  };
+
   const deposits = bankTransactions.filter(t => t.depositAmount > 0);
+  const totalDepositAmountSum = deposits.reduce((s, t) => s + t.depositAmount, 0);
+  const totalDepositUsedAmountSum = deposits.reduce((s, t) => s + getDepositUsedAmount(t.id), 0);
+  const totalDepositAvailAmountSum = Math.max(0, totalDepositAmountSum - totalDepositUsedAmountSum);
+
   const matchedDepositCount = deposits.filter(t => {
     const hasLink = (paymentDepositLinks || []).some(l => l.bankTransactionId === t.id && l.usedAmount > 0);
     const remBal = getDepositBalance(t.id);
     return !!t.matchedBillingId || hasLink || remBal <= 0;
   }).length;
   const unmatchedDepositCount = deposits.length - matchedDepositCount;
-  const depositMatchRate = deposits.length > 0 ? Math.round((matchedDepositCount / deposits.length) * 100) : 0;
+  const depositMatchRate = totalDepositAmountSum > 0 ? Math.round((totalDepositUsedAmountSum / totalDepositAmountSum) * 100) : 0;
 
   const unpaidBillings = billings.filter(b => b.status === 'UNPAID' || b.status === 'PARTIAL');
   const totalUnpaidBillingAmount = unpaidBillings.reduce((sum, b) => {
@@ -228,9 +249,13 @@ export const BankMatching: React.FC = () => {
 
   // 출금/지급 통계
   const withdraws = bankTransactions.filter(t => t.withdrawAmount > 0);
+  const totalWithdrawAmountSum = withdraws.reduce((s, t) => s + t.withdrawAmount, 0);
+  const totalWithdrawMatchedAmountSum = withdraws.reduce((s, t) => s + getWithdrawMatchedAmount(t.id), 0);
+  const totalWithdrawUnmatchedAmountSum = Math.max(0, totalWithdrawAmountSum - totalWithdrawMatchedAmountSum);
+
   const matchedWithdrawCount = withdraws.filter(t => purchaseSettlements.some(s => s.bankTransactionId === t.id)).length;
-  const unmatchedWithdrawCount = withdraws.filter(t => !purchaseSettlements.some(s => s.bankTransactionId === t.id)).length;
-  const withdrawMatchRate = withdraws.length > 0 ? Math.round((matchedWithdrawCount / withdraws.length) * 100) : 0;
+  const unmatchedWithdrawCount = withdraws.length - matchedWithdrawCount;
+  const withdrawMatchRate = totalWithdrawAmountSum > 0 ? Math.round((totalWithdrawMatchedAmountSum / totalWithdrawAmountSum) * 100) : 0;
 
   const unpaidSettlements = purchaseSettlements.filter(s => s.status !== 'PAID');
   const totalUnpaidSettlementAmount = unpaidSettlements.reduce((sum, s) => sum + (s.totalAmount - s.paidAmount), 0);
@@ -663,15 +688,15 @@ export const BankMatching: React.FC = () => {
         }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span style={{ fontSize: '12px', fontWeight: '700', color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-              📥 입금 수납 대사 ({deposits.length}건)
+              📥 입금 수납 대사 ({deposits.length}건 / ₩{totalDepositAmountSum.toLocaleString()})
             </span>
             <span style={{ fontSize: '13px', fontWeight: '800', color: 'var(--success)' }}>
-              완료 {matchedDepositCount}건 ({depositMatchRate}%)
+              수납완료 {depositMatchRate}% (₩{totalDepositUsedAmountSum.toLocaleString()})
             </span>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11px', backgroundColor: 'var(--bg-app)', padding: '5px 8px', borderRadius: '5px', border: '1px solid var(--border-color)' }}>
             <span style={{ color: 'var(--warning)', fontWeight: '600' }}>
-              미수납 입금: <strong>{unmatchedDepositCount}건</strong>
+              미수납 잔액: <strong>₩{totalDepositAvailAmountSum.toLocaleString()}</strong> ({unmatchedDepositCount}건)
             </span>
             <span style={{ color: 'var(--danger)', fontWeight: '600' }}>
               전사 미수금: <strong>₩{totalUnpaidBillingAmount.toLocaleString()}</strong>
@@ -691,15 +716,15 @@ export const BankMatching: React.FC = () => {
         }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span style={{ fontSize: '12px', fontWeight: '700', color: '#10B981', display: 'flex', alignItems: 'center', gap: '4px' }}>
-              💸 출금 지급 대사 ({withdraws.length}건)
+              💸 출금 지급 대사 ({withdraws.length}건 / ₩{totalWithdrawAmountSum.toLocaleString()})
             </span>
             <span style={{ fontSize: '13px', fontWeight: '800', color: '#10B981' }}>
-              대사 {matchedWithdrawCount}건 ({withdrawMatchRate}%)
+              정산대사 {withdrawMatchRate}% (₩{totalWithdrawMatchedAmountSum.toLocaleString()})
             </span>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11px', backgroundColor: 'var(--bg-app)', padding: '5px 8px', borderRadius: '5px', border: '1px solid var(--border-color)' }}>
             <span style={{ color: 'var(--warning)', fontWeight: '600' }}>
-              미대사 출금: <strong>{unmatchedWithdrawCount}건</strong>
+              미대사 출금: <strong>₩{totalWithdrawUnmatchedAmountSum.toLocaleString()}</strong> ({unmatchedWithdrawCount}건)
             </span>
             <span style={{ color: 'var(--danger)', fontWeight: '600' }}>
               전사 매입미지급: <strong>₩{totalUnpaidSettlementAmount.toLocaleString()}</strong>
@@ -884,8 +909,8 @@ export const BankMatching: React.FC = () => {
                   <th style={{ padding: '12px 14px', whiteSpace: 'nowrap' }}>거래일시</th>
                   <th style={{ padding: '12px 14px', whiteSpace: 'nowrap' }}>적요</th>
                   <th style={{ padding: '12px 14px', whiteSpace: 'nowrap' }}>기재내용 (상호/거래처)</th>
-                  <th style={{ padding: '12px 14px', whiteSpace: 'nowrap', textAlign: 'right' }}>입금액 (수납)</th>
-                  <th style={{ padding: '12px 14px', whiteSpace: 'nowrap', textAlign: 'right' }}>출금액 (지급)</th>
+                  <th style={{ padding: '12px 14px', whiteSpace: 'nowrap', textAlign: 'right' }}>입금액 대비 수납결과</th>
+                  <th style={{ padding: '12px 14px', whiteSpace: 'nowrap', textAlign: 'right' }}>출금액 대비 정산결과</th>
                   <th style={{ padding: '12px 14px', whiteSpace: 'nowrap', textAlign: 'right' }}>거래후 잔액</th>
                   <th style={{ padding: '12px 14px', whiteSpace: 'nowrap' }}>취급/거래점</th>
                   <th style={{ padding: '12px 14px', whiteSpace: 'nowrap' }}>매칭 정보 (청구/정산)</th>
@@ -903,11 +928,13 @@ export const BankMatching: React.FC = () => {
                   filteredTransactions.map((tx) => {
                     const linkedLinks = (paymentDepositLinks || []).filter(l => l.bankTransactionId === tx.id && l.usedAmount > 0);
                     const remBal = getDepositBalance(tx.id);
+                    const usedDeposit = getDepositUsedAmount(tx.id);
+                    const matchedWithdrawAmt = getWithdrawMatchedAmount(tx.id);
                     const isFullyUsed = tx.depositAmount > 0 && remBal <= 0;
-                    const isPartialUsed = tx.depositAmount > 0 && remBal > 0 && remBal < tx.depositAmount;
-                    const isMatchedDeposit = !!tx.matchedBillingId || linkedLinks.length > 0;
+                    const isPartialUsed = tx.depositAmount > 0 && remBal > 0 && usedDeposit > 0;
+                    const isMatchedDeposit = !!tx.matchedBillingId || linkedLinks.length > 0 || usedDeposit > 0;
                     const matchedSettlement = purchaseSettlements.find(s => s.bankTransactionId === tx.id);
-                    const isMatchedWithdraw = !!matchedSettlement;
+                    const isMatchedWithdraw = !!matchedSettlement || matchedWithdrawAmt > 0;
                     const isMatched = isMatchedDeposit || isMatchedWithdraw;
                     const senderDisplay = tx.counterparty || tx.senderName;
                     const bBank = tx.bankName || '우리은행';
@@ -993,12 +1020,82 @@ export const BankMatching: React.FC = () => {
                           {senderDisplay}
                         </td>
 
-                        <td style={{ padding: '10px 14px', whiteSpace: 'nowrap', textAlign: 'right', fontWeight: 'bold', color: tx.depositAmount > 0 ? 'var(--primary)' : 'var(--text-muted)' }}>
-                          {tx.depositAmount > 0 ? `+${tx.depositAmount.toLocaleString()}원` : '-'}
+                        {/* 🌟 입금액 대비 수납처리 완료 결과 셀 */}
+                        <td style={{ padding: '10px 14px', whiteSpace: 'nowrap', textAlign: 'right' }}>
+                          {tx.depositAmount > 0 ? (
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '2px' }}>
+                              <span style={{ fontWeight: '800', color: 'var(--primary)', fontSize: '13px' }}>
+                                +{tx.depositAmount.toLocaleString()}원
+                              </span>
+                              {isFullyUsed ? (
+                                <span style={{
+                                  fontSize: '10.5px',
+                                  fontWeight: '600',
+                                  color: '#059669',
+                                  backgroundColor: '#d1fae5',
+                                  padding: '1px 5px',
+                                  borderRadius: '3px'
+                                }}>
+                                  ✓ 전액 수납완결 ({usedDeposit.toLocaleString()}원)
+                                </span>
+                              ) : isPartialUsed ? (
+                                <div style={{ display: 'flex', gap: '4px', fontSize: '10.5px' }}>
+                                  <span style={{ color: '#059669', fontWeight: '600' }}>수납 {usedDeposit.toLocaleString()}원</span>
+                                  <span style={{ color: 'var(--text-muted)' }}>/</span>
+                                  <span style={{ color: '#d97706', fontWeight: '600' }}>잔여 {remBal.toLocaleString()}원</span>
+                                </div>
+                              ) : (
+                                <span style={{
+                                  fontSize: '10.5px',
+                                  fontWeight: '500',
+                                  color: '#6b7280',
+                                  backgroundColor: '#f3f4f6',
+                                  padding: '1px 5px',
+                                  borderRadius: '3px'
+                                }}>
+                                  미수납 (가용 {tx.depositAmount.toLocaleString()}원)
+                                </span>
+                              )}
+                            </div>
+                          ) : (
+                            <span style={{ color: 'var(--text-muted)', fontSize: '12px' }}>-</span>
+                          )}
                         </td>
 
-                        <td style={{ padding: '10px 14px', whiteSpace: 'nowrap', textAlign: 'right', color: tx.withdrawAmount > 0 ? 'var(--danger)' : 'var(--text-muted)' }}>
-                          {tx.withdrawAmount > 0 ? `-${tx.withdrawAmount.toLocaleString()}원` : '-'}
+                        {/* 🌟 출금액 대비 매입정산 결과 셀 */}
+                        <td style={{ padding: '10px 14px', whiteSpace: 'nowrap', textAlign: 'right' }}>
+                          {tx.withdrawAmount > 0 ? (
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '2px' }}>
+                              <span style={{ fontWeight: '800', color: '#dc2626', fontSize: '13px' }}>
+                                -{tx.withdrawAmount.toLocaleString()}원
+                              </span>
+                              {isMatchedWithdraw ? (
+                                <span style={{
+                                  fontSize: '10.5px',
+                                  fontWeight: '600',
+                                  color: '#059669',
+                                  backgroundColor: '#d1fae5',
+                                  padding: '1px 5px',
+                                  borderRadius: '3px'
+                                }}>
+                                  ✓ 정산대사 완료 ({matchedWithdrawAmt.toLocaleString()}원)
+                                </span>
+                              ) : (
+                                <span style={{
+                                  fontSize: '10.5px',
+                                  fontWeight: '500',
+                                  color: '#b45309',
+                                  backgroundColor: '#fef3c7',
+                                  padding: '1px 5px',
+                                  borderRadius: '3px'
+                                }}>
+                                  ⚠️ 미대사 출금 (-{tx.withdrawAmount.toLocaleString()}원)
+                                </span>
+                              )}
+                            </div>
+                          ) : (
+                            <span style={{ color: 'var(--text-muted)', fontSize: '12px' }}>-</span>
+                          )}
                         </td>
 
                         <td style={{ padding: '10px 14px', whiteSpace: 'nowrap', textAlign: 'right', color: 'var(--text-main)', fontSize: '12px', fontWeight: '500' }}>
