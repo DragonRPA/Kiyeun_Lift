@@ -45,15 +45,8 @@ export const Contracts: React.FC = () => {
   const [siteFilter, setSiteFilter] = useState('ALL');
   const [siteInputText, setSiteInputText] = useState('');
   const [siteDropdownOpen, setSiteDropdownOpen] = useState(false);
-  const [startDateFilter, setStartDateFilter] = useState<string>(() => {
-    const now = new Date();
-    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
-  });
-  const [endDateFilter, setEndDateFilter] = useState<string>(() => {
-    const now = new Date();
-    const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
-    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
-  });
+  const [startDateFilter, setStartDateFilter] = useState<string>('');
+  const [endDateFilter, setEndDateFilter] = useState<string>('');
   const [quickChipFilter, setQuickChipFilter] = useState<'ALL' | 'ACTIVE' | 'ASSIGNED' | 'D3' | 'ZERO_FEE' | 'SUCCEEDED' | 'COMPLETED'>('ALL');
 
   // 선택된 계약 ID

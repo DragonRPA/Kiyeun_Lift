@@ -202,11 +202,21 @@ CREATE TABLE assets (
     
     -- 임차자산 상세 (vendors 연동)
     "vendorId" TEXT REFERENCES vendors(id),
+    supplier TEXT,
     "rentStart" TEXT,
     "rentEnd" TEXT, -- 실제 반납 시 지연 정산 기준
     "monthlyRentFee" DOUBLE PRECISION,
     "dailyRentFee" DOUBLE PRECISION,
     "actualRentReturnDate" TEXT,
+
+    -- 현재 가동/계약 연동 속성 (실시간 라이프사이클)
+    "currentCustomerId" TEXT REFERENCES customers(id),
+    "currentSiteId" TEXT REFERENCES customer_sites(id),
+    "contractStart" TEXT,
+    "contractEnd" TEXT,
+    "cumRentalFee" DOUBLE PRECISION DEFAULT 0,
+    "cumRepairCost" DOUBLE PRECISION DEFAULT 0,
+    note TEXT,
 
     memo TEXT,
     "createdAt" TEXT NOT NULL,
