@@ -1639,6 +1639,16 @@ ${items.map((item, idx) => {
               const totalPaid = filteredBillings.reduce((sum, b) => sum + (b.paidAmount || 0), 0);
               const totalUnpaid = Math.max(0, totalGrand - totalPaid);
 
+              // 💰 미수납 통장잔액 (검색된 고객사 기준, 전체 검색 시 전사 미사용 입금 잔액 총합)
+              const searchedCustName = searchTerm.trim().toLowerCase();
+              const relevantDeposits = bankTransactions.filter(t => {
+                if (!t.isDeposit) return false;
+                if (!searchedCustName) return true;
+                const mappedCustName = customers.find(c => c.id === t.customerId)?.name || '';
+                return t.senderName.toLowerCase().includes(searchedCustName) || mappedCustName.toLowerCase().includes(searchedCustName);
+              });
+              const totalUnappliedDeposit = relevantDeposits.reduce((sum, t) => sum + getDepositBalance(t.id), 0);
+
               return (
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '12px', marginBottom: '16px' }}>
                   <div style={{ padding: '12px', backgroundColor: 'var(--bg-card)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
@@ -1660,6 +1670,10 @@ ${items.map((item, idx) => {
                   <div style={{ padding: '12px', backgroundColor: 'var(--bg-card)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
                     <div style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 600, marginBottom: '4px' }}>미수 채권 잔액</div>
                     <div style={{ fontSize: '16px', fontWeight: 800, color: totalUnpaid > 0 ? '#dc2626' : 'var(--text-muted)' }}>₩{totalUnpaid.toLocaleString()}</div>
+                  </div>
+                  <div style={{ padding: '12px', backgroundColor: 'var(--bg-card)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                    <div style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 600, marginBottom: '4px' }}>미수납 통장잔액</div>
+                    <div style={{ fontSize: '16px', fontWeight: 800, color: totalUnappliedDeposit > 0 ? '#10B981' : 'var(--text-muted)' }}>₩{totalUnappliedDeposit.toLocaleString()}</div>
                   </div>
                 </div>
               );
