@@ -2736,6 +2736,7 @@ ${items.map((item, idx) => {
             );
           })
           .map(dep => ({ ...dep, balance: getDepositBalance(dep.id) }))
+          .filter(dep => dep.balance > 0) // 0원이 된 입금 항목은 표시에서 제외
           .sort((a, b) => a.transactionDate.localeCompare(b.transactionDate)); // 오래된 입금 우선 (FIFO)
 
         // 이번 수납 합계 계산
