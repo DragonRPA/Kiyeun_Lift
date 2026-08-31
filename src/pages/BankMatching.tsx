@@ -557,141 +557,32 @@ export const BankMatching: React.FC = () => {
   return (
     <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
       
-      {/* 헤더 타이틀 */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
-        <div>
-          <h2 style={{ fontSize: '20px', fontWeight: 'bold', margin: 0, color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Building2 size={22} style={{ color: 'var(--primary)' }} />
-            통장 입출금 내역 및 수납 / 지급 대사 관리
+      {/* 🌟 1. 헤더 타이틀 및 상단 액션 툴바 */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <h2 style={{ fontSize: '18px', fontWeight: 'bold', margin: 0, color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <Building2 size={20} style={{ color: 'var(--primary)' }} />
+            은행 입출금 대장
           </h2>
-          <p style={{ fontSize: '13px', color: 'var(--text-muted)', margin: '4px 0 0 0' }}>
-            거래 은행의 통장 엑셀을 업로드하여 입금(수납) 내역과 출금(지급) 내역의 1:1 대사를 누락 없이 통합 관리합니다.
-          </p>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
           <button
             onClick={() => setActiveTab('MATCHING')}
             className={`btn ${activeTab === 'MATCHING' ? 'btn-primary' : 'btn-secondary'}`}
-            style={{ fontSize: '13px', whiteSpace: 'nowrap' }}
+            style={{ fontSize: '12px', padding: '4px 10px', whiteSpace: 'nowrap' }}
           >
-            <Layers size={14} style={{ marginRight: '6px' }} />
+            <Layers size={13} style={{ marginRight: '4px' }} />
             통장 입출금 대사
           </button>
           <button
             onClick={() => setActiveTab('RULES')}
             className={`btn ${activeTab === 'RULES' ? 'btn-primary' : 'btn-secondary'}`}
-            style={{ fontSize: '13px', whiteSpace: 'nowrap' }}
+            style={{ fontSize: '12px', padding: '4px 10px', whiteSpace: 'nowrap' }}
           >
-            <RefreshCw size={14} style={{ marginRight: '6px' }} />
-            매칭 규칙 관리 ({bankMatchingRules.length}건)
+            <RefreshCw size={13} style={{ marginRight: '4px' }} />
+            매칭 규칙 ({bankMatchingRules.length}건)
           </button>
-        </div>
-      </div>
-
-      {/* 수납/입금 관점 통계 카드 */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-        <div style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <span>📥 [수납 / 입금 관점] 통장 입금 대사 현황</span>
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
-          <div style={{ padding: '14px', backgroundColor: 'var(--bg-surface)', borderRadius: '8px', border: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <div style={{ padding: '8px', backgroundColor: 'rgba(59, 130, 246, 0.1)', color: 'var(--primary)', borderRadius: '6px' }}>
-              <DollarSign size={18} />
-            </div>
-            <div>
-              <div style={{ fontSize: '11px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>총 입금 대상</div>
-              <div style={{ fontSize: '16px', fontWeight: 'bold', color: 'var(--text-main)' }}>{deposits.length} 건</div>
-            </div>
-          </div>
-
-          <div style={{ padding: '14px', backgroundColor: 'var(--bg-surface)', borderRadius: '8px', border: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <div style={{ padding: '8px', backgroundColor: 'rgba(16, 185, 129, 0.1)', color: 'var(--success)', borderRadius: '6px' }}>
-              <CheckCircle2 size={18} />
-            </div>
-            <div>
-              <div style={{ fontSize: '11px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>수납 대사 완료</div>
-              <div style={{ fontSize: '16px', fontWeight: 'bold', color: 'var(--success)' }}>{matchedDepositCount} 건 ({depositMatchRate}%)</div>
-            </div>
-          </div>
-
-          <div style={{ padding: '14px', backgroundColor: 'var(--bg-surface)', borderRadius: '8px', border: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <div style={{ padding: '8px', backgroundColor: 'rgba(245, 158, 11, 0.1)', color: 'var(--warning)', borderRadius: '6px' }}>
-              <AlertCircle size={18} />
-            </div>
-            <div>
-              <div style={{ fontSize: '11px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>미매칭 입금 (수수동)</div>
-              <div style={{ fontSize: '16px', fontWeight: 'bold', color: 'var(--warning)' }}>{unmatchedDepositCount} 건</div>
-            </div>
-          </div>
-
-          <div style={{ padding: '14px', backgroundColor: 'var(--bg-surface)', borderRadius: '8px', border: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <div style={{ padding: '8px', backgroundColor: 'rgba(239, 68, 68, 0.1)', color: 'var(--danger)', borderRadius: '6px' }}>
-              <TrendingUp size={18} />
-            </div>
-            <div>
-              <div style={{ fontSize: '11px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>전사 미수금 잔액</div>
-              <div style={{ fontSize: '16px', fontWeight: 'bold', color: 'var(--danger)' }}>{totalUnpaidBillingAmount.toLocaleString()} 원</div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* 지급/출금 관점 통계 카드 */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-        <div style={{ fontSize: '12px', fontWeight: 'bold', color: '#10B981', display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <span>💸 [지급 / 출금 관점] 통장 출금 대사 현황</span>
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
-          <div style={{ padding: '14px', backgroundColor: 'var(--bg-surface)', borderRadius: '8px', border: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <div style={{ padding: '8px', backgroundColor: 'rgba(16, 185, 129, 0.1)', color: '#10B981', borderRadius: '6px' }}>
-              <DollarSign size={18} />
-            </div>
-            <div>
-              <div style={{ fontSize: '11px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>총 출금 대상</div>
-              <div style={{ fontSize: '16px', fontWeight: 'bold', color: 'var(--text-main)' }}>{withdraws.length} 건</div>
-            </div>
-          </div>
-
-          <div style={{ padding: '14px', backgroundColor: 'var(--bg-surface)', borderRadius: '8px', border: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <div style={{ padding: '8px', backgroundColor: 'rgba(16, 185, 129, 0.15)', color: '#10B981', borderRadius: '6px' }}>
-              <CheckCircle2 size={18} />
-            </div>
-            <div>
-              <div style={{ fontSize: '11px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>지급 대사 완료</div>
-              <div style={{ fontSize: '16px', fontWeight: 'bold', color: '#10B981' }}>{matchedWithdrawCount} 건 ({withdrawMatchRate}%)</div>
-            </div>
-          </div>
-
-          <div style={{ padding: '14px', backgroundColor: 'var(--bg-surface)', borderRadius: '8px', border: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <div style={{ padding: '8px', backgroundColor: 'rgba(245, 158, 11, 0.1)', color: 'var(--warning)', borderRadius: '6px' }}>
-              <AlertCircle size={18} />
-            </div>
-            <div>
-              <div style={{ fontSize: '11px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>미매칭 출금 (미대사)</div>
-              <div style={{ fontSize: '16px', fontWeight: 'bold', color: 'var(--warning)' }}>{unmatchedWithdrawCount} 건</div>
-            </div>
-          </div>
-
-          <div style={{ padding: '14px', backgroundColor: 'var(--bg-surface)', borderRadius: '8px', border: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <div style={{ padding: '8px', backgroundColor: 'rgba(239, 68, 68, 0.1)', color: 'var(--danger)', borderRadius: '6px' }}>
-              <TrendingUp size={18} />
-            </div>
-            <div>
-              <div style={{ fontSize: '11px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>전사 매입 미지급 잔액</div>
-              <div style={{ fontSize: '16px', fontWeight: 'bold', color: 'var(--danger)' }}>{totalUnpaidSettlementAmount.toLocaleString()} 원</div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* 🏦 은행별 실시간 계좌 잔액 현황 카드 패널 */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <Wallet size={16} style={{ color: 'var(--primary)' }} />
-            <span>은행별 계좌 잔액 현황</span>
-          </div>
           <button
             onClick={() => {
               const bInfo = bankBalances.bankMap['우리은행'];
@@ -701,258 +592,285 @@ export const BankMatching: React.FC = () => {
               setIsInitBalanceModalOpen(true);
             }}
             className="btn btn-secondary"
-            style={{ fontSize: '11px', padding: '3px 8px', display: 'flex', alignItems: 'center', gap: '4px' }}
+            style={{ fontSize: '12px', padding: '4px 10px', display: 'flex', alignItems: 'center', gap: '4px' }}
           >
-            <Settings size={12} />
-            기초 / 현재 잔액 설정
+            <Settings size={13} />
+            기초 잔액 설정
           </button>
         </div>
+      </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px' }}>
-          {Object.entries(bankBalances.bankMap).map(([bName, bInfo]) => {
-            const isSelected = selectedBankFilter === bName;
-            return (
-              <div
-                key={bName}
-                onClick={() => setSelectedBankFilter(isSelected ? 'ALL' : bName)}
-                style={{
-                  padding: '14px',
-                  backgroundColor: isSelected ? 'rgba(59, 130, 246, 0.12)' : 'var(--bg-surface)',
-                  borderRadius: '8px',
-                  border: isSelected ? '2px solid var(--primary)' : '1px solid var(--border-color)',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '4px',
-                  boxShadow: isSelected ? '0 0 10px rgba(59, 130, 246, 0.3)' : 'none',
-                  transition: 'all 0.15s ease'
-                }}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: '12px', fontWeight: 'bold', color: isSelected ? 'var(--primary)' : 'var(--text-main)' }}>
-                    {bName} {isSelected && '✓ 선택됨'}
-                  </span>
-                  <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{bInfo.accountNumber || '계좌'}</span>
-                </div>
-                <div style={{ fontSize: '18px', fontWeight: '800', color: isSelected ? 'var(--primary)' : 'var(--text-main)' }}>
-                  {bInfo.balance.toLocaleString()} 원
-                </div>
-                <div style={{ fontSize: '10px', color: 'var(--text-muted)', display: 'flex', justifyContent: 'space-between' }}>
-                  <span>최종 거래일시: {bInfo.latestDate}</span>
-                </div>
-              </div>
-            );
-          })}
-
-          {/* 합계 총 계좌 잔액 카드 */}
-          <div
-            onClick={() => setSelectedBankFilter('ALL')}
-            style={{
-              padding: '14px',
-              backgroundColor: selectedBankFilter === 'ALL' ? 'rgba(16, 185, 129, 0.1)' : 'var(--bg-surface)',
-              borderRadius: '8px',
-              border: selectedBankFilter === 'ALL' ? '2px solid var(--success)' : '1px solid var(--border-color)',
-              cursor: 'pointer',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '4px',
-              transition: 'all 0.15s ease'
-            }}
-          >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--text-main)' }}>전 계좌 잔액 총합계</span>
-              {selectedBankFilter === 'ALL' && <span style={{ fontSize: '10px', color: 'var(--success)', fontWeight: 'bold' }}>전체 보기 중</span>}
-            </div>
-            <div style={{ fontSize: '18px', fontWeight: '800', color: 'var(--success)' }}>
-              {bankBalances.totalBalance.toLocaleString()} 원
-            </div>
-            <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>전사 은행 계좌 합산 누계액</div>
+      {/* 🌟 2. 고밀도 슬림 통계 요약 바 (3분할 콤팩트 카드) */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '10px' }}>
+        
+        {/* 블록 1: 은행 계좌 잔액 현황 */}
+        <div style={{
+          padding: '10px 14px',
+          backgroundColor: 'var(--bg-surface)',
+          borderRadius: '8px',
+          border: '1px solid var(--border-color)',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '6px'
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '12px', fontWeight: '700', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <Wallet size={14} style={{ color: 'var(--primary)' }} /> 은행 계좌 잔액
+            </span>
+            <span style={{ fontSize: '14px', fontWeight: '800', color: 'var(--success)' }}>
+              ₩{bankBalances.totalBalance.toLocaleString()}
+            </span>
+          </div>
+          <div style={{ display: 'flex', gap: '6px', fontSize: '11px' }}>
+            {Object.entries(bankBalances.bankMap).map(([bName, bInfo]) => {
+              const isSelected = selectedBankFilter === bName;
+              return (
+                <button
+                  key={bName}
+                  type="button"
+                  onClick={() => setSelectedBankFilter(isSelected ? 'ALL' : bName)}
+                  style={{
+                    flex: 1,
+                    padding: '4px 8px',
+                    borderRadius: '5px',
+                    border: isSelected ? '1.5px solid var(--primary)' : '1px solid var(--border-color)',
+                    backgroundColor: isSelected ? 'rgba(59, 130, 246, 0.12)' : 'var(--bg-app)',
+                    color: isSelected ? 'var(--primary)' : 'var(--text-secondary)',
+                    fontWeight: isSelected ? '700' : '500',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center'
+                  }}
+                >
+                  <span>{bName}</span>
+                  <strong style={{ color: isSelected ? 'var(--primary)' : 'var(--text-main)' }}>₩{bInfo.balance.toLocaleString()}</strong>
+                </button>
+              );
+            })}
           </div>
         </div>
+
+        {/* 블록 2: 📥 입금 (매출 수납 대사 현황) */}
+        <div style={{
+          padding: '10px 14px',
+          backgroundColor: 'var(--bg-surface)',
+          borderRadius: '8px',
+          border: '1px solid var(--border-color)',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '6px'
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '12px', fontWeight: '700', color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+              📥 입금 수납 대사 ({deposits.length}건)
+            </span>
+            <span style={{ fontSize: '13px', fontWeight: '800', color: 'var(--success)' }}>
+              완료 {matchedDepositCount}건 ({depositMatchRate}%)
+            </span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11px', backgroundColor: 'var(--bg-app)', padding: '5px 8px', borderRadius: '5px', border: '1px solid var(--border-color)' }}>
+            <span style={{ color: 'var(--warning)', fontWeight: '600' }}>
+              미수납 입금: <strong>{unmatchedDepositCount}건</strong>
+            </span>
+            <span style={{ color: 'var(--danger)', fontWeight: '600' }}>
+              전사 미수금: <strong>₩{totalUnpaidBillingAmount.toLocaleString()}</strong>
+            </span>
+          </div>
+        </div>
+
+        {/* 블록 3: 💸 출금 (매입 지급 대사 현황) */}
+        <div style={{
+          padding: '10px 14px',
+          backgroundColor: 'var(--bg-surface)',
+          borderRadius: '8px',
+          border: '1px solid var(--border-color)',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '6px'
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '12px', fontWeight: '700', color: '#10B981', display: 'flex', alignItems: 'center', gap: '4px' }}>
+              💸 출금 지급 대사 ({withdraws.length}건)
+            </span>
+            <span style={{ fontSize: '13px', fontWeight: '800', color: '#10B981' }}>
+              대사 {matchedWithdrawCount}건 ({withdrawMatchRate}%)
+            </span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11px', backgroundColor: 'var(--bg-app)', padding: '5px 8px', borderRadius: '5px', border: '1px solid var(--border-color)' }}>
+            <span style={{ color: 'var(--warning)', fontWeight: '600' }}>
+              미대사 출금: <strong>{unmatchedWithdrawCount}건</strong>
+            </span>
+            <span style={{ color: 'var(--danger)', fontWeight: '600' }}>
+              전사 매입미지급: <strong>₩{totalUnpaidSettlementAmount.toLocaleString()}</strong>
+            </span>
+          </div>
+        </div>
+
       </div>
 
       {activeTab === 'MATCHING' ? (
         <>
-          {/* 전사 컨트롤 툴바 */}
-          <div style={{ padding: '16px', backgroundColor: 'var(--bg-surface)', borderRadius: '8px', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+          {/* 🌟 3. 슬림 고밀도 조회 필터 및 액션 툴바 */}
+          <div style={{ padding: '12px 14px', backgroundColor: 'var(--bg-surface)', borderRadius: '8px', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '10px' }}>
             
-            {/* 1열: 토글 스위치 바 */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', backgroundColor: 'var(--bg-main)', padding: '10px 14px', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Info size={16} style={{ color: 'var(--primary)', flexShrink: 0 }} />
-                <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-main)', whiteSpace: 'nowrap' }}>
-                  수납 대사 설정:
-                </span>
-                <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-                  상대방 계좌번호가 없는 통장 내역에 대응하여 입금자명 기준 수동 수납 처리가 기본 수행됩니다.
-                </span>
+            {/* 1열 필터: 구분, 은행, 상태, 검색어, 계좌자동매칭 토글 */}
+            <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                <label style={{ fontSize: '11px', fontWeight: '600', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>구분</label>
+                <div style={{ display: 'flex', gap: '2px' }}>
+                  <button className={`btn ${typeFilter === 'ALL' ? 'btn-primary' : 'btn-secondary'}`} style={{ fontSize: '11.5px', padding: '3px 8px' }} onClick={() => setTypeFilter('ALL')}>전체</button>
+                  <button className={`btn ${typeFilter === 'DEPOSIT' ? 'btn-primary' : 'btn-secondary'}`} style={{ fontSize: '11.5px', padding: '3px 8px' }} onClick={() => setTypeFilter('DEPOSIT')}>입금</button>
+                  <button className={`btn ${typeFilter === 'WITHDRAW' ? 'btn-primary' : 'btn-secondary'}`} style={{ fontSize: '11.5px', padding: '3px 8px' }} onClick={() => setTypeFilter('WITHDRAW')}>출금</button>
+                </div>
               </div>
 
-              {/* 계좌번호 매칭 ON/OFF 토글 (기본값: OFF) */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }} onClick={() => setUseAccountNumberMatch(!useAccountNumberMatch)}>
-                <span style={{ fontSize: '12px', fontWeight: 'bold', color: useAccountNumberMatch ? 'var(--primary)' : 'var(--text-muted)', whiteSpace: 'nowrap' }}>
-                  계좌번호 자동 매칭 {useAccountNumberMatch ? '[ ON ]' : '[ OFF (기본값) ]'}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                <label style={{ fontSize: '11px', fontWeight: '600', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>은행</label>
+                <div style={{ display: 'flex', gap: '2px' }}>
+                  <button className={`btn ${selectedBankFilter === 'ALL' ? 'btn-primary' : 'btn-secondary'}`} style={{ fontSize: '11.5px', padding: '3px 8px' }} onClick={() => setSelectedBankFilter('ALL')}>전체</button>
+                  <button className={`btn ${selectedBankFilter === '우리은행' ? 'btn-primary' : 'btn-secondary'}`} style={{ fontSize: '11.5px', padding: '3px 8px' }} onClick={() => setSelectedBankFilter('우리은행')}>우리은행</button>
+                  <button className={`btn ${selectedBankFilter === '신한은행' ? 'btn-primary' : 'btn-secondary'}`} style={{ fontSize: '11.5px', padding: '3px 8px' }} onClick={() => setSelectedBankFilter('신한은행')}>신한은행</button>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                <label style={{ fontSize: '11px', fontWeight: '600', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>대사 상태</label>
+                <select value={statusFilter} onChange={(e: any) => setStatusFilter(e.target.value)} className="form-control" style={{ width: '160px', fontSize: '12px', padding: '4px 8px', height: '28px' }}>
+                  <option value="ALL">전체 매칭 상태</option>
+                  <option value="UNMATCHED_ALL">⚠️ 전체 미대사건</option>
+                  <option value="MATCHED_ALL">✅ 전체 대사완료건</option>
+                  <option value="DEPOSIT_UNMATCHED">📥 입금 미수납</option>
+                  <option value="DEPOSIT_MATCHED">📥 입금 수납 완료</option>
+                  <option value="WITHDRAW_UNMATCHED">💸 출금 미대사</option>
+                  <option value="WITHDRAW_MATCHED">💸 출금 지급 완료</option>
+                </select>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                <label style={{ fontSize: '11px', fontWeight: '600', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>검색어</label>
+                <div style={{ position: 'relative', width: '180px' }}>
+                  <Search size={13} style={{ position: 'absolute', left: '8px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+                  <input type="text" placeholder="입금자명 / 기재내용" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="form-control" style={{ width: '100%', paddingLeft: '26px', fontSize: '12px', padding: '4px 8px 4px 26px', height: '28px' }} />
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px', cursor: 'pointer' }} onClick={() => setUseAccountNumberMatch(!useAccountNumberMatch)}>
+                <span style={{ fontSize: '11px', fontWeight: 'bold', color: useAccountNumberMatch ? 'var(--primary)' : 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                  계좌번호 자동매칭 {useAccountNumberMatch ? '[ON]' : '[OFF]'}
                 </span>
                 {useAccountNumberMatch ? (
-                  <ToggleRight size={26} style={{ color: 'var(--primary)' }} />
+                  <ToggleRight size={20} style={{ color: 'var(--primary)' }} />
                 ) : (
-                  <ToggleLeft size={26} style={{ color: 'var(--text-muted)' }} />
+                  <ToggleLeft size={20} style={{ color: 'var(--text-muted)' }} />
                 )}
               </div>
             </div>
 
-            {/* 2열: 입출금 구분 필터 & 검색 필터 및 액션 버튼 */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              <div style={{ display: 'flex', gap: '16px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <label style={{ fontSize: '11px', fontWeight: '600', display: 'block', whiteSpace: 'nowrap' }}>구분</label>
-                  <div style={{ display: 'flex', gap: '4px' }}>
-                    <button className={`btn ${typeFilter === 'ALL' ? 'btn-primary' : 'btn-secondary'}`} style={{ fontSize: '12px', padding: '4px 10px' }} onClick={() => setTypeFilter('ALL')}>전체</button>
-                    <button className={`btn ${typeFilter === 'DEPOSIT' ? 'btn-primary' : 'btn-secondary'}`} style={{ fontSize: '12px', padding: '4px 10px' }} onClick={() => setTypeFilter('DEPOSIT')}>입금</button>
-                    <button className={`btn ${typeFilter === 'WITHDRAW' ? 'btn-primary' : 'btn-secondary'}`} style={{ fontSize: '12px', padding: '4px 10px' }} onClick={() => setTypeFilter('WITHDRAW')}>출금</button>
-                  </div>
-                </div>
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <label style={{ fontSize: '11px', fontWeight: '600', display: 'block', whiteSpace: 'nowrap' }}>은행</label>
-                  <div style={{ display: 'flex', gap: '4px' }}>
-                    <button className={`btn ${selectedBankFilter === 'ALL' ? 'btn-primary' : 'btn-secondary'}`} style={{ fontSize: '12px', padding: '4px 10px' }} onClick={() => setSelectedBankFilter('ALL')}>전체</button>
-                    <button className={`btn ${selectedBankFilter === '우리은행' ? 'btn-primary' : 'btn-secondary'}`} style={{ fontSize: '12px', padding: '4px 10px' }} onClick={() => setSelectedBankFilter('우리은행')}>우리은행</button>
-                    <button className={`btn ${selectedBankFilter === '신한은행' ? 'btn-primary' : 'btn-secondary'}`} style={{ fontSize: '12px', padding: '4px 10px' }} onClick={() => setSelectedBankFilter('신한은행')}>신한은행</button>
-                  </div>
-                </div>
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <label style={{ fontSize: '11px', fontWeight: '600', display: 'block', whiteSpace: 'nowrap' }}>상태</label>
-                  <select value={statusFilter} onChange={(e: any) => setStatusFilter(e.target.value)} className="form-control" style={{ width: '180px', fontSize: '12px' }}>
-                    <option value="ALL">전체 매칭 상태</option>
-                    <option value="UNMATCHED_ALL">⚠️ 전체 미대사건</option>
-                    <option value="MATCHED_ALL">✅ 전체 대사완료건</option>
-                    <option value="DEPOSIT_UNMATCHED">📥 입금 미수납</option>
-                    <option value="DEPOSIT_MATCHED">📥 입금 수납 완료</option>
-                    <option value="WITHDRAW_UNMATCHED">💸 출금 미대사</option>
-                    <option value="WITHDRAW_MATCHED">💸 출금 지급 완료</option>
-                  </select>
-                </div>
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <label style={{ fontSize: '11px', fontWeight: '600', display: 'block', whiteSpace: 'nowrap' }}>검색어</label>
-                  <div style={{ position: 'relative', width: '200px' }}>
-                    <Search size={14} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
-                    <input type="text" placeholder="입금자명 / 기재내용 / 메모" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="form-control" style={{ width: '100%', paddingLeft: '30px', fontSize: '12px' }} />
-                  </div>
+            {/* 2열 필터: 기간, 기간이동, 금액, 초기화 & 엑셀 액션 버튼들 */}
+            <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-end', flexWrap: 'wrap', paddingTop: '6px', borderTop: '1px solid var(--border-color)' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                <label style={{ fontSize: '11px', fontWeight: '600', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>조회 기간</label>
+                <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                  <input type="date" value={txStartDate} onChange={e => setTxStartDate(e.target.value)} className="form-control" style={{ fontSize: '11.5px', padding: '3px 6px', height: '28px' }} />
+                  <span style={{ color: 'var(--text-muted)' }}>~</span>
+                  <input type="date" value={txEndDate} onChange={e => setTxEndDate(e.target.value)} className="form-control" style={{ fontSize: '11.5px', padding: '3px 6px', height: '28px' }} />
                 </div>
               </div>
 
-              <div style={{ display: 'flex', gap: '16px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <label style={{ fontSize: '11px', fontWeight: '600', display: 'block', whiteSpace: 'nowrap' }}>시작일</label>
-                  <input type="date" value={txStartDate} onChange={e => setTxStartDate(e.target.value)} className="form-control" style={{ fontSize: '12px', minWidth: '130px' }} />
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <label style={{ fontSize: '11px', fontWeight: '600', display: 'block', whiteSpace: 'nowrap' }}>종료일</label>
-                  <input type="date" value={txEndDate} onChange={e => setTxEndDate(e.target.value)} className="form-control" style={{ fontSize: '12px', minWidth: '130px' }} />
-                </div>
-
-                {/* ◀ 당월 ▶ 바로가기 버튼 그룹 */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flexShrink: 0 }}>
-                  <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>기간 이동</label>
-                  <div style={{ display: 'flex', gap: '2px', alignItems: 'center' }}>
-                    <button
-                      type="button"
-                      className="btn-secondary"
-                      onClick={() => handleShiftMonth(-1)}
-                      style={{ padding: '5px 8px', height: '31px', fontSize: '12px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                      title="전월로 이동"
-                    >
-                      &lt;
-                    </button>
-                    <button
-                      type="button"
-                      className="btn-secondary"
-                      onClick={handleSetCurrentMonth}
-                      style={{ padding: '5px 10px', height: '31px', fontSize: '12px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', whiteSpace: 'nowrap' }}
-                      title="당월로 이동"
-                    >
-                      당월
-                    </button>
-                    <button
-                      type="button"
-                      className="btn-secondary"
-                      onClick={() => handleShiftMonth(1)}
-                      style={{ padding: '5px 8px', height: '31px', fontSize: '12px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                      title="다음달로 이동"
-                    >
-                      &gt;
-                    </button>
-                    <button
-                      type="button"
-                      className="btn-secondary"
-                      onClick={handleSetAllDates}
-                      style={{ padding: '5px 10px', height: '31px', fontSize: '12px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', whiteSpace: 'nowrap' }}
-                      title="전체 기간 보기"
-                    >
-                      전체
-                    </button>
-                  </div>
-                </div>
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <label style={{ fontSize: '11px', fontWeight: '600', display: 'block', whiteSpace: 'nowrap' }}>최소금액</label>
-                  <input type="number" value={minAmount} onChange={e => setMinAmount(e.target.value)} className="form-control" placeholder="0" style={{ width: '110px', fontSize: '12px' }} />
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <label style={{ fontSize: '11px', fontWeight: '600', display: 'block', whiteSpace: 'nowrap' }}>최대금액</label>
-                  <input type="number" value={maxAmount} onChange={e => setMaxAmount(e.target.value)} className="form-control" placeholder="무제한" style={{ width: '110px', fontSize: '12px' }} />
-                </div>
-
-                <div style={{ display: 'flex', gap: '8px', marginBottom: '2px' }}>
-                  <button className="btn-secondary" style={{ padding: '6px 12px', fontSize: '12px' }} onClick={() => {
-                    setSearchTerm('');
-                    setTxStartDate('');
-                    setTxEndDate('');
-                    setMinAmount('');
-                    setMaxAmount('');
-                    setTypeFilter('ALL');
-                    setStatusFilter('ALL');
-                    setSelectedBankFilter('ALL');
-                  }}>초기화</button>
-                </div>
-
-                <div style={{ flex: 1 }} />
-
-                {/* 다중 은행 엑셀 업로드 */}
-                <label className="btn btn-primary" style={{ fontSize: '12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap' }}>
-                  <Upload size={14} />
-                  통장 엑셀 업로드
-                  <input
-                    type="file"
-                    accept=".xlsx, .xls, .csv"
-                    style={{ display: 'none' }}
-                    onChange={handleBankExcelUpload}
-                  />
-                </label>
-
-                {isAdmin && (
-                  <button
-                    onClick={handleGenerateMockData}
-                    className="btn btn-secondary"
-                    style={{ fontSize: '12px', whiteSpace: 'nowrap' }}
-                  >
-                    <Plus size={14} style={{ marginRight: '4px' }} />
-                    샘플 엑셀 데이터 생성
-                  </button>
-                )}
-
+              {/* 기간 바로가기 버튼 */}
+              <div style={{ display: 'flex', gap: '2px', alignItems: 'center', marginBottom: '1px' }}>
                 <button
-                  onClick={handleExport}
-                  className="btn btn-secondary"
-                  style={{ fontSize: '12px', whiteSpace: 'nowrap' }}
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => handleShiftMonth(-1)}
+                  style={{ padding: '3px 7px', height: '28px', fontSize: '11.5px', fontWeight: 'bold' }}
+                  title="전월로 이동"
                 >
-                  <FileSpreadsheet size={14} style={{ marginRight: '4px' }} />
-                  엑셀 내보내기
+                  &lt;
+                </button>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={handleSetCurrentMonth}
+                  style={{ padding: '3px 8px', height: '28px', fontSize: '11.5px', fontWeight: 'bold', whiteSpace: 'nowrap' }}
+                  title="당월로 이동"
+                >
+                  당월
+                </button>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => handleShiftMonth(1)}
+                  style={{ padding: '3px 7px', height: '28px', fontSize: '11.5px', fontWeight: 'bold' }}
+                  title="다음달로 이동"
+                >
+                  &gt;
+                </button>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={handleSetAllDates}
+                  style={{ padding: '3px 8px', height: '28px', fontSize: '11.5px', fontWeight: 'bold', whiteSpace: 'nowrap' }}
+                  title="전체 기간 보기"
+                >
+                  전체
                 </button>
               </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                <label style={{ fontSize: '11px', fontWeight: '600', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>금액 범위</label>
+                <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                  <input type="number" value={minAmount} onChange={e => setMinAmount(e.target.value)} className="form-control" placeholder="최소" style={{ width: '85px', fontSize: '11.5px', padding: '3px 6px', height: '28px' }} />
+                  <span style={{ color: 'var(--text-muted)' }}>~</span>
+                  <input type="number" value={maxAmount} onChange={e => setMaxAmount(e.target.value)} className="form-control" placeholder="최대" style={{ width: '85px', fontSize: '11.5px', padding: '3px 6px', height: '28px' }} />
+                </div>
+              </div>
+
+              <button className="btn-secondary" style={{ padding: '3px 10px', height: '28px', fontSize: '11.5px', marginBottom: '1px' }} onClick={() => {
+                setSearchTerm('');
+                setTxStartDate('');
+                setTxEndDate('');
+                setMinAmount('');
+                setMaxAmount('');
+                setTypeFilter('ALL');
+                setStatusFilter('ALL');
+                setSelectedBankFilter('ALL');
+              }}>초기화</button>
+
+              <div style={{ flex: 1 }} />
+
+              {/* 통장 엑셀 업로드 및 내보내기 */}
+              <label className="btn btn-primary" style={{ fontSize: '11.5px', padding: '4px 10px', height: '28px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', whiteSpace: 'nowrap', marginBottom: '1px' }}>
+                <Upload size={13} />
+                통장 엑셀 업로드
+                <input
+                  type="file"
+                  accept=".xlsx, .xls, .csv"
+                  style={{ display: 'none' }}
+                  onChange={handleBankExcelUpload}
+                />
+              </label>
+
+              {isAdmin && (
+                <button
+                  onClick={handleGenerateMockData}
+                  className="btn btn-secondary"
+                  style={{ fontSize: '11.5px', padding: '4px 10px', height: '28px', whiteSpace: 'nowrap', marginBottom: '1px' }}
+                >
+                  <Plus size={13} style={{ marginRight: '3px' }} />
+                  샘플 엑셀 데이터
+                </button>
+              )}
+
+              <button
+                onClick={handleExport}
+                className="btn btn-secondary"
+                style={{ fontSize: '11.5px', padding: '4px 10px', height: '28px', whiteSpace: 'nowrap', marginBottom: '1px' }}
+              >
+                <FileSpreadsheet size={13} style={{ marginRight: '3px' }} />
+                엑셀 내보내기
+              </button>
             </div>
           </div>
 
