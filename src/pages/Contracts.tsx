@@ -1318,9 +1318,13 @@ export const Contracts: React.FC = () => {
                       const isZero = ca.monthlyRentalFee === 0;
 
                       // 가동일수 및 매출 기여액 정밀 일할 계산
+                      // 원칙: 매출 기여액 = 과거에 기발생한 확정 기여액만 집계
+                      // 9999-12-31 등 미확정 미래 sentinel 값은 오늘로 cap → 진행 중 계약은 "오늘까지" 기준
+                      const today = new Date(); today.setHours(23, 59, 59, 999);
                       const sDate = new Date(ca.startDate || activeContract.startDate || todayStr);
                       const eDateStr = ca.endDate || activeContract.endDate;
-                      const eDate = (!eDateStr || eDateStr === '미정') ? new Date() : new Date(eDateStr);
+                      const rawEDate = (!eDateStr || eDateStr === '미정') ? today : new Date(eDateStr);
+                      const eDate = rawEDate > today ? today : rawEDate; // ← 미래 sentinel cap
                       const diffTime = Math.max(0, eDate.getTime() - sDate.getTime());
                       const activeDays = Math.max(1, Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1);
                       const dailyFee = ca.dailyRentalFee || Math.round(ca.monthlyRentalFee / 30);

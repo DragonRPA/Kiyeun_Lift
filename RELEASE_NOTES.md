@@ -1,3 +1,26 @@
+# Release Notes (v0.6.0.Build.6 - 2026-08-31 22:08)
+
+## 🐛 [계약 상세 체결자산 매출 기여액: 미래 sentinel 날짜 오계산 수정]
+
+### 🔍 문제
+- `contract_assets.endDate = '9999-12-31'`은 "미확정 진행 중" 계약을 표현하는 sentinel 값.
+- 기존 코드는 이 sentinel 값을 그대로 `new Date('9999-12-31')`로 변환하여 가동일수 계산 → 약 **297,000일 × 일렌탈료** = 비상식적 매출 기여액 표출.
+
+### 🔑 확정 원칙
+> **매출 기여액 = 과거에 기발생한 확정 기여액만 집계.**  
+> 미확정 미래(9999-12-31, 미정, 임의 미래날짜)는 가정법적 표기일 뿐. 집계 기준일은 항상 오늘(today)로 cap.
+
+### ✅ 수정 내용 (`src/pages/Contracts.tsx`)
+```
+Before: eDate = new Date(endDate)  →  9999-12-31 그대로 사용
+After:  eDate = min(new Date(endDate), today)  →  미래 sentinel은 today로 cap
+```
+- **진행 중 계약**: 시작일 ~ 오늘까지의 일수 × 일렌탈료 = 오늘까지 확정 기여액
+- **종료 계약**: 시작일 ~ 실종료일까지의 일수 × 일렌탈료 = 최종 확정 기여액
+- `미정`, `null`, `undefined`도 동일하게 today cap 처리.
+
+---
+
 # Release Notes (v0.6.0.Build.5 - 2026-08-31 19:11)
 
 ## 🐛 [초기DB 업로드 메뉴: stale 캐시 차단 로직 전면 적용]
