@@ -2769,6 +2769,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const effectiveStatementDay = Math.min(rawStatementDay, lastDayOfMonth);
       const triggerDay = Math.min(effectiveBillingDay, effectiveStatementDay);
 
+      // 💡 계약 시작일이 당월 마감일(triggerDay)보다 미래인 경우: 당월 청구 대상이 아니므로 제외 (익월 청구로 이관)
+      const closingDateStr = `${year}-${String(month).padStart(2, '0')}-${String(triggerDay).padStart(2, '0')}`;
+      if (c.startDate > closingDateStr) {
+        return;
+      }
+
       const isDayPassed = day >= triggerDay;
       const isPastMonthContract = new Date(c.startDate) < startOfMonth;
 

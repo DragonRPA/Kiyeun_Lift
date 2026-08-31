@@ -1138,6 +1138,18 @@ ${items.map((item, idx) => {
     const effectiveBillingDay = getEffectiveDay(c.billingDay);
     const effectiveStatementDay = getEffectiveDay(c.statementClosingDay);
 
+    // 💡 계약 시작일(c.startDate)이 이번 달 마감일보다 뒤에 있는 경우 (예: 8/31 시작 > 8/30 마감)
+    // 당월 마감 기준으로는 가동일이 0일이므로 당월 청구 대상에서 제외 (익월 청구로 이관)
+    const targetClosingDay = effectiveBillingDay || effectiveStatementDay || 31;
+    const yStr = startDateObj.getFullYear();
+    const mStr = String(startDateObj.getMonth() + 1).padStart(2, '0');
+    const dStr = String(targetClosingDay).padStart(2, '0');
+    const closingDateStr = `${yStr}-${mStr}-${dStr}`;
+
+    if (c.startDate > closingDateStr) {
+      return false;
+    }
+
     const isDayInRange = (day: number | undefined) => {
       if (!day) return false;
       if (startDay <= endDay) {
@@ -1285,7 +1297,16 @@ ${items.map((item, idx) => {
     }
 
     const normalEnd = normalizeEndDate(c.endDate);
-    const calcEnd = normalEnd < endStr ? normalEnd : endStr;
+    let calcEnd = normalEnd < endStr ? normalEnd : endStr;
+
+    // 만약 calcStart가 calcEnd보다 미래인 경우 (예: 시작일 8/31 > 8/30 마감)
+    // 비정상적인 0일 정산 기간이 되지 않도록 calcEnd를 계약 종료일 또는 월말일로 자동 보정
+    if (calcStart > calcEnd) {
+      calcEnd = normalEnd < endStr ? normalEnd : endStr;
+      if (calcStart > calcEnd) {
+        calcEnd = calcStart;
+      }
+    }
     
     setWizardStartDate(calcStart);
     setWizardEndDate(calcEnd);
