@@ -2855,7 +2855,7 @@ ${items.map((item, idx) => {
                       </thead>
                       <tbody>
                         <tr style={{ fontWeight: '700', fontSize: '14px' }}>
-                          <td style={{ padding: '10px 6px', borderRight: '1px solid var(--border)' }}>{customerTotalUnpaid.toLocaleString()} 원</td>
+                          <td style={{ padding: '10px 6px', borderRight: '1px solid var(--border)' }}>{availableTotal.toLocaleString()} 원</td>
                           <td style={{ padding: '10px 6px', borderRight: '1px solid var(--border)' }}>{billingGrandTotal.toLocaleString()} 원</td>
                           <td style={{ padding: '10px 6px', borderRight: '1px solid var(--border)', color: isOverMatch ? '#EF4444' : 'var(--primary)' }}>
                             {payAmount.toLocaleString()} 원
@@ -2864,7 +2864,7 @@ ${items.map((item, idx) => {
                             {isOverMatch ? `+${(payAmount - unpaid).toLocaleString()}원 초과` : `${remainingBilling.toLocaleString()} 원`}
                             {remainingBilling === 0 && !isOverMatch && <span style={{ fontSize: '11px', color: '#10B981', marginLeft: '4px' }}> (0 원)</span>}
                           </td>
-                          <td style={{ padding: '10px 6px', color: '#F59E0B' }}>{remainingCustUnpaid.toLocaleString()} 원</td>
+                          <td style={{ padding: '10px 6px', color: '#10B981' }}>{totalPostDepositBalance.toLocaleString()} 원</td>
                         </tr>
                       </tbody>
                     </table>
