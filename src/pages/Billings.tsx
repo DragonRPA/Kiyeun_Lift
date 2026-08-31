@@ -223,6 +223,60 @@ export const Billings: React.FC = () => {
     setSearchedBillingIds(matched);
   };
 
+  // ◀ 전월 / 당월 / 다음달 ▶ 기간 이동 핸들러
+  const shiftMonth = (baseYm: string, deltaMonths: number): string => {
+    const ym = baseYm || new Date().toISOString().slice(0, 7);
+    const [yStr, mStr] = ym.split('-');
+    const date = new Date(Number(yStr), Number(mStr) - 1 + deltaMonths, 1);
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    return `${y}-${m}`;
+  };
+
+  const handlePrevMonth = () => {
+    const curYm = tempStartBillingYmFilter || tempEndBillingYmFilter || new Date().toISOString().slice(0, 7);
+    const nextYm = shiftMonth(curYm, -1);
+    setTempStartBillingYmFilter(nextYm);
+    setTempEndBillingYmFilter(nextYm);
+    setStartBillingYmFilter(nextYm);
+    setEndBillingYmFilter(nextYm);
+    setSearchTerm(tempSearchTerm);
+    setContractNoFilter(tempContractNoFilter);
+    setPaymentFilter(tempPaymentFilter);
+    setMailSentFilter(tempMailSentFilter);
+    const matched = computeMatchedBillingIds(tempSearchTerm, tempContractNoFilter, nextYm, nextYm, tempPaymentFilter, tempMailSentFilter);
+    setSearchedBillingIds(matched);
+  };
+
+  const handleCurrentMonth = () => {
+    const nowYm = new Date().toISOString().slice(0, 7);
+    setTempStartBillingYmFilter(nowYm);
+    setTempEndBillingYmFilter(nowYm);
+    setStartBillingYmFilter(nowYm);
+    setEndBillingYmFilter(nowYm);
+    setSearchTerm(tempSearchTerm);
+    setContractNoFilter(tempContractNoFilter);
+    setPaymentFilter(tempPaymentFilter);
+    setMailSentFilter(tempMailSentFilter);
+    const matched = computeMatchedBillingIds(tempSearchTerm, tempContractNoFilter, nowYm, nowYm, tempPaymentFilter, tempMailSentFilter);
+    setSearchedBillingIds(matched);
+  };
+
+  const handleNextMonth = () => {
+    const curYm = tempEndBillingYmFilter || tempStartBillingYmFilter || new Date().toISOString().slice(0, 7);
+    const nextYm = shiftMonth(curYm, 1);
+    setTempStartBillingYmFilter(nextYm);
+    setTempEndBillingYmFilter(nextYm);
+    setStartBillingYmFilter(nextYm);
+    setEndBillingYmFilter(nextYm);
+    setSearchTerm(tempSearchTerm);
+    setContractNoFilter(tempContractNoFilter);
+    setPaymentFilter(tempPaymentFilter);
+    setMailSentFilter(tempMailSentFilter);
+    const matched = computeMatchedBillingIds(tempSearchTerm, tempContractNoFilter, nextYm, nextYm, tempPaymentFilter, tempMailSentFilter);
+    setSearchedBillingIds(matched);
+  };
+
   // 🌟 조회 버튼으로 고정된 스냅샷에 해당하는 청구서만 렌더링 (수납 처리 시 자동 재조회/행 삭제 없이 안정적으로 유지)
   const filteredBillings = useMemo(() => {
     if (searchedBillingIds === null) {
@@ -1588,6 +1642,40 @@ ${items.map((item, idx) => {
                   onChange={e => setTempEndBillingYmFilter(e.target.value)} 
                   style={{ width: '120px', padding: '6px 8px', fontSize: '12px', borderRadius: '5px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-card)', color: 'var(--text-main)' }}
                 />
+              </div>
+
+              {/* ◀ 당월 ▶ 바로가기 버튼 그룹 */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flexShrink: 0 }}>
+                <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>기간 이동</label>
+                <div style={{ display: 'flex', gap: '2px', alignItems: 'center' }}>
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    onClick={handlePrevMonth}
+                    style={{ padding: '5px 8px', height: '31px', fontSize: '12px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                    title="전월로 이동"
+                  >
+                    &lt;
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    onClick={handleCurrentMonth}
+                    style={{ padding: '5px 10px', height: '31px', fontSize: '12px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', whiteSpace: 'nowrap' }}
+                    title="당월로 이동"
+                  >
+                    당월
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    onClick={handleNextMonth}
+                    style={{ padding: '5px 8px', height: '31px', fontSize: '12px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                    title="다음달로 이동"
+                  >
+                    &gt;
+                  </button>
+                </div>
               </div>
 
               {/* 💰 수납 상태 (완료 / 미완료) */}
