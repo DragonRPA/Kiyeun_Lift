@@ -19,6 +19,7 @@ export const BankMatching: React.FC = () => {
     billings,
     customers,
     payments,
+    paymentDepositLinks,
     purchaseSettlements,
     recordPurchaseSettlementPayment,
     uploadBankTransactions,
@@ -75,34 +76,85 @@ export const BankMatching: React.FC = () => {
     return customers.find(c => c.id === custId)?.name || '알 수 없음';
   };
 
-  // 통장 입출금 내역 1건에 연결된 매칭 정보 (입금: 매출청구서 / 출금: 월말매입정산)
+  // v2: 통장 입금 잔액 계산 (PaymentDepositLinks 실시간 반영)
+  const getDepositBalance = (txId: string) => {
+    const tx = bankTransactions.find(t => t.id === txId);
+    const used = (paymentDepositLinks || [])
+      .filter(l => l.bankTransactionId === txId)
+      .reduce((s, l) => s + l.usedAmount, 0);
+    return (tx?.depositAmount || 0) - used;
+  };
+
+  // 통장 입출금 내역 1건에 연결된 매칭 정보 (입금: 매출청구서 1:N / 출금: 월말매입정산)
   const getMatchedTransactionInfo = (tx: BankTransaction) => {
     if (tx.isDeposit || tx.depositAmount > 0) {
+      // 1) 신규 체계: paymentDepositLinks 1:N 매핑
+      const linkedLinks = (paymentDepositLinks || []).filter(l => l.bankTransactionId === tx.id && l.usedAmount > 0);
+      
+      // 2) 레거시 호환 체계
       const matchPrefix = `pay-matching-${tx.id}`;
       const txPayments = payments.filter(p => p.id.startsWith(matchPrefix));
       
-      if (txPayments.length === 0) return <span style={{ color: 'var(--text-muted)', fontSize: '12px' }}>-</span>;
+      if (linkedLinks.length === 0 && txPayments.length === 0) {
+        return <span style={{ color: 'var(--text-muted)', fontSize: '12px' }}>미수납 (가용 {tx.depositAmount.toLocaleString()}원)</span>;
+      }
       
-      return txPayments.map((p) => {
+      const elements: React.ReactNode[] = [];
+
+      // 신규 링크 표출
+      linkedLinks.forEach(link => {
+        const payObj = payments.find(p => p.id === link.paymentId);
+        const b = payObj ? billings.find(x => x.id === payObj.billingId) : null;
+        if (b) {
+          const cust = customers.find(c => c.id === b.customerId);
+          elements.push(
+            <div key={link.id} style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px', whiteSpace: 'nowrap' }}>
+              <LinkIcon size={10} style={{ color: 'var(--primary)', flexShrink: 0 }} />
+              <span>
+                <strong>[{cust?.name || '고객사'}]</strong> {b.billingYm} 청구분 ({link.usedAmount.toLocaleString()}원 수납)
+              </span>
+            </div>
+          );
+        }
+      });
+
+      // 레거시 결제 표출
+      txPayments.forEach(p => {
         if (!p.billingId) {
-          return (
+          elements.push(
             <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--success)', fontSize: '12px', whiteSpace: 'nowrap' }}>
               <span>• 선수금 적립 (+{p.amount.toLocaleString()}원)</span>
             </div>
           );
+        } else {
+          const b = billings.find(x => x.id === p.billingId);
+          if (b) {
+            elements.push(
+              <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px', whiteSpace: 'nowrap' }}>
+                <LinkIcon size={10} style={{ color: 'var(--primary)', flexShrink: 0 }} />
+                <span>{b.billingYm} 청구분 ({p.amount.toLocaleString()}원 수납)</span>
+              </div>
+            );
+          }
         }
-        
-        const b = billings.find(x => x.id === p.billingId);
-        if (!b) return null;
-        return (
-          <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px', whiteSpace: 'nowrap' }}>
-            <LinkIcon size={10} style={{ color: 'var(--primary)', flexShrink: 0 }} />
-            <span>
-              {b.billingYm} 청구분 ({p.amount.toLocaleString()}원 수납)
-            </span>
+      });
+
+      const remBal = getDepositBalance(tx.id);
+      if (remBal > 0) {
+        elements.push(
+          <div key="rem-bal" style={{ fontSize: '11px', color: '#10B981', fontWeight: 600, marginTop: '2px' }}>
+            ↳ 잔여 가용잔액: {remBal.toLocaleString()}원
           </div>
         );
-      }).filter(Boolean);
+      } else {
+        elements.push(
+          <div key="zero-bal" style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600, marginTop: '2px' }}>
+            ↳ 전액 소진 완료 (잔액 0원)
+          </div>
+        );
+      }
+
+      return elements;
     } else {
       // 출금 항목인 경우: 매입 정산 건 수색
       const matchedSettlement = purchaseSettlements.find(s => s.bankTransactionId === tx.id);
@@ -212,11 +264,31 @@ export const BankMatching: React.FC = () => {
   // 5. 엑셀 다운로드
   const handleExport = () => {
     const excelData = filteredTransactions.map((t, idx) => {
+      const linkedLinks = (paymentDepositLinks || []).filter(l => l.bankTransactionId === t.id && l.usedAmount > 0);
       const matchPrefix = `pay-matching-${t.id}`;
       const txPayments = payments.filter(p => p.id.startsWith(matchPrefix));
-      const matchInfo = txPayments.length > 0
-        ? txPayments.map(p => p.billingId ? `${billings.find(b => b.id === p.billingId)?.billingYm} 청구분 (${p.amount.toLocaleString()}원)` : `선수금 적립 (+${p.amount.toLocaleString()}원)`).join(', ')
-        : '-';
+
+      const infoParts: string[] = [];
+      linkedLinks.forEach(link => {
+        const payObj = payments.find(p => p.id === link.paymentId);
+        const b = payObj ? billings.find(x => x.id === payObj.billingId) : null;
+        if (b) {
+          const cust = customers.find(c => c.id === b.customerId);
+          infoParts.push(`[${cust?.name || ''}] ${b.billingYm} 청구분 (${link.usedAmount.toLocaleString()}원)`);
+        }
+      });
+      txPayments.forEach(p => {
+        if (!p.billingId) {
+          infoParts.push(`선수금 (+${p.amount.toLocaleString()}원)`);
+        } else {
+          const b = billings.find(x => x.id === p.billingId);
+          if (b) infoParts.push(`${b.billingYm} 청구분 (${p.amount.toLocaleString()}원)`);
+        }
+      });
+
+      const remBal = getDepositBalance(t.id);
+      const isFull = t.depositAmount > 0 && remBal <= 0;
+      const isPartial = t.depositAmount > 0 && remBal > 0 && remBal < t.depositAmount;
 
       return {
         'No': idx + 1,
@@ -226,11 +298,12 @@ export const BankMatching: React.FC = () => {
         '입금자명(기재내용)': t.counterparty || t.senderName,
         '입금액': t.depositAmount.toLocaleString() + '원',
         '출금액': t.withdrawAmount.toLocaleString() + '원',
-        '거래후잔액': t.balance ? t.balance.toLocaleString() + '원' : '-',
+        '통장거래잔액': t.balance ? t.balance.toLocaleString() + '원' : '-',
+        '미사용가용잔액': t.depositAmount > 0 ? `${remBal.toLocaleString()}원` : '-',
         '취급/거래점': t.branchName || '-',
         '메모': t.memo,
-        '매칭형태': t.matchedBillingId ? (t.matchingType === 'AUTO' ? '자동매칭' : '수동매칭') : '미매칭',
-        '매칭된 청구 정보': matchInfo
+        '매칭상태': isFull ? '완납매칭' : isPartial ? '부분매칭' : t.matchedBillingId ? '매칭완료' : '미매칭',
+        '매칭된 청구 정보': infoParts.length > 0 ? infoParts.join(', ') : '-'
       };
     });
     exportToExcel(excelData, `은행입출금수납대사_${new Date().toISOString().split('T')[0]}`, '입출금대조');
@@ -847,7 +920,11 @@ export const BankMatching: React.FC = () => {
                   </tr>
                 ) : (
                   filteredTransactions.map((tx) => {
-                    const isMatchedDeposit = !!tx.matchedBillingId;
+                    const linkedLinks = (paymentDepositLinks || []).filter(l => l.bankTransactionId === tx.id && l.usedAmount > 0);
+                    const remBal = getDepositBalance(tx.id);
+                    const isFullyUsed = tx.depositAmount > 0 && remBal <= 0;
+                    const isPartialUsed = tx.depositAmount > 0 && remBal > 0 && remBal < tx.depositAmount;
+                    const isMatchedDeposit = !!tx.matchedBillingId || linkedLinks.length > 0;
                     const matchedSettlement = purchaseSettlements.find(s => s.bankTransactionId === tx.id);
                     const isMatchedWithdraw = !!matchedSettlement;
                     const isMatched = isMatchedDeposit || isMatchedWithdraw;
@@ -864,15 +941,19 @@ export const BankMatching: React.FC = () => {
                       >
                         <td style={{ padding: '10px 14px', whiteSpace: 'nowrap' }}>
                           {tx.depositAmount > 0 ? (
-                            isMatchedDeposit ? (
+                            isFullyUsed ? (
+                              <span style={{ fontSize: '11px', padding: '3px 8px', borderRadius: '4px', backgroundColor: 'rgba(16, 185, 129, 0.15)', color: '#10B981', fontWeight: 'bold' }}>
+                                ✓ 완납 매칭됨
+                              </span>
+                            ) : isPartialUsed ? (
                               <button
-                                onClick={() => unmatchTransaction(tx.id)}
+                                onClick={() => handleOpenManualMatch(tx)}
                                 className="btn btn-secondary"
-                                style={{ fontSize: '11px', padding: '4px 8px', color: 'var(--danger)', whiteSpace: 'nowrap' }}
+                                style={{ fontSize: '11px', padding: '3px 8px', color: '#10B981', borderColor: '#10B981', fontWeight: 'bold', whiteSpace: 'nowrap' }}
                                 disabled={!canSave}
                               >
-                                <X size={12} style={{ marginRight: '3px' }} />
-                                매칭 해제
+                                <Check size={12} style={{ marginRight: '3px' }} />
+                                부분매칭 ({remBal.toLocaleString()}원 가용)
                               </button>
                             ) : (
                               <button
