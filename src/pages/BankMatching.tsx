@@ -210,12 +210,21 @@ export const BankMatching: React.FC = () => {
   }, [bankTransactions]);
 
   const deposits = bankTransactions.filter(t => t.depositAmount > 0);
-  const matchedDepositCount = deposits.filter(t => !!t.matchedBillingId).length;
-  const unmatchedDepositCount = deposits.filter(t => !t.matchedBillingId).length;
+  const matchedDepositCount = deposits.filter(t => {
+    const hasLink = (paymentDepositLinks || []).some(l => l.bankTransactionId === t.id && l.usedAmount > 0);
+    const remBal = getDepositBalance(t.id);
+    return !!t.matchedBillingId || hasLink || remBal <= 0;
+  }).length;
+  const unmatchedDepositCount = deposits.length - matchedDepositCount;
   const depositMatchRate = deposits.length > 0 ? Math.round((matchedDepositCount / deposits.length) * 100) : 0;
 
   const unpaidBillings = billings.filter(b => b.status === 'UNPAID' || b.status === 'PARTIAL');
-  const totalUnpaidBillingAmount = unpaidBillings.reduce((sum, b) => sum + (b.totalAmount - b.paidAmount), 0);
+  const totalUnpaidBillingAmount = unpaidBillings.reduce((sum, b) => {
+    const grand = (b.totalAmount || 0) + Math.round((b.totalAmount || 0) * 0.1);
+    const isPaid = b.status === 'PAID';
+    const actualPaid = isPaid ? grand : (b.paidAmount || 0);
+    return sum + (isPaid ? 0 : Math.max(0, grand - actualPaid));
+  }, 0);
 
   // 출금/지급 통계
   const withdraws = bankTransactions.filter(t => t.withdrawAmount > 0);
@@ -309,6 +318,37 @@ export const BankMatching: React.FC = () => {
     exportToExcel(excelData, `은행입출금수납대사_${new Date().toISOString().split('T')[0]}`, '입출금대조');
   };
 
+  // ◀ 전월 / 당월 / 다음달 ▶ 기간 이동 핸들러
+  const handleShiftMonth = (deltaMonths: number) => {
+    const today = new Date();
+    let baseDate: Date;
+    if (txStartDate) {
+      const [y, m] = txStartDate.split('-').map(Number);
+      baseDate = new Date(y, m - 1 + deltaMonths, 1);
+    } else {
+      baseDate = new Date(today.getFullYear(), today.getMonth() + deltaMonths, 1);
+    }
+    const y = baseDate.getFullYear();
+    const m = String(baseDate.getMonth() + 1).padStart(2, '0');
+    const lastDay = new Date(y, baseDate.getMonth() + 1, 0).getDate();
+    setTxStartDate(`${y}-${m}-01`);
+    setTxEndDate(`${y}-${m}-${String(lastDay).padStart(2, '0')}`);
+  };
+
+  const handleSetCurrentMonth = () => {
+    const today = new Date();
+    const y = today.getFullYear();
+    const m = String(today.getMonth() + 1).padStart(2, '0');
+    const lastDay = new Date(y, today.getMonth() + 1, 0).getDate();
+    setTxStartDate(`${y}-${m}-01`);
+    setTxEndDate(`${y}-${m}-${String(lastDay).padStart(2, '0')}`);
+  };
+
+  const handleSetAllDates = () => {
+    setTxStartDate('');
+    setTxEndDate('');
+  };
+
   // 6. 데이터 필터링
   const filteredTransactions = bankTransactions.filter(t => {
     if (selectedBankFilter !== 'ALL') {
@@ -339,7 +379,9 @@ export const BankMatching: React.FC = () => {
     if (typeFilter === 'WITHDRAW' && (t.depositAmount > 0 && t.withdrawAmount === 0)) return false;
 
     // 2) 지급 / 수납 매치 완료 여부 상태 필터 (statusFilter)
-    const isMatchedDeposit = !!t.matchedBillingId;
+    const linkedLinks = (paymentDepositLinks || []).filter(l => l.bankTransactionId === t.id && l.usedAmount > 0);
+    const remBal = getDepositBalance(t.id);
+    const isMatchedDeposit = !!t.matchedBillingId || linkedLinks.length > 0 || (t.depositAmount > 0 && remBal <= 0);
     const isMatchedWithdraw = purchaseSettlements.some(s => s.bankTransactionId === t.id);
 
     if (statusFilter === 'DEPOSIT_UNMATCHED') {
@@ -811,36 +853,57 @@ export const BankMatching: React.FC = () => {
                   <label style={{ fontSize: '11px', fontWeight: '600', display: 'block', whiteSpace: 'nowrap' }}>종료일</label>
                   <input type="date" value={txEndDate} onChange={e => setTxEndDate(e.target.value)} className="form-control" style={{ fontSize: '12px', minWidth: '130px' }} />
                 </div>
-                <div style={{ display: 'flex', gap: '4px', marginBottom: '2px' }}>
-                  <button className="btn-secondary" style={{ padding: '6px 10px', fontSize: '12px' }} onClick={() => {
-                    const today = new Date();
-                    const y = today.getFullYear();
-                    const m = String(today.getMonth() + 1).padStart(2, '0');
-                    setTxStartDate(`${y}-${m}-01`);
-                    setTxEndDate(`${y}-${m}-${new Date(y, today.getMonth() + 1, 0).getDate().toString().padStart(2, '0')}`);
-                  }}>당월</button>
-                  <button className="btn-secondary" style={{ padding: '6px 10px', fontSize: '12px' }} onClick={() => {
-                    const today = new Date();
-                    const y = today.getFullYear();
-                    const m = String(today.getMonth()).padStart(2, '0');
-                    if (today.getMonth() === 0) {
-                      setTxStartDate(`${y - 1}-12-01`);
-                      setTxEndDate(`${y - 1}-12-31`);
-                    } else {
-                      setTxStartDate(`${y}-${m}-01`);
-                      setTxEndDate(`${y}-${m}-${new Date(y, today.getMonth(), 0).getDate().toString().padStart(2, '0')}`);
-                    }
-                  }}>전월</button>
-                  <button className="btn-secondary" style={{ padding: '6px 10px', fontSize: '12px' }} onClick={() => { setTxStartDate(''); setTxEndDate(''); }}>전체</button>
+
+                {/* ◀ 당월 ▶ 바로가기 버튼 그룹 */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flexShrink: 0 }}>
+                  <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>기간 이동</label>
+                  <div style={{ display: 'flex', gap: '2px', alignItems: 'center' }}>
+                    <button
+                      type="button"
+                      className="btn-secondary"
+                      onClick={() => handleShiftMonth(-1)}
+                      style={{ padding: '5px 8px', height: '31px', fontSize: '12px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                      title="전월로 이동"
+                    >
+                      &lt;
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-secondary"
+                      onClick={handleSetCurrentMonth}
+                      style={{ padding: '5px 10px', height: '31px', fontSize: '12px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', whiteSpace: 'nowrap' }}
+                      title="당월로 이동"
+                    >
+                      당월
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-secondary"
+                      onClick={() => handleShiftMonth(1)}
+                      style={{ padding: '5px 8px', height: '31px', fontSize: '12px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                      title="다음달로 이동"
+                    >
+                      &gt;
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-secondary"
+                      onClick={handleSetAllDates}
+                      style={{ padding: '5px 10px', height: '31px', fontSize: '12px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', whiteSpace: 'nowrap' }}
+                      title="전체 기간 보기"
+                    >
+                      전체
+                    </button>
+                  </div>
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                   <label style={{ fontSize: '11px', fontWeight: '600', display: 'block', whiteSpace: 'nowrap' }}>최소금액</label>
-                  <input type="number" value={minAmount} onChange={e => setMinAmount(e.target.value)} className="form-control" placeholder="0" style={{ width: '120px', fontSize: '12px' }} />
+                  <input type="number" value={minAmount} onChange={e => setMinAmount(e.target.value)} className="form-control" placeholder="0" style={{ width: '110px', fontSize: '12px' }} />
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                   <label style={{ fontSize: '11px', fontWeight: '600', display: 'block', whiteSpace: 'nowrap' }}>최대금액</label>
-                  <input type="number" value={maxAmount} onChange={e => setMaxAmount(e.target.value)} className="form-control" placeholder="무제한" style={{ width: '120px', fontSize: '12px' }} />
+                  <input type="number" value={maxAmount} onChange={e => setMaxAmount(e.target.value)} className="form-control" placeholder="무제한" style={{ width: '110px', fontSize: '12px' }} />
                 </div>
 
                 <div style={{ display: 'flex', gap: '8px', marginBottom: '2px' }}>
