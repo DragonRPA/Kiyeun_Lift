@@ -846,7 +846,7 @@ export function parseInitialExcelWorkbook(fileBuffer: ArrayBuffer | Uint8Array |
   });
 
   // ── 4. 202608 월별 계약/배차/청구 종합 파싱 ──
-  const wsMain = wb.Sheets['202608'];
+  const wsMain = wb.Sheets['계약현황'] || wb.Sheets['202608'];
   const allMainRows = wsMain ? XLSX.utils.sheet_to_json(wsMain, { header: 1, defval: null }) : [];
   let mainHeaderMap = new Map<string, number>();
   let mainDataStartIndex = 3;
@@ -1002,7 +1002,7 @@ export function parseInitialExcelWorkbook(fileBuffer: ArrayBuffer | Uint8Array |
           currentSiteId: null,
           contractStart: null,
           contractEnd: null,
-          memo: '202608 시트 기반 자동등록',
+          memo: '계약현황(202608) 시트 기반 자동등록',
           createdAt: nowIso,
           updatedAt: nowIso
         };

@@ -262,7 +262,7 @@ export const InitialDbUploader: React.FC = () => {
                 엑셀 파일 선택
               </label>
               <span style={{ fontSize: '12px', color: '#64748b', whiteSpace: 'nowrap' }}>
-                5개 시트(보유자산현황, 26.08, 거래처정보현황, 업체별마감일자, 202608)가 포함된 초기 현황 엑셀 파일(.xlsx)
+                5개 시트(보유자산현황, 보유장비 임대현황, 거래처정보현황, 업체별마감일자, 계약현황)가 포함된 초기 현황 엑셀 파일(.xlsx)
               </span>
             </div>
 
