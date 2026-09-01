@@ -714,6 +714,12 @@ export function parseInitialExcelWorkbook(fileBuffer: ArrayBuffer | Uint8Array |
   const currentMonthBillingGroup = new Map<string, any>();
   const purchaseBillingGroup = new Map<string, any>();
 
+  // ── 계약 그룹핑 맵 ──────────────────────────────────────────────
+  // 동일 (고객사 + 현장 + 계약시작일 + 계약종료일) 조합 = 하나의 계약으로 통합
+  // 엑셀 1행 = 계약 1건이 아니라, N개 행 = 1개 계약 + N개 체결자산(contract_assets)
+  // ───────────────────────────────────────────────────────────────
+  const contractGroupMap = new Map<string, any>(); // key → 계약 엔티티
+
   rawMainRows.forEach((r: any) => {
     if (!r) return;
     const rawCustName = r[0];
@@ -920,48 +926,67 @@ export function parseInitialExcelWorkbook(fileBuffer: ArrayBuffer | Uint8Array |
     const contractStatusStr = r[10] ? String(r[10]).trim() : '';
     const isCompleted = contractStatusStr === '종료' || (rowEndDate && rowEndDate < '2026-08-01');
 
-    const contractId = `CONT-260801-${String(contractSeq++).padStart(4, '0')}`;
-    const contractNo = `C2608-${String(contractSeq - 1).padStart(4, '0')}`;
+    // ── 계약 그룹핑: 동일 (고객사 + 현장 + 시작일 + 종료일) = 1개 계약 ──
+    // 재영전기처럼 같은 현장·기간에 여러 자산이 있을 경우 하나의 계약으로 묶음
+    const contractGroupKey = `${customer.id}_${site.id}_${rowStartDate}_${rowEndDate}`;
+    let contractId: string;
+    let contractNo: string;
 
-    contracts.push({
-      id: contractId,
-      contractNo: contractNo,
-      customerId: customer.id,
-      salespersonId: null,
-      contactId: null,
-      siteId: site.id,
-      billingDay: customer.billingDay || 30,
-      paymentDueDay: customer.paymentDueDay || 15,
-      lateInterestRate: 0,
-      status: isCompleted ? 'COMPLETED' : 'ACTIVE',
-      startDate: rowStartDate,
-      endDate: rowEndDate,
-      lastBillingDate: '2026-08-31',
-      lastBilledPeriodStart: '2026-08-01',
-      lastBilledPeriodEnd: '2026-08-31',
-      lastBilledYm: '2026-08',
-      billingCount: 1,
-      createdAt: nowIso,
-      updatedAt: nowIso
-    });
+    if (contractGroupMap.has(contractGroupKey)) {
+      // 이미 동일 (고객+현장+기간) 계약이 존재 → 기존 계약 재사용
+      const existingContract = contractGroupMap.get(contractGroupKey);
+      contractId = existingContract.id;
+      contractNo = existingContract.contractNo;
+      // 계약 헤더의 월 합계를 추가 자산 단가만큼 누적
+      existingContract._totalMonthlyFee = (existingContract._totalMonthlyFee || 0) + rowMonthlyFee;
+    } else {
+      // 신규 계약 생성
+      contractId = `CONT-260801-${String(contractSeq++).padStart(4, '0')}`;
+      contractNo = `C2608-${String(contractSeq - 1).padStart(4, '0')}`;
 
-    contractHistories.push({
-      id: `CH-${String(histSeq++).padStart(7, '0')}`,
-      contractId: contractId,
-      changeType: 'INITIAL_START',
-      changedBy: '시스템(초기DB업로드)',
-      description: `계약 최초 등록 (${rowStartDate} 개시)`,
-      snapshot: {
+      const newContract = {
+        id: contractId,
         contractNo: contractNo,
         customerId: customer.id,
-        customerName: customer.name,
-        siteName: site.name,
+        salespersonId: null,
+        contactId: null,
+        siteId: site.id,
+        billingDay: customer.billingDay || 30,
+        paymentDueDay: customer.paymentDueDay || 15,
+        lateInterestRate: 0,
+        status: isCompleted ? 'COMPLETED' : 'ACTIVE',
         startDate: rowStartDate,
         endDate: rowEndDate,
-        monthlyFee: rowMonthlyFee
-      },
-      createdAt: nowIso
-    });
+        lastBillingDate: '2026-08-31',
+        lastBilledPeriodStart: '2026-08-01',
+        lastBilledPeriodEnd: '2026-08-31',
+        lastBilledYm: '2026-08',
+        billingCount: 1,
+        _totalMonthlyFee: rowMonthlyFee,  // 내부 집계용 (DB 저장 X)
+        createdAt: nowIso,
+        updatedAt: nowIso
+      };
+      contracts.push(newContract);
+      contractGroupMap.set(contractGroupKey, newContract);
+
+      contractHistories.push({
+        id: `CH-${String(histSeq++).padStart(7, '0')}`,
+        contractId: contractId,
+        changeType: 'INITIAL_START',
+        changedBy: '시스템(초기DB업로드)',
+        description: `계약 최초 등록 (${rowStartDate} 개시)`,
+        snapshot: {
+          contractNo: contractNo,
+          customerId: customer.id,
+          customerName: customer.name,
+          siteName: site.name,
+          startDate: rowStartDate,
+          endDate: rowEndDate,
+          monthlyFee: rowMonthlyFee
+        },
+        createdAt: nowIso
+      });
+    }
 
     const caId = `CA-${String(caSeq++).padStart(7, '0')}`;
     contractAssets.push({
@@ -1380,6 +1405,12 @@ export function parseInitialExcelWorkbook(fileBuffer: ArrayBuffer | Uint8Array |
     asset.bookValue = depnResult.bookValue;
   });
   // ── 자산 정보 확정 완료 ──────────────────────────────────────────
+
+  // ── 계약 헤더 내부 집계 필드 정리 (DB INSERT 전 제거) ──────────
+  // _totalMonthlyFee는 그룹핑 중 집계용으로 사용된 임시 필드.
+  // TABLE_COLUMNS 화이트리스트가 걸러주지만, 명시적으로 제거.
+  contracts.forEach(c => { delete c._totalMonthlyFee; });
+  // ────────────────────────────────────────────────────────────────
 
   const parsedAssets = Array.from(assetMap.values());
 
