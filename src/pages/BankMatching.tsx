@@ -39,6 +39,8 @@ export const BankMatching: React.FC = () => {
   const [editingBankName, setEditingBankName] = useState('우리은행');
   const [editingInitialBalance, setEditingInitialBalance] = useState<number>(15000000);
   const [editingAccountNumber, setEditingAccountNumber] = useState('');
+
+  // ── 입력 상태 (필터 패널 바인딩용)
   const [searchTerm, setSearchTerm] = useState('');
   const [txStartDate, setTxStartDate] = useState('');
   const [txEndDate, setTxEndDate] = useState('');
@@ -46,6 +48,28 @@ export const BankMatching: React.FC = () => {
   const [maxAmount, setMaxAmount] = useState('');
   const [typeFilter, setTypeFilter] = useState<'ALL' | 'DEPOSIT' | 'WITHDRAW'>('ALL');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
+
+  // ── 적용 상태 (조회 버튼 클릭 시에만 갱신 → 실제 테이블 필터링에 사용)
+  const [appliedSearchTerm, setAppliedSearchTerm] = useState('');
+  const [appliedTxStartDate, setAppliedTxStartDate] = useState('');
+  const [appliedTxEndDate, setAppliedTxEndDate] = useState('');
+  const [appliedMinAmount, setAppliedMinAmount] = useState('');
+  const [appliedMaxAmount, setAppliedMaxAmount] = useState('');
+  const [appliedTypeFilter, setAppliedTypeFilter] = useState<'ALL' | 'DEPOSIT' | 'WITHDRAW'>('ALL');
+  const [appliedStatusFilter, setAppliedStatusFilter] = useState<string>('ALL');
+  const [appliedBankFilter, setAppliedBankFilter] = useState<string>('ALL');
+
+  // 조회 실행
+  const handleSearch = () => {
+    setAppliedSearchTerm(searchTerm);
+    setAppliedTxStartDate(txStartDate);
+    setAppliedTxEndDate(txEndDate);
+    setAppliedMinAmount(minAmount);
+    setAppliedMaxAmount(maxAmount);
+    setAppliedTypeFilter(typeFilter);
+    setAppliedStatusFilter(statusFilter);
+    setAppliedBankFilter(selectedBankFilter);
+  };
   
   // 은행별 필터 ('ALL' | '우리은행' | '신한은행' | 기타)
   const [selectedBankFilter, setSelectedBankFilter] = useState<string>('ALL');
@@ -374,57 +398,57 @@ export const BankMatching: React.FC = () => {
     setTxEndDate('');
   };
 
-  // 6. 데이터 필터링
+  // 6. 데이터 필터링 — applied* 상태 기준으로 실행 (조회 버튼 클릭 시에만 갱신)
   const filteredTransactions = bankTransactions.filter(t => {
-    if (selectedBankFilter !== 'ALL') {
+    if (appliedBankFilter !== 'ALL') {
       const tBank = t.bankName || '우리은행';
-      if (tBank !== selectedBankFilter) return false;
+      if (tBank !== appliedBankFilter) return false;
     }
 
     const sender = (t.counterparty || t.senderName || '').toLowerCase();
     const memoStr = (t.memo || '').toLowerCase();
     const summaryStr = (t.summary || '').toLowerCase();
-    const searchLower = searchTerm.toLowerCase();
+    const searchLower = appliedSearchTerm.toLowerCase();
 
     const matchesSearch = sender.includes(searchLower) || memoStr.includes(searchLower) || summaryStr.includes(searchLower);
     if (!matchesSearch) return false;
 
     const txDate = (t.transactionDate || '').split('T')[0];
-    const matchesTxDateStart = !txStartDate || txDate >= txStartDate;
-    const matchesTxDateEnd = !txEndDate || txDate <= txEndDate;
+    const matchesTxDateStart = !appliedTxStartDate || txDate >= appliedTxStartDate;
+    const matchesTxDateEnd = !appliedTxEndDate || txDate <= appliedTxEndDate;
     if (!matchesTxDateStart || !matchesTxDateEnd) return false;
 
     const txAmt = Math.abs((t.depositAmount || 0) + (t.withdrawAmount || 0));
-    const matchesMinAmt = !minAmount || txAmt >= Number(minAmount);
-    const matchesMaxAmt = !maxAmount || txAmt <= Number(maxAmount);
+    const matchesMinAmt = !appliedMinAmount || txAmt >= Number(appliedMinAmount);
+    const matchesMaxAmt = !appliedMaxAmount || txAmt <= Number(appliedMaxAmount);
     if (!matchesMinAmt || !matchesMaxAmt) return false;
 
-    // 1) 입금액 / 출금액 구분 필터 (typeFilter)
-    if (typeFilter === 'DEPOSIT' && (t.withdrawAmount > 0 && t.depositAmount === 0)) return false;
-    if (typeFilter === 'WITHDRAW' && (t.depositAmount > 0 && t.withdrawAmount === 0)) return false;
+    // 1) 입금액 / 출금액 구분 필터 (appliedTypeFilter)
+    if (appliedTypeFilter === 'DEPOSIT' && (t.withdrawAmount > 0 && t.depositAmount === 0)) return false;
+    if (appliedTypeFilter === 'WITHDRAW' && (t.depositAmount > 0 && t.withdrawAmount === 0)) return false;
 
-    // 2) 지급 / 수납 매치 완료 여부 상태 필터 (statusFilter)
+    // 2) 지급 / 수납 매치 완료 여부 상태 필터 (appliedStatusFilter)
     const linkedLinks = (paymentDepositLinks || []).filter(l => l.bankTransactionId === t.id && l.usedAmount > 0);
     const remBal = getDepositBalance(t.id);
     const isMatchedDeposit = !!t.matchedBillingId || linkedLinks.length > 0 || (t.depositAmount > 0 && remBal <= 0);
     const isMatchedWithdraw = purchaseSettlements.some(s => s.bankTransactionId === t.id);
 
-    if (statusFilter === 'DEPOSIT_UNMATCHED') {
+    if (appliedStatusFilter === 'DEPOSIT_UNMATCHED') {
       return t.depositAmount > 0 && !isMatchedDeposit;
     }
-    if (statusFilter === 'DEPOSIT_MATCHED') {
+    if (appliedStatusFilter === 'DEPOSIT_MATCHED') {
       return t.depositAmount > 0 && isMatchedDeposit;
     }
-    if (statusFilter === 'WITHDRAW_UNMATCHED') {
+    if (appliedStatusFilter === 'WITHDRAW_UNMATCHED') {
       return t.withdrawAmount > 0 && !isMatchedWithdraw;
     }
-    if (statusFilter === 'WITHDRAW_MATCHED') {
+    if (appliedStatusFilter === 'WITHDRAW_MATCHED') {
       return t.withdrawAmount > 0 && isMatchedWithdraw;
     }
-    if (statusFilter === 'UNMATCHED_ALL') {
+    if (appliedStatusFilter === 'UNMATCHED_ALL') {
       return (t.depositAmount > 0 && !isMatchedDeposit) || (t.withdrawAmount > 0 && !isMatchedWithdraw);
     }
-    if (statusFilter === 'MATCHED_ALL') {
+    if (appliedStatusFilter === 'MATCHED_ALL') {
       return (t.depositAmount > 0 && isMatchedDeposit) || (t.withdrawAmount > 0 && isMatchedWithdraw);
     }
     return true;
@@ -861,7 +885,25 @@ export const BankMatching: React.FC = () => {
                 setTypeFilter('ALL');
                 setStatusFilter('ALL');
                 setSelectedBankFilter('ALL');
+                // applied 상태도 함께 초기화
+                setAppliedSearchTerm('');
+                setAppliedTxStartDate('');
+                setAppliedTxEndDate('');
+                setAppliedMinAmount('');
+                setAppliedMaxAmount('');
+                setAppliedTypeFilter('ALL');
+                setAppliedStatusFilter('ALL');
+                setAppliedBankFilter('ALL');
               }}>초기화</button>
+
+              <button
+                className="btn btn-primary"
+                style={{ padding: '3px 14px', height: '28px', fontSize: '12px', fontWeight: '700', marginBottom: '1px', display: 'flex', alignItems: 'center', gap: '4px', whiteSpace: 'nowrap' }}
+                onClick={handleSearch}
+              >
+                <Search size={13} />
+                조회
+              </button>
 
               <div style={{ flex: 1 }} />
 
