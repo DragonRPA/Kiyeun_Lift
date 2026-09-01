@@ -1052,105 +1052,12 @@ export function parseInitialExcelWorkbook(fileBuffer: ArrayBuffer | Uint8Array |
       }
     }
 
-    const delivOutId = `DELIV-OUT-${String(delivSeq++).padStart(5, '0')}`;
-    deliveries.push({
-      id: delivOutId,
-      deliveryNo: `DL-OUT-${String(delivSeq - 1).padStart(5, '0')}`,
-      type: 'OUTBOUND',
-      contractId: contractId,
-      contractAssetId: caId,
-      customerId: customer.id,
-      siteId: site.id,
-      assetId: matchedAsset ? matchedAsset.id : null,
-      assetNo: matchedAsset ? matchedAsset.assetNo : (ownAssetNo || leaseAssetNo || '가상'),
-      modelName: targetModel,
-      dispatchDate: rowStartDate,
-      timeSlot: '오전 (08:00 ~ 12:00)',
-      status: 'DELIVERED',
-      memo: dispatchMemo || '초기 마이그레이션 출고 배차',
-      createdBy: '시스템(초기DB업로드)',
-      createdAt: nowIso,
-      updatedAt: nowIso
-    });
+    // ── 배차·출고검수·입출고일지 생성 제외 ─────────────────────────────
+    // 배차 엑셀 양식 미입수 상태 → 정확한 배차 이력 재현 불가.
+    // 배차 엑셀 입수 후 별도 재시행 예정.
+    // deliveries / outbound_inspections / asset_inout_logs 는 현 마이그레이션에서 미생성.
+    // ────────────────────────────────────────────────────────────────────
 
-    if (matchedAsset) {
-      const inspId = `INSP-${String(inspSeq++).padStart(7, '0')}`;
-      outboundInspections.push({
-        id: inspId,
-        deliveryId: delivOutId,
-        contractId: contractId,
-        assetId: matchedAsset.id,
-        status: 'APPROVED',
-        inspectorId: MIGRATION_INSPECTOR_ID,
-        checkedItems: { battery: true, tire: true, hydraulic: true, emergencyStop: true },
-        notes: '초기 마이그레이션 출고 검수 자동 승인',
-        approvedAt: rowStartDate,
-        approvedBy: MIGRATION_INSPECTOR_ID,
-        createdAt: nowIso,
-        updatedAt: nowIso
-      });
-
-      assetInOutLogs.push({
-        id: `LOG-OUT-${String(logSeq++).padStart(7, '0')}`,
-        assetId: matchedAsset.id,
-        assetNo: matchedAsset.assetNo,
-        modelName: matchedAsset.modelName,
-        type: 'OUTBOUND',
-        eventDate: rowStartDate,
-        contractId: contractId,
-        customerId: customer.id,
-        siteId: site.id,
-        deliveryId: delivOutId,
-        details: `현장 출고 (${customer.name} - ${site.name})`,
-        performedBy: MIGRATION_INSPECTOR_ID,
-        createdAt: nowIso,
-        updatedAt: nowIso
-      });
-    }
-
-    if (isCompleted && rowEndDate && rowEndDate !== '9999-12-31') {
-      const delivInId = `DELIV-IN-${String(delivSeq++).padStart(5, '0')}`;
-      deliveries.push({
-        id: delivInId,
-        deliveryNo: `DL-IN-${String(delivSeq - 1).padStart(5, '0')}`,
-        type: 'INBOUND',
-        contractId: contractId,
-        contractAssetId: caId,
-        customerId: customer.id,
-        siteId: site.id,
-        assetId: matchedAsset ? matchedAsset.id : null,
-        assetNo: matchedAsset ? matchedAsset.assetNo : (ownAssetNo || leaseAssetNo || '가상'),
-        modelName: targetModel,
-        dispatchDate: rowEndDate,
-        timeSlot: '오후 (13:00 ~ 17:00)',
-        status: 'DELIVERED',
-        isReturn: true,
-        returnDate: rowEndDate,
-        memo: '종료 계약 회수 배차',
-        createdBy: '시스템(초기DB업로드)',
-        createdAt: nowIso,
-        updatedAt: nowIso
-      });
-
-      if (matchedAsset) {
-        assetInOutLogs.push({
-          id: `LOG-IN-${String(logSeq++).padStart(7, '0')}`,
-          assetId: matchedAsset.id,
-          assetNo: matchedAsset.assetNo,
-          modelName: matchedAsset.modelName,
-          type: 'INBOUND',
-          eventDate: rowEndDate,
-          contractId: contractId,
-          customerId: customer.id,
-          siteId: site.id,
-          deliveryId: delivInId,
-          details: `현장 회수 입고 (${customer.name} - ${site.name})`,
-          performedBy: MIGRATION_INSPECTOR_ID,
-          createdAt: nowIso,
-          updatedAt: nowIso
-        });
-      }
-    }
 
     const transportFee = sanitizeNumber(r[20]);
     if (transportFee > 0) {
@@ -1612,14 +1519,12 @@ export async function ingestExcelInitialData(
       await batchUpsertChunked('external_leases', parsed.externalLeases, 100);
     }
 
-    // Step 8: 출고/회수 배차 체인
-    onProgress?.(8, totalSteps, `8/13: 출고 및 회수 배차 대장 (${parsed.deliveries.length}건) 적재 중...`);
-    await batchUpsertChunked('deliveries', parsed.deliveries, 200);
-
-    // Step 9: 출고 검수 및 자산 입출고 일지
-    onProgress?.(9, totalSteps, `9/13: 출고 검수 및 입출고 일지 (${parsed.assetInOutLogs.length}건) 적재 중...`);
-    await batchUpsertChunked('outbound_inspections', parsed.outboundInspections, 200);
-    await batchUpsertChunked('asset_inout_logs', parsed.assetInOutLogs, 200);
+    // Step 8~9: 배차·출고검수·입출고일지 — 배차 엑셀 입수 후 재시행 예정, 현재 SKIP
+    onProgress?.(8, totalSteps, '8/13: 배차 데이터 미생성 (배차 엑셀 입수 후 재시행 예정)...');
+    // await batchUpsertChunked('deliveries', parsed.deliveries, 200);
+    onProgress?.(9, totalSteps, '9/13: 출고검수·입출고일지 미생성 (배차 엑셀 입수 후 재시행 예정)...');
+    // await batchUpsertChunked('outbound_inspections', parsed.outboundInspections, 200);
+    // await batchUpsertChunked('asset_inout_logs', parsed.assetInOutLogs, 200);
 
     // Step 10: 과거 및 당월 매출 청구서 (Billings & Details)
     onProgress?.(10, totalSteps, `10/13: 과거 전체 및 8월 청구서 (${parsed.billings.length}건) 적재 중...`);
