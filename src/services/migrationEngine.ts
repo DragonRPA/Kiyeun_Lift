@@ -967,8 +967,11 @@ export function parseInitialExcelWorkbook(fileBuffer: ArrayBuffer | Uint8Array |
       });
     }
 
-    const ownAssetNo = getCol(r, mainHeaderMap, ['자사장비', '자산번호', '장비번호'], 13) ? String(getCol(r, mainHeaderMap, ['자사장비', '자산번호', '장비번호'], 13)).trim().toUpperCase() : '';
-    const leaseAssetNo = getCol(r, mainHeaderMap, ['전대장비', '임차장비'], 13) ? String(getCol(r, mainHeaderMap, ['전대장비', '임차장비'], 13)).trim().toUpperCase() : '';
+    // Col[10]=당사장비 관리번호, Col[13]=전대장비 관리번호
+    // buildHeaderMap은 '관리번호' 중복키 중 첫번째(Col[10])만 등록하므로
+    // 검색키 매칭 실패 시 fallback 인덱스로 정확히 분리해야 함
+    const ownAssetNo = (r[10] && String(r[10]).trim()) ? String(r[10]).trim().toUpperCase() : '';
+    const leaseAssetNo = (r[13] && String(r[13]).trim()) ? String(r[13]).trim().toUpperCase() : '';
     const leaseVendorName = getCol(r, mainHeaderMap, ['임차업체', '매입처'], 15) ? String(getCol(r, mainHeaderMap, ['임차업체', '매입처'], 15)).trim() : '';
     const leasePrice = sanitizeNumber(getCol(r, mainHeaderMap, ['임차단가', '매입단가'], 16));
     const leaseReturnDate = sanitizeExcelDate(getCol(r, mainHeaderMap, ['전대반납일', '반납일'], 17));
