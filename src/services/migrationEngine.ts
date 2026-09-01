@@ -137,8 +137,7 @@ export const TABLE_COLUMNS: Record<string, string[]> = {
     'performedBy', 'createdAt', 'updatedAt'
   ],
   billings: [
-    'id', 'billingNo', 'customerId', 'billingYm', 'billingDate', 'dueDate',
-    'totalAmount', 'paidAmount', 'status', 'note', 'driveFileId', 'createdAt', 'updatedAt'
+    'id', 'customerId', 'contractId', 'billingYm', 'totalAmount', 'paidAmount', 'status', 'billingDate', 'createdAt', 'updatedAt'
   ],
   billing_details: [
     'id', 'billingId', 'contractAssetId', 'assetId', 'itemName', 'quantity',
@@ -146,7 +145,7 @@ export const TABLE_COLUMNS: Record<string, string[]> = {
     'createdAt', 'updatedAt'
   ],
   purchase_billings: [
-    'id', 'vendorId', 'billingYm', 'totalAmount', 'paidAmount', 'status', 'note', 'createdAt', 'updatedAt'
+    'id', 'vendorId', 'billingYm', 'totalAmount', 'status', 'createdAt', 'updatedAt'
   ],
   purchase_billing_details: [
     'id', 'purchaseBillId', 'assetId', 'contractId', 'expenseType', 'itemName', 'amount', 'createdAt', 'updatedAt'
@@ -1187,11 +1186,9 @@ export function parseInitialExcelWorkbook(fileBuffer: ArrayBuffer | Uint8Array |
         const histDueDate = calcDueDate(billDateStr, customer.paymentDueDay ?? 30, customer.paymentTermDays ?? null);
         billings.push({
           id: histBillId,
-          billingNo: `BL-HIST-${String(billSeq - 1).padStart(6, '0')}`,
           customerId: customer.id,
           billingYm: ymStr,
           billingDate: billDateStr,
-          dueDate: histDueDate,
           totalAmount: histBillAmount,
           paidAmount: histBillAmount,
           status: 'PAID',
@@ -1321,11 +1318,9 @@ export function parseInitialExcelWorkbook(fileBuffer: ArrayBuffer | Uint8Array |
 
     billings.push({
       id: billingId,
-      billingNo: billingNo,
       customerId: custId,
       billingYm: '2026-08',
       billingDate: group.billingDate,
-      dueDate: group.dueDate,
       totalAmount: group.totalAmount,
       paidAmount: 0,
       status: 'UNPAID',
@@ -1360,7 +1355,6 @@ export function parseInitialExcelWorkbook(fileBuffer: ArrayBuffer | Uint8Array |
       vendorId: pGroup.vendorId,
       billingYm: '2026-08',
       totalAmount: pGroup.totalAmount,
-      paidAmount: 0,
       status: 'REQUESTED',
       createdAt: nowIso,
       updatedAt: nowIso
