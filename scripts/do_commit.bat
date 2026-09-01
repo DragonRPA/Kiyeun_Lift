@@ -1,3 +1,3 @@
 git add -A
-git commit -m "v0.7.0.Build.5: fix migration error - sync contract_history TABLE_COLUMNS and data mapping with schema.sql (remove changedBy, snapshot; add changeDate, updatedAt; fix changeType from INITIAL_START to REGISTER) (2026-09-01 16:35)"
+git commit -m "v0.7.0.Build.6: fix migration error - map external_leases correctly to schema (remove modelName/assetNo/serialNo, add assetDescription, fix leaseStartDate/leaseEndDate, etc) (2026-09-01 16:38)"
 git push origin main

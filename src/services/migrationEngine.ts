@@ -117,9 +117,9 @@ export const TABLE_COLUMNS: Record<string, string[]> = {
     'dailyRentalFee', 'startDate', 'endDate', 'createdAt', 'updatedAt'
   ],
   external_leases: [
-    'id', 'leaseNo', 'vendorId', 'contractId', 'modelName', 'assetNo', 'serialNo',
-    'rentStart', 'rentEnd', 'monthlyRentFee', 'dailyRentFee', 'actualRentReturnDate',
-    'memo', 'createdAt', 'updatedAt'
+    'id', 'vendorId', 'contractId', 'contractAssetId', 'assetDescription',
+    'monthlyRentFee', 'dailyRentFee', 'leaseStartDate', 'leaseEndDate', 'status',
+    'statementFileUrl', 'memo', 'createdAt', 'updatedAt'
   ],
   deliveries: [
     'id', 'deliveryNo', 'type', 'contractId', 'contractAssetId', 'customerId',
@@ -996,17 +996,16 @@ export function parseInitialExcelWorkbook(fileBuffer: ArrayBuffer | Uint8Array |
       const leaseId = `LEASE-2608-${String(leaseSeq++).padStart(4, '0')}`;
       const leaseEntity: any = {
         id: leaseId,
-        leaseNo: `EL2608-${String(leaseSeq - 1).padStart(4, '0')}`,
         vendorId: leaseVendor ? leaseVendor.id : null,
         contractId: null,   // 계약 그룹핑 완료 후 아래에서 주입 (A-01 fix)
-        modelName: targetModel,
-        assetNo: leaseAssetNo,
-        serialNo: '',
-        rentStart: sanitizeExcelDate(r[4]) || '2026-08-01',
-        rentEnd: leaseReturnDate,
+        contractAssetId: null,
+        assetDescription: `${targetModel} (${leaseAssetNo})`,
         monthlyRentFee: leasePrice,
         dailyRentFee: Math.round(leasePrice / 30),
-        actualRentReturnDate: leaseReturnDate,
+        leaseStartDate: sanitizeExcelDate(r[4]) || '2026-08-01',
+        leaseEndDate: leaseReturnDate,
+        status: leaseReturnDate ? 'RETURNED' : 'ACTIVE',
+        statementFileUrl: null,
         memo: `임차처: ${leaseVendorName}`,
         createdAt: nowIso,
         updatedAt: nowIso
@@ -1107,11 +1106,11 @@ export function parseInitialExcelWorkbook(fileBuffer: ArrayBuffer | Uint8Array |
     });
 
     // [A-01 fix] 전대 자산인 경우: leaseEntity.contractId를 이제 확정된 contractId로 주입
-    // externalLeases의 마지막 항목(방금 push된 leaseEntity)에 contractId 세팅
-    if (leaseAssetNo && !ownAssetNo) {
+    if (leaseAssetNo) {
       const lastLease = externalLeases[externalLeases.length - 1];
       if (lastLease && lastLease.contractId === null) {
         lastLease.contractId = contractId;
+        lastLease.contractAssetId = caId; // 김에 contractAssetId도 매핑
       }
     }
 
