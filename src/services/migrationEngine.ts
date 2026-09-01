@@ -673,7 +673,11 @@ export function parseInitialExcelWorkbook(fileBuffer: ArrayBuffer | Uint8Array |
 
   rawCustRows.forEach((r: any) => {
     if (!r) return;
-    const rawCustName = r[1];
+    const rawBizRegNo = r[1] ? String(r[1]).trim() : '';
+    const rawCustName = r[2] ? String(r[2]).trim() : '';
+    
+    // 헤더 행 무시 (사업자번호, 거래처명 등이 값으로 들어온 경우)
+    if (rawCustName === '거래처명' || rawBizRegNo === '사업자번호') return;
     if (!rawCustName) return;
 
     const custName = normalizeCustomerName(rawCustName);
@@ -683,7 +687,7 @@ export function parseInitialExcelWorkbook(fileBuffer: ArrayBuffer | Uint8Array |
       custEntity = {
         id: `CUST-${String(custSeq++).padStart(7, '0')}`,
         name: custName,
-        bizRegNo: r[2] ? String(r[2]).trim() : '',
+        bizRegNo: rawBizRegNo,
         representative: r[3] ? String(r[3]).trim() : '',
         repContact: r[7] ? String(r[7]).trim() : '',
         repEmail: r[8] ? String(r[8]).trim() : '',
@@ -742,7 +746,8 @@ export function parseInitialExcelWorkbook(fileBuffer: ArrayBuffer | Uint8Array |
   
   rawClosingRows.forEach((r: any) => {
     if (!r || !r[0]) return;
-    const custName = normalizeCustomerName(r[0]);
+    const custName = normalizeCustomerName(String(r[0]));
+    if (custName === '거래처명' || custName === '고객사명' || custName === '사업자번호') return;
     const closingDay = parseClosingDay(r[1]);
     const paymentTerm = parsePaymentDueTerm(r[2]);   // r[2] = 결제일 (누락항목 수정)
     const memo = r[3] ? String(r[3]).trim() : '';
@@ -817,6 +822,7 @@ export function parseInitialExcelWorkbook(fileBuffer: ArrayBuffer | Uint8Array |
     const rawCustName = r[0];
     const rawModel = r[2];
     if (!rawCustName && !rawModel) return;
+    if (rawCustName === '업체명' || rawCustName === '고객명' || rawCustName === '거래처명') return;
 
     const custName = normalizeCustomerName(rawCustName) || '기본고객사';
     let customer = customerMap.get(custName);
