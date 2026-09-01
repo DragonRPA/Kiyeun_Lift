@@ -812,13 +812,16 @@ export function parseInitialExcelWorkbook(fileBuffer: ArrayBuffer | Uint8Array |
   const rawClosingRows = allClosingRows.slice(closingDataStartIndex);
   
   rawClosingRows.forEach((r: any) => {
-    const rawCust = getCol(r, closingHeaderMap, ['거래처명', '고객사명', '업체명'], 0);
+    // 업체별마감일자 시트 구조: Col[0]=순번, Col[1]=업체명, Col[2]=마감일, Col[3]=결재일, Col[4]=비고
+    // getCol fallback=0은 순번(숫자)을 고객명으로 읽는 버그를 유발하므로 Col[1] 직접 읽기
+    const rawCust = (r[1] && String(r[1]).trim() && String(r[1]).trim() !== 'nan') ? String(r[1]).trim() : null;
     if (!r || !rawCust) return;
-    const custName = normalizeCustomerName(String(rawCust));
-    if (custName === '거래처명' || custName === '고객사명' || custName === '사업자번호') return;
-    const closingDay = parseClosingDay(getCol(r, closingHeaderMap, ['마감일자', '마감일'], 1));
-    const paymentTerm = parsePaymentDueTerm(getCol(r, closingHeaderMap, ['결제일', '결재일', '결제조건'], 2));   // r[2] = 결제일 (누락항목 수정)
-    const memo = getCol(r, closingHeaderMap, ['비고', '메모'], 3) ? String(getCol(r, closingHeaderMap, ['비고', '메모'], 3)).trim() : '';
+    if (typeof r[1] === 'number') return; // 숫자(순번)인 경우 건너뜀
+    const custName = normalizeCustomerName(rawCust);
+    if (!custName || custName === '거래처명' || custName === '고객사명' || custName === '업체명' || custName === '사업자번호') return;
+    const closingDay = parseClosingDay((r[2] && String(r[2]).trim() !== 'nan') ? String(r[2]).trim() : '');
+    const paymentTerm = parsePaymentDueTerm((r[3] && String(r[3]).trim() !== 'nan') ? String(r[3]).trim() : '');
+    const memo = (r[4] && String(r[4]).trim() !== 'nan') ? String(r[4]).trim() : '';
 
     let custEntity = customerMap.get(custName);
     if (!custEntity) {
