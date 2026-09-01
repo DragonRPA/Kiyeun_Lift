@@ -457,13 +457,16 @@ export function parseInitialExcelWorkbook(fileBuffer: ArrayBuffer | Uint8Array |
   const nowIso = new Date().toISOString();
 
   // ── 초기 마이그레이션 담당자 지정 ──────────────────────────────
-  // salesperson(영업 담당) 및 inspector(검수 담당)는 모두 김동우 팀장으로 일괄 지정
-  // users 배열이 전달된 경우 이름으로 동적 조회, 없으면 null 유지
+  // 영업 담당(salesperson): 김동우 팀장
+  // 검수/출고 담당(inspector): 김관주 부장
   const kimDongwoo = users?.find(u =>
     u.name?.includes('김동우') || u.name?.replace(/\s/g, '').includes('김동우')
   );
+  const kimGwanju = users?.find(u =>
+    u.name?.includes('김관주') || u.name?.replace(/\s/g, '').includes('김관주')
+  );
   const MIGRATION_SALESPERSON_ID: string | null = kimDongwoo?.id ?? null;
-  const MIGRATION_INSPECTOR_ID: string = kimDongwoo?.id ?? 'SYS-MIGRATED';
+  const MIGRATION_INSPECTOR_ID: string = kimGwanju?.id ?? 'SYS-MIGRATED';
   // ────────────────────────────────────────────────────────────────
 
   const productMap = new Map<string, any>();
