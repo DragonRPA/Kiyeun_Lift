@@ -701,8 +701,8 @@ export function parseInitialExcelWorkbook(fileBuffer: ArrayBuffer | Uint8Array |
       customerMap.set(custName, custEntity);
     }
 
-    const rawSite = r[5] ? String(r[5]).trim() : '';
-    if (rawSite) {
+    const rawSite = r[7] ? String(r[7]).trim() : '';
+    if (rawSite && rawSite !== '-') {
       const { cleanSiteName } = extractSiteNameAndMemo(rawSite);
       const siteKey = `${custEntity.id}_${cleanSiteName}`;
       if (!siteMap.has(siteKey)) {
@@ -710,18 +710,18 @@ export function parseInitialExcelWorkbook(fileBuffer: ArrayBuffer | Uint8Array |
           id: `SITE-${String(siteSeq++).padStart(7, '0')}`,
           customerId: custEntity.id,
           name: cleanSiteName,
-          address: custEntity.address,
-          contactName: r[7] ? String(r[7]).trim() : '',
-          contact: r[8] ? String(r[8]).trim() : '',
-          email: r[9] ? String(r[9]).trim() : '',
+          address: r[8] ? String(r[8]).trim() : '',
+          contactName: r[9] ? String(r[9]).trim() : '',
+          contact: r[10] ? String(r[10]).trim() : '',
+          email: r[11] ? String(r[11]).trim() : '',
           createdAt: nowIso,
           updatedAt: nowIso
         });
       }
     }
 
-    const rawContact = r[7] ? String(r[7]).trim() : '';
-    if (rawContact) {
+    const rawContact = r[9] ? String(r[9]).trim() : '';
+    if (rawContact && rawContact !== '-') {
       const { name, position } = extractContactPosition(rawContact);
       const contactKey = `${custEntity.id}_${name}`;
       if (!contactMap.has(contactKey)) {
@@ -730,8 +730,8 @@ export function parseInitialExcelWorkbook(fileBuffer: ArrayBuffer | Uint8Array |
           customerId: custEntity.id,
           name: name,
           position: position,
-          contact: r[8] ? String(r[8]).trim() : '',
-          email: r[9] ? String(r[9]).trim() : '',
+          contact: r[10] ? String(r[10]).trim() : '',
+          email: r[11] ? String(r[11]).trim() : '',
           isPrimary: true,
           createdAt: nowIso,
           updatedAt: nowIso
