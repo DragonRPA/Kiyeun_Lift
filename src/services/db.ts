@@ -483,10 +483,31 @@ export interface BillingDetail {
   updatedAt?: string;
 }
 
+/** 청구 인보이스 — 동일 고객의 복수 계약 청구를 단일 청구서/거래명세서로 통합하는 단위 */
+export interface BillingInvoice {
+  id: string;                  // 'INV-YYYYMM-NNNN'
+  customId?: string;           // 세금계산서 번호 등 외부 식별자
+  customerId: string;          // FK → customers
+  billingYm: string;           // 'YYYY-MM' 청구 귀속월
+  siteId?: string;             // null=고객 전체 통합, 값=현장 단위 분리
+  totalAmount: number;         // 포함된 billings 합계
+  vatAmount: number;           // 부가세 (기본 0, 필요 시 별도 입력)
+  grandTotal: number;          // totalAmount + vatAmount
+  status: 'DRAFT' | 'ISSUED' | 'PAID' | 'PARTIAL' | 'CANCELLED';
+  dueDate?: string;            // 납기일
+  issuedAt?: string;           // 실제 발행일시
+  memo?: string;
+  createdAt: string;
+  updatedAt: string;
+  // 가상 필드 (조인 시)
+  billings?: Billing[];
+}
+
 export interface Billing {
   id: string;
   customerId: string;
   contractId?: string; // 연결된 계약 ID (개별 계약 정산용)
+  invoiceId?: string;  // FK → billing_invoices (통합 인보이스 묶음, null=단독 청구)
   billingYm: string; // 'YYYY-MM'
   billingDate: string;
   totalAmount: number;
@@ -498,6 +519,7 @@ export interface Billing {
   // 가상필드
   details?: BillingDetail[];
 }
+
 
 /** 외상미수금 대장 — 운송료·수리비·청소비 분할 청산 관리 */
 export interface Receivable {

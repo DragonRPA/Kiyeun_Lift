@@ -1,4 +1,105 @@
-# Release Notes (v0.6.0.Build.9 - 2026-08-31 22:23)
+# Release Notes (v0.7.0.Build.1 - 2026-09-01 14:41)
+
+## 🆕 청구 인보이스 통합 기능 신규 도입
+
+### 배경
+현행 계약 그룹핑(고객+현장+시작일+종료일 조합 = 1계약) 구조에서 동일 고객이 납품 시점이 
+다른 여러 자산을 보유하면 계약이 분산됨. 고객에게는 월 1건의 청구서·거래명세서를 발행해야 
+하는 실무 요구를 충족하기 위해 **청구 인보이스(BillingInvoice)** 레이어를 신규 도입.
+
+### 핵심 설계 원칙
+- **계약 단위 무변경**: 계약 구조는 그대로 유지. 청구서/명세서 발행 레이어에서만 통합.
+- **1 인보이스 = 1 고객 × 1 청구월** (현장 단위 분리 옵션 지원)
+- **비례 자동 배분**: 인보이스 단위 수납 시 포함 billings에 금액 비례 자동 배분
+
+### 신규 파일
+
+#### `src/services/invoiceEngine.ts` [NEW]
+- `generateInvoices(opts)` — 월별 billings를 고객/현장 단위로 묶어 인보이스 자동 생성
+- `consolidateExistingBillings(groupBy)` — invoiceId 없는 기존 billings 소급 일괄 묶기
+- `applyPaymentToInvoice(invoiceId, amount, date)` — 수납 비례 배분
+- `cancelInvoice(invoiceId)` — 인보이스 취소 + billings.invoiceId null 복원
+- `fetchInvoices(billingYm?)` — 목록 조회
+- `fetchInvoiceDetail(invoiceId)` — billings+details 포함 상세 조회
+
+#### `src/components/BillingInvoiceTab.tsx` [NEW]
+- 인보이스 목록 테이블 (상태 배지, 금액, 납기일)
+- 행 클릭 → 포함 billings 상세 펼치기
+- [인보이스 생성] — 귀속월 + 통합 단위 선택 후 생성
+- [기존 데이터 소급 묶기] — invoiceId 없는 전체 billings 일괄 처리
+- [취소] — 인보이스 취소 및 billings 연결 해제
+
+### 수정 파일
+
+#### `src/services/db.ts`
+- `BillingInvoice` 인터페이스 신규 추가
+- `Billing.invoiceId?: string` 필드 추가
+
+#### `src/pages/Billings.tsx`
+- `BillingInvoiceTab` import 추가
+- `activeTab` 타입에 `'INVOICE'` 추가
+- [청구 인보이스] 탭 버튼 + 패널 렌더링 추가
+
+### DB DDL (Supabase에 적용 필요)
+
+```sql
+-- 1. billing_invoices 테이블 생성
+CREATE TABLE IF NOT EXISTS billing_invoices (
+  id              TEXT PRIMARY KEY,
+  custom_id       TEXT NOT NULL DEFAULT '',
+  customer_id     TEXT NOT NULL REFERENCES customers(id),
+  billing_ym      TEXT NOT NULL,
+  site_id         TEXT,
+  total_amount    BIGINT NOT NULL DEFAULT 0,
+  vat_amount      BIGINT NOT NULL DEFAULT 0,
+  grand_total     BIGINT NOT NULL DEFAULT 0,
+  status          TEXT NOT NULL DEFAULT 'DRAFT'
+                  CHECK (status IN ('DRAFT','ISSUED','PAID','PARTIAL','CANCELLED')),
+  due_date        TEXT,
+  issued_at       TEXT,
+  memo            TEXT DEFAULT '',
+  created_at      TEXT NOT NULL,
+  updated_at      TEXT NOT NULL
+);
+
+-- 2. billings 테이블에 invoice_id 컬럼 추가
+ALTER TABLE billings
+  ADD COLUMN IF NOT EXISTS invoice_id TEXT
+    REFERENCES billing_invoices(id);
+
+-- 3. RLS (authenticated 롤 허용)
+ALTER TABLE billing_invoices ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS billing_invoices_authenticated ON billing_invoices;
+CREATE POLICY billing_invoices_authenticated ON billing_invoices
+  FOR ALL TO authenticated USING (true) WITH CHECK (true);
+```
+
+---
+
+# Release Notes (v0.6.0.Build.19 - 2026-09-01 14:25)
+
+## 🔴 external_leases 혼재행 누락 버그 수정
+
+### 증상
+초기DB 업로드 후 `external_leases` 721건(백업) → 10건으로 급감.
+`vendors` 18건 → 7건으로 감소. `purchase_billings` 0건.
+
+### 근본 원인
+`202608` 시트의 1,520행이 자사 자산번호(r[13])와 전대 자산번호(r[14])를 **동시에 기입**하는 
+혼재 구조임에도, `if (ownAssetNo) { ... } else if (leaseAssetNo) { ... }` 구조로 인해
+자사번호가 있으면 전대 처리 분기 전체를 무조건 건너뜀.
+→ 1,520건 혼재행의 외부임차 등록, vendor 수집, purchase_billing 생성이 전부 누락.
+
+### 수정 (`src/services/migrationEngine.ts`)
+- `if-else if` → **독립 블록 2개**로 분리
+  1. `if (ownAssetNo)`: 자사 자산 등록 (기존과 동일)
+  2. `if (leaseAssetNo)`: 전대 처리 (ownAssetNo 유무와 무관하게 실행)
+- 혼재행(자사+전대 동시): 자사 자산을 leaseAssetRef로 참조하여 external_lease 생성
+- leaseVendorId 주입 로직 독립 처리
+
+---
+
+
 
 ## 🏛️ [기수/미수 원칙 글로벌 정책 전면 적용]
 

@@ -3,10 +3,12 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useApp } from '../context/AppContext';
 import { db, Asset, Billing, BillingDetail, ContractHistory, normalizeEndDate } from '../services/db';
-import { Plus, Download, Mail, CheckCircle, Search, DollarSign, Calendar, FileText, Send, Edit3, RotateCcw, AlertTriangle, Check } from 'lucide-react';
+import { Plus, Download, Mail, CheckCircle, Search, DollarSign, Calendar, FileText, Send, Edit3, RotateCcw, AlertTriangle, Check, Layers } from 'lucide-react';
 import { emailService } from '../services/email';
 import { exportToExcel, exportTransactionStatementExcel, exportTransactionStatementExcelBuffer, calcServicePeriod, formatStatementItemName } from '../services/excel';
 import { generateTransactionStatementPdf, generateTransactionStatementExcel } from '../services/excelTemplateEngine';
+import { BillingInvoiceTab } from '../components/BillingInvoiceTab';
+
 
 export const Billings: React.FC = () => {
   const {
@@ -22,7 +24,7 @@ export const Billings: React.FC = () => {
   const canSave = hasPermission('billing', 'save');
   const isAdmin = currentUser?.role === 'ADMIN';
 
-  const [activeTab, setActiveTab] = useState<'LIST' | 'GENERATE' | 'WIZARD'>('LIST');
+  const [activeTab, setActiveTab] = useState<'LIST' | 'GENERATE' | 'WIZARD' | 'INVOICE'>('LIST');
 
   // --- 청구 조회 필터 상태 ---
   const initialYm = new Date().toISOString().slice(0, 7);
@@ -1578,7 +1580,17 @@ ${items.map((item, idx) => {
         <button className={activeTab === 'LIST' ? 'btn-primary' : 'btn-secondary'} onClick={() => setActiveTab('LIST')}>
           청구 및 수납 내역
         </button>
+        <button
+          className={activeTab === 'INVOICE' ? 'btn-primary' : 'btn-secondary'}
+          onClick={() => setActiveTab('INVOICE')}
+          style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+        >
+          <Layers size={14} /> 청구 인보이스
+        </button>
       </div>
+
+      {/* 청구 인보이스 탭 */}
+      {activeTab === 'INVOICE' && <BillingInvoiceTab />}
 
       {activeTab === 'LIST' && (() => {
         const dueContracts = getDueContractsForBilling();
