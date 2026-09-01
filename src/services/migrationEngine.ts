@@ -85,13 +85,13 @@ export const TABLE_COLUMNS: Record<string, string[]> = {
   ],
   customers: [
     'id', 'name', 'bizRegNo', 'representative', 'repContact', 'repEmail',
-    'address', 'defaultBillingDay', 'paymentDueDay', 'paymentTermDays', 'memo', 'isActive', 'createdAt', 'updatedAt'
+    'address', 'defaultBillingDay', 'paymentDueDay', 'paymentTermDays', 'isClosed', 'createdAt', 'updatedAt'
   ],
   customer_sites: [
     'id', 'customerId', 'name', 'address', 'contactName', 'contact', 'email', 'createdAt', 'updatedAt'
   ],
   customer_contacts: [
-    'id', 'customerId', 'name', 'position', 'phone', 'email', 'isPrimary', 'createdAt', 'updatedAt'
+    'id', 'customerId', 'name', 'position', 'contact', 'email', 'isPrimary', 'createdAt', 'updatedAt'
   ],
   assets: [
     'id', 'modelName', 'assetNo', 'serialNo', 'manufacturer', 'manufactureYear',
@@ -689,10 +689,9 @@ export function parseInitialExcelWorkbook(fileBuffer: ArrayBuffer | Uint8Array |
         repContact: r[7] ? String(r[7]).trim() : '',
         repEmail: r[8] ? String(r[8]).trim() : '',
         address: r[4] ? String(r[4]).trim() : '',
-        billingDay: 30,
+        defaultBillingDay: 30,
         paymentDueDay: 15,
-        memo: '',
-        isActive: true,
+        isClosed: false,
         createdAt: nowIso,
         updatedAt: nowIso
       };
@@ -728,7 +727,7 @@ export function parseInitialExcelWorkbook(fileBuffer: ArrayBuffer | Uint8Array |
           customerId: custEntity.id,
           name: name,
           position: position,
-          phone: r[8] ? String(r[8]).trim() : '',
+          contact: r[8] ? String(r[8]).trim() : '',
           email: r[9] ? String(r[9]).trim() : '',
           isPrimary: true,
           createdAt: nowIso,
@@ -762,8 +761,7 @@ export function parseInitialExcelWorkbook(fileBuffer: ArrayBuffer | Uint8Array |
         defaultBillingDay: closingDay,
         paymentDueDay: paymentTerm.paymentDueDay,
         paymentTermDays: paymentTerm.paymentTermDays,
-        memo: memo,
-        isActive: true,
+        isClosed: false,
         createdAt: nowIso,
         updatedAt: nowIso
       };
@@ -772,9 +770,6 @@ export function parseInitialExcelWorkbook(fileBuffer: ArrayBuffer | Uint8Array |
       custEntity.defaultBillingDay = closingDay;
       custEntity.paymentDueDay = paymentTerm.paymentDueDay;
       custEntity.paymentTermDays = paymentTerm.paymentTermDays;
-      if (memo) {
-        custEntity.memo = custEntity.memo ? `${custEntity.memo} | ${memo}` : memo;
-      }
     }
   });
 
@@ -835,10 +830,9 @@ export function parseInitialExcelWorkbook(fileBuffer: ArrayBuffer | Uint8Array |
         repContact: '',
         repEmail: '',
         address: '',
-        billingDay: 30,
+        defaultBillingDay: 30,
         paymentDueDay: 15,
-        memo: '',
-        isActive: true,
+        isClosed: false,
         createdAt: nowIso,
         updatedAt: nowIso
       };
