@@ -447,7 +447,7 @@ export async function resetAllDatabaseTables(keepAdmin: boolean = true): Promise
 // ──────────────────────────────────────────────
 // 4. 엑셀 1개 파일 풀 라이프사이클 종합 파싱 엔진
 // ──────────────────────────────────────────────
-export function parseInitialExcelWorkbook(fileBuffer: ArrayBuffer | Uint8Array | XLSX.WorkBook): ParsedInitialData {
+export function parseInitialExcelWorkbook(fileBuffer: ArrayBuffer | Uint8Array | XLSX.WorkBook, users?: any[]): ParsedInitialData {
   let wb: XLSX.WorkBook;
   if ((fileBuffer as any).Sheets) {
     wb = fileBuffer as XLSX.WorkBook;
@@ -455,6 +455,16 @@ export function parseInitialExcelWorkbook(fileBuffer: ArrayBuffer | Uint8Array |
     wb = XLSX.read(fileBuffer, { type: 'array' });
   }
   const nowIso = new Date().toISOString();
+
+  // ── 초기 마이그레이션 담당자 지정 ──────────────────────────────
+  // salesperson(영업 담당) 및 inspector(검수 담당)는 모두 김동우 팀장으로 일괄 지정
+  // users 배열이 전달된 경우 이름으로 동적 조회, 없으면 null 유지
+  const kimDongwoo = users?.find(u =>
+    u.name?.includes('김동우') || u.name?.replace(/\s/g, '').includes('김동우')
+  );
+  const MIGRATION_SALESPERSON_ID: string | null = kimDongwoo?.id ?? null;
+  const MIGRATION_INSPECTOR_ID: string = kimDongwoo?.id ?? 'SYS-MIGRATED';
+  // ────────────────────────────────────────────────────────────────
 
   const productMap = new Map<string, any>();
   const vendorMap = new Map<string, any>();
@@ -961,7 +971,7 @@ export function parseInitialExcelWorkbook(fileBuffer: ArrayBuffer | Uint8Array |
         id: contractId,
         contractNo: contractNo,
         customerId: customer.id,
-        salespersonId: null,
+        salespersonId: MIGRATION_SALESPERSON_ID,   // C-01 fix: 김동우 팀장
         contactId: null,
         siteId: site.id,
         billingDay: customer.billingDay || 30,
@@ -1068,11 +1078,11 @@ export function parseInitialExcelWorkbook(fileBuffer: ArrayBuffer | Uint8Array |
         contractId: contractId,
         assetId: matchedAsset.id,
         status: 'APPROVED',
-        inspectorId: 'SYSTEM_ADMIN',
+        inspectorId: MIGRATION_INSPECTOR_ID,
         checkedItems: { battery: true, tire: true, hydraulic: true, emergencyStop: true },
         notes: '초기 마이그레이션 출고 검수 자동 승인',
         approvedAt: rowStartDate,
-        approvedBy: 'SYSTEM_ADMIN',
+        approvedBy: MIGRATION_INSPECTOR_ID,
         createdAt: nowIso,
         updatedAt: nowIso
       });
@@ -1089,7 +1099,7 @@ export function parseInitialExcelWorkbook(fileBuffer: ArrayBuffer | Uint8Array |
         siteId: site.id,
         deliveryId: delivOutId,
         details: `현장 출고 (${customer.name} - ${site.name})`,
-        performedBy: 'SYSTEM_ADMIN',
+        performedBy: MIGRATION_INSPECTOR_ID,
         createdAt: nowIso,
         updatedAt: nowIso
       });
@@ -1132,7 +1142,7 @@ export function parseInitialExcelWorkbook(fileBuffer: ArrayBuffer | Uint8Array |
           siteId: site.id,
           deliveryId: delivInId,
           details: `현장 회수 입고 (${customer.name} - ${site.name})`,
-          performedBy: 'SYSTEM_ADMIN',
+          performedBy: MIGRATION_INSPECTOR_ID,
           createdAt: nowIso,
           updatedAt: nowIso
         });

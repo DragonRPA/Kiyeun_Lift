@@ -33,7 +33,7 @@ import {
 } from 'lucide-react';
 
 export const InitialDbUploader: React.FC = () => {
-  const { showSuccessToast, showErrorModal, fullRefreshFromServer } = useApp();
+  const { showSuccessToast, showErrorModal, fullRefreshFromServer, users } = useApp();
 
   // 상태 관리
   const [activeTab, setActiveTab] = useState<'INGEST' | 'BACKUP' | 'RESET'>('INGEST');
@@ -127,7 +127,7 @@ export const InitialDbUploader: React.FC = () => {
       try {
         const data = new Uint8Array(evt.target?.result as ArrayBuffer);
         const wb = XLSX.read(data, { type: 'array' });
-        const parsed = parseWorkbookToEntities(wb);
+        const parsed = parseWorkbookToEntities(wb, users);
         setParsedData(parsed);
         showSuccessToast?.(`엑셀 분석 완료: 계약 ${parsed.stats.contractsCount}건, 출고배차 ${parsed.stats.outboundDeliveriesCount}건, 소급청구 ${parsed.stats.historicalBillingsCount}건`);
       } catch (err: any) {
