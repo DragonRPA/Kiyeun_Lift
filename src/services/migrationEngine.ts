@@ -110,7 +110,7 @@ export const TABLE_COLUMNS: Record<string, string[]> = {
     'driveFolderId', 'createdAt', 'updatedAt'
   ],
   contract_history: [
-    'id', 'contractId', 'changeType', 'changedBy', 'description', 'snapshot', 'createdAt'
+    'id', 'contractId', 'changeType', 'prevEndDate', 'newEndDate', 'description', 'changeDate', 'createdAt', 'updatedAt'
   ],
   contract_assets: [
     'id', 'contractId', 'assetId', 'expectedModel', 'monthlyRentalFee',
@@ -1084,19 +1084,11 @@ export function parseInitialExcelWorkbook(fileBuffer: ArrayBuffer | Uint8Array |
       contractHistories.push({
         id: `CH-${String(histSeq++).padStart(7, '0')}`,
         contractId: contractId,
-        changeType: 'INITIAL_START',
-        changedBy: '시스템(초기DB업로드)',
+        changeType: 'REGISTER',
+        changeDate: rowStartDate,
         description: `계약 최초 등록 (${rowStartDate} 개시)`,
-        snapshot: {
-          contractNo: contractNo,
-          customerId: customer.id,
-          customerName: customer.name,
-          siteName: site.name,
-          startDate: rowStartDate,
-          endDate: rowEndDate,
-          monthlyFee: rowMonthlyFee
-        },
-        createdAt: nowIso
+        createdAt: nowIso,
+        updatedAt: nowIso
       });
     }
 
