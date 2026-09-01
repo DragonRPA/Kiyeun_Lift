@@ -898,8 +898,19 @@ export function parseInitialExcelWorkbook(fileBuffer: ArrayBuffer | Uint8Array |
 
   rawMainRows.forEach((r: any) => {
     if (!r) return;
+    // ── 중복 헤더 컬럼 직접 인덱스 분리 파싱 ──────────────────────────────────
+    // 계약현황 시트에 '장비명'[9/12], '관리번호'[10/13], '수량'[11/14]이 중복 존재.
+    // buildHeaderMap은 첫 번째(당사 측)만 등록하므로, 전대 측은 헤더명 검색 불가.
+    // 전대 장비 전용 행에서 getCol fallback이 Col[3](최초개시일=날짜시리얼)을 읽어
+    // 모델명 = 45845 같은 날짜 숫자로 깨지는 버그를 직접 인덱스로 완전 차단.
+    const ownModelRaw  = (r[9]  && String(r[9]).trim()  && String(r[9]).trim()  !== 'nan') ? String(r[9]).trim()  : '';
+    const leaseModelRaw= (r[12] && String(r[12]).trim() && String(r[12]).trim() !== 'nan') ? String(r[12]).trim() : '';
+    const rawModel = ownModelRaw || leaseModelRaw;  // 당사 있으면 우선, 없으면 전대
+
+    // Col[10]=당사장비 관리번호, Col[13]=전대장비 관리번호
+    const ownAssetNo   = (r[10] && String(r[10]).trim() && String(r[10]).trim() !== 'nan') ? String(r[10]).trim().toUpperCase() : '';
+    const leaseAssetNo = (r[13] && String(r[13]).trim() && String(r[13]).trim() !== 'nan') ? String(r[13]).trim().toUpperCase() : '';
     const rawCustName = getCol(r, mainHeaderMap, ['업체명', '거래처명', '고객명'], 0);
-    const rawModel = getCol(r, mainHeaderMap, ['모델', '기종', '장비명'], 3);
     if (!rawCustName && !rawModel) return;
     if (rawCustName === '업체명' || rawCustName === '고객명' || rawCustName === '거래처명') return;
 
@@ -943,10 +954,9 @@ export function parseInitialExcelWorkbook(fileBuffer: ArrayBuffer | Uint8Array |
     }
 
     const targetModel = sanitizeModelName(rawModel) || 'ES1330L';
-    // 규격(r[3])에서 숫자(M 또는 ft) 추출. r[4]는 시작일이므로 사용 금지.
-    const rawHeight = getCol(r, mainHeaderMap, ['규격', '모델', '기종', '장비명'], 3);
-    const heightM = typeof rawHeight === 'number' ? rawHeight : parseFloat(String(rawHeight || '5.8')) || 5.8;
-    const feet = inferFeetFromModel(targetModel, heightM);
+    // 높이는 모델명에서 추론 (Col[3]=최초개시일(날짜시리얼)을 높이로 잘못 읽는 버그 차단)
+    const feet = inferFeetFromModel(targetModel, 0);
+    const heightM = feet > 0 ? feet * 0.3048 : 5.8; // feet→미터 환산, 불명 시 5.8M 기본값
 
     if (!productMap.has(targetModel)) {
       productMap.set(targetModel, {
@@ -967,11 +977,7 @@ export function parseInitialExcelWorkbook(fileBuffer: ArrayBuffer | Uint8Array |
       });
     }
 
-    // Col[10]=당사장비 관리번호, Col[13]=전대장비 관리번호
-    // buildHeaderMap은 '관리번호' 중복키 중 첫번째(Col[10])만 등록하므로
-    // 검색키 매칭 실패 시 fallback 인덱스로 정확히 분리해야 함
-    const ownAssetNo = (r[10] && String(r[10]).trim()) ? String(r[10]).trim().toUpperCase() : '';
-    const leaseAssetNo = (r[13] && String(r[13]).trim()) ? String(r[13]).trim().toUpperCase() : '';
+    // (ownAssetNo, leaseAssetNo는 상단 중복 헤더 직접 인덱스 블록에서 이미 선언됨)
     const leaseVendorName = getCol(r, mainHeaderMap, ['임차업체', '매입처'], 15) ? String(getCol(r, mainHeaderMap, ['임차업체', '매입처'], 15)).trim() : '';
     const leasePrice = sanitizeNumber(getCol(r, mainHeaderMap, ['임차단가', '매입단가'], 16));
     const leaseReturnDate = sanitizeExcelDate(getCol(r, mainHeaderMap, ['전대반납일', '반납일'], 17));
