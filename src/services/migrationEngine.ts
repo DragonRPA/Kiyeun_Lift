@@ -968,7 +968,7 @@ export function parseInitialExcelWorkbook(fileBuffer: ArrayBuffer | Uint8Array |
     }
 
     const ownAssetNo = getCol(r, mainHeaderMap, ['자사장비', '자산번호', '장비번호'], 13) ? String(getCol(r, mainHeaderMap, ['자사장비', '자산번호', '장비번호'], 13)).trim().toUpperCase() : '';
-    const leaseAssetNo = getCol(r, mainHeaderMap, ['전대장비', '임차장비'], 14) ? String(getCol(r, mainHeaderMap, ['전대장비', '임차장비'], 14)).trim().toUpperCase() : '';
+    const leaseAssetNo = getCol(r, mainHeaderMap, ['전대장비', '임차장비'], 13) ? String(getCol(r, mainHeaderMap, ['전대장비', '임차장비'], 13)).trim().toUpperCase() : '';
     const leaseVendorName = getCol(r, mainHeaderMap, ['임차업체', '매입처'], 15) ? String(getCol(r, mainHeaderMap, ['임차업체', '매입처'], 15)).trim() : '';
     const leasePrice = sanitizeNumber(getCol(r, mainHeaderMap, ['임차단가', '매입단가'], 16));
     const leaseReturnDate = sanitizeExcelDate(getCol(r, mainHeaderMap, ['전대반납일', '반납일'], 17));
