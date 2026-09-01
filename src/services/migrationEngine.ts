@@ -85,7 +85,7 @@ export const TABLE_COLUMNS: Record<string, string[]> = {
   ],
   customers: [
     'id', 'name', 'bizRegNo', 'representative', 'repContact', 'repEmail',
-    'address', 'billingDay', 'paymentDueDay', 'memo', 'isActive', 'createdAt', 'updatedAt'
+    'address', 'billingDay', 'paymentDueDay', 'paymentTermDays', 'memo', 'isActive', 'createdAt', 'updatedAt'
   ],
   customer_sites: [
     'id', 'customerId', 'name', 'address', 'contactName', 'contact', 'email', 'createdAt', 'updatedAt'
@@ -226,6 +226,77 @@ export function parseClosingDay(dayStr: any): number {
   }
   return 30;
 }
+
+/**
+ * 결제 조건 파싱 — 엑셀 결제일 셀 값을 두 가지 타입으로 분리
+ *
+ * 반환값:
+ *   paymentDueDay   : 특정 날짜 기준 결제일 (익월N일 방식) — null이면 Net Terms 사용
+ *   paymentTermDays : 청구일 기준 N일 이내 결제 (Net Terms) — null이면 익월N일 방식 사용
+ *
+ * 판별 규칙:
+ *   "익월N일" / "익익월N일" / "N일" (단, N ≤ 31)  →  paymentDueDay = N, paymentTermDays = null
+ *   "익월말" / "말일"                              →  paymentDueDay = 30, paymentTermDays = null
+ *   "N일" (N > 31) 또는 숫자만 (N > 31)            →  paymentDueDay = null, paymentTermDays = N  (Net Terms)
+ *   공백 / null                                    →  paymentDueDay = 30, paymentTermDays = null (기본값)
+ */
+export function parsePaymentDueTerm(rawStr: any): { paymentDueDay: number | null; paymentTermDays: number | null } {
+  const DEFAULT = { paymentDueDay: 30, paymentTermDays: null };
+  if (!rawStr) return DEFAULT;
+
+  const s = String(rawStr).trim();
+  if (!s) return DEFAULT;
+
+  // 말일 계열
+  if (s.includes('말일') || s === '익월말' || s === '말') {
+    return { paymentDueDay: 30, paymentTermDays: null };
+  }
+
+  // 숫자 추출
+  const numMatch = s.match(/(\d+)/);
+  if (!numMatch) return DEFAULT;
+  const n = parseInt(numMatch[1], 10);
+  if (isNaN(n)) return DEFAULT;
+
+  // "익월N일" 패턴: "익월" 포함이고 N ≤ 31 → 익월 N일
+  if (s.includes('익월') || s.includes('익익월')) {
+    return { paymentDueDay: Math.min(31, Math.max(1, n)), paymentTermDays: null };
+  }
+
+  // N만 있는 경우: N ≤ 31이면 당월N일, N > 31이면 Net Terms
+  if (n <= 31) {
+    return { paymentDueDay: n, paymentTermDays: null };
+  } else {
+    // 예: "75일" → Net 75 Terms
+    return { paymentDueDay: null, paymentTermDays: n };
+  }
+}
+
+/**
+ * 결제 만기일(dueDate) 계산 — paymentTermDays 또는 paymentDueDay 기반 단일 로직
+ * @param billingDateStr  청구서 발행일 (YYYY-MM-DD)
+ * @param paymentDueDay   익월N일 방식의 결제일 (nullable)
+ * @param paymentTermDays Net Terms 일수 (nullable)
+ */
+export function calcDueDate(billingDateStr: string, paymentDueDay: number | null, paymentTermDays: number | null): string {
+  if (!billingDateStr) return billingDateStr;
+  const billingDate = new Date(billingDateStr);
+
+  if (paymentTermDays != null && paymentTermDays > 0) {
+    // Net Terms: 발행일 + N일
+    const due = new Date(billingDate);
+    due.setDate(due.getDate() + paymentTermDays);
+    return due.toISOString().slice(0, 10);
+  }
+
+  // 익월N일 방식
+  const dueDay = paymentDueDay ?? 30;
+  const nextMonth = new Date(billingDate.getFullYear(), billingDate.getMonth() + 1, 1);
+  const lastDayOfNextMonth = new Date(nextMonth.getFullYear(), nextMonth.getMonth() + 1, 0).getDate();
+  const actualDay = Math.min(dueDay, lastDayOfNextMonth);
+  return `${nextMonth.getFullYear()}-${String(nextMonth.getMonth() + 1).padStart(2, '0')}-${String(actualDay).padStart(2, '0')}`;
+}
+
 
 export function extractSiteNameAndMemo(rawSite: string): { cleanSiteName: string; dispatchMemo: string } {
   if (!rawSite) return { cleanSiteName: '기본현장', dispatchMemo: '' };
@@ -675,6 +746,7 @@ export function parseInitialExcelWorkbook(fileBuffer: ArrayBuffer | Uint8Array |
     if (!r || !r[0]) return;
     const custName = normalizeCustomerName(r[0]);
     const closingDay = parseClosingDay(r[1]);
+    const paymentTerm = parsePaymentDueTerm(r[2]);   // r[2] = 결제일 (누락항목 수정)
     const memo = r[3] ? String(r[3]).trim() : '';
 
     let custEntity = customerMap.get(custName);
@@ -688,7 +760,8 @@ export function parseInitialExcelWorkbook(fileBuffer: ArrayBuffer | Uint8Array |
         repEmail: '',
         address: '',
         billingDay: closingDay,
-        paymentDueDay: 15,
+        paymentDueDay: paymentTerm.paymentDueDay,
+        paymentTermDays: paymentTerm.paymentTermDays,
         memo: memo,
         isActive: true,
         createdAt: nowIso,
@@ -697,6 +770,8 @@ export function parseInitialExcelWorkbook(fileBuffer: ArrayBuffer | Uint8Array |
       customerMap.set(custName, custEntity);
     } else {
       custEntity.billingDay = closingDay;
+      custEntity.paymentDueDay = paymentTerm.paymentDueDay;
+      custEntity.paymentTermDays = paymentTerm.paymentTermDays;
       if (memo) {
         custEntity.memo = custEntity.memo ? `${custEntity.memo} | ${memo}` : memo;
       }
@@ -1071,7 +1146,7 @@ export function parseInitialExcelWorkbook(fileBuffer: ArrayBuffer | Uint8Array |
         paidAmount: 0,
         status: 'UNPAID',
         issueDate: rowStartDate,
-        dueDate: '2026-09-25',
+        dueDate: calcDueDate(rowStartDate, customer.paymentDueDay ?? 30, customer.paymentTermDays ?? null),
         description: `운반비 청구 (${cleanSiteName})`,
         createdAt: nowIso,
         updatedAt: nowIso
@@ -1107,13 +1182,14 @@ export function parseInitialExcelWorkbook(fileBuffer: ArrayBuffer | Uint8Array |
         }
 
         const histBillId = `BILL-HIST-${String(billSeq++).padStart(6, '0')}`;
+        const histDueDate = calcDueDate(billDateStr, customer.paymentDueDay ?? 30, customer.paymentTermDays ?? null);
         billings.push({
           id: histBillId,
           billingNo: `BL-HIST-${String(billSeq - 1).padStart(6, '0')}`,
           customerId: customer.id,
           billingYm: ymStr,
           billingDate: billDateStr,
-          dueDate: billDateStr,
+          dueDate: histDueDate,
           totalAmount: histBillAmount,
           paidAmount: histBillAmount,
           status: 'PAID',
@@ -1160,10 +1236,11 @@ export function parseInitialExcelWorkbook(fileBuffer: ArrayBuffer | Uint8Array |
 
     let custBill = currentMonthBillingGroup.get(customer.id);
     if (!custBill) {
+      const billDate = '2026-08-31';
       custBill = {
         customer: customer,
-        billingDate: '2026-08-31',
-        dueDate: '2026-09-25',
+        billingDate: billDate,
+        dueDate: calcDueDate(billDate, customer.paymentDueDay ?? 30, customer.paymentTermDays ?? null),
         details: [],
         totalAmount: 0,
         paidAmount: 0
