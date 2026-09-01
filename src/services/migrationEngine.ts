@@ -1183,13 +1183,16 @@ export function parseInitialExcelWorkbook(fileBuffer: ArrayBuffer | Uint8Array |
         const lastDayOfCurMonth = new Date(curYear, curMonth, 0).getDate();
         const billDateStr = `${ymStr}-${String(Math.min(customer.billingDay || 30, lastDayOfCurMonth)).padStart(2, '0')}`;
 
-        let daysInPeriod = 30;
+        // A-02 fix: 실제 해당 월의 일수로 계산 (30일 고정 제거)
+        let daysInPeriod = lastDayOfCurMonth;
         if (curYear === parseInt(startParts[0], 10) && curMonth === parseInt(startParts[1], 10)) {
+          // 계약 개시월: 개시일부터 말일까지의 일수
           const startDay = parseInt(startParts[2], 10);
-          daysInPeriod = Math.max(1, 30 - startDay + 1);
+          daysInPeriod = Math.max(1, lastDayOfCurMonth - startDay + 1);
         }
 
-        const histBillAmount = daysInPeriod === 30 ? rowMonthlyFee : Math.round(rowDailyFee * daysInPeriod);
+        const isFullMonth = daysInPeriod === lastDayOfCurMonth;
+        const histBillAmount = isFullMonth ? rowMonthlyFee : Math.round(rowDailyFee * daysInPeriod);
 
         if (matchedAsset) {
           // 기수 원칙: 과거 소급 청구서 발행 금액(histBillAmount)만 누적 — 실발행된 청구의 기수 성과
