@@ -1039,3 +1039,35 @@ INSERT INTO customers (id, name, "bizRegNo", "isClosed", address, representative
 ('cust-1', '현대건설(주)', '101-81-12345', false, '서울시 종로구', '윤영준', '02-746-1114', TO_CHAR(NOW(), 'YYYY-MM-DD"T"HH24:MI:SS"Z"')),
 ('cust-2', '삼성물산(주)', '202-81-54321', false, '서울시 강동구', '오세철', '02-2145-5114', TO_CHAR(NOW(), 'YYYY-MM-DD"T"HH24:MI:SS"Z"'));
 
+ 
+ - -   = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =  
+ - -   4 3 .   ��I� �9m���? �!�  ? � ? ? 1uK��? ? ( r e c o n c i l i a t i o n _ r e p o r t s )  
+ - -   = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =  
+ C R E A T E   T A B L E   I F   N O T   E X I S T S   r e c o n c i l i a t i o n _ r e p o r t s   (  
+         i d   T E X T   P R I M A R Y   K E Y ,  
+         m i g r a t i o n _ r u n _ a t   T E X T   N O T   N U L L ,  
+         a s s e t _ c o u n t _ e x c e l   I N T ,  
+         a s s e t _ c o u n t _ d b   I N T ,  
+         a s s e t _ c o u n t _ m a t c h   B O O L E A N ,  
+         b i l l i n g _ t o t a l _ e x c e l   D O U B L E   P R E C I S I O N ,  
+         b i l l i n g _ t o t a l _ d b   D O U B L E   P R E C I S I O N ,  
+         b i l l i n g _ t o t a l _ d i f f   D O U B L E   P R E C I S I O N ,  
+         b i l l i n g _ t o t a l _ m a t c h   B O O L E A N ,  
+         d e t a i l s _ h e a d e r _ s u m   D O U B L E   P R E C I S I O N ,  
+         d e t a i l s _ d e t a i l _ s u m   D O U B L E   P R E C I S I O N ,  
+         d e t a i l s _ s u m _ d i f f   D O U B L E   P R E C I S I O N ,  
+         d e t a i l s _ s u m _ m a t c h   B O O L E A N ,  
+         l e a s e _ t o t a l _ e x c e l   D O U B L E   P R E C I S I O N ,  
+         l e a s e _ t o t a l _ d b   D O U B L E   P R E C I S I O N ,  
+         l e a s e _ t o t a l _ m a t c h   B O O L E A N ,  
+         l i f e c y c l e _ c o n t r a c t s   I N T ,  
+         l i f e c y c l e _ d e l i v e r i e s   I N T ,  
+         l i f e c y c l e _ m a t c h   B O O L E A N ,  
+         o r p h a n _ c o n t r a c t s   I N T ,  
+         o r p h a n _ a s s e t s   I N T ,  
+         o r p h a n _ i s _ c l e a n   B O O L E A N ,  
+         a l l _ p a s s e d   B O O L E A N ,  
+         m e m o   T E X T ,  
+         c r e a t e d _ a t   T E X T   N O T   N U L L  
+ ) ;  
+ 
