@@ -820,7 +820,7 @@ export function parseInitialExcelWorkbook(fileBuffer: ArrayBuffer | Uint8Array |
   rawMainRows.forEach((r: any) => {
     if (!r) return;
     const rawCustName = r[0];
-    const rawModel = r[2];
+    const rawModel = r[3];
     if (!rawCustName && !rawModel) return;
     if (rawCustName === '업체명' || rawCustName === '고객명' || rawCustName === '거래처명') return;
 
@@ -844,7 +844,7 @@ export function parseInitialExcelWorkbook(fileBuffer: ArrayBuffer | Uint8Array |
       customerMap.set(custName, customer);
     }
 
-    const rawSite = r[1] ? String(r[1]).trim() : '';
+    const rawSite = r[2] ? String(r[2]).trim() : '';
     const { cleanSiteName, dispatchMemo } = extractSiteNameAndMemo(rawSite);
     const siteKey = `${customer.id}_${cleanSiteName}`;
     let site = siteMap.get(siteKey);
@@ -864,6 +864,7 @@ export function parseInitialExcelWorkbook(fileBuffer: ArrayBuffer | Uint8Array |
     }
 
     const targetModel = sanitizeModelName(rawModel) || 'ES1330L';
+    // 규격(r[3])에서 숫자(M 또는 ft) 추출. r[4]는 시작일이므로 사용 금지.
     const heightM = typeof r[3] === 'number' ? r[3] : parseFloat(String(r[3] || '5.8')) || 5.8;
     const feet = inferFeetFromModel(targetModel, heightM);
 
