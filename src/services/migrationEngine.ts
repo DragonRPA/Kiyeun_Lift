@@ -117,7 +117,7 @@ export const TABLE_COLUMNS: Record<string, string[]> = {
     'dailyRentalFee', 'startDate', 'endDate', 'createdAt', 'updatedAt'
   ],
   external_leases: [
-    'id', 'leaseNo', 'vendorId', 'modelName', 'assetNo', 'serialNo',
+    'id', 'leaseNo', 'vendorId', 'contractId', 'modelName', 'assetNo', 'serialNo',
     'rentStart', 'rentEnd', 'monthlyRentFee', 'dailyRentFee', 'actualRentReturnDate',
     'memo', 'createdAt', 'updatedAt'
   ],
@@ -154,6 +154,16 @@ export const TABLE_COLUMNS: Record<string, string[]> = {
   receivables: [
     'id', 'customerId', 'siteId', 'contractId', 'type', 'amount', 'paidAmount',
     'status', 'issueDate', 'dueDate', 'description', 'createdAt', 'updatedAt'
+  ],
+  reconciliation_reports: [
+    'id', 'migration_run_at',
+    'asset_count_excel', 'asset_count_db', 'asset_count_match',
+    'billing_total_excel', 'billing_total_db', 'billing_total_diff', 'billing_total_match',
+    'details_header_sum', 'details_detail_sum', 'details_sum_diff', 'details_sum_match',
+    'lease_total_excel', 'lease_total_db', 'lease_total_match',
+    'lifecycle_contracts', 'lifecycle_deliveries', 'lifecycle_match',
+    'orphan_contracts', 'orphan_assets', 'orphan_is_clean',
+    'all_passed', 'memo', 'created_at'
   ]
 };
 
@@ -885,10 +895,12 @@ export function parseInitialExcelWorkbook(fileBuffer: ArrayBuffer | Uint8Array |
       }
 
       const leaseId = `LEASE-2608-${String(leaseSeq++).padStart(4, '0')}`;
-      externalLeases.push({
+      // contractId는 아래 그룹핑 단계에서 결정됨 → 객체 참조 보관 후 사후 주입
+      const leaseEntity: any = {
         id: leaseId,
         leaseNo: `EL2608-${String(leaseSeq - 1).padStart(4, '0')}`,
         vendorId: leaseVendor ? leaseVendor.id : null,
+        contractId: null,   // 계약 그룹핑 완료 후 아래에서 주입 (A-01 fix)
         modelName: targetModel,
         assetNo: leaseAssetNo,
         serialNo: '',
@@ -900,7 +912,8 @@ export function parseInitialExcelWorkbook(fileBuffer: ArrayBuffer | Uint8Array |
         memo: `임차처: ${leaseVendorName}`,
         createdAt: nowIso,
         updatedAt: nowIso
-      });
+      };
+      externalLeases.push(leaseEntity);
 
       if (leasePrice > 0 && leaseVendor) {
         let pGroup = purchaseBillingGroup.get(leaseVendor.id);
@@ -1001,6 +1014,15 @@ export function parseInitialExcelWorkbook(fileBuffer: ArrayBuffer | Uint8Array |
       createdAt: nowIso,
       updatedAt: nowIso
     });
+
+    // [A-01 fix] 전대 자산인 경우: leaseEntity.contractId를 이제 확정된 contractId로 주입
+    // externalLeases의 마지막 항목(방금 push된 leaseEntity)에 contractId 세팅
+    if (leaseAssetNo && !ownAssetNo) {
+      const lastLease = externalLeases[externalLeases.length - 1];
+      if (lastLease && lastLease.contractId === null) {
+        lastLease.contractId = contractId;
+      }
+    }
 
     // 🌟 [보강 2] 자산(assets) ➔ 계약정보 양방향 실시간 동기화 바인딩
     if (matchedAsset) {
@@ -1598,14 +1620,44 @@ export async function ingestExcelInitialData(
       await batchUpsertChunked('receivables', parsed.receivables, 100);
     }
 
-    // Step 12: 4대 대차대조 검증
-    onProgress?.(12, totalSteps, '12/13: 4대 대차대조(Reconciliation) 정밀 검증 중...');
+    // Step 12: 대사 검증 및 결과 DB 저장 (C-03 fix)
+    onProgress?.(12, totalSteps, '12/13: 대사 검증(Reconciliation) 수행 및 DB 저장 중...');
     await db.awaitPendingWrites?.();
+
+    const report = runReconciliationAudit(parsed);
+    const reportId = `REC-${Date.now()}`;
+    const reportRecord = {
+      id: reportId,
+      migration_run_at: nowIso,
+      asset_count_excel:      report.assetCountMatch.excel,
+      asset_count_db:         report.assetCountMatch.db,
+      asset_count_match:      report.assetCountMatch.isMatch,
+      billing_total_excel:    report.currentBillingTotalMatch.excel,
+      billing_total_db:       report.currentBillingTotalMatch.db,
+      billing_total_diff:     report.currentBillingTotalMatch.diff,
+      billing_total_match:    report.currentBillingTotalMatch.isMatch,
+      details_header_sum:     report.currentDetailsTotalMatch.headerSum,
+      details_detail_sum:     report.currentDetailsTotalMatch.detailSum,
+      details_sum_diff:       report.currentDetailsTotalMatch.diff,
+      details_sum_match:      report.currentDetailsTotalMatch.isMatch,
+      lease_total_excel:      report.leaseTotalMatch.excel,
+      lease_total_db:         report.leaseTotalMatch.db,
+      lease_total_match:      report.leaseTotalMatch.isMatch,
+      lifecycle_contracts:    report.lifecycleChainMatch.contracts,
+      lifecycle_deliveries:   report.lifecycleChainMatch.outboundDeliveries,
+      lifecycle_match:        report.lifecycleChainMatch.isMatch,
+      orphan_contracts:       report.orphanCheck.orphanContracts,
+      orphan_assets:          report.orphanCheck.orphanAssets,
+      orphan_is_clean:        report.orphanCheck.isClean,
+      all_passed:             report.allPassed,
+      memo:                   report.allPassed ? '전 항목 통과' : '일부 항목 불일치 — 상세 확인 요망',
+      created_at:             nowIso
+    };
+    await batchUpsertChunked('reconciliation_reports', [reportRecord], 1);
 
     // Step 13: Supabase → LocalStorage 동기화 (stale 캐시 차단)
     onProgress?.(13, totalSteps, '13/13: localStorage 동기화 완료 중...');
 
-    const report = runReconciliationAudit(parsed);
     return { success: true, report, message: '과거 라이프사이클 복원 및 초기 DB 마이그레이션 완료' };
   } catch (error: any) {
     return {
