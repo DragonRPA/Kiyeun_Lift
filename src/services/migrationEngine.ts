@@ -151,8 +151,8 @@ export const TABLE_COLUMNS: Record<string, string[]> = {
     'id', 'purchaseBillId', 'assetId', 'contractId', 'expenseType', 'itemName', 'amount', 'createdAt', 'updatedAt'
   ],
   receivables: [
-    'id', 'customerId', 'siteId', 'contractId', 'type', 'amount', 'paidAmount',
-    'status', 'issueDate', 'dueDate', 'description', 'createdAt', 'updatedAt'
+    'id', 'contractId', 'customerId', 'type', 'totalAmount', 'billedAmount',
+    'internalDescription', 'displayName', 'occurredDate', 'status', 'createdAt', 'updatedAt'
   ],
   reconciliation_reports: [
     'id', 'migration_run_at',
@@ -1139,16 +1139,15 @@ export function parseInitialExcelWorkbook(fileBuffer: ArrayBuffer | Uint8Array |
     if (transportFee > 0) {
       receivables.push({
         id: `RECV-${String(recvSeq++).padStart(7, '0')}`,
-        customerId: customer.id,
-        siteId: site.id,
         contractId: contractId,
+        customerId: customer.id,
         type: 'TRANSPORT',
-        amount: transportFee,
-        paidAmount: 0,
-        status: 'UNPAID',
-        issueDate: rowStartDate,
-        dueDate: calcDueDate(rowStartDate, customer.paymentDueDay ?? 30, customer.paymentTermDays ?? null),
-        description: `운반비 청구 (${cleanSiteName})`,
+        totalAmount: transportFee,
+        billedAmount: 0,
+        internalDescription: `운반비 청구 (${cleanSiteName})`,
+        displayName: null,
+        occurredDate: rowStartDate,
+        status: 'PENDING',
         createdAt: nowIso,
         updatedAt: nowIso
       });
