@@ -1519,25 +1519,35 @@ async function batchUpsertChunked(table: string, records: any[], chunkSize: numb
   // 🌟 스키마 화이트리스트로 불필요한 클라이언트 가상 필드 사전 정제
   const sanitizedRecords = records.map(r => filterRecordBySchema(table, r));
 
+  // 🔒 id 기준 중복 제거 — 동일 id가 두 번 이상 존재하면 PostgreSQL UPSERT에서
+  // "ON CONFLICT DO UPDATE command cannot affect row a second time" 에러 발생
+  const dedupMap = new Map<string, any>();
+  for (const r of sanitizedRecords) {
+    if (r.id) dedupMap.set(r.id, r);
+    else dedupMap.set(JSON.stringify(r), r); // id 없는 행은 전체 내용으로 키 설정
+  }
+  const dedupedRecords = Array.from(dedupMap.values());
+
   if (supabase) {
-    for (let i = 0; i < sanitizedRecords.length; i += chunkSize) {
-      const chunk = sanitizedRecords.slice(i, i + chunkSize);
+    for (let i = 0; i < dedupedRecords.length; i += chunkSize) {
+      const chunk = dedupedRecords.slice(i, i + chunkSize);
       const { error } = await supabase.from(table).upsert(chunk, { onConflict: 'id' });
       if (error) {
         console.error(`[Ingest Error] ${table} chunk ${i / chunkSize + 1} failed:`, error.message);
         throw new Error(`${table} 저장 실패: ${error.message}`);
       }
       if (onProgress) {
-        onProgress(`${table} 적재 진행 중 (${Math.min(i + chunkSize, sanitizedRecords.length)} / ${sanitizedRecords.length})`);
+        onProgress(`${table} 적재 진행 중 (${Math.min(i + chunkSize, dedupedRecords.length)} / ${dedupedRecords.length})`);
       }
     }
   } else {
     const tableArr = (db as any)[table] || [];
     const map = new Map(tableArr.map((item: any) => [item.id, item]));
-    sanitizedRecords.forEach(r => map.set(r.id, r));
+    dedupedRecords.forEach(r => map.set(r.id, r));
     (db as any)[table] = Array.from(map.values());
   }
 }
+
 
 export async function ingestExcelInitialData(
   parsed: ParsedInitialData,
