@@ -1235,7 +1235,8 @@ export function parseInitialExcelWorkbook(fileBuffer: ArrayBuffer | Uint8Array |
     // ────────────────────────────────────────────────────────────────────
 
 
-    const transportFee = sanitizeNumber(getCol(r, mainHeaderMap, ['운반비', '왕복운반비'], 20));
+    // Col[7] = 운반비. fallback 20은 임차단가 컬럼이므로 7로 수정
+    const transportFee = sanitizeNumber(getCol(r, mainHeaderMap, ['운반비', '왕복운반비'], 7));
     if (transportFee > 0) {
       receivables.push({
         id: `RECV-${String(recvSeq++).padStart(7, '0')}`,
