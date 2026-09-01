@@ -1631,7 +1631,7 @@ export async function ingestExcelInitialData(
     const reportId = `REC-${Date.now()}`;
     const reportRecord = {
       id: reportId,
-      migration_run_at: nowIso,
+      migration_run_at: new Date().toISOString(),
       asset_count_excel:      report.assetCountMatch.excel,
       asset_count_db:         report.assetCountMatch.db,
       asset_count_match:      report.assetCountMatch.isMatch,
