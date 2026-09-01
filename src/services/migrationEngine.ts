@@ -929,23 +929,8 @@ export function parseInitialExcelWorkbook(fileBuffer: ArrayBuffer | Uint8Array |
         assetMap.set(ownAssetNo, matchedAsset);
       }
     } else if (leaseAssetNo) {
+      // 자사번호 없이 전대번호만 있는 경우: 외부임차 자산으로 등록
       matchedAsset = assetMap.get(leaseAssetNo);
-      let leaseVendor: any = null;
-      if (leaseVendorName) {
-        leaseVendor = vendorMap.get(leaseVendorName);
-        if (!leaseVendor) {
-          leaseVendor = {
-            id: `VEND-${String(vendorMap.size + 1).padStart(7, '0')}`,
-            name: leaseVendorName,
-            type: 'RENTAL',
-            isActive: true,
-            createdAt: nowIso,
-            updatedAt: nowIso
-          };
-          vendorMap.set(leaseVendorName, leaseVendor);
-        }
-      }
-
       if (!matchedAsset) {
         const assetId = `ASSET-${String(assetSeq++).padStart(7, '0')}`;
         matchedAsset = {
@@ -965,7 +950,7 @@ export function parseInitialExcelWorkbook(fileBuffer: ArrayBuffer | Uint8Array |
           bookValue: 0,
           cumRentalFee: 0,
           cumRepairCost: 0,
-          vendorId: leaseVendor ? leaseVendor.id : null,
+          vendorId: null,           // 아래 leaseVendor 처리 후 주입
           rentStart: sanitizeExcelDate(r[4]) || '2026-08-01',
           rentEnd: leaseReturnDate,
           monthlyRentFee: leasePrice,
@@ -981,9 +966,40 @@ export function parseInitialExcelWorkbook(fileBuffer: ArrayBuffer | Uint8Array |
         };
         assetMap.set(leaseAssetNo, matchedAsset);
       }
+    }
+
+    // ── 전대(external_lease) 등록 —
+    // 자사번호 + 전대번호 동시 존재(혼재 행) 또는 전대번호만 있는 행 모두 처리
+    // Build.18 fix: if-else → 독립 블록으로 분리하여 1,520건 혼재 행 누락 방지
+    if (leaseAssetNo) {
+      let leaseVendor: any = null;
+      if (leaseVendorName) {
+        leaseVendor = vendorMap.get(leaseVendorName);
+        if (!leaseVendor) {
+          leaseVendor = {
+            id: `VEND-${String(vendorMap.size + 1).padStart(7, '0')}`,
+            name: leaseVendorName,
+            type: 'RENTAL',
+            isActive: true,
+            createdAt: nowIso,
+            updatedAt: nowIso
+          };
+          vendorMap.set(leaseVendorName, leaseVendor);
+        }
+      }
+
+      // matchedAsset이 자사 자산인 경우(혼재 행): 전대 asset을 별도 생성하지 않고
+      // external_lease 레코드만 생성 (자사 자산 추적은 ownAssetNo로 이미 완료)
+      const leaseAssetRef = ownAssetNo
+        ? (assetMap.get(ownAssetNo) || matchedAsset)  // 혼재 행: 자사 자산 참조
+        : (assetMap.get(leaseAssetNo) || matchedAsset); // 전대만: 임차 자산 참조
+
+      // leaseVendorId를 자산에도 주입 (전대번호만 있는 경우)
+      if (!ownAssetNo && leaseAssetRef && leaseVendor) {
+        leaseAssetRef.vendorId = leaseVendor.id;
+      }
 
       const leaseId = `LEASE-2608-${String(leaseSeq++).padStart(4, '0')}`;
-      // contractId는 아래 그룹핑 단계에서 결정됨 → 객체 참조 보관 후 사후 주입
       const leaseEntity: any = {
         id: leaseId,
         leaseNo: `EL2608-${String(leaseSeq - 1).padStart(4, '0')}`,
@@ -1011,7 +1027,7 @@ export function parseInitialExcelWorkbook(fileBuffer: ArrayBuffer | Uint8Array |
         }
         pGroup.totalAmount += leasePrice;
         pGroup.details.push({
-          assetId: matchedAsset.id,
+          assetId: leaseAssetRef ? leaseAssetRef.id : null,
           contractId: null,
           expenseType: 'RENTAL',
           itemName: `${targetModel} (${leaseAssetNo}) 전대 임차료`,
@@ -1019,6 +1035,7 @@ export function parseInitialExcelWorkbook(fileBuffer: ArrayBuffer | Uint8Array |
         });
       }
     }
+
 
     const rowStartDate = sanitizeExcelDate(r[4]) || '2026-08-01';
     const rowEndDate = sanitizeExcelDate(r[5]) || '9999-12-31';

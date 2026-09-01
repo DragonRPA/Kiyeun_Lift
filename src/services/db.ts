@@ -11,7 +11,7 @@ export const supabase = supabaseUrl && supabaseAnonKey
 // 법인 표기어 및 공백 제거 정규화 파서
 export function normalizeCustomerName(name: string): string {
   if (!name) return '';
-  return name
+  return String(name)
     .replace(/주식회사|\(주\)|\(주\)|㈜|\(유\)|유한회사|\(합\)|합자회사|사단법인|재단법인/gi, '')
     .replace(/[\s\(\)\[\]._\-]/g, '')
     .toLowerCase();
