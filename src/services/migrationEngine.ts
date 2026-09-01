@@ -1138,7 +1138,9 @@ export function parseInitialExcelWorkbook(
     const rowDailyFee = Math.round(rowMonthlyFee / 30);
     // Col[8]=계약구분 ('연장','종료','가상' 등). '상태'/'결재상태' 헤더는 없으므로 직접 인덱스 사용
     const contractStatusStr = (r[8] && String(r[8]).trim()) ? String(r[8]).trim() : '';
-    const isCompleted = contractStatusStr === '종료' || (rowEndDate && rowEndDate < '2026-08-01');
+    // 계약기간 만료 자산도 연장/반납 미결 상태이므로 ACTIVE 유지.
+    // 엑셀 Col[8]에 '종료'로 명시된 경우에만 COMPLETED 처리.
+    const isCompleted = contractStatusStr === '종료';
 
     // ── 계약 그룹핑: 동일 (고객사 + 현장 + 시작일 + 종료일) = 1개 계약 ──
     // 재영전기처럼 같은 현장·기간에 여러 자산이 있을 경우 하나의 계약으로 묶음
@@ -1218,14 +1220,18 @@ export function parseInitialExcelWorkbook(
     }
 
     // 🌟 [보강 2] 자산(assets) ➔ 계약정보 양방향 실시간 동기화 바인딩
+    // 계약기간 만료 자산도 연장/반납 미결 상태이므로 RENTED + 현장 바인딩 유지.
+    // 엑셀 Col[8]='종료' 명시 시에만 COMPLETED/RENTED_RETURNED 처리.
     if (matchedAsset) {
       if (!isCompleted) {
+        // 활성(ACTIVE) 계약 + 기간 만료 후 미결 계약 모두 RENTED로 처리
         matchedAsset.status = 'RENTED';
         matchedAsset.currentCustomerId = customer.id;
         matchedAsset.currentSiteId = site.id;
         matchedAsset.contractStart = rowStartDate;
         matchedAsset.contractEnd = rowEndDate;
       } else {
+        // Col[8]='종료'로 명시된 경우에만 회수 완료 처리
         if (matchedAsset.status !== 'RENTED') {
           matchedAsset.status = matchedAsset.ownerType === 'RENTED' ? 'RENTED_RETURNED' : 'AVAILABLE';
         }

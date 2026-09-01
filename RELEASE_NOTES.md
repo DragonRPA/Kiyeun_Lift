@@ -8312,3 +8312,10 @@ PostgreSQL DB ?덈꺼??`billings_status_check` ?쒖빟 議곌굔??寃곗옱 ?�
   - 활성화 시: 시작 월 ~ 종료 월 입력란이 표시되며, 지정 기간 내에만 계약별 월별 소급 청구서 생성.
   - 계약 최초개시월보다 늦은 시작월을 설정해도 정상 처리 (max 기준 자동 적용).
   - migrationEngine.ts: parseInitialExcelWorkbook에 histBillingRange 옵션 파라미터 추가.
+
+### v0.7.1.Build.31 (2026-09-01 21:54)
+- **정책변경**: 마이그레이션 시 계약기간 만료 자산 처리 원칙 변경.
+  - 변경 전: 종료일이 2026-08-01 이전이면 자동으로 COMPLETED/AVAILABLE 처리.
+  - 변경 후: 엑셀 Col[8](계약구분)에 '종료'로 명시된 경우에만 COMPLETED 처리.
+  - 근거: 계약기간이 만료되었더라도 연장/반납 여부 미결 상태이므로 RENTED + 현장 바인딩 유지.
+  - 영향: isCompleted 판별, 계약 status, 자산 status 및 currentCustomerId/currentSiteId 모두 적용.
