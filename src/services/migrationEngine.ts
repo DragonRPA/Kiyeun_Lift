@@ -537,14 +537,7 @@ export function parseInitialExcelWorkbook(fileBuffer: ArrayBuffer | Uint8Array |
       });
     }
 
-    const depnResult = calculateAssetDepreciation({
-      acquisitionPrice: acqPrice,
-      acquisitionDate: acqDate,
-      depreciationMonths: 96,
-      residualValueRate: 10,
-      status: 'AVAILABLE'
-    } as any, new Date('2026-08-31'));
-
+    // 감가상각은 【자산 정보 확정 단계】에서 전 자산 일괄 재계산 → 여기서는 placeholder
     const assetId = `ASSET-${String(assetSeq++).padStart(7, '0')}`;
     const assetEntity = {
       id: assetId,
@@ -559,8 +552,8 @@ export function parseInitialExcelWorkbook(fileBuffer: ArrayBuffer | Uint8Array |
       acquisitionPrice: acqPrice,
       depreciationMonths: 96,
       residualValueRate: 10,
-      accumDepreciation: depnResult.accumDepreciation,
-      bookValue: depnResult.bookValue,
+      accumDepreciation: 0,   // → 자산 확정 단계에서 덮어씀
+      bookValue: acqPrice,    // → 자산 확정 단계에서 덮어씀
       cumRentalFee: 0,
       cumRepairCost: 0,
       supplier: supplier,
@@ -1344,6 +1337,50 @@ export function parseInitialExcelWorkbook(fileBuffer: ArrayBuffer | Uint8Array |
   const parsedCustomers = Array.from(customerMap.values());
   const parsedSites = Array.from(siteMap.values());
   const parsedContacts = Array.from(contactMap.values());
+
+  // ──────────────────────────────────────────────────────────────────
+  // 【자산 정보 확정 단계】 — 모든 시트 파싱 완료 후, DB INSERT 전
+  // 이 시점에서 assetMap에 모든 자산이 확정 등록된 상태이므로
+  // 자사 보유(OWNED) 자산 전체에 대해 감가상각을 일괄 재계산한다.
+  //
+  // 목적:
+  //   - 보유자산현황 시트에서 직접 등록된 자산: 인라인 계산값을 덮어씀(재검증)
+  //   - 202608 계약대장 시트에서 자동 등록된 자산: accumDepreciation=0 하드코딩을 교정
+  //   - RENTED/EXTERNAL 자산: 감가상각 해당 없음 → 건너뜀
+  //
+  // 기준일: 2026-08-31 (마이그레이션 기준 결산일)
+  // ──────────────────────────────────────────────────────────────────
+  const DEPRECIATION_BASE_DATE = new Date('2026-08-31');
+
+  assetMap.forEach((asset) => {
+    if (asset.ownerType !== 'OWNED') return; // 전대(임차) 자산 제외
+
+    const acqPrice = asset.acquisitionPrice || 0;
+    const acqDate = asset.acquisitionDate;
+
+    if (!acqDate || acqPrice <= 0) {
+      // 취득가 또는 취득일 미확정 자산 — 감가상각 미적용, 장부가 = 취득가 유지
+      asset.accumDepreciation = 0;
+      asset.bookValue = acqPrice;
+      return;
+    }
+
+    const depnResult = calculateAssetDepreciation(
+      {
+        acquisitionPrice: acqPrice,
+        acquisitionDate: acqDate,
+        depreciationMonths: asset.depreciationMonths || 96,
+        residualValueRate: asset.residualValueRate ?? 10,
+        status: asset.status
+      } as any,
+      DEPRECIATION_BASE_DATE
+    );
+
+    asset.accumDepreciation = depnResult.accumDepreciation;
+    asset.bookValue = depnResult.bookValue;
+  });
+  // ── 자산 정보 확정 완료 ──────────────────────────────────────────
+
   const parsedAssets = Array.from(assetMap.values());
 
   const currentMonthBills = billings.filter(b => b.billingYm === '2026-08');
