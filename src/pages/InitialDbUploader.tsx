@@ -58,6 +58,11 @@ export const InitialDbUploader: React.FC = () => {
   });
   const [reconciliationReport, setReconciliationReport] = useState<ReconciliationReport | null>(null);
 
+  // 소급 청구서 생성 기간 설정
+  const [histBillingEnabled, setHistBillingEnabled] = useState(false);
+  const [histBillingStart, setHistBillingStart] = useState('2026-01');
+  const [histBillingEnd, setHistBillingEnd] = useState('2026-07');
+
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // ── 1. DB 전체 백업 실행 ──
@@ -127,7 +132,10 @@ export const InitialDbUploader: React.FC = () => {
       try {
         const data = new Uint8Array(evt.target?.result as ArrayBuffer);
         const wb = XLSX.read(data, { type: 'array' });
-        const parsed = parseWorkbookToEntities(wb, users);
+        const histRange = histBillingEnabled
+          ? { start: histBillingStart, end: histBillingEnd }
+          : undefined;
+        const parsed = parseWorkbookToEntities(wb, users, histRange);
         setParsedData(parsed);
         showSuccessToast?.(`엑셀 분석 완료: 계약 ${parsed.stats.contractsCount}건, 출고배차 ${parsed.stats.outboundDeliveriesCount}건, 소급청구 ${parsed.stats.historicalBillingsCount}건`);
       } catch (err: any) {
@@ -313,7 +321,65 @@ export const InitialDbUploader: React.FC = () => {
             </div>
           </div>
 
-          {/* 2. 파싱 통계 프리뷰 카드뉴스 */}
+          {/* 2. 소급 청구 기간 설정 카드 */}
+          <div style={{ backgroundColor: '#ffffff', borderRadius: '8px', border: '1px solid #e2e8f0', padding: '20px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: histBillingEnabled ? '16px' : '0' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', userSelect: 'none' }}>
+                <input
+                  type="checkbox"
+                  checked={histBillingEnabled}
+                  onChange={e => setHistBillingEnabled(e.target.checked)}
+                  style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+                />
+                <span style={{ fontSize: '14px', fontWeight: 600, color: '#334155', whiteSpace: 'nowrap' }}>
+                  과거 소급 청구서 생성
+                </span>
+              </label>
+              <span style={{ fontSize: '12px', color: histBillingEnabled ? '#d97706' : '#94a3b8', whiteSpace: 'nowrap' }}>
+                {histBillingEnabled
+                  ? '지정 기간 내 계약별 월별 청구서를 생성합니다 (대량 생성 주의)'
+                  : '미선택 시 과거 청구서 미생성 — 수납 정리 후 필요 시 별도 선택'}
+              </span>
+            </div>
+            {histBillingEnabled && (
+              <div style={{ display: 'flex', alignItems: 'flex-end', gap: '20px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label style={{ fontSize: '12px', fontWeight: 600, color: '#64748b', whiteSpace: 'nowrap' }}>시작 월</label>
+                  <input
+                    type="month"
+                    value={histBillingStart}
+                    onChange={e => setHistBillingStart(e.target.value)}
+                    style={{
+                      padding: '8px 12px', border: '1px solid #cbd5e1', borderRadius: '6px',
+                      fontSize: '14px', color: '#1e293b', backgroundColor: '#f8fafc', outline: 'none'
+                    }}
+                  />
+                </div>
+                <span style={{ fontSize: '18px', color: '#64748b', paddingBottom: '8px' }}>~</span>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label style={{ fontSize: '12px', fontWeight: 600, color: '#64748b', whiteSpace: 'nowrap' }}>종료 월</label>
+                  <input
+                    type="month"
+                    value={histBillingEnd}
+                    onChange={e => setHistBillingEnd(e.target.value)}
+                    style={{
+                      padding: '8px 12px', border: '1px solid #cbd5e1', borderRadius: '6px',
+                      fontSize: '14px', color: '#1e293b', backgroundColor: '#f8fafc', outline: 'none'
+                    }}
+                  />
+                </div>
+                <div style={{
+                  padding: '8px 14px', backgroundColor: '#fffbeb', border: '1px solid #fcd34d',
+                  borderRadius: '6px', fontSize: '12px', color: '#92400e', whiteSpace: 'nowrap', lineHeight: '1.5'
+                }}>
+                  ⚠️ {histBillingStart} ~ {histBillingEnd} 기간<br/>
+                  계약별 월별 청구서 대량 생성
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* 3. 파싱 통계 프리뷰 카드뉴스 */}
           {parsedData && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>

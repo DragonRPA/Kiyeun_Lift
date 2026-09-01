@@ -550,7 +550,11 @@ function getCol(row: any[], map: Map<string, number>, keys: string[], fallbackId
   return row[fallbackIdx];
 }
 
-export function parseInitialExcelWorkbook(fileBuffer: ArrayBuffer | Uint8Array | XLSX.WorkBook, users?: any[]): ParsedInitialData {
+export function parseInitialExcelWorkbook(
+  fileBuffer: ArrayBuffer | Uint8Array | XLSX.WorkBook,
+  users?: any[],
+  histBillingRange?: { start: string; end: string }   // 소급 청구 생성 기간 (없으면 생성 안 함)
+): ParsedInitialData {
   let wb: XLSX.WorkBook;
   if ((fileBuffer as any).Sheets) {
     wb = fileBuffer as XLSX.WorkBook;
@@ -1254,25 +1258,35 @@ export function parseInitialExcelWorkbook(fileBuffer: ArrayBuffer | Uint8Array |
       });
     }
 
-    // ── 과거 소급 청구서 생성 (최초개시월 ~ 2026-07) ──
+    // ── 과거 소급 청구서 선택적 생성 (histBillingRange 지정 시에만 실행) ──
     // Col[3] = 최초개시일 (실제 계약 시작일). Col[4] = 개시일은 당월 기산일이므로 사용 금지.
     const firstStartDate = sanitizeExcelDate(r[3]) || rowStartDate;
     const startYmd = firstStartDate;
-    if (startYmd && startYmd < '2026-08-01') {
+    // histBillingRange가 없으면 소급 청구서 생성 안 함 (담당자가 UI에서 기간을 지정해야만 생성)
+    if (histBillingRange && startYmd && startYmd < '2026-08-01') {
+      const rangeStart = histBillingRange.start;   // 'YYYY-MM' 형식
+      const rangeEnd   = histBillingRange.end;     // 'YYYY-MM' 형식
       const startParts = startYmd.split('-');
-      let curYear = parseInt(startParts[0], 10);
-      let curMonth = parseInt(startParts[1], 10);
+      // 소급 시작월: max(계약 최초개시월, 지정 시작월)
+      const contractStartYm = `${startParts[0]}-${startParts[1]}`;
+      const loopStartYm = contractStartYm >= rangeStart ? contractStartYm : rangeStart;
+      const loopStartParts = loopStartYm.split('-');
+      let curYear = parseInt(loopStartParts[0], 10);
+      let curMonth = parseInt(loopStartParts[1], 10);
 
-      while (curYear < 2026 || (curYear === 2026 && curMonth <= 7)) {
+      const [rangeEndY, rangeEndM] = rangeEnd.split('-').map(Number);
+
+      while (curYear < rangeEndY || (curYear === rangeEndY && curMonth <= rangeEndM)) {
         const ymStr = `${curYear}-${String(curMonth).padStart(2, '0')}`;
         const lastDayOfCurMonth = new Date(curYear, curMonth, 0).getDate();
         const billDateStr = `${ymStr}-${String(Math.min(customer.billingDay || 30, lastDayOfCurMonth)).padStart(2, '0')}`;
 
         // A-02 fix: 실제 해당 월의 일수로 계산 (30일 고정 제거)
         let daysInPeriod = lastDayOfCurMonth;
-        if (curYear === parseInt(startParts[0], 10) && curMonth === parseInt(startParts[1], 10)) {
-          // 계약 개시월: 개시일부터 말일까지의 일수
-          const startDay = parseInt(startParts[2], 10);
+        const origStartParts = firstStartDate.split('-');
+        if (curYear === parseInt(origStartParts[0], 10) && curMonth === parseInt(origStartParts[1], 10)) {
+          // 계약 최초개시월: 개시일부터 말일까지의 일수
+          const startDay = parseInt(origStartParts[2], 10);
           daysInPeriod = Math.max(1, lastDayOfCurMonth - startDay + 1);
         }
 
