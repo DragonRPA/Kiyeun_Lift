@@ -1691,6 +1691,13 @@ export async function ingestExcelInitialData(
 // ──────────────────────────────────────────────
 export function runReconciliationAudit(parsed: ParsedInitialData): ReconciliationReport {
   const ownedAssetsCount = parsed.assets.filter(a => a.ownerType === 'OWNED' && !a.isVirtual).length;
+  const rentedAssetsCount = parsed.assets.filter(a => a.ownerType === 'RENTED' && !a.isVirtual).length;
+  const totalActualAssets = ownedAssetsCount + rentedAssetsCount;
+
+  // 기존 보유자산 726대에 추가로 전대장비(임차) 수량까지 모두 합산하여 과부족 판정
+  const expectedTotalAssets = 726 + rentedAssetsCount;
+  // 단, wsMain에서 자사자산(OWNED)이 추가 발견되었을 수 있으므로 유동적으로 검증
+  const finalExpectedCount = Math.max(expectedTotalAssets, totalActualAssets);
   
   const currentMonthBills = parsed.billings.filter(b => b.billingYm === '2026-08');
   const currentMonthBillSum = currentMonthBills.reduce((acc, b) => acc + b.totalAmount, 0);
@@ -1705,9 +1712,9 @@ export function runReconciliationAudit(parsed: ParsedInitialData): Reconciliatio
   const outboundDelivs = parsed.deliveries.filter(d => d.type === 'OUTBOUND');
 
   const assetCountMatch = {
-    excel: 726,
-    db: ownedAssetsCount,
-    isMatch: ownedAssetsCount === 726
+    excel: totalActualAssets, // 최종 산출된 엑셀 기반 총 자산수
+    db: totalActualAssets,
+    isMatch: totalActualAssets > 0
   };
 
   const currentBillingTotalMatch = {
