@@ -118,6 +118,8 @@ CREATE TABLE customers (
     "prepaidBalance" DOUBLE PRECISION NOT NULL DEFAULT 0,
     "defaultBillingDay" INTEGER DEFAULT 30,
     "defaultStatementClosingDay" INTEGER DEFAULT 25,
+    "paymentDueDay" INTEGER,
+    "paymentTermDays" INTEGER,
     "bankAccounts" JSONB,
     "createdAt" TEXT NOT NULL,
     "updatedAt" TEXT NOT NULL

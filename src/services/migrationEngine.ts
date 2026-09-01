@@ -85,7 +85,7 @@ export const TABLE_COLUMNS: Record<string, string[]> = {
   ],
   customers: [
     'id', 'name', 'bizRegNo', 'representative', 'repContact', 'repEmail',
-    'address', 'billingDay', 'paymentDueDay', 'paymentTermDays', 'memo', 'isActive', 'createdAt', 'updatedAt'
+    'address', 'defaultBillingDay', 'paymentDueDay', 'paymentTermDays', 'memo', 'isActive', 'createdAt', 'updatedAt'
   ],
   customer_sites: [
     'id', 'customerId', 'name', 'address', 'contactName', 'contact', 'email', 'createdAt', 'updatedAt'
@@ -759,7 +759,7 @@ export function parseInitialExcelWorkbook(fileBuffer: ArrayBuffer | Uint8Array |
         repContact: '',
         repEmail: '',
         address: '',
-        billingDay: closingDay,
+        defaultBillingDay: closingDay,
         paymentDueDay: paymentTerm.paymentDueDay,
         paymentTermDays: paymentTerm.paymentTermDays,
         memo: memo,
@@ -769,7 +769,7 @@ export function parseInitialExcelWorkbook(fileBuffer: ArrayBuffer | Uint8Array |
       };
       customerMap.set(custName, custEntity);
     } else {
-      custEntity.billingDay = closingDay;
+      custEntity.defaultBillingDay = closingDay;
       custEntity.paymentDueDay = paymentTerm.paymentDueDay;
       custEntity.paymentTermDays = paymentTerm.paymentTermDays;
       if (memo) {

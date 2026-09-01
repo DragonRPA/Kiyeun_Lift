@@ -156,6 +156,8 @@ export interface Customer {
   transactionStatus?: 'ALLOWED' | 'BLOCKED'; // ALLOWED: 거래가능 (기본), BLOCKED: 거래불가 (신규 계약/출고 제한)
   defaultBillingDay?: number; // 청구서(세금계산서) 기본 마감일 (예: 30일/월말)
   defaultStatementClosingDay?: number; // 거래명세서 기본 마감일 (예: 25일)
+  paymentDueDay?: number; // 익월 결제일 (N일)
+  paymentTermDays?: number; // Net Terms 결제기한 (발행 후 N일)
   bankAccounts?: CustomerBankAccount[]; // 고객사 다중 계좌 목록
   createdAt: string;
 }
