@@ -1254,8 +1254,10 @@ export function parseInitialExcelWorkbook(fileBuffer: ArrayBuffer | Uint8Array |
       });
     }
 
-    // ── 과거 소급 청구서 생성 (계약 개시월 ~ 2026-07) ──
-    const startYmd = rowStartDate;
+    // ── 과거 소급 청구서 생성 (최초개시월 ~ 2026-07) ──
+    // Col[3] = 최초개시일 (실제 계약 시작일). Col[4] = 개시일은 당월 기산일이므로 사용 금지.
+    const firstStartDate = sanitizeExcelDate(r[3]) || rowStartDate;
+    const startYmd = firstStartDate;
     if (startYmd && startYmd < '2026-08-01') {
       const startParts = startYmd.split('-');
       let curYear = parseInt(startParts[0], 10);
