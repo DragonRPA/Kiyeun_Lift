@@ -1108,7 +1108,7 @@ export function parseInitialExcelWorkbook(fileBuffer: ArrayBuffer | Uint8Array |
         pGroup.details.push({
           assetId: leaseAssetRef ? leaseAssetRef.id : null,
           contractId: null,
-          expenseType: 'RENTAL',
+          expenseType: 'RENTAL_FEE',
           itemName: `${targetModel} (${leaseAssetNo}) 전대 임차료`,
           amount: leasePrice
         });
