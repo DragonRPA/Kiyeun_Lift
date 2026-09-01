@@ -7,7 +7,7 @@ import { ASSET_STATUS_SSOT, getAssetStatusLabel, getAssetStatusBadgeClass } from
 import { CloudStoragePickerModal } from '../components/CloudStoragePickerModal';
 
 export const Assets: React.FC = () => {
-  const { assets, customers, sites, hasPermission, saveAsset, showErrorModal, loadTablesForMenu, assetInOutLogs, repairs } = useApp();
+  const { assets, customers, sites, contracts, contractAssets, hasPermission, saveAsset, showErrorModal, loadTablesForMenu, assetInOutLogs, repairs } = useApp();
 
   const canEdit = hasPermission('asset', 'save');
 
@@ -127,6 +127,25 @@ export const Assets: React.FC = () => {
     return sites.find(s => s.id === id)?.name || '-';
   };
 
+  // 자산 → 계약번호 역방향 룩업 (contract_assets 경유)
+  // 하나의 자산이 여러 계약에 걸쳐 이력이 있을 수 있으나,
+  // 현재 활성(ACTIVE) 계약을 우선 반환하고, 없으면 가장 최근 계약을 반환
+  const getAssetContractInfo = (assetId?: string): { contractNo: string; contractId: string } | null => {
+    if (!assetId || !contractAssets || !contracts) return null;
+    const linkedCAs = contractAssets.filter(ca => ca.assetId === assetId);
+    if (linkedCAs.length === 0) return null;
+    // ACTIVE 계약 우선
+    for (const ca of linkedCAs) {
+      const contract = contracts.find(c => c.id === ca.contractId && c.status === 'ACTIVE');
+      if (contract) return { contractNo: contract.contractNo, contractId: contract.id };
+    }
+    // ACTIVE 없으면 가장 최근 계약
+    const latestCA = linkedCAs[linkedCAs.length - 1];
+    const contract = contracts.find(c => c.id === latestCA.contractId);
+    if (contract) return { contractNo: contract.contractNo, contractId: contract.id };
+    return null;
+  };
+
   const statusLabel = getAssetStatusLabel;
   const statusBadge = getAssetStatusBadgeClass;
 
@@ -219,6 +238,7 @@ export const Assets: React.FC = () => {
     status: 72,
     currentCustomer: 120,
     currentSite: 100,
+    contractNo: 110,
     contractStart: 88,
     contractEnd: 88,
     billingDay: 70,
@@ -372,6 +392,7 @@ export const Assets: React.FC = () => {
             <col style={{ width: `${colWidths.status}px` }} />
             <col style={{ width: `${colWidths.currentCustomer}px` }} />
             <col style={{ width: `${colWidths.currentSite}px` }} />
+            <col style={{ width: `${colWidths.contractNo}px` }} />
             <col style={{ width: `${colWidths.contractStart}px` }} />
             <col style={{ width: `${colWidths.contractEnd}px` }} />
             <col style={{ width: `${colWidths.billingDay}px` }} />
@@ -422,6 +443,7 @@ export const Assets: React.FC = () => {
                 현재 고객사{renderSortArrow('currentCustomerId')}
               </th>
               <th style={{ whiteSpace: 'nowrap', padding: '8px 6px', fontSize: '12px' }}>현재 현장</th>
+              <th style={{ whiteSpace: 'nowrap', padding: '8px 6px', fontSize: '12px', textAlign: 'center' }}>계약번호</th>
               <th style={{ whiteSpace: 'nowrap', padding: '8px 6px', fontSize: '12px', textAlign: 'center' }}>계약시작일</th>
               <th style={{ whiteSpace: 'nowrap', padding: '8px 6px', fontSize: '12px', textAlign: 'center' }}>계약종료일</th>
               <th style={{ whiteSpace: 'nowrap', padding: '8px 6px', fontSize: '12px', textAlign: 'center' }}>청구마감일</th>
@@ -498,6 +520,16 @@ export const Assets: React.FC = () => {
                     </td>
                     <td style={{ padding: '7px 6px', fontSize: '12px' }}>{getCustomerName(a.currentCustomerId)}</td>
                     <td style={{ padding: '7px 6px', fontSize: '12px', color: 'var(--text-secondary)' }}>{getSiteName(a.currentSiteId)}</td>
+                    <td style={{ padding: '7px 6px', fontSize: '11px', textAlign: 'center' }}>
+                      {(() => {
+                        const ci = getAssetContractInfo(a.id);
+                        return ci ? (
+                          <span style={{ fontFamily: 'monospace', fontSize: '11px', color: 'var(--primary)', fontWeight: '600', whiteSpace: 'nowrap' }}>
+                            {ci.contractNo}
+                          </span>
+                        ) : <span style={{ color: 'var(--text-muted)' }}>-</span>;
+                      })()}
+                    </td>
                     <td style={{ padding: '7px 6px', fontSize: '11px', textAlign: 'center', color: 'var(--text-muted)' }}>{a.contractStart ? a.contractStart.slice(0, 10) : '-'}</td>
                     <td style={{ padding: '7px 6px', fontSize: '11px', textAlign: 'center', color: 'var(--text-muted)' }}>{a.contractEnd ? a.contractEnd.slice(0, 10) : '-'}</td>
                     <td style={{ padding: '7px 6px', fontSize: '12px', textAlign: 'center' }}>{a.billingDay ? `${a.billingDay}일` : '-'}</td>
@@ -688,6 +720,7 @@ export const Assets: React.FC = () => {
                     </>
                   ) : (
                     <>
+                      <InfoItem label="계약번호" value={(() => { const ci = getAssetContractInfo(selectedAsset.id); return ci ? ci.contractNo : '-'; })()} />
                       <InfoItem label="현재 고객사" value={getCustomerName(selectedAsset.currentCustomerId)} />
                       <InfoItem label="사용 현장" value={getSiteName(selectedAsset.currentSiteId)} />
                       <InfoItem label="계약 기간" value={selectedAsset.contractStart ? `${selectedAsset.contractStart} ~ ${selectedAsset.contractEnd}` : '-'} />
