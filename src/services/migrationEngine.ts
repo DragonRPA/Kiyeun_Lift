@@ -1654,7 +1654,7 @@ export async function ingestExcelInitialData(
       orphan_is_clean:        report.orphanCheck.isClean,
       all_passed:             report.allPassed,
       memo:                   report.allPassed ? '전 항목 통과' : '일부 항목 불일치 — 상세 확인 요망',
-      created_at:             nowIso
+      created_at:             new Date().toISOString()
     };
     await batchUpsertChunked('reconciliation_reports', [reportRecord], 1);
 
