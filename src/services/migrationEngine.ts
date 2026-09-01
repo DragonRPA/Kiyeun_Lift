@@ -838,7 +838,18 @@ export function parseInitialExcelWorkbook(fileBuffer: ArrayBuffer | Uint8Array |
 
   // ── 4. 202608 월별 계약/배차/청구 종합 파싱 ──
   const wsMain = wb.Sheets['202608'];
-  const rawMainRows = wsMain ? XLSX.utils.sheet_to_json(wsMain, { header: 1, defval: null }).slice(3) : [];
+  const allMainRows = wsMain ? XLSX.utils.sheet_to_json(wsMain, { header: 1, defval: null }) : [];
+  let mainHeaderMap = new Map<string, number>();
+  let mainDataStartIndex = 3;
+  for (let i = 0; i < Math.min(10, allMainRows.length); i++) {
+    const row = allMainRows[i] as any[];
+    if (row && (row.includes('업체명') || row.includes('현장명'))) {
+      mainHeaderMap = buildHeaderMap(row);
+      mainDataStartIndex = i + 1;
+      break;
+    }
+  }
+  const rawMainRows = allMainRows.slice(mainDataStartIndex);
 
   const contracts: any[] = [];
   const contractAssets: any[] = [];
