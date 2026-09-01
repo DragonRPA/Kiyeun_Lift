@@ -517,6 +517,30 @@ export async function resetAllDatabaseTables(keepAdmin: boolean = true): Promise
 // ──────────────────────────────────────────────
 // 4. 엑셀 1개 파일 풀 라이프사이클 종합 파싱 엔진
 // ──────────────────────────────────────────────
+
+// ── 유틸리티 함수: 동적 헤더 매핑 ──
+function buildHeaderMap(row: any[]): Map<string, number> {
+  const map = new Map<string, number>();
+  if (!row || !Array.isArray(row)) return map;
+  row.forEach((col, idx) => {
+    if (col && typeof col === 'string') {
+      const key = col.replace(/\s+/g, '');
+      if (!map.has(key)) map.set(key, idx);
+    }
+  });
+  return map;
+}
+
+function getCol(row: any[], map: Map<string, number>, keys: string[], fallbackIdx: number): any {
+  for (const k of keys) {
+    const idx = map.get(k);
+    if (idx !== undefined && row[idx] !== null && row[idx] !== undefined) {
+      return row[idx];
+    }
+  }
+  return row[fallbackIdx];
+}
+
 export function parseInitialExcelWorkbook(fileBuffer: ArrayBuffer | Uint8Array | XLSX.WorkBook, users?: any[]): ParsedInitialData {
   let wb: XLSX.WorkBook;
   if ((fileBuffer as any).Sheets) {
@@ -579,26 +603,38 @@ export function parseInitialExcelWorkbook(fileBuffer: ArrayBuffer | Uint8Array |
 
   // ── 1. 보유자산현황 시트 파싱 ──
   const wsAsset = wb.Sheets['보유자산현황'];
-  const rawAssetRows = wsAsset ? XLSX.utils.sheet_to_json(wsAsset, { header: 1, defval: null }).slice(4) : [];
+  const allAssetRows = wsAsset ? XLSX.utils.sheet_to_json(wsAsset, { header: 1, defval: null }) : [];
+  let assetHeaderMap = new Map<string, number>();
+  let assetDataStartIndex = 4;
+  for (let i = 0; i < Math.min(10, allAssetRows.length); i++) {
+    const row = allAssetRows[i] as any[];
+    if (row && (row.includes('관리번호') || row.includes('취득가액'))) {
+      assetHeaderMap = buildHeaderMap(row);
+      assetDataStartIndex = i + 1;
+      break;
+    }
+  }
+  const rawAssetRows = allAssetRows.slice(assetDataStartIndex);
   
   const assetMap = new Map<string, any>();
   let assetSeq = 1;
 
   rawAssetRows.forEach((r: any) => {
     if (!r) return;
-    const rawModel = r[1];
-    const rawAssetNo = r[4];
+    const rawModel = getCol(r, assetHeaderMap, ['자산마스터명', '모델', '장비명'], 1);
+    const rawAssetNo = getCol(r, assetHeaderMap, ['관리번호', '자산번호'], 4);
     if (!rawModel && !rawAssetNo) return;
 
     const modelName = sanitizeModelName(rawModel) || 'ES1330L';
     const assetNo = String(rawAssetNo || `TEMP-${assetSeq}`).trim().toUpperCase();
-    const maker = r[7] ? String(r[7]).trim() : inferMakerFromModel(modelName);
-    const supplier = r[8] ? String(r[8]).trim() : '';
-    const heightM = typeof r[6] === 'number' ? r[6] : parseFloat(String(r[6] || '5.8')) || 5.8;
+    const maker = getCol(r, assetHeaderMap, ['제조사', '제조업체'], 7) ? String(r[7]).trim() : inferMakerFromModel(modelName);
+    const supplier = getCol(r, assetHeaderMap, ['공급처', '구입처'], 8) ? String(r[8]).trim() : '';
+    const rawHeight = getCol(r, assetHeaderMap, ['작업높이', '규격'], 6);
+    const heightM = typeof rawHeight === 'number' ? rawHeight : parseFloat(String(rawHeight || '5.8')) || 5.8;
     const feet = inferFeetFromModel(modelName, heightM);
-    const acqDate = sanitizeExcelDate(r[9]) || '2025-01-01';
-    const acqPrice = sanitizeNumber(r[10]) || 11800000;
-    const memo = r[16] ? String(r[16]).trim() : '';
+    const acqDate = sanitizeExcelDate(getCol(r, assetHeaderMap, ['취득일자', '구입일'], 9)) || '2025-01-01';
+    const acqPrice = sanitizeNumber(getCol(r, assetHeaderMap, ['취득가액', '구입가액'], 10)) || 11800000;
+    const memo = getCol(r, assetHeaderMap, ['리스비고', '비고'], 16) ? String(r[16]).trim() : '';
 
     if (!productMap.has(modelName)) {
       productMap.set(modelName, {
@@ -636,9 +672,9 @@ export function parseInitialExcelWorkbook(fileBuffer: ArrayBuffer | Uint8Array |
       id: assetId,
       modelName: modelName,
       assetNo: assetNo,
-      serialNo: r[3] ? String(r[3]).trim() : '',
+      serialNo: getCol(r, assetHeaderMap, ['시리얼번호', 'S/N'], 3) ? String(getCol(r, assetHeaderMap, ['시리얼번호', 'S/N'], 3)).trim() : '',
       manufacturer: maker,
-      manufactureYear: r[5] ? String(r[5]).trim() : '2025년',
+      manufactureYear: getCol(r, assetHeaderMap, ['연식', '제조년월'], 5) ? String(getCol(r, assetHeaderMap, ['연식', '제조년월'], 5)).trim() : '2025년',
       ownerType: 'OWNED',
       status: 'AVAILABLE',
       acquisitionDate: acqDate,
@@ -665,7 +701,18 @@ export function parseInitialExcelWorkbook(fileBuffer: ArrayBuffer | Uint8Array |
 
   // ── 2. 거래처정보현황 시트 파싱 ──
   const wsCust = wb.Sheets['거래처정보현황'];
-  const rawCustRows = wsCust ? XLSX.utils.sheet_to_json(wsCust, { header: 1, defval: null }).slice(2) : [];
+  const allCustRows = wsCust ? XLSX.utils.sheet_to_json(wsCust, { header: 1, defval: null }) : [];
+  let custHeaderMap = new Map<string, number>();
+  let custDataStartIndex = 2;
+  for (let i = 0; i < Math.min(10, allCustRows.length); i++) {
+    const row = allCustRows[i] as any[];
+    if (row && (row.includes('거래처명') || row.includes('사업자번호'))) {
+      custHeaderMap = buildHeaderMap(row);
+      custDataStartIndex = i + 1;
+      break;
+    }
+  }
+  const rawCustRows = allCustRows.slice(custDataStartIndex);
   
   let custSeq = 1;
   let siteSeq = 1;
@@ -673,8 +720,8 @@ export function parseInitialExcelWorkbook(fileBuffer: ArrayBuffer | Uint8Array |
 
   rawCustRows.forEach((r: any) => {
     if (!r) return;
-    const rawBizRegNo = r[1] ? String(r[1]).trim() : '';
-    const rawCustName = r[2] ? String(r[2]).trim() : '';
+    const rawBizRegNo = getCol(r, custHeaderMap, ['사업자번호', '사업자등록번호'], 1) ? String(getCol(r, custHeaderMap, ['사업자번호', '사업자등록번호'], 1)).trim() : '';
+    const rawCustName = getCol(r, custHeaderMap, ['거래처명', '고객사명', '업체명'], 2) ? String(getCol(r, custHeaderMap, ['거래처명', '고객사명', '업체명'], 2)).trim() : '';
     
     // 헤더 행 무시 (사업자번호, 거래처명 등이 값으로 들어온 경우)
     if (rawCustName === '거래처명' || rawBizRegNo === '사업자번호') return;
@@ -688,10 +735,10 @@ export function parseInitialExcelWorkbook(fileBuffer: ArrayBuffer | Uint8Array |
         id: `CUST-${String(custSeq++).padStart(7, '0')}`,
         name: custName,
         bizRegNo: rawBizRegNo,
-        representative: r[3] ? String(r[3]).trim() : '',
-        repContact: r[7] ? String(r[7]).trim() : '',
-        repEmail: r[8] ? String(r[8]).trim() : '',
-        address: r[4] ? String(r[4]).trim() : '',
+        representative: getCol(r, custHeaderMap, ['대표자', '대표자명'], 3) ? String(getCol(r, custHeaderMap, ['대표자', '대표자명'], 3)).trim() : '',
+        repContact: getCol(r, custHeaderMap, ['현장명'], 7) ? String(r[7]).trim() : '',
+        repEmail: getCol(r, custHeaderMap, ['현장주소'], 8) ? String(r[8]).trim() : '',
+        address: getCol(r, custHeaderMap, ['사업장주소', '주소'], 4) ? String(getCol(r, custHeaderMap, ['사업장주소', '주소'], 4)).trim() : '',
         defaultBillingDay: 30,
         paymentDueDay: 15,
         isClosed: false,
@@ -701,7 +748,7 @@ export function parseInitialExcelWorkbook(fileBuffer: ArrayBuffer | Uint8Array |
       customerMap.set(custName, custEntity);
     }
 
-    const rawSite = r[7] ? String(r[7]).trim() : '';
+    const rawSite = getCol(r, custHeaderMap, ['현장명', '현장'], 7) ? String(getCol(r, custHeaderMap, ['현장명', '현장'], 7)).trim() : '';
     if (rawSite && rawSite !== '-') {
       const { cleanSiteName } = extractSiteNameAndMemo(rawSite);
       const siteKey = `${custEntity.id}_${cleanSiteName}`;
@@ -710,17 +757,17 @@ export function parseInitialExcelWorkbook(fileBuffer: ArrayBuffer | Uint8Array |
           id: `SITE-${String(siteSeq++).padStart(7, '0')}`,
           customerId: custEntity.id,
           name: cleanSiteName,
-          address: r[8] ? String(r[8]).trim() : '',
-          contactName: r[9] ? String(r[9]).trim() : '',
-          contact: r[10] ? String(r[10]).trim() : '',
-          email: r[11] ? String(r[11]).trim() : '',
+          address: getCol(r, custHeaderMap, ['연락처', '현장주소', '비고'], 8) ? String(getCol(r, custHeaderMap, ['연락처', '현장주소', '비고'], 8)).trim() : '',
+          contactName: getCol(r, custHeaderMap, ['현장담당자'], 9) ? String(getCol(r, custHeaderMap, ['현장담당자'], 9)).trim() : '',
+          contact: getCol(r, custHeaderMap, ['청구담당자'], 10) ? String(getCol(r, custHeaderMap, ['청구담당자'], 10)).trim() : '',
+          email: getCol(r, custHeaderMap, ['이메일', 'email'], 11) ? String(getCol(r, custHeaderMap, ['이메일', 'email'], 11)).trim() : '',
           createdAt: nowIso,
           updatedAt: nowIso
         });
       }
     }
 
-    const rawContact = r[9] ? String(r[9]).trim() : '';
+    const rawContact = getCol(r, custHeaderMap, ['현장담당자', '담당자'], 9) ? String(getCol(r, custHeaderMap, ['현장담당자', '담당자'], 9)).trim() : '';
     if (rawContact && rawContact !== '-') {
       const { name, position } = extractContactPosition(rawContact);
       const contactKey = `${custEntity.id}_${name}`;
@@ -730,8 +777,8 @@ export function parseInitialExcelWorkbook(fileBuffer: ArrayBuffer | Uint8Array |
           customerId: custEntity.id,
           name: name,
           position: position,
-          contact: r[10] ? String(r[10]).trim() : '',
-          email: r[11] ? String(r[11]).trim() : '',
+          contact: getCol(r, custHeaderMap, ['청구담당자'], 10) ? String(getCol(r, custHeaderMap, ['청구담당자'], 10)).trim() : '',
+          email: getCol(r, custHeaderMap, ['이메일', 'email'], 11) ? String(getCol(r, custHeaderMap, ['이메일', 'email'], 11)).trim() : '',
           isPrimary: true,
           createdAt: nowIso,
           updatedAt: nowIso
@@ -742,15 +789,27 @@ export function parseInitialExcelWorkbook(fileBuffer: ArrayBuffer | Uint8Array |
 
   // ── 3. 업체별마감일자 시트 파싱 ──
   const wsClosing = wb.Sheets['업체별마감일자'];
-  const rawClosingRows = wsClosing ? XLSX.utils.sheet_to_json(wsClosing, { header: 1, defval: null }).slice(2) : [];
+  const allClosingRows = wsClosing ? XLSX.utils.sheet_to_json(wsClosing, { header: 1, defval: null }) : [];
+  let closingHeaderMap = new Map<string, number>();
+  let closingDataStartIndex = 2;
+  for (let i = 0; i < Math.min(10, allClosingRows.length); i++) {
+    const row = allClosingRows[i] as any[];
+    if (row && (row.includes('거래처명') || row.includes('마감일자'))) {
+      closingHeaderMap = buildHeaderMap(row);
+      closingDataStartIndex = i + 1;
+      break;
+    }
+  }
+  const rawClosingRows = allClosingRows.slice(closingDataStartIndex);
   
   rawClosingRows.forEach((r: any) => {
-    if (!r || !r[0]) return;
-    const custName = normalizeCustomerName(String(r[0]));
+    const rawCust = getCol(r, closingHeaderMap, ['거래처명', '고객사명', '업체명'], 0);
+    if (!r || !rawCust) return;
+    const custName = normalizeCustomerName(String(rawCust));
     if (custName === '거래처명' || custName === '고객사명' || custName === '사업자번호') return;
-    const closingDay = parseClosingDay(r[1]);
-    const paymentTerm = parsePaymentDueTerm(r[2]);   // r[2] = 결제일 (누락항목 수정)
-    const memo = r[3] ? String(r[3]).trim() : '';
+    const closingDay = parseClosingDay(getCol(r, closingHeaderMap, ['마감일자', '마감일'], 1));
+    const paymentTerm = parsePaymentDueTerm(getCol(r, closingHeaderMap, ['결제일', '결재일', '결제조건'], 2));   // r[2] = 결제일 (누락항목 수정)
+    const memo = getCol(r, closingHeaderMap, ['비고', '메모'], 3) ? String(getCol(r, closingHeaderMap, ['비고', '메모'], 3)).trim() : '';
 
     let custEntity = customerMap.get(custName);
     if (!custEntity) {
@@ -819,8 +878,8 @@ export function parseInitialExcelWorkbook(fileBuffer: ArrayBuffer | Uint8Array |
 
   rawMainRows.forEach((r: any) => {
     if (!r) return;
-    const rawCustName = r[0];
-    const rawModel = r[3];
+    const rawCustName = getCol(r, mainHeaderMap, ['업체명', '거래처명', '고객명'], 0);
+    const rawModel = getCol(r, mainHeaderMap, ['모델명', '규격', '장비명'], 3);
     if (!rawCustName && !rawModel) return;
     if (rawCustName === '업체명' || rawCustName === '고객명' || rawCustName === '거래처명') return;
 
@@ -844,7 +903,7 @@ export function parseInitialExcelWorkbook(fileBuffer: ArrayBuffer | Uint8Array |
       customerMap.set(custName, customer);
     }
 
-    const rawSite = r[2] ? String(r[2]).trim() : '';
+    const rawSite = getCol(r, mainHeaderMap, ['현장명'], 2) ? String(getCol(r, mainHeaderMap, ['현장명'], 2)).trim() : '';
     const { cleanSiteName, dispatchMemo } = extractSiteNameAndMemo(rawSite);
     const siteKey = `${customer.id}_${cleanSiteName}`;
     let site = siteMap.get(siteKey);
@@ -865,7 +924,8 @@ export function parseInitialExcelWorkbook(fileBuffer: ArrayBuffer | Uint8Array |
 
     const targetModel = sanitizeModelName(rawModel) || 'ES1330L';
     // 규격(r[3])에서 숫자(M 또는 ft) 추출. r[4]는 시작일이므로 사용 금지.
-    const heightM = typeof r[3] === 'number' ? r[3] : parseFloat(String(r[3] || '5.8')) || 5.8;
+    const rawHeight = getCol(r, mainHeaderMap, ['규격', '모델명', '장비명'], 3);
+    const heightM = typeof rawHeight === 'number' ? rawHeight : parseFloat(String(rawHeight || '5.8')) || 5.8;
     const feet = inferFeetFromModel(targetModel, heightM);
 
     if (!productMap.has(targetModel)) {
@@ -887,11 +947,11 @@ export function parseInitialExcelWorkbook(fileBuffer: ArrayBuffer | Uint8Array |
       });
     }
 
-    const ownAssetNo = r[13] ? String(r[13]).trim().toUpperCase() : '';
-    const leaseAssetNo = r[14] ? String(r[14]).trim().toUpperCase() : '';
-    const leaseVendorName = r[15] ? String(r[15]).trim() : '';
-    const leasePrice = sanitizeNumber(r[16]);
-    const leaseReturnDate = sanitizeExcelDate(r[17]);
+    const ownAssetNo = getCol(r, mainHeaderMap, ['자사장비', '자산번호', '장비번호'], 13) ? String(getCol(r, mainHeaderMap, ['자사장비', '자산번호', '장비번호'], 13)).trim().toUpperCase() : '';
+    const leaseAssetNo = getCol(r, mainHeaderMap, ['전대장비', '임차장비'], 14) ? String(getCol(r, mainHeaderMap, ['전대장비', '임차장비'], 14)).trim().toUpperCase() : '';
+    const leaseVendorName = getCol(r, mainHeaderMap, ['임차업체', '매입처'], 15) ? String(getCol(r, mainHeaderMap, ['임차업체', '매입처'], 15)).trim() : '';
+    const leasePrice = sanitizeNumber(getCol(r, mainHeaderMap, ['임차단가', '매입단가'], 16));
+    const leaseReturnDate = sanitizeExcelDate(getCol(r, mainHeaderMap, ['전대반납일', '반납일'], 17));
 
     let matchedAsset: any = null;
 
@@ -1036,11 +1096,11 @@ export function parseInitialExcelWorkbook(fileBuffer: ArrayBuffer | Uint8Array |
     }
 
 
-    const rowStartDate = sanitizeExcelDate(r[4]) || '2026-08-01';
-    const rowEndDate = sanitizeExcelDate(r[5]) || '9999-12-31';
-    const rowMonthlyFee = sanitizeNumber(r[22]) || (sanitizeNumber(r[25]) > 0 ? sanitizeNumber(r[25]) : 300000);
+    const rowStartDate = sanitizeExcelDate(getCol(r, mainHeaderMap, ['계약시작일', '시작일', '출고일'], 4)) || '2026-08-01';
+    const rowEndDate = sanitizeExcelDate(getCol(r, mainHeaderMap, ['계약종료일', '종료일'], 5)) || '9999-12-31';
+    const rowMonthlyFee = sanitizeNumber(getCol(r, mainHeaderMap, ['월렌탈료', '렌탈료', '단가'], 22)) || (sanitizeNumber(getCol(r, mainHeaderMap, ['당월청구액', '청구합계'], 25)) > 0 ? sanitizeNumber(getCol(r, mainHeaderMap, ['당월청구액', '청구합계'], 25)) : 300000);
     const rowDailyFee = Math.round(rowMonthlyFee / 30);
-    const contractStatusStr = r[10] ? String(r[10]).trim() : '';
+    const contractStatusStr = getCol(r, mainHeaderMap, ['상태', '결재상태'], 10) ? String(getCol(r, mainHeaderMap, ['상태', '결재상태'], 10)).trim() : '';
     const isCompleted = contractStatusStr === '종료' || (rowEndDate && rowEndDate < '2026-08-01');
 
     // ── 계약 그룹핑: 동일 (고객사 + 현장 + 시작일 + 종료일) = 1개 계약 ──
@@ -1142,7 +1202,7 @@ export function parseInitialExcelWorkbook(fileBuffer: ArrayBuffer | Uint8Array |
     // ────────────────────────────────────────────────────────────────────
 
 
-    const transportFee = sanitizeNumber(r[20]);
+    const transportFee = sanitizeNumber(getCol(r, mainHeaderMap, ['운반비', '왕복운반비'], 20));
     if (transportFee > 0) {
       receivables.push({
         id: `RECV-${String(recvSeq++).padStart(7, '0')}`,
