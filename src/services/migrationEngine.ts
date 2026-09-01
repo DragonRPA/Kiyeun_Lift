@@ -1123,7 +1123,8 @@ export function parseInitialExcelWorkbook(fileBuffer: ArrayBuffer | Uint8Array |
     const rowEndDate = sanitizeExcelDate(getCol(r, mainHeaderMap, ['계약종료일', '종료일'], 5)) || '9999-12-31';
     const rowMonthlyFee = sanitizeNumber(getCol(r, mainHeaderMap, ['월렌탈료', '렌탈료', '단가'], 22)) || (sanitizeNumber(getCol(r, mainHeaderMap, ['당월청구액', '청구합계'], 25)) > 0 ? sanitizeNumber(getCol(r, mainHeaderMap, ['당월청구액', '청구합계'], 25)) : 300000);
     const rowDailyFee = Math.round(rowMonthlyFee / 30);
-    const contractStatusStr = getCol(r, mainHeaderMap, ['상태', '결재상태'], 10) ? String(getCol(r, mainHeaderMap, ['상태', '결재상태'], 10)).trim() : '';
+    // Col[8]=계약구분 ('연장','종료','가상' 등). '상태'/'결재상태' 헤더는 없으므로 직접 인덱스 사용
+    const contractStatusStr = (r[8] && String(r[8]).trim()) ? String(r[8]).trim() : '';
     const isCompleted = contractStatusStr === '종료' || (rowEndDate && rowEndDate < '2026-08-01');
 
     // ── 계약 그룹핑: 동일 (고객사 + 현장 + 시작일 + 종료일) = 1개 계약 ──

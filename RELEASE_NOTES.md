@@ -8272,3 +8272,10 @@ PostgreSQL DB ?덈꺼??`billings_status_check` ?쒖빟 議곌굔??寃곗옱 ?�
     buildHeaderMap()이 첫 번째(Col[10])만 Map에 등록. getCol() 헤더 검색 실패 시 fallback 인덱스를
     ownAssetNo와 leaseAssetNo 모두 13으로 동일하게 참조하여 당사 자산이 전대 관리번호칸(빈값)을 읽음.
   - 해결: ownAssetNo는 r[10], leaseAssetNo는 r[13]을 직접 인덱스로 읽도록 hardfix.
+
+### v0.7.1.Build.25 (2026-09-01 20:31)
+- **버그수정**: migrationEngine.ts 내 getCol() 호출 13건 전수 감사 완료.
+  - 12건 정상 확인.
+  - 1건 오류 수정: contractStatusStr이 '상태'/'결재상태' 키 매칭 실패로 fallback Col[10](관리번호)를
+    읽는 버그 → Col[8](계약구분: '연장','종료','가상' 등)을 직접 인덱스로 읽도록 수정.
+    이로 인해 '종료' 계약 판별이 정상화됨.
