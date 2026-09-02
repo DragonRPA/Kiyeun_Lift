@@ -1982,9 +1982,10 @@ export function parseDispatchExcelWorkbook(
       const r = raw[ri] as any[];
       if (!r) continue;
 
-      // Col[4] 장비명 없으면 스킵
+      // Col[4] 장비명 없거나, 괄호로 시작하는 메모행이면 스킵 (예: '(부가세별도)')
       const modelRaw = r[4] != null ? String(r[4]).trim() : '';
       if (!modelRaw) continue;
+      if (modelRaw.startsWith('(') || /^\d{4,}$/.test(modelRaw)) continue; // 메모행/숫자합계행 스킵
 
       // 날짜 파싱
       const loadDay = parseDayStr(r[0]);
@@ -1992,8 +1993,9 @@ export function parseDispatchExcelWorkbook(
       const loadingDate = buildDateStr(ym.year, ym.month, loadDay);
       const unloadingDate = buildDateStr(ym.year, ym.month, unloadDay);
 
-      // 운반비: 만원 단위 → 원
-      const deliveryCost = (sanitizeNumber(r[3]) || 0) * 10000;
+      // 운반비: 만원 단위 → 원. 상한 2,000,000원(200만원)으로 캡 — 이상치 행 방어
+      const rawCostVal = sanitizeNumber(r[3]) || 0;
+      const deliveryCost = rawCostVal <= 200 ? rawCostVal * 10000 : 0; // 200만원 초과 원본값은 0 처리
 
       // 수량
       const qty = sanitizeNumber(r[5]) || 1;
@@ -2004,9 +2006,9 @@ export function parseDispatchExcelWorkbook(
       const address = r[8] != null ? String(r[8]).trim() : '';
       const destinationAddress = [siteName, address ? `(${address})` : ''].filter(Boolean).join(' ');
 
-      // 배차유무 → status
+      // 배차유무 → status ('완료' 외에 '완려' 오타도 COMPLETED 처리)
       const dispatchStatus = r[9] != null ? String(r[9]).trim() : '';
-      const status: 'COMPLETED' | 'PENDING' = dispatchStatus === '완료' ? 'COMPLETED' : 'PENDING';
+      const status: 'COMPLETED' | 'PENDING' = dispatchStatus.startsWith('완') ? 'COMPLETED' : 'PENDING';
 
       // 입출고 + 비고 → type
       const inoutRaw = r[10] != null ? String(r[10]).trim() : '';
