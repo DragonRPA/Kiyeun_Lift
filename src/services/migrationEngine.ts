@@ -2117,18 +2117,22 @@ export async function ingestDispatchData(
     requestDate: r.loadingDate,
     loadingDate: r.loadingDate,
     unloadingDate: r.unloadingDate,
-    customerId: r.customerId,
-    contractId: r.contractId,
-    contractAssetId: r.contractAssetId,
-    destinationAddress: r.destinationAddress,
-    transportCompany: r.transportCompany,
-    vehicleType: r.vehicleType,
+    contractId: r.contractId ?? undefined,
+    destinationAddress: r.destinationAddress || undefined,
+    transportCompany: r.transportCompany || undefined,
+    vehicleType: r.vehicleType || undefined,
     deliveryCost: r.deliveryCost,
-    specialNotes: r.specialNotes,
+    isCostSettled: false,
     dispatchCategory: r.type === 'OUTBOUND' ? '출고'
       : r.type === 'INBOUND' ? '입고'
       : r.type === 'RETURN' ? '반납'
       : r.type === 'EXCHANGE' ? '교환' : '출고',
+    // 고객명 + 계약자산 정보는 memo/specialNotes 필드에 텍스트로 보존
+    memo: [
+      r.customerNameRaw ? `업체: ${r.customerNameRaw}` : '',
+      r.specialNotes || ''
+    ].filter(Boolean).join(' | ') || '',
+    closingMemo: r.specialNotes || undefined,
     createdAt: nowIso,
     updatedAt: nowIso
   }));

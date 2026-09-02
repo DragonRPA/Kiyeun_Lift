@@ -8342,3 +8342,9 @@ PostgreSQL DB ?덈꺼??`billings_status_check` ?쒖빟 議곌굔??寃곗옱 ?�
 - **버그패치**: 배차 적재 실패 수정 — deliveries 테이블 컬럼명 snake_case → camelCase 전환.
   - 원인: DB Delivery 인터페이스가 camelCase(requestDate, loadingDate 등)인데 snake_case로 삽입하여 requestDate NOT NULL 제약 위반.
   - 수정: request_date→requestDate, loading_date→loadingDate, customer_id→customerId 등 전 컬럼명 camelCase로 수정.
+
+### v0.7.1.Build.35 (2026-09-02 18:14)
+- **버그패치**: 배차 적재 실패 수정 — deliveries 테이블에 존재하지 않는 컬럼 제거.
+  - 제거: contractAssetId, customerId, specialNotes (Delivery 인터페이스에 없음).
+  - 추가: isCostSettled=false (NOT NULL 필수 컬럼).
+  - 고객명/수량 정보는 memo 필드에 '업체: XXX | 수량: N대' 형식으로 텍스트 보존.
