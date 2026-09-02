@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { Receivable } from '../services/db';
-import { Plus, Search, DollarSign, Calendar, FileText, CheckCircle, AlertTriangle, RotateCcw } from 'lucide-react';
+import { Plus, Search, DollarSign, Calendar, FileText, CheckCircle, AlertTriangle, RotateCcw, Download } from 'lucide-react';
+import { exportToExcel } from '../services/excel';
 
 export const Receivables: React.FC = () => {
   const {
@@ -212,6 +213,50 @@ export const Receivables: React.FC = () => {
   const totalBilledSum = filtered.reduce((sum, r) => sum + (r.billedAmount || 0), 0);
   const totalRemainingSum = Math.max(0, totalReceivableSum - totalBilledSum);
 
+  const handleExportExcel = () => {
+    const excelData = filtered.map((r, idx) => {
+      const c = contracts.find(x => x.id === r.contractId);
+      const cust = customers.find(x => x.id === (r.customerId || c?.customerId));
+      const s = c ? sites.find(x => x.id === c.siteId) : null;
+      const remaining = Math.max(0, (r.totalAmount || 0) - (r.billedAmount || 0));
+
+      return {
+        // ① 식별 및 분류
+        'No': idx + 1,
+        '구상/미수 구분': r.type === 'VENDOR_CLAIM' ? '타사구상금' :
+                         r.type === 'TRANSPORT' ? '운송료' :
+                         r.type === 'REPAIR' ? '수리비' :
+                         r.type === 'CLEANING' ? '청소비' : '기타',
+        '청구 상태': r.status === 'CLEARED' ? '청구완료' :
+                   r.status === 'PARTIAL' ? '일부청구' : '미청구',
+
+        // ② 고객 및 현장
+        '고객사': cust ? cust.name : '-',
+        '계약번호': c ? c.contractNo : '-',
+        '현장명': s ? s.name : '-',
+
+        // ③ 구상 및 장비 연계
+        '원사명(타사)': r.vendorName || '-',
+        '대상 장비번호': r.assetNo || '-',
+
+        // ④ 발생 일정 및 내역
+        '발생일자': r.occurredDate || '-',
+        '내부 장부 기재명': r.internalDescription || '-',
+        '명세서 표기명': r.displayName || r.internalDescription || '-',
+
+        // ⑤ 금액 및 청구 현황
+        '외상 총액(원)': r.totalAmount || 0,
+        '기청구 누적액(원)': r.billedAmount || 0,
+        '미청구 잔액(원)': remaining,
+
+        // ⑥ 감사
+        '등록일자': r.createdAt ? r.createdAt.split('T')[0] : '-'
+      };
+    });
+
+    exportToExcel(excelData, `외상미수금_대장_${new Date().toISOString().split('T')[0]}`, '외상미수금');
+  };
+
   const handleStandaloneIssue = async (receivableId: string) => {
     if (!hasPermission('billing', 'save')) {
       alert('청구 권한이 없습니다.');
@@ -291,7 +336,10 @@ export const Receivables: React.FC = () => {
             렌탈료 외 부대비용 (운송료, 수리비, 청소비 등) 분할 청산 관리
           </p>
         </div>
-        <div>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button className="btn-secondary" onClick={handleExportExcel} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <Download size={15} /> 엑셀 다운로드
+          </button>
           {canWrite && (
             <button className="btn-primary" onClick={() => setShowAddModal(true)} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
               <Plus size={16} /> 신규 외상 등록
@@ -370,6 +418,7 @@ export const Receivables: React.FC = () => {
                 <option value="TRANSPORT">운송료</option>
                 <option value="REPAIR">수리비</option>
                 <option value="CLEANING">청소비</option>
+                <option value="VENDOR_CLAIM">타사구상금</option>
                 <option value="OTHER">기타</option>
               </select>
             </div>
@@ -480,11 +529,13 @@ export const Receivables: React.FC = () => {
                       <span className={`badge ${
                         r.type === 'REPAIR' ? 'badge-danger' :
                         r.type === 'TRANSPORT' ? 'badge-info' :
-                        r.type === 'CLEANING' ? 'badge-warning' : 'badge-secondary'
-                      }`} style={{ fontSize: '10.5px' }}>
+                        r.type === 'CLEANING' ? 'badge-warning' :
+                        r.type === 'VENDOR_CLAIM' ? 'badge-warning' : 'badge-secondary'
+                      }`} style={{ fontSize: '10.5px', backgroundColor: r.type === 'VENDOR_CLAIM' ? '#f59e0b' : undefined, color: r.type === 'VENDOR_CLAIM' ? '#ffffff' : undefined }}>
                         {r.type === 'TRANSPORT' ? '운송료' :
                          r.type === 'REPAIR' ? '수리비' :
-                         r.type === 'CLEANING' ? '청소비' : '기타'}
+                         r.type === 'CLEANING' ? '청소비' :
+                         r.type === 'VENDOR_CLAIM' ? '타사구상금' : '기타'}
                       </span>
                     </td>
                     <td style={{ whiteSpace: 'nowrap' }}>{r.internalDescription}</td>

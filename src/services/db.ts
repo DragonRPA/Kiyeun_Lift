@@ -268,6 +268,7 @@ export interface Asset {
   id: string;
   modelName: string;
   assetNo: string; // 관리번호
+  vendorAssetNo?: string; // 타사(원사) 원래 관리번호
   serialNo?: string; // 제조번호
   manufacturer?: string;
   manufactureYear?: string; // 제조년도 (예: 2023)
@@ -567,12 +568,12 @@ export interface Billing {
 }
 
 
-/** 외상미수금 대장 — 운송료·수리비·청소비 분할 청산 관리 */
+/** 외상미수금 대장 — 운송료·수리비·청소비·타사구상금 분할 청산 관리 */
 export interface Receivable {
   id: string;
   contractId?: string;
   customerId?: string;
-  type: 'TRANSPORT' | 'REPAIR' | 'CLEANING' | 'OTHER';
+  type: 'TRANSPORT' | 'REPAIR' | 'CLEANING' | 'VENDOR_CLAIM' | 'OTHER';
   totalAmount: number;        // 외상 총액
   billedAmount: number;       // 청구된 누적 금액
   // remainingAmount = totalAmount - billedAmount (계산값)
@@ -581,6 +582,8 @@ export interface Receivable {
   occurredDate: string;        // 발생일
   status: 'PENDING' | 'PARTIAL' | 'CLEARED';
   repairId?: string;           // 수리비 연동 시 repairs.id
+  vendorName?: string;         // 타사 구상금인 경우 원사명
+  assetNo?: string;            // 대상 장비번호
   createdAt: string;
   updatedAt: string;
 }
@@ -620,7 +623,12 @@ export interface Delivery {
   unloadingDate?: string; // 하차 일자 (YYYY-MM-DD)
   unloadingTimeSlot?: string; // 하차 시간 구분 (오전/오후/희망시간)
   originAddress?: string; // 상차지
+  pickupType?: 'HQ_YARD' | 'VENDOR_YARD' | 'CUSTOMER_SITE'; // 상차 구분
+  pickupVendorName?: string; // 타사 주기장명 (타사 직출고 시)
   destinationAddress?: string; // 하차지
+  dropoffType?: 'CUSTOMER_SITE' | 'HQ_YARD' | 'VENDOR_YARD' | 'MULTI_STOP'; // 하차 구분
+  viaDropoffAddress?: string; // 1차 경유 하차지 주소 (혼적 회수 시)
+  viaDropoffName?: string; // 1차 경유지명 (예: 기연 본사 주기장)
   transportCompany?: string; // 운송 거래처 (월 마감 및 정산용)
   vehicleType?: string; // 예: 1톤, 2.5톤 등
   vehicleNo?: string; // 차량 번호

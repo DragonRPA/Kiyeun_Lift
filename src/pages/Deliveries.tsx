@@ -208,20 +208,53 @@ export const Deliveries: React.FC = () => {
       }
 
       return {
+        // ① 식별 및 계약
         'No': idx + 1,
-        '구분': d.type === 'OUTBOUND' ? '출고' : '회수',
+        '배차ID': d.id,
         '계약번호': getContractNo(d.contractId),
-        '의뢰 메모': d.memo,
-        '고객사/대상지': displayName,
-        '운송 차량 정보': vehiclesSummary,
-        '기사 연락처': d.driverContact || '-',
-        '임시 운송비': d.deliveryCost ? `${d.deliveryCost.toLocaleString()}원` : '0원',
-        '확정 운송비': d.deliveryCostConfirmed ? `${d.deliveryCostConfirmed.toLocaleString()}원` : '0원',
+        '구분': d.dispatchCategory || (d.type === 'OUTBOUND' ? '출고' : '회수'),
         '배송 상태': d.status === 'REQUESTED' ? '의뢰중' :
-                   d.status === 'DISPATCHED' ? '배차완료' : '완료',
+                   d.status === 'DISPATCHED' ? '배차완료' : 
+                   d.status === 'DELIVERED' ? '배송완료' : '완료',
+
+        // ② 고객 및 현장
+        '고객사/대상지': displayName,
+        '요청일자': d.requestDate || '-',
+
+        // ③ 상차지 (출발)
+        '상차지 구분': d.pickupType === 'VENDOR_YARD' ? '타사주기장 직출고' : '당사 보관소',
+        '상차지명': d.pickupVendorName || (d.type === 'OUTBOUND' ? '당사 보관소' : displayName),
+        '상차지 주소': d.originAddress || '-',
+        '상차일자': d.loadingDate || '-',
+        '상차시간': d.loadingTimeSlot || '-',
+
+        // ④ 하차지 (경유 및 도착)
+        '하차지 구분': d.dropoffType === 'MULTI_STOP' ? '다중경유 혼적' : '단일하차',
+        '1차 경유지명': d.viaDropoffName || '-',
+        '1차 경유지 주소': d.viaDropoffAddress || '-',
+        '최종 하차지 주소': d.destinationAddress || '-',
+        '하차일자': d.unloadingDate || '-',
+        '하차시간': d.unloadingTimeSlot || '-',
+
+        // ⑤ 운송사 및 배정 차량
+        '운송 차량 정보': vehiclesSummary,
+        '운송 거래처': d.transportCompany || '-',
+        '차종': d.vehicleType || '-',
+        '차량번호': d.vehicleNo || '-',
+        '기사명': d.driverName || '-',
+        '기사 연락처': d.driverContact || '-',
+
+        // ⑥ 운송비 및 정산
+        '예상 운송비': d.expectedCost ? `${d.expectedCost.toLocaleString()}원` : '0원',
+        '의뢰 운송비': d.deliveryCost ? `${d.deliveryCost.toLocaleString()}원` : '0원',
+        '확정 운송비': d.finalCost ? `${d.finalCost.toLocaleString()}원` : (d.deliveryCostConfirmed ? `${d.deliveryCostConfirmed.toLocaleString()}원` : '0원'),
         '정산 여부': d.isCostSettled ? '정산완료' : '미정산',
         '정산 마감일': (d.isCostSettled && d.updatedAt) ? d.updatedAt.split('T')[0] : '-',
-        '등록일': d.createdAt ? d.createdAt.split('T')[0] : '-'
+
+        // ⑦ 메모 및 감사
+        '의뢰 메모': d.memo || '-',
+        '마감 비고': d.closingMemo || '-',
+        '등록일시': d.createdAt ? d.createdAt.split('T')[0] : '-'
       };
     });
 

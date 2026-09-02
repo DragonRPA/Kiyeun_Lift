@@ -202,46 +202,57 @@ export const Assets: React.FC = () => {
   };
 
   const handleExport = () => {
-    const data = filtered.map(a => {
+    const data = filtered.map((a, idx) => {
       const ci = getAssetContractInfo(a.id);
       return {
-        'No': filtered.indexOf(a) + 1,
+        // ① 식별자
+        'No': idx + 1,
         '관리번호': a.assetNo || '-',
+        '원사(타사) 관리번호': a.vendorAssetNo || '-',
+        '제조번호(S/N)': a.serialNo || '-',
+
+        // ② 장비 제원 및 소유 속성
         '모델명': a.modelName || '-',
         '제조사': a.manufacturer || '-',
-        '제조번호(S/N)': a.serialNo || '-',
         '제조년도': a.manufactureYear || '-',
-        '소유': a.ownerType === 'OWNED' ? '당사' : '임차',
+        '소유구분': a.ownerType === 'OWNED' ? '당사자산' : '외부임차',
         '상태': statusLabel(a.status),
+
+        // ③ 소유/임차 거래처 및 기간
+        '임차처(원사)': a.renter || a.supplier || '-',
+        '임차개시일': a.rentStart ? a.rentStart.slice(0, 10) : '-',
+        '임차만료일': a.rentEnd ? a.rentEnd.slice(0, 10) : '-',
+        '실제반납일': a.actualRentReturnDate ? a.actualRentReturnDate.slice(0, 10) : '-',
+        '월임차료(원)': a.monthlyRentFee || 0,
+        '일임차료(원)': a.dailyRentFee || 0,
+
+        // ④ 현재 가동 현장 및 계약
         '현재 고객사': getCustomerName(a.currentCustomerId),
         '현재 현장': getSiteName(a.currentSiteId),
         '계약번호': ci ? ci.contractNo : '-',
         '계약시작일': a.contractStart ? a.contractStart.slice(0, 10) : '-',
         '계약종료일': a.contractEnd ? a.contractEnd.slice(0, 10) : '-',
         '청구마감일': a.billingDay ? `${a.billingDay}일` : '-',
-        '월대여료': a.monthlyRentalFee || 0,
-        '일대여료': a.dailyRentalFee || 0,
+        '월대여료(원)': a.monthlyRentalFee || 0,
+        '일대여료(원)': a.dailyRentalFee || 0,
+
+        // ⑤ 자산 회계 및 손익
         '취득일자': a.acquisitionDate ? a.acquisitionDate.slice(0, 10) : '-',
-        '취득금액': a.acquisitionPrice || 0,
+        '취득금액(원)': a.acquisitionPrice || 0,
         '구입처': a.supplier || '-',
         '감가상각개월수': a.depreciationMonths || 0,
-        '감가상각누계액': calculateAssetDepreciation(a).accumDepreciation || 0,
+        '감가상각누계액(원)': calculateAssetDepreciation(a).accumDepreciation || 0,
         '잔존가치율': a.residualValueRate != null ? `${a.residualValueRate}%` : '-',
-        '장부가치': a.bookValue ?? (a.acquisitionPrice || 0),
-        '누적렌탈수익': a.cumRentalFee || 0,
-        '누적수리비': a.cumRepairCost || 0,
-        '임차처': a.renter || '-',
-        '임차개시일': a.rentStart ? a.rentStart.slice(0, 10) : '-',
-        '임차만료일': a.rentEnd ? a.rentEnd.slice(0, 10) : '-',
-        '월임차료': a.monthlyRentFee || 0,
-        '일임차료': a.dailyRentFee || 0,
-        '실제반납일': a.actualRentReturnDate ? a.actualRentReturnDate.slice(0, 10) : '-',
-        '매각일자': a.disposalDate ? a.disposalDate.slice(0, 10) : '-',
-        '매각가격': a.disposalPrice || 0,
-        '매각처': a.buyer || '-',
+        '장부가치(원)': a.bookValue ?? (a.acquisitionPrice || 0),
+        '누적렌탈수익(원)': a.cumRentalFee || 0,
+        '누적수리비(원)': a.cumRepairCost || 0,
         '정비점수': a.maintenanceScore || 0,
-        '비고1': a.memo1 || '-',
-        '비고2': a.memo2 || '-'
+
+        // ⑥ 매각 및 비고
+        '매각일자': a.disposalDate ? a.disposalDate.slice(0, 10) : '-',
+        '매각가격(원)': a.disposalPrice || 0,
+        '매각처': a.buyer || '-',
+        '비고': a.memo || a.memo1 || a.note || '-'
       };
     });
     exportToExcel(data, `자산장비목록_${new Date().toISOString().split('T')[0]}`, '자산목록');

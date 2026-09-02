@@ -1,1151 +1,1145 @@
--- 기연리프트 ERP 시스템 데이터베이스 DDL 스키마 (Supabase PostgreSQL 호환)
--- 최종 합의된 프로젝트 요구사항 적용 (인사/조직도, 매입 이원화, 협업 3대 테이블, 외주/배차 등 확장)
+-- ==============================================================================
+-- [기연리프트 ERP] 전사 단일 표준 통합 데이터베이스 DDL 스키마 (SSOT)
+-- 대상 DBMS: Supabase PostgreSQL (PostgreSQL 15+)
+-- 설계 원칙:
+--   1. [카테고리 I] 3대 핵심 가치 (자산 운용, 무누락 DB 이력, 임직원 최소 조작)
+--   2. [논리적 컬럼 6단계 배치 표준]:
+--      ① 식별자/PK ➔ ② 핵심 본질 속성 ➔ ③ 관계/외래키(FK) ➔ ④ 일정/수량/금액 ➔ ⑤ 상태/메모/비고 ➔ ⑥ 감사 추적(Audit)
+--   3. 중복 정의 제거 및 RLS 보안 정책 멱등성 100% 보장
+-- ==============================================================================
 
--- 기존 테이블 삭제 (순서 주의: 자식 테이블 먼저)
-DROP TABLE IF EXISTS consumable_purchases CASCADE;
+-- ------------------------------------------------------------------------------
+-- 기존 테이블 일괄 정리 (FK 역순 CASCADE)
+-- ------------------------------------------------------------------------------
+DROP TABLE IF EXISTS settlement_payment_logs CASCADE;
+DROP TABLE IF EXISTS purchase_settlement_items CASCADE;
+DROP TABLE IF EXISTS purchase_settlements CASCADE;
+DROP TABLE IF EXISTS payment_deposit_links CASCADE;
+DROP TABLE IF EXISTS payments CASCADE;
+DROP TABLE IF EXISTS receivables CASCADE;
+DROP TABLE IF EXISTS billing_details CASCADE;
+DROP TABLE IF EXISTS billing_invoices CASCADE;
+DROP TABLE IF EXISTS billings CASCADE;
+DROP TABLE IF EXISTS bank_matching_rules CASCADE;
+DROP TABLE IF EXISTS bank_transactions CASCADE;
+DROP TABLE IF EXISTS bank_account_initial_balances CASCADE;
+DROP TABLE IF EXISTS cash_flow_snapshots CASCADE;
+DROP TABLE IF EXISTS prepaid_transactions CASCADE;
+DROP TABLE IF EXISTS delinquency_action_logs CASCADE;
+DROP TABLE IF EXISTS depreciation_logs CASCADE;
+DROP TABLE IF EXISTS outbound_inspections CASCADE;
+DROP TABLE IF EXISTS inbound_defect_details CASCADE;
+DROP TABLE IF EXISTS asset_in_out_logs CASCADE;
+DROP TABLE IF EXISTS repair_timeline_events CASCADE;
+DROP TABLE IF EXISTS repair_consumables CASCADE;
+DROP TABLE IF EXISTS repairs CASCADE;
+DROP TABLE IF EXISTS inspection_checklist_items CASCADE;
+DROP TABLE IF EXISTS deliveries CASCADE;
 DROP TABLE IF EXISTS transport_drivers CASCADE;
 DROP TABLE IF EXISTS transport_companies CASCADE;
-DROP TABLE IF EXISTS todos CASCADE;
-DROP TABLE IF EXISTS google_configs CASCADE;
+DROP TABLE IF EXISTS contract_history CASCADE;
+DROP TABLE IF EXISTS contract_assets CASCADE;
+DROP TABLE IF EXISTS contracts CASCADE;
+DROP TABLE IF EXISTS mechanic_consumable_stocks CASCADE;
+DROP TABLE IF EXISTS consumable_logs CASCADE;
+DROP TABLE IF EXISTS consumable_purchase_items CASCADE;
+DROP TABLE IF EXISTS consumable_purchase_requests CASCADE;
+DROP TABLE IF EXISTS consumable_purchases CASCADE;
+DROP TABLE IF EXISTS consumables CASCADE;
+DROP TABLE IF EXISTS assets CASCADE;
+DROP TABLE IF EXISTS products CASCADE;
+DROP TABLE IF EXISTS customer_bank_accounts CASCADE;
+DROP TABLE IF EXISTS customer_sites CASCADE;
+DROP TABLE IF EXISTS customer_contacts CASCADE;
+DROP TABLE IF EXISTS customers CASCADE;
+DROP TABLE IF EXISTS vendors CASCADE;
+DROP TABLE IF EXISTS payroll_closings CASCADE;
+DROP TABLE IF EXISTS overtime_records CASCADE;
+DROP TABLE IF EXISTS leave_usages CASCADE;
+DROP TABLE IF EXISTS annual_leave_quotas CASCADE;
+DROP TABLE IF EXISTS permissions CASCADE;
+DROP TABLE IF EXISTS users CASCADE;
+DROP TABLE IF EXISTS departments CASCADE;
 DROP TABLE IF EXISTS collaboration_request_history CASCADE;
 DROP TABLE IF EXISTS collaboration_requests CASCADE;
 DROP TABLE IF EXISTS work_instructions CASCADE;
 DROP TABLE IF EXISTS announcement_reads CASCADE;
 DROP TABLE IF EXISTS announcements CASCADE;
-DROP TABLE IF EXISTS mechanic_consumable_stocks CASCADE;
-DROP TABLE IF EXISTS consumable_logs CASCADE;
-DROP TABLE IF EXISTS consumable_purchase_items CASCADE;
-DROP TABLE IF EXISTS consumable_purchase_requests CASCADE;
-DROP TABLE IF EXISTS repair_consumables CASCADE;
-DROP TABLE IF EXISTS repairs CASCADE;
+DROP TABLE IF EXISTS todos CASCADE;
 DROP TABLE IF EXISTS document_jobs CASCADE;
 DROP TABLE IF EXISTS agent_registry CASCADE;
-DROP TABLE IF EXISTS purchase_billing_details CASCADE;
-DROP TABLE IF EXISTS purchase_billings CASCADE;
-DROP TABLE IF EXISTS deliveries CASCADE;
-DROP TABLE IF EXISTS payments CASCADE;
-DROP TABLE IF EXISTS billing_details CASCADE;
-DROP TABLE IF EXISTS receivables CASCADE;
-DROP TABLE IF EXISTS billings CASCADE;
-DROP TABLE IF EXISTS contract_history CASCADE;
-DROP TABLE IF EXISTS contract_assets CASCADE;
-DROP TABLE IF EXISTS contracts CASCADE;
-DROP TABLE IF EXISTS assets CASCADE;
-DROP TABLE IF EXISTS consumables CASCADE;
-DROP TABLE IF EXISTS products CASCADE;
-DROP TABLE IF EXISTS customer_sites CASCADE;
-DROP TABLE IF EXISTS customer_contacts CASCADE;
-DROP TABLE IF EXISTS customers CASCADE;
-DROP TABLE IF EXISTS vendors CASCADE;
-DROP TABLE IF EXISTS permissions CASCADE;
-DROP TABLE IF EXISTS users CASCADE;
-DROP TABLE IF EXISTS departments CASCADE;
+DROP TABLE IF EXISTS google_configs CASCADE;
 
--- 1. 부서 테이블 (departments) - 신설
+
+-- ==============================================================================
+-- 🏛️ [도메인 1] 조직, 계정 및 인사노무 (Org, Users & HR)
+-- ==============================================================================
+
+-- 1-1. 부서 마스터 (departments)
 CREATE TABLE departments (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL UNIQUE,
-    "parentDepartmentId" TEXT REFERENCES departments(id),
-    "managerId" TEXT, -- users.id 참조 (순환 참조 문제로 추후 ALTER 처리하거나 논리적 유지)
-    "createdAt" TEXT NOT NULL,
-    "updatedAt" TEXT NOT NULL
-);
-
--- 2. 사용자 테이블 (users) - 확장(인사노무)
-CREATE TABLE users (
-    id TEXT PRIMARY KEY,
-    "loginId" TEXT NOT NULL UNIQUE,
-    "passwordHash" TEXT NOT NULL,
-    name TEXT NOT NULL,
-    "departmentId" TEXT REFERENCES departments(id),
-    position TEXT, -- 직급 (사원, 대리, 부장 등)
-    "managerId" TEXT REFERENCES users(id), -- 직속 상급자
-    status TEXT CHECK (status IN ('ACTIVE', 'LEAVE_OF_ABSENCE', 'RETIRED')) NOT NULL DEFAULT 'ACTIVE',
-    role TEXT CHECK (role IN ('ADMIN', 'MANAGER', 'USER', 'MECHANIC')),
-    "joinDate" TEXT,
-    "retireDate" TEXT,
-    "birthDate" TEXT,
-    address TEXT,
-    phone TEXT,
-    email TEXT,
-    "profileImageUrl" TEXT,
-    "createdAt" TEXT NOT NULL,
-    "updatedAt" TEXT NOT NULL
-);
-
--- 3. 매입 거래처 테이블 (vendors) - 신설
-CREATE TABLE vendors (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    type TEXT CHECK (type IN ('TRANSPORT', 'RENTAL', 'REPAIR', 'PURCHASE', 'OTHER')) NOT NULL,
-    types TEXT,
-    "bizRegNo" TEXT,
-    representative TEXT,
-    "contactName" TEXT,
-    contact TEXT,
-    email TEXT,
-    address TEXT,
-    "isActive" BOOLEAN NOT NULL DEFAULT TRUE,
-    "bankAccount" TEXT,
-    memo TEXT,
-    "createdAt" TEXT NOT NULL,
-    "updatedAt" TEXT NOT NULL
-);
-
--- 4. 메뉴 권한 테이블 (permissions)
-CREATE TABLE permissions (
-    id TEXT PRIMARY KEY,
-    "userId" TEXT NOT NULL,
-    role TEXT DEFAULT 'USER',
-    "menuId" TEXT NOT NULL,
-    "canView" BOOLEAN NOT NULL DEFAULT FALSE,
-    "canSave" BOOLEAN NOT NULL DEFAULT FALSE,
-    "createdAt" TEXT,
-    "updatedAt" TEXT
-);
-
--- 5. 고객 테이블 (customers)
-CREATE TABLE customers (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    "bizRegNo" TEXT,
-    "isClosed" BOOLEAN NOT NULL DEFAULT FALSE,
-    address TEXT,
-    representative TEXT,
-    "repContact" TEXT,
-    "repEmail" TEXT,
-    "driveFolderId" TEXT,
-    "prepaidBalance" DOUBLE PRECISION NOT NULL DEFAULT 0,
-    "defaultBillingDay" INTEGER DEFAULT 30,
-    "defaultStatementClosingDay" INTEGER DEFAULT 25,
-    "paymentDueDay" INTEGER,
-    "paymentTermDays" INTEGER,
-    "bankAccounts" JSONB,
-    "defaultPaidOptions" TEXT, -- 고객사 기본 유상옵션
-    "defaultProtection" TEXT, -- 고객사 기본 보양작업
-    "defaultCheckedSpecs" JSONB, -- 고객사 기본 21대 표준 스펙 체크 상태
-    "specialNotes" TEXT, -- 고객사 특이사항 메모 (예: 재임대/자가배차/운임부담 등)
-    "createdAt" TEXT NOT NULL,
-    "updatedAt" TEXT NOT NULL
-);
-
-
--- 6. 고객 담당자 및 현장 (customer_contacts, customer_sites)
-CREATE TABLE customer_contacts (
-    id TEXT PRIMARY KEY,
-    "customerId" TEXT REFERENCES customers(id) ON DELETE CASCADE,
-    name TEXT NOT NULL,
-    position TEXT,
-    contact TEXT,
-    email TEXT,
-    "createdAt" TEXT NOT NULL,
-    "updatedAt" TEXT NOT NULL
-);
-
-CREATE TABLE customer_sites (
-    id TEXT PRIMARY KEY,
-    "customerId" TEXT REFERENCES customers(id) ON DELETE CASCADE,
-    name TEXT NOT NULL,
-    address TEXT,
-    "contactName" TEXT,
-    contact TEXT,
-    email TEXT,
-    "paidOptions" TEXT, -- 현장 전용 유상옵션
-    "protection" TEXT, -- 현장 전용 보양작업
-    "checkedSpecs" JSONB, -- 현장 전용 21대 표준 스펙 체크 상태
-    "createdAt" TEXT NOT NULL,
-    "updatedAt" TEXT NOT NULL
-);
-
--- 7. 제품 마스터 테이블 (products)
-CREATE TABLE products (
-    id TEXT PRIMARY KEY,
-    "modelName" TEXT NOT NULL UNIQUE,
-    feet DOUBLE PRECISION NOT NULL,
-    spec TEXT,
-    manufacturer TEXT,
-    weight TEXT,
-    speed TEXT,
-    "maxHeightCapacity" TEXT,
-    "safetyCertDate" TEXT,
-    "safetyCertUrl" TEXT,
-    "specSheetUrl" TEXT,
-    "emergencyGuideUrl" TEXT,
-    "isActive" BOOLEAN DEFAULT TRUE NOT NULL,
-    
-    -- 🌟 [신규 확장] 장비 제원표 상세 규격 (1대1 매핑)
-    "powerSource" TEXT,
-    "workingHeight" TEXT,
-    "platformHeight" TEXT,
-    "machineDimensions" TEXT,
-    "platformDimensions" TEXT,
-    "gradeability" TEXT,
-    "asContact" TEXT DEFAULT '031-334-5296',
-    "capacityPreExt" TEXT,
-    "capacityPostExtMain" TEXT,
-    "capacityPostExtDeck" TEXT,
-    "maxWindSpeed" TEXT DEFAULT '12.5 m/s 이내',
-
-    "createdAt" TEXT NOT NULL,
-    "updatedAt" TEXT NOT NULL
-);
-
--- 8. 자산 대장 테이블 (assets)
-CREATE TABLE assets (
-    id TEXT PRIMARY KEY,
-    "modelName" TEXT REFERENCES products("modelName") ON UPDATE CASCADE,
-    "assetNo" TEXT NOT NULL UNIQUE,
-    "serialNo" TEXT,
-    manufacturer TEXT,
-    "manufactureYear" TEXT,
-    "ownerType" TEXT CHECK ("ownerType" IN ('OWNED', 'RENTED')) NOT NULL,
-    status TEXT CHECK (status IN ('AVAILABLE', 'ASSIGNED', 'RENTED', 'REPAIRING', 'RENTED_RETURNED', 'SOLD')) NOT NULL, -- SSOT: ASSET_STATUS_SSOT 동기화
-    
-    -- 당사자산 상세
-    "acquisitionDate" TEXT,
-    "acquisitionPrice" DOUBLE PRECISION,
-    "depreciationMonths" INTEGER,
-    "residualValueRate" DOUBLE PRECISION,
-    "accumDepreciation" DOUBLE PRECISION,
-    "bookValue" DOUBLE PRECISION,
-    
-    -- 임차자산 상세 (vendors 연동)
-    "vendorId" TEXT REFERENCES vendors(id),
-    supplier TEXT,
-    "rentStart" TEXT,
-    "rentEnd" TEXT, -- 실제 반납 시 지연 정산 기준
-    "monthlyRentFee" DOUBLE PRECISION,
-    "dailyRentFee" DOUBLE PRECISION,
-    "actualRentReturnDate" TEXT,
-
-    -- 현재 가동/계약 연동 속성 (실시간 라이프사이클)
-    "currentCustomerId" TEXT REFERENCES customers(id),
-    "currentSiteId" TEXT REFERENCES customer_sites(id),
-    "contractStart" TEXT,
-    "contractEnd" TEXT,
-    "cumRentalFee" DOUBLE PRECISION DEFAULT 0,
-    "cumRepairCost" DOUBLE PRECISION DEFAULT 0,
-    note TEXT,
-
-    memo TEXT,
-    "createdAt" TEXT NOT NULL,
-    "updatedAt" TEXT NOT NULL
-);
-
--- 9. 소모품 테이블 (consumables)
-CREATE TABLE consumables (
-    id TEXT PRIMARY KEY,
-    "modelName" TEXT NOT NULL UNIQUE,
-    "stockQty" DOUBLE PRECISION NOT NULL DEFAULT 0,
-    unit TEXT NOT NULL,
-    "unitPrice" DOUBLE PRECISION NOT NULL DEFAULT 0, -- 기준 매입가
-    "vendorId" TEXT REFERENCES vendors(id),
-    "createdAt" TEXT NOT NULL,
-    "updatedAt" TEXT NOT NULL
-);
-
--- 10. 소모품 구매신청서 마스터 (consumable_purchase_requests) - 신설
-CREATE TABLE consumable_purchase_requests (
-    id TEXT PRIMARY KEY,
-    "requesterId" TEXT REFERENCES users(id),
-    title TEXT NOT NULL,
-    status TEXT CHECK (status IN ('REQUESTED', 'PARTIAL_INBOUND', 'COMPLETED', 'CANCELLED')) NOT NULL,
-    "requestDate" TEXT NOT NULL,
-    "createdAt" TEXT NOT NULL,
-    "updatedAt" TEXT NOT NULL
-);
-
--- 11. 소모품 구매신청 상세 (consumable_purchase_items) - 신설
-CREATE TABLE consumable_purchase_items (
-    id TEXT PRIMARY KEY,
-    "requestId" TEXT REFERENCES consumable_purchase_requests(id) ON DELETE CASCADE,
-    "consumableId" TEXT REFERENCES consumables(id),
-    "requestQty" DOUBLE PRECISION NOT NULL,
-    "inboundQty" DOUBLE PRECISION NOT NULL DEFAULT 0, -- 누적 입고 수량
-    "createdAt" TEXT NOT NULL,
-    "updatedAt" TEXT NOT NULL
-);
-
--- 12. 소모품 입출고 로그 (consumable_logs) - 기사 차량 불출 및 증빙 확장
-CREATE TABLE consumable_logs (
-    id TEXT PRIMARY KEY,
-    "consumableId" TEXT REFERENCES consumables(id) ON DELETE CASCADE,
-    type TEXT CHECK (type IN ('INBOUND', 'OUTBOUND', 'ADJUST', 'TRANSFER_TO_VEHICLE', 'RETURN_TO_HQ')) NOT NULL,
-    quantity DOUBLE PRECISION NOT NULL,
-    "unitPrice" DOUBLE PRECISION NOT NULL,
-    "vendorId" TEXT REFERENCES vendors(id),
-    "userId" TEXT REFERENCES users(id),
-    "mechanicId" TEXT REFERENCES users(id),
-    "fromLocation" TEXT,
-    "toLocation" TEXT,
-    "targetAssetId" TEXT REFERENCES assets(id),
-    "purchaseItemId" TEXT REFERENCES consumable_purchase_items(id), -- 구매신청 입고 매칭
-    "evidenceFileUrl" TEXT, -- 거래명세서 등 매입 증빙 파일
-    description TEXT,
-    "actionDate" TEXT NOT NULL,
-    "createdAt" TEXT NOT NULL,
-    "updatedAt" TEXT NOT NULL
-);
-
--- 12-1. 정비사 차량 소모품 적재 재고 테이블 (mechanic_consumable_stocks)
-CREATE TABLE mechanic_consumable_stocks (
-    id TEXT PRIMARY KEY,
-    "mechanicId" TEXT REFERENCES users(id) ON DELETE CASCADE,
-    "consumableId" TEXT REFERENCES consumables(id) ON DELETE CASCADE,
-    "stockQty" DOUBLE PRECISION NOT NULL DEFAULT 0,
-    "updatedAt" TEXT NOT NULL
-);
-
-ALTER TABLE mechanic_consumable_stocks ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "allow_anon_select" ON mechanic_consumable_stocks;
-DROP POLICY IF EXISTS "allow_anon_insert" ON mechanic_consumable_stocks;
-DROP POLICY IF EXISTS "allow_anon_update" ON mechanic_consumable_stocks;
-DROP POLICY IF EXISTS "allow_anon_delete" ON mechanic_consumable_stocks;
-DROP POLICY IF EXISTS "allow_authenticated_select" ON mechanic_consumable_stocks;
-DROP POLICY IF EXISTS "allow_authenticated_insert" ON mechanic_consumable_stocks;
-DROP POLICY IF EXISTS "allow_authenticated_update" ON mechanic_consumable_stocks;
-DROP POLICY IF EXISTS "allow_authenticated_delete" ON mechanic_consumable_stocks;
-CREATE POLICY "allow_anon_select" ON mechanic_consumable_stocks FOR SELECT TO anon USING (true);
-CREATE POLICY "allow_anon_insert" ON mechanic_consumable_stocks FOR INSERT TO anon WITH CHECK (true);
-CREATE POLICY "allow_anon_update" ON mechanic_consumable_stocks FOR UPDATE TO anon USING (true) WITH CHECK (true);
-CREATE POLICY "allow_anon_delete" ON mechanic_consumable_stocks FOR DELETE TO anon USING (true);
-CREATE POLICY "allow_authenticated_select" ON mechanic_consumable_stocks FOR SELECT TO authenticated USING (true);
-CREATE POLICY "allow_authenticated_insert" ON mechanic_consumable_stocks FOR INSERT TO authenticated WITH CHECK (true);
-CREATE POLICY "allow_authenticated_update" ON mechanic_consumable_stocks FOR UPDATE TO authenticated USING (true) WITH CHECK (true);
-CREATE POLICY "allow_authenticated_delete" ON mechanic_consumable_stocks FOR DELETE TO authenticated USING (true);
-
--- 13. 계약 테이블 (contracts) - 영업사원 추가
-CREATE TABLE contracts (
-    id TEXT PRIMARY KEY,
-    "contractNo" TEXT NOT NULL UNIQUE,
-    "customerId" TEXT REFERENCES customers(id),
-    "salespersonId" TEXT REFERENCES users(id), -- 담당 영업사원
-    "contactId" TEXT REFERENCES customer_contacts(id),
-    "siteId" TEXT REFERENCES customer_sites(id),
-    "billingDay" INTEGER NOT NULL DEFAULT 30,
-    "lateInterestRate" DOUBLE PRECISION NOT NULL DEFAULT 0, -- 연체이자율 (%), 기본값 0 = 미발생
-    "paymentDueDay" INTEGER, -- 납기일: 세금계산서 발행 익월 N일 (계약별 개별 지정)
-    status TEXT CHECK (status IN ('ACTIVE', 'EXTENDED', 'SHORTENED', 'SUCCEEDED', 'COMPLETED')) NOT NULL,
-    "successorContractId" TEXT REFERENCES contracts(id),
-    "predecessorContractId" TEXT REFERENCES contracts(id),
-    "predecessorContractNo" TEXT,
-    "predecessorCustomerId" TEXT REFERENCES customers(id),
-    "predecessorCustomerName" TEXT,
-    "driveFolderId" TEXT,
-    "lastBillingDate" TEXT, -- 최근 렌탈료 청구 발행일 (YYYY-MM-DD)
-    "lastBilledPeriodStart" TEXT, -- 최근 청구 시작일 (YYYY-MM-DD)
-    "lastBilledPeriodEnd" TEXT, -- 최근 청구 종료일 (YYYY-MM-DD)
-    "lastBilledYm" TEXT, -- 최근 청구 귀속월 (YYYY-MM)
-    "billingCount" INTEGER NOT NULL DEFAULT 0, -- 누적 발행 청구 건수
-    "startDate" TEXT NOT NULL,
-    "endDate" TEXT NOT NULL,
-    "createdAt" TEXT NOT NULL,
-    "updatedAt" TEXT NOT NULL
-);
-
--- 14. 계약 자산 및 이력 (contract_assets, contract_history)
-CREATE TABLE contract_assets (
-    id TEXT PRIMARY KEY,
-    "contractId" TEXT REFERENCES contracts(id) ON DELETE CASCADE,
-    "assetId" TEXT REFERENCES assets(id),
-    "expectedModel" TEXT,
-    "monthlyRentalFee" DOUBLE PRECISION NOT NULL DEFAULT 0,
-    "dailyRentalFee" DOUBLE PRECISION NOT NULL DEFAULT 0,
-    "startDate" TEXT NOT NULL,
-    "endDate" TEXT NOT NULL,
-    "createdAt" TEXT NOT NULL,
-    "updatedAt" TEXT NOT NULL
-);
-
-CREATE TABLE contract_history (
-    id TEXT PRIMARY KEY,
-    "contractId" TEXT REFERENCES contracts(id) ON DELETE CASCADE,
-    "changeType" TEXT CHECK ("changeType" IN ('REGISTER', 'EXTEND', 'SHORTEN', 'SUCCEED', 'TERMINATE', 'EXCHANGE', 'FEE_CHANGE', 'AS_SERVICE')) NOT NULL,
-    "prevEndDate" TEXT,
-    "newEndDate" TEXT,
-    "description" TEXT,
-    "changeDate" TEXT NOT NULL,
-    "createdAt" TEXT NOT NULL,
-    "updatedAt" TEXT NOT NULL
-);
-
--- 15. 배차 및 운송 테이블 (deliveries) - 운송사, 상하차 일시 및 세부 유형 확장
-CREATE TABLE deliveries (
-    id TEXT PRIMARY KEY,
-    "contractId" TEXT REFERENCES contracts(id) ON DELETE SET NULL,
-    "assetIds" TEXT,
-    "transportVendorId" TEXT REFERENCES vendors(id), -- 운송 거래처
-    type TEXT CHECK (type IN ('OUTBOUND', 'INBOUND', 'EXCHANGE', 'MOVEMENT', 'RETURN')) NOT NULL,
-    status TEXT CHECK (status IN ('PENDING', 'REQUESTED', 'DISPATCHED', 'DELIVERED', 'COMPLETED', 'CANCELLED')) NOT NULL DEFAULT 'PENDING',
-    "dispatchCategory" TEXT CHECK ("dispatchCategory" IN ('출고', '입고', '반납', '정비', '이동', '교환')) DEFAULT '출고',
-    "loadingDate" TEXT, -- 상차일자 (YYYY-MM-DD)
-    "loadingTimeSlot" TEXT DEFAULT '오전', -- 상차시간 구분 (오전/오후/희망시간)
-    "unloadingDate" TEXT, -- 하차일자 (YYYY-MM-DD)
-    "unloadingTimeSlot" TEXT DEFAULT '오전', -- 하차시간 구분 (오전/오후/희망시간)
-    "vehicleType" TEXT,
-    "driverName" TEXT,
-    "driverContact" TEXT,
-    "deliveryCost" DOUBLE PRECISION NOT NULL DEFAULT 0,
-    "purchaseBillId" TEXT, -- 매입 마감 연동
-    "isCostSettled" BOOLEAN DEFAULT FALSE,
-    "rawText" TEXT, -- 스마트 출고시 입력된 사용자 요청 원문 텍스트
-    memo TEXT,
-    "closingMemo" TEXT, -- 실무자 마감 비고
-    "requestDate" TEXT NOT NULL,
-    "loadingTime" TEXT, -- 상차 예정 일시 (구 버전 호환)
-    "unloadingTime" TEXT, -- 하차 예정 일시 (구 버전 호환)
-    "createdAt" TEXT NOT NULL,
-    "updatedAt" TEXT NOT NULL
-);
-
--- 16. 매출 청구 마스터 (billings) - 고객 대상
-CREATE TABLE billings (
-    id TEXT PRIMARY KEY,
-    "customerId" TEXT REFERENCES customers(id),
-    "contractId" TEXT REFERENCES contracts(id),
-    "billingYm" TEXT NOT NULL,
-    "totalAmount" DOUBLE PRECISION NOT NULL DEFAULT 0,
-    "paidAmount" DOUBLE PRECISION NOT NULL DEFAULT 0,
-    status TEXT CHECK (status IN ('UNPAID', 'PARTIAL', 'PAID', 'REQUESTED', 'REJECTED')) NOT NULL,
-    "billingDate" TEXT NOT NULL,
-    "createdAt" TEXT NOT NULL,
-    "updatedAt" TEXT NOT NULL
-);
-
--- 17. 매출 청구 상세 (billing_details) - 자산 개별 매핑
-CREATE TABLE billing_details (
-    id TEXT PRIMARY KEY,
-    "billingId" TEXT REFERENCES billings(id) ON DELETE CASCADE,
-    "contractAssetId" TEXT REFERENCES contract_assets(id),
-    "assetId" TEXT REFERENCES assets(id), -- 손익 분석용 자산 직접 연결
-    "receivableId" TEXT, -- 외상미수금 연동 ID (receivables.id)
-    "itemName" TEXT NOT NULL,
-    quantity DOUBLE PRECISION NOT NULL DEFAULT 1,
-    "unitPrice" DOUBLE PRECISION NOT NULL DEFAULT 0,
-    amount DOUBLE PRECISION NOT NULL DEFAULT 0,
-    description TEXT, -- 구버전 호환 유지
-    "internalDescription" TEXT, -- 내부 장부 기재명 (실제 발생 내용)
-    "displayName" TEXT, -- 거래명세서 표기명 (고객 노출용, NULL이면 itemName 사용)
-    "createdAt" TEXT NOT NULL,
-    "updatedAt" TEXT NOT NULL
-);
-
--- 17-2. 외상미수금 대장 (receivables) - 부대 청구 항목 관리
-CREATE TABLE receivables (
-    id TEXT PRIMARY KEY,
-    "contractId" TEXT REFERENCES contracts(id),
-    "customerId" TEXT REFERENCES customers(id),
-    type TEXT CHECK (type IN ('TRANSPORT', 'REPAIR', 'CLEANING', 'OTHER')) NOT NULL,
-    "totalAmount" DOUBLE PRECISION NOT NULL DEFAULT 0,
-    "billedAmount" DOUBLE PRECISION NOT NULL DEFAULT 0,
-    "internalDescription" TEXT NOT NULL,
-    "displayName" TEXT,
-    "occurredDate" TEXT NOT NULL,
-    status TEXT CHECK (status IN ('PENDING', 'PARTIAL', 'CLEARED')) NOT NULL DEFAULT 'PENDING',
-    CONSTRAINT chk_billed_amount CHECK ("billedAmount" <= "totalAmount"),
-    "createdAt" TEXT NOT NULL,
-    "updatedAt" TEXT NOT NULL
-);
-
--- 18. 매입 청구 마스터 (purchase_billings) - 신설
-CREATE TABLE purchase_billings (
-    id TEXT PRIMARY KEY,
-    "vendorId" TEXT REFERENCES vendors(id),
-    "billingYm" TEXT NOT NULL,
-    "totalAmount" DOUBLE PRECISION NOT NULL DEFAULT 0,
-    "paidAmount" DOUBLE PRECISION NOT NULL DEFAULT 0,
-    status TEXT CHECK (status IN ('REQUESTED', 'APPROVED', 'PAID')) NOT NULL,
-    "createdAt" TEXT NOT NULL,
-    "updatedAt" TEXT NOT NULL
-);
-
--- 19. 매입 청구 상세 (purchase_billing_details) - 신설 (비용의 자산 연계)
-CREATE TABLE purchase_billing_details (
-    id TEXT PRIMARY KEY,
-    "purchaseBillId" TEXT REFERENCES purchase_billings(id) ON DELETE CASCADE,
-    "assetId" TEXT REFERENCES assets(id), -- 어떤 자산에 투입된 비용인가? (손익 추적)
-    "contractId" TEXT REFERENCES contracts(id), -- 어떤 계약에 투입된 비용인가? (손익 추적)
-    "expenseType" TEXT CHECK ("expenseType" IN ('TRANSPORT', 'REPAIR', 'RENTAL_FEE', 'CONSUMABLE', 'OTHER')) NOT NULL,
-    "itemName" TEXT NOT NULL,
-    amount DOUBLE PRECISION NOT NULL DEFAULT 0,
-    "createdAt" TEXT NOT NULL,
-    "updatedAt" TEXT NOT NULL
-);
-
--- 20. 매출 수납 테이블 (payments)
-CREATE TABLE payments (
-    id TEXT PRIMARY KEY,
-    "billingId" TEXT REFERENCES billings(id) ON DELETE CASCADE,
-    amount DOUBLE PRECISION NOT NULL,
-    method TEXT NOT NULL,
-    memo TEXT,
-    "paymentDate" TEXT NOT NULL,
-    "createdAt" TEXT NOT NULL,
-    "updatedAt" TEXT NOT NULL
-);
-
--- 21. 자산 수리 테이블 (repairs) - 외주 정비, 긴급AS/예방정비 및 영업 청구 판단 이원화
--- 21. 자산 수리 및 현장 AS 단일 물리 통합 테이블 (repairs)
-CREATE TABLE repairs (
-    id TEXT PRIMARY KEY,
-    "ticketNo" TEXT,
-    "workCategory" TEXT DEFAULT 'FIELD_AS',
-    "workLocation" TEXT DEFAULT 'SITE',
-    "stockSource" TEXT DEFAULT 'VEHICLE_VAN',
-    "source" TEXT DEFAULT 'DIRECT_INTAKE',
-    "repairType" TEXT NOT NULL DEFAULT 'INTERNAL',
-    "maintenanceType" TEXT,
-    "assetId" TEXT,
-    "assetNo" TEXT,
-    "modelName" TEXT,
-    "contractId" TEXT REFERENCES contracts(id) ON DELETE SET NULL,
-    "targetContractStatus" TEXT,
-    "customerId" TEXT,
-    "customerName" TEXT,
-    "siteId" TEXT,
-    "siteName" TEXT,
-    "locationDetail" TEXT,
-    "reporterName" TEXT,
-    "reporterContact" TEXT,
-    "issueCategory" TEXT,
-    "issueDescription" TEXT,
-    details TEXT,
-    "errorCode" TEXT,
-    priority TEXT DEFAULT 'NORMAL',
-    "mechanicId" TEXT,
-    "assignedMechanicId" TEXT,
-    "mechanicName" TEXT,
-    "vendorId" TEXT,
-    "requestDate" TEXT NOT NULL,
-    "scheduleDate" TEXT,
-    "visitDate" TEXT,
-    "repairDate" TEXT,
-    "completedDate" TEXT,
-    "outboundDate" TEXT,
-    status TEXT NOT NULL DEFAULT 'REQUESTED',
-    "resolutionType" TEXT,
-    "unresolvedReason" TEXT,
-    "nextAction" TEXT,
-    "actionTaken" TEXT,
-    "partsUsed" JSONB DEFAULT '[]'::jsonb,
-    "collectedParts" JSONB DEFAULT '[]'::jsonb,
-    "billableType" TEXT DEFAULT 'FREE',
-    "billableAmount" DOUBLE PRECISION DEFAULT 0,
-    "billableToCustomer" BOOLEAN NOT NULL DEFAULT FALSE,
-    "totalCost" DOUBLE PRECISION NOT NULL DEFAULT 0,
-    "costTotal" DOUBLE PRECISION NOT NULL DEFAULT 0,
-    "billingAmount" DOUBLE PRECISION,
-    "laborHours" DOUBLE PRECISION,
-    "isCustomerFault" BOOLEAN NOT NULL DEFAULT FALSE,
-    "faultImageUrl" TEXT,
-    "evidenceImages" TEXT[],
-    "beforeImage" TEXT,
-    "afterImage" TEXT,
-    "estimateFileUrl" TEXT,
-    "customerSignature" TEXT,
-    "customerConfirmName" TEXT,
-    "parentRepairId" TEXT,
-    "parentTicketId" TEXT,
-    "revisitRepairId" TEXT,
-    "revisitTicketId" TEXT,
-    "revisitDate" TEXT,
-    "revisitReason" TEXT,
-    "exchangeSuggested" BOOLEAN DEFAULT FALSE,
-    "inboundNo" TEXT,
-    "defectsJson" TEXT,
-    "billingId" TEXT,
-    "purchaseBillId" TEXT,
-    memo TEXT,
-    "createdAt" TEXT NOT NULL,
-    "updatedAt" TEXT NOT NULL
-);
-
--- 22. 수리 투입 자재 (repair_consumables)
-CREATE TABLE repair_consumables (
-    id TEXT PRIMARY KEY,
-    "repairId" TEXT REFERENCES repairs(id) ON DELETE CASCADE,
-    "consumableId" TEXT REFERENCES consumables(id),
-    quantity DOUBLE PRECISION NOT NULL DEFAULT 1,
-    "unitPrice" DOUBLE PRECISION NOT NULL DEFAULT 0,
-    cost DOUBLE PRECISION NOT NULL DEFAULT 0,
-    "createdAt" TEXT NOT NULL,
-    "updatedAt" TEXT NOT NULL
-);
-
--- 23. 공지사항 (announcements & announcement_reads) - 신설
-CREATE TABLE announcements (
-    id TEXT PRIMARY KEY,
-    "authorId" TEXT REFERENCES users(id),
-    title TEXT NOT NULL,
-    content TEXT NOT NULL,
-    "createdAt" TEXT NOT NULL,
-    "updatedAt" TEXT NOT NULL
-);
-
-CREATE TABLE announcement_reads (
-    id TEXT PRIMARY KEY,
-    "announcementId" TEXT REFERENCES announcements(id) ON DELETE CASCADE,
-    "userId" TEXT REFERENCES users(id) ON DELETE CASCADE,
-    "readAt" TEXT NOT NULL,
-    "createdAt" TEXT NOT NULL,
-    "updatedAt" TEXT NOT NULL
-);
-
--- 24. 업무 지시 (work_instructions) - 3대 보고유형 - 신설
-CREATE TABLE work_instructions (
-    id TEXT PRIMARY KEY,
-    "managerId" TEXT REFERENCES users(id),
-    "assigneeId" TEXT REFERENCES users(id),
-    title TEXT NOT NULL,
-    content TEXT,
-    "reportType" TEXT CHECK ("reportType" IN ('FILE', 'TEXT', 'VERBAL')) NOT NULL,
-    status TEXT CHECK (status IN ('PENDING', 'REPORTED', 'APPROVED', 'NEEDS_WORK')) NOT NULL DEFAULT 'PENDING',
-    "reportContent" TEXT,
-    "reportFileUrl" TEXT,
-    "createdAt" TEXT NOT NULL,
-    "updatedAt" TEXT NOT NULL
-);
-
--- 25. 협업 요청 (collaboration_requests & history) - 조율 4회 제한 - 신설
-CREATE TABLE collaboration_requests (
-    id TEXT PRIMARY KEY,
-    "requesterId" TEXT REFERENCES users(id),
-    "targetUserId" TEXT REFERENCES users(id),
-    title TEXT NOT NULL,
-    content TEXT,
-    status TEXT CHECK (status IN ('REQUESTED', 'NEGOTIATING', 'AGREED', 'REJECTED', 'ESCALATED')) NOT NULL DEFAULT 'REQUESTED',
-    "negotiationCount" INTEGER NOT NULL DEFAULT 0, -- 4회 초과 시 자동 REJECTED 처리 로직 백엔드 수행
-    "createdAt" TEXT NOT NULL,
-    "updatedAt" TEXT NOT NULL
-);
-
-CREATE TABLE collaboration_request_history (
-    id TEXT PRIMARY KEY,
-    "requestId" TEXT REFERENCES collaboration_requests(id) ON DELETE CASCADE,
-    "writerId" TEXT REFERENCES users(id),
-    content TEXT NOT NULL,
-    action TEXT CHECK (action IN ('NEGOTIATE', 'AGREE', 'REJECT', 'ESCALATE')) NOT NULL,
-    "createdAt" TEXT NOT NULL,
-    "updatedAt" TEXT NOT NULL
-);
-
--- 26. 은행 입출금 거래 내역 (bank_transactions) - 신설
-CREATE TABLE bank_transactions (
-    id TEXT PRIMARY KEY,
-    "senderName" TEXT NOT NULL,
-    "senderAccount" TEXT,
-    "depositAmount" DOUBLE PRECISION NOT NULL DEFAULT 0,
-    "withdrawAmount" DOUBLE PRECISION NOT NULL DEFAULT 0,
-    memo TEXT,
-    "matchedBillingId" TEXT REFERENCES billings(id) ON DELETE SET NULL,
-    "matchingType" TEXT CHECK ("matchingType" IN ('AUTO', 'MANUAL')),
-    "transactionDate" TEXT NOT NULL,
-    "customerId" TEXT REFERENCES customers(id) ON DELETE SET NULL,
-    "isDeposit" BOOLEAN NOT NULL DEFAULT TRUE,
-    "createdAt" TEXT NOT NULL,
-    "updatedAt" TEXT NOT NULL
-);
-
--- 26-1. 수납-통장입금 N:N 매핑 테이블 (payment_deposit_links)
-CREATE TABLE payment_deposit_links (
-    id TEXT PRIMARY KEY,
-    "paymentId" TEXT NOT NULL REFERENCES payments(id) ON DELETE CASCADE,
-    "bankTransactionId" TEXT NOT NULL REFERENCES bank_transactions(id) ON DELETE CASCADE,
-    "usedAmount" DOUBLE PRECISION NOT NULL DEFAULT 0,
-    "createdAt" TEXT NOT NULL
-);
-
-
--- 27. 은행 입금 대조 학습 매핑 룰 (bank_matching_rules) - 신설
-CREATE TABLE bank_matching_rules (
-    id TEXT PRIMARY KEY,
-    "senderName" TEXT NOT NULL UNIQUE,
-    "customerId" TEXT REFERENCES customers(id) ON DELETE CASCADE,
-    "createdAt" TEXT NOT NULL,
-    "updatedAt" TEXT NOT NULL
-);
-
--- 28. 자산 입출고/정비 이력 테이블 (asset_inout_logs) - 신설
-CREATE TABLE asset_inout_logs (
-    id TEXT PRIMARY KEY,
-    "assetId" TEXT REFERENCES assets(id) ON DELETE CASCADE,
-    "assetNo" TEXT NOT NULL,
-    "modelName" TEXT NOT NULL,
-    type TEXT CHECK (type IN ('OUTBOUND', 'INBOUND', 'REPAIR')) NOT NULL,
-    "customerId" TEXT REFERENCES customers(id) ON DELETE SET NULL,
-    "customerName" TEXT,
-    "siteId" TEXT REFERENCES customer_sites(id) ON DELETE SET NULL,
-    "siteName" TEXT,
-    "deliveryId" TEXT REFERENCES deliveries(id) ON DELETE SET NULL,
-    "repairId" TEXT REFERENCES repairs(id) ON DELETE SET NULL,
-    "maintenanceScore" INTEGER,
-    memo TEXT,
-    "eventDate" TEXT NOT NULL,
-    "createdAt" TEXT NOT NULL,
-    "updatedAt" TEXT NOT NULL
-);
-
--- 33. 소모품 구매 신청서 테이블 (consumable_purchases) - 통합 규격
-CREATE TABLE consumable_purchases (
-    id TEXT PRIMARY KEY,
-    "consumableId" TEXT REFERENCES consumables(id),
-    "modelName" TEXT NOT NULL,
-    "requestedQty" DOUBLE PRECISION NOT NULL,
-    "unitPrice" DOUBLE PRECISION NOT NULL,
-    "sellerName" TEXT NOT NULL,
-    status TEXT CHECK (status IN ('REQUESTED', 'ACCEPTED', 'COMPLETED', 'CANCELLED')) NOT NULL,
-    "requesterId" TEXT REFERENCES users(id),
-    "requesterName" TEXT NOT NULL,
-    "accepterId" TEXT,
-    "accepterName" TEXT,
-    "inbounderName" TEXT,
-    "receivedQty" DOUBLE PRECISION NOT NULL DEFAULT 0,
-    "statementFileUrl" TEXT,
-    "requestDate" TEXT NOT NULL,
-    "acceptedDate" TEXT,
-    "actualReturnDate" TEXT,
-    
-    "createdAt" TEXT NOT NULL,
-    "updatedAt" TEXT NOT NULL
-);
-
--- 34. 운송 거래처 테이블 (transport_companies)
-CREATE TABLE transport_companies (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    "businessNo" TEXT,
-    contact TEXT,
-    "bankName" TEXT,
-    "bankAccount" TEXT,
-    "bankHolder" TEXT,
-    memo TEXT,
-    "createdAt" TEXT NOT NULL,
-    "updatedAt" TEXT NOT NULL
-);
-
--- 35. 운송 차량/기사 테이블 (transport_drivers)
-CREATE TABLE transport_drivers (
-    id TEXT PRIMARY KEY,
-    "companyId" TEXT REFERENCES transport_companies(id) ON DELETE SET NULL,
-    "driverName" TEXT NOT NULL,
-    "driverContact" TEXT,
-    "idNo" TEXT,
-    address TEXT,
-    "vehicleNo" TEXT,
-    "vehicleType" TEXT,
-    "vehicleColor" TEXT,
-    "createdAt" TEXT NOT NULL,
-    "updatedAt" TEXT NOT NULL
-);
-
--- 36. 미완료 업무/할 일 테이블 (todos)
-CREATE TABLE todos (
-    id TEXT PRIMARY KEY,
-    "userId" TEXT NOT NULL,
-    type TEXT CHECK (type IN ('MISSING_INFO', 'GENERAL')) NOT NULL,
-    title TEXT NOT NULL,
-    content TEXT NOT NULL,
-    "isCompleted" BOOLEAN NOT NULL DEFAULT FALSE,
-    "relatedEntityId" TEXT,
-    "createdAt" TEXT NOT NULL,
-    "updatedAt" TEXT NOT NULL
-);
-
--- 37. 구글 드라이브 및 API 설정 테이블 (google_configs)
-CREATE TABLE google_configs (
-    id TEXT PRIMARY KEY,
-    "googleEmail" TEXT NOT NULL,
-    "googlePassword" TEXT,
-    "gmailAppPassword" TEXT,
-    "contractFolder" TEXT NOT NULL,
-    "consumableFolder" TEXT NOT NULL,
-    "deliveryFolder" TEXT NOT NULL,
-    "maintenanceFolder" TEXT NOT NULL,
-    "isDevMode" BOOLEAN NOT NULL DEFAULT TRUE,
-    "quotationTemplateUrl" TEXT,
-    "contractTemplateUrl" TEXT,
-    "safetyInspectionTemplateUrl" TEXT,
-    "preDeliveryChecklistTemplateUrl" TEXT,
-    "bizRegCertUrl" TEXT,
-    "bankbookCopyUrl" TEXT,
-    "transactionStatementTemplateUrl" TEXT,
-    "defaultRootFolderId" TEXT,
-    "r2AccountId" TEXT,
-    "r2BucketName" TEXT,
-    "r2AccessKeyId" TEXT,
-    "r2SecretAccessKey" TEXT,
-    "r2PublicDomain" TEXT,
-    "createdAt" TEXT NOT NULL,
-    "updatedAt" TEXT NOT NULL
-);
-
--- 39. CashFlow 스냅샷 테이블 (cash_flow_snapshots)
-CREATE TABLE cash_flow_snapshots (
-    id TEXT PRIMARY KEY,
-    "snapshotDate" TEXT NOT NULL,
-    "startingBalance" BIGINT NOT NULL,
-    "projectedInflow" BIGINT NOT NULL,
-    "projectedOpex" BIGINT NOT NULL,
-    "projectedCapex" BIGINT NOT NULL,
-    "projectedFinalBalance" BIGINT NOT NULL,
-    notes TEXT,
-    "createdAt" TEXT NOT NULL,
-    "updatedAt" TEXT NOT NULL
-);
-
--- 40. 출고 검수/정비 의뢰 테이블 (outbound_inspections)
-CREATE TABLE outbound_inspections (
-    id TEXT PRIMARY KEY,
-    "contractId" TEXT,
-    "contractAssetId" TEXT,
-    "assetId" TEXT,
-    status TEXT NOT NULL DEFAULT 'PENDING',
-    "specsJson" TEXT,
-    "inspectorId" TEXT,
-    "inspectedAt" TEXT,
-    note TEXT,
-    "createdAt" TEXT NOT NULL,
-    "updatedAt" TEXT NOT NULL
-);
-
-ALTER TABLE outbound_inspections ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "allow_anon_select" ON outbound_inspections;
-DROP POLICY IF EXISTS "allow_anon_insert" ON outbound_inspections;
-DROP POLICY IF EXISTS "allow_anon_update" ON outbound_inspections;
-DROP POLICY IF EXISTS "allow_authenticated_select" ON outbound_inspections;
-DROP POLICY IF EXISTS "allow_authenticated_insert" ON outbound_inspections;
-DROP POLICY IF EXISTS "allow_authenticated_update" ON outbound_inspections;
-CREATE POLICY "allow_anon_select" ON outbound_inspections FOR SELECT TO anon USING (true);
-CREATE POLICY "allow_anon_insert" ON outbound_inspections FOR INSERT TO anon WITH CHECK (true);
-CREATE POLICY "allow_anon_update" ON outbound_inspections FOR UPDATE TO anon USING (true) WITH CHECK (true);
-CREATE POLICY "allow_authenticated_select" ON outbound_inspections FOR SELECT TO authenticated USING (true);
-CREATE POLICY "allow_authenticated_insert" ON outbound_inspections FOR INSERT TO authenticated WITH CHECK (true);
-CREATE POLICY "allow_authenticated_update" ON outbound_inspections FOR UPDATE TO authenticated USING (true) WITH CHECK (true);
-
--- 41. 월별 감가상각 결산 마감 이력 테이블 (depreciation_logs)
-CREATE TABLE depreciation_logs (
-    id TEXT PRIMARY KEY,
-    "depreciationYm" TEXT NOT NULL,
-    "executedAt" TEXT NOT NULL,
-    "executedBy" TEXT,
-    "targetAssetCount" INTEGER NOT NULL DEFAULT 0,
-    "totalDepreciationAmount" NUMERIC NOT NULL DEFAULT 0,
-    note TEXT,
-    "createdAt" TEXT NOT NULL,
-    "updatedAt" TEXT NOT NULL
-);
-
-ALTER TABLE depreciation_logs ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "allow_anon_select" ON depreciation_logs;
-DROP POLICY IF EXISTS "allow_anon_insert" ON depreciation_logs;
-DROP POLICY IF EXISTS "allow_anon_update" ON depreciation_logs;
-DROP POLICY IF EXISTS "allow_authenticated_select" ON depreciation_logs;
-DROP POLICY IF EXISTS "allow_authenticated_insert" ON depreciation_logs;
-DROP POLICY IF EXISTS "allow_authenticated_update" ON depreciation_logs;
-CREATE POLICY "allow_anon_select" ON depreciation_logs FOR SELECT TO anon USING (true);
-CREATE POLICY "allow_anon_insert" ON depreciation_logs FOR INSERT TO anon WITH CHECK (true);
-CREATE POLICY "allow_anon_update" ON depreciation_logs FOR UPDATE TO anon USING (true) WITH CHECK (true);
-CREATE POLICY "allow_authenticated_select" ON depreciation_logs FOR SELECT TO authenticated USING (true);
-CREATE POLICY "allow_authenticated_insert" ON depreciation_logs FOR INSERT TO authenticated WITH CHECK (true);
-CREATE POLICY "allow_authenticated_update" ON depreciation_logs FOR UPDATE TO authenticated USING (true) WITH CHECK (true);
-
-
--- ==========================================
--- 월말 매입 정산 (Purchase Settlement)
--- ==========================================
-
-CREATE TABLE purchase_settlements (
-    id TEXT PRIMARY KEY,
-    "settlementYm" TEXT NOT NULL,
-    "settlementType" TEXT NOT NULL,
-    "vendorId" TEXT,
-    "vendorName" TEXT NOT NULL,
-    "totalAmount" NUMERIC NOT NULL DEFAULT 0,
-    "paidAmount" NUMERIC NOT NULL DEFAULT 0,
-    status TEXT NOT NULL DEFAULT 'PENDING',
-    "paymentDate" TEXT,
-    "paymentMethod" TEXT,
-    "bankAccount" TEXT,
-    "bankTransactionId" TEXT,
-    "confirmedAt" TEXT,
-    "confirmedBy" TEXT,
-    memo TEXT,
-    "createdAt" TEXT NOT NULL,
-    "updatedAt" TEXT NOT NULL
-);
-
-ALTER TABLE purchase_settlements ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "allow_anon_select" ON purchase_settlements;
-DROP POLICY IF EXISTS "allow_anon_insert" ON purchase_settlements;
-DROP POLICY IF EXISTS "allow_anon_update" ON purchase_settlements;
-DROP POLICY IF EXISTS "allow_authenticated_select" ON purchase_settlements;
-DROP POLICY IF EXISTS "allow_authenticated_insert" ON purchase_settlements;
-DROP POLICY IF EXISTS "allow_authenticated_update" ON purchase_settlements;
-CREATE POLICY "allow_anon_select" ON purchase_settlements FOR SELECT TO anon USING (true);
-CREATE POLICY "allow_anon_insert" ON purchase_settlements FOR INSERT TO anon WITH CHECK (true);
-CREATE POLICY "allow_anon_update" ON purchase_settlements FOR UPDATE TO anon USING (true) WITH CHECK (true);
-CREATE POLICY "allow_authenticated_select" ON purchase_settlements FOR SELECT TO authenticated USING (true);
-CREATE POLICY "allow_authenticated_insert" ON purchase_settlements FOR INSERT TO authenticated WITH CHECK (true);
-CREATE POLICY "allow_authenticated_update" ON purchase_settlements FOR UPDATE TO authenticated USING (true) WITH CHECK (true);
-
-CREATE TABLE purchase_settlement_items (
-    id TEXT PRIMARY KEY,
-    "settlementId" TEXT NOT NULL,
-    "sourceType" TEXT NOT NULL,
-    "sourceId" TEXT NOT NULL,
-    "itemDescription" TEXT NOT NULL,
-    quantity NUMERIC NOT NULL DEFAULT 1,
-    "unitPrice" NUMERIC NOT NULL DEFAULT 0,
-    amount NUMERIC NOT NULL DEFAULT 0,
-    "evidenceFileUrl" TEXT,
-    "createdAt" TEXT NOT NULL
-);
-
-ALTER TABLE purchase_settlement_items ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "allow_anon_select" ON purchase_settlement_items;
-DROP POLICY IF EXISTS "allow_anon_insert" ON purchase_settlement_items;
-DROP POLICY IF EXISTS "allow_anon_update" ON purchase_settlement_items;
-DROP POLICY IF EXISTS "allow_authenticated_select" ON purchase_settlement_items;
-DROP POLICY IF EXISTS "allow_authenticated_insert" ON purchase_settlement_items;
-DROP POLICY IF EXISTS "allow_authenticated_update" ON purchase_settlement_items;
-CREATE POLICY "allow_anon_select" ON purchase_settlement_items FOR SELECT TO anon USING (true);
-CREATE POLICY "allow_anon_insert" ON purchase_settlement_items FOR INSERT TO anon WITH CHECK (true);
-CREATE POLICY "allow_anon_update" ON purchase_settlement_items FOR UPDATE TO anon USING (true) WITH CHECK (true);
-CREATE POLICY "allow_authenticated_select" ON purchase_settlement_items FOR SELECT TO authenticated USING (true);
-CREATE POLICY "allow_authenticated_insert" ON purchase_settlement_items FOR INSERT TO authenticated WITH CHECK (true);
-CREATE POLICY "allow_authenticated_update" ON purchase_settlement_items FOR UPDATE TO authenticated USING (true) WITH CHECK (true);
-
-CREATE TABLE external_leases (
-    id TEXT PRIMARY KEY,
-    "vendorId" TEXT NOT NULL,
-    "contractId" TEXT NOT NULL,
-    "contractAssetId" TEXT,
-    "assetDescription" TEXT NOT NULL,
-    "monthlyRentFee" NUMERIC NOT NULL DEFAULT 0,
-    "dailyRentFee" NUMERIC NOT NULL DEFAULT 0,
-    "leaseStartDate" TEXT NOT NULL,
-    "leaseEndDate" TEXT,
-    status TEXT NOT NULL DEFAULT 'ACTIVE',
-    "statementFileUrl" TEXT,
-    memo TEXT,
-    "createdAt" TEXT NOT NULL,
-    "updatedAt" TEXT NOT NULL
-);
-
-CREATE TABLE inspection_checklist_items (
-    id TEXT PRIMARY KEY,
-    category TEXT NOT NULL,
-    code TEXT NOT NULL,
-    name TEXT NOT NULL,
-    score INT NOT NULL DEFAULT 0,
-    description TEXT,
-    "createdAt" TEXT NOT NULL,
-    "updatedAt" TEXT
-);
-
-ALTER TABLE inspection_checklist_items ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "allow_anon_select" ON inspection_checklist_items;
-DROP POLICY IF EXISTS "allow_anon_insert" ON inspection_checklist_items;
-DROP POLICY IF EXISTS "allow_anon_update" ON inspection_checklist_items;
-DROP POLICY IF EXISTS "allow_authenticated_select" ON inspection_checklist_items;
-DROP POLICY IF EXISTS "allow_authenticated_insert" ON inspection_checklist_items;
-DROP POLICY IF EXISTS "allow_authenticated_update" ON inspection_checklist_items;
-CREATE POLICY "allow_anon_select" ON inspection_checklist_items FOR SELECT TO anon USING (true);
-CREATE POLICY "allow_anon_insert" ON inspection_checklist_items FOR INSERT TO anon WITH CHECK (true);
-CREATE POLICY "allow_anon_update" ON inspection_checklist_items FOR UPDATE TO anon USING (true) WITH CHECK (true);
-CREATE POLICY "allow_authenticated_select" ON inspection_checklist_items FOR SELECT TO authenticated USING (true);
-CREATE POLICY "allow_authenticated_insert" ON inspection_checklist_items FOR INSERT TO authenticated WITH CHECK (true);
-CREATE POLICY "allow_authenticated_update" ON inspection_checklist_items FOR UPDATE TO authenticated USING (true) WITH CHECK (true);
-
-ALTER TABLE external_leases ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "allow_anon_select" ON external_leases;
-DROP POLICY IF EXISTS "allow_anon_insert" ON external_leases;
-DROP POLICY IF EXISTS "allow_anon_update" ON external_leases;
-DROP POLICY IF EXISTS "allow_authenticated_select" ON external_leases;
-DROP POLICY IF EXISTS "allow_authenticated_insert" ON external_leases;
-DROP POLICY IF EXISTS "allow_authenticated_update" ON external_leases;
-CREATE POLICY "allow_anon_select" ON external_leases FOR SELECT TO anon USING (true);
-CREATE POLICY "allow_anon_insert" ON external_leases FOR INSERT TO anon WITH CHECK (true);
-CREATE POLICY "allow_anon_update" ON external_leases FOR UPDATE TO anon USING (true) WITH CHECK (true);
-CREATE POLICY "allow_authenticated_select" ON external_leases FOR SELECT TO authenticated USING (true);
-CREATE POLICY "allow_authenticated_insert" ON external_leases FOR INSERT TO authenticated WITH CHECK (true);
-CREATE POLICY "allow_authenticated_update" ON external_leases FOR UPDATE TO authenticated USING (true) WITH CHECK (true);
-
-ALTER TABLE payment_deposit_links ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "allow_anon_select" ON payment_deposit_links;
-DROP POLICY IF EXISTS "allow_anon_insert" ON payment_deposit_links;
-DROP POLICY IF EXISTS "allow_anon_update" ON payment_deposit_links;
-DROP POLICY IF EXISTS "allow_authenticated_select" ON payment_deposit_links;
-DROP POLICY IF EXISTS "allow_authenticated_insert" ON payment_deposit_links;
-DROP POLICY IF EXISTS "allow_authenticated_update" ON payment_deposit_links;
-CREATE POLICY "allow_anon_select" ON payment_deposit_links FOR SELECT TO anon USING (true);
-CREATE POLICY "allow_anon_insert" ON payment_deposit_links FOR INSERT TO anon WITH CHECK (true);
-CREATE POLICY "allow_anon_update" ON payment_deposit_links FOR UPDATE TO anon USING (true) WITH CHECK (true);
-CREATE POLICY "allow_authenticated_select" ON payment_deposit_links FOR SELECT TO authenticated USING (true);
-CREATE POLICY "allow_authenticated_insert" ON payment_deposit_links FOR INSERT TO authenticated WITH CHECK (true);
-CREATE POLICY "allow_authenticated_update" ON payment_deposit_links FOR UPDATE TO authenticated USING (true) WITH CHECK (true);
-
-
-
--- ==========================================
--- 35. 로컬 사이드카 에이전트 레지스트리 (agent_registry)
--- ==========================================
-CREATE TABLE agent_registry (
-    callsign TEXT PRIMARY KEY,          -- 고유 콜사인 (로그인 아이디 기반)
-    "userId" TEXT REFERENCES users(id), -- 연동 사용자 ID
-    "machineName" TEXT,                 -- 컴퓨터 호스트명
-    "isMaster" BOOLEAN DEFAULT FALSE,   -- 모바일/부재 시 대행 마스터 여부
-    status TEXT CHECK (status IN ('ONLINE', 'BUSY', 'OFFLINE')) NOT NULL DEFAULT 'ONLINE',
-    "lastHeartbeat" TIMESTAMPTZ NOT NULL,
-    "createdAt" TIMESTAMPTZ DEFAULT NOW(),
-    "updatedAt" TIMESTAMPTZ DEFAULT NOW()
-);
-
--- ==========================================
--- 36. 문서 생산 작업 큐 (document_jobs)
--- ==========================================
-CREATE TABLE document_jobs (
-    id TEXT PRIMARY KEY,                -- JOB-YYMMDD-0001
-    "jobType" TEXT NOT NULL,            -- CONTRACT_BUNDLE | CHECKLIST | SAFETY_INSPECTION | ZIP_BACKUP
-    "contractId" TEXT REFERENCES contracts(id),
-    "targetCallsign" TEXT,              -- 우선 처리 대상 에이전트 콜사인 (null이면 공용 대행)
-    "assignedCallsign" TEXT REFERENCES agent_registry(callsign), -- 실제 잠금 획득 에이전트
-    status TEXT CHECK (status IN ('PENDING', 'PROCESSING', 'COMPLETED', 'FAILED')) NOT NULL DEFAULT 'PENDING',
-    payload JSONB NOT NULL,             -- 작업 요청 상세 데이터 (고객/현장/장비/옵션)
-    "resultUrl" TEXT,                   -- 생성 완료된 PDF 클라우드 URL
-    "localFilePath" TEXT,               -- 로컬 문서고 저장 경로
-    "errorMessage" TEXT,
-    "createdAt" TIMESTAMPTZ DEFAULT NOW(),
-    "lockedAt" TIMESTAMPTZ,
-    "completedAt" TIMESTAMPTZ
-);
-
-
--- ==========================================
--- 42. 외상미수금 대장 (receivables) - 신설
--- 렌탈료 외 부대 청구항목(운송료/수리비/청소비) 분할 청산 관리
--- ==========================================
-CREATE TABLE IF NOT EXISTS receivables (
     id                    TEXT PRIMARY KEY,
-    "contractId"          TEXT REFERENCES contracts(id) ON DELETE SET NULL,
-    "customerId"          TEXT REFERENCES customers(id) ON DELETE SET NULL,
-    type                  TEXT CHECK (type IN ('TRANSPORT', 'REPAIR', 'CLEANING', 'OTHER')) NOT NULL,
-    "totalAmount"         DOUBLE PRECISION NOT NULL DEFAULT 0,   -- 외상 총액
-    "billedAmount"        DOUBLE PRECISION NOT NULL DEFAULT 0,   -- 청구된 누적 금액
-    "internalDescription" TEXT NOT NULL,   -- 내부 장부 기재명 (실제 발생 내용)
-    "displayName"         TEXT,            -- 명세서 표기명 (NULL이면 internalDescription 사용)
-    "occurredDate"        TEXT NOT NULL,   -- 발생일
-    status                TEXT CHECK (status IN ('PENDING', 'PARTIAL', 'CLEARED')) NOT NULL DEFAULT 'PENDING',
-    "repairId"            TEXT REFERENCES repairs(id) ON DELETE SET NULL, -- 수리비 연동
+    name                  TEXT NOT NULL UNIQUE,
+    "parentDepartmentId"  TEXT REFERENCES departments(id) ON DELETE SET NULL,
+    "managerId"           TEXT, -- 부서장 users.id
     "createdAt"           TEXT NOT NULL,
     "updatedAt"           TEXT NOT NULL
 );
 
-ALTER TABLE receivables ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "allow_anon_select" ON receivables;
-DROP POLICY IF EXISTS "allow_anon_insert" ON receivables;
-DROP POLICY IF EXISTS "allow_anon_update" ON receivables;
-DROP POLICY IF EXISTS "allow_anon_delete" ON receivables;
-DROP POLICY IF EXISTS "allow_authenticated_select" ON receivables;
-DROP POLICY IF EXISTS "allow_authenticated_insert" ON receivables;
-DROP POLICY IF EXISTS "allow_authenticated_update" ON receivables;
-DROP POLICY IF EXISTS "allow_authenticated_delete" ON receivables;
-CREATE POLICY "allow_anon_select" ON receivables FOR SELECT TO anon USING (true);
-CREATE POLICY "allow_anon_insert" ON receivables FOR INSERT TO anon WITH CHECK (true);
-CREATE POLICY "allow_anon_update" ON receivables FOR UPDATE TO anon USING (true) WITH CHECK (true);
-CREATE POLICY "allow_anon_delete" ON receivables FOR DELETE TO anon USING (true);
-CREATE POLICY "allow_authenticated_select" ON receivables FOR SELECT TO authenticated USING (true);
-CREATE POLICY "allow_authenticated_insert" ON receivables FOR INSERT TO authenticated WITH CHECK (true);
-CREATE POLICY "allow_authenticated_update" ON receivables FOR UPDATE TO authenticated USING (true) WITH CHECK (true);
-CREATE POLICY "allow_authenticated_delete" ON receivables FOR DELETE TO authenticated USING (true);
+-- 1-2. 사용자 및 임직원 마스터 (users)
+CREATE TABLE users (
+    id                    TEXT PRIMARY KEY,
+    "loginId"             TEXT NOT NULL UNIQUE,
+    "passwordHash"        TEXT NOT NULL,
+    name                  TEXT NOT NULL,
+    "departmentId"        TEXT REFERENCES departments(id) ON DELETE SET NULL,
+    position              TEXT, -- 직급 (사원, 대리, 과장, 차장, 부장, 이사, 대표이사)
+    "managerId"           TEXT REFERENCES users(id) ON DELETE SET NULL, -- 직속 상급자
+    role                  TEXT CHECK (role IN ('ADMIN', 'MANAGER', 'USER', 'MECHANIC')) NOT NULL DEFAULT 'USER',
+    status                TEXT CHECK (status IN ('ACTIVE', 'LEAVE_OF_ABSENCE', 'RETIRED')) NOT NULL DEFAULT 'ACTIVE',
+    phone                 TEXT,
+    email                 TEXT,
+    address               TEXT,
+    "birthDate"           TEXT,
+    "joinDate"            TEXT,
+    "retireDate"          TEXT,
+    "profileImageUrl"     TEXT,
+    "createdAt"           TEXT NOT NULL,
+    "updatedAt"           TEXT NOT NULL
+);
 
--- ==========================================
--- 초기 기초 데이터 시딩 (Seed Data)
--- ==========================================
+-- 1-3. 메뉴별 권한 마스터 (permissions)
+CREATE TABLE permissions (
+    id                    TEXT PRIMARY KEY,
+    "userId"              TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    "menuId"              TEXT NOT NULL,
+    role                  TEXT DEFAULT 'USER',
+    "canView"             BOOLEAN NOT NULL DEFAULT FALSE,
+    "canSave"             BOOLEAN NOT NULL DEFAULT FALSE,
+    "createdAt"           TEXT,
+    "updatedAt"           TEXT,
+    UNIQUE("userId", "menuId")
+);
+
+-- 1-4. 연차 생성 쿼터 (annual_leave_quotas)
+CREATE TABLE annual_leave_quotas (
+    id                    TEXT PRIMARY KEY,
+    "userId"              TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    year                  INTEGER NOT NULL,
+    "baseDays"            DOUBLE PRECISION NOT NULL DEFAULT 15,
+    "bonusDays"           DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "totalDays"           DOUBLE PRECISION NOT NULL DEFAULT 15,
+    "usedDays"            DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "remainingDays"       DOUBLE PRECISION NOT NULL DEFAULT 15,
+    memo                  TEXT,
+    "createdAt"           TEXT NOT NULL,
+    "updatedAt"           TEXT NOT NULL,
+    UNIQUE("userId", year)
+);
+
+-- 1-5. 휴가 사용 내역 (leave_usages)
+CREATE TABLE leave_usages (
+    id                    TEXT PRIMARY KEY,
+    "userId"              TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    "leaveType"           TEXT CHECK ("leaveType" IN ('ANNUAL', 'HALF_AM', 'HALF_PM', 'SPECIAL', 'SICK', 'OFFICIAL', 'UNPAID')) NOT NULL,
+    "startDate"           TEXT NOT NULL,
+    "endDate"             TEXT NOT NULL,
+    "usedDays"            DOUBLE PRECISION NOT NULL,
+    reason                TEXT,
+    status                TEXT CHECK (status IN ('PENDING', 'APPROVED', 'REJECTED', 'CANCELLED')) NOT NULL DEFAULT 'PENDING',
+    "approverId"          TEXT REFERENCES users(id) ON DELETE SET NULL,
+    "approvedAt"          TEXT,
+    "createdAt"           TEXT NOT NULL,
+    "updatedAt"           TEXT NOT NULL
+);
+
+-- 1-6. 연장/휴일 근로 기록 (overtime_records)
+CREATE TABLE overtime_records (
+    id                    TEXT PRIMARY KEY,
+    "userId"              TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    "workDate"            TEXT NOT NULL,
+    "overtimeType"        TEXT CHECK ("overtimeType" IN ('OVERTIME', 'NIGHT', 'HOLIDAY')) NOT NULL,
+    "startTime"           TEXT NOT NULL,
+    "endTime"             TEXT NOT NULL,
+    "hoursWorked"         DOUBLE PRECISION NOT NULL,
+    reason                TEXT NOT NULL,
+    status                TEXT CHECK (status IN ('PENDING', 'APPROVED', 'REJECTED')) NOT NULL DEFAULT 'PENDING',
+    "approverId"          TEXT REFERENCES users(id) ON DELETE SET NULL,
+    "createdAt"           TEXT NOT NULL,
+    "updatedAt"           TEXT NOT NULL
+);
+
+-- 1-7. 월별 급여 대장 (payroll_closings)
+CREATE TABLE payroll_closings (
+    id                    TEXT PRIMARY KEY,
+    "payrollYm"           TEXT NOT NULL, -- YYYY-MM
+    "userId"              TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    "baseSalary"          DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "overtimePay"         DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "bonusPay"            DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "otherAllowance"      DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "totalGross"          DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "incomeTax"           DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "residentTax"         DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "nationalPension"     DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "healthInsurance"     DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "careInsurance"       DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "employmentInsurance" DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "totalDeductions"     DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "netSalary"           DOUBLE PRECISION NOT NULL DEFAULT 0,
+    status                TEXT CHECK (status IN ('DRAFT', 'CONFIRMED', 'PAID')) NOT NULL DEFAULT 'DRAFT',
+    "paymentDate"         TEXT,
+    "createdAt"           TEXT NOT NULL,
+    "updatedAt"           TEXT NOT NULL,
+    UNIQUE("payrollYm", "userId")
+);
 
 
--- 1. 부서 및 조직도 시드 (비어 있음)
+-- ==============================================================================
+-- 🏢 [도메인 2] 기준 정보 (Master Data - 거래처, 제품, 자산, 부품)
+-- ==============================================================================
 
--- 2. 사용자 시드 (최고관리자만 등록)
-INSERT INTO users (id, "loginId", "passwordHash", name, "departmentId", position, "managerId", role, status, "joinDate", "createdAt") VALUES
-('u-1', 'admin', 'admin123', '시스템관리자', NULL, '대표이사', NULL, 'ADMIN', 'ACTIVE', '2020-01-01', TO_CHAR(NOW(), 'YYYY-MM-DD"T"HH24:MI:SS"Z"'));
+-- 2-1. 매입 거래처 마스터 (vendors)
+CREATE TABLE vendors (
+    id                    TEXT PRIMARY KEY,
+    name                  TEXT NOT NULL,
+    type                  TEXT CHECK (type IN ('TRANSPORT', 'RENTAL', 'REPAIR', 'PURCHASE', 'OTHER')) NOT NULL,
+    types                 TEXT, -- 다중 업종 콤마 구분
+    "bizRegNo"            TEXT,
+    representative        TEXT,
+    "contactName"         TEXT,
+    contact               TEXT,
+    email                 TEXT,
+    address               TEXT,
+    "bankAccount"         TEXT,
+    "isActive"            BOOLEAN NOT NULL DEFAULT TRUE,
+    memo                  TEXT,
+    "createdAt"           TEXT NOT NULL,
+    "updatedAt"           TEXT NOT NULL
+);
 
--- 3. 매입 거래처(vendors) 시드
-INSERT INTO vendors (id, name, type, "contactName", contact, "createdAt") VALUES
-('v-1', '제일운송', 'TRANSPORT', '김기사', '010-1234-5678', TO_CHAR(NOW(), 'YYYY-MM-DD"T"HH24:MI:SS"Z"')),
-('v-2', '에이스렌탈(주)', 'RENTAL', '이렌탈', '010-9876-5432', TO_CHAR(NOW(), 'YYYY-MM-DD"T"HH24:MI:SS"Z"')),
-('v-3', '대한고소공업', 'REPAIR', '최공업', '02-123-4567', TO_CHAR(NOW(), 'YYYY-MM-DD"T"HH24:MI:SS"Z"')),
-('v-4', '철물부속상사', 'CONSUMABLE', '박철물', '031-987-6543', TO_CHAR(NOW(), 'YYYY-MM-DD"T"HH24:MI:SS"Z"'));
+-- 2-2. 고객사 마스터 (customers)
+CREATE TABLE customers (
+    id                    TEXT PRIMARY KEY,
+    name                  TEXT NOT NULL,
+    "bizRegNo"            TEXT,
+    representative        TEXT,
+    "repContact"          TEXT,
+    "repEmail"            TEXT,
+    address               TEXT,
+    "defaultBillingDay"   INTEGER DEFAULT 30,
+    "defaultStatementClosingDay" INTEGER DEFAULT 25,
+    "paymentDueDay"       INTEGER,
+    "paymentTermDays"     INTEGER,
+    "prepaidBalance"      DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "defaultPaidOptions"  TEXT, -- 고객사 기본 유상옵션
+    "defaultProtection"   TEXT, -- 고객사 기본 보양작업
+    "defaultCheckedSpecs" JSONB, -- 고객사 기본 21대 표준 스펙 체크 상태
+    "bankAccounts"        JSONB, -- 고객사 환불/거래 계좌 목록
+    "driveFolderId"       TEXT,
+    "isClosed"            BOOLEAN NOT NULL DEFAULT FALSE,
+    "specialNotes"        TEXT,
+    "createdAt"           TEXT NOT NULL,
+    "updatedAt"           TEXT NOT NULL
+);
 
--- (이후 기존 products, customers 시드는 유사하게 유지됨)
-INSERT INTO products (id, "modelName", feet, spec, manufacturer, "createdAt") VALUES
-('prod-1', 'Skyjack SJ3219', 19, '작업높이 7.8m / 리프트 용량 227kg', 'Skyjack', TO_CHAR(NOW(), 'YYYY-MM-DD"T"HH24:MI:SS"Z"')),
-('prod-2', 'Genie GS-1930', 19, '작업높이 7.8m / 무소음 친환경 모터', 'Genie', TO_CHAR(NOW(), 'YYYY-MM-DD"T"HH24:MI:SS"Z"'));
+-- 2-3. 고객사 담당자 (customer_contacts)
+CREATE TABLE customer_contacts (
+    id                    TEXT PRIMARY KEY,
+    "customerId"          TEXT NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+    name                  TEXT NOT NULL,
+    position              TEXT,
+    contact               TEXT,
+    email                 TEXT,
+    "createdAt"           TEXT NOT NULL,
+    "updatedAt"           TEXT NOT NULL
+);
 
-INSERT INTO customers (id, name, "bizRegNo", "isClosed", address, representative, "repContact", "createdAt") VALUES
-('cust-1', '현대건설(주)', '101-81-12345', false, '서울시 종로구', '윤영준', '02-746-1114', TO_CHAR(NOW(), 'YYYY-MM-DD"T"HH24:MI:SS"Z"')),
-('cust-2', '삼성물산(주)', '202-81-54321', false, '서울시 강동구', '오세철', '02-2145-5114', TO_CHAR(NOW(), 'YYYY-MM-DD"T"HH24:MI:SS"Z"'));
+-- 2-4. 고객사 현장 (customer_sites)
+CREATE TABLE customer_sites (
+    id                    TEXT PRIMARY KEY,
+    "customerId"          TEXT NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+    name                  TEXT NOT NULL,
+    address               TEXT,
+    "contactName"         TEXT,
+    contact               TEXT,
+    email                 TEXT,
+    "paidOptions"         TEXT, -- 현장별 유상옵션
+    "protection"          TEXT, -- 현장별 보양작업
+    "checkedSpecs"        JSONB, -- 현장별 21대 표준 스펙 체크
+    "createdAt"           TEXT NOT NULL,
+    "updatedAt"           TEXT NOT NULL
+);
+
+-- 2-5. 고객사 계좌 (customer_bank_accounts)
+CREATE TABLE customer_bank_accounts (
+    id                    TEXT PRIMARY KEY,
+    "customerId"          TEXT NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+    "bankName"            TEXT NOT NULL,
+    "accountNumber"       TEXT NOT NULL,
+    "accountHolder"       TEXT NOT NULL,
+    "isPrimary"           BOOLEAN DEFAULT FALSE,
+    "createdAt"           TEXT NOT NULL,
+    "updatedAt"           TEXT NOT NULL
+);
+
+-- 2-6. 제품 카탈로그 및 표준 제원 (products)
+CREATE TABLE products (
+    id                    TEXT PRIMARY KEY,
+    "modelName"           TEXT NOT NULL UNIQUE,
+    feet                  DOUBLE PRECISION NOT NULL,
+    manufacturer          TEXT,
+    spec                  TEXT,
+    weight                TEXT,
+    speed                 TEXT,
+    "maxHeightCapacity"   TEXT,
+    "powerSource"         TEXT,
+    "workingHeight"       TEXT,
+    "platformHeight"      TEXT,
+    "machineDimensions"   TEXT,
+    "platformDimensions"  TEXT,
+    "gradeability"        TEXT,
+    "capacityPreExt"      TEXT,
+    "capacityPostExtMain" TEXT,
+    "capacityPostExtDeck" TEXT,
+    "maxWindSpeed"        TEXT DEFAULT '12.5 m/s 이내',
+    "asContact"           TEXT DEFAULT '031-334-5296',
+    "safetyCertDate"      TEXT,
+    "safetyCertUrl"       TEXT,
+    "specSheetUrl"        TEXT,
+    "emergencyGuideUrl"   TEXT,
+    "isActive"            BOOLEAN NOT NULL DEFAULT TRUE,
+    "createdAt"           TEXT NOT NULL,
+    "updatedAt"           TEXT NOT NULL
+);
+
+-- 2-7. 자산 마스터 (assets) - 논리적 6단계 완전 정돈
+CREATE TABLE assets (
+    -- ① 식별자
+    id                    TEXT PRIMARY KEY,
+    "assetNo"             TEXT NOT NULL UNIQUE,
+    "vendorAssetNo"       TEXT, -- 원사(타사) 실물 원래 관리번호
+    "serialNo"            TEXT,
+
+    -- ② 장비 제원 및 소유 속성
+    "modelName"           TEXT NOT NULL REFERENCES products("modelName") ON UPDATE CASCADE,
+    manufacturer          TEXT,
+    "manufactureYear"     TEXT,
+    "ownerType"           TEXT CHECK ("ownerType" IN ('OWNED', 'RENTED')) NOT NULL,
+
+    -- ③ 임차 및 매입처 연동
+    "vendorId"            TEXT REFERENCES vendors(id) ON DELETE SET NULL,
+    supplier              TEXT,
+
+    -- ④ 임차 기간 및 원가 단가
+    "rentStart"           TEXT,
+    "rentEnd"             TEXT,
+    "actualRentReturnDate" TEXT,
+    "monthlyRentFee"      DOUBLE PRECISION DEFAULT 0,
+    "dailyRentFee"        DOUBLE PRECISION DEFAULT 0,
+
+    -- ⑤ 현재 가동 현장 및 계약 속성 (실시간 라이프사이클)
+    "currentCustomerId"   TEXT REFERENCES customers(id) ON DELETE SET NULL,
+    "currentSiteId"       TEXT REFERENCES customer_sites(id) ON DELETE SET NULL,
+    "contractStart"       TEXT,
+    "contractEnd"         TEXT,
+
+    -- ⑥ 자산 회계 및 손익 원장
+    "acquisitionDate"     TEXT,
+    "acquisitionPrice"    DOUBLE PRECISION DEFAULT 0,
+    "depreciationMonths"  INTEGER DEFAULT 60,
+    "residualValueRate"   DOUBLE PRECISION DEFAULT 0,
+    "accumDepreciation"   DOUBLE PRECISION DEFAULT 0,
+    "bookValue"           DOUBLE PRECISION DEFAULT 0,
+    "cumRentalFee"        DOUBLE PRECISION DEFAULT 0,
+    "cumRepairCost"       DOUBLE PRECISION DEFAULT 0,
+
+    -- ⑦ 업무 상태 및 감사
+    status                TEXT CHECK (status IN ('AVAILABLE', 'ASSIGNED', 'RENTED', 'REPAIRING', 'RENTED_RETURNED', 'SOLD')) NOT NULL DEFAULT 'AVAILABLE',
+    memo                  TEXT,
+    note                  TEXT,
+    "createdAt"           TEXT NOT NULL,
+    "updatedAt"           TEXT NOT NULL
+);
+
+-- 2-8. 소모품/부품 카탈로그 (consumables)
+CREATE TABLE consumables (
+    id                    TEXT PRIMARY KEY,
+    "modelName"           TEXT NOT NULL UNIQUE,
+    unit                  TEXT NOT NULL,
+    "unitPrice"           DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "stockQty"            DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "vendorId"            TEXT REFERENCES vendors(id) ON DELETE SET NULL,
+    "createdAt"           TEXT NOT NULL,
+    "updatedAt"           TEXT NOT NULL
+);
+
+-- 2-9. 정비사 차량별 적재 부품 재고 (mechanic_consumable_stocks)
+CREATE TABLE mechanic_consumable_stocks (
+    id                    TEXT PRIMARY KEY,
+    "mechanicId"          TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    "consumableId"        TEXT NOT NULL REFERENCES consumables(id) ON DELETE CASCADE,
+    "stockQty"            DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "updatedAt"           TEXT NOT NULL,
+    UNIQUE("mechanicId", "consumableId")
+);
+
+-- 2-10. 운송 거래처 (transport_companies)
+CREATE TABLE transport_companies (
+    id                    TEXT PRIMARY KEY,
+    name                  TEXT NOT NULL,
+    "businessNo"          TEXT,
+    contact               TEXT,
+    "bankName"            TEXT,
+    "bankAccount"         TEXT,
+    "bankHolder"          TEXT,
+    memo                  TEXT,
+    "createdAt"           TEXT NOT NULL,
+    "updatedAt"           TEXT NOT NULL
+);
+
+-- 2-11. 운송 기사 (transport_drivers)
+CREATE TABLE transport_drivers (
+    id                    TEXT PRIMARY KEY,
+    "companyId"           TEXT REFERENCES transport_companies(id) ON DELETE SET NULL,
+    "driverName"          TEXT NOT NULL,
+    "driverContact"       TEXT,
+    "vehicleNo"           TEXT,
+    "vehicleType"         TEXT,
+    "vehicleColor"        TEXT,
+    "idNo"                TEXT,
+    address               TEXT,
+    "createdAt"           TEXT NOT NULL,
+    "updatedAt"           TEXT NOT NULL
+);
 
 
- 
- - -   = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = 
- 
- - -   4 3 .   I 9m? !  ?  ? ? 1uK? ? ( r e c o n c i l i a t i o n _ r e p o r t s ) 
- 
- - -   = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = 
- 
- C R E A T E   T A B L E   I F   N O T   E X I S T S   r e c o n c i l i a t i o n _ r e p o r t s   ( 
- 
-         i d   T E X T   P R I M A R Y   K E Y , 
- 
-         m i g r a t i o n _ r u n _ a t   T E X T   N O T   N U L L , 
- 
-         a s s e t _ c o u n t _ e x c e l   I N T , 
- 
-         a s s e t _ c o u n t _ d b   I N T , 
- 
-         a s s e t _ c o u n t _ m a t c h   B O O L E A N , 
- 
-         b i l l i n g _ t o t a l _ e x c e l   D O U B L E   P R E C I S I O N , 
- 
-         b i l l i n g _ t o t a l _ d b   D O U B L E   P R E C I S I O N , 
- 
-         b i l l i n g _ t o t a l _ d i f f   D O U B L E   P R E C I S I O N , 
- 
-         b i l l i n g _ t o t a l _ m a t c h   B O O L E A N , 
- 
-         d e t a i l s _ h e a d e r _ s u m   D O U B L E   P R E C I S I O N , 
- 
-         d e t a i l s _ d e t a i l _ s u m   D O U B L E   P R E C I S I O N , 
- 
-         d e t a i l s _ s u m _ d i f f   D O U B L E   P R E C I S I O N , 
- 
-         d e t a i l s _ s u m _ m a t c h   B O O L E A N , 
- 
-         l e a s e _ t o t a l _ e x c e l   D O U B L E   P R E C I S I O N , 
- 
-         l e a s e _ t o t a l _ d b   D O U B L E   P R E C I S I O N , 
- 
-         l e a s e _ t o t a l _ m a t c h   B O O L E A N , 
- 
-         l i f e c y c l e _ c o n t r a c t s   I N T , 
- 
-         l i f e c y c l e _ d e l i v e r i e s   I N T , 
- 
-         l i f e c y c l e _ m a t c h   B O O L E A N , 
- 
-         o r p h a n _ c o n t r a c t s   I N T , 
- 
-         o r p h a n _ a s s e t s   I N T , 
- 
-         o r p h a n _ i s _ c l e a n   B O O L E A N , 
- 
-         a l l _ p a s s e d   B O O L E A N , 
- 
-         m e m o   T E X T , 
- 
-         c r e a t e d _ a t   T E X T   N O T   N U L L 
- 
- ) ; 
- 
- 
+-- ==============================================================================
+-- 📜 [도메인 3] 계약, 배차 및 출고/입고 (Operations)
+-- ==============================================================================
+
+-- 3-1. 임대 계약 마스터 (contracts)
+CREATE TABLE contracts (
+    id                    TEXT PRIMARY KEY,
+    "contractNo"          TEXT NOT NULL UNIQUE,
+    "customerId"          TEXT NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+    "salespersonId"       TEXT REFERENCES users(id) ON DELETE SET NULL,
+    "contactId"           TEXT REFERENCES customer_contacts(id) ON DELETE SET NULL,
+    "siteId"              TEXT REFERENCES customer_sites(id) ON DELETE SET NULL,
+    "startDate"           TEXT NOT NULL,
+    "endDate"             TEXT NOT NULL,
+    "billingDay"          INTEGER NOT NULL DEFAULT 30,
+    "paymentDueDay"       INTEGER,
+    "lateInterestRate"    DOUBLE PRECISION NOT NULL DEFAULT 0,
+    status                TEXT CHECK (status IN ('ACTIVE', 'EXTENDED', 'SHORTENED', 'SUCCEEDED', 'COMPLETED')) NOT NULL DEFAULT 'ACTIVE',
+    "predecessorContractId" TEXT REFERENCES contracts(id) ON DELETE SET NULL,
+    "predecessorContractNo" TEXT,
+    "predecessorCustomerId" TEXT REFERENCES customers(id) ON DELETE SET NULL,
+    "predecessorCustomerName" TEXT,
+    "successorContractId" TEXT REFERENCES contracts(id) ON DELETE SET NULL,
+    "driveFolderId"       TEXT,
+    "lastBillingDate"     TEXT,
+    "lastBilledPeriodStart" TEXT,
+    "lastBilledPeriodEnd" TEXT,
+    "lastBilledYm"        TEXT,
+    "billingCount"        INTEGER NOT NULL DEFAULT 0,
+    "createdAt"           TEXT NOT NULL,
+    "updatedAt"           TEXT NOT NULL
+);
+
+-- 3-2. 체결 자산 목록 (contract_assets)
+CREATE TABLE contract_assets (
+    id                    TEXT PRIMARY KEY,
+    "contractId"          TEXT NOT NULL REFERENCES contracts(id) ON DELETE CASCADE,
+    "assetId"             TEXT REFERENCES assets(id) ON DELETE SET NULL,
+    "expectedModel"       TEXT,
+    "monthlyRentalFee"    DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "dailyRentalFee"      DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "startDate"           TEXT NOT NULL,
+    "endDate"             TEXT NOT NULL,
+    status                TEXT DEFAULT 'ASSIGNED',
+    "actualReturnDate"    TEXT,
+    "createdAt"           TEXT NOT NULL,
+    "updatedAt"           TEXT NOT NULL
+);
+
+-- 3-3. 계약 변경 이력 및 타임라인 (contract_history)
+CREATE TABLE contract_history (
+    id                    TEXT PRIMARY KEY,
+    "contractId"          TEXT NOT NULL REFERENCES contracts(id) ON DELETE CASCADE,
+    "changeType"          TEXT CHECK ("changeType" IN ('REGISTER', 'EXTEND', 'SHORTEN', 'SUCCEED', 'TERMINATE', 'EXCHANGE', 'FEE_CHANGE', 'AS_SERVICE')) NOT NULL,
+    "prevEndDate"         TEXT,
+    "newEndDate"          TEXT,
+    description           TEXT,
+    "changeDate"          TEXT NOT NULL,
+    "createdAt"           TEXT NOT NULL,
+    "updatedAt"           TEXT NOT NULL
+);
+
+-- 3-4. 배차 및 화물 운송 대장 (deliveries) - 논리적 6단계 완전 정돈
+CREATE TABLE deliveries (
+    -- ① 식별 및 계약
+    id                    TEXT PRIMARY KEY,
+    "contractId"          TEXT REFERENCES contracts(id) ON DELETE SET NULL,
+    "assetIds"            TEXT,
+    type                  TEXT CHECK (type IN ('OUTBOUND', 'INBOUND', 'EXCHANGE', 'MOVEMENT', 'RETURN')) NOT NULL,
+    "dispatchCategory"    TEXT CHECK ("dispatchCategory" IN ('출고', '입고', '반납', '정비', '이동', '교환')) DEFAULT '출고',
+
+    -- ② 운송사 및 배정 기사
+    "transportVendorId"   TEXT REFERENCES vendors(id) ON DELETE SET NULL,
+    "transportCompany"    TEXT,
+    "driverName"          TEXT,
+    "driverContact"       TEXT,
+    "vehicleNo"           TEXT,
+    "vehicleType"         TEXT,
+    "assignedVehicles"    JSONB DEFAULT '[]'::jsonb,
+
+    -- ③ 상차지 (출발)
+    "pickupType"          TEXT CHECK ("pickupType" IN ('HQ_YARD', 'VENDOR_YARD', 'CUSTOMER_SITE', 'YARD', 'VENDOR')) DEFAULT 'HQ_YARD',
+    "pickupVendorName"    TEXT,
+    "originAddress"       TEXT,
+    "loadingDate"         TEXT,
+    "loadingTimeSlot"     TEXT DEFAULT '오전',
+    "loadingTime"         TEXT,
+
+    -- ④ 하차지 (경유 및 도착)
+    "dropoffType"         TEXT CHECK ("dropoffType" IN ('SINGLE', 'MULTI_STOP')) DEFAULT 'SINGLE',
+    "viaDropoffName"      TEXT,
+    "viaDropoffAddress"   TEXT,
+    "destinationAddress"  TEXT,
+    "unloadingDate"       TEXT,
+    "unloadingTimeSlot"   TEXT DEFAULT '오전',
+    "unloadingTime"       TEXT,
+
+    -- ⑤ 운송비 및 정산
+    "expectedCost"        DOUBLE PRECISION DEFAULT 0,
+    "deliveryCost"        DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "finalCost"           DOUBLE PRECISION DEFAULT 0,
+    "deliveryCostConfirmed" DOUBLE PRECISION DEFAULT 0,
+    "purchaseBillId"      TEXT,
+    "isCostSettled"       BOOLEAN DEFAULT FALSE,
+
+    -- ⑥ 상태 및 업무 감사
+    status                TEXT CHECK (status IN ('PENDING', 'REQUESTED', 'DISPATCHED', 'DELIVERED', 'COMPLETED', 'CANCELLED')) NOT NULL DEFAULT 'PENDING',
+    "requestDate"         TEXT NOT NULL,
+    "rawText"             TEXT,
+    memo                  TEXT,
+    "closingMemo"         TEXT,
+    "createdAt"           TEXT NOT NULL,
+    "updatedAt"           TEXT NOT NULL
+);
+
+-- 3-5. 출고 검수 승인 대장 (outbound_inspections)
+CREATE TABLE outbound_inspections (
+    id                    TEXT PRIMARY KEY,
+    "contractId"          TEXT REFERENCES contracts(id) ON DELETE SET NULL,
+    "contractAssetId"     TEXT REFERENCES contract_assets(id) ON DELETE SET NULL,
+    "assetId"             TEXT REFERENCES assets(id) ON DELETE SET NULL,
+    status                TEXT CHECK (status IN ('PENDING', 'IN_PROGRESS', 'COMPLETED', 'REJECTED')) NOT NULL DEFAULT 'PENDING',
+    "specsJson"           TEXT,
+    "inspectorId"         TEXT REFERENCES users(id) ON DELETE SET NULL,
+    "inspectedAt"         TEXT,
+    note                  TEXT,
+    "createdAt"           TEXT NOT NULL,
+    "updatedAt"           TEXT NOT NULL
+);
+
+-- 3-6. 입고 하자 상세 (inbound_defect_details)
+CREATE TABLE inbound_defect_details (
+    id                    TEXT PRIMARY KEY,
+    "inboundNo"           TEXT NOT NULL,
+    "assetId"             TEXT REFERENCES assets(id) ON DELETE SET NULL,
+    "defectCategory"      TEXT NOT NULL,
+    "defectDescription"   TEXT NOT NULL,
+    "isCustomerFault"     BOOLEAN NOT NULL DEFAULT FALSE,
+    "estimatedRepairCost" DOUBLE PRECISION DEFAULT 0,
+    "photoUrls"           TEXT[],
+    "createdAt"           TEXT NOT NULL
+);
+
+-- 3-7. 자산 입출고/정비 이력 (asset_in_out_logs)
+CREATE TABLE asset_in_out_logs (
+    id                    TEXT PRIMARY KEY,
+    "assetId"             TEXT NOT NULL REFERENCES assets(id) ON DELETE CASCADE,
+    "assetNo"             TEXT NOT NULL,
+    "modelName"           TEXT NOT NULL,
+    type                  TEXT CHECK (type IN ('OUTBOUND', 'INBOUND', 'REPAIR')) NOT NULL,
+    "customerId"          TEXT REFERENCES customers(id) ON DELETE SET NULL,
+    "customerName"        TEXT,
+    "siteId"              TEXT REFERENCES customer_sites(id) ON DELETE SET NULL,
+    "siteName"            TEXT,
+    "deliveryId"          TEXT REFERENCES deliveries(id) ON DELETE SET NULL,
+    "repairId"            TEXT,
+    "maintenanceScore"    INTEGER,
+    "eventDate"           TEXT NOT NULL,
+    memo                  TEXT,
+    "createdAt"           TEXT NOT NULL,
+    "updatedAt"           TEXT NOT NULL
+);
+
+
+-- ==============================================================================
+-- 🔧 [도메인 4] 정비 및 현장 AS (Repairs & Field Services)
+-- ==============================================================================
+
+-- 4-1. 정비 및 현장 AS 대장 (repairs) - 단일 물리 통합 마스터
+CREATE TABLE repairs (
+    -- ① 식별 및 분류
+    id                    TEXT PRIMARY KEY,
+    "ticketNo"            TEXT,
+    "workCategory"        TEXT DEFAULT 'FIELD_AS', -- FIELD_AS, INSHOP_MAINTENANCE, PERIODIC_CHECK
+    "workLocation"        TEXT DEFAULT 'SITE',
+    "stockSource"         TEXT DEFAULT 'VEHICLE_VAN',
+    source                TEXT DEFAULT 'DIRECT_INTAKE',
+    "repairType"          TEXT NOT NULL DEFAULT 'INTERNAL',
+    "maintenanceType"     TEXT,
+    priority              TEXT DEFAULT 'NORMAL',
+
+    -- ② 대상 자산 & 현장
+    "assetId"             TEXT REFERENCES assets(id) ON DELETE SET NULL,
+    "assetNo"             TEXT,
+    "modelName"           TEXT,
+    "contractId"          TEXT REFERENCES contracts(id) ON DELETE SET NULL,
+    "targetContractStatus" TEXT,
+    "customerId"          TEXT REFERENCES customers(id) ON DELETE SET NULL,
+    "customerName"        TEXT,
+    "siteId"              TEXT REFERENCES customer_sites(id) ON DELETE SET NULL,
+    "siteName"            TEXT,
+    "locationDetail"      TEXT,
+
+    -- ③ 접수자 & 고장 내용
+    "reporterName"        TEXT,
+    "reporterContact"     TEXT,
+    "issueCategory"       TEXT,
+    "issueDescription"    TEXT,
+    details               TEXT,
+    "errorCode"           TEXT,
+
+    -- ④ 배정 정비사 & 외주 거래처
+    "mechanicId"          TEXT REFERENCES users(id) ON DELETE SET NULL,
+    "assignedMechanicId"  TEXT,
+    "mechanicName"        TEXT,
+    "vendorId"            TEXT REFERENCES vendors(id) ON DELETE SET NULL,
+    "preferredNavApp"     TEXT DEFAULT 'TMAP',
+
+    -- ⑤ 일정
+    "requestDate"         TEXT NOT NULL,
+    "scheduleDate"        TEXT,
+    "visitDate"           TEXT,
+    "repairDate"          TEXT,
+    "completedDate"       TEXT,
+    "outboundDate"        TEXT,
+
+    -- ⑥ 조치 결과 & 부품
+    status                TEXT NOT NULL DEFAULT 'REQUESTED',
+    "resolutionType"      TEXT,
+    "unresolvedReason"    TEXT,
+    "nextAction"          TEXT,
+    "actionTaken"         TEXT,
+    "partsUsed"           JSONB DEFAULT '[]'::jsonb,
+    "collectedParts"      JSONB DEFAULT '[]'::jsonb,
+    "timelineLogs"        JSONB DEFAULT '[]'::jsonb,
+
+    -- ⑦ 유상 청구 및 원가
+    "billableType"        TEXT DEFAULT 'FREE',
+    "billableAmount"      DOUBLE PRECISION DEFAULT 0,
+    "billableToCustomer"  BOOLEAN NOT NULL DEFAULT FALSE,
+    "totalCost"           DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "costTotal"           DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "billingAmount"       DOUBLE PRECISION,
+    "laborHours"          DOUBLE PRECISION,
+    "isCustomerFault"     BOOLEAN NOT NULL DEFAULT FALSE,
+
+    -- ⑧ 증빙 사진 및 서명
+    "faultImageUrl"       TEXT,
+    "evidenceImages"      TEXT[],
+    "beforeImage"         TEXT,
+    "afterImage"          TEXT,
+    "estimateFileUrl"     TEXT,
+    "customerSignature"   TEXT,
+    "customerConfirmName" TEXT,
+
+    -- ⑨ 재방문 및 대차 연계
+    "parentRepairId"      TEXT,
+    "parentTicketId"      TEXT,
+    "revisitRepairId"     TEXT,
+    "revisitTicketId"     TEXT,
+    "revisitDate"         TEXT,
+    "revisitReason"       TEXT,
+    "exchangeSuggested"   BOOLEAN DEFAULT FALSE,
+    "inboundNo"           TEXT,
+    "defectsJson"         TEXT,
+    "billingId"           TEXT,
+    "purchaseBillId"      TEXT,
+
+    -- ⑩ 비고 및 감사
+    memo                  TEXT,
+    "createdAt"           TEXT NOT NULL,
+    "updatedAt"           TEXT NOT NULL
+);
+
+-- 4-2. AS 실시간 이벤트 타임라인 로그 (repair_timeline_events)
+CREATE TABLE repair_timeline_events (
+    id                    TEXT PRIMARY KEY,
+    "repairId"            TEXT NOT NULL REFERENCES repairs(id) ON DELETE CASCADE,
+    "eventType"           TEXT NOT NULL, -- CALL_MADE, TRANSIT_START, ARRIVED, COMPLETED, REVISIT_SET
+    "eventTitle"          TEXT NOT NULL,
+    "eventDescription"    TEXT,
+    "eventMeta"           JSONB,
+    "actorId"             TEXT,
+    "actorName"           TEXT,
+    "occurredAt"          TEXT NOT NULL,
+    "createdAt"           TEXT NOT NULL
+);
+
+-- 4-3. 수리 투입 자재 (repair_consumables)
+CREATE TABLE repair_consumables (
+    id                    TEXT PRIMARY KEY,
+    "repairId"            TEXT NOT NULL REFERENCES repairs(id) ON DELETE CASCADE,
+    "consumableId"        TEXT NOT NULL REFERENCES consumables(id) ON DELETE CASCADE,
+    quantity              DOUBLE PRECISION NOT NULL DEFAULT 1,
+    "unitPrice"           DOUBLE PRECISION NOT NULL DEFAULT 0,
+    cost                  DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "createdAt"           TEXT NOT NULL,
+    "updatedAt"           TEXT NOT NULL
+);
+
+-- 4-4. 소모품 수불 로그 (consumable_logs)
+CREATE TABLE consumable_logs (
+    id                    TEXT PRIMARY KEY,
+    "consumableId"        TEXT NOT NULL REFERENCES consumables(id) ON DELETE CASCADE,
+    type                  TEXT CHECK (type IN ('INBOUND', 'OUTBOUND', 'ADJUST', 'TRANSFER_TO_VEHICLE', 'RETURN_TO_HQ')) NOT NULL,
+    quantity              DOUBLE PRECISION NOT NULL,
+    "unitPrice"           DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "vendorId"            TEXT REFERENCES vendors(id) ON DELETE SET NULL,
+    "userId"              TEXT REFERENCES users(id) ON DELETE SET NULL,
+    "mechanicId"          TEXT REFERENCES users(id) ON DELETE SET NULL,
+    "fromLocation"        TEXT,
+    "toLocation"          TEXT,
+    "targetAssetId"       TEXT REFERENCES assets(id) ON DELETE SET NULL,
+    "evidenceFileUrl"     TEXT,
+    description           TEXT,
+    "actionDate"          TEXT NOT NULL,
+    "createdAt"           TEXT NOT NULL,
+    "updatedAt"           TEXT NOT NULL
+);
+
+-- 4-5. 소모품 구매신청 마스터 (consumable_purchase_requests)
+CREATE TABLE consumable_purchase_requests (
+    id                    TEXT PRIMARY KEY,
+    "requesterId"         TEXT REFERENCES users(id) ON DELETE SET NULL,
+    title                 TEXT NOT NULL,
+    status                TEXT CHECK (status IN ('REQUESTED', 'PARTIAL_INBOUND', 'COMPLETED', 'CANCELLED')) NOT NULL DEFAULT 'REQUESTED',
+    "requestDate"         TEXT NOT NULL,
+    "createdAt"           TEXT NOT NULL,
+    "updatedAt"           TEXT NOT NULL
+);
+
+-- 4-6. 소모품 구매신청 상세 (consumable_purchase_items)
+CREATE TABLE consumable_purchase_items (
+    id                    TEXT PRIMARY KEY,
+    "requestId"           TEXT NOT NULL REFERENCES consumable_purchase_requests(id) ON DELETE CASCADE,
+    "consumableId"        TEXT NOT NULL REFERENCES consumables(id) ON DELETE CASCADE,
+    "requestQty"          DOUBLE PRECISION NOT NULL,
+    "inboundQty"          DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "createdAt"           TEXT NOT NULL,
+    "updatedAt"           TEXT NOT NULL
+);
+
+-- 4-7. 검수 체크리스트 항목 (inspection_checklist_items)
+CREATE TABLE inspection_checklist_items (
+    id                    TEXT PRIMARY KEY,
+    category              TEXT NOT NULL,
+    code                  TEXT NOT NULL UNIQUE,
+    name                  TEXT NOT NULL,
+    score                 INTEGER NOT NULL DEFAULT 0,
+    description           TEXT,
+    "createdAt"           TEXT NOT NULL,
+    "updatedAt"           TEXT
+);
+
+
+-- ==============================================================================
+-- 💰 [도메인 5] 회계, 청구, 매입정산 및 금융 (Accounting, Billing & Finance)
+-- ==============================================================================
+
+-- 5-1. 매출 청구 마스터 (billings) - 고객 대상
+CREATE TABLE billings (
+    id                    TEXT PRIMARY KEY,
+    "billingYm"           TEXT NOT NULL, -- YYYY-MM
+    "customerId"          TEXT NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+    "contractId"          TEXT REFERENCES contracts(id) ON DELETE SET NULL,
+    "billingDate"         TEXT NOT NULL,
+    "totalAmount"         DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "paidAmount"          DOUBLE PRECISION NOT NULL DEFAULT 0,
+    status                TEXT CHECK (status IN ('UNPAID', 'PARTIAL', 'PAID', 'REQUESTED', 'REJECTED')) NOT NULL DEFAULT 'UNPAID',
+    "createdAt"           TEXT NOT NULL,
+    "updatedAt"           TEXT NOT NULL
+);
+
+-- 5-2. 매출 청구 상세 (billing_details)
+CREATE TABLE billing_details (
+    id                    TEXT PRIMARY KEY,
+    "billingId"           TEXT NOT NULL REFERENCES billings(id) ON DELETE CASCADE,
+    "contractAssetId"     TEXT REFERENCES contract_assets(id) ON DELETE SET NULL,
+    "assetId"             TEXT REFERENCES assets(id) ON DELETE SET NULL,
+    "receivableId"        TEXT, -- 외상미수금 연동
+    "itemName"            TEXT NOT NULL,
+    "displayName"         TEXT,
+    "internalDescription" TEXT,
+    quantity              DOUBLE PRECISION NOT NULL DEFAULT 1,
+    "unitPrice"           DOUBLE PRECISION NOT NULL DEFAULT 0,
+    amount                DOUBLE PRECISION NOT NULL DEFAULT 0,
+    description           TEXT,
+    "createdAt"           TEXT NOT NULL,
+    "updatedAt"           TEXT NOT NULL
+);
+
+-- 5-3. 전자세금계산서 발행 내역 (billing_invoices)
+CREATE TABLE billing_invoices (
+    id                    TEXT PRIMARY KEY,
+    "billingId"           TEXT NOT NULL REFERENCES billings(id) ON DELETE CASCADE,
+    "invoiceNo"           TEXT NOT NULL UNIQUE,
+    "issueDate"           TEXT NOT NULL,
+    "supplyAmount"        DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "taxAmount"           DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "totalAmount"         DOUBLE PRECISION NOT NULL DEFAULT 0,
+    status                TEXT CHECK (status IN ('ISSUED', 'CANCELLED', 'MODIFIED')) NOT NULL DEFAULT 'ISSUED',
+    "ntsConfirmNo"        TEXT,
+    "createdAt"           TEXT NOT NULL,
+    "updatedAt"           TEXT NOT NULL
+);
+
+-- 5-4. 외상미수금 대장 (receivables) - 타사 구상채권(VENDOR_CLAIM) 통합
+CREATE TABLE receivables (
+    id                    TEXT PRIMARY KEY,
+    "contractId"          TEXT REFERENCES contracts(id) ON DELETE SET NULL,
+    "customerId"          TEXT REFERENCES customers(id) ON DELETE SET NULL,
+    "vendorName"          TEXT, -- 타사 구상처 원사명
+    "assetNo"             TEXT, -- 구상 원인 대상 장비번호
+    type                  TEXT CHECK (type IN ('TRANSPORT', 'REPAIR', 'CLEANING', 'OTHER', 'VENDOR_CLAIM')) NOT NULL,
+    "occurredDate"        TEXT NOT NULL,
+    "internalDescription" TEXT NOT NULL,
+    "displayName"         TEXT,
+    "totalAmount"         DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "billedAmount"        DOUBLE PRECISION NOT NULL DEFAULT 0,
+    status                TEXT CHECK (status IN ('PENDING', 'PARTIAL', 'CLEARED')) NOT NULL DEFAULT 'PENDING',
+    "repairId"            TEXT REFERENCES repairs(id) ON DELETE SET NULL,
+    CONSTRAINT chk_billed_lte_total CHECK ("billedAmount" <= "totalAmount"),
+    "createdAt"           TEXT NOT NULL,
+    "updatedAt"           TEXT NOT NULL
+);
+
+-- 5-5. 매출 수납 테이블 (payments)
+CREATE TABLE payments (
+    id                    TEXT PRIMARY KEY,
+    "billingId"           TEXT NOT NULL REFERENCES billings(id) ON DELETE CASCADE,
+    "paymentDate"         TEXT NOT NULL,
+    amount                DOUBLE PRECISION NOT NULL,
+    method                TEXT NOT NULL,
+    memo                  TEXT,
+    "createdAt"           TEXT NOT NULL,
+    "updatedAt"           TEXT NOT NULL
+);
+
+-- 5-6. 은행 입출금 거래 내역 (bank_transactions)
+CREATE TABLE bank_transactions (
+    id                    TEXT PRIMARY KEY,
+    "transactionDate"     TEXT NOT NULL,
+    "isDeposit"           BOOLEAN NOT NULL DEFAULT TRUE,
+    "senderName"          TEXT NOT NULL,
+    "senderAccount"       TEXT,
+    "depositAmount"       DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "withdrawAmount"      DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "customerId"          TEXT REFERENCES customers(id) ON DELETE SET NULL,
+    "matchedBillingId"    TEXT REFERENCES billings(id) ON DELETE SET NULL,
+    "matchingType"        TEXT CHECK ("matchingType" IN ('AUTO', 'MANUAL')),
+    memo                  TEXT,
+    "createdAt"           TEXT NOT NULL,
+    "updatedAt"           TEXT NOT NULL
+);
+
+-- 5-7. 수납-통장입금 N:N 매핑 링크 (payment_deposit_links)
+CREATE TABLE payment_deposit_links (
+    id                    TEXT PRIMARY KEY,
+    "paymentId"           TEXT NOT NULL REFERENCES payments(id) ON DELETE CASCADE,
+    "bankTransactionId"   TEXT NOT NULL REFERENCES bank_transactions(id) ON DELETE CASCADE,
+    "usedAmount"          DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "createdAt"           TEXT NOT NULL
+);
+
+-- 5-8. 통장 대사 룰 매핑 (bank_matching_rules)
+CREATE TABLE bank_matching_rules (
+    id                    TEXT PRIMARY KEY,
+    "senderName"          TEXT NOT NULL UNIQUE,
+    "customerId"          TEXT NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+    "createdAt"           TEXT NOT NULL,
+    "updatedAt"           TEXT NOT NULL
+);
+
+-- 5-9. 통장 기초 잔액 (bank_account_initial_balances)
+CREATE TABLE bank_account_initial_balances (
+    id                    TEXT PRIMARY KEY,
+    "bankName"            TEXT NOT NULL,
+    "accountNumber"       TEXT NOT NULL UNIQUE,
+    "initialBalance"      DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "asOfDate"            TEXT NOT NULL,
+    "createdAt"           TEXT NOT NULL,
+    "updatedAt"           TEXT NOT NULL
+);
+
+-- 5-10. 월말 매입 정산 마스터 (purchase_settlements)
+CREATE TABLE purchase_settlements (
+    id                    TEXT PRIMARY KEY,
+    "settlementYm"        TEXT NOT NULL,
+    "settlementType"      TEXT NOT NULL, -- TRANSPORT, EQUIPMENT_LEASE, REPAIR, CONSUMABLE
+    "vendorId"            TEXT REFERENCES vendors(id) ON DELETE SET NULL,
+    "vendorName"          TEXT NOT NULL,
+    "totalAmount"         DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "paidAmount"          DOUBLE PRECISION NOT NULL DEFAULT 0,
+    status                TEXT CHECK (status IN ('PENDING', 'APPROVED', 'PAID', 'REJECTED')) NOT NULL DEFAULT 'PENDING',
+    "paymentDate"         TEXT,
+    "paymentMethod"       TEXT,
+    "bankAccount"         TEXT,
+    "bankTransactionId"   TEXT REFERENCES bank_transactions(id) ON DELETE SET NULL,
+    "confirmedAt"         TEXT,
+    "confirmedBy"         TEXT,
+    memo                  TEXT,
+    "createdAt"           TEXT NOT NULL,
+    "updatedAt"           TEXT NOT NULL
+);
+
+-- 5-11. 월말 매입 정산 상세 (purchase_settlement_items)
+CREATE TABLE purchase_settlement_items (
+    id                    TEXT PRIMARY KEY,
+    "settlementId"        TEXT NOT NULL REFERENCES purchase_settlements(id) ON DELETE CASCADE,
+    "sourceType"          TEXT NOT NULL, -- DELIVERY, CONSUMABLE_PURCHASE, EQUIPMENT_LEASE, REPAIR
+    "sourceId"            TEXT NOT NULL,
+    "itemDescription"     TEXT NOT NULL,
+    quantity              DOUBLE PRECISION NOT NULL DEFAULT 1,
+    "unitPrice"           DOUBLE PRECISION NOT NULL DEFAULT 0,
+    amount                DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "evidenceFileUrl"     TEXT,
+    "createdAt"           TEXT NOT NULL
+);
+
+-- 5-12. 정산 지급 분할 이력 레코드 (settlement_payment_logs)
+CREATE TABLE settlement_payment_logs (
+    id                    TEXT PRIMARY KEY,
+    "settlementId"        TEXT NOT NULL REFERENCES purchase_settlements(id) ON DELETE CASCADE,
+    "bankTransactionId"   TEXT REFERENCES bank_transactions(id) ON DELETE SET NULL,
+    "paidAmount"          DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "paymentDate"         TEXT NOT NULL,
+    "paymentMethod"       TEXT,
+    "bankAccount"         TEXT,
+    memo                  TEXT,
+    "createdAt"           TEXT NOT NULL
+);
+
+-- 5-13. 자금 흐름 스냅샷 (cash_flow_snapshots)
+CREATE TABLE cash_flow_snapshots (
+    id                    TEXT PRIMARY KEY,
+    "snapshotDate"        TEXT NOT NULL,
+    "startingBalance"     BIGINT NOT NULL DEFAULT 0,
+    "projectedInflow"     BIGINT NOT NULL DEFAULT 0,
+    "projectedOpex"       BIGINT NOT NULL DEFAULT 0,
+    "projectedCapex"      BIGINT NOT NULL DEFAULT 0,
+    "projectedFinalBalance" BIGINT NOT NULL DEFAULT 0,
+    notes                 TEXT,
+    "createdAt"           TEXT NOT NULL,
+    "updatedAt"           TEXT NOT NULL
+);
+
+-- 5-14. 선급금 원장 (prepaid_transactions)
+CREATE TABLE prepaid_transactions (
+    id                    TEXT PRIMARY KEY,
+    "customerId"          TEXT NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+    "transactionDate"     TEXT NOT NULL,
+    type                  TEXT CHECK (type IN ('DEPOSIT', 'DEDUCTION', 'REFUND')) NOT NULL,
+    amount                DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "balanceAfter"        DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "relatedBillingId"    TEXT REFERENCES billings(id) ON DELETE SET NULL,
+    description           TEXT,
+    "createdAt"           TEXT NOT NULL
+);
+
+-- 5-15. 연체 채권 독촉 이력 (delinquency_action_logs)
+CREATE TABLE delinquency_action_logs (
+    id                    TEXT PRIMARY KEY,
+    "customerId"          TEXT NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+    "actionDate"          TEXT NOT NULL,
+    "actionType"          TEXT CHECK ("actionType" IN ('CALL', 'SMS', 'VISIT', 'LEGAL_NOTICE', 'DEVICE_LOCK')) NOT NULL,
+    "actorId"             TEXT REFERENCES users(id) ON DELETE SET NULL,
+    "contactPerson"       TEXT,
+    "contactPhone"        TEXT,
+    content               TEXT NOT NULL,
+    "promisedDate"        TEXT,
+    "promisedAmount"      DOUBLE PRECISION,
+    "createdAt"           TEXT NOT NULL
+);
+
+-- 5-16. 월별 감가상각 마감 이력 (depreciation_logs)
+CREATE TABLE depreciation_logs (
+    id                    TEXT PRIMARY KEY,
+    "depreciationYm"      TEXT NOT NULL UNIQUE,
+    "executedAt"          TEXT NOT NULL,
+    "executedBy"          TEXT,
+    "targetAssetCount"    INTEGER NOT NULL DEFAULT 0,
+    "totalDepreciationAmount" DOUBLE PRECISION NOT NULL DEFAULT 0,
+    note                  TEXT,
+    "createdAt"           TEXT NOT NULL,
+    "updatedAt"           TEXT NOT NULL
+);
+
+
+-- ==============================================================================
+-- 🤝 [도메인 6] 협업, ToDo, 문서작업 및 시스템 (System & Collaboration)
+-- ==============================================================================
+
+-- 6-1. 사용자 맞춤형 ToDo 피드 (todos)
+CREATE TABLE todos (
+    id                    TEXT PRIMARY KEY,
+    "userId"              TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    type                  TEXT CHECK (type IN ('MISSING_INFO', 'GENERAL', 'URGENT', 'APPROVAL')) NOT NULL DEFAULT 'GENERAL',
+    title                 TEXT NOT NULL,
+    content               TEXT NOT NULL,
+    "isCompleted"         BOOLEAN NOT NULL DEFAULT FALSE,
+    "relatedEntityId"     TEXT,
+    "createdAt"           TEXT NOT NULL,
+    "updatedAt"           TEXT NOT NULL
+);
+
+-- 6-2. 사내 공지사항 (announcements & reads)
+CREATE TABLE announcements (
+    id                    TEXT PRIMARY KEY,
+    "authorId"            TEXT REFERENCES users(id) ON DELETE SET NULL,
+    title                 TEXT NOT NULL,
+    content               TEXT NOT NULL,
+    "createdAt"           TEXT NOT NULL,
+    "updatedAt"           TEXT NOT NULL
+);
+
+CREATE TABLE announcement_reads (
+    id                    TEXT PRIMARY KEY,
+    "announcementId"      TEXT NOT NULL REFERENCES announcements(id) ON DELETE CASCADE,
+    "userId"              TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    "readAt"              TEXT NOT NULL,
+    "createdAt"           TEXT NOT NULL,
+    "updatedAt"           TEXT NOT NULL,
+    UNIQUE("announcementId", "userId")
+);
+
+-- 6-3. 작업 지시 (work_instructions)
+CREATE TABLE work_instructions (
+    id                    TEXT PRIMARY KEY,
+    "managerId"           TEXT REFERENCES users(id) ON DELETE SET NULL,
+    "assigneeId"          TEXT REFERENCES users(id) ON DELETE SET NULL,
+    title                 TEXT NOT NULL,
+    content               TEXT,
+    "reportType"          TEXT CHECK ("reportType" IN ('FILE', 'TEXT', 'VERBAL')) NOT NULL,
+    status                TEXT CHECK (status IN ('PENDING', 'REPORTED', 'APPROVED', 'NEEDS_WORK')) NOT NULL DEFAULT 'PENDING',
+    "reportContent"       TEXT,
+    "reportFileUrl"       TEXT,
+    "createdAt"           TEXT NOT NULL,
+    "updatedAt"           TEXT NOT NULL
+);
+
+-- 6-4. 협업 요청 (collaboration_requests & history)
+CREATE TABLE collaboration_requests (
+    id                    TEXT PRIMARY KEY,
+    "requesterId"         TEXT REFERENCES users(id) ON DELETE SET NULL,
+    "targetUserId"        TEXT REFERENCES users(id) ON DELETE SET NULL,
+    title                 TEXT NOT NULL,
+    content               TEXT,
+    status                TEXT CHECK (status IN ('REQUESTED', 'NEGOTIATING', 'AGREED', 'REJECTED', 'ESCALATED')) NOT NULL DEFAULT 'REQUESTED',
+    "negotiationCount"    INTEGER NOT NULL DEFAULT 0,
+    "createdAt"           TEXT NOT NULL,
+    "updatedAt"           TEXT NOT NULL
+);
+
+CREATE TABLE collaboration_request_history (
+    id                    TEXT PRIMARY KEY,
+    "requestId"           TEXT NOT NULL REFERENCES collaboration_requests(id) ON DELETE CASCADE,
+    "writerId"            TEXT REFERENCES users(id) ON DELETE SET NULL,
+    content               TEXT NOT NULL,
+    action                TEXT CHECK (action IN ('NEGOTIATE', 'AGREE', 'REJECT', 'ESCALATE')) NOT NULL,
+    "createdAt"           TEXT NOT NULL,
+    "updatedAt"           TEXT NOT NULL
+);
+
+-- 6-5. 로컬 에이전트 레지스트리 (agent_registry)
+CREATE TABLE agent_registry (
+    callsign              TEXT PRIMARY KEY,
+    "userId"              TEXT REFERENCES users(id) ON DELETE SET NULL,
+    "machineName"         TEXT,
+    "isMaster"            BOOLEAN DEFAULT FALSE,
+    status                TEXT CHECK (status IN ('ONLINE', 'BUSY', 'OFFLINE')) NOT NULL DEFAULT 'ONLINE',
+    "lastHeartbeat"       TIMESTAMPTZ NOT NULL,
+    "createdAt"           TIMESTAMPTZ DEFAULT NOW(),
+    "updatedAt"           TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 6-6. 문서 생산 백그라운드 작업 큐 (document_jobs)
+CREATE TABLE document_jobs (
+    id                    TEXT PRIMARY KEY,
+    "jobType"             TEXT NOT NULL,
+    "contractId"          TEXT REFERENCES contracts(id) ON DELETE SET NULL,
+    "targetCallsign"      TEXT,
+    "assignedCallsign"    TEXT REFERENCES agent_registry(callsign) ON DELETE SET NULL,
+    status                TEXT CHECK (status IN ('PENDING', 'PROCESSING', 'COMPLETED', 'FAILED')) NOT NULL DEFAULT 'PENDING',
+    payload               JSONB NOT NULL,
+    "resultUrl"           TEXT,
+    "localFilePath"       TEXT,
+    "errorMessage"        TEXT,
+    "createdAt"           TIMESTAMPTZ DEFAULT NOW(),
+    "lockedAt"            TIMESTAMPTZ,
+    "completedAt"         TIMESTAMPTZ
+);
+
+-- 6-7. 클라우드 및 구글 연동 설정 (google_configs)
+CREATE TABLE google_configs (
+    id                    TEXT PRIMARY KEY,
+    "googleEmail"         TEXT NOT NULL,
+    "googlePassword"      TEXT,
+    "gmailAppPassword"    TEXT,
+    "contractFolder"      TEXT NOT NULL,
+    "consumableFolder"    TEXT NOT NULL,
+    "deliveryFolder"      TEXT NOT NULL,
+    "maintenanceFolder"   TEXT NOT NULL,
+    "isDevMode"           BOOLEAN NOT NULL DEFAULT TRUE,
+    "quotationTemplateUrl" TEXT,
+    "contractTemplateUrl" TEXT,
+    "safetyInspectionTemplateUrl" TEXT,
+    "preDeliveryChecklistTemplateUrl" TEXT,
+    "bizRegCertUrl"       TEXT,
+    "bankbookCopyUrl"     TEXT,
+    "transactionStatementTemplateUrl" TEXT,
+    "defaultRootFolderId" TEXT,
+    "r2AccountId"         TEXT,
+    "r2BucketName"        TEXT,
+    "r2AccessKeyId"       TEXT,
+    "r2SecretAccessKey"   TEXT,
+    "r2PublicDomain"      TEXT,
+    "createdAt"           TEXT NOT NULL,
+    "updatedAt"           TEXT NOT NULL
+);
+
+
+-- ==============================================================================
+-- 🔒 전 테이블 Row Level Security (RLS) 및 권한 일괄 활성화
+-- ==============================================================================
+DO $$
+DECLARE
+    tbl TEXT;
+BEGIN
+    FOR tbl IN 
+        SELECT table_name 
+        FROM information_schema.tables 
+        WHERE table_schema = 'public' AND table_type = 'BASE TABLE'
+    LOOP
+        EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY;', tbl);
+        EXECUTE format('DROP POLICY IF EXISTS "allow_anon_all" ON %I;', tbl);
+        EXECUTE format('DROP POLICY IF EXISTS "allow_auth_all" ON %I;', tbl);
+        EXECUTE format('CREATE POLICY "allow_anon_all" ON %I FOR ALL TO anon USING (true) WITH CHECK (true);', tbl);
+        EXECUTE format('CREATE POLICY "allow_auth_all" ON %I FOR ALL TO authenticated USING (true) WITH CHECK (true);', tbl);
+    END LOOP;
+END $$;

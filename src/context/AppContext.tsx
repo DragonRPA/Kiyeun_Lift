@@ -134,6 +134,16 @@ interface AppContextType {
   disposeAsset: (assetId: string, disposalData: { disposalDate: string; disposalPrice: number; buyer: string; billingYm?: string }) => void;
   registerRentedAsset: (assetData: Partial<Asset>) => Promise<any>;
   returnRentedAsset: (assetId: string, returnDate: string) => void;
+  createVendorClaimReceivable: (data: {
+    contractId?: string;
+    customerId?: string;
+    vendorName: string;
+    assetNo: string;
+    totalAmount: number;
+    internalDescription: string;
+    displayName?: string;
+    occurredDate?: string;
+  }) => Promise<void>;
   registerInboundAsset: (data: { assetId: string; returnDate: string; maintenanceScore?: number; memo?: string; inboundNo?: string; defects?: InboundDefectDetail[] }) => Promise<void>;
   cancelInboundAsset: (logId: string, cancelReason?: string) => Promise<void>;
   
@@ -1520,10 +1530,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const registerRentedAsset = async (assetData: Partial<Asset>) => {
     let result;
-    const existing = db.assets.find(a => a.assetNo === assetData.assetNo);
+    const existing = db.assets.find(a => a.assetNo === assetData.assetNo || (assetData.id && a.id === assetData.id));
     if (existing) {
       result = db.updateRow<Asset>('assets', existing.id, {
         ...assetData,
+        vendorAssetNo: assetData.vendorAssetNo || existing.vendorAssetNo || '',
         ownerType: 'RENTED',
         status: 'AVAILABLE',
         actualRentReturnDate: '', // 과거 실제 반납일 초기화 (재임차 활성화)
@@ -1533,6 +1544,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       result = db.insertRow<Asset>('assets', {
         modelName: assetData.modelName || '',
         assetNo: assetData.assetNo || '',
+        vendorAssetNo: assetData.vendorAssetNo || '',
         serialNo: assetData.serialNo || '',
         manufacturer: assetData.manufacturer || '',
         ownerType: 'RENTED',
@@ -1573,6 +1585,41 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       updatedAt: new Date().toISOString()
     });
     refreshAllData();
+  };
+
+  const createVendorClaimReceivable = async (data: {
+    contractId?: string;
+    customerId?: string;
+    vendorName: string;
+    assetNo: string;
+    totalAmount: number;
+    internalDescription: string;
+    displayName?: string;
+    occurredDate?: string;
+  }): Promise<void> => {
+    try {
+      db.insertRow<Receivable>('receivables', {
+        contractId: data.contractId,
+        customerId: data.customerId,
+        type: 'VENDOR_CLAIM',
+        totalAmount: data.totalAmount,
+        billedAmount: 0,
+        internalDescription: data.internalDescription,
+        displayName: data.displayName || data.internalDescription,
+        occurredDate: data.occurredDate || new Date().toISOString().split('T')[0],
+        vendorName: data.vendorName,
+        assetNo: data.assetNo,
+        status: 'PENDING',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      });
+      await db.awaitPendingWrites();
+      refreshAllData();
+    } catch (err: any) {
+      console.error('createVendorClaimReceivable error:', err);
+      showErrorModal(`⚠️ 구상 미수금 등록 오류:\n${err.message || err.details || JSON.stringify(err)}`, 'DB 동기화 오류');
+      throw err;
+    }
   };
 
   const purchaseConsumable = async (data: { modelName: string; qty: number; unit: string; unitPrice: number; supplier: string }) => {
@@ -5784,7 +5831,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       refreshAllData, fullRefreshFromServer, executeMonthlyDepreciation, loadTablesForMenu, updatePermissions, saveUser, saveCustomer, saveContact, saveSite, saveProduct, saveAsset, updateGoogleConfig,
       saveCashFlowSnapshot, deleteCashFlowSnapshot, saveVendor, deleteVendor, saveBankInitialBalance, saveInspectionChecklistItem, deleteInspectionChecklistItem,
       updateAnnualLeaveQuota, addLeaveUsage, deleteLeaveUsage, addOvertimeRecord, deleteOvertimeRecord, setPayrollClosingStatus,
-      acquireAsset, disposeAsset, registerRentedAsset, returnRentedAsset, changeAssetStatus, registerInboundAsset, cancelInboundAsset,
+      acquireAsset, disposeAsset, registerRentedAsset, returnRentedAsset, createVendorClaimReceivable, changeAssetStatus, registerInboundAsset, cancelInboundAsset,
       purchaseConsumable, useConsumable, transferConsumableToMechanic, returnConsumableToHq,
       requestConsumablePurchase, acceptConsumablePurchase, completeConsumablePurchase, inboundConsumablePurchase, clearEvidenceFileUrls, updateEvidenceFileUrls,
       createContract, extendContract, shortenContract, succeedContract, exchangeAsset,

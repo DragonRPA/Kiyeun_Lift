@@ -1,5 +1,102 @@
 ---
 
+# Release Notes (v1.3.0.Build.58 - 2026-09-02 23:58)
+
+## 📱 [모바일 PWA] 현장 기동 업무 전용 모바일 PWA (`/m`) 분리 구축 완결
+
+### 🎯 핵심 요약 및 기능 구축 내역
+- **1. 모바일 전용 셸 및 라우팅 분리 (`src/mobile/MobileApp.tsx`, `App.tsx`)**:
+  - URL `/m` 접속, `?view=mobile` 쿼리, 또는 768px 미만 모바일 기기 접속 시 모바일 전용 PWA 레이아웃 자동 구동.
+  - PC 헤더 ➔ `[📱 모바일화면]` / 모바일 헤더 ➔ `[🖥️ PC화면]` 1-Click 상호 전환 버튼 탑재.
+- **2. 2대 필드 전용 테마 & 56px+ 대형 터치 아키텍처**:
+  - `Field High-Contrast Dark` (`#0B0F19` Deep Dark) 테마로 야외 직사광선 아래 시인성 극대화 및 배터리 절약.
+  - 횡스크롤 0%의 단일 수직 카드 피드(Card Dossier) 및 하단 엄지손가락 5버튼 고정 내비게이션 바.
+- **3. 현장 AS 360도 스튜디오 (`MobileAsDetail.tsx`, `MobileAsList.tsx`, `MobileAsCreate.tsx`)**:
+  - TMAP / 카카오내비 원터치 길안내 및 담당자 전화걸기.
+  - 현장 고장 사진 및 수리 완료 사진 압축 촬영/업로드 (`CameraUploader.tsx`).
+  - 차량 탑차 부품 실시간 검색 및 수량 차감 (`RepairPartUsed` 연동).
+  - HTML5 Canvas 기반 터치 고객 서명 패드 (`SignatureCanvas.tsx`) 탑재 및 조치 완료 승인.
+- **4. 배차 운송 지시 카드 (`MobileDispatchList.tsx`)**:
+  - 상차지(주기장/원사 직출고) 및 하차지(고객사 현장) 확인 및 1-Click 통화.
+  - `하차 완료 1-Click 보고`로 실시간 배차 상태 갱신.
+- **5. 출고 전 기능 검수 스튜디오 (`MobileInspectionList.tsx`)**:
+  - 10대 법정/기능 점검 체크리스트 (`✓ 전체 정상 선택` 지원).
+  - 출고 외관 4방향 사진 촬영 및 최종 승인 마감 시 **자산 상태 `RENTED` 자동 전환 (헌장 제1.3조 준수)**.
+- **6. 가용 렌탈 자산 실시간 조회기 (`MobileAssetSearch.tsx`)**:
+  - 영업 담당 현장 상담용 19ft, 26ft, 32ft, 40ft, 46ft, 53ft 규격별 실시간 재고 & 단가 조회.
+
+---
+
+# Release Notes (v1.2.1.Build.57 - 2026-09-02 23:47)
+
+## 🗄️ [DB 패치] 전사 4대 테이블 신규 컬럼 일괄 추가 완결 (ADD COLUMN IF NOT EXISTS)
+
+### 🎯 핵심 요약
+- `assets`, `deliveries`, `receivables`, `repairs` 4대 테이블에 스키마 6단계 표준에 따른 신규 컬럼 일괄 추가 (Supabase SQL Editor 직접 실행 완료).
+- 순수 `ADD COLUMN IF NOT EXISTS` 방식 채택 — 테이블 DROP/RENAME 스왑 없이 안전하게 완결.
+- `migrationEngine.ts` `TABLE_COLUMNS` 화이트리스트 신규 컬럼 동기화 완료.
+- `INITIAL_DB_UPLOAD.md` v2.0 전면 갱신: Build.22~56 누적 이슈 이력, 42대 테이블 적재 DAG, 전대 손익원장 체계 상세 기록.
+
+---
+
+# Release Notes (v1.2.1.Build.56 - 2026-09-02 23:36)
+
+## 📊 [엑셀 내보내기] 전사 대장 스키마 6단계 논리적 배치 표준 동기화 완결
+
+### 🎯 핵심 요약 및 기능 구축 내역
+- **1. 자산 대장 엑셀 내보내기 (`Assets.tsx`)**:
+  - `원사(타사) 관리번호`(`vendorAssetNo`) 컬럼 추가 반영.
+  - 컬럼 순서를 `①식별(관리번호/S/N) ➔ ②제원 ➔ ③소유/임차거래처 ➔ ④가동현장/계약 ➔ ⑤회계/감가상각/손익 ➔ ⑥매각/비고` 6단계로 전면 재정돈.
+- **2. 배차 대장 엑셀 내보내기 (`Deliveries.tsx`)**:
+  - 타사 직출고 상차지(`pickupVendorName`), 혼적 경유지(`viaDropoffName`/`viaDropoffAddress`), 확정운송비(`finalCost`) 연동.
+  - `①식별/계약 ➔ ②고객/현장 ➔ ③상차지 ➔ ④하차지/경유지 ➔ ⑤운송사/기사 ➔ ⑥운송비/정산 ➔ ⑦메모/감사` 순서로 일목요연 정돈.
+- **3. 임차자산 대장 & 전대 손익 원장 엑셀 내보내기 (`rent_assets.tsx`)**:
+  - `CURRENT` 탭: `관리번호`, `원사 관리번호`, `모델명`, `임차처`, `임차기간`, `월임차료`, `반납일`, `가동상태` 표준 서식 내보내기 연동.
+  - `PROFIT_LEDGER` 탭: **`[📥 전대 손익 원장 엑셀 다운로드]` 신설** ➔ 계약별 대차대조 손익(`확정청구액 - 매입원가 - 직송운송비 = 순마진`) 및 자산별 누적 손익 원장 엑셀 출력 지원.
+- **4. 외상미수금 대장 엑셀 내보내기 신설 (`Receivables.tsx`)**:
+  - `[📥 엑셀 다운로드]` 신설: 타사구상채권(`VENDOR_CLAIM`), 운송료, 수리비, 청소비 등 부대비용의 `원사명`, `대상장비번호`, `총미수금액`, `기청구누적액`, `미청구잔액` 1:1 대사 서식 지원.
+- **5. 정비/AS 및 계약 대장 엑셀 동기화 (`Repairs.tsx`, `FieldAsManagement.tsx`, `Contracts.tsx`, `Billings.tsx`)**:
+  - 수식 계산 호환을 위한 숫자 데이터 정규화 및 표준 컬럼 순서 100% 동기화.
+
+---
+
+# Release Notes (v1.2.1.Build.55 - 2026-09-02 23:33)
+
+## 🗄️ [DB 스키마] 전사 42대 테이블 6대 도메인 표준 논리적 배치 전면 재정돈 & 무손실 원자적 스왑 DDL 패치
+
+### 🎯 핵심 요약 및 기능 구축 내역
+- **1. 단일 진실의 원천(SSOT) [`schema.sql`](file:///d:/01.AntiGravity/Kiyuen_Lift/schema.sql) 전면 리팩토링 완결**:
+  - 누적 패치로 누더기화되었던 중복 테이블(`receivables`, `purchase_settlements` 등) 및 흩어진 컬럼들을 전면 정돈.
+  - 전사 단일 표준 **[논리적 컬럼 6단계 배치 원칙]** (`①식별자 ➔ ②본질속성 ➔ ③FK관계 ➔ ④일정/수량/금액 ➔ ⑤업무상태 ➔ ⑥감사로그`)을 전사 42개 테이블에 100% 일관되게 적용.
+  - 6대 비즈니스 도메인(조직/인사, 기준정보, 계약/배차, 정비/AS, 회계/정산, 협업/시스템)별 체계적 그룹화.
+- **2. 기존 운영 데이터 100% 무손실 보존 원자적 테이블 스왑 마이그레이션 DDL 구축**:
+  - [`scripts/reorganize_tables_zero_loss.sql`](file:///d:/01.AntiGravity/Kiyuen_Lift/scripts/reorganize_tables_zero_loss.sql) 생성.
+  - `assets`, `deliveries`, `receivables`, `repairs` 등 핵심 운영 테이블의 기존 데이터를 단 1건도 유실하지 않고 정돈된 새 컬럼 순서로 1:1 복제 후 단일 트랜잭션(`BEGIN ~ COMMIT`) 내 0.01초 스왑(`RENAME`) 및 RLS 보안 정책 자동 재연결.
+
+---
+
+# Release Notes (v1.2.1.Build.54 - 2026-09-02 23:18)
+
+## 🏢 [전대(임차) 자산] 5대 마스터 라이프사이클 & 원천정보 기반 대차대조 손익 원장 시스템 구축
+
+### 🎯 핵심 요약 및 기능 구축 내역
+- **1. 장비 식별 & 재전대(재임차) 라이프사이클 연속성 확보 (`rent_assets.tsx`)**:
+  - `vendorAssetNo` (원사 원래번호) + `assetNo` (기연 임차번호) 1:1 매핑 표출 및 등록.
+  - 임차 반납 시 `RENTED_RETURNED` 상태로 영속 보존하며, **동일 장비 재임차 시 새 번호를 따지 않고 기존 번호의 상태를 1-Click `AVAILABLE`로 재활성화**하여 동일 자산의 과거 이력 단절 방지.
+- **2. 원천정보(SSOT) 기반 대차대조 전대 손익 원장 (Spread Margin) 탑재 (`PROFIT_LEDGER` 탭)**:
+  - **매출 원천**: 고객사 확정 청구서 (`billings` / 전자세금계산서).
+  - **원가 원천**: 원사 매입세금계산서 (`purchase_settlements`) + 직송/경유 운송비 (`deliveries`).
+  - **계약별 대차대조 손익 뷰**: `[계약 확정 청구액] - [매입원가 + 운송비] = 🟢 순마진 (마진율 %)` 실시간 산출.
+  - **자산별 누적 손익 뷰**: `[R-001 누적 청구액] - [R-001 누적 매입원가 + 운송비] = 자산 누적 공헌이익`.
+- **3. 단일 경유 혼적 회수 배차 및 타사 직출고 배차 체인 지원 (`TruckDispatch.tsx` & `Delivery`)**:
+  - `Delivery`에 `pickupVendorName` (타사 주기장 직출고), `viaDropoffName` / `viaDropoffAddress` (혼적 경유 하차지) 지원.
+  - 5톤 트럭 1대로 본사 주기장 하차 + 타사 주기장 하차를 처리하는 경유 배차표 출력 연동.
+- **4. 타사 청구 부대비용(파손/세척비) ➔ 외상미수금(구상채권) 등록 & 분할 상계 모달 탑재**:
+  - 원사 청구 부대비용 대사 승인 시 `[🚨 고객사 구상 미수금 등록]` 원터치 실행.
+  - `Receivables`에 `type: 'VENDOR_CLAIM'` 구상채권 생성 후 고객 청구서 발행 시 분할 청구 및 입금 상계 체계 확립.
+
+---
+
 # Release Notes (v1.2.1.Build.53 - 2026-09-02 22:54)
 
 ## 🗺️ [현장 AS] 기사별 선호 내비(T맵/카카오/네이버) 맞춤 연동 & 전화·출발 타임라인 자동 로깅 시스템 구축

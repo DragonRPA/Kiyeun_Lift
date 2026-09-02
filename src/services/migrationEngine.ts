@@ -95,7 +95,7 @@ export const TABLE_COLUMNS: Record<string, string[]> = {
     'id', 'customerId', 'name', 'position', 'contact', 'email', 'isPrimary', 'createdAt', 'updatedAt'
   ],
   assets: [
-    'id', 'modelName', 'assetNo', 'serialNo', 'manufacturer', 'manufactureYear',
+    'id', 'modelName', 'assetNo', 'vendorAssetNo', 'serialNo', 'manufacturer', 'manufactureYear',
     'ownerType', 'status', 'acquisitionDate', 'acquisitionPrice', 'depreciationMonths',
     'residualValueRate', 'accumDepreciation', 'bookValue', 'vendorId', 'supplier',
     'renter', 'rentStart', 'rentEnd', 'monthlyRentFee', 'dailyRentFee', 'actualRentReturnDate',
@@ -133,7 +133,8 @@ export const TABLE_COLUMNS: Record<string, string[]> = {
     'paymentRequestedAt', 'paymentCompletedAt', 'statementFileUrl',
     'billableToCustomer', 'billableCustomerId', 'vehicleRequirements', 'cargoItems',
     'vehicles', 'dispatchCategory', 'loadingDate', 'loadingTimeSlot',
-    'unloadingDate', 'unloadingTimeSlot', 'closingMemo', 'rawText'
+    'unloadingDate', 'unloadingTimeSlot', 'closingMemo', 'rawText',
+    'pickupType', 'pickupVendorName', 'dropoffType', 'viaDropoffName', 'viaDropoffAddress'
   ],
   outbound_inspections: [
     'id', 'deliveryId', 'contractId', 'assetId', 'status', 'inspectorId',
@@ -160,6 +161,7 @@ export const TABLE_COLUMNS: Record<string, string[]> = {
   ],
   receivables: [
     'id', 'contractId', 'customerId', 'type', 'totalAmount', 'billedAmount',
+    'vendorName', 'assetNo', 'repairId',
     'internalDescription', 'displayName', 'occurredDate', 'status', 'createdAt', 'updatedAt'
   ],
   reconciliation_reports: [

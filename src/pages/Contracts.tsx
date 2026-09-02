@@ -509,20 +509,48 @@ export const Contracts: React.FC = () => {
   };
 
   const handleExportExcel = () => {
-    const excelData = filteredContracts.map((c, idx) => ({
-      'No': idx + 1,
-      '계약번호': c.contractNo,
-      '고객사': getCustName(c.customerId),
-      '현장명': getSiteName(c.siteId),
-      '담당자': getContactName(c.contactId),
-      '영업담당': users.find(u => u.id === c.salespersonId)?.name || '-',
-      '시작일': c.startDate,
-      '만료일': c.endDate || '미정',
-      '청구마감일': `매월 ${c.billingDay}일`,
-      '상태': c.status === 'ACTIVE' ? '진행중' :
-             c.status === 'EXTENDED' ? '연장됨' :
-             c.status === 'SUCCEEDED' ? '승계됨' : '종료',
-    }));
+    const excelData = filteredContracts.map((c, idx) => {
+      const cas = contractAssets.filter(ca => ca.contractId === c.id);
+      const totalMonthlyRent = cas.reduce((sum, ca) => sum + (ca.monthlyRentalFee || 0), 0);
+      const assetSummary = cas.map(ca => {
+        const a = assets.find(ast => ast.id === ca.assetId);
+        return a ? `${a.modelName}[${a.assetNo}]` : (ca.expectedModel || '미배정');
+      }).join(', ');
+
+      return {
+        // ① 식별 및 계약
+        'No': idx + 1,
+        '계약번호': c.contractNo,
+        '계약 상태': c.status === 'ACTIVE' ? '진행중' :
+                   c.status === 'EXTENDED' ? '연장됨' :
+                   c.status === 'SUCCEEDED' ? '승계됨' :
+                   c.status === 'SHORTENED' ? '단축종료' : '종료',
+
+        // ② 거래처 및 현장
+        '고객사명': getCustName(c.customerId),
+        '현장명': getSiteName(c.siteId),
+        '현장 담당자': getContactName(c.contactId),
+        '영업 담당자': users.find(u => u.id === c.salespersonId)?.name || '-',
+
+        // ③ 체결 장비 요약
+        '체결 장비 수': `${cas.length}대`,
+        '체결 장비 목록': assetSummary || '-',
+
+        // ④ 계약 일정 및 청구 조건
+        '계약 시작일': c.startDate,
+        '계약 만료일': c.endDate || '미정',
+        '청구 마감일': `매월 ${c.billingDay}일`,
+        '월 임대료 합계(원)': totalMonthlyRent,
+
+        // ⑤ 승계 및 이력 연계
+        '전계약번호': c.predecessorContractNo || '-',
+        '전고객사명': c.predecessorCustomerName || '-',
+        '후계약 ID': c.successorContractId || '-',
+
+        // ⑥ 감사
+        '등록일자': c.createdAt ? c.createdAt.split('T')[0] : '-'
+      };
+    });
 
     exportToExcel(excelData, `계약대장_${todayStr}`, '계약목록');
   };

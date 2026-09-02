@@ -29,7 +29,9 @@ export interface ReconcileResultItem {
 
 export const RentAssets: React.FC = () => {
   const { 
-    assets, products, customers, vendors, registerRentedAsset, returnRentedAsset, 
+    assets, products, customers, vendors, contracts, sites, billings, billingDetails,
+    purchaseSettlements, purchaseSettlementItems, deliveries, receivables,
+    registerRentedAsset, returnRentedAsset, createVendorClaimReceivable,
     hasPermission, setActiveTab: setGlobalActiveTab
   } = useApp();
   
@@ -46,8 +48,20 @@ export const RentAssets: React.FC = () => {
   const [paymentMemo, setPaymentMemo] = useState<string>('');
   const [createdSettlementId, setCreatedSettlementId] = useState<string | null>(null);
 
-  // 활성화 탭 상태: CURRENT (임차자산 대장 & 반납 현황 관리 - 기본 메인), RECONCILIATION (임차처 거래명세서 대사 & 매입 정산)
-  const [activeTab, setActiveTab] = useState<'CURRENT' | 'RECONCILIATION'>('CURRENT');
+  // 🚨 [고객사 구상 미수금 등록 모달] 상태
+  const [showClaimModal, setShowClaimModal] = useState<boolean>(false);
+  const [claimVendorName, setClaimVendorName] = useState<string>('');
+  const [claimAssetNo, setClaimAssetNo] = useState<string>('');
+  const [claimAmount, setClaimAmount] = useState<number>(0);
+  const [claimCustomerId, setClaimCustomerId] = useState<string>('');
+  const [claimContractId, setClaimContractId] = useState<string>('');
+  const [claimInternalDescription, setClaimInternalDescription] = useState<string>('');
+  const [claimDisplayName, setClaimDisplayName] = useState<string>('');
+  const [claimOccurredDate, setClaimOccurredDate] = useState<string>(new Date().toISOString().split('T')[0]);
+
+  // 활성화 탭 상태: CURRENT (임차자산 대장 & 반납 관리), PROFIT_LEDGER (전대 손익 원장), RECONCILIATION (임차처 거래명세서 대사 & 매입 정산)
+  const [activeTab, setActiveTab] = useState<'CURRENT' | 'PROFIT_LEDGER' | 'RECONCILIATION'>('CURRENT');
+  const [profitLedgerSubTab, setProfitLedgerSubTab] = useState<'CONTRACT' | 'ASSET'>('CONTRACT');
 
   // ==========================================
   // [탭 2] 임차처 거래명세서 대사 (Reconciliation) 관련 상태
@@ -239,6 +253,110 @@ export const RentAssets: React.FC = () => {
 
     return { totalCount, totalBilled, matchedCount, priceMismatchCount, periodMismatchCount, unregisteredCount, missingCount, totalDiffAmount };
   }, [statementRows, reconcileResults]);
+
+  // ==========================================
+  // 💰 [원천정보 기반 대차대조 전대 손익 원장] 계산 엔진
+  // ==========================================
+  // 1. 계약별 전대 손익 원장 (확정 청구서 매출 vs 매입세금계산서 원가 + 운송비)
+  const subleaseContracts = React.useMemo(() => {
+    const rentedAssetIds = new Set(rentedAssets.map(a => a.id));
+    const rentedAssetNos = new Set(rentedAssets.map(a => a.assetNo));
+    
+    return contracts.map(c => {
+      // 이 계약에 속한 임차 자산들 매핑
+      const assignedRentedAssets = (c.assets || [])
+        .filter(ca => ca.assetId && rentedAssetIds.has(ca.assetId))
+        .map(ca => {
+          const match = rentedAssets.find(a => a.id === ca.assetId);
+          return { ca, match };
+        });
+
+      if (assignedRentedAssets.length === 0) return null;
+
+      const customer = customers.find(cust => cust.id === c.customerId);
+      const site = sites.find(s => s.id === c.siteId);
+
+      // 확정 매출 청구액 (billings 중 이 contractId)
+      const contractBillings = billings.filter(b => b.contractId === c.id && b.status !== 'REJECTED');
+      const confirmedRevenue = contractBillings.reduce((sum, b) => sum + (b.totalAmount || 0), 0);
+
+      // 매입세금계산서 원가 (purchaseSettlementItems 중 이 임차자산들 대상)
+      const assetIds = new Set(assignedRentedAssets.map(a => a.match?.id).filter(Boolean));
+      const assetNos = new Set(assignedRentedAssets.map(a => a.match?.assetNo).filter(Boolean));
+      let confirmedCost = 0;
+      purchaseSettlementItems.forEach(item => {
+        if (item.sourceId && (assetIds.has(item.sourceId) || assetNos.has(item.sourceId))) {
+          confirmedCost += (item.amount || 0);
+        }
+      });
+      // 만약 purchaseSettlementItems에 아직 매칭 전이면 약정 임차료로 보조 산출
+      if (confirmedCost === 0) {
+        assignedRentedAssets.forEach(a => {
+          if (a.match?.monthlyRentFee) {
+            confirmedCost += (a.match.monthlyRentFee || 0);
+          }
+        });
+      }
+
+      // 직송/회수 운송비 원가 (deliveries 중 이 contractId)
+      const contractDeliveries = deliveries.filter(d => d.contractId === c.id && d.status !== 'CANCELLED');
+      const freightCost = contractDeliveries.reduce((sum, d) => sum + (d.finalCost || d.deliveryCostConfirmed || d.deliveryCost || 0), 0);
+
+      const netProfit = confirmedRevenue - (confirmedCost + freightCost);
+      const marginRate = confirmedRevenue > 0 ? (netProfit / confirmedRevenue) * 100 : 0;
+
+      return {
+        contract: c,
+        customer,
+        site,
+        assignedRentedAssets,
+        confirmedRevenue,
+        confirmedCost,
+        freightCost,
+        netProfit,
+        marginRate
+      };
+    }).filter(Boolean) as {
+      contract: any;
+      customer: any;
+      site: any;
+      assignedRentedAssets: any[];
+      confirmedRevenue: number;
+      confirmedCost: number;
+      freightCost: number;
+      netProfit: number;
+      marginRate: number;
+    }[];
+  }, [contracts, rentedAssets, customers, sites, billings, purchaseSettlementItems, deliveries]);
+
+  // 2. 자산별 누적 손익 원장 (자산별 누적 청구액 vs 누적 매입원가)
+  const assetProfitLedgers = React.useMemo(() => {
+    return rentedAssets.map(a => {
+      // 매출: billingDetails 중 assetId === a.id 또는 assetNo === a.assetNo
+      const relatedBillingDetails = billingDetails.filter(bd => bd.assetId === a.id || bd.itemName?.includes(a.assetNo));
+      const cumRevenue = relatedBillingDetails.reduce((sum, bd) => sum + (bd.amount || 0), 0) || (a.cumRentalFee || 0);
+
+      // 매입원가: purchaseSettlementItems 중 sourceId === a.id || sourceId === a.assetNo
+      const relatedPurchaseItems = purchaseSettlementItems.filter(pi => pi.sourceId === a.id || pi.sourceId === a.assetNo);
+      const cumCost = relatedPurchaseItems.reduce((sum, pi) => sum + (pi.amount || 0), 0) || (a.monthlyRentFee || 0);
+
+      // 운송비
+      const relatedDeliveries = deliveries.filter(d => (d.assetIds && d.assetIds.includes(a.id)) || d.memo?.includes(a.assetNo));
+      const freightCost = relatedDeliveries.reduce((sum, d) => sum + (d.finalCost || d.deliveryCostConfirmed || d.deliveryCost || 0), 0);
+
+      const cumNetProfit = cumRevenue - (cumCost + freightCost);
+      const marginRate = cumRevenue > 0 ? (cumNetProfit / cumRevenue) * 100 : 0;
+
+      return {
+        asset: a,
+        cumRevenue,
+        cumCost,
+        freightCost,
+        cumNetProfit,
+        marginRate
+      };
+    });
+  }, [rentedAssets, billingDetails, purchaseSettlementItems, deliveries]);
 
   // 거래명세서 파일 업로드 처리 핸들러 (엑셀 .xlsx / .xls 및 PDF .pdf 통합 범용 파서 연동)
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -633,6 +751,124 @@ export const RentAssets: React.FC = () => {
     setShowReturnModal(false);
   };
 
+  // 🔄 재임차 활성화 핸들러 (과거 반납 자산 재활용 - 신규 채번 방지)
+  const handleOpenReactivate = (a: Asset) => {
+    const today = new Date().toISOString().split('T')[0];
+    setEditingAsset({
+      ...a,
+      rentStart: today,
+      rentEnd: calcRentEnd(today),
+      actualRentReturnDate: '',
+      status: 'AVAILABLE'
+    });
+    setShowModal(true);
+  };
+
+  // 🚨 고객사 구상 미수금 등록 모달 오픈
+  const handleOpenClaimModal = (item: ReconcileResultItem) => {
+    const row = item.statementRow;
+    const vendor = selectedVendor || item.matchedAsset?.renter || '기타 원사';
+    const assetNo = row?.assetNo || item.matchedAsset?.assetNo || '';
+    const amount = row?.billedAmount || Math.abs(item.priceDiff) || 0;
+
+    // 장비번호 기반 매칭되는 최근 활성 계약 자동 탐색
+    const matchedContract = contracts.find(c => 
+      c.status !== 'COMPLETED' && (c.assets || []).some(ca => (item.matchedAsset && ca.assetId === item.matchedAsset.id))
+    );
+
+    setClaimVendorName(vendor);
+    setClaimAssetNo(assetNo);
+    setClaimAmount(amount);
+    setClaimContractId(matchedContract?.id || '');
+    setClaimCustomerId(matchedContract?.customerId || '');
+    setClaimInternalDescription(`[타사 구상금] ${vendor} ${assetNo} ${row?.memo || '파손/세척/부대비용'}`);
+    setClaimDisplayName(`현장 장비 정비 및 세척 비용 (${assetNo})`);
+    setClaimOccurredDate(new Date().toISOString().split('T')[0]);
+    setShowClaimModal(true);
+  };
+
+  // 🚨 고객사 구상 미수금 등록 확정
+  const handleSubmitClaim = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!claimCustomerId) {
+      alert('귀책 고객사를 선택해 주세요.');
+      return;
+    }
+    if (claimAmount <= 0) {
+      alert('구상 금액은 0원보다 커야 합니다.');
+      return;
+    }
+
+    try {
+      await createVendorClaimReceivable({
+        contractId: claimContractId || undefined,
+        customerId: claimCustomerId,
+        vendorName: claimVendorName,
+        assetNo: claimAssetNo,
+        totalAmount: claimAmount,
+        internalDescription: claimInternalDescription,
+        displayName: claimDisplayName || claimInternalDescription,
+        occurredDate: claimOccurredDate
+      });
+
+      alert(`✅ [외상미수금 대장]에 타사 구상채권(₩${claimAmount.toLocaleString()})이 성공적으로 등록되었습니다!\n\n고객사 매출 청구서(Billings) 발행 시 분할 청구 및 상계할 수 있습니다.`);
+      setShowClaimModal(false);
+    } catch (err: any) {
+      alert(`⚠️ 구상 미수금 등록 실패: ${err?.message || err}`);
+    }
+  };
+
+  // 📥 임차자산 대장 엑셀 내보내기
+  const handleExportRentedAssetsExcel = () => {
+    const data = filteredAssets.map((a, idx) => ({
+      'No': idx + 1,
+      '관리번호': a.assetNo || '-',
+      '원사 원래번호': a.vendorAssetNo || '-',
+      '모델명': a.modelName || '-',
+      '임차처(원사)': a.renter || '-',
+      '임차 시작일': a.rentStart || '-',
+      '임차 만료예정일': a.rentEnd || '-',
+      '월 임차료(원)': a.monthlyRentFee || 0,
+      '실제 반납일': a.actualRentReturnDate || '-',
+      '현재 가동상태': a.actualRentReturnDate ? '반납완료' : (a.status === 'RENTED' || a.currentCustomerId ? '대여중(현장가동)' : '입고보관중')
+    }));
+    exportToExcel(data, `임차자산_대장_목록_${new Date().toISOString().split('T')[0]}`, '임차자산대장');
+  };
+
+  // 📥 전대 손익 원장 엑셀 내보내기
+  const handleExportProfitLedgerExcel = () => {
+    if (profitLedgerSubTab === 'CONTRACT') {
+      const data = subleaseContracts.map((sc, idx) => ({
+        'No': idx + 1,
+        '계약번호': sc.contract.contractNo,
+        '고객사명': sc.customer?.name || '고객 미지정',
+        '현장명': sc.site?.name || '현장 미지정',
+        '투입 전대장비': sc.assignedRentedAssets.map(ara => `${ara.ca.assetId ? ara.match?.assetNo : ''} (${ara.match?.renter || '원사'})`).join(', '),
+        '확정 청구액(매출, 원)': sc.confirmedRevenue,
+        '매입 임차료 원가(원)': sc.confirmedCost,
+        '직송 운송비 원가(원)': sc.freightCost,
+        '순마진(스프레드, 원)': sc.netProfit,
+        '마진율(%)': `${sc.marginRate.toFixed(1)}%`,
+        '대차대조 상태': '무결성 일치'
+      }));
+      exportToExcel(data, `계약별_전대손익원장_${new Date().toISOString().split('T')[0]}`, '계약별전대손익');
+    } else {
+      const data = assetProfitLedgers.map((apl, idx) => ({
+        'No': idx + 1,
+        '관리번호': apl.asset.assetNo,
+        '원사 원래번호': apl.asset.vendorAssetNo || '-',
+        '모델명': apl.asset.modelName,
+        '임차처(원사)': apl.asset.renter || '미지정',
+        '누적 렌탈 청구액(매출, 원)': apl.cumRevenue,
+        '누적 지급 임차료(원가, 원)': apl.cumCost,
+        '누적 운송비(원)': apl.freightCost,
+        '누적 공헌이익(원)': apl.cumNetProfit,
+        '수익 기여율(%)': `${apl.marginRate.toFixed(1)}%`
+      }));
+      exportToExcel(data, `자산별_전대손익원장_${new Date().toISOString().split('T')[0]}`, '자산별전대손익');
+    }
+  };
+
   return (
     <div style={{ padding: '20px', maxWidth: '1600px', margin: '0 auto' }}>
       
@@ -640,10 +876,10 @@ export const RentAssets: React.FC = () => {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
         <div>
           <h1 style={{ fontSize: '20px', fontWeight: '800', margin: 0, display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-main)' }}>
-            <Layers className="text-primary" size={22} /> 임차(전대) 자산관리 & 임차처 거래명세서 매입 정산
+            <Layers className="text-primary" size={22} /> 임차 자산 관리 및 전대 손익 정산
           </h1>
           <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: '4px 0 0 0' }}>
-            임차처 거래명세서 1:1 교차 대사, 단가/기간 오차 자동 검증 및 매입 정산 승인 시스템
+            외부 원사 임차 장비 라이프사이클, 대차대조 손익 원장 및 거래명세서 1:1 대사 승인 시스템
           </p>
         </div>
 
@@ -654,7 +890,7 @@ export const RentAssets: React.FC = () => {
         )}
       </div>
 
-      {/* 2. 상단 2대 메인 탭 (임차자산 대장 우선 배치) */}
+      {/* 2. 상단 3대 메인 탭 */}
       <div style={{ display: 'flex', borderBottom: '2px solid var(--border-color)', marginBottom: '20px', gap: '8px' }}>
         <button
           onClick={() => setActiveTab('CURRENT')}
@@ -674,7 +910,28 @@ export const RentAssets: React.FC = () => {
             whiteSpace: 'nowrap'
           }}
         >
-          <Layers size={15} /> 📦 임차자산 대장 & 반납 현황 관리
+          <Layers size={15} /> 📦 임차자산 대장 및 반납 관리
+        </button>
+
+        <button
+          onClick={() => setActiveTab('PROFIT_LEDGER')}
+          style={{
+            padding: '10px 18px',
+            fontSize: '13px',
+            fontWeight: '700',
+            border: 'none',
+            borderBottom: activeTab === 'PROFIT_LEDGER' ? '3px solid var(--primary)' : '3px solid transparent',
+            backgroundColor: activeTab === 'PROFIT_LEDGER' ? 'var(--primary-light)' : 'transparent',
+            color: activeTab === 'PROFIT_LEDGER' ? 'var(--primary)' : 'var(--text-secondary)',
+            cursor: 'pointer',
+            borderRadius: '8px 8px 0 0',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            whiteSpace: 'nowrap'
+          }}
+        >
+          <CreditCard size={15} /> ⚖️ 전대 손익 원장 (대차대조)
         </button>
 
         <button
@@ -695,7 +952,7 @@ export const RentAssets: React.FC = () => {
             whiteSpace: 'nowrap'
           }}
         >
-          <FileSpreadsheet size={15} /> 📄 임차처 거래명세서 대사 & 매입 정산
+          <FileSpreadsheet size={15} /> 📄 임차처 거래명세서 대사 및 매입 정산
         </button>
       </div>
 
@@ -1035,9 +1292,30 @@ export const RentAssets: React.FC = () => {
                             {item.priceDiff > 0 ? `+₩${item.priceDiff.toLocaleString()}` : item.priceDiff < 0 ? `-₩${Math.abs(item.priceDiff).toLocaleString()}` : '0원'}
                           </td>
 
-                          {/* 대사 분석 소견 */}
+                          {/* 대사 분석 소견 및 구상 조치 */}
                           <td style={{ padding: '10px', fontSize: '11px', color: 'var(--text-secondary)', maxWidth: '300px' }}>
-                            {item.reason}
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                              <span>{item.reason}</span>
+                              {canSave && (item.statementRow?.itemType === 'REPAIR' || item.statementRow?.itemType === 'OTHER_FEE' || item.status === 'UNREGISTERED' || item.priceDiff > 0) && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenClaimModal(item)}
+                                  style={{
+                                    alignSelf: 'flex-start',
+                                    padding: '3px 8px',
+                                    fontSize: '10.5px',
+                                    fontWeight: 700,
+                                    borderRadius: '4px',
+                                    backgroundColor: '#fef3c7',
+                                    border: '1px solid #fde047',
+                                    color: '#92400e',
+                                    cursor: 'pointer'
+                                  }}
+                                >
+                                  🚨 고객사 구상 미수금 등록
+                                </button>
+                              )}
+                            </div>
                           </td>
                         </tr>
                       );
@@ -1052,7 +1330,245 @@ export const RentAssets: React.FC = () => {
       )}
 
       {/* ========================================================================= */}
-      {/* 탭 2: 임차자산 대장 현황 (Current Assets) */}
+      {/* 탭: 전대 손익 원장 (대차대조) */}
+      {/* ========================================================================= */}
+      {activeTab === 'PROFIT_LEDGER' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+
+          {/* 대차대조 손익 KPI 카드 */}
+          {(() => {
+            const totalRev = subleaseContracts.reduce((sum, sc) => sum + sc.confirmedRevenue, 0);
+            const totalCost = subleaseContracts.reduce((sum, sc) => sum + sc.confirmedCost, 0);
+            const totalFreight = subleaseContracts.reduce((sum, sc) => sum + sc.freightCost, 0);
+            const totalExpense = totalCost + totalFreight;
+            const netProfit = totalRev - totalExpense;
+            const marginRate = totalRev > 0 ? (netProfit / totalRev) * 100 : 0;
+
+            return (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
+                <div style={{ padding: '14px', backgroundColor: 'var(--bg-card)', borderRadius: '10px', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <span style={{ fontSize: '11.5px', color: 'var(--text-secondary)', fontWeight: 600 }}>📄 전대 확정 청구액 (매출)</span>
+                  <strong style={{ fontSize: '18px', color: '#2563eb' }}>₩{totalRev.toLocaleString()}</strong>
+                  <span style={{ fontSize: '10.5px', color: '#64748b' }}>확정 매출 세금계산서 기준</span>
+                </div>
+
+                <div style={{ padding: '14px', backgroundColor: 'var(--bg-card)', borderRadius: '10px', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <span style={{ fontSize: '11.5px', color: 'var(--text-secondary)', fontWeight: 600 }}>🏢 매입 임차료 원가 (매입)</span>
+                  <strong style={{ fontSize: '18px', color: '#dc2626' }}>₩{totalCost.toLocaleString()}</strong>
+                  <span style={{ fontSize: '10.5px', color: '#64748b' }}>원사 매입세금계산서 기준</span>
+                </div>
+
+                <div style={{ padding: '14px', backgroundColor: 'var(--bg-card)', borderRadius: '10px', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <span style={{ fontSize: '11.5px', color: 'var(--text-secondary)', fontWeight: 600 }}>🚚 직송/경유 운송비 원가</span>
+                  <strong style={{ fontSize: '18px', color: '#d97706' }}>₩{totalFreight.toLocaleString()}</strong>
+                  <span style={{ fontSize: '10.5px', color: '#64748b' }}>화물 배차 대장 확정액</span>
+                </div>
+
+                <div style={{ padding: '14px', backgroundColor: '#f0fdf4', borderRadius: '10px', border: '1px solid #bbf7d0', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <span style={{ fontSize: '11.5px', color: '#166534', fontWeight: 700 }}>⚖️ 전대 순마진 (대차대조)</span>
+                  <strong style={{ fontSize: '18px', color: '#16a34a' }}>₩{netProfit.toLocaleString()}</strong>
+                  <span style={{ fontSize: '11px', fontWeight: 700, color: marginRate >= 20 ? '#16a34a' : '#d97706' }}>
+                    마진율: {marginRate.toFixed(1)}% ({marginRate >= 0 ? '🟢 흑자' : '🔴 적자'})
+                  </span>
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* 서브 세그먼트 스위처 & 엑셀 내보내기 버튼 */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+            <div style={{ display: 'flex', gap: '6px', backgroundColor: 'var(--bg-app)', padding: '4px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+              <button
+                type="button"
+                onClick={() => setProfitLedgerSubTab('CONTRACT')}
+                style={{
+                  padding: '6px 14px',
+                  borderRadius: '6px',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  border: 'none',
+                  cursor: 'pointer',
+                  backgroundColor: profitLedgerSubTab === 'CONTRACT' ? 'var(--primary)' : 'transparent',
+                  color: profitLedgerSubTab === 'CONTRACT' ? '#ffffff' : 'var(--text-secondary)'
+                }}
+              >
+                🏢 계약별 전대 손익 원장 ({subleaseContracts.length}건)
+              </button>
+              <button
+                type="button"
+                onClick={() => setProfitLedgerSubTab('ASSET')}
+                style={{
+                  padding: '6px 14px',
+                  borderRadius: '6px',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  border: 'none',
+                  cursor: 'pointer',
+                  backgroundColor: profitLedgerSubTab === 'ASSET' ? 'var(--primary)' : 'transparent',
+                  color: profitLedgerSubTab === 'ASSET' ? '#ffffff' : 'var(--text-secondary)'
+                }}
+              >
+                🚜 자산별 누적 손익 원장 ({assetProfitLedgers.length}대)
+              </button>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleExportProfitLedgerExcel}
+              style={{
+                padding: '7px 14px',
+                fontSize: '12px',
+                fontWeight: '700',
+                backgroundColor: 'var(--bg-card)',
+                border: '1px solid var(--border-color)',
+                color: 'var(--text-main)',
+                borderRadius: '6px',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px'
+              }}
+            >
+              <Download size={13} /> 전대 손익 원장 엑셀 다운로드
+            </button>
+          </div>
+
+          {/* 1. 계약별 전대 손익 원장 그리드 */}
+          {profitLedgerSubTab === 'CONTRACT' && (
+            <div className="card" style={{ border: '1px solid var(--border-color)', borderRadius: '10px', overflow: 'hidden', backgroundColor: 'var(--bg-card)' }}>
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+                  <thead>
+                    <tr style={{ backgroundColor: 'var(--bg-card-header)', borderBottom: '2px solid var(--border-color)', textAlign: 'left', color: 'var(--text-muted)' }}>
+                      <th style={{ padding: '10px', whiteSpace: 'nowrap' }}>계약번호 / 현장</th>
+                      <th style={{ padding: '10px', whiteSpace: 'nowrap' }}>고객사명</th>
+                      <th style={{ padding: '10px', whiteSpace: 'nowrap' }}>투입 전대장비</th>
+                      <th style={{ padding: '10px', whiteSpace: 'nowrap', textAlign: 'right' }}>📄 확정 청구액(매출)</th>
+                      <th style={{ padding: '10px', whiteSpace: 'nowrap', textAlign: 'right' }}>🏢 매입원가(임차료)</th>
+                      <th style={{ padding: '10px', whiteSpace: 'nowrap', textAlign: 'right' }}>🚚 직송 운송비</th>
+                      <th style={{ padding: '10px', whiteSpace: 'nowrap', textAlign: 'right' }}>🟢 순마진</th>
+                      <th style={{ padding: '10px', whiteSpace: 'nowrap', textAlign: 'center' }}>마진율</th>
+                      <th style={{ padding: '10px', whiteSpace: 'nowrap', textAlign: 'center' }}>대차대조 상태</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {subleaseContracts.length === 0 ? (
+                      <tr>
+                        <td colSpan={9} style={{ padding: '30px', textAlign: 'center', color: 'var(--text-muted)' }}>
+                          현재 진행 중인 전대(임차) 계약이 없습니다.
+                        </td>
+                      </tr>
+                    ) : (
+                      subleaseContracts.map(sc => (
+                        <tr key={sc.contract.id} style={{ borderBottom: '1px solid var(--border-color)', color: 'var(--text-main)' }}>
+                          <td style={{ padding: '10px', whiteSpace: 'nowrap' }}>
+                            <div style={{ display: 'flex', flexDirection: 'column' }}>
+                              <strong style={{ color: '#2563eb' }}>{sc.contract.contractNo}</strong>
+                              <span style={{ fontSize: '11px', color: '#64748b' }}>{sc.site?.name || '현장 미지정'}</span>
+                            </div>
+                          </td>
+                          <td style={{ padding: '10px', whiteSpace: 'nowrap', fontWeight: 600 }}>
+                            {sc.customer?.name || '고객 미지정'}
+                          </td>
+                          <td style={{ padding: '10px', whiteSpace: 'nowrap' }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                              {sc.assignedRentedAssets.map((ara, idx) => (
+                                <span key={idx} style={{ fontSize: '11.5px', color: '#334155' }}>
+                                  • {ara.ca.assetNo} ({ara.match?.renter || '원사'})
+                                </span>
+                              ))}
+                            </div>
+                          </td>
+                          <td style={{ padding: '10px', whiteSpace: 'nowrap', textAlign: 'right', fontWeight: 700, color: '#2563eb' }}>
+                            ₩{sc.confirmedRevenue.toLocaleString()}
+                          </td>
+                          <td style={{ padding: '10px', whiteSpace: 'nowrap', textAlign: 'right', fontWeight: 600, color: '#dc2626' }}>
+                            ₩{sc.confirmedCost.toLocaleString()}
+                          </td>
+                          <td style={{ padding: '10px', whiteSpace: 'nowrap', textAlign: 'right', color: '#d97706' }}>
+                            ₩{sc.freightCost.toLocaleString()}
+                          </td>
+                          <td style={{ padding: '10px', whiteSpace: 'nowrap', textAlign: 'right', fontWeight: 800, color: sc.netProfit >= 0 ? '#16a34a' : '#dc2626' }}>
+                            ₩{sc.netProfit.toLocaleString()}
+                          </td>
+                          <td style={{ padding: '10px', whiteSpace: 'nowrap', textAlign: 'center', fontWeight: 700 }}>
+                            <span style={{ color: sc.marginRate >= 20 ? '#16a34a' : (sc.marginRate >= 0 ? '#d97706' : '#dc2626') }}>
+                              {sc.marginRate.toFixed(1)}%
+                            </span>
+                          </td>
+                          <td style={{ padding: '10px', whiteSpace: 'nowrap', textAlign: 'center' }}>
+                            <span className="badge badge-success" style={{ fontSize: '10px' }}>
+                              무결성 일치 ⚖️
+                            </span>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* 2. 자산별 누적 손익 원장 그리드 */}
+          {profitLedgerSubTab === 'ASSET' && (
+            <div className="card" style={{ border: '1px solid var(--border-color)', borderRadius: '10px', overflow: 'hidden', backgroundColor: 'var(--bg-card)' }}>
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+                  <thead>
+                    <tr style={{ backgroundColor: 'var(--bg-card-header)', borderBottom: '2px solid var(--border-color)', textAlign: 'left', color: 'var(--text-muted)' }}>
+                      <th style={{ padding: '10px', whiteSpace: 'nowrap' }}>관리번호</th>
+                      <th style={{ padding: '10px', whiteSpace: 'nowrap' }}>원사 관리번호</th>
+                      <th style={{ padding: '10px', whiteSpace: 'nowrap' }}>모델명</th>
+                      <th style={{ padding: '10px', whiteSpace: 'nowrap' }}>임차처(원사)</th>
+                      <th style={{ padding: '10px', whiteSpace: 'nowrap', textAlign: 'right' }}>누적 렌탈 청구액</th>
+                      <th style={{ padding: '10px', whiteSpace: 'nowrap', textAlign: 'right' }}>누적 지급 임차료</th>
+                      <th style={{ padding: '10px', whiteSpace: 'nowrap', textAlign: 'right' }}>누적 운송비</th>
+                      <th style={{ padding: '10px', whiteSpace: 'nowrap', textAlign: 'right' }}>🟢 누적 공헌이익</th>
+                      <th style={{ padding: '10px', whiteSpace: 'nowrap', textAlign: 'center' }}>수익 기여율</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {assetProfitLedgers.map(apl => (
+                      <tr key={apl.asset.id} style={{ borderBottom: '1px solid var(--border-color)', color: 'var(--text-main)' }}>
+                        <td style={{ padding: '10px', whiteSpace: 'nowrap', fontWeight: 800, color: '#0f172a' }}>
+                          {apl.asset.assetNo}
+                        </td>
+                        <td style={{ padding: '10px', whiteSpace: 'nowrap', color: '#64748b' }}>
+                          {apl.asset.vendorAssetNo || '-'}
+                        </td>
+                        <td style={{ padding: '10px', whiteSpace: 'nowrap' }}>{apl.asset.modelName}</td>
+                        <td style={{ padding: '10px', whiteSpace: 'nowrap', fontWeight: 600 }}>{apl.asset.renter || '미지정'}</td>
+                        <td style={{ padding: '10px', whiteSpace: 'nowrap', textAlign: 'right', fontWeight: 700, color: '#2563eb' }}>
+                          ₩{apl.cumRevenue.toLocaleString()}
+                        </td>
+                        <td style={{ padding: '10px', whiteSpace: 'nowrap', textAlign: 'right', fontWeight: 600, color: '#dc2626' }}>
+                          ₩{apl.cumCost.toLocaleString()}
+                        </td>
+                        <td style={{ padding: '10px', whiteSpace: 'nowrap', textAlign: 'right', color: '#d97706' }}>
+                          ₩{apl.freightCost.toLocaleString()}
+                        </td>
+                        <td style={{ padding: '10px', whiteSpace: 'nowrap', textAlign: 'right', fontWeight: 800, color: apl.cumNetProfit >= 0 ? '#16a34a' : '#dc2626' }}>
+                          ₩{apl.cumNetProfit.toLocaleString()}
+                        </td>
+                        <td style={{ padding: '10px', whiteSpace: 'nowrap', textAlign: 'center', fontWeight: 700 }}>
+                          <span style={{ color: apl.marginRate >= 20 ? '#16a34a' : '#d97706' }}>
+                            {apl.marginRate.toFixed(1)}%
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 탭: 임차자산 대장 현황 (Current Assets) */}
       {/* ========================================================================= */}
       {activeTab === 'CURRENT' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
@@ -1101,7 +1617,7 @@ export const RentAssets: React.FC = () => {
 
               <div>
                 <button
-                  onClick={() => exportToExcel(filteredAssets, '임차자산_대장_목록')}
+                  onClick={handleExportRentedAssetsExcel}
                   style={{ padding: '7px 12px', fontSize: '12px', fontWeight: '600', backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', color: 'var(--text-main)', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}
                 >
                   <Download size={13} /> 엑셀 다운로드
@@ -1161,13 +1677,31 @@ export const RentAssets: React.FC = () => {
                                   반납
                                 </button>
                               )}
+                              {canSave && isReturned && (
+                                <button
+                                  onClick={() => handleOpenReactivate(a)}
+                                  style={{ padding: '3px 6px', fontSize: '11px', backgroundColor: '#10b981', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 700 }}
+                                  title="기존 자산번호를 유지하며 재임차 활성화"
+                                >
+                                  🔄 재임차
+                                </button>
+                              )}
                             </div>
                           </td>
 
-                          {/* 관리번호 */}
+                          {/* 관리번호 & 원사 관리번호 */}
                           <td style={{ padding: '10px', whiteSpace: 'nowrap', fontWeight: '800', color: 'var(--text-main)' }}>
-                            {a.assetNo}
-                            <span className="badge badge-info" style={{ marginLeft: '4px', fontSize: '9px' }}>임차</span>
+                            <div style={{ display: 'flex', flexDirection: 'column' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                <span>{a.assetNo}</span>
+                                <span className="badge badge-info" style={{ fontSize: '9px' }}>임차</span>
+                              </div>
+                              {a.vendorAssetNo && (
+                                <span style={{ fontSize: '10.5px', color: '#64748b', fontWeight: 500 }}>
+                                  원사: {a.vendorAssetNo}
+                                </span>
+                              )}
+                            </div>
                           </td>
 
                           {/* 모델명 */}
@@ -1242,20 +1776,65 @@ export const RentAssets: React.FC = () => {
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
           <div style={{ backgroundColor: 'var(--bg-card)', color: 'var(--text-main)', padding: '24px', borderRadius: '12px', width: '500px', maxWidth: '90%', maxHeight: '90vh', overflowY: 'auto', border: '1px solid var(--border-color)' }}>
             <h2 style={{ fontSize: '16px', fontWeight: '800', marginBottom: '16px', color: 'var(--text-main)' }}>
-              {editingAsset.id ? '임차 자산 수정' : '임차 자산 신규 등록'}
+              {editingAsset.id ? '임차 자산 수정' : '임차 자산 신규/재임차 등록'}
             </h2>
 
+            {/* 과거 반납 자산 재임차 1초 선택기 (신규 등록 시에만 노출) */}
+            {!editingAsset.id && rentedAssets.some(a => a.status === 'RENTED_RETURNED') && (
+              <div style={{ backgroundColor: '#f1f5f9', padding: '10px 12px', borderRadius: '8px', border: '1px solid #cbd5e1', marginBottom: '12px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <span style={{ fontSize: '11.5px', fontWeight: 700, color: '#334155' }}>
+                  🔄 과거 반납된 자산 재임차 선택 (기존 관리번호 재활용):
+                </span>
+                <select
+                  onChange={e => {
+                    const found = rentedAssets.find(a => a.id === e.target.value);
+                    if (found) {
+                      const today = new Date().toISOString().split('T')[0];
+                      setEditingAsset({
+                        ...found,
+                        rentStart: today,
+                        rentEnd: calcRentEnd(today),
+                        actualRentReturnDate: '',
+                        status: 'AVAILABLE'
+                      });
+                    }
+                  }}
+                  style={{ padding: '6px 8px', fontSize: '12px', borderRadius: '6px', border: '1px solid #94a3b8' }}
+                >
+                  <option value="">-- 신규 채번 (직접 입력) --</option>
+                  {rentedAssets.filter(a => a.status === 'RENTED_RETURNED').map(a => (
+                    <option key={a.id} value={a.id}>
+                      {a.assetNo} ({a.modelName} | 원사: {a.renter || '미지정'} | {a.vendorAssetNo ? `원사번호:${a.vendorAssetNo}` : '원사번호없음'})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
             <form onSubmit={handleSubmitAsset} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <label style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-muted)' }}>관리번호 (필수)</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="예: R-001"
-                  value={editingAsset.assetNo || ''}
-                  onChange={e => setEditingAsset({ ...editingAsset, assetNo: e.target.value })}
-                  style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-app)', color: 'var(--text-main)', fontSize: '12px' }}
-                />
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-muted)' }}>기연 관리번호 (필수)</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="예: R-001"
+                    value={editingAsset.assetNo || ''}
+                    onChange={e => setEditingAsset({ ...editingAsset, assetNo: e.target.value })}
+                    style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-app)', color: 'var(--text-main)', fontSize: '12px' }}
+                  />
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-muted)' }}>원사 원래번호 (선택)</label>
+                  <input
+                    type="text"
+                    placeholder="예: 대한-101, AJ-502"
+                    value={editingAsset.vendorAssetNo || ''}
+                    onChange={e => setEditingAsset({ ...editingAsset, vendorAssetNo: e.target.value })}
+                    style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-app)', color: 'var(--text-main)', fontSize: '12px' }}
+                  />
+                </div>
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
@@ -1712,6 +2291,161 @@ export const RentAssets: React.FC = () => {
               );
             })()}
 
+          </div>
+        </div>
+      )}
+
+      {/* ──────────────────────────────────────────────────────────────────────────
+          🚨 [고객사 구상 미수금 등록 모달] (타사 파손/세척/부대비용 구상 채권화)
+      ────────────────────────────────────────────────────────────────────────── */}
+      {showClaimModal && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100 }}>
+          <div style={{ backgroundColor: 'var(--bg-card)', color: 'var(--text-main)', padding: '24px', borderRadius: '12px', width: '520px', maxWidth: '95%', maxHeight: '90vh', overflowY: 'auto', border: '1px solid var(--border-color)', boxShadow: '0 10px 25px rgba(0,0,0,0.3)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', borderBottom: '1px solid var(--border-color)', paddingBottom: '10px' }}>
+              <h3 style={{ fontSize: '16px', fontWeight: '800', margin: 0, display: 'flex', alignItems: 'center', gap: '6px', color: '#b45309' }}>
+                🚨 타사 청구 부대비용 ➔ 고객사 구상 미수금 등록
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowClaimModal(false)}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}
+              >
+                <XCircle size={18} />
+              </button>
+            </div>
+
+            <div style={{ backgroundColor: '#fef3c7', padding: '10px 12px', borderRadius: '8px', border: '1px solid #fde047', fontSize: '12px', color: '#92400e', marginBottom: '14px', lineHeight: '1.4' }}>
+              • 타사(원사)에 지급할 매입채무는 즉시 100% 확정 지급되며,<br/>
+              • 고객 귀책 비용은 <strong>외상미수금 대장(구상채권)</strong>에 등록되어 향후 1회 또는 수회에 걸쳐 매출 청구서 반영 및 입금 상계됩니다.
+            </div>
+
+            <form onSubmit={handleSubmitClaim} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-muted)' }}>청구 원사명</label>
+                  <input
+                    type="text"
+                    readOnly
+                    value={claimVendorName}
+                    style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-app)', color: 'var(--text-main)', fontSize: '12px' }}
+                  />
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-muted)' }}>대상 장비번호</label>
+                  <input
+                    type="text"
+                    value={claimAssetNo}
+                    onChange={e => setClaimAssetNo(e.target.value)}
+                    style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-app)', color: 'var(--text-main)', fontSize: '12px' }}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <label style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-muted)' }}>구상 청구 대상 고객사 (필수)</label>
+                <select
+                  required
+                  value={claimCustomerId}
+                  onChange={e => {
+                    const custId = e.target.value;
+                    setClaimCustomerId(custId);
+                    const custContracts = contracts.filter(c => c.customerId === custId && c.status !== 'COMPLETED');
+                    if (custContracts.length > 0) {
+                      setClaimContractId(custContracts[0].id);
+                    } else {
+                      setClaimContractId('');
+                    }
+                  }}
+                  style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-app)', color: 'var(--text-main)', fontSize: '12px' }}
+                >
+                  <option value="">-- 귀책 고객사 선택 --</option>
+                  {customers.map(c => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <label style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-muted)' }}>연결 계약 (선택)</label>
+                <select
+                  value={claimContractId}
+                  onChange={e => setClaimContractId(e.target.value)}
+                  style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-app)', color: 'var(--text-main)', fontSize: '12px' }}
+                >
+                  <option value="">-- 계약 선택 (미지정 시 고객사 일반 미수금) --</option>
+                  {contracts.filter(c => !claimCustomerId || c.customerId === claimCustomerId).map(c => {
+                    const s = sites.find(site => site.id === c.siteId);
+                    return (
+                      <option key={c.id} value={c.id}>
+                        {c.contractNo} ({s?.name || '현장미지정'})
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-muted)' }}>구상 청구액 (원)</label>
+                  <input
+                    type="number"
+                    required
+                    value={claimAmount}
+                    onChange={e => setClaimAmount(Number(e.target.value))}
+                    style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-app)', color: 'var(--text-main)', fontSize: '12px', fontWeight: 700 }}
+                  />
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-muted)' }}>구상 발생일</label>
+                  <input
+                    type="date"
+                    required
+                    value={claimOccurredDate}
+                    onChange={e => setClaimOccurredDate(e.target.value)}
+                    style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-app)', color: 'var(--text-main)', fontSize: '12px' }}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <label style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-muted)' }}>내부 장부 기재명 (실제 발생 원인)</label>
+                <input
+                  type="text"
+                  required
+                  value={claimInternalDescription}
+                  onChange={e => setClaimInternalDescription(e.target.value)}
+                  style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-app)', color: 'var(--text-main)', fontSize: '12px' }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <label style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-muted)' }}>명세서 표기명 (고객 청구서 인쇄용)</label>
+                <input
+                  type="text"
+                  value={claimDisplayName}
+                  onChange={e => setClaimDisplayName(e.target.value)}
+                  style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-app)', color: 'var(--text-main)', fontSize: '12px' }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '14px' }}>
+                <button
+                  type="button"
+                  onClick={() => setShowClaimModal(false)}
+                  style={{ padding: '8px 14px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-card)', color: 'var(--text-main)', fontSize: '12px', cursor: 'pointer' }}
+                >
+                  취소
+                </button>
+                <button
+                  type="submit"
+                  style={{ padding: '8px 18px', borderRadius: '6px', border: 'none', backgroundColor: '#d97706', color: '#ffffff', fontSize: '12px', fontWeight: 700, cursor: 'pointer' }}
+                >
+                  🚨 외상미수금 대장 등록 확정
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

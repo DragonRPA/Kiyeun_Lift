@@ -5,7 +5,7 @@ import {
   LayoutDashboard, Users, UserCheck, Package, Layers, PlusCircle,
   Truck, Wrench, Shield, ShoppingBag, CreditCard, LogOut, Sun, Moon, Menu, X, Zap, Settings, Database as DatabaseIcon,
   TrendingUp, Clock, AlertTriangle, Building2, ChevronDown, ChevronRight, Briefcase, Box, FolderKanban, ShieldAlert, Terminal, ArrowLeftRight, CheckSquare,
-  ExternalLink, Sparkles, HelpCircle
+  ExternalLink, Sparkles, HelpCircle, Smartphone
 } from 'lucide-react';
 
 import { WeatherWidget } from './components/WeatherWidget';
@@ -48,6 +48,7 @@ import { PurchaseSettlementPage } from './pages/PurchaseSettlementPage';
 import { InitialDbUploader } from './pages/InitialDbUploader';
 import { AgentHeaderBadge } from './components/AgentHeaderBadge';
 import { MirrorSyncProgressToast } from './components/MirrorSyncProgressToast';
+import { MobileApp } from './mobile/MobileApp';
 
 export interface SubMenuItem {
   id: string;
@@ -78,6 +79,20 @@ const App: React.FC = () => {
 
   // 모바일 메뉴 사이드바 토글 상태
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  // 모바일 전용 뷰 모드 (PWA / Field App)
+  const [isMobileView, setIsMobileView] = useState<boolean>(() => {
+    // 1. URL 쿼리나 해시 확인 (/m 또는 ?view=mobile)
+    if (window.location.pathname.startsWith('/m') || window.location.search.includes('view=mobile')) {
+      return true;
+    }
+    // 2. localStorage 저장값 확인
+    const savedView = localStorage.getItem('erp_view_mode');
+    if (savedView === 'mobile') return true;
+    if (savedView === 'desktop') return false;
+    // 3. 기기 화면 너비 768px 미만이면 기본 모바일 모드 진입
+    return window.innerWidth < 768;
+  });
 
   // 컴포넌트 마운트 시 저장된 로그인 편의 정보 로드
   useEffect(() => {
@@ -369,7 +384,19 @@ const App: React.FC = () => {
     );
   }
 
-  // 2. 로그인 상태: 메인 ERP 대시보드 렌더링
+  // 2. 모바일 전용 PWA 화면 렌더링 (분리 구축 뷰)
+  if (isMobileView) {
+    return (
+      <MobileApp
+        onSwitchToPc={() => {
+          setIsMobileView(false);
+          localStorage.setItem('erp_view_mode', 'desktop');
+        }}
+      />
+    );
+  }
+
+  // 3. 로그인 상태: 메인 ERP 대시보드 렌더링
   const userHasViewPerm = hasPermission(activeTab, 'view');
 
   return (
@@ -403,11 +430,38 @@ const App: React.FC = () => {
           <WeatherWidget />
         </div>
 
-        {/* 사용자 정보 및 화면 모드 (밝은화면모드 / 어두운화면모드) */}
+        {/* 사용자 정보 및 화면 모드 (밝은화면모드 / 어두운화면모드 / 모바일전환) */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
 
           {/* 🤖 로컬 사이드카 에이전트 실시간 상태 미니 배지 */}
           <AgentHeaderBadge currentUser={currentUser} />
+
+          {/* 모바일 현장 전용 뷰 전환 버튼 */}
+          <button
+            onClick={() => {
+              setIsMobileView(true);
+              localStorage.setItem('erp_view_mode', 'mobile');
+            }}
+            style={{
+              padding: '6px 14px',
+              borderRadius: '20px',
+              backgroundColor: 'var(--bg-app)',
+              color: 'var(--text-primary)',
+              border: '1px solid var(--border-color)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              fontSize: '12.5px',
+              fontWeight: '600',
+              cursor: 'pointer',
+              whiteSpace: 'nowrap',
+              transition: 'all 0.15s ease'
+            }}
+            title="모바일 현장 PWA 모드로 전환"
+          >
+            <Smartphone size={15} color="#38BDF8" />
+            <span>모바일화면</span>
+          </button>
 
           {/* 화면 모드 전환 버튼 (명시적 텍스트 라벨 적용) */}
           <button

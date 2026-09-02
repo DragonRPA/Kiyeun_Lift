@@ -317,26 +317,34 @@ export const Billings: React.FC = () => {
   const handleExportExcel = () => {
     const excelData = filteredBillings.map((b, idx) => {
       const supply = b.totalAmount || 0;
-      const grand = supply + Math.round(supply * 0.1);
+      const vat = Math.round(supply * 0.1);
+      const grand = supply + vat;
       const isPaid = b.status === 'PAID';
       const actualPaid = isPaid ? grand : (b.paidAmount || 0);
       const unpaid = isPaid ? 0 : Math.max(0, grand - actualPaid);
       return {
+        // ① 식별 및 기준정보
         'No': idx + 1,
-        '청구월': b.billingYm,
-        '고객사': getCustName(b.customerId),
+        '청구ID': b.id,
+        '청구연월': b.billingYm,
+        '고객사명': getCustName(b.customerId),
         '청구 일자': b.billingDate || '-',
-        '공급가액': `${supply.toLocaleString()}원`,
-        '청구 금액(VAT포함)': `${grand.toLocaleString()}원`,
-        '수납 금액': `${actualPaid.toLocaleString()}원`,
-        '미납 금액': `${unpaid.toLocaleString()}원`,
-        '결제 상태': b.status === 'UNPAID'     ? '미발송' :
-                   b.status === 'REQUESTED' ? '발송완료(미납)' :
-                   b.status === 'REJECTED'  ? '이의제기(취소)' :
-                   b.status === 'PAID'      ? '완납' :
-                   b.status === 'PARTIAL'   ? '일부납' : b.status,
-        '수납 최종일': b.status === 'PAID' ? b.updatedAt.split('T')[0] : '-',
-        '등록일': b.createdAt ? b.createdAt.split('T')[0] : '-'
+
+        // ② 금액 및 세무
+        '공급가액(원)': supply,
+        '부가세(원)': vat,
+        '청구총액(VAT포함, 원)': grand,
+        '수납 누적액(원)': actualPaid,
+        '미납 잔액(원)': unpaid,
+
+        // ③ 상태 및 일정
+        '결제/발송 상태': b.status === 'UNPAID'    ? '미발송' :
+                         b.status === 'REQUESTED' ? '발송완료(미납)' :
+                         b.status === 'REJECTED'  ? '이의제기(취소)' :
+                         b.status === 'PAID'      ? '완납' :
+                         b.status === 'PARTIAL'   ? '일부납' : b.status,
+        '수납 최종일': b.status === 'PAID' && b.updatedAt ? b.updatedAt.split('T')[0] : '-',
+        '등록일시': b.createdAt ? b.createdAt.split('T')[0] : '-'
       };
     });
 

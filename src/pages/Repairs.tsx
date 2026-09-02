@@ -158,23 +158,48 @@ export const Repairs: React.FC = () => {
 
   const handleExportExcel = () => {
     const excelData = filteredRepairs.map((r, idx) => ({
+      // ① 식별 및 분류
       'No': idx + 1,
-      '자산번호': getAssetNo(r.assetId),
-      '모델명': getAssetModel(r.assetId),
+      '티켓번호': r.ticketNo || r.id,
+      '자산번호': r.assetNo || getAssetNo(r.assetId),
+      '모델명': r.modelName || getAssetModel(r.assetId),
       '정비 구분': r.maintenanceType === 'EMERGENCY_AS' ? '긴급출장정비' :
                   r.maintenanceType === 'PREVENTIVE' ? '정기예방정비' :
                   r.maintenanceType === 'EXTERNAL' ? '외주정비' : '야적장자사정비',
-      '고객사/현장': r.customerName ? `${r.customerName} (${r.siteName || '-'})` : '-',
+      '작업 위치': r.workLocation === 'SITE' ? '현장방문' : '야적장',
+
+      // ② 고객사 및 현장
+      '고객사': r.customerName || '-',
+      '현장명': r.siteName || '-',
+      '상세 위치': r.locationDetail || '-',
+
+      // ③ 접수 및 고장 증상
+      '접수자명': r.reporterName || '-',
+      '접수자 연락처': r.reporterContact || '-',
+      '고장 분류': r.issueCategory || '-',
+      '고장 내용': r.issueDescription || r.details || '-',
+      '에러코드': r.errorCode || '-',
+
+      // ④ 배정 정비사
+      '담당 정비사': r.mechanicName || getMechanicName(r.mechanicId),
+
+      // ⑤ 일정
+      '의뢰/접수일': r.requestDate || '-',
+      '방문예정일': r.scheduleDate || '-',
+      '정비완료일': r.repairDate || r.completedDate || '-',
+
+      // ⑥ 조치 결과 및 비용
       '정비 상태': r.status === 'SCHEDULED' ? '방문예정' :
                   r.status === 'IN_PROGRESS' ? '정비중' :
                   r.status === 'UNRESOLVED' ? `미완료 (${r.unresolvedReason || '-'})` : '정비완료',
-      '방문/의뢰일': r.scheduleDate || r.requestDate || '-',
-      '정비완료일': r.repairDate || '-',
-      '정비 내용': r.details || '',
-      '정비 총비용': `${(r.totalCost || 0).toLocaleString()}원`,
-      '고객사 청구여부': r.billableToCustomer ? '청구' : '미청구',
-      '담당 정비사': getMechanicName(r.mechanicId),
-      '후속 조치': r.nextAction === 'REVISIT' ? '재방문' : r.nextAction === 'EXCHANGE_REQUEST' ? '대차의뢰' : '-'
+      '조치 내용': r.actionTaken || r.details || '-',
+      '후속 조치': r.nextAction === 'REVISIT' ? '재방문' : r.nextAction === 'EXCHANGE_REQUEST' ? '대차의뢰' : '-',
+      '정비 총비용(원)': r.totalCost || 0,
+      '유상 청구여부': r.billableToCustomer || r.billableType === 'BILLABLE' ? '유상청구' : '무상정비',
+      '청구 금액(원)': r.billableAmount || 0,
+
+      // ⑦ 메모
+      '비고': r.memo || '-'
     }));
 
     exportToExcel(excelData, `정비정리대장_${new Date().toISOString().split('T')[0]}`, '정비목록');

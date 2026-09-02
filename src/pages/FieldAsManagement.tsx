@@ -518,24 +518,44 @@ export const FieldAsManagement: React.FC = () => {
   // 대장 엑셀 내보내기
   const handleExportLedgerExcel = () => {
     const data = ledgerFilteredTickets.map((t, idx) => ({
+      // ① 식별 및 접수
       'No': idx + 1,
       '접수번호': t.ticketNo,
+      '관리번호': t.assetNo || '-',
+      '모델명': t.modelName || '-',
       '접수구분': t.source === 'SALES_REQUEST' ? '영업요청' : (t.source === 'BAND_IMPORT' ? '밴드이력' : '직접접수'),
       '접수일자': t.requestDate,
-      '현장명': t.siteName,
-      '업체명': t.customerName,
-      '관리번호': t.assetNo,
+
+      // ② 고객사 및 현장
+      '업체명(고객사)': t.customerName || '-',
+      '현장명': t.siteName || '-',
       '장비위치': t.locationDetail || '-',
-      '고장분류': t.issueCategory,
-      '고장증상': t.issueDescription,
-      '진행상태': t.status,
-      '방문일자': t.visitDate || '-',
+      '접수자 연락처': t.reporterContact || '-',
+
+      // ③ 고장 증상
+      '고장분류': t.issueCategory || '-',
+      '고장증상': t.issueDescription || '-',
+
+      // ④ 배정 기사
       '담당기사': users.find(u => u.id === t.assignedMechanicId)?.name || '미배정',
+
+      // ⑤ 일정 및 진행상태
+      '방문일자': t.visitDate || '-',
+      '진행상태': t.status === 'COMPLETED' ? '완료' :
+                 t.status === 'IN_PROGRESS' ? '조치중' :
+                 t.status === 'REVISIT' ? '재방문요청' :
+                 t.status === 'SCHEDULED' ? '방문예정' :
+                 t.status === 'GUIDED' ? '유선안내완료' :
+                 t.status === 'UNRESOLVED' ? '미해결' : '접수/배정',
+
+      // ⑥ 조치 내용 및 부품/비용
       '조치내용': t.actionTaken || '-',
       '사용소모품': (t.partsUsed || []).map(p => `${p.modelName} ${p.quantity}개`).join(', ') || '없음',
       '유무상구분': t.billableType === 'BILLABLE' ? '유상' : '무상',
-      '청구금액': t.billableAmount ? `${t.billableAmount.toLocaleString()}원` : '0원',
-      '접수자연락처': t.reporterContact || '-'
+      '청구금액(원)': t.billableAmount ? `${t.billableAmount.toLocaleString()}원` : '0원',
+
+      // ⑦ 비고
+      '비고': t.memo || '-'
     }));
     exportToExcel(data, `현장AS처리대장_${new Date().toISOString().split('T')[0]}`, '현장AS대장');
   };

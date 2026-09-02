@@ -141,8 +141,12 @@ export const TruckDispatch: React.FC = () => {
 
     const fromLabel = isOutbound ? '상차지 (출발)' : '상차지 (회수지)';
     const toLabel   = isOutbound ? '하차지 (현장)' : '하차지 (반납지)';
-    const fromAddr  = isOutbound ? (delivery.originAddress || '당사 창고') : (delivery.destinationAddress || site?.address || '-');
-    const toAddr    = isOutbound ? (delivery.destinationAddress || site?.address || '-') : (delivery.originAddress || '당사 창고');
+    const fromAddr  = delivery.pickupVendorName 
+      ? `[타사 직출고] ${delivery.pickupVendorName} (${delivery.originAddress || '-'})` 
+      : (isOutbound ? (delivery.originAddress || '당사 보관소') : (delivery.destinationAddress || site?.address || '-'));
+    const toAddr    = delivery.viaDropoffName 
+      ? `[혼적 경유] 1차: ${delivery.viaDropoffName} (${delivery.viaDropoffAddress || '본사'}) ➔ 2차: ${delivery.destinationAddress || '원사 보관소'}` 
+      : (isOutbound ? (delivery.destinationAddress || site?.address || '-') : (delivery.originAddress || '당사 보관소'));
 
     const html = `<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8">
 <title>${title}</title>
