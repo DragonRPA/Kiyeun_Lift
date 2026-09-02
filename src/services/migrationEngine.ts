@@ -1879,3 +1879,271 @@ export function runReconciliationAudit(parsed: ParsedInitialData): Reconciliatio
 }
 
 export const parseWorkbookToEntities = parseInitialExcelWorkbook;
+
+// ────────────────────────────────────────────────────────────────────────────
+// 배차 이력 엑셀 파싱 & 적재 (Build.32)
+// ────────────────────────────────────────────────────────────────────────────
+
+export interface ParsedDispatchRow {
+  id: string;
+  type: 'OUTBOUND' | 'INBOUND' | 'RETURN' | 'EXCHANGE';
+  status: 'COMPLETED' | 'PENDING';
+  loadingDate: string;
+  unloadingDate: string;
+  customerId: string | null;
+  customerNameRaw: string;
+  contractId: string | null;
+  contractAssetId: string | null;
+  destinationAddress: string;
+  transportCompany: string;
+  vehicleType: string;
+  deliveryCost: number;
+  specialNotes: string;
+  sourceSheet: string;
+  sourceRow: number;
+}
+
+export interface ParsedDispatchData {
+  rows: ParsedDispatchRow[];
+  stats: {
+    total: number;
+    completed: number;
+    customerUnmatched: number;
+    contractUnmatched: number;
+    exchangeCount: number;
+  };
+}
+
+/** 시트명에서 연도·월 추출 */
+function parseSheetYearMonth(sheetName: string): { year: number; month: number } | null {
+  // '26년X월' → 2026년
+  const m26 = sheetName.match(/^26년\s*(\d{1,2})월/);
+  if (m26) return { year: 2026, month: parseInt(m26[1], 10) };
+  // 'X월' (연도 없음) → 2025년
+  const m25 = sheetName.match(/^(\d{1,2})월/);
+  if (m25) return { year: 2025, month: parseInt(m25[1], 10) };
+  return null;
+}
+
+/** '1일', '15일오전' 등에서 day 추출 */
+function parseDayStr(raw: any): number | null {
+  if (!raw) return null;
+  const m = String(raw).match(/^(\d{1,2})일/);
+  return m ? parseInt(m[1], 10) : null;
+}
+
+/** YYYY-MM-DD 조합, day 없으면 해당 월 마지막 날 사용 */
+function buildDateStr(year: number, month: number, day: number | null): string {
+  const lastDay = new Date(year, month, 0).getDate();
+  const d = day && day >= 1 && day <= lastDay ? day : lastDay;
+  return `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+}
+
+export function parseDispatchExcelWorkbook(
+  fileBuffer: ArrayBuffer | Uint8Array | XLSX.WorkBook,
+  customers: { id: string; name: string }[],
+  contractAssets: { id: string; contractId: string; assetId: string | null; expectedModel: string | null }[],
+  contracts: { id: string; customerId: string; siteId: string | null }[],
+  customerSites: { id: string; customerId: string; siteName: string }[]
+): ParsedDispatchData {
+  let wb: XLSX.WorkBook;
+  if ((fileBuffer as any).Sheets) {
+    wb = fileBuffer as XLSX.WorkBook;
+  } else {
+    wb = XLSX.read(fileBuffer, { type: 'array' });
+  }
+
+  const rows: ParsedDispatchRow[] = [];
+  let seq = 1;
+
+  // 모델명 정규화 키 (공백/하이픈/대소문자 무시)
+  const normalizeModelKey = (name?: string | null): string => {
+    if (!name) return '';
+    return name.replace(/[\s\-_]/g, '').toUpperCase();
+  };
+
+  // 고객명 정규화 Map 생성
+  const customerMap = new Map<string, string>(); // normalizedName → customerId
+  customers.forEach(c => {
+    const key = normalizeCustomerName(c.name);
+    if (key) customerMap.set(key, c.id);
+  });
+
+  for (const sheetName of wb.SheetNames) {
+    const ym = parseSheetYearMonth(sheetName);
+    if (!ym) continue; // 연월 파싱 실패 시 스킵
+
+    const ws = wb.Sheets[sheetName];
+    if (!ws) continue;
+    const raw = XLSX.utils.sheet_to_json<any[]>(ws, { header: 1, defval: null });
+
+    // Row 0 = 헤더, Row 1~ = 데이터
+    for (let ri = 1; ri < raw.length; ri++) {
+      const r = raw[ri] as any[];
+      if (!r) continue;
+
+      // Col[4] 장비명 없으면 스킵
+      const modelRaw = r[4] != null ? String(r[4]).trim() : '';
+      if (!modelRaw) continue;
+
+      // 날짜 파싱
+      const loadDay = parseDayStr(r[0]);
+      const unloadDay = parseDayStr(r[1]);
+      const loadingDate = buildDateStr(ym.year, ym.month, loadDay);
+      const unloadingDate = buildDateStr(ym.year, ym.month, unloadDay);
+
+      // 운반비: 만원 단위 → 원
+      const deliveryCost = (sanitizeNumber(r[3]) || 0) * 10000;
+
+      // 수량
+      const qty = sanitizeNumber(r[5]) || 1;
+
+      // 업체명, 현장명, 주소
+      const customerNameRaw = r[6] != null ? String(r[6]).trim() : '';
+      const siteName = r[7] != null ? String(r[7]).trim() : '';
+      const address = r[8] != null ? String(r[8]).trim() : '';
+      const destinationAddress = [siteName, address ? `(${address})` : ''].filter(Boolean).join(' ');
+
+      // 배차유무 → status
+      const dispatchStatus = r[9] != null ? String(r[9]).trim() : '';
+      const status: 'COMPLETED' | 'PENDING' = dispatchStatus === '완료' ? 'COMPLETED' : 'PENDING';
+
+      // 입출고 + 비고 → type
+      const inoutRaw = r[10] != null ? String(r[10]).trim() : '';
+      const noteRaw = r[12] != null ? String(r[12]).trim() : '';
+      let type: 'OUTBOUND' | 'INBOUND' | 'RETURN' | 'EXCHANGE';
+      if (noteRaw.includes('왕복')) {
+        type = 'EXCHANGE';
+      } else if (inoutRaw === '출고') {
+        type = 'OUTBOUND';
+      } else if (inoutRaw === '입고') {
+        type = 'INBOUND';
+      } else if (inoutRaw === '반납') {
+        type = 'RETURN';
+      } else {
+        type = 'OUTBOUND'; // 기본값
+      }
+
+      // 운반업체
+      const transportCompany = r[11] != null ? String(r[11]).trim() : '';
+
+      // 차량톤수
+      const vehicleType = r[2] != null ? String(r[2]).trim() : '';
+
+      // specialNotes 조합 (수량 + 비고)
+      const noteParts: string[] = [];
+      if (qty > 1) noteParts.push(`수량: ${qty}대`);
+      if (noteRaw) noteParts.push(noteRaw);
+      const specialNotes = noteParts.join(' / ');
+
+      // 고객 매핑
+      const custKey = normalizeCustomerName(customerNameRaw);
+      const customerId = custKey ? (customerMap.get(custKey) ?? null) : null;
+
+      // contract_assets 매핑 (3중 조건: 고객 → 현장 유사 → 모델 유사)
+      let contractId: string | null = null;
+      let contractAssetId: string | null = null;
+
+      if (customerId) {
+        const custContracts = contracts.filter(c => c.customerId === customerId);
+        const modelKey = normalizeModelKey(modelRaw);
+        for (const cont of custContracts) {
+          const ca = contractAssets.find(ca =>
+            ca.contractId === cont.id &&
+            !ca.assetId &&  // 미할당 우선 매핑 시도
+            normalizeModelKey(ca.expectedModel) === modelKey
+          ) || contractAssets.find(ca =>
+            ca.contractId === cont.id &&
+            normalizeModelKey(ca.expectedModel) === modelKey
+          );
+          if (ca) {
+            contractId = cont.id;
+            contractAssetId = ca.id;
+            break;
+          }
+        }
+      }
+
+      const id = `DEL-HIST-${String(seq++).padStart(6, '0')}`;
+
+      rows.push({
+        id,
+        type,
+        status,
+        loadingDate,
+        unloadingDate,
+        customerId,
+        customerNameRaw,
+        contractId,
+        contractAssetId,
+        destinationAddress,
+        transportCompany,
+        vehicleType,
+        deliveryCost,
+        specialNotes,
+        sourceSheet: sheetName,
+        sourceRow: ri
+      });
+    }
+  }
+
+  const stats = {
+    total: rows.length,
+    completed: rows.filter(r => r.status === 'COMPLETED').length,
+    customerUnmatched: rows.filter(r => !r.customerId).length,
+    contractUnmatched: rows.filter(r => !r.contractId).length,
+    exchangeCount: rows.filter(r => r.type === 'EXCHANGE').length
+  };
+
+  return { rows, stats };
+}
+
+/** 배차 이력 일괄 적재 */
+export async function ingestDispatchData(
+  parsed: ParsedDispatchData,
+  onProgress?: (step: number, total: number, message: string) => void
+): Promise<{ success: boolean; message: string; insertedCount: number }> {
+  const nowIso = new Date().toISOString();
+  const total = 2;
+
+  onProgress?.(0, total, `배차 이력 ${parsed.rows.length}건 적재 준비 중...`);
+
+  const deliveryRecords = parsed.rows.map(r => ({
+    id: r.id,
+    type: r.type,
+    status: r.status,
+    request_date: r.loadingDate,
+    loading_date: r.loadingDate,
+    unloading_date: r.unloadingDate,
+    customer_id: r.customerId,
+    contract_id: r.contractId,
+    contract_asset_id: r.contractAssetId,
+    destination_address: r.destinationAddress,
+    transport_company: r.transportCompany,
+    vehicle_type: r.vehicleType,
+    delivery_cost: r.deliveryCost,
+    special_notes: r.specialNotes,
+    dispatch_category: r.type === 'OUTBOUND' ? '출고'
+      : r.type === 'INBOUND' ? '입고'
+      : r.type === 'RETURN' ? '반납'
+      : r.type === 'EXCHANGE' ? '교환' : '출고',
+    created_at: nowIso,
+    updated_at: nowIso
+  }));
+
+  onProgress?.(1, total, `배차 이력 ${deliveryRecords.length}건 Supabase 적재 중...`);
+
+  try {
+    await batchUpsertChunked('deliveries', deliveryRecords, 100);
+  } catch (e: any) {
+    return { success: false, message: `배차 적재 실패: ${e.message}`, insertedCount: 0 };
+  }
+
+  onProgress?.(2, total, '배차 이력 적재 완료');
+
+  return {
+    success: true,
+    message: `배차 이력 ${deliveryRecords.length}건 적재 완료 (고객미매핑: ${parsed.stats.customerUnmatched}건, 계약미매핑: ${parsed.stats.contractUnmatched}건)`,
+    insertedCount: deliveryRecords.length
+  };
+}

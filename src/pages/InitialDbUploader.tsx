@@ -7,7 +7,10 @@ import {
   parseWorkbookToEntities,
   ingestExcelInitialData,
   ParsedInitialData,
-  ReconciliationReport
+  ReconciliationReport,
+  parseDispatchExcelWorkbook,
+  ingestDispatchData,
+  ParsedDispatchData
 } from '../services/migrationEngine';
 import * as XLSX from 'xlsx';
 import {
@@ -33,7 +36,7 @@ import {
 } from 'lucide-react';
 
 export const InitialDbUploader: React.FC = () => {
-  const { showSuccessToast, showErrorModal, fullRefreshFromServer, users } = useApp();
+  const { showSuccessToast, showErrorModal, fullRefreshFromServer, users, customers, contracts, contractAssets, customerSites } = useApp();
 
   // 상태 관리
   const [activeTab, setActiveTab] = useState<'INGEST' | 'BACKUP' | 'RESET'>('INGEST');
@@ -62,6 +65,15 @@ export const InitialDbUploader: React.FC = () => {
   const [histBillingEnabled, setHistBillingEnabled] = useState(false);
   const [histBillingStart, setHistBillingStart] = useState('2026-01');
   const [histBillingEnd, setHistBillingEnd] = useState('2026-07');
+
+  // 배차 이력 업로드 상태
+  const [dispatchFileName, setDispatchFileName] = useState<string>('');
+  const [dispatchParsedData, setDispatchParsedData] = useState<ParsedDispatchData | null>(null);
+  const [isDispatchParsing, setIsDispatchParsing] = useState(false);
+  const [isDispatchIngesting, setIsDispatchIngesting] = useState(false);
+  const [dispatchProgressMsg, setDispatchProgressMsg] = useState('');
+
+  const dispatchFileInputRef = useRef<HTMLInputElement>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -145,6 +157,66 @@ export const InitialDbUploader: React.FC = () => {
       }
     };
     reader.readAsArrayBuffer(file);
+  };
+
+  // ── 배차 이력 엑셀 파싱 ──
+  const handleDispatchFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    const file = files[0];
+    setDispatchFileName(file.name);
+    setIsDispatchParsing(true);
+    setDispatchParsedData(null);
+
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const data = new Uint8Array(evt.target?.result as ArrayBuffer);
+        const wb = XLSX.read(data, { type: 'array' });
+        const parsed = parseDispatchExcelWorkbook(
+          wb,
+          customers || [],
+          contractAssets || [],
+          contracts || [],
+          customerSites || []
+        );
+        setDispatchParsedData(parsed);
+        showSuccessToast?.(
+          `배차 이력 파싱 완료: 총 ${parsed.stats.total}건 / EXCHANGE ${parsed.stats.exchangeCount}건 / 고객미매핑 ${parsed.stats.customerUnmatched}건`
+        );
+      } catch (err: any) {
+        showErrorModal?.(`배차 엑셀 파싱 오류: ${err.message}`);
+      } finally {
+        setIsDispatchParsing(false);
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  };
+
+  // ── 배차 이력 일괄 적재 ──
+  const handleDispatchIngest = async () => {
+    if (!dispatchParsedData) {
+      showErrorModal?.('분석된 배차 데이터가 없습니다. 먼저 파일을 선택해 주세요.');
+      return;
+    }
+    setIsDispatchIngesting(true);
+    setDispatchProgressMsg('배차 이력 적재 시작...');
+    try {
+      const result = await ingestDispatchData(dispatchParsedData, (_step, _total, msg) => {
+        setDispatchProgressMsg(msg);
+      });
+      if (result.success) {
+        showSuccessToast?.(result.message);
+        await fullRefreshFromServer();
+      } else {
+        showErrorModal?.(result.message);
+      }
+    } catch (e: any) {
+      showErrorModal?.(`배차 적재 오류: ${e.message}`);
+    } finally {
+      setIsDispatchIngesting(false);
+      setDispatchProgressMsg('');
+    }
   };
 
   // ── 4. 시작점 데이터 일괄 적재 실행 ──
@@ -379,7 +451,103 @@ export const InitialDbUploader: React.FC = () => {
             )}
           </div>
 
-          {/* 3. 파싱 통계 프리뷰 카드뉴스 */}
+          {/* ③ 배차 이력 업로드 카드 */}
+          <div style={{ backgroundColor: '#ffffff', borderRadius: '8px', border: '1px solid #e2e8f0', padding: '20px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
+              <Truck size={16} color="#0369a1" />
+              <span style={{ fontSize: '14px', fontWeight: 600, color: '#0369a1', whiteSpace: 'nowrap' }}>
+                배차 이력 업로드
+              </span>
+              <span style={{ fontSize: '12px', color: '#64748b', whiteSpace: 'nowrap' }}>
+                배차현황 엑셀 파일 (2025-04 ~ 2026-09)
+              </span>
+            </div>
+
+            {/* 파일 선택 버튼 */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+              <input
+                ref={dispatchFileInputRef}
+                type="file"
+                accept=".xlsx,.xls"
+                onChange={handleDispatchFileSelect}
+                style={{ display: 'none' }}
+              />
+              <button
+                onClick={() => dispatchFileInputRef.current?.click()}
+                disabled={isDispatchParsing || isDispatchIngesting}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '6px',
+                  padding: '8px 16px', backgroundColor: '#0369a1', color: 'white',
+                  border: 'none', borderRadius: '6px', cursor: 'pointer',
+                  fontSize: '13px', fontWeight: 600, whiteSpace: 'nowrap',
+                  opacity: (isDispatchParsing || isDispatchIngesting) ? 0.5 : 1
+                }}
+              >
+                <FileSpreadsheet size={14} />
+                배차 엑셀 파일 선택
+              </button>
+
+              {dispatchFileName && (
+                <span style={{ fontSize: '13px', color: '#1e293b', whiteSpace: 'nowrap' }}>
+                  {dispatchFileName}
+                </span>
+              )}
+
+              {isDispatchParsing && (
+                <span style={{ fontSize: '12px', color: '#2563eb', display: 'flex', alignItems: 'center', gap: '4px', whiteSpace: 'nowrap' }}>
+                  <RefreshCw size={13} className="animate-spin" /> 파싱 중...
+                </span>
+              )}
+            </div>
+
+            {/* 파싱 결과 프리뷰 */}
+            {dispatchParsedData && (
+              <div style={{ marginTop: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '8px' }}>
+                  {[
+                    { label: '총 배차건', value: `${dispatchParsedData.stats.total}건`, color: '#1e293b' },
+                    { label: '완료', value: `${dispatchParsedData.stats.completed}건`, color: '#059669' },
+                    { label: '왕복(EXCHANGE)', value: `${dispatchParsedData.stats.exchangeCount}건`, color: '#7c3aed' },
+                    { label: '고객 미매핑', value: `${dispatchParsedData.stats.customerUnmatched}건`, color: dispatchParsedData.stats.customerUnmatched > 0 ? '#dc2626' : '#059669' },
+                    { label: '계약 미매핑', value: `${dispatchParsedData.stats.contractUnmatched}건`, color: dispatchParsedData.stats.contractUnmatched > 0 ? '#d97706' : '#059669' },
+                  ].map(({ label, value, color }) => (
+                    <div key={label} style={{ backgroundColor: '#f8fafc', padding: '10px 14px', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
+                      <div style={{ fontSize: '11px', color: '#64748b', whiteSpace: 'nowrap' }}>{label}</div>
+                      <div style={{ fontSize: '18px', fontWeight: 700, color, marginTop: '2px' }}>{value}</div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* 진행 메시지 */}
+                {dispatchProgressMsg && (
+                  <div style={{ fontSize: '13px', color: '#2563eb', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <RefreshCw size={13} className="animate-spin" />
+                    {dispatchProgressMsg}
+                  </div>
+                )}
+
+                {/* 적재 버튼 */}
+                <button
+                  onClick={handleDispatchIngest}
+                  disabled={isDispatchIngesting}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'center',
+                    padding: '10px 20px', backgroundColor: isDispatchIngesting ? '#94a3b8' : '#0369a1',
+                    color: 'white', border: 'none', borderRadius: '6px',
+                    cursor: isDispatchIngesting ? 'not-allowed' : 'pointer',
+                    fontSize: '14px', fontWeight: 600, whiteSpace: 'nowrap', alignSelf: 'flex-start'
+                  }}
+                >
+                  {isDispatchIngesting
+                    ? <><RefreshCw size={15} className="animate-spin" /> 배차 이력 적재 중...</>
+                    : <><Upload size={15} /> 배차 이력 일괄 적재 시작</>
+                  }
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* 4. 파싱 통계 프리뷰 카드뉴스 */}
           {parsedData && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>

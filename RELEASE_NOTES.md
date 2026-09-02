@@ -8319,3 +8319,15 @@ PostgreSQL DB ?덈꺼??`billings_status_check` ?쒖빟 議곌굔??寃곗옱 ?�
   - 변경 후: 엑셀 Col[8](계약구분)에 '종료'로 명시된 경우에만 COMPLETED 처리.
   - 근거: 계약기간이 만료되었더라도 연장/반납 여부 미결 상태이므로 RENTED + 현장 바인딩 유지.
   - 영향: isCompleted 판별, 계약 status, 자산 status 및 currentCustomerId/currentSiteId 모두 적용.
+
+### v0.7.1.Build.32 (2026-09-02 18:03)
+- **기능추가**: 초기DB 업로드 화면에 '배차 이력 업로드' 섹션 ③ 추가.
+  - 대상 파일: 배차현황 엑셀 (18개 시트, 2025-04 ~ 2026-09, 총 1,684건).
+  - 연도 파싱: 시트명 '26년X월' → 2026년, 'X월' → 2025년 자동 판별.
+  - 배차 유형 결정: 비고에 '왕복'/'왕복건' 포함 → EXCHANGE, 출고→OUTBOUND, 입고→INBOUND, 반납→RETURN.
+  - 수량 처리: 수량 > 1이어도 delivery 레코드 1건, specialNotes에 '수량: N대' 기록.
+  - 운반비 단위: 만원 단위 숫자 × 10,000 → 원 단위 자동 변환.
+  - 고객 자동 매핑: normalizeCustomerName 기준, 실패 시 customerId=null 저장.
+  - 계약 자동 매핑: 고객+모델명 3중 조건, 실패 시 null 저장.
+  - 파싱 미리보기: 총 건수 / 완료 / EXCHANGE / 고객미매핑 / 계약미매핑 통계 표출.
+  - migrationEngine.ts: parseDispatchExcelWorkbook, ingestDispatchData 신규 함수 추가.
