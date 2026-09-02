@@ -171,6 +171,9 @@ export const TABLE_COLUMNS: Record<string, string[]> = {
     'lifecycle_contracts', 'lifecycle_deliveries', 'lifecycle_match',
     'orphan_contracts', 'orphan_assets', 'orphan_is_clean',
     'all_passed', 'memo', 'created_at'
+  ],
+  transport_companies: [
+    'id', 'name', 'businessNo', 'contact', 'bankName', 'bankAccount', 'bankHolder', 'memo', 'createdAt', 'updatedAt'
   ]
 };
 
@@ -485,6 +488,7 @@ export async function resetAllDatabaseTables(keepAdmin: boolean = true): Promise
     'asset_inout_logs',
     'outbound_inspections',
     'deliveries',
+    'transport_companies',
     'external_leases',
     'contract_assets',
     'contract_history',
@@ -1913,12 +1917,25 @@ export interface ParsedDispatchRow {
 
 export interface ParsedDispatchData {
   rows: ParsedDispatchRow[];
+  transportCompanies: {
+    id: string;
+    name: string;
+    businessNo: string;
+    contact: string;
+    bankName: string;
+    bankAccount: string;
+    bankHolder: string;
+    memo: string;
+    createdAt: string;
+    updatedAt: string;
+  }[];
   stats: {
     total: number;
     completed: number;
     customerUnmatched: number;
     contractUnmatched: number;
     exchangeCount: number;
+    transportCompaniesCount: number;
   };
 }
 
@@ -2019,8 +2036,6 @@ export function parseDispatchExcelWorkbook(
       const status: 'COMPLETED' | 'PENDING' = dispatchStatus.startsWith('완') ? 'COMPLETED' : 'PENDING';
 
       // 입출고 + 비고 → type & dispatchCategory 매핑 (Supabase DB Check Constraint 100% 준수)
-      // DB type check: IN ('OUTBOUND', 'INBOUND')
-      // DB dispatchCategory check: IN ('출고', '입고', '반납', '정비', '이동')
       const inoutRaw = r[10] != null ? String(r[10]).trim() : '';
       const noteRaw = r[12] != null ? String(r[12]).trim() : '';
       let type: 'OUTBOUND' | 'INBOUND' | 'RETURN' | 'EXCHANGE';
@@ -2100,26 +2115,59 @@ export function parseDispatchExcelWorkbook(
     }
   }
 
+  // 🚚 2026년 이후 시트('26년'으로 시작)에서 등장한 고유 운송사 마스터 목록 추출
+  const nowIso = new Date().toISOString();
+  const tcom2026Names = Array.from(new Set(
+    rows
+      .filter(r => r.sourceSheet.startsWith('26년') && r.transportCompany)
+      .map(r => r.transportCompany.trim())
+  )).filter(Boolean);
+
+  let tcomSeq = 1;
+  const transportCompanies = tcom2026Names.map(name => ({
+    id: `TCOM-2026-${String(tcomSeq++).padStart(3, '0')}`,
+    name,
+    businessNo: '',
+    contact: '',
+    bankName: '',
+    bankAccount: '',
+    bankHolder: '',
+    memo: '2026년 배차이력 자동등록',
+    createdAt: nowIso,
+    updatedAt: nowIso
+  }));
+
   const stats = {
     total: rows.length,
     completed: rows.filter(r => r.status === 'COMPLETED').length,
     customerUnmatched: rows.filter(r => !r.customerId).length,
     contractUnmatched: rows.filter(r => !r.contractId).length,
-    exchangeCount: rows.filter(r => r.type === 'EXCHANGE').length
+    exchangeCount: rows.filter(r => r.type === 'EXCHANGE').length,
+    transportCompaniesCount: transportCompanies.length
   };
 
-  return { rows, stats };
+  return { rows, transportCompanies, stats };
 }
 
 /** 배차 이력 일괄 적재 */
 export async function ingestDispatchData(
   parsed: ParsedDispatchData,
   onProgress?: (step: number, total: number, message: string) => void
-): Promise<{ success: boolean; message: string; insertedCount: number }> {
+): Promise<{ success: boolean; message: string; insertedCount: number; transportCompanyCount: number }> {
   const nowIso = new Date().toISOString();
-  const total = 2;
+  const total = parsed.transportCompanies.length > 0 ? 3 : 2;
 
-  onProgress?.(0, total, `배차 이력 ${parsed.rows.length}건 적재 준비 중...`);
+  // 1단계: 2026년 이후 운송사 마스터 선제 적재
+  if (parsed.transportCompanies.length > 0) {
+    onProgress?.(1, total, `2026년 운송사 마스터 ${parsed.transportCompanies.length}개사 적재 중...`);
+    try {
+      await batchUpsertChunked('transport_companies', parsed.transportCompanies, 100);
+    } catch (e: any) {
+      console.warn('운송사 마스터 적재 경고 (계속 진행):', e.message);
+    }
+  }
+
+  onProgress?.(total - 1, total, `배차 이력 ${parsed.rows.length}건 Supabase 적재 중...`);
 
   const deliveryRecords = parsed.rows.map(r => {
     // Supabase DB Check Constraint 매핑:
@@ -2156,19 +2204,18 @@ export async function ingestDispatchData(
     };
   });
 
-  onProgress?.(1, total, `배차 이력 ${deliveryRecords.length}건 Supabase 적재 중...`);
-
   try {
     await batchUpsertChunked('deliveries', deliveryRecords, 100);
   } catch (e: any) {
-    return { success: false, message: `배차 적재 실패: ${e.message}`, insertedCount: 0 };
+    return { success: false, message: `배차 적재 실패: ${e.message}`, insertedCount: 0, transportCompanyCount: 0 };
   }
 
-  onProgress?.(2, total, '배차 이력 적재 완료');
+  onProgress?.(total, total, '배차 이력 및 운송사 마스터 적재 완료');
 
   return {
     success: true,
-    message: `배차 이력 ${deliveryRecords.length}건 적재 완료 (고객미매핑: ${parsed.stats.customerUnmatched}건, 계약미매핑: ${parsed.stats.contractUnmatched}건, 왕복/교환: ${parsed.stats.exchangeCount}건)`,
-    insertedCount: deliveryRecords.length
+    message: `배차 이력 ${deliveryRecords.length}건 및 2026년 운송사 마스터 ${parsed.transportCompanies.length}개사 적재 완료 (고객미매핑: ${parsed.stats.customerUnmatched}건, 계약미매핑: ${parsed.stats.contractUnmatched}건, 왕복/교환: ${parsed.stats.exchangeCount}건)`,
+    insertedCount: deliveryRecords.length,
+    transportCompanyCount: parsed.transportCompanies.length
   };
 }

@@ -508,6 +508,7 @@ export const InitialDbUploader: React.FC = () => {
                     { label: '총 배차건', value: `${dispatchParsedData.stats.total}건`, color: '#1e293b' },
                     { label: '완료', value: `${dispatchParsedData.stats.completed}건`, color: '#059669' },
                     { label: '왕복(EXCHANGE)', value: `${dispatchParsedData.stats.exchangeCount}건`, color: '#7c3aed' },
+                    { label: '2026 운송사', value: `${dispatchParsedData.stats.transportCompaniesCount}개사`, color: '#0284c7' },
                     { label: '고객 미매핑', value: `${dispatchParsedData.stats.customerUnmatched}건`, color: dispatchParsedData.stats.customerUnmatched > 0 ? '#dc2626' : '#059669' },
                     { label: '계약 미매핑', value: `${dispatchParsedData.stats.contractUnmatched}건`, color: dispatchParsedData.stats.contractUnmatched > 0 ? '#d97706' : '#059669' },
                   ].map(({ label, value, color }) => (

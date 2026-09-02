@@ -8361,3 +8361,9 @@ PostgreSQL DB ?덈꺼??`billings_status_check` ?쒖빟 議곌굔??寃곗옱 ?�
   - 근본 원인: PostgreSQL deliveries 테이블의 CHECK 제약조건 상 dispatchCategory는 ('출고', '입고', '반납', '정비', '이동'), type은 ('OUTBOUND', 'INBOUND')만 허용되나, '교환' 및 'EXCHANGE', 'RETURN' 값을 직접 삽입하려 하여 Check Constraint 위반 발생.
   - 수정 조치: type은 OUTBOUND/INBOUND로 변환 매핑하고, dispatchCategory는 '출고'/'입고'/'반납'으로 정규화 매핑, '왕복/교환' 상세 내용은 memo/closingMemo 필드에 안전하게 보존.
   - 실측 검증: 1,521건 실제 엑셀 파싱 데이터 중 100건 배치 청크를 Supabase에 직접 전송하여 Status 201 정상 저장 검증 완료.
+
+### v0.7.1.Build.38 (2026-09-02 18:32)
+- **기능 확장**: 배차 이력 업로드 시 2026년 이후 거래 운송사 마스터(transport_companies) 자동 선제 등록 연동.
+  - 대상: 2026년 시트(26년1월~26년9월)에 등장하는 고유 운송사 11개 사(경기, 엘제이, 자인일반, 자인셀프, 동방, 김수흥, 태현물류, 정익균, 자인 등).
+  - 동작: 배차 엑셀 파싱 시 2026년 운송사 목록을 자동 추출하여 프리뷰 카드에 표시하고, 배차 적재 1단계에서 transport_companies 테이블에 선제 batchUpsert 처리.
+  - 초기화 연동: resetAllDatabaseTables DELETION_ORDER에 transport_companies 추가.
