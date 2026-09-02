@@ -8337,3 +8337,8 @@ PostgreSQL DB ?덈꺼??`billings_status_check` ?쒖빟 議곌굔??寃곗옱 ?�
   - 메모/합계 행 스킵: Col[4]가 '('로 시작하거나 4자리 이상 숫자인 행 건너뜀 (예: '(부가세별도)', '4510000').
   - 운반비 상한 캡: 원본 값 200 초과(만원 단위 기준 200만원 초과)는 0으로 처리 — 합계금액 오인 방어.
   - 배차유무 오타 허용: '완려' 등 '완'으로 시작하는 값 → COMPLETED 처리.
+
+### v0.7.1.Build.34 (2026-09-02 18:11)
+- **버그패치**: 배차 적재 실패 수정 — deliveries 테이블 컬럼명 snake_case → camelCase 전환.
+  - 원인: DB Delivery 인터페이스가 camelCase(requestDate, loadingDate 등)인데 snake_case로 삽입하여 requestDate NOT NULL 제약 위반.
+  - 수정: request_date→requestDate, loading_date→loadingDate, customer_id→customerId 등 전 컬럼명 camelCase로 수정.

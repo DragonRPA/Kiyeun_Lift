@@ -2114,23 +2114,23 @@ export async function ingestDispatchData(
     id: r.id,
     type: r.type,
     status: r.status,
-    request_date: r.loadingDate,
-    loading_date: r.loadingDate,
-    unloading_date: r.unloadingDate,
-    customer_id: r.customerId,
-    contract_id: r.contractId,
-    contract_asset_id: r.contractAssetId,
-    destination_address: r.destinationAddress,
-    transport_company: r.transportCompany,
-    vehicle_type: r.vehicleType,
-    delivery_cost: r.deliveryCost,
-    special_notes: r.specialNotes,
-    dispatch_category: r.type === 'OUTBOUND' ? '출고'
+    requestDate: r.loadingDate,
+    loadingDate: r.loadingDate,
+    unloadingDate: r.unloadingDate,
+    customerId: r.customerId,
+    contractId: r.contractId,
+    contractAssetId: r.contractAssetId,
+    destinationAddress: r.destinationAddress,
+    transportCompany: r.transportCompany,
+    vehicleType: r.vehicleType,
+    deliveryCost: r.deliveryCost,
+    specialNotes: r.specialNotes,
+    dispatchCategory: r.type === 'OUTBOUND' ? '출고'
       : r.type === 'INBOUND' ? '입고'
       : r.type === 'RETURN' ? '반납'
       : r.type === 'EXCHANGE' ? '교환' : '출고',
-    created_at: nowIso,
-    updated_at: nowIso
+    createdAt: nowIso,
+    updatedAt: nowIso
   }));
 
   onProgress?.(1, total, `배차 이력 ${deliveryRecords.length}건 Supabase 적재 중...`);
