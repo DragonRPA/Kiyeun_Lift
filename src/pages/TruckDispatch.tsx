@@ -357,12 +357,14 @@ export const TruckDispatch: React.FC = () => {
 
   // 📄 [월말 운송료 대사 탭 state & 1:1 Split Pair 파이프라인]
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [reconStartDate, setReconStartDate] = useState<string>(() => {
-    const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
-  });
-  const [reconEndDate, setReconEndDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
+  
+  // 💡 [사장님 지시] 기본 조회: 2026년 7월 / 당월 1일 기준
+  const [reconStartDate, setReconStartDate] = useState<string>('2026-07-01');
+  const [reconEndDate, setReconEndDate] = useState<string>('2026-07-31');
   const [selectedReconCompany, setSelectedReconCompany] = useState<string>('ALL');
+  
+  // 💡 [사장님 지시] 지급 상태 필터: 기본값은 'UNPAID' (지급 미완료 / 미정산 건만 집중 대사)
+  const [reconPaymentFilter, setReconPaymentFilter] = useState<'UNPAID' | 'PAID' | 'ALL'>('UNPAID');
   const [reconStatusFilter, setReconStatusFilter] = useState<'ALL' | 'PENDING' | 'MATCHED' | 'MISMATCH' | 'EXCEL_ONLY' | 'SYSTEM_ONLY' | 'EXCLUDED' | 'PAYMENT_REQUESTED'>('ALL');
   const [reconSearchQuery, setReconSearchQuery] = useState<string>('');
 
@@ -373,6 +375,7 @@ export const TruckDispatch: React.FC = () => {
   const [reconNotificationMsg, setReconNotificationMsg] = useState<string>('');
   const [selectedSystemDeliveryId, setSelectedSystemDeliveryId] = useState<string | null>(null);
   const [selectedExcelRowIndex, setSelectedExcelRowIndex] = useState<number | null>(null);
+
 
   // 💡 [사장님 지시] 금액 수정 모달 state & DB 반영 핸들러
   const [showCostEditModal, setShowCostEditModal] = useState<boolean>(false);
@@ -502,20 +505,28 @@ export const TruckDispatch: React.FC = () => {
     setReconNotificationMsg(`✅ [${sysD.id}] 배차건과 엑셀 행이 1:1 수동 대사 완료 처리되었습니다.`);
   };
 
-  // 📅 기간 선택 피커 헬퍼
-  const handleSetReconDatePreset = (preset: 'THIS_MONTH' | 'LAST_MONTH' | '1M' | '3M' | 'ALL') => {
+  // 📅 기간 선택 피커 헬퍼 (월별 정산 원클릭 지원)
+  const handleSetReconMonth = (year: number, month: number) => {
+    const startStr = `${year}-${String(month).padStart(2, '0')}-01`;
+    const lastDay = new Date(year, month, 0).getDate();
+    const endStr = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+    setReconStartDate(startStr);
+    setReconEndDate(endStr);
+  };
+
+  const handleSetReconDatePreset = (preset: '2026-07' | '2026-08' | 'THIS_MONTH' | 'LAST_MONTH' | '1M' | '3M' | 'ALL') => {
     const today = new Date();
     const todayStr = today.toISOString().split('T')[0];
 
-    if (preset === 'THIS_MONTH') {
-      const firstDay = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-01`;
-      setReconStartDate(firstDay);
-      setReconEndDate(todayStr);
+    if (preset === '2026-07') {
+      handleSetReconMonth(2026, 7);
+    } else if (preset === '2026-08') {
+      handleSetReconMonth(2026, 8);
+    } else if (preset === 'THIS_MONTH') {
+      handleSetReconMonth(today.getFullYear(), today.getMonth() + 1);
     } else if (preset === 'LAST_MONTH') {
-      const lastMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
-      const lastMonthLastDay = new Date(today.getFullYear(), today.getMonth(), 0);
-      setReconStartDate(lastMonth.toISOString().split('T')[0]);
-      setReconEndDate(lastMonthLastDay.toISOString().split('T')[0]);
+      const lm = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+      handleSetReconMonth(lm.getFullYear(), lm.getMonth() + 1);
     } else if (preset === '1M') {
       const past = new Date();
       past.setMonth(today.getMonth() - 1);
@@ -532,22 +543,72 @@ export const TruckDispatch: React.FC = () => {
     }
   };
 
-  // 🚚 운송 완료(DELIVERED) 건들 대사 대상 필터링
+  // 🏢 운송사별 미지급(대사 대상) 건수 및 금액 실시간 집계 (선택된 기간 기준)
+  const unpaidStatsByCompany = useMemo(() => {
+    const inPeriodDeliveries = deliveries.filter(d => {
+      if (getNormalizedDeliveryStatus(d) !== 'DELIVERED') return false;
+      const dDate = d.loadingDate || d.requestDate || d.scheduledDate || d.createdAt?.substring(0, 10);
+      if (reconStartDate && dDate && dDate < reconStartDate) return false;
+      if (reconEndDate && dDate && dDate > reconEndDate) return false;
+      return true;
+    });
+
+    const stats: Record<string, { total: number; unpaid: number; unpaidCost: number }> = {
+      ALL: { total: 0, unpaid: 0, unpaidCost: 0 }
+    };
+
+    inPeriodDeliveries.forEach(d => {
+      const isPaid = (d as any).reconciliationStatus === 'PAYMENT_REQUESTED' || (d as any).reconciliationStatus === 'SETTLED' || d.isCostSettled === true;
+      const cost = d.finalCost || d.deliveryCost || 70000;
+
+      // 운송사명 파싱
+      const rawComp = d.assignedVehicles?.[0]?.transportCompany || d.transportCompany || '';
+      let matchedComp = '기타';
+      if (rawComp.includes('경기')) matchedComp = '경기';
+      else if (rawComp.includes('엘제이') || rawComp.toLowerCase().includes('lj')) matchedComp = '엘제이';
+      else if (rawComp.includes('자인') || rawComp.includes('엠제이') || rawComp.toLowerCase().includes('mj')) matchedComp = '자인';
+      else if (rawComp) matchedComp = rawComp;
+
+      stats.ALL.total++;
+      if (!isPaid) {
+        stats.ALL.unpaid++;
+        stats.ALL.unpaidCost += cost;
+      }
+
+      if (!stats[matchedComp]) {
+        stats[matchedComp] = { total: 0, unpaid: 0, unpaidCost: 0 };
+      }
+      stats[matchedComp].total++;
+      if (!isPaid) {
+        stats[matchedComp].unpaid++;
+        stats[matchedComp].unpaidCost += cost;
+      }
+    });
+
+    return stats;
+  }, [deliveries, reconStartDate, reconEndDate]);
+
+  // 🚚 운송 완료(DELIVERED) 건들 대사 대상 필터링 (지급 상태 및 운송사별 연동)
   const completedDeliveriesForRecon = useMemo(() => {
     return deliveries.filter(d => {
       // 1. 운송 완료건만 대상
       if (getNormalizedDeliveryStatus(d) !== 'DELIVERED') return false;
 
-      // 2. 날짜 필터
+      // 2. 💡 [사장님 지시] 지급/정산 상태 필터 (기본: 지급 미완료 건만 대사 대상)
+      const isPaid = (d as any).reconciliationStatus === 'PAYMENT_REQUESTED' || (d as any).reconciliationStatus === 'SETTLED' || d.isCostSettled === true;
+      if (reconPaymentFilter === 'UNPAID' && isPaid) return false;
+      if (reconPaymentFilter === 'PAID' && !isPaid) return false;
+
+      // 3. 날짜 필터
       const dDate = d.loadingDate || d.requestDate || d.scheduledDate || d.createdAt?.substring(0, 10);
       if (reconStartDate && dDate && dDate < reconStartDate) return false;
       if (reconEndDate && dDate && dDate > reconEndDate) return false;
 
-      // 3. 운송 거래처 필터
+      // 4. 운송 거래처 필터
       if (selectedReconCompany !== 'ALL') {
-        const matchComp = d.assignedVehicles?.some((v: any) => v.transportCompany.trim() === selectedReconCompany.trim()) || 
-                          (d.transportCompany && d.transportCompany.trim() === selectedReconCompany.trim());
-        if (!matchComp) return false;
+        const rawComp = d.assignedVehicles?.[0]?.transportCompany || d.transportCompany || '';
+        const match = rawComp.toLowerCase().includes(selectedReconCompany.toLowerCase());
+        if (!match) return false;
       }
 
       // 5. 검색어 (배차ID, 기사명, 거래처, 고객사명)
@@ -565,7 +626,8 @@ export const TruckDispatch: React.FC = () => {
 
       return true;
     });
-  }, [deliveries, reconStartDate, reconEndDate, selectedReconCompany, reconSearchQuery, contracts, customers]);
+  }, [deliveries, reconPaymentFilter, reconStartDate, reconEndDate, selectedReconCompany, reconSearchQuery, contracts, customers]);
+
 
   // 거래명세서 엑셀 파싱 및 스마트 1:1 페어링 파이프라인 (다변형 서식/날짜 정규화 & 2단계 지능형 매칭 엔진)
   const handleExcelFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -2349,124 +2411,256 @@ export const TruckDispatch: React.FC = () => {
             backgroundColor: 'var(--bg-card)',
             border: '1px solid var(--border-color)',
             borderRadius: '10px',
-            padding: '10px 14px',
+            padding: '12px 14px',
             display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            flexWrap: 'wrap',
+            flexDirection: 'column',
             gap: '10px'
           }}>
-            {/* ① 좌측 상단 (Start / Scope): 조회 범위 설정 */}
-            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: 'var(--bg-body)', padding: '4px 8px', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
-                <Calendar size={13} style={{ color: 'var(--primary)' }} />
-                <span style={{ fontSize: '11.5px', fontWeight: 800, whiteSpace: 'nowrap' }}>운송 기간:</span>
-                <input
-                  type="date"
-                  value={reconStartDate}
-                  onChange={e => setReconStartDate(e.target.value)}
-                  style={{ padding: '3px 6px', borderRadius: '4px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)', fontSize: '11.5px' }}
-                />
-                <span style={{ fontSize: '11px' }}>~</span>
-                <input
-                  type="date"
-                  value={reconEndDate}
-                  onChange={e => setReconEndDate(e.target.value)}
-                  style={{ padding: '3px 6px', borderRadius: '4px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)', fontSize: '11.5px' }}
-                />
+            {/* Row 1: 조회 기간 / 정산 연월 + 지급 상태 필터 + 엑셀 파이프라인 버튼군 */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+              
+              {/* 좌측: 정산 기간 & 지급 상태 필터 */}
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                
+                {/* 📅 정산 연월 퀵 피커 */}
+                <div style={{ display: 'flex', gap: '3px', alignItems: 'center' }}>
+                  <span style={{ fontSize: '11.5px', fontWeight: 800, color: 'var(--text-secondary)', marginRight: '2px', whiteSpace: 'nowrap' }}>📅 정산 연월:</span>
+                  {[
+                    { label: '26년 7월', key: '2026-07' },
+                    { label: '26년 8월', key: '2026-08' },
+                    { label: '당월', key: 'THIS_MONTH' },
+                    { label: '전월', key: 'LAST_MONTH' },
+                    { label: '전체', key: 'ALL' }
+                  ].map(b => (
+                    <button
+                      key={b.key}
+                      onClick={() => handleSetReconDatePreset(b.key as any)}
+                      style={{
+                        padding: '4px 8px',
+                        fontSize: '11px',
+                        fontWeight: 700,
+                        borderRadius: '4px',
+                        border: '1px solid',
+                        borderColor: (b.key === '2026-07' && reconStartDate === '2026-07-01' && reconEndDate === '2026-07-31') ||
+                                     (b.key === '2026-08' && reconStartDate === '2026-08-01' && reconEndDate === '2026-08-31')
+                                      ? 'var(--primary)' : 'var(--border-color)',
+                        backgroundColor: (b.key === '2026-07' && reconStartDate === '2026-07-01' && reconEndDate === '2026-07-31') ||
+                                         (b.key === '2026-08' && reconStartDate === '2026-08-01' && reconEndDate === '2026-08-31')
+                                          ? 'rgba(59,130,246,0.12)' : 'var(--bg-body)',
+                        color: (b.key === '2026-07' && reconStartDate === '2026-07-01' && reconEndDate === '2026-07-31') ||
+                               (b.key === '2026-08' && reconStartDate === '2026-08-01' && reconEndDate === '2026-08-31')
+                                ? 'var(--primary)' : 'var(--text-secondary)',
+                        cursor: 'pointer',
+                        whiteSpace: 'nowrap'
+                      }}
+                    >
+                      {b.label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* 정밀 일자 피커 */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', backgroundColor: 'var(--bg-body)', padding: '3px 6px', borderRadius: '5px', border: '1px solid var(--border-color)' }}>
+                  <input
+                    type="date"
+                    value={reconStartDate}
+                    onChange={e => setReconStartDate(e.target.value)}
+                    style={{ padding: '2px 4px', borderRadius: '4px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)', fontSize: '11px' }}
+                  />
+                  <span style={{ fontSize: '11px' }}>~</span>
+                  <input
+                    type="date"
+                    value={reconEndDate}
+                    onChange={e => setReconEndDate(e.target.value)}
+                    style={{ padding: '2px 4px', borderRadius: '4px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)', fontSize: '11px' }}
+                  />
+                </div>
+
+                {/* 💳 지급/정산 상태 필터 (사장님 지시: 기본은 지급 미완료 건 집중 대사) */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', backgroundColor: 'var(--bg-body)', padding: '3px 6px', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
+                  <span style={{ fontSize: '11px', fontWeight: 800, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>💳 지급 상태:</span>
+                  {[
+                    { key: 'UNPAID', label: '🔴 미완료 (대사 대상)' },
+                    { key: 'PAID', label: '💳 지급요청/완료' },
+                    { key: 'ALL', label: '전체' }
+                  ].map(p => (
+                    <button
+                      key={p.key}
+                      onClick={() => setReconPaymentFilter(p.key as any)}
+                      style={{
+                        padding: '3px 7px',
+                        fontSize: '11px',
+                        fontWeight: reconPaymentFilter === p.key ? 800 : 500,
+                        borderRadius: '4px',
+                        border: 'none',
+                        backgroundColor: reconPaymentFilter === p.key ? (p.key === 'UNPAID' ? 'rgba(239,68,68,0.15)' : 'rgba(59,130,246,0.15)') : 'transparent',
+                        color: reconPaymentFilter === p.key ? (p.key === 'UNPAID' ? '#dc2626' : 'var(--primary)') : 'var(--text-muted)',
+                        cursor: 'pointer',
+                        whiteSpace: 'nowrap'
+                      }}
+                    >
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
+
+                <button
+                  onClick={() => setReconNotificationMsg(`🔍 [${selectedReconCompany === 'ALL' ? '전체 거래처' : selectedReconCompany}] (${reconStartDate} ~ ${reconEndDate} / ${reconPaymentFilter === 'UNPAID' ? '미지급건' : reconPaymentFilter === 'PAID' ? '지급완료건' : '전체'}) 조회가 갱신되었습니다.`)}
+                  className="btn-primary"
+                  style={{ padding: '4px 10px', fontSize: '11.5px', fontWeight: 800, borderRadius: '5px', display: 'inline-flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}
+                >
+                  <Search size={12} /> 조회
+                </button>
               </div>
 
-              {/* 기간 프리셋 버튼들 */}
-              <div style={{ display: 'flex', gap: '3px' }}>
-                {[
-                  { label: '당월', key: 'THIS_MONTH' },
-                  { label: '전월', key: 'LAST_MONTH' },
-                  { label: '1개월', key: '1M' },
-                  { label: '3개월', key: '3M' },
-                  { label: '전체', key: 'ALL' }
-                ].map(b => (
+              {/* 우측: 📂 엑셀 파이프라인 버튼군 */}
+              <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
+                <input type="file" ref={fileInputRef} onChange={handleExcelFileUpload} accept=".xlsx, .xls, .csv" style={{ display: 'none' }} />
+                
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  className="btn-primary"
+                  style={{ padding: '6px 12px', fontSize: '12px', fontWeight: 800, borderRadius: '6px', display: 'inline-flex', alignItems: 'center', gap: '5px', boxShadow: '0 2px 6px rgba(59,130,246,0.25)' }}
+                >
+                  <Upload size={13} /> 엑셀 거래명세서 업로드 & 자동대사
+                </button>
+
+                <button
+                  onClick={handleDownloadExcelTemplate}
+                  style={{ padding: '6px 9px', fontSize: '11.5px', fontWeight: 700, borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-body)', color: 'var(--text-primary)', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '3px' }}
+                >
+                  <FileSpreadsheet size={12} /> 양식 다운로드
+                </button>
+
+                <button
+                  onClick={handleExportReconciliationReport}
+                  style={{ padding: '6px 9px', fontSize: '11.5px', fontWeight: 700, borderRadius: '6px', border: '1px solid #16a34a', backgroundColor: 'rgba(22,163,74,0.1)', color: '#16a34a', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '3px' }}
+                >
+                  <Download size={12} /> 대사 리포트 다운로드
+                </button>
+
+                <button
+                  onClick={async () => {
+                    const targetYm = reconStartDate.slice(0, 7);
+                    const compId = selectedReconCompany === 'ALL' ? undefined : transportCompanies.find(c => c.name === selectedReconCompany)?.id;
+                    if (!confirm(`[${targetYm}] 연월의 대사 완료된 배차 운송비 건들을 [월말 매입 정산 대장]으로 자동 집계/이관하시겠습니까?`)) return;
+                    try {
+                      const count = await convertReconciledDeliveriesToSettlement(targetYm, compId);
+                      if (count > 0) {
+                        alert(`✅ 대사 완료 배차 ${count}건이 [월말 매입 정산(Purchase Settlement)] 대장으로 성공적으로 이관되었습니다.`);
+                      } else {
+                        alert(`ℹ️ [${targetYm}] 연월에 대사 완료(RECONCILED) 상태인 미이관 배차건이 없습니다.`);
+                      }
+                    } catch (err: any) {
+                      showErrorModal(`매입 정산 이관 실패: ${err?.message || err}`);
+                    }
+                  }}
+                  style={{ padding: '6px 9px', fontSize: '11.5px', fontWeight: 800, borderRadius: '6px', border: '1px solid #6366f1', backgroundColor: 'rgba(99,102,241,0.12)', color: '#6366f1', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '3px' }}
+                >
+                  매입정산 대장 이관
+                </button>
+              </div>
+            </div>
+
+            {/* 💡 [사장님 지시] Row 2: 🏢 거래명세서(운송사) 별 퀵 선택 탭 바 (실시간 미지급 건수/금액 배지) */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              paddingTop: '8px',
+              borderTop: '1px dashed var(--border-color)',
+              flexWrap: 'wrap'
+            }}>
+              <span style={{ fontSize: '11.5px', fontWeight: 800, color: 'var(--text-secondary)', marginRight: '4px', whiteSpace: 'nowrap' }}>
+                🏢 운송사별 정산 선택:
+              </span>
+
+              {/* 전체 거래처 */}
+              <button
+                onClick={() => setSelectedReconCompany('ALL')}
+                style={{
+                  padding: '5px 11px',
+                  borderRadius: '6px',
+                  border: '1px solid',
+                  borderColor: selectedReconCompany === 'ALL' ? 'var(--primary)' : 'var(--border-color)',
+                  backgroundColor: selectedReconCompany === 'ALL' ? 'rgba(59,130,246,0.12)' : 'var(--bg-body)',
+                  color: selectedReconCompany === 'ALL' ? 'var(--primary)' : 'var(--text-primary)',
+                  fontWeight: selectedReconCompany === 'ALL' ? 800 : 500,
+                  fontSize: '11.5px',
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  whiteSpace: 'nowrap'
+                }}
+              >
+                <span>전체 운송사</span>
+                <span style={{ padding: '1px 5px', borderRadius: '10px', fontSize: '10.5px', fontWeight: 800, backgroundColor: 'rgba(59,130,246,0.2)', color: 'var(--primary)' }}>
+                  미지급 {unpaidStatsByCompany.ALL?.unpaid || 0}건 (₩{((unpaidStatsByCompany.ALL?.unpaidCost || 0) / 10000).toFixed(0)}만)
+                </span>
+              </button>
+
+              {/* 3대 핵심 운송사 & 등록된 거래처들 */}
+              {[
+                { name: '경기', label: '경기' },
+                { name: '엘제이', label: '엘제이' },
+                { name: '자인', label: '자인 (엠제이)' }
+              ].map(comp => {
+                const stat = unpaidStatsByCompany[comp.name] || { total: 0, unpaid: 0, unpaidCost: 0 };
+                const isSelected = selectedReconCompany === comp.name;
+
+                return (
                   <button
-                    key={b.key}
-                    onClick={() => handleSetReconDatePreset(b.key as any)}
-                    style={{ padding: '4px 8px', fontSize: '11px', fontWeight: 700, borderRadius: '4px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-body)', color: 'var(--text-secondary)', cursor: 'pointer' }}
+                    key={comp.name}
+                    onClick={() => setSelectedReconCompany(comp.name)}
+                    style={{
+                      padding: '5px 11px',
+                      borderRadius: '6px',
+                      border: '1px solid',
+                      borderColor: isSelected ? 'var(--primary)' : 'var(--border-color)',
+                      backgroundColor: isSelected ? 'rgba(59,130,246,0.12)' : 'var(--bg-body)',
+                      color: isSelected ? 'var(--primary)' : 'var(--text-primary)',
+                      fontWeight: isSelected ? 800 : 500,
+                      fontSize: '11.5px',
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      whiteSpace: 'nowrap'
+                    }}
                   >
-                    {b.label}
+                    <span>{comp.label}</span>
+                    <span style={{
+                      padding: '1px 5px',
+                      borderRadius: '10px',
+                      fontSize: '10.5px',
+                      fontWeight: 800,
+                      backgroundColor: stat.unpaid > 0 ? 'rgba(239,68,68,0.15)' : 'rgba(34,197,94,0.15)',
+                      color: stat.unpaid > 0 ? '#dc2626' : '#16a34a'
+                    }}>
+                      미지급 {stat.unpaid}건 (₩{(stat.unpaidCost / 10000).toFixed(0)}만)
+                    </span>
                   </button>
-                ))}
-              </div>
+                );
+              })}
 
-              {/* 🏢 운송 거래처 선택 */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                <span style={{ fontSize: '11.5px', fontWeight: 800, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>🏢 운송사:</span>
+              {/* 기타 운송사 드롭다운 */}
+              <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>기타 거래처:</span>
                 <select
                   value={selectedReconCompany}
                   onChange={e => setSelectedReconCompany(e.target.value)}
-                  style={{ padding: '4px 8px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-body)', color: 'var(--text-primary)', fontSize: '11.5px', fontWeight: 700 }}
+                  style={{ padding: '3px 8px', borderRadius: '5px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-body)', color: 'var(--text-primary)', fontSize: '11px' }}
                 >
-                  <option value="ALL">전체 거래처</option>
+                  <option value="ALL">직접 선택...</option>
                   {transportCompanies.map(c => (
                     <option key={c.id} value={c.name}>{c.name}</option>
                   ))}
                 </select>
               </div>
-
-              <button
-                onClick={() => setReconNotificationMsg(`🔍 [${selectedReconCompany === 'ALL' ? '전체 거래처' : selectedReconCompany}] (${reconStartDate} ~ ${reconEndDate}) 기간 조회가 갱신되었습니다.`)}
-                className="btn-primary"
-                style={{ padding: '4px 10px', fontSize: '11.5px', fontWeight: 800, borderRadius: '5px', display: 'inline-flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}
-              >
-                <Search size={12} /> 조회
-              </button>
-            </div>
-
-            {/* ② 우측 상단 (Input / Pipeline): 데이터 유입 파이프라인 버튼군 */}
-            <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
-              <input type="file" ref={fileInputRef} onChange={handleExcelFileUpload} accept=".xlsx, .xls, .csv" style={{ display: 'none' }} />
-              
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                className="btn-primary"
-                style={{ padding: '6px 12px', fontSize: '12px', fontWeight: 800, borderRadius: '6px', display: 'inline-flex', alignItems: 'center', gap: '5px', boxShadow: '0 2px 6px rgba(59,130,246,0.25)' }}
-              >
-                <Upload size={13} /> 엑셀 거래명세서 업로드 & 자동대사
-              </button>
-
-              <button
-                onClick={handleDownloadExcelTemplate}
-                style={{ padding: '6px 9px', fontSize: '11.5px', fontWeight: 700, borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-body)', color: 'var(--text-primary)', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '3px' }}
-              >
-                <FileSpreadsheet size={12} /> 양식 다운로드
-              </button>
-
-              <button
-                onClick={handleExportReconciliationReport}
-                style={{ padding: '6px 9px', fontSize: '11.5px', fontWeight: 700, borderRadius: '6px', border: '1px solid #16a34a', backgroundColor: 'rgba(22,163,74,0.1)', color: '#16a34a', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '3px' }}
-              >
-                <Download size={12} /> 대사 리포트 다운로드
-              </button>
-
-              <button
-                onClick={async () => {
-                  const targetYm = reconStartDate.slice(0, 7);
-                  const compId = selectedReconCompany === 'ALL' ? undefined : transportCompanies.find(c => c.name === selectedReconCompany)?.id;
-                  if (!confirm(`[${targetYm}] 연월의 대사 완료된 배차 운송비 건들을 [월말 매입 정산 대장]으로 자동 집계/이관하시겠습니까?`)) return;
-                  try {
-                    const count = await convertReconciledDeliveriesToSettlement(targetYm, compId);
-                    if (count > 0) {
-                      alert(`✅ 대사 완료 배차 ${count}건이 [월말 매입 정산(Purchase Settlement)] 대장으로 성공적으로 이관되었습니다.`);
-                    } else {
-                      alert(`ℹ️ [${targetYm}] 연월에 대사 완료(RECONCILED) 상태인 미이관 배차건이 없습니다.`);
-                    }
-                  } catch (err: any) {
-                    showErrorModal(`매입 정산 이관 실패: ${err?.message || err}`);
-                  }
-                }}
-                style={{ padding: '6px 9px', fontSize: '11.5px', fontWeight: 800, borderRadius: '6px', border: '1px solid #6366f1', backgroundColor: 'rgba(99,102,241,0.12)', color: '#6366f1', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '3px' }}
-              >
-                매입정산 대장 이관
-              </button>
             </div>
           </div>
+
 
           {/* ────────────── ③ 중앙 본문 (Body / Inspection): 고밀도 1:1 대사 작업대 그리드 (화면의 85% 확보) ────────────── */}
           <div style={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '10px', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
