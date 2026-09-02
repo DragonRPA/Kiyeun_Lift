@@ -45,8 +45,6 @@ export const InitialDbUploader: React.FC = () => {
 
   // 초기화 상태
   const [isResetting, setIsResetting] = useState(false);
-  const [showResetConfirmModal, setShowResetConfirmModal] = useState(false);
-  const [resetConfirmInput, setResetConfirmInput] = useState('');
   const [keepAdminUser, setKeepAdminUser] = useState(true);
 
   // 엑셀 파싱 및 마이그레이션 상태
@@ -105,8 +103,7 @@ export const InitialDbUploader: React.FC = () => {
 
   // ── 2. DB 초기화 실행 ──
   const handleReset = async () => {
-    if (resetConfirmInput.trim() !== '초기화확인') {
-      showErrorModal?.('확인 문구가 일치하지 않습니다. "초기화확인"을 정확히 입력하십시오.');
+    if (!window.confirm('기존의 모든 자산, 고객사, 계약, 배차, 청구 대장을 영구 삭제하고 초기화하시겠습니까?')) {
       return;
     }
 
@@ -114,8 +111,6 @@ export const InitialDbUploader: React.FC = () => {
     try {
       const res = await resetAllDatabaseTables(keepAdminUser);
       if (res.success) {
-        setShowResetConfirmModal(false);
-        setResetConfirmInput('');
         showSuccessToast?.(res.message);
         // ✅ DB 초기화 완료 후 localStorage stale 캐시 차단 + Supabase 최신 상태로 React state 즉시 동기화
         await fullRefreshFromServer();
@@ -878,112 +873,36 @@ export const InitialDbUploader: React.FC = () => {
             </label>
 
             <button
-              onClick={() => setShowResetConfirmModal(true)}
+              onClick={handleReset}
+              disabled={isResetting}
               style={{
                 display: 'flex',
                 alignItems: 'center',
                 gap: '8px',
                 padding: '10px 20px',
-                backgroundColor: '#dc2626',
+                backgroundColor: isResetting ? '#94a3b8' : '#dc2626',
                 color: '#ffffff',
                 border: 'none',
                 borderRadius: '6px',
                 fontWeight: 600,
                 fontSize: '14px',
-                cursor: 'pointer',
+                cursor: isResetting ? 'not-allowed' : 'pointer',
                 width: 'fit-content',
                 whiteSpace: 'nowrap'
               }}
             >
-              <Trash2 size={16} />
-              데이터 전체 초기화 실행
+              {isResetting ? (
+                <>
+                  <RefreshCw size={16} className="animate-spin" />
+                  데이터 전체 초기화 진행 중...
+                </>
+              ) : (
+                <>
+                  <Trash2 size={16} />
+                  데이터 전체 초기화 실행
+                </>
+              )}
             </button>
-          </div>
-        </div>
-      )}
-
-      {/* 2중 안전 확인 모달 */}
-      {showResetConfirmModal && (
-        <div
-          style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            width: '100vw',
-            height: '100vh',
-            backgroundColor: 'rgba(0, 0, 0, 0.5)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 9999
-          }}
-        >
-          <div style={{ backgroundColor: '#ffffff', borderRadius: '8px', padding: '24px', width: '460px', display: 'flex', flexDirection: 'column', gap: '16px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#dc2626' }}>
-              <AlertTriangle size={24} />
-              <h3 style={{ margin: 0, fontSize: '17px', fontWeight: 700 }}>데이터베이스 초기화 2차 확인</h3>
-            </div>
-
-            <p style={{ margin: 0, fontSize: '13px', color: '#475569', lineHeight: 1.5 }}>
-              이 작업은 되돌릴 수 없습니다. 기존의 모든 자산, 고객사, 계약, 청구 대장이 영구 삭제됩니다.
-              계속 진행하려면 아래 입력창에 <strong>초기화확인</strong> 을 정확히 입력하십시오.
-            </p>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              <label style={{ fontSize: '12px', fontWeight: 600, color: '#334155' }}>확인 문구 입력</label>
-              <input
-                type="text"
-                value={resetConfirmInput}
-                onChange={(e) => setResetConfirmInput(e.target.value)}
-                placeholder="초기화확인"
-                style={{
-                  padding: '8px 12px',
-                  borderRadius: '6px',
-                  border: '1px solid #cbd5e1',
-                  fontSize: '14px',
-                  outline: 'none'
-                }}
-              />
-            </div>
-
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '8px' }}>
-              <button
-                onClick={() => {
-                  setShowResetConfirmModal(false);
-                  setResetConfirmInput('');
-                }}
-                disabled={isResetting}
-                style={{
-                  padding: '8px 16px',
-                  backgroundColor: '#f1f5f9',
-                  color: '#475569',
-                  border: 'none',
-                  borderRadius: '6px',
-                  fontWeight: 600,
-                  fontSize: '13px',
-                  cursor: 'pointer'
-                }}
-              >
-                취소
-              </button>
-
-              <button
-                onClick={handleReset}
-                disabled={isResetting || resetConfirmInput.trim() !== '초기화확인'}
-                style={{
-                  padding: '8px 18px',
-                  backgroundColor: resetConfirmInput.trim() === '초기화확인' ? '#dc2626' : '#cbd5e1',
-                  color: '#ffffff',
-                  border: 'none',
-                  borderRadius: '6px',
-                  fontWeight: 600,
-                  fontSize: '13px',
-                  cursor: resetConfirmInput.trim() === '초기화확인' && !isResetting ? 'pointer' : 'not-allowed'
-                }}
-              >
-                {isResetting ? '초기화 진행 중...' : '확인 및 영구 삭제'}
-              </button>
-            </div>
           </div>
         </div>
       )}
@@ -992,3 +911,4 @@ export const InitialDbUploader: React.FC = () => {
 };
 
 export default InitialDbUploader;
+
