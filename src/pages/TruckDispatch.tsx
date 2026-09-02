@@ -1311,7 +1311,7 @@ export const TruckDispatch: React.FC = () => {
 
           return {
             '순번': i + 1,
-            '대사 상태': p.isReconciled ? '대사완료' : p.matchStatus === 'MISMATCH' ? '금액불일치' : p.matchStatus === 'EXCEL_ONLY' ? '엑셀단독' : '대사대기',
+            '대사 상태': p.isExcluded ? '반려(제외)' : p.isReconciled ? '대사완료(확정)' : p.matchStatus === 'MISMATCH' ? '금액불일치(할증)' : p.matchStatus === 'EXCEL_ONLY' ? '엑셀단독' : p.matchStatus === 'SYSTEM_ONLY' ? '시스템단독' : '대사대기',
             '시스템 배차ID': sysD?.id || '미존재',
             '운송일자': sysD?.loadingDate || sysD?.requestDate || p.excelRow?.['운송일자'] || p.excelRow?.['날짜'] || '',
             '운송 거래처': sysD?.transportCompany || sysD?.assignedVehicles?.[0]?.transportCompany || '자사배차',
@@ -1320,6 +1320,7 @@ export const TruckDispatch: React.FC = () => {
             '시스템 운송비(원)': p.systemCost,
             '엑셀 청구액(원)': p.excelCost,
             '차액(원)': p.diffCost,
+            '할증 사유': p.surchargeReason || '',
             '비고 / 특이사항': p.memo || ''
           };
         })
