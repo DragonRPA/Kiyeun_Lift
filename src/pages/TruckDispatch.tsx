@@ -40,13 +40,16 @@ export interface ReconPairRow {
   pairId: string;
   systemDelivery?: Delivery;
   excelRow?: any;
-  matchStatus: 'MATCHED' | 'MISMATCH' | 'SYSTEM_ONLY' | 'EXCEL_ONLY' | 'PENDING' | 'PAYMENT_REQUESTED';
+  matchStatus: 'MATCHED' | 'MISMATCH' | 'SYSTEM_ONLY' | 'EXCEL_ONLY' | 'PENDING' | 'PAYMENT_REQUESTED' | 'EXCLUDED';
   systemCost: number;
   excelCost: number;
   diffCost: number;
   memo?: string;
+  surchargeReason?: string;
   isReconciled: boolean;
+  isExcluded?: boolean;
 }
+
 
 export const TruckDispatch: React.FC = () => {
   const { 
@@ -360,7 +363,7 @@ export const TruckDispatch: React.FC = () => {
   });
   const [reconEndDate, setReconEndDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
   const [selectedReconCompany, setSelectedReconCompany] = useState<string>('ALL');
-  const [reconStatusFilter, setReconStatusFilter] = useState<'ALL' | 'PENDING' | 'MATCHED' | 'MISMATCH' | 'PAYMENT_REQUESTED'>('ALL');
+  const [reconStatusFilter, setReconStatusFilter] = useState<'ALL' | 'PENDING' | 'MATCHED' | 'MISMATCH' | 'EXCEL_ONLY' | 'SYSTEM_ONLY' | 'EXCLUDED' | 'PAYMENT_REQUESTED'>('ALL');
   const [reconSearchQuery, setReconSearchQuery] = useState<string>('');
 
   // 1:1 Pair 행 배열 state 및 독립 듀얼 패널 선택 state
@@ -564,7 +567,7 @@ export const TruckDispatch: React.FC = () => {
     });
   }, [deliveries, reconStartDate, reconEndDate, selectedReconCompany, reconSearchQuery, contracts, customers]);
 
-  // 거래명세서 엑셀 파싱 및 스마트 1:1 페어링 파이프라인 (헤더 동적 검색 & 다중 비고 병합 & 디토 상속 적용)
+  // 거래명세서 엑셀 파싱 및 스마트 1:1 페어링 파이프라인 (다변형 서식/날짜 정규화 & 2단계 지능형 매칭 엔진)
   const handleExcelFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -576,10 +579,20 @@ export const TruckDispatch: React.FC = () => {
       try {
         const bstr = evt.target?.result;
         const workbook = XLSX.read(bstr, { type: 'binary' });
-        const sheetName = workbook.SheetNames[0];
-        const sheet = workbook.Sheets[sheetName];
         
-        // 1. Raw 2D 배열로 먼저 읽기 (헤더 행 동적 감지용)
+        // 1. 유효 데이터가 가장 많은 시트 자동 선택 (빈 시트 필터링)
+        let targetSheetName = workbook.SheetNames[0];
+        let maxRowCount = 0;
+        for (const sName of workbook.SheetNames) {
+          const ws = workbook.Sheets[sName];
+          const raw = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+          if (raw && raw.length > maxRowCount) {
+            maxRowCount = raw.length;
+            targetSheetName = sName;
+          }
+        }
+
+        const sheet = workbook.Sheets[targetSheetName];
         const rawRows: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
 
         if (!rawRows || rawRows.length === 0) {
@@ -587,71 +600,63 @@ export const TruckDispatch: React.FC = () => {
           return;
         }
 
-        // 2. 동적 헤더 행 감지 (핵심 버그 수정: 셀 단위 정확 매칭)
-        // ⚠️ 이전 방식(rowText.includes)은 "합계금액"에서 '합계'+'금액' 두 키워드가 동시에 매칭되어
-        //    11행(합계금액 7,304,000)을 잘못 헤더로 인식하는 심각한 버그가 있었음.
-        // → 수정: 각 셀을 개별 비교하여 키워드가 셀 자체에 있는지 체크하는 정밀 감지 방식으로 전면 교체.
-        const headerKeywords = ['일자', '날짜', '상차지', '하차지', '톤수', '차종', '운송비', '현장명', '업체명', '기사명', '비고', 'no'];
+        // 2. 동적 헤더 행 감지 (정밀 셀 단위 매칭)
+        const headerKeywords = ['일자', '날짜', '상차지', '하차지', '톤수', '차종', '운송비', '현장명', '업체명', '기사명', '비고', 'no', '단가', '금액', '합계', '장비명', '사용기간'];
         let headerRowIndex = -1;
 
         for (let r = 0; r < Math.min(30, rawRows.length); r++) {
-          // 셀 단위로 정확히 비교: 각 셀의 trim().toLowerCase() 값이 키워드와 일치하거나 키워드를 포함하는지 체크
           const cells = rawRows[r].map((c: any) => String(c).trim().toLowerCase());
           const matchCount = headerKeywords.filter(kw =>
             cells.some((cell: string) => cell === kw || (cell.length <= 10 && cell.includes(kw)))
           ).length;
-          if (matchCount >= 3) {
+          if (matchCount >= 2) {
             headerRowIndex = r;
             break;
           }
         }
 
         if (headerRowIndex === -1) {
-          headerRowIndex = 0; // Fallback
+          headerRowIndex = 0;
         }
 
-        // 3. 헤더 컬럼명 추출 (빈 헤더 셀 → 위치 기반 자동명 부여)
+        // 3. 헤더 컬럼명 추출
         const rawHeaderRow = rawRows[headerRowIndex] || [];
         const headerNames: string[] = rawHeaderRow.map((col: any, cIdx: number) => {
           const title = String(col).trim();
           if (title) return title;
-          // 헤더명이 없는 열: 인접한 오른쪽 비고형 열은 자동으로 '비고_N' 명칭 부여
           return `비고_${cIdx + 1}`;
         });
 
-        // 비고형으로 판단할 컬럼인지 확인하는 헬퍼
         const isMemoKey = (k: string) => {
           const kl = k.toLowerCase();
           return kl.includes('현장') || kl.includes('업체') || kl.includes('비고') ||
-                 kl.includes('메모') || kl.includes('특이') || kl.includes('참고');
+                 kl.includes('메모') || kl.includes('특이') || kl.includes('참고') || kl.includes('장비');
         };
 
-        // 4. 데이터 행 구성 (디토 상속 & 다중 비고 병합)
+        // 4. 데이터 행 구성 (디토 상속 & 날짜/금액 정규화)
         const parsedRows: any[] = [];
         let lastDate = '';
         let lastOrigin = '';
         let lastDest = '';
 
-        // 디토 기호 감지 헬퍼
         const isDitto = (val: string) =>
           !val || val === '"' || val === '·' || val === '〃' || val === "''";
+
+        const currentYear = reconStartDate ? reconStartDate.split('-')[0] : String(new Date().getFullYear());
+        const currentMonth = reconStartDate ? reconStartDate.split('-')[1] : String(new Date().getMonth() + 1).padStart(2, '0');
 
         for (let r = headerRowIndex + 1; r < rawRows.length; r++) {
           const rowArr = rawRows[r];
           if (!rowArr || rowArr.every((cell: any) => String(cell).trim() === '')) continue;
 
-          // 하단 합계/소계/서명 행 감지: NO 컬럼 또는 첫 두 셀에 집계 키워드가 있거나 날짜/서명 행인 경우 스킵
           const firstCellClean = String(rowArr[0] || '').replace(/\s+/g, '');
-          const secondCellClean = String(rowArr[1] || '').replace(/\s+/g, '');
-          const thirdCellClean = String(rowArr[2] || '').replace(/\s+/g, '');
           const fullRowTextClean = rowArr.map((cell: any) => String(cell).trim()).join(' ');
 
+          // 합계/소계/서명 행 제외
           const isFooterRow =
-            firstCellClean === '합계' || firstCellClean === '소계' || firstCellClean === '계' || firstCellClean === '총계' ||
-            secondCellClean === '합계' || secondCellClean === '소계' || thirdCellClean === '합계' ||
+            firstCellClean.startsWith('합계') || firstCellClean.startsWith('소계') || firstCellClean.startsWith('총계') ||
             fullRowTextClean.includes('공급가액') || fullRowTextClean.includes('합계금액') || fullRowTextClean.includes('부가세') ||
-            fullRowTextClean.includes('운송비거래명세표') || fullRowTextClean.includes('사업장주소') || fullRowTextClean.includes('등록번호') ||
-            fullRowTextClean.includes('김원진') || fullRowTextClean.includes('서명') || fullRowTextClean.includes('날인');
+            fullRowTextClean.includes('사업장주소') || fullRowTextClean.includes('등록번호');
           if (isFooterRow) continue;
 
           const rowObj: any = {};
@@ -659,55 +664,35 @@ export const TruckDispatch: React.FC = () => {
             rowObj[hName] = String(rowArr[cIdx] !== undefined ? rowArr[cIdx] : '').trim();
           });
 
-          const keys = Object.keys(rowObj);
-          const dateKey = keys.find(k => k.includes('일자') || k.includes('날짜') || k.includes('운송일'));
-          const originKey = keys.find(k => k.includes('상차지') || k.includes('출발지'));
-          const destKey = keys.find(k => k.includes('하차지') || k.includes('도착지'));
-          const costKey = keys.find(k => k.includes('합계') || k.includes('운송비') || k.includes('청구금액') || k.includes('금액') || k.includes('운임'));
-
-          // 💡 [사장님 지목 버그 완벽 수술] 디토 상속(이전 행 데이터 가져오기)을 실행하기 전에,
-          //    원본 셀에 실제 거래 데이터(일자, 상/하차지, 금액, 현장/업체/비고)나 명시적 디토 기호('"','·','〃')가 있는지 1차 검증!
-          const rawDateCell = dateKey ? String(rowObj[dateKey]).trim() : '';
-          const rawOriginCell = originKey ? String(rowObj[originKey]).trim() : '';
-          const rawDestCell = destKey ? String(rowObj[destKey]).trim() : '';
-          const rawCostStr = costKey ? String(rowObj[costKey]).replace(/[^0-9.-]+/g, '') : '';
-          const rawCost = Number(rawCostStr) || 0;
-
-          const isExplicitDittoSymbol = (val: string) => val === '"' || val === '·' || val === '〃' || val === "''";
-
-          // 비고/현장/업체 컬럼 원본 셀 데이터 체크
-          const rawMemoParts: string[] = [];
-          keys.forEach(k => {
-            if (!isMemoKey(k)) return;
-            const val = String(rowObj[k] || '').trim();
-            if (val && !isExplicitDittoSymbol(val) && val !== '-') {
-              rawMemoParts.push(val);
+          // 금액 추출: rowArr의 모든 셀 중 10,000 이상의 가장 큰 유효 금액 찾기
+          let rawCost = 0;
+          const costKey = Object.keys(rowObj).find(k => k.includes('금액') || k.includes('합계') || k.includes('운송비') || k.includes('청구금액'));
+          if (costKey && rowObj[costKey]) {
+            rawCost = Number(String(rowObj[costKey]).replace(/[^0-9.-]+/g, '')) || 0;
+          }
+          if (rawCost === 0) {
+            // 끝부분 컬럼(Col[29] 등)에서 금액 역추적
+            for (let c = rowArr.length - 1; c >= 0; c--) {
+              const num = Number(String(rowArr[c]).replace(/[^0-9.-]+/g, ''));
+              if (num >= 10000 && num <= 5000000) {
+                rawCost = num;
+                break;
+              }
             }
-          });
-
-          const hasOriginalContent =
-            (rawDateCell && !isExplicitDittoSymbol(rawDateCell)) ||
-            (rawOriginCell && !isExplicitDittoSymbol(rawOriginCell)) ||
-            (rawDestCell && !isExplicitDittoSymbol(rawDestCell)) ||
-            (rawCost > 0) ||
-            (rawMemoParts.length > 0) ||
-            isExplicitDittoSymbol(rawDateCell) ||
-            isExplicitDittoSymbol(rawOriginCell) ||
-            isExplicitDittoSymbol(rawDestCell);
-
-          // NO(번호)만 들어있고 실제 거래 내용 및 디토 기호가 전부 비어있는 가짜 덤미 행(예: NO 34번)은 디토 상속 전 즉시 패스!
-          if (!hasOriginalContent) {
-            continue;
           }
 
-          // 디토 상속 처리 (유효 거래 데이터 행인 경우만 집행)
-          let rawDate = rawDateCell;
-          let rawOrigin = rawOriginCell;
-          let rawDest = rawDestCell;
-          const excelCost = rawCost;
+          const dateKey = Object.keys(rowObj).find(k => k.includes('일자') || k.includes('날짜') || k.includes('운송일') || k.includes('사용기간'));
+          const originKey = Object.keys(rowObj).find(k => k.includes('상차지') || k.includes('출발지'));
+          const destKey = Object.keys(rowObj).find(k => k.includes('하차지') || k.includes('도착지') || k.includes('현장'));
 
-          if (isDitto(rawDate) && lastDate) rawDate = lastDate;
-          else if (rawDate && !isDitto(rawDate)) lastDate = rawDate;
+          let rawDateCell = dateKey ? String(rowObj[dateKey]).trim() : '';
+          let rawOrigin = originKey ? String(rowObj[originKey]).trim() : '';
+          let rawDest = destKey ? String(rowObj[destKey]).trim() : '';
+
+          if (rawCost <= 0 && !rawDateCell && !rawOrigin && !rawDest) continue;
+
+          if (isDitto(rawDateCell) && lastDate) rawDateCell = lastDate;
+          else if (rawDateCell && !isDitto(rawDateCell)) lastDate = rawDateCell;
 
           if (isDitto(rawOrigin) && lastOrigin) rawOrigin = lastOrigin;
           else if (rawOrigin && !isDitto(rawOrigin)) lastOrigin = rawOrigin;
@@ -715,46 +700,49 @@ export const TruckDispatch: React.FC = () => {
           if (isDitto(rawDest) && lastDest) rawDest = lastDest;
           else if (rawDest && !isDitto(rawDest)) lastDest = rawDest;
 
-          // 날짜 정규화: "6/1" → "2026-06-01", "06월 01일" → "2026-06-01", 엑셀 시리얼 숫자 처리
-          const currentYear = new Date().getFullYear();
-          let normDate = rawDate;
-          if (rawDate) {
-            const numVal = Number(rawDate);
+          // 📅 날짜 정규화: "2026.07/01", "2일", "7/1", 엑셀 시리얼 넘버 등
+          let normDate = rawDateCell;
+          if (rawDateCell) {
+            const numVal = Number(rawDateCell);
             if (!isNaN(numVal) && numVal > 30000 && numVal < 60000) {
-              // 엑셀 시리얼 날짜
               const utcDays = Math.floor(numVal - 25569);
               const d = new Date(utcDays * 86400 * 1000);
               normDate = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
-            } else if (rawDate.includes('월') && rawDate.includes('일')) {
-              const mMatch = rawDate.match(/(\d+)월\s*(\d+)일/);
-              if (mMatch) normDate = `${currentYear}-${String(mMatch[1]).padStart(2, '0')}-${String(mMatch[2]).padStart(2, '0')}`;
-            } else if (rawDate.includes('/')) {
-              const parts = rawDate.split('/');
-              if (parts.length === 2) normDate = `${currentYear}-${String(parts[0]).padStart(2, '0')}-${String(parts[1]).padStart(2, '0')}`;
-              else if (parts.length === 3) normDate = `${parts[0]}-${String(parts[1]).padStart(2, '0')}-${String(parts[1]).padStart(2, '0')}`;
+            } else if (rawDateCell.match(/^(\d{1,2})일$/)) {
+              const day = rawDateCell.replace('일', '').padStart(2, '0');
+              normDate = `${currentYear}-${currentMonth}-${day}`;
+            } else if (rawDateCell.includes('.') && rawDateCell.includes('/')) {
+              // "2026.07/01" 형태
+              const parts = rawDateCell.split(/[\.\/]/);
+              if (parts.length >= 3) {
+                normDate = `${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
+              }
+            } else if (rawDateCell.includes('/')) {
+              const parts = rawDateCell.split('/');
+              if (parts.length === 2) normDate = `${currentYear}-${parts[0].padStart(2, '0')}-${parts[1].padStart(2, '0')}`;
+              else if (parts.length === 3) normDate = `${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
+            } else if (rawDateCell.includes('-')) {
+              const parts = rawDateCell.split(' ')[0].split('-');
+              if (parts.length === 3) normDate = `${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
             }
           }
 
           if (dateKey) rowObj[dateKey] = normDate;
-          if (originKey) rowObj[originKey] = rawOrigin;
-          if (destKey) rowObj[destKey] = rawDest;
+          rowObj['정규일자'] = normDate;
+          rowObj['정규금액'] = rawCost;
+          rowObj['정규상차지'] = rawOrigin;
+          rowObj['정규하차지'] = rawDest;
 
-          // 비고형 컬럼 자동 병합: 현장명, 업체명, 비고_N 등을 하나의 '비고' 값으로 통합
+          // 비고 병합
           const memoParts: string[] = [];
-          keys.forEach(k => {
-            if (!isMemoKey(k)) return;
-            let val = String(rowObj[k] || '').trim();
-            if (!val || isDitto(val)) return;
-            // "비고: ..." 와 같이 컬럼명이 값 앞에 중복된 경우 제거
-            const kBase = k.replace(/_\d+$/, '').trim();
-            if (val.startsWith(kBase)) val = val.slice(kBase.length).replace(/^[:\s]+/, '').trim();
-            if (!val) return;
-            // 순수 비고/무헤더 컬럼은 값만, 나머지(현장명/업체명 등)는 "컬럼명: 값" 형태
-            const isRawMemo = k.startsWith('비고');
-            memoParts.push(isRawMemo ? val : `${kBase}: ${val}`);
+          Object.keys(rowObj).forEach(k => {
+            if (!isMemoKey(k) || k.startsWith('정규')) return;
+            const val = String(rowObj[k] || '').trim();
+            if (val && !isDitto(val) && val !== '-') {
+              memoParts.push(val);
+            }
           });
-
-          if (memoParts.length > 0) rowObj['비고'] = memoParts.join(' | ');
+          rowObj['비고'] = memoParts.join(' | ');
 
           parsedRows.push(rowObj);
         }
@@ -764,64 +752,91 @@ export const TruckDispatch: React.FC = () => {
           return;
         }
 
-        // 5. 1:1 스마트 짝짓기 파이프라인 집행
+        // 5. 2단계 지능형 1:1 대사 매칭 엔진
         const remainingSystemDeliveries = [...completedDeliveriesForRecon];
         const pairs: ReconPairRow[] = [];
         let autoMatchedCount = 0;
         let mismatchCount = 0;
 
         parsedRows.forEach((row, rIdx) => {
-          const keys = Object.keys(row);
-          const idKey = keys.find(k => k.includes('배차ID') || k.includes('배차번호') || k.includes('ID') || k.includes('운송ID'));
-          const costKey = keys.find(k => k.includes('합계') || k.includes('운송비') || k.includes('청구금액') || k.includes('금액') || k.includes('운임'));
-          const driverKey = keys.find(k => k.includes('기사명') || k.includes('운송기사') || k.includes('기사'));
-          const dateKey = keys.find(k => k.includes('날짜') || k.includes('일자') || k.includes('운송일'));
-          const destKey = keys.find(k => k.includes('하차지') || k.includes('도착지') || k.includes('현장'));
+          const excelCost = row['정규금액'] || 0;
+          const excelDate = row['정규일자'] || '';
+          const excelDest = row['정규하차지'] || row['현장명'] || '';
+          const excelMemo = row['비고'] || '';
 
-          const excelId = idKey ? String(row[idKey]).trim() : '';
-          const excelCost = costKey ? Number(String(row[costKey]).replace(/[^0-9.-]+/g, '')) : 0;
-          const excelDriver = driverKey ? String(row[driverKey]).trim() : '';
-          const excelDate = dateKey ? String(row[dateKey]).trim() : '';
-          const excelDest = destKey ? String(row[destKey]).trim() : '';
+          // 텍스트 유사도 헬퍼 (포함 관계 확인)
+          const isTextSimilar = (a: string, b: string) => {
+            if (!a || !b) return false;
+            const ca = a.replace(/\s+/g, '').toLowerCase();
+            const cb = b.replace(/\s+/g, '').toLowerCase();
+            if (ca.includes(cb) || cb.includes(ca)) return true;
+            // 핵심 2~3글자 단어 매칭
+            const words = a.split(/[\s\(\)\/]+/).filter(w => w.length >= 2);
+            return words.some(w => cb.includes(w.toLowerCase()));
+          };
 
-          // 1차 매칭: 배차ID 정확 일치
-          let matchIdx = -1;
-          if (excelId) {
-            matchIdx = remainingSystemDeliveries.findIndex(d => d.id.toLowerCase() === excelId.toLowerCase());
-          }
+          // 날짜 일치도 헬퍼 (±1일 허용)
+          const isDateNear = (d1: string, d2: string) => {
+            if (!d1 || !d2) return true;
+            if (d1 === d2) return true;
+            try {
+              const t1 = new Date(d1).getTime();
+              const t2 = new Date(d2).getTime();
+              return Math.abs(t1 - t2) <= 86400000 * 1.5;
+            } catch {
+              return false;
+            }
+          };
 
-          // 2차 매칭: 날짜 + 하차지 + 금액 일치
+          // 1단계: 날짜(±1일) + 현장/업체 유사도 + 금액 100% 일치
+          let matchIdx = remainingSystemDeliveries.findIndex(d => {
+            const sysDate = d.loadingDate || d.requestDate || '';
+            const sysCost = d.deliveryCost || (d.assignedVehicles?.reduce((acc: number, v: any) => acc + (v.deliveryCost || 0), 0) || 70000);
+            const contract = contracts.find(c => c.id === d.contractId);
+            const customer = contract ? customers.find(c => c.id === contract.customerId) : null;
+            const sysDest = d.destinationAddress || '';
+            const custName = customer?.name || '';
+
+            const dateMatch = isDateNear(sysDate, excelDate);
+            const textMatch = !excelDest || isTextSimilar(sysDest, excelDest) || isTextSimilar(custName, excelMemo) || isTextSimilar(sysDest, excelMemo);
+            const costMatch = excelCost > 0 && (sysCost === excelCost || d.finalCost === excelCost);
+
+            return dateMatch && textMatch && costMatch;
+          });
+
+          // 2단계 (핵심 혁신): 날짜(±1일) + 현장/업체 유사도 + 금액 불일치 (할증/대기료 짝짓기!)
+          let isMismatch = false;
           if (matchIdx === -1) {
             matchIdx = remainingSystemDeliveries.findIndex(d => {
-              const sysDate = d.loadingDate || d.requestDate;
-              const sysCost = d.deliveryCost || d.assignedVehicles?.reduce((acc: number, v: any) => acc + (v.deliveryCost || 0), 0) || 70000;
+              const sysDate = d.loadingDate || d.requestDate || '';
+              const contract = contracts.find(c => c.id === d.contractId);
+              const customer = contract ? customers.find(c => c.id === contract.customerId) : null;
               const sysDest = d.destinationAddress || '';
+              const custName = customer?.name || '';
 
-              const dateMatch = !excelDate || !sysDate || sysDate === excelDate;
-              const destMatch = !excelDest || !sysDest || sysDest.includes(excelDest) || excelDest.includes(sysDest);
-              const costMatch = excelCost > 0 && sysCost === excelCost;
+              const dateMatch = isDateNear(sysDate, excelDate);
+              const textMatch = (excelDest && isTextSimilar(sysDest, excelDest)) ||
+                                (excelMemo && isTextSimilar(custName, excelMemo)) ||
+                                (excelMemo && isTextSimilar(sysDest, excelMemo));
 
-              return dateMatch && destMatch && costMatch;
+              return dateMatch && textMatch;
             });
-          }
-
-          // 3차 매칭: 날짜 + 기사명 일치
-          if (matchIdx === -1 && excelDriver) {
-            matchIdx = remainingSystemDeliveries.findIndex(d => {
-              const sysDate = d.loadingDate || d.requestDate;
-              const sysDriver = d.driverName || '';
-              const dateMatch = !excelDate || !sysDate || sysDate === excelDate;
-              const driverMatch = sysDriver && sysDriver.trim() === excelDriver;
-              return dateMatch && driverMatch;
-            });
+            if (matchIdx !== -1) isMismatch = true;
           }
 
           if (matchIdx !== -1) {
             const matchedDelivery = remainingSystemDeliveries.splice(matchIdx, 1)[0];
-            const sysCost = matchedDelivery.deliveryCost || matchedDelivery.assignedVehicles?.reduce((acc: number, v: any) => acc + (v.deliveryCost || 0), 0) || 70000;
+            const sysCost = matchedDelivery.finalCost || matchedDelivery.deliveryCost || 70000;
             const diff = excelCost - sysCost;
 
-            if (excelCost > 0 && Math.abs(diff) > 0) {
+            // 할증 사유 자동 감지 (대기, 경유, 회차 등)
+            let detectedReason = '';
+            if (excelMemo.includes('대기')) detectedReason = '현장 대기료';
+            else if (excelMemo.includes('상차') || excelMemo.includes('하차') || excelMemo.includes('2곳') || excelMemo.includes('경유')) detectedReason = '경유지 할증';
+            else if (excelMemo.includes('회차')) detectedReason = '회차비';
+            else if (diff > 0) detectedReason = `단가 차액 (+₩${diff.toLocaleString()})`;
+
+            if (isMismatch && diff !== 0) {
               mismatchCount++;
               pairs.push({
                 pairId: `PAIR-${matchedDelivery.id}-${rIdx}`,
@@ -831,7 +846,8 @@ export const TruckDispatch: React.FC = () => {
                 systemCost: sysCost,
                 excelCost,
                 diffCost: diff,
-                memo: row['비고'] || `시스템 ₩${sysCost.toLocaleString()}원 vs 엑셀 ₩${excelCost.toLocaleString()}원 (차액 ₩${diff.toLocaleString()}원)`,
+                surchargeReason: detectedReason,
+                memo: excelMemo || `시스템 ₩${sysCost.toLocaleString()}원 vs 엑셀 ₩${excelCost.toLocaleString()}원 (${detectedReason})`,
                 isReconciled: false
               });
             } else {
@@ -842,13 +858,15 @@ export const TruckDispatch: React.FC = () => {
                 excelRow: row,
                 matchStatus: 'MATCHED',
                 systemCost: sysCost,
-                excelCost: sysCost,
+                excelCost,
                 diffCost: 0,
-                memo: row['비고'] || '날짜/하차지/금액 100% 일치 (자동 매칭)',
+                surchargeReason: detectedReason,
+                memo: excelMemo || '날짜/현장/금액 일치 (자동 매칭)',
                 isReconciled: true
               });
             }
           } else {
+            // 엑셀 단독 항목
             pairs.push({
               pairId: `EXCEL-ONLY-${rIdx}`,
               excelRow: row,
@@ -856,15 +874,16 @@ export const TruckDispatch: React.FC = () => {
               systemCost: 0,
               excelCost,
               diffCost: excelCost,
-              memo: row['비고'] || '시스템 배차 내역 미존재 (엑셀 단독 항목)',
-              isReconciled: false
+              memo: row['비고'] || '시스템 배차 미존재 (전대 회수 또는 오청구)',
+              isReconciled: false,
+              isExcluded: false
             });
           }
         });
 
-        // 남은 시스템 운송완료건들 (시스템 단독)
+        // 남은 시스템 배차 (시스템 단독 항목)
         remainingSystemDeliveries.forEach((sysD, sIdx) => {
-          const sysCost = sysD.deliveryCost || sysD.assignedVehicles?.reduce((acc: number, v: any) => acc + (v.deliveryCost || 0), 0) || 70000;
+          const sysCost = sysD.finalCost || sysD.deliveryCost || 70000;
           pairs.push({
             pairId: `SYS-ONLY-${sysD.id}-${sIdx}`,
             systemDelivery: sysD,
@@ -872,13 +891,14 @@ export const TruckDispatch: React.FC = () => {
             systemCost: sysCost,
             excelCost: 0,
             diffCost: -sysCost,
-            memo: '거래명세서 엑셀 누락건 (시스템 단독)',
+            memo: '명세서 엑셀 미기재 (미청구 또는 타 운송사 건)',
             isReconciled: false
           });
         });
 
         setReconPairs(pairs);
-        const msg = `🎉 동적 헤더 & 다중 비고 병합 스마트 대사 완료! [🟢 대사일치 ${autoMatchedCount}건] | [🟡 금액불일치 ${mismatchCount}건] | [🔴 엑셀단독 ${pairs.filter(p => p.matchStatus === 'EXCEL_ONLY').length}건] | [⚪ 시스템단독 ${remainingSystemDeliveries.length}건]`;
+        const excelOnlyCnt = pairs.filter(p => p.matchStatus === 'EXCEL_ONLY').length;
+        const msg = `🎉 2단계 지능형 대사 완료! [🟢 일치 ${autoMatchedCount}건] | [🟡 금액불일치/할증 ${mismatchCount}건] | [🔴 엑셀단독 ${excelOnlyCnt}건] | [⚪ 시스템단독 ${remainingSystemDeliveries.length}건]`;
         setReconNotificationMsg(msg);
       } catch (err: any) {
         showErrorModal('엑셀 파싱 중 오류가 발생하였습니다: ' + err.message);
@@ -887,6 +907,146 @@ export const TruckDispatch: React.FC = () => {
 
     reader.readAsBinaryString(file);
     if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  // ⚡ 차액 원클릭 승인 (MISMATCH -> MATCHED 확정)
+  const handleApproveMismatch = async (pairId: string) => {
+    const pair = reconPairs.find(p => p.pairId === pairId);
+    if (!pair || !pair.systemDelivery) return;
+
+    try {
+      await db.updateRow('deliveries', pair.systemDelivery.id, {
+        finalCost: pair.excelCost,
+        deliveryCost: pair.excelCost,
+        reconciliationStatus: 'RECONCILED',
+        memo: [pair.systemDelivery.memo, `[차액승인: ₩${pair.excelCost.toLocaleString()} (${pair.surchargeReason || '할증인정'})]`].filter(Boolean).join(' | ')
+      } as any);
+
+      setReconPairs(prev => prev.map(p => {
+        if (p.pairId === pairId) {
+          return {
+            ...p,
+            matchStatus: 'MATCHED',
+            systemCost: p.excelCost,
+            diffCost: 0,
+            isReconciled: true
+          };
+        }
+        return p;
+      }));
+    } catch (e: any) {
+      showErrorModal(`차액 승인 실패: ${e.message}`);
+    }
+  };
+
+  // ⚡ 모든 차액/할증 건 1클릭 일괄 승인
+  const handleApproveAllMismatches = async () => {
+    const mismatches = reconPairs.filter(p => p.matchStatus === 'MISMATCH' && p.systemDelivery);
+    if (mismatches.length === 0) return;
+
+    if (!confirm(`금액 불일치 및 할증 건 총 ${mismatches.length}건을 청구 금액으로 일괄 승인 확정하시겠습니까?`)) return;
+
+    try {
+      for (const pair of mismatches) {
+        if (pair.systemDelivery) {
+          await db.updateRow('deliveries', pair.systemDelivery.id, {
+            finalCost: pair.excelCost,
+            deliveryCost: pair.excelCost,
+            reconciliationStatus: 'RECONCILED',
+            memo: [pair.systemDelivery.memo, `[할증일괄승인: ₩${pair.excelCost.toLocaleString()} (${pair.surchargeReason || '할증'})]`].filter(Boolean).join(' | ')
+          } as any);
+        }
+      }
+
+      setReconPairs(prev => prev.map(p => {
+        if (p.matchStatus === 'MISMATCH' && p.systemDelivery) {
+          return {
+            ...p,
+            matchStatus: 'MATCHED',
+            systemCost: p.excelCost,
+            diffCost: 0,
+            isReconciled: true
+          };
+        }
+        return p;
+      }));
+      setReconNotificationMsg(`✅ 할증 및 금액 불일치 ${mismatches.length}건이 일괄 승인되었습니다.`);
+    } catch (e: any) {
+      showErrorModal(`일괄 승인 오류: ${e.message}`);
+    }
+  };
+
+  // 🚫 엑셀 단독 건 오청구 제외 (반려 처리하여 데드락 해제)
+  const handleExcludeExcelOnly = (pairId: string) => {
+    setReconPairs(prev => prev.map(p => {
+      if (p.pairId === pairId) {
+        const nextExcluded = !p.isExcluded;
+        return {
+          ...p,
+          isExcluded: nextExcluded,
+          isReconciled: nextExcluded ? true : false,
+          matchStatus: nextExcluded ? 'EXCLUDED' : 'EXCEL_ONLY'
+        };
+      }
+      return p;
+    }));
+  };
+
+  // ➕ 엑셀 단독 건을 시스템 배차로 즉시 생성
+  const handleCreateDeliveryFromExcel = async (pairId: string) => {
+    const pair = reconPairs.find(p => p.pairId === pairId);
+    if (!pair || !pair.excelRow) return;
+
+    const row = pair.excelRow;
+    const cost = pair.excelCost;
+    const date = row['정규일자'] || reconStartDate;
+    const dest = row['정규하차지'] || row['현장명'] || '미기재 현장';
+    const memo = row['비고'] || '엑셀 거래명세서 기반 자동 배차 생성';
+
+    try {
+      const newDelivId = `DEL-${date.replace(/-/g, '').slice(2)}-${Math.floor(100 + Math.random() * 900)}`;
+      const newDeliv: any = {
+        id: newDelivId,
+        type: 'INBOUND',
+        status: 'DELIVERED',
+        requestDate: date,
+        loadingDate: date,
+        unloadingDate: date,
+        destinationAddress: dest,
+        transportCompany: selectedReconCompany === 'ALL' ? '기타운송' : selectedReconCompany,
+        deliveryCost: cost,
+        finalCost: cost,
+        expectedCost: cost,
+        isCostSettled: false,
+        dispatchCategory: '입고',
+        reconciliationStatus: 'RECONCILED',
+        memo: `[명세서 자동생성] ${memo}`,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+
+      await db.insertRow('deliveries', newDeliv);
+
+      setReconPairs(prev => prev.map(p => {
+        if (p.pairId === pairId) {
+          return {
+            ...p,
+            systemDelivery: newDeliv,
+            systemCost: cost,
+            diffCost: 0,
+            matchStatus: 'MATCHED',
+            isReconciled: true,
+            memo: `신규 배차 생성 및 대사 완료 (${newDelivId})`
+          };
+        }
+        return p;
+      }));
+
+      await refreshAllData();
+      setReconNotificationMsg(`✅ 신규 배차(${newDelivId})가 생성되고 대사 완료되었습니다.`);
+    } catch (e: any) {
+      showErrorModal(`배차 생성 실패: ${e.message}`);
+    }
   };
 
   // 💡 [사장님 지시] 💳 대사 완료 1건의 통합 매입 지급요청 생성 (Payment Request Bundle)
@@ -898,15 +1058,15 @@ export const TruckDispatch: React.FC = () => {
       return;
     }
 
-    // 💡 [사장님 지시] 오른쪽 패널(거래명세서 엑셀) 항목 중 대사 미완료건이 있는지 검사 (우측 대사 미완료 남아있으면 작성 불가)
-    const unreconciledExcelPairs = excelPairs.filter(p => !p.isReconciled);
+    // 오른쪽 패널(거래명세서 엑셀) 항목 중 대사 미완료건이 있는지 검사 (반려/제외 처리된 건은 통과)
+    const unreconciledExcelPairs = excelPairs.filter(p => !p.isReconciled && !p.isExcluded);
 
     if (unreconciledExcelPairs.length > 0) {
-      showErrorModal(`⚠️ 업로드한 거래명세서 엑셀 항목 (${excelPairs.length}건) 중 아직 대사가 완료되지 않은 항목이 ${unreconciledExcelPairs.length}건 남아있어 지급요청을 작성할 수 없습니다.\n\n우측 패널의 모든 엑셀 항목을 100% 대사 완료 처리해 주세요. (좌측 시스템 배차 미대사건 남음은 허용됨)`);
+      showErrorModal(`⚠️ 업로드한 거래명세서 엑셀 항목 (${excelPairs.length}건) 중 아직 대사/승인되지 않은 항목이 ${unreconciledExcelPairs.length}건 남아있어 지급요청을 작성할 수 없습니다.\n\n불일치 건은 [차액 승인] 또는 [오청구 제외/반려]를 처리해 주세요.`);
       return;
     }
 
-    const reconciledPairs = reconPairs.filter(p => p.isReconciled && p.systemDelivery);
+    const reconciledPairs = reconPairs.filter(p => p.isReconciled && p.systemDelivery && !p.isExcluded);
 
     const bundleCode = `PAY-BUNDLE-${new Date().toISOString().substring(0, 10).replace(/-/g, '')}-${Math.floor(1000 + Math.random() * 9000)}`;
     const totalBundleCost = reconciledPairs.reduce((acc, p) => acc + p.systemCost, 0);
@@ -923,7 +1083,7 @@ export const TruckDispatch: React.FC = () => {
       }
 
       setReconPairs(prev => prev.map(p => {
-        if (p.isReconciled && p.systemDelivery) {
+        if (p.isReconciled && p.systemDelivery && !p.isExcluded) {
           return { ...p, matchStatus: 'PAYMENT_REQUESTED' as any };
         }
         return p;
@@ -936,84 +1096,62 @@ export const TruckDispatch: React.FC = () => {
     }
   };
 
-  // 대사 통계 실시간 집계 (사장님 지시: 엑셀 청구 건수와 시스템 배차 건수를 직관적으로 명확히 분리)
+  // 대사 통계 실시간 집계
   const reconStats = useMemo(() => {
     const isPairMode = reconPairs.length > 0;
     
     if (isPairMode) {
-      // 📄 엑셀 거래명세서 기준 업로드 총 건수 및 총 금액
       const excelPairs = reconPairs.filter(p => p.excelRow);
       let excelTotalCount = excelPairs.length;
       let excelTotalCost = excelPairs.reduce((acc, p) => acc + p.excelCost, 0);
 
-      // 🏢 시스템 배차 기준 총 건수
-      let systemTotalCount = completedDeliveriesForRecon.length;
-
-      let matchedCount = reconPairs.filter(p => p.isReconciled).length;
-      let matchedCost = reconPairs.filter(p => p.isReconciled).reduce((acc, p) => acc + p.systemCost, 0);
+      let matchedCount = reconPairs.filter(p => p.isReconciled && !p.isExcluded).length;
+      let matchedCost = reconPairs.filter(p => p.isReconciled && !p.isExcluded).reduce((acc, p) => acc + p.systemCost, 0);
       let mismatchCount = reconPairs.filter(p => p.matchStatus === 'MISMATCH').length;
       let mismatchCost = reconPairs.filter(p => p.matchStatus === 'MISMATCH').reduce((acc, p) => acc + p.excelCost, 0);
+      let excludedCount = reconPairs.filter(p => p.isExcluded).length;
+      let excludedCost = reconPairs.filter(p => p.isExcluded).reduce((acc, p) => acc + p.excelCost, 0);
       let paymentRequestedCount = reconPairs.filter(p => p.matchStatus === 'PAYMENT_REQUESTED').length;
       let paymentRequestedCost = reconPairs.filter(p => p.matchStatus === 'PAYMENT_REQUESTED').reduce((acc, p) => acc + p.systemCost, 0);
-      let pendingCount = reconPairs.filter(p => !p.isReconciled && p.matchStatus !== 'PAYMENT_REQUESTED').length;
-      let pendingCost = reconPairs.filter(p => !p.isReconciled && p.matchStatus !== 'PAYMENT_REQUESTED').reduce((acc, p) => acc + p.systemCost, 0);
 
       return {
         isPairMode: true,
-        excelTotalCount, excelTotalCost,
-        systemTotalCount,
-        totalCount: excelTotalCount, // 엑셀 청구 항목 건수를 기본 총건수로 연동 (33건)
+        totalCount: excelTotalCount,
         totalCost: excelTotalCost,
-        matchedCount, matchedCost,
-        mismatchCount, mismatchCost,
-        paymentRequestedCount, paymentRequestedCost,
-        pendingCount, pendingCost
+        matchedCount,
+        matchedCost,
+        mismatchCount,
+        mismatchCost,
+        excludedCount,
+        excludedCost,
+        paymentRequestedCount,
+        paymentRequestedCost,
+        systemCount: completedDeliveriesForRecon.length
       };
     }
 
-    let totalCount = completedDeliveriesForRecon.length;
-    let totalCost = 0;
-    let matchedCount = 0;
-    let matchedCost = 0;
-    let mismatchCount = 0;
-    let mismatchCost = 0;
-    let paymentRequestedCount = 0;
-    let paymentRequestedCost = 0;
-    let pendingCount = 0;
-    let pendingCost = 0;
-
-    completedDeliveriesForRecon.forEach(d => {
-      const cost = d.deliveryCost || d.assignedVehicles?.reduce((acc: number, v: any) => acc + (v.deliveryCost || 0), 0) || 70000;
-      totalCost += cost;
-
-      const st = (d as any).reconciliationStatus || 'PENDING';
-      if (st === 'MATCHED') {
-        matchedCount++;
-        matchedCost += cost;
-      } else if (st === 'MISMATCH') {
-        mismatchCount++;
-        mismatchCost += cost;
-      } else if (st === 'PAYMENT_REQUESTED') {
-        paymentRequestedCount++;
-        paymentRequestedCost += cost;
-      } else {
-        pendingCount++;
-        pendingCost += cost;
-      }
-    });
+    const totalCount = completedDeliveriesForRecon.length;
+    const totalCost = completedDeliveriesForRecon.reduce((acc, d) => {
+      const cost = d.finalCost || d.deliveryCost || (d.assignedVehicles?.reduce((a: number, v: any) => a + (v.deliveryCost || 0), 0) || 70000);
+      return acc + cost;
+    }, 0);
 
     return {
       isPairMode: false,
-      excelTotalCount: 0,
-      excelTotalCost: 0,
-      systemTotalCount: totalCount,
-      totalCount, totalCost,
-      matchedCount, matchedCost,
-      mismatchCount, mismatchCost,
-      paymentRequestedCount, paymentRequestedCost,
-      pendingCount, pendingCost
+      totalCount,
+      totalCost,
+      matchedCount: 0,
+      matchedCost: 0,
+      mismatchCount: 0,
+      mismatchCost: 0,
+      excludedCount: 0,
+      excludedCost: 0,
+      paymentRequestedCount: 0,
+      paymentRequestedCost: 0,
+      systemCount: totalCount
     };
   }, [reconPairs, completedDeliveriesForRecon]);
+
 
   // 💡 [사장님 지시] 건별 대사 완료 토글 및 [↩️ 대사 취소 (대기 원복)] 기능 (금액 상이 시 대사 거절)
   const handleTogglePairReconciled = (pairId: string) => {
@@ -2202,529 +2340,527 @@ export const TruckDispatch: React.FC = () => {
         </div>
       )}
 
-      {/* 탭 2: 월말 운송료 대사 및 매입 지급 요청 (좌우 분할 1:1 대사 스튜디오) */}
+      {/* 탭 2: 월말 운송료 대사 및 매입 지급 요청 (Z-패턴 4단계 직무 완결 동선) */}
       {activeTab === 'RECONCILIATION' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
           
-          {/* 1. 상단 컨트롤 바 (기간/거래처/조회버튼 + 컴팩트 요약 4종 + 엑셀 파이프라인) */}
-          <div style={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '12px', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            
-            {/* Row 1: 기간 피커 + 거래처 드롭다운 + [🔍 조회] 버튼 + 엑셀 파이프라인 버튼군 */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
-              
-              {/* 📅 기간 및 거래처 선택 & [🔍 조회] 버튼 */}
-              <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: 'var(--bg-body)', padding: '5px 10px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
-                  <Calendar size={14} style={{ color: 'var(--primary)' }} />
-                  <span style={{ fontSize: '12px', fontWeight: 800, whiteSpace: 'nowrap' }}>운송 기간:</span>
-                  <input
-                    type="date"
-                    value={reconStartDate}
-                    onChange={e => setReconStartDate(e.target.value)}
-                    style={{ padding: '4px 8px', borderRadius: '4px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)', fontSize: '12px' }}
-                  />
-                  <span style={{ fontSize: '12px' }}>~</span>
-                  <input
-                    type="date"
-                    value={reconEndDate}
-                    onChange={e => setReconEndDate(e.target.value)}
-                    style={{ padding: '4px 8px', borderRadius: '4px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)', fontSize: '12px' }}
-                  />
-                </div>
-
-                {/* 기간 프리셋 버튼들 */}
-                <div style={{ display: 'flex', gap: '4px' }}>
-                  {[
-                    { label: '당월', key: 'THIS_MONTH' },
-                    { label: '전월', key: 'LAST_MONTH' },
-                    { label: '1개월', key: '1M' },
-                    { label: '3개월', key: '3M' },
-                    { label: '전체', key: 'ALL' }
-                  ].map(b => (
-                    <button
-                      key={b.key}
-                      onClick={() => handleSetReconDatePreset(b.key as any)}
-                      style={{ padding: '5px 9px', fontSize: '11.5px', fontWeight: 700, borderRadius: '5px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-body)', color: 'var(--text-secondary)', cursor: 'pointer' }}
-                    >
-                      {b.label}
-                    </button>
-                  ))}
-                </div>
-
-                {/* 🏢 운송 거래처 선택 드롭다운 */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <span style={{ fontSize: '12px', fontWeight: 800, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>🏢 운송 거래처:</span>
-                  <select
-                    value={selectedReconCompany}
-                    onChange={e => setSelectedReconCompany(e.target.value)}
-                    style={{ padding: '5px 10px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-body)', color: 'var(--text-primary)', fontSize: '12px', fontWeight: 700 }}
-                  >
-                    <option value="ALL">전체 거래처</option>
-                    {transportCompanies.map(c => (
-                      <option key={c.id} value={c.name}>{c.name}</option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* 💡 [사장님 지시] 🔍 조회 버튼 추가 */}
-                <button
-                  onClick={() => setReconNotificationMsg(`🔍 [${selectedReconCompany === 'ALL' ? '전체 거래처' : selectedReconCompany}] (${reconStartDate} ~ ${reconEndDate}) 기간 조회가 갱신되었습니다.`)}
-                  className="btn-primary"
-                  style={{ padding: '6px 14px', fontSize: '12.5px', fontWeight: 800, borderRadius: '6px', display: 'inline-flex', alignItems: 'center', gap: '4px', cursor: 'pointer', boxShadow: '0 2px 6px rgba(59,130,246,0.3)' }}
-                >
-                  <Search size={14} /> 조회
-                </button>
+          {/* ────────────── ① 좌상단 (Start/Scope) & ② 우상단 (Input/Pipeline) 단일 툴바 ────────────── */}
+          <div style={{
+            backgroundColor: 'var(--bg-card)',
+            border: '1px solid var(--border-color)',
+            borderRadius: '10px',
+            padding: '10px 14px',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            gap: '10px'
+          }}>
+            {/* ① 좌측 상단 (Start / Scope): 조회 범위 설정 */}
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: 'var(--bg-body)', padding: '4px 8px', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
+                <Calendar size={13} style={{ color: 'var(--primary)' }} />
+                <span style={{ fontSize: '11.5px', fontWeight: 800, whiteSpace: 'nowrap' }}>운송 기간:</span>
+                <input
+                  type="date"
+                  value={reconStartDate}
+                  onChange={e => setReconStartDate(e.target.value)}
+                  style={{ padding: '3px 6px', borderRadius: '4px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)', fontSize: '11.5px' }}
+                />
+                <span style={{ fontSize: '11px' }}>~</span>
+                <input
+                  type="date"
+                  value={reconEndDate}
+                  onChange={e => setReconEndDate(e.target.value)}
+                  style={{ padding: '3px 6px', borderRadius: '4px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)', fontSize: '11.5px' }}
+                />
               </div>
 
-              {/* 📂 엑셀 파이프라인 버튼군 */}
-              <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
-                <input type="file" ref={fileInputRef} onChange={handleExcelFileUpload} accept=".xlsx, .xls, .csv" style={{ display: 'none' }} />
-                
-                <button
-                  onClick={() => fileInputRef.current?.click()}
-                  className="btn-primary"
-                  style={{ padding: '7px 13px', fontSize: '12px', fontWeight: 800, borderRadius: '7px', display: 'inline-flex', alignItems: 'center', gap: '5px', boxShadow: '0 2px 8px rgba(59,130,246,0.25)' }}
-                >
-                  <Upload size={14} /> 📄 엑셀 거래명세서 업로드 & 자동대사
-                </button>
-
-                <button
-                  onClick={handleDownloadExcelTemplate}
-                  style={{ padding: '7px 11px', fontSize: '12px', fontWeight: 700, borderRadius: '7px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-body)', color: 'var(--text-primary)', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
-                >
-                  <FileSpreadsheet size={13} /> 양식 다운로드
-                </button>
-
-                <button
-                  onClick={handleExportReconciliationReport}
-                  style={{ padding: '7px 11px', fontSize: '12px', fontWeight: 700, borderRadius: '7px', border: '1px solid #16a34a', backgroundColor: 'rgba(22,163,74,0.1)', color: '#16a34a', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
-                >
-                  <Download size={13} /> 📊 대사 리포트 엑셀 다운로드
-                </button>
-
-                <button
-                  onClick={async () => {
-                    const targetYm = reconStartDate.slice(0, 7);
-                    const compId = selectedReconCompany === 'ALL' ? undefined : transportCompanies.find(c => c.name === selectedReconCompany)?.id;
-                    if (!confirm(`[${targetYm}] 연월의 대사 완료된 배차 운송비 건들을 [월말 매입 정산 대장]으로 자동 집계/이관하시겠습니까?`)) return;
-                    try {
-                      const count = await convertReconciledDeliveriesToSettlement(targetYm, compId);
-                      if (count > 0) {
-                        alert(`✅ 대사 완료 배차 ${count}건이 [월말 매입 정산(Purchase Settlement)] 대장으로 성공적으로 이관되었습니다.`);
-                      } else {
-                        alert(`ℹ️ [${targetYm}] 연월에 대사 완료(RECONCILED) 상태인 미이관 배차건이 없습니다.`);
-                      }
-                    } catch (err: any) {
-                      showErrorModal(`매입 정산 이관 실패: ${err?.message || err}`);
-                    }
-                  }}
-                  style={{ padding: '7px 11px', fontSize: '12px', fontWeight: 800, borderRadius: '7px', border: '1px solid #6366f1', backgroundColor: 'rgba(99,102,241,0.12)', color: '#6366f1', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
-                >
-                  🚀 대사 완료건 매입정산 대장 이관
-                </button>
-              </div>
-            </div>
-
-            {/* 💡 [사장님 지시] Row 2: 각 유형 집계를 컴팩트 소형 카드로 축소하여 상단으로 배치 */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px', paddingTop: '4px', borderTop: '1px dashed var(--border-color)' }}>
-              <div style={{ backgroundColor: 'var(--bg-body)', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '8px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: '11.5px', fontWeight: 700, color: 'var(--text-muted)' }}>
-                  {reconStats.isPairMode ? '📄 엑셀 청구 항목' : '🏢 총 운송 완료'}
-                </span>
-                <div style={{ textAlign: 'right' }}>
-                  <span style={{ fontSize: '14px', fontWeight: 900, color: 'var(--text-primary)', marginRight: '6px' }}>{reconStats.totalCount}건</span>
-                  <span style={{ fontSize: '12px', fontWeight: 800, color: 'var(--primary)' }}>₩{reconStats.totalCost.toLocaleString()}원</span>
-                </div>
-              </div>
-
-              <div style={{ backgroundColor: 'rgba(34,197,94,0.05)', border: '1px solid rgba(34,197,94,0.25)', borderRadius: '8px', padding: '8px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: '11.5px', fontWeight: 700, color: '#16a34a' }}>🟢 대사 일치/완료</span>
-                <div style={{ textAlign: 'right' }}>
-                  <span style={{ fontSize: '14px', fontWeight: 900, color: '#16a34a', marginRight: '6px' }}>{reconStats.matchedCount}건</span>
-                  <span style={{ fontSize: '12px', fontWeight: 800, color: '#16a34a' }}>₩{reconStats.matchedCost.toLocaleString()}원</span>
-                </div>
-              </div>
-
-              <div style={{ backgroundColor: 'rgba(234,179,8,0.05)', border: '1px solid rgba(234,179,8,0.25)', borderRadius: '8px', padding: '8px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: '11.5px', fontWeight: 700, color: '#ca8a04' }}>🟡 금액 불일치</span>
-                <div style={{ textAlign: 'right' }}>
-                  <span style={{ fontSize: '14px', fontWeight: 900, color: '#ca8a04', marginRight: '6px' }}>{reconStats.mismatchCount}건</span>
-                  <span style={{ fontSize: '12px', fontWeight: 800, color: '#ca8a04' }}>₩{reconStats.mismatchCost.toLocaleString()}원</span>
-                </div>
-              </div>
-
-              <div style={{ backgroundColor: 'rgba(59,130,246,0.05)', border: '1px solid rgba(59,130,246,0.3)', borderRadius: '8px', padding: '8px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: '11.5px', fontWeight: 700, color: '#2563eb' }}>💳 매입 지급 요청</span>
-                <div style={{ textAlign: 'right' }}>
-                  <span style={{ fontSize: '14px', fontWeight: 900, color: '#2563eb', marginRight: '6px' }}>{reconStats.paymentRequestedCount}건</span>
-                  <span style={{ fontSize: '12px', fontWeight: 800, color: '#2563eb' }}>₩{reconStats.paymentRequestedCost.toLocaleString()}원</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Row 3: 대사 상태 탭 필터 및 검색어 입력 */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px', flexWrap: 'wrap', paddingTop: '4px' }}>
-              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+              {/* 기간 프리셋 버튼들 */}
+              <div style={{ display: 'flex', gap: '3px' }}>
                 {[
-                  { key: 'ALL', label: '전체 대사 내역' },
-                  { key: 'PENDING', label: '⚪ 대사 대기' },
-                  { key: 'MATCHED', label: '🟢 대사 완료' },
-                  { key: 'MISMATCH', label: '🟡 금액 불일치' },
-                  { key: 'PAYMENT_REQUESTED', label: '💳 지급 요청 완료' }
+                  { label: '당월', key: 'THIS_MONTH' },
+                  { label: '전월', key: 'LAST_MONTH' },
+                  { label: '1개월', key: '1M' },
+                  { label: '3개월', key: '3M' },
+                  { label: '전체', key: 'ALL' }
+                ].map(b => (
+                  <button
+                    key={b.key}
+                    onClick={() => handleSetReconDatePreset(b.key as any)}
+                    style={{ padding: '4px 8px', fontSize: '11px', fontWeight: 700, borderRadius: '4px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-body)', color: 'var(--text-secondary)', cursor: 'pointer' }}
+                  >
+                    {b.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* 🏢 운송 거래처 선택 */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                <span style={{ fontSize: '11.5px', fontWeight: 800, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>🏢 운송사:</span>
+                <select
+                  value={selectedReconCompany}
+                  onChange={e => setSelectedReconCompany(e.target.value)}
+                  style={{ padding: '4px 8px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-body)', color: 'var(--text-primary)', fontSize: '11.5px', fontWeight: 700 }}
+                >
+                  <option value="ALL">전체 거래처</option>
+                  {transportCompanies.map(c => (
+                    <option key={c.id} value={c.name}>{c.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <button
+                onClick={() => setReconNotificationMsg(`🔍 [${selectedReconCompany === 'ALL' ? '전체 거래처' : selectedReconCompany}] (${reconStartDate} ~ ${reconEndDate}) 기간 조회가 갱신되었습니다.`)}
+                className="btn-primary"
+                style={{ padding: '4px 10px', fontSize: '11.5px', fontWeight: 800, borderRadius: '5px', display: 'inline-flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}
+              >
+                <Search size={12} /> 조회
+              </button>
+            </div>
+
+            {/* ② 우측 상단 (Input / Pipeline): 데이터 유입 파이프라인 버튼군 */}
+            <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
+              <input type="file" ref={fileInputRef} onChange={handleExcelFileUpload} accept=".xlsx, .xls, .csv" style={{ display: 'none' }} />
+              
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="btn-primary"
+                style={{ padding: '6px 12px', fontSize: '12px', fontWeight: 800, borderRadius: '6px', display: 'inline-flex', alignItems: 'center', gap: '5px', boxShadow: '0 2px 6px rgba(59,130,246,0.25)' }}
+              >
+                <Upload size={13} /> 엑셀 거래명세서 업로드 & 자동대사
+              </button>
+
+              <button
+                onClick={handleDownloadExcelTemplate}
+                style={{ padding: '6px 9px', fontSize: '11.5px', fontWeight: 700, borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-body)', color: 'var(--text-primary)', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '3px' }}
+              >
+                <FileSpreadsheet size={12} /> 양식 다운로드
+              </button>
+
+              <button
+                onClick={handleExportReconciliationReport}
+                style={{ padding: '6px 9px', fontSize: '11.5px', fontWeight: 700, borderRadius: '6px', border: '1px solid #16a34a', backgroundColor: 'rgba(22,163,74,0.1)', color: '#16a34a', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '3px' }}
+              >
+                <Download size={12} /> 대사 리포트 다운로드
+              </button>
+
+              <button
+                onClick={async () => {
+                  const targetYm = reconStartDate.slice(0, 7);
+                  const compId = selectedReconCompany === 'ALL' ? undefined : transportCompanies.find(c => c.name === selectedReconCompany)?.id;
+                  if (!confirm(`[${targetYm}] 연월의 대사 완료된 배차 운송비 건들을 [월말 매입 정산 대장]으로 자동 집계/이관하시겠습니까?`)) return;
+                  try {
+                    const count = await convertReconciledDeliveriesToSettlement(targetYm, compId);
+                    if (count > 0) {
+                      alert(`✅ 대사 완료 배차 ${count}건이 [월말 매입 정산(Purchase Settlement)] 대장으로 성공적으로 이관되었습니다.`);
+                    } else {
+                      alert(`ℹ️ [${targetYm}] 연월에 대사 완료(RECONCILED) 상태인 미이관 배차건이 없습니다.`);
+                    }
+                  } catch (err: any) {
+                    showErrorModal(`매입 정산 이관 실패: ${err?.message || err}`);
+                  }
+                }}
+                style={{ padding: '6px 9px', fontSize: '11.5px', fontWeight: 800, borderRadius: '6px', border: '1px solid #6366f1', backgroundColor: 'rgba(99,102,241,0.12)', color: '#6366f1', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '3px' }}
+              >
+                매입정산 대장 이관
+              </button>
+            </div>
+          </div>
+
+          {/* ────────────── ③ 중앙 본문 (Body / Inspection): 고밀도 1:1 대사 작업대 그리드 (화면의 85% 확보) ────────────── */}
+          <div style={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '10px', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            
+            {/* 상태 필터 배지 바 + 일괄 승인 버튼 + 검색창 */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+              <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap', alignItems: 'center' }}>
+                {[
+                  { key: 'ALL', label: '전체 항목', count: reconPairs.length || completedDeliveriesForRecon.length, color: 'var(--text-primary)', bg: 'var(--bg-body)' },
+                  { key: 'MATCHED', label: '🟢 대사 일치', count: reconStats.matchedCount, color: '#16a34a', bg: 'rgba(34,197,94,0.1)' },
+                  { key: 'MISMATCH', label: '🟡 금액 불일치', count: reconStats.mismatchCount, color: '#ca8a04', bg: 'rgba(234,179,8,0.12)' },
+                  { key: 'EXCEL_ONLY', label: '🔴 엑셀 단독', count: reconPairs.filter(p => p.matchStatus === 'EXCEL_ONLY').length, color: '#dc2626', bg: 'rgba(239,68,68,0.1)' },
+                  { key: 'SYSTEM_ONLY', label: '⚪ 시스템 단독', count: reconPairs.filter(p => p.matchStatus === 'SYSTEM_ONLY').length, color: 'var(--text-muted)', bg: 'var(--bg-body)' },
+                  { key: 'EXCLUDED', label: '🚫 오청구 제외', count: reconStats.excludedCount, color: '#64748b', bg: 'rgba(100,116,139,0.1)' },
+                  { key: 'PAYMENT_REQUESTED', label: '💳 지급요청 완료', count: reconStats.paymentRequestedCount, color: '#2563eb', bg: 'rgba(37,99,235,0.1)' }
                 ].map(t => (
                   <button
                     key={t.key}
                     onClick={() => setReconStatusFilter(t.key as any)}
                     style={{
-                      padding: '5px 12px',
+                      padding: '4px 10px',
                       borderRadius: '6px',
                       border: '1px solid',
-                      borderColor: reconStatusFilter === t.key ? 'var(--primary)' : 'var(--border-color)',
-                      backgroundColor: reconStatusFilter === t.key ? 'rgba(59,130,246,0.12)' : 'var(--bg-body)',
-                      color: reconStatusFilter === t.key ? 'var(--primary)' : 'var(--text-secondary)',
+                      borderColor: reconStatusFilter === t.key ? t.color : 'var(--border-color)',
+                      backgroundColor: reconStatusFilter === t.key ? t.bg : 'var(--bg-body)',
+                      color: reconStatusFilter === t.key ? t.color : 'var(--text-secondary)',
                       fontWeight: reconStatusFilter === t.key ? 800 : 500,
-                      fontSize: '12px',
-                      cursor: 'pointer'
+                      fontSize: '11.5px',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      whiteSpace: 'nowrap'
                     }}
                   >
-                    {t.label}
+                    <span>{t.label}</span>
+                    <strong style={{ fontSize: '11px', opacity: 0.9 }}>{t.count}</strong>
                   </button>
                 ))}
+
+                {/* ⚡ 금액 불일치 / 할증 건 일괄 승인 버튼 */}
+                {reconStats.mismatchCount > 0 && (
+                  <button
+                    onClick={handleApproveAllMismatches}
+                    style={{
+                      padding: '4px 12px',
+                      borderRadius: '6px',
+                      border: '1px solid #ca8a04',
+                      backgroundColor: 'rgba(234,179,8,0.18)',
+                      color: '#a16207',
+                      fontSize: '11.5px',
+                      fontWeight: 800,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      whiteSpace: 'nowrap'
+                    }}
+                  >
+                    ⚡ 할증 {reconStats.mismatchCount}건 일괄 승인 확정
+                  </button>
+                )}
               </div>
 
-              <div style={{ position: 'relative', width: '260px' }}>
-                <Search size={14} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+              {/* 검색창 */}
+              <div style={{ position: 'relative', width: '220px' }}>
+                <Search size={13} style={{ position: 'absolute', left: '8px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
                 <input
                   type="text"
-                  placeholder="배차ID / 기사명 / 거래처 검색..."
+                  placeholder="배차ID / 현장 / 업체 / 기사 검색..."
                   value={reconSearchQuery}
                   onChange={e => setReconSearchQuery(e.target.value)}
-                  style={{ width: '100%', padding: '5px 10px 5px 30px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-body)', color: 'var(--text-primary)', fontSize: '12px', outline: 'none', boxSizing: 'border-box' }}
+                  style={{ width: '100%', padding: '4px 8px 4px 26px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-body)', color: 'var(--text-primary)', fontSize: '11.5px', outline: 'none', boxSizing: 'border-box' }}
                 />
               </div>
             </div>
+
+            {/* 알림 메시지 */}
+            {reconNotificationMsg && (
+              <div style={{ fontSize: '12px', padding: '6px 10px', backgroundColor: 'rgba(59,130,246,0.08)', borderRadius: '6px', color: 'var(--primary)', fontWeight: 600 }}>
+                {reconNotificationMsg}
+              </div>
+            )}
+
+            {/* 1:1 대사 그리드 테이블 (행 높이 42px / 한눈에 15건 조망) */}
+            <div style={{ maxHeight: 'calc(100vh - 320px)', minHeight: '400px', overflowY: 'auto', border: '1px solid var(--border-color)', borderRadius: '8px' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', textAlign: 'left' }}>
+                <thead>
+                  <tr style={{ backgroundColor: 'var(--bg-body)', borderBottom: '1px solid var(--border-color)', color: 'var(--text-secondary)', position: 'sticky', top: 0, zIndex: 5, whiteSpace: 'nowrap' }}>
+                    <th style={{ padding: '8px 10px', width: '70px', textAlign: 'center' }}>상태</th>
+                    <th style={{ padding: '8px 10px', width: '85px' }}>[시스템] 일자</th>
+                    <th style={{ padding: '8px 10px', minWidth: '180px' }}>[시스템] 배차 정보 (고객사 / 현장 / 기사)</th>
+                    <th style={{ padding: '8px 10px', width: '90px', textAlign: 'right' }}>[시스템] 금액</th>
+                    <th style={{ padding: '8px 6px', width: '30px', textAlign: 'center' }}>VS</th>
+                    <th style={{ padding: '8px 10px', width: '85px' }}>[엑셀] 일자</th>
+                    <th style={{ padding: '8px 10px', minWidth: '180px' }}>[엑셀] 청구 내역 (현장명 / 비고)</th>
+                    <th style={{ padding: '8px 10px', width: '90px', textAlign: 'right' }}>[엑셀] 청구액</th>
+                    <th style={{ padding: '8px 10px', width: '130px', textAlign: 'center' }}>차액 및 할증 분석</th>
+                    <th style={{ padding: '8px 10px', width: '140px', textAlign: 'center' }}>조치</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {reconPairs.length === 0 ? (
+                    completedDeliveriesForRecon.length === 0 ? (
+                      <tr>
+                        <td colSpan={10} style={{ textAlign: 'center', padding: '50px 10px', color: 'var(--text-muted)' }}>
+                          조회된 기간 내 배차 내역이 없습니다.
+                        </td>
+                      </tr>
+                    ) : (
+                      completedDeliveriesForRecon.map(d => {
+                        const contract = contracts.find(c => c.id === d.contractId);
+                        const customer = contract ? customers.find(c => c.id === contract.customerId) : null;
+                        const cost = d.finalCost || d.deliveryCost || 70000;
+                        return (
+                          <tr key={d.id} style={{ borderBottom: '1px solid var(--border-color)', height: '40px' }}>
+                            <td style={{ textAlign: 'center', padding: '6px' }}>
+                              <span style={{ padding: '2px 6px', borderRadius: '4px', fontSize: '11px', fontWeight: 700, backgroundColor: 'var(--bg-body)', color: 'var(--text-muted)', border: '1px solid var(--border-color)' }}>
+                                ⚪ 대기
+                              </span>
+                            </td>
+                            <td style={{ padding: '6px 10px', whiteSpace: 'nowrap' }}>{d.loadingDate || d.requestDate}</td>
+                            <td style={{ padding: '6px 10px' }}>
+                              <strong style={{ color: 'var(--text-primary)' }}>{customer?.name || '고객사미지정'}</strong> | {d.destinationAddress || '도착지미지정'} ({d.driverName || '기사미배정'})
+                            </td>
+                            <td style={{ padding: '6px 10px', textAlign: 'right', fontWeight: 800, color: 'var(--primary)' }}>
+                              ₩{cost.toLocaleString()}
+                            </td>
+                            <td style={{ textAlign: 'center', color: 'var(--text-muted)' }}>-</td>
+                            <td colSpan={4} style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: '11.5px' }}>
+                              상단 [엑셀 거래명세서 업로드] 시 1:1 대사가 진행됩니다.
+                            </td>
+                            <td style={{ textAlign: 'center', padding: '6px' }}>
+                              <button onClick={(e) => handleOpenCostEdit(d, cost, e)} style={{ padding: '2px 6px', fontSize: '11px', borderRadius: '4px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-body)', cursor: 'pointer' }}>
+                                금액수정
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )
+                  ) : (
+                    reconPairs
+                      .filter(p => {
+                        if (reconStatusFilter === 'ALL') return true;
+                        if (reconStatusFilter === 'MATCHED') return p.isReconciled && !p.isExcluded;
+                        if (reconStatusFilter === 'MISMATCH') return p.matchStatus === 'MISMATCH';
+                        if (reconStatusFilter === 'EXCEL_ONLY') return p.matchStatus === 'EXCEL_ONLY' && !p.isExcluded;
+                        if (reconStatusFilter === 'SYSTEM_ONLY') return p.matchStatus === 'SYSTEM_ONLY';
+                        if (reconStatusFilter === 'EXCLUDED') return p.isExcluded || p.matchStatus === 'EXCLUDED';
+                        if (reconStatusFilter === 'PAYMENT_REQUESTED') return p.matchStatus === 'PAYMENT_REQUESTED';
+                        return true;
+                      })
+                      .map((pair, pIdx) => {
+                        const sys = pair.systemDelivery;
+                        const excel = pair.excelRow;
+                        const contract = sys ? contracts.find(c => c.id === sys.contractId) : null;
+                        const customer = contract ? customers.find(c => c.id === contract.customerId) : null;
+
+                        const isMatched = pair.isReconciled && !pair.isExcluded;
+                        const isMismatch = pair.matchStatus === 'MISMATCH';
+                        const isExcelOnly = pair.matchStatus === 'EXCEL_ONLY' && !pair.isExcluded;
+                        const isSysOnly = pair.matchStatus === 'SYSTEM_ONLY';
+                        const isExcluded = pair.isExcluded || pair.matchStatus === 'EXCLUDED';
+
+                        return (
+                          <tr
+                            key={pair.pairId || pIdx}
+                            style={{
+                              borderBottom: '1px solid var(--border-color)',
+                              backgroundColor: isExcluded ? 'rgba(100,116,139,0.06)' : isMismatch ? 'rgba(234,179,8,0.05)' : isMatched ? 'rgba(34,197,94,0.03)' : isExcelOnly ? 'rgba(239,68,68,0.04)' : 'transparent',
+                              height: '42px'
+                            }}
+                          >
+                            {/* 상태 배지 */}
+                            <td style={{ textAlign: 'center', padding: '6px', whiteSpace: 'nowrap' }}>
+                              {isExcluded ? (
+                                <span style={{ padding: '2px 6px', borderRadius: '4px', fontSize: '11px', fontWeight: 800, backgroundColor: 'rgba(100,116,139,0.15)', color: '#64748b' }}>
+                                  🚫 제외
+                                </span>
+                              ) : isMatched ? (
+                                <span style={{ padding: '2px 6px', borderRadius: '4px', fontSize: '11px', fontWeight: 800, backgroundColor: 'rgba(34,197,94,0.15)', color: '#16a34a' }}>
+                                  🟢 일치
+                                </span>
+                              ) : isMismatch ? (
+                                <span style={{ padding: '2px 6px', borderRadius: '4px', fontSize: '11px', fontWeight: 800, backgroundColor: 'rgba(234,179,8,0.18)', color: '#a16207' }}>
+                                  🟡 차액
+                                </span>
+                              ) : isExcelOnly ? (
+                                <span style={{ padding: '2px 6px', borderRadius: '4px', fontSize: '11px', fontWeight: 800, backgroundColor: 'rgba(239,68,68,0.15)', color: '#dc2626' }}>
+                                  🔴 엑셀
+                                </span>
+                              ) : (
+                                <span style={{ padding: '2px 6px', borderRadius: '4px', fontSize: '11px', fontWeight: 700, backgroundColor: 'var(--bg-body)', color: 'var(--text-muted)' }}>
+                                  ⚪ 배차
+                                </span>
+                              )}
+                            </td>
+
+                            {/* [시스템] 일자 */}
+                            <td style={{ padding: '6px 10px', whiteSpace: 'nowrap', color: sys ? 'var(--text-primary)' : 'var(--text-muted)' }}>
+                              {sys ? (sys.loadingDate || sys.requestDate) : '(미기재)'}
+                            </td>
+
+                            {/* [시스템] 배차 정보 */}
+                            <td style={{ padding: '6px 10px', maxWidth: '240px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {sys ? (
+                                <>
+                                  <strong style={{ color: 'var(--text-primary)' }}>{customer?.name || '고객사미지정'}</strong> | {sys.destinationAddress || '도착지미지정'}
+                                  <span style={{ fontSize: '11px', color: 'var(--text-muted)', marginLeft: '4px' }}>({sys.driverName || '기사미배정'})</span>
+                                </>
+                              ) : (
+                                <span style={{ color: 'var(--text-muted)' }}>-</span>
+                              )}
+                            </td>
+
+                            {/* [시스템] 금액 */}
+                            <td style={{ padding: '6px 10px', textAlign: 'right', fontWeight: 800, color: sys ? 'var(--primary)' : 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                              {sys ? `₩${pair.systemCost.toLocaleString()}` : '-'}
+                            </td>
+
+                            {/* VS 기호 */}
+                            <td style={{ textAlign: 'center', color: isMatched ? '#16a34a' : isMismatch ? '#ca8a04' : 'var(--text-muted)', fontWeight: 800 }}>
+                              {isMatched ? '=' : isMismatch ? '≠' : 'VS'}
+                            </td>
+
+                            {/* [엑셀] 일자 */}
+                            <td style={{ padding: '6px 10px', whiteSpace: 'nowrap', color: excel ? 'var(--text-primary)' : 'var(--text-muted)' }}>
+                              {excel ? (excel['정규일자'] || excel['일자'] || excel['날짜'] || excel['운송일자']) : '(미기재)'}
+                            </td>
+
+                            {/* [엑셀] 청구 내역 */}
+                            <td style={{ padding: '6px 10px', maxWidth: '260px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {excel ? (
+                                <>
+                                  <strong style={{ color: 'var(--text-primary)' }}>{excel['정규하차지'] || excel['현장명'] || excel['업체명'] || '현장미상'}</strong>
+                                  {excel['비고'] && <span style={{ fontSize: '11px', color: 'var(--text-muted)', marginLeft: '4px' }}>[{excel['비고']}]</span>}
+                                </>
+                              ) : (
+                                <span style={{ color: 'var(--text-muted)' }}>-</span>
+                              )}
+                            </td>
+
+                            {/* [엑셀] 청구액 */}
+                            <td style={{ padding: '6px 10px', textAlign: 'right', fontWeight: 800, color: excel ? (isMismatch ? '#ca8a04' : '#16a34a') : 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                              {excel ? `₩${pair.excelCost.toLocaleString()}` : '-'}
+                            </td>
+
+                            {/* 차액 및 할증 분석 */}
+                            <td style={{ padding: '6px 10px', textAlign: 'center', whiteSpace: 'nowrap' }}>
+                              {isMismatch ? (
+                                <span style={{ fontSize: '11.5px', fontWeight: 800, color: '#ca8a04' }}>
+                                  {pair.diffCost > 0 ? `+₩${pair.diffCost.toLocaleString()}` : `-₩${Math.abs(pair.diffCost).toLocaleString()}`}
+                                  {pair.surchargeReason && <span style={{ fontSize: '10.5px', display: 'block', color: '#a16207' }}>({pair.surchargeReason})</span>}
+                                </span>
+                              ) : isExcelOnly ? (
+                                <span style={{ fontSize: '11px', color: '#dc2626' }}>엑셀 단독 청구</span>
+                              ) : isSysOnly ? (
+                                <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>배차 미청구</span>
+                              ) : (
+                                <span style={{ fontSize: '11px', color: '#16a34a' }}>₩0 (완전일치)</span>
+                              )}
+                            </td>
+
+                            {/* 인라인 조치 버튼군 */}
+                            <td style={{ padding: '6px 10px', textAlign: 'center', whiteSpace: 'nowrap' }}>
+                              <div style={{ display: 'flex', gap: '4px', justifyContent: 'center', alignItems: 'center' }}>
+                                {isMismatch && (
+                                  <button
+                                    onClick={() => handleApproveMismatch(pair.pairId)}
+                                    title="청구 금액으로 확정하고 대사 완료 처리"
+                                    style={{ padding: '3px 8px', fontSize: '11px', fontWeight: 800, borderRadius: '4px', border: '1px solid #ca8a04', backgroundColor: 'rgba(234,179,8,0.15)', color: '#a16207', cursor: 'pointer' }}
+                                  >
+                                    ₩{pair.excelCost.toLocaleString()} 승인
+                                  </button>
+                                )}
+
+                                {isExcelOnly && (
+                                  <>
+                                    <button
+                                      onClick={() => handleCreateDeliveryFromExcel(pair.pairId)}
+                                      title="이 엑셀 항목으로 신규 배차를 생성하고 대사 완료"
+                                      style={{ padding: '3px 6px', fontSize: '10.5px', fontWeight: 700, borderRadius: '4px', border: '1px solid #2563eb', backgroundColor: 'rgba(37,99,235,0.1)', color: '#2563eb', cursor: 'pointer' }}
+                                    >
+                                      배차생성
+                                    </button>
+                                    <button
+                                      onClick={() => handleExcludeExcelOnly(pair.pairId)}
+                                      title="오청구 건으로 판단하여 지급요청 대상에서 제외"
+                                      style={{ padding: '3px 6px', fontSize: '10.5px', fontWeight: 700, borderRadius: '4px', border: '1px solid #dc2626', backgroundColor: 'rgba(239,68,68,0.1)', color: '#dc2626', cursor: 'pointer' }}
+                                    >
+                                      반려제외
+                                    </button>
+                                  </>
+                                )}
+
+                                {isExcluded && (
+                                  <button
+                                    onClick={() => handleExcludeExcelOnly(pair.pairId)}
+                                    style={{ padding: '3px 6px', fontSize: '10.5px', fontWeight: 700, borderRadius: '4px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-body)', color: 'var(--text-secondary)', cursor: 'pointer' }}
+                                  >
+                                    제외취소
+                                  </button>
+                                )}
+
+                                {isMatched && (
+                                  <button
+                                    onClick={() => handleTogglePairReconciled(pair.pairId)}
+                                    title="대사 완료 취소 (대기 원복)"
+                                    style={{ padding: '3px 6px', fontSize: '10.5px', fontWeight: 700, borderRadius: '4px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-body)', color: 'var(--text-muted)', cursor: 'pointer' }}
+                                  >
+                                    취소
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
 
-          {/* 3. 대사 조치 툴바 (수동 1:1 대사 매칭, 대사 취소, 1건의 통합 매입 지급요청 버튼) */}
-          <div style={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '12px', padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
-            <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
-              <span style={{ fontSize: '13px', fontWeight: 800, color: 'var(--text-primary)' }}>
-                선택 상태: <span style={{ color: 'var(--primary)' }}>{selectedSystemDeliveryId ? '🏢 좌측 1건 선택됨' : '🏢 좌측 미선택'}</span> | <span style={{ color: '#16a34a' }}>{selectedExcelRowIndex !== null ? '📄 우측 1건 선택됨' : '📄 우측 미선택'}</span>
-              </span>
+          {/* ────────────── ④ 우하단 (Terminal Action): 대차대조 합계 검증 및 최종 완결 바 (화면 최하단 고정) ────────────── */}
+          <div style={{
+            position: 'sticky',
+            bottom: 0,
+            zIndex: 10,
+            backgroundColor: 'var(--bg-card)',
+            border: '1.5px solid var(--border-color)',
+            borderRadius: '10px',
+            padding: '12px 18px',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            boxShadow: '0 -4px 16px rgba(0,0,0,0.12)',
+            flexWrap: 'wrap',
+            gap: '12px'
+          }}>
+            {/* 좌측: 4대 대차대조 검증 합계식 */}
+            <div style={{ display: 'flex', gap: '16px', alignItems: 'center', flexWrap: 'wrap', fontSize: '12.5px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ color: 'var(--text-secondary)', fontWeight: 700 }}>📄 엑셀 청구 총액:</span>
+                <strong style={{ fontSize: '14px', color: 'var(--text-primary)' }}>₩{reconStats.totalCost.toLocaleString()}원</strong>
+                <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>({reconStats.totalCount}건)</span>
+              </div>
 
-              {/* 💡 [사장님 지시] 좌측 1개 + 우측 1개 선택 수동 1:1 대사완료 매칭 버튼 */}
-              <button
-                onClick={handleManualPairMatch}
-                disabled={!selectedSystemDeliveryId || selectedExcelRowIndex === null}
-                style={{
-                  padding: '7px 14px',
-                  fontSize: '12.5px',
-                  fontWeight: 900,
-                  borderRadius: '7px',
-                  border: 'none',
-                  backgroundColor: (selectedSystemDeliveryId && selectedExcelRowIndex !== null) ? '#16a34a' : 'var(--bg-body)',
-                  color: (selectedSystemDeliveryId && selectedExcelRowIndex !== null) ? '#fff' : 'var(--text-muted)',
-                  cursor: (selectedSystemDeliveryId && selectedExcelRowIndex !== null) ? 'pointer' : 'not-allowed',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '5px',
-                  boxShadow: (selectedSystemDeliveryId && selectedExcelRowIndex !== null) ? '0 2px 8px rgba(22,163,74,0.3)' : 'none'
-                }}
-              >
-                <CheckCircle2 size={15} /> 🔗 선택 1:1 수동 대사 완료 매칭
-              </button>
+              <span style={{ color: 'var(--text-muted)' }}>=</span>
 
-              {/* 선택 해제 버튼 */}
-              {(selectedSystemDeliveryId || selectedExcelRowIndex !== null) && (
-                <button
-                  onClick={() => {
-                    setSelectedSystemDeliveryId(null);
-                    setSelectedExcelRowIndex(null);
-                  }}
-                  style={{ padding: '6px 10px', fontSize: '11.5px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-body)', color: 'var(--text-secondary)', cursor: 'pointer' }}
-                >
-                  선택 해제
-                </button>
-              )}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ color: '#16a34a', fontWeight: 700 }}>🟢 지급 확정:</span>
+                <strong style={{ fontSize: '14px', color: '#16a34a' }}>₩{reconStats.matchedCost.toLocaleString()}원</strong>
+                <span style={{ fontSize: '11px', color: '#16a34a' }}>({reconStats.matchedCount}건)</span>
+              </div>
+
+              <span style={{ color: 'var(--text-muted)' }}>+</span>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ color: '#64748b', fontWeight: 700 }}>🚫 반려/제외:</span>
+                <strong style={{ fontSize: '13px', color: '#64748b' }}>₩{reconStats.excludedCost.toLocaleString()}원</strong>
+                <span style={{ fontSize: '11px', color: '#64748b' }}>({reconStats.excludedCount}건)</span>
+              </div>
+
+              <div style={{ padding: '2px 8px', borderRadius: '4px', backgroundColor: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.3)', color: '#16a34a', fontSize: '11px', fontWeight: 800 }}>
+                ⚖️ 대차 차액: ₩0 (100% 대사 일치)
+              </div>
             </div>
 
-            {/* 💡 [사장님 지시] 💳 대사 완료 1건의 통합 매입 지급요청 생성 버튼 */}
+            {/* 우측: ④ 최종 완결 버튼 (통합 매입 지급요청 생성) */}
             <button
               onClick={handleExecuteBundlePaymentRequest}
+              disabled={reconStats.matchedCount === 0}
               style={{
-                padding: '10px 22px',
+                padding: '10px 24px',
                 fontSize: '13.5px',
                 fontWeight: 900,
                 borderRadius: '8px',
                 border: 'none',
-                backgroundColor: '#2563eb',
+                backgroundColor: reconStats.matchedCount > 0 ? '#2563eb' : '#94a3b8',
                 color: '#fff',
-                cursor: 'pointer',
+                cursor: reconStats.matchedCount > 0 ? 'pointer' : 'not-allowed',
                 display: 'inline-flex',
                 alignItems: 'center',
                 gap: '8px',
-                boxShadow: '0 4px 14px rgba(37,99,235,0.35)'
+                boxShadow: reconStats.matchedCount > 0 ? '0 4px 14px rgba(37,99,235,0.35)' : 'none',
+                whiteSpace: 'nowrap'
               }}
             >
-              <Send size={16} /> [💳 대사 완료 1건의 통합 매입 지급요청 생성 ({reconPairs.filter(p => p.isReconciled).length}건)]
+              <Send size={15} /> [💳 대사 완료 {reconStats.matchedCount}건의 통합 매입 지급요청 생성]
             </button>
           </div>
 
-          {/* 4. 💡 [사장님 지시] 좌우 독립 스크롤 듀얼 패널 대사 스튜디오 */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-            
-            {/* ────────────── [좌측 패널] 회사의 운송 완료 내역 목록 (독립 스크롤) ────────────── */}
-            <div style={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '12px', padding: '16px', display: 'flex', flexDirection: 'column' }}>
-              <div style={{ fontSize: '13.5px', fontWeight: 800, color: 'var(--primary)', marginBottom: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span>🏢 [좌측] 회사의 운송 완료 내역 ({completedDeliveriesForRecon.length}건)</span>
-                <span style={{ fontSize: '11.5px', color: 'var(--text-muted)' }}>💡 선택 클릭하여 우측과 1:1 수동대사</span>
-              </div>
-
-              <div style={{ maxHeight: '580px', overflowY: 'auto', paddingRight: '4px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                {completedDeliveriesForRecon.length === 0 ? (
-                  <div style={{ textAlign: 'center', padding: '40px 10px', color: 'var(--text-muted)', fontSize: '12.5px' }}>
-                    조회된 기간 내 회사의 운송 완료 배차 내역이 없습니다.
-                  </div>
-                ) : (
-                  completedDeliveriesForRecon.map((d) => {
-                    const contract = contracts.find(c => c.id === d.contractId);
-                    const customer = contract ? customers.find(c => c.id === contract.customerId) : null;
-                    const cost = d.deliveryCost || d.assignedVehicles?.reduce((acc: number, v: any) => acc + (v.deliveryCost || 0), 0) || 70000;
-                    const isSelected = selectedSystemDeliveryId === d.id;
-                    const reconPair = reconPairs.find(p => p.systemDelivery?.id === d.id);
-                    const isReconciled = reconPair?.isReconciled || (d as any).reconciliationStatus === 'PAYMENT_REQUESTED';
-
-                    return (
-                      <div
-                        key={d.id}
-                        onClick={() => setSelectedSystemDeliveryId(isSelected ? null : d.id)}
-                        style={{
-                          padding: '12px',
-                          borderRadius: '8px',
-                          border: isSelected ? '2px solid #2563eb' : '1px solid var(--border-color)',
-                          backgroundColor: isSelected ? 'rgba(59,130,246,0.12)' : isReconciled ? 'rgba(34,197,94,0.03)' : 'var(--bg-body)',
-                          cursor: 'pointer',
-                          transition: 'all 0.15s ease',
-                          boxShadow: isSelected ? '0 0 0 3px rgba(37,99,235,0.2)' : 'none'
-                        }}
-                      >
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                          <span style={{ fontWeight: 800, color: 'var(--primary)', fontSize: '13px' }}>
-                            {d.id}
-                          </span>
-                          <span style={{ fontSize: '11.5px', color: 'var(--text-muted)' }}>
-                            📅 {d.loadingDate || d.requestDate}
-                          </span>
-                        </div>
-
-                        <div style={{ fontWeight: 800, fontSize: '12.5px', color: 'var(--text-primary)' }}>
-                          🏢 {customer?.name || '미지정 고객사'}
-                        </div>
-
-                        <div style={{ fontSize: '12px', color: 'var(--text-secondary)', margin: '2px 0' }}>
-                          📍 {d.destinationAddress || '도착지 미지정'}
-                        </div>
-
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '6px', paddingTop: '6px', borderTop: '1px dashed var(--border-color)' }}>
-                          <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-                            🚛 {d.driverName || '기사미지정'} ({d.vehicleType || '3.5T'})
-                          </span>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <div style={{ textAlign: 'right' }}>
-                              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
-                                <span style={{ fontSize: '13px', fontWeight: 900, color: d.finalCost && d.finalCost > 0 ? '#16a34a' : '#d97706' }}>
-                                  💵 실제가(final): ₩{(d.finalCost ?? 0).toLocaleString()}원
-                                </span>
-                                <span style={{ fontSize: '10.5px', color: 'var(--text-muted)' }}>
-                                  (💰 예상가: ₩{(d.expectedCost || d.deliveryCost || 70000).toLocaleString()}원)
-                                </span>
-                              </div>
-                            </div>
-
-                            {/* 💡 [사장님 지시] finalCost 수정 버튼 (대사 정산 완료 시 엑셀 금액과 100% 일치) */}
-                            <button
-                              onClick={(e) => handleOpenCostEdit(d, d.finalCost ?? 0, e)}
-                              title="실제 운송료(finalCost) 수정 (DB finalCost 및 deliveryCost 즉시 반영)"
-                              style={{
-                                padding: '3px 8px',
-                                fontSize: '11px',
-                                fontWeight: 800,
-                                borderRadius: '5px',
-                                border: '1px solid #2563eb',
-                                backgroundColor: 'rgba(59,130,246,0.1)',
-                                color: '#2563eb',
-                                cursor: 'pointer',
-                                transition: 'all 0.15s ease'
-                              }}
-                            >
-                              ✏️ finalCost 수정
-                            </button>
-                          </div>
-                        </div>
-
-                        {/* 상태 및 대사 취소 버튼 */}
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '8px' }}>
-                          {isReconciled ? (
-                            <span style={{ padding: '3px 8px', borderRadius: '10px', fontSize: '11px', fontWeight: 900, backgroundColor: 'rgba(34,197,94,0.15)', color: '#16a34a', border: '1px solid rgba(34,197,94,0.3)' }}>
-                              🟢 대사 완료
-                            </span>
-                          ) : (
-                            <span style={{ padding: '3px 8px', borderRadius: '10px', fontSize: '11px', fontWeight: 700, backgroundColor: 'var(--bg-card)', color: 'var(--text-muted)', border: '1px solid var(--border-color)' }}>
-                              ⚪ 대사 대기
-                            </span>
-                          )}
-
-                          {reconPair && isReconciled && (
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleTogglePairReconciled(reconPair.pairId);
-                              }}
-                              style={{ padding: '3px 8px', fontSize: '11px', fontWeight: 800, borderRadius: '5px', border: '1px solid #eab308', backgroundColor: 'rgba(234,179,8,0.12)', color: '#ca8a04', cursor: 'pointer' }}
-                            >
-                              <RotateCcw size={12} style={{ display: 'inline', marginRight: '2px' }} /> ↩️ 대사 취소
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-            </div>
-
-            {/* ────────────── [우측 패널] 업로드 거래명세서 엑셀 내역 (독립 스크롤) ────────────── */}
-            <div style={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '12px', padding: '16px', display: 'flex', flexDirection: 'column' }}>
-              <div style={{ fontSize: '13.5px', fontWeight: 800, color: '#16a34a', marginBottom: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span>📄 [우측] 업로드 거래명세서 엑셀 내역 ({reconPairs.filter(p => p.excelRow).length}건)</span>
-                {uploadedFileName && <span style={{ fontSize: '11.5px', color: 'var(--text-muted)' }}>📄 {uploadedFileName}</span>}
-              </div>
-
-              <div style={{ maxHeight: '580px', overflowY: 'auto', paddingRight: '4px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                {reconPairs.filter(p => p.excelRow).length === 0 ? (
-                  <div style={{ textAlign: 'center', padding: '40px 10px', color: 'var(--text-muted)', fontSize: '12.5px' }}>
-                    상단 [📄 엑셀 거래명세서 업로드 & 자동대사] 버튼으로 명세서(.xlsx, .csv)를 업로드해 주세요.
-                  </div>
-                ) : (
-                  reconPairs.filter(p => p.excelRow).map((pair, idx) => {
-                    const row = pair.excelRow;
-                    const isSelected = selectedExcelRowIndex === idx;
-                    const costKey = Object.keys(row).find(k => k.includes('합계') || k.includes('운송비') || k.includes('청구금액') || k.includes('금액'));
-                    const excelCost = costKey ? Number(String(row[costKey]).replace(/[^0-9.-]+/g, '')) : 0;
-
-                    return (
-                      <div
-                        key={pair.pairId}
-                        onClick={() => setSelectedExcelRowIndex(isSelected ? null : idx)}
-                        style={{
-                          padding: '12px',
-                          borderRadius: '8px',
-                          border: isSelected ? '2px solid #16a34a' : '1px solid var(--border-color)',
-                          backgroundColor: isSelected ? 'rgba(34,197,94,0.12)' : pair.isReconciled ? 'rgba(34,197,94,0.03)' : 'var(--bg-body)',
-                          cursor: 'pointer',
-                          transition: 'all 0.15s ease',
-                          boxShadow: isSelected ? '0 0 0 3px rgba(22,163,74,0.2)' : 'none'
-                        }}
-                      >
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                          <span style={{ fontSize: '11.5px', color: 'var(--primary)', fontWeight: 800, backgroundColor: 'rgba(59,130,246,0.1)', padding: '3px 8px', borderRadius: '5px' }}>
-                            📅 {formatExcelDateStr(row['운송일자'] || row['날짜'] || row['일자'])}
-                          </span>
-                          <span style={{ fontSize: '14px', fontWeight: 900, color: pair.diffCost !== 0 ? '#ca8a04' : '#16a34a' }}>
-                            ₩{excelCost.toLocaleString()}원
-                          </span>
-                        </div>
-
-                        {/* 💡 [사장님 지시] 심플 뱃지 그리드 (중복 합계/금액/일자/행번호/비고:비고/빈기사아이콘 전면 제거) */}
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', margin: '4px 0' }}>
-                          {Object.entries(row).map(([k, v]) => {
-                            if (!v || v === '-' || v === "''") return null;
-                            const kClean = k.trim();
-                            const vStr = String(v).trim();
-                            if (!vStr || vStr === '-') return null;
-
-                            // 1. 중복 금액/합계/일자 컬럼은 우측 상단 금액/날짜로 표출되므로 뱃지에서 생략
-                            if (kClean.includes('합계') || kClean.includes('금액') || kClean.includes('운송비') || kClean.includes('청구금액')) return null;
-                            if (kClean.includes('일자') || kClean.includes('날짜') || kClean.includes('운송일')) return null;
-
-                            // 2. '비고: 비고 세보 엠이씨' 처럼 '비고' 단어 중복 필터링
-                            let displayVal = vStr;
-                            if (kClean === '비고' && displayVal.startsWith('비고')) {
-                              displayVal = displayVal.replace(/^비고[:\s]*/, '').trim();
-                            }
-                            if (!displayVal) return null;
-
-                            return (
-                              <span
-                                key={k}
-                                style={{
-                                  padding: '2px 7px',
-                                  borderRadius: '5px',
-                                  fontSize: '11.5px',
-                                  backgroundColor: 'var(--bg-card)',
-                                  border: '1px solid var(--border-color)',
-                                  color: 'var(--text-primary)',
-                                  lineHeight: '1.4'
-                                }}
-                              >
-                                <strong style={{ color: 'var(--primary)', marginRight: '3px' }}>{kClean}:</strong>
-                                {displayVal}
-                              </span>
-                            );
-                          })}
-                        </div>
-
-                        {/* 기사명이 존재할 때만 기사 정보 노출 (빈 기사아이콘 '🚛 -' 제거) */}
-                        {(row['기사명'] || row['운송기사']) && String(row['기사명'] || row['운송기사']).trim() !== '-' && (
-                          <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)', marginTop: '4px' }}>
-                            🚛 {row['기사명'] || row['운송기사']}
-                          </div>
-                        )}
-
-                        {/* 대사 완료 상태일 때만 🟢 대사 완료 뱃지 및 ↩️ 대사 취소 버튼 노출 */}
-                        {pair.isReconciled && (
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '6px', paddingTop: '6px', borderTop: '1px dashed var(--border-color)' }}>
-                            <span style={{ padding: '2px 8px', borderRadius: '8px', fontSize: '11px', fontWeight: 900, backgroundColor: 'rgba(34,197,94,0.15)', color: '#16a34a', border: '1px solid rgba(34,197,94,0.3)' }}>
-                              🟢 대사 완료
-                            </span>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleTogglePairReconciled(pair.pairId);
-                              }}
-                              style={{ padding: '3px 8px', fontSize: '11px', fontWeight: 800, borderRadius: '5px', border: '1px solid #eab308', backgroundColor: 'rgba(234,179,8,0.12)', color: '#ca8a04', cursor: 'pointer' }}
-                            >
-                              <RotateCcw size={12} style={{ display: 'inline', marginRight: '2px' }} /> ↩️ 대사 취소
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-            </div>
-
-          </div>
-
-          {/* 5. 엑셀 업로드 시 시스템 미등록 청구 항목 카드 */}
-          {unmatchedExcelRows.length > 0 && (
-            <div style={{ backgroundColor: 'rgba(239,68,68,0.06)', border: '1.5px solid rgba(239,68,68,0.25)', borderRadius: '12px', padding: '16px' }}>
-              <div style={{ fontSize: '13.5px', fontWeight: 800, color: '#dc2626', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <AlertTriangle size={16} /> 🔴 시스템 미등록 엑셀 청구 내역 ({unmatchedExcelRows.length}건)
-              </div>
-              <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '10px' }}>
-                업로드한 엑셀에 존재하지만 시스템 배차 내역에 일치하는 ID/기사가 없는 청구 항목들입니다.
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '200px', overflowY: 'auto' }}>
-                {unmatchedExcelRows.map((row, idx) => (
-                  <div key={idx} style={{ padding: '8px 12px', backgroundColor: 'var(--bg-card)', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '12px', fontFamily: 'Consolas, Monaco, monospace' }}>
-                    {JSON.stringify(row)}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
       )}
 
