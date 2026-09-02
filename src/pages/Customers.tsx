@@ -1,8 +1,8 @@
 // d:\Kiyeun_Lift\src\pages\Customers.tsx
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
-import { Plus, Search, MapPin, Phone, User, Mail, PlusCircle, Building, Download, CreditCard } from 'lucide-react';
-import { db, Customer, CustomerContact, CustomerSite, CustomerBankAccount } from '../services/db';
+import { Plus, Search, MapPin, Phone, User, Mail, PlusCircle, Building, Download, CreditCard, ShieldCheck, Zap, Sparkles, CheckCircle2 } from 'lucide-react';
+import { db, Customer, CustomerContact, CustomerSite, CustomerBankAccount, STANDARD_SPECS, SpecItem } from '../services/db';
 import { exportToExcel } from '../services/excel';
 
 export const Customers: React.FC = () => {
@@ -25,12 +25,14 @@ export const Customers: React.FC = () => {
   // 등록/수정 폼 관련 모달/바인딩 상태
   const [showCustModal, setShowCustModal] = useState(false);
   const [editingCust, setEditingCust] = useState<Partial<Customer> | null>(null);
+  const [showCustSpecs, setShowCustSpecs] = useState(false); // 고객사 21대 스펙 체크리스트 펼침 여부
 
   const [showContactModal, setShowContactModal] = useState(false);
   const [editingContact, setEditingContact] = useState<Partial<CustomerContact> | null>(null);
 
   const [showSiteModal, setShowSiteModal] = useState(false);
   const [editingSite, setEditingSite] = useState<Partial<CustomerSite> | null>(null);
+  const [showSiteSpecs, setShowSiteSpecs] = useState(false); // 현장 21대 스펙 체크리스트 펼침 여부
 
   // 계좌 관리 모달 상태
   const [showAccountModal, setShowAccountModal] = useState(false);
@@ -236,24 +238,53 @@ export const Customers: React.FC = () => {
 
   const handleOpenEditSite = (cs: CustomerSite) => {
     setEditingSite(cs);
+    setShowSiteSpecs(false);
     setShowSiteModal(true);
+  };
+
+  // ⚡ [원클릭 전파] 고객사의 기본 옵션/보양/스펙을 등록된 모든 현장에 일괄 적용
+  const handlePropagateDefaultsToAllSites = async (cust: Partial<Customer>) => {
+    if (!cust.id) return;
+    const targetSites = sites.filter(s => s.customerId === cust.id);
+    if (targetSites.length === 0) {
+      alert(`⚠️ '${cust.name}' 고객사에 등록된 현장이 없습니다.`);
+      return;
+    }
+
+    const specCount = cust.defaultCheckedSpecs ? Object.values(cust.defaultCheckedSpecs).filter(Boolean).length : 0;
+    const confirmMsg = `⚡ [기본 옵션/보양 전체 현장 일괄 전파]\n\n고객사 '${cust.name}'의 기본 설정:\n• 유상옵션: ${cust.defaultPaidOptions || '(없음)'}\n• 보양작업: ${cust.defaultProtection || '(없음)'}\n• 기술스펙: ${specCount > 0 ? specCount + '개 선택됨' : '(없음)'}\n\n위 기본 설정을 등록된 ${targetSites.length}개 모든 현장에 일괄 적용(동기화)하시겠습니까?`;
+    if (!window.confirm(confirmMsg)) return;
+
+    try {
+      for (const s of targetSites) {
+        db.updateRow<CustomerSite>('sites', s.id, {
+          paidOptions: cust.defaultPaidOptions || s.paidOptions,
+          protection: cust.defaultProtection || s.protection,
+          checkedSpecs: cust.defaultCheckedSpecs || s.checkedSpecs
+        });
+      }
+      await db.awaitPendingWrites();
+      alert(`🎉 '${cust.name}'의 ${targetSites.length}개 현장에 기본 옵션/보양/스펙이 100% 성공적으로 일괄 전파되었습니다!`);
+    } catch (err: any) {
+      alert(`❌ 일괄 전파 중 오류: ${err.message}`);
+    }
+  };
+
+  // 🏢 [현장 폼에서 고객사 기본값 가져오기]
+  const handleCopyCustomerDefaultsToSite = () => {
+    if (!activeCustomer) return;
+    setEditingSite(prev => ({
+      ...prev,
+      paidOptions: activeCustomer.defaultPaidOptions || '',
+      protection: activeCustomer.defaultProtection || '',
+      checkedSpecs: activeCustomer.defaultCheckedSpecs ? { ...activeCustomer.defaultCheckedSpecs } : {}
+    }));
+    alert(`🏢 고객사 '${activeCustomer.name}'의 기본 옵션/보양/기술스펙을 현재 현장 폼에 불러왔습니다.`);
   };
 
   const handleSaveSiteSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingSite || !editingSite.name || !editingSite.customerId) return;
-
-    const isEdit = !!editingSite.id;
-    const nextId = editingSite.id || db.generateNextId('sites', sites);
-    
-    let simulatedQuery = "";
-    if (isEdit) {
-      simulatedQuery = `UPDATE customer_sites \nSET name = '${editingSite.name}', address = '${editingSite.address || ''}', "contactName" = '${editingSite.contactName || ''}', contact = '${editingSite.contact || ''}', email = '${editingSite.email || ''}' \nWHERE id = '${editingSite.id}';`;
-    } else {
-      simulatedQuery = `INSERT INTO customer_sites (id, "customerId", name, address, "contactName", contact, email, "isActive", "createdAt") \nVALUES ('${nextId}', '${editingSite.customerId}', '${editingSite.name}', '${editingSite.address || ''}', '${editingSite.contactName || ''}', '${editingSite.contact || ''}', '${editingSite.email || ''}', true, '${new Date().toISOString()}');`;
-    }
-    
-    alert(`[DB 전송 예정 SQL 쿼리 안내]\n\n${simulatedQuery}\n\n확인을 누르면 Supabase에 전송됩니다.`);
 
     try {
       await saveSite(editingSite as Omit<CustomerSite, 'id' | 'createdAt'>);
@@ -493,6 +524,45 @@ export const Customers: React.FC = () => {
                     <div style={{ fontSize: '15px', fontWeight: '500' }}>{activeCustomer.address || '-'}</div>
                   </div>
                 </div>
+
+                {/* 🌟 고객사 기본 옵션·보양·스펙 요약 바 */}
+                <div style={{ marginTop: '16px', paddingTop: '14px', borderTop: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap', fontSize: '13px' }}>
+                    <span style={{ fontWeight: 700, color: '#0284c7', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <ShieldCheck size={16} /> 기본 옵션/보양 마스터:
+                    </span>
+                    <span className="badge" style={{ backgroundColor: '#e0f2fe', color: '#0369a1', fontWeight: 600 }}>
+                      유상옵션: {activeCustomer.defaultPaidOptions || '(없음)'}
+                    </span>
+                    <span className="badge" style={{ backgroundColor: '#fef3c7', color: '#b45309', fontWeight: 600 }}>
+                      보양작업: {activeCustomer.defaultProtection || '(없음)'}
+                    </span>
+                    <span className="badge" style={{ backgroundColor: '#dcfce7', color: '#15803d', fontWeight: 600 }}>
+                      스펙: {activeCustomer.defaultCheckedSpecs ? Object.values(activeCustomer.defaultCheckedSpecs).filter(Boolean).length + '개 항목' : '0개'}
+                    </span>
+                  </div>
+                  {canSave && (
+                    <button
+                      type="button"
+                      onClick={() => handlePropagateDefaultsToAllSites(activeCustomer)}
+                      style={{
+                        padding: '4px 12px',
+                        fontSize: '12px',
+                        borderRadius: '6px',
+                        border: '1px solid #0284c7',
+                        backgroundColor: '#0284c7',
+                        color: '#fff',
+                        fontWeight: '700',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '4px'
+                      }}
+                    >
+                      <Zap size={13} /> 모든 현장에 기본값 일괄 적용
+                    </button>
+                  )}
+                </div>
               </div>
 
               {/* 하위 탭 1: 고객 담당자 관리 */}
@@ -518,7 +588,7 @@ export const Customers: React.FC = () => {
                     <thead>
                       <tr>
                         <th>담당자명</th>
-                        <th>직급</th>
+                        <th>직책/부서</th>
                         <th>연락처</th>
                         <th>이메일</th>
                         <th>사용 여부</th>
@@ -581,6 +651,7 @@ export const Customers: React.FC = () => {
                         <th>현장 주소</th>
                         <th>현장 담당자</th>
                         <th>연락처</th>
+                        <th>옵션 / 보양</th>
                         <th>사용 여부</th>
                         <th>관리</th>
                       </tr>
@@ -983,6 +1054,97 @@ export const Customers: React.FC = () => {
                   </div>
                 );
               })()}
+
+              {/* 🌟 고객사 기본 유상옵션 및 보양작업 설정 (신규 현장 자동 상속 마스터) */}
+              <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '14px', marginTop: '4px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                  <div style={{ fontSize: '13px', fontWeight: '700', color: '#0284c7', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <ShieldCheck size={16} /> 고객사 기본 옵션·보양 마스터 (출고 시 자동 재사용)
+                  </div>
+                  {editingCust.id && (
+                    <button
+                      type="button"
+                      onClick={() => handlePropagateDefaultsToAllSites(editingCust)}
+                      style={{
+                        padding: '4px 10px',
+                        fontSize: '11.5px',
+                        borderRadius: '6px',
+                        border: '1px solid #0284c7',
+                        backgroundColor: 'rgba(2, 132, 199, 0.08)',
+                        color: '#0284c7',
+                        fontWeight: '700',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '4px'
+                      }}
+                    >
+                      <Zap size={13} /> 모든 현장 일괄 적용
+                    </button>
+                  )}
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '10px' }}>
+                  <div>
+                    <label style={{ fontSize: '12px' }}>기본 유상옵션</label>
+                    <input
+                      type="text"
+                      value={editingCust.defaultPaidOptions || ''}
+                      onChange={e => setEditingCust({ ...editingCust, defaultPaidOptions: e.target.value })}
+                      placeholder="예: 협착방지봉 4EA, 소화기함"
+                    />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '12px' }}>기본 보양작업</label>
+                    <input
+                      type="text"
+                      value={editingCust.defaultProtection || ''}
+                      onChange={e => setEditingCust({ ...editingCust, defaultProtection: e.target.value })}
+                      placeholder="예: 4면 철망, 사다리 보양"
+                    />
+                  </div>
+                </div>
+
+                {/* 21대 표준 기술 요구스펙 아코디언 */}
+                <div style={{ border: '1px solid var(--border-color)', borderRadius: '8px', padding: '10px', backgroundColor: 'var(--bg-app)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: '12px', fontWeight: 600 }}>
+                      기본 21대 기술요구스펙 ({Object.values(editingCust.defaultCheckedSpecs || {}).filter(Boolean).length}개 선택됨)
+                    </span>
+                    <button
+                      type="button"
+                      className="btn-secondary"
+                      onClick={() => setShowCustSpecs(!showCustSpecs)}
+                      style={{ padding: '2px 8px', fontSize: '11px' }}
+                    >
+                      {showCustSpecs ? '▲ 접기' : '▼ 스펙 설정 펼치기'}
+                    </button>
+                  </div>
+
+                  {showCustSpecs && (
+                    <div style={{ marginTop: '10px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', maxHeight: '200px', overflowY: 'auto' }}>
+                      {STANDARD_SPECS.map(spec => {
+                        const isChecked = !!editingCust.defaultCheckedSpecs?.[spec.id];
+                        return (
+                          <label key={spec.id} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11.5px', cursor: 'pointer' }}>
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={e => {
+                                const nextSpecs = { ...(editingCust.defaultCheckedSpecs || {}) };
+                                if (e.target.checked) nextSpecs[spec.id] = true;
+                                else delete nextSpecs[spec.id];
+                                setEditingCust({ ...editingCust, defaultCheckedSpecs: nextSpecs });
+                              }}
+                            />
+                            <span>{spec.label}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
 
             <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
@@ -1154,6 +1316,97 @@ export const Customers: React.FC = () => {
                 >
                   사용 여부 (공사 완공 시 체크 해제)
                 </label>
+              </div>
+
+              {/* 🌟 현장 전용 유상옵션 및 보양작업 설정 */}
+              <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '14px', marginTop: '12px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                  <div style={{ fontSize: '13px', fontWeight: '700', color: '#16a34a', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <ShieldCheck size={16} /> 현장 전용 옵션·보양 설정
+                  </div>
+                  {activeCustomer && (
+                    <button
+                      type="button"
+                      onClick={handleCopyCustomerDefaultsToSite}
+                      style={{
+                        padding: '4px 10px',
+                        fontSize: '11.5px',
+                        borderRadius: '6px',
+                        border: '1px solid #16a34a',
+                        backgroundColor: 'rgba(22, 163, 74, 0.08)',
+                        color: '#16a34a',
+                        fontWeight: '700',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '4px'
+                      }}
+                    >
+                      <Sparkles size={13} /> 고객사 기본값 불러오기
+                    </button>
+                  )}
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '10px' }}>
+                  <div>
+                    <label style={{ fontSize: '12px' }}>현장 전용 유상옵션</label>
+                    <input
+                      type="text"
+                      value={editingSite.paidOptions || ''}
+                      onChange={e => setEditingSite({ ...editingSite, paidOptions: e.target.value })}
+                      placeholder="비어있으면 고객사 기본값 상속"
+                    />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '12px' }}>현장 전용 보양작업</label>
+                    <input
+                      type="text"
+                      value={editingSite.protection || ''}
+                      onChange={e => setEditingSite({ ...editingSite, protection: e.target.value })}
+                      placeholder="비어있으면 고객사 기본값 상속"
+                    />
+                  </div>
+                </div>
+
+                {/* 21대 현장 전용 스펙 아코디언 */}
+                <div style={{ border: '1px solid var(--border-color)', borderRadius: '8px', padding: '10px', backgroundColor: 'var(--bg-app)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: '12px', fontWeight: 600 }}>
+                      현장 전용 기술요구스펙 ({Object.values(editingSite.checkedSpecs || {}).filter(Boolean).length}개 선택됨)
+                    </span>
+                    <button
+                      type="button"
+                      className="btn-secondary"
+                      onClick={() => setShowSiteSpecs(!showSiteSpecs)}
+                      style={{ padding: '2px 8px', fontSize: '11px' }}
+                    >
+                      {showSiteSpecs ? '▲ 접기' : '▼ 스펙 설정 펼치기'}
+                    </button>
+                  </div>
+
+                  {showSiteSpecs && (
+                    <div style={{ marginTop: '10px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', maxHeight: '200px', overflowY: 'auto' }}>
+                      {STANDARD_SPECS.map(spec => {
+                        const isChecked = !!editingSite.checkedSpecs?.[spec.id];
+                        return (
+                          <label key={spec.id} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11.5px', cursor: 'pointer' }}>
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={e => {
+                                const nextSpecs = { ...(editingSite.checkedSpecs || {}) };
+                                if (e.target.checked) nextSpecs[spec.id] = true;
+                                else delete nextSpecs[spec.id];
+                                setEditingSite({ ...editingSite, checkedSpecs: nextSpecs });
+                              }}
+                            />
+                            <span>{spec.label}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
             <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>

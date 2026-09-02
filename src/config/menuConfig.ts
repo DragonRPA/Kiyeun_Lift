@@ -27,7 +27,8 @@ export const SYSTEM_MENU_CONFIG: MenuGroupConfig[] = [
       { id: 'contract', name: '계약 관리' },
       { id: 'billing', name: '청구/수납 관리' },
       { id: 'smart_dispatch', name: '출고 요청' },
-      { id: 'smart_return', name: '회수 요청' }
+      { id: 'smart_return', name: '회수 요청' },
+      { id: 'smart_as_request', name: 'AS 요청' }
     ]
   },
   {
@@ -62,7 +63,8 @@ export const SYSTEM_MENU_CONFIG: MenuGroupConfig[] = [
     name: '정비 / 소모품관리',
     items: [
       { id: 'consumable', name: '소모품 관리' },
-      { id: 'repair', name: '자산 정비수리' },
+      { id: 'field_as', name: '현장 AS 관리' },
+      { id: 'repair', name: '주기장 정비 관리' },
       { id: 'inspection_checklist_manage', name: '정비항목관리' }
     ]
   },

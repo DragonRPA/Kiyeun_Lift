@@ -121,6 +121,10 @@ CREATE TABLE customers (
     "paymentDueDay" INTEGER,
     "paymentTermDays" INTEGER,
     "bankAccounts" JSONB,
+    "defaultPaidOptions" TEXT, -- 고객사 기본 유상옵션
+    "defaultProtection" TEXT, -- 고객사 기본 보양작업
+    "defaultCheckedSpecs" JSONB, -- 고객사 기본 21대 표준 스펙 체크 상태
+    "specialNotes" TEXT, -- 고객사 특이사항 메모 (예: 재임대/자가배차/운임부담 등)
     "createdAt" TEXT NOT NULL,
     "updatedAt" TEXT NOT NULL
 );
@@ -146,6 +150,9 @@ CREATE TABLE customer_sites (
     "contactName" TEXT,
     contact TEXT,
     email TEXT,
+    "paidOptions" TEXT, -- 현장 전용 유상옵션
+    "protection" TEXT, -- 현장 전용 보양작업
+    "checkedSpecs" JSONB, -- 현장 전용 21대 표준 스펙 체크 상태
     "createdAt" TEXT NOT NULL,
     "updatedAt" TEXT NOT NULL
 );
@@ -353,7 +360,7 @@ CREATE TABLE contract_assets (
 CREATE TABLE contract_history (
     id TEXT PRIMARY KEY,
     "contractId" TEXT REFERENCES contracts(id) ON DELETE CASCADE,
-    "changeType" TEXT CHECK ("changeType" IN ('REGISTER', 'EXTEND', 'SHORTEN', 'SUCCEED', 'TERMINATE', 'EXCHANGE', 'FEE_CHANGE')) NOT NULL,
+    "changeType" TEXT CHECK ("changeType" IN ('REGISTER', 'EXTEND', 'SHORTEN', 'SUCCEED', 'TERMINATE', 'EXCHANGE', 'FEE_CHANGE', 'AS_SERVICE')) NOT NULL,
     "prevEndDate" TEXT,
     "newEndDate" TEXT,
     "description" TEXT,
@@ -478,37 +485,77 @@ CREATE TABLE payments (
 );
 
 -- 21. 자산 수리 테이블 (repairs) - 외주 정비, 긴급AS/예방정비 및 영업 청구 판단 이원화
+-- 21. 자산 수리 및 현장 AS 단일 물리 통합 테이블 (repairs)
 CREATE TABLE repairs (
     id TEXT PRIMARY KEY,
-    "assetId" TEXT REFERENCES assets(id),
-    "mechanicId" TEXT REFERENCES users(id),
-    "repairType" TEXT CHECK ("repairType" IN ('INTERNAL', 'EXTERNAL')) NOT NULL DEFAULT 'INTERNAL',
-    "maintenanceType" TEXT, -- EMERGENCY_AS, PREVENTIVE, INHOUSE_REPAIR, EXTERNAL
-    "scheduleDate" TEXT,
-    "vendorId" TEXT REFERENCES vendors(id), -- 외주업체
-    "estimateFileUrl" TEXT, -- 견적서 첨부
-    status TEXT CHECK (status IN ('SCHEDULED', 'PENDING', 'IN_PROGRESS', 'COMPLETED', 'UNRESOLVED')) NOT NULL,
-    details TEXT,
-    "isCustomerFault" BOOLEAN NOT NULL DEFAULT FALSE, -- 입고 시 고객 파손 의심 통지
-    "faultImageUrl" TEXT, -- 파손 증빙 사진
-    "unresolvedReason" TEXT,
-    "nextAction" TEXT, -- REVISIT, EXCHANGE_REQUEST, NONE
-    "evidenceImages" TEXT[],
+    "ticketNo" TEXT,
+    "workCategory" TEXT DEFAULT 'FIELD_AS',
+    "workLocation" TEXT DEFAULT 'SITE',
+    "stockSource" TEXT DEFAULT 'VEHICLE_VAN',
+    "source" TEXT DEFAULT 'DIRECT_INTAKE',
+    "repairType" TEXT NOT NULL DEFAULT 'INTERNAL',
+    "maintenanceType" TEXT,
+    "assetId" TEXT,
+    "assetNo" TEXT,
+    "modelName" TEXT,
+    "contractId" TEXT REFERENCES contracts(id) ON DELETE SET NULL,
+    "targetContractStatus" TEXT,
+    "customerId" TEXT,
     "customerName" TEXT,
+    "siteId" TEXT,
     "siteName" TEXT,
-    
-    -- 비용 및 청구 판단
-    "laborHours" DOUBLE PRECISION, -- 메카닉 투입 공수
-    "costTotal" DOUBLE PRECISION NOT NULL DEFAULT 0, -- 원가 합계 (자재비 등)
-    "billableToCustomer" BOOLEAN, -- 영업사원의 최종 청구 판단 (NULL이면 대기)
-    "billingAmount" DOUBLE PRECISION, -- 영업사원이 확정한 고객 청구액
-    
-    "billingId" TEXT REFERENCES billings(id), -- 매출(고객) 전표
-    "purchaseBillId" TEXT REFERENCES purchase_billings(id), -- 매입(외주) 전표
-    
+    "locationDetail" TEXT,
+    "reporterName" TEXT,
+    "reporterContact" TEXT,
+    "issueCategory" TEXT,
+    "issueDescription" TEXT,
+    details TEXT,
+    "errorCode" TEXT,
+    priority TEXT DEFAULT 'NORMAL',
+    "mechanicId" TEXT,
+    "assignedMechanicId" TEXT,
+    "mechanicName" TEXT,
+    "vendorId" TEXT,
     "requestDate" TEXT NOT NULL,
-    "outboundDate" TEXT, -- 반출일자
-    "completedDate" TEXT, -- 정비완료일자
+    "scheduleDate" TEXT,
+    "visitDate" TEXT,
+    "repairDate" TEXT,
+    "completedDate" TEXT,
+    "outboundDate" TEXT,
+    status TEXT NOT NULL DEFAULT 'REQUESTED',
+    "resolutionType" TEXT,
+    "unresolvedReason" TEXT,
+    "nextAction" TEXT,
+    "actionTaken" TEXT,
+    "partsUsed" JSONB DEFAULT '[]'::jsonb,
+    "collectedParts" JSONB DEFAULT '[]'::jsonb,
+    "billableType" TEXT DEFAULT 'FREE',
+    "billableAmount" DOUBLE PRECISION DEFAULT 0,
+    "billableToCustomer" BOOLEAN NOT NULL DEFAULT FALSE,
+    "totalCost" DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "costTotal" DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "billingAmount" DOUBLE PRECISION,
+    "laborHours" DOUBLE PRECISION,
+    "isCustomerFault" BOOLEAN NOT NULL DEFAULT FALSE,
+    "faultImageUrl" TEXT,
+    "evidenceImages" TEXT[],
+    "beforeImage" TEXT,
+    "afterImage" TEXT,
+    "estimateFileUrl" TEXT,
+    "customerSignature" TEXT,
+    "customerConfirmName" TEXT,
+    "parentRepairId" TEXT,
+    "parentTicketId" TEXT,
+    "revisitRepairId" TEXT,
+    "revisitTicketId" TEXT,
+    "revisitDate" TEXT,
+    "revisitReason" TEXT,
+    "exchangeSuggested" BOOLEAN DEFAULT FALSE,
+    "inboundNo" TEXT,
+    "defectsJson" TEXT,
+    "billingId" TEXT,
+    "purchaseBillId" TEXT,
+    memo TEXT,
     "createdAt" TEXT NOT NULL,
     "updatedAt" TEXT NOT NULL
 );
@@ -1039,35 +1086,66 @@ INSERT INTO customers (id, name, "bizRegNo", "isClosed", address, representative
 ('cust-1', '현대건설(주)', '101-81-12345', false, '서울시 종로구', '윤영준', '02-746-1114', TO_CHAR(NOW(), 'YYYY-MM-DD"T"HH24:MI:SS"Z"')),
 ('cust-2', '삼성물산(주)', '202-81-54321', false, '서울시 강동구', '오세철', '02-2145-5114', TO_CHAR(NOW(), 'YYYY-MM-DD"T"HH24:MI:SS"Z"'));
 
- 
- - -   = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =  
- - -   4 3 .   ��I� �9m���? �!�  ? � ? ? 1uK��? ? ( r e c o n c i l i a t i o n _ r e p o r t s )  
- - -   = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =  
- C R E A T E   T A B L E   I F   N O T   E X I S T S   r e c o n c i l i a t i o n _ r e p o r t s   (  
-         i d   T E X T   P R I M A R Y   K E Y ,  
-         m i g r a t i o n _ r u n _ a t   T E X T   N O T   N U L L ,  
-         a s s e t _ c o u n t _ e x c e l   I N T ,  
-         a s s e t _ c o u n t _ d b   I N T ,  
-         a s s e t _ c o u n t _ m a t c h   B O O L E A N ,  
-         b i l l i n g _ t o t a l _ e x c e l   D O U B L E   P R E C I S I O N ,  
-         b i l l i n g _ t o t a l _ d b   D O U B L E   P R E C I S I O N ,  
-         b i l l i n g _ t o t a l _ d i f f   D O U B L E   P R E C I S I O N ,  
-         b i l l i n g _ t o t a l _ m a t c h   B O O L E A N ,  
-         d e t a i l s _ h e a d e r _ s u m   D O U B L E   P R E C I S I O N ,  
-         d e t a i l s _ d e t a i l _ s u m   D O U B L E   P R E C I S I O N ,  
-         d e t a i l s _ s u m _ d i f f   D O U B L E   P R E C I S I O N ,  
-         d e t a i l s _ s u m _ m a t c h   B O O L E A N ,  
-         l e a s e _ t o t a l _ e x c e l   D O U B L E   P R E C I S I O N ,  
-         l e a s e _ t o t a l _ d b   D O U B L E   P R E C I S I O N ,  
-         l e a s e _ t o t a l _ m a t c h   B O O L E A N ,  
-         l i f e c y c l e _ c o n t r a c t s   I N T ,  
-         l i f e c y c l e _ d e l i v e r i e s   I N T ,  
-         l i f e c y c l e _ m a t c h   B O O L E A N ,  
-         o r p h a n _ c o n t r a c t s   I N T ,  
-         o r p h a n _ a s s e t s   I N T ,  
-         o r p h a n _ i s _ c l e a n   B O O L E A N ,  
-         a l l _ p a s s e d   B O O L E A N ,  
-         m e m o   T E X T ,  
-         c r e a t e d _ a t   T E X T   N O T   N U L L  
- ) ;  
+
+ 
+ - -   = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = 
+ 
+ - -   4 3 .   I 9m? !  ?  ? ? 1uK? ? ( r e c o n c i l i a t i o n _ r e p o r t s ) 
+ 
+ - -   = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = 
+ 
+ C R E A T E   T A B L E   I F   N O T   E X I S T S   r e c o n c i l i a t i o n _ r e p o r t s   ( 
+ 
+         i d   T E X T   P R I M A R Y   K E Y , 
+ 
+         m i g r a t i o n _ r u n _ a t   T E X T   N O T   N U L L , 
+ 
+         a s s e t _ c o u n t _ e x c e l   I N T , 
+ 
+         a s s e t _ c o u n t _ d b   I N T , 
+ 
+         a s s e t _ c o u n t _ m a t c h   B O O L E A N , 
+ 
+         b i l l i n g _ t o t a l _ e x c e l   D O U B L E   P R E C I S I O N , 
+ 
+         b i l l i n g _ t o t a l _ d b   D O U B L E   P R E C I S I O N , 
+ 
+         b i l l i n g _ t o t a l _ d i f f   D O U B L E   P R E C I S I O N , 
+ 
+         b i l l i n g _ t o t a l _ m a t c h   B O O L E A N , 
+ 
+         d e t a i l s _ h e a d e r _ s u m   D O U B L E   P R E C I S I O N , 
+ 
+         d e t a i l s _ d e t a i l _ s u m   D O U B L E   P R E C I S I O N , 
+ 
+         d e t a i l s _ s u m _ d i f f   D O U B L E   P R E C I S I O N , 
+ 
+         d e t a i l s _ s u m _ m a t c h   B O O L E A N , 
+ 
+         l e a s e _ t o t a l _ e x c e l   D O U B L E   P R E C I S I O N , 
+ 
+         l e a s e _ t o t a l _ d b   D O U B L E   P R E C I S I O N , 
+ 
+         l e a s e _ t o t a l _ m a t c h   B O O L E A N , 
+ 
+         l i f e c y c l e _ c o n t r a c t s   I N T , 
+ 
+         l i f e c y c l e _ d e l i v e r i e s   I N T , 
+ 
+         l i f e c y c l e _ m a t c h   B O O L E A N , 
+ 
+         o r p h a n _ c o n t r a c t s   I N T , 
+ 
+         o r p h a n _ a s s e t s   I N T , 
+ 
+         o r p h a n _ i s _ c l e a n   B O O L E A N , 
+ 
+         a l l _ p a s s e d   B O O L E A N , 
+ 
+         m e m o   T E X T , 
+ 
+         c r e a t e d _ a t   T E X T   N O T   N U L L 
+ 
+ ) ; 
+ 
  

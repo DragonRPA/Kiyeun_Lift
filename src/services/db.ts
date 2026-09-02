@@ -140,6 +140,37 @@ export interface CustomerBankAccount {
   memo?: string;         // 메모 (예: 대표 계좌, 현장 전용 등)
 }
 
+export interface SpecItem {
+  id: string;
+  label: string;
+  keywords: string[];
+}
+
+// 🛡️ 고소작업대 필수 기술 요구사항 표준 체크리스트 정의 (SSOT 단일 원천)
+export const STANDARD_SPECS: SpecItem[] = [
+  { id: 'spec1', label: '철망 / 함석 설치', keywords: ['철망', '함석', '사면철망', '1면', '2면', '3면', '4면', '5면', '망'] },
+  { id: 'spec2', label: '확장대 철망 / 함석 설치', keywords: ['확장대 철망', '확장대철망', '확장대 함석', '확장대함석'] },
+  { id: 'spec3', label: '상단 감지봉 / 협착 센서 설치 (4EA)', keywords: ['감지봉', '감지봉 4ea', '상단감지', '협착', '센서', '4ea', '감지봉4ea'] },
+  { id: 'spec4', label: '원판 설치', keywords: ['원판설치', '원판'] },
+  { id: 'spec5', label: '배터리 단자 풀림 확인 마킹', keywords: ['배터리 단자 풀림', '단자 풀림 확인 마킹', '단자 풀림', '배터리 마킹'] },
+  { id: 'spec6', label: '배터리 단자 커버 설치', keywords: ['배터리 단자 커버', '커버설치', '단자 커버'] },
+  { id: 'spec7', label: '트레이 내부 볼트류 풀림 확인 마킹', keywords: ['트레이 내부 볼트', '볼트류 풀림 확인마킹', '트레이 내부 볼트류 풀림'] },
+  { id: 'spec8', label: '주행속도 세팅 (고속 60 / 저속 45)', keywords: ['주행속도', '고속 60', '저속 45', '주행속도 고속', '속도 세팅'] },
+  { id: 'spec9', label: '오버로드 과적재 세팅', keywords: ['오버로드 셋팅', '오버로드', '오버로드 세팅', '과적'] },
+  { id: 'spec10', label: '조이스틱 커버 연장', keywords: ['조이스틱 커버', '커버 연장', '조이스틱 커버 연장'] },
+  { id: 'spec11', label: '탑승구 사다리 보양', keywords: ['탑승구 사다리', '사다리 보양', '탑승구 사다리 보양', '사다리'] },
+  { id: 'spec12', label: '모서리/전면부/미끄럼방지 보양', keywords: ['미끄럼방지', '모서리 8개소', '전면부 2개소', '모서리보양', '모서리 8면', '보양'] },
+  { id: 'spec13', label: '소화기함/손잡이 설치 및 안내스티커 부착', keywords: ['소화기함', '기타 스티커물', '탑승구 손잡이', '작동설명', '소화기', '스티커'] },
+  { id: 'spec14', label: '타이어 A급 장착', keywords: ['타이어 A급', '타이어A급', '타이어 A급 상태', '타이어'] },
+  { id: 'spec15', label: '점멸등, 비상하강장치, 비상정지장치 청결', keywords: ['점멸등', '비상하강장치', '비상정지장치', '비상하강장치 청결', '정지장치'] },
+  { id: 'spec16', label: '작업높이 80% 세팅', keywords: ['작업높이 80프로', '발판높이기준', '작업높이 80%', '작업높이 80'] },
+  { id: 'spec17', label: '작업구간 색상 라인구분 (초록/빨강)', keywords: ['라인구분', '초록, 빨강', '라인 구분'] },
+  { id: 'spec18', label: '하부상승제한, 확장대 50% 표식 부착', keywords: ['하부상승제한', '확장대 50%', '50%지점 표식'] },
+  { id: 'spec19', label: '비상정지스위치 및 비상하강꼬리표 부착', keywords: ['비상정지스위치', '비상하강꼬리표', '비상정지스위치 부착'] },
+  { id: 'spec20', label: '시저구간 협착위험 스티커 부착', keywords: ['협착위험 스티커', '시저구간', '접촉금지', '시저구간 접촉금지'] },
+  { id: 'spec21', label: '부착물 세트 (인증서, 제원표, 보험증권, 반입전 체크리스트)', keywords: ['부착물', '제원표', '비상하강사용법', '보험증권', '인증서', '반입전', '체크리스트'] }
+];
+
 export interface Customer {
   id: string;
   name: string;
@@ -159,6 +190,13 @@ export interface Customer {
   paymentDueDay?: number; // 익월 결제일 (N일)
   paymentTermDays?: number; // Net Terms 결제기한 (발행 후 N일)
   bankAccounts?: CustomerBankAccount[]; // 고객사 다중 계좌 목록
+  
+  // 🌟 [신규] 고객사 기본 옵션/보양/요구스펙 자동 재사용 마스터
+  defaultPaidOptions?: string;       // 기본 유상옵션 (예: '협착방지봉 4EA, 소화기함')
+  defaultProtection?: string;        // 기본 보양작업 (예: '4면 철망 보양, 탑승구 사다리')
+  defaultCheckedSpecs?: Record<string, boolean>; // 기본 21대 표준 스펙 체크 상태
+  specialNotes?: string;             // 고객사 특이사항 메모 (예: '재임대 출고건으로 운반비 및 배차 한솔렌탈 부담')
+
   createdAt: string;
 }
 
@@ -182,6 +220,12 @@ export interface CustomerSite {
   contact: string;
   email: string;
   isActive?: boolean; // 사용/미사용 (공사 완공 시 미사용)
+  
+  // 🌟 [신규] 현장 전용 옵션/보양/요구스펙 (미입력 시 고객사 기본값 자동 상속)
+  paidOptions?: string;              // 현장 전용 유상옵션
+  protection?: string;               // 현장 전용 보양작업
+  checkedSpecs?: Record<string, boolean>; // 현장 전용 21대 표준 스펙 체크 상태
+
   createdAt: string;
 }
 
@@ -459,7 +503,7 @@ export interface Contract {
 export interface ContractHistory {
   id: string;
   contractId: string;
-  changeType: 'REGISTER' | 'EXTEND' | 'SHORTEN' | 'SUCCEED' | 'TERMINATE' | 'EXCHANGE' | 'FEE_CHANGE'
+  changeType: 'REGISTER' | 'EXTEND' | 'SHORTEN' | 'SUCCEED' | 'TERMINATE' | 'EXCHANGE' | 'FEE_CHANGE' | 'AS_SERVICE'
            | 'BILLING_CREATED' | 'BILLING_SENT' | 'BILLING_CANCELLED' | 'BILLING_REGENERATED' | 'PAYMENT_RECEIVED';
   changeDate: string;
   prevEndDate?: string;
@@ -660,39 +704,125 @@ export interface RepairConsumable {
   cost: number;
 }
 
+export interface RepairPartUsed {
+  consumableId: string;
+  modelName: string;
+  quantity: number;
+  unitPrice: number;
+  stockSource?: 'VEHICLE_VAN' | 'CENTRAL_HQ';
+}
+
+export interface RepairCollectedPart {
+  partName: string;
+  quantity: number;
+  status: 'IN_VEHICLE' | 'YARD_RETURNED' | 'DISPOSED'; // 차량보관 | 주기장반납 | 폐기
+  returnedAt?: string;
+  memo?: string;
+}
+
+// 💡 [전사 정비 & AS 단일 물리 통합 인터페이스 (1-A 원칙)]
 export interface Repair {
   id: string;
-  assetId: string;
-  mechanicId?: string;
+  ticketNo?: string; // 예: AS-260902-001 또는 REP-260902-001
+  
+  // 1. 업무 분류 및 장소
+  workCategory?: 'FIELD_AS' | 'YARD_INTERNAL' | 'PREVENTIVE' | 'EXTERNAL_VENDOR'; // 외근AS | 주기장정비 | 예방정비 | 외주정비
+  workLocation?: 'SITE' | 'YARD' | 'VENDOR_SHOP';                                  // 현장 | 주기장 | 외주처
+  stockSource?: 'VEHICLE_VAN' | 'CENTRAL_HQ' | 'DIRECT_PURCHASE';                  // 기사차량 | 본사창고 | 현장구매
+  source?: 'SALES_REQUEST' | 'DIRECT_INTAKE' | 'INBOUND_INSPECTION' | 'BAND_IMPORT';
   repairType?: 'INTERNAL' | 'EXTERNAL';
-  maintenanceType?: 'EMERGENCY_AS' | 'PREVENTIVE' | 'INHOUSE_REPAIR' | 'EXTERNAL'; // AS 출장 4대 유형
+  maintenanceType?: 'EMERGENCY_AS' | 'PREVENTIVE' | 'INHOUSE_REPAIR' | 'EXTERNAL'; // 레거시 호환
+  
+  // 2. 대상 자산 및 계약 정보
+  assetId?: string;
+  assetNo?: string;
+  modelName?: string;
+  contractId?: string; // 🌟 소속 계약 ID (계약별 AS 이력 1:1 매핑)
+  targetContractStatus?: string;
+  
+  // 3. 고객사 및 현장 정보
+  customerId?: string;
+  customerName: string;
+  siteId?: string;
+  siteName: string;
+  locationDetail?: string; // 예: 팹동 8층 X27 Y17
+  reporterName?: string;
+  reporterContact?: string;
+  
+  // 4. 고장 증상 및 정비 내용
+  issueCategory?: string;
+  issueDescription?: string;
+  details: string; // 레거시 details 호환
+  errorCode?: string;
+  priority?: 'NORMAL' | 'URGENT';
+  
+  // 5. 정비자 및 일정
+  mechanicId?: string;
+  assignedMechanicId?: string; // mechanicId 동의어
+  mechanicName?: string;
   vendorId?: string;
-  outboundDate?: string;
-  completedDate?: string;
-  estimateFileUrl?: string;
   requestDate: string;
-  scheduleDate?: string; // AS 출장/예방정비 방문 예정일시
+  scheduleDate?: string;
+  visitDate?: string;
   repairDate?: string;
-  status: 'SCHEDULED' | 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'UNRESOLVED'; // 상태 머신
-  unresolvedReason?: string; // 미완료 사유 (부품수급대기, 현장수리불가 등)
-  nextAction?: 'REVISIT' | 'EXCHANGE_REQUEST' | 'NONE'; // 미완료 후속 조치
-  details: string;
-  totalCost: number;
+  completedDate?: string;
+  outboundDate?: string;
+  
+  // 6. 상태 머신 및 다형성 완료 판정
+  status: 'REQUESTED' | 'SCHEDULED' | 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'REVISIT' | 'GUIDED' | 'UNRESOLVED' | 'CANCELED';
+  resolutionType?: 
+    | 'REPAIR_DONE'
+    | 'REVISIT_NEEDED'
+    | 'GUIDED_END'
+    | 'EXCHANGE_SUGGESTED'
+    | 'YARD_REPAIRED'
+    | 'SCRAP_CANDIDATE'
+    | 'EXTERNAL_OUTSOURCE';
+  unresolvedReason?: string;
+  nextAction?: 'REVISIT' | 'EXCHANGE_REQUEST' | 'NONE';
+  
+  // 7. 조치 및 부품
+  actionTaken?: string;
+  partsUsed?: RepairPartUsed[];
+  collectedParts?: RepairCollectedPart[];
+  consumables?: RepairConsumable[];
+  
+  // 8. 비용 및 청구
+  billableType?: 'FREE' | 'BILLABLE';
+  billableAmount?: number;
   billableToCustomer: boolean;
+  totalCost: number;
   billingId?: string;
   purchaseBillId?: string;
   isCustomerFault?: boolean;
+  
+  // 9. 증빙 및 연계
   faultImageUrl?: string;
-  evidenceImages?: string[]; // 현장 정비 전/후 증빙 사진 배열
-  customerName?: string; // 출장 현장 고객사명
-  siteName?: string; // 출장 현장명
+  evidenceImages?: string[];
+  beforeImage?: string;
+  afterImage?: string;
+  estimateFileUrl?: string;
+  customerSignature?: string;
+  customerConfirmName?: string;
+  parentRepairId?: string;
+  parentTicketId?: string; // 호환용
+  revisitRepairId?: string;
+  revisitTicketId?: string; // 호환용
+  revisitDate?: string;
+  revisitReason?: string;
+  exchangeSuggested?: boolean;
+  
   inboundNo?: string;
   defectsJson?: string;
+  memo?: string;
   createdAt: string;
   updatedAt: string;
-  // 가상필드
-  consumables?: RepairConsumable[];
 }
+
+// 💡 호환용 타입 알리아스 (단일 물리 테이블: repairs)
+export type FieldAsTicket = Repair;
+export type FieldAsPartUsed = RepairPartUsed;
+export type FieldAsCollectedPart = RepairCollectedPart;
 
 export interface InspectionChecklistItem {
   id: string;
@@ -3144,6 +3274,7 @@ class LocalDB {
       case 'inspectionChecklistItems': prefix = 'CHK-'; break;
       case 'depreciationLogs':   prefix = 'DEP-';    break;
       case 'receivables':        prefix = 'RCV-';    break;
+      case 'fieldAsTickets':     prefix = 'AS-';     break;
       default:
         prefix = key.slice(0, 4).toUpperCase() + '-';
     }

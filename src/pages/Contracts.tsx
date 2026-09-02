@@ -249,17 +249,25 @@ export const Contracts: React.FC = () => {
       });
     });
 
-    // 4. 수리 이력
+    // 4. 현장 AS 및 수리 이력 (5대 매트릭스 양방향 매핑)
     const relAssetIds = activeContractAssets.map(ca => ca.assetId).filter((id): id is string => Boolean(id));
-    const relReps = repairs.filter(r => relAssetIds.includes(r.assetId));
+    const relReps = repairs.filter(r => 
+      r.contractId === activeContract.id ||
+      (r.assetId && relAssetIds.includes(r.assetId)) ||
+      (!r.assetId && r.customerId === activeContract.customerId && (r.siteId === activeContract.siteId || r.siteName === getSiteName(activeContract.siteId)))
+    );
+
     relReps.forEach(r => {
       const asset = assets.find(a => a.id === r.assetId);
-      const rDate = r.repairDate || r.completedDate || r.requestDate || r.createdAt.split('T')[0];
+      const rDate = r.visitDate || r.repairDate || r.completedDate || r.requestDate || r.createdAt.split('T')[0];
+      const isFieldAs = r.workCategory === 'FIELD_AS' || r.maintenanceType === 'EMERGENCY_AS';
+      const assetLabel = asset?.assetNo || r.assetNo || (activeContractAssets.length === 1 ? (assets.find(a => a.id === activeContractAssets[0].assetId)?.assetNo || '단독장비') : '현장확인');
+      
       timeline.push({
         id: `r-${r.id}`,
         date: rDate,
-        title: `자산 정비 (${asset?.assetNo || '자산'})`,
-        desc: `내용: ${r.details || '정비 완료'} / 비용: ${(r.totalCost || 0).toLocaleString()}원`,
+        title: isFieldAs ? `🛠️ 현장 AS (${assetLabel})` : `🔧 자산 정비 (${assetLabel})`,
+        desc: `증상: ${r.issueDescription || r.details || '점검'} ➔ 조치: ${r.actionTaken || '정비 완료'}${r.mechanicName ? ` (정비사: ${r.mechanicName})` : ''}${r.billableAmount && r.billableAmount > 0 ? ` [유상 ₩${r.billableAmount.toLocaleString()}]` : ''}`,
         category: 'REPAIR'
       });
     });
@@ -1497,6 +1505,104 @@ export const Contracts: React.FC = () => {
               </div>
             </div>
           </div>
+
+          {/* 섹션 5: 계약 귀속 현장 AS 및 정비 이력 */}
+          {(() => {
+            const relAssetIds = activeContractAssets.map(ca => ca.assetId).filter((id): id is string => Boolean(id));
+            const contractRepairs = (repairs || []).filter(r => 
+              r.contractId === activeContract.id ||
+              (r.assetId && relAssetIds.includes(r.assetId)) ||
+              (!r.assetId && r.customerId === activeContract.customerId && (r.siteId === activeContract.siteId || r.siteName === getSiteName(activeContract.siteId)))
+            ).sort((a, b) => new Date(b.visitDate || b.requestDate || b.createdAt).getTime() - new Date(a.visitDate || a.requestDate || a.createdAt).getTime());
+
+            const isFrequent = contractRepairs.length >= 2;
+
+            return (
+              <div className="card" style={{ margin: 0 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <h3 className="card-title" style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <Wrench size={16} color="var(--primary)" /> 계약 현장 AS 및 정비 이력 ({contractRepairs.length}건)
+                    </h3>
+                    {isFrequent && (
+                      <span className="badge badge-danger" style={{ fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        ⚠️ AS {contractRepairs.length}회 발생 - 장비 대차/교체 검토 요망
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                    총 정비/수리 비용: <strong style={{ color: 'var(--text-primary)' }}>₩{contractRepairs.reduce((sum, r) => sum + (r.totalCost || r.billableAmount || 0), 0).toLocaleString()}</strong>
+                  </div>
+                </div>
+
+                <div className="table-container" style={{ border: 'none', maxHeight: '280px', overflowY: 'auto' }}>
+                  {contractRepairs.length === 0 ? (
+                    <div style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '24px 0', fontSize: '12.5px' }}>
+                      ✓ 이 계약에 발생한 현장 AS 및 정비 이력이 없습니다. (무장애 운용중)
+                    </div>
+                  ) : (
+                    <table style={{ width: '100%', fontSize: '12px', whiteSpace: 'nowrap' }}>
+                      <thead>
+                        <tr style={{ backgroundColor: 'var(--bg-app)' }}>
+                          <th style={{ padding: '6px 8px' }}>접수/조치일자</th>
+                          <th style={{ padding: '6px 8px' }}>자산번호 (모델)</th>
+                          <th style={{ padding: '6px 8px' }}>고장 분류 / 증상</th>
+                          <th style={{ padding: '6px 8px' }}>정비 조치내용</th>
+                          <th style={{ padding: '6px 8px' }}>담당 정비사</th>
+                          <th style={{ padding: '6px 8px' }}>유상 / 무상</th>
+                          <th style={{ padding: '6px 8px', textAlign: 'center' }}>상태</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {contractRepairs.map(r => {
+                          const asset = assets.find(a => a.id === r.assetId);
+                          const assetLabel = asset?.assetNo || r.assetNo || (activeContractAssets.length === 1 ? (assets.find(a => a.id === activeContractAssets[0].assetId)?.assetNo || '단독장비') : '현장확인');
+                          const dateStr = r.visitDate || r.completedDate || r.requestDate || r.createdAt.split('T')[0];
+
+                          return (
+                            <tr key={r.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                              <td style={{ padding: '6px 8px', color: 'var(--text-muted)' }}>{dateStr}</td>
+                              <td style={{ padding: '6px 8px', fontWeight: 600, color: 'var(--primary)' }}>
+                                {assetLabel} <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 400 }}>({r.modelName || asset?.modelName || '고소작업대'})</span>
+                              </td>
+                              <td style={{ padding: '6px 8px' }}>
+                                <span style={{ fontWeight: 600 }}>[{r.issueCategory || '일반'}]</span> {r.issueDescription || r.details || '-'}
+                              </td>
+                              <td style={{ padding: '6px 8px', color: '#059669', fontWeight: 600 }}>
+                                {r.actionTaken || '정비 완료'}
+                              </td>
+                              <td style={{ padding: '6px 8px' }}>{r.mechanicName || '-'}</td>
+                              <td style={{ padding: '6px 8px' }}>
+                                {r.billableAmount && r.billableAmount > 0 ? (
+                                  <span style={{ color: '#dc2626', fontWeight: 700 }}>
+                                    유상 ₩{r.billableAmount.toLocaleString()}
+                                  </span>
+                                ) : (
+                                  <span style={{ color: '#059669' }}>무상 정비</span>
+                                )}
+                              </td>
+                              <td style={{ padding: '6px 8px', textAlign: 'center' }}>
+                                <span className={`badge ${
+                                  r.status === 'COMPLETED' ? 'badge-success' :
+                                  r.status === 'REVISIT' ? 'badge-warning' :
+                                  r.status === 'GUIDED' ? 'badge-info' : 'badge-secondary'
+                                }`} style={{ fontSize: '10px' }}>
+                                  {r.status === 'COMPLETED' ? '조치완료' :
+                                   r.status === 'REVISIT' ? '재방문요' :
+                                   r.status === 'GUIDED' ? '안내종결' :
+                                   r.status === 'IN_PROGRESS' ? '정비중' : '접수'}
+                                </span>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
         </div>
       )}
 

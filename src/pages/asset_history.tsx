@@ -267,13 +267,17 @@ export const AssetHistory: React.FC = () => {
     });
 
     return {
-      description: rep.details,
-      details: rep.details,
-      cost: rep.totalCost,
-      date: rep.repairDate,
+      description: rep.details || rep.issueDescription || rep.actionTaken,
+      details: rep.details || rep.issueDescription || rep.actionTaken,
+      cost: rep.totalCost || rep.billableAmount || 0,
+      date: rep.repairDate || rep.requestDate,
       repairType: rep.repairType || 'SELF',
+      workCategory: rep.workCategory || (rep.maintenanceType === 'EMERGENCY_AS' ? 'FIELD_AS' : 'YARD_INTERNAL'),
+      customerName: rep.customerName,
+      siteName: rep.siteName,
+      mechanicName: rep.mechanicName,
       vendorId: rep.vendorId,
-      usedConsumables: used
+      usedConsumables: used.length > 0 ? used : (rep.partsUsed || []).map(p => ({ name: p.modelName, qty: p.quantity, price: p.unitPrice }))
     };
   };
 
@@ -899,7 +903,9 @@ export const AssetHistory: React.FC = () => {
                     <th style={{ whiteSpace: 'nowrap' }}>관리번호</th>
                     <th style={{ whiteSpace: 'nowrap' }}>모델명</th>
                     <th style={{ whiteSpace: 'nowrap' }}>정비 구분</th>
-                    <th style={{ whiteSpace: 'nowrap' }}>정비 내역 및 사유</th>
+                    <th style={{ whiteSpace: 'nowrap' }}>고객사 / 현장</th>
+                    <th style={{ whiteSpace: 'nowrap' }}>정비 내역 및 조치</th>
+                    <th style={{ whiteSpace: 'nowrap' }}>정비자</th>
                     <th style={{ whiteSpace: 'nowrap' }}>정비 비용</th>
                   </tr>
                 )}
@@ -985,16 +991,30 @@ export const AssetHistory: React.FC = () => {
 
                         {activeTab === 'REPAIR' && (
                           <>
+                            <td style={{ whiteSpace: 'nowrap' }}>{log.eventDate}</td>
+                            <td style={{ whiteSpace: 'nowrap' }}><strong style={{ color: 'var(--primary)' }}>[{log.assetNo}]</strong></td>
+                            <td style={{ whiteSpace: 'nowrap' }}>{log.modelName}</td>
                             <td style={{ whiteSpace: 'nowrap' }}>
-                              <span className={`badge ${repDetail?.repairType === 'VENDOR' ? 'badge-warning' : 'badge-info'}`}>
-                                {repDetail?.repairType === 'VENDOR' ? '외주정비' : '자체정비'}
+                              <span className={`badge ${
+                                (repDetail?.workCategory === 'FIELD_AS' || (log.memo && log.memo.includes('현장AS'))) ? 'badge-primary' :
+                                (repDetail?.repairType === 'VENDOR' ? 'badge-warning' : 'badge-info')
+                              }`}>
+                                {(repDetail?.workCategory === 'FIELD_AS' || (log.memo && log.memo.includes('현장AS'))) ? '외근 현장AS' :
+                                 (repDetail?.repairType === 'VENDOR' ? '외주정비' : '내근 주기장정비')}
                               </span>
                             </td>
+                            <td style={{ whiteSpace: 'nowrap' }}>
+                              <strong>{log.customerName || repDetail?.customerName || '-'}</strong>
+                              {(log.siteName || repDetail?.siteName) ? ` / ${log.siteName || repDetail?.siteName}` : ''}
+                            </td>
                             <td style={{ fontSize: '12.5px' }}>
-                              {repDetail ? repDetail.details : (log.memo || '정비 작업')}
+                              {log.memo || (repDetail ? repDetail.details : '정비 작업')}
+                            </td>
+                            <td style={{ whiteSpace: 'nowrap', fontSize: '12px' }}>
+                              {repDetail?.mechanicName || '-'}
                             </td>
                             <td style={{ whiteSpace: 'nowrap', fontWeight: 'bold', color: 'var(--primary)' }}>
-                              {repDetail ? `${(repDetail.cost || 0).toLocaleString()}원` : '-'}
+                              {repDetail?.cost ? `${(repDetail.cost || 0).toLocaleString()}원` : '-'}
                             </td>
                           </>
                         )}

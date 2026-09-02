@@ -81,12 +81,13 @@ export const Repairs: React.FC = () => {
   const [isDrawing, setIsDrawing] = useState(false);
   const [signatureData, setSignatureData] = useState<string>('');
 
-  const getAssetNo = (id: string) => assets.find(a => a.id === id)?.assetNo || '-';
-  const getAssetModel = (id: string) => assets.find(a => a.id === id)?.modelName || '-';
+  const getAssetNo = (id?: string) => (id ? assets.find(a => a.id === id)?.assetNo : '') || '-';
+  const getAssetModel = (id?: string) => (id ? assets.find(a => a.id === id)?.modelName : '') || '-';
   const getMechanicName = (id?: string) => users.find(u => u.id === id)?.name || '정비사';
 
   // 장비가 현재 대여중인 계약 현장 및 고객사 조회
-  const getAssetRentalInfo = (assetId: string) => {
+  const getAssetRentalInfo = (assetId?: string) => {
+    if (!assetId) return null;
     const asset = assets.find(a => a.id === assetId);
     if (!asset || asset.status !== 'RENTED') return null;
 
@@ -375,9 +376,9 @@ export const Repairs: React.FC = () => {
       {/* 상단 헤더 및 뷰 전환 탭 */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
         <div>
-          <h2 style={{ fontWeight: '800', margin: 0 }}>장비 정비 및 AS 관리</h2>
+          <h2 style={{ fontWeight: '800', margin: 0 }}>주기장 정비 관리</h2>
           <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
-            현장 출장 AS, 정기 예방정비, 차량 이동재고(Van Stock) 차감 및 원터치 증빙 수집
+            주기장 내 비임대 자산(임대가능, 수리중, 입고검수) 정비 활동 및 본사 중앙창고 소모품 차감 관리
           </div>
         </div>
 

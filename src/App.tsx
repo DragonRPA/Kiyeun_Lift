@@ -28,6 +28,8 @@ import { TruckDispatch } from './pages/TruckDispatch';
 import { TransportMaster } from './pages/TransportMaster';
 import { DevDataUploader } from './pages/DevDataUploader';
 import { Repairs } from './pages/Repairs';
+import { SmartAsRequest } from './pages/SmartAsRequest';
+import { FieldAsManagement } from './pages/FieldAsManagement';
 import { SmartDispatch } from './pages/smart_dispatch';
 import { SmartReturn } from './pages/smart_return';
 import { AssetHistory } from './pages/asset_history';
@@ -148,6 +150,7 @@ const App: React.FC = () => {
         { id: 'receivable', name: '외상미수금 대장', icon: <CreditCard size={16} />, component: <Receivables /> },
         { id: 'smart_dispatch', name: '출고 요청', icon: <Zap size={16} />, component: <SmartDispatch /> },
         { id: 'smart_return', name: '회수 요청', icon: <Zap size={16} />, component: <SmartReturn /> },
+        { id: 'smart_as_request', name: 'AS 요청', icon: <Wrench size={16} />, component: <SmartAsRequest /> },
       ]
     },
     {
@@ -185,8 +188,9 @@ const App: React.FC = () => {
       name: '정비 / 소모품관리',
       icon: <Wrench size={17} />,
       items: [
+        { id: 'field_as', name: '현장 AS 관리', icon: <Wrench size={16} />, component: <FieldAsManagement /> },
         { id: 'consumable', name: '소모품 관리', icon: <ShoppingBag size={16} />, component: <Consumables /> },
-        { id: 'repair', name: '자산 정비 수리', icon: <Wrench size={16} />, component: <Repairs /> },
+        { id: 'repair', name: '주기장 정비 관리', icon: <Wrench size={16} />, component: <Repairs /> },
         { id: 'inspection_checklist_manage', name: '정비항목관리', icon: <Shield size={16} />, component: <InspectionChecklistManage /> },
       ]
     },

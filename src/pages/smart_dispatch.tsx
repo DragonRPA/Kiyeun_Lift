@@ -1,47 +1,20 @@
 // src/pages/smart_dispatch.tsx
 import React, { useState, useEffect, useRef } from 'react';
 import { useApp } from '../context/AppContext';
-import { Zap, Clipboard, FileText, Copy, Printer, Braces, Plus, Trash2, RefreshCw } from 'lucide-react';
+import { findCustomerByNormalizedName, STANDARD_SPECS, SpecItem } from '../services/db';
+import { Zap, Clipboard, FileText, Copy, Printer, Braces, Plus, Trash2, RefreshCw, CheckCircle2, AlertTriangle, Settings, ShieldCheck } from 'lucide-react';
 
 interface EquipmentItem {
   modelName: string;
   qty: number;
 }
 
-interface SpecItem {
-  id: string;
-  label: string;
-  keywords: string[];
-}
-
-// 고소작업대 필수 기술 요구사항 표준 체크리스트 정의 (스마트 자연어 파싱 키워드 매칭)
-const STANDARD_SPECS: SpecItem[] = [
-  { id: 'spec1', label: '철망 / 함석 설치', keywords: ['철망', '함석', '사면철망', '1면', '2면', '3면', '4면', '5면', '망'] },
-  { id: 'spec2', label: '확장대 철망 / 함석 설치', keywords: ['확장대 철망', '확장대철망', '확장대 함석', '확장대함석'] },
-  { id: 'spec3', label: '상단 감지봉 / 협착 센서 설치 (4EA)', keywords: ['감지봉', '감지봉 4ea', '상단감지', '협착', '센서', '4ea', '감지봉4ea'] },
-  { id: 'spec4', label: '원판 설치', keywords: ['원판설치', '원판'] },
-  { id: 'spec5', label: '배터리 단자 풀림 확인 마킹', keywords: ['배터리 단자 풀림', '단자 풀림 확인 마킹', '단자 풀림', '배터리 마킹'] },
-  { id: 'spec6', label: '배터리 단자 커버 설치', keywords: ['배터리 단자 커버', '커버설치', '단자 커버'] },
-  { id: 'spec7', label: '트레이 내부 볼트류 풀림 확인 마킹', keywords: ['트레이 내부 볼트', '볼트류 풀림 확인마킹', '트레이 내부 볼트류 풀림'] },
-  { id: 'spec8', label: '주행속도 세팅 (고속 60 / 저속 45)', keywords: ['주행속도', '고속 60', '저속 45', '주행속도 고속', '속도 세팅'] },
-  { id: 'spec9', label: '오버로드 과적재 세팅', keywords: ['오버로드 셋팅', '오버로드', '오버로드 세팅', '과적'] },
-  { id: 'spec10', label: '조이스틱 커버 연장', keywords: ['조이스틱 커버', '커버 연장', '조이스틱 커버 연장'] },
-  { id: 'spec11', label: '탑승구 사다리 보양', keywords: ['탑승구 사다리', '사다리 보양', '탑승구 사다리 보양', '사다리'] },
-  { id: 'spec12', label: '모서리/전면부/미끄럼방지 보양', keywords: ['미끄럼방지', '모서리 8개소', '전면부 2개소', '모서리보양', '모서리 8면', '보양'] },
-  { id: 'spec13', label: '소화기함/손잡이 설치 및 안내스티커 부착', keywords: ['소화기함', '기타 스티커물', '탑승구 손잡이', '작동설명', '소화기', '스티커'] },
-  { id: 'spec14', label: '타이어 A급 장착', keywords: ['타이어 A급', '타이어A급', '타이어 A급 상태', '타이어'] },
-  { id: 'spec15', label: '점멸등, 비상하강장치, 비상정지장치 청결', keywords: ['점멸등', '비상하강장치', '비상정지장치', '비상하강장치 청결', '정지장치'] },
-  { id: 'spec16', label: '작업높이 80% 세팅', keywords: ['작업높이 80프로', '발판높이기준', '작업높이 80%', '작업높이 80'] },
-  { id: 'spec17', label: '작업구간 색상 라인구분 (초록/빨강)', keywords: ['라인구분', '초록, 빨강', '라인 구분'] },
-  { id: 'spec18', label: '하부상승제한, 확장대 50% 표식 부착', keywords: ['하부상승제한', '확장대 50%', '50%지점 표식'] },
-  { id: 'spec19', label: '비상정지스위치 및 비상하강꼬리표 부착', keywords: ['비상정지스위치', '비상하강꼬리표', '비상정지스위치 부착'] },
-  { id: 'spec20', label: '시저구간 협착위험 스티커 부착', keywords: ['협착위험 스티커', '시저구간', '접촉금지', '시저구간 접촉금지'] },
-  { id: 'spec21', label: '부착물 세트 (인증서, 제원표, 보험증권, 반입전 체크리스트)', keywords: ['부착물', '제원표', '비상하강사용법', '보험증권', '인증서', '반입전', '체크리스트'] }
-];
-
 export const SmartDispatch: React.FC = () => {
-  const { hasPermission, saveSmartDispatch, assets, products, showErrorModal, users, contracts, currentUser } = useApp();
+  const { hasPermission, saveSmartDispatch, assets, products, showErrorModal, users, contracts, currentUser, customers, contacts, sites } = useApp();
   const canSave = hasPermission('delivery', 'save');
+
+  // ⚡ 기존 DB 정보 자동 상속 목록 상태 (시각적 배지 노출용)
+  const [inheritedFieldList, setInheritedFieldList] = useState<string[]>([]);
 
   // 실시간 프로세스 진행 릴레이 모달 상태
   const [isProcessingModalOpen, setIsProcessingModalOpen] = useState(false);
@@ -95,6 +68,10 @@ export const SmartDispatch: React.FC = () => {
 
   const [paidOptions, setPaidOptions] = useState('');
   const [protection, setProtection] = useState('');
+
+  // 🌟 고객사 기본값 등록 및 전체 현장 일괄 전파 플래그 상태
+  const [isSetAsCustomerDefault, setIsSetAsCustomerDefault] = useState(false);
+  const [applyToAllSites, setApplyToAllSites] = useState(false);
 
   // 요구사항 필수 체크리스트 선택/해제 상태 (Record<specId, boolean>)
   const [checkedSpecs, setCheckedSpecs] = useState<Record<string, boolean>>({});
@@ -213,7 +190,183 @@ export const SmartDispatch: React.FC = () => {
     }));
   }, [rawText]);
 
-  // 규칙 기반 지능형 텍스트 파서 함수 (AI-less)
+  // ⚡ [지능형 자동 상속 엔진] 고객사명 및 현장명 기준 기존 DB 등록 정보 자동 탐색 및 빈칸 상속
+  const applyAutoInheritance = (
+    cName: string,
+    sName: string,
+    current: {
+      address: string;
+      salespersonName: string;
+      salespersonPhone: string;
+      siteContactName: string;
+      siteContactPhone: string;
+      siteContactEmail: string;
+      billingContactName: string;
+      billingContactPhone: string;
+      statementEmail: string;
+      taxBillEmail: string;
+      paidOptions: string;
+      protection: string;
+      checkedSpecs: Record<string, boolean>;
+      closing: string;
+      payment: string;
+    }
+  ) => {
+    if (!cName.trim()) return { ...current, inherited: [] };
+
+    const inherited: string[] = [];
+    const matchedCustomer = findCustomerByNormalizedName(customers, cName);
+
+    let nextAddress = current.address;
+    let nextSalespersonName = current.salespersonName;
+    let nextSalespersonPhone = current.salespersonPhone;
+    let nextSiteContactName = current.siteContactName;
+    let nextSiteContactPhone = current.siteContactPhone;
+    let nextSiteContactEmail = current.siteContactEmail;
+    let nextBillingContactName = current.billingContactName;
+    let nextBillingContactPhone = current.billingContactPhone;
+    let nextStatementEmail = current.statementEmail;
+    let nextTaxBillEmail = current.taxBillEmail;
+    let nextPaidOptions = current.paidOptions;
+    let nextProtection = current.protection;
+    let nextCheckedSpecs = { ...current.checkedSpecs };
+    let nextClosing = current.closing;
+    let nextPayment = current.payment;
+
+    if (matchedCustomer) {
+      // 1. 고객 마스터 상속
+      if (!nextTaxBillEmail && matchedCustomer.repEmail && matchedCustomer.repEmail !== '미상') {
+        nextTaxBillEmail = matchedCustomer.repEmail;
+        inherited.push('계산서 메일');
+      }
+      if (!nextClosing && matchedCustomer.defaultBillingDay) {
+        nextClosing = (matchedCustomer.defaultBillingDay === 30 || matchedCustomer.defaultBillingDay === 31) ? '말일' : `${matchedCustomer.defaultBillingDay}일`;
+        inherited.push('마감일');
+      }
+      if (!nextPayment && matchedCustomer.paymentDueDay) {
+        nextPayment = `익월 ${matchedCustomer.paymentDueDay}일`;
+        inherited.push('결제일');
+      }
+      if (!nextPaidOptions && matchedCustomer.defaultPaidOptions) {
+        nextPaidOptions = matchedCustomer.defaultPaidOptions;
+        inherited.push('유상옵션(고객기본)');
+      }
+      if (!nextProtection && matchedCustomer.defaultProtection) {
+        nextProtection = matchedCustomer.defaultProtection;
+        inherited.push('보양작업(고객기본)');
+      }
+      if (matchedCustomer.defaultCheckedSpecs) {
+        let anySpecInherited = false;
+        Object.entries(matchedCustomer.defaultCheckedSpecs).forEach(([k, v]) => {
+          if (v && !nextCheckedSpecs[k]) {
+            nextCheckedSpecs[k] = true;
+            anySpecInherited = true;
+          }
+        });
+        if (anySpecInherited) inherited.push('기술스펙(고객기본)');
+      }
+
+      // 2. 현장(Site) 정보 상속 (현장 전용 설정이 있다면 고객 기본값보다 우선 적용!)
+      const matchedSite = sites.find(
+        s => s.customerId === matchedCustomer.id &&
+        (sName ? (s.name.replace(/\s/g, '') === sName.replace(/\s/g, '') || s.name.includes(sName) || sName.includes(s.name)) : true)
+      );
+
+      if (matchedSite) {
+        if (!nextAddress && matchedSite.address && matchedSite.address !== '미상') {
+          nextAddress = matchedSite.address;
+          inherited.push('현장 상세 주소');
+        }
+        if (!nextSiteContactName && matchedSite.contactName && matchedSite.contactName !== '미상') {
+          nextSiteContactName = matchedSite.contactName;
+          inherited.push('현장담당자 이름');
+        }
+        if (!nextSiteContactPhone && matchedSite.contact && matchedSite.contact !== '미상') {
+          nextSiteContactPhone = matchedSite.contact;
+          inherited.push('현장담당자 연락처');
+        }
+        if (!nextSiteContactEmail && matchedSite.email && matchedSite.email !== '미상') {
+          nextSiteContactEmail = matchedSite.email;
+          inherited.push('현장담당자 이메일');
+        }
+        if (matchedSite.paidOptions) {
+          nextPaidOptions = matchedSite.paidOptions;
+          if (!inherited.includes('유상옵션(현장)')) inherited.push('유상옵션(현장)');
+        }
+        if (matchedSite.protection) {
+          nextProtection = matchedSite.protection;
+          if (!inherited.includes('보양작업(현장)')) inherited.push('보양작업(현장)');
+        }
+        if (matchedSite.checkedSpecs) {
+          let anySiteSpecInherited = false;
+          Object.entries(matchedSite.checkedSpecs).forEach(([k, v]) => {
+            if (v && !nextCheckedSpecs[k]) {
+              nextCheckedSpecs[k] = true;
+              anySiteSpecInherited = true;
+            }
+          });
+          if (anySiteSpecInherited && !inherited.includes('기술스펙(현장)')) inherited.push('기술스펙(현장)');
+        }
+      }
+
+      // 3. 담당자(Contacts) 정보 상속
+      const custContacts = contacts.filter(ct => ct.customerId === matchedCustomer.id);
+      if (custContacts.length > 0) {
+        if (!nextSiteContactPhone) {
+          const siteCt = custContacts.find(ct => ct.position?.includes('현장') || ct.position?.includes('소장')) || custContacts[0];
+          if (siteCt && siteCt.contact && siteCt.contact !== '미상') {
+            nextSiteContactPhone = siteCt.contact;
+            if (!nextSiteContactName && siteCt.name) nextSiteContactName = siteCt.name;
+            inherited.push('현장담당자(연락처)');
+          }
+        }
+        if (!nextBillingContactName || !nextBillingContactPhone) {
+          const billCt = custContacts.find(ct => ct.position?.includes('청구') || ct.position?.includes('경리') || ct.position?.includes('회계'));
+          if (billCt) {
+            if (!nextBillingContactName && billCt.name) { nextBillingContactName = billCt.name; inherited.push('청구담당자'); }
+            if (!nextBillingContactPhone && billCt.contact && billCt.contact !== '미상') { nextBillingContactPhone = billCt.contact; inherited.push('청구담당자 연락처'); }
+            if (!nextTaxBillEmail && billCt.email && billCt.email !== '미상') { nextTaxBillEmail = billCt.email; inherited.push('계산서 메일'); }
+          }
+        }
+      }
+
+      // 4. 최근 계약(Contracts)의 영업담당자 상속
+      if (!nextSalespersonName) {
+        const lastContract = contracts
+          .filter(c => c.customerId === matchedCustomer.id)
+          .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''))[0];
+        if (lastContract?.salespersonId) {
+          const salesUser = users.find(u => u.id === lastContract.salespersonId);
+          if (salesUser) {
+            nextSalespersonName = salesUser.name;
+            nextSalespersonPhone = salesUser.phone || '';
+            inherited.push('영업담당자');
+          }
+        }
+      }
+    }
+
+    return {
+      address: nextAddress,
+      salespersonName: nextSalespersonName,
+      salespersonPhone: nextSalespersonPhone,
+      siteContactName: nextSiteContactName,
+      siteContactPhone: nextSiteContactPhone,
+      siteContactEmail: nextSiteContactEmail,
+      billingContactName: nextBillingContactName,
+      billingContactPhone: nextBillingContactPhone,
+      statementEmail: nextStatementEmail,
+      taxBillEmail: nextTaxBillEmail,
+      paidOptions: nextPaidOptions,
+      protection: nextProtection,
+      checkedSpecs: nextCheckedSpecs,
+      closing: nextClosing,
+      payment: nextPayment,
+      inherited
+    };
+  };
+
+  // 규칙 기반 지능형 텍스트 파서 함수 (AI-less + 동의어 확장 + 자동 상속)
   const handleParse = () => {
     if (!rawText.trim()) {
       alert('파싱할 텍스트를 입력해 주세요.');
@@ -225,6 +378,8 @@ export const SmartDispatch: React.FC = () => {
     let parsedCustomer = '';
     let parsedSite = '';
     let parsedAddress = '';
+    let parsedSalespersonName = '';
+    let parsedSalespersonPhone = '';
     let parsedSiteContactName = '';
     let parsedSiteContactPhone = '';
     let parsedSiteContactEmail = '';
@@ -260,41 +415,70 @@ export const SmartDispatch: React.FC = () => {
     const extractName = (str: string): string => {
       let namePart = str.split(/01[016789]/)[0] || str;
       namePart = namePart.split(/[a-zA-Z0-9._%+-]+@/)[0] || namePart;
-      return namePart.replace(/[:\-]/g, '').replace(/선임|책임|담당자/g, '').trim();
+      return namePart.replace(/[:\-]/g, '').replace(/선임|책임|담당자|소장|부장|과장|대리|팀장/g, '').trim();
     };
 
     lines.forEach(line => {
-      if (line.includes('고객명')) {
-        parsedCustomer = line.split(':')[1]?.trim() || '';
-      } else if (line.includes('현장명')) {
-        parsedSite = line.split(':')[1]?.trim() || '';
-      } else if (line.includes('현장 상세 주소') || line.includes('현장상세주소')) {
-        parsedAddress = line.split(':')[1]?.trim() || '';
-      } else if (line.includes('현장담당자') || line.includes('현장 담당자')) {
-        const val = line.split(':')[1] || '';
+      const trimmed = line.trim();
+      const val = line.includes(':') ? line.substring(line.indexOf(':') + 1).trim() : (line.includes('：') ? line.substring(line.indexOf('：') + 1).trim() : '');
+
+      // 1. 고객사명 / 업체 / 상호
+      if (/^(?:\d+[\.\)]\s*)?(?:고객사명?|고객명|업체명?|상호명?|상호|고객사)/i.test(trimmed)) {
+        parsedCustomer = val || trimmed.replace(/^(?:\d+[\.\)]\s*)?(?:고객사명?|고객명|업체명?|상호명?|상호|고객사)\s*[:：]?\s*/i, '');
+      }
+      // 2. 현장 상세 주소 / 배송지 (현장명보다 먼저 매칭)
+      else if (/^(?:\d+[\.\)]\s*)?(?:현장\s*상세\s*주소|현장상세주소|현장\s*주소|주소|배송지)/i.test(trimmed)) {
+        parsedAddress = val || trimmed.replace(/^(?:\d+[\.\)]\s*)?(?:현장\s*상세\s*주소|현장상세주소|현장\s*주소|주소|배송지)\s*[:：]?\s*/i, '');
+      }
+      // 3. 현장담당자 / 소장 / 반장 (현장명보다 먼저 매칭)
+      else if (/^(?:\d+[\.\)]\s*)?(?:현장\s*담당자?|현장담당|담당자?|소장|반장)/i.test(trimmed) && !trimmed.includes('청구') && !trimmed.includes('영업')) {
         parsedSiteContactName = extractName(val);
         parsedSiteContactPhone = extractPhone(val);
-      } else if (line.includes('담당자 메일') || line.includes('담당자메일')) {
-        const val = line.split(':')[1] || '';
-        parsedSiteContactEmail = extractEmails(val);
-      } else if (line.includes('강경현책임') || line.includes('강경현 책임')) {
-        const val = line.split(':')[1] || '';
         const email = extractEmails(val);
-        if (email) {
-          parsedSiteContactEmail = parsedSiteContactEmail ? `${parsedSiteContactEmail}/${email}` : email;
-        }
-      } else if (line.includes('상차시간') || line.includes('상차 시간')) {
-        parsedLoading = line.split(':')[1]?.trim() || '';
-      } else if (line.includes('하차시간') || line.includes('하차 시간')) {
-        parsedUnloading = line.split(':')[1]?.trim() || '';
-      } else if (line.includes('모델명') || line.includes('장비명')) {
-        const val = line.split(':')[1] || '';
-        const parts = val.split('/');
+        if (email) parsedSiteContactEmail = email;
+      }
+      // 4. 현장명 / 현장
+      else if (/^(?:\d+[\.\)]\s*)?(?:현장명?|현장)(?!\s*상세|\s*주소|\s*담당)/i.test(trimmed)) {
+        parsedSite = val || trimmed.replace(/^(?:\d+[\.\)]\s*)?(?:현장명?|현장)\s*[:：]?\s*/i, '');
+      }
+      // 5. 영업담당자
+      else if (/^(?:\d+[\.\)]\s*)?(?:영업\s*담당자?|영업담당|영업)/i.test(trimmed)) {
+        parsedSalespersonName = extractName(val);
+        parsedSalespersonPhone = extractPhone(val);
+      }
+      // 6. 청구담당자
+      else if (/^(?:\d+[\.\)]\s*)?(?:청구\s*담당자?|청구담당|경리|회계)/i.test(trimmed)) {
+        parsedBillingContactName = extractName(val);
+        parsedBillingContactPhone = extractPhone(val);
+        const email = extractEmails(val);
+        if (email) parsedTaxBillEmail = email;
+      }
+      // 7. 거래명세서 수신 메일
+      else if (/^(?:\d+[\.\)]\s*)?(?:거래명세서\s*(?:수신)?\s*메일|거래명세서메일|거래명세서|명세서\s*메일)/i.test(trimmed)) {
+        parsedStatementEmail = extractEmails(val || trimmed);
+      }
+      // 8. 계산서 메일
+      else if (/^(?:\d+[\.\)]\s*)?(?:계산서\s*메일|계산서메일|계산서|세금계산서)/i.test(trimmed)) {
+        const email = extractEmails(val || trimmed);
+        parsedTaxBillEmail = email || val;
+      }
+      // 9. 상차 스케줄 / 상차시간
+      else if (/^(?:\d+[\.\)]\s*)?(?:상차\s*스케줄|상차스케줄|상차\s*시간|상차시간|상차)/i.test(trimmed)) {
+        parsedLoading = val || trimmed.replace(/^(?:\d+[\.\)]\s*)?(?:상차\s*스케줄|상차스케줄|상차\s*시간|상차시간|상차)\s*[:：]?\s*/i, '');
+      }
+      // 10. 하차 스케줄 / 하차시간 / 도착시간
+      else if (/^(?:\d+[\.\)]\s*)?(?:하차\s*스케줄|하차스케줄|하차\s*시간|하차시간|하차|도착\s*시간|도착시간|도착)/i.test(trimmed)) {
+        parsedUnloading = val || trimmed.replace(/^(?:\d+[\.\)]\s*)?(?:하차\s*스케줄|하차스케줄|하차\s*시간|하차시간|하차|도착\s*시간|도착시간|도착)\s*[:：]?\s*/i, '');
+      }
+      // 11. 신청 고소작업대 모델 목록 / 모델명 / 규격
+      else if (/^(?:\d+[\.\)]\s*)?(?:신청\s*(?:고소작업대\s*)?모델\s*목록|신청모델목록|신청모델|모델명?|장비명?|규격)/i.test(trimmed) || /^\s*-\s*(?:GS|SJ|JCPT|HD|star|STAR)/i.test(trimmed)) {
+        const rawModelText = val || trimmed.replace(/^(?:\d+[\.\)]\s*)?(?:신청\s*(?:고소작업대\s*)?모델\s*목록|신청모델목록|신청모델|모델명?|장비명?|규격)\s*[:：]?\s*/i, '').replace(/^-\s*/, '');
+        const parts = rawModelText.split(/[\/,]/);
         parts.forEach(p => {
-          const match = p.match(/(.+?)\s*[*xX]\s*(\d+)/);
+          const match = p.match(/(.+?)\s*[*xX대]\s*(\d+)/) || p.match(/(.+?)\s*(\d+)\s*대/);
           if (match) {
             parsedEquipments.push({
-              modelName: match[1].trim(),
+              modelName: match[1].replace(/대$/, '').trim(),
               qty: parseInt(match[2]) || 1
             });
           } else {
@@ -306,27 +490,26 @@ export const SmartDispatch: React.FC = () => {
             }
           }
         });
-      } else if (line.includes('유상옵션') || line.includes('유상 옵션')) {
-        parsedPaidOptions = line.split(':')[1]?.trim() || '';
-      } else if (line.includes('보양')) {
-        parsedProtection = line.split(':')[1]?.trim() || '';
-      } else if (line.includes('청구담당자') || line.includes('청구 담당자')) {
-        const val = line.split(':')[1] || '';
-        parsedBillingContactName = extractName(val);
-        parsedBillingContactPhone = extractPhone(val);
-      } else if (line.includes('거래명세서')) {
-        const val = line.split(':')[1] || '';
-        parsedStatementEmail = extractEmails(val);
-      } else if (line.includes('계산서메일') || line.includes('계산서 메일')) {
-        const val = line.split(':')[1]?.trim() || '';
-        const email = extractEmails(val);
-        parsedTaxBillEmail = email || val;
-      } else if (line.includes('마감일')) {
-        parsedClosing = line.split(':')[1]?.trim() || '';
-      } else if (line.includes('결제일')) {
-        parsedPayment = line.split(':')[1]?.trim() || '';
-      } else if (line.includes('특이사항')) {
-        parsedNote = line.split(':')[1]?.trim() || '';
+      }
+      // 12. 유상옵션
+      else if (/^(?:\d+[\.\)]\s*)?(?:유상\s*옵션|유상옵션|옵션)/i.test(trimmed) && !trimmed.includes('요구') && !trimmed.includes('스펙')) {
+        parsedPaidOptions = val || trimmed.replace(/^(?:\d+[\.\)]\s*)?(?:유상\s*옵션|유상옵션|옵션)\s*[:：]?\s*/i, '');
+      }
+      // 13. 보양작업
+      else if (/^(?:\d+[\.\)]\s*)?(?:보양\s*작업\s*조건|보양작업조건|보양\s*작업|보양작업|보양)/i.test(trimmed)) {
+        parsedProtection = val || trimmed.replace(/^(?:\d+[\.\)]\s*)?(?:보양\s*작업\s*조건|보양작업조건|보양\s*작업|보양작업|보양)\s*[:：]?\s*/i, '');
+      }
+      // 14. 마감일
+      else if (/^(?:\d+[\.\)]\s*)?(?:마감일|청구\s*마감일)/i.test(trimmed)) {
+        parsedClosing = val || trimmed.replace(/^(?:\d+[\.\)]\s*)?(?:마감일|청구\s*마감일)\s*[:：]?\s*/i, '');
+      }
+      // 15. 결제일
+      else if (/^(?:\d+[\.\)]\s*)?(?:결제일|입금일)/i.test(trimmed)) {
+        parsedPayment = val || trimmed.replace(/^(?:\d+[\.\)]\s*)?(?:결제일|입금일)\s*[:：]?\s*/i, '');
+      }
+      // 16. 특이사항 / 배차메모
+      else if (/^(?:\d+[\.\)]\s*)?(?:특이사항|비고|배차\s*메모|배차메모)/i.test(trimmed)) {
+        parsedNote = val || trimmed.replace(/^(?:\d+[\.\)]\s*)?(?:특이사항|비고|배차\s*메모|배차메모)\s*[:：]?\s*/i, '');
       }
     });
 
@@ -338,28 +521,54 @@ export const SmartDispatch: React.FC = () => {
       newCheckedSpecs[spec.id] = matched;
     });
 
+    // ⚡ [지능형 자동 상속 엔진 실행] DB에 등록된 기존 정보가 있다면 누락된 빈칸 및 옵션/보양 자동 채움!
+    const inheritedResult = applyAutoInheritance(parsedCustomer, parsedSite, {
+      address: parsedAddress,
+      salespersonName: parsedSalespersonName,
+      salespersonPhone: parsedSalespersonPhone,
+      siteContactName: parsedSiteContactName,
+      siteContactPhone: parsedSiteContactPhone,
+      siteContactEmail: parsedSiteContactEmail,
+      billingContactName: parsedBillingContactName,
+      billingContactPhone: parsedBillingContactPhone,
+      statementEmail: parsedStatementEmail,
+      taxBillEmail: parsedTaxBillEmail,
+      paidOptions: parsedPaidOptions,
+      protection: parsedProtection,
+      checkedSpecs: newCheckedSpecs,
+      closing: parsedClosing,
+      payment: parsedPayment
+    });
+
     // 상태 업데이트
     setCustomerName(parsedCustomer);
     setSiteName(parsedSite);
-    setSiteAddress(parsedAddress);
-    setSiteContactName(parsedSiteContactName);
-    setSiteContactPhone(parsedSiteContactPhone);
-    setSiteContactEmail(parsedSiteContactEmail);
-    setBillingContactName(parsedBillingContactName);
-    setBillingContactPhone(parsedBillingContactPhone);
-    setStatementEmail(parsedStatementEmail);
-    setTaxBillEmail(parsedTaxBillEmail);
+    setSiteAddress(inheritedResult.address);
+    setSalespersonName(inheritedResult.salespersonName);
+    setSalespersonPhone(inheritedResult.salespersonPhone);
+    setSiteContactName(inheritedResult.siteContactName);
+    setSiteContactPhone(inheritedResult.siteContactPhone);
+    setSiteContactEmail(inheritedResult.siteContactEmail);
+    setBillingContactName(inheritedResult.billingContactName);
+    setBillingContactPhone(inheritedResult.billingContactPhone);
+    setStatementEmail(inheritedResult.statementEmail);
+    setTaxBillEmail(inheritedResult.taxBillEmail);
     setLoadingTime(parsedLoading);
     setUnloadingTime(parsedUnloading);
     setEquipments(parsedEquipments.length > 0 ? parsedEquipments : [{ modelName: '', qty: 1 }]);
-    setPaidOptions(parsedPaidOptions);
-    setProtection(parsedProtection);
-    setCheckedSpecs(newCheckedSpecs);
-    setClosingDay(parsedClosing);
-    setPaymentDay(parsedPayment);
+    setPaidOptions(inheritedResult.paidOptions);
+    setProtection(inheritedResult.protection);
+    setCheckedSpecs(inheritedResult.checkedSpecs);
+    setClosingDay(inheritedResult.closing);
+    setPaymentDay(inheritedResult.payment);
     setNote(parsedNote);
+    setInheritedFieldList(inheritedResult.inherited);
 
-    alert('정규식 룰 파서가 분석을 완료하여, 폼 필드 대입 및 21대 요구사항 체크박스를 자동 체크 처리했습니다. (비용 0원)');
+    if (inheritedResult.inherited.length > 0) {
+      alert(`✨ [텍스트 분석 & 지능형 DB 자동 상속 완료]\n\n• 텍스트 추출 완료\n• 기존 DB 자동 상속: ${inheritedResult.inherited.join(', ')}\n\n(※ 기존 정보가 유지되며, 수정 입력 시 최신 정보로 동기화 갱신됩니다)`);
+    } else {
+      alert('정규식 룰 파서가 분석을 완료하여, 폼 필드 대입 및 21대 요구사항 체크박스를 자동 체크 처리했습니다.');
+    }
   };
 
   // 장비 모델 행 동적 관리
@@ -733,9 +942,36 @@ ${activeSpecs.map((s, idx) => `  ${idx + 1}. [적용] ${s.label}`).join('\n') ||
       alert('저장 권한이 없습니다.');
       return;
     }
-    if (!customerName || !siteName) {
-      alert('파싱된 결과에 고객사명과 현장명이 없습니다.');
+    
+    // 🛡️ 1. [방어 가드 - Validation Guard] 필수 항목 검증 및 진행 차단
+    if (!customerName.trim()) {
+      alert('⚠️ [필수 항목 누락] 고객사명을 입력하거나 메신저 텍스트를 파싱해주세요.');
       return;
+    }
+    if (!siteName.trim()) {
+      alert('⚠️ [필수 항목 누락] 현장명을 입력하거나 메신저 텍스트를 파싱해주세요.');
+      return;
+    }
+
+    const matchedCust = findCustomerByNormalizedName(customers, customerName);
+    const matchedSite = matchedCust ? sites.find(s => s.customerId === matchedCust.id && (s.name.replace(/\s/g, '') === siteName.replace(/\s/g, '') || s.name.includes(siteName) || siteName.includes(s.name))) : null;
+
+    const finalAddress = siteAddress.trim() || (matchedSite?.address && matchedSite.address !== '미상' ? matchedSite.address : '');
+    if (!finalAddress) {
+      alert(`⚠️ [현장 상세 주소 필수 누락 - 진행 차단]\n\n고객사 '${customerName}' / 현장 '${siteName}'의 기존 DB에 등록된 주소가 없으며, 현재 입력창에도 주소가 생략되어 있습니다.\n\n배차 기사 운송 및 계약 체결을 위해 현장 상세 주소를 반드시 입력해주세요.`);
+      return; // 🚫 진행 차단
+    }
+
+    const finalPhone = siteContactPhone.trim() || (matchedSite?.contact && matchedSite.contact !== '미상' ? matchedSite.contact : '');
+    if (!finalPhone) {
+      alert(`⚠️ [현장 담당자 연락처 필수 누락 - 진행 차단]\n\n고객사 '${customerName}' / 현장 '${siteName}'의 현장 담당자 연락처가 기존 DB에 없으며 입력창에도 생략되었습니다.\n\n장비 하차 인계 및 기사 비상 연락을 위해 현장 담당자 연락처를 반드시 입력해주세요.`);
+      return; // 🚫 진행 차단
+    }
+
+    const validEquips = equipments.filter(e => e.modelName?.trim());
+    if (validEquips.length === 0) {
+      alert('⚠️ [신청 장비 누락 - 진행 차단]\n\n신청 고소작업대 모델을 최소 1대 이상 선택하거나 입력해주세요.');
+      return; // 🚫 진행 차단
     }
 
     setIsSubmitting(true);
@@ -770,9 +1006,12 @@ ${activeSpecs.map((s, idx) => `  ${idx + 1}. [적용] ${s.label}`).join('\n') ||
     }
 
     const data = {
-      customerName, siteName, siteAddress, siteContactName, siteContactPhone, siteContactEmail,
+      customerName, siteName, siteAddress, salespersonName, salespersonPhone,
+      siteContactName, siteContactPhone, siteContactEmail,
       billingContactName, billingContactPhone, statementEmail, taxBillEmail,
-      loadingTime, unloadingTime, equipments: updatedEquipments, note, rawText: rawText || note
+      loadingTime, unloadingTime, equipments: updatedEquipments, note, rawText: rawText || note,
+      paidOptions, protection, checkedSpecs, isSetAsCustomerDefault, applyToAllSites,
+      closingDay, paymentDay
     };
 
     // 프로세스 진행 모달 초기화
@@ -989,11 +1228,37 @@ ${activeSpecs.map((s, idx) => `  ${idx + 1}. [적용] ${s.label}`).join('\n') ||
           
           <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
             
-            {/* 섹션 1: 기본 정보 */}
+            {/* ⚡ 기존 DB 정보 자동 상속 안내 배너 */}
+            {inheritedFieldList.length > 0 && (
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '8px 12px',
+                backgroundColor: '#f0fdf4',
+                border: '1px solid #86efac',
+                borderRadius: '6px',
+                color: '#166534',
+                fontSize: '12px',
+                fontWeight: '600'
+              }}>
+                <CheckCircle2 size={16} color="#16a34a" />
+                <span>⚡ 기존 DB 자동 상속: {inheritedFieldList.join(', ')}</span>
+                <span style={{ fontSize: '11px', color: '#15803d', fontWeight: '400', marginLeft: 'auto' }}>
+                  (새로운 입력 시 고객/현장 마스터가 자동 최신화됩니다)
+                </span>
+              </div>
+            )}
+
             {/* 섹션 1: 고객사 및 현장 기본정보 */}
             <div>
-              <h4 style={{ fontSize: '14px', fontWeight: '700', color: 'var(--primary)', marginBottom: '8px', borderBottom: '1px solid var(--border-color)', paddingBottom: '4px' }}>
-                1. 기본 고객 및 현장 정보
+              <h4 style={{ fontSize: '14px', fontWeight: '700', color: 'var(--primary)', marginBottom: '8px', borderBottom: '1px solid var(--border-color)', paddingBottom: '4px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span>1. 기본 고객 및 현장 정보</span>
+                {findCustomerByNormalizedName(customers, customerName) && (
+                  <span style={{ fontSize: '11px', fontWeight: 600, color: '#16a34a', backgroundColor: '#dcfce7', padding: '2px 8px', borderRadius: '4px' }}>
+                    ✓ 등록 고객사 매핑됨
+                  </span>
+                )}
               </h4>
               <div className="mobile-grid-1col" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
                 <div>
@@ -1001,17 +1266,122 @@ ${activeSpecs.map((s, idx) => `  ${idx + 1}. [적용] ${s.label}`).join('\n') ||
                   <input type="text" value={contractNo} onChange={e => setContractNo(e.target.value)} placeholder="예: CT-2026-00123" />
                 </div>
                 <div>
-                  <label>고객사명</label>
-                  <input type="text" value={customerName} onChange={e => setCustomerName(e.target.value)} />
+                  <label>고객사명 <span style={{ color: '#ef4444' }}>*</span></label>
+                  <input
+                    type="text"
+                    list="smart-dispatch-customer-list"
+                    value={customerName}
+                    onChange={e => {
+                      const val = e.target.value;
+                      setCustomerName(val);
+                      const matched = findCustomerByNormalizedName(customers, val);
+                      if (matched) {
+                        const res = applyAutoInheritance(val, siteName, {
+                          address: siteAddress,
+                          salespersonName,
+                          salespersonPhone,
+                          siteContactName,
+                          siteContactPhone,
+                          siteContactEmail,
+                          billingContactName,
+                          billingContactPhone,
+                          statementEmail,
+                          taxBillEmail,
+                          paidOptions,
+                          protection,
+                          checkedSpecs,
+                          closing: closingDay,
+                          payment: paymentDay
+                        });
+                        setSiteAddress(res.address);
+                        setSalespersonName(res.salespersonName);
+                        setSalespersonPhone(res.salespersonPhone);
+                        setSiteContactName(res.siteContactName);
+                        setSiteContactPhone(res.siteContactPhone);
+                        setSiteContactEmail(res.siteContactEmail);
+                        setBillingContactName(res.billingContactName);
+                        setBillingContactPhone(res.billingContactPhone);
+                        setStatementEmail(res.statementEmail);
+                        setTaxBillEmail(res.taxBillEmail);
+                        setPaidOptions(res.paidOptions);
+                        setProtection(res.protection);
+                        setCheckedSpecs(res.checkedSpecs);
+                        setClosingDay(res.closing);
+                        setPaymentDay(res.payment);
+                        setInheritedFieldList(res.inherited);
+                      }
+                    }}
+                    placeholder="고객사명 입력 또는 선택"
+                  />
+                  <datalist id="smart-dispatch-customer-list">
+                    {customers.map(c => <option key={c.id} value={c.name} />)}
+                  </datalist>
                 </div>
                 <div>
-                  <label>현장명</label>
-                  <input type="text" value={siteName} onChange={e => setSiteName(e.target.value)} />
+                  <label>현장명 <span style={{ color: '#ef4444' }}>*</span></label>
+                  <input
+                    type="text"
+                    list="smart-dispatch-site-list"
+                    value={siteName}
+                    onChange={e => {
+                      const val = e.target.value;
+                      setSiteName(val);
+                      if (customerName) {
+                        const res = applyAutoInheritance(customerName, val, {
+                          address: siteAddress,
+                          salespersonName,
+                          salespersonPhone,
+                          siteContactName,
+                          siteContactPhone,
+                          siteContactEmail,
+                          billingContactName,
+                          billingContactPhone,
+                          statementEmail,
+                          taxBillEmail,
+                          paidOptions,
+                          protection,
+                          checkedSpecs,
+                          closing: closingDay,
+                          payment: paymentDay
+                        });
+                        setSiteAddress(res.address);
+                        setSiteContactName(res.siteContactName);
+                        setSiteContactPhone(res.siteContactPhone);
+                        setSiteContactEmail(res.siteContactEmail);
+                        setPaidOptions(res.paidOptions);
+                        setProtection(res.protection);
+                        setCheckedSpecs(res.checkedSpecs);
+                        setInheritedFieldList(res.inherited);
+                      }
+                    }}
+                    placeholder="현장명 입력 또는 선택"
+                  />
+                  <datalist id="smart-dispatch-site-list">
+                    {sites
+                      .filter(s => {
+                        const mc = findCustomerByNormalizedName(customers, customerName);
+                        return mc ? s.customerId === mc.id : true;
+                      })
+                      .map(s => <option key={s.id} value={s.name} />)}
+                  </datalist>
                 </div>
               </div>
               <div style={{ marginTop: '10px' }}>
-                <label>현장 상세 주소</label>
-                <input type="text" value={siteAddress} onChange={e => setSiteAddress(e.target.value)} />
+                <label style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span>현장 상세 주소 <span style={{ color: '#ef4444' }}>*</span></span>
+                  {inheritedFieldList.includes('현장 상세 주소') && (
+                    <span style={{ fontSize: '10px', color: '#16a34a', fontWeight: 700 }}>[DB 상속됨]</span>
+                  )}
+                </label>
+                <input
+                  type="text"
+                  value={siteAddress}
+                  onChange={e => setSiteAddress(e.target.value)}
+                  placeholder="예: 경기도 평택시 고덕면 고덕산단로 123"
+                  style={{
+                    borderColor: !siteAddress && customerName ? '#fca5a5' : undefined
+                  }}
+                />
               </div>
             </div>
 
@@ -1030,28 +1400,63 @@ ${activeSpecs.map((s, idx) => `  ${idx + 1}. [적용] ${s.label}`).join('\n') ||
                   <input type="text" value={salespersonPhone} onChange={e => setSalespersonPhone(e.target.value)} placeholder="예: 010-1234-5678" />
                 </div>
                 <div>
-                  <label>현장담당자 이름</label>
-                  <input type="text" value={siteContactName} onChange={e => setSiteContactName(e.target.value)} />
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span>현장담당자 이름</span>
+                    {inheritedFieldList.includes('현장담당자 이름') && (
+                      <span style={{ fontSize: '10px', color: '#16a34a', fontWeight: 700 }}>[DB 상속됨]</span>
+                    )}
+                  </label>
+                  <input type="text" value={siteContactName} onChange={e => setSiteContactName(e.target.value)} placeholder="예: 김소장" />
                 </div>
                 <div>
-                  <label>현장담당자 연락처</label>
-                  <input type="text" value={siteContactPhone} onChange={e => setSiteContactPhone(e.target.value)} />
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span>현장담당자 연락처 <span style={{ color: '#ef4444' }}>*</span></span>
+                    {(inheritedFieldList.includes('현장담당자 연락처') || inheritedFieldList.includes('현장담당자(연락처)')) && (
+                      <span style={{ fontSize: '10px', color: '#16a34a', fontWeight: 700 }}>[DB 상속됨]</span>
+                    )}
+                  </label>
+                  <input
+                    type="text"
+                    value={siteContactPhone}
+                    onChange={e => setSiteContactPhone(e.target.value)}
+                    placeholder="예: 010-1234-5678"
+                    style={{
+                      borderColor: !siteContactPhone && customerName ? '#fca5a5' : undefined
+                    }}
+                  />
                 </div>
                 <div>
-                  <label>청구담당자 이름</label>
-                  <input type="text" value={billingContactName} onChange={e => setBillingContactName(e.target.value)} />
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span>청구담당자 이름</span>
+                    {inheritedFieldList.includes('청구담당자') && (
+                      <span style={{ fontSize: '10px', color: '#16a34a', fontWeight: 700 }}>[DB 상속됨]</span>
+                    )}
+                  </label>
+                  <input type="text" value={billingContactName} onChange={e => setBillingContactName(e.target.value)} placeholder="예: 이대리" />
                 </div>
                 <div>
-                  <label>청구담당자 연락처</label>
-                  <input type="text" value={billingContactPhone} onChange={e => setBillingContactPhone(e.target.value)} />
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span>청구담당자 연락처</span>
+                    {inheritedFieldList.includes('청구담당자 연락처') && (
+                      <span style={{ fontSize: '10px', color: '#16a34a', fontWeight: 700 }}>[DB 상속됨]</span>
+                    )}
+                  </label>
+                  <input type="text" value={billingContactPhone} onChange={e => setBillingContactPhone(e.target.value)} placeholder="예: 010-9876-5432" />
                 </div>
                 <div>
-                  <label>거래명세서 수신 메일</label>
-                  <input type="text" value={statementEmail} onChange={e => setStatementEmail(e.target.value.replace(/\s+/g, ''))} />
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span>거래명세서 수신 메일</span>
+                  </label>
+                  <input type="text" value={statementEmail} onChange={e => setStatementEmail(e.target.value.replace(/\s+/g, ''))} placeholder="예: site@company.co.kr" />
                 </div>
                 <div>
-                  <label>계산서 메일 (역발행 여부 등)</label>
-                  <input type="text" value={taxBillEmail} onChange={e => setTaxBillEmail(e.target.value)} />
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span>계산서 메일</span>
+                    {inheritedFieldList.includes('계산서 메일') && (
+                      <span style={{ fontSize: '10px', color: '#16a34a', fontWeight: 700 }}>[DB 상속됨]</span>
+                    )}
+                  </label>
+                  <input type="text" value={taxBillEmail} onChange={e => setTaxBillEmail(e.target.value)} placeholder="예: tax@company.co.kr" />
                 </div>
               </div>
             </div>
@@ -1130,15 +1535,61 @@ ${activeSpecs.map((s, idx) => `  ${idx + 1}. [적용] ${s.label}`).join('\n') ||
                 </div>
               </div>
 
-              <div className="mobile-grid-1col" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '14px' }}>
+              <div className="mobile-grid-1col" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '10px' }}>
                 <div>
-                  <label>유상 옵션 내역</label>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span>유상 옵션 내역</span>
+                    {(inheritedFieldList.includes('유상옵션(현장)') || inheritedFieldList.includes('유상옵션(고객기본)')) && (
+                      <span style={{ fontSize: '10px', color: '#16a34a', fontWeight: 700 }}>
+                        [{inheritedFieldList.includes('유상옵션(현장)') ? '현장 DB 상속' : '고객 기본 상속'}]
+                      </span>
+                    )}
+                  </label>
                   <input type="text" value={paidOptions} onChange={e => setPaidOptions(e.target.value)} placeholder="예: 3면 함석, 감지봉 4EA..." />
                 </div>
                 <div>
-                  <label>보양작업 조건</label>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span>보양작업 조건</span>
+                    {(inheritedFieldList.includes('보양작업(현장)') || inheritedFieldList.includes('보양작업(고객기본)')) && (
+                      <span style={{ fontSize: '10px', color: '#16a34a', fontWeight: 700 }}>
+                        [{inheritedFieldList.includes('보양작업(현장)') ? '현장 DB 상속' : '고객 기본 상속'}]
+                      </span>
+                    )}
+                  </label>
                   <input type="text" value={protection} onChange={e => setProtection(e.target.value)} placeholder="예: 4면 망 포함 보양..." />
                 </div>
+              </div>
+
+              {/* 🌟 고객사 기본값 등록 및 전체 현장 일괄 전파 체크 패널 */}
+              <div style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '8px',
+                padding: '10px 14px',
+                backgroundColor: 'rgba(241, 245, 249, 0.6)',
+                border: '1px solid var(--border-color)',
+                borderRadius: '8px',
+                marginBottom: '14px',
+                fontSize: '12px'
+              }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontWeight: 600, color: 'var(--text-main)' }}>
+                  <input
+                    type="checkbox"
+                    checked={isSetAsCustomerDefault}
+                    onChange={e => setIsSetAsCustomerDefault(e.target.checked)}
+                    style={{ width: '15px', height: '15px', cursor: 'pointer' }}
+                  />
+                  <span>🏢 이 옵션·보양·스펙을 '{customerName || '해당 고객사'}' 기본 설정으로 등록 (다음 신규 현장에도 자동 적용)</span>
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontWeight: 600, color: '#2563eb' }}>
+                  <input
+                    type="checkbox"
+                    checked={applyToAllSites}
+                    onChange={e => setApplyToAllSites(e.target.checked)}
+                    style={{ width: '15px', height: '15px', cursor: 'pointer' }}
+                  />
+                  <span>⚡ '{customerName || '해당 고객사'}'의 등록된 모든 현장에도 이 옵션·보양을 동일하게 일괄 적용</span>
+                </label>
               </div>
 
               {/* 💡 [텍스트 추출 감지 수량 안내 뱃지] */}

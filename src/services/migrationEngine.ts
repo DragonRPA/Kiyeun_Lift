@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { supabase, db, calculateAssetDepreciation, normalizeCustomerName } from './db';
+import { supabase, db, calculateAssetDepreciation, normalizeCustomerName, STANDARD_SPECS, findCustomerByNormalizedName } from './db';
 import * as XLSX from 'xlsx';
 import { PRESET_PRODUCT_SPECS, ProductPresetSpec } from '../data/presetProductSpecs';
 
@@ -2363,4 +2363,527 @@ export async function generateAndIngestHistoricalBillingsDirect(
     totalAmount: totalSum
   };
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 🌟 밴드 출고요청 텍스트 파서 & 유효 계약처 기본 요구사항(옵션/보양/스펙) 마스터 동기화 엔진
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface ParsedDispatchPost {
+  postId: number;
+  dateStr: string;
+  timestamp: number;
+  author: string;
+  customerName: string;
+  siteName: string;
+  siteAddress: string;
+  salesperson: string;
+  siteContactName: string;
+  siteContactPhone: string;
+  siteContactEmail: string;
+  billingContactName: string;
+  billingContactPhone: string;
+  statementEmail: string;
+  taxBillEmail: string;
+  paidOptions: string;
+  protection: string;
+  closingDay: string;
+  paymentDay: string;
+  note: string;
+  matchedSpecs: Record<string, boolean>;
+  rawText: string;
+}
+
+export interface CustomerEnrichmentSummary {
+  customerId: string;
+  customerName: string;
+  hasActiveContract: boolean;
+  contractCount: number;
+  latestDate: string;
+  totalPostsCount: number;
+  extractedDefaults: {
+    defaultPaidOptions?: string;
+    defaultProtection?: string;
+    defaultCheckedSpecs?: Record<string, boolean>;
+    defaultBillingDay?: number;
+    specialNotes?: string;
+  };
+  sites: Array<{
+    siteId?: string;
+    siteName: string;
+    siteAddress?: string;
+    paidOptions?: string;
+    protection?: string;
+    checkedSpecs?: Record<string, boolean>;
+    contactName?: string;
+    contact?: string;
+    email?: string;
+  }>;
+  contacts: Array<{
+    name: string;
+    position: string;
+    contact: string;
+    email: string;
+  }>;
+}
+
+export interface DispatchAnalysisResult {
+  totalPosts: number;
+  matchedEnrichments: CustomerEnrichmentSummary[];
+  ignoredPosts: Array<{
+    postId: number;
+    date: string;
+    customerName: string;
+    siteName: string;
+    reason: string;
+  }>;
+  stats: {
+    totalParsed: number;
+    contractedCustomerCount: number;
+    contractedSiteCount: number;
+    ignoredCount: number;
+    extractedOptionCount: number;
+    extractedProtectionCount: number;
+    extractedSpecCount: number;
+  };
+}
+
+export function parseDispatchHistoryText(rawText: string): ParsedDispatchPost[] {
+  const lines = rawText.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+  const postHeaderRe = /^(\d{4}년\s*\d{1,2}월\s*\d{1,2}일\s*(?:오전|오후)\s*\d{1,2}:\d{2})(?:\s*게시글)?$/;
+  
+  const indices: number[] = [];
+  lines.forEach((line, idx) => {
+    if (postHeaderRe.test(line)) {
+      indices.push(idx);
+    }
+  });
+
+  const posts: ParsedDispatchPost[] = [];
+
+  indices.forEach((startIdx, i) => {
+    const endIdx = i + 1 < indices.length ? indices[i + 1] : lines.length;
+    const postLines = lines.slice(startIdx, endIdx);
+    const header = postLines[0];
+
+    // 시계열 정렬을 위한 타임스탬프 계산
+    let timestamp = 0;
+    const dateMatch = header.match(/(\d{4})년\s*(\d{1,2})월\s*(\d{1,2})일\s*(오전|오후)\s*(\d{1,2}):(\d{2})/);
+    if (dateMatch) {
+      let year = parseInt(dateMatch[1]);
+      let month = parseInt(dateMatch[2]) - 1;
+      let day = parseInt(dateMatch[3]);
+      let isPm = dateMatch[4] === '오후';
+      let hour = parseInt(dateMatch[5]);
+      if (isPm && hour < 12) hour += 12;
+      if (!isPm && hour === 12) hour = 0;
+      let min = parseInt(dateMatch[6]);
+      timestamp = new Date(year, month, day, hour, min).getTime();
+    }
+
+    let authorRole = '';
+    let author = '';
+    const rawContent: string[] = [];
+
+    postLines.slice(1).forEach(l => {
+      if (['리더', '공동리더', '멤버'].includes(l)) {
+        authorRole = l;
+      } else if (!author && authorRole && /^[가-힣]{2,4}$/.test(l)) {
+        author = l;
+      } else if (l.startsWith('202') && (l.includes('오전') || l.includes('오후')) && l.length < 35) {
+        // 중복 시간 라인 생략
+      } else if (['글 옵션', '표정짓기', '댓글쓰기', '원글 보기', '더보기', '본문으로 가기', '다크/라이트 모드', '채팅', '출고요청'].includes(l)) {
+        // UI 잔재 텍스트 생략
+      } else if (/^댓글\d+$/.test(l) || l === '읽음' || /^\d+$/.test(l)) {
+        // 카운터 생략
+      } else {
+        rawContent.push(l);
+      }
+    });
+
+    const fullContentText = rawContent.join('\n');
+
+    let customerName = '';
+    let siteName = '';
+    let siteAddress = '';
+    let salesperson = '';
+    let siteContactName = '';
+    let siteContactPhone = '';
+    let siteContactEmail = '';
+    let billingContactName = '';
+    let billingContactPhone = '';
+    let statementEmail = '';
+    let taxBillEmail = '';
+    let paidOptions = '';
+    let protection = '';
+    let closingDay = '';
+    let paymentDay = '';
+    let note = '';
+
+    const extractPhone = (str: string): string => {
+      const match = str.match(/(01[016789]\s*[-~]?\s*\d{3,4}\s*[-~]?\s*\d{4})/);
+      return match ? match[0].replace(/\s+/g, '') : '';
+    };
+
+    const extractEmails = (str: string): string => {
+      const matches = str.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g);
+      return matches ? matches.map(e => e.replace(/\s+/g, '')).join('/') : '';
+    };
+
+    const extractName = (str: string): string => {
+      let namePart = str.split(/01[016789]/)[0] || str;
+      namePart = namePart.split(/[a-zA-Z0-9._%+-]+@/)[0] || namePart;
+      return namePart.replace(/[:\-]/g, '').replace(/선임|책임|담당자|소장|부장|과장|대리|팀장/g, '').trim();
+    };
+
+    rawContent.forEach(l => {
+      const val = l.includes(':') ? l.substring(l.indexOf(':') + 1).trim() : (l.includes('：') ? l.substring(l.indexOf('：') + 1).trim() : '');
+
+      if (/^(?:\d+[\.\)]\s*)?(?:고객사명?|고객명|업체명?|상호명?|상호|고객사)/i.test(l)) {
+        customerName = val || l.replace(/^(?:\d+[\.\)]\s*)?(?:고객사명?|고객명|업체명?|상호명?|상호|고객사)\s*[:：]?\s*/i, '');
+      } else if (/^(?:\d+[\.\)]\s*)?(?:현장\s*상세\s*주소|현장상세주소|현장\s*주소|주소|배송지)/i.test(l)) {
+        siteAddress = val || l.replace(/^(?:\d+[\.\)]\s*)?(?:현장\s*상세\s*주소|현장상세주소|현장\s*주소|주소|배송지)\s*[:：]?\s*/i, '');
+      } else if (/^(?:\d+[\.\)]\s*)?(?:현장\s*담당자?|현장담당|담당자?|소장|반장)/i.test(l) && !l.includes('청구') && !l.includes('영업')) {
+        siteContactName = extractName(val || l);
+        siteContactPhone = extractPhone(val || l);
+        siteContactEmail = extractEmails(val || l);
+      } else if (/^(?:\d+[\.\)]\s*)?(?:현장명?|현장)(?!\s*상세|\s*주소|\s*담당)/i.test(l)) {
+        siteName = val || l.replace(/^(?:\d+[\.\)]\s*)?(?:현장명?|현장)\s*[:：]?\s*/i, '');
+      } else if (/^(?:\d+[\.\)]\s*)?(?:영업\s*담당자?|영업담당|영업)/i.test(l)) {
+        salesperson = val || l;
+      } else if (/^(?:\d+[\.\)]\s*)?(?:청구\s*담당자?|청구담당|경리|회계)/i.test(l)) {
+        billingContactName = extractName(val || l);
+        billingContactPhone = extractPhone(val || l);
+        const em = extractEmails(val || l);
+        if (em) taxBillEmail = em;
+      } else if (/^(?:\d+[\.\)]\s*)?(?:거래명세서\s*(?:수신)?\s*메일|거래명세서메일|명세서\s*메일)/i.test(l)) {
+        statementEmail = extractEmails(val || l);
+      } else if (/^(?:\d+[\.\)]\s*)?(?:계산서\s*메일|계산서메일|세금계산서)/i.test(l)) {
+        taxBillEmail = extractEmails(val || l) || val;
+      } else if (/^(?:\d+[\.\)]\s*)?(?:유상\s*옵션|유상옵션|옵션)/i.test(l) && !l.includes('요구') && !l.includes('스펙')) {
+        paidOptions = val || l.replace(/^(?:\d+[\.\)]\s*)?(?:유상\s*옵션|유상옵션|옵션)\s*[:：]?\s*/i, '');
+      } else if (/^(?:\d+[\.\)]\s*)?(?:보양\s*작업\s*조건|보양작업조건|보양\s*작업|보양작업|보양)/i.test(l)) {
+        protection = val || l.replace(/^(?:\d+[\.\)]\s*)?(?:보양\s*작업\s*조건|보양작업조건|보양\s*작업|보양작업|보양)\s*[:：]?\s*/i, '');
+      } else if (/^(?:\d+[\.\)]\s*)?(?:마감일|청구\s*마감일)/i.test(l)) {
+        closingDay = val || l.replace(/^(?:\d+[\.\)]\s*)?(?:마감일|청구\s*마감일)\s*[:：]?\s*/i, '');
+      } else if (/^(?:\d+[\.\)]\s*)?(?:결제일|입금일)/i.test(l)) {
+        paymentDay = val || l.replace(/^(?:\d+[\.\)]\s*)?(?:결제일|입금일)\s*[:：]?\s*/i, '');
+      } else if (/^(?:\d+[\.\)]\s*)?(?:특이사항|비고|배차\s*메모|배차메모)/i.test(l)) {
+        note = val || l.replace(/^(?:\d+[\.\)]\s*)?(?:특이사항|비고|배차\s*메모|배차메모)\s*[:：]?\s*/i, '');
+      }
+    });
+
+    const cleanedText = fullContentText.replace(/\s+/g, '');
+    const matchedSpecs: Record<string, boolean> = {};
+    STANDARD_SPECS.forEach(spec => {
+      const isMatched = spec.keywords.some(kw => cleanedText.includes(kw.replace(/\s+/g, '')));
+      if (isMatched) matchedSpecs[spec.id] = true;
+    });
+
+    posts.push({
+      postId: i + 1,
+      dateStr: header.replace(' 게시글', '').trim(),
+      timestamp,
+      author: `${authorRole} ${author}`.trim(),
+      customerName: customerName.replace(/^\d+[\.\)]\s*/, '').trim(),
+      siteName: siteName.replace(/^\d+[\.\)]\s*/, '').trim(),
+      siteAddress: siteAddress.trim(),
+      salesperson: salesperson.trim(),
+      siteContactName: siteContactName.trim(),
+      siteContactPhone: siteContactPhone.trim(),
+      siteContactEmail: siteContactEmail.trim(),
+      billingContactName: billingContactName.trim(),
+      billingContactPhone: billingContactPhone.trim(),
+      statementEmail: statementEmail.trim(),
+      taxBillEmail: taxBillEmail.trim(),
+      paidOptions: paidOptions.trim(),
+      protection: protection.trim(),
+      closingDay: closingDay.trim(),
+      paymentDay: paymentDay.trim(),
+      note: note.trim(),
+      matchedSpecs,
+      rawText: fullContentText
+    });
+  });
+
+  return posts;
+}
+
+export function analyzeDispatchHistoryForCustomerDefaults(
+  posts: ParsedDispatchPost[],
+  customers: any[],
+  sites: any[],
+  contracts: any[],
+  contacts: any[]
+): DispatchAnalysisResult {
+  // 시계열 최신값 우선 원칙: 타임스탬프 내림차순 정렬
+  const sortedPosts = [...posts].sort((a, b) => b.timestamp - a.timestamp);
+
+  const matchedEnrichments: CustomerEnrichmentSummary[] = [];
+  const ignoredPosts: Array<{ postId: number; date: string; customerName: string; siteName: string; reason: string }> = [];
+
+  const customerGroupMap = new Map<string, ParsedDispatchPost[]>();
+
+  sortedPosts.forEach(p => {
+    if (!p.customerName) {
+      ignoredPosts.push({
+        postId: p.postId,
+        date: p.dateStr,
+        customerName: '(미기재)',
+        siteName: p.siteName || '-',
+        reason: '고객사명 미기재'
+      });
+      return;
+    }
+
+    const matchedCustomer = findCustomerByNormalizedName(customers, p.customerName);
+    if (!matchedCustomer) {
+      ignoredPosts.push({
+        postId: p.postId,
+        date: p.dateStr,
+        customerName: p.customerName,
+        siteName: p.siteName || '-',
+        reason: '현재 DB에 미등록된 고객사 (과거 종료 거래처)'
+      });
+      return;
+    }
+
+    // 유효 계약(contracts) 보유 여부 검증 (헌장 및 사장님 지침 준수)
+    const hasContract = contracts.some(c => c.customerId === matchedCustomer.id);
+    if (!hasContract) {
+      ignoredPosts.push({
+        postId: p.postId,
+        date: p.dateStr,
+        customerName: p.customerName,
+        siteName: p.siteName || '-',
+        reason: '유효 계약(contracts) 없음 (거래 종료 고객)'
+      });
+      return;
+    }
+
+    if (!customerGroupMap.has(matchedCustomer.id)) {
+      customerGroupMap.set(matchedCustomer.id, []);
+    }
+    customerGroupMap.get(matchedCustomer.id)!.push(p);
+  });
+
+  let totalExtractedOptions = 0;
+  let totalExtractedProtections = 0;
+  let totalExtractedSpecs = 0;
+  let matchedSitesCount = 0;
+
+  customerGroupMap.forEach((custPosts, custId) => {
+    const cust = customers.find(c => c.id === custId)!;
+    const custContracts = contracts.filter(c => c.customerId === custId);
+    
+    // 가장 최신 게시글이 최우선
+    const latestPost = custPosts[0];
+
+    // 스펙 합집합
+    const aggregatedSpecs: Record<string, boolean> = {};
+    custPosts.forEach(p => {
+      Object.entries(p.matchedSpecs).forEach(([k, v]) => {
+        if (v) aggregatedSpecs[k] = true;
+      });
+    });
+
+    // 기본 유상옵션 및 보양 (최신 유효값 우선)
+    const defaultPaidOptions = custPosts.find(p => !!p.paidOptions)?.paidOptions || '';
+    const defaultProtection = custPosts.find(p => !!p.protection)?.protection || '';
+    const specialNotes = custPosts.find(p => !!p.note)?.note || '';
+
+    // 청구 마감일
+    let defaultBillingDay: number | undefined = undefined;
+    const closingStr = custPosts.find(p => !!p.closingDay)?.closingDay || '';
+    if (closingStr) {
+      if (closingStr.includes('말일') || closingStr.includes('30') || closingStr.includes('31')) defaultBillingDay = 30;
+      else {
+        const dMatch = closingStr.match(/(\d{1,2})/);
+        if (dMatch) defaultBillingDay = parseInt(dMatch[1]);
+      }
+    }
+
+    // 현장별 요구사항 매핑
+    const siteMap = new Map<string, any>();
+    custPosts.forEach(p => {
+      const sName = p.siteName || '기본현장';
+      if (!siteMap.has(sName)) {
+        const matchedSite = sites.find(s => s.customerId === custId && (s.name === sName || s.name.includes(sName) || sName.includes(s.name)));
+        siteMap.set(sName, {
+          siteId: matchedSite?.id,
+          siteName: sName,
+          siteAddress: p.siteAddress || matchedSite?.address,
+          paidOptions: p.paidOptions || defaultPaidOptions,
+          protection: p.protection || defaultProtection,
+          checkedSpecs: Object.keys(p.matchedSpecs).length > 0 ? p.matchedSpecs : aggregatedSpecs,
+          contactName: p.siteContactName,
+          contact: p.siteContactPhone,
+          email: p.siteContactEmail
+        });
+        matchedSitesCount++;
+      }
+    });
+
+    // 담당자 매핑
+    const contactList: any[] = [];
+    const seenPhones = new Set<string>();
+    custPosts.forEach(p => {
+      if (p.siteContactPhone && !seenPhones.has(p.siteContactPhone)) {
+        seenPhones.add(p.siteContactPhone);
+        contactList.push({
+          name: p.siteContactName || '현장담당자',
+          position: '현장담당',
+          contact: p.siteContactPhone,
+          email: p.siteContactEmail || ''
+        });
+      }
+      if (p.billingContactPhone && !seenPhones.has(p.billingContactPhone)) {
+        seenPhones.add(p.billingContactPhone);
+        contactList.push({
+          name: p.billingContactName || '청구담당자',
+          position: '청구담당',
+          contact: p.billingContactPhone,
+          email: p.taxBillEmail || p.statementEmail || ''
+        });
+      }
+    });
+
+    if (defaultPaidOptions) totalExtractedOptions++;
+    if (defaultProtection) totalExtractedProtections++;
+    if (Object.keys(aggregatedSpecs).length > 0) totalExtractedSpecs++;
+
+    matchedEnrichments.push({
+      customerId: custId,
+      customerName: cust.name,
+      hasActiveContract: true,
+      contractCount: custContracts.length,
+      latestDate: latestPost.dateStr,
+      totalPostsCount: custPosts.length,
+      extractedDefaults: {
+        defaultPaidOptions,
+        defaultProtection,
+        defaultCheckedSpecs: Object.keys(aggregatedSpecs).length > 0 ? aggregatedSpecs : undefined,
+        defaultBillingDay,
+        specialNotes
+      },
+      sites: Array.from(siteMap.values()),
+      contacts: contactList
+    });
+  });
+
+  return {
+    totalPosts: posts.length,
+    matchedEnrichments,
+    ignoredPosts,
+    stats: {
+      totalParsed: posts.length,
+      contractedCustomerCount: matchedEnrichments.length,
+      contractedSiteCount: matchedSitesCount,
+      ignoredCount: ignoredPosts.length,
+      extractedOptionCount: totalExtractedOptions,
+      extractedProtectionCount: totalExtractedProtections,
+      extractedSpecCount: totalExtractedSpecs
+    }
+  };
+}
+
+export async function ingestCustomerDefaultsFromDispatchHistory(
+  enrichments: CustomerEnrichmentSummary[],
+  onProgress?: (step: number, total: number, message: string) => void
+): Promise<{ success: boolean; message: string; updatedCustomers: number; updatedSites: number; addedContacts: number }> {
+  let updatedCustomers = 0;
+  let updatedSites = 0;
+  let addedContacts = 0;
+  const total = enrichments.length;
+
+  for (let i = 0; i < enrichments.length; i++) {
+    const item = enrichments[i];
+    onProgress?.(i + 1, total, `[${i + 1}/${total}] '${item.customerName}' 기본 옵션/보양 및 현장 요구사항 동기화 중...`);
+
+    // 1. 고객 마스터 빈칸 안전 보완 업데이트
+    const existingCust = db.getRow<any>('customers', item.customerId);
+    if (existingCust) {
+      const updates: any = {};
+      if (!existingCust.defaultPaidOptions && item.extractedDefaults.defaultPaidOptions) {
+        updates.defaultPaidOptions = item.extractedDefaults.defaultPaidOptions;
+      }
+      if (!existingCust.defaultProtection && item.extractedDefaults.defaultProtection) {
+        updates.defaultProtection = item.extractedDefaults.defaultProtection;
+      }
+      if ((!existingCust.defaultCheckedSpecs || Object.keys(existingCust.defaultCheckedSpecs).length === 0) && item.extractedDefaults.defaultCheckedSpecs) {
+        updates.defaultCheckedSpecs = item.extractedDefaults.defaultCheckedSpecs;
+      }
+      if (!existingCust.specialNotes && item.extractedDefaults.specialNotes) {
+        updates.specialNotes = item.extractedDefaults.specialNotes;
+      }
+      if (!existingCust.defaultBillingDay && item.extractedDefaults.defaultBillingDay) {
+        updates.defaultBillingDay = item.extractedDefaults.defaultBillingDay;
+      }
+
+      if (Object.keys(updates).length > 0) {
+        db.updateRow('customers', item.customerId, updates);
+        updatedCustomers++;
+      }
+    }
+
+    // 2. 현장 마스터 빈칸 안전 보완
+    item.sites.forEach(siteItem => {
+      if (siteItem.siteId) {
+        const existingSite = db.getRow<any>('customer_sites', siteItem.siteId);
+        if (existingSite) {
+          const siteUpdates: any = {};
+          if (!existingSite.paidOptions && siteItem.paidOptions) siteUpdates.paidOptions = siteItem.paidOptions;
+          if (!existingSite.protection && siteItem.protection) siteUpdates.protection = siteItem.protection;
+          if ((!existingSite.checkedSpecs || Object.keys(existingSite.checkedSpecs).length === 0) && siteItem.checkedSpecs) {
+            siteUpdates.checkedSpecs = siteItem.checkedSpecs;
+          }
+          if ((!existingSite.address || existingSite.address === '미상') && siteItem.siteAddress) {
+            siteUpdates.address = siteItem.siteAddress;
+          }
+          if ((!existingSite.contactName || existingSite.contactName === '미상') && siteItem.contactName) {
+            siteUpdates.contactName = siteItem.contactName;
+          }
+          if ((!existingSite.contact || existingSite.contact === '미상') && siteItem.contact) {
+            siteUpdates.contact = siteItem.contact;
+          }
+          if (Object.keys(siteUpdates).length > 0) {
+            db.updateRow('customer_sites', siteItem.siteId, siteUpdates);
+            updatedSites++;
+          }
+        }
+      }
+    });
+
+    // 3. 담당자(contacts) 보완
+    item.contacts.forEach(ct => {
+      if (ct.contact && ct.contact !== '미상') {
+        const existingContacts = db.customerContacts || [];
+        const existingCt = existingContacts.find(c => c.customerId === item.customerId && c.contact === ct.contact);
+        if (!existingCt) {
+          db.insertRow('customer_contacts', {
+            id: `CC-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+            customerId: item.customerId,
+            name: ct.name,
+            position: ct.position,
+            contact: ct.contact,
+            email: ct.email,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+          });
+          addedContacts++;
+        }
+      }
+    });
+  }
+
+  await db.awaitPendingWrites();
+
+  return {
+    success: true,
+    message: `유효 계약 고객 ${enrichments.length}개사에 대한 요구사항 동기화 완료 (고객 마스터 ${updatedCustomers}건 보완, 현장 마스터 ${updatedSites}건 보완, 담당자 ${addedContacts}명 등록)`,
+    updatedCustomers,
+    updatedSites,
+    addedContacts
+  };
+}
+
 

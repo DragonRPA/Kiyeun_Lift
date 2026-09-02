@@ -1,6 +1,6 @@
 // @ts-nocheck
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
-import { db, supabase, User, MenuPermission, createMenuPermission, Customer, CustomerContact, CustomerSite, Product, Asset, Consumable, ConsumableLog, ConsumablePurchaseRequest, MechanicConsumableStock, Contract, ContractAsset, ContractHistory, Delivery, Billing, BillingDetail, Receivable, Payment, PaymentDepositLink, Repair, RepairConsumable, Todo, BankTransaction, BankMatchingRule, BankAccountInitialBalance, AssetInOutLog, GoogleConfig, Vendor, CashFlowSnapshot, OutboundInspection, TransportCompany, TransportDriver, DepreciationLog, PurchaseSettlement, PurchaseSettlementItem, SettlementPaymentLog, ExternalLease, PurchaseSettlementType, PurchaseSettlementStatus, findCustomerByNormalizedName, AnnualLeaveQuota, LeaveUsage, OvertimeRecord, PayrollClosing, InspectionChecklistItem, InboundDefectDetail, PrepaidTransaction, DelinquencyActionLog, calculateAssetDepreciation } from '../services/db';
+import { db, supabase, User, MenuPermission, createMenuPermission, Customer, CustomerContact, CustomerSite, Product, Asset, Consumable, ConsumableLog, ConsumablePurchaseRequest, MechanicConsumableStock, Contract, ContractAsset, ContractHistory, Delivery, Billing, BillingDetail, Receivable, Payment, PaymentDepositLink, Repair, RepairConsumable, Todo, BankTransaction, BankMatchingRule, BankAccountInitialBalance, AssetInOutLog, GoogleConfig, Vendor, CashFlowSnapshot, OutboundInspection, TransportCompany, TransportDriver, DepreciationLog, PurchaseSettlement, PurchaseSettlementItem, SettlementPaymentLog, ExternalLease, PurchaseSettlementType, PurchaseSettlementStatus, findCustomerByNormalizedName, AnnualLeaveQuota, LeaveUsage, OvertimeRecord, PayrollClosing, InspectionChecklistItem, InboundDefectDetail, PrepaidTransaction, DelinquencyActionLog, calculateAssetDepreciation, FieldAsTicket, FieldAsPartUsed, FieldAsCollectedPart } from '../services/db';
 import { ErrorModal } from '../components/ErrorModal';
 import { getAllSystemMenuIds } from '../config/menu_config';
 
@@ -8,6 +8,8 @@ export interface SmartDispatchData {
   customerName: string;
   siteName: string;
   siteAddress: string;
+  salespersonName?: string;
+  salespersonPhone?: string;
   siteContactName: string;
   siteContactPhone: string;
   siteContactEmail: string;
@@ -18,7 +20,15 @@ export interface SmartDispatchData {
   loadingTime: string;
   unloadingTime: string;
   equipments: { modelName: string, qty: number }[];
+  paidOptions?: string;
+  protection?: string;
+  checkedSpecs?: Record<string, boolean>;
+  isSetAsCustomerDefault?: boolean;
+  applyToAllSites?: boolean;
+  closingDay?: string;
+  paymentDay?: string;
   note: string;
+  rawText?: string;
 }
 
 export interface SmartReturnData {
@@ -141,6 +151,29 @@ interface AppContextType {
   mechanicConsumableStocks: MechanicConsumableStock[];
   transferConsumableToMechanic: (mechanicId: string, consumableId: string, quantity: number, memo?: string) => Promise<void>;
   returnConsumableToHq: (mechanicId: string, consumableId: string, quantity: number, memo?: string) => Promise<void>;
+
+  // 현장 AS 관리
+  fieldAsTickets: FieldAsTicket[];
+  createFieldAsTicket: (data: Partial<FieldAsTicket>) => Promise<FieldAsTicket>;
+  updateFieldAsTicketStatus: (ticketId: string, status: FieldAsTicket['status'], extra?: Partial<FieldAsTicket>) => Promise<void>;
+  completeFieldAsTicket: (ticketId: string, completionData: {
+    mechanicId: string;
+    actionTaken: string;
+    resolutionType: FieldAsTicket['resolutionType'];
+    partsUsed?: FieldAsPartUsed[];
+    collectedParts?: FieldAsCollectedPart[];
+    billableType: 'FREE' | 'BILLABLE';
+    billableAmount: number;
+    beforeImage?: string;
+    afterImage?: string;
+    customerSignature?: string;
+    customerConfirmName?: string;
+    revisitDate?: string;
+    revisitReason?: string;
+    exchangeSuggested?: boolean;
+  }) => Promise<void>;
+  createRevisitAsTicket: (parentTicketId: string, revisitDate: string, revisitReason: string, mechanicId?: string) => Promise<FieldAsTicket>;
+  importBandAsHistory: (records: any[]) => Promise<number>;
   
   // Contract Mutators
   createContract: (contractData: Omit<Contract, 'id' | 'createdAt' | 'updatedAt' | 'contractNo'>, assetsList: { assetId?: string; expectedModel?: string; monthlyRentalFee: number; dailyRentalFee: number }[]) => Promise<void>;
@@ -367,7 +400,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setDelinquencyActionLogs([...db.delinquencyActionLogs]);
   };
 
-  // 전체 28개 테이블 Supabase pull 후 state 동기화 (초기 로딩 전용)
+  // 전체 테이블 Supabase pull 후 state 동기화 (초기 로딩 전용)
   const fullRefreshFromServer = async () => {
     if (db.isSupabaseConnected()) {
       try {
@@ -384,6 +417,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     'dashboard':            ['deliveries', 'contracts', 'billings', 'todos', 'assets'],
     'delivery':             ['deliveries', 'transportCompanies', 'transportDrivers', 'contracts', 'assets'],
     'transport_master':     ['transportCompanies', 'transportDrivers'],
+    'field_as':             ['repairs', 'assets', 'users', 'consumables', 'mechanicConsumableStocks', 'customers', 'sites', 'contracts'],
+    'smart_as_request':     ['repairs', 'customers', 'sites', 'contracts', 'contractAssets', 'assets'],
+    'repair':               ['repairs', 'assets', 'consumables', 'repairConsumables', 'mechanicConsumableStocks', 'vendors'],
     'contract':             ['contracts', 'contractAssets', 'contractHistory', 'customers', 'assets'],
     'billing':              ['billings', 'billingDetails', 'payments', 'paymentDepositLinks', 'bankTransactions', 'contracts', 'customers'],
     'customer':             ['customers', 'contacts', 'sites'],
@@ -926,12 +962,41 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (customer && customer.transactionStatus === 'BLOCKED') {
       return { success: false, errorMessage: '⚠️ 해당 고객사는 [거래불가] 상태로 설정되어 있어 신규 출고 및 계약 등록이 원천 차단됩니다.' };
     }
-    const customerId = customer?.id;
-    let site = customerId ? db.sites.find(s => s.customerId === customerId && s.name.replace(/\s/g, '') === data.siteName.replace(/\s/g, '')) : null;
     
+    // 🛡️ [1. 방어 가드 - Validation Guard]
+    // 현장 상세 주소와 현장담당자 연락처가 입력값과 기존 DB 모두에 전혀 없는 경우 강력 방어
+    const existingSite = customer ? db.sites.find(s => s.customerId === customer.id && (s.name.replace(/\s/g, '') === data.siteName.replace(/\s/g, '') || s.name.includes(data.siteName) || data.siteName.includes(s.name))) : null;
+    const existingContact = customer ? db.contacts.find(ct => ct.customerId === customer.id && (data.siteContactName ? ct.name.replace(/\s/g, '') === data.siteContactName.replace(/\s/g, '') : true)) : null;
+
+    const effectiveAddress = data.siteAddress?.trim() || (existingSite?.address && existingSite.address !== '미상' ? existingSite.address : '');
+    const effectivePhone = data.siteContactPhone?.trim() || (existingSite?.contact && existingSite.contact !== '미상' ? existingSite.contact : '') || (existingContact?.contact && existingContact.contact !== '미상' ? existingContact.contact : '');
+
+    if (!effectiveAddress) {
+      return {
+        success: false,
+        errorMessage: `⚠️ [현장 상세 주소 필수 누락]\n\n고객사 '${data.customerName}' / 현장 '${data.siteName}'의 기존 DB에 등록된 주소가 없으며, 현재 입력창에도 주소가 생략되어 있습니다.\n\n배차 기사 운송 및 계약 체결을 위해 현장 상세 주소를 반드시 입력해주세요.`
+      };
+    }
+    if (!effectivePhone) {
+      return {
+        success: false,
+        errorMessage: `⚠️ [현장 담당자 연락처 필수 누락]\n\n고객사 '${data.customerName}' / 현장 '${data.siteName}'의 현장 담당자 연락처가 기존 DB에 없으며 입력창에도 생략되었습니다.\n\n장비 하차 인계 및 기사 비상 연락을 위해 현장 담당자 연락처를 반드시 입력해주세요.`
+      };
+    }
+
+    // ⚡ [2. 기존 정보 상속] 누락 필드 자동 승계
+    data.siteAddress = effectiveAddress;
+    if (!data.siteContactPhone?.trim()) data.siteContactPhone = effectivePhone;
+    if (!data.siteContactName?.trim() && existingSite?.contactName && existingSite.contactName !== '미상') {
+      data.siteContactName = existingSite.contactName;
+    }
+    if (!data.taxBillEmail?.trim() && customer?.repEmail && customer.repEmail !== '미상') {
+      data.taxBillEmail = customer.repEmail;
+    }
+
     const missingFields = [];
     if (!customer) missingFields.push(`고객사: ${data.customerName}`);
-    if (!site) missingFields.push(`현장: ${data.siteName}`);
+    if (!existingSite) missingFields.push(`현장: ${data.siteName}`);
 
     if (missingFields.length > 0 && !autoRegister) {
       return { success: false, requiresConfirm: true, missingFields };
@@ -943,10 +1008,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         name: data.customerName,
         bizRegNo: '미상',
         isClosed: false,
-        address: '미상',
+        address: data.siteAddress || '미상',
         representative: '미상',
-        repContact: '미상',
-        repEmail: '미상',
+        repContact: data.siteContactPhone || '미상',
+        repEmail: data.taxBillEmail || data.statementEmail || '미상',
         createdAt: new Date().toISOString()
       });
 
@@ -963,7 +1028,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         db.insertRow<CustomerContact>('contacts', {
           customerId: customer.id,
           name: data.siteContactName,
-          position: '담당자',
+          position: '현장담당자',
           contact: data.siteContactPhone || '미상',
           email: data.siteContactEmail || '미상',
           createdAt: new Date().toISOString()
@@ -971,17 +1036,53 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     } else {
       await notify(`✅ [고객 확인] 기존 등록 고객사 '${customer.name}' 매핑 완료`, 25);
+      
+      // 🔄 [3. 최신 정보 업데이트] 고객 마스터 정보 동기화
+      const custUpdates: Partial<Customer> = {};
+      if (data.taxBillEmail && data.taxBillEmail !== '미상' && data.taxBillEmail !== customer.repEmail) {
+        custUpdates.repEmail = data.taxBillEmail;
+      }
+      if (Object.keys(custUpdates).length > 0) {
+        customer = db.updateRow<Customer>('customers', customer.id, { ...custUpdates, updatedAt: new Date().toISOString() }) as Customer;
+        await notify(`🏢 [고객 정보 갱신] 계산서 수신처('${data.taxBillEmail}')가 고객 마스터에 업데이트되었습니다.`, 28);
+      }
+
+      // 담당자 정보 업데이트 및 신규 추가
       if (data.siteContactName) {
         const targetCustomerId = customer.id;
-        const existingContact = db.contacts.find(ct => ct.customerId === targetCustomerId && ct.name.replace(/\s/g, '') === data.siteContactName.replace(/\s/g, ''));
-        if (!existingContact) {
-          await notify(`👤 [담당자 신규] 현장 담당자 '${data.siteContactName}' 등록 중...`, 30);
+        const matchedContact = db.contacts.find(ct => ct.customerId === targetCustomerId && ct.name.replace(/\s/g, '') === data.siteContactName.replace(/\s/g, ''));
+        if (matchedContact) {
+          if ((data.siteContactPhone && data.siteContactPhone !== '미상' && data.siteContactPhone !== matchedContact.contact) || (data.siteContactEmail && data.siteContactEmail !== '미상' && data.siteContactEmail !== matchedContact.email)) {
+            db.updateRow<CustomerContact>('contacts', matchedContact.id, {
+              contact: data.siteContactPhone || matchedContact.contact,
+              email: data.siteContactEmail || matchedContact.email,
+              updatedAt: new Date().toISOString()
+            });
+            await notify(`👤 [담당자 최신화] 담당자 '${data.siteContactName}' 연락처가 최신값으로 업데이트되었습니다.`, 30);
+          }
+        } else {
+          await notify(`👤 [신규 담당자] 현장 담당자 '${data.siteContactName}' 등록 중...`, 30);
           db.insertRow<CustomerContact>('contacts', {
             customerId: targetCustomerId,
             name: data.siteContactName,
-            position: '담당자',
+            position: '현장담당자',
             contact: data.siteContactPhone || '미상',
             email: data.siteContactEmail || '미상',
+            createdAt: new Date().toISOString()
+          });
+        }
+      }
+
+      if (data.billingContactName) {
+        const targetCustomerId = customer.id;
+        const matchedBilling = db.contacts.find(ct => ct.customerId === targetCustomerId && ct.name.replace(/\s/g, '') === data.billingContactName.replace(/\s/g, ''));
+        if (!matchedBilling) {
+          db.insertRow<CustomerContact>('contacts', {
+            customerId: targetCustomerId,
+            name: data.billingContactName,
+            position: '청구담당자',
+            contact: data.billingContactPhone || '미상',
+            email: data.taxBillEmail || data.statementEmail || '미상',
             createdAt: new Date().toISOString()
           });
         }
@@ -990,8 +1091,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const finalCustomer = customer;
 
+    // 현장(Site) 처리: 기존 현장 업데이트 또는 신규 현장 등록
+    let site = db.sites.find(s => s.customerId === finalCustomer.id && (s.name.replace(/\s/g, '') === data.siteName.replace(/\s/g, '') || s.name.includes(data.siteName) || data.siteName.includes(s.name)));
     if (!site) {
-      await notify(`📍 [2/5 현장 등록] 신규 현장 '${data.siteName}' 자동 등록 중...`, 40);
+      await notify(`📍 [2/5 신규 현장] 신규 현장 '${data.siteName}' 자동 등록 중...`, 40);
       site = db.insertRow<CustomerSite>('sites', {
         customerId: finalCustomer.id,
         name: data.siteName,
@@ -999,10 +1102,70 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         contactName: data.siteContactName || '미상',
         contact: data.siteContactPhone || '미상',
         email: data.siteContactEmail || '미상',
+        paidOptions: data.paidOptions || undefined,
+        protection: data.protection || undefined,
+        checkedSpecs: data.checkedSpecs || undefined,
         createdAt: new Date().toISOString()
       });
     } else {
-      await notify(`📍 [2/5 현장 매핑] 기존 현장 '${site.name}' 매핑 완료`, 45);
+      // 기존 현장 정보가 '미상'이거나 변경된 경우 최신값으로 업데이트!
+      const siteUpdates: Partial<CustomerSite> = {};
+      if (data.siteAddress && data.siteAddress !== '미상' && data.siteAddress !== site.address) {
+        siteUpdates.address = data.siteAddress;
+      }
+      if (data.siteContactName && data.siteContactName !== '미상' && data.siteContactName !== site.contactName) {
+        siteUpdates.contactName = data.siteContactName;
+      }
+      if (data.siteContactPhone && data.siteContactPhone !== '미상' && data.siteContactPhone !== site.contact) {
+        siteUpdates.contact = data.siteContactPhone;
+      }
+      if (data.siteContactEmail && data.siteContactEmail !== '미상' && data.siteContactEmail !== site.email) {
+        siteUpdates.email = data.siteContactEmail;
+      }
+      if (data.paidOptions !== undefined && data.paidOptions !== site.paidOptions) {
+        siteUpdates.paidOptions = data.paidOptions;
+      }
+      if (data.protection !== undefined && data.protection !== site.protection) {
+        siteUpdates.protection = data.protection;
+      }
+      if (data.checkedSpecs && Object.keys(data.checkedSpecs).length > 0) {
+        siteUpdates.checkedSpecs = data.checkedSpecs;
+      }
+      if (Object.keys(siteUpdates).length > 0) {
+        site = db.updateRow<CustomerSite>('sites', site.id, { ...siteUpdates, updatedAt: new Date().toISOString() }) as CustomerSite;
+        await notify(`📍 [현장 정보 최신화] 현장 '${site.name}'의 정보(주소/옵션/보양)가 고객 마스터에 업데이트되었습니다.`, 45);
+      } else {
+        await notify(`📍 [2/5 현장 매핑] 기존 현장 '${site.name}' 매핑 완료`, 45);
+      }
+    }
+
+    // 🌟 고객사 기본 옵션/보양 등록 및 전체 현장 일괄 전파 처리
+    const custOptionUpdates: Partial<Customer> = {};
+    if (data.isSetAsCustomerDefault || (!finalCustomer.defaultPaidOptions && data.paidOptions)) {
+      if (data.paidOptions) custOptionUpdates.defaultPaidOptions = data.paidOptions;
+    }
+    if (data.isSetAsCustomerDefault || (!finalCustomer.defaultProtection && data.protection)) {
+      if (data.protection) custOptionUpdates.defaultProtection = data.protection;
+    }
+    if (data.isSetAsCustomerDefault || (!finalCustomer.defaultCheckedSpecs && data.checkedSpecs && Object.keys(data.checkedSpecs).length > 0)) {
+      if (data.checkedSpecs) custOptionUpdates.defaultCheckedSpecs = data.checkedSpecs;
+    }
+    if (Object.keys(custOptionUpdates).length > 0) {
+      db.updateRow<Customer>('customers', finalCustomer.id, { ...custOptionUpdates, updatedAt: new Date().toISOString() });
+      await notify(`🏢 [고객사 기본설정 동기화] 고객사('${finalCustomer.name}') 기본 옵션/보양 마스터가 등록되었습니다.`, 48);
+    }
+
+    if (data.applyToAllSites) {
+      const allSites = db.sites.filter(s => s.customerId === finalCustomer.id);
+      for (const s of allSites) {
+        db.updateRow<CustomerSite>('sites', s.id, {
+          paidOptions: data.paidOptions || s.paidOptions,
+          protection: data.protection || s.protection,
+          checkedSpecs: data.checkedSpecs || s.checkedSpecs,
+          updatedAt: new Date().toISOString()
+        });
+      }
+      await notify(`🌐 [전체 현장 전파] '${finalCustomer.name}' 산하 ${allSites.length}개 모든 현장에 옵션/보양이 일괄 적용되었습니다.`, 50);
     }
 
     if (autoRegister && currentUser) {
@@ -1585,6 +1748,574 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       refreshAllData();
     } catch (err: any) {
       showErrorModal(`⚠️ 본사 반납 처리 실패:\n${err?.message || err}`);
+      throw err;
+    }
+  };
+
+  // ─── [전사 정비 & AS 단일 물리 통합 핵심 비즈니스 로직 (1-A, 2-B, 3-B, 4-A)] ─────────
+  const createFieldAsTicket = async (data: Partial<Repair>): Promise<Repair> => {
+    try {
+      const now = new Date();
+      const dateStr = now.toISOString().split('T')[0];
+      const ymCompact = dateStr.replace(/-/g, '').slice(2, 8);
+      const existingList = db.repairs;
+      const todayPrefix = `AS-${ymCompact}`;
+      let maxNum = 0;
+      existingList.forEach(t => {
+        if (t.ticketNo && t.ticketNo.startsWith(todayPrefix)) {
+          const num = parseInt(t.ticketNo.replace(`${todayPrefix}-`, ''), 10);
+          if (!isNaN(num) && num > maxNum) maxNum = num;
+        }
+      });
+      const ticketNo = `${todayPrefix}-${String(maxNum + 1).padStart(3, '0')}`;
+      const newRepairId = data.id || db.generateNextId('repairs', db.repairs);
+
+      // 💡 계약 및 1대 단독계약 자산 자동 매핑 (사장님 확정 1번 원칙)
+      let resolvedContractId = data.contractId;
+      let resolvedAssetId = data.assetId;
+      let resolvedAssetNo = data.assetNo;
+      let resolvedModelName = data.modelName;
+
+      if (!resolvedContractId && (data.customerId || data.siteId)) {
+        const matchedContract = db.contracts.find(c => 
+          (data.customerId && c.customerId === data.customerId) || 
+          (data.siteId && c.siteId === data.siteId)
+        );
+        if (matchedContract) {
+          resolvedContractId = matchedContract.id;
+        }
+      }
+
+      if (resolvedContractId && (!resolvedAssetId || resolvedAssetId === '현장확인' || resolvedAssetNo === '현장확인')) {
+        const cas = db.contractAssets.filter(ca => ca.contractId === resolvedContractId && ca.status !== 'RETURNED');
+        if (cas.length === 1 && cas[0].assetId) {
+          const singleAsset = db.assets.find(a => a.id === cas[0].assetId);
+          if (singleAsset) {
+            resolvedAssetId = singleAsset.id;
+            resolvedAssetNo = singleAsset.assetNo;
+            resolvedModelName = singleAsset.modelName;
+          }
+        }
+      }
+
+      const newTicket = db.insertRow<Repair>('repairs', {
+        id: newRepairId,
+        ticketNo: data.ticketNo || ticketNo,
+        workCategory: 'FIELD_AS',
+        workLocation: 'SITE',
+        stockSource: 'VEHICLE_VAN',
+        maintenanceType: 'EMERGENCY_AS',
+        repairType: 'INTERNAL',
+        source: data.source || 'DIRECT_INTAKE',
+        contractId: resolvedContractId,
+        customerId: data.customerId || '',
+        customerName: data.customerName || '',
+        siteId: data.siteId || '',
+        siteName: data.siteName || '',
+        assetId: resolvedAssetId || '',
+        assetNo: resolvedAssetNo || '현장확인',
+        modelName: resolvedModelName || '고소작업대',
+        locationDetail: data.locationDetail || '',
+        reporterName: data.reporterName || '',
+        reporterContact: data.reporterContact || '',
+        issueCategory: data.issueCategory || '기타',
+        issueDescription: data.issueDescription || '',
+        details: data.issueDescription || '',
+        errorCode: data.errorCode || '',
+        priority: data.priority || 'NORMAL',
+        status: data.status || 'REQUESTED',
+        requestDate: data.requestDate || dateStr,
+        visitDate: data.visitDate || '',
+        scheduleDate: data.visitDate || '',
+        mechanicId: data.mechanicId || data.assignedMechanicId || '',
+        assignedMechanicId: data.mechanicId || data.assignedMechanicId || '',
+        mechanicName: data.mechanicName || '',
+        actionTaken: data.actionTaken || '',
+        resolutionType: data.resolutionType || undefined,
+        partsUsed: data.partsUsed || [],
+        collectedParts: data.collectedParts || [],
+        billableType: data.billableType || 'FREE',
+        billableAmount: data.billableAmount || 0,
+        billableToCustomer: data.billableType === 'BILLABLE',
+        beforeImage: data.beforeImage || '',
+        afterImage: data.afterImage || '',
+        customerSignature: data.customerSignature || '',
+        customerConfirmName: data.customerConfirmName || '',
+        parentRepairId: data.parentRepairId || data.parentTicketId || '',
+        revisitRepairId: data.revisitRepairId || data.revisitTicketId || '',
+        revisitDate: data.revisitDate || '',
+        revisitReason: data.revisitReason || '',
+        exchangeSuggested: !!data.exchangeSuggested,
+        memo: data.memo || '',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      });
+
+      await db.awaitPendingWrites();
+      refreshAllData();
+      return newTicket;
+    } catch (err: any) {
+      showErrorModal(`⚠️ AS 접수 생성 실패:\n${err?.message || err}`);
+      throw err;
+    }
+  };
+
+  const updateFieldAsTicketStatus = async (ticketId: string, status: Repair['status'], extra?: Partial<Repair>): Promise<void> => {
+    try {
+      db.updateRow<Repair>('repairs', ticketId, {
+        status,
+        ...(extra || {}),
+        updatedAt: new Date().toISOString()
+      });
+      await db.awaitPendingWrites();
+      refreshAllData();
+    } catch (err: any) {
+      showErrorModal(`⚠️ AS 상태 변경 실패:\n${err?.message || err}`);
+      throw err;
+    }
+  };
+
+  const completeFieldAsTicket = async (ticketId: string, data: {
+    mechanicId: string;
+    actionTaken: string;
+    resolutionType: Repair['resolutionType'];
+    partsUsed?: RepairPartUsed[];
+    collectedParts?: RepairCollectedPart[];
+    billableType: 'FREE' | 'BILLABLE';
+    billableAmount: number;
+    beforeImage?: string;
+    afterImage?: string;
+    customerSignature?: string;
+    customerConfirmName?: string;
+    revisitDate?: string;
+    revisitReason?: string;
+    exchangeSuggested?: boolean;
+  }): Promise<void> => {
+    try {
+      const ticket = db.repairs.find(t => t.id === ticketId);
+      if (!ticket) throw new Error('해당 정비/AS 접수건을 찾을 수 없습니다.');
+
+      const mechanic = db.users.find(u => u.id === data.mechanicId);
+      const mechanicName = mechanic?.name || ticket.mechanicName || '담당기사';
+
+      // 1. 소모품 차량 재고 유효성 검사 및 차감
+      if (data.partsUsed && data.partsUsed.length > 0) {
+        for (const part of data.partsUsed) {
+          const vehicleStock = db.mechanicConsumableStocks.find(
+            s => s.mechanicId === data.mechanicId && s.consumableId === part.consumableId
+          );
+          const currentQty = vehicleStock?.stockQty || 0;
+          if (currentQty < part.quantity) {
+            throw new Error(`⚠️ [차량 재고 부족] ${mechanicName} 기사의 차량 재고에 "${part.modelName}" 품목이 부족합니다.\n(현재 적재: ${currentQty}개 / 사용 필요: ${part.quantity}개)\n\n[소모품 관리 ➔ 차량별 이동재고] 메뉴에서 주기장 재고를 차량으로 먼저 불출(이동) 등록해 주시기 바랍니다.`);
+          }
+        }
+
+        // 실제 차감 수행
+        for (const part of data.partsUsed) {
+          const vehicleStock = db.mechanicConsumableStocks.find(
+            s => s.mechanicId === data.mechanicId && s.consumableId === part.consumableId
+          );
+          if (vehicleStock) {
+            db.updateRow<MechanicConsumableStock>('mechanicConsumableStocks', vehicleStock.id, {
+              stockQty: vehicleStock.stockQty - part.quantity,
+              updatedAt: new Date().toISOString()
+            });
+
+            // 소모품 출고 로그 기록
+            db.insertRow<ConsumableLog>('consumableLogs', {
+              consumableId: part.consumableId,
+              type: 'OUTBOUND',
+              quantity: part.quantity,
+              unitPrice: part.unitPrice,
+              userId: currentUser?.id,
+              mechanicId: data.mechanicId,
+              fromLocation: `${mechanicName} 차량`,
+              toLocation: `현장AS (${ticket.siteName || ''} / ${ticket.assetNo || ''})`,
+              actionDate: new Date().toISOString().split('T')[0],
+              description: `[현장AS 조치 소진] ${ticket.assetNo || ''} 수리 사용 (${ticket.ticketNo || ticket.id})`,
+              createdAt: new Date().toISOString()
+            });
+          }
+        }
+      }
+
+      // 2. 재방문 연계 티켓 생성 (선택된 경우)
+      let revisitRepairId: string | undefined = undefined;
+      let finalStatus: Repair['status'] = 'COMPLETED';
+
+      if (data.resolutionType === 'REVISIT_NEEDED') {
+        finalStatus = 'REVISIT';
+        const now = new Date();
+        const ymCompact = now.toISOString().split('T')[0].replace(/-/g, '').slice(2, 8);
+        const todayPrefix = `AS-${ymCompact}`;
+        let maxNum = 0;
+        db.repairs.forEach(t => {
+          if (t.ticketNo && t.ticketNo.startsWith(todayPrefix)) {
+            const num = parseInt(t.ticketNo.replace(`${todayPrefix}-`, ''), 10);
+            if (!isNaN(num) && num > maxNum) maxNum = num;
+          }
+        });
+        const nextTicketNo = `${todayPrefix}-${String(maxNum + 1).padStart(3, '0')}`;
+        const chainedId = db.generateNextId('repairs', db.repairs);
+
+        const chainedTicket = db.insertRow<Repair>('repairs', {
+          id: chainedId,
+          ticketNo: nextTicketNo,
+          workCategory: 'FIELD_AS',
+          workLocation: 'SITE',
+          stockSource: 'VEHICLE_VAN',
+          maintenanceType: 'EMERGENCY_AS',
+          repairType: 'INTERNAL',
+          source: 'DIRECT_INTAKE',
+          customerId: ticket.customerId,
+          customerName: ticket.customerName,
+          siteId: ticket.siteId,
+          siteName: ticket.siteName,
+          assetId: ticket.assetId,
+          assetNo: ticket.assetNo,
+          locationDetail: ticket.locationDetail,
+          reporterName: ticket.reporterName,
+          reporterContact: ticket.reporterContact,
+          issueCategory: ticket.issueCategory,
+          issueDescription: `[재방문 사유] ${data.revisitReason || '후속 조치 필요'} (원 접수: ${ticket.issueDescription})`,
+          details: `[재방문 사유] ${data.revisitReason || '후속 조치 필요'} (원 접수: ${ticket.issueDescription})`,
+          errorCode: ticket.errorCode,
+          priority: ticket.priority,
+          status: 'SCHEDULED',
+          requestDate: new Date().toISOString().split('T')[0],
+          visitDate: data.revisitDate || new Date(Date.now() + 86400000).toISOString().split('T')[0],
+          scheduleDate: data.revisitDate || new Date(Date.now() + 86400000).toISOString().split('T')[0],
+          mechanicId: data.mechanicId,
+          assignedMechanicId: data.mechanicId,
+          mechanicName,
+          billableType: data.billableType,
+          billableAmount: 0,
+          billableToCustomer: data.billableType === 'BILLABLE',
+          parentRepairId: ticket.id,
+          parentTicketId: ticket.id,
+          memo: `이전 AS 티켓(${ticket.ticketNo || ticket.id}) 1차 점검 후 연계 생성됨`,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        });
+        revisitRepairId = chainedTicket.id;
+      } else if (data.resolutionType === 'GUIDED_END') {
+        finalStatus = 'GUIDED';
+      }
+
+      // 3. 현재 티켓 완료/종결 업데이트
+      db.updateRow<Repair>('repairs', ticketId, {
+        status: finalStatus,
+        mechanicId: data.mechanicId,
+        assignedMechanicId: data.mechanicId,
+        mechanicName,
+        actionTaken: data.actionTaken,
+        resolutionType: data.resolutionType,
+        partsUsed: data.partsUsed || [],
+        collectedParts: data.collectedParts || [],
+        billableType: data.billableType,
+        billableAmount: data.billableAmount,
+        billableToCustomer: data.billableType === 'BILLABLE',
+        beforeImage: data.beforeImage || ticket.beforeImage,
+        afterImage: data.afterImage || ticket.afterImage,
+        customerSignature: data.customerSignature || ticket.customerSignature,
+        customerConfirmName: data.customerConfirmName || ticket.customerConfirmName,
+        revisitDate: data.revisitDate,
+        revisitReason: data.revisitReason,
+        revisitRepairId: revisitRepairId || ticket.revisitRepairId,
+        revisitTicketId: revisitRepairId || ticket.revisitTicketId,
+        exchangeSuggested: !!data.exchangeSuggested,
+        completedDate: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      });
+
+      // 4. 자산 이력(AssetInOutLog)에 정비 사건 무누락 DB 저장
+      const targetAssetNo = ticket.assetNo;
+      if (targetAssetNo && targetAssetNo !== '현장확인' && targetAssetNo !== '전체장비') {
+        const matchedAsset = db.assets.find(a => a.assetNo === targetAssetNo);
+        db.insertRow<AssetInOutLog>('assetInOutLogs', {
+          assetId: matchedAsset?.id || ticket.assetId || `asset-${targetAssetNo}`,
+          assetNo: targetAssetNo,
+          modelName: matchedAsset?.modelName || ticket.locationDetail || '고소작업대',
+          type: 'REPAIR',
+          eventDate: new Date().toISOString().split('T')[0],
+          customerId: ticket.customerId,
+          customerName: ticket.customerName,
+          siteId: ticket.siteId,
+          siteName: ticket.siteName,
+        });
+      }
+
+      // 5. 계약 이력(ContractHistory)에 AS 발생 및 조치 사건 무누락 DB 저장 (양방향 완벽 추적성)
+      if (ticket.contractId) {
+        db.insertRow<ContractHistory>('contract_history', {
+          id: `ch-as-${ticket.id}-${Date.now()}`,
+          contractId: ticket.contractId,
+          changeType: 'AS_SERVICE',
+          changeDate: new Date().toISOString().split('T')[0],
+          description: `[현장 AS ${finalStatus === 'COMPLETED' ? '완료' : '조치'}] ${data.actionTaken} (${ticket.assetNo || '현장장비'}, 정비사: ${mechanicName}${data.billableAmount && data.billableAmount > 0 ? `, 유상수리비 ₩${data.billableAmount.toLocaleString()}` : ''})`,
+          createdAt: new Date().toISOString()
+        });
+      }
+
+      await db.awaitPendingWrites();
+      refreshAllData();
+    } catch (err: any) {
+      showErrorModal(err?.message || String(err));
+      throw err;
+    }
+  };
+
+  const createRevisitAsTicket = async (parentRepairId: string, revisitDate: string, revisitReason: string, mechanicId?: string): Promise<Repair> => {
+    try {
+      const parent = db.repairs.find(t => t.id === parentRepairId);
+      if (!parent) throw new Error('이전 AS 티켓을 찾을 수 없습니다.');
+
+      const now = new Date();
+      const ymCompact = now.toISOString().split('T')[0].replace(/-/g, '').slice(2, 8);
+      const todayPrefix = `AS-${ymCompact}`;
+      let maxNum = 0;
+      db.repairs.forEach(t => {
+        if (t.ticketNo && t.ticketNo.startsWith(todayPrefix)) {
+          const num = parseInt(t.ticketNo.replace(`${todayPrefix}-`, ''), 10);
+          if (!isNaN(num) && num > maxNum) maxNum = num;
+        }
+      });
+      const nextTicketNo = `${todayPrefix}-${String(maxNum + 1).padStart(3, '0')}`;
+      const newId = db.generateNextId('repairs', db.repairs);
+
+      const effectiveMechId = mechanicId || parent.mechanicId || parent.assignedMechanicId;
+      const mech = db.users.find(u => u.id === effectiveMechId);
+
+      const newTicket = db.insertRow<Repair>('repairs', {
+        id: newId,
+        ticketNo: nextTicketNo,
+        workCategory: 'FIELD_AS',
+        workLocation: 'SITE',
+        stockSource: 'VEHICLE_VAN',
+        maintenanceType: 'EMERGENCY_AS',
+        repairType: 'INTERNAL',
+        source: 'DIRECT_INTAKE',
+        customerId: parent.customerId,
+        customerName: parent.customerName,
+        siteId: parent.siteId,
+        siteName: parent.siteName,
+        assetId: parent.assetId,
+        assetNo: parent.assetNo,
+        locationDetail: parent.locationDetail,
+        reporterName: parent.reporterName,
+        reporterContact: parent.reporterContact,
+        issueCategory: parent.issueCategory,
+        issueDescription: `[재방문] ${revisitReason} (원 접수: ${parent.issueDescription || parent.details})`,
+        details: `[재방문] ${revisitReason} (원 접수: ${parent.issueDescription || parent.details})`,
+        errorCode: parent.errorCode,
+        priority: parent.priority,
+        status: 'SCHEDULED',
+        requestDate: now.toISOString().split('T')[0],
+        visitDate: revisitDate,
+        scheduleDate: revisitDate,
+        mechanicId: effectiveMechId,
+        assignedMechanicId: effectiveMechId,
+        mechanicName: mech?.name || parent.mechanicName,
+        billableType: parent.billableType,
+        billableAmount: 0,
+        billableToCustomer: parent.billableToCustomer,
+        parentRepairId: parent.id,
+        parentTicketId: parent.id,
+        memo: `티켓 ${parent.ticketNo || parent.id}에서 재방문 연계 생성`,
+        createdAt: now.toISOString(),
+        updatedAt: now.toISOString()
+      });
+
+      db.updateRow<Repair>('repairs', parentRepairId, {
+        revisitRepairId: newTicket.id,
+        revisitTicketId: newTicket.id,
+        updatedAt: now.toISOString()
+      });
+
+      await db.awaitPendingWrites();
+      refreshAllData();
+      return newTicket;
+    } catch (err: any) {
+      showErrorModal(`⚠️ 재방문 티켓 생성 실패:\n${err?.message || err}`);
+      throw err;
+    }
+  };
+
+  const importBandAsHistory = async (records: any[]): Promise<number> => {
+    try {
+      let importedCount = 0;
+      const existingList = db.repairs;
+      const existingRawSet = new Set(existingList.map(t => `${t.siteName}_${t.assetNo}_${t.requestDate}_${(t.issueDescription || t.details || '').slice(0, 20)}`));
+
+      const newRepairs: Repair[] = [];
+      const newAssetLogs: AssetInOutLog[] = [];
+
+      records.forEach((r, idx) => {
+        const site = r.site || '미지정현장';
+        const asset = r.asset_no || '현장확인';
+        const reqDate = r.date || '2026-08-01';
+        const issue = r.issue || (r.raw ? r.raw.slice(0, 100) : '점검 요청');
+        const dedupeKey = `${site}_${asset}_${reqDate}_${issue.slice(0, 20)}`;
+
+        if (existingRawSet.has(dedupeKey)) return;
+
+        existingRawSet.add(dedupeKey);
+        importedCount++;
+
+        const ticketNo = `BAND-${String(5518 - idx).padStart(4, '0')}`;
+        const rawText = r.raw || '';
+        const isRevisit = rawText.includes('내일방문') || rawText.includes('재방문') || rawText.includes('방문예정');
+        const isGuided = rawText.includes('설명처리') || rawText.includes('이상없음') || rawText.includes('문제없음');
+        const isCompleted = rawText.includes('완료') || rawText.includes('교체') || rawText.includes('수리') || rawText.includes('보수');
+
+        let status: Repair['status'] = 'COMPLETED';
+        let resolutionType: Repair['resolutionType'] = 'REPAIR_DONE';
+        if (isRevisit) {
+          status = 'REVISIT';
+          resolutionType = 'REVISIT_NEEDED';
+        } else if (isGuided) {
+          status = 'GUIDED';
+          resolutionType = 'GUIDED_END';
+        } else if (isCompleted) {
+          status = 'COMPLETED';
+          resolutionType = 'REPAIR_DONE';
+        }
+
+        let category = '기타';
+        if (issue.includes('방지봉') || issue.includes('협착')) category = '방지봉/협착';
+        else if (issue.includes('상승') || issue.includes('하강')) category = '상하강불량';
+        else if (issue.includes('충전') || issue.includes('배터리')) category = '충전/전원';
+        else if (issue.includes('오일') || issue.includes('누유')) category = '오일누유';
+        else if (issue.includes('키박스') || issue.includes('키스위치')) category = '키박스/스위치';
+        else if (issue.includes('파이프')) category = '파이프걸림';
+        else if (issue.includes('점검')) category = '점검요청';
+
+        // 💡 4-A 원칙: 밴드 작성자 ➔ 시스템 users 이름 1:1 자동 매칭
+        const authorName = (r.author || '').trim();
+        const matchedUser = db.users.find(u => u.name && authorName && (u.name.trim() === authorName || authorName.includes(u.name.trim())));
+        const mechanicId = matchedUser?.id || '';
+        const mechanicName = matchedUser?.name || authorName || '정비기사';
+
+        // 💡 고객사 및 현장 매칭
+        const contractorName = (r.contractor || '').trim();
+        const matchedCustomer = db.customers.find(c => 
+          c.name && contractorName && (
+            c.name.trim() === contractorName || 
+            contractorName.includes(c.name.trim()) || 
+            c.name.trim().includes(contractorName)
+          )
+        );
+        const matchedSite = db.customerSites.find(s => 
+          s.name && site && (
+            s.name.trim() === site.trim() || 
+            site.includes(s.name.trim()) || 
+            s.name.trim().includes(site)
+          )
+        );
+
+        // 계약 조회 (고객/현장 기준)
+        let matchedContract = db.contracts.find(c => 
+          (matchedCustomer && c.customerId === matchedCustomer.id) || 
+          (matchedSite && c.siteId === matchedSite.id)
+        );
+
+        // 💡 5대 매트릭스 & 사장님 확정 원칙 1: 관리번호 미기재 시 1대 단독 계약이면 해당 자산으로 자동 추정 매핑
+        let finalAssetNo = asset;
+        let matchedAsset = db.assets.find(a => a.assetNo && asset && a.assetNo.trim().toUpperCase() === asset.trim().toUpperCase());
+        let assetId = matchedAsset?.id || '';
+
+        if ((!finalAssetNo || finalAssetNo === '현장확인' || finalAssetNo === '전체장비') && matchedContract) {
+          const contractAssetsForContract = db.contractAssets.filter(ca => ca.contractId === matchedContract.id && ca.status !== 'RETURNED');
+          if (contractAssetsForContract.length === 1 && contractAssetsForContract[0].assetId) {
+            const singleAsset = db.assets.find(a => a.id === contractAssetsForContract[0].assetId);
+            if (singleAsset) {
+              assetId = singleAsset.id;
+              finalAssetNo = singleAsset.assetNo;
+              matchedAsset = singleAsset;
+            }
+          }
+        } else if (matchedAsset && !matchedContract) {
+          const activeCa = db.contractAssets.find(ca => ca.assetId === matchedAsset.id && ca.status !== 'RETURNED');
+          if (activeCa) {
+            matchedContract = db.contracts.find(c => c.id === activeCa.contractId);
+          }
+        }
+
+        const actionText = r.action || (isCompleted ? '현장 정비 및 조치 완료' : (isRevisit ? '익일 재방문 접수' : '설명 및 안내 종결'));
+
+        const repairRow: Repair = {
+          id: `rep-band-${idx + 1}`,
+          ticketNo,
+          workCategory: 'FIELD_AS',
+          workLocation: 'SITE',
+          stockSource: 'VEHICLE_VAN',
+          maintenanceType: 'EMERGENCY_AS',
+          repairType: 'INTERNAL',
+          source: 'BAND_IMPORT',
+          contractId: matchedContract?.id || undefined,
+          customerId: matchedCustomer?.id || '',
+          customerName: matchedCustomer?.name || r.contractor || '현장 협력업체',
+          siteId: matchedSite?.id || '',
+          siteName: matchedSite?.name || site,
+          assetId: assetId || undefined,
+          assetNo: finalAssetNo || '현장확인',
+          modelName: matchedAsset?.modelName || '고소작업대',
+          locationDetail: r.location || '',
+          reporterContact: r.contact || '',
+          issueCategory: category,
+          issueDescription: issue,
+          details: issue,
+          status,
+          resolutionType,
+          priority: 'NORMAL',
+          requestDate: reqDate,
+          visitDate: reqDate,
+          scheduleDate: reqDate,
+          completedDate: status === 'COMPLETED' ? reqDate : undefined,
+          mechanicId,
+          assignedMechanicId: mechanicId,
+          mechanicName,
+          actionTaken: actionText,
+          billableType: 'FREE',
+          billableAmount: 0,
+          billableToCustomer: false,
+          memo: `[밴드 과거이력 자동 임포트]\n작성자: ${authorName || '기사'}\n원문: ${rawText.slice(0, 150)}`,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        };
+
+        newRepairs.push(repairRow);
+
+        // 💡 자산 생애주기 이력 로그(AssetInOutLog) 동시 기록 (관리번호가 식별되는 장비)
+        if (finalAssetNo && finalAssetNo !== '현장확인' && finalAssetNo !== '전체장비') {
+          newAssetLogs.push({
+            id: `aiog-band-${idx + 1}`,
+            assetId: assetId || `asset-${finalAssetNo}`,
+            assetNo: finalAssetNo,
+            modelName: matchedAsset?.modelName || '고소작업대',
+            type: 'REPAIR',
+            eventDate: reqDate,
+            customerName: repairRow.customerName,
+            siteName: repairRow.siteName,
+            repairId: repairRow.id,
+            memo: `[현장AS] ${issue} ➔ ${actionText} (정비자: ${mechanicName})`,
+            createdAt: new Date().toISOString()
+          });
+        }
+      });
+
+      if (newRepairs.length > 0) {
+        db.repairs = [...newRepairs, ...db.repairs];
+        if (newAssetLogs.length > 0) {
+          db.assetInOutLogs = [...newAssetLogs, ...db.assetInOutLogs];
+        }
+        await db.awaitPendingWrites();
+        refreshAllData();
+      }
+
+      return importedCount;
+    } catch (err: any) {
+      showErrorModal(`⚠️ 밴드 데이터 가져오기 실패:\n${err?.message || err}`);
       throw err;
     }
   };
@@ -4021,13 +4752,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const targetAsset = db.assets.find(a => a.id === repairData.assetId);
     let resolvedCustomerName = repairData.customerName || '';
     let resolvedSiteName = repairData.siteName || '';
+    let resolvedContractId = repairData.contractId;
 
     // 대여중 장비인 경우 현재 계약의 고객사/현장 자동 매핑
-    if ((!resolvedCustomerName || !resolvedSiteName) && targetAsset && targetAsset.status === 'RENTED') {
+    if (targetAsset && targetAsset.status === 'RENTED') {
       const activeContractAsset = db.contractAssets.find(ca => ca.assetId === targetAsset.id && ca.status !== 'RETURNED');
       if (activeContractAsset) {
         const activeContract = db.contracts.find(c => c.id === activeContractAsset.contractId);
         if (activeContract) {
+          resolvedContractId = resolvedContractId || activeContract.id;
           const cust = db.customers.find(cu => cu.id === activeContract.customerId);
           const st = db.sites.find(s => s.id === activeContract.siteId);
           resolvedCustomerName = cust?.name || resolvedCustomerName;
@@ -4039,6 +4772,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (repairData.id) {
       db.updateRow<Repair>('repairs', repairData.id, {
         ...repairData,
+        contractId: resolvedContractId,
         maintenanceType,
         status: repairStatus,
         customerName: resolvedCustomerName,
@@ -4048,7 +4782,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } else {
       db.insertRow<Repair>('repairs', {
         id: repairId,
+        contractId: resolvedContractId,
         assetId: repairData.assetId || '',
+        assetNo: targetAsset?.assetNo || repairData.assetNo || '현장확인',
+        modelName: targetAsset?.modelName || repairData.modelName || '고소작업대',
         mechanicId: currentUser?.id || '',
         maintenanceType,
         repairType: repairData.repairType || (maintenanceType === 'EXTERNAL' ? 'EXTERNAL' : 'INTERNAL'),
@@ -4149,13 +4886,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           nextMaintenanceScore = 0; // 정비 완료 시 이상무 리셋
         }
       } else {
-        // 야적장 자사/입고 정비
-        if (repairStatus === 'COMPLETED') {
-          nextAssetStatus = 'AVAILABLE';
-          nextMaintenanceScore = 0;
-        } else {
-          nextAssetStatus = 'REPAIRING';
-        }
+        // 야적장 자사/입고 정비: 3-B 원칙 준수 - 정비가 부분 수리일 수 있으므로 AVAILABLE로 자동 전환하지 않고 상태 보존
+        nextAssetStatus = targetAsset.status;
       }
 
       db.updateRow<Asset>('assets', targetAsset.id, {
@@ -4193,6 +4925,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       });
     }
 
+    // 📜 계약 이력(ContractHistory) 무누락 타임라인 자동 연동
+    if (resolvedContractId && repairStatus === 'COMPLETED') {
+      db.insertRow<ContractHistory>('contract_history', {
+        id: `ch-rep-${repairId}-${Date.now()}`,
+        contractId: resolvedContractId,
+        changeType: 'AS_SERVICE',
+        changeDate: repairData.repairDate || repairData.requestDate || new Date().toISOString().split('T')[0],
+        description: `[현장 정비/AS 완료] ${repairData.details || '정비 완료'} (${targetAsset ? `장비: ${targetAsset.assetNo}` : '현장확인'}${mechanicName ? `, 정비사: ${mechanicName}` : ''}${totalRepairCost > 0 ? `, 비용: ₩${totalRepairCost.toLocaleString()}` : ''})`,
+        createdAt: new Date().toISOString()
+      });
+    }
+
     await db.awaitPendingWrites();
     refreshAllData();
   };
@@ -4215,29 +4959,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       updatedAt: new Date().toISOString()
     });
 
-    const targetAsset = db.assets.find(a => a.id === existing.assetId);
-    if (targetAsset) {
-      if (existing.maintenanceType !== 'EMERGENCY_AS' && existing.maintenanceType !== 'PREVENTIVE' && targetAsset.status !== 'RENTED') {
-        if (status === 'COMPLETED') {
-          db.updateRow<Asset>('assets', targetAsset.id, {
-            status: 'AVAILABLE',
-            maintenanceScore: 0,
-            updatedAt: new Date().toISOString()
-          });
-        } else {
-          db.updateRow<Asset>('assets', targetAsset.id, {
-            status: 'REPAIRING',
-            updatedAt: new Date().toISOString()
-          });
-        }
-      } else if (status === 'COMPLETED') {
-        db.updateRow<Asset>('assets', targetAsset.id, {
-          maintenanceScore: 0,
-          updatedAt: new Date().toISOString()
-        });
-      }
-    }
-
+    // 💡 3-B 원칙 준수: 정비 상태가 COMPLETED로 변경되어도 자산 상태를 AVAILABLE로 자동 조작하지 않음
     await db.awaitPendingWrites();
     refreshAllData();
   };
@@ -5018,6 +5740,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       uploadBankTransactions, matchTransactionManual, unmatchTransaction, saveMatchingRule, deleteMatchingRule,
       dispatchDelivery, settleDeliveryCost, completeDelivery, completeInboundDelivery,
       registerRepair, updateRepairStatus,
+      // 현장 AS 관리 (단일 물리 테이블 repairs 뷰 제공)
+      fieldAsTickets: repairs.filter(r => r.workCategory === 'FIELD_AS' || r.source === 'BAND_IMPORT' || r.source === 'SALES_REQUEST'),
+      createFieldAsTicket,
+      updateFieldAsTicketStatus,
+      completeFieldAsTicket,
+      createRevisitAsTicket,
+      importBandAsHistory,
       saveTransportDataOnFly,
       generateMonthlyPurchaseSettlements, confirmPurchaseSettlement, recordPurchaseSettlementPayment, savePurchaseSettlement, convertReconciledDeliveriesToSettlement,
       cancelMonthlyDepreciation, linkRepairToBilling, unlinkRepairFromBilling,
