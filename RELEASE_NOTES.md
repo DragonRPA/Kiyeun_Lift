@@ -8355,3 +8355,9 @@ PostgreSQL DB ?덈꺼??`billings_status_check` ?쒖빟 議곌굔??寃곗옱 ?�
   - 조치 1: Supabase REST API를 통해 전체 19개 테이블의 실제 DB 컬럼을 전수 조회/감사.
   - 조치 2: TABLE_COLUMNS 내 deliveries, vendors, customers, assets, external_leases 등 전 테이블의 컬럼 화이트리스트를 Supabase 실제 컬럼과 100% 일치하도록 보강.
   - 조치 3: 실제 Supabase deliveries 테이블에 테스트 배차 데이터 UPSERT/DELETE 1:1 통신 검증 완료.
+
+### v0.7.1.Build.37 (2026-09-02 18:25)
+- **버그패치**: Supabase deliveries Check Constraint(type, dispatchCategory) 100% 준수 매핑.
+  - 근본 원인: PostgreSQL deliveries 테이블의 CHECK 제약조건 상 dispatchCategory는 ('출고', '입고', '반납', '정비', '이동'), type은 ('OUTBOUND', 'INBOUND')만 허용되나, '교환' 및 'EXCHANGE', 'RETURN' 값을 직접 삽입하려 하여 Check Constraint 위반 발생.
+  - 수정 조치: type은 OUTBOUND/INBOUND로 변환 매핑하고, dispatchCategory는 '출고'/'입고'/'반납'으로 정규화 매핑, '왕복/교환' 상세 내용은 memo/closingMemo 필드에 안전하게 보존.
+  - 실측 검증: 1,521건 실제 엑셀 파싱 데이터 중 100건 배치 청크를 Supabase에 직접 전송하여 Status 201 정상 저장 검증 완료.

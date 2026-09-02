@@ -2018,7 +2018,9 @@ export function parseDispatchExcelWorkbook(
       const dispatchStatus = r[9] != null ? String(r[9]).trim() : '';
       const status: 'COMPLETED' | 'PENDING' = dispatchStatus.startsWith('완') ? 'COMPLETED' : 'PENDING';
 
-      // 입출고 + 비고 → type
+      // 입출고 + 비고 → type & dispatchCategory 매핑 (Supabase DB Check Constraint 100% 준수)
+      // DB type check: IN ('OUTBOUND', 'INBOUND')
+      // DB dispatchCategory check: IN ('출고', '입고', '반납', '정비', '이동')
       const inoutRaw = r[10] != null ? String(r[10]).trim() : '';
       const noteRaw = r[12] != null ? String(r[12]).trim() : '';
       let type: 'OUTBOUND' | 'INBOUND' | 'RETURN' | 'EXCHANGE';
@@ -2026,10 +2028,10 @@ export function parseDispatchExcelWorkbook(
         type = 'EXCHANGE';
       } else if (inoutRaw === '출고') {
         type = 'OUTBOUND';
-      } else if (inoutRaw === '입고') {
-        type = 'INBOUND';
       } else if (inoutRaw === '반납') {
         type = 'RETURN';
+      } else if (inoutRaw === '입고') {
+        type = 'INBOUND';
       } else {
         type = 'OUTBOUND'; // 기본값
       }
@@ -2043,7 +2045,8 @@ export function parseDispatchExcelWorkbook(
       // specialNotes 조합 (수량 + 비고)
       const noteParts: string[] = [];
       if (qty > 1) noteParts.push(`수량: ${qty}대`);
-      if (noteRaw) noteParts.push(noteRaw);
+      if (noteRaw.includes('왕복')) noteParts.push('왕복/교환');
+      if (noteRaw && !noteRaw.includes('왕복')) noteParts.push(noteRaw);
       const specialNotes = noteParts.join(' / ');
 
       // 고객 매핑
@@ -2118,32 +2121,40 @@ export async function ingestDispatchData(
 
   onProgress?.(0, total, `배차 이력 ${parsed.rows.length}건 적재 준비 중...`);
 
-  const deliveryRecords = parsed.rows.map(r => ({
-    id: r.id,
-    type: r.type,
-    status: r.status,
-    requestDate: r.loadingDate,
-    loadingDate: r.loadingDate,
-    unloadingDate: r.unloadingDate,
-    contractId: r.contractId ?? undefined,
-    destinationAddress: r.destinationAddress || undefined,
-    transportCompany: r.transportCompany || undefined,
-    vehicleType: r.vehicleType || undefined,
-    deliveryCost: r.deliveryCost,
-    isCostSettled: false,
-    dispatchCategory: r.type === 'OUTBOUND' ? '출고'
+  const deliveryRecords = parsed.rows.map(r => {
+    // Supabase DB Check Constraint 매핑:
+    // 1. type CHECK: IN ('OUTBOUND', 'INBOUND')
+    // 2. dispatchCategory CHECK: IN ('출고', '입고', '반납', '정비', '이동')
+    const dbType: 'OUTBOUND' | 'INBOUND' = (r.type === 'INBOUND' || r.type === 'RETURN') ? 'INBOUND' : 'OUTBOUND';
+    const dbDispatchCategory: '출고' | '입고' | '반납' | '정비' | '이동' =
+      r.type === 'RETURN' ? '반납'
       : r.type === 'INBOUND' ? '입고'
-      : r.type === 'RETURN' ? '반납'
-      : r.type === 'EXCHANGE' ? '교환' : '출고',
-    // 고객명 + 계약자산 정보는 memo/specialNotes 필드에 텍스트로 보존
-    memo: [
-      r.customerNameRaw ? `업체: ${r.customerNameRaw}` : '',
-      r.specialNotes || ''
-    ].filter(Boolean).join(' | ') || '',
-    closingMemo: r.specialNotes || undefined,
-    createdAt: nowIso,
-    updatedAt: nowIso
-  }));
+      : '출고';
+
+    return {
+      id: r.id,
+      type: dbType,
+      status: r.status,
+      requestDate: r.loadingDate,
+      loadingDate: r.loadingDate,
+      unloadingDate: r.unloadingDate,
+      contractId: r.contractId || null,
+      destinationAddress: r.destinationAddress || undefined,
+      transportCompany: r.transportCompany || undefined,
+      vehicleType: r.vehicleType || undefined,
+      deliveryCost: r.deliveryCost,
+      isCostSettled: false,
+      dispatchCategory: dbDispatchCategory,
+      // 고객명 + 계약자산 정보는 memo/specialNotes 필드에 텍스트로 보존
+      memo: [
+        r.customerNameRaw ? `업체: ${r.customerNameRaw}` : '',
+        r.specialNotes || ''
+      ].filter(Boolean).join(' | ') || '',
+      closingMemo: r.specialNotes || undefined,
+      createdAt: nowIso,
+      updatedAt: nowIso
+    };
+  });
 
   onProgress?.(1, total, `배차 이력 ${deliveryRecords.length}건 Supabase 적재 중...`);
 
@@ -2157,7 +2168,7 @@ export async function ingestDispatchData(
 
   return {
     success: true,
-    message: `배차 이력 ${deliveryRecords.length}건 적재 완료 (고객미매핑: ${parsed.stats.customerUnmatched}건, 계약미매핑: ${parsed.stats.contractUnmatched}건)`,
+    message: `배차 이력 ${deliveryRecords.length}건 적재 완료 (고객미매핑: ${parsed.stats.customerUnmatched}건, 계약미매핑: ${parsed.stats.contractUnmatched}건, 왕복/교환: ${parsed.stats.exchangeCount}건)`,
     insertedCount: deliveryRecords.length
   };
 }
