@@ -10,7 +10,8 @@ import {
   ReconciliationReport,
   parseDispatchExcelWorkbook,
   ingestDispatchData,
-  ParsedDispatchData
+  ParsedDispatchData,
+  generateAndIngestHistoricalBillingsDirect
 } from '../services/migrationEngine';
 import * as XLSX from 'xlsx';
 import {
@@ -60,9 +61,11 @@ export const InitialDbUploader: React.FC = () => {
   const [reconciliationReport, setReconciliationReport] = useState<ReconciliationReport | null>(null);
 
   // 소급 청구서 생성 기간 설정
-  const [histBillingEnabled, setHistBillingEnabled] = useState(false);
+  const [histBillingEnabled, setHistBillingEnabled] = useState(true);
   const [histBillingStart, setHistBillingStart] = useState('2026-01');
   const [histBillingEnd, setHistBillingEnd] = useState('2026-07');
+  const [isHistBillingIngesting, setIsHistBillingIngesting] = useState(false);
+  const [histBillingProgressMsg, setHistBillingProgressMsg] = useState('');
 
   // 배차 이력 업로드 상태
   const [dispatchFileName, setDispatchFileName] = useState<string>('');
@@ -211,6 +214,51 @@ export const InitialDbUploader: React.FC = () => {
     } finally {
       setIsDispatchIngesting(false);
       setDispatchProgressMsg('');
+    }
+  };
+
+  // ── 과거 소급 청구서 독립 선택 생성 및 적재 ──
+  const handleDirectHistBillingIngest = async () => {
+    if (!contracts || contracts.length === 0) {
+      showErrorModal?.('DB에 등록된 계약 데이터가 없습니다. 먼저 초기 DB 엑셀 파일을 업로드해 주세요.');
+      return;
+    }
+
+    if (!histBillingStart || !histBillingEnd) {
+      showErrorModal?.('소급 청구서 생성 시작 월과 종료 월을 입력해 주세요.');
+      return;
+    }
+
+    if (histBillingStart > histBillingEnd) {
+      showErrorModal?.('시작 월이 종료 월보다 클 수 없습니다.');
+      return;
+    }
+
+    setIsHistBillingIngesting(true);
+    setHistBillingProgressMsg('소급 청구서 계산 및 적재 시작...');
+
+    try {
+      const result = await generateAndIngestHistoricalBillingsDirect(
+        contracts,
+        contractAssets || [],
+        customers || [],
+        { start: histBillingStart, end: histBillingEnd },
+        (_step, _total, msg) => {
+          setHistBillingProgressMsg(msg);
+        }
+      );
+
+      if (result.success) {
+        showSuccessToast?.(result.message);
+        await fullRefreshFromServer();
+      } else {
+        showErrorModal?.(result.message);
+      }
+    } catch (e: any) {
+      showErrorModal?.(`소급 청구서 생성 오류: ${e.message}`);
+    } finally {
+      setIsHistBillingIngesting(false);
+      setHistBillingProgressMsg('');
     }
   };
 
@@ -388,60 +436,87 @@ export const InitialDbUploader: React.FC = () => {
             </div>
           </div>
 
-          {/* 2. 소급 청구 기간 설정 카드 */}
+          {/* 2. 과거 소급 청구서 선택적 생성 카드 */}
           <div style={{ backgroundColor: '#ffffff', borderRadius: '8px', border: '1px solid #e2e8f0', padding: '20px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: histBillingEnabled ? '16px' : '0' }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', userSelect: 'none' }}>
-                <input
-                  type="checkbox"
-                  checked={histBillingEnabled}
-                  onChange={e => setHistBillingEnabled(e.target.checked)}
-                  style={{ width: '16px', height: '16px', cursor: 'pointer' }}
-                />
-                <span style={{ fontSize: '14px', fontWeight: 600, color: '#334155', whiteSpace: 'nowrap' }}>
-                  과거 소급 청구서 생성
-                </span>
-              </label>
-              <span style={{ fontSize: '12px', color: histBillingEnabled ? '#d97706' : '#94a3b8', whiteSpace: 'nowrap' }}>
-                {histBillingEnabled
-                  ? '지정 기간 내 계약별 월별 청구서를 생성합니다 (대량 생성 주의)'
-                  : '미선택 시 과거 청구서 미생성 — 수납 정리 후 필요 시 별도 선택'}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+              <Layers size={16} color="#d97706" />
+              <span style={{ fontSize: '14px', fontWeight: 600, color: '#d97706', whiteSpace: 'nowrap' }}>
+                과거 소급 청구서 생성 (선택 실행)
+              </span>
+              <span style={{ fontSize: '12px', color: '#64748b', whiteSpace: 'nowrap' }}>
+                지정 기간 내 계약별 월별 청구서를 독립적으로 계산하여 DB에 일괄 생성합니다.
               </span>
             </div>
-            {histBillingEnabled && (
-              <div style={{ display: 'flex', alignItems: 'flex-end', gap: '20px' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <label style={{ fontSize: '12px', fontWeight: 600, color: '#64748b', whiteSpace: 'nowrap' }}>시작 월</label>
-                  <input
-                    type="month"
-                    value={histBillingStart}
-                    onChange={e => setHistBillingStart(e.target.value)}
-                    style={{
-                      padding: '8px 12px', border: '1px solid #cbd5e1', borderRadius: '6px',
-                      fontSize: '14px', color: '#1e293b', backgroundColor: '#f8fafc', outline: 'none'
-                    }}
-                  />
-                </div>
-                <span style={{ fontSize: '18px', color: '#64748b', paddingBottom: '8px' }}>~</span>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <label style={{ fontSize: '12px', fontWeight: 600, color: '#64748b', whiteSpace: 'nowrap' }}>종료 월</label>
-                  <input
-                    type="month"
-                    value={histBillingEnd}
-                    onChange={e => setHistBillingEnd(e.target.value)}
-                    style={{
-                      padding: '8px 12px', border: '1px solid #cbd5e1', borderRadius: '6px',
-                      fontSize: '14px', color: '#1e293b', backgroundColor: '#f8fafc', outline: 'none'
-                    }}
-                  />
-                </div>
-                <div style={{
-                  padding: '8px 14px', backgroundColor: '#fffbeb', border: '1px solid #fcd34d',
-                  borderRadius: '6px', fontSize: '12px', color: '#92400e', whiteSpace: 'nowrap', lineHeight: '1.5'
-                }}>
-                  ⚠️ {histBillingStart} ~ {histBillingEnd} 기간<br/>
-                  계약별 월별 청구서 대량 생성
-                </div>
+
+            <div style={{ display: 'flex', alignItems: 'flex-end', gap: '16px', flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <label style={{ fontSize: '12px', fontWeight: 600, color: '#64748b', whiteSpace: 'nowrap' }}>시작 월</label>
+                <input
+                  type="month"
+                  value={histBillingStart}
+                  onChange={e => setHistBillingStart(e.target.value)}
+                  disabled={isHistBillingIngesting}
+                  style={{
+                    padding: '8px 12px', border: '1px solid #cbd5e1', borderRadius: '6px',
+                    fontSize: '14px', color: '#1e293b', backgroundColor: '#f8fafc', outline: 'none'
+                  }}
+                />
+              </div>
+
+              <span style={{ fontSize: '18px', color: '#64748b', paddingBottom: '8px' }}>~</span>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <label style={{ fontSize: '12px', fontWeight: 600, color: '#64748b', whiteSpace: 'nowrap' }}>종료 월</label>
+                <input
+                  type="month"
+                  value={histBillingEnd}
+                  onChange={e => setHistBillingEnd(e.target.value)}
+                  disabled={isHistBillingIngesting}
+                  style={{
+                    padding: '8px 12px', border: '1px solid #cbd5e1', borderRadius: '6px',
+                    fontSize: '14px', color: '#1e293b', backgroundColor: '#f8fafc', outline: 'none'
+                  }}
+                />
+              </div>
+
+              {/* 과거 소급 청구서 생성 실행 버튼 */}
+              <button
+                onClick={handleDirectHistBillingIngest}
+                disabled={isHistBillingIngesting}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'center',
+                  padding: '9px 20px', backgroundColor: isHistBillingIngesting ? '#94a3b8' : '#d97706',
+                  color: 'white', border: 'none', borderRadius: '6px',
+                  cursor: isHistBillingIngesting ? 'not-allowed' : 'pointer',
+                  fontSize: '13px', fontWeight: 600, whiteSpace: 'nowrap'
+                }}
+              >
+                {isHistBillingIngesting ? (
+                  <>
+                    <RefreshCw size={14} className="animate-spin" />
+                    소급 청구서 생성 중...
+                  </>
+                ) : (
+                  <>
+                    <Upload size={14} />
+                    소급 청구서 생성 및 적재 시작
+                  </>
+                )}
+              </button>
+
+              <div style={{
+                padding: '7px 12px', backgroundColor: '#fffbeb', border: '1px solid #fcd34d',
+                borderRadius: '6px', fontSize: '12px', color: '#92400e', whiteSpace: 'nowrap'
+              }}>
+                ⚠️ {histBillingStart} ~ {histBillingEnd} 기간 계약별 월별 청구서 대량 생성
+              </div>
+            </div>
+
+            {/* 진행 메시지 */}
+            {histBillingProgressMsg && (
+              <div style={{ marginTop: '12px', fontSize: '13px', color: '#d97706', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <RefreshCw size={13} className="animate-spin" />
+                {histBillingProgressMsg}
               </div>
             )}
           </div>

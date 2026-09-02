@@ -2219,3 +2219,148 @@ export async function ingestDispatchData(
     transportCompanyCount: parsed.transportCompanies.length
   };
 }
+
+/**
+ * 💡 과거 소급 청구서 독립 선택 생성 및 적재 (기능 테스트 및 선택적 실행용)
+ */
+export async function generateAndIngestHistoricalBillingsDirect(
+  contracts: any[],
+  contractAssets: any[],
+  customers: any[],
+  range: { start: string; end: string },
+  onProgress?: (step: number, total: number, message: string) => void
+): Promise<{ success: boolean; message: string; billingsCount: number; detailsCount: number; totalAmount: number }> {
+  const nowIso = new Date().toISOString();
+  const customerMap = new Map<string, any>();
+  customers.forEach(c => customerMap.set(c.id, c));
+
+  const contractAssetsByContract = new Map<string, any[]>();
+  contractAssets.forEach(ca => {
+    const list = contractAssetsByContract.get(ca.contractId) || [];
+    list.push(ca);
+    contractAssetsByContract.set(ca.contractId, list);
+  });
+
+  const billings: any[] = [];
+  const billingDetails: any[] = [];
+  let bdSeq = 1;
+  let totalSum = 0;
+
+  const [rangeEndY, rangeEndM] = range.end.split('-').map(Number);
+
+  for (const contract of contracts) {
+    const startYmd = contract.startDate;
+    if (!startYmd || startYmd >= '2026-08-01') continue;
+
+    const cust = customerMap.get(contract.customerId) || {};
+    const caList = contractAssetsByContract.get(contract.id) || [];
+    if (caList.length === 0) continue;
+
+    const startParts = startYmd.split('-');
+    const contractStartYm = `${startParts[0]}-${startParts[1]}`;
+    const loopStartYm = contractStartYm >= range.start ? contractStartYm : range.start;
+    const [loopStartY, loopStartM] = loopStartYm.split('-').map(Number);
+
+    let curYear = loopStartY;
+    let curMonth = loopStartM;
+
+    while (curYear < rangeEndY || (curYear === rangeEndY && curMonth <= rangeEndM)) {
+      const ymStr = `${curYear}-${String(curMonth).padStart(2, '0')}`;
+      const lastDayOfCurMonth = new Date(curYear, curMonth, 0).getDate();
+      const billingDay = cust.billingDay || cust.defaultBillingDay || 30;
+      const billDateStr = `${ymStr}-${String(Math.min(billingDay, lastDayOfCurMonth)).padStart(2, '0')}`;
+
+      let daysInPeriod = lastDayOfCurMonth;
+      if (curYear === parseInt(startParts[0], 10) && curMonth === parseInt(startParts[1], 10)) {
+        const startDay = parseInt(startParts[2], 10);
+        daysInPeriod = Math.max(1, lastDayOfCurMonth - startDay + 1);
+      }
+
+      const isFullMonth = daysInPeriod === lastDayOfCurMonth;
+
+      // 계약 내 자산별 청구 상세 계산
+      let contractBillTotal = 0;
+      const tempDetails: any[] = [];
+
+      for (const ca of caList) {
+        const mFee = ca.monthlyRentalFee || 0;
+        const dFee = ca.dailyRentalFee || (mFee > 0 ? Math.round(mFee / 30) : 0);
+        const itemAmount = isFullMonth ? mFee : Math.round(dFee * daysInPeriod);
+        if (itemAmount <= 0) continue;
+
+        contractBillTotal += itemAmount;
+        tempDetails.push({
+          id: `BD-HIST-${contract.id.replace(/[^a-zA-Z0-9]/g, '')}-${ymStr.replace('-', '')}-${String(bdSeq++).padStart(4, '0')}`,
+          contractAssetId: ca.id,
+          assetId: ca.assetId || null,
+          itemName: `${ca.expectedModel || '임대장비'} 렌탈료`,
+          quantity: daysInPeriod,
+          unitPrice: Math.round(itemAmount / daysInPeriod),
+          amount: itemAmount,
+          description: `${ymStr} 렌탈료 (${daysInPeriod}일)`,
+          internalDescription: `소급 청구 (계약: ${contract.contractNo || contract.id})`,
+          displayName: `${ca.expectedModel || '임대장비'} 렌탈료`,
+          createdAt: nowIso,
+          updatedAt: nowIso
+        });
+      }
+
+      if (contractBillTotal > 0) {
+        const histBillId = `BILL-HIST-${contract.id.replace(/[^a-zA-Z0-9]/g, '')}-${ymStr.replace('-', '')}`;
+        totalSum += contractBillTotal;
+
+        billings.push({
+          id: histBillId,
+          customerId: contract.customerId,
+          contractId: contract.id,
+          billingYm: ymStr,
+          billingDate: billDateStr,
+          totalAmount: contractBillTotal,
+          paidAmount: contractBillTotal,
+          status: 'PAID',
+          createdAt: nowIso,
+          updatedAt: nowIso
+        });
+
+        tempDetails.forEach(d => {
+          d.billingId = histBillId;
+          billingDetails.push(d);
+        });
+      }
+
+      curMonth++;
+      if (curMonth > 12) {
+        curYear++;
+        curMonth = 1;
+      }
+    }
+  }
+
+  onProgress?.(1, 3, `소급 청구서 ${billings.length}건 및 상세 ${billingDetails.length}건 적재 준비 중...`);
+
+  try {
+    if (billings.length > 0) {
+      await batchUpsertChunked('billings', billings, 100, msg => onProgress?.(2, 3, msg));
+    }
+    if (billingDetails.length > 0) {
+      await batchUpsertChunked('billing_details', billingDetails, 100, msg => onProgress?.(3, 3, msg));
+    }
+  } catch (e: any) {
+    return {
+      success: false,
+      message: `소급 청구서 적재 실패: ${e.message}`,
+      billingsCount: 0,
+      detailsCount: 0,
+      totalAmount: 0
+    };
+  }
+
+  return {
+    success: true,
+    message: `지정 기간(${range.start} ~ ${range.end}) 소급 청구서 ${billings.length.toLocaleString()}건(₩${totalSum.toLocaleString()}) 및 상세 ${billingDetails.length.toLocaleString()}건 생성 완료`,
+    billingsCount: billings.length,
+    detailsCount: billingDetails.length,
+    totalAmount: totalSum
+  };
+}
+
