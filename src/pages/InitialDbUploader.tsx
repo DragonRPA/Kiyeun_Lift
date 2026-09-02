@@ -16,7 +16,12 @@ import {
   analyzeDispatchHistoryForCustomerDefaults,
   ingestCustomerDefaultsFromDispatchHistory,
   DispatchAnalysisResult,
-  CustomerEnrichmentSummary
+  CustomerEnrichmentSummary,
+  parseBandAsHistoryText,
+  analyzeBandAsHistory,
+  ingestBandAsHistoryDirect,
+  BandAsAnalysisResult,
+  ParsedBandAsRecord
 } from '../services/migrationEngine';
 import * as XLSX from 'xlsx';
 import {
@@ -39,7 +44,10 @@ import {
   FileCheck,
   TrendingUp,
   History,
-  Wrench
+  Wrench,
+  Search,
+  Eye,
+  X
 } from 'lucide-react';
 
 export const InitialDbUploader: React.FC = () => {
@@ -84,11 +92,14 @@ export const InitialDbUploader: React.FC = () => {
 
   // 밴드 과거 AS 이력 업로드 상태
   const [bandFileName, setBandFileName] = useState<string>('');
-  const [bandParsedRecords, setBandParsedRecords] = useState<any[] | null>(null);
-  const [bandStats, setBandStats] = useState<{ total: number; uniqueAssets: number; completed: number; revisit: number; guided: number } | null>(null);
+  const [bandAnalysisResult, setBandAnalysisResult] = useState<BandAsAnalysisResult | null>(null);
+  const [bandSearchTerm, setBandSearchTerm] = useState<string>('');
+  const [bandStatusFilter, setBandStatusFilter] = useState<'ALL' | 'COMPLETED' | 'REVISIT' | 'GUIDED'>('ALL');
+  const [bandContractFilter, setBandContractFilter] = useState<'ALL' | 'MATCHED' | 'UNMATCHED' | 'GUESSED'>('ALL');
   const [isBandParsing, setIsBandParsing] = useState(false);
   const [isBandIngesting, setIsBandIngesting] = useState(false);
   const [bandProgressMsg, setBandProgressMsg] = useState('');
+  const [selectedAsRecord, setSelectedAsRecord] = useState<ParsedBandAsRecord | null>(null);
 
   const bandFileInputRef = useRef<HTMLInputElement>(null);
 
@@ -395,28 +406,16 @@ export const InitialDbUploader: React.FC = () => {
     setIsBandParsing(true);
     try {
       const text = await file.text();
-      const records = parseBandTextContent(text);
-      if (!records || records.length === 0) {
+      const analysis = analyzeBandAsHistory(text, contracts, contractAssets, customers, customerSites, assets, users);
+      if (!analysis || analysis.totalCount === 0) {
         showErrorModal?.('파싱 가능한 AS 게시글 데이터를 찾을 수 없습니다.');
         return;
       }
 
-      const uniqueAssets = new Set(records.map(r => r.asset_no || r.assetNo)).size;
-      const completed = records.filter(r => (r.raw || '').includes('완료') || (r.action || '').includes('완료')).length;
-      const revisit = records.filter(r => (r.raw || '').includes('내일방문') || (r.raw || '').includes('재방문') || (r.raw || '').includes('방문예정')).length;
-      const guided = records.filter(r => (r.raw || '').includes('설명처리') || (r.raw || '').includes('이상없음')).length;
-
-      setBandParsedRecords(records);
-      setBandStats({
-        total: records.length,
-        uniqueAssets,
-        completed: completed || Math.floor(records.length * 0.88),
-        revisit: revisit || Math.floor(records.length * 0.08),
-        guided: guided || Math.floor(records.length * 0.04)
-      });
-      showSuccessToast?.(`밴드 AS 데이터 ${records.length.toLocaleString()}건 파싱 완료`);
+      setBandAnalysisResult(analysis);
+      showSuccessToast?.(`밴드 AS 데이터 총 ${analysis.totalCount.toLocaleString()}건 전수 분석 완료 (고유장비 ${analysis.uniqueAssetsCount.toLocaleString()}대, 계약 ${analysis.matchedContractCount.toLocaleString()}건 매핑)`);
     } catch (err: any) {
-      showErrorModal?.(`밴드 파일 파싱 실패: ${err.message || err}`);
+      showErrorModal?.(`밴드 파일 분석 실패: ${err.message || err}`);
     } finally {
       setIsBandParsing(false);
       e.target.value = '';
@@ -424,13 +423,15 @@ export const InitialDbUploader: React.FC = () => {
   };
 
   const handleBandIngest = async () => {
-    if (!bandParsedRecords || bandParsedRecords.length === 0) return;
+    if (!bandAnalysisResult || bandAnalysisResult.totalCount === 0) return;
 
     setIsBandIngesting(true);
-    setBandProgressMsg('밴드 AS 데이터 적재 중...');
+    setBandProgressMsg('과거 AS 이력 정비 마스터(repairs) DB 적재 중...');
     try {
-      const count = await importBandAsHistory(bandParsedRecords);
-      showSuccessToast?.(`🎉 밴드 AS 이력 총 ${count.toLocaleString()}건이 시스템에 성공적으로 적재되었습니다.`);
+      const result = await ingestBandAsHistoryDirect(bandAnalysisResult, (curr, tot, msg) => {
+        setBandProgressMsg(msg);
+      });
+      showSuccessToast?.(result.message);
       await fullRefreshFromServer();
     } catch (err: any) {
       showErrorModal?.(`밴드 AS 적재 오류: ${err.message || err}`);
@@ -867,7 +868,7 @@ export const InitialDbUploader: React.FC = () => {
                 현장 AS 과거 이력 (네이버 밴드) 빅데이터 업로드
               </span>
               <span style={{ fontSize: '12px', color: '#64748b', whiteSpace: 'nowrap' }}>
-                네이버 밴드 AS 게시글 텍스트 파일 (총 5,518건, 2,171대 장비 이력)
+                네이버 밴드 AS 게시글 텍스트 파일 (총 5,518건, 2,171대 장비 이력 및 단독계약 1대 추정 연동)
               </span>
             </div>
 
@@ -896,61 +897,217 @@ export const InitialDbUploader: React.FC = () => {
               </button>
 
               {bandFileName && (
-                <span style={{ fontSize: '13px', color: '#1e293b', whiteSpace: 'nowrap' }}>
-                  {bandFileName}
+                <span style={{ fontSize: '13px', color: '#1e293b', whiteSpace: 'nowrap', fontWeight: 600 }}>
+                  📄 {bandFileName}
                 </span>
               )}
 
               {isBandParsing && (
                 <span style={{ fontSize: '12px', color: '#16a34a', display: 'flex', alignItems: 'center', gap: '4px', whiteSpace: 'nowrap' }}>
-                  <RefreshCw size={13} className="animate-spin" /> 빅데이터 파싱 중...
+                  <RefreshCw size={13} className="animate-spin" /> AS 빅데이터 5대 매트릭스 전수 분석 중...
                 </span>
               )}
             </div>
 
             {/* 파싱 결과 프리뷰 */}
-            {bandParsedRecords && bandStats && (
-              <div style={{ marginTop: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            {bandAnalysisResult && (
+              <div style={{ marginTop: '16px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                {/* 5대 지표 바 */}
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '8px' }}>
                   {[
-                    { label: '총 AS 건수', value: `${bandStats.total.toLocaleString()}건`, color: '#1e293b' },
-                    { label: '고유 대상장비', value: `${bandStats.uniqueAssets.toLocaleString()}대`, color: '#2563eb' },
-                    { label: '조치완료', value: `${bandStats.completed.toLocaleString()}건`, color: '#16a34a' },
-                    { label: '익일 재방문', value: `${bandStats.revisit.toLocaleString()}건`, color: '#d97706' },
-                    { label: '단순 안내종결', value: `${bandStats.guided.toLocaleString()}건`, color: '#6366f1' },
-                  ].map(({ label, value, color }) => (
+                    { label: '총 AS 분석 건수', value: `${bandAnalysisResult.totalCount.toLocaleString()}건`, color: '#1e293b' },
+                    { label: '고유 장비 매핑', value: `${bandAnalysisResult.uniqueAssetsCount.toLocaleString()}대`, color: '#2563eb' },
+                    { label: '유효 계약 연동', value: `${bandAnalysisResult.matchedContractCount.toLocaleString()}건`, color: '#7c3aed', sub: bandAnalysisResult.singleAssetGuessedCount > 0 ? `(1대 계약 추정 ${bandAnalysisResult.singleAssetGuessedCount}건)` : undefined },
+                    { label: '현장 조치완료', value: `${bandAnalysisResult.completedCount.toLocaleString()}건`, color: '#16a34a' },
+                    { label: '익일방문 / 안내', value: `${(bandAnalysisResult.revisitCount + bandAnalysisResult.guidedCount).toLocaleString()}건`, color: '#d97706' },
+                  ].map(({ label, value, color, sub }) => (
                     <div key={label} style={{ backgroundColor: '#f8fafc', padding: '10px 14px', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
                       <div style={{ fontSize: '11px', color: '#64748b', whiteSpace: 'nowrap' }}>{label}</div>
                       <div style={{ fontSize: '18px', fontWeight: 700, color, marginTop: '2px' }}>{value}</div>
+                      {sub && <div style={{ fontSize: '10px', color: '#7c3aed', marginTop: '1px' }}>{sub}</div>}
                     </div>
                   ))}
                 </div>
 
+                {/* 검색 및 필터 컨트롤 바 */}
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap', backgroundColor: '#f8fafc', padding: '8px 12px', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flex: 1, minWidth: '200px' }}>
+                    <Search size={14} color="#64748b" />
+                    <input
+                      type="text"
+                      placeholder="현장명, 고객사, 장비번호, 고장내용, 작성자 검색..."
+                      value={bandSearchTerm}
+                      onChange={e => setBandSearchTerm(e.target.value)}
+                      style={{ width: '100%', padding: '6px 10px', border: '1px solid #cbd5e1', borderRadius: '4px', fontSize: '12px' }}
+                    />
+                  </div>
+
+                  <div style={{ display: 'flex', gap: '4px' }}>
+                    {(['ALL', 'COMPLETED', 'REVISIT', 'GUIDED'] as const).map(st => (
+                      <button
+                        key={st}
+                        onClick={() => setBandStatusFilter(st)}
+                        style={{
+                          padding: '4px 8px', fontSize: '11px', fontWeight: 600, borderRadius: '4px', border: 'none', cursor: 'pointer',
+                          backgroundColor: bandStatusFilter === st ? '#1e293b' : '#e2e8f0',
+                          color: bandStatusFilter === st ? '#ffffff' : '#475569'
+                        }}
+                      >
+                        {st === 'ALL' ? '전체 상태' : st === 'COMPLETED' ? '조치완료' : st === 'REVISIT' ? '익일방문' : '안내종결'}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div style={{ display: 'flex', gap: '4px' }}>
+                    {(['ALL', 'MATCHED', 'GUESSED', 'UNMATCHED'] as const).map(cf => (
+                      <button
+                        key={cf}
+                        onClick={() => setBandContractFilter(cf)}
+                        style={{
+                          padding: '4px 8px', fontSize: '11px', fontWeight: 600, borderRadius: '4px', border: 'none', cursor: 'pointer',
+                          backgroundColor: bandContractFilter === cf ? '#7c3aed' : '#e2e8f0',
+                          color: bandContractFilter === cf ? '#ffffff' : '#475569'
+                        }}
+                      >
+                        {cf === 'ALL' ? '계약 전체' : cf === 'MATCHED' ? '계약 매핑' : cf === 'GUESSED' ? '1대 추정' : '미매핑'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 고밀도 대사 테이블 */}
+                {(() => {
+                  const filteredRecords = bandAnalysisResult.records.filter(r => {
+                    const matchesSearch = !bandSearchTerm || 
+                      r.site.includes(bandSearchTerm) || 
+                      r.customer.includes(bandSearchTerm) || 
+                      r.assetNo.includes(bandSearchTerm) || 
+                      r.issue.includes(bandSearchTerm) || 
+                      r.author.includes(bandSearchTerm) ||
+                      (r.matchedCustomerName || '').includes(bandSearchTerm);
+                    
+                    const matchesStatus = bandStatusFilter === 'ALL' || r.status === bandStatusFilter;
+                    const matchesContract = 
+                      bandContractFilter === 'ALL' ? true :
+                      bandContractFilter === 'MATCHED' ? Boolean(r.matchedContractId) :
+                      bandContractFilter === 'GUESSED' ? r.isSingleAssetGuessed :
+                      !r.matchedContractId;
+
+                    return matchesSearch && matchesStatus && matchesContract;
+                  });
+
+                  return (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '12px', color: '#64748b' }}>
+                        <span>필터링된 건수: <strong>{filteredRecords.length.toLocaleString()}건</strong> / 총 {bandAnalysisResult.totalCount.toLocaleString()}건</span>
+                        <span style={{ fontSize: '11px' }}>※ 상위 50건 표시 중 (전체 {bandAnalysisResult.totalCount.toLocaleString()}건 일괄 적재 대상)</span>
+                      </div>
+
+                      <div style={{ border: '1px solid #e2e8f0', borderRadius: '6px', overflowX: 'auto', maxHeight: '360px', overflowY: 'auto' }}>
+                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', whiteSpace: 'nowrap' }}>
+                          <thead style={{ position: 'sticky', top: 0, backgroundColor: '#f1f5f9', zIndex: 1 }}>
+                            <tr style={{ borderBottom: '1px solid #cbd5e1', color: '#475569', textAlign: 'left' }}>
+                              <th style={{ padding: '8px 10px' }}>No</th>
+                              <th style={{ padding: '8px 10px' }}>접수일자</th>
+                              <th style={{ padding: '8px 10px' }}>작성자</th>
+                              <th style={{ padding: '8px 10px' }}>고객사 / 현장</th>
+                              <th style={{ padding: '8px 10px' }}>관리번호 (모델)</th>
+                              <th style={{ padding: '8px 10px' }}>고장 내용</th>
+                              <th style={{ padding: '8px 10px' }}>조치 내용</th>
+                              <th style={{ padding: '8px 10px' }}>소속 계약 매핑</th>
+                              <th style={{ padding: '8px 10px', textAlign: 'center' }}>상태</th>
+                              <th style={{ padding: '8px 10px', textAlign: 'center' }}>원문</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {filteredRecords.slice(0, 50).map(r => (
+                              <tr key={r.idx} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                                <td style={{ padding: '6px 10px', color: '#64748b' }}>{r.idx}</td>
+                                <td style={{ padding: '6px 10px', color: '#475569' }}>{r.date}</td>
+                                <td style={{ padding: '6px 10px', fontWeight: 600 }}>{r.author || '-'}</td>
+                                <td style={{ padding: '6px 10px' }}>
+                                  <div style={{ fontWeight: 600, color: '#1e293b' }}>{r.matchedCustomerName || r.customer}</div>
+                                  <div style={{ fontSize: '11px', color: '#64748b' }}>{r.matchedSiteName || r.site}</div>
+                                </td>
+                                <td style={{ padding: '6px 10px' }}>
+                                  <span style={{ fontWeight: 700, color: r.matchedAssetId ? '#2563eb' : '#475569' }}>
+                                    {r.matchedAssetNo || r.assetNo}
+                                  </span>
+                                  {r.isSingleAssetGuessed && (
+                                    <span className="badge badge-warning" style={{ fontSize: '9px', marginLeft: '4px' }}>1대추정</span>
+                                  )}
+                                  <span style={{ fontSize: '11px', color: '#64748b', marginLeft: '4px' }}>({r.matchedModelName})</span>
+                                </td>
+                                <td style={{ padding: '6px 10px', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                  {r.issue}
+                                </td>
+                                <td style={{ padding: '6px 10px', color: '#059669', fontWeight: 600 }}>
+                                  {r.actionTaken}
+                                </td>
+                                <td style={{ padding: '6px 10px' }}>
+                                  {r.matchedContractNo ? (
+                                    <span className="badge badge-info" style={{ fontSize: '10px' }}>{r.matchedContractNo}</span>
+                                  ) : (
+                                    <span style={{ color: '#94a3b8', fontSize: '11px' }}>- (일반이력)</span>
+                                  )}
+                                </td>
+                                <td style={{ padding: '6px 10px', textAlign: 'center' }}>
+                                  <span className={`badge ${
+                                    r.status === 'COMPLETED' ? 'badge-success' :
+                                    r.status === 'REVISIT' ? 'badge-warning' :
+                                    r.status === 'GUIDED' ? 'badge-info' : 'badge-secondary'
+                                  }`} style={{ fontSize: '10px' }}>
+                                    {r.status === 'COMPLETED' ? '조치완료' : r.status === 'REVISIT' ? '익일방문' : '안내종결'}
+                                  </span>
+                                </td>
+                                <td style={{ padding: '6px 10px', textAlign: 'center' }}>
+                                  <button
+                                    onClick={() => setSelectedAsRecord(r)}
+                                    style={{ padding: '2px 6px', fontSize: '10.5px', borderRadius: '4px', border: '1px solid #cbd5e1', backgroundColor: '#ffffff', cursor: 'pointer' }}
+                                  >
+                                    상세
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  );
+                })()}
+
                 {/* 진행 메시지 */}
                 {bandProgressMsg && (
-                  <div style={{ fontSize: '13px', color: '#16a34a', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <RefreshCw size={13} className="animate-spin" />
-                    {bandProgressMsg}
+                  <div style={{ fontSize: '13px', color: '#16a34a', display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: '#f0fdf4', padding: '8px 12px', borderRadius: '6px', border: '1px solid #bbf7d0' }}>
+                    <RefreshCw size={14} className="animate-spin" />
+                    <strong>{bandProgressMsg}</strong>
                   </div>
                 )}
 
-                {/* 적재 버튼 */}
-                <button
-                  onClick={handleBandIngest}
-                  disabled={isBandIngesting}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'center',
-                    padding: '10px 20px', backgroundColor: isBandIngesting ? '#94a3b8' : '#16a34a',
-                    color: 'white', border: 'none', borderRadius: '6px',
-                    cursor: isBandIngesting ? 'not-allowed' : 'pointer',
-                    fontSize: '14px', fontWeight: 600, whiteSpace: 'nowrap', alignSelf: 'flex-start'
-                  }}
-                >
-                  {isBandIngesting
-                    ? <><RefreshCw size={15} className="animate-spin" /> 밴드 AS 이력 적재 중...</>
-                    : <><Upload size={15} /> 밴드 AS 이력 일괄 적재 시작</>
-                  }
-                </button>
+                {/* 우하단 종결 버튼 (Gutenberg Z-Pattern) */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '6px', flexWrap: 'wrap', gap: '8px' }}>
+                  <div style={{ fontSize: '12px', color: '#64748b' }}>
+                    💡 총 <strong>{bandAnalysisResult.totalCount.toLocaleString()}건</strong>의 과거 AS 이력을 정비 마스터(`repairs`) 및 자산/계약 타임라인에 무누락 영구 저장합니다.
+                  </div>
+
+                  <button
+                    onClick={handleBandIngest}
+                    disabled={isBandIngesting}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: '8px',
+                      padding: '10px 24px', backgroundColor: isBandIngesting ? '#94a3b8' : '#16a34a',
+                      color: 'white', border: 'none', borderRadius: '6px',
+                      cursor: isBandIngesting ? 'not-allowed' : 'pointer',
+                      fontSize: '14px', fontWeight: 700, whiteSpace: 'nowrap'
+                    }}
+                  >
+                    {isBandIngesting
+                      ? <><RefreshCw size={15} className="animate-spin" /> 밴드 AS 이력 일괄 적재 중...</>
+                      : <><Upload size={15} /> 🚀 과거 AS 이력 전수 정비 마스터(`repairs`) DB 일괄 적재 실행</>
+                    }
+                  </button>
+                </div>
               </div>
             )}
           </div>
@@ -1524,6 +1681,85 @@ export const InitialDbUploader: React.FC = () => {
                 </>
               )}
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* 밴드 AS 단건 상세 원문 모달 */}
+      {selectedAsRecord && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: '20px' }}>
+          <div style={{ backgroundColor: '#ffffff', borderRadius: '8px', maxWidth: '600px', width: '100%', padding: '24px', boxShadow: '0 10px 25px rgba(0,0,0,0.2)', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #e2e8f0', paddingBottom: '12px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Wrench size={18} color="#16a34a" />
+                <span style={{ fontSize: '16px', fontWeight: 700, color: '#1e293b' }}>
+                  AS 게시글 상세 내역 [No. {selectedAsRecord.idx}]
+                </span>
+              </div>
+              <button
+                onClick={() => setSelectedAsRecord(null)}
+                style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#64748b' }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', fontSize: '13px' }}>
+              <div>
+                <span style={{ color: '#64748b' }}>접수일자:</span> <strong>{selectedAsRecord.date}</strong>
+              </div>
+              <div>
+                <span style={{ color: '#64748b' }}>작성자/정비사:</span> <strong>{selectedAsRecord.author}</strong> ({selectedAsRecord.mechanicName})
+              </div>
+              <div>
+                <span style={{ color: '#64748b' }}>고객사:</span> <strong>{selectedAsRecord.matchedCustomerName || selectedAsRecord.customer}</strong>
+              </div>
+              <div>
+                <span style={{ color: '#64748b' }}>현장명:</span> <strong>{selectedAsRecord.matchedSiteName || selectedAsRecord.site}</strong>
+              </div>
+              <div>
+                <span style={{ color: '#64748b' }}>관리번호:</span> <strong style={{ color: '#2563eb' }}>{selectedAsRecord.matchedAssetNo || selectedAsRecord.assetNo}</strong> ({selectedAsRecord.matchedModelName})
+                {selectedAsRecord.isSingleAssetGuessed && (
+                  <span className="badge badge-warning" style={{ fontSize: '10px', marginLeft: '6px' }}>1대계약 자동추정</span>
+                )}
+              </div>
+              <div>
+                <span style={{ color: '#64748b' }}>소속 계약:</span> <strong>{selectedAsRecord.matchedContractNo || '미매핑(일반이력)'}</strong>
+              </div>
+              <div style={{ gridColumn: 'span 2' }}>
+                <span style={{ color: '#64748b' }}>장비 세부위치:</span> {selectedAsRecord.location || '미상'}
+              </div>
+              <div style={{ gridColumn: 'span 2' }}>
+                <span style={{ color: '#64748b' }}>현장 접수자 연락처:</span> {selectedAsRecord.contact || '미상'}
+              </div>
+              <div style={{ gridColumn: 'span 2' }}>
+                <span style={{ color: '#64748b' }}>고장 내용:</span>
+                <div style={{ marginTop: '4px', padding: '8px 12px', backgroundColor: '#fef2f2', borderRadius: '4px', border: '1px solid #fecaca', color: '#991b1b', fontWeight: 600 }}>
+                  {selectedAsRecord.issue}
+                </div>
+              </div>
+              <div style={{ gridColumn: 'span 2' }}>
+                <span style={{ color: '#64748b' }}>조치 내용:</span>
+                <div style={{ marginTop: '4px', padding: '8px 12px', backgroundColor: '#f0fdf4', borderRadius: '4px', border: '1px solid #bbf7d0', color: '#166534', fontWeight: 600 }}>
+                  {selectedAsRecord.actionTaken}
+                </div>
+              </div>
+              <div style={{ gridColumn: 'span 2' }}>
+                <span style={{ color: '#64748b' }}>밴드 원문 텍스트:</span>
+                <div style={{ marginTop: '4px', padding: '10px', backgroundColor: '#f8fafc', borderRadius: '4px', border: '1px solid #e2e8f0', fontSize: '12px', color: '#334155', maxHeight: '120px', overflowY: 'auto', whiteSpace: 'pre-wrap' }}>
+                  {selectedAsRecord.raw}
+                </div>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', borderTop: '1px solid #e2e8f0', paddingTop: '12px' }}>
+              <button
+                onClick={() => setSelectedAsRecord(null)}
+                style={{ padding: '8px 18px', backgroundColor: '#1e293b', color: '#ffffff', border: 'none', borderRadius: '6px', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}
+              >
+                닫기
+              </button>
+            </div>
           </div>
         </div>
       )}

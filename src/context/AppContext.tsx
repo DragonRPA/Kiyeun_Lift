@@ -174,6 +174,7 @@ interface AppContextType {
   }) => Promise<void>;
   createRevisitAsTicket: (parentTicketId: string, revisitDate: string, revisitReason: string, mechanicId?: string) => Promise<FieldAsTicket>;
   importBandAsHistory: (records: any[]) => Promise<number>;
+  logFieldAsTimelineEvent: (ticketId: string, eventType: 'CALL_MADE' | 'TRANSIT_START' | 'ARRIVED' | 'COMPLETED', detail?: string) => Promise<void>;
   
   // Contract Mutators
   createContract: (contractData: Omit<Contract, 'id' | 'createdAt' | 'updatedAt' | 'contractNo'>, assetsList: { assetId?: string; expectedModel?: string; monthlyRentalFee: number; dailyRentalFee: number }[]) => Promise<void>;
@@ -1872,6 +1873,61 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } catch (err: any) {
       showErrorModal(`⚠️ AS 상태 변경 실패:\n${err?.message || err}`);
       throw err;
+    }
+  };
+
+  const logFieldAsTimelineEvent = async (
+    ticketId: string,
+    eventType: 'CALL_MADE' | 'TRANSIT_START' | 'ARRIVED' | 'COMPLETED',
+    detail?: string
+  ): Promise<void> => {
+    try {
+      const ticket = db.repairs.find(t => t.id === ticketId);
+      if (!ticket) return;
+
+      const now = new Date();
+      const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+      const mechanicName = currentUser?.name || ticket.mechanicName || '담당기사';
+
+      let label = '';
+      let newStatus = ticket.status;
+
+      if (eventType === 'CALL_MADE') {
+        label = `📞 [${timeStr}] ${mechanicName} 현장 통화 발신 (${detail || ticket.reporterContact || ''})`;
+      } else if (eventType === 'TRANSIT_START') {
+        label = `🚗 [${timeStr}] ${mechanicName} ${detail || '내비 길안내'} (현장 이동 시작)`;
+        if (ticket.status === 'REQUESTED' || ticket.status === 'SCHEDULED') {
+          newStatus = 'IN_PROGRESS';
+        }
+      } else if (eventType === 'ARRIVED') {
+        label = `📍 [${timeStr}] ${mechanicName} 현장 도착 및 점검 착수`;
+        newStatus = 'IN_PROGRESS';
+      } else if (eventType === 'COMPLETED') {
+        label = `✅ [${timeStr}] ${mechanicName} 현장 조치 완료 (${detail || ''})`;
+      }
+
+      const eventItem = {
+        id: `EVT-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+        eventType,
+        label,
+        mechanicId: currentUser?.id || ticket.assignedMechanicId || '',
+        mechanicName,
+        detail,
+        timestamp: now.toISOString()
+      };
+
+      const existingEvents = ticket.timelineEvents || [];
+      const updatedEvents = [...existingEvents, eventItem];
+
+      db.updateRow<Repair>('repairs', ticketId, {
+        status: newStatus,
+        timelineEvents: updatedEvents,
+        updatedAt: now.toISOString()
+      });
+      await db.awaitPendingWrites();
+      refreshAllData();
+    } catch (err: any) {
+      console.warn('Timeline log error:', err);
     }
   };
 
@@ -5747,6 +5803,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       completeFieldAsTicket,
       createRevisitAsTicket,
       importBandAsHistory,
+      logFieldAsTimelineEvent,
       saveTransportDataOnFly,
       generateMonthlyPurchaseSettlements, confirmPurchaseSettlement, recordPurchaseSettlementPayment, savePurchaseSettlement, convertReconciledDeliveriesToSettlement,
       cancelMonthlyDepreciation, linkRepairToBilling, unlinkRepairFromBilling,

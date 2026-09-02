@@ -1,13 +1,15 @@
 // src/pages/FieldAsManagement.tsx
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { 
   Wrench, Plus, CheckCircle2, Clock, Calendar, AlertTriangle, Search, Download, 
   User, Building2, MapPin, Phone, Tag, Camera, Check, RefreshCw, X, ArrowRight,
-  Truck, ShieldAlert, FileText, ChevronRight, Layers, MessageSquare, ExternalLink, ArrowDownLeft
+  Truck, ShieldAlert, FileText, ChevronRight, Layers, MessageSquare, ExternalLink, ArrowDownLeft,
+  PhoneCall, Navigation, Smartphone, Monitor, Minus
 } from 'lucide-react';
 import { FieldAsTicket, FieldAsPartUsed, FieldAsCollectedPart } from '../services/db';
 import { exportToExcel } from '../services/excel';
+import { compressImageFile } from '../utils/imageCompressor';
 
 // 자주 쓰이는 조치 내용 프리셋 태그 (5,518건 빅데이터 기반)
 const QUICK_ACTION_TAGS = [
@@ -41,7 +43,7 @@ const CATEGORIES = [
 export const FieldAsManagement: React.FC = () => {
   const {
     fieldAsTickets, createFieldAsTicket, updateFieldAsTicketStatus, completeFieldAsTicket,
-    createRevisitAsTicket, importBandAsHistory,
+    createRevisitAsTicket, importBandAsHistory, logFieldAsTimelineEvent,
     users, customers, sites, assets, consumables, mechanicConsumableStocks,
     transferConsumableToMechanic, currentUser, hasPermission, showErrorModal, setActiveTab
   } = useApp();
@@ -119,6 +121,70 @@ export const FieldAsManagement: React.FC = () => {
   // ─── [밴드 5,518건 임포트 진행 상태] ───
   const [isImporting, setIsImporting] = useState(false);
   const [importProgressText, setImportProgressText] = useState('');
+
+  // ─── [모바일 터치 최적화 상태 (갤럭시 S24 대응)] ───
+  const [isMobile, setIsMobile] = useState<boolean>(typeof window !== 'undefined' ? window.innerWidth < 850 : false);
+  const [mobileForceView, setMobileForceView] = useState<'AUTO' | 'MOBILE' | 'DESKTOP'>('AUTO');
+  const [showMobileActionSheet, setShowMobileActionSheet] = useState<boolean>(false);
+  const [mobileActiveTab, setMobileActiveTab] = useState<'TICKETS' | 'VAN_STOCK' | 'HISTORY'>('TICKETS');
+
+  // ─── [기사별 선호 내비게이션 (T맵 / 카카오내비 / 네이버지도) 설정] ───
+  const [preferredNavApp, setPreferredNavApp] = useState<'TMAP' | 'KAKAO' | 'NAVER' | 'ASK'>(() => {
+    return (localStorage.getItem('preferred_nav_app') as any) || 'ASK';
+  });
+  const [showNavSelectorTicket, setShowNavSelectorTicket] = useState<FieldAsTicket | null>(null);
+  const [rememberDefaultNav, setRememberDefaultNav] = useState(true);
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 850);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  const isEffectiveMobile = mobileForceView === 'MOBILE' ? true : (mobileForceView === 'DESKTOP' ? false : isMobile);
+
+  // ─── [내비게이션 실행 및 타임라인 자동 로깅 핸들러] ───
+  const handleLaunchNav = async (ticket: FieldAsTicket, app: 'TMAP' | 'KAKAO' | 'NAVER') => {
+    const encodedSite = encodeURIComponent(ticket.siteName);
+    const navLabel = app === 'TMAP' ? 'T맵' : (app === 'KAKAO' ? '카카오내비' : '네이버지도');
+    
+    // 1. 타임라인 이벤트 무자각 자동 저장
+    await logFieldAsTimelineEvent(ticket.id, 'TRANSIT_START', `${navLabel} 실행`);
+
+    if (rememberDefaultNav) {
+      setPreferredNavApp(app);
+      localStorage.setItem('preferred_nav_app', app);
+    }
+
+    setShowNavSelectorTicket(null);
+
+    // 2. 실제 앱 딥링크 호출
+    if (app === 'TMAP') {
+      window.location.href = `tmap://search?name=${encodedSite}`;
+    } else if (app === 'KAKAO') {
+      window.location.href = `https://map.kakao.com/link/search/${encodedSite}`;
+    } else if (app === 'NAVER') {
+      window.location.href = `nmap://search?query=${encodedSite}&appname=com.kiyuen.lift`;
+    }
+  };
+
+  const handleNavButtonClick = (ticket: FieldAsTicket) => {
+    if (preferredNavApp !== 'ASK') {
+      handleLaunchNav(ticket, preferredNavApp);
+    } else {
+      setShowNavSelectorTicket(ticket);
+    }
+  };
+
+  // ─── [전화걸기 및 통화 타임라인 자동 로깅 핸들러] ───
+  const handlePhoneCallClick = async (ticket: FieldAsTicket) => {
+    if (ticket.reporterContact) {
+      await logFieldAsTimelineEvent(ticket.id, 'CALL_MADE', ticket.reporterContact);
+      window.location.href = `tel:${ticket.reporterContact.replace(/[^0-9]/g, '')}`;
+    }
+  };
 
   // 정비 기사 목록
   const mechanics = users.filter(u => u.role === 'MECHANIC' || u.role === 'ADMIN' || u.role === 'MANAGER');
@@ -248,6 +314,67 @@ export const FieldAsManagement: React.FC = () => {
 
   const handleRemovePartUsed = (idx: number) => {
     setActionPartsUsed(prev => prev.filter((_, i) => i !== idx));
+  };
+
+  // ─── [모바일 전용 대형 스텝퍼 부품 증감 핸들러] ───
+  const handleStepPartQty = (consumableId: string, delta: number) => {
+    const item = consumables.find(c => c.id === consumableId);
+    if (!item) return;
+    const vehicleStock = getMechanicVehicleStock(actionAssignMechanicId, consumableId);
+
+    setActionPartsUsed(prev => {
+      const existingIdx = prev.findIndex(p => p.consumableId === consumableId);
+      if (existingIdx !== -1) {
+        const currentQty = prev[existingIdx].quantity;
+        const newQty = currentQty + delta;
+        if (newQty <= 0) {
+          return prev.filter((_, i) => i !== existingIdx);
+        }
+        if (newQty > vehicleStock) {
+          showErrorModal(`⚠️ 차량 적재 잔여량(${vehicleStock}개)을 초과할 수 없습니다.`);
+          return prev;
+        }
+        return prev.map((p, i) => i === existingIdx ? { ...p, quantity: newQty } : p);
+      } else {
+        if (delta <= 0) return prev;
+        if (delta > vehicleStock) {
+          showErrorModal(`⚠️ 차량 적재 잔여량(${vehicleStock}개)을 초과할 수 없습니다.`);
+          return prev;
+        }
+        return [...prev, {
+          consumableId: item.id,
+          modelName: item.modelName,
+          quantity: delta,
+          unitPrice: item.unitPrice
+        }];
+      }
+    });
+  };
+
+  const getSelectedPartQty = (consumableId: string) => {
+    const p = actionPartsUsed.find(item => item.consumableId === consumableId);
+    return p ? p.quantity : 0;
+  };
+
+  // ─── [모바일 전용 다이렉트 카메라 촬영 핸들러] ───
+  const handleMobilePhotoCapture = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const compressedDataUrl = await compressImageFile(file, 1200, 1200, 0.7);
+      setActionAfterImage(compressedDataUrl);
+    } catch (err: any) {
+      showErrorModal(`사진 처리 오류: ${err.message || err}`);
+    }
+  };
+
+  // ─── [모바일 전용 빈출 조치 태그 1초 원터치 탭] ───
+  const handleTagClick = (tag: string) => {
+    if (!actionTakenText.trim()) {
+      setActionTakenText(tag);
+    } else if (!actionTakenText.includes(tag)) {
+      setActionTakenText(`${actionTakenText}, ${tag}`);
+    }
   };
 
   // 수거 부품 추가 핸들러
@@ -555,9 +682,405 @@ export const FieldAsManagement: React.FC = () => {
             <Plus size={16} />
             신규 AS 직접 등록
           </button>
+
+          {/* 모바일 / PC 뷰 전환 토글 */}
+          <button
+            onClick={() => setMobileForceView(prev => prev === 'MOBILE' ? 'DESKTOP' : 'MOBILE')}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '7px 12px',
+              backgroundColor: isEffectiveMobile ? '#fef3c7' : '#f1f5f9',
+              border: isEffectiveMobile ? '1px solid #f59e0b' : '1px solid #cbd5e1',
+              borderRadius: '6px',
+              fontSize: '12px',
+              fontWeight: 700,
+              color: isEffectiveMobile ? '#b45309' : '#475569',
+              cursor: 'pointer',
+              whiteSpace: 'nowrap'
+            }}
+            title="스마트폰 터치 뷰 및 PC 대화면 뷰 전환"
+          >
+            {isEffectiveMobile ? <Smartphone size={15} color="#d97706" /> : <Monitor size={15} />}
+            {isEffectiveMobile ? '모바일 전용 뷰' : 'PC 대화면 뷰'}
+          </button>
         </div>
       </div>
 
+      {/* ──────────────────────────────────────────────────────────────────────────
+          📱 모바일 전용 뷰 (갤럭시 S24 최적화: 393px 1열 세로 스택 & 바텀시트)
+      ────────────────────────────────────────────────────────────────────────── */}
+      {isEffectiveMobile ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', width: '100%', maxWidth: '480px', margin: '0 auto' }}>
+          {/* 모바일 상단 세그먼트 탭 */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', backgroundColor: '#e2e8f0', padding: '4px', borderRadius: '10px', gap: '4px' }}>
+            <button
+              onClick={() => setMobileActiveTab('TICKETS')}
+              style={{
+                padding: '10px 4px',
+                borderRadius: '8px',
+                fontSize: '13px',
+                fontWeight: 700,
+                border: 'none',
+                cursor: 'pointer',
+                backgroundColor: mobileActiveTab === 'TICKETS' ? '#2563eb' : 'transparent',
+                color: mobileActiveTab === 'TICKETS' ? '#ffffff' : '#475569',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '4px',
+                whiteSpace: 'nowrap'
+              }}
+            >
+              🚨 출동 ({studioFilteredTickets.filter(t => t.status !== 'COMPLETED').length})
+            </button>
+            <button
+              onClick={() => setMobileActiveTab('VAN_STOCK')}
+              style={{
+                padding: '10px 4px',
+                borderRadius: '8px',
+                fontSize: '13px',
+                fontWeight: 700,
+                border: 'none',
+                cursor: 'pointer',
+                backgroundColor: mobileActiveTab === 'VAN_STOCK' ? '#2563eb' : 'transparent',
+                color: mobileActiveTab === 'VAN_STOCK' ? '#ffffff' : '#475569',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '4px',
+                whiteSpace: 'nowrap'
+              }}
+            >
+              🚐 내차부품
+            </button>
+            <button
+              onClick={() => setMobileActiveTab('HISTORY')}
+              style={{
+                padding: '10px 4px',
+                borderRadius: '8px',
+                fontSize: '13px',
+                fontWeight: 700,
+                border: 'none',
+                cursor: 'pointer',
+                backgroundColor: mobileActiveTab === 'HISTORY' ? '#2563eb' : 'transparent',
+                color: mobileActiveTab === 'HISTORY' ? '#ffffff' : '#475569',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '4px',
+                whiteSpace: 'nowrap'
+              }}
+            >
+              📋 완료내역
+            </button>
+          </div>
+
+          {/* 기본 내비 앱 설정 및 상태 뱃지 */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', backgroundColor: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+            <span style={{ fontSize: '12px', color: '#64748b' }}>
+              🚗 내 기본 내비: <strong style={{ color: '#2563eb' }}>{preferredNavApp === 'TMAP' ? 'T맵' : (preferredNavApp === 'KAKAO' ? '카카오내비' : (preferredNavApp === 'NAVER' ? '네이버지도' : '매번 선택'))}</strong>
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                const nextApp = preferredNavApp === 'TMAP' ? 'KAKAO' : (preferredNavApp === 'KAKAO' ? 'NAVER' : (preferredNavApp === 'NAVER' ? 'ASK' : 'TMAP'));
+                setPreferredNavApp(nextApp);
+                localStorage.setItem('preferred_nav_app', nextApp);
+              }}
+              style={{
+                padding: '3px 8px',
+                borderRadius: '4px',
+                border: '1px solid #cbd5e1',
+                backgroundColor: '#ffffff',
+                fontSize: '11px',
+                fontWeight: 700,
+                color: '#334155',
+                cursor: 'pointer'
+              }}
+            >
+              내비 변경 ⚙️
+            </button>
+          </div>
+
+          {/* 1. 모바일 출동 티켓 피드 */}
+          {mobileActiveTab === 'TICKETS' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              {/* 검색창 */}
+              <div style={{ position: 'relative' }}>
+                <Search size={16} color="#94a3b8" style={{ position: 'absolute', left: '12px', top: '11px' }} />
+                <input
+                  type="text"
+                  value={studioSearchTerm}
+                  onChange={(e) => setStudioSearchTerm(e.target.value)}
+                  placeholder="현장, 장비번호, 고장내용 검색..."
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px 10px 38px',
+                    borderRadius: '8px',
+                    border: '1px solid #cbd5e1',
+                    fontSize: '14px',
+                    boxSizing: 'border-box'
+                  }}
+                />
+              </div>
+
+              {/* 티켓 카드 리스트 */}
+              {studioFilteredTickets.filter(t => t.status !== 'COMPLETED').length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '60px 20px', backgroundColor: '#ffffff', borderRadius: '10px', border: '1px solid #e2e8f0', color: '#64748b' }}>
+                  <CheckCircle2 size={42} color="#16a34a" style={{ margin: '0 auto 10px auto' }} />
+                  <p style={{ margin: 0, fontSize: '15px', fontWeight: 700, color: '#1e293b' }}>대기 중인 출동 건이 없습니다!</p>
+                  <p style={{ margin: '4px 0 0 0', fontSize: '12px' }}>모든 현장 AS가 완료 처리되었습니다.</p>
+                </div>
+              ) : (
+                studioFilteredTickets.filter(t => t.status !== 'COMPLETED').map(t => {
+                  const isUrgent = t.priority === 'URGENT';
+                  const isRevisit = t.status === 'REVISIT';
+
+                  return (
+                    <div
+                      key={t.id}
+                      style={{
+                        backgroundColor: '#ffffff',
+                        border: isUrgent ? '2px solid #ef4444' : '1px solid #cbd5e1',
+                        borderRadius: '12px',
+                        padding: '14px',
+                        boxShadow: '0 2px 6px rgba(0,0,0,0.06)',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '10px'
+                      }}
+                    >
+                      {/* 헤더: 상태 + 장비번호 + 일자 */}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <span style={{
+                            padding: '3px 8px',
+                            borderRadius: '6px',
+                            fontSize: '12px',
+                            fontWeight: 700,
+                            backgroundColor: isRevisit ? '#fef3c7' : (isUrgent ? '#fee2e2' : '#dbeafe'),
+                            color: isRevisit ? '#92400e' : (isUrgent ? '#991b1b' : '#1e40af')
+                          }}>
+                            {isRevisit ? '🔄 재방문' : (isUrgent ? '🚨 긴급' : '⚡ 출동대기')}
+                          </span>
+                          <span style={{ fontSize: '11px', color: '#94a3b8' }}>{t.ticketNo}</span>
+                        </div>
+                        <span style={{ fontSize: '12px', color: '#64748b' }}>{t.requestDate}</span>
+                      </div>
+
+                      {/* 현장명 & 장비번호 */}
+                      <div>
+                        <div style={{ fontSize: '17px', fontWeight: 800, color: '#0f172a', lineHeight: '1.3' }}>
+                          {t.siteName}
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px', fontSize: '13px' }}>
+                          <span style={{ fontWeight: 700, color: '#2563eb', backgroundColor: '#eff6ff', padding: '2px 8px', borderRadius: '4px' }}>
+                            장비: {t.assetNo || '현장확인'}
+                          </span>
+                          <span style={{ color: '#475569' }}>🏢 {t.customerName}</span>
+                        </div>
+                        {t.locationDetail && (
+                          <div style={{ fontSize: '12px', color: '#64748b', marginTop: '3px' }}>
+                            📍 위치: {t.locationDetail}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* 고장 증상 박스 */}
+                      <div style={{ backgroundColor: '#f8fafc', padding: '10px 12px', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '13px', color: '#1e293b', lineHeight: '1.4' }}>
+                        <strong style={{ color: '#dc2626' }}>[{t.issueCategory}]</strong> {t.issueDescription}
+                      </div>
+
+                      {/* 전화걸기 & 길안내 딥링크 바 (타임라인 자동 로깅 연동) */}
+                      <div style={{ display: 'grid', gridTemplateColumns: t.reporterContact ? '1fr 1fr' : '1fr', gap: '8px' }}>
+                        {t.reporterContact && (
+                          <button
+                            type="button"
+                            onClick={() => handlePhoneCallClick(t)}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              gap: '6px',
+                              padding: '10px',
+                              borderRadius: '8px',
+                              backgroundColor: '#f0fdf4',
+                              border: '1px solid #bbf7d0',
+                              color: '#166534',
+                              fontSize: '13px',
+                              fontWeight: 700,
+                              cursor: 'pointer'
+                            }}
+                          >
+                            <PhoneCall size={16} />
+                            전화걸기
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => handleNavButtonClick(t)}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '6px',
+                            padding: '10px',
+                            borderRadius: '8px',
+                            backgroundColor: '#eff6ff',
+                            border: '1px solid #bfdbfe',
+                            color: '#1d4ed8',
+                            fontSize: '13px',
+                            fontWeight: 700,
+                            cursor: 'pointer'
+                          }}
+                        >
+                          <Navigation size={16} />
+                          {preferredNavApp === 'TMAP' ? 'T맵 길안내' : (preferredNavApp === 'KAKAO' ? '카카오내비' : (preferredNavApp === 'NAVER' ? '네이버지도' : '내비 길안내'))}
+                        </button>
+                      </div>
+
+                      {/* 최근 타임라인 활동 이력 (있을 경우 표출) */}
+                      {t.timelineEvents && t.timelineEvents.length > 0 && (
+                        <div style={{ backgroundColor: '#f1f5f9', padding: '6px 10px', borderRadius: '6px', fontSize: '11.5px', color: '#475569', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                          <span style={{ fontWeight: 700, color: '#334155' }}>최근 진행 이력:</span>
+                          {t.timelineEvents.slice(-2).map(ev => (
+                            <div key={ev.id} style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                              • {ev.label}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* 메인 48px 조치 액션 버튼 */}
+                      <button
+                        onClick={() => {
+                          handleSelectTicket(t);
+                          setShowMobileActionSheet(true);
+                        }}
+                        style={{
+                          width: '100%',
+                          height: '48px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '8px',
+                          backgroundColor: '#2563eb',
+                          color: '#ffffff',
+                          border: 'none',
+                          borderRadius: '8px',
+                          fontSize: '15px',
+                          fontWeight: 800,
+                          cursor: 'pointer',
+                          boxShadow: '0 2px 4px rgba(37,99,235,0.2)'
+                        }}
+                      >
+                        <Wrench size={18} />
+                        ⚡ 지금 현장 조치 & 부품 투입 ➔
+                      </button>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          )}
+
+          {/* 2. 모바일 내차 부품고 탭 */}
+          {mobileActiveTab === 'VAN_STOCK' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div style={{ backgroundColor: '#f0fdf4', padding: '12px 14px', borderRadius: '8px', border: '1px solid #bbf7d0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <div style={{ fontSize: '11px', color: '#166534', fontWeight: 600 }}>담당 차량 보관소</div>
+                  <div style={{ fontSize: '16px', fontWeight: 800, color: '#14532d' }}>
+                    🚐 {users.find(u => u.id === actionAssignMechanicId)?.name || currentUser?.name || '내 차량'}
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowTransferModal(true)}
+                  style={{
+                    padding: '8px 12px',
+                    borderRadius: '6px',
+                    backgroundColor: '#16a34a',
+                    color: '#ffffff',
+                    border: 'none',
+                    fontSize: '12px',
+                    fontWeight: 700,
+                    cursor: 'pointer'
+                  }}
+                >
+                  + 주기장 불출요청
+                </button>
+              </div>
+
+              {/* 부품 목록 */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {consumables.map(c => {
+                  const stock = getMechanicVehicleStock(actionAssignMechanicId, c.id);
+                  return (
+                    <div
+                      key={c.id}
+                      style={{
+                        backgroundColor: '#ffffff',
+                        padding: '12px 14px',
+                        borderRadius: '8px',
+                        border: '1px solid #e2e8f0',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center'
+                      }}
+                    >
+                      <div>
+                        <div style={{ fontSize: '14px', fontWeight: 700, color: '#1e293b' }}>{c.modelName}</div>
+                        <div style={{ fontSize: '11px', color: '#64748b' }}>단가: ₩{c.unitPrice.toLocaleString()}</div>
+                      </div>
+                      <div style={{ textAlign: 'right' }}>
+                        <span style={{
+                          padding: '4px 10px',
+                          borderRadius: '12px',
+                          fontSize: '14px',
+                          fontWeight: 800,
+                          backgroundColor: stock > 0 ? '#dcfce7' : '#fee2e2',
+                          color: stock > 0 ? '#166534' : '#991b1b'
+                        }}>
+                          적재: {stock}개
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* 3. 모바일 완료 이력 탭 */}
+          {mobileActiveTab === 'HISTORY' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {fieldAsTickets.filter(t => t.status === 'COMPLETED').slice(0, 30).map(t => (
+                <div key={t.id} style={{ backgroundColor: '#ffffff', padding: '12px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#64748b', marginBottom: '4px' }}>
+                    <span>{t.ticketNo}</span>
+                    <span>{t.completedDate || t.visitDate}</span>
+                  </div>
+                  <div style={{ fontSize: '15px', fontWeight: 700, color: '#1e293b' }}>
+                    {t.siteName} ({t.assetNo})
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#16a34a', fontWeight: 600, marginTop: '4px' }}>
+                    ✓ {t.actionTaken}
+                  </div>
+                  {t.partsUsed && t.partsUsed.length > 0 && (
+                    <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px' }}>
+                      사용한 부품: {t.partsUsed.map(p => `${p.modelName} × ${p.quantity}`).join(', ')}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      ) : (
+        /* PC 대화면 뷰 (기존 3개 탭 유지) */
+        <>
       {/* ──────────────────────────────────────────────────────────────────────────
           탭 1: AS 접수 / 출동 스튜디오 (유형 A: 요청 처리형 카드 마스터-디테일)
       ────────────────────────────────────────────────────────────────────────── */}
@@ -1537,6 +2060,375 @@ export const FieldAsManagement: React.FC = () => {
           </div>
         </div>
       )}
+      </>
+      )}
+
+      {/* ──────────────────────────────────────────────────────────────────────────
+          📱 모바일 슬라이드업 바텀시트 (현장 AS 완료 & 부품 실시간 차감)
+      ────────────────────────────────────────────────────────────────────────── */}
+      {showMobileActionSheet && selectedTicket && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0,0,0,0.6)',
+            zIndex: 9999,
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'flex-end'
+          }}
+          onClick={() => setShowMobileActionSheet(false)}
+        >
+          <div
+            style={{
+              backgroundColor: '#ffffff',
+              borderTopLeftRadius: '20px',
+              borderTopRightRadius: '20px',
+              maxHeight: '90vh',
+              overflowY: 'auto',
+              padding: '20px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '16px',
+              boxShadow: '0 -4px 20px rgba(0,0,0,0.15)',
+              boxSizing: 'border-box'
+            }}
+            onClick={e => e.stopPropagation()}
+          >
+            {/* 바텀시트 헤더 */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '1px solid #e2e8f0', paddingBottom: '12px' }}>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span style={{ fontSize: '13px', fontWeight: 800, color: '#2563eb', backgroundColor: '#eff6ff', padding: '3px 8px', borderRadius: '4px' }}>
+                    {selectedTicket.assetNo || '현장확인'}
+                  </span>
+                  <span style={{ fontSize: '12px', color: '#64748b' }}>{selectedTicket.ticketNo}</span>
+                </div>
+                <h3 style={{ margin: '4px 0 0 0', fontSize: '18px', fontWeight: 800, color: '#0f172a' }}>
+                  {selectedTicket.siteName}
+                </h3>
+                <div style={{ fontSize: '13px', color: '#64748b', marginTop: '2px' }}>
+                  업체: <strong>{selectedTicket.customerName}</strong>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowMobileActionSheet(false)}
+                style={{
+                  width: '38px',
+                  height: '38px',
+                  borderRadius: '50%',
+                  backgroundColor: '#f1f5f9',
+                  border: 'none',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                  color: '#475569'
+                }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* 고장 증상 원문 */}
+            <div style={{ backgroundColor: '#fff1f2', border: '1px solid #fecdd3', padding: '10px 12px', borderRadius: '8px', fontSize: '13px', color: '#9f1239' }}>
+              🚨 <strong>[{selectedTicket.issueCategory}]</strong> {selectedTicket.issueDescription}
+            </div>
+
+            {/* 1️⃣ 사용 부품 선택 (50px 대형 스텝퍼 카트) */}
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                <label style={{ fontSize: '14px', fontWeight: 800, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Truck size={16} color="#2563eb" />
+                  1. 사용 부품 선택 (차량 재고 실시간 차감)
+                </label>
+                <span style={{ fontSize: '11px', color: '#64748b' }}>
+                  미사용 시 0개 유지
+                </span>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {consumables.slice(0, 10).map(c => {
+                  const stock = getMechanicVehicleStock(actionAssignMechanicId, c.id);
+                  const selectedQty = getSelectedPartQty(c.id);
+
+                  return (
+                    <div
+                      key={c.id}
+                      style={{
+                        backgroundColor: selectedQty > 0 ? '#eff6ff' : '#f8fafc',
+                        border: selectedQty > 0 ? '2px solid #2563eb' : '1px solid #e2e8f0',
+                        borderRadius: '10px',
+                        padding: '10px 12px',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center'
+                      }}
+                    >
+                      <div style={{ flex: 1, marginRight: '10px' }}>
+                        <div style={{ fontSize: '14px', fontWeight: 700, color: '#1e293b' }}>
+                          {c.modelName}
+                        </div>
+                        <div style={{ fontSize: '11px', color: stock > 0 ? '#16a34a' : '#dc2626', fontWeight: 600 }}>
+                          내 차량 잔여: {stock}개
+                        </div>
+                      </div>
+
+                      {/* 50px 스텝퍼 버튼군 */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <button
+                          type="button"
+                          onClick={() => handleStepPartQty(c.id, -1)}
+                          disabled={selectedQty === 0}
+                          style={{
+                            width: '46px',
+                            height: '46px',
+                            borderRadius: '8px',
+                            backgroundColor: selectedQty > 0 ? '#ffffff' : '#f1f5f9',
+                            border: selectedQty > 0 ? '1px solid #cbd5e1' : '1px solid #e2e8f0',
+                            color: selectedQty > 0 ? '#1e293b' : '#94a3b8',
+                            fontSize: '20px',
+                            fontWeight: 800,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            cursor: selectedQty > 0 ? 'pointer' : 'not-allowed'
+                          }}
+                        >
+                          <Minus size={18} />
+                        </button>
+
+                        <span style={{ fontSize: '18px', fontWeight: 800, minWidth: '32px', textAlign: 'center', color: selectedQty > 0 ? '#2563eb' : '#64748b' }}>
+                          {selectedQty}
+                        </span>
+
+                        <button
+                          type="button"
+                          onClick={() => handleStepPartQty(c.id, 1)}
+                          disabled={stock <= selectedQty}
+                          style={{
+                            width: '46px',
+                            height: '46px',
+                            borderRadius: '8px',
+                            backgroundColor: stock > selectedQty ? '#2563eb' : '#e2e8f0',
+                            color: stock > selectedQty ? '#ffffff' : '#94a3b8',
+                            border: 'none',
+                            fontSize: '20px',
+                            fontWeight: 800,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            cursor: stock > selectedQty ? 'pointer' : 'not-allowed'
+                          }}
+                        >
+                          <Plus size={18} />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* 2️⃣ 빈출 조치 태그 (1초 원터치 탭) */}
+            <div>
+              <label style={{ fontSize: '14px', fontWeight: 800, color: '#0f172a', display: 'block', marginBottom: '8px' }}>
+                2. 현장 조치 내용 (원터치 탭)
+              </label>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '8px' }}>
+                {QUICK_ACTION_TAGS.map(tag => {
+                  const isSelected = actionTakenText.includes(tag);
+                  return (
+                    <button
+                      key={tag}
+                      type="button"
+                      onClick={() => handleTagClick(tag)}
+                      style={{
+                        padding: '8px 12px',
+                        borderRadius: '20px',
+                        fontSize: '12.5px',
+                        fontWeight: isSelected ? 700 : 500,
+                        backgroundColor: isSelected ? '#1e293b' : '#f1f5f9',
+                        color: isSelected ? '#ffffff' : '#334155',
+                        border: 'none',
+                        cursor: 'pointer',
+                        whiteSpace: 'nowrap'
+                      }}
+                    >
+                      {isSelected ? `✓ ${tag}` : `+ ${tag}`}
+                    </button>
+                  );
+                })}
+              </div>
+              <textarea
+                value={actionTakenText}
+                onChange={e => setActionTakenText(e.target.value)}
+                placeholder="조치 내용을 직접 입력하거나 위의 태그를 탭하세요..."
+                rows={2}
+                style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '14px', boxSizing: 'border-box' }}
+              />
+            </div>
+
+            {/* 3️⃣ 처리 판정 버튼 (48px) */}
+            <div>
+              <label style={{ fontSize: '14px', fontWeight: 800, color: '#0f172a', display: 'block', marginBottom: '8px' }}>
+                3. 처리 결과 판정
+              </label>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '6px' }}>
+                <button
+                  type="button"
+                  onClick={() => setActionResolutionType('REPAIR_DONE')}
+                  style={{
+                    height: '46px',
+                    borderRadius: '8px',
+                    border: actionResolutionType === 'REPAIR_DONE' ? '2px solid #16a34a' : '1px solid #cbd5e1',
+                    backgroundColor: actionResolutionType === 'REPAIR_DONE' ? '#dcfce7' : '#ffffff',
+                    color: actionResolutionType === 'REPAIR_DONE' ? '#166534' : '#475569',
+                    fontSize: '13px',
+                    fontWeight: 700,
+                    cursor: 'pointer'
+                  }}
+                >
+                  🟢 조치완료
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActionResolutionType('REVISIT_NEEDED')}
+                  style={{
+                    height: '46px',
+                    borderRadius: '8px',
+                    border: actionResolutionType === 'REVISIT_NEEDED' ? '2px solid #d97706' : '1px solid #cbd5e1',
+                    backgroundColor: actionResolutionType === 'REVISIT_NEEDED' ? '#fef3c7' : '#ffffff',
+                    color: actionResolutionType === 'REVISIT_NEEDED' ? '#92400e' : '#475569',
+                    fontSize: '13px',
+                    fontWeight: 700,
+                    cursor: 'pointer'
+                  }}
+                >
+                  🔄 재방문
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActionResolutionType('GUIDED_END')}
+                  style={{
+                    height: '46px',
+                    borderRadius: '8px',
+                    border: actionResolutionType === 'GUIDED_END' ? '2px solid #6366f1' : '1px solid #cbd5e1',
+                    backgroundColor: actionResolutionType === 'GUIDED_END' ? '#e0e7ff' : '#ffffff',
+                    color: actionResolutionType === 'GUIDED_END' ? '#3730a3' : '#475569',
+                    fontSize: '13px',
+                    fontWeight: 700,
+                    cursor: 'pointer'
+                  }}
+                >
+                  💬 안내종결
+                </button>
+              </div>
+
+              {/* 재방문 일정 입력창 */}
+              {actionResolutionType === 'REVISIT_NEEDED' && (
+                <div style={{ backgroundColor: '#fffbeb', border: '1px solid #fde68a', borderRadius: '8px', padding: '10px', marginTop: '8px' }}>
+                  <div style={{ fontSize: '12px', fontWeight: 700, color: '#92400e', marginBottom: '6px' }}>
+                    📅 후속 재방문 일정
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '130px 1fr', gap: '6px' }}>
+                    <input
+                      type="date"
+                      value={actionRevisitDate}
+                      onChange={e => setActionRevisitDate(e.target.value)}
+                      style={{ padding: '6px 8px', borderRadius: '4px', border: '1px solid #d97706', fontSize: '13px' }}
+                    />
+                    <input
+                      type="text"
+                      value={actionRevisitReason}
+                      onChange={e => setActionRevisitReason(e.target.value)}
+                      placeholder="재방문 사유 입력"
+                      style={{ padding: '6px 8px', borderRadius: '4px', border: '1px solid #d97706', fontSize: '13px' }}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* 4️⃣ 즉시 사진 촬영 */}
+            <div>
+              <label style={{ fontSize: '14px', fontWeight: 800, color: '#0f172a', display: 'block', marginBottom: '8px' }}>
+                4. 수리 완료 사진 (선택)
+              </label>
+              <label
+                style={{
+                  height: '48px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px',
+                  backgroundColor: '#f8fafc',
+                  border: '1px dashed #94a3b8',
+                  borderRadius: '8px',
+                  fontSize: '14px',
+                  fontWeight: 700,
+                  color: '#334155',
+                  cursor: 'pointer'
+                }}
+              >
+                <Camera size={20} color="#2563eb" />
+                {actionAfterImage ? '✓ 사진 재촬영' : '📷 카메라로 즉시 촬영하기'}
+                <input
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  onChange={handleMobilePhotoCapture}
+                  style={{ display: 'none' }}
+                />
+              </label>
+              {actionAfterImage && (
+                <div style={{ marginTop: '8px', position: 'relative', width: '80px', height: '80px' }}>
+                  <img src={actionAfterImage} alt="after" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '6px' }} />
+                  <button
+                    type="button"
+                    onClick={() => setActionAfterImage('')}
+                    style={{ position: 'absolute', top: '-6px', right: '-6px', width: '20px', height: '20px', borderRadius: '50%', backgroundColor: '#ef4444', color: '#fff', border: 'none', cursor: 'pointer', fontSize: '12px' }}
+                  >
+                    ×
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* 5️⃣ 최하단 고정 완료 버튼 (54px) */}
+            <button
+              type="button"
+              onClick={async () => {
+                await handleCompleteTicket();
+                setShowMobileActionSheet(false);
+              }}
+              style={{
+                width: '100%',
+                height: '54px',
+                backgroundColor: '#16a34a',
+                color: '#ffffff',
+                border: 'none',
+                borderRadius: '10px',
+                fontSize: '16px',
+                fontWeight: 800,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
+                boxShadow: '0 4px 12px rgba(22,163,74,0.3)',
+                marginTop: '10px'
+              }}
+            >
+              <CheckCircle2 size={22} />
+              ✅ AS 조치 완료 & 차량 재고 차감
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ──────────────────────────────────────────────────────────────────────────
           모달: 신규 AS 직접 등록
@@ -1844,6 +2736,138 @@ export const FieldAsManagement: React.FC = () => {
                   차량 재고 이동 확정
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ──────────────────────────────────────────────────────────────────────────
+          🚗 내비게이션 선택 모달 (기사 선호앱 지정 및 1초 실행)
+      ────────────────────────────────────────────────────────────────────────── */}
+      {showNavSelectorTicket && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0,0,0,0.5)',
+            zIndex: 9999,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '16px'
+          }}
+          onClick={() => setShowNavSelectorTicket(null)}
+        >
+          <div
+            style={{
+              backgroundColor: '#ffffff',
+              borderRadius: '16px',
+              width: '100%',
+              maxWidth: '380px',
+              padding: '20px',
+              boxShadow: '0 10px 25px rgba(0,0,0,0.2)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '14px'
+            }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #e2e8f0', paddingBottom: '10px' }}>
+              <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 800, color: '#0f172a' }}>
+                🚗 길안내 내비게이션 앱 선택
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowNavSelectorTicket(null)}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b' }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div style={{ fontSize: '13px', color: '#475569' }}>
+              목적지: <strong>{showNavSelectorTicket.siteName}</strong>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <button
+                type="button"
+                onClick={() => handleLaunchNav(showNavSelectorTicket, 'TMAP')}
+                style={{
+                  height: '48px',
+                  borderRadius: '10px',
+                  backgroundColor: '#fee2e2',
+                  border: '1px solid #fca5a5',
+                  color: '#991b1b',
+                  fontSize: '14px',
+                  fontWeight: 800,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px',
+                  cursor: 'pointer'
+                }}
+              >
+                🔴 T맵 (Tmap)으로 바로 길안내
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleLaunchNav(showNavSelectorTicket, 'KAKAO')}
+                style={{
+                  height: '48px',
+                  borderRadius: '10px',
+                  backgroundColor: '#fef08a',
+                  border: '1px solid #fde047',
+                  color: '#854d0e',
+                  fontSize: '14px',
+                  fontWeight: 800,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px',
+                  cursor: 'pointer'
+                }}
+              >
+                🟡 카카오내비로 바로 길안내
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleLaunchNav(showNavSelectorTicket, 'NAVER')}
+                style={{
+                  height: '48px',
+                  borderRadius: '10px',
+                  backgroundColor: '#dcfce7',
+                  border: '1px solid #86efac',
+                  color: '#166534',
+                  fontSize: '14px',
+                  fontWeight: 800,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px',
+                  cursor: 'pointer'
+                }}
+              >
+                🟢 네이버지도로 바로 길안내
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
+              <input
+                type="checkbox"
+                id="chkRememberNav"
+                checked={rememberDefaultNav}
+                onChange={e => setRememberDefaultNav(e.target.checked)}
+                style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+              />
+              <label htmlFor="chkRememberNav" style={{ fontSize: '12px', color: '#64748b', cursor: 'pointer' }}>
+                선택한 앱을 기본 내비로 기억하기 (다음부터 즉시 실행)
+              </label>
             </div>
           </div>
         </div>

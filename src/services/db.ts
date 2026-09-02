@@ -815,8 +815,19 @@ export interface Repair {
   inboundNo?: string;
   defectsJson?: string;
   memo?: string;
+  timelineEvents?: RepairTimelineEvent[];
   createdAt: string;
   updatedAt: string;
+}
+
+export interface RepairTimelineEvent {
+  id: string;
+  eventType: 'CALL_MADE' | 'TRANSIT_START' | 'ARRIVED' | 'COMPLETED';
+  label: string;
+  mechanicId: string;
+  mechanicName: string;
+  detail?: string;
+  timestamp: string;
 }
 
 // 💡 호환용 타입 알리아스 (단일 물리 테이블: repairs)
