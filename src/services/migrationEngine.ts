@@ -80,12 +80,13 @@ export const TABLE_COLUMNS: Record<string, string[]> = {
     'specSheetUrl', 'emergencyGuideUrl', 'isActive', 'createdAt', 'updatedAt'
   ],
   vendors: [
-    'id', 'name', 'type', 'contact', 'email', 'address', 'bankName',
-    'accountNumber', 'accountHolder', 'memo', 'isActive', 'createdAt', 'updatedAt'
+    'id', 'name', 'type', 'types', 'bizRegNo', 'representative', 'contactName', 'contact', 'email', 'address', 'bankName',
+    'bankAccount', 'accountNumber', 'accountHolder', 'memo', 'isActive', 'createdAt', 'updatedAt'
   ],
   customers: [
     'id', 'name', 'bizRegNo', 'representative', 'repContact', 'repEmail',
-    'address', 'defaultBillingDay', 'paymentDueDay', 'paymentTermDays', 'isClosed', 'createdAt', 'updatedAt'
+    'address', 'defaultBillingDay', 'defaultStatementClosingDay', 'billingDay', 'paymentDueDay', 'paymentTermDays', 'payment_term_days',
+    'bankAccounts', 'driveFolderId', 'prepaidBalance', 'isClosed', 'createdAt', 'updatedAt'
   ],
   customer_sites: [
     'id', 'customerId', 'name', 'address', 'contactName', 'contact', 'email', 'createdAt', 'updatedAt'
@@ -97,9 +98,10 @@ export const TABLE_COLUMNS: Record<string, string[]> = {
     'id', 'modelName', 'assetNo', 'serialNo', 'manufacturer', 'manufactureYear',
     'ownerType', 'status', 'acquisitionDate', 'acquisitionPrice', 'depreciationMonths',
     'residualValueRate', 'accumDepreciation', 'bookValue', 'vendorId', 'supplier',
-    'rentStart', 'rentEnd', 'monthlyRentFee', 'dailyRentFee', 'actualRentReturnDate',
+    'renter', 'rentStart', 'rentEnd', 'monthlyRentFee', 'dailyRentFee', 'actualRentReturnDate',
+    'disposalDate', 'disposalPrice', 'buyer', 'safetyInspectionUrl', 'preDeliveryChecklistUrl',
     'currentCustomerId', 'currentSiteId', 'contractStart', 'contractEnd',
-    'cumRentalFee', 'cumRepairCost', 'note', 'memo', 'createdAt', 'updatedAt'
+    'cumRentalFee', 'cumRepairCost', 'note', 'memo', 'memo1', 'memo2', 'createdAt', 'updatedAt'
   ],
   contracts: [
     'id', 'contractNo', 'customerId', 'salespersonId', 'contactId', 'siteId',
@@ -119,13 +121,19 @@ export const TABLE_COLUMNS: Record<string, string[]> = {
   external_leases: [
     'id', 'vendorId', 'contractId', 'contractAssetId', 'assetDescription',
     'monthlyRentFee', 'dailyRentFee', 'leaseStartDate', 'leaseEndDate', 'status',
-    'statementFileUrl', 'memo', 'createdAt', 'updatedAt'
+    'statementFileUrl', 'memo', 'contract_id', 'createdAt', 'updatedAt'
   ],
   deliveries: [
-    'id', 'deliveryNo', 'type', 'contractId', 'contractAssetId', 'customerId',
-    'siteId', 'assetId', 'assetNo', 'modelName', 'dispatchDate', 'timeSlot',
-    'status', 'transportCompany', 'transportCost', 'driverName', 'driverContact',
-    'vehicleNumber', 'isReturn', 'returnDate', 'memo', 'createdBy', 'createdAt', 'updatedAt'
+    'id', 'contractId', 'assetIds', 'transportVendorId', 'type', 'status',
+    'vehicleType', 'driverName', 'driverContact', 'deliveryCost', 'purchaseBillId',
+    'memo', 'requestDate', 'loadingTime', 'unloadingTime', 'createdAt', 'updatedAt',
+    'isCostSettled', 'scheduledDate', 'originAddress', 'destinationAddress',
+    'transportCompany', 'vehicleNo', 'expectedCost', 'deliveryCostConfirmed',
+    'finalCost', 'costAdjustmentReason', 'reconciliationStatus', 'reconciledAt',
+    'paymentRequestedAt', 'paymentCompletedAt', 'statementFileUrl',
+    'billableToCustomer', 'billableCustomerId', 'vehicleRequirements', 'cargoItems',
+    'vehicles', 'dispatchCategory', 'loadingDate', 'loadingTimeSlot',
+    'unloadingDate', 'unloadingTimeSlot', 'closingMemo', 'rawText'
   ],
   outbound_inspections: [
     'id', 'deliveryId', 'contractId', 'assetId', 'status', 'inspectorId',
