@@ -380,6 +380,8 @@ export const TruckDispatch: React.FC = () => {
   const [selectedSystemDeliveryId, setSelectedSystemDeliveryId] = useState<string | null>(null);
   const [selectedExcelRowIndex, setSelectedExcelRowIndex] = useState<number | null>(null);
 
+  // 💡 [사장님 지시] 대사 행 더블클릭 시 배차 상세 및 대사 비교 모달 state
+  const [selectedReconDetailPair, setSelectedReconDetailPair] = useState<ReconPairRow | null>(null);
 
   // 💡 [사장님 지시] 금액 수정 모달 state & DB 반영 핸들러
   const [showCostEditModal, setShowCostEditModal] = useState<boolean>(false);
@@ -2867,10 +2869,13 @@ export const TruckDispatch: React.FC = () => {
                         return (
                           <tr
                             key={pair.pairId || pIdx}
+                            onDoubleClick={() => setSelectedReconDetailPair(pair)}
+                            title="더블클릭 시 배차 상세 및 엑셀 청구 대조 모달이 열립니다."
                             style={{
                               borderBottom: '1px solid var(--border-color)',
                               backgroundColor: isExcluded ? 'rgba(100,116,139,0.06)' : isMismatch ? 'rgba(234,179,8,0.05)' : isMatched ? 'rgba(34,197,94,0.03)' : isExcelOnly ? 'rgba(239,68,68,0.04)' : 'transparent',
-                              height: '42px'
+                              height: '42px',
+                              cursor: 'pointer'
                             }}
                           >
                             {/* 상태 배지 */}
@@ -3013,6 +3018,14 @@ export const TruckDispatch: React.FC = () => {
                                     취소
                                   </button>
                                 )}
+
+                                <button
+                                  onClick={() => setSelectedReconDetailPair(pair)}
+                                  title="배차 상세 및 대사 검토 모달 열기"
+                                  style={{ padding: '3px 6px', fontSize: '10.5px', fontWeight: 700, borderRadius: '4px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-body)', color: 'var(--text-secondary)', cursor: 'pointer' }}
+                                >
+                                  상세
+                                </button>
                               </div>
                             </td>
                           </tr>
@@ -3221,6 +3234,379 @@ export const TruckDispatch: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* 💡 [사장님 지시] 운송료 대사 상세 및 불일치 검토 모달 (행 더블클릭 시 표출) */}
+      {selectedReconDetailPair && (() => {
+        const pair = selectedReconDetailPair;
+        const sys = pair.systemDelivery;
+        const excel = pair.excelRow;
+        const contract = sys ? contracts.find(c => c.id === sys.contractId) : null;
+        const customer = contract ? customers.find(c => c.id === contract.customerId) : null;
+        const site = contract ? sites.find(s => s.id === contract.siteId) : null;
+        const memoCustomer = sys?.memo && sys.memo.includes('업체:') ? sys.memo.split('업체:')[1].split('|')[0].trim() : '';
+        const displayCustomer = customer?.name || memoCustomer || (excel ? excel['업체명'] : '고객사미지정');
+
+        const isMatched = pair.isReconciled && !pair.isExcluded;
+        const isMismatch = pair.matchStatus === 'MISMATCH';
+        const isExcelOnly = pair.matchStatus === 'EXCEL_ONLY' && !pair.isExcluded;
+        const isSysOnly = pair.matchStatus === 'SYSTEM_ONLY';
+
+        return (
+          <div style={{
+            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+            backgroundColor: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(4px)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            zIndex: 99999, padding: '20px'
+          }}>
+            <div style={{
+              backgroundColor: 'var(--bg-card)',
+              border: '1px solid var(--border-color)',
+              borderRadius: '14px',
+              padding: '24px',
+              width: '100%',
+              maxWidth: '840px',
+              maxHeight: '90vh',
+              overflowY: 'auto',
+              boxShadow: '0 12px 36px rgba(0,0,0,0.35)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '18px'
+            }}>
+              {/* 모달 헤더 */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-color)', paddingBottom: '12px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <h3 style={{ fontSize: '18px', fontWeight: 900, margin: 0, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    🚚 배차 상세 및 운송료 대사 검토
+                  </h3>
+                  {isMismatch && (
+                    <span style={{ padding: '3px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: 800, backgroundColor: 'rgba(234,179,8,0.18)', color: '#ca8a04' }}>
+                      🟡 차액 불일치 ({pair.diffCost > 0 ? `+₩${pair.diffCost.toLocaleString()}` : `-₩${Math.abs(pair.diffCost).toLocaleString()}`})
+                    </span>
+                  )}
+                  {isMatched && (
+                    <span style={{ padding: '3px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: 800, backgroundColor: 'rgba(34,197,94,0.15)', color: '#16a34a' }}>
+                      🟢 대사 일치 (₩0 완전일치)
+                    </span>
+                  )}
+                  {isExcelOnly && (
+                    <span style={{ padding: '3px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: 800, backgroundColor: 'rgba(239,68,68,0.15)', color: '#dc2626' }}>
+                      🔴 엑셀 단독 청구 (배차 미발견)
+                    </span>
+                  )}
+                  {isSysOnly && (
+                    <span style={{ padding: '3px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: 800, backgroundColor: 'var(--bg-body)', color: 'var(--text-muted)' }}>
+                      ⚪ 시스템 배차 단독 (청구 미도착)
+                    </span>
+                  )}
+                </div>
+                <button
+                  onClick={() => setSelectedReconDetailPair(null)}
+                  style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: '20px', cursor: 'pointer', padding: '4px' }}
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* 상단 대차대조 비교 바 */}
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: '1fr auto 1fr',
+                gap: '12px',
+                alignItems: 'center',
+                backgroundColor: 'var(--bg-body)',
+                border: '1px solid var(--border-color)',
+                borderRadius: '10px',
+                padding: '14px 20px'
+              }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <span style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: 700 }}>시스템 등록 배차 금액</span>
+                  <span style={{ fontSize: '20px', fontWeight: 900, color: sys ? 'var(--primary)' : 'var(--text-muted)' }}>
+                    {sys ? `₩${pair.systemCost.toLocaleString()}원` : '배차 없음'}
+                  </span>
+                </div>
+                <div style={{ textAlign: 'center', padding: '0 16px' }}>
+                  <span style={{ fontSize: '16px', fontWeight: 900, color: isMatched ? '#16a34a' : isMismatch ? '#ca8a04' : 'var(--text-muted)' }}>
+                    {isMatched ? '=' : isMismatch ? '≠' : 'VS'}
+                  </span>
+                  {isMismatch && (
+                    <div style={{ fontSize: '11.5px', fontWeight: 800, color: '#ca8a04', marginTop: '2px' }}>
+                      차액: {pair.diffCost > 0 ? `+₩${pair.diffCost.toLocaleString()}` : `-₩${Math.abs(pair.diffCost).toLocaleString()}`}
+                    </div>
+                  )}
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', textAlign: 'right' }}>
+                  <span style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: 700 }}>운송사 엑셀 청구 운송비</span>
+                  <span style={{ fontSize: '20px', fontWeight: 900, color: excel ? (isMismatch ? '#ca8a04' : '#16a34a') : 'var(--text-muted)' }}>
+                    {excel ? `₩${pair.excelCost.toLocaleString()}원` : '청구 없음'}
+                  </span>
+                </div>
+              </div>
+
+              {pair.surchargeReason && (
+                <div style={{
+                  padding: '8px 14px',
+                  backgroundColor: 'rgba(234,179,8,0.1)',
+                  border: '1px solid rgba(234,179,8,0.3)',
+                  borderRadius: '6px',
+                  fontSize: '12.5px',
+                  fontWeight: 700,
+                  color: '#a16207',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}>
+                  <span>💡</span>
+                  <span>할증 및 차액 사유 분석: <strong>{pair.surchargeReason}</strong></span>
+                </div>
+              )}
+
+              {/* 2열 비교 본문 (좌측: 시스템 배차 원장 / 우측: 운송사 엑셀 청구 내역) */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                {/* 좌측: 시스템 배차 내역 */}
+                <div style={{
+                  border: '1px solid var(--border-color)',
+                  borderRadius: '10px',
+                  padding: '16px',
+                  backgroundColor: 'var(--bg-body)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '10px'
+                }}>
+                  <div style={{ fontSize: '14px', fontWeight: 900, color: 'var(--text-primary)', borderBottom: '1px solid var(--border-color)', paddingBottom: '8px' }}>
+                    📋 시스템 배차 원장
+                  </div>
+                  {sys ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '12.5px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <span style={{ color: 'var(--text-muted)', fontWeight: 600 }}>배차 번호 / ID</span>
+                        <span style={{ fontWeight: 800, color: 'var(--text-primary)' }}>{sys.id}</span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <span style={{ color: 'var(--text-muted)', fontWeight: 600 }}>배차 일자</span>
+                        <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>
+                          {sys.loadingDate || sys.requestDate} {sys.loadingTimeSlot ? `(${sys.loadingTimeSlot})` : ''}
+                        </span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <span style={{ color: 'var(--text-muted)', fontWeight: 600 }}>배차 구분 / 상태</span>
+                        <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>
+                          {sys.type === 'OUTBOUND' ? '출고' : sys.type === 'INBOUND' ? '회수' : sys.type === 'EXCHANGE' ? '교환' : sys.type} ({sys.status === 'DELIVERED' ? '운송완료' : sys.status})
+                        </span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <span style={{ color: 'var(--text-muted)', fontWeight: 600 }}>고객사 (거래처)</span>
+                        <span style={{ fontWeight: 800, color: 'var(--text-primary)' }}>{displayCustomer}</span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <span style={{ color: 'var(--text-muted)', fontWeight: 600 }}>현장명</span>
+                        <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{site?.name || sys.destinationAddress || '-'}</span>
+                      </div>
+                      <div style={{ borderTop: '1px dashed var(--border-color)', paddingTop: '6px' }}>
+                        <div style={{ color: 'var(--text-muted)', fontWeight: 600, marginBottom: '2px' }}>상차지 (출발)</div>
+                        <div style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{sys.originAddress || '기연 주기장'}</div>
+                      </div>
+                      <div>
+                        <div style={{ color: 'var(--text-muted)', fontWeight: 600, marginBottom: '2px' }}>하차지 (도착)</div>
+                        <div style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{sys.destinationAddress || '-'}</div>
+                      </div>
+                      {sys.viaDropoffAddress && (
+                        <div>
+                          <div style={{ color: '#a16207', fontWeight: 600, marginBottom: '2px' }}>경유지</div>
+                          <div style={{ fontWeight: 700, color: '#ca8a04' }}>{sys.viaDropoffAddress} {sys.viaDropoffName ? `(${sys.viaDropoffName})` : ''}</div>
+                        </div>
+                      )}
+                      <div style={{ borderTop: '1px dashed var(--border-color)', paddingTop: '6px', display: 'flex', justifyContent: 'space-between' }}>
+                        <span style={{ color: 'var(--text-muted)', fontWeight: 600 }}>배정 기사 / 차량</span>
+                        <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>
+                          {sys.driverName || '기사미배정'} {sys.driverContact ? `(${sys.driverContact})` : ''} | {sys.vehicleNo || '-'} ({sys.vehicleType || '-'})
+                        </span>
+                      </div>
+                      {sys.memo && (
+                        <div style={{ borderTop: '1px dashed var(--border-color)', paddingTop: '6px' }}>
+                          <div style={{ color: 'var(--text-muted)', fontWeight: 600, marginBottom: '2px' }}>배차 메모</div>
+                          <div style={{ color: 'var(--text-secondary)', wordBreak: 'break-all' }}>{sys.memo}</div>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div style={{ padding: '30px 10px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '13px' }}>
+                      시스템에 일치하는 배차 내역이 없습니다. (엑셀 단독 청구)
+                    </div>
+                  )}
+                </div>
+
+                {/* 우측: 운송사 엑셀 청구 내역 */}
+                <div style={{
+                  border: '1px solid var(--border-color)',
+                  borderRadius: '10px',
+                  padding: '16px',
+                  backgroundColor: 'var(--bg-body)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '10px'
+                }}>
+                  <div style={{ fontSize: '14px', fontWeight: 900, color: 'var(--text-primary)', borderBottom: '1px solid var(--border-color)', paddingBottom: '8px' }}>
+                    📄 운송사 엑셀 거래명세서 내역
+                  </div>
+                  {excel ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '12.5px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <span style={{ color: 'var(--text-muted)', fontWeight: 600 }}>명세서 일자</span>
+                        <span style={{ fontWeight: 800, color: 'var(--text-primary)' }}>
+                          {excel['정규일자'] || excel['일자'] || excel['날짜'] || excel['운송일자'] || '-'}
+                        </span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <span style={{ color: 'var(--text-muted)', fontWeight: 600 }}>청구 업체명</span>
+                        <span style={{ fontWeight: 800, color: 'var(--text-primary)' }}>{excel['업체명'] || '-'}</span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <span style={{ color: 'var(--text-muted)', fontWeight: 600 }}>청구 현장명</span>
+                        <span style={{ fontWeight: 800, color: 'var(--text-primary)' }}>{excel['현장명'] || '-'}</span>
+                      </div>
+                      <div style={{ borderTop: '1px dashed var(--border-color)', paddingTop: '6px' }}>
+                        <div style={{ color: 'var(--text-muted)', fontWeight: 600, marginBottom: '2px' }}>상차지 (출발)</div>
+                        <div style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{excel['상차지'] || '-'}</div>
+                      </div>
+                      <div>
+                        <div style={{ color: 'var(--text-muted)', fontWeight: 600, marginBottom: '2px' }}>하차지 (도착)</div>
+                        <div style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{excel['정규하차지'] || excel['하차지'] || '-'}</div>
+                      </div>
+                      <div style={{ borderTop: '1px dashed var(--border-color)', paddingTop: '6px', display: 'flex', justifyContent: 'space-between' }}>
+                        <span style={{ color: 'var(--text-muted)', fontWeight: 600 }}>톤수 / 차종</span>
+                        <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{excel['톤수'] || excel['차종'] || '-'}</span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <span style={{ color: 'var(--text-muted)', fontWeight: 600 }}>엑셀 기재 운송비</span>
+                        <span style={{ fontWeight: 900, color: '#16a34a', fontSize: '14px' }}>₩{pair.excelCost.toLocaleString()}원</span>
+                      </div>
+                      {excel['비고'] && (
+                        <div style={{ borderTop: '1px dashed var(--border-color)', paddingTop: '6px' }}>
+                          <div style={{ color: '#ca8a04', fontWeight: 700, marginBottom: '2px' }}>명세서 비고 / 특이사항</div>
+                          <div style={{ fontWeight: 700, color: '#a16207', backgroundColor: 'rgba(234,179,8,0.1)', padding: '6px 8px', borderRadius: '4px' }}>
+                            {excel['비고']}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div style={{ padding: '30px 10px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '13px' }}>
+                      운송사 엑셀에 해당 건의 청구 내역이 없습니다. (배차 단독)
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* 하단 액션 버튼군 */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid var(--border-color)', paddingTop: '14px' }}>
+                <button
+                  onClick={() => setSelectedReconDetailPair(null)}
+                  style={{
+                    padding: '9px 18px',
+                    borderRadius: '7px',
+                    border: '1px solid var(--border-color)',
+                    backgroundColor: 'var(--bg-body)',
+                    color: 'var(--text-secondary)',
+                    cursor: 'pointer',
+                    fontWeight: 700,
+                    fontSize: '13px'
+                  }}
+                >
+                  닫기
+                </button>
+
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  {isMismatch && (
+                    <>
+                      <button
+                        onClick={async () => {
+                          await handleApproveMismatch(pair.pairId);
+                          setSelectedReconDetailPair(null);
+                        }}
+                        style={{
+                          padding: '9px 18px',
+                          borderRadius: '7px',
+                          border: 'none',
+                          backgroundColor: '#ca8a04',
+                          color: '#fff',
+                          cursor: 'pointer',
+                          fontWeight: 800,
+                          fontSize: '13px',
+                          boxShadow: '0 2px 8px rgba(202,138,4,0.3)'
+                        }}
+                      >
+                        ⚡ 엑셀 청구액 ₩{pair.excelCost.toLocaleString()} 승인 (대사 완료)
+                      </button>
+                    </>
+                  )}
+
+                  {isExcelOnly && (
+                    <>
+                      <button
+                        onClick={async () => {
+                          await handleCreateDeliveryFromExcel(pair.pairId);
+                          setSelectedReconDetailPair(null);
+                        }}
+                        style={{
+                          padding: '9px 16px',
+                          borderRadius: '7px',
+                          border: 'none',
+                          backgroundColor: '#2563eb',
+                          color: '#fff',
+                          cursor: 'pointer',
+                          fontWeight: 800,
+                          fontSize: '13px'
+                        }}
+                      >
+                        ➕ 이 내역으로 신규 배차 생성
+                      </button>
+                      <button
+                        onClick={() => {
+                          handleExcludeExcelOnly(pair.pairId);
+                          setSelectedReconDetailPair(null);
+                        }}
+                        style={{
+                          padding: '9px 16px',
+                          borderRadius: '7px',
+                          border: '1px solid #dc2626',
+                          backgroundColor: 'rgba(239,68,68,0.1)',
+                          color: '#dc2626',
+                          cursor: 'pointer',
+                          fontWeight: 800,
+                          fontSize: '13px'
+                        }}
+                      >
+                        🚫 오청구 반려 및 제외
+                      </button>
+                    </>
+                  )}
+
+                  {isMatched && (
+                    <button
+                      onClick={() => {
+                        handleTogglePairReconciled(pair.pairId);
+                        setSelectedReconDetailPair(null);
+                      }}
+                      style={{
+                        padding: '9px 16px',
+                        borderRadius: '7px',
+                        border: '1px solid var(--border-color)',
+                        backgroundColor: 'var(--bg-body)',
+                        color: 'var(--text-muted)',
+                        cursor: 'pointer',
+                        fontWeight: 700,
+                        fontSize: '13px'
+                      }}
+                    >
+                      대사 완료 취소 (대기 원복)
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* ☀️ 운송 하차지 실시간 날씨 및 주간 예보 모달 */}
       <DestinationWeatherModal
