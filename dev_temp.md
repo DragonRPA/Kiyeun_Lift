@@ -1,6 +1,17 @@
 # 개발 지시 및 개편 완료 내역 (dev_temp.md)
 
-## 🚀 [배차 및 운송료] 운반비 0원 온전 보존 및 7만원 기본값 하드코딩 완전 제거 (v1.3.0.Build.78 - 2026-09-03)
+## 🚀 [초기 DB 일괄 업로드] 고객 요구사항 적재 시 'db.getRow is not a function' 오류 긴급 해결 (v1.3.0.Build.79 - 2026-09-03)
+
+### 1. 개발 내용 요약
+- **`src/services/db.ts` (`LocalDB`)**:
+  - `db.getRow<T>(key, id)` 메서드 신설: 로컬 캐시 및 snake_case 테이블명(`customer_sites`, `customer_contacts` 등)과 내부 키(`sites`, `contacts`)를 상호 자동 정규화(`normalizeKey`)하여 단일 레코드를 안전하게 조회.
+  - `addRow`, `insertRow`, `updateRow`, `deleteRow`에 `normalizeKey` 호환 지원 탑재.
+  - `customerContacts`, `customerSites`, `contractHistories` 게터/세터 별칭 등록으로 속성 불일치 원천 차단.
+- **`src/services/migrationEngine.ts`**:
+  - `ingestCustomerDefaultsFromDispatchHistory`에서 고객 및 현장 데이터 조회 시 로컬 캐시 조회 실패 시 Supabase 원격 테이블 직접 조회 Fallback 구현.
+  - 동기화 루프 비동기 처리 정밀화 및 `await db.awaitPendingWrites()` 안전 완결.
+
+---
 
 ### 1. 개발 내용 요약
 - **`migrationEngine.ts` (배차 엑셀 업로드 엔진)**:

@@ -2821,7 +2821,16 @@ export async function ingestCustomerDefaultsFromDispatchHistory(
     onProgress?.(i + 1, total, `[${i + 1}/${total}] '${item.customerName}' 기본 옵션/보양 및 현장 요구사항 동기화 중...`);
 
     // 1. 고객 마스터 빈칸 안전 보완 업데이트
-    const existingCust = db.getRow<any>('customers', item.customerId);
+    let existingCust = db.getRow<any>('customers', item.customerId);
+    if (!existingCust && supabase) {
+      try {
+        const { data } = await supabase.from('customers').select('*').eq('id', item.customerId).maybeSingle();
+        if (data) existingCust = data;
+      } catch {
+        // ignore
+      }
+    }
+
     if (existingCust) {
       const updates: any = {};
       if (!existingCust.defaultPaidOptions && item.extractedDefaults.defaultPaidOptions) {
@@ -2847,9 +2856,18 @@ export async function ingestCustomerDefaultsFromDispatchHistory(
     }
 
     // 2. 현장 마스터 빈칸 안전 보완
-    item.sites.forEach(siteItem => {
+    for (const siteItem of item.sites) {
       if (siteItem.siteId) {
-        const existingSite = db.getRow<any>('customer_sites', siteItem.siteId);
+        let existingSite = db.getRow<any>('customer_sites', siteItem.siteId);
+        if (!existingSite && supabase) {
+          try {
+            const { data } = await supabase.from('customer_sites').select('*').eq('id', siteItem.siteId).maybeSingle();
+            if (data) existingSite = data;
+          } catch {
+            // ignore
+          }
+        }
+
         if (existingSite) {
           const siteUpdates: any = {};
           if (!existingSite.paidOptions && siteItem.paidOptions) siteUpdates.paidOptions = siteItem.paidOptions;
@@ -2872,7 +2890,7 @@ export async function ingestCustomerDefaultsFromDispatchHistory(
           }
         }
       }
-    });
+    }
 
     // 3. 담당자(contacts) 보완
     item.contacts.forEach(ct => {

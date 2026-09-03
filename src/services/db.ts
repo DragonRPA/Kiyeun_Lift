@@ -2802,9 +2802,13 @@ class LocalDB {
 
   get contacts() { return this.get<CustomerContact>('contacts', SEED_CONTACTS); }
   set contacts(val: CustomerContact[]) { this.set('contacts', val); }
+  get customerContacts() { return this.contacts; }
+  set customerContacts(val: CustomerContact[]) { this.contacts = val; }
 
   get sites() { return this.get<CustomerSite>('sites', SEED_SITES); }
   set sites(val: CustomerSite[]) { this.set('sites', val); }
+  get customerSites() { return this.sites; }
+  set customerSites(val: CustomerSite[]) { this.sites = val; }
 
   get products() { return this.get<Product>('products', SEED_PRODUCTS); }
   set products(val: Product[]) { this.set('products', val); }
@@ -2838,6 +2842,8 @@ class LocalDB {
 
   get contractHistory() { return this.get<ContractHistory>('contractHistory', SEED_CONTRACT_HISTORY); }
   set contractHistory(val: ContractHistory[]) { this.set('contractHistory', val); }
+  get contractHistories() { return this.contractHistory; }
+  set contractHistories(val: ContractHistory[]) { this.contractHistory = val; }
 
   get deliveries() { return this.get<Delivery>('deliveries', SEED_DELIVERIES); }
   set deliveries(val: Delivery[]) { this.set('deliveries', val); }
@@ -3354,10 +3360,62 @@ class LocalDB {
     return sanitized;
   }
 
+  // Supabase 테이블명 / snake_case / 복수형 키를 LocalDB의 내부 프로퍼티 키로 상호 호환 정규화
+  private normalizeKey(key: string): keyof LocalDB {
+    const reverseMapping: Record<string, string> = {
+      customer_sites: 'sites',
+      customer_contacts: 'contacts',
+      customerSites: 'sites',
+      customerContacts: 'contacts',
+      contract_assets: 'contractAssets',
+      contract_history: 'contractHistory',
+      contractHistories: 'contractHistory',
+      asset_inout_logs: 'assetInOutLogs',
+      outbound_inspections: 'outboundInspections',
+      billing_details: 'billingDetails',
+      transport_companies: 'transportCompanies',
+      transport_drivers: 'transportDrivers',
+      bank_transactions: 'bankTransactions',
+      bank_matching_rules: 'bankMatchingRules',
+      bank_initial_balances: 'bankInitialBalances',
+      payment_deposit_links: 'paymentDepositLinks',
+      repair_consumables: 'repairConsumables',
+      consumable_logs: 'consumableLogs',
+      consumable_purchases: 'consumablePurchases',
+      purchase_settlements: 'purchaseSettlements',
+      purchase_settlement_items: 'purchaseSettlementItems',
+      settlement_payment_logs: 'settlementPaymentLogs',
+      external_leases: 'externalLeases',
+      prepaid_transactions: 'prepaidTransactions',
+      delinquency_action_logs: 'delinquencyActionLogs',
+      inspection_checklist_items: 'inspectionChecklistItems',
+      mechanic_consumable_stocks: 'mechanicConsumableStocks',
+      depreciation_logs: 'depreciationLogs',
+      annual_leave_quotas: 'annualLeaveQuotas',
+      leave_usages: 'leaveUsages',
+      overtime_records: 'overtimeRecords',
+      payroll_closings: 'payrollClosings',
+    };
+    return (reverseMapping[key] || key) as keyof LocalDB;
+  }
+
+  // 단일 행 조회 (로컬 캐시 기준, snake_case 및 복수형 키 자동 호환)
+  getRow<T extends { id: string }>(key: keyof LocalDB | string, id: string): T | null {
+    const tableKey = this.normalizeKey(key as string);
+    const list = ((this[tableKey] || []) as unknown) as T[];
+    if (!Array.isArray(list)) return null;
+    return list.find(item => item && item.id === id) || null;
+  }
+
   // 헬퍼 메소드들 - CRUD 시뮬레이션 및 백그라운드 Supabase 업로드
-  insertRow<T extends { id: string }>(key: keyof LocalDB, row: Omit<T, 'id'> & { id?: string }): T {
-    const list = (this[key] as unknown) as T[];
-    const newId = row.id || this.generateNextId(key as string, list as any, row);
+  addRow<T extends { id: string }>(key: keyof LocalDB | string, row: Omit<T, 'id'> & { id?: string }): T {
+    return this.insertRow<T>(key, row);
+  }
+
+  insertRow<T extends { id: string }>(key: keyof LocalDB | string, row: Omit<T, 'id'> & { id?: string }): T {
+    const tableKey = this.normalizeKey(key as string);
+    const list = ((this[tableKey] || []) as unknown) as T[];
+    const newId = row.id || this.generateNextId(tableKey as string, list as any, row);
     const nowIso = new Date().toISOString();
     const formattedRow = {
       createdAt: nowIso,
@@ -3367,10 +3425,10 @@ class LocalDB {
     };
     const newRow = formattedRow as unknown as T;
     list.push(newRow);
-    this.set(key, list);
+    this.set(tableKey, list);
 
     if (supabase) {
-      const tableName = this.mapToSupabaseTable(key as string);
+      const tableName = this.mapToSupabaseTable(tableKey as string);
       const payloadForSupabase = this.sanitizeSupabasePayload(newRow, tableName);
       // upsert(onConflict: 'id'): 동일 id가 이미 존재하면 update로 대체 — PK 중복 오류 방지
       const promise = supabase
@@ -3407,9 +3465,11 @@ class LocalDB {
     return newRow;
   }
 
-  updateRow<T extends { id: string }>(key: keyof LocalDB, id: string, updates: Partial<T>): T | null {
-    const list = (this[key] as unknown) as T[];
-    const index = list.findIndex(item => item.id === id);
+  updateRow<T extends { id: string }>(key: keyof LocalDB | string, id: string, updates: Partial<T>): T | null {
+    const tableKey = this.normalizeKey(key as string);
+    const list = ((this[tableKey] || []) as unknown) as T[];
+    if (!Array.isArray(list)) return null;
+    const index = list.findIndex(item => item && item.id === id);
     if (index === -1) return null;
     const nowIso = new Date().toISOString();
     const updatedPayload = {
@@ -3418,10 +3478,10 @@ class LocalDB {
     };
     const updated = { ...list[index], ...updatedPayload } as unknown as T;
     list[index] = updated;
-    this.set(key, list);
+    this.set(tableKey, list);
 
     if (supabase) {
-      const tableName = this.mapToSupabaseTable(key as string);
+      const tableName = this.mapToSupabaseTable(tableKey as string);
       let payloadForSupabase = this.sanitizeSupabasePayload(updatedPayload, tableName);
 
       // 💡 [NULL 컬럼 갱신 보장]: updates에 명시적으로 전달된 undefined/null 필드를 Supabase null로 정확히 반영
@@ -3466,19 +3526,21 @@ class LocalDB {
     return updated;
   }
 
-  deleteRow<T extends { id: string }>(key: keyof LocalDB, id: string): boolean {
+  deleteRow<T extends { id: string }>(key: keyof LocalDB | string, id: string): boolean {
+    const tableKey = this.normalizeKey(key as string);
     // 최고관리자 계정 절대 보호
-    if (key === 'users' && (id === 'u-1' || id === 'sys-admin')) {
+    if (tableKey === 'users' && (id === 'u-1' || id === 'sys-admin')) {
       console.warn('Cannot delete system administrator account.');
       return false;
     }
-    const list = (this[key] as unknown) as T[];
-    const filtered = list.filter(item => item.id !== id);
+    const list = ((this[tableKey] || []) as unknown) as T[];
+    if (!Array.isArray(list)) return false;
+    const filtered = list.filter(item => item && item.id !== id);
     if (filtered.length === list.length) return false;
-    this.set(key, filtered);
+    this.set(tableKey, filtered);
 
     if (supabase) {
-      const tableName = this.mapToSupabaseTable(key as string);
+      const tableName = this.mapToSupabaseTable(tableKey as string);
       const promise = supabase
         .from(tableName)
         .delete()

@@ -1,5 +1,22 @@
 ---
 
+# Release Notes (v1.3.0.Build.79 - 2026-09-03 16:28)
+
+## 🛠️ [초기 DB 일괄 업로드] 고객 요구사항 적재 시 'db.getRow is not a function' 오류 긴급 해결
+
+### 🎯 핵심 요약 및 기능 확장 내역
+- **1. `LocalDB`에 `getRow<T>(key, id)` 및 `addRow` 공식 신설 (`db.ts`)**:
+  - `migrationEngine.ts`의 출고 이력 기반 고객 요구사항 적재 시 단일 행 조회가 가능하도록 `getRow` 구현.
+  - `addRow` 별칭 신설로 `insertRow`와 동일하게 안전 동작.
+- **2. Supabase 테이블명-로컬 키 상호 정규화 (`db.ts`)**:
+  - `normalizeKey` 헬퍼를 탑재하여 `customer_sites` ➔ `sites`, `customer_contacts` ➔ `contacts` 등 snake_case 및 복수형 키를 내부 프로퍼티 키로 자동 호환.
+  - `customerContacts`, `customerSites`, `contractHistories` 게터/세터 별칭 등록으로 프로퍼티명 불일치 방어.
+- **3. 원격 Supabase Fallback 이중 안전망 구축 (`migrationEngine.ts`)**:
+  - 고객 및 현장 데이터 조회 시 로컬 캐시에 없는 경우 Supabase 원격 테이블을 직접 조회하는 Fallback 로직 탑재.
+- **4. 글로벌 학습 지식 베이스 등록**: `경험.md`에 이슈 `E-031` 등록 완료.
+
+---
+
 # Release Notes (v1.3.0.Build.78 - 2026-09-03 15:57)
 
 ## 🚚 [배차 및 운송료] 운반비 0원 온전 보존 & 7만원 기본값 하드코딩 완전 제거
