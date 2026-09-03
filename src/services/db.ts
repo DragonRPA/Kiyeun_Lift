@@ -879,6 +879,33 @@ export interface PrepaidTransaction {
   createdAt: string;
 }
 
+export interface LegalNoticeLog {
+  id: string;
+  customerId: string;
+  customerName: string;
+  representative: string;
+  bizRegNo?: string;
+  address: string;
+  overdueAmount: number;
+  overdueDays: number;
+  noticeTitle: string;
+  noticeContent: string;
+  deadlineDays: number;
+  sentDate: string;
+  sentByUserId: string;
+  sentByName: string;
+  postalTrackingNo?: string;
+  createdAt: string;
+}
+
+export interface LegalNoticeTemplate {
+  id: string;
+  title: string;
+  content: string;
+  deadlineDays: number;
+  updatedAt: string;
+}
+
 export interface DelinquencyActionLog {
   id: string;
   customerId: string;
@@ -2761,7 +2788,7 @@ export const ALL_DB_KEYS = [
   'cashFlowSnapshots', 'outboundInspections', 'depreciationLogs',
   'purchaseSettlements', 'purchaseSettlementItems', 'settlementPaymentLogs', 'externalLeases',
   'annualLeaveQuotas', 'leaveUsages', 'overtimeRecords', 'payrollClosings', 'inspectionChecklistItems',
-  'prepaidTransactions', 'delinquencyActionLogs', 'mechanicConsumableStocks', 'receivables'
+  'prepaidTransactions', 'delinquencyActionLogs', 'mechanicConsumableStocks', 'receivables', 'legalNoticeLogs', 'legalNoticeTemplates'
 ];
 
 class LocalDB {
@@ -2987,6 +3014,11 @@ class LocalDB {
   get prepaidTransactions() { return this.get<PrepaidTransaction>('prepaidTransactions', []); }
   set prepaidTransactions(val: PrepaidTransaction[]) { this.set('prepaidTransactions', val); }
 
+  get legalNoticeLogs() { return this.get<LegalNoticeLog>('legalNoticeLogs', []); }
+  set legalNoticeLogs(val: LegalNoticeLog[]) { this.set('legalNoticeLogs', val); }
+
+  get legalNoticeTemplates() { return this.get<LegalNoticeTemplate>('legalNoticeTemplates', []); }
+  set legalNoticeTemplates(val: LegalNoticeTemplate[]) { this.set('legalNoticeTemplates', val); }
   get delinquencyActionLogs() { return this.get<DelinquencyActionLog>('delinquencyActionLogs', []); }
   set delinquencyActionLogs(val: DelinquencyActionLog[]) { this.set('delinquencyActionLogs', val); }
 
@@ -2995,6 +3027,8 @@ class LocalDB {
     const mapping: Record<string, string> = {
       prepaidTransactions: 'prepaid_transactions',
       delinquencyActionLogs: 'delinquency_action_logs',
+      legalNoticeLogs: 'legal_notice_logs',
+      legalNoticeTemplates: 'legal_notice_templates',
       users: 'users',
       departments: 'departments',
       permissions: 'permissions',
@@ -3413,6 +3447,8 @@ class LocalDB {
       external_leases: 'externalLeases',
       prepaid_transactions: 'prepaidTransactions',
       delinquency_action_logs: 'delinquencyActionLogs',
+      legal_notice_logs: 'legalNoticeLogs',
+      legal_notice_templates: 'legalNoticeTemplates',
       inspection_checklist_items: 'inspectionChecklistItems',
       mechanic_consumable_stocks: 'mechanicConsumableStocks',
       depreciation_logs: 'depreciationLogs',

@@ -6,7 +6,7 @@ import {
   AlertTriangle, PhoneCall, Mail, CheckCircle, 
   Clock, Plus, Upload, Trash2, ArrowRight, UserCheck, ShieldAlert,
   Calendar, DollarSign, Award, ThumbsUp, ThumbsDown, Lock, Unlock, Search,
-  Send, AlertCircle, FileText, Check
+  Send, AlertCircle, FileText, Check, Printer, FileCheck, Save, Eye
 } from 'lucide-react';
 
 interface CalculatedDelinquency {
@@ -44,10 +44,35 @@ export const DelinquencyPage: React.FC = () => {
   const { 
     currentUser, hasPermission, billings, customers, users, contracts, 
     delinquencyActionLogs, saveDelinquencyAction, updateDelinquencyActionPromise,
-    saveCustomer, refreshAllData, showErrorModal, todos
+    saveCustomer, refreshAllData, showErrorModal, todos,
+    legalNoticeLogs, legalNoticeTemplates, saveLegalNoticeLog, saveLegalNoticeTemplate
   } = useApp();
   const canSave = hasPermission('billing', 'save');
-  const isAdmin = currentUser?.role === 'ADMIN' || currentUser?.role === 'EXECUTIVE';
+  // ─── [내용증명 스튜디오 상태] ───
+  const isExecutive = currentUser?.role === 'ADMIN' || currentUser?.role === 'EXECUTIVE';
+  const [showNoticeModal, setShowNoticeModal] = useState(false);
+  const [noticeTargetDel, setNoticeTargetDel] = useState<CalculatedDelinquency | null>(null);
+  const [noticeTitle, setNoticeTitle] = useState('고소작업대 임대료 미납에 따른 대금 변제 최고 및 계약 해지·장비 회수 예고 통보서');
+  const [noticeDeadlineDays, setNoticeDeadlineDays] = useState(7);
+  const [noticeCustomContent, setNoticeCustomContent] = useState('');
+  const [noticeTrackingNo, setNoticeTrackingNo] = useState('');
+  const [viewingNoticeLog, setViewingNoticeLog] = useState<any | null>(null);
+
+  // 기본 서식 템플릿 생성 헬퍼
+  const generateDefaultNoticeText = (del: CalculatedDelinquency, customer?: Customer, days = 7) => {
+    return `1. 귀사의 무궁한 발전을 기원합니다.
+
+2. 당사와 귀사는 고소작업대 임대차 계약을 체결하고 현장에 정상적으로 장비를 공급·가동하여 왔으나, 귀사는 약정 결제기일(${del.paymentDueConditionText})을 ${del.overdueDays}일 도과하여 현재까지 총 ₩${del.totalOverdueAmount.toLocaleString()}원의 렌탈 임대료를 미납하고 있습니다.
+
+3. 이에 당사는 본 통고서 도달일로부터 ${days}일 이내에 미납된 임대료 전액을 당사 지정 계좌로 완납하여 주실 것을 엄중히 최고(催告)합니다.
+
+4. 만일 위 기한 내에 대금 변제가 이루어지지 않을 경우, 당사는 부득이 다음과 같은 법적 조치를 즉각 단행할 것임을 통지합니다:
+   가. 민법 및 임대차 계약서 조항에 의거한 임대차 계약 즉시 해지 및 현장 투입 장비의 강제 회수/원격 가동 락(Lock) 조치
+   나. 관할 법원에 지급명령 신청 및 귀사의 공사대금 채권(원청사 기성금), 예금, 부동산 등에 대한 가압류 및 강제집행
+   다. 상법 및 소송촉진등에관한특례법에 따른 법정 지연손해금(연 12%) 및 일체의 변호사/소송/회수 비용 청구
+
+5. 부디 원만한 해결을 위해 조속한 시일 내에 완납 또는 구체적인 변제 확약 일정을 통보해 주시기 바랍니다.`;
+  };
 
   // 토스트 알림 상태 (헌장 5.2: 브라우저 alert/confirm 전면 퇴출)
   const [toastMessage, setToastMessage] = useState<{ type: 'success' | 'error' | 'warning'; text: string } | null>(null);
@@ -319,6 +344,96 @@ export const DelinquencyPage: React.FC = () => {
     setPromiseContactPerson('');
   };
 
+  // 📜 내용증명 작성 스튜디오 오픈
+  const handleOpenNoticeModal = (del: CalculatedDelinquency) => {
+    if (!isExecutive) {
+      showToast('내용증명 작성 및 발송은 경영진 고유 권한입니다.', 'error');
+      return;
+    }
+    const customer = customers.find(c => c.id === del.customerId);
+    setNoticeTargetDel(del);
+
+    // 저장된 커스텀 템플릿이 있으면 적용, 없으면 기본 템플릿 로드
+    const customTemplate = legalNoticeTemplates && legalNoticeTemplates[0];
+    if (customTemplate) {
+      setNoticeTitle(customTemplate.title || '고소작업대 임대료 미납에 따른 대금 변제 최고 및 계약 해지·장비 회수 예고 통보서');
+      setNoticeDeadlineDays(customTemplate.deadlineDays || 7);
+      setNoticeCustomContent(customTemplate.content
+        .replace(/{{customerName}}/g, del.customerName)
+        .replace(/{{overdueAmount}}/g, del.totalOverdueAmount.toLocaleString())
+        .replace(/{{overdueDays}}/g, String(del.overdueDays))
+        .replace(/{{deadlineDays}}/g, String(customTemplate.deadlineDays || 7))
+        .replace(/{{paymentDueConditionText}}/g, del.paymentDueConditionText)
+      );
+    } else {
+      setNoticeTitle('고소작업대 임대료 미납에 따른 대금 변제 최고 및 계약 해지·장비 회수 예고 통보서');
+      setNoticeDeadlineDays(7);
+      setNoticeCustomContent(generateDefaultNoticeText(del, customer, 7));
+    }
+
+    setNoticeTrackingNo('');
+    setShowNoticeModal(true);
+  };
+
+  // 내용증명 기본 서식 저장
+  const handleSaveNoticeTemplate = async () => {
+    if (!isExecutive) return;
+    try {
+      await saveLegalNoticeTemplate({
+        title: noticeTitle,
+        content: noticeCustomContent,
+        deadlineDays: noticeDeadlineDays
+      });
+      showToast('현재 편집 내용이 향후 작성용 [기본 서식]으로 영구 저장되었습니다.');
+    } catch (err: any) {
+      showErrorModal(`서식 저장 오류: ${err?.message || err}`);
+    }
+  };
+
+  // 내용증명 발송 승인 및 이력 저장
+  const handleSubmitLegalNotice = async () => {
+    if (!noticeTargetDel || !isExecutive) return;
+    const customer = customers.find(c => c.id === noticeTargetDel.customerId);
+
+    try {
+      // 1. LegalNoticeLog 저장
+      await saveLegalNoticeLog({
+        customerId: noticeTargetDel.customerId,
+        customerName: noticeTargetDel.customerName,
+        representative: customer?.representative || '대표이사',
+        bizRegNo: customer?.bizRegNo,
+        address: customer?.address || '사업장 주소지',
+        overdueAmount: noticeTargetDel.totalOverdueAmount,
+        overdueDays: noticeTargetDel.overdueDays,
+        noticeTitle: noticeTitle.trim(),
+        noticeContent: noticeCustomContent.trim(),
+        deadlineDays: noticeDeadlineDays,
+        sentDate: todayStr,
+        sentByUserId: currentUser?.id || 'ceo',
+        sentByName: currentUser?.name || '대표이사',
+        postalTrackingNo: noticeTrackingNo.trim() || undefined
+      });
+
+      // 2. DelinquencyActionLog에 NOTICE_SENT 기록
+      await saveDelinquencyAction({
+        customerId: noticeTargetDel.customerId,
+        actionType: 'NOTICE_SENT',
+        actionDetails: `[내용증명/최고장 발송] ${noticeTitle.trim()} (최고금액: ₩${noticeTargetDel.totalOverdueAmount.toLocaleString()}원, 최고기한: ${noticeDeadlineDays}일)${noticeTrackingNo ? ` [등기번호: ${noticeTrackingNo}]` : ''}`,
+        recordedBy: currentUser?.name || '경영진',
+        mandateType: 'CEO_AUTO_MANDATE'
+      });
+
+      refreshAllData();
+      await db.awaitPendingWrites();
+
+      showToast(`[${noticeTargetDel.customerName}] 내용증명 발송 이력이 저장되고 고객관리 및 연체대장에 반영되었습니다.`);
+      setShowNoticeModal(false);
+      setNoticeTargetDel(null);
+    } catch (err: any) {
+      showErrorModal(`내용증명 발송 처리 오류: ${err?.message || err}`);
+    }
+  };
+
   // 조치 기록 및 상담 약속 등록
   const handleRegisterAction = async () => {
     if (!selectedDelinquency) return;
@@ -412,9 +527,12 @@ export const DelinquencyPage: React.FC = () => {
     }
   };
 
-  // 거래 차단 / 해제 토글
+  // 거래 차단 / 해제 토글 (경영진 고유 권한 엄격 한정)
   const handleToggleCustomerBlock = async (del: CalculatedDelinquency) => {
-    if (!canSave) return;
+    if (!isExecutive) {
+      showToast('신규계약 및 출고금지(BLOCKED) 처분은 경영진 고유 권한입니다.', 'error');
+      return;
+    }
     const customer = customers.find(c => c.id === del.customerId);
     if (!customer) return;
 
@@ -775,14 +893,27 @@ export const DelinquencyPage: React.FC = () => {
                   <span>연체: <strong style={{ color: 'var(--danger)' }}>₩{selectedDelinquency.totalOverdueAmount.toLocaleString()}원 ({selectedDelinquency.overdueDays}일)</strong></span>
                 </div>
               </div>
-              <button 
-                type="button" 
-                className="btn-primary" 
-                onClick={() => handleOpenDirectiveModal(selectedDelinquency)}
-                style={{ padding: '4px 10px', fontSize: '11.5px', display: 'flex', alignItems: 'center', gap: '4px' }}
-              >
-                <Send size={12} /> 경영진 지시
-              </button>
+              <div style={{ display: 'flex', gap: '6px' }}>
+                {isExecutive && (
+                  <button 
+                    type="button" 
+                    className="btn-secondary" 
+                    onClick={() => handleOpenNoticeModal(selectedDelinquency)}
+                    style={{ padding: '4px 10px', fontSize: '11.5px', display: 'flex', alignItems: 'center', gap: '4px', color: '#7e22ce', fontWeight: 700, borderColor: '#d8b4fe', backgroundColor: '#faf5ff' }}
+                    title="경영진 고유권한: 최고장/내용증명 작성 및 인쇄"
+                  >
+                    <FileText size={12} /> 내용증명 작성
+                  </button>
+                )}
+                <button 
+                  type="button" 
+                  className="btn-primary" 
+                  onClick={() => handleOpenDirectiveModal(selectedDelinquency)}
+                  style={{ padding: '4px 10px', fontSize: '11.5px', display: 'flex', alignItems: 'center', gap: '4px' }}
+                >
+                  <Send size={12} /> 경영진 지시
+                </button>
+              </div>
             </div>
 
             {/* 지시 방치 경보 배너 */}
@@ -890,6 +1021,22 @@ export const DelinquencyPage: React.FC = () => {
                       <div style={{ whiteSpace: 'pre-wrap', lineHeight: '1.4', color: 'var(--text-secondary)' }}>
                         {log.actionDetails}
                       </div>
+                      {log.actionType === 'NOTICE_SENT' && (() => {
+                        const noticeRecord = legalNoticeLogs.find(n => n.customerId === selectedDelinquency?.customerId);
+                        if (!noticeRecord) return null;
+                        return (
+                          <div style={{ marginTop: '6px' }}>
+                            <button
+                              type="button"
+                              className="btn-secondary"
+                              onClick={() => setViewingNoticeLog(noticeRecord)}
+                              style={{ padding: '2px 8px', fontSize: '11px', color: '#7e22ce', display: 'flex', alignItems: 'center', gap: '4px' }}
+                            >
+                              <Eye size={11} /> 발송 내용증명 원문 보기
+                            </button>
+                          </div>
+                        );
+                      })()}
 
                       {log.promiseDate && (
                         <div style={{ marginTop: '6px', padding: '6px 8px', borderRadius: '4px', backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -973,6 +1120,236 @@ export const DelinquencyPage: React.FC = () => {
           </div>
         );
       })()}
+      {/* ──────────────────────────────────────────────────────────────────────── */}
+      {/* [경영진 고유권한] 내용증명(최고장) 편집기 & 인쇄 스튜디오 모달                 */}
+      {/* ──────────────────────────────────────────────────────────────────────── */}
+      {showNoticeModal && noticeTargetDel && (() => {
+        const cust = customers.find(c => c.id === noticeTargetDel.customerId);
+
+        return (
+          <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100, padding: '20px' }}>
+            <div className="card" style={{ width: '95%', maxWidth: '1100px', height: '90vh', backgroundColor: 'var(--bg-card)', margin: 0, padding: '16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              
+              {/* 모달 헤더 */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-color)', paddingBottom: '8px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ padding: '2px 6px', borderRadius: '4px', fontSize: '11px', fontWeight: 800, backgroundColor: '#f3e8ff', color: '#7e22ce' }}>경영진 전결</span>
+                  <h3 style={{ fontSize: '16px', fontWeight: 800, margin: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <FileText size={17} color="#7e22ce" /> 내용증명 / 법적 최고장 작성 스튜디오
+                  </h3>
+                </div>
+                <button type="button" onClick={() => setShowNoticeModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '16px' }}>
+                  ✕
+                </button>
+              </div>
+
+              {/* 2열 스튜디오 본체: 좌측 편집기 / 우측 실시간 A4 미리보기 */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1.05fr 1fr', gap: '14px', flex: 1, minHeight: 0 }}>
+                
+                {/* [좌측] 실시간 내용증명 편집기 */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', overflowY: 'auto', paddingRight: '4px' }}>
+                  
+                  <div style={{ backgroundColor: 'var(--bg-app)', padding: '10px', borderRadius: '6px', fontSize: '11.5px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
+                    <div>수신 거래처: <strong>{noticeTargetDel.customerName}</strong></div>
+                    <div>대표이사: <strong>{cust?.representative || '대표이사'}</strong> 귀하</div>
+                    <div>연체 총액: <strong style={{ color: 'var(--danger)' }}>₩{noticeTargetDel.totalOverdueAmount.toLocaleString()}원</strong></div>
+                    <div>약정 결제일: <strong>{noticeTargetDel.paymentDueConditionText}</strong> ({noticeTargetDel.overdueDays}일 도과)</div>
+                  </div>
+
+                  <div>
+                    <label style={{ fontSize: '11.5px', fontWeight: 700, display: 'block', marginBottom: '3px' }}>문서 제목</label>
+                    <input
+                      type="text"
+                      value={noticeTitle}
+                      onChange={e => setNoticeTitle(e.target.value)}
+                      style={{ width: '100%', padding: '6px 8px', fontSize: '12px', borderRadius: '5px', border: '1px solid var(--border-color)', fontWeight: 700 }}
+                    />
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                    <div>
+                      <label style={{ fontSize: '11.5px', fontWeight: 700, display: 'block', marginBottom: '3px' }}>변제 최고 기한 (도달일로부터)</label>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <input
+                          type="number"
+                          value={noticeDeadlineDays}
+                          onChange={e => setNoticeDeadlineDays(Math.max(1, Number(e.target.value)))}
+                          style={{ width: '80px', padding: '5px', fontSize: '12px', textAlign: 'center' }}
+                        />
+                        <span style={{ fontSize: '12px' }}>일 이내</span>
+                      </div>
+                    </div>
+                    <div>
+                      <label style={{ fontSize: '11.5px', fontWeight: 700, display: 'block', marginBottom: '3px' }}>우체국 등기번호 (발송 후 입력)</label>
+                      <input
+                        type="text"
+                        value={noticeTrackingNo}
+                        onChange={e => setNoticeTrackingNo(e.target.value)}
+                        placeholder="예: 13자리 등기번호"
+                        style={{ width: '100%', padding: '5px 8px', fontSize: '12px' }}
+                      />
+                    </div>
+                  </div>
+
+                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '3px' }}>
+                      <label style={{ fontSize: '11.5px', fontWeight: 700 }}>내용증명 본문 (자유 편집 가능)</label>
+                      <button
+                        type="button"
+                        className="btn-secondary"
+                        onClick={handleSaveNoticeTemplate}
+                        style={{ padding: '2px 8px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '3px', color: 'var(--primary)' }}
+                      >
+                        <Save size={11} /> 기본 서식으로 저장
+                      </button>
+                    </div>
+                    <textarea
+                      value={noticeCustomContent}
+                      onChange={e => setNoticeCustomContent(e.target.value)}
+                      rows={12}
+                      style={{ width: '100%', flex: 1, padding: '10px', fontSize: '11.5px', lineHeight: '1.6', borderRadius: '5px', border: '1px solid var(--border-color)', resize: 'none', fontFamily: 'inherit' }}
+                    />
+                  </div>
+                </div>
+
+                {/* [우측] A4 실시간 인쇄 규격 미리보기 */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', minHeight: 0 }}>
+                  <div style={{ fontSize: '11.5px', fontWeight: 700, color: 'var(--text-secondary)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span>A4 우체국 내용증명 규격 실시간 미리보기 (여백 20mm)</span>
+                    <button
+                      type="button"
+                      className="btn-secondary"
+                      onClick={() => window.print()}
+                      style={{ padding: '3px 8px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '3px' }}
+                    >
+                      <Printer size={12} /> 인쇄 / PDF 출력
+                    </button>
+                  </div>
+
+                  <div 
+                    id="legal-notice-print-area"
+                    style={{
+                      flex: 1,
+                      backgroundColor: '#ffffff',
+                      color: '#0f172a',
+                      padding: '24px 28px',
+                      borderRadius: '6px',
+                      border: '1px solid #cbd5e1',
+                      boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
+                      overflowY: 'auto',
+                      fontSize: '11px',
+                      lineHeight: '1.6',
+                      fontFamily: "'Malgun Gothic', '맑은 고딕', sans-serif"
+                    }}
+                  >
+                    <div style={{ textAlign: 'center', fontSize: '18px', fontWeight: 900, letterSpacing: '4px', textDecoration: 'underline', marginBottom: '20px' }}>
+                      최 고 장 (내 용 증 명)
+                    </div>
+
+                    {/* 수신인 / 발신인 상자 */}
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '16px', border: '1px solid #94a3b8', padding: '10px' }}>
+                      <div>
+                        <div style={{ fontWeight: 800, borderBottom: '1px dashed #cbd5e1', paddingBottom: '3px', marginBottom: '4px' }}>[수 신 인]</div>
+                        <div>상 호: <strong>{noticeTargetDel.customerName}</strong></div>
+                        <div>대 표 자: <strong>{cust?.representative || '대표이사'}</strong> 귀하</div>
+                        <div>사업자번호: {cust?.bizRegNo || '-'}</div>
+                        <div>주 소: {cust?.address || '사업장 소재지'}</div>
+                      </div>
+                      <div>
+                        <div style={{ fontWeight: 800, borderBottom: '1px dashed #cbd5e1', paddingBottom: '3px', marginBottom: '4px' }}>[발 신 인]</div>
+                        <div>상 호: <strong>주식회사 기연리프트</strong></div>
+                        <div>대 표 자: <strong>이 수 용</strong> (직인생략/날인)</div>
+                        <div>등록번호: 138-81-83251</div>
+                        <div>주 소: 경기도 용인시 처인구 백암면 덕평로 112</div>
+                        <div>전화번호: 031-334-5296</div>
+                      </div>
+                    </div>
+
+                    <div style={{ fontWeight: 800, fontSize: '12px', marginBottom: '12px', backgroundColor: '#f1f5f9', padding: '6px 8px', borderLeft: '4px solid #0f172a' }}>
+                      제 목: {noticeTitle}
+                    </div>
+
+                    {/* 본문 */}
+                    <div style={{ whiteSpace: 'pre-wrap', lineHeight: '1.7', marginBottom: '24px' }}>
+                      {noticeCustomContent}
+                    </div>
+
+                    {/* 말미 직인 날인란 */}
+                    <div style={{ textAlign: 'right', marginTop: '30px', paddingRight: '10px' }}>
+                      <div style={{ fontSize: '12px', fontWeight: 700, marginBottom: '8px' }}>
+                        {todayStr.split('-')[0]}년 {todayStr.split('-')[1]}월 {todayStr.split('-')[2]}일
+                      </div>
+                      <div style={{ fontSize: '14px', fontWeight: 900, display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+                        <span>주식회사 기연리프트 대표이사 이 수 용</span>
+                        <span style={{ border: '2px solid #dc2626', color: '#dc2626', padding: '2px 6px', borderRadius: '4px', fontSize: '11px', fontWeight: 800 }}>
+                          (인)
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+              </div>
+
+              {/* 하단 액션 버튼 바 */}
+              <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                  발송 승인 시 내용증명 발송 이력(`legalNoticeLogs`) 및 고객 타임라인에 영구 보존됩니다.
+                </span>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button type="button" className="btn-secondary" onClick={() => setShowNoticeModal(false)} style={{ padding: '6px 14px', fontSize: '12px' }}>
+                    취소
+                  </button>
+                  <button type="button" className="btn-primary" onClick={handleSubmitLegalNotice} style={{ padding: '6px 16px', fontSize: '12px', backgroundColor: '#7e22ce', borderColor: '#7e22ce' }}>
+                    내용증명 발송 승인 및 이력 저장
+                  </button>
+                </div>
+              </div>
+
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ──────────────────────────────────────────────────────────────────────── */}
+      {/* 내용증명 원문 열람 모달 (과거 발송분 조회)                                   */}
+      {/* ──────────────────────────────────────────────────────────────────────── */}
+      {viewingNoticeLog && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1200, padding: '20px' }}>
+          <div className="card" style={{ width: '90%', maxWidth: '750px', maxHeight: '85vh', backgroundColor: '#ffffff', color: '#0f172a', margin: 0, padding: '24px', display: 'flex', flexDirection: 'column', gap: '14px', overflowY: 'auto' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #cbd5e1', paddingBottom: '8px' }}>
+              <h3 style={{ fontSize: '16px', fontWeight: 800, margin: 0 }}>
+                📜 발송 내용증명 원문 (발송일: {viewingNoticeLog.sentDate})
+              </h3>
+              <button type="button" onClick={() => setViewingNoticeLog(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '16px' }}>
+                ✕
+              </button>
+            </div>
+
+            <div style={{ backgroundColor: '#f8fafc', padding: '10px', borderRadius: '6px', fontSize: '11.5px', border: '1px solid #e2e8f0' }}>
+              <div>수신: <strong>{viewingNoticeLog.customerName}</strong> ({viewingNoticeLog.representative} 귀하)</div>
+              <div>발송자: <strong>{viewingNoticeLog.sentByName}</strong> (경영진)</div>
+              <div>최고금액: <strong style={{ color: '#dc2626' }}>₩{viewingNoticeLog.overdueAmount?.toLocaleString()}원</strong> ({viewingNoticeLog.overdueDays}일 도과 시점)</div>
+              {viewingNoticeLog.postalTrackingNo && <div>등기번호: <strong>{viewingNoticeLog.postalTrackingNo}</strong></div>}
+            </div>
+
+            <div style={{ fontWeight: 800, fontSize: '13px' }}>
+              제 목: {viewingNoticeLog.noticeTitle}
+            </div>
+
+            <div style={{ whiteSpace: 'pre-wrap', lineHeight: '1.7', fontSize: '11.5px', backgroundColor: '#ffffff', padding: '12px', border: '1px solid #e2e8f0', borderRadius: '4px' }}>
+              {viewingNoticeLog.noticeContent}
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+              <button type="button" className="btn-secondary" onClick={() => setViewingNoticeLog(null)} style={{ padding: '6px 14px', fontSize: '12px' }}>
+                닫기
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
 
       {/* ──────────────────────────────────────────────────────────────────────── */}
       {/* 경영진 수금독촉 지시 하달 모달                                            */}

@@ -12,7 +12,7 @@ import { exportToExcel } from '../services/excel';
 export const Customers: React.FC = () => {
   const {
     customers, contacts, sites, saveCustomer, saveContact, saveSite, hasPermission,
-    navigationPayload, setNavigationPayload, currentUser, refreshAllData
+    navigationPayload, setNavigationPayload, currentUser, refreshAllData, legalNoticeLogs
   } = useApp();
 
   const canSave = hasPermission('customer', 'save');
@@ -669,6 +669,15 @@ export const Customers: React.FC = () => {
                         ) : cust.transactionStatus === 'BLOCKED' ? (
                           <span className="badge badge-danger" style={{ fontSize: '9.5px', padding: '1px 4px' }}>제한</span>
                         ) : null}
+                        {(() => {
+                          const noticeCount = (legalNoticeLogs || []).filter(l => l.customerId === cust.id).length;
+                          if (noticeCount === 0) return null;
+                          return (
+                            <span style={{ fontSize: '9.5px', color: '#7e22ce', backgroundColor: '#f3e8ff', padding: '1px 4px', borderRadius: '3px', fontWeight: 800 }}>
+                              📜 내용증명 {noticeCount}건
+                            </span>
+                          );
+                        })()}
                       </div>
                     </div>
 

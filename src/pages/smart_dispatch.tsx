@@ -1,5 +1,4 @@
-// src/pages/smart_dispatch.tsx
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
 import { findCustomerByNormalizedName, STANDARD_SPECS, SpecItem } from '../services/db';
 import { Zap, Clipboard, FileText, Copy, Printer, Braces, Plus, Trash2, RefreshCw, CheckCircle2, AlertTriangle, Settings, ShieldCheck } from 'lucide-react';
@@ -10,7 +9,7 @@ interface EquipmentItem {
 }
 
 export const SmartDispatch: React.FC = () => {
-  const { hasPermission, saveSmartDispatch, assets, products, showErrorModal, users, contracts, currentUser, customers, contacts, sites } = useApp();
+  const { hasPermission, saveSmartDispatch, assets, products, showErrorModal, users, contracts, currentUser, customers, contacts, sites, billings } = useApp();
   const canSave = hasPermission('delivery', 'save');
 
   // 토스트 알림 상태 (헌장 5.2: 브라우저 alert/confirm 전면 퇴출)
@@ -53,6 +52,16 @@ export const SmartDispatch: React.FC = () => {
   // 구조화된 폼 데이터 상태
   const [contractNo, setContractNo] = useState('');
   const [customerName, setCustomerName] = useState('');
+  const [dispatchOverdueAcknowledged, setDispatchOverdueAcknowledged] = useState(false);
+
+  const matchedCustOverdue = useMemo(() => {
+    const mc = findCustomerByNormalizedName(customers, customerName);
+    if (!mc) return null;
+    const custBillings = billings.filter(b => b.customerId === mc.id && b.status !== 'PAID' && (b.totalAmount - b.paidAmount) > 0);
+    const overdueSum = custBillings.reduce((s, b) => s + (b.totalAmount - b.paidAmount), 0);
+    if (overdueSum <= 0 && mc.transactionStatus !== 'BLOCKED') return null;
+    return { overdueSum, count: custBillings.length, isBlocked: mc.transactionStatus === 'BLOCKED' };
+  }, [customers, customerName, billings]);
   const [siteName, setSiteName] = useState('');
   const [siteAddress, setSiteAddress] = useState('');
 
@@ -961,6 +970,14 @@ ${activeSpecs.map((s, idx) => `  ${idx + 1}. [적용] ${s.label}`).join('\n') ||
     }
 
     const matchedCust = findCustomerByNormalizedName(customers, customerName);
+    if (matchedCust?.transactionStatus === 'BLOCKED') {
+      showToast('🚫 경영진 처분으로 인해 거래 불가(BLOCKED) 상태인 거래처입니다. 신규 출고의뢰 발행이 차단됩니다.', 'error');
+      return;
+    }
+    if (matchedCustOverdue && matchedCustOverdue.overdueSum > 0 && !dispatchOverdueAcknowledged) {
+      showToast('⚠️ 연체 채권 경각심 통제: [수금 책임 인지] 확인 체크박스에 동의해야 출고의뢰를 발행할 수 있습니다.', 'error');
+      return;
+    }
     const matchedSite = matchedCust ? sites.find(s => s.customerId === matchedCust.id && (s.name.replace(/\s/g, '') === siteName.replace(/\s/g, '') || s.name.includes(siteName) || siteName.includes(s.name))) : null;
 
     const finalAddress = siteAddress.trim() || (matchedSite?.address && matchedSite.address !== '미상' ? matchedSite.address : '');
@@ -1257,6 +1274,27 @@ ${activeSpecs.map((s, idx) => `  ${idx + 1}. [적용] ${s.label}`).join('\n') ||
                   </span>
                 )}
               </h4>
+              {matchedCustOverdue && (
+                <div style={{ padding: '10px 14px', borderRadius: '6px', backgroundColor: matchedCustOverdue.isBlocked ? '#fef2f2' : '#fffbeb', border: `1px solid ${matchedCustOverdue.isBlocked ? '#f87171' : '#fcd34d'}`, color: matchedCustOverdue.isBlocked ? '#991b1b' : '#92400e', marginBottom: '12px', fontSize: '12px' }}>
+                  <div style={{ fontWeight: 800, display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
+                    <AlertTriangle size={15} color={matchedCustOverdue.isBlocked ? '#dc2626' : '#d97706'} />
+                    {matchedCustOverdue.isBlocked ? '🚫 [경영진 처분] 거래 불가 (BLOCKED)' : '⚠️ [연체 채권 경각심 통제 경보]'}
+                  </div>
+                  <div>
+                    {matchedCustOverdue.isBlocked
+                      ? '해당 고객사는 경영진의 출고금지(BLOCKED) 처분으로 신규 출고의뢰 발행이 전면 차단되어 있습니다.'
+                      : `해당 거래처는 약정 납기일이 도과된 미납 청구서 ${matchedCustOverdue.count}건 (총 ₩${matchedCustOverdue.overdueSum.toLocaleString()}원)이 존재합니다.`
+                    }
+                  </div>
+                  {!matchedCustOverdue.isBlocked && (
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '6px', fontWeight: 700, cursor: 'pointer' }}>
+                      <input type="checkbox" checked={dispatchOverdueAcknowledged} onChange={e => setDispatchOverdueAcknowledged(e.target.checked)} />
+                      <span>☑️ [수금 책임 인지] "위 연체 사실 및 경영진 모니터링 현황을 확인하였으며, 신규 출고 진행에 따른 수금 관리에 책임을 다할 것을 확인합니다."</span>
+                    </label>
+                  )}
+                </div>
+              )}
+
               <div className="mobile-grid-1col" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
                 <div>
                   <label>계약번호</label>

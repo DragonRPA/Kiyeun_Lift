@@ -1,6 +1,6 @@
 // @ts-nocheck
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
-import { db, supabase, User, MenuPermission, createMenuPermission, Customer, CustomerContact, CustomerSite, Product, Asset, Consumable, ConsumableLog, ConsumablePurchaseRequest, MechanicConsumableStock, Contract, ContractAsset, ContractHistory, Delivery, Billing, BillingDetail, Receivable, Payment, PaymentDepositLink, Repair, RepairConsumable, Todo, BankTransaction, BankMatchingRule, BankAccountInitialBalance, AssetInOutLog, GoogleConfig, Vendor, CashFlowSnapshot, OutboundInspection, TransportCompany, TransportDriver, DepreciationLog, PurchaseSettlement, PurchaseSettlementItem, SettlementPaymentLog, ExternalLease, PurchaseSettlementType, PurchaseSettlementStatus, findCustomerByNormalizedName, AnnualLeaveQuota, LeaveUsage, OvertimeRecord, PayrollClosing, InspectionChecklistItem, InboundDefectDetail, PrepaidTransaction, DelinquencyActionLog, calculateAssetDepreciation, FieldAsTicket, FieldAsPartUsed, FieldAsCollectedPart } from '../services/db';
+import { db, supabase, User, MenuPermission, createMenuPermission, Customer, CustomerContact, CustomerSite, Product, Asset, Consumable, ConsumableLog, ConsumablePurchaseRequest, MechanicConsumableStock, Contract, ContractAsset, ContractHistory, Delivery, Billing, BillingDetail, Receivable, Payment, PaymentDepositLink, Repair, RepairConsumable, Todo, BankTransaction, BankMatchingRule, BankAccountInitialBalance, AssetInOutLog, GoogleConfig, Vendor, CashFlowSnapshot, OutboundInspection, TransportCompany, TransportDriver, DepreciationLog, PurchaseSettlement, PurchaseSettlementItem, SettlementPaymentLog, ExternalLease, PurchaseSettlementType, PurchaseSettlementStatus, findCustomerByNormalizedName, AnnualLeaveQuota, LeaveUsage, OvertimeRecord, PayrollClosing, InspectionChecklistItem, InboundDefectDetail, PrepaidTransaction, DelinquencyActionLog, LegalNoticeLog, LegalNoticeTemplate, calculateAssetDepreciation, FieldAsTicket, FieldAsPartUsed, FieldAsCollectedPart } from '../services/db';
 import { ErrorModal } from '../components/ErrorModal';
 import { getAllSystemMenuIds } from '../config/menu_config';
 
@@ -269,7 +269,12 @@ interface AppContextType {
 
   // Delinquency Management
   delinquencyActionLogs: DelinquencyActionLog[];
-  saveDelinquencyAction: (action: Omit<DelinquencyActionLog, 'id' | 'createdAt'>) => Promise<void>;
+  legalNoticeLogs: LegalNoticeLog[];
+  legalNoticeTemplates: LegalNoticeTemplate[];
+  saveLegalNoticeLog: (log: Omit<LegalNoticeLog, 'id' | 'createdAt'>) => Promise<LegalNoticeLog>;
+  saveLegalNoticeTemplate: (tpl: Omit<LegalNoticeTemplate, 'id' | 'updatedAt'> & { id?: string }) => Promise<void>;
+
+  saveDelinquencyAction: (action: Omit<DelinquencyActionLog, LegalNoticeLog, LegalNoticeTemplate, 'id' | 'createdAt'>) => Promise<void>;
   updateDelinquencyActionPromise: (actionId: string, status: 'PENDING' | 'KEPT' | 'BROKEN') => Promise<void>;
 
   // Navigation states (cross-page routing)
@@ -328,6 +333,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [payrollClosings, setPayrollClosings] = useState<PayrollClosing[]>([]);
   const [prepaidTransactions, setPrepaidTransactions] = useState<PrepaidTransaction[]>([]);
   const [delinquencyActionLogs, setDelinquencyActionLogs] = useState<DelinquencyActionLog[]>([]);
+  const [legalNoticeLogs, setLegalNoticeLogs] = useState<LegalNoticeLog[]>([]);
+  const [legalNoticeTemplates, setLegalNoticeTemplates] = useState<LegalNoticeTemplate[]>([]);
+
 
   // Navigation / Routing states
   const [activeTab, setActiveTab] = useState<string>('dashboard');
@@ -410,6 +418,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setPayrollClosings([...db.payrollClosings]);
     setPrepaidTransactions([...db.prepaidTransactions]);
     setDelinquencyActionLogs([...db.delinquencyActionLogs]);
+    setLegalNoticeLogs([...db.legalNoticeLogs]);
+    setLegalNoticeTemplates([...db.legalNoticeTemplates]);
+
   };
 
   // 전체 테이블 Supabase pull 후 state 동기화 (초기 로딩 전용)
@@ -5893,7 +5904,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   // ── 연체 조치 및 입금 약속 관리 ──
-  const saveDelinquencyAction = async (action: Omit<DelinquencyActionLog, 'id' | 'createdAt'>): Promise<void> => {
+  const saveDelinquencyAction = async (action: Omit<DelinquencyActionLog, LegalNoticeLog, LegalNoticeTemplate, 'id' | 'createdAt'>): Promise<void> => {
     try {
       db.insertRow<DelinquencyActionLog>('delinquencyActionLogs', {
         ...action,
@@ -5920,13 +5931,54 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
+  const saveLegalNoticeLog = async (log: Omit<LegalNoticeLog, 'id' | 'createdAt'>): Promise<LegalNoticeLog> => {
+    const newLog = db.insertRow<LegalNoticeLog>('legalNoticeLogs', {
+      ...log,
+      createdAt: new Date().toISOString()
+    }) as LegalNoticeLog;
+
+    refreshAllData();
+    if (db.isSupabaseConnected() && db.pendingWrites.length > 0) {
+      try {
+        await db.pendingWrites[db.pendingWrites.length - 1];
+      } catch (err) {
+        console.error('Supabase write error:', err);
+      }
+    }
+    return newLog;
+  };
+
+  const saveLegalNoticeTemplate = async (tpl: Omit<LegalNoticeTemplate, 'id' | 'updatedAt'> & { id?: string }): Promise<void> => {
+    const existing = db.legalNoticeTemplates[0];
+    if (existing) {
+      db.updateRow<LegalNoticeTemplate>('legalNoticeTemplates', existing.id, {
+        ...tpl,
+        updatedAt: new Date().toISOString()
+      });
+    } else {
+      db.insertRow<LegalNoticeTemplate>('legalNoticeTemplates', {
+        ...tpl,
+        updatedAt: new Date().toISOString()
+      });
+    }
+
+    refreshAllData();
+    if (db.isSupabaseConnected() && db.pendingWrites.length > 0) {
+      try {
+        await db.pendingWrites[db.pendingWrites.length - 1];
+      } catch (err) {
+        console.error('Supabase write error:', err);
+      }
+    }
+  };
+
   return (
     <AppContext.Provider value={{ receivables: db.receivables as any[], refreshReceivables: () => {}, 
       currentUser, theme, toggleTheme, login, logout, hasPermission, showErrorModal,
       users, permissions, customers, contacts, sites, products, assets, consumables, consumableLogs, consumablePurchases, mechanicConsumableStocks: db.mechanicConsumableStocks, contracts, contractAssets, contractHistory, deliveries, billings, billingDetails, payments, paymentDepositLinks, repairs, repairConsumables, transportCompanies, transportDrivers, todos,
       bankTransactions, bankMatchingRules, bankInitialBalances, assetInOutLogs, vendors, googleConfigs, cashFlowSnapshots, outboundInspections, depreciationLogs,
       purchaseSettlements, purchaseSettlementItems, settlementPaymentLogs: db.settlementPaymentLogs, externalLeases, inspectionChecklistItems,
-      annualLeaveQuotas, leaveUsages, overtimeRecords, payrollClosings, prepaidTransactions, delinquencyActionLogs,
+      annualLeaveQuotas, leaveUsages, overtimeRecords, payrollClosings, prepaidTransactions, delinquencyActionLogs, legalNoticeLogs, legalNoticeTemplates, saveLegalNoticeLog, saveLegalNoticeTemplate,
       refreshAllData, fullRefreshFromServer, executeMonthlyDepreciation, loadTablesForMenu, updatePermissions, saveUser, saveCustomer, saveContact, saveSite, saveProduct, saveAsset, updateGoogleConfig,
       saveCashFlowSnapshot, deleteCashFlowSnapshot, saveVendor, deleteVendor, saveBankInitialBalance, saveInspectionChecklistItem, deleteInspectionChecklistItem,
       updateAnnualLeaveQuota, addLeaveUsage, deleteLeaveUsage, addOvertimeRecord, deleteOvertimeRecord, setPayrollClosingStatus,

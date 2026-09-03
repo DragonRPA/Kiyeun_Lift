@@ -3,7 +3,7 @@ import React, { useState, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
 import {
   Plus, Calendar, Search, Download, Edit3, Repeat, Clock, Wrench, ChevronLeft,
-  Building2, ArrowLeftRight, Receipt, FolderOpen, AlertCircle, ExternalLink, Copy
+  Building2, ArrowLeftRight, Receipt, FolderOpen, AlertCircle, ExternalLink, Copy, AlertTriangle
 } from 'lucide-react';
 import { Contract, db, Customer, CustomerContact, CustomerSite, ContractAsset, ContractHistory, Delivery, normalizeEndDate } from '../services/db';
 import { exportToExcel } from '../services/excel';
@@ -60,6 +60,16 @@ export const Contracts: React.FC = () => {
 
   // --- 계약 등록 폼 상태 ---
   const [custSelect, setCustSelect] = useState(customers[0]?.id || '');
+  const [overdueAcknowledged, setOverdueAcknowledged] = useState(false);
+
+  const selectedCustOverdue = useMemo(() => {
+    if (!custSelect || custSelect === 'NEW') return null;
+    const custBillings = billings.filter(b => b.customerId === custSelect && b.status !== 'PAID' && (b.totalAmount - b.paidAmount) > 0);
+    const overdueSum = custBillings.reduce((s, b) => s + (b.totalAmount - b.paidAmount), 0);
+    if (overdueSum <= 0) return null;
+    const mc = customers.find(c => c.id === custSelect);
+    return { overdueSum, count: custBillings.length, isBlocked: mc?.transactionStatus === 'BLOCKED' };
+  }, [custSelect, customers, billings]);
   const [contactSelect, setContactSelect] = useState('');
   const [siteSelect, setSiteSelect] = useState('');
   const [salespersonSelect, setSalespersonSelect] = useState(currentUser?.id || '');
@@ -591,7 +601,11 @@ export const Contracts: React.FC = () => {
     if (custSelect !== 'NEW' && custSelect) {
       const selectedCustomer = customers.find(c => c.id === custSelect);
       if (selectedCustomer?.transactionStatus === 'BLOCKED') {
-        showToast('거래 불가 상태인 거래처입니다.', 'error');
+        showToast('🚫 경영진 처분으로 인해 거래 불가(BLOCKED) 상태인 거래처입니다. 신규 계약 등록이 원천 차단됩니다.', 'error');
+        return;
+      }
+      if (selectedCustOverdue && !overdueAcknowledged) {
+        showToast('⚠️ 연체 채권 경각심 통제: [수금 책임 인지] 확인 체크박스에 동의해야 신규 계약을 등록할 수 있습니다.', 'error');
         return;
       }
     }
@@ -1922,6 +1936,27 @@ export const Contracts: React.FC = () => {
         <form onSubmit={handleCreateContractSubmit} className="card" style={{ margin: 0 }}>
           <h3 className="card-title" style={{ marginBottom: '16px' }}>신규 계약 등록</h3>
           
+          {selectedCustOverdue && (
+            <div style={{ padding: '10px 14px', borderRadius: '6px', backgroundColor: selectedCustOverdue.isBlocked ? '#fef2f2' : '#fffbeb', border: `1px solid ${selectedCustOverdue.isBlocked ? '#f87171' : '#fcd34d'}`, color: selectedCustOverdue.isBlocked ? '#991b1b' : '#92400e', marginBottom: '14px', fontSize: '12px' }}>
+              <div style={{ fontWeight: 800, display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
+                <AlertTriangle size={15} color={selectedCustOverdue.isBlocked ? '#dc2626' : '#d97706'} />
+                {selectedCustOverdue.isBlocked ? '🚫 [경영진 처분] 거래 불가 (BLOCKED)' : '⚠️ [연체 채권 경각심 통제 경보]'}
+              </div>
+              <div>
+                {selectedCustOverdue.isBlocked
+                  ? '해당 거래처는 경영진의 출고금지(BLOCKED) 처분으로 신규 계약 등록이 전면 차단되어 있습니다.'
+                  : `해당 거래처는 약정 납기일이 도과된 미납 청구서 ${selectedCustOverdue.count}건 (총 ₩${selectedCustOverdue.overdueSum.toLocaleString()}원)이 존재합니다.`
+                }
+              </div>
+              {!selectedCustOverdue.isBlocked && (
+                <label style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '6px', fontWeight: 700, cursor: 'pointer' }}>
+                  <input type="checkbox" checked={overdueAcknowledged} onChange={e => setOverdueAcknowledged(e.target.checked)} />
+                  <span>☑️ [수금 책임 인지] "위 연체 사실 및 경영진 모니터링 현황을 확인하였으며, 신규 계약 진행에 따른 수금 관리에 책임을 다할 것을 확인합니다."</span>
+                </label>
+              )}
+            </div>
+          )}
+
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', marginBottom: '16px' }}>
             <div>
               <label>고객사 선택 *</label>
