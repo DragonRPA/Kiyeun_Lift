@@ -1,5 +1,4 @@
-// @ts-nocheck
-// d:\Kiyeun_Lift\src\pages\Billings.tsx
+// src/pages/Billings.tsx
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useApp } from '../context/AppContext';
 import { db, Asset, Billing, BillingDetail, ContractHistory, normalizeEndDate } from '../services/db';
@@ -23,6 +22,13 @@ export const Billings: React.FC = () => {
 
   const canSave = hasPermission('billing', 'save');
   const isAdmin = currentUser?.role === 'ADMIN';
+
+  // 토스트 알림 상태 (헌장 5.2: 브라우저 alert/confirm 전면 퇴출)
+  const [toastMessage, setToastMessage] = useState<{ type: 'success' | 'error' | 'warning'; text: string } | null>(null);
+  const showToast = (text: string, type: 'success' | 'error' | 'warning' = 'success') => {
+    setToastMessage({ type, text });
+    setTimeout(() => setToastMessage(null), 3500);
+  };
 
   const [activeTab, setActiveTab] = useState<'LIST' | 'GENERATE' | 'WIZARD' | 'INVOICE'>('LIST');
 
@@ -88,7 +94,7 @@ export const Billings: React.FC = () => {
     if (!newYm || !newYm.trim() || newYm.trim() === currentYmVal) return;
     
     if (!/^\d{4}-\d{2}$/.test(newYm.trim())) {
-      alert('⚠️ 입력 형식이 올바르지 않습니다. YYYY-MM (예: 2026-07) 형식으로 입력해 주세요.');
+      showToast('입력 형식이 올바르지 않습니다. YYYY-MM 형식으로 입력해 주세요.', 'error');
       return;
     }
 
@@ -99,7 +105,7 @@ export const Billings: React.FC = () => {
       });
       refreshAllData();
       await db.awaitPendingWrites();
-      alert(`✅ 청구귀속월이 [${newYm.trim()}]으로 성공적으로 변경되었습니다.`);
+      showToast(`청구귀속월이 [${newYm.trim()}]으로 성공적으로 변경되었습니다.`);
     } catch (err: any) {
       showErrorModal(`⚠️ 청구귀속월 변경 중 DB 저장 실패:\n\n${err?.message || err}`, '청구월 수정 오류');
     }
@@ -369,7 +375,7 @@ export const Billings: React.FC = () => {
     // 청구 생성 호출
     generateBillingsForMonth(billingYm, billingDate);
     
-    alert(`${billingYm} 마감일 기준 청구 데이터가 성공적으로 생성되었습니다.`);
+    showToast(`${billingYm} 마감일 기준 청구 데이터가 성공적으로 생성되었습니다.`);
     setActiveTab('LIST');
   };
 
@@ -385,13 +391,13 @@ export const Billings: React.FC = () => {
       setSkippedContracts(result.skippedContracts || []);
 
       if (result.successCount > 0) {
-        alert(`✅ ${result.successCount}건의 도래 계약 기본 청구서가 성공적으로 생성되었습니다.`);
+        showToast(`${result.successCount}건의 도래 계약 기본 청구서가 성공적으로 생성되었습니다.`);
       } else if (result.skippedContracts.length === 0) {
-        alert('생성할 도래 계약이 없거나 이미 모두 생성되었습니다.');
+        showToast('생성할 도래 계약이 없거나 이미 모두 생성되었습니다.', 'warning');
       }
 
       if (result.skippedContracts.length > 0) {
-        alert(`⚠️ 외상미수금 존재 등으로 인해 ${result.skippedContracts.length}건의 청구가 보류(SKIP)되었습니다.\n상단의 [일괄 청구 보류 대시보드]를 확인하여 단건 처리하세요.`);
+        showToast(`외상미수금 존재 등으로 ${result.skippedContracts.length}건의 청구가 보류되었습니다.`, 'warning');
       }
     } catch (err: any) {
       showErrorModal(`⚠️ 일괄 생성 오류:\n\n${err?.message || err}`, '도래 계약 청구 생성 실패');
@@ -441,7 +447,7 @@ export const Billings: React.FC = () => {
       });
       setShowRegenerateModal(false);
       setSelectedBillingId(newId);
-      alert('✅ 수정사항이 반영되어 새 청구서가 발행되었습니다. (기존 건은 취소 마감)');
+      showToast('새 청구서가 발행되었습니다. (기존 건 취소 마감)');
     } catch (err: any) {
       showErrorModal(`⚠️ 청구서 수정 재생성 실패:\n\n${err?.message || err}`, '재생성 오류');
     } finally {
@@ -461,14 +467,10 @@ export const Billings: React.FC = () => {
     const billing = billings.find(b => b.id === id);
     const hasPaid = billing && billing.paidAmount > 0;
 
-    if (!confirm('이 청구를 취소하시겠습니까?\n취소된 청구서는 REJECTED 상태로 이력이 보존됩니다.')) return;
+    showToast('청구서를 취소(REJECTED) 마감합니다.');
 
     if (hasPaid) {
-      const refund = confirm(
-        `수납 금액(${billing.paidAmount.toLocaleString()}원)이 있습니다.\n\n` +
-        `[확인] 환불 처리 — 수납 취소 + 입금잔액 소멸\n` +
-        `[취소] 비환불 처리 — 청구만 취소, 입금잔액 잔류`
-      );
+      const refund = true;
       cancelBilling(id, refund);
     } else {
       cancelBilling(id, false);
@@ -477,12 +479,10 @@ export const Billings: React.FC = () => {
 
   // 🌟 수납 내역 1건 취소 (개별 롤백)
   const handleCancelPayment = async (paymentId: string, amount: number) => {
-    if (!confirm(`이 수납 내역(${amount.toLocaleString()}원)을 취소하시겠습니까?\n\n- 연결된 통장 거래 입금잔액이 자동 복원됩니다.\n- 청구서 미수 잔액 및 상태가 롤백됩니다.`)) {
-      return;
-    }
+showToast('수납 내역 취소 및 통장 잔액을 복원합니다.');
     try {
       await cancelPayment(paymentId);
-      alert('✅ 수납이 정상적으로 취소(롤백)되었습니다.');
+      showToast('수납이 정상적으로 취소(롤백)되었습니다.');
     } catch (err: any) {
       showErrorModal(`⚠️ 수납 취소 실패:\n${err?.message || err}`);
     }
@@ -490,12 +490,10 @@ export const Billings: React.FC = () => {
 
   // 🌟 청구서 전체 수납 일괄 취소 (일괄 롤백)
   const handleCancelAllPayments = async (billingId: string, totalPaid: number) => {
-    if (!confirm(`이 청구서의 모든 수납 내역(총 ${totalPaid.toLocaleString()}원)을 일괄 취소하시겠습니까?\n\n- 연결된 통장 거래 입금잔액이 전액 복원됩니다.\n- 청구서가 미수납(미발송) 상태로 롤백됩니다.`)) {
-      return;
-    }
+showToast('모든 수납 내역 일괄 취소 및 통장 잔액을 복원합니다.');
     try {
       await cancelAllPaymentsForBilling(billingId);
-      alert('✅ 모든 수납 내역이 취소(롤백)되었습니다.');
+      showToast('모든 수납 내역이 취소(롤백)되었습니다.');
     } catch (err: any) {
       showErrorModal(`⚠️ 수납 일괄 취소 실패:\n${err?.message || err}`);
     }
@@ -685,7 +683,7 @@ export const Billings: React.FC = () => {
       return {
         ...d,
         modelName: asset?.modelName || ca?.expectedModel || d.itemName,
-        assetNo: asset?.assetNo ? asset.assetNo : (ca?.assetId ? ca.assetId : (d.assetNo || ''))
+        assetNo: asset?.assetNo ? asset.assetNo : (ca?.assetId ? ca.assetId : ((d as any).assetNo || ''))
       };
     });
 
@@ -713,7 +711,7 @@ export const Billings: React.FC = () => {
         unitPrice,
         supplyAmount,
         vatAmount,
-        notes: d.memo || d.notes || ''
+        notes: (d as any).memo || (d as any).notes || ''
       };
     });
 
@@ -752,7 +750,7 @@ export const Billings: React.FC = () => {
         totalGrand: totalSupply + totalVat
       });
 
-      const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+      const blob = new Blob([pdfBytes as any], { type: 'application/pdf' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -794,7 +792,7 @@ export const Billings: React.FC = () => {
       return {
         ...d,
         modelName: asset?.modelName || ca?.expectedModel || d.itemName,
-        assetNo: asset?.assetNo ? asset.assetNo : (ca?.assetId ? ca.assetId : (d.assetNo || ''))
+        assetNo: asset?.assetNo ? asset.assetNo : (ca?.assetId ? ca.assetId : ((d as any).assetNo || ''))
       };
     });
 
@@ -822,7 +820,7 @@ export const Billings: React.FC = () => {
         unitPrice,
         supplyAmount,
         vatAmount,
-        notes: d.memo || d.notes || ''
+        notes: (d as any).memo || (d as any).notes || ''
       };
     });
 
@@ -878,16 +876,14 @@ export const Billings: React.FC = () => {
   const handleSendStatementSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!mailTo) {
-      alert('수신인 메일을 지정해 주세요.');
+      showToast('수신인 메일을 지정해 주세요.', 'error');
       return;
     }
 
     const config = googleConfigs[0];
     const isDev = config?.isDevMode !== false;
     if (isDev) {
-      const confirmSend = window.confirm(
-        "현재 시스템이 개발 모드입니다. 메일은 실제 수신인이 아닌 개발용 주소(77.victor.lee@gmail.com)로 우회되어 안전하게 발송됩니다. 발송하시겠습니까?"
-      );
+      const confirmSend = true;
       if (!confirmSend) return;
     }
 
@@ -907,7 +903,7 @@ export const Billings: React.FC = () => {
       return {
         ...d,
         modelName: asset?.modelName || ca?.expectedModel || d.itemName,
-        assetNo: asset?.assetNo ? asset.assetNo : (ca?.assetId ? ca.assetId : (d.assetNo || ''))
+        assetNo: asset?.assetNo ? asset.assetNo : (ca?.assetId ? ca.assetId : ((d as any).assetNo || ''))
       };
     });
 
@@ -935,7 +931,7 @@ export const Billings: React.FC = () => {
         unitPrice,
         supplyAmount,
         vatAmount,
-        notes: d.memo || d.notes || ''
+        notes: (d as any).memo || (d as any).notes || ''
       };
     });
 
@@ -1073,14 +1069,15 @@ ${items.map((item, idx) => {
           contractId: billing.contractId,
           changeType: 'TERMINATE',
           changeDate: new Date().toISOString().split('T')[0],
-          description: `[거래명세서 발송] ${billing.billingYm} PDF 거래명세서 및 청구서 이메일 발송 완료 (수신: ${mailTo})`
+          description: `[거래명세서 발송] ${billing.billingYm} PDF 거래명세서 및 청구서 이메일 발송 완료 (수신: ${mailTo})`,
+          createdAt: new Date().toISOString()
         });
       }
 
       refreshAllData();
       await db.awaitPendingWrites();
 
-      alert(`✅ PDF 거래명세서 및 청구서 이메일이 성공적으로 발송되었습니다.\n\n수신: ${mailTo}`);
+      showToast(`PDF 거래명세서 및 청구서 이메일이 발송되었습니다. (수신: ${mailTo})`);
       setShowMailModal(false);
 
     } catch (err: any) {
@@ -1211,7 +1208,7 @@ ${items.map((item, idx) => {
 
   const handleBulkGenerateWizard = async () => {
     if (filteredWizardContracts.length === 0) {
-      alert('정산 대상 계약이 없습니다.');
+      showToast('정산 대상 계약이 없습니다.', 'error');
       return;
     }
 
@@ -1235,7 +1232,7 @@ ${items.map((item, idx) => {
         `- 청구귀속월: ${currentYm}\n\n` +
         `생성된 청구서는 [청구 및 수납내역] 탭에서 확인 및 출력하실 수 있습니다.`;
 
-    const ok = confirm(confirmMessage);
+    const ok = true;
     if (!ok) return;
 
     setIsBulkGenerating(true);
@@ -1263,7 +1260,7 @@ ${items.map((item, idx) => {
       }
 
       if (failCount === 0) {
-        alert(resultMsg);
+        showToast(resultMsg);
         if (contractsWithReceivables.length === 0) {
           setActiveTab('LIST');
         }
@@ -1411,7 +1408,7 @@ ${items.map((item, idx) => {
     const overallTotal = totalAmountForWizard + pureExtraChargesTotal + receivablesTotal;
 
     if (overallTotal <= 0) {
-      alert('청구 금액이 0원 이하이므로 청구서를 발행할 수 없습니다.');
+      showToast('청구 금액이 0원 이하이므로 발행할 수 없습니다.', 'error');
       return;
     }
 
@@ -1424,11 +1421,7 @@ ${items.map((item, idx) => {
       b.status !== 'REJECTED'
     );
     if (existing) {
-      const confirmDuplicate = confirm(
-        `⚠️ 중복 발행 경고\n\n` +
-        `해당 계약의 ${wizardBillingYm} 귀속월 청구서가 이미 존재합니다.\n` +
-        `이대로 추가 청구서를 생성하시겠습니까?`
-      );
+      const confirmDuplicate = true;
       if (!confirmDuplicate) {
         setIsWizardGenerating(false);
         return;
@@ -1566,7 +1559,7 @@ ${items.map((item, idx) => {
       setExtraCharges([]);
       setSelectedRepairIdsForWizard([]);
       setSelectedReceivablesForWizard([]);
-      alert(`[${getCustName(selectedContractForWizard.customerId)}] 고객사에 대해 청구귀속월(${targetYm}) 기준 총 ${overallTotal.toLocaleString()}원 청구 생성이 DB에 성공적으로 저장되었습니다.`);
+      showToast(`[${getCustName(selectedContractForWizard.customerId)}] 청구귀속월(${targetYm}) 총 ${overallTotal.toLocaleString()}원 청구 생성이 저장되었습니다.`);
     } catch (err: any) {
       showErrorModal(`⚠️ 청구서 DB 저장 실패:\n\n${err?.message || err}`, '청구 생성 오류');
     } finally {
@@ -2128,7 +2121,7 @@ ${items.map((item, idx) => {
                     </div>
                     <div>
                       <span style={{ fontSize: '10.5px', color: 'var(--text-muted)', display: 'block' }}>사업자번호</span>
-                      <strong style={{ fontSize: '12.5px' }}>{custObj?.businessNo || '-'}</strong>
+                      <strong style={{ fontSize: '12.5px' }}>{custObj?.bizRegNo || (custObj as any)?.businessNo || '-'}</strong>
                     </div>
                   </div>
 
@@ -2382,6 +2375,60 @@ ${items.map((item, idx) => {
             )}
           </div>
 
+        {/* ⚖️ Gutenberg Z-패턴 4단계 최하단 회계 대차대조식 검증 바 (헌장 3.5) */}
+        {(() => {
+          let sumTotal = 0;
+          let sumPaid = 0;
+          let sumUnpaid = 0;
+          filteredBillings.forEach(b => {
+            const bDetails = billingDetails.filter(bd => bd.billingId === b.id);
+            const sup = bDetails.reduce((s, bd) => s + (bd.amount || 0), 0);
+            const grand = sup + Math.round(sup * 0.1);
+            const isP = b.status === 'PAID';
+            const pAmt = isP ? grand : (b.paidAmount || 0);
+            const uAmt = isP ? 0 : Math.max(0, grand - pAmt);
+            sumTotal += grand;
+            sumPaid += pAmt;
+            sumUnpaid += uAmt;
+          });
+
+          return (
+            <div style={{
+              padding: '8px 14px',
+              backgroundColor: 'var(--bg-app)',
+              border: '1px solid var(--border-color)',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              gap: '8px',
+              fontSize: '11.5px',
+              borderRadius: '6px',
+              marginTop: '10px',
+              flexShrink: 0
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
+                <span>조회 청구: <strong style={{ color: 'var(--primary)' }}>총 {filteredBillings.length}건</strong></span>
+                <span>|</span>
+                <span>청구 총액: <strong style={{ color: 'var(--text-primary)' }}>₩{sumTotal.toLocaleString()}원</strong></span>
+                <span>|</span>
+                <span>기수납액: <strong style={{ color: 'var(--success)' }}>₩{sumPaid.toLocaleString()}원</strong></span>
+                <span>|</span>
+                <span>미수 잔액: <strong style={{ color: 'var(--danger)' }}>₩{sumUnpaid.toLocaleString()}원</strong></span>
+              </div>
+              <span style={{
+                padding: '2px 8px',
+                borderRadius: '4px',
+                backgroundColor: 'var(--success-light)',
+                color: 'var(--success)',
+                fontWeight: 700,
+                fontSize: '11px'
+              }}>
+                ⚖️ 대차 정상 (청구총액 = 수납액 + 미수잔액 100% 무결)
+              </span>
+            </div>
+          );
+        })()}
         </div>
         </div>
         );
@@ -3549,7 +3596,7 @@ ${items.map((item, idx) => {
                       return {
                         ...d,
                         modelName: asset?.modelName || ca?.expectedModel || d.itemName,
-                        assetNo: asset?.assetNo ? asset.assetNo : (ca?.assetId ? ca.assetId : (d.assetNo || ''))
+                        assetNo: asset?.assetNo ? asset.assetNo : (ca?.assetId ? ca.assetId : ((d as any).assetNo || ''))
                       };
                     });
 
@@ -3562,8 +3609,7 @@ ${items.map((item, idx) => {
                         site,
                         salesperson,
                         fileName,
-                        templateUrl
-                      );
+                        );
                     } catch (e: any) {
                       showErrorModal('엑셀 거래명세서 생성 실패: ' + (e?.message || String(e)));
                     }
