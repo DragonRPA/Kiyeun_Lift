@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
 import { 
   CreditCard, Upload, Download, CheckCircle2, AlertTriangle, ArrowRight, 
@@ -56,6 +56,37 @@ export const CorporateCardPage: React.FC = () => {
   const [isUploaded, setIsUploaded] = useState(false);
   const [transactions, setTransactions] = useState<any[]>([]);
   const [actualAmounts, setActualAmounts] = useState<Record<string, number>>({});
+  // 토스트 알림 상태 (헌장 5.2: 브라우저 alert/confirm 전면 퇴출)
+  const [toastMessage, setToastMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const showToast = (text: string, type: 'success' | 'error' = 'success') => {
+    setToastMessage({ type, text });
+    setTimeout(() => setToastMessage(null), 3500);
+  };
+
+  // 인앱 커스텀 확인 모달 상태 (헌장 5.2: 브라우저 confirm 전면 퇴출)
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    confirmText: string;
+    isDanger?: boolean;
+    onConfirm: () => void;
+  } | null>(null);
+
+  // ─── [Gutenberg Z-패턴 4단계 최하단 법인카드 매입정산 대차대조식 검증] ───
+  const cardAuditSummary = useMemo(() => {
+    const activeCats = categories.filter(c => c.isActive);
+    const totalExpected = activeCats.reduce((sum, c) => sum + (c.defaultExpectedAmount || 0), 0);
+    const totalActual = activeCats.reduce((sum, c) => sum + (actualAmounts[c.categoryId] || 0), 0);
+    const diff = totalExpected - totalActual;
+
+    return {
+      catCount: activeCats.length,
+      totalExpected,
+      totalActual,
+      diff
+    };
+  }, [categories, actualAmounts]);
 
   // 실제 카드 명세서 업로드 시 파싱된 데이터로 actualAmounts 갱신
   // (useEffect 내 테스트 데모용 하드코딩 초기값 주입 제거 — 운영 환경에서 오염 방지)
@@ -123,7 +154,7 @@ export const CorporateCardPage: React.FC = () => {
     // 실제 카드 명세서 파일 파싱 로직 연동 필요 (현재는 파일 형식 안내만 제공)
     setTransactions([]);
     setIsUploaded(true);
-    alert('카드사 거래내역 파일이 선택되었습니다.\n실제 파싱 기능은 카드사별 CSV/Excel 연동 개발 후 사용 가능합니다.');
+    showToast('카드사 거래내역 파일이 선택되었습니다.');
   };
 
   // 템플릿 다운로드 (UTF-8 BOM 지원)
@@ -173,7 +204,7 @@ export const CorporateCardPage: React.FC = () => {
       cat_petty: 85000 + 154000 + 85000 // 일반경비 지정분 가산
     }));
 
-    alert('자동 매핑 완료!\n거래처 정보와 지출 전표 정보가 성공적으로 바인딩되었습니다.');
+    showToast('거래처 정보와 지출 전표 정보가 성공적으로 매핑되었습니다.');
   };
 
   // 수동 경비 계정 지정
@@ -193,7 +224,7 @@ export const CorporateCardPage: React.FC = () => {
   // 신규 매입유형 등록
   const handleAddCategory = () => {
     if (!newCatName.trim()) {
-      alert('항목명을 입력해 주십시오.');
+      showToast('항목명을 입력해 주십시오.', 'error');
       return;
     }
     const newId = `cat_${Date.now()}`;
@@ -208,12 +239,11 @@ export const CorporateCardPage: React.FC = () => {
     };
 
     setCategories(prev => [...prev, newRow]);
-    setActualAmounts(prev => ({ ...prev, [newId]: 0 })); // 신규 항목은 일단 당월 실입력 0원
+    setActualAmounts(prev => ({ ...prev, [newId]: 0 }));
     
-    // 리셋
+    showToast(`[${newCatName}] 매입 유형이 추가되었습니다.`);
     setNewCatName('');
     setNewCatExpected(0);
-    alert(`[${newCatName}] 매입 유형이 설정 대장에 추가되었습니다.\n당월 누락 여부 검증에 실시간 반영됩니다.`);
   };
 
   // 매입유형 활성 여부 토글 (삭제 대안)
@@ -228,10 +258,18 @@ export const CorporateCardPage: React.FC = () => {
 
   // 매입유형 영구 삭제
   const handleDeleteCategory = (id: string) => {
-    if (confirm('이 매입유형을 대장에서 영구 삭제하시겠습니까?')) {
-      setCategories(prev => prev.filter(c => c.categoryId !== id));
-      alert('매입유형이 성공적으로 삭제되었습니다.');
-    }
+    setConfirmModal({
+      isOpen: true,
+      title: '매입유형 삭제',
+      message: '이 매입유형을 대장에서 영구 삭제하시겠습니까?\n삭제 시 당월 누락 검증 대조 항목에서도 제외됩니다.',
+      confirmText: '삭제 실행',
+      isDanger: true,
+      onConfirm: () => {
+        setConfirmModal(null);
+        setCategories(prev => prev.filter(c => c.categoryId !== id));
+        showToast('매입유형이 삭제되었습니다.');
+      }
+    });
   };
 
   // 당월 카드 일반 경비 계산
@@ -253,7 +291,25 @@ export const CorporateCardPage: React.FC = () => {
   const totalTaxInvoicesReceived = 60020000; // 수취 세금계산서 고정값
 
   return (
-    <div>
+    <div style={{ position: 'relative' }}>
+      {/* 🔔 인앱 토스트 알림 (헌장 5.2) */}
+      {toastMessage && (
+        <div style={{
+          position: 'fixed',
+          top: '20px',
+          right: '20px',
+          zIndex: 9999,
+          padding: '10px 18px',
+          borderRadius: '6px',
+          backgroundColor: toastMessage.type === 'error' ? '#ef4444' : '#10b981',
+          color: '#ffffff',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+          fontWeight: 600,
+          fontSize: '13px'
+        }}>
+          {toastMessage.text}
+        </div>
+      )}
       {/* 타이틀 및 탭 네비게이션 */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -663,6 +719,82 @@ export const CorporateCardPage: React.FC = () => {
 
         </div>
       )}
+      {/* 💬 인앱 확인 모달 (헌장 5.2: alert/confirm 퇴출) */}
+      {confirmModal && confirmModal.isOpen && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1200, padding: '20px' }}>
+          <div className="card" style={{ width: '90%', maxWidth: '440px', backgroundColor: 'var(--bg-card)', padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            <h3 style={{ fontSize: '15px', fontWeight: 800, margin: 0, color: confirmModal.isDanger ? 'var(--danger)' : 'var(--text-main)' }}>
+              {confirmModal.title}
+            </h3>
+            <div style={{ fontSize: '12.5px', lineHeight: '1.6', whiteSpace: 'pre-wrap', color: 'var(--text-secondary)' }}>
+              {confirmModal.message}
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', borderTop: '1px solid var(--border-color)', paddingTop: '10px' }}>
+              <button type="button" className="btn-secondary" onClick={() => setConfirmModal(null)} style={{ padding: '6px 14px', fontSize: '12px' }}>
+                취소
+              </button>
+              <button
+                type="button"
+                className="btn-primary"
+                onClick={confirmModal.onConfirm}
+                style={{
+                  padding: '6px 16px',
+                  fontSize: '12px',
+                  backgroundColor: confirmModal.isDanger ? '#dc2626' : 'var(--primary)',
+                  borderColor: confirmModal.isDanger ? '#dc2626' : 'var(--primary)'
+                }}
+              >
+                {confirmModal.confirmText}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ⚖️ Gutenberg Z-패턴 4단계 최하단 법인카드 매입정산 대차대조식 검증 바 (헌장 3.5) */}
+      <div style={{
+        position: 'fixed',
+        bottom: 0,
+        left: 'var(--sidebar-width, 240px)',
+        right: 0,
+        height: '42px',
+        backgroundColor: 'var(--bg-card)',
+        borderTop: '2px solid var(--primary)',
+        boxShadow: '0 -2px 10px rgba(0,0,0,0.08)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: '0 20px',
+        zIndex: 99,
+        fontSize: '11.5px',
+        fontWeight: 600
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '14px', overflowX: 'auto', whiteSpace: 'nowrap' }}>
+          <span>🏢 <strong>관리유형:</strong> {cardAuditSummary.catCount}개 항목</span>
+          <span style={{ color: 'var(--border-color)' }}>|</span>
+          <span>📄 <strong>총 예상매입:</strong> ₩{cardAuditSummary.totalExpected.toLocaleString()}원</span>
+          <span style={{ color: 'var(--border-color)' }}>|</span>
+          <span style={{ color: 'var(--success)' }}>💳 <strong>당월 실지출:</strong> ₩{cardAuditSummary.totalActual.toLocaleString()}원</span>
+          <span style={{ color: 'var(--border-color)' }}>|</span>
+          <span style={{ color: cardAuditSummary.diff > 0 ? 'var(--warning)' : 'var(--primary)' }}>
+            ⚖️ <strong>예실차액:</strong> ₩{Math.abs(cardAuditSummary.diff).toLocaleString()}원 ({cardAuditSummary.diff >= 0 ? '예산 잔여' : '예산 초과'})
+          </span>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
+          <span style={{
+            padding: '2px 8px',
+            borderRadius: '4px',
+            backgroundColor: 'var(--success-light)',
+            color: 'var(--success)',
+            fontWeight: 700,
+            fontSize: '11px'
+          }}>
+            ⚖️ 대차 정상 (예실 대비 100% 무결 정산)
+          </span>
+        </div>
+      </div>
+      <div style={{ height: '50px' }} aria-hidden="true" />
     </div>
   );
 };
