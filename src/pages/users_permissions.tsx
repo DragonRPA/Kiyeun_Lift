@@ -712,7 +712,7 @@ export const UsersPermissions: React.FC = () => {
                                   checked={canView}
                                   onChange={() => handlePermissionToggle(menu.id, 'view')}
                                   disabled={!canSave}
-                                  style={{ cursor: canSave ? 'pointer' : 'default', width: '16px', height: '16px', accentColor: 'var(--primary)' }}
+                                  style={{ cursor: canSave ? 'pointer' : 'default' }}
                                 />
                               )}
                             </td>
@@ -727,7 +727,7 @@ export const UsersPermissions: React.FC = () => {
                                   checked={canSaveVal}
                                   onChange={() => handlePermissionToggle(menu.id, 'save')}
                                   disabled={!canSave || !canView}
-                                  style={{ cursor: canSave && canView ? 'pointer' : 'default', width: '16px', height: '16px', accentColor: 'var(--success)' }}
+                                  style={{ cursor: canSave && canView ? 'pointer' : 'default' }}
                                 />
                               )}
                             </td>

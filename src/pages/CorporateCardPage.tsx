@@ -579,13 +579,12 @@ export const CorporateCardPage: React.FC = () => {
                 />
               </div>
 
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '6px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '6px' }}>
                 <input 
                   type="checkbox" 
                   id="req-proof" 
                   checked={newCatProof} 
                   onChange={e => setNewCatProof(e.target.checked)} 
-                  style={{ width: '15px', height: '15px', cursor: 'pointer' }}
                 />
                 <label htmlFor="req-proof" style={{ fontSize: '12.5px', cursor: 'pointer' }}>적격 매입 세금계산서 증빙 필수</label>
               </div>

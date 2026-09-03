@@ -327,30 +327,27 @@ const App: React.FC = () => {
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px', fontSize: '12px', color: 'var(--text-secondary)', padding: '2px 0' }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
                 <input
                   type="checkbox"
                   checked={rememberId}
                   onChange={e => setRememberId(e.target.checked)}
-                  style={{ cursor: 'pointer', width: '13px', height: '13px' }}
                 />
                 아이디 저장
               </label>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
                 <input
                   type="checkbox"
                   checked={rememberPw}
                   onChange={e => setRememberPw(e.target.checked)}
-                  style={{ cursor: 'pointer', width: '13px', height: '13px' }}
                 />
                 비밀번호 저장
               </label>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
                 <input
                   type="checkbox"
                   checked={autoLogin}
                   onChange={e => setAutoLogin(e.target.checked)}
-                  style={{ cursor: 'pointer', width: '13px', height: '13px' }}
                 />
                 자동 로그인
               </label>

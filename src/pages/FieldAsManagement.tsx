@@ -1522,7 +1522,6 @@ export const FieldAsManagement: React.FC = () => {
                       id="chkExchange"
                       checked={actionExchangeSuggested}
                       onChange={(e) => setActionExchangeSuggested(e.target.checked)}
-                      style={{ width: '16px', height: '16px', cursor: 'pointer' }}
                     />
                     <label htmlFor="chkExchange" style={{ fontSize: '13px', color: '#b91c1c', fontWeight: 600, cursor: 'pointer' }}>
                       ⚠️ 현장 수리 불가하여 대차(장비 교체) 필요 건의 (영업팀 알림)
@@ -2883,7 +2882,6 @@ export const FieldAsManagement: React.FC = () => {
                 id="chkRememberNav"
                 checked={rememberDefaultNav}
                 onChange={e => setRememberDefaultNav(e.target.checked)}
-                style={{ width: '16px', height: '16px', cursor: 'pointer' }}
               />
               <label htmlFor="chkRememberNav" style={{ fontSize: '12px', color: '#64748b', cursor: 'pointer' }}>
                 선택한 앱을 기본 내비로 기억하기 (다음부터 즉시 실행)

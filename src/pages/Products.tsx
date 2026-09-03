@@ -1079,7 +1079,6 @@ export const Products: React.FC = () => {
                   id="productIsActive"
                   checked={editingProduct.isActive !== false}
                   onChange={e => setEditingProduct({ ...editingProduct, isActive: e.target.checked })}
-                  style={{ width: '16px', height: '16px', cursor: 'pointer', margin: 0, padding: 0 }}
                 />
                 <label 
                   htmlFor="productIsActive" 

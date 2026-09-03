@@ -198,7 +198,8 @@ body {
 }
 
 /* 폼 스타일 */
-input, select, textarea {
+/* 폼 스타일 */
+input:not([type="checkbox"]):not([type="radio"]), select, textarea {
   font-family: inherit;
   width: 100%;
   padding: 10px 14px;
@@ -212,6 +213,62 @@ input, select, textarea {
   /* 브라우저 기본 배경/색상 오버라이드 강제 적용 */
   -webkit-appearance: none;
   appearance: none;
+}
+
+/* ───────────────────────────────────────────────────
+   전사 표준 체크박스 (Crisp "V" Checkmark Component)
+   박스 안에 V 표시가 선명하게 보이는 전사 통일 스타일
+─────────────────────────────────────────────────── */
+input[type="checkbox"] {
+  -webkit-appearance: none !important;
+  appearance: none !important;
+  width: 18px !important;
+  height: 18px !important;
+  min-width: 18px !important;
+  min-height: 18px !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border: 2px solid #64748b !important;
+  border-radius: 4px !important;
+  background-color: #ffffff !important;
+  cursor: pointer !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  position: relative !important;
+  vertical-align: middle !important;
+  flex-shrink: 0 !important;
+  transition: background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+[data-theme='dark'] input[type="checkbox"] {
+  border-color: #64748b !important;
+  background-color: #1e293b !important;
+}
+
+input[type="checkbox"]:hover {
+  border-color: var(--primary, #2563eb) !important;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2) !important;
+}
+
+/* 체크 시: 선명한 V (체크마크) 표시 */
+input[type="checkbox"]:checked {
+  background-color: var(--primary, #2563eb) !important;
+  border-color: var(--primary, #2563eb) !important;
+  background-image: url("data:image/svg+xml,%3csvg viewBox='0 0 16 16' fill='none' stroke='white' stroke-width='2.8' stroke-linecap='round' stroke-linejoin='round' xmlns='http://www.w3.org/2000/svg'%3e%3cpolyline points='3.5 8.5 6.5 11.5 12.5 5.5'/%3e%3c/svg%3e") !important;
+  background-position: center !important;
+  background-repeat: no-repeat !important;
+  background-size: 13px 13px !important;
+}
+
+input[type="checkbox"]:focus-visible {
+  outline: none !important;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.35) !important;
+}
+
+input[type="checkbox"]:disabled {
+  opacity: 0.5 !important;
+  cursor: not-allowed !important;
 }
 
 /* select는 화살표 아이콘 유지를 위해 appearance 따로 처리 */
@@ -238,7 +295,7 @@ input:disabled, select:disabled, textarea:disabled {
    브라우저가 기본적으로 날짜/선택박스에 흰색 배경을
    강제 적용하는 것을 color-scheme으로 차단
 ─────────────────────────────────────────────────── */
-[data-theme='dark'] input,
+[data-theme='dark'] input:not([type="checkbox"]):not([type="radio"]),
 [data-theme='dark'] select,
 [data-theme='dark'] textarea,
 [data-theme='dark'] input[type="date"],

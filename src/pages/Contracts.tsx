@@ -1668,7 +1668,7 @@ export const Contracts: React.FC = () => {
             <h3 className="card-title" style={{ marginBottom: '14px' }}>계약 기간 연장 / 단축</h3>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '16px' }}>
               <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
-                <input type="checkbox" checked={modIsOpen} onChange={e => setModIsOpen(e.target.checked)} style={{ width: '16px', height: '16px' }} />
+                <input type="checkbox" checked={modIsOpen} onChange={e => setModIsOpen(e.target.checked)} />
                 종료일 미정 (상시 대여중)
               </label>
 
@@ -1903,7 +1903,7 @@ export const Contracts: React.FC = () => {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '16px' }}>
             <div>
               <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
-                <input type="checkbox" checked={isEndDateOpen} onChange={e => setIsEndDateOpen(e.target.checked)} style={{ width: '16px', height: '16px' }} />
+                <input type="checkbox" checked={isEndDateOpen} onChange={e => setIsEndDateOpen(e.target.checked)} />
                 종료일 미정 (상시 대여중)
               </label>
               {!isEndDateOpen && (

@@ -1564,29 +1564,27 @@ ${activeSpecs.map((s, idx) => `  ${idx + 1}. [적용] ${s.label}`).join('\n') ||
               <div style={{
                 display: 'flex',
                 flexDirection: 'column',
-                gap: '8px',
-                padding: '10px 14px',
-                backgroundColor: 'rgba(241, 245, 249, 0.6)',
+                gap: '10px',
+                padding: '12px 16px',
+                backgroundColor: 'var(--bg-app)',
                 border: '1px solid var(--border-color)',
                 borderRadius: '8px',
                 marginBottom: '14px',
-                fontSize: '12px'
+                fontSize: '12.5px'
               }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontWeight: 600, color: 'var(--text-main)' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', fontWeight: 600, color: 'var(--text-main)' }}>
                   <input
                     type="checkbox"
                     checked={isSetAsCustomerDefault}
                     onChange={e => setIsSetAsCustomerDefault(e.target.checked)}
-                    style={{ width: '15px', height: '15px', cursor: 'pointer' }}
                   />
                   <span>🏢 이 옵션·보양·스펙을 '{customerName || '해당 고객사'}' 기본 설정으로 등록 (다음 신규 현장에도 자동 적용)</span>
                 </label>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontWeight: 600, color: '#2563eb' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', fontWeight: 600, color: '#3b82f6' }}>
                   <input
                     type="checkbox"
                     checked={applyToAllSites}
                     onChange={e => setApplyToAllSites(e.target.checked)}
-                    style={{ width: '15px', height: '15px', cursor: 'pointer' }}
                   />
                   <span>⚡ '{customerName || '해당 고객사'}'의 등록된 모든 현장에도 이 옵션·보양을 동일하게 일괄 적용</span>
                 </label>
@@ -1639,7 +1637,6 @@ ${activeSpecs.map((s, idx) => `  ${idx + 1}. [적용] ${s.label}`).join('\n') ||
                         type="checkbox" 
                         checked={isChecked} 
                         onChange={() => handleToggleSpec(spec.id)} 
-                        style={{ cursor: 'pointer', width: '16px', height: '16px', accentColor: '#16a34a' }}
                       />
                       <span style={{ 
                         color: isChecked ? '#15803d' : 'var(--text-secondary)',

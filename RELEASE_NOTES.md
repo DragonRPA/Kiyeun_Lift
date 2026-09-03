@@ -1,5 +1,40 @@
 ---
 
+# Release Notes (v1.3.0.Build.65 - 2026-09-03 11:42)
+
+## 🔍 [전사 체크박스] 전 화면 잔존 체크박스 전수 점검 및 고선명 "V" 표준 컴포넌트 100% 완전 동기화
+
+### 🎯 핵심 요약 및 기능 구축 내역
+- **1. 전사 잔존 체크박스 전수 감사 및 인라인 충돌 스타일 제거**:
+  - 시스템 전체를 스캔하여 체크마크를 찌그러뜨리거나 왜곡하던 인라인 크기(`width: 13~16px`) 및 `accentColor` 설정을 전면 제거.
+  - 적용 대상 페이지:
+    - **[`smart_dispatch.tsx`](file:///d:/01.AntiGravity/Kiyuen_Lift/src/pages/smart_dispatch.tsx)**: 고객사 기본 스펙 전파 패널 및 21대 표준 스펙 체크박스
+    - **[`Contracts.tsx`](file:///d:/01.AntiGravity/Kiyuen_Lift/src/pages/Contracts.tsx)**: 계약 연장/단축 및 신규 계약 체결 시 '종료일 미정' 체크박스
+    - **[`CorporateCardPage.tsx`](file:///d:/01.AntiGravity/Kiyuen_Lift/src/pages/CorporateCardPage.tsx)**: 법인카드 적격 세금계산서 증빙 체크박스
+    - **[`FieldAsManagement.tsx`](file:///d:/01.AntiGravity/Kiyuen_Lift/src/pages/FieldAsManagement.tsx)**: 현장 AS 대차(교체) 건의 및 기본 내비게이션 기억 체크박스
+    - **[`Products.tsx`](file:///d:/01.AntiGravity/Kiyuen_Lift/src/pages/Products.tsx)**: 장비 모델 사용 여부 활성 체크박스
+    - **[`users_permissions.tsx`](file:///d:/01.AntiGravity/Kiyuen_Lift/src/pages/users_permissions.tsx)**: 사용자 권한 매트릭스(조회/저장) 체크박스
+    - **[`App.tsx`](file:///d:/01.AntiGravity/Kiyuen_Lift/src/App.tsx)**: 로그인 화면(아이디 저장, 비밀번호 저장, 자동 로그인) 체크박스
+- **2. 100% 일관된 시각적 피드백 달성**:
+  - ERP 내의 어떤 화면, 어떤 모달에서든 체크박스를 클릭하면 **고선명 화이트 벡터 "V"**가 선명하게 돋보이는 단일 표준 UX 완성.
+
+---
+
+# Release Notes (v1.3.0.Build.64 - 2026-09-03 11:36)
+
+## 🎨 [UI/UX] 전사 체크박스 고대비 선명한 "V" (Checkmark) 표준 컴포넌트 전면 적용
+
+### 🎯 핵심 요약 및 기능 구축 내역
+- **1. 체크박스 내부의 선명한 "V" (체크마크) 표준 스타일 구축 (`index.css`)**:
+  - 기존 텍스트 input의 `appearance: none` 오버라이드로 인해 브라우저 기본 체크마크가 지워지고 어두운 사각 블롭으로 보이던 문제 해결.
+  - `input[type="checkbox"]`를 텍스트 폼 스타일에서 완전 분리하고, 18×18px 규격의 선명한 2px 테두리 박스로 리뉴얼.
+  - **체크(`:checked`) 시**: 고선명 화이트 `polyline` 벡터 SVG 기반의 **굵고 뚜렷한 "V" (체크마크)**가 프라이머리 블루 배경 위에 선명하게 렌더링되도록 구현.
+- **2. 다크/라이트 테마 자동 호환 및 전사 화면 일괄 적용**:
+  - `smart_dispatch.tsx`(배차 요구사항 패널), `Contracts.tsx`, `Customers.tsx`, `Products.tsx`, `BankMatching.tsx` 등 전사 모든 체크박스에 동일한 고선명 "V" 스타일 즉시 적용.
+  - 고객사 기본 스펙 일괄 전파 패널 배경을 다크 테마에 맞는 고대비 색상으로 정돈.
+
+---
+
 # Release Notes (v1.3.0.Build.63 - 2026-09-03 11:32)
 
 ## ⚖️ [외상미수금 대장] 초기DB 마이그레이션 과거 운반비 자동생성 완전 제거 및 허위 75건 전량 정화
