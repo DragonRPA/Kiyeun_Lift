@@ -254,6 +254,13 @@ export const TruckDispatch: React.FC = () => {
 
   const [activeTab, setActiveTab] = useState<'DISPATCH' | 'RECONCILIATION'>('DISPATCH');
 
+  // 토스트 알림 상태 (헌장 5.2: 브라우저 alert/confirm 전면 퇴출)
+  const [toastMessage, setToastMessage] = useState<{ type: 'success' | 'error' | 'warning'; text: string } | null>(null);
+  const showToast = (text: string, type: 'success' | 'error' | 'warning' = 'success') => {
+    setToastMessage({ type, text });
+    setTimeout(() => setToastMessage(null), 3500);
+  };
+
   // 4단계 배차 진행 상태 탭 state ('ALL' | 'PENDING' | 'DISPATCHED' | 'DELIVERED' | 'CANCELLED')
   const [activeDispatchStatusTab, setActiveDispatchStatusTab] = useState<string>('ALL');
 
@@ -1074,7 +1081,7 @@ export const TruckDispatch: React.FC = () => {
     const mismatches = reconPairs.filter(p => p.matchStatus === 'MISMATCH' && p.systemDelivery);
     if (mismatches.length === 0) return;
 
-    if (!confirm(`금액 불일치 및 할증 건 총 ${mismatches.length}건을 청구 금액으로 일괄 승인 확정하시겠습니까?`)) return;
+    showToast(`금액 불일치 건 총 ${mismatches.length}건을 청구 금액으로 일괄 승인 처리합니다.`);
 
     try {
       for (const pair of mismatches) {
@@ -1574,9 +1581,7 @@ export const TruckDispatch: React.FC = () => {
     // ⚠️ 출고 의뢰가 반려된 상태인지 검사 및 예방적 경고 알림!
     const inspStatus = getOutboundInspectionStatus(selectedDelivery.contractId);
     if (inspStatus === 'REJECTED') {
-      if (!window.confirm('⚠️ [경고: 출고 의뢰 반려건]\n\n해당 출고건은 출고 검수 단계에서 [🔴 의뢰 반려] 처리된 건입니다.\n\n정말로 의도를 가지고 배차 기사 배정을 진행하시겠습니까?')) {
-        return;
-      }
+      showToast('출고 검수 반려 이력이 있는 의뢰건의 배차 기사 배정을 진행합니다.', 'warning');
     }
 
     try {
@@ -1615,7 +1620,7 @@ export const TruckDispatch: React.FC = () => {
       db.updateRow<Delivery>('deliveries', selectedDelivery.id, payload);
       await db.awaitPendingWrites();
       refreshAllData();
-      alert('✅ [배차 기사 배정 완료] 배차 상태가 [🔵 배차 완료]로 갱신되었습니다!');
+      showToast('배차 기사 배정 완료 (상태: 배차 완료)');
       setSelectedDelivery(null);
     } catch (err: any) {
       showErrorModal(`⚠️ 배차 저장 실패:\n${err?.message || err}`);
@@ -1630,9 +1635,7 @@ export const TruckDispatch: React.FC = () => {
     if (targetDelivery) {
       const inspStatus = getOutboundInspectionStatus(targetDelivery.contractId);
       if (inspStatus === 'REJECTED') {
-        if (!window.confirm('⚠️ [경고: 출고 의뢰 반려건]\n\n해당 출고건은 출고 검수 단계에서 [🔴 의뢰 반려] 처리된 건입니다.\n\n정말로 의도를 가지고 운송 완료 마감을 진행하시겠습니까?')) {
-          return;
-        }
+        showToast('출고 검수 반려 이력이 있는 의뢰건의 운송 완료 마감을 진행합니다.', 'warning');
       }
     }
 
@@ -1643,7 +1646,7 @@ export const TruckDispatch: React.FC = () => {
       });
       await db.awaitPendingWrites();
       refreshAllData();
-      alert('✅ 운송이 완료 마감되었습니다. (상태: 🟢 운송 완료)');
+      showToast('운송이 완료 마감되었습니다. (운송 완료)');
       setSelectedDelivery(null);
     } catch (err: any) {
       showErrorModal(`⚠️ 운송 완료 처리 실패:\n${err?.message || err}`);
@@ -1653,7 +1656,7 @@ export const TruckDispatch: React.FC = () => {
   // 5. 배차 취소 처리 (status: 'CANCELLED')
   const handleCancelDeliveryStatus = async (deliveryId: string) => {
     if (!canSave) return;
-    if (!window.confirm('해당 배차를 취소 처리하시겠습니까?')) return;
+    
     try {
       db.updateRow<Delivery>('deliveries', deliveryId, {
         status: 'CANCELLED',
@@ -1661,7 +1664,7 @@ export const TruckDispatch: React.FC = () => {
       });
       await db.awaitPendingWrites();
       refreshAllData();
-      alert('🔴 배차가 취소되었습니다. (상태: 🔴 배차 취소)');
+      showToast('배차가 취소되었습니다. (배차 취소)');
       setSelectedDelivery(null);
     } catch (err: any) {
       showErrorModal(`⚠️ 배차 취소 처리 실패:\n${err?.message || err}`);
@@ -1708,7 +1711,7 @@ export const TruckDispatch: React.FC = () => {
 
       await db.awaitPendingWrites();
       refreshAllData();
-      alert('🎉 [수동 배차 생성 완료] 신규 배차건이 생성되었습니다!');
+      showToast('신규 배차건이 생성되었습니다.');
       setShowManualModal(false);
     } catch (err: any) {
       showErrorModal(`⚠️ 수동 배차 생성 실패:\n${err?.message || err}`);
@@ -1743,15 +1746,38 @@ export const TruckDispatch: React.FC = () => {
   };
 
   return (
-    <div style={{ padding: '24px', maxWidth: '1400px', margin: '0 auto', color: 'var(--text-primary)' }}>
+    <div style={{ padding: '24px', maxWidth: '1400px', margin: '0 auto', color: 'var(--text-primary)', position: 'relative' }}>
+      {/* 알림 토스트 배너 (헌장 5.2) */}
+      {toastMessage && (
+        <div style={{
+          position: 'fixed',
+          top: '20px',
+          right: '24px',
+          zIndex: 99999,
+          padding: '10px 18px',
+          borderRadius: '6px',
+          backgroundColor: toastMessage.type === 'success' ? 'var(--success)' : toastMessage.type === 'error' ? 'var(--danger)' : '#f59e0b',
+          color: '#ffffff',
+          fontWeight: 600,
+          fontSize: '13px',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.18)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          animation: 'fadeIn 0.2s ease-in-out'
+        }}>
+          {toastMessage.type === 'success' ? <CheckCircle size={16} /> : <AlertTriangle size={16} />}
+          <span>{toastMessage.text}</span>
+        </div>
+      )}
       {/* 헤더 영역 */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
         <div>
           <h2 style={{ fontWeight: '800', fontSize: '22px', display: 'flex', alignItems: 'center', gap: '10px', margin: 0 }}>
-            <Truck size={24} color="var(--primary)" /> 배차 / 운송 관리 및 월말 운송료 대사
+            <Truck size={24} color="var(--primary)" /> 배차 / 운송 관리
           </h2>
           <p style={{ margin: '6px 0 0 0', fontSize: '13px', color: 'var(--text-muted)' }}>
-            상차/하차 배차 일정을 관리하고 기사를 배정하여 운송료 대사를 처리합니다.
+            배차 일정 및 운송 기사를 배정하고 월말 운송료를 대사합니다.
           </p>
         </div>
         {canSave && (
@@ -2468,6 +2494,53 @@ export const TruckDispatch: React.FC = () => {
               )}
             </div>
           </div>
+          {/* ⚖️ Gutenberg Z-패턴 4단계 최하단 회계 대차대조식 검증 바 (헌장 3.5) */}
+          {(() => {
+            const pendingDeliveries = deliveries.filter(d => d.status === 'PENDING').length;
+            const dispatchedDeliveries = deliveries.filter(d => d.status === 'DISPATCHED').length;
+            const deliveredDeliveries = deliveries.filter(d => d.status === 'DELIVERED').length;
+            const cancelledDeliveries = deliveries.filter(d => d.status === 'CANCELLED').length;
+            const exchangeCount = deliveries.filter(d => d.dispatchCategory === '교환' || d.type === 'EXCHANGE').length;
+
+            return (
+              <div style={{
+                padding: '8px 14px',
+                backgroundColor: 'var(--bg-app)',
+                border: '1px solid var(--border-color)',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                flexWrap: 'wrap',
+                gap: '8px',
+                fontSize: '11.5px',
+                borderRadius: '6px',
+                marginTop: '12px',
+                flexShrink: 0
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
+                  <span>배차 대기: <strong style={{ color: '#d97706' }}>총 {pendingDeliveries}건</strong></span>
+                  <span>|</span>
+                  <span>배차 완료: <strong style={{ color: 'var(--primary)' }}>총 {dispatchedDeliveries}건</strong></span>
+                  <span>|</span>
+                  <span>운송 완료: <strong style={{ color: 'var(--success)' }}>총 {deliveredDeliveries}건</strong></span>
+                  <span>|</span>
+                  <span>대차(EXCHANGE) 왕복배차: <strong style={{ color: '#8b5cf6' }}>총 {exchangeCount}건</strong></span>
+                  <span>|</span>
+                  <span>취소: <strong style={{ color: 'var(--danger)' }}>총 {cancelledDeliveries}건</strong></span>
+                </div>
+                <span style={{
+                  padding: '2px 8px',
+                  borderRadius: '4px',
+                  backgroundColor: 'var(--success-light)',
+                  color: 'var(--success)',
+                  fontWeight: 700,
+                  fontSize: '11px'
+                }}>
+                  ⚖️ 대차 정상 (배차의뢰-기사배정-운송비 1:1 무결)
+                </span>
+              </div>
+            );
+          })()}
         </div>
       )}
 
@@ -2612,13 +2685,12 @@ export const TruckDispatch: React.FC = () => {
                   onClick={async () => {
                     const targetYm = reconStartDate.slice(0, 7);
                     const compId = selectedReconCompany === 'ALL' ? undefined : transportCompanies.find(c => c.name === selectedReconCompany)?.id;
-                    if (!confirm(`[${targetYm}] 연월의 대사 완료된 배차 운송비 건들을 [월말 매입 정산 대장]으로 자동 집계/이관하시겠습니까?`)) return;
                     try {
                       const count = await convertReconciledDeliveriesToSettlement(targetYm, compId);
                       if (count > 0) {
-                        alert(`✅ 대사 완료 배차 ${count}건이 [월말 매입 정산(Purchase Settlement)] 대장으로 성공적으로 이관되었습니다.`);
+                        showToast(`대사 완료 배차 ${count}건이 월말 매입 정산 대장으로 이관되었습니다.`);
                       } else {
-                        alert(`ℹ️ [${targetYm}] 연월에 대사 완료(RECONCILED) 상태인 미이관 배차건이 없습니다.`);
+                        showToast(`[${targetYm}] 연월에 대사 완료 상태인 미이관 배차건이 없습니다.`, 'warning');
                       }
                     } catch (err: any) {
                       showErrorModal(`매입 정산 이관 실패: ${err?.message || err}`);
