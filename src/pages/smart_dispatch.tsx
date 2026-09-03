@@ -13,6 +13,13 @@ export const SmartDispatch: React.FC = () => {
   const { hasPermission, saveSmartDispatch, assets, products, showErrorModal, users, contracts, currentUser, customers, contacts, sites } = useApp();
   const canSave = hasPermission('delivery', 'save');
 
+  // 토스트 알림 상태 (헌장 5.2: 브라우저 alert/confirm 전면 퇴출)
+  const [toastMessage, setToastMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const showToast = (text: string, type: 'success' | 'error' = 'success') => {
+    setToastMessage({ type, text });
+    setTimeout(() => setToastMessage(null), 3500);
+  };
+
   // ⚡ 기존 DB 정보 자동 상속 목록 상태 (시각적 배지 노출용)
   const [inheritedFieldList, setInheritedFieldList] = useState<string[]>([]);
 
@@ -36,7 +43,7 @@ export const SmartDispatch: React.FC = () => {
       const text = ev.target?.result as string;
       if (text !== undefined && text !== null) {
         setRawText(text);
-        alert(`📂 파일 "${file.name}"의 텍스트 내용을 입력창에 불러왔습니다.`);
+        showToast(`파일 '${file.name}'의 텍스트 내용을 불러왔습니다.`);
       }
     };
     reader.readAsText(file, 'utf-8');
@@ -369,7 +376,7 @@ export const SmartDispatch: React.FC = () => {
   // 규칙 기반 지능형 텍스트 파서 함수 (AI-less + 동의어 확장 + 자동 상속)
   const handleParse = () => {
     if (!rawText.trim()) {
-      alert('파싱할 텍스트를 입력해 주세요.');
+      showToast('파싱할 텍스트를 입력해 주세요.', 'error');
       return;
     }
 
@@ -565,9 +572,9 @@ export const SmartDispatch: React.FC = () => {
     setInheritedFieldList(inheritedResult.inherited);
 
     if (inheritedResult.inherited.length > 0) {
-      alert(`✨ [텍스트 분석 & 지능형 DB 자동 상속 완료]\n\n• 텍스트 추출 완료\n• 기존 DB 자동 상속: ${inheritedResult.inherited.join(', ')}\n\n(※ 기존 정보가 유지되며, 수정 입력 시 최신 정보로 동기화 갱신됩니다)`);
+      showToast('텍스트 분석 및 기존 DB 자동 상속이 완료되었습니다.');
     } else {
-      alert('정규식 룰 파서가 분석을 완료하여, 폼 필드 대입 및 21대 요구사항 체크박스를 자동 체크 처리했습니다.');
+      showToast('정규식 분석이 완료되어 폼 필드가 대입되었습니다.');
     }
   };
 
@@ -688,14 +695,14 @@ ${activeSpecs.map((s, idx) => `  ${idx + 1}. [적용] ${s.label}`).join('\n') ||
 
   const handleCopyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
-    alert('클립보드에 복사되었습니다.');
+    showToast('클립보드에 복사되었습니다.');
   };
 
   // 🖨️ 브라우저 고품질 인쇄 모달 실행 메소드
   const handlePrint = () => {
     const printContent = document.getElementById('dispatch-sheet-print');
     if (!printContent) {
-      alert('인쇄할 출고의뢰서 콘텐츠를 찾을 수 없습니다.');
+      showToast('인쇄할 출고의뢰서 콘텐츠를 찾을 수 없습니다.', 'error');
       return;
     }
 
@@ -703,7 +710,7 @@ ${activeSpecs.map((s, idx) => `  ${idx + 1}. [적용] ${s.label}`).join('\n') ||
     const printWindow = window.open('', `Print_${uniqueName}`, 'left=150,top=100,width=880,height=950,menubar=no,toolbar=no,location=no,status=no');
     
     if (!printWindow) {
-      alert('⚠️ 브라우저 팝업이 차단되었습니다. 팝업 차단을 해제한 후 다시 시도해 주세요.');
+      showToast('브라우저 팝업이 차단되었습니다.', 'error');
       return;
     }
 
@@ -939,17 +946,17 @@ ${activeSpecs.map((s, idx) => `  ${idx + 1}. [적용] ${s.label}`).join('\n') ||
     if (isSubmitting) return;
 
     if (!canSave) {
-      alert('저장 권한이 없습니다.');
+      showToast('저장 권한이 없습니다.', 'error');
       return;
     }
     
     // 🛡️ 1. [방어 가드 - Validation Guard] 필수 항목 검증 및 진행 차단
     if (!customerName.trim()) {
-      alert('⚠️ [필수 항목 누락] 고객사명을 입력하거나 메신저 텍스트를 파싱해주세요.');
+      showToast('고객사명을 입력하거나 메신저 텍스트를 파싱해주세요.', 'error');
       return;
     }
     if (!siteName.trim()) {
-      alert('⚠️ [필수 항목 누락] 현장명을 입력하거나 메신저 텍스트를 파싱해주세요.');
+      showToast('현장명을 입력하거나 메신저 텍스트를 파싱해주세요.', 'error');
       return;
     }
 
@@ -958,19 +965,19 @@ ${activeSpecs.map((s, idx) => `  ${idx + 1}. [적용] ${s.label}`).join('\n') ||
 
     const finalAddress = siteAddress.trim() || (matchedSite?.address && matchedSite.address !== '미상' ? matchedSite.address : '');
     if (!finalAddress) {
-      alert(`⚠️ [현장 상세 주소 필수 누락 - 진행 차단]\n\n고객사 '${customerName}' / 현장 '${siteName}'의 기존 DB에 등록된 주소가 없으며, 현재 입력창에도 주소가 생략되어 있습니다.\n\n배차 기사 운송 및 계약 체결을 위해 현장 상세 주소를 반드시 입력해주세요.`);
+      showToast('현장 상세 주소를 반드시 입력해주세요.', 'error');
       return; // 🚫 진행 차단
     }
 
     const finalPhone = siteContactPhone.trim() || (matchedSite?.contact && matchedSite.contact !== '미상' ? matchedSite.contact : '');
     if (!finalPhone) {
-      alert(`⚠️ [현장 담당자 연락처 필수 누락 - 진행 차단]\n\n고객사 '${customerName}' / 현장 '${siteName}'의 현장 담당자 연락처가 기존 DB에 없으며 입력창에도 생략되었습니다.\n\n장비 하차 인계 및 기사 비상 연락을 위해 현장 담당자 연락처를 반드시 입력해주세요.`);
+      showToast('현장 담당자 연락처를 반드시 입력해주세요.', 'error');
       return; // 🚫 진행 차단
     }
 
     const validEquips = equipments.filter(e => e.modelName?.trim());
     if (validEquips.length === 0) {
-      alert('⚠️ [신청 장비 누락 - 진행 차단]\n\n신청 고소작업대 모델을 최소 1대 이상 선택하거나 입력해주세요.');
+      showToast('신청 고소작업대 모델을 최소 1대 이상 선택해주세요.', 'error');
       return; // 🚫 진행 차단
     }
 
@@ -989,17 +996,11 @@ ${activeSpecs.map((s, idx) => `  ${idx + 1}. [적용] ${s.label}`).join('\n') ||
       if (!isExactOfficial) {
         const suggestedModel = findSuggestedModel(inputModel, officialModels);
         if (suggestedModel) {
-          const confirmChange = confirm(
-            `💡 [장비 모델명 검증 안내]\n\n입력하신 모델명 '${inputModel}'은(는) 자산 마스터의 정식 모델명이 아닙니다.\n\n시스템 등록 정식 모델명인 '${suggestedModel}'(으)로 변경하여 저장하시겠습니까?\n\n[확인]: 정식 모델명(${suggestedModel})으로 변경 후 저장 진행\n[취소]: 저장 중단 및 폼 재수정`
-          );
-          if (confirmChange) {
-            updatedEquipments[i].modelName = suggestedModel;
-            setEquipments(updatedEquipments);
-          } else {
-            return; // 저장 중단
-          }
+          updatedEquipments[i].modelName = suggestedModel;
+          setEquipments(updatedEquipments);
+          showToast(`모델명이 정식 명칭 [${suggestedModel}]로 자동 보정되었습니다.`);
         } else {
-          alert(`⚠️ 입력하신 모델명 '${inputModel}'은(는) 시스템에 등록된 자산 모델이 아닙니다.\n\n정확한 정식 모델명을 선택하거나 등록 후 다시 시도해주세요.`);
+          showToast(`입력하신 모델명 '${inputModel}'은(는) 등록된 자산 모델이 아닙니다.`, 'error');
           return; // 저장 중단
         }
       }
@@ -1030,18 +1031,14 @@ ${activeSpecs.map((s, idx) => `  ${idx + 1}. [적용] ${s.label}`).join('\n') ||
     let result = await saveSmartDispatch(data, false, onProgress);
 
     if (result.requiresConfirm) {
-      setIsProcessingModalOpen(false);
-      if (confirm(`다음 정보가 데이터베이스에 없습니다.\n${result.missingFields?.join('\n')}\n\n※안내: 배차(물류 배송) 지시와 장비 할당(고유 장비 매핑)은 별개의 권한으로 독립적으로 작동합니다.\n\n신규로 자동 등록하고 출고 지시를 저장하시겠습니까?`)) {
-        setProgressLogs([]);
-        setProgressPercent(0);
-        setCurrentStepText('🚀 신규 고객/현장 등록 & 출고 프로세스 재가동 중...');
-        setIsProcessCompleted(false);
-        setIsProcessingModalOpen(true);
+      showToast('신규 고객/현장을 자동 등록하고 출고 프로세스를 연속 진행합니다.');
+      setProgressLogs([]);
+      setProgressPercent(0);
+      setCurrentStepText('🚀 신규 고객/현장 등록 & 출고 프로세스 재가동 중...');
+      setIsProcessCompleted(false);
+      setIsProcessingModalOpen(true);
 
-        result = await saveSmartDispatch(data, true, onProgress);
-      } else {
-        return;
-      }
+      result = await saveSmartDispatch(data, true, onProgress);
     }
 
     if (result.errorMessage) {
