@@ -3011,34 +3011,59 @@ export const TruckDispatch: React.FC = () => {
             flexWrap: 'wrap',
             gap: '12px'
           }}>
-            {/* 좌측: 4대 대차대조 검증 합계식 */}
-            <div style={{ display: 'flex', gap: '16px', alignItems: 'center', flexWrap: 'wrap', fontSize: '12.5px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <span style={{ color: 'var(--text-secondary)', fontWeight: 700 }}>📄 엑셀 청구 총액:</span>
-                <strong style={{ fontSize: '14px', color: 'var(--text-primary)' }}>₩{reconStats.totalCost.toLocaleString()}원</strong>
-                <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>({reconStats.totalCount}건)</span>
+            {/* 좌측: 4대 대차대조 검증 합계식 (대사 전/후 분기) */}
+            {!reconStats.isPairMode ? (
+              <div style={{ display: 'flex', gap: '16px', alignItems: 'center', flexWrap: 'wrap', fontSize: '12.5px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span style={{ color: 'var(--text-secondary)', fontWeight: 700 }}>🚚 배차 운송료 합계:</span>
+                  <strong style={{ fontSize: '14px', color: 'var(--primary)' }}>₩{reconStats.totalCost.toLocaleString()}원</strong>
+                  <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>({reconStats.totalCount}건)</span>
+                </div>
+                <div style={{ padding: '3px 10px', borderRadius: '4px', backgroundColor: 'rgba(100,116,139,0.1)', border: '1px solid var(--border-color)', color: 'var(--text-muted)', fontSize: '11.5px', fontWeight: 600 }}>
+                  ⏳ 대사 대기 (상단 [엑셀 거래명세서 업로드] 시 1:1 대사 시작)
+                </div>
               </div>
+            ) : (
+              <div style={{ display: 'flex', gap: '16px', alignItems: 'center', flexWrap: 'wrap', fontSize: '12.5px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span style={{ color: 'var(--text-secondary)', fontWeight: 700 }}>📄 운송사 청구 총액:</span>
+                  <strong style={{ fontSize: '14px', color: 'var(--text-primary)' }}>₩{reconStats.totalCost.toLocaleString()}원</strong>
+                  <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>({reconStats.totalCount}건)</span>
+                </div>
 
-              <span style={{ color: 'var(--text-muted)' }}>=</span>
+                <span style={{ color: 'var(--text-muted)' }}>=</span>
 
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <span style={{ color: '#16a34a', fontWeight: 700 }}>🟢 지급 확정:</span>
-                <strong style={{ fontSize: '14px', color: '#16a34a' }}>₩{reconStats.matchedCost.toLocaleString()}원</strong>
-                <span style={{ fontSize: '11px', color: '#16a34a' }}>({reconStats.matchedCount}건)</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span style={{ color: '#16a34a', fontWeight: 700 }}>🟢 지급 확정액:</span>
+                  <strong style={{ fontSize: '14px', color: '#16a34a' }}>₩{reconStats.matchedCost.toLocaleString()}원</strong>
+                  <span style={{ fontSize: '11px', color: '#16a34a' }}>({reconStats.matchedCount}건)</span>
+                </div>
+
+                <span style={{ color: 'var(--text-muted)' }}>+</span>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span style={{ color: '#64748b', fontWeight: 700 }}>🚫 반려/제외액:</span>
+                  <strong style={{ fontSize: '13px', color: '#64748b' }}>₩{reconStats.excludedCost.toLocaleString()}원</strong>
+                  <span style={{ fontSize: '11px', color: '#64748b' }}>({reconStats.excludedCount}건)</span>
+                </div>
+
+                {(() => {
+                  const balanceDiff = reconStats.totalCost - (reconStats.matchedCost + reconStats.excludedCost);
+                  if (balanceDiff === 0) {
+                    return (
+                      <div style={{ padding: '2px 8px', borderRadius: '4px', backgroundColor: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.3)', color: '#16a34a', fontSize: '11px', fontWeight: 800 }}>
+                        ⚖️ 대차 차액: ₩0원 (대사 일치)
+                      </div>
+                    );
+                  }
+                  return (
+                    <div style={{ padding: '2px 8px', borderRadius: '4px', backgroundColor: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', color: '#dc2626', fontSize: '11px', fontWeight: 800 }}>
+                      ⚠️ 대차 차액: ₩{Math.abs(balanceDiff).toLocaleString()}원 ({balanceDiff > 0 ? '미확정 잔액' : '초과 확정'})
+                    </div>
+                  );
+                })()}
               </div>
-
-              <span style={{ color: 'var(--text-muted)' }}>+</span>
-
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <span style={{ color: '#64748b', fontWeight: 700 }}>🚫 반려/제외:</span>
-                <strong style={{ fontSize: '13px', color: '#64748b' }}>₩{reconStats.excludedCost.toLocaleString()}원</strong>
-                <span style={{ fontSize: '11px', color: '#64748b' }}>({reconStats.excludedCount}건)</span>
-              </div>
-
-              <div style={{ padding: '2px 8px', borderRadius: '4px', backgroundColor: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.3)', color: '#16a34a', fontSize: '11px', fontWeight: 800 }}>
-                ⚖️ 대차 차액: ₩0 (100% 대사 일치)
-              </div>
-            </div>
+            )}
 
             {/* 우측: ④ 최종 완결 버튼 (통합 매입 지급요청 생성) */}
             <button
