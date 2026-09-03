@@ -680,18 +680,24 @@ export const TruckDispatch: React.FC = () => {
           return;
         }
 
-        // 2. 동적 헤더 행 감지 (정밀 셀 단위 매칭)
+        // 2. 동적 헤더 행 감지 (정밀 셀 단위 매칭: 최다 키워드 일치 행 선정)
         const headerKeywords = ['일자', '날짜', '상차지', '하차지', '톤수', '차종', '운송비', '현장명', '업체명', '기사명', '비고', 'no', '단가', '금액', '합계', '장비명', '사용기간'];
         let headerRowIndex = -1;
+        let maxMatchCount = 0;
 
         for (let r = 0; r < Math.min(30, rawRows.length); r++) {
           const cells = rawRows[r].map((c: any) => String(c).trim().toLowerCase());
+          const fullRowTextClean = cells.join(' ');
+          // 명세서 상단 공급가액/합계금액 요약표 행은 명세서 본문 테이블 헤더가 아니므로 제외
+          if (fullRowTextClean.includes('공급가액') || fullRowTextClean.includes('사업장주소') || fullRowTextClean.includes('등록번호')) {
+            continue;
+          }
           const matchCount = headerKeywords.filter(kw =>
             cells.some((cell: string) => cell === kw || (cell.length <= 10 && cell.includes(kw)))
           ).length;
-          if (matchCount >= 2) {
+          if (matchCount > maxMatchCount && matchCount >= 3) {
+            maxMatchCount = matchCount;
             headerRowIndex = r;
-            break;
           }
         }
 
@@ -744,17 +750,26 @@ export const TruckDispatch: React.FC = () => {
             rowObj[hName] = String(rowArr[cIdx] !== undefined ? rowArr[cIdx] : '').trim();
           });
 
-          // 금액 추출: rowArr의 모든 셀 중 10,000 이상의 가장 큰 유효 금액 찾기
+          // 금액 추출:
           let rawCost = 0;
-          const costKey = Object.keys(rowObj).find(k => k.includes('금액') || k.includes('합계') || k.includes('운송비') || k.includes('청구금액'));
+          // 1순위: 운송비, 청구금액, 청구액, 단가 등 명확한 운송비 헤더 (일자/날짜/번호 제외)
+          const priorityCostKey = Object.keys(rowObj).find(k =>
+            (k.includes('운송비') || k.includes('청구') || k.includes('단가')) && !k.includes('일자') && !k.includes('날짜') && !k.toLowerCase().includes('no')
+          );
+          // 2순위: 금액, 합계 (일자/날짜/번호 제외)
+          const generalCostKey = Object.keys(rowObj).find(k =>
+            (k.includes('금액') || k.includes('합계')) && !k.includes('일자') && !k.includes('날짜') && !k.toLowerCase().includes('no')
+          );
+          const costKey = priorityCostKey || generalCostKey;
+
           if (costKey && rowObj[costKey]) {
             rawCost = Number(String(rowObj[costKey]).replace(/[^0-9.-]+/g, '')) || 0;
           }
           if (rawCost === 0) {
-            // 끝부분 컬럼(Col[29] 등)에서 금액 역추적
+            // 끝부분 컬럼에서 금액 역추적 (날짜 시리얼 35000~55000 제외)
             for (let c = rowArr.length - 1; c >= 0; c--) {
               const num = Number(String(rowArr[c]).replace(/[^0-9.-]+/g, ''));
-              if (num >= 10000 && num <= 5000000) {
+              if (num >= 10000 && num <= 5000000 && !(num >= 40000 && num <= 50000 && c <= 2)) {
                 rawCost = num;
                 break;
               }
