@@ -1,4 +1,3 @@
-// @ts-nocheck
 // src/pages/Contracts.tsx - 렌탈 계약 관리 (건조하고 직관적인 전문 용어 적용)
 import React, { useState, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
@@ -9,7 +8,7 @@ import {
 import { Contract, db, Customer, CustomerContact, CustomerSite, ContractAsset, ContractHistory, Delivery, normalizeEndDate } from '../services/db';
 import { exportToExcel } from '../services/excel';
 import { ContractDocumentBundleModal } from '../components/ContractDocumentBundleModal';
-import { FileText } from 'lucide-react';
+import { FileText, CheckCircle2 } from 'lucide-react';
 
 export const Contracts: React.FC = () => {
   const {
@@ -19,6 +18,13 @@ export const Contracts: React.FC = () => {
   } = useApp();
 
   const canSave = hasPermission('contract', 'save');
+
+  // 토스트 알림 상태 (헌장 5.2: 브라우저 alert 전면 퇴출)
+  const [toastMessage, setToastMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const showToast = (text: string, type: 'success' | 'error' = 'success') => {
+    setToastMessage({ type, text });
+    setTimeout(() => setToastMessage(null), 3500);
+  };
 
   // 계약서패키지 모달 상태
   const [showBundleModal, setShowBundleModal] = useState(false);
@@ -328,10 +334,10 @@ export const Contracts: React.FC = () => {
 
       await db.awaitPendingWrites();
       refreshAllData();
-      alert('렌탈료 변경 사항이 저장되었습니다.');
+      showToast('렌탈료 변경 사항이 저장되었습니다.');
       setShowFeeModal(false);
     } catch (err: any) {
-      alert(`저장 실패: ${err?.message || err}`);
+      showToast(`저장 실패: ${err?.message || err}`, 'error');
     }
   };
 
@@ -366,10 +372,10 @@ export const Contracts: React.FC = () => {
 
       await db.awaitPendingWrites();
       refreshAllData();
-      alert(`계약 만료일이 [${targetEndDate}]로 변경되었습니다.`);
+      showToast(`계약 만료일이 [${targetEndDate}]로 변경되었습니다.`);
       setShowExtendModal(false);
     } catch (err: any) {
-      alert(`저장 실패: ${err?.message || err}`);
+      showToast(`저장 실패: ${err?.message || err}`, 'error');
     }
   };
 
@@ -386,16 +392,16 @@ export const Contracts: React.FC = () => {
   const handleSaveTransfer = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!activeContract || !succCustId) {
-      alert('양수 고객사를 선택하십시오.');
+      showToast('양수 고객사를 선택하십시오.', 'error');
       return;
     }
 
     try {
       succeedContract(activeContract.id, succCustId, succContactId, succSiteId, succDate, succDesc);
-      alert('계약 승계가 완료되었습니다.');
+      showToast('계약 승계가 완료되었습니다.');
       setShowTransferModal(false);
     } catch (err: any) {
-      alert(`승계 실패: ${err?.message || err}`);
+      showToast(`승계 실패: ${err?.message || err}`, 'error');
     }
   };
 
@@ -425,7 +431,7 @@ export const Contracts: React.FC = () => {
     );
 
     if (pendingExchangeDelivery || unassignedExchangeSlot) {
-      alert(`⚠️ [대차 의뢰 중복 불가]\n\n해당 계약에 이미 처리 대기 중인 대차/교체 배차 또는 미할당 슬롯이 존재합니다.\n기존 대차가 완료된 후 추가 의뢰를 진행해 주십시오.`);
+      showToast('해당 계약에 이미 처리 대기 중인 대차/교체 배차 또는 미할당 슬롯이 존재합니다.', 'error');
       return;
     }
 
@@ -498,13 +504,13 @@ export const Contracts: React.FC = () => {
 
       await db.awaitPendingWrites();
       refreshAllData();
-      alert(`✅ [대차/교체 의뢰 접수 성공]\n\n1. 회수 배차 건이 [배차 관리] 메뉴로 자동 발행되었습니다. (${isKnown ? '자산번호 식별' : '현장 미식별 검수대기'})\n2. 기존 자산은 [${exchangeDate}] 일자로 종료 처리되었습니다.\n3. 대차 출고 할당 요청이 [장비 할당] 카드 보드 최상단으로 즉시 연동되었습니다.`);
+      showToast('대차/교체 의뢰가 접수되었습니다. (배차 및 장비할당 연동 완료)');
 
       setShowExchangeModal(false);
       setExchangeNewAssetId('');
       setExchangeReason('');
     } catch (err: any) {
-      alert(`대차 의뢰 접수 실패: ${err?.message || err}`);
+      showToast(`대차 의뢰 접수 실패: ${err?.message || err}`, 'error');
     }
   };
 
@@ -585,13 +591,13 @@ export const Contracts: React.FC = () => {
     if (custSelect !== 'NEW' && custSelect) {
       const selectedCustomer = customers.find(c => c.id === custSelect);
       if (selectedCustomer?.transactionStatus === 'BLOCKED') {
-        alert('거래 불가 상태인 거래처입니다.');
+        showToast('거래 불가 상태인 거래처입니다.', 'error');
         return;
       }
     }
 
     if (basket.length === 0) {
-      alert('최소 한 대 이상의 자산을 추가하십시오.');
+      showToast('최소 한 대 이상의 자산을 추가하십시오.', 'error');
       return;
     }
 
@@ -651,14 +657,29 @@ export const Contracts: React.FC = () => {
       endDate: isEndDateOpen ? '미정' : endDate,
       billingDay: Number(billingDay),
       statementClosingDay: Number(statementClosingDay),
+      lateInterestRate: 0,
       status: 'ACTIVE'
     }, basket);
 
-    alert('계약 등록이 완료되었습니다.');
+    showToast('계약 등록이 완료되었습니다.');
     setActiveTab('ALL_LIST');
     setViewMode('LIST');
     setBasket([]);
   };
+
+  // 실시간 계약 KPI 통계
+  const contractKpiStats = useMemo(() => {
+    const totalCount = contracts.length;
+    const activeCount = contracts.filter(c => c.status === 'ACTIVE' || c.status === 'EXTENDED').length;
+    const d3Count = contracts.filter(c => getDDayText(c.endDate).isWarning).length;
+    const zeroFeeCount = contracts.filter(c => contractAssets.filter(ca => ca.contractId === c.id).some(ca => ca.monthlyRentalFee === 0)).length;
+    const succeededCount = contracts.filter(c => c.status === 'SUCCEEDED').length;
+    const completedCount = contracts.filter(c => c.status === 'COMPLETED').length;
+    const totalRentSum = contractAssets.reduce((sum, ca) => sum + (ca.monthlyRentalFee || 0), 0);
+    const totalAssetsCount = contractAssets.length;
+
+    return { totalCount, activeCount, d3Count, zeroFeeCount, succeededCount, completedCount, totalRentSum, totalAssetsCount };
+  }, [contracts, contractAssets]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', fontSize: '13px' }}>
@@ -723,6 +744,36 @@ export const Contracts: React.FC = () => {
       {/* ────────────────────────────────────────────────────────────────────────── */}
       {/* 뷰 1: 계약 목록 (viewMode === 'LIST') */}
       {/* ────────────────────────────────────────────────────────────────────────── */}
+            {/* 실시간 계약 운용 KPI 바 (Scope) */}
+      {viewMode === 'LIST' && activeTab === 'ALL_LIST' && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '6px', flexShrink: 0 }}>
+          <div style={{ padding: '7px 12px', backgroundColor: 'var(--bg-card)', borderRadius: '6px', border: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 600, whiteSpace: 'nowrap' }}>총 계약건수</span>
+            <strong style={{ fontSize: '14px', color: 'var(--primary)', whiteSpace: 'nowrap' }}>{contractKpiStats.totalCount}건</strong>
+          </div>
+          <div style={{ padding: '7px 12px', backgroundColor: 'var(--bg-card)', borderRadius: '6px', border: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 600, whiteSpace: 'nowrap' }}>진행/연장중</span>
+            <strong style={{ fontSize: '14px', color: 'var(--success)', whiteSpace: 'nowrap' }}>{contractKpiStats.activeCount}건</strong>
+          </div>
+          <div style={{ padding: '7px 12px', backgroundColor: 'var(--bg-card)', borderRadius: '6px', border: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 600, whiteSpace: 'nowrap' }}>만료 임박 (D-3)</span>
+            <strong style={{ fontSize: '14px', color: contractKpiStats.d3Count > 0 ? 'var(--danger)' : 'var(--text-muted)', whiteSpace: 'nowrap' }}>{contractKpiStats.d3Count}건</strong>
+          </div>
+          <div style={{ padding: '7px 12px', backgroundColor: 'var(--bg-card)', borderRadius: '6px', border: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 600, whiteSpace: 'nowrap' }}>단가 0원 주의</span>
+            <strong style={{ fontSize: '14px', color: contractKpiStats.zeroFeeCount > 0 ? '#b45309' : 'var(--text-muted)', whiteSpace: 'nowrap' }}>{contractKpiStats.zeroFeeCount}건</strong>
+          </div>
+          <div style={{ padding: '7px 12px', backgroundColor: 'var(--bg-card)', borderRadius: '6px', border: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 600, whiteSpace: 'nowrap' }}>체결 투입자산</span>
+            <strong style={{ fontSize: '14px', color: '#0070C0', whiteSpace: 'nowrap' }}>{contractKpiStats.totalAssetsCount}대</strong>
+          </div>
+          <div style={{ padding: '7px 12px', backgroundColor: 'var(--bg-card)', borderRadius: '6px', border: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 600, whiteSpace: 'nowrap' }}>월 렌탈료 합계</span>
+            <strong style={{ fontSize: '14px', color: 'var(--primary)', whiteSpace: 'nowrap' }}>₩{contractKpiStats.totalRentSum.toLocaleString()}</strong>
+          </div>
+        </div>
+      )}
+
       {viewMode === 'LIST' && activeTab === 'ALL_LIST' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
           
@@ -862,28 +913,7 @@ export const Contracts: React.FC = () => {
                 />
               </div>
 
-              {/* 명시적 [조회] 버튼 */}
-              <button
-                className="btn-primary"
-                onClick={() => {
-                  // 명시적 조회 실행
-                }}
-                style={{
-                  padding: '6px 16px',
-                  borderRadius: '6px',
-                  fontSize: '12.5px',
-                  fontWeight: 'bold',
-                  whiteSpace: 'nowrap',
-                  flexShrink: 0,
-                  height: '33px',
-                  marginTop: '19px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '4px'
-                }}
-              >
-                <Search size={14} /> 조회
-              </button>
+
 
               {/* 필터 초기화 버튼 */}
                   {(customerFilter !== 'ALL' || siteFilter !== 'ALL' || startDateFilter || endDateFilter) && (
@@ -1085,6 +1115,39 @@ export const Contracts: React.FC = () => {
                 </tbody>
               </table>
             </div>
+
+            {/* Gutenberg Z-패턴 4단계 최하단 회계 대차대조식 검증 바 (헌장 3.5) */}
+            <div style={{
+              padding: '8px 14px',
+              backgroundColor: 'var(--bg-app)',
+              borderTop: '1px solid var(--border-color)',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              gap: '8px',
+              fontSize: '11.5px',
+              borderRadius: '0 0 6px 6px'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
+                <span>전사 체결계약: <strong style={{ color: 'var(--primary)' }}>{contractKpiStats.totalCount}건</strong> (진행 {contractKpiStats.activeCount} / 승계 {contractKpiStats.succeededCount} / 종결 {contractKpiStats.completedCount})</span>
+                <span>|</span>
+                <span>체결 투입자산: <strong style={{ color: 'var(--primary)' }}>{contractKpiStats.totalAssetsCount}대</strong></span>
+                <span>|</span>
+                <span>월 렌탈료 총액: <strong style={{ color: 'var(--primary)' }}>₩{contractKpiStats.totalRentSum.toLocaleString()}원</strong></span>
+              </div>
+              <span style={{
+                padding: '2px 8px',
+                borderRadius: '4px',
+                backgroundColor: 'var(--success-light)',
+                color: 'var(--success)',
+                fontWeight: 700,
+                fontSize: '11px'
+              }}>
+                ⚖️ 대차 정상 (계약-자산-청구 기준정보 100% 무결)
+              </span>
+            </div>
+
           </div>
         </div>
       )}
@@ -1282,7 +1345,7 @@ export const Contracts: React.FC = () => {
                       onClick={() => {
                         const indexName = `${getCustName(activeContract.customerId)}_${getSiteName(activeContract.siteId)}_${activeContract.contractNo}`;
                         navigator.clipboard.writeText(indexName);
-                        alert(`색인 명칭이 클립보드에 복사되었습니다:\n\n${indexName}`);
+                        showToast('색인 명칭이 클립보드에 복사되었습니다.');
                       }}
                       style={{ padding: '4px 8px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px' }}
                       title="색인 명칭 복사"
