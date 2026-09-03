@@ -1999,29 +1999,36 @@ export function parseDispatchExcelWorkbook(
       const r = raw[ri] as any[];
       if (!r) continue;
 
-      // Col[4] 장비명 없거나, 괄호로 시작하는 메모행이면 스킵 (예: '(부가세별도)')
-      const modelRaw = r[4] != null ? String(r[4]).trim() : '';
-      if (!modelRaw) continue;
-      if (modelRaw.startsWith('(') || /^\d{4,}$/.test(modelRaw)) continue; // 메모행/숫자합계행 스킵
-
-      // 날짜 파싱
+      // [KEY 1] 날짜 파싱 (상차일 또는 하차일 중 최소 1개 필수)
       const loadDay = parseDayStr(r[0]);
       const unloadDay = parseDayStr(r[1]);
-      const loadingDate = buildDateStr(ym.year, ym.month, loadDay);
-      const unloadingDate = buildDateStr(ym.year, ym.month, unloadDay);
+      if (loadDay == null && unloadDay == null) continue; // 날짜가 전혀 없으면 배차 행이 아님
 
-      // 운반비: 만원 단위 → 원. 상한 2,000,000원(200만원)으로 캡 — 이상치 행 방어
-      const rawCostVal = sanitizeNumber(r[3]) || 0;
-      const deliveryCost = rawCostVal <= 200 ? rawCostVal * 10000 : 0; // 200만원 초과 원본값은 0 처리
+      const loadingDate = buildDateStr(ym.year, ym.month, loadDay || unloadDay);
+      const unloadingDate = buildDateStr(ym.year, ym.month, unloadDay || loadDay);
 
-      // 수량
-      const qty = sanitizeNumber(r[5]) || 1;
-
-      // 업체명, 현장명, 주소
+      // [KEY 2] 업체명, 현장명, 주소 (업체명 또는 현장명 최소 1개 필수)
       const customerNameRaw = r[6] != null ? String(r[6]).trim() : '';
       const siteName = r[7] != null ? String(r[7]).trim() : '';
       const address = r[8] != null ? String(r[8]).trim() : '';
       const destinationAddress = [siteName, address ? `(${address})` : ''].filter(Boolean).join(' ');
+
+      // 업체명과 현장명이 둘 다 없으면 유효한 배차 기록이 아니므로 스킵
+      if (!customerNameRaw && !siteName) continue;
+
+      // 명시적 합계/소계/총계 행 스킵 방어
+      const rowSummaryCheck = `${customerNameRaw} ${siteName} ${r[0] || ''} ${r[4] || ''}`;
+      if (/합계|소계|총계|월계|total/i.test(rowSummaryCheck)) continue;
+
+      // [KEY 3] 운반비: 만원 단위 → 원. 상한 2,000,000원(200만원)으로 캡 — 이상치 행 방어
+      const rawCostVal = sanitizeNumber(r[3]) || 0;
+      const deliveryCost = rawCostVal <= 200 ? rawCostVal * 10000 : rawCostVal;
+
+      // 장비명: 순수 숫자(1008, 1330, 1012 등)나 기타 형식도 담당자 기억 보조용으로 완전 보존!
+      const modelRaw = r[4] != null ? String(r[4]).trim() : '';
+
+      // 수량
+      const qty = sanitizeNumber(r[5]) || 1;
 
       // 배차유무 → status ('완료' 외에 '완려' 오타도 COMPLETED 처리)
       const dispatchStatus = r[9] != null ? String(r[9]).trim() : '';
@@ -2049,8 +2056,9 @@ export function parseDispatchExcelWorkbook(
       // 차량톤수
       const vehicleType = r[2] != null ? String(r[2]).trim() : '';
 
-      // specialNotes 조합 (수량 + 비고)
+      // specialNotes 조합 (장비 + 수량 + 비고: 담당자 기억 보조용)
       const noteParts: string[] = [];
+      if (modelRaw) noteParts.push(`장비: ${modelRaw}`);
       if (qty > 1) noteParts.push(`수량: ${qty}대`);
       if (noteRaw.includes('왕복')) noteParts.push('왕복/교환');
       if (noteRaw && !noteRaw.includes('왕복')) noteParts.push(noteRaw);

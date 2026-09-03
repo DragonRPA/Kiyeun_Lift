@@ -2779,6 +2779,8 @@ export const TruckDispatch: React.FC = () => {
                       completedDeliveriesForRecon.map(d => {
                         const contract = contracts.find(c => c.id === d.contractId);
                         const customer = contract ? customers.find(c => c.id === contract.customerId) : null;
+                        const memoCustomer = d.memo && d.memo.includes('업체:') ? d.memo.split('업체:')[1].split('|')[0].trim() : '';
+                        const displayCustomer = customer?.name || memoCustomer || '고객사미지정';
                         const cost = d.finalCost || d.deliveryCost || 70000;
                         return (
                           <tr key={d.id} style={{ borderBottom: '1px solid var(--border-color)', height: '40px' }}>
@@ -2789,7 +2791,7 @@ export const TruckDispatch: React.FC = () => {
                             </td>
                             <td style={{ padding: '6px 10px', whiteSpace: 'nowrap' }}>{d.loadingDate || d.requestDate}</td>
                             <td style={{ padding: '6px 10px' }}>
-                              <strong style={{ color: 'var(--text-primary)' }}>{customer?.name || '고객사미지정'}</strong> | {d.destinationAddress || '도착지미지정'} ({d.driverName || '기사미배정'})
+                              <strong style={{ color: 'var(--text-primary)' }}>{displayCustomer}</strong> | {d.destinationAddress || '도착지미지정'} ({d.driverName || '기사미배정'})
                             </td>
                             <td style={{ padding: '6px 10px', textAlign: 'right', fontWeight: 800, color: 'var(--primary)' }}>
                               ₩{cost.toLocaleString()}
@@ -2824,6 +2826,8 @@ export const TruckDispatch: React.FC = () => {
                         const excel = pair.excelRow;
                         const contract = sys ? contracts.find(c => c.id === sys.contractId) : null;
                         const customer = contract ? customers.find(c => c.id === contract.customerId) : null;
+                        const memoCustomer = sys?.memo && sys.memo.includes('업체:') ? sys.memo.split('업체:')[1].split('|')[0].trim() : '';
+                        const displayCustomer = customer?.name || memoCustomer || '고객사미지정';
 
                         const isMatched = pair.isReconciled && !pair.isExcluded;
                         const isMismatch = pair.matchStatus === 'MISMATCH';
@@ -2874,7 +2878,7 @@ export const TruckDispatch: React.FC = () => {
                             <td style={{ padding: '6px 10px', maxWidth: '240px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                               {sys ? (
                                 <>
-                                  <strong style={{ color: 'var(--text-primary)' }}>{customer?.name || '고객사미지정'}</strong> | {sys.destinationAddress || '도착지미지정'}
+                                  <strong style={{ color: 'var(--text-primary)' }}>{displayCustomer}</strong> | {sys.destinationAddress || '도착지미지정'}
                                   <span style={{ fontSize: '11px', color: 'var(--text-muted)', marginLeft: '4px' }}>({sys.driverName || '기사미배정'})</span>
                                 </>
                               ) : (
