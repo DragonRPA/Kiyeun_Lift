@@ -47,7 +47,8 @@ import {
   Wrench,
   Search,
   Eye,
-  X
+  X,
+  Copy
 } from 'lucide-react';
 
 export const InitialDbUploader: React.FC = () => {
@@ -501,6 +502,70 @@ export const InitialDbUploader: React.FC = () => {
     } finally {
       setIsIngestingCustomerDefaults(false);
       setDispatchHistProgressMsg('');
+    }
+  };
+
+  // ── 밴드 콘솔 추출 스크립트 클립보드 복사 ──
+  const handleCopyBandScraperScript = () => {
+    const scriptCode = `(async () => {
+  console.log('⏳ [기연리프트] 중복·중첩 100% 제거 과거 게시글 실시간 누적 수집 시작...');
+  const postMap = new Map();
+  const dateSplitRe = /\\n(?=\\d{4}년\\s*\\d{1,2}월\\s*\\d{1,2}일\\s*(?:오전|오후)\\s*\\d{1,2}:\\d{2})/;
+  const dateHeaderRe = /^(\\d{4}년\\s*\\d{1,2}월\\s*\\d{1,2}일\\s*(?:오전|오후)\\s*\\d{1,2}:\\d{2})/;
+
+  const harvest = () => {
+    const raw = document.body.innerText;
+    const blocks = raw.split(dateSplitRe);
+    for (const b of blocks) {
+      const trimmed = b.trim();
+      const m = trimmed.match(dateHeaderRe);
+      if (m) {
+        const key = m[1] + ' | ' + trimmed.slice(0, 40).replace(/\\s+/g, ' ');
+        if (!postMap.has(key) || trimmed.length > postMap.get(key).length) {
+          postMap.set(key, trimmed);
+        }
+      }
+    }
+  };
+
+  let lastHeight = 0, sameCount = 0;
+  for (let i = 0; i < 4000; i++) {
+    harvest();
+    window.scrollTo(0, document.body.scrollHeight);
+    document.documentElement.scrollTop = document.documentElement.scrollHeight;
+    await new Promise(r => setTimeout(r, 500));
+    harvest();
+    let newHeight = document.body.scrollHeight;
+    if (i % 5 === 0) console.log(\`⏳ 스크롤 진행 중 [\${i}회] | 📦 수집된 글: \${postMap.size}건\`);
+    if (newHeight === lastHeight) {
+      sameCount++;
+      if (sameCount >= 6) {
+        console.log(\`🏁 바닥 도달! 최종 수집 건수: \${postMap.size}건\`);
+        break;
+      }
+    } else {
+      sameCount = 0;
+      lastHeight = newHeight;
+    }
+  }
+  harvest();
+  const cleanFullText = Array.from(postMap.values()).join('\\n\\n');
+  const blob = new Blob([cleanFullText], { type: 'text/plain;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'band_as_history_all.txt';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  console.log(\`✅ [성공] 총 \${postMap.size}건 수집 완료! band_as_history_all.txt 파일 다운로드됨\`);
+})();`;
+
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(scriptCode).then(() => {
+        showSuccessToast?.('📋 밴드 추출 스크립트가 복사되었습니다. 네이버 밴드 화면의 F12 콘솔에 붙여넣어 실행하세요.');
+      }).catch(() => {
+        showErrorModal?.('클립보드 복사에 실패했습니다.');
+      });
     }
   };
 
@@ -1146,6 +1211,20 @@ export const InitialDbUploader: React.FC = () => {
               >
                 <FileText size={14} />
                 출고요청 파일 (.txt / .json) 선택
+              </button>
+
+              <button
+                onClick={handleCopyBandScraperScript}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '6px',
+                  padding: '8px 14px', backgroundColor: '#f8fafc', color: '#475569',
+                  border: '1px solid #cbd5e1', borderRadius: '6px', cursor: 'pointer',
+                  fontSize: '12.5px', fontWeight: 600, whiteSpace: 'nowrap'
+                }}
+                title="네이버 밴드 화면에서 F12 콘솔에 붙여넣어 중복 없이 전체 출고 이력을 추출하는 자바스크립트 코드를 클립보드에 복사합니다."
+              >
+                <Copy size={13} />
+                밴드 전체 게시글 추출 스크립트 복사
               </button>
 
               {dispatchHistFileName && (
