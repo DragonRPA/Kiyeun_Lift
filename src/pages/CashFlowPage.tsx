@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
+import { db } from '../services/db';
 import { 
   TrendingUp, ArrowDownRight, ArrowUpRight, AlertTriangle, 
   Layers, CheckCircle, RefreshCw, Landmark, HelpCircle,
@@ -23,6 +24,12 @@ interface DailyForecast {
 export const CashFlowPage: React.FC = () => {
   const { hasPermission, cashFlowSnapshots, saveCashFlowSnapshot, deleteCashFlowSnapshot, bankTransactions } = useApp();
   const canSave = hasPermission('billing', 'save');
+  // 토스트 알림 상태 (헌장 5.2: 브라우저 alert/confirm 전면 퇴출)
+  const [toastMessage, setToastMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const showToast = (text: string, type: 'success' | 'error' = 'success') => {
+    setToastMessage({ type, text });
+    setTimeout(() => setToastMessage(null), 3500);
+  };
 
   // 화면 탭 관리
   const [activeSubTab, setActiveSubTab] = useState<'FORECAST' | 'HISTORY'>('FORECAST');
@@ -232,28 +239,49 @@ export const CashFlowPage: React.FC = () => {
 
   const criticalItem = forecastList.find(item => item.cumulative < 0);
 
-  // 스냅샷 저장
-  const handleSaveSnapshotSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    saveCashFlowSnapshot({
-      snapshotDate: focusDateString,
-      startingBalance: startingBalanceAtFocus,
-      projectedInflow: totalInflow,
-      projectedOpex: totalOpex,
-      projectedCapex: totalCapex,
-      projectedFinalBalance: finalBalance,
-      notes: snapNotes
-    });
+  // ─── [Gutenberg Z-패턴 4단계 최하단 자금 수지 대차대조식 검증] ───
+  const cashFlowAuditSummary = useMemo(() => {
+    const netFlow = (totalInflow || 0) - (totalOpex || 0) - (totalCapex || 0);
+    const isSafe = (finalBalance || 0) >= safetyThreshold;
 
-    alert(`기준일(${focusDateString})자 현금흐름 예측 스냅샷이 성공적으로 저장되었습니다.`);
-    setShowSnapModal(false);
-    setSnapNotes('');
+    return {
+      startingBalance: startingBalanceAtFocus || 0,
+      inflow: totalInflow || 0,
+      opex: totalOpex || 0,
+      capex: totalCapex || 0,
+      netFlow,
+      finalBalance: finalBalance || 0,
+      isSafe
+    };
+  }, [startingBalanceAtFocus, totalInflow, totalOpex, totalCapex, finalBalance, safetyThreshold]);
+
+  // 스냅샷 저장
+  const handleSaveSnapshotSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await saveCashFlowSnapshot({
+        snapshotDate: focusDateString,
+        startingBalance: startingBalanceAtFocus,
+        projectedInflow: totalInflow,
+        projectedOpex: totalOpex,
+        projectedCapex: totalCapex,
+        projectedFinalBalance: finalBalance,
+        notes: snapNotes
+      });
+      await db.awaitPendingWrites();
+
+      showToast(`기준일(${focusDateString})자 자금흐름 예측 스냅샷이 성공적으로 저장되었습니다.`);
+      setShowSnapModal(false);
+      setSnapNotes('');
+    } catch (err: any) {
+      showToast(`스냅샷 저장 실패: ${err?.message || err}`, 'error');
+    }
   };
 
   // 30일 시뮬레이션 결과 엑셀(CSV) 다운로드 함수
   const downloadExcel = () => {
     if (forecastList.length === 0) {
-      alert("다운로드할 데이터가 없습니다.");
+      showToast("다운로드할 데이터가 없습니다.", "error");
       return;
     }
 
@@ -934,12 +962,13 @@ export const CashFlowPage: React.FC = () => {
                     <td style={{ textAlign: 'center' }}>
                       <button 
                         className="btn-secondary" 
-                        onClick={() => {
-                          if (confirm('해당 스냅샷 이력을 정말 삭제하시겠습니까?')) {
-                            deleteCashFlowSnapshot(snap.id);
-                          }
+                        onClick={async () => {
+                          await deleteCashFlowSnapshot(snap.id);
+                          await db.awaitPendingWrites();
+                          showToast('스냅샷 이력이 삭제되었습니다.');
                         }}
                         style={{ padding: '4px 8px', fontSize: '11.5px', color: 'var(--danger)' }}
+                        title="스냅샷 삭제"
                       >
                         <Trash2 size={13} />
                       </button>
@@ -1275,6 +1304,50 @@ export const CashFlowPage: React.FC = () => {
         </div>
       )}
 
+      {/* ⚖️ Gutenberg Z-패턴 4단계 최하단 자금흐름 수지 대차대조식 검증 바 (헌장 3.5) */}
+      <div style={{
+        position: 'fixed',
+        bottom: 0,
+        left: 'var(--sidebar-width, 240px)',
+        right: 0,
+        height: '42px',
+        backgroundColor: 'var(--bg-card)',
+        borderTop: '2px solid var(--primary)',
+        boxShadow: '0 -2px 10px rgba(0,0,0,0.08)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: '0 20px',
+        zIndex: 99,
+        fontSize: '11.5px',
+        fontWeight: 600
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '14px', overflowX: 'auto', whiteSpace: 'nowrap' }}>
+          <span>🏦 <strong>기초시작잔액:</strong> ₩{cashFlowAuditSummary.startingBalance.toLocaleString()}원</span>
+          <span style={{ color: 'var(--border-color)' }}>|</span>
+          <span style={{ color: 'var(--success)' }}>📥 <strong>예정수납:</strong> +₩{cashFlowAuditSummary.inflow.toLocaleString()}원</span>
+          <span style={{ color: 'var(--border-color)' }}>|</span>
+          <span style={{ color: 'var(--warning)' }}>📤 <strong>운영지출:</strong> -₩{cashFlowAuditSummary.opex.toLocaleString()}원</span>
+          <span style={{ color: 'var(--border-color)' }}>|</span>
+          <span style={{ color: 'var(--danger)' }}>🏗️ <strong>투자지출:</strong> -₩{cashFlowAuditSummary.capex.toLocaleString()}원</span>
+          <span style={{ color: 'var(--border-color)' }}>|</span>
+          <span>💰 <strong>30일후 기말잔고:</strong> ₩{cashFlowAuditSummary.finalBalance.toLocaleString()}원</span>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
+          <span style={{
+            padding: '2px 8px',
+            borderRadius: '4px',
+            backgroundColor: cashFlowAuditSummary.isSafe ? 'var(--success-light)' : 'rgba(239,68,68,0.15)',
+            color: cashFlowAuditSummary.isSafe ? 'var(--success)' : 'var(--danger)',
+            fontWeight: 700,
+            fontSize: '11px'
+          }}>
+            {cashFlowAuditSummary.isSafe ? '⚖️ 자금 유동성 정상 (기말 = 기초 + 수납 - 지출 무결)' : '🚨 안전 임계치 하회 경보'}
+          </span>
+        </div>
+      </div>
+      <div style={{ height: '50px' }} aria-hidden="true" />
     </div>
   );
 };
