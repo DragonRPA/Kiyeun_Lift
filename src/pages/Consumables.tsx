@@ -1,5 +1,5 @@
 // d:\Kiyeun_Lift\src\pages\Consumables.tsx
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
 import { 
   ShoppingCart, Hammer, ListCollapse, Layers, Plus, ClipboardList, PackagePlus, 
@@ -7,7 +7,7 @@ import {
   Truck, ArrowRightLeft, ArrowUpRight, ArrowDownLeft, User, ShieldCheck, X
 } from 'lucide-react';
 import { exportToExcel } from '../services/excel';
-import { Consumable, MechanicConsumableStock } from '../services/db';
+import { Consumable, MechanicConsumableStock, db } from '../services/db';
 import { compressFileIfNeeded } from '../utils/imageCompressor';
 import { uploadToSupabaseStorage } from '../services/supabaseStorage';
 
@@ -20,6 +20,45 @@ export const Consumables: React.FC = () => {
   } = useApp();
 
   const canSave = hasPermission('consumable', 'save');
+  // 토스트 알림 상태 (헌장 5.2: 브라우저 alert/confirm 전면 퇴출)
+  const [toastMessage, setToastMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const showToast = (text: string, type: 'success' | 'error' = 'success') => {
+    setToastMessage({ type, text });
+    setTimeout(() => setToastMessage(null), 3500);
+  };
+
+  // ─── [Gutenberg Z-패턴 4단계 최하단 재고/원가 대차대조식 검증] ───
+  const hqStockSummary = useMemo(() => {
+    const totalKinds = consumables.length;
+    const totalQty = consumables.reduce((acc, c) => acc + (c.stockQty || 0), 0);
+    const totalValue = consumables.reduce((acc, c) => acc + (c.stockQty || 0) * (c.unitPrice || 0), 0);
+    return { totalKinds, totalQty, totalValue };
+  }, [consumables]);
+
+  const vehicleStockSummary = useMemo(() => {
+    const totalQty = (mechanicConsumableStocks || []).reduce((acc, s) => acc + (s.stockQty || 0), 0);
+    const totalValue = (mechanicConsumableStocks || []).reduce((acc, s) => {
+      const c = consumables.find(item => item.id === s.consumableId);
+      return acc + (s.stockQty || 0) * (c?.unitPrice || 0);
+    }, 0);
+    return { totalQty, totalValue };
+  }, [mechanicConsumableStocks, consumables]);
+
+  const monthlyPurchaseSummary = useMemo(() => {
+    const ym = new Date().toISOString().substring(0, 7);
+    const thisMonthPurchases = consumablePurchases.filter(p => p.status === 'COMPLETED' && p.completedDate?.startsWith(ym));
+    const totalCount = thisMonthPurchases.length;
+    const totalAmount = thisMonthPurchases.reduce((acc, p) => acc + (p.receivedQty || p.requestedQty) * (p.unitPrice || 0), 0);
+    return { totalCount, totalAmount };
+  }, [consumablePurchases]);
+
+  const monthlyUseSummary = useMemo(() => {
+    const ym = new Date().toISOString().substring(0, 7);
+    const thisMonthLogs = consumableLogs.filter(l => l.type === 'OUTBOUND' && l.actionDate?.startsWith(ym));
+    const totalCount = thisMonthLogs.length;
+    const totalAmount = thisMonthLogs.reduce((acc, l) => acc + (l.quantity * (l.unitPrice || 0)), 0);
+    return { totalCount, totalAmount };
+  }, [consumableLogs]);
   // 탭 구성: STOCK (본사 재고), VEHICLE_STOCK (차량별 이동재고), REQ_LIST (신청 내역 조회), REQ_WRITE (구매신청 작성), REQ_INBOUND (구매물품 입고처리), USE (소모품 사용), LOGS (입출고 로그)
   const [activeTab, setActiveTab] = useState<'STOCK' | 'VEHICLE_STOCK' | 'REQ_LIST' | 'REQ_WRITE' | 'REQ_INBOUND' | 'USE' | 'LOGS'>('STOCK');
 
@@ -196,7 +235,7 @@ export const Consumables: React.FC = () => {
     
     const finalModelName = reqConsumableId === 'NEW' ? reqModelName : (consumables.find(c => c.id === reqConsumableId)?.modelName || '');
     if (!finalModelName || reqQty <= 0 || reqUnitPrice < 0 || !reqSellerName) {
-      alert('신청 품명, 수량, 단가 및 판매처를 올바르게 지정해 주세요.');
+      showToast('신청 품명, 수량, 단가 및 판매처를 올바르게 지정해 주세요.', 'error');
       return;
     }
 
@@ -210,7 +249,8 @@ export const Consumables: React.FC = () => {
         sellerName: reqSellerName
       });
 
-      alert('소모품 구매 신청서가 성공적으로 제출 및 저장되었습니다.');
+      await db.awaitPendingWrites();
+      showToast('소모품 구매 신청서가 성공적으로 제출 및 저장되었습니다.');
       setReqConsumableId('');
       setReqModelName('');
       setReqQty(1);
@@ -227,11 +267,11 @@ export const Consumables: React.FC = () => {
     e.preventDefault();
     if (!canSave) return;
     if (!selectedReqId || inboundQty <= 0) {
-      alert('입고할 신청건을 선택하고 입고 수량을 지정해 주세요.');
+      showToast('입고할 신청건을 선택하고 입고 수량을 지정해 주세요.', 'error');
       return;
     }
     if (!selectedFile && !noInvoice) {
-      alert('공급자 거래명세서 증빙 파일을 먼저 지정해 주세요.');
+      showToast('공급자 거래명세서 증빙 파일을 먼저 지정해 주세요.', 'error');
       return;
     }
 
@@ -262,7 +302,8 @@ export const Consumables: React.FC = () => {
       }
 
       await inboundConsumablePurchase(selectedReqId, inboundQty, uploadedUrl);
-      alert('입고 처리가 완료되었습니다. 본사 중앙 창고 재고에 반영되었습니다.');
+      await db.awaitPendingWrites();
+      showToast('입고 처리가 완료되었습니다. 본사 중앙 창고 재고에 반영되었습니다.');
       setSelectedReqId('');
       setInboundQty(1);
       setSelectedFile(null);
@@ -278,13 +319,14 @@ export const Consumables: React.FC = () => {
   const handleTransferSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!transferMechanicId || !transferConsumableId || transferQty <= 0) {
-      alert('정비사와 소모품 품목, 불출 수량을 선택해 주세요.');
+      showToast('정비사와 소모품 품목, 불출 수량을 선택해 주세요.', 'error');
       return;
     }
 
     try {
       await transferConsumableToMechanic(transferMechanicId, transferConsumableId, transferQty, transferMemo);
-      alert('본사 창고에서 정비사 차량으로 소모품 불출 이동이 완료되었습니다.');
+      await db.awaitPendingWrites();
+      showToast('본사 창고에서 정비사 차량으로 소모품 불출 이동이 완료되었습니다.');
       setShowTransferModal(false);
       setTransferQty(1);
       setTransferMemo('');
@@ -297,13 +339,14 @@ export const Consumables: React.FC = () => {
   const handleReturnSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!returnMechanicId || !returnConsumableId || returnQty <= 0) {
-      alert('정비사와 반납 소모품 품목, 반납 수량을 선택해 주세요.');
+      showToast('정비사와 반납 소모품 품목, 반납 수량을 선택해 주세요.', 'error');
       return;
     }
 
     try {
       await returnConsumableToHq(returnMechanicId, returnConsumableId, returnQty, returnMemo);
-      alert('정비사 차량에서 본사 창고로 소모품 반납이 완료되었습니다.');
+      await db.awaitPendingWrites();
+      showToast('정비사 차량에서 본사 창고로 소모품 반납이 완료되었습니다.');
       setShowReturnModal(false);
       setReturnQty(1);
       setReturnMemo('');
@@ -317,13 +360,13 @@ export const Consumables: React.FC = () => {
     e.preventDefault();
     if (!canSave) return;
     if (!useConsumableId || useQty <= 0) {
-      alert('사용할 품목과 수량을 확인해 주세요.');
+      showToast('사용할 품목과 수량을 확인해 주세요.', 'error');
       return;
     }
 
     const item = consumables.find(c => c.id === useConsumableId);
     if (!item || item.stockQty < useQty) {
-      alert('본사 중앙 재고가 부족합니다.');
+      showToast('본사 중앙 재고가 부족합니다.', 'error');
       return;
     }
 
@@ -335,7 +378,8 @@ export const Consumables: React.FC = () => {
         description: useDesc || '일반 야적장 정비 사용'
       });
 
-      alert('소모품 출고 및 자산 정비비용 누적이 완료되었습니다.');
+      await db.awaitPendingWrites();
+      showToast('소모품 출고 및 자산 정비비용 누적이 완료되었습니다.');
       setUseConsumableId('');
       setUseQty(1);
       setUseAssetId('');
@@ -347,13 +391,31 @@ export const Consumables: React.FC = () => {
   };
 
   return (
-    <div>
+    <div style={{ position: 'relative' }}>
+      {/* 🔔 인앱 토스트 알림 (헌장 5.2) */}
+      {toastMessage && (
+        <div style={{
+          position: 'fixed',
+          top: '20px',
+          right: '20px',
+          zIndex: 9999,
+          padding: '10px 18px',
+          borderRadius: '6px',
+          backgroundColor: toastMessage.type === 'error' ? '#ef4444' : '#10b981',
+          color: '#ffffff',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+          fontWeight: 600,
+          fontSize: '13px'
+        }}>
+          {toastMessage.text}
+        </div>
+      )}
       {/* 상단 헤더 */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '10px' }}>
         <div>
-          <h2 style={{ fontWeight: '800', margin: 0 }}>소모품 및 자재 수불 관리</h2>
-          <div style={{ fontSize: '12.5px', color: 'var(--text-secondary)', marginTop: '4px' }}>
-            본사 중앙 창고 재고와 AS 정비 차량별 이동재고(Van Stock) 2-Tier 통합 관리
+          <h2 style={{ fontWeight: '800', margin: 0 }}>소모품 수불 관리</h2>
+          <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '3px' }}>
+            본사 창고 및 정비 차량 2-Tier 재고 수불 대장
           </div>
         </div>
 
@@ -405,21 +467,21 @@ export const Consumables: React.FC = () => {
           onClick={() => setActiveTab('STOCK')}
           style={{ padding: '8px 14px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '4px' }}
         >
-          <Layers size={14} /> 본사 중앙 재고
+          <Layers size={14} /> 본사 재고
         </button>
         <button
           className={activeTab === 'VEHICLE_STOCK' ? 'btn-primary' : 'btn-secondary'}
           onClick={() => setActiveTab('VEHICLE_STOCK')}
           style={{ padding: '8px 14px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '4px', position: 'relative' }}
         >
-          <Truck size={14} /> AS 차량별 이동재고 (Van Stock)
+          <Truck size={14} /> 차량 이동 재고
         </button>
         <button
           className={activeTab === 'REQ_LIST' ? 'btn-primary' : 'btn-secondary'}
           onClick={() => setActiveTab('REQ_LIST')}
           style={{ padding: '8px 14px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '4px' }}
         >
-          <ClipboardList size={14} /> 구매 신청 내역
+          <ClipboardList size={14} /> 구매 신청 대장
         </button>
         {canSave && (
           <>
@@ -428,21 +490,21 @@ export const Consumables: React.FC = () => {
               onClick={() => setActiveTab('REQ_WRITE')}
               style={{ padding: '8px 14px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '4px' }}
             >
-              <Plus size={14} /> 구매 신청서 작성
+              <Plus size={14} /> 구매 신청 등록
             </button>
             <button
               className={activeTab === 'REQ_INBOUND' ? 'btn-primary' : 'btn-secondary'}
               onClick={() => setActiveTab('REQ_INBOUND')}
               style={{ padding: '8px 14px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '4px' }}
             >
-              <PackagePlus size={14} /> 구매물품 입고
+              <PackagePlus size={14} /> 입고 처리
             </button>
             <button
               className={activeTab === 'USE' ? 'btn-primary' : 'btn-secondary'}
               onClick={() => setActiveTab('USE')}
               style={{ padding: '8px 14px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '4px' }}
             >
-              <Hammer size={14} /> 소모품 출고(야적장)
+              <Hammer size={14} /> 소모품 출고
             </button>
           </>
         )}
@@ -1195,6 +1257,48 @@ export const Consumables: React.FC = () => {
           </form>
         </div>
       )}
+
+      {/* ⚖️ Gutenberg Z-패턴 4단계 최하단 회계/재고 대차대조식 검증 바 (헌장 3.5) */}
+      <div style={{
+        position: 'fixed',
+        bottom: 0,
+        left: 'var(--sidebar-width, 240px)',
+        right: 0,
+        height: '42px',
+        backgroundColor: 'var(--bg-card)',
+        borderTop: '2px solid var(--primary)',
+        boxShadow: '0 -2px 10px rgba(0,0,0,0.08)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: '0 20px',
+        zIndex: 99,
+        fontSize: '11.5px',
+        fontWeight: 600
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '14px', overflowX: 'auto', whiteSpace: 'nowrap' }}>
+          <span>📦 <strong>본사 재고:</strong> {hqStockSummary.totalKinds}종 / {hqStockSummary.totalQty.toLocaleString()}개 (₩{hqStockSummary.totalValue.toLocaleString()}원)</span>
+          <span style={{ color: 'var(--border-color)' }}>|</span>
+          <span>🚚 <strong>차량 이동재고:</strong> {vehicleStockSummary.totalQty.toLocaleString()}개 (₩{vehicleStockSummary.totalValue.toLocaleString()}원)</span>
+          <span style={{ color: 'var(--border-color)' }}>|</span>
+          <span>📥 <strong>당월 구매입고:</strong> {monthlyPurchaseSummary.totalCount}건 (₩{monthlyPurchaseSummary.totalAmount.toLocaleString()}원)</span>
+          <span style={{ color: 'var(--border-color)' }}>|</span>
+          <span>🔧 <strong>당월 정비출고:</strong> {monthlyUseSummary.totalCount}건 (₩{monthlyUseSummary.totalAmount.toLocaleString()}원)</span>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
+          <span style={{
+            padding: '2px 8px',
+            borderRadius: '4px',
+            backgroundColor: 'var(--success-light)',
+            color: 'var(--success)',
+            fontWeight: 700,
+            fontSize: '11px'
+          }}>
+            ⚖️ 대차 정상 (기초 + 입고 = 기말 + 사용 무결)
+          </span>
+        </div>
+      </div>
 
       {/* 모바일 화면 하단 여유 스페이서 */}
       <div style={{ height: '100px', width: '100%' }} aria-hidden="true" />
