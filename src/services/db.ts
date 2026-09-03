@@ -747,6 +747,7 @@ export interface Repair {
   modelName?: string;
   contractId?: string; // 🌟 소속 계약 ID (계약별 AS 이력 1:1 매핑)
   targetContractStatus?: string;
+  targetAssetStatus?: Asset['status']; // 🌟 정비 완료 시 자산 상태 전이 (AVAILABLE, REPAIRING 등)
   
   // 3. 고객사 및 현장 정보
   customerId?: string;

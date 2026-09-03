@@ -241,7 +241,7 @@ interface AppContextType {
   
   // Repairs
   registerRepair: (repairData: Partial<Repair>, usedConsumables: { consumableId: string; quantity: number }[]) => void;
-  updateRepairStatus: (repairId: string, status: Repair['status'], unresolvedReason?: string, nextAction?: Repair['nextAction']) => Promise<void>;
+  updateRepairStatus: (repairId: string, status: Repair['status'], unresolvedReason?: string, nextAction?: Repair['nextAction'], targetAssetStatus?: Asset['status']) => Promise<void>;
   
   // Transport Master
   saveTransportDataOnFly: (companyName: string, driverName: string, contact: string, vehicleNo: string, vehicleType: string) => void;
@@ -4909,7 +4909,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       });
     }
 
-    // 소모품 재고 차감: 담당 정비사 차량 이동재고에서 우선 차감, 미등록 시 본사 창고 차감
+    // 소모품 재고 차감: 주기장 정비(YARD)이거나 stockSource가 CENTRAL_HQ인 경우 본사 중앙창고에서 우선 차감
+    const isYardDepotRepair = repairData.workLocation === 'YARD' || repairData.stockSource === 'CENTRAL_HQ' || maintenanceType === 'INHOUSE_REPAIR';
     const effectiveMechanicId = repairData.mechanicId || currentUser?.id;
     const mechanic = db.users.find(u => u.id === effectiveMechanicId);
     const mechanicName = mechanic?.name || '정비사';
@@ -4918,12 +4919,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const consumable = db.consumables.find(c => c.id === uc.consumableId);
       if (!consumable) return;
 
-      const mechanicStock = effectiveMechanicId 
+      const mechanicStock = (!isYardDepotRepair && effectiveMechanicId)
         ? db.mechanicConsumableStocks.find(s => s.mechanicId === effectiveMechanicId && s.consumableId === uc.consumableId)
         : null;
 
       if (mechanicStock && mechanicStock.stockQty >= uc.quantity) {
-        // 1. 기사 차량 재고에서 차감
+        // 1. 기사 차량 재고에서 차감 (현장 출장 AS인 경우)
         db.updateRow<MechanicConsumableStock>('mechanicConsumableStocks', mechanicStock.id, {
           stockQty: mechanicStock.stockQty - uc.quantity,
           updatedAt: new Date().toISOString()
@@ -4943,10 +4944,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           description: `[차량재고 소진] 정비(${repairId}) ${mechanicName} 차량에서 현장 투입`,
           createdAt: new Date().toISOString()
         });
-      } else if (consumable.stockQty >= uc.quantity) {
-        // 2. 본사 창고 재고에서 차감
+      } else {
+        // 2. 본사 중앙창고 재고에서 차감 (주기장 정비 또는 본사 불출)
+        const nextQty = Math.max(0, (consumable.stockQty || 0) - uc.quantity);
         db.updateRow<Consumable>('consumables', consumable.id, {
-          stockQty: consumable.stockQty - uc.quantity,
+          stockQty: nextQty,
           updatedAt: new Date().toISOString()
         });
 
@@ -4958,9 +4960,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           targetAssetId: repairData.assetId,
           userId: currentUser?.id,
           fromLocation: '본사 중앙창고',
-          toLocation: `현장 장비(${targetAsset?.assetNo || 'N/A'})`,
+          toLocation: `주기장 장비(${targetAsset?.assetNo || 'N/A'})`,
           actionDate: repairData.repairDate || new Date().toISOString().split('T')[0],
-          description: `[본사직접 투입] 정비(${repairId}) 본사창고에서 현장 투입`,
+          description: `[본사직접 투입] 정비(${repairId}) 주기장 수리 부품 투입`,
           createdAt: new Date().toISOString()
         });
       }
@@ -4988,9 +4990,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (repairStatus === 'COMPLETED') {
           nextMaintenanceScore = 0; // 정비 완료 시 이상무 리셋
         }
-      } else {
-        // 야적장 자사/입고 정비: 3-B 원칙 준수 - 정비가 부분 수리일 수 있으므로 AVAILABLE로 자동 전환하지 않고 상태 보존
-        nextAssetStatus = targetAsset.status;
+      } else if (repairData.targetAssetStatus) {
+        // 🌟 주기장 정비 판정 명시적 전이 (AVAILABLE, REPAIRING 등)
+        nextAssetStatus = repairData.targetAssetStatus;
+        if (nextAssetStatus === 'AVAILABLE') {
+          nextMaintenanceScore = 0; // 임대가능 복귀 시 정비점수 초기화
+        }
+      } else if (repairStatus === 'COMPLETED' && (targetAsset.status === 'REPAIRING' || targetAsset.status === 'RENTED_RETURNED')) {
+        // 기본값: 입고검수/수리중 장비의 정비 완료 시 AVAILABLE로 자동 전이
+        nextAssetStatus = 'AVAILABLE';
+        nextMaintenanceScore = 0;
       }
 
       db.updateRow<Asset>('assets', targetAsset.id, {
@@ -5007,7 +5016,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       let memoText = `[${typeLabel}] `;
       if (repairStatus === 'COMPLETED') {
-        memoText += `정비 완료 (비용: ${totalRepairCost.toLocaleString()}원): ${repairData.details || ''}`;
+        memoText += `정비 완료 (비용: ${totalRepairCost.toLocaleString()}원) ➔ 자산상태 [${nextAssetStatus}] 전이: ${repairData.details || ''}`;
       } else if (repairStatus === 'UNRESOLVED') {
         memoText += `미완료 (${repairData.unresolvedReason || '사유미기재'}, 후속: ${repairData.nextAction || '없음'}): ${repairData.details || ''}`;
       } else {
@@ -5048,7 +5057,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     repairId: string, 
     status: Repair['status'], 
     unresolvedReason?: string, 
-    nextAction?: Repair['nextAction']
+    nextAction?: Repair['nextAction'],
+    targetAssetStatus?: Asset['status']
   ) => {
     const existing = db.repairs.find(r => r.id === repairId);
     if (!existing) return;
@@ -5059,10 +5069,33 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       repairDate: status === 'COMPLETED' ? today : existing.repairDate,
       unresolvedReason: unresolvedReason ?? existing.unresolvedReason,
       nextAction: nextAction ?? existing.nextAction,
+      targetAssetStatus: targetAssetStatus ?? existing.targetAssetStatus,
       updatedAt: new Date().toISOString()
     });
 
-    // 💡 3-B 원칙 준수: 정비 상태가 COMPLETED로 변경되어도 자산 상태를 AVAILABLE로 자동 조작하지 않음
+    // 🌟 자산 상태 전이 명시적 지원
+    if (existing.assetId && targetAssetStatus) {
+      const targetAsset = db.assets.find(a => a.id === existing.assetId);
+      if (targetAsset) {
+        db.updateRow<Asset>('assets', targetAsset.id, {
+          status: targetAssetStatus,
+          maintenanceScore: targetAssetStatus === 'AVAILABLE' ? 0 : targetAsset.maintenanceScore,
+          updatedAt: new Date().toISOString()
+        });
+        db.insertRow<AssetInOutLog>('assetInOutLogs', {
+          assetId: targetAsset.id,
+          assetNo: targetAsset.assetNo,
+          modelName: targetAsset.modelName,
+          type: 'REPAIR',
+          eventDate: today,
+          repairId: repairId,
+          maintenanceScore: targetAssetStatus === 'AVAILABLE' ? 0 : targetAsset.maintenanceScore,
+          memo: `[주기장 정비 상태 갱신] ${status} ➔ 자산상태 [${targetAssetStatus}] 전이`,
+          createdAt: new Date().toISOString()
+        });
+      }
+    }
+
     await db.awaitPendingWrites();
     refreshAllData();
   };
