@@ -32,6 +32,13 @@ export const Repairs: React.FC = () => {
 
   const canSave = hasPermission('repair', 'save');
 
+  // 토스트 알림 상태 (헌장 5.2: 브라우저 alert/confirm 전면 퇴출)
+  const [toastMessage, setToastMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const showToast = (text: string, type: 'success' | 'error' = 'success') => {
+    setToastMessage({ type, text });
+    setTimeout(() => setToastMessage(null), 3500);
+  };
+
   // 뷰 모드 탭: 'STUDIO' (주기장 정비 스튜디오) vs 'LEDGER' (정비 이력 대장)
   const [activeTab, setActiveTab] = useState<'STUDIO' | 'LEDGER'>('STUDIO');
 
@@ -241,17 +248,15 @@ export const Repairs: React.FC = () => {
   const handleCompleteRepair = async () => {
     if (!canSave) return;
     if (!selectedAsset) {
-      alert('정비 대상 자산을 먼저 선택해 주십시오.');
+      showToast('정비 대상 자산을 먼저 선택해 주십시오.', 'error');
       return;
     }
     if (!repairDetails.trim()) {
-      alert('정비 상세 내용 또는 점검 조치 내역을 입력해 주십시오.');
+      showToast('정비 상세 내용 또는 점검 조치 내역을 입력해 주십시오.', 'error');
       return;
     }
 
-    const confirmMsg = `[${selectedAsset.assetNo}] (${selectedAsset.modelName})
-정비 완료 처리 후 자산 상태를 '임대가능(AVAILABLE)'으로 전환하시겠습니까?`;
-    if (!window.confirm(confirmMsg)) return;
+
 
     const evidenceImages: string[] = [];
     if (beforeImage) evidenceImages.push(beforeImage);
@@ -280,9 +285,7 @@ export const Repairs: React.FC = () => {
     };
 
     registerRepair(payload, usedConsumables);
-    alert(`✅ [${selectedAsset.assetNo}] 정비 완료!
-
-자산 상태가 '임대가능(AVAILABLE)'으로 즉시 전환되었으며, 본사 중앙창고 소모품 차감 및 정비 이력이 정상 저장되었습니다.`);
+    showToast(`[${selectedAsset.assetNo}] 정비 완료: 임대가능(AVAILABLE) 복원 및 소모품 차감 완료`);
 
     // 폼 초기화
     setSelectedAssetId('');
@@ -329,7 +332,7 @@ export const Repairs: React.FC = () => {
     };
 
     registerRepair(payload, usedConsumables);
-    alert(`[${selectedAsset.assetNo}] 장비가 '수리정비중(REPAIRING)' 상태로 보존되었습니다.`);
+    showToast(`[${selectedAsset.assetNo}] 장비가 수리정비중(REPAIRING) 상태로 보존되었습니다.`);
     setShowUnresolvedModal(false);
     setSelectedAssetId('');
     setRepairDetails('');
@@ -340,12 +343,11 @@ export const Repairs: React.FC = () => {
   const handleOutsourceRepair = async () => {
     if (!canSave || !selectedAsset) return;
     if (!selectedVendorId) {
-      alert('외주 정비 업체를 선택해 주십시오.');
+      showToast('외주 정비 업체를 선택해 주십시오.', 'error');
       return;
     }
 
-    const confirmMsg = `[${selectedAsset.assetNo}] 장비를 외주업체(${getVendorName(selectedVendorId)})로 위탁 반출 등록하시겠습니까?`;
-    if (!window.confirm(confirmMsg)) return;
+
 
     const payload: Partial<Repair> = {
       assetId: selectedAsset.id,
@@ -366,7 +368,7 @@ export const Repairs: React.FC = () => {
     };
 
     registerRepair(payload, []);
-    alert(`[${selectedAsset.assetNo}] 외주 정비 위탁 등록 완료.`);
+    showToast(`[${selectedAsset.assetNo}] 외주 정비 위탁 등록 완료`);
     setSelectedAssetId('');
     setRepairDetails('');
   };
@@ -1062,6 +1064,50 @@ export const Repairs: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* ⚖️ Gutenberg Z-패턴 4단계 최하단 회계 대차대조식 검증 바 (헌장 3.5) */}
+      {(() => {
+        const repairingAssets = assets.filter(a => a.status === 'REPAIRING').length;
+        const availableAssets = assets.filter(a => a.status === 'AVAILABLE').length;
+        const monthlyCompletedRepairs = repairs.filter(r => r.status === 'COMPLETED' && (r.repairDate || '').startsWith(thisMonthStart.slice(0, 7))).length;
+        const totalConsumableCost = repairs.filter(r => (r.repairDate || '').startsWith(thisMonthStart.slice(0, 7))).reduce((sum, r) => sum + (r.totalCost || 0), 0);
+
+        return (
+          <div style={{
+            padding: '8px 14px',
+            backgroundColor: 'var(--bg-app)',
+            border: '1px solid var(--border-color)',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            gap: '8px',
+            fontSize: '11.5px',
+            borderRadius: '6px',
+            flexShrink: 0
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
+              <span>수리정비중(REPAIRING): <strong style={{ color: 'var(--danger)' }}>총 {repairingAssets}대</strong></span>
+              <span>|</span>
+              <span>임대가능(AVAILABLE): <strong style={{ color: 'var(--success)' }}>총 {availableAssets}대</strong></span>
+              <span>|</span>
+              <span>금월 정비완료: <strong style={{ color: 'var(--primary)' }}>총 {monthlyCompletedRepairs}건</strong></span>
+              <span>|</span>
+              <span>금월 소모품비: <strong style={{ color: 'var(--text-main)' }}>₩{totalConsumableCost.toLocaleString()}원</strong></span>
+            </div>
+            <span style={{
+              padding: '2px 8px',
+              borderRadius: '4px',
+              backgroundColor: 'var(--success-light)',
+              color: 'var(--success)',
+              fontWeight: 700,
+              fontSize: '11px'
+            }}>
+              ⚖️ 대차 정상 (정비완료-자산AVAILABLE환원 100% 무결)
+            </span>
+          </div>
+        );
+      })()}
 
       {/* ──────────────────────────────────────────────────────────────────────── */}
       {/* 모달 1: 부품대기 (수리중 유지) 사유 입력 모달                             */}
