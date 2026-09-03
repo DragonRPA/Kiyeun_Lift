@@ -268,6 +268,7 @@ export interface Asset {
   id: string;
   modelName: string;
   assetNo: string; // 관리번호
+  vendorId?: string; // 임차처/매입처 외래키
   vendorAssetNo?: string; // 타사(원사) 원래 관리번호
   serialNo?: string; // 제조번호
   manufacturer?: string;
