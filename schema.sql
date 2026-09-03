@@ -768,6 +768,7 @@ CREATE TABLE billings (
     "billingYm"           TEXT NOT NULL, -- YYYY-MM
     "customerId"          TEXT NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
     "contractId"          TEXT REFERENCES contracts(id) ON DELETE SET NULL,
+    "invoiceId"           TEXT REFERENCES billing_invoices(id) ON DELETE SET NULL,
     "billingDate"         TEXT NOT NULL,
     "totalAmount"         DOUBLE PRECISION NOT NULL DEFAULT 0,
     "paidAmount"          DOUBLE PRECISION NOT NULL DEFAULT 0,
@@ -794,17 +795,20 @@ CREATE TABLE billing_details (
     "updatedAt"           TEXT NOT NULL
 );
 
--- 5-3. 전자세금계산서 발행 내역 (billing_invoices)
+-- 5-3. 통합 청구 인보이스 마스터 (billing_invoices)
 CREATE TABLE billing_invoices (
     id                    TEXT PRIMARY KEY,
-    "billingId"           TEXT NOT NULL REFERENCES billings(id) ON DELETE CASCADE,
-    "invoiceNo"           TEXT NOT NULL UNIQUE,
-    "issueDate"           TEXT NOT NULL,
-    "supplyAmount"        DOUBLE PRECISION NOT NULL DEFAULT 0,
-    "taxAmount"           DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "customId"            TEXT,
+    "customerId"          TEXT NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+    "billingYm"           TEXT NOT NULL, -- YYYY-MM
+    "siteId"              TEXT REFERENCES customer_sites(id) ON DELETE SET NULL,
     "totalAmount"         DOUBLE PRECISION NOT NULL DEFAULT 0,
-    status                TEXT CHECK (status IN ('ISSUED', 'CANCELLED', 'MODIFIED')) NOT NULL DEFAULT 'ISSUED',
-    "ntsConfirmNo"        TEXT,
+    "vatAmount"           DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "grandTotal"          DOUBLE PRECISION NOT NULL DEFAULT 0,
+    status                TEXT CHECK (status IN ('DRAFT', 'ISSUED', 'PAID', 'PARTIAL', 'CANCELLED')) NOT NULL DEFAULT 'DRAFT',
+    "dueDate"             TEXT,
+    "issuedAt"            TEXT,
+    memo                  TEXT,
     "createdAt"           TEXT NOT NULL,
     "updatedAt"           TEXT NOT NULL
 );

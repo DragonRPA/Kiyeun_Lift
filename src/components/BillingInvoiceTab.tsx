@@ -54,14 +54,14 @@ export const BillingInvoiceTab: React.FC = () => {
   const [isGenerating, setIsGenerating] = useState(false);
   const [isConsolidating, setIsConsolidating] = useState(false);
 
-  // 인보이스 목록 로드
+  // 청구서통합 목록 로드
   const loadInvoices = useCallback(async () => {
     setIsLoading(true);
     try {
       const data = await fetchInvoices(selectedYm || undefined);
       setInvoices(data);
     } catch (e: any) {
-      showErrorModal?.(`인보이스 조회 실패: ${e.message}`);
+      showErrorModal?.(`청구서통합 조회 실패: ${e.message}`);
     } finally {
       setIsLoading(false);
     }
@@ -69,13 +69,13 @@ export const BillingInvoiceTab: React.FC = () => {
 
   useEffect(() => { loadInvoices(); }, [loadInvoices]);
 
-  // 월별 인보이스 생성
+  // 월별 청구서통합 생성
   const handleGenerate = async () => {
     if (!selectedYm) { showErrorModal?.('청구 귀속월(YYYY-MM)을 선택하세요.'); return; }
     setIsGenerating(true);
     try {
       const r = await generateInvoices({ billingYm: selectedYm, groupBy });
-      showSuccessToast?.(`인보이스 ${r.created}건 생성 완료 (건너뜀 ${r.skipped}건)`);
+      showSuccessToast?.(`청구서통합 ${r.created}건 생성 완료 (건너뜀 ${r.skipped}건)`);
       await loadInvoices();
     } catch (e: any) {
       showErrorModal?.(`생성 실패: ${e.message}`);
@@ -86,11 +86,11 @@ export const BillingInvoiceTab: React.FC = () => {
 
   // 기존 데이터 소급 묶기
   const handleConsolidate = async () => {
-    if (!window.confirm('invoiceId가 없는 모든 기존 청구를 인보이스로 일괄 묶습니다. 계속하시겠습니까?')) return;
+    if (!window.confirm('기존 청구를 청구서통합으로 일괄 묶습니다. 계속하시겠습니까?')) return;
     setIsConsolidating(true);
     try {
       const r = await consolidateExistingBillings(groupBy);
-      showSuccessToast?.(`소급 완료: 총 ${r.totalCreated}건 인보이스 생성`);
+      showSuccessToast?.(`소급 완료: 총 ${r.totalCreated}건 청구서통합 생성`);
       await loadInvoices();
     } catch (e: any) {
       showErrorModal?.(`소급 실패: ${e.message}`);
@@ -107,9 +107,9 @@ export const BillingInvoiceTab: React.FC = () => {
     setDetail(d);
   };
 
-  // 인보이스 취소
+  // 청구서통합 취소
   const handleCancel = async (id: string) => {
-    if (!window.confirm(`인보이스 ${id}를 취소하면 포함된 청구의 인보이스 연결이 해제됩니다. 계속하시겠습니까?`)) return;
+    if (!window.confirm(`청구서통합 ${id}를 취소하면 포함된 청구의 통합 연결이 해제됩니다. 계속하시겠습니까?`)) return;
     const r = await cancelInvoice(id);
     if (r.success) { showSuccessToast?.(r.message); await loadInvoices(); }
     else showErrorModal?.(r.message);
@@ -164,7 +164,7 @@ export const BillingInvoiceTab: React.FC = () => {
           }}
         >
           <Plus size={14} />
-          {isGenerating ? '생성 중...' : '인보이스 생성'}
+          {isGenerating ? '생성 중...' : '청구서통합 생성'}
         </button>
 
         <button
@@ -178,7 +178,7 @@ export const BillingInvoiceTab: React.FC = () => {
           }}
         >
           <Layers size={14} />
-          {isConsolidating ? '처리 중...' : '기존 데이터 소급 묶기'}
+          {isConsolidating ? '처리 중...' : '기존 청구 소급 묶기'}
         </button>
 
         <button
@@ -194,12 +194,12 @@ export const BillingInvoiceTab: React.FC = () => {
         </button>
       </div>
 
-      {/* ── 인보이스 목록 테이블 ── */}
+      {/* ── 청구서통합 목록 테이블 ── */}
       <div style={{ overflowX: 'auto', border: '1px solid #e2e8f0', borderRadius: '8px' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
           <thead>
             <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
-              {['', '인보이스번호', '고객사', '귀속월', '상태', '합계금액', '납기일', '액션'].map(h => (
+              {['', '통합청구번호', '고객사', '귀속월', '상태', '합계금액', '납기일', '액션'].map(h => (
                 <th key={h} style={{
                   padding: '10px 12px', textAlign: 'left', fontWeight: 600,
                   color: '#374151', whiteSpace: 'nowrap'
@@ -211,10 +211,10 @@ export const BillingInvoiceTab: React.FC = () => {
             {isLoading ? (
               <tr><td colSpan={8} style={{ padding: '32px', textAlign: 'center', color: '#94a3b8' }}>로딩 중...</td></tr>
             ) : invoices.length === 0 ? (
-              <tr><td colSpan={8} style={{ padding: '32px', textAlign: 'center', color: '#94a3b8' }}>인보이스 없음</td></tr>
+              <tr><td colSpan={8} style={{ padding: '32px', textAlign: 'center', color: '#94a3b8' }}>청구서통합 내역 없음</td></tr>
             ) : invoices.map(inv => (
               <React.Fragment key={inv.id}>
-                {/* 인보이스 행 */}
+                {/* 청구서통합 행 */}
                 <tr style={{ borderBottom: '1px solid #f1f5f9' }}>
                   <td style={{ padding: '8px 12px' }}>
                     <button
@@ -243,7 +243,7 @@ export const BillingInvoiceTab: React.FC = () => {
                       {inv.status !== 'CANCELLED' && (
                         <button
                           onClick={() => handleCancel(inv.id)}
-                          title="인보이스 취소"
+                          title="청구서통합 취소"
                           style={{
                             padding: '4px 8px', borderRadius: '4px', border: '1px solid #fca5a5',
                             background: '#fff', color: '#dc2626', cursor: 'pointer', fontSize: '12px',

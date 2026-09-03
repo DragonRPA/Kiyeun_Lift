@@ -146,7 +146,10 @@ export const TABLE_COLUMNS: Record<string, string[]> = {
     'performedBy', 'createdAt', 'updatedAt'
   ],
   billings: [
-    'id', 'customerId', 'contractId', 'billingYm', 'totalAmount', 'paidAmount', 'status', 'billingDate', 'createdAt', 'updatedAt'
+    'id', 'customerId', 'contractId', 'billingYm', 'invoiceId', 'totalAmount', 'paidAmount', 'status', 'billingDate', 'createdAt', 'updatedAt'
+  ],
+  billing_invoices: [
+    'id', 'customId', 'customerId', 'billingYm', 'siteId', 'totalAmount', 'vatAmount', 'grandTotal', 'status', 'dueDate', 'issuedAt', 'memo', 'createdAt', 'updatedAt'
   ],
   billing_details: [
     'id', 'billingId', 'contractAssetId', 'assetId', 'itemName', 'quantity',
@@ -1259,24 +1262,11 @@ export function parseInitialExcelWorkbook(
     // ────────────────────────────────────────────────────────────────────
 
 
-    // Col[7] = 운반비. fallback 20은 임차단가 컬럼이므로 7로 수정
-    const transportFee = sanitizeNumber(getCol(r, mainHeaderMap, ['운반비', '왕복운반비'], 7));
-    if (transportFee > 0) {
-      receivables.push({
-        id: `RECV-${String(recvSeq++).padStart(7, '0')}`,
-        contractId: contractId,
-        customerId: customer.id,
-        type: 'TRANSPORT',
-        totalAmount: transportFee,
-        billedAmount: 0,
-        internalDescription: `운반비 청구 (${cleanSiteName})`,
-        displayName: null,
-        occurredDate: rowStartDate,
-        status: 'PENDING',
-        createdAt: nowIso,
-        updatedAt: nowIso
-      });
-    }
+    // ── 외상미수금(receivables) 자동 생성 제외 ──────────────────────────
+    // 엑셀 Col[7] 운반비는 과거 계약 체결 시점의 참조값이거나 날짜 오입력 셀이므로,
+    // 현재 시점의 미청구 외상채권(receivables)으로 자동 생성하지 않음.
+    // 외상미수금은 향후 실제 배차(고객청구 확정) 또는 정비(고객과실 확정) 이벤트에 의해서만 생성됨.
+    // ────────────────────────────────────────────────────────────────────
 
     // ── 과거 소급 청구서 선택적 생성 (histBillingRange 지정 시에만 실행) ──
     // Col[3] = 최초개시일 (실제 계약 시작일). Col[4] = 개시일은 당월 기산일이므로 사용 금지.

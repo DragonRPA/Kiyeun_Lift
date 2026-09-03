@@ -392,8 +392,8 @@ export const Products: React.FC = () => {
   };
 
   return (
-    <div>
-      <div className="card-header" style={{ marginBottom: '16px' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, gap: '12px' }}>
+      <div className="card-header" style={{ marginBottom: 0, flexShrink: 0 }}>
         <div>
           <h2 className="card-title">제품 모델 관리</h2>
           <p className="card-subtitle">장비 모델 및 제원표 규격 관리</p>
@@ -416,7 +416,7 @@ export const Products: React.FC = () => {
         </div>
       </div>
 
-      <div style={{ display: 'flex', gap: '12px', marginBottom: '16px', alignItems: 'center', flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', gap: '12px', marginBottom: 0, alignItems: 'center', flexWrap: 'wrap', flexShrink: 0 }}>
         <div style={{ position: 'relative', flex: 1, minWidth: '280px', maxWidth: '380px' }}>
           <Search size={18} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
           <input
@@ -484,8 +484,8 @@ export const Products: React.FC = () => {
         </div>
       </div>
 
-      {/* 수직 전용 독립 스크롤 컨테이너 (고정 스티키 헤더 탑재) */}
-      <div className="table-container" style={{ maxHeight: 'calc(850px - 260px)', overflowY: 'auto', overscrollBehavior: 'contain' }}>
+      {/* 수직 전용 독립 스크롤 컨테이너 (하단 뷰포트 영역 100% 가득 활용) */}
+      <div className="table-container" style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'auto', maxHeight: 'none', border: '1px solid var(--border-color)', borderRadius: '8px' }}>
         <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0 }}>
           <thead style={{ position: 'sticky', top: 0, zIndex: 10, backgroundColor: 'var(--bg-sidebar)' }}>
             <tr>

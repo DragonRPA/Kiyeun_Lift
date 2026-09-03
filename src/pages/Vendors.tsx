@@ -222,8 +222,8 @@ export const Vendors: React.FC = () => {
   };
 
   return (
-    <div>
-      <div className="card-header" style={{ marginBottom: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, gap: '10px' }}>
+      <div className="card-header" style={{ marginBottom: 0, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
         <div>
           <h2 style={{ fontWeight: '700', display: 'flex', alignItems: 'center', gap: '8px' }}>
             <Building2 className="text-primary" /> 매입처 (공급자 / 외주처) 관리
@@ -247,7 +247,7 @@ export const Vendors: React.FC = () => {
         const purchaseCount = vendors.filter(v => JSON.stringify(v.types || v.type || '').includes('PURCHASE')).length;
 
         return (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '10px', marginBottom: '16px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '10px', marginBottom: 0, flexShrink: 0 }}>
             <div style={{ padding: '10px 14px', backgroundColor: 'var(--bg-card)', borderRadius: '6px', border: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <span style={{ fontSize: '11.5px', color: 'var(--text-secondary)', fontWeight: 600 }}>총 매입 협력처</span>
               <strong style={{ fontSize: '15px', color: 'var(--primary)' }}>{vendors.length}개사</strong>
@@ -269,7 +269,7 @@ export const Vendors: React.FC = () => {
       })()}
 
       {/* 검색 및 필터 바 */}
-      <div className="card" style={{ padding: '16px', marginBottom: '16px' }}>
+      <div className="card" style={{ padding: '12px 16px', marginBottom: 0, flexShrink: 0 }}>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', gap: '8px', flex: 1, minWidth: '320px', alignItems: 'center' }}>
             {/* 검색어 입력 */}
@@ -324,8 +324,8 @@ export const Vendors: React.FC = () => {
       </div>
 
       {/* 매입처 목록 테이블 */}
-      <div className="card" style={{ padding: 0 }}>
-        <div className="table-container" style={{ maxHeight: 'calc(850px - 260px)', overflowY: 'auto', overscrollBehavior: 'contain' }}>
+      <div className="card" style={{ padding: 0, flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+        <div className="table-container" style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'auto', maxHeight: 'none', overscrollBehavior: 'contain' }}>
           <table className="table" style={{ width: '100%', margin: 0, tableLayout: 'fixed' }}>
             <colgroup>
               <col style={{ width: '145px' }} />{/* 상호명 */}

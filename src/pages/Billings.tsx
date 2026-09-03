@@ -1576,28 +1576,28 @@ ${items.map((item, idx) => {
 
   return (
     <div>
-      <h2 style={{ marginBottom: '24px', fontWeight: '700' }}>청구 및 수납 수금 관리</h2>
+      <h2 style={{ marginBottom: '18px', fontWeight: '700' }}>매출 청구 관리</h2>
 
       {/* 탭 */}
-      <div style={{ display: 'flex', gap: '8px', marginBottom: '24px', flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', flexWrap: 'wrap' }}>
         {canSave && (
           <button className={activeTab === 'WIZARD' ? 'btn-primary' : 'btn-secondary'} onClick={() => setActiveTab('WIZARD')}>
-            <Calendar size={14} /> 미청구 계약 정산 마법사
+            <Calendar size={14} /> 미청구 정산
           </button>
         )}
         <button className={activeTab === 'LIST' ? 'btn-primary' : 'btn-secondary'} onClick={() => setActiveTab('LIST')}>
-          청구 및 수납 내역
+          청구 대장
         </button>
         <button
           className={activeTab === 'INVOICE' ? 'btn-primary' : 'btn-secondary'}
           onClick={() => setActiveTab('INVOICE')}
           style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
         >
-          <Layers size={14} /> 청구 인보이스
+          <Layers size={14} /> 청구서통합
         </button>
       </div>
 
-      {/* 청구 인보이스 탭 */}
+      {/* 청구서통합 탭 */}
       {activeTab === 'INVOICE' && <BillingInvoiceTab />}
 
       {activeTab === 'LIST' && (() => {
@@ -1679,117 +1679,115 @@ ${items.map((item, idx) => {
           {/* 청구 목록 (좌측 독립 스크롤) */}
           <div className="card" style={{ margin: 0, display: 'flex', flexDirection: 'column', gap: '16px', maxHeight: 'calc(100vh - 160px)', overflowY: 'auto' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h3 className="card-title" style={{ margin: 0 }}>청구서 리스트</h3>
+              <h3 className="card-title" style={{ margin: 0 }}>청구 목록</h3>
               <button 
                 type="button" 
                 className="btn-secondary" 
                 onClick={handleExportExcel}
-                style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px', padding: '6px 12px' }}
+                style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px', padding: '5px 10px' }}
               >
                 <Download size={12} /> 엑셀 다운로드
               </button>
             </div>
 
-            {/* 필터 바 (상하 헤더 세로 스택 및 다중 정밀 필터) */}
-            <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-end', flexWrap: 'wrap', backgroundColor: 'var(--bg-app)', padding: '12px', borderRadius: '8px' }}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flex: 1, minWidth: '120px' }}>
+            {/* 필터 바 (1줄 고밀도 컴팩트 수평 정렬) */}
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-end', flexWrap: 'wrap', backgroundColor: 'var(--bg-app)', padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', flex: 1, minWidth: '120px' }}>
                 <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>고객사 검색</label>
                 <input 
                   type="text" 
                   value={tempSearchTerm} 
                   onChange={e => setTempSearchTerm(e.target.value)} 
+                  onKeyDown={e => { if (e.key === 'Enter') handleSearchClick(); }}
                   placeholder="고객사명..."
-                  style={{ width: '100%', padding: '6px 8px', fontSize: '12px', borderRadius: '5px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-card)', color: 'var(--text-main)' }}
+                  style={{ width: '100%', padding: '5px 8px', fontSize: '12px', borderRadius: '5px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-card)', color: 'var(--text-main)' }}
                 />
               </div>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flex: 1, minWidth: '110px' }}>
-                <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>계약번호 검색</label>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', flex: 1, minWidth: '100px' }}>
+                <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>계약번호</label>
                 <input 
                   type="text" 
                   value={tempContractNoFilter} 
                   onChange={e => setTempContractNoFilter(e.target.value)} 
+                  onKeyDown={e => { if (e.key === 'Enter') handleSearchClick(); }}
                   placeholder="계약번호..."
-                  style={{ width: '100%', padding: '6px 8px', fontSize: '12px', borderRadius: '5px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-card)', color: 'var(--text-main)' }}
+                  style={{ width: '100%', padding: '5px 8px', fontSize: '12px', borderRadius: '5px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-card)', color: 'var(--text-main)' }}
                 />
               </div>
 
-              {/* 📅 청구 시작월 ~ 종료월 */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flexShrink: 0 }}>
-                <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>청구 시작월</label>
-                <input 
-                  type="month"
-                  value={tempStartBillingYmFilter} 
-                  onChange={e => setTempStartBillingYmFilter(e.target.value)} 
-                  style={{ width: '120px', padding: '6px 8px', fontSize: '12px', borderRadius: '5px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-card)', color: 'var(--text-main)' }}
-                />
-              </div>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flexShrink: 0 }}>
-                <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>청구 종료월</label>
-                <input 
-                  type="month"
-                  value={tempEndBillingYmFilter} 
-                  onChange={e => setTempEndBillingYmFilter(e.target.value)} 
-                  style={{ width: '120px', padding: '6px 8px', fontSize: '12px', borderRadius: '5px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-card)', color: 'var(--text-main)' }}
-                />
-              </div>
-
-              {/* ◀ 당월 ▶ 바로가기 버튼 그룹 */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flexShrink: 0 }}>
-                <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>기간 이동</label>
-                <div style={{ display: 'flex', gap: '2px', alignItems: 'center' }}>
-                  <button
-                    type="button"
-                    className="btn-secondary"
-                    onClick={handlePrevMonth}
-                    style={{ padding: '5px 8px', height: '31px', fontSize: '12px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                    title="전월로 이동"
-                  >
-                    &lt;
-                  </button>
-                  <button
-                    type="button"
-                    className="btn-secondary"
-                    onClick={handleCurrentMonth}
-                    style={{ padding: '5px 10px', height: '31px', fontSize: '12px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', whiteSpace: 'nowrap' }}
-                    title="당월로 이동"
-                  >
-                    당월
-                  </button>
-                  <button
-                    type="button"
-                    className="btn-secondary"
-                    onClick={handleNextMonth}
-                    style={{ padding: '5px 8px', height: '31px', fontSize: '12px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                    title="다음달로 이동"
-                  >
-                    &gt;
-                  </button>
+              {/* 📅 청구 귀속월 */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', flexShrink: 0 }}>
+                <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>청구 귀속월</label>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+                  <input 
+                    type="month"
+                    value={tempStartBillingYmFilter} 
+                    onChange={e => setTempStartBillingYmFilter(e.target.value)} 
+                    style={{ width: '110px', padding: '5px 6px', fontSize: '12px', borderRadius: '5px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-card)', color: 'var(--text-main)' }}
+                  />
+                  <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>~</span>
+                  <input 
+                    type="month"
+                    value={tempEndBillingYmFilter} 
+                    onChange={e => setTempEndBillingYmFilter(e.target.value)} 
+                    style={{ width: '110px', padding: '5px 6px', fontSize: '12px', borderRadius: '5px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-card)', color: 'var(--text-main)' }}
+                  />
                 </div>
               </div>
 
-              {/* 💰 수납 상태 (완료 / 미완료) */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flexShrink: 0 }}>
+              {/* ◀ 당월 ▶ 이동 */}
+              <div style={{ display: 'flex', gap: '2px', alignItems: 'center', flexShrink: 0, paddingBottom: '1px' }}>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={handlePrevMonth}
+                  style={{ padding: '4px 7px', height: '28px', fontSize: '11px', fontWeight: 'bold' }}
+                  title="전월"
+                >
+                  &lt;
+                </button>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={handleCurrentMonth}
+                  style={{ padding: '4px 8px', height: '28px', fontSize: '11px', fontWeight: 'bold', whiteSpace: 'nowrap' }}
+                  title="당월"
+                >
+                  당월
+                </button>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={handleNextMonth}
+                  style={{ padding: '4px 7px', height: '28px', fontSize: '11px', fontWeight: 'bold' }}
+                  title="익월"
+                >
+                  &gt;
+                </button>
+              </div>
+
+              {/* 💰 수납 상태 */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', flexShrink: 0 }}>
                 <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>수납 상태</label>
                 <select 
                   value={tempPaymentFilter} 
                   onChange={e => setTempPaymentFilter(e.target.value as any)} 
-                  style={{ width: '110px', padding: '6px 8px', fontSize: '12px', borderRadius: '5px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-card)', color: 'var(--text-main)' }}
+                  style={{ width: '90px', padding: '5px 6px', fontSize: '12px', borderRadius: '5px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-card)', color: 'var(--text-main)' }}
                 >
                   <option value="ALL">전체</option>
-                  <option value="PAID">수납 완료</option>
-                  <option value="UNPAID_ANY">수납 미완료</option>
+                  <option value="PAID">수납완료</option>
+                  <option value="UNPAID_ANY">미완료</option>
                 </select>
               </div>
 
-              {/* ✉️ 메일 발송 상태 (발송 / 미발송) */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flexShrink: 0 }}>
+              {/* ✉️ 메일 발송 */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', flexShrink: 0 }}>
                 <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>메일 발송</label>
                 <select 
                   value={tempMailSentFilter} 
                   onChange={e => setTempMailSentFilter(e.target.value as any)} 
-                  style={{ width: '100px', padding: '6px 8px', fontSize: '12px', borderRadius: '5px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-card)', color: 'var(--text-main)' }}
+                  style={{ width: '85px', padding: '5px 6px', fontSize: '12px', borderRadius: '5px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-card)', color: 'var(--text-main)' }}
                 >
                   <option value="ALL">전체</option>
                   <option value="SENT">발송</option>
@@ -1797,12 +1795,13 @@ ${items.map((item, idx) => {
                 </select>
               </div>
 
-              <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexShrink: 0 }}>
+              {/* 버튼 그룹 */}
+              <div style={{ display: 'flex', gap: '4px', alignItems: 'center', flexShrink: 0, paddingBottom: '1px' }}>
                 <button 
                   type="button" 
                   className="btn-primary" 
                   onClick={handleSearchClick}
-                  style={{ padding: '6px 14px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '12px', whiteSpace: 'nowrap' }}
+                  style={{ padding: '5px 12px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '12px', whiteSpace: 'nowrap' }}
                 >
                   조회
                 </button>
@@ -1810,14 +1809,14 @@ ${items.map((item, idx) => {
                   type="button" 
                   className="btn-secondary" 
                   onClick={handleResetFilters}
-                  style={{ padding: '6px 10px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '12px', whiteSpace: 'nowrap' }}
+                  style={{ padding: '5px 8px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '12px', whiteSpace: 'nowrap' }}
                 >
                   초기화
                 </button>
               </div>
             </div>
 
-            {/* 📊 청구 및 수납 실시간 종합 집계 위젯 */}
+            {/* 📊 청구 및 수납 실시간 종합 집계 (1줄 고밀도 압축 스트립) */}
             {(() => {
               const totalSupply = filteredBillings.reduce((sum, b) => sum + (b.totalAmount || 0), 0);
               const totalVat = Math.round(totalSupply * 0.1);
@@ -1839,30 +1838,42 @@ ${items.map((item, idx) => {
               const totalUnappliedDeposit = relevantDeposits.reduce((sum, t) => sum + getDepositBalance(t.id), 0);
 
               return (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '12px', marginBottom: '16px' }}>
-                  <div style={{ padding: '12px', backgroundColor: 'var(--bg-card)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
-                    <div style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 600, marginBottom: '4px' }}>조회 청구건수</div>
-                    <div style={{ fontSize: '16px', fontWeight: 800, color: 'var(--primary)' }}>{filteredBillings.length}건</div>
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: '12px',
+                  padding: '8px 14px',
+                  backgroundColor: 'var(--bg-app)',
+                  borderRadius: '6px',
+                  border: '1px solid var(--border-color)',
+                  flexWrap: 'wrap',
+                  fontSize: '12.5px',
+                  whiteSpace: 'nowrap'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                    <span style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>조회:</span>
+                    <strong style={{ color: 'var(--primary)', fontSize: '13.5px' }}>{filteredBillings.length}건</strong>
                   </div>
-                  <div style={{ padding: '12px', backgroundColor: 'var(--bg-card)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
-                    <div style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 600, marginBottom: '4px' }}>공급가액 합계</div>
-                    <div style={{ fontSize: '16px', fontWeight: 800 }}>₩{totalSupply.toLocaleString()}</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                    <span style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>공급가액:</span>
+                    <strong>₩{totalSupply.toLocaleString()}</strong>
                   </div>
-                  <div style={{ padding: '12px', backgroundColor: 'var(--bg-card)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
-                    <div style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 600, marginBottom: '4px' }}>총 청구금액 (VAT포함)</div>
-                    <div style={{ fontSize: '16px', fontWeight: 800, color: '#0070C0' }}>₩{totalGrand.toLocaleString()}</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                    <span style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>총 청구(VAT포함):</span>
+                    <strong style={{ color: '#0070C0', fontSize: '13.5px' }}>₩{totalGrand.toLocaleString()}</strong>
                   </div>
-                  <div style={{ padding: '12px', backgroundColor: 'var(--bg-card)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
-                    <div style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 600, marginBottom: '4px' }}>수납 완료액</div>
-                    <div style={{ fontSize: '16px', fontWeight: 800, color: 'var(--success)' }}>₩{totalPaid.toLocaleString()}</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                    <span style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>수납완료:</span>
+                    <strong style={{ color: 'var(--success)' }}>₩{totalPaid.toLocaleString()}</strong>
                   </div>
-                  <div style={{ padding: '12px', backgroundColor: 'var(--bg-card)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
-                    <div style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 600, marginBottom: '4px' }}>미수 채권 잔액</div>
-                    <div style={{ fontSize: '16px', fontWeight: 800, color: totalUnpaid > 0 ? '#dc2626' : 'var(--text-muted)' }}>₩{totalUnpaid.toLocaleString()}</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                    <span style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>미수채권:</span>
+                    <strong style={{ color: totalUnpaid > 0 ? '#dc2626' : 'var(--text-muted)' }}>₩{totalUnpaid.toLocaleString()}</strong>
                   </div>
-                  <div style={{ padding: '12px', backgroundColor: 'var(--bg-card)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
-                    <div style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 600, marginBottom: '4px' }}>미수납 통장잔액</div>
-                    <div style={{ fontSize: '16px', fontWeight: 800, color: totalUnappliedDeposit > 0 ? '#10B981' : 'var(--text-muted)' }}>₩{totalUnappliedDeposit.toLocaleString()}</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                    <span style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>통장잔액:</span>
+                    <strong style={{ color: totalUnappliedDeposit > 0 ? '#10B981' : 'var(--text-muted)' }}>₩{totalUnappliedDeposit.toLocaleString()}</strong>
                   </div>
                 </div>
               );

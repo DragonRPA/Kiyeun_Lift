@@ -187,7 +187,7 @@ export async function applyPaymentToInvoice(
     .eq('id', invoiceId)
     .single();
 
-  if (invErr || !invoice) return { success: false, message: `인보이스 조회 실패: ${invErr?.message}` };
+  if (invErr || !invoice) return { success: false, message: `청구서통합 조회 실패: ${invErr?.message}` };
 
   const { data: billings, error: bErr } = await supabase
     .from('billings')
@@ -211,7 +211,7 @@ export async function applyPaymentToInvoice(
       .eq('id', b.id);
   }
 
-  // 인보이스 상태 갱신
+  // 청구서통합 상태 갱신
   const { data: updated } = await supabase
     .from('billings')
     .select('paidAmount, totalAmount')
@@ -230,7 +230,7 @@ export async function applyPaymentToInvoice(
 }
 
 // ──────────────────────────────────────────────
-// 4. 인보이스 취소 (billings.invoiceId → null 복원)
+// 4. 청구서통합 취소 (billings.invoiceId → null 복원)
 // ──────────────────────────────────────────────
 export async function cancelInvoice(invoiceId: string): Promise<{ success: boolean; message: string }> {
   const nowIso = new Date().toISOString();
@@ -243,19 +243,19 @@ export async function cancelInvoice(invoiceId: string): Promise<{ success: boole
 
   if (resetErr) return { success: false, message: `billing 초기화 실패: ${resetErr.message}` };
 
-  // 인보이스 CANCELLED 처리
+  // 청구서통합 CANCELLED 처리
   const { error: cancelErr } = await supabase
     .from('billing_invoices')
     .update({ status: 'CANCELLED', updatedAt: nowIso })
     .eq('id', invoiceId);
 
-  if (cancelErr) return { success: false, message: `인보이스 취소 실패: ${cancelErr.message}` };
+  if (cancelErr) return { success: false, message: `청구서통합 취소 실패: ${cancelErr.message}` };
 
-  return { success: true, message: `인보이스 ${invoiceId} 취소 완료` };
+  return { success: true, message: `청구서통합 ${invoiceId} 취소 완료` };
 }
 
 // ──────────────────────────────────────────────
-// 5. 인보이스 목록 조회 (UI용)
+// 5. 청구서통합 목록 조회 (UI용)
 // ──────────────────────────────────────────────
 export async function fetchInvoices(billingYm?: string): Promise<BillingInvoice[]> {
   let query = supabase
@@ -267,7 +267,7 @@ export async function fetchInvoices(billingYm?: string): Promise<BillingInvoice[
   if (billingYm) query = query.eq('billingYm', billingYm);
 
   const { data, error } = await query;
-  if (error) throw new Error(`인보이스 조회 실패: ${error.message}`);
+  if (error) throw new Error(`청구서통합 조회 실패: ${error.message}`);
   return data || [];
 }
 
