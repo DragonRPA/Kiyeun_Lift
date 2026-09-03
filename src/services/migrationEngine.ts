@@ -2453,9 +2453,20 @@ export function parseDispatchHistoryText(rawText: string): ParsedDispatchPost[] 
   const postHeaderRe = /^(\d{4}년\s*\d{1,2}월\s*\d{1,2}일\s*(?:오전|오후)\s*\d{1,2}:\d{2})(?:\s*게시글)?$/;
   
   const indices: number[] = [];
+  let lastHeaderTime = '';
+  let lastIdx = -999;
+
   lines.forEach((line, idx) => {
-    if (postHeaderRe.test(line)) {
+    const m = line.match(postHeaderRe);
+    if (m) {
+      const timeStr = m[1];
+      // 💡 [네이버 밴드 중복 헤더 방지] 동일한 시간 문자열의 헤더가 3줄 이내에 연달아 등장하면 중복 병합
+      if ((idx - lastIdx) <= 3 && timeStr === lastHeaderTime) {
+        return;
+      }
       indices.push(idx);
+      lastHeaderTime = timeStr;
+      lastIdx = idx;
     }
   });
 
@@ -2502,6 +2513,11 @@ export function parseDispatchHistoryText(rawText: string): ParsedDispatchPost[] 
     });
 
     const fullContentText = rawContent.join('\n');
+
+    // 💡 밴드 멤버 가입/기념일 알림글은 출고요청이 아니므로 배제
+    if (fullContentText.includes('환영해주세요') || fullContentText.includes('주년입니다') || header.includes('멤버를 환영')) {
+      return;
+    }
 
     let customerName = '';
     let siteName = '';

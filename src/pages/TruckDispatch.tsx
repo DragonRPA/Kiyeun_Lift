@@ -632,6 +632,20 @@ export const TruckDispatch: React.FC = () => {
     });
   }, [deliveries, reconPaymentFilter, reconStartDate, reconEndDate, selectedReconCompany, reconSearchQuery, contracts, customers]);
 
+  // 💡 [사장님 지시] 조회 버튼 클릭 시 로딩된 대사 정보(엑셀 1:1 대사 pair, 업로드 파일, 선택 상태 등)를 완전 초기화하여 깨끗한 원장 조회 상태로 복귀
+  const handleReconSearch = () => {
+    setReconPairs([]);
+    setUploadedFileName('');
+    setSelectedPairIds(new Set());
+    setSelectedSystemDeliveryId(null);
+    setSelectedExcelRowIndex(null);
+    setReconStatusFilter('ALL');
+    setReconSearchQuery('');
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+    setReconNotificationMsg(`🔍 [${selectedReconCompany === 'ALL' ? '전체 거래처' : selectedReconCompany}] (${reconStartDate} ~ ${reconEndDate} / ${reconPaymentFilter === 'UNPAID' ? '미지급건' : reconPaymentFilter === 'PAID' ? '지급완료건' : '전체'}) 조회가 갱신되었습니다. (대사 정보 초기화됨)`);
+  };
 
   // 거래명세서 엑셀 파싱 및 스마트 1:1 페어링 파이프라인 (다변형 서식/날짜 정규화 & 2단계 지능형 매칭 엔진)
   const handleExcelFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -2510,7 +2524,7 @@ export const TruckDispatch: React.FC = () => {
                 </div>
 
                 <button
-                  onClick={() => setReconNotificationMsg(`🔍 [${selectedReconCompany === 'ALL' ? '전체 거래처' : selectedReconCompany}] (${reconStartDate} ~ ${reconEndDate} / ${reconPaymentFilter === 'UNPAID' ? '미지급건' : reconPaymentFilter === 'PAID' ? '지급완료건' : '전체'}) 조회가 갱신되었습니다.`)}
+                  onClick={handleReconSearch}
                   className="btn-primary"
                   style={{ padding: '4px 10px', fontSize: '11.5px', fontWeight: 800, borderRadius: '5px', display: 'inline-flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}
                 >
