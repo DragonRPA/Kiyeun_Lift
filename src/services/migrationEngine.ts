@@ -1072,7 +1072,7 @@ export function parseInitialExcelWorkbook(
           manufacturer: inferMakerFromModel(targetModel),
           manufactureYear: '2025년',
           ownerType: 'RENTED',
-          status: 'AVAILABLE',
+          status: leaseReturnDate ? 'RENTED_RETURNED' : 'AVAILABLE',
           acquisitionDate: '2026-08-01',
           acquisitionPrice: 0,
           depreciationMonths: 0,
@@ -1082,7 +1082,10 @@ export function parseInitialExcelWorkbook(
           cumRentalFee: 0,
           cumRepairCost: 0,
           vendorId: null,           // 아래 leaseVendor 처리 후 주입
-          rentStart: sanitizeExcelDate(r[4]) || '2026-08-01',
+          renter: leaseVendorName || '미지정',
+          rentStart: (leaseReturnDate && sanitizeExcelDate(r[4]) && leaseReturnDate < sanitizeExcelDate(r[4]))
+            ? leaseReturnDate
+            : (sanitizeExcelDate(r[4]) || '2026-08-01'),
           rentEnd: leaseReturnDate,
           monthlyRentFee: leasePrice,
           dailyRentFee: Math.round(leasePrice / 30),
@@ -1128,6 +1131,7 @@ export function parseInitialExcelWorkbook(
       // leaseVendorId를 자산에도 주입 (전대번호만 있는 경우)
       if (!ownAssetNo && leaseAssetRef && leaseVendor) {
         leaseAssetRef.vendorId = leaseVendor.id;
+        leaseAssetRef.renter = leaseVendor.name;
       }
 
       const leaseId = `LEASE-2608-${String(leaseSeq++).padStart(4, '0')}`;

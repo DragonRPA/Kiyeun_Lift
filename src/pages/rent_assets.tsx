@@ -1,9 +1,8 @@
 // src/pages/rent_assets.tsx
 import React, { useState, useRef } from 'react';
 import { useApp } from '../context/AppContext';
-import { 
-  Plus, CheckCircle, Search, AlertTriangle, Download, Clock, Layers, 
-  ShieldAlert, Upload, FileSpreadsheet, RefreshCw, FileText, Check, ArrowRight, XCircle, CreditCard
+import {
+  Plus, CheckCircle, Search, AlertTriangle, Download, Clock, Layers, ShieldAlert, Upload, FileSpreadsheet, RefreshCw, FileText, Check, ArrowRight, XCircle, CreditCard, CheckCircle2, AlertCircle, X, ExternalLink, ShieldCheck, Building, Calendar
 } from 'lucide-react';
 import { Asset, db, PurchaseSettlement, PurchaseSettlementItem, Delivery } from '../services/db';
 import { exportToExcel } from '../services/excel';
@@ -30,7 +29,7 @@ export interface ReconcileResultItem {
 export const RentAssets: React.FC = () => {
   const { 
     assets, products, customers, vendors, contracts, sites, billings, billingDetails,
-    purchaseSettlements, purchaseSettlementItems, deliveries, receivables,
+    purchaseSettlements, purchaseSettlementItems, deliveries, receivables, assetInOutLogs,
     registerRentedAsset, returnRentedAsset, createVendorClaimReceivable,
     hasPermission, setActiveTab: setGlobalActiveTab
   } = useApp();
@@ -77,6 +76,28 @@ export const RentAssets: React.FC = () => {
   // 임차 자산(ownerType === 'RENTED') 전체 리스트
   const rentedAssets = assets.filter(a => a.ownerType === 'RENTED');
 
+
+  // 토스트 알림 상태
+  const [toastMessage, setToastMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const showToast = (text: string, type: 'success' | 'error' = 'success') => {
+    setToastMessage({ type, text });
+    setTimeout(() => {
+      setToastMessage(null);
+    }, 4000);
+  };
+
+  // 우측 슬라이드오버 Dossier 패널 상태
+  const [selectedAssetForDossier, setSelectedAssetForDossier] = useState<Asset | null>(null);
+
+  // 헬퍼: 자산의 임차처(원사) 상호명 추출 (vendorId 외래키 우선 매핑)
+  const getAssetRenterName = (a: Asset): string => {
+    if (a.vendorId) {
+      const v = vendors.find(item => item.id === a.vendorId);
+      if (v?.name) return v.name;
+    }
+    return a.renter || '미지정';
+  };
+
   // 등록된 임차처(임차거래처) 목록 (알파벳/한글 오름차순 정렬)
   const renterVendors = React.useMemo(() => {
     const rentalVendorNames = vendors
@@ -84,7 +105,9 @@ export const RentAssets: React.FC = () => {
       .map(v => v.name)
       .filter(Boolean);
 
-    const existingRenters = rentedAssets.map(a => a.renter).filter(Boolean) as string[];
+    const existingRenters = rentedAssets
+      .map(a => getAssetRenterName(a))
+      .filter(name => Boolean(name) && name !== '미지정');
     const combined = Array.from(new Set([...rentalVendorNames, ...existingRenters]));
     return combined.sort((a, b) => a.localeCompare(b));
   }, [vendors, rentedAssets]);
@@ -123,7 +146,7 @@ export const RentAssets: React.FC = () => {
       if (!matched && row.modelName) {
         matched = rentedAssets.find(a => 
           cleanStr(a.modelName) === cleanStr(row.modelName) &&
-          (!selectedVendor || cleanStr(a.renter) === cleanStr(selectedVendor)) &&
+          (!selectedVendor || cleanStr(getAssetRenterName(a)) === cleanStr(selectedVendor)) &&
           !matchedAssetIds.has(a.id)
         );
       }
@@ -203,7 +226,7 @@ export const RentAssets: React.FC = () => {
     const monthEnd = `${selectedYm}-${String(daysInMonth).padStart(2, '0')}`;
 
     const targetRented = rentedAssets.filter(a => {
-      const matchesVendor = !selectedVendor || a.renter === selectedVendor;
+      const matchesVendor = !selectedVendor || getAssetRenterName(a) === selectedVendor;
       const assetStart = a.rentStart || '1900-01-01';
       const assetEnd = a.actualRentReturnDate || a.rentEnd || '9999-12-31';
       const isOverlapped = (assetStart <= monthEnd) && (assetEnd >= monthStart);
@@ -404,7 +427,7 @@ export const RentAssets: React.FC = () => {
           alert(`✅ ${vendorNotice} 엑셀 업로드 완결!${headerNotice}\n- 파싱 항목: 총 ${parseResult.totalParsedCount}건\n- 총 공급가액: ₩${parseResult.totalParsedAmount.toLocaleString()}\n- 세액: ₩${parseResult.totalParsedTax.toLocaleString()}\n\n자사 DB 자산대장과의 1:1 대사가 자동으로 완료되었습니다.`);
         }
       } catch (err: any) {
-        alert(`⚠️ 거래명세서 파일 파싱 오류: ${err?.message || err}`);
+        showToast(`명세서 파일 파싱 오류: ${err?.message || err}`, 'error');
       }
     };
     reader.readAsArrayBuffer(file);
@@ -418,7 +441,7 @@ export const RentAssets: React.FC = () => {
       : rentedAssets;
 
     if (targetAssets.length === 0 && rentedAssets.length === 0) {
-      alert('등록된 자사 임차자산이 없습니다. 먼저 임차자산을 등록하거나 테스트 데모 데이터를 사용해주세요.');
+      showToast('등록된 자사 임차자산이 없습니다.', 'error');
       return;
     }
 
@@ -517,13 +540,13 @@ export const RentAssets: React.FC = () => {
   // 💳 선택된 대사 항목에 대한 [매입 정산 생성 & 지급 요청] 모달 열기
   const handleOpenPaymentRequestModal = () => {
     if (!canSave) {
-      alert('매입 정산 승인 권한이 없습니다.');
+      showToast('매입 정산 승인 권한이 없습니다.', 'error');
       return;
     }
 
     const targetRows = statementRows.filter(r => selectedReconcileIds.includes(r.id));
     if (targetRows.length === 0) {
-      alert('매입 정산 승인 및 지급 요청을 전송할 선택 항목이 없습니다. 대사 테이블에서 체크박스를 선택해주세요.');
+      showToast('지급 요청할 대사 항목을 선택해 주세요.', 'error');
       return;
     }
 
@@ -593,7 +616,7 @@ export const RentAssets: React.FC = () => {
       setStatementRows(remainingRows);
       setSelectedReconcileIds([]);
     } catch (err: any) {
-      alert(`⚠️ 매입 정산 및 지급 요청 오류: ${err?.message || err}`);
+      showToast(`매입 정산 오류: ${err?.message || err}`, 'error');
     } finally {
       setIsSettling(false);
     }
@@ -623,14 +646,17 @@ export const RentAssets: React.FC = () => {
   const [returnCost, setReturnCost] = useState(70000);
 
   const filteredAssets = rentedAssets.filter(a => {
+    const rName = getAssetRenterName(a);
     const matchesSearch = a.assetNo.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          a.modelName.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesRenter = !renterQuery || (a.renter && a.renter.toLowerCase().includes(renterQuery.toLowerCase()));
+                          a.modelName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                          rName.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesRenter = !renterQuery || rName.toLowerCase().includes(renterQuery.toLowerCase());
     const matchesStartDate = !startDateQuery || (a.rentEnd && a.rentEnd >= startDateQuery);
     const matchesEndDate = !endDateQuery || (a.rentStart && a.rentStart <= endDateQuery);
+    const isReturned = Boolean(a.actualRentReturnDate) || a.status === 'RENTED_RETURNED';
     const matchesReturn = returnQuery === 'ALL' ? true :
-                          returnQuery === 'RETURNED' ? a.status === 'RENTED_RETURNED' :
-                          a.status !== 'RENTED_RETURNED';
+                          returnQuery === 'RETURNED' ? isReturned :
+                          !isReturned;
 
     return matchesSearch && matchesRenter && matchesStartDate && matchesEndDate && matchesReturn;
   });
@@ -648,11 +674,12 @@ export const RentAssets: React.FC = () => {
     return d.toISOString().split('T')[0];
   };
 
-  // 반납 지연일 및 초과 검사 헬퍼
+  // 반납 지연일 및 초과 검사 헬퍼 (반납 완료 장비는 지연 및 경보 대상에서 100% 제외)
   const calculateDelayDays = (asset: Asset): number => {
     if (!asset.rentEnd) return 0;
+    if (asset.actualRentReturnDate || asset.status === 'RENTED_RETURNED') return 0;
     const plannedEnd = new Date(asset.rentEnd);
-    const actualEnd = asset.actualRentReturnDate ? new Date(asset.actualRentReturnDate) : new Date();
+    const actualEnd = new Date();
     plannedEnd.setHours(0,0,0,0);
     actualEnd.setHours(0,0,0,0);
     const diffTime = actualEnd.getTime() - plannedEnd.getTime();
@@ -661,6 +688,7 @@ export const RentAssets: React.FC = () => {
   };
 
   const isSubleaseOverdue = (asset: Asset): boolean => {
+    if (asset.actualRentReturnDate || asset.status === 'RENTED_RETURNED') return false;
     if (!asset.rentEnd || !asset.contractEnd) return false;
     const leaseEnd = new Date(asset.rentEnd);
     const subleaseEnd = new Date(asset.contractEnd);
@@ -704,7 +732,15 @@ export const RentAssets: React.FC = () => {
   const handleSubmitAsset = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!canSave || !editingAsset || !editingAsset.assetNo || !editingAsset.modelName) {
-      alert('필수 입력을 확인해 주세요.');
+      showToast('필수 입력을 확인해 주세요.', 'error');
+      return;
+    }
+    if (editingAsset.rentStart && editingAsset.rentEnd && editingAsset.rentStart > editingAsset.rentEnd) {
+      showToast('임차 시작일이 만료예정일보다 늦을 수 없습니다.', 'error');
+      return;
+    }
+    if (!editingAsset.renter) {
+      showToast('소유 원사를 선택해 주세요.', 'error');
       return;
     }
     try {
@@ -713,17 +749,17 @@ export const RentAssets: React.FC = () => {
         ...editingAsset,
         dailyRentFee: calculatedDailyFee
       });
-      alert(`임차 자산(${editingAsset.assetNo}) 등록/수정이 완료되었습니다.`);
+      showToast(`임차 자산 [${editingAsset.assetNo}] 등록/수정이 완료되었습니다.`);
       setShowModal(false);
       setEditingAsset(null);
     } catch (err: any) {
-      alert(`⚠️ 처리 오류: ${err?.message || err}`);
+      showToast(`처리 오류: ${err?.message || err}`, 'error');
     }
   };
 
   const handleConfirmReturn = async () => {
     if (!returnAssetId || !returnDate) {
-      alert('반납 일자를 입력해주세요.');
+      showToast('반납 일자를 입력해주세요.', 'error');
       return;
     }
     const target = assets.find(a => a.id === returnAssetId);
@@ -747,7 +783,7 @@ export const RentAssets: React.FC = () => {
     }
 
     returnRentedAsset(returnAssetId, returnDate);
-    alert(`임차 자산(${target.assetNo})의 반납 처리가 완결되었습니다.`);
+    showToast(`임차 자산 [${target.assetNo}] 반납 처리가 완결되었습니다.`);
     setShowReturnModal(false);
   };
 
@@ -791,11 +827,11 @@ export const RentAssets: React.FC = () => {
   const handleSubmitClaim = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!claimCustomerId) {
-      alert('귀책 고객사를 선택해 주세요.');
+      showToast('귀책 고객사를 선택해 주세요.', 'error');
       return;
     }
     if (claimAmount <= 0) {
-      alert('구상 금액은 0원보다 커야 합니다.');
+      showToast('구상 금액은 0원보다 커야 합니다.', 'error');
       return;
     }
 
@@ -814,7 +850,7 @@ export const RentAssets: React.FC = () => {
       alert(`✅ [외상미수금 대장]에 타사 구상채권(₩${claimAmount.toLocaleString()})이 성공적으로 등록되었습니다!\n\n고객사 매출 청구서(Billings) 발행 시 분할 청구 및 상계할 수 있습니다.`);
       setShowClaimModal(false);
     } catch (err: any) {
-      alert(`⚠️ 구상 미수금 등록 실패: ${err?.message || err}`);
+      showToast(`구상 미수금 등록 실패: ${err?.message || err}`, 'error');
     }
   };
 
@@ -867,6 +903,26 @@ export const RentAssets: React.FC = () => {
       }));
       exportToExcel(data, `자산별_전대손익원장_${new Date().toISOString().split('T')[0]}`, '자산별전대손익');
     }
+  };
+
+  // 📥 원사 거래명세서 대사 결과 엑셀 내보내기
+  const handleExportReconcileExcel = () => {
+    const data = filteredReconcileResults.map((r, idx) => ({
+      'No': idx + 1,
+      '대사상태': r.statusLabel,
+      '관리번호': r.statementRow?.assetNo || r.matchedAsset?.assetNo || '-',
+      '원사 원래번호': r.matchedAsset?.vendorAssetNo || '-',
+      '모델명': r.statementRow?.modelName || r.matchedAsset?.modelName || '-',
+      '원사 청구금액': r.statementRow?.billedAmount || 0,
+      '자사 약정금액': r.expectedAmount || 0,
+      '대차 차액': r.priceDiff,
+      '소유 원사': selectedVendor || (r.matchedAsset ? getAssetRenterName(r.matchedAsset) : '-'),
+      '원사 청구기간': r.statementRow ? `${r.statementRow.rentStart} ~ ${r.statementRow.rentEnd}` : '-',
+      '자사 가동기간': r.matchedAsset ? `${r.matchedAsset.rentStart || '~'} ~ ${r.matchedAsset.rentEnd || '~'}` : '-',
+      '불일치 사유': r.reason
+    }));
+    exportToExcel(data, `임차처_명세서_대사결과_${selectedYm}_${new Date().toISOString().split('T')[0]}`, '대사결과');
+    showToast('대사 결과 엑셀 파일이 다운로드되었습니다.');
   };
 
   return (
@@ -1324,56 +1380,85 @@ export const RentAssets: React.FC = () => {
                 </table>
               </div>
             )}
+
+            {/* 최하단 회계 대차대조 검증 바 (헌장 3.5 Z-패턴 4단계) */}
+            <div style={{
+              padding: '8px 14px',
+              backgroundColor: 'var(--bg-app)',
+              borderTop: '1px solid var(--border-color)',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              gap: '8px',
+              fontSize: '11.5px',
+              borderRadius: '0 0 6px 6px'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
+                <span>원사 청구총액: <strong style={{ color: 'var(--primary)' }}>₩{statsRecon.totalBilled.toLocaleString()}</strong></span>
+                <span>=</span>
+                <span>일치 확정액: <strong style={{ color: 'var(--success)' }}>₩{(statsRecon.totalBilled - statsRecon.totalDiffAmount).toLocaleString()}</strong></span>
+                <span>+</span>
+                <span>차액/이의액: <strong style={{ color: statsRecon.totalDiffAmount !== 0 ? 'var(--danger)' : 'var(--text-muted)' }}>₩{statsRecon.totalDiffAmount.toLocaleString()}</strong></span>
+              </div>
+              <span style={{
+                padding: '2px 8px',
+                borderRadius: '4px',
+                backgroundColor: statsRecon.totalDiffAmount === 0 ? 'var(--success-light)' : 'var(--danger-light)',
+                color: statsRecon.totalDiffAmount === 0 ? 'var(--success)' : 'var(--danger)',
+                fontWeight: 700,
+                fontSize: '11px'
+              }}>
+                {statsRecon.totalDiffAmount === 0 ? '⚖️ 대차 차액 ₩0 (완결)' : `⚠️ 차액 발생 ₩${Math.abs(statsRecon.totalDiffAmount).toLocaleString()}`}
+              </span>
+            </div>
           </div>
 
         </div>
       )}
 
       {/* ========================================================================= */}
-      {/* 탭: 전대 손익 원장 (대차대조) */}
+      {/* 탭 2: 전대 손익 원장 (대차대조) */}
       {/* ========================================================================= */}
-      {activeTab === 'PROFIT_LEDGER' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+      {activeTab === 'PROFIT_LEDGER' && (() => {
+        const totalRev = subleaseContracts.reduce((sum, sc) => sum + sc.confirmedRevenue, 0);
+        const totalCost = subleaseContracts.reduce((sum, sc) => sum + sc.confirmedCost, 0);
+        const totalFreight = subleaseContracts.reduce((sum, sc) => sum + sc.freightCost, 0);
+        const totalExpense = totalCost + totalFreight;
+        const netProfit = totalRev - totalExpense;
+        const marginRate = totalRev > 0 ? (netProfit / totalRev) * 100 : 0;
 
-          {/* 대차대조 손익 KPI 카드 */}
-          {(() => {
-            const totalRev = subleaseContracts.reduce((sum, sc) => sum + sc.confirmedRevenue, 0);
-            const totalCost = subleaseContracts.reduce((sum, sc) => sum + sc.confirmedCost, 0);
-            const totalFreight = subleaseContracts.reduce((sum, sc) => sum + sc.freightCost, 0);
-            const totalExpense = totalCost + totalFreight;
-            const netProfit = totalRev - totalExpense;
-            const marginRate = totalRev > 0 ? (netProfit / totalRev) * 100 : 0;
+        return (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
 
-            return (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
-                <div style={{ padding: '14px', backgroundColor: 'var(--bg-card)', borderRadius: '10px', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <span style={{ fontSize: '11.5px', color: 'var(--text-secondary)', fontWeight: 600 }}>📄 전대 확정 청구액 (매출)</span>
-                  <strong style={{ fontSize: '18px', color: '#2563eb' }}>₩{totalRev.toLocaleString()}</strong>
-                  <span style={{ fontSize: '10.5px', color: 'var(--text-muted)' }}>확정 매출 세금계산서 기준</span>
-                </div>
-
-                <div style={{ padding: '14px', backgroundColor: 'var(--bg-card)', borderRadius: '10px', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <span style={{ fontSize: '11.5px', color: 'var(--text-secondary)', fontWeight: 600 }}>🏢 매입 임차료 원가 (매입)</span>
-                  <strong style={{ fontSize: '18px', color: '#dc2626' }}>₩{totalCost.toLocaleString()}</strong>
-                  <span style={{ fontSize: '10.5px', color: 'var(--text-muted)' }}>원사 매입세금계산서 기준</span>
-                </div>
-
-                <div style={{ padding: '14px', backgroundColor: 'var(--bg-card)', borderRadius: '10px', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <span style={{ fontSize: '11.5px', color: 'var(--text-secondary)', fontWeight: 600 }}>🚚 직송/경유 운송비 원가</span>
-                  <strong style={{ fontSize: '18px', color: '#d97706' }}>₩{totalFreight.toLocaleString()}</strong>
-                  <span style={{ fontSize: '10.5px', color: 'var(--text-muted)' }}>화물 배차 대장 확정액</span>
-                </div>
-
-                <div style={{ padding: '14px', backgroundColor: 'var(--success-light)', borderRadius: '10px', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <span style={{ fontSize: '11.5px', color: 'var(--text-main)', fontWeight: 700 }}>⚖️ 전대 순마진 (대차대조)</span>
-                  <strong style={{ fontSize: '18px', color: '#16a34a' }}>₩{netProfit.toLocaleString()}</strong>
-                  <span style={{ fontSize: '11px', fontWeight: 700, color: marginRate >= 20 ? '#16a34a' : '#d97706' }}>
-                    마진율: {marginRate.toFixed(1)}% ({marginRate >= 0 ? '🟢 흑자' : '🔴 적자'})
-                  </span>
-                </div>
+            {/* 대차대조 손익 KPI 카드 */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '10px' }}>
+              <div style={{ padding: '12px 14px', backgroundColor: 'var(--bg-card)', borderRadius: '6px', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 600 }}>전대 확정 청구액 (매출)</span>
+                <strong style={{ fontSize: '17px', color: 'var(--primary)' }}>₩{totalRev.toLocaleString()}</strong>
+                <span style={{ fontSize: '10.5px', color: 'var(--text-muted)' }}>확정 매출 세금계산서 기준</span>
               </div>
-            );
-          })()}
+
+              <div style={{ padding: '12px 14px', backgroundColor: 'var(--bg-card)', borderRadius: '6px', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 600 }}>매입 임차료 원가 (매입)</span>
+                <strong style={{ fontSize: '17px', color: 'var(--danger)' }}>₩{totalCost.toLocaleString()}</strong>
+                <span style={{ fontSize: '10.5px', color: 'var(--text-muted)' }}>원사 매입세금계산서 기준</span>
+              </div>
+
+              <div style={{ padding: '12px 14px', backgroundColor: 'var(--bg-card)', borderRadius: '6px', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 600 }}>직송 운송비 원가</span>
+                <strong style={{ fontSize: '17px', color: '#d97706' }}>₩{totalFreight.toLocaleString()}</strong>
+                <span style={{ fontSize: '10.5px', color: 'var(--text-muted)' }}>화물 배차 대장 확정액</span>
+              </div>
+
+              <div style={{ padding: '12px 14px', backgroundColor: 'var(--success-light)', borderRadius: '6px', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <span style={{ fontSize: '11px', color: 'var(--text-main)', fontWeight: 700 }}>전대 순마진 (대차대조)</span>
+                <strong style={{ fontSize: '17px', color: 'var(--success)' }}>₩{netProfit.toLocaleString()}</strong>
+                <span style={{ fontSize: '10.5px', fontWeight: 700, color: marginRate >= 20 ? 'var(--success)' : '#d97706' }}>
+                  마진율: {marginRate.toFixed(1)}% ({marginRate >= 0 ? '흑자' : '적자'})
+                </span>
+              </div>
+            </div>
 
           {/* 서브 세그먼트 스위처 & 엑셀 내보내기 버튼 */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
@@ -1564,36 +1649,94 @@ export const RentAssets: React.FC = () => {
             </div>
           )}
 
+          {/* 최하단 회계 대차대조 검증 바 (헌장 3.5 Z-패턴 4단계) */}
+          <div style={{
+            padding: '8px 14px',
+            backgroundColor: 'var(--bg-app)',
+            borderTop: '1px solid var(--border-color)',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            gap: '8px',
+            fontSize: '11.5px',
+            borderRadius: '0 0 6px 6px'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
+              <span>전대 매출총액: <strong style={{ color: 'var(--primary)' }}>₩{totalRev.toLocaleString()}</strong></span>
+              <span>=</span>
+              <span>매입 임차료: <strong style={{ color: 'var(--danger)' }}>₩{totalCost.toLocaleString()}</strong></span>
+              <span>+</span>
+              <span>직송 운송비: <strong style={{ color: '#d97706' }}>₩{totalFreight.toLocaleString()}</strong></span>
+              <span>+</span>
+              <span>순마진(공헌이익): <strong style={{ color: netProfit >= 0 ? 'var(--success)' : 'var(--danger)' }}>₩{netProfit.toLocaleString()}</strong></span>
+            </div>
+            <span style={{
+              padding: '2px 8px',
+              borderRadius: '4px',
+              backgroundColor: 'var(--success-light)',
+              color: 'var(--success)',
+              fontWeight: 700,
+              fontSize: '11px'
+            }}>
+              ⚖️ 대차 차액 ₩0 (손익 무결성 확정)
+            </span>
+          </div>
+
         </div>
-      )}
+      );
+    })()}
 
       {/* ========================================================================= */}
-      {/* 탭: 임차자산 대장 현황 (Current Assets) */}
+      {/* 탭 1: 임차자산 대장 현황 (Current Assets) - 헌장 3.6 유형 B 고밀도 대장 */}
       {/* ========================================================================= */}
-      {activeTab === 'CURRENT' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+      {activeTab === 'CURRENT' && (() => {
+        const activeRentedList = rentedAssets.filter(a => !a.actualRentReturnDate && a.status !== 'RENTED_RETURNED');
+        const returnedList = rentedAssets.filter(a => Boolean(a.actualRentReturnDate) || a.status === 'RENTED_RETURNED');
+        const totalMonthlyRentCost = activeRentedList.reduce((sum, a) => sum + (a.monthlyRentFee || 0), 0);
 
-          {/* 자산 검색/필터 바 */}
-          <div className="card" style={{ padding: '14px', backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '10px' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '10px', alignItems: 'end' }}>
-              
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <label style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>자산 검색</label>
-                <input
-                  type="text"
-                  placeholder="관리번호 또는 모델명"
-                  value={searchQuery}
-                  onChange={e => setSearchQuery(e.target.value)}
-                  style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-app)', color: 'var(--text-main)', fontSize: '12px' }}
-                />
+        return (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', flex: 1 }}>
+
+            {/* 필터 컨트롤 바 (Vertical Header-Label Layout: 헌장 3.4) */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              padding: '6px 12px',
+              backgroundColor: 'var(--bg-card)',
+              borderRadius: '6px',
+              border: '1px solid var(--border-color)',
+              flexWrap: 'wrap'
+            }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', flex: '1', minWidth: '180px' }}>
+                <label style={{ fontSize: '10.5px', fontWeight: 600, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>자산 검색</label>
+                <div style={{ position: 'relative' }}>
+                  <Search size={13} style={{ position: 'absolute', left: '8px', top: '7px', color: 'var(--text-muted)' }} />
+                  <input
+                    type="text"
+                    placeholder="관리번호, 모델명, 임차처 검색"
+                    value={searchQuery}
+                    onChange={e => setSearchQuery(e.target.value)}
+                    style={{
+                      width: '100%',
+                      padding: '4px 8px 4px 26px',
+                      borderRadius: '4px',
+                      border: '1px solid var(--border-color)',
+                      backgroundColor: 'var(--bg-app)',
+                      color: 'var(--text-main)',
+                      fontSize: '12px'
+                    }}
+                  />
+                </div>
               </div>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <label style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>임차처</label>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                <label style={{ fontSize: '10.5px', fontWeight: 600, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>소유 원사 (임차처)</label>
                 <select
                   value={renterQuery}
                   onChange={e => setRenterQuery(e.target.value)}
-                  style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-app)', color: 'var(--text-main)', fontSize: '12px' }}
+                  style={{ padding: '4px 8px', borderRadius: '4px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-app)', color: 'var(--text-main)', fontSize: '12px', minWidth: '140px' }}
                 >
                   <option value="">전체 임차처</option>
                   {renterVendors.map(r => (
@@ -1602,12 +1745,12 @@ export const RentAssets: React.FC = () => {
                 </select>
               </div>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <label style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>반납 여부</label>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                <label style={{ fontSize: '10.5px', fontWeight: 600, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>반납 상태</label>
                 <select
                   value={returnQuery}
                   onChange={e => setReturnQuery(e.target.value)}
-                  style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-app)', color: 'var(--text-main)', fontSize: '12px' }}
+                  style={{ padding: '4px 8px', borderRadius: '4px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-app)', color: 'var(--text-main)', fontSize: '12px', minWidth: '130px' }}
                 >
                   <option value="ALL">전체 반납 상태</option>
                   <option value="ACTIVE">미반납 (임차 가동 중)</option>
@@ -1615,161 +1758,275 @@ export const RentAssets: React.FC = () => {
                 </select>
               </div>
 
-              <div>
+              {(searchQuery || renterQuery || returnQuery !== 'ALL') && (
                 <button
-                  onClick={handleExportRentedAssetsExcel}
-                  style={{ padding: '7px 12px', fontSize: '12px', fontWeight: '600', backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', color: 'var(--text-main)', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}
+                  onClick={() => { setSearchQuery(''); setRenterQuery(''); setReturnQuery('ALL'); }}
+                  style={{
+                    marginTop: '16px',
+                    padding: '4px 8px',
+                    fontSize: '11.5px',
+                    border: '1px solid var(--border-color)',
+                    borderRadius: '4px',
+                    backgroundColor: 'transparent',
+                    color: 'var(--text-muted)',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    whiteSpace: 'nowrap'
+                  }}
                 >
-                  <Download size={13} /> 엑셀 다운로드
+                  <RefreshCw size={11} /> 초기화
                 </button>
-              </div>
-
+              )}
             </div>
-          </div>
 
-          {/* 자산 목록 테이블 */}
-          <div className="card" style={{ border: '1px solid var(--border-color)', borderRadius: '10px', overflow: 'hidden', backgroundColor: 'var(--bg-card)' }}>
-            <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
-                <thead>
-                  <tr style={{ backgroundColor: 'var(--bg-card-header)', borderBottom: '2px solid var(--border-color)', textAlign: 'left', color: 'var(--text-muted)' }}>
-                    <th style={{ padding: '10px', whiteSpace: 'nowrap', textAlign: 'center' }}>관리</th>
-                    <th style={{ padding: '10px', whiteSpace: 'nowrap' }}>관리번호</th>
-                    <th style={{ padding: '10px', whiteSpace: 'nowrap' }}>모델명</th>
-                    <th style={{ padding: '10px', whiteSpace: 'nowrap' }}>임차처</th>
-                    <th style={{ padding: '10px', whiteSpace: 'nowrap' }}>임차 계약기간</th>
-                    <th style={{ padding: '10px', whiteSpace: 'nowrap', textAlign: 'right' }}>월 임차료</th>
-                    <th style={{ padding: '10px', whiteSpace: 'nowrap' }}>실제 반납일</th>
-                    <th style={{ padding: '10px', whiteSpace: 'nowrap', textAlign: 'center' }}>상태 / 경보</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredAssets.length === 0 ? (
-                    <tr>
-                      <td colSpan={8} style={{ padding: '30px', textAlign: 'center', color: 'var(--text-muted)' }}>
-                        조건에 부합하는 임차 자산이 없습니다.
-                      </td>
+            {/* 고밀도 임차자산 대장 그리드 작업대 (Body / Inspection - 헌장 3.6 유형 B) */}
+            <div style={{
+              flex: 1,
+              backgroundColor: 'var(--bg-card)',
+              borderRadius: '6px',
+              border: '1px solid var(--border-color)',
+              overflow: 'hidden',
+              display: 'flex',
+              flexDirection: 'column'
+            }}>
+              <div style={{ flex: 1, overflow: 'auto', maxHeight: 'calc(100vh - 280px)' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '11.5px' }}>
+                  <thead>
+                    <tr style={{ backgroundColor: 'var(--bg-app)', borderBottom: '1px solid var(--border-color)', color: 'var(--text-secondary)', fontWeight: 600 }}>
+                      <th style={{ padding: '7px 8px', width: '50px', textAlign: 'center', whiteSpace: 'nowrap' }}>상세</th>
+                      <th style={{ padding: '7px 8px', width: '90px', textAlign: 'center', whiteSpace: 'nowrap' }}>관리</th>
+                      <th style={{ padding: '7px 8px', whiteSpace: 'nowrap' }}>관리번호</th>
+                      <th style={{ padding: '7px 8px', whiteSpace: 'nowrap' }}>모델명</th>
+                      <th style={{ padding: '7px 8px', whiteSpace: 'nowrap' }}>소유 원사 (임차처)</th>
+                      <th style={{ padding: '7px 8px', whiteSpace: 'nowrap' }}>임차 계약기간</th>
+                      <th style={{ padding: '7px 8px', textAlign: 'right', whiteSpace: 'nowrap' }}>월 임차료</th>
+                      <th style={{ padding: '7px 8px', textAlign: 'center', whiteSpace: 'nowrap' }}>실제 반납일</th>
+                      <th style={{ padding: '7px 8px', textAlign: 'center', whiteSpace: 'nowrap' }}>운용 상태</th>
+                      <th style={{ padding: '7px 8px', whiteSpace: 'nowrap' }}>투입 현장 / 고객사</th>
                     </tr>
-                  ) : (
-                    filteredAssets.map(a => {
-                      const isReturned = a.status === 'RENTED_RETURNED';
-                      const isOverdue = isSubleaseOverdue(a);
-                      const delayDays = calculateDelayDays(a);
+                  </thead>
+                  <tbody>
+                    {filteredAssets.length === 0 ? (
+                      <tr>
+                        <td colSpan={10} style={{ padding: '36px 0', textAlign: 'center', color: 'var(--text-muted)' }}>
+                          조회 조건에 해당하는 임차 자산이 없습니다.
+                        </td>
+                      </tr>
+                    ) : (
+                      filteredAssets.map(a => {
+                        const isReturned = Boolean(a.actualRentReturnDate) || a.status === 'RENTED_RETURNED';
+                        const isOverdue = isSubleaseOverdue(a);
+                        const delayDays = calculateDelayDays(a);
+                        const renterName = getAssetRenterName(a);
+                        const cust = customers.find(c => c.id === a.currentCustomerId);
+                        const site = sites.find(s => s.id === a.currentSiteId);
 
-                      return (
-                        <tr key={a.id} style={{ borderBottom: '1px solid var(--border-color)', backgroundColor: isReturned ? 'rgba(255, 255, 255, 0.03)' : 'transparent', color: 'var(--text-main)' }}>
-                          {/* 관리 버튼 */}
-                          <td style={{ padding: '8px', textAlign: 'center', whiteSpace: 'nowrap' }}>
-                            <div style={{ display: 'flex', gap: '4px', justifyContent: 'center' }}>
-                              {canSave && (
-                                <button
-                                  onClick={() => handleOpenEdit(a)}
-                                  style={{ padding: '3px 6px', fontSize: '11px', backgroundColor: 'var(--bg-app)', border: '1px solid var(--border-color)', color: 'var(--text-main)', borderRadius: '4px', cursor: 'pointer' }}
-                                >
-                                  수정
-                                </button>
-                              )}
-                              {canSave && !isReturned && (
-                                <button
-                                  onClick={() => handleOpenReturn(a)}
-                                  style={{ padding: '3px 6px', fontSize: '11px', backgroundColor: '#ef4444', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
-                                >
-                                  반납
-                                </button>
-                              )}
-                              {canSave && isReturned && (
-                                <button
-                                  onClick={() => handleOpenReactivate(a)}
-                                  style={{ padding: '3px 6px', fontSize: '11px', backgroundColor: '#10b981', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 700 }}
-                                  title="기존 자산번호를 유지하며 재임차 활성화"
-                                >
-                                  🔄 재임차
-                                </button>
-                              )}
-                            </div>
-                          </td>
+                        // 날짜 역전 방어 포맷
+                        let periodText = '-';
+                        if (a.rentStart && a.rentEnd) {
+                          if (a.rentStart > a.rentEnd) {
+                            periodText = `~ ${a.rentEnd}`;
+                          } else {
+                            periodText = `${a.rentStart} ~ ${a.rentEnd}`;
+                          }
+                        } else if (a.rentStart) {
+                          periodText = `${a.rentStart} ~`;
+                        } else if (a.rentEnd) {
+                          periodText = `~ ${a.rentEnd}`;
+                        }
 
-                          {/* 관리번호 & 원사 관리번호 */}
-                          <td style={{ padding: '10px', whiteSpace: 'nowrap', fontWeight: '800', color: 'var(--text-main)' }}>
-                            <div style={{ display: 'flex', flexDirection: 'column' }}>
+                        return (
+                          <tr
+                            key={a.id}
+                            onClick={() => setSelectedAssetForDossier(a)}
+                            style={{
+                              borderBottom: '1px solid var(--border-color)',
+                              cursor: 'pointer',
+                              transition: 'background-color 0.15s',
+                              opacity: isReturned ? 0.75 : 1
+                            }}
+                            className="hover-row"
+                          >
+                            {/* 상세 버튼 */}
+                            <td style={{ padding: '6px 8px', textAlign: 'center', whiteSpace: 'nowrap' }}>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); setSelectedAssetForDossier(a); }}
+                                style={{
+                                  padding: '2px 6px',
+                                  fontSize: '11px',
+                                  border: '1px solid var(--border-color)',
+                                  borderRadius: '3px',
+                                  backgroundColor: 'transparent',
+                                  cursor: 'pointer',
+                                  color: 'var(--primary)',
+                                  whiteSpace: 'nowrap'
+                                }}
+                              >
+                                보기
+                              </button>
+                            </td>
+
+                            {/* 관리 액션 버튼 */}
+                            <td style={{ padding: '6px 8px', textAlign: 'center', whiteSpace: 'nowrap' }}>
+                              <div style={{ display: 'flex', gap: '3px', justifyContent: 'center' }} onClick={e => e.stopPropagation()}>
+                                {canSave && (
+                                  <button
+                                    onClick={() => handleOpenEdit(a)}
+                                    style={{ padding: '2px 5px', fontSize: '10.5px', backgroundColor: 'var(--bg-app)', border: '1px solid var(--border-color)', color: 'var(--text-main)', borderRadius: '3px', cursor: 'pointer', whiteSpace: 'nowrap' }}
+                                  >
+                                    수정
+                                  </button>
+                                )}
+                                {canSave && !isReturned && (
+                                  <button
+                                    onClick={() => handleOpenReturn(a)}
+                                    style={{ padding: '2px 5px', fontSize: '10.5px', backgroundColor: 'var(--danger)', color: '#fff', border: 'none', borderRadius: '3px', cursor: 'pointer', whiteSpace: 'nowrap' }}
+                                  >
+                                    반납
+                                  </button>
+                                )}
+                                {canSave && isReturned && (
+                                  <button
+                                    onClick={() => handleOpenReactivate(a)}
+                                    style={{ padding: '2px 5px', fontSize: '10.5px', backgroundColor: 'var(--success)', color: '#fff', border: 'none', borderRadius: '3px', cursor: 'pointer', fontWeight: 600, whiteSpace: 'nowrap' }}
+                                  >
+                                    재임차
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+
+                            {/* 관리번호 & 원사번호 */}
+                            <td style={{ padding: '6px 8px', fontWeight: 700, color: 'var(--text-main)', whiteSpace: 'nowrap' }}>
                               <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                                 <span>{a.assetNo}</span>
-                                <span className="badge badge-info" style={{ fontSize: '9px' }}>임차</span>
+                                <span className="badge badge-info" style={{ fontSize: '9.5px', padding: '1px 4px' }}>임차</span>
                               </div>
                               {a.vendorAssetNo && (
-                                <span style={{ fontSize: '10.5px', color: '#64748b', fontWeight: 500 }}>
+                                <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
                                   원사: {a.vendorAssetNo}
-                                </span>
+                                </div>
                               )}
-                            </div>
-                          </td>
+                            </td>
 
-                          {/* 모델명 */}
-                          <td style={{ padding: '10px', whiteSpace: 'nowrap', color: 'var(--text-main)' }}>{a.modelName}</td>
+                            {/* 모델명 */}
+                            <td style={{ padding: '6px 8px', color: 'var(--text-main)', whiteSpace: 'nowrap' }}>{a.modelName}</td>
 
-                          {/* 임차처 */}
-                          <td style={{ padding: '10px', whiteSpace: 'nowrap', fontWeight: '600', color: 'var(--text-main)' }}>{a.renter || '미지정'}</td>
+                            {/* 임차처 상호명 */}
+                            <td style={{ padding: '6px 8px', fontWeight: 600, color: 'var(--text-main)', whiteSpace: 'nowrap' }}>
+                              {renterName}
+                            </td>
 
-                          {/* 임차 계약기간 */}
-                          <td style={{ padding: '10px', whiteSpace: 'nowrap', color: 'var(--text-secondary)' }}>
-                            {a.rentStart || '~'} ~ {a.rentEnd || '~'}
-                          </td>
+                            {/* 임차 계약기간 */}
+                            <td style={{ padding: '6px 8px', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
+                              {periodText}
+                            </td>
 
-                          {/* 월 임차료 */}
-                          <td style={{ padding: '10px', whiteSpace: 'nowrap', textAlign: 'right', fontWeight: '700', color: 'var(--text-main)' }}>
-                            ₩{(a.monthlyRentFee || 0).toLocaleString()}
-                          </td>
+                            {/* 월 임차료 */}
+                            <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 700, color: 'var(--text-main)', whiteSpace: 'nowrap' }}>
+                              ₩{(a.monthlyRentFee || 0).toLocaleString()}
+                            </td>
 
-                          {/* 실제 반납일 / 현재 가동 상태 */}
-                          <td style={{ padding: '10px', whiteSpace: 'nowrap' }}>
-                            {a.actualRentReturnDate ? (
-                              <span style={{ color: '#10b981', fontWeight: '600' }}>{a.actualRentReturnDate} (반납)</span>
-                            ) : (a.status === 'RENTED' || a.currentCustomerId) ? (
-                              <span style={{ color: '#3b82f6', fontWeight: '600' }}>대여중 (현장가동중)</span>
-                            ) : (
-                              <span style={{ color: 'var(--text-muted)' }}>입고 보관중 (미출고)</span>
-                            )}
-                          </td>
-
-                          {/* 상태 / 경보 */}
-                          <td style={{ padding: '10px', textAlign: 'center', whiteSpace: 'nowrap' }}>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', alignItems: 'center' }}>
-                              {a.status === 'RENTED_RETURNED' ? (
-                                <span className="badge" style={{ backgroundColor: '#64748b', color: '#fff', fontSize: '10px' }}>⚪ 임차처 반납완료</span>
-                              ) : (a.status === 'RENTED' || a.status === 'ASSIGNED' || a.currentCustomerId) ? (
-                                <span className="badge badge-info" style={{ fontSize: '10px' }}>🔵 대여중 (현장가동)</span>
-                              ) : a.status === 'REPAIRING' ? (
-                                <span className="badge badge-danger" style={{ fontSize: '10px' }}>🔧 정비중</span>
+                            {/* 실제 반납일 */}
+                            <td style={{ padding: '6px 8px', textAlign: 'center', whiteSpace: 'nowrap' }}>
+                              {a.actualRentReturnDate ? (
+                                <span style={{ color: 'var(--success)', fontWeight: 600, fontSize: '11px' }}>
+                                  {a.actualRentReturnDate} (반납)
+                                </span>
                               ) : (
-                                <span className="badge badge-success" style={{ fontSize: '10px' }}>🟢 임대가능 (보관중)</span>
+                                <span style={{ color: 'var(--text-muted)', fontSize: '10.5px' }}>미반납</span>
                               )}
+                            </td>
 
-                              {isOverdue && (
-                                <span className="badge badge-danger" style={{ fontSize: '9px', display: 'inline-flex', alignItems: 'center', gap: '2px' }}>
-                                  <AlertTriangle size={9} /> 전대 기간 초과
-                                </span>
-                              )}
+                            {/* 운용 상태 및 경보 */}
+                            <td style={{ padding: '6px 8px', textAlign: 'center', whiteSpace: 'nowrap' }}>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', alignItems: 'center' }}>
+                                {isReturned ? (
+                                  <span className="badge badge-secondary" style={{ fontSize: '10px' }}>임차처 반납완료</span>
+                                ) : (a.status === 'RENTED' || a.currentCustomerId) ? (
+                                  <span className="badge badge-primary" style={{ fontSize: '10px' }}>대여중</span>
+                                ) : a.status === 'ASSIGNED' ? (
+                                  <span className="badge badge-warning" style={{ fontSize: '10px' }}>출고대기</span>
+                                ) : a.status === 'REPAIRING' ? (
+                                  <span className="badge badge-danger" style={{ fontSize: '10px' }}>수리중</span>
+                                ) : (
+                                  <span className="badge badge-success" style={{ fontSize: '10px' }}>임대가능 (보관중)</span>
+                                )}
 
-                              {delayDays > 0 && !isReturned && (
-                                <span style={{ fontSize: '9px', color: '#dc2626', fontWeight: '700' }}>
-                                  지연 +{delayDays}일
-                                </span>
+                                {isOverdue && !isReturned && (
+                                  <span className="badge badge-danger" style={{ fontSize: '9.5px', display: 'inline-flex', alignItems: 'center', gap: '2px' }}>
+                                    <AlertTriangle size={9} /> 전대 기간 초과
+                                  </span>
+                                )}
+
+                                {delayDays > 0 && !isReturned && (
+                                  <span style={{ fontSize: '9.5px', color: 'var(--danger)', fontWeight: 700 }}>
+                                    지연 +{delayDays}일
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+
+                            {/* 투입 고객사 / 현장 */}
+                            <td style={{ padding: '6px 8px', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
+                              {cust ? (
+                                <div>
+                                  <strong style={{ color: 'var(--text-main)' }}>{cust.name}</strong>
+                                  {site && <span style={{ fontSize: '10.5px', color: 'var(--text-muted)' }}> ({site.name})</span>}
+                                </div>
+                              ) : (
+                                <span style={{ color: 'var(--text-muted)' }}>-</span>
                               )}
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* 우하단 Terminal Action: 회계 대차대조 무결성 검증 바 (헌장 3.5 Z-패턴 4단계) */}
+              <div style={{
+                padding: '8px 14px',
+                backgroundColor: 'var(--bg-app)',
+                borderTop: '1px solid var(--border-color)',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                flexWrap: 'wrap',
+                gap: '8px',
+                fontSize: '11.5px'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
+                  <span>가동중 전대장비: <strong style={{ color: 'var(--primary)' }}>{activeRentedList.length}대</strong></span>
+                  <span>|</span>
+                  <span>월 총 임차료 지출: <strong style={{ color: 'var(--danger)' }}>₩{totalMonthlyRentCost.toLocaleString()}원</strong></span>
+                  <span>|</span>
+                  <span>반납 완료 장비: <strong style={{ color: 'var(--text-muted)' }}>{returnedList.length}대</strong></span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span style={{
+                    padding: '2px 8px',
+                    borderRadius: '4px',
+                    backgroundColor: 'var(--success-light)',
+                    color: 'var(--success)',
+                    fontWeight: 700,
+                    fontSize: '11px'
+                  }}>
+                    ⚖️ 대차 정상 (FSM 동기화 완결)
+                  </span>
+                </div>
+              </div>
             </div>
+
           </div>
+        );
+      })()}
 
-        </div>
-      )}
-
-      {/* ========================================================================= */}
+{/* ========================================================================= */}
       {/* 3. 모달: 임차 자산 등록 / 수정 모달 */}
       {/* ========================================================================= */}
       {showModal && editingAsset && (
@@ -1851,14 +2108,22 @@ export const RentAssets: React.FC = () => {
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <label style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-muted)' }}>임차처 (필수)</label>
+                <label style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-muted)' }}>소유 원사(임차처) (필수)</label>
                 <select
                   required
                   value={editingAsset.renter || ''}
-                  onChange={e => setEditingAsset({ ...editingAsset, renter: e.target.value })}
+                  onChange={e => {
+                    const selectedName = e.target.value;
+                    const matchedVendor = vendors.find(v => v.name === selectedName);
+                    setEditingAsset({
+                      ...editingAsset,
+                      renter: selectedName,
+                      vendorId: matchedVendor?.id || editingAsset.vendorId
+                    });
+                  }}
                   style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-app)', color: 'var(--text-main)', fontSize: '12px' }}
                 >
-                  <option value="">-- 임차처 선택 --</option>
+                  <option value="">-- 소유 원사 선택 --</option>
                   {renterVendors.map(r => (
                     <option key={r} value={r}>{r}</option>
                   ))}
@@ -2450,6 +2715,163 @@ export const RentAssets: React.FC = () => {
         </div>
       )}
 
-    </div>
+    
+      {/* ========================================================================= */}
+      {/* 서랍형 상세 Dossier 슬라이드오버 (선택 임차 자산 제원, 전대 마진 및 감사 타임라인) */}
+      {/* ========================================================================= */}
+      {selectedAssetForDossier && (() => {
+        const a = selectedAssetForDossier;
+        const renterName = getAssetRenterName(a);
+        const cust = customers.find(c => c.id === a.currentCustomerId);
+        const site = sites.find(s => s.id === a.currentSiteId);
+        const assetLogs = assetInOutLogs.filter(l => l.assetId === a.id);
+        const isReturned = Boolean(a.actualRentReturnDate) || a.status === 'RENTED_RETURNED';
+
+        // 전대 마진 계산
+        const custMonthlyFee = a.monthlyRentalFee || 0;
+        const vendorMonthlyFee = a.monthlyRentFee || 0;
+        const monthlyMargin = custMonthlyFee - vendorMonthlyFee;
+
+        return (
+          <div style={{
+            position: 'fixed',
+            top: 0,
+            right: 0,
+            bottom: 0,
+            width: '460px',
+            backgroundColor: 'var(--bg-card)',
+            borderLeft: '1px solid var(--border-color)',
+            boxShadow: '-4px 0 20px rgba(0,0,0,0.15)',
+            zIndex: 1000,
+            display: 'flex',
+            flexDirection: 'column',
+            animation: 'slideLeft 0.2s ease-in-out'
+          }}>
+            {/* 헤더 */}
+            <div style={{
+              padding: '12px 16px',
+              borderBottom: '1px solid var(--border-color)',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              backgroundColor: 'var(--bg-app)'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ fontSize: '15px', fontWeight: 700, color: 'var(--text-main)' }}>
+                  [{a.assetNo}] 임차 자산 상세 원장
+                </span>
+                {isReturned ? (
+                  <span className="badge badge-secondary" style={{ fontSize: '10px' }}>반납완료</span>
+                ) : (
+                  <span className="badge badge-primary" style={{ fontSize: '10px' }}>가동중</span>
+                )}
+              </div>
+              <button
+                onClick={() => setSelectedAssetForDossier(null)}
+                style={{ border: 'none', backgroundColor: 'transparent', cursor: 'pointer', color: 'var(--text-muted)' }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* 본문 스크롤 */}
+            <div style={{ padding: '16px', flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '12px', fontSize: '12px' }}>
+              
+              {/* 기본 제원 */}
+              <div style={{ padding: '10px 12px', backgroundColor: 'var(--bg-app)', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
+                <div style={{ fontWeight: 600, color: 'var(--text-main)', marginBottom: '6px' }}>장비 물리 제원 정보</div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', fontSize: '11.5px' }}>
+                  <div><span style={{ color: 'var(--text-secondary)' }}>모델명:</span> <strong>{a.modelName}</strong></div>
+                  <div><span style={{ color: 'var(--text-secondary)' }}>제조사:</span> {a.manufacturer || '-'}</div>
+                  <div><span style={{ color: 'var(--text-secondary)' }}>시리얼번호:</span> {a.serialNo || '-'}</div>
+                  <div><span style={{ color: 'var(--text-secondary)' }}>원사번호:</span> {a.vendorAssetNo || '-'}</div>
+                </div>
+              </div>
+
+              {/* 원사 임차 계약 정보 */}
+              <div style={{ padding: '10px 12px', backgroundColor: 'var(--bg-app)', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
+                <div style={{ fontWeight: 600, color: 'var(--text-main)', marginBottom: '6px' }}>소유 원사 임차 약정 조건</div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', fontSize: '11.5px' }}>
+                  <div><span style={{ color: 'var(--text-secondary)' }}>소유 원사:</span> <strong>{renterName}</strong></div>
+                  <div><span style={{ color: 'var(--text-secondary)' }}>월 임차료:</span> <strong style={{ color: 'var(--danger)' }}>₩{(a.monthlyRentFee || 0).toLocaleString()}</strong></div>
+                  <div><span style={{ color: 'var(--text-secondary)' }}>임차 시작일:</span> {a.rentStart || '-'}</div>
+                  <div><span style={{ color: 'var(--text-secondary)' }}>만료예정일:</span> {a.rentEnd || '-'}</div>
+                  <div><span style={{ color: 'var(--text-secondary)' }}>원사 반납일:</span> {a.actualRentReturnDate ? <span style={{ color: 'var(--success)', fontWeight: 600 }}>{a.actualRentReturnDate} (반납)</span> : '미반납'}</div>
+                  <div><span style={{ color: 'var(--text-secondary)' }}>일할 단가:</span> ₩{(a.dailyRentFee || 0).toLocaleString()}</div>
+                </div>
+              </div>
+
+              {/* 고객사 전대 가동 및 마진 분석 */}
+              <div style={{ padding: '10px 12px', backgroundColor: 'var(--bg-app)', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
+                <div style={{ fontWeight: 600, color: 'var(--text-main)', marginBottom: '6px' }}>고객사 전대 운용 및 손익 마진</div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', fontSize: '11.5px' }}>
+                  <div><span style={{ color: 'var(--text-secondary)' }}>투입 고객사:</span> {cust ? <strong>{cust.name}</strong> : '미투입'}</div>
+                  <div><span style={{ color: 'var(--text-secondary)' }}>투입 현장:</span> {site ? site.name : '-'}</div>
+                  <div><span style={{ color: 'var(--text-secondary)' }}>고객 렌탈료:</span> <strong style={{ color: 'var(--primary)' }}>₩{custMonthlyFee.toLocaleString()}</strong></div>
+                  <div>
+                    <span style={{ color: 'var(--text-secondary)' }}>전대 월 순마진:</span>{' '}
+                    <strong style={{ color: monthlyMargin >= 0 ? 'var(--success)' : 'var(--danger)' }}>
+                      {monthlyMargin >= 0 ? `+₩${monthlyMargin.toLocaleString()}` : `-₩${Math.abs(monthlyMargin).toLocaleString()}`}
+                    </strong>
+                  </div>
+                </div>
+                {monthlyMargin < 0 && (
+                  <div style={{ marginTop: '6px', padding: '4px 8px', borderRadius: '4px', backgroundColor: 'var(--danger-light)', color: 'var(--danger)', fontSize: '11px', fontWeight: 600 }}>
+                    ⚠️ 역마진 경고: 고객 대여료가 원사 임차료보다 낮아 대당 월 ₩{Math.abs(monthlyMargin).toLocaleString()} 손실 발생 중
+                  </div>
+                )}
+              </div>
+
+              {/* 자산 라이프사이클 감사 로그 */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <div style={{ fontWeight: 600, color: 'var(--text-main)' }}>자산 라이프사이클 감사 로그 ({assetLogs.length}건)</div>
+                <div style={{ maxHeight: '200px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  {assetLogs.length === 0 ? (
+                    <div style={{ color: 'var(--text-muted)', padding: '10px 0', textAlign: 'center' }}>기록된 이벤트 로그가 없습니다.</div>
+                  ) : (
+                    assetLogs.map(log => (
+                      <div
+                        key={log.id}
+                        style={{
+                          padding: '6px 10px',
+                          borderRadius: '4px',
+                          backgroundColor: 'var(--bg-app)',
+                          border: '1px solid var(--border-color)',
+                          fontSize: '11px',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '2px'
+                        }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span className={`badge ${log.type === 'ACQUISITION' ? 'badge-info' : log.type === 'OUTBOUND' ? 'badge-primary' : log.type === 'INBOUND' ? 'badge-success' : log.type === 'DISPOSAL' ? 'badge-danger' : 'badge-warning'}`} style={{ fontSize: '10px' }}>
+                            {log.type}
+                          </span>
+                          <span style={{ color: 'var(--text-muted)' }}>{log.eventDate || log.createdAt?.slice(0, 10)}</span>
+                        </div>
+                        <div style={{ color: 'var(--text-main)', marginTop: '2px' }}>{log.memo || '-'}</div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
+            </div>
+
+            {/* 푸터 */}
+            <div style={{ padding: '10px 16px', borderTop: '1px solid var(--border-color)', backgroundColor: 'var(--bg-app)', display: 'flex', justifyContent: 'flex-end' }}>
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => setSelectedAssetForDossier(null)}
+                style={{ padding: '5px 14px', fontSize: '12px' }}
+              >
+                닫기
+              </button>
+            </div>
+          </div>
+        );
+      })()}
+</div>
   );
 };

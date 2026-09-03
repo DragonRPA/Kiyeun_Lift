@@ -714,3 +714,25 @@ tr:hover td {
 .toggle-switch input:checked + .toggle-switch-slider:before {
   transform: translateX(20px);
 }
+
+@keyframes slideLeft {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
