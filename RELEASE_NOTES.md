@@ -1,5 +1,19 @@
 ---
 
+# Release Notes (v1.3.0.Build.68 - 2026-09-03 12:38)
+
+## 🐛 [초기DB 엑셀 파싱] 당월 청구서 집계 내 `transportFee` 미정의 참조 런타임 오류 긴급 패치
+
+### 🎯 핵심 요약 및 수정 내역
+- **원인 분석**:
+  - `v1.3.0.Build.63`에서 외상미수금 자동 생성 로직을 제거하면서 상단 스코프에 선언되어 있던 `const transportFee` 변수가 함께 정리되었으나,
+  - 하단 당월 청구서 집계 섹션(1377행)에서 `rawSum = monthRentFee + otherFee + transportFee`를 계산할 때 해당 변수를 참조하여 런타임 `ReferenceError: transportFee is not defined` 발생.
+- **긴급 조치**:
+  - `migrationEngine.ts` 1353행에 `const transportFee = sanitizeNumber(getCol(r, mainHeaderMap, ['운반비', '왕복운반비'], 7));`를 정확한 스코프 내에 재정의.
+  - 초기DB 엑셀 파일 파싱 시 런타임 에러 없이 100% 정상 파싱 완료되도록 완전 복구.
+
+---
+
 # Release Notes (v1.3.0.Build.67 - 2026-09-03 12:35)
 
 ## 🚚 [배차 이력 업로드] 실무 기억 보조 원칙 확립: 3대 핵심 Key(날짜·업체명·금액) 기반 완전성 수집 체계 구축

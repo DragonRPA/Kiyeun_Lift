@@ -1350,6 +1350,7 @@ export function parseInitialExcelWorkbook(
     const monthRentFee = sanitizeNumber(r[22]);
     const otherFee = sanitizeNumber(r[23]);
     const otherMemo = r[24] ? String(r[24]).trim() : '';
+    const transportFee = sanitizeNumber(getCol(r, mainHeaderMap, ['운반비', '왕복운반비'], 7));
     const days = sanitizeNumber(r[6]) || 30;
 
     excelTotalBillingSum += rowBillingTotal;
