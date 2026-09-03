@@ -50,6 +50,16 @@ export interface ReconPairRow {
   isExcluded?: boolean;
 }
 
+// 💡 [사장님 지시] 배차 운반비 0원 온전 보존 헬퍼 (하드코딩 70,000원 기본값 완전 제거)
+export const getEffectiveDeliveryCost = (d?: Delivery | null): number => {
+  if (!d) return 0;
+  if (d.finalCost !== undefined && d.finalCost !== null) return d.finalCost;
+  if (d.deliveryCost !== undefined && d.deliveryCost !== null) return d.deliveryCost;
+  if (d.expectedCost !== undefined && d.expectedCost !== null) return d.expectedCost;
+  const vehicleCost = d.assignedVehicles?.reduce((acc: number, v: any) => acc + (v.deliveryCost || 0), 0);
+  if (vehicleCost !== undefined && vehicleCost > 0) return vehicleCost;
+  return 0;
+};
 
 export const TruckDispatch: React.FC = () => {
   const { 
@@ -351,7 +361,7 @@ export const TruckDispatch: React.FC = () => {
   const [manualUnloadingDate, setManualUnloadingDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [manualUnloadingTimeSlot, setManualUnloadingTimeSlot] = useState('오전');
   const [manualUnloadingCustomTime, setManualUnloadingCustomTime] = useState('');
-  const [manualExpectedCost, setManualExpectedCost] = useState(70000);
+  const [manualExpectedCost, setManualExpectedCost] = useState(0);
   const [manualBillable, setManualBillable] = useState(false);
   const [manualMemo, setManualMemo] = useState('');
   const [manualClosingMemo, setManualClosingMemo] = useState('');
@@ -477,7 +487,7 @@ export const TruckDispatch: React.FC = () => {
       return;
     }
 
-    const sysCost = sysD.deliveryCost || sysD.assignedVehicles?.reduce((acc: number, v: any) => acc + (v.deliveryCost || 0), 0) || 70000;
+    const sysCost = getEffectiveDeliveryCost(sysD);
     const costKey = Object.keys(excelPair.excelRow).find(k => k.includes('합계') || k.includes('운송비') || k.includes('청구금액') || k.includes('금액'));
     const excelCost = costKey ? Number(String(excelPair.excelRow[costKey]).replace(/[^0-9.-]+/g, '')) : 0;
     const diff = excelCost - sysCost;
@@ -565,7 +575,7 @@ export const TruckDispatch: React.FC = () => {
 
     inPeriodDeliveries.forEach(d => {
       const isPaid = (d as any).reconciliationStatus === 'PAYMENT_REQUESTED' || (d as any).reconciliationStatus === 'SETTLED' || d.isCostSettled === true;
-      const cost = d.finalCost || d.deliveryCost || 70000;
+      const cost = getEffectiveDeliveryCost(d);
 
       // 운송사명 파싱
       const rawComp = d.assignedVehicles?.[0]?.transportCompany || d.transportCompany || '';
@@ -631,6 +641,11 @@ export const TruckDispatch: React.FC = () => {
       }
 
       return true;
+    }).sort((a, b) => {
+      const dateA = a.loadingDate || a.requestDate || a.scheduledDate || a.createdAt?.substring(0, 10) || '9999-99-99';
+      const dateB = b.loadingDate || b.requestDate || b.scheduledDate || b.createdAt?.substring(0, 10) || '9999-99-99';
+      if (dateA !== dateB) return dateA.localeCompare(dateB);
+      return (a.id || '').localeCompare(b.id || '');
     });
   }, [deliveries, reconPaymentFilter, reconStartDate, reconEndDate, selectedReconCompany, reconSearchQuery, contracts, customers]);
 
@@ -683,12 +698,12 @@ export const TruckDispatch: React.FC = () => {
         }
 
         // 2. 동적 헤더 행 감지 (정밀 셀 단위 매칭: 최다 키워드 일치 행 선정)
-        const headerKeywords = ['일자', '날짜', '상차지', '하차지', '톤수', '차종', '운송비', '현장명', '업체명', '기사명', '비고', 'no', '단가', '금액', '합계', '장비명', '사용기간'];
+        const headerKeywords = ['일자', '날짜', '상차지', '하차지', '톤수', '차종', '운송비', '현장명', '업체명', '기사명', '비고', 'no', '단가', '금액', '합계', '장비명', '사용기간', '품명'];
         let headerRowIndex = -1;
         let maxMatchCount = 0;
 
         for (let r = 0; r < Math.min(30, rawRows.length); r++) {
-          const cells = rawRows[r].map((c: any) => String(c).trim().toLowerCase());
+          const cells = rawRows[r].map((c: any) => String(c).replace(/\s+/g, '').toLowerCase());
           const fullRowTextClean = cells.join(' ');
           // 명세서 상단 공급가액/합계금액 요약표 행은 명세서 본문 테이블 헤더가 아니므로 제외
           if (fullRowTextClean.includes('공급가액') || fullRowTextClean.includes('사업장주소') || fullRowTextClean.includes('등록번호')) {
@@ -716,9 +731,15 @@ export const TruckDispatch: React.FC = () => {
         });
 
         const isMemoKey = (k: string) => {
-          const kl = k.toLowerCase();
+          const kl = k.replace(/\s+/g, '').toLowerCase();
+          // 날짜, 금액, 상차지, 번호 등 정규 컬럼은 비고에 넣지 않음
+          if (kl.includes('일자') || kl.includes('날짜') || kl.includes('운송일') || kl.includes('사용기간') ||
+              kl.includes('금액') || kl.includes('단가') || kl.includes('운송비') || kl.includes('청구') ||
+              kl.includes('no') || kl.includes('번호')) {
+            return false;
+          }
           return kl.includes('현장') || kl.includes('업체') || kl.includes('비고') ||
-                 kl.includes('메모') || kl.includes('특이') || kl.includes('참고') || kl.includes('장비');
+                 kl.includes('메모') || kl.includes('특이') || kl.includes('참고') || kl.includes('장비') || kl.includes('품명');
         };
 
         // 4. 데이터 행 구성 (디토 상속 & 날짜/금액 정규화)
@@ -740,11 +761,12 @@ export const TruckDispatch: React.FC = () => {
           const firstCellClean = String(rowArr[0] || '').replace(/\s+/g, '');
           const fullRowTextClean = rowArr.map((cell: any) => String(cell).trim()).join(' ');
 
-          // 합계/소계/서명 행 제외
+          // 합계/소계/서명/입금계좌 행 제외
           const isFooterRow =
             firstCellClean.startsWith('합계') || firstCellClean.startsWith('소계') || firstCellClean.startsWith('총계') ||
             fullRowTextClean.includes('공급가액') || fullRowTextClean.includes('합계금액') || fullRowTextClean.includes('부가세') ||
-            fullRowTextClean.includes('사업장주소') || fullRowTextClean.includes('등록번호');
+            fullRowTextClean.includes('사업장주소') || fullRowTextClean.includes('등록번호') || fullRowTextClean.includes('입금계좌') ||
+            fullRowTextClean.includes('계좌번호');
           if (isFooterRow) continue;
 
           const rowObj: any = {};
@@ -752,16 +774,18 @@ export const TruckDispatch: React.FC = () => {
             rowObj[hName] = String(rowArr[cIdx] !== undefined ? rowArr[cIdx] : '').trim();
           });
 
-          // 금액 추출:
+          // 금액 추출 (공백 제거 정규화 매칭):
           let rawCost = 0;
           // 1순위: 운송비, 청구금액, 청구액, 단가 등 명확한 운송비 헤더 (일자/날짜/번호 제외)
-          const priorityCostKey = Object.keys(rowObj).find(k =>
-            (k.includes('운송비') || k.includes('청구') || k.includes('단가')) && !k.includes('일자') && !k.includes('날짜') && !k.toLowerCase().includes('no')
-          );
+          const priorityCostKey = Object.keys(rowObj).find(k => {
+            const ck = k.replace(/\s+/g, '');
+            return (ck.includes('운송비') || ck.includes('청구') || ck.includes('단가')) && !ck.includes('일자') && !ck.includes('날짜') && !ck.toLowerCase().includes('no');
+          });
           // 2순위: 금액, 합계 (일자/날짜/번호 제외)
-          const generalCostKey = Object.keys(rowObj).find(k =>
-            (k.includes('금액') || k.includes('합계')) && !k.includes('일자') && !k.includes('날짜') && !k.toLowerCase().includes('no')
-          );
+          const generalCostKey = Object.keys(rowObj).find(k => {
+            const ck = k.replace(/\s+/g, '');
+            return (ck.includes('금액') || ck.includes('합계')) && !ck.includes('일자') && !ck.includes('날짜') && !ck.toLowerCase().includes('no');
+          });
           const costKey = priorityCostKey || generalCostKey;
 
           if (costKey && rowObj[costKey]) {
@@ -778,9 +802,18 @@ export const TruckDispatch: React.FC = () => {
             }
           }
 
-          const dateKey = Object.keys(rowObj).find(k => k.includes('일자') || k.includes('날짜') || k.includes('운송일') || k.includes('사용기간'));
-          const originKey = Object.keys(rowObj).find(k => k.includes('상차지') || k.includes('출발지'));
-          const destKey = Object.keys(rowObj).find(k => k.includes('하차지') || k.includes('도착지') || k.includes('현장'));
+          const dateKey = Object.keys(rowObj).find(k => {
+            const ck = k.replace(/\s+/g, '');
+            return ck.includes('일자') || ck.includes('날짜') || ck.includes('운송일') || ck.includes('사용기간');
+          });
+          const originKey = Object.keys(rowObj).find(k => {
+            const ck = k.replace(/\s+/g, '');
+            return ck.includes('상차지') || ck.includes('출발지') || ck.includes('상차');
+          });
+          const destKey = Object.keys(rowObj).find(k => {
+            const ck = k.replace(/\s+/g, '');
+            return ck.includes('하차지') || ck.includes('도착지') || ck.includes('현장') || ck.includes('하차');
+          });
 
           let rawDateCell = dateKey ? String(rowObj[dateKey]).trim() : '';
           let rawOrigin = originKey ? String(rowObj[originKey]).trim() : '';
@@ -874,7 +907,7 @@ export const TruckDispatch: React.FC = () => {
 
           // 날짜 일치도 헬퍼 (±1일 허용)
           const isDateNear = (d1: string, d2: string) => {
-            if (!d1 || !d2) return true;
+            if (!d1 || !d2) return false; // 💡 날짜가 없으면 임의 매칭 방지
             if (d1 === d2) return true;
             try {
               const t1 = new Date(d1).getTime();
@@ -888,7 +921,7 @@ export const TruckDispatch: React.FC = () => {
           // 1단계: 날짜(±1일) + 현장/업체 유사도 + 금액 100% 일치
           let matchIdx = remainingSystemDeliveries.findIndex(d => {
             const sysDate = d.loadingDate || d.requestDate || '';
-            const sysCost = d.deliveryCost || (d.assignedVehicles?.reduce((acc: number, v: any) => acc + (v.deliveryCost || 0), 0) || 70000);
+            const sysCost = getEffectiveDeliveryCost(d);
             const contract = contracts.find(c => c.id === d.contractId);
             const customer = contract ? customers.find(c => c.id === contract.customerId) : null;
             const sysDest = d.destinationAddress || '';
@@ -923,7 +956,7 @@ export const TruckDispatch: React.FC = () => {
 
           if (matchIdx !== -1) {
             const matchedDelivery = remainingSystemDeliveries.splice(matchIdx, 1)[0];
-            const sysCost = matchedDelivery.finalCost || matchedDelivery.deliveryCost || 70000;
+            const sysCost = getEffectiveDeliveryCost(matchedDelivery);
             const diff = excelCost - sysCost;
 
             // 할증 사유 자동 감지 (대기, 경유, 회차 등)
@@ -980,7 +1013,7 @@ export const TruckDispatch: React.FC = () => {
 
         // 남은 시스템 배차 (시스템 단독 항목)
         remainingSystemDeliveries.forEach((sysD, sIdx) => {
-          const sysCost = sysD.finalCost || sysD.deliveryCost || 70000;
+          const sysCost = getEffectiveDeliveryCost(sysD);
           pairs.push({
             pairId: `SYS-ONLY-${sysD.id}-${sIdx}`,
             systemDelivery: sysD,
@@ -1229,7 +1262,7 @@ export const TruckDispatch: React.FC = () => {
 
     const totalCount = completedDeliveriesForRecon.length;
     const totalCost = completedDeliveriesForRecon.reduce((acc, d) => {
-      const cost = d.finalCost || d.deliveryCost || (d.assignedVehicles?.reduce((a: number, v: any) => a + (v.deliveryCost || 0), 0) || 70000);
+      const cost = getEffectiveDeliveryCost(d);
       return acc + cost;
     }, 0);
 
@@ -1362,7 +1395,7 @@ export const TruckDispatch: React.FC = () => {
       : completedDeliveriesForRecon.map((d, i) => {
           const contract = contracts.find(c => c.id === d.contractId);
           const customer = contract ? customers.find(c => c.id === contract.customerId) : null;
-          const cost = d.deliveryCost || d.assignedVehicles?.reduce((acc: number, v: any) => acc + (v.deliveryCost || 0), 0) || 70000;
+          const cost = getEffectiveDeliveryCost(d);
 
           return {
             '순번': i + 1,
@@ -1484,9 +1517,9 @@ export const TruckDispatch: React.FC = () => {
       vehicleNo: d.vehicleNo || '',
       driverName: d.driverName || '',
       driverContact: d.driverContact || '',
-      expectedCost: d.expectedCost || d.deliveryCost || 70000,
+      expectedCost: getEffectiveDeliveryCost(d),
       finalCost: d.finalCost !== undefined && d.finalCost !== null ? d.finalCost : 0,
-      deliveryCost: d.finalCost || d.expectedCost || d.deliveryCost || 70000
+      deliveryCost: getEffectiveDeliveryCost(d)
     }]);
   };
 
@@ -2812,7 +2845,7 @@ export const TruckDispatch: React.FC = () => {
                         const customer = contract ? customers.find(c => c.id === contract.customerId) : null;
                         const memoCustomer = d.memo && d.memo.includes('업체:') ? d.memo.split('업체:')[1].split('|')[0].trim() : '';
                         const displayCustomer = customer?.name || memoCustomer || '고객사미지정';
-                        const cost = d.finalCost || d.deliveryCost || 70000;
+                        const cost = getEffectiveDeliveryCost(d);
                         return (
                           <tr key={d.id} style={{ borderBottom: '1px solid var(--border-color)', height: '40px' }}>
                             <td style={{ textAlign: 'center', padding: '6px' }}>
@@ -2851,6 +2884,13 @@ export const TruckDispatch: React.FC = () => {
                         if (reconStatusFilter === 'EXCLUDED') return p.isExcluded || p.matchStatus === 'EXCLUDED';
                         if (reconStatusFilter === 'PAYMENT_REQUESTED') return p.matchStatus === 'PAYMENT_REQUESTED';
                         return true;
+                      })
+                      .sort((a, b) => {
+                        // 💡 [사장님 지시] 운송료 대사 결과 항상 날짜순(오름차순: 과거 ➔ 최신) 정렬 보장
+                        const dateA = a.excelRow?.['정규일자'] || a.systemDelivery?.loadingDate || a.systemDelivery?.requestDate || '9999-99-99';
+                        const dateB = b.excelRow?.['정규일자'] || b.systemDelivery?.loadingDate || b.systemDelivery?.requestDate || '9999-99-99';
+                        if (dateA !== dateB) return dateA.localeCompare(dateB);
+                        return (a.pairId || '').localeCompare(b.pairId || '');
                       })
                       .map((pair, pIdx) => {
                         const sys = pair.systemDelivery;
@@ -3196,7 +3236,7 @@ export const TruckDispatch: React.FC = () => {
                   type="number"
                   value={editingCostInput}
                   onChange={e => setEditingCostInput(Number(e.target.value))}
-                  placeholder="예: 70000"
+                  placeholder="예: 0"
                   style={{
                     width: '100%',
                     padding: '10px 12px 10px 30px',

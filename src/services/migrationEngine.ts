@@ -2021,9 +2021,12 @@ export function parseDispatchExcelWorkbook(
       const rowSummaryCheck = `${customerNameRaw} ${siteName} ${r[0] || ''} ${r[4] || ''}`;
       if (/합계|소계|총계|월계|total/i.test(rowSummaryCheck)) continue;
 
-      // [KEY 3] 운반비: 만원 단위 → 원. 상한 2,000,000원(200만원)으로 캡 — 이상치 행 방어
-      const rawCostVal = sanitizeNumber(r[3]) || 0;
-      const deliveryCost = rawCostVal <= 200 ? rawCostVal * 10000 : rawCostVal;
+      // [KEY 3] 운반비: 빈 칸이거나 0이면 정확히 0원 처리 (하드코딩 70000 방지). 만원 단위(9, 12 등)는 원 단위로 환산.
+      let deliveryCost = 0;
+      if (r[3] !== null && r[3] !== undefined && String(r[3]).trim() !== '') {
+        const rawCostVal = sanitizeNumber(r[3]);
+        deliveryCost = (rawCostVal > 0 && rawCostVal <= 200) ? rawCostVal * 10000 : rawCostVal;
+      }
 
       // 장비명: 순수 숫자(1008, 1330, 1012 등)나 기타 형식도 담당자 기억 보조용으로 완전 보존!
       const modelRaw = r[4] != null ? String(r[4]).trim() : '';
@@ -2191,7 +2194,8 @@ export async function ingestDispatchData(
       destinationAddress: r.destinationAddress || undefined,
       transportCompany: r.transportCompany || undefined,
       vehicleType: r.vehicleType || undefined,
-      deliveryCost: r.deliveryCost,
+      deliveryCost: r.deliveryCost ?? 0,
+      expectedCost: r.deliveryCost ?? 0,
       isCostSettled: false,
       dispatchCategory: dbDispatchCategory,
       // 고객명 + 계약자산 정보는 memo/specialNotes 필드에 텍스트로 보존

@@ -267,7 +267,7 @@ export const Deliveries: React.FC = () => {
     setVehicleType(d.vehicleType || '셀프로더');
     setDriverName(d.driverName || '');
     setDriverContact(d.driverContact || '');
-    setDeliveryCost(d.deliveryCost || 70000);
+    setDeliveryCost(d.deliveryCost ?? 0);
     setShowDispatchModal(true);
   };
 
