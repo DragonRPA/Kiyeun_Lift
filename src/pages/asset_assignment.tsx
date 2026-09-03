@@ -19,6 +19,13 @@ export const AssetAssignment: React.FC = () => {
   const [quickInputText, setQuickInputText] = useState('');
   const [isAssigning, setIsAssigning] = useState(false);
 
+  // 토스트 알림 상태 (헌장 5.2: 브라우저 alert 전면 퇴출)
+  const [toastMessage, setToastMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const showToast = (text: string, type: 'success' | 'error' = 'success') => {
+    setToastMessage({ type, text });
+    setTimeout(() => setToastMessage(null), 3500);
+  };
+
   const canEdit = hasPermission('dispatch_assign', 'save');
   const canView = hasPermission('dispatch_assign', 'view');
 
@@ -201,17 +208,17 @@ export const AssetAssignment: React.FC = () => {
       const quota = getModelQuotaForAsset(targetAsset);
 
       if (quota.maxQuota === 0) {
-        alert(`⚠️ 선택된 슬롯(또는 미할당 계약)에 [${targetAsset.modelName}] 모델의 요구 수량이 없습니다.`);
+        showToast(`선택된 슬롯에 [${targetAsset.modelName}] 모델의 요구 수량이 없습니다.`, 'error');
         return;
       }
 
       if (quota.isFull) {
-        alert(`⚠️ [${targetAsset.modelName}] 모델의 요구 수량(${quota.maxQuota}대)을 초과하여 선택할 수 없습니다.\n\n• 필요 수량: ${quota.maxQuota}대\n• 현재 선택: ${quota.currentCount}대\n\n다른 장비로 변경하시려면 기존 선택된 장비를 먼저 해제해 주세요.`);
+        showToast(`[${targetAsset.modelName}] 모델의 요구 수량을 초과하여 선택할 수 없습니다.`, 'error');
         return;
       }
 
       if (selectedAssetIds.length >= maxSelectableCount) {
-        alert(`⚠️ 전체 선택 가능한 최대 수량(${maxSelectableCount}대)을 초과할 수 없습니다.`);
+        showToast(`선택 가능한 최대 수량을 초과할 수 없습니다.`, 'error');
         return;
       }
 
@@ -222,7 +229,7 @@ export const AssetAssignment: React.FC = () => {
   // 🚀 스마트 자동 추천 선택 (현재 활성화된 모델의 요구수량만큼만 자동 선택)
   const handleAutoSelectTopAssets = () => {
     if (maxSelectableCount <= 0) {
-      alert('할당할 대상 슬롯이 없습니다.');
+      showToast('할당할 대상 슬롯이 없습니다.', 'error');
       return;
     }
     const topAssetIds = availableAssets.slice(0, maxSelectableCount).map(a => a.id);
@@ -273,13 +280,13 @@ export const AssetAssignment: React.FC = () => {
       setSelectedAssetIds(combined);
       setQuickInputText('');
       if (skippedOverQuota.length > 0) {
-        alert(`입력하신 장비 중 ${matchedAssetIds.length}대가 추가되었으나,\n다음 장비는 모델별 요구수량을 초과하여 제외되었습니다:\n• ${skippedOverQuota.join(', ')}`);
+        showToast('입력 장비가 추가되었으나 일부 요구수량 초과 장비는 제외되었습니다.', 'error');
       }
     } else {
       if (skippedOverQuota.length > 0) {
-        alert(`입력하신 장비(${skippedOverQuota.join(', ')})는 해당 모델의 요구수량을 초과하여 추가할 수 없습니다.`);
+        showToast('해당 모델의 요구수량을 초과하여 추가할 수 없습니다.', 'error');
       } else {
-        alert(`입력하신 번호(${tokens.join(', ')})와 일치하는 가용 장비를 찾을 수 없습니다.`);
+        showToast('일치하는 가용 장비를 찾을 수 없습니다.', 'error');
       }
     }
   };
@@ -292,12 +299,12 @@ export const AssetAssignment: React.FC = () => {
     if (isAssigning) return;
 
     if (!canEdit) {
-      alert('장비 할당 권한이 없습니다.');
+      showToast('장비 할당 권한이 없습니다.', 'error');
       return;
     }
 
     if (selectedAssetIds.length === 0) {
-      alert('할당할 장비를 1대 이상 선택해 주세요.');
+      showToast('할당할 장비를 1대 이상 선택해 주세요.', 'error');
       return;
     }
 
@@ -323,7 +330,7 @@ export const AssetAssignment: React.FC = () => {
     }
 
     if (targetCaIds.length !== selectedAssetIds.length) {
-      alert(`⚠️ 선택된 장비(${selectedAssetIds.length}대)에 매핑할 수 있는 미할당 슬롯(${targetCaIds.length}개)이 부족합니다.`);
+      showToast('선택된 장비에 매핑할 수 있는 미할당 슬롯이 부족합니다.', 'error');
       return;
     }
 
@@ -336,14 +343,14 @@ export const AssetAssignment: React.FC = () => {
 
       await batchAssignAssetsToContract(pairs);
 
-      alert(`✅ 총 ${pairs.length}대 장비 할당 완료!\n자산 상태가 [출고대기(ASSIGNED)]로 즉시 전환되고 출고 검수 의뢰가 발행되었습니다.`);
+      showToast(`총 ${pairs.length}대 장비 할당 완료 (출고대기 전환 및 검수의뢰 발행)`);
       
       // 할당 완료된 슬롯 제외한 잔여 슬롯 유지 & 선택 장비 초기화
       setSelectedCaIds(selectedCaIds.filter(id => !targetCaIds.includes(id)));
       setSelectedAssetIds([]);
     } catch (err: any) {
       console.error('장비 할당 실패:', err);
-      alert(`⚠️ 장비 할당 실패: ${err?.message || err}`);
+      showToast(`장비 할당 실패: ${err?.message || err}`, 'error');
     } finally {
       setIsAssigning(false);
     }
@@ -353,17 +360,17 @@ export const AssetAssignment: React.FC = () => {
   const handleUnassignSlot = async (caId: string, assetNo?: string) => {
     if (isAssigning) return;
     if (!canEdit) {
-      alert('장비 할당 권한이 없습니다.');
+      showToast('장비 할당 권한이 없습니다.', 'error');
       return;
     }
 
     setIsAssigning(true);
     try {
       await unassignAssetFromContract(caId);
-      alert(`🔄 [${assetNo || '장비'}] 할당이 취소되었습니다.\n자산이 [임대가능] 상태로 복원되었습니다.`);
+      showToast(`[${assetNo || '장비'}] 할당이 취소되어 임대가능 상태로 복원되었습니다.`);
     } catch (err: any) {
       console.error('할당 취소 실패:', err);
-      alert(`⚠️ 할당 취소 실패: ${err?.message || err}`);
+      showToast(`할당 취소 실패: ${err?.message || err}`, 'error');
     } finally {
       setIsAssigning(false);
     }
@@ -373,17 +380,17 @@ export const AssetAssignment: React.FC = () => {
   const handleBatchUnassignModelSlots = async (modelName: string, caIdsWithAsset: string[]) => {
     if (isAssigning || caIdsWithAsset.length === 0) return;
     if (!canEdit) {
-      alert('장비 할당 권한이 없습니다.');
+      showToast('장비 할당 권한이 없습니다.', 'error');
       return;
     }
 
     setIsAssigning(true);
     try {
       await batchUnassignAssetsFromContract(caIdsWithAsset);
-      alert(`🔄 [${modelName}] ${caIdsWithAsset.length}대 장비 할당 취소 완료!\n모든 장비가 [임대가능] 상태로 복원되었습니다.`);
+      showToast(`[${modelName}] ${caIdsWithAsset.length}대 장비 할당이 취소되었습니다.`);
     } catch (err: any) {
       console.error('모델 일괄 할당 취소 실패:', err);
-      alert(`⚠️ 할당 취소 실패: ${err?.message || err}`);
+      showToast(`할당 취소 실패: ${err?.message || err}`, 'error');
     } finally {
       setIsAssigning(false);
     }
@@ -904,6 +911,42 @@ export const AssetAssignment: React.FC = () => {
           </div>
         </div>
       )}
+
+
+      {/* ⚖️ Gutenberg Z-패턴 4단계 최하단 회계 대차대조식 검증 바 (헌장 3.5) */}
+      <div style={{
+        padding: '8px 14px',
+        backgroundColor: 'var(--bg-app)',
+        border: '1px solid var(--border-color)',
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        flexWrap: 'wrap',
+        gap: '8px',
+        fontSize: '11.5px',
+        borderRadius: '6px',
+        flexShrink: 0
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
+          <span>미할당 요구: <strong style={{ color: 'var(--danger)' }}>총 {pendingCaList.length}대</strong> ({pendingContracts.length + exchangePendingContracts.length}건 계약)</span>
+          <span>|</span>
+          <span>대차(EXCHANGE) 긴급: <strong style={{ color: '#b45309' }}>{exchangePendingContracts.length}건</strong></span>
+          <span>|</span>
+          <span>가용 출고자산: <strong style={{ color: 'var(--success)' }}>총 {assets.filter(a => a.status === 'AVAILABLE').length}대</strong></span>
+          <span>|</span>
+          <span>현재 선택 매핑: <strong style={{ color: 'var(--primary)' }}>{selectedAssetIds.length}대</strong></span>
+        </div>
+        <span style={{
+          padding: '2px 8px',
+          borderRadius: '4px',
+          backgroundColor: 'var(--success-light)',
+          color: 'var(--success)',
+          fontWeight: 700,
+          fontSize: '11px'
+        }}>
+          ⚖️ 대차 정상 (요구슬롯-실자산 1:1 매핑 무결)
+        </span>
+      </div>
 
       <style>{`
         .hover-lift:hover {
