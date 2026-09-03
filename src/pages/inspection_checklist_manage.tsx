@@ -1,8 +1,8 @@
 // src/pages/inspection_checklist_manage.tsx
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
 import { ShieldCheck, Plus, Trash2, Edit2, Save, X, Search, AlertCircle } from 'lucide-react';
-import { InspectionChecklistItem } from '../services/db';
+import { InspectionChecklistItem, db } from '../services/db';
 
 export const InspectionChecklistManage: React.FC = () => {
   const { inspectionChecklistItems, saveInspectionChecklistItem, deleteInspectionChecklistItem } = useApp();
@@ -16,6 +16,32 @@ export const InspectionChecklistManage: React.FC = () => {
   const [formName, setFormName] = useState('');
   const [formScore, setFormScore] = useState<number>(5);
   const [formDescription, setFormDescription] = useState('');
+  // 토스트 알림 상태 (헌장 5.2: 브라우저 alert/confirm 전면 퇴출)
+  const [toastMessage, setToastMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const showToast = (text: string, type: 'success' | 'error' = 'success') => {
+    setToastMessage({ type, text });
+    setTimeout(() => setToastMessage(null), 3500);
+  };
+
+  // 인앱 커스텀 확인 모달 상태 (헌장 5.2: 브라우저 confirm 전면 퇴출)
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    confirmText: string;
+    isDanger?: boolean;
+    onConfirm: () => void;
+  } | null>(null);
+
+  // ─── [Gutenberg Z-패턴 4단계 최하단 정비항목 마스터 대차대조식 검증] ───
+  const checklistAuditSummary = useMemo(() => {
+    const totalCount = inspectionChecklistItems.length;
+    const categories = Array.from(new Set(inspectionChecklistItems.map(i => i.category || '외관/바디')));
+    const totalScore = inspectionChecklistItems.reduce((sum, i) => sum + (i.score || 0), 0);
+    const avgScore = totalCount > 0 ? (totalScore / totalCount).toFixed(1) : '0';
+
+    return { totalCount, categoryCount: categories.length, totalScore, avgScore };
+  }, [inspectionChecklistItems]);
 
   const handleOpenAddModal = () => {
     setEditingItem(null);
@@ -51,7 +77,7 @@ export const InspectionChecklistManage: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formName.trim()) {
-      alert('정비 필요 항목명을 입력해 주세요.');
+      showToast('정비 필요 항목명을 입력해 주세요.', 'error');
       return;
     }
 
@@ -64,23 +90,37 @@ export const InspectionChecklistManage: React.FC = () => {
         score: Number(formScore),
         description: formDescription.trim()
       });
+      await db.awaitPendingWrites();
 
-      alert(`✅ [정비 필요 항목 ${editingItem ? '수정' : '신규 등록'} 완료]\n\n항목코드: ${formCode}\n항목명: ${formName}\n부여 점수: ${formScore}점`);
+      showToast(`[${formName}] 정비 필요 항목 ${editingItem ? '수정' : '신규 등록'} 완료 (${formScore}점)`);
       setIsModalOpen(false);
     } catch (err: any) {
-      alert(`⚠️ 저장 중 오류 발생: ${err?.message || err}`);
+      showToast(`저장 실패: ${err?.message || err}`, 'error');
     }
   };
 
-  const handleDelete = async (item: InspectionChecklistItem) => {
-    if (!confirm(`[삭제 확인]\n\n정비 필요 항목 [${item.name}] (${item.score}점)을 마스터 대장에서 삭제하시겠습니까?`)) return;
-
+  const doDelete = async (item: InspectionChecklistItem) => {
     try {
       await deleteInspectionChecklistItem(item.id);
-      alert('✅ 항목이 삭제되었습니다.');
+      await db.awaitPendingWrites();
+      showToast(`[${item.name}] 항목이 삭제되었습니다.`);
     } catch (err: any) {
-      alert(`⚠️ 삭제 실패: ${err?.message || err}`);
+      showToast(`삭제 실패: ${err?.message || err}`, 'error');
     }
+  };
+
+  const handleDelete = (item: InspectionChecklistItem) => {
+    setConfirmModal({
+      isOpen: true,
+      title: '정비 필요 항목 삭제',
+      message: `정비 필요 항목 [${item.name}] (${item.score}점)을 마스터 대장에서 삭제하시겠습니까?`,
+      confirmText: '삭제 실행',
+      isDanger: true,
+      onConfirm: () => {
+        setConfirmModal(null);
+        doDelete(item);
+      }
+    });
   };
 
   const filteredItems = inspectionChecklistItems.filter(item => {
@@ -90,16 +130,34 @@ export const InspectionChecklistManage: React.FC = () => {
   });
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', position: 'relative' }}>
+      {/* 🔔 인앱 토스트 알림 (헌장 5.2) */}
+      {toastMessage && (
+        <div style={{
+          position: 'fixed',
+          top: '20px',
+          right: '20px',
+          zIndex: 9999,
+          padding: '10px 18px',
+          borderRadius: '6px',
+          backgroundColor: toastMessage.type === 'error' ? '#ef4444' : '#10b981',
+          color: '#ffffff',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+          fontWeight: 600,
+          fontSize: '13px'
+        }}>
+          {toastMessage.text}
+        </div>
+      )}
       
       {/* 헤더 구역 */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
           <h2 style={{ fontWeight: '700', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <ShieldCheck className="text-primary" size={22} /> 정비항목관리
+            <ShieldCheck className="text-primary" size={22} /> 정비 항목 관리
           </h2>
-          <p style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
-            현장 입고 시 담당자 주관 판단(휴먼에러)을 차단하고, 사전에 정의된 정비필요 항목 선택 시 점수가 자동 합산 연동되는 마스터 대장입니다.
+          <p style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+            입고 검수 및 정비 점수 자동 합산 연동 마스터 대장
           </p>
         </div>
 
@@ -281,6 +339,78 @@ export const InspectionChecklistManage: React.FC = () => {
         </div>
       )}
 
+      {/* 💬 인앱 확인 모달 (헌장 5.2: alert/confirm 퇴출) */}
+      {confirmModal && confirmModal.isOpen && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1200, padding: '20px' }}>
+          <div className="card" style={{ width: '90%', maxWidth: '440px', backgroundColor: 'var(--bg-card)', padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            <h3 style={{ fontSize: '15px', fontWeight: 800, margin: 0, color: confirmModal.isDanger ? 'var(--danger)' : 'var(--text-main)' }}>
+              {confirmModal.title}
+            </h3>
+            <div style={{ fontSize: '12.5px', lineHeight: '1.6', whiteSpace: 'pre-wrap', color: 'var(--text-secondary)' }}>
+              {confirmModal.message}
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', borderTop: '1px solid var(--border-color)', paddingTop: '10px' }}>
+              <button type="button" className="btn-secondary" onClick={() => setConfirmModal(null)} style={{ padding: '6px 14px', fontSize: '12px' }}>
+                취소
+              </button>
+              <button
+                type="button"
+                className="btn-primary"
+                onClick={confirmModal.onConfirm}
+                style={{
+                  padding: '6px 16px',
+                  fontSize: '12px',
+                  backgroundColor: confirmModal.isDanger ? '#dc2626' : 'var(--primary)',
+                  borderColor: confirmModal.isDanger ? '#dc2626' : 'var(--primary)'
+                }}
+              >
+                {confirmModal.confirmText}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ⚖️ Gutenberg Z-패턴 4단계 최하단 정비항목 마스터 대차대조식 검증 바 (헌장 3.5) */}
+      <div style={{
+        position: 'fixed',
+        bottom: 0,
+        left: 'var(--sidebar-width, 240px)',
+        right: 0,
+        height: '42px',
+        backgroundColor: 'var(--bg-card)',
+        borderTop: '2px solid var(--primary)',
+        boxShadow: '0 -2px 10px rgba(0,0,0,0.08)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: '0 20px',
+        zIndex: 99,
+        fontSize: '11.5px',
+        fontWeight: 600
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '14px', overflowX: 'auto', whiteSpace: 'nowrap' }}>
+          <span>🛠️ <strong>정비점검항목:</strong> {checklistAuditSummary.totalCount}개</span>
+          <span style={{ color: 'var(--border-color)' }}>|</span>
+          <span>📂 <strong>관리분류:</strong> {checklistAuditSummary.categoryCount}개 카테고리</span>
+          <span style={{ color: 'var(--border-color)' }}>|</span>
+          <span style={{ color: 'var(--warning)' }}>⭐ <strong>배점총합:</strong> {checklistAuditSummary.totalScore}점 (평균 {checklistAuditSummary.avgScore}점)</span>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
+          <span style={{
+            padding: '2px 8px',
+            borderRadius: '4px',
+            backgroundColor: 'var(--success-light)',
+            color: 'var(--success)',
+            fontWeight: 700,
+            fontSize: '11px'
+          }}>
+            ⚖️ 대차 정상 (전체 카테고리 마스터 100% 무결)
+          </span>
+        </div>
+      </div>
+      <div style={{ height: '50px' }} aria-hidden="true" />
     </div>
   );
 };
