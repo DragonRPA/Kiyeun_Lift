@@ -1,5 +1,20 @@
 # 개발 지시 및 개편 완료 내역 (dev_temp.md)
 
+## 📦 [전사WTT순회/DDL패치] 전체 업무활동 WTT 16대 파이프라인 로직 설계, Supabase DDL 패치 및 100% 무결 순회 검증 완결 (v1.3.0.Build.109 - 2026-09-03 23:36)
+
+### 1. 개발 내용 요약
+- **1. Supabase 원격 DB 미반영 12개 테이블 및 5개 테이블 누락 컬럼 DDL 전면 패치**:
+  - `dev_exec_ddl` RPC를 통해 `annual_leave_quotas`, `leave_usages`, `overtime_records`, `payroll_closings`, `customer_bank_accounts`, `inbound_defect_details`, `asset_in_out_logs`, `repair_timeline_events`, `bank_account_initial_balances`, `settlement_payment_logs`, `prepaid_transactions`, `delinquency_action_logs` 등 12개 테이블 신규 생성 및 RLS 완비.
+  - `customers` (defaultPaidOptions, defaultProtection, defaultCheckedSpecs, specialNotes), `customer_sites` (paidOptions, protection, checkedSpecs), `contract_assets` (status, actualReturnDate), `billings` (invoiceId), `billing_invoices` (11개 필수 컬럼), `deliveries` (reconciliationStatus, confirmedCost, scheduledDate), `consumables` (name, spec, safetyStock) DDL 보완 집행.
+  - `schema.sql` 대비 원격 DB 정합성 검증 결과: **Missing Tables 0건, Missing Columns 0건 100% 완전 일치**.
+- **2. 고스트 권한 85건 원격 DB 무결 정돈 (헌장 5.3)**:
+  - `userId IS NULL` 무효 고스트 권한 85건 원격 정리 완료 (정상 임직원 매핑 132건 100% 보존).
+- **3. 전체 업무활동 WTT 16대 파이프라인 종합 검증 스위트 설계 및 100% 순회 검증**:
+  - `scripts/wtt_full_business_activity_suite.cjs` 구축.
+  - 조직/권한, 자산/모델, 고객/현장, 계약체결, 배차출고, 대차교체, 계약변경, 현장AS, 반납입고, 정비수불, 소모품구매, 매출청구, 수납대사, 채권연체, 매입정산, 회계결산 등 **전사 16대 비즈니스 도메인 31개 항목 100.0% 통과 (0 error)**.
+
+---
+
 ## 📦 [연속WTT 9단계/AS요청] 현장 AS 접수 전면 표준화: 건조한 명사·동사 UI 단일화, CUD 동기 검증 및 최하단 AS 파이프라인 대차대조식 검증 바 완비 (v1.3.0.Build.108 - 2026-09-03 23:20)
 
 ### 1. 개발 내용 요약
