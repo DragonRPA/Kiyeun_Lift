@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
 import { Shield, Check, Lock, Save, FolderKanban, ChevronDown, ChevronRight } from 'lucide-react';
-import { MenuPermission, User, createMenuPermission } from '../services/db';
+import { MenuPermission, User, createMenuPermission, db } from '../services/db';
 
 import { SYSTEM_MENU_CONFIG, getAllSystemMenuIds, MenuGroupConfig } from '../config/menu_config';
 
@@ -22,6 +22,12 @@ export const UsersPermissions: React.FC = () => {
 
   // 상위 카테고리 접힘/펼침 상태
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
+  // 토스트 알림 상태 (헌장 5.2: 브라우저 alert/confirm 전면 퇴출)
+  const [toastMessage, setToastMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const showToast = (text: string, type: 'success' | 'error' = 'success') => {
+    setToastMessage({ type, text });
+    setTimeout(() => setToastMessage(null), 3500);
+  };
 
   useEffect(() => {
     setLocalUsers([...users]);
@@ -63,16 +69,16 @@ export const UsersPermissions: React.FC = () => {
     }));
   };
 
-  const handleRoleChange = (userId: string, newRole: string) => {
+  const handleRoleChange = async (userId: string, newRole: string) => {
     if (!canSave) return;
     
     if (userId === 'u-1' || userId === 'sys-admin') {
-      alert('최고관리자 계정의 시스템 등급은 변경할 수 없습니다.');
+      showToast('최고관리자 계정의 시스템 등급은 변경할 수 없습니다.', 'error');
       return;
     }
 
     if (newRole === 'ADMIN' && !isSuperAdmin) {
-      alert('ADMIN(최고관리자) 등급은 오직 최고관리자(sys-admin) 계정만 승인 권한이 있습니다.');
+      showToast('ADMIN(최고관리자) 등급은 오직 최고관리자(sys-admin) 계정만 승인 권한이 있습니다.', 'error');
       return;
     }
 
@@ -80,7 +86,7 @@ export const UsersPermissions: React.FC = () => {
     if (!targetUser) return;
 
     if (targetUser.role === 'ADMIN' && newRole !== 'ADMIN' && !isSuperAdmin) {
-      alert('ADMIN 권한 박탈은 오직 최고관리자(sys-admin)만 가능합니다.');
+      showToast('ADMIN 권한 박탈은 오직 최고관리자(sys-admin)만 가능합니다.', 'error');
       return;
     }
 
@@ -89,9 +95,10 @@ export const UsersPermissions: React.FC = () => {
       role: newRole as 'ADMIN' | 'MANAGER' | 'USER'
     };
 
-    saveUser(updatedUser);
+    await saveUser(updatedUser);
+    await db.awaitPendingWrites();
     setLocalUsers(prev => prev.map(u => u.id === userId ? updatedUser : u));
-    alert(`${targetUser.name} 님의 등급이 [${newRole}] (으)로 변경되었습니다.`);
+    showToast(`${targetUser.name} 님의 등급이 [${newRole}] (으)로 변경되었습니다.`);
   };
 
   const handlePermissionToggle = (menuId: string, type: 'view' | 'save') => {
@@ -100,7 +107,7 @@ export const UsersPermissions: React.FC = () => {
     const targetUser = localUsers.find(u => u.id === selectedUserId);
     // 절대 슈퍼 관리자 계정은 권한 회수 불가
     if (targetUser?.id === 'u-1' || targetUser?.id === 'sys-admin' || targetUser?.loginId === 'admin') {
-      alert('시스템 최고관리자 계정의 메뉴 권한은 변경할 수 없습니다.');
+      showToast('시스템 최고관리자 계정의 메뉴 권한은 변경할 수 없습니다.', 'error');
       return;
     }
 
@@ -145,7 +152,7 @@ export const UsersPermissions: React.FC = () => {
     const targetUser = localUsers.find(u => u.id === selectedUserId);
     // 절대 슈퍼 관리자 계정은 권한 회수 불가
     if (targetUser?.id === 'u-1' || targetUser?.id === 'sys-admin' || targetUser?.loginId === 'admin') {
-      alert('시스템 최고관리자 계정의 메뉴 권한은 변경할 수 없습니다.');
+      showToast('시스템 최고관리자 계정의 메뉴 권한은 변경할 수 없습니다.', 'error');
       return;
     }
 
@@ -205,7 +212,7 @@ export const UsersPermissions: React.FC = () => {
     if (!canSave || !selectedUserId) return;
     const targetUser = localUsers.find(u => u.id === selectedUserId);
     if (targetUser?.id === 'u-1' || targetUser?.id === 'sys-admin' || targetUser?.loginId === 'admin') {
-      alert('시스템 최고관리자 계정의 메뉴 권한은 변경할 수 없습니다.');
+      showToast('시스템 최고관리자 계정의 메뉴 권한은 변경할 수 없습니다.', 'error');
       return;
     }
 
@@ -286,7 +293,7 @@ export const UsersPermissions: React.FC = () => {
   // 1-Click 고스트 권한 자동 정돈 및 정상 데이터 재저장
   const handleCleanGhostPermissions = async () => {
     if (ghostPermissions.length === 0) {
-      alert('✅ 현재 무효(고스트) 권한 데이터가 없습니다. 모든 데이터가 정상입니다.');
+      showToast('현재 무효(고스트) 권한 데이터가 없습니다. 모든 데이터가 정상입니다.');
       setShowGhostModal(false);
       return;
     }
@@ -294,15 +301,28 @@ export const UsersPermissions: React.FC = () => {
     try {
       const cleanList = localPermissions.filter(p => validUserIds.has(p.userId));
       await updatePermissions(cleanList);
+      await db.awaitPendingWrites();
       setLocalPermissions(cleanList);
       setIsDirty(false);
       setShowGhostModal(false);
-      alert(`✅ 총 ${ghostPermissions.length}건의 무효 고스트 권한 데이터가 성공적으로 정돈 제거되었으며, 정상 권한 ${cleanList.length}건이 데이터베이스에 업데이트되었습니다.`);
+      showToast(`무효 고스트 권한 ${ghostPermissions.length}건 정돈 완료 (정상 권한 ${cleanList.length}건 보존)`);
     } catch (err: any) {
       console.error('Clean ghost permissions error:', err);
       showErrorModal(`⚠️ 고스트 권한 정돈 저장 중 오류가 발생했습니다:\n\n${err?.message || err}`);
     }
   };
+
+  // ─── [Gutenberg Z-패턴 4단계 최하단 임직원 권한 대차대조식 검증] ───
+  const permissionAuditSummary = useMemo(() => {
+    const totalUsers = localUsers.length;
+    const adminCount = localUsers.filter(u => u.role === 'ADMIN').length;
+    const managerCount = localUsers.filter(u => u.role === 'MANAGER').length;
+    const userCount = localUsers.filter(u => u.role !== 'ADMIN' && u.role !== 'MANAGER').length;
+    const totalPermCount = localPermissions.length;
+    const ghostCount = ghostPermissions.length;
+
+    return { totalUsers, adminCount, managerCount, userCount, totalPermCount, ghostCount };
+  }, [localUsers, localPermissions, ghostPermissions]);
 
   const handleSavePermissions = async () => {
     if (!canSave) return;
@@ -323,8 +343,9 @@ export const UsersPermissions: React.FC = () => {
 
     try {
       await updatePermissions(localPermissions);
+      await db.awaitPendingWrites();
       setIsDirty(false);
-      alert('메뉴 권한 설정이 성공적으로 저장되었습니다.');
+      showToast('메뉴 권한 설정이 성공적으로 저장되었습니다.');
     } catch (err: any) {
       console.error('Save permissions error:', err);
       showErrorModal(`⚠️ 메뉴 권한 설정 저장 중 오류가 발생했습니다:\n\n${err?.message || err}`);
@@ -332,7 +353,25 @@ export const UsersPermissions: React.FC = () => {
   };
 
   return (
-    <div>
+    <div style={{ position: 'relative' }}>
+      {/* 🔔 인앱 토스트 알림 (헌장 5.2) */}
+      {toastMessage && (
+        <div style={{
+          position: 'fixed',
+          top: '20px',
+          right: '20px',
+          zIndex: 9999,
+          padding: '10px 18px',
+          borderRadius: '6px',
+          backgroundColor: toastMessage.type === 'error' ? '#ef4444' : '#10b981',
+          color: '#ffffff',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+          fontWeight: 600,
+          fontSize: '13px'
+        }}>
+          {toastMessage.text}
+        </div>
+      )}
       <div className="card-header" style={{ marginBottom: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
           <h2 style={{ fontWeight: '700', display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -743,6 +782,48 @@ export const UsersPermissions: React.FC = () => {
         </div>
 
       </div>
+      {/* ⚖️ Gutenberg Z-패턴 4단계 최하단 임직원 권한 대차대조식 검증 바 (헌장 3.5) */}
+      <div style={{
+        position: 'fixed',
+        bottom: 0,
+        left: 'var(--sidebar-width, 240px)',
+        right: 0,
+        height: '42px',
+        backgroundColor: 'var(--bg-card)',
+        borderTop: '2px solid var(--primary)',
+        boxShadow: '0 -2px 10px rgba(0,0,0,0.08)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: '0 20px',
+        zIndex: 99,
+        fontSize: '11.5px',
+        fontWeight: 600
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '14px', overflowX: 'auto', whiteSpace: 'nowrap' }}>
+          <span>👥 <strong>전체임직원:</strong> {permissionAuditSummary.totalUsers}명</span>
+          <span style={{ color: 'var(--border-color)' }}>|</span>
+          <span>👑 <strong>최고관리자:</strong> {permissionAuditSummary.adminCount}명</span>
+          <span style={{ color: 'var(--border-color)' }}>|</span>
+          <span>💼 <strong>매니저/실무:</strong> {permissionAuditSummary.managerCount + permissionAuditSummary.userCount}명</span>
+          <span style={{ color: 'var(--border-color)' }}>|</span>
+          <span style={{ color: 'var(--primary)' }}>📑 <strong>권한매핑총수:</strong> {permissionAuditSummary.totalPermCount}건</span>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
+          <span style={{
+            padding: '2px 8px',
+            borderRadius: '4px',
+            backgroundColor: permissionAuditSummary.ghostCount === 0 ? 'var(--success-light)' : 'rgba(239,68,68,0.15)',
+            color: permissionAuditSummary.ghostCount === 0 ? 'var(--success)' : 'var(--danger)',
+            fontWeight: 700,
+            fontSize: '11px'
+          }}>
+            {permissionAuditSummary.ghostCount === 0 ? '⚖️ 대차 정상 (무효 고스트 권한 0건 무결)' : `⚠️ 고스트 권한 ${permissionAuditSummary.ghostCount}건 감지`}
+          </span>
+        </div>
+      </div>
+      <div style={{ height: '50px' }} aria-hidden="true" />
     </div>
   );
 };
