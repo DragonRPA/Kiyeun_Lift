@@ -1,5 +1,21 @@
 ---
 
+# Release Notes (v1.3.0.Build.81 - 2026-09-03 17:04)
+
+## 🛠️ [자산관리 & DB업로드] 자산 상세 모달 AS/정비 통합 이력 바인딩 및 asset_inout_logs 스키마 정합성 패치
+
+### 🎯 핵심 요약 및 기능 확장 내역
+- **1. 자산 상세 모달 통합 이력 바인딩 (`getUnifiedAssetLogs`) 신설 (`Assets.tsx`)**:
+  - 기존에 `assetInOutLogs`(입출고 대장)만 조회하여 하단 자산이력 목록에 AS 이력이 0건으로 표시되던 결함 전면 해결.
+  - `repairs` 마스터 대장의 과거 AS/정비 데이터(접수/방문일자, 티켓번호, 고장증상, 조치내용, 정비사, 거래처, 현장명)를 `[정비]` 배지 항목으로 자동 합성 바인딩하여 타임라인에 무누락 노출.
+  - `[📥 엑셀 내려받기]`에서도 정비/수리 내역이 100% 온전하게 포함되어 다운로드되도록 연동.
+- **2. `asset_inout_logs` Supabase 실서버 스키마 컬럼 정합성 패치 (`migrationEngine.ts`)**:
+  - 실서버에 부재한 `details` 컬럼을 정식 컬럼인 `memo`로 필드명 교체 및 `TABLE_COLUMNS` 화이트리스트 100% 동기화.
+  - `Could not find the 'details' column of 'asset_inout_logs' in the schema cache` 오류 원천 차단.
+- **3. 글로벌 학습 지식 베이스 등록**: `경험.md`에 이슈 `E-033` 등록 완료.
+
+---
+
 # Release Notes (v1.3.0.Build.80 - 2026-09-03 16:37)
 
 ## 🛠️ [초기 DB 일괄 업로드] 밴드 AS 이력 적재 시 localStorage QuotaExceeded 방지 & 청킹 Supabase DB 직접 적재

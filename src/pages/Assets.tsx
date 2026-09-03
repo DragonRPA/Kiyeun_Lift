@@ -46,9 +46,61 @@ export const Assets: React.FC = () => {
     setEditForm({ ...asset });
   };
 
+  // 자산 개별 생애주기 통합 이력(입출고 + 현장 정비/AS 대장) 추출 헬퍼
+  const getUnifiedAssetLogs = (asset: Asset): AssetInOutLog[] => {
+    if (!asset) return [];
+
+    // 1. 기존 입출고 로그 (assetId 또는 assetNo 일치)
+    const rawLogs = (assetInOutLogs || []).filter((l: AssetInOutLog) => l.assetId === asset.id || (l.assetNo && l.assetNo === asset.assetNo));
+
+    // 2. 정비/AS 대장(repairs) 연동 로그
+    const assetRepairs = (repairs || []).filter((r: Repair) => r.assetId === asset.id || (r.assetNo && r.assetNo === asset.assetNo));
+
+    // 이미 rawLogs에 동일 repairId가 있는 경우 중복 방지
+    const existingRepairIds = new Set(rawLogs.map(l => l.repairId).filter(Boolean));
+
+    const repairLogs: AssetInOutLog[] = assetRepairs
+      .filter(r => !existingRepairIds.has(r.id))
+      .map(r => ({
+        id: `repair-log-${r.id}`,
+        assetId: asset.id,
+        assetNo: asset.assetNo,
+        modelName: asset.modelName,
+        type: 'REPAIR',
+        eventDate: r.visitDate || r.repairDate || r.requestDate || (r.createdAt ? r.createdAt.slice(0, 10) : ''),
+        customerId: r.customerId,
+        customerName: r.customerName || (r as any).customer,
+        siteId: r.siteId,
+        siteName: r.siteName || (r as any).site,
+        repairId: r.id,
+        memo: `[${r.ticketNo || 'AS'}] ${r.issueDescription || r.details || '정비점검'} ➔ ${r.actionTaken || '조치완료'} (정비사: ${r.mechanicName || '-'})`,
+        createdAt: r.createdAt || new Date().toISOString()
+      }));
+
+    const unified = [...rawLogs, ...repairLogs];
+
+    // 3. 최초 취득 로그 fallback
+    const hasAcquisition = unified.some(l => l.type === 'ACQUISITION');
+    if (!hasAcquisition && asset.acquisitionDate) {
+      unified.unshift({
+        id: `acq-fallback-${asset.id}`,
+        assetId: asset.id,
+        assetNo: asset.assetNo,
+        modelName: asset.modelName,
+        type: 'ACQUISITION',
+        eventDate: asset.acquisitionDate,
+        memo: `자산 최초 취득 및 대장 등록 (취득일: ${asset.acquisitionDate} / 취득가: ${(asset.acquisitionPrice || 0).toLocaleString()}원 / 임차/구입처: ${asset.renter || '-'})`,
+        createdAt: asset.createdAt || asset.acquisitionDate
+      });
+    }
+
+    // 최신순(내림차순) 정렬
+    return unified.sort((a, b) => (b.eventDate || '').localeCompare(a.eventDate || ''));
+  };
+
   // 자산 개별 생애주기 통합 이력 엑셀 내려받기
   const handleExportAssetHistoryExcel = (asset: Asset) => {
-    const assetLogs = assetInOutLogs.filter((log: AssetInOutLog) => log.assetId === asset.id);
+    const assetLogs = getUnifiedAssetLogs(asset);
     if (assetLogs.length === 0) {
       alert('해당 자산의 누적 이력 데이터가 존재하지 않습니다.');
       return;
@@ -899,60 +951,49 @@ export const Assets: React.FC = () => {
                   {/* 명시적 [자산이력 조회] 클릭 시에만 자산이력 표출 */}
                   {showHistoryToggle && (
                     <div style={{ marginTop: '14px', paddingTop: '12px', borderTop: '1px solid var(--border-color)' }}>
-                      <h5 style={{ margin: '0 0 10px 0', fontSize: '13px', fontWeight: 'bold' }}>
-                        자산이력 ({assetInOutLogs.filter((l: AssetInOutLog) => l.assetId === selectedAsset.id).length}건)
-                      </h5>
+                      {(() => {
+                        const unifiedLogs = getUnifiedAssetLogs(selectedAsset);
+                        return (
+                          <>
+                            <h5 style={{ margin: '0 0 10px 0', fontSize: '13px', fontWeight: 'bold' }}>
+                              자산이력 ({unifiedLogs.length}건)
+                            </h5>
 
-                      {assetInOutLogs.filter((l: AssetInOutLog) => l.assetId === selectedAsset.id).length === 0 ? (
-                        <div style={{ padding: '16px', color: 'var(--text-muted)', fontSize: '12px', textAlign: 'center' }}>
-                          기록된 입출고 및 정비 이력이 없습니다.
-                        </div>
-                      ) : (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', borderLeft: '2px solid var(--border-color)', paddingLeft: '12px', marginLeft: '4px' }}>
-                          {(() => {
-                            const rawLogs = assetInOutLogs.filter((l: AssetInOutLog) => l.assetId === selectedAsset.id);
-                            const hasAcquisition = rawLogs.some(l => l.type === 'ACQUISITION');
-                            const displayLogs = [...rawLogs];
-                            if (!hasAcquisition && selectedAsset.acquisitionDate) {
-                              displayLogs.unshift({
-                                id: `acq-fallback-${selectedAsset.id}`,
-                                assetId: selectedAsset.id,
-                                assetNo: selectedAsset.assetNo,
-                                modelName: selectedAsset.modelName,
-                                type: 'ACQUISITION',
-                                eventDate: selectedAsset.acquisitionDate,
-                                memo: `자산 최초 취득 및 대장 등록 (취득일: ${selectedAsset.acquisitionDate} / 취득가: ${(selectedAsset.acquisitionPrice || 0).toLocaleString()}원 / 임차/구입처: ${selectedAsset.renter || '-'})`,
-                                createdAt: selectedAsset.createdAt || selectedAsset.acquisitionDate
-                              });
-                            }
-
-                            return displayLogs.map((log: AssetInOutLog, idx: number) => (
-                              <div key={idx} style={{ fontSize: '12px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                  <span className={`badge ${log.type === 'ACQUISITION' ? 'badge-info' : log.type === 'OUTBOUND' ? 'badge-primary' : log.type === 'INBOUND' ? 'badge-success' : log.type === 'DISPOSAL' ? 'badge-danger' : 'badge-warning'}`}>
-                                    {log.type === 'ACQUISITION' ? '취득' : log.type === 'OUTBOUND' ? '출고' : log.type === 'INBOUND' ? '입고' : log.type === 'INBOUND_CANCEL' ? '입고취소' : log.type === 'DISPOSAL' ? '매각' : '정비'}
-                                  </span>
-                                  <strong>{log.eventDate}</strong>
-                                  {log.inboundNo && <span style={{ color: 'var(--primary)', fontWeight: 'bold' }}>[{log.inboundNo}]</span>}
-                                  {log.customerName && <span>(거래처: {log.customerName})</span>}
-                                </div>
-                                <div style={{ color: 'var(--text-secondary)', paddingLeft: '4px' }}>
-                                  {log.memo || '이상 무'}
-                                  {log.defectsJson && (
-                                    <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '4px' }}>
-                                      {JSON.parse(log.defectsJson).map((d: any, dIdx: number) => (
-                                        <span key={dIdx} className="badge badge-secondary" style={{ fontSize: '10px' }}>
-                                          {d.subNo}: {d.checkitemName} (+{d.score}점)
-                                        </span>
-                                      ))}
-                                    </div>
-                                  )}
-                                </div>
+                            {unifiedLogs.length === 0 ? (
+                              <div style={{ padding: '16px', color: 'var(--text-muted)', fontSize: '12px', textAlign: 'center' }}>
+                                기록된 입출고 및 정비 이력이 없습니다.
                               </div>
-                            ));
-                          })()}
-                        </div>
-                      )}
+                            ) : (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', borderLeft: '2px solid var(--border-color)', paddingLeft: '12px', marginLeft: '4px' }}>
+                                {unifiedLogs.map((log: AssetInOutLog, idx: number) => (
+                                  <div key={idx} style={{ fontSize: '12px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                      <span className={`badge ${log.type === 'ACQUISITION' ? 'badge-info' : log.type === 'OUTBOUND' ? 'badge-primary' : log.type === 'INBOUND' ? 'badge-success' : log.type === 'DISPOSAL' ? 'badge-danger' : 'badge-warning'}`}>
+                                        {log.type === 'ACQUISITION' ? '취득' : log.type === 'OUTBOUND' ? '출고' : log.type === 'INBOUND' ? '입고' : log.type === 'INBOUND_CANCEL' ? '입고취소' : log.type === 'DISPOSAL' ? '매각' : '정비'}
+                                      </span>
+                                      <strong>{log.eventDate}</strong>
+                                      {log.inboundNo && <span style={{ color: 'var(--primary)', fontWeight: 'bold' }}>[{log.inboundNo}]</span>}
+                                      {log.customerName && <span>(거래처: {log.customerName})</span>}
+                                    </div>
+                                    <div style={{ color: 'var(--text-secondary)', paddingLeft: '4px' }}>
+                                      {log.memo || '이상 무'}
+                                      {log.defectsJson && (
+                                        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '4px' }}>
+                                          {JSON.parse(log.defectsJson).map((d: any, dIdx: number) => (
+                                            <span key={dIdx} className="badge badge-secondary" style={{ fontSize: '10px' }}>
+                                              {d.subNo}: {d.checkitemName} (+{d.score}점)
+                                            </span>
+                                          ))}
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </>
+                        );
+                      })()}
                     </div>
                   )}
                 </section>

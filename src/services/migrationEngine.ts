@@ -159,8 +159,9 @@ export const TABLE_COLUMNS: Record<string, string[]> = {
   ],
   asset_inout_logs: [
     'id', 'assetId', 'assetNo', 'modelName', 'type', 'eventDate',
-    'contractId', 'customerId', 'siteId', 'deliveryId', 'details',
-    'performedBy', 'createdAt', 'updatedAt'
+    'customerId', 'customerName', 'siteId', 'siteName', 'deliveryId',
+    'repairId', 'inboundNo', 'maintenanceScore', 'defectsJson', 'memo',
+    'createdAt', 'updatedAt'
   ],
   billings: [
     'id', 'customerId', 'contractId', 'billingYm', 'invoiceId', 'totalAmount', 'paidAmount', 'status', 'billingDate', 'createdAt', 'updatedAt'
@@ -3302,6 +3303,8 @@ export async function ingestBandAsHistoryDirect(
         ? r.matchedAssetId
         : (db.assets || []).find(a => a.assetNo === r.matchedAssetNo)?.id;
       if (realAssetId) {
+        const realCustId = (repairRow.customerId && validCustomerIds.has(repairRow.customerId)) ? repairRow.customerId : undefined;
+        const realSiteId = (repairRow.siteId && validSiteIds.has(repairRow.siteId)) ? repairRow.siteId : undefined;
         newAssetLogs.push({
           id: `aiog-band-${Date.now()}-${idx + 1}`,
           assetId: realAssetId,
@@ -3309,10 +3312,12 @@ export async function ingestBandAsHistoryDirect(
           modelName: r.matchedModelName || '고소작업대',
           type: 'REPAIR',
           eventDate: r.date,
+          customerId: realCustId,
           customerName: repairRow.customerName,
+          siteId: realSiteId,
           siteName: repairRow.siteName,
           repairId: repairRow.id,
-          details: `[현장AS] ${r.issue} ➔ ${r.actionTaken} (정비사: ${r.mechanicName})`,
+          memo: `[현장AS] ${r.issue} ➔ ${r.actionTaken} (정비사: ${r.mechanicName})`,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString()
         });

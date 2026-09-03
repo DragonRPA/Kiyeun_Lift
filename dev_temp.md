@@ -1,6 +1,17 @@
 # 개발 지시 및 개편 완료 내역 (dev_temp.md)
 
-## 🚀 [초기 DB 일괄 업로드] 밴드 AS 이력 적재 시 localStorage QuotaExceeded 방지 및 청킹 Supabase DB 직접 적재 (v1.3.0.Build.80 - 2026-09-03)
+## 🚀 [자산관리 & DB업로드] asset_inout_logs 스키마 정합성 패치 및 자산 상세 모달 AS/정비 통합 이력 바인딩 (v1.3.0.Build.81 - 2026-09-03)
+
+### 1. 개발 내용 요약
+- **`src/pages/Assets.tsx` (자산 상세 모달 및 이력 대장)**:
+  - `getUnifiedAssetLogs` 헬퍼 함수 신설: 기존에 `assetInOutLogs`(입출고)만 조회하여 밴드 과거 AS 이력(`repairs` 대장 4건 등)이 누락되던 문제를 전면 해결.
+  - `repairs` 대장의 접수일/방문일, 고장증상, 조치내용, 정비사, 티켓번호를 `[정비]` 배지 항목으로 자동 합성 바인딩하여 자산이력 타임라인 및 엑셀 내려받기에 100% 온전하게 노출.
+- **`src/services/migrationEngine.ts`**:
+  - `TABLE_COLUMNS.asset_inout_logs` 스키마 화이트리스트를 Supabase 실서버 스키마 및 DB 인터페이스와 100% 일치하도록 정정 (`details`, `contractId`, `note`, `performedBy` 제거 ➔ `memo`, `customerName`, `siteName`, `repairId`, `inboundNo`, `maintenanceScore`, `defectsJson` 반영).
+  - `ingestBandAsHistoryDirect`에서 `asset_inout_logs` 적재 시 `details` 대신 실서버 컬럼인 `memo`로 필드명 교체.
+  - `assetId`, `customerId`, `siteId` 유효 외래키(FK) 사전 검증으로 무결성 보장.
+
+---
 
 ### 1. 개발 내용 요약
 - **`src/services/db.ts` (`LocalDB`)**:
