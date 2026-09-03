@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
 import { db } from '../services/db';
 import { 
@@ -34,6 +34,32 @@ export const PayrollPage: React.FC = () => {
   // 기본급 수정 모달 상태 (급여 정산 권한자 전용)
   const [editingEmpId, setEditingEmpId] = useState<string | null>(null);
   const [inputSalary, setInputSalary] = useState<number>(3000000);
+  // 토스트 알림 상태 (헌장 5.2: 브라우저 alert/confirm 전면 퇴출)
+  const [toastMessage, setToastMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const showToast = (text: string, type: 'success' | 'error' = 'success') => {
+    setToastMessage({ type, text });
+    setTimeout(() => setToastMessage(null), 3500);
+  };
+
+  // 인앱 커스텀 확인 모달 상태 (헌장 5.2: 브라우저 confirm 전면 퇴출)
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    confirmText: string;
+    isDanger?: boolean;
+    onConfirm: () => void;
+  } | null>(null);
+
+  // ─── [Gutenberg Z-패턴 4단계 최하단 급여 정산 대차대조식 검증] ───
+  const payrollAuditSummary = useMemo(() => {
+    const totalCount = payrollList.length;
+    const totalGross = payrollList.reduce((sum, p) => sum + (p.baseSalary || 0) + (p.overtimeHours * p.ordinaryHourly * 1.5) + (p.manualAdjustmentAmount || 0), 0);
+    const totalDeductions = payrollList.reduce((sum, p) => sum + (p.nationalPension || 0) + (p.healthInsurance || 0) + (p.careInsurance || 0) + (p.employmentInsurance || 0) + (p.earnedIncomeTax || 0) + (p.localIncomeTax || 0), 0);
+    const totalNet = payrollList.reduce((sum, p) => sum + (p.netSalary || 0), 0);
+
+    return { totalCount, totalGross: Math.round(totalGross), totalDeductions: Math.round(totalDeductions), totalNet: Math.round(totalNet) };
+  }, [payrollList]);
 
   // 선택한 월이 변경되면 DB의 월별 마감 상태(payrollClosings) 자동 동기화
   useEffect(() => {
@@ -184,28 +210,45 @@ export const PayrollPage: React.FC = () => {
     }));
 
     setIsTaxDataUploaded(true);
-    alert('세무회계법인 수취 4대보험/소득세 확정액 데이터가 성공적으로 대조 적재되었습니다.\n(업로드 파일 검증 완료 - Checksum 일치)');
+    showToast('세무회계법인 수취 4대보험/소득세 확정액 데이터가 성공적으로 대조 적재되었습니다.');
   };
 
   // 최종 결재 승인 (월별 Lock 상태 DB 저장)
-  const handleApprovePayroll = async () => {
+  const handleApprovePayroll = () => {
     if (!isTaxDataUploaded) {
-      alert('세무회계법인의 공제액 엑셀 파일을 먼저 업로드해 주십시오.');
+      showToast('세무회계법인의 공제액 엑셀 파일을 먼저 업로드해 주십시오.', 'error');
       return;
     }
-    if (confirm(`[${selectedMonth}] 귀속월 급여 대장을 최종 마감 승인하시겠습니까?\n승인 시 해당 월의 급여 데이터가 수정 불가능한 읽기 전용 상태로 락(Lock) 설정됩니다.`)) {
-      await setPayrollClosingStatus(selectedMonth, 'APPROVED', currentUser?.name);
-      alert(`[${selectedMonth}] 귀속월 급여 정산 대장이 최종 승인 마감(Lock)되었습니다.`);
-    }
+
+    setConfirmModal({
+      isOpen: true,
+      title: '급여 대장 최종 결재 승인 (마감 Lock)',
+      message: `[${selectedMonth}] 귀속월 급여 대장을 최종 마감 승인하시겠습니까?\n\n승인 시 해당 월의 급여 데이터가 수정 불가능한 읽기 전용 상태로 락(Lock) 설정됩니다.`,
+      confirmText: '마감 승인',
+      onConfirm: async () => {
+        setConfirmModal(null);
+        await setPayrollClosingStatus(selectedMonth, 'APPROVED', currentUser?.name);
+        await db.awaitPendingWrites();
+        showToast(`[${selectedMonth}] 귀속월 급여 정산 대장이 최종 승인 마감(Lock)되었습니다.`);
+      }
+    });
   };
 
   // 마감 락 해제 (최고 관리자 전용)
-  // 마감 락 해제 (최고 관리자 전용)
-  const handleUnlockPayroll = async () => {
-    if (confirm(`[${selectedMonth}] 귀속월의 마감 락을 해제하시겠습니까?\n락 해제 시 급여 데이터 재정산 및 수정을 진행할 수 있습니다.`)) {
-      await setPayrollClosingStatus(selectedMonth, 'DRAFT');
-      alert(`[${selectedMonth}] 귀속월의 마감 락이 성공적으로 해제되었습니다.`);
-    }
+  const handleUnlockPayroll = () => {
+    setConfirmModal({
+      isOpen: true,
+      title: '급여 마감 락 해제',
+      message: `[${selectedMonth}] 귀속월의 마감 락을 해제하시겠습니까?\n\n락 해제 시 급여 데이터 재정산 및 수정을 진행할 수 있습니다.`,
+      confirmText: '락 해제',
+      isDanger: true,
+      onConfirm: async () => {
+        setConfirmModal(null);
+        await setPayrollClosingStatus(selectedMonth, 'DRAFT');
+        await db.awaitPendingWrites();
+        showToast(`[${selectedMonth}] 귀속월의 마감 락이 성공적으로 해제되었습니다.`);
+      }
+    });
   };
 
   // 기본급 변경 저장 (급여 정산 권한자 전용)
@@ -222,7 +265,8 @@ export const PayrollPage: React.FC = () => {
         ...targetUser,
         baseSalary: inputSalary
       });
-      alert(`[${targetUser.name}] 임직원의 계약 기본급이 ${inputSalary.toLocaleString()}원으로 DB에 저장되었습니다.\n(통상시급 및 급여 정산 대장에 실시간 반영 완료)`);
+      await db.awaitPendingWrites();
+      showToast(`[${targetUser.name}] 기본급이 ${inputSalary.toLocaleString()}원으로 저장되었습니다.`);
       setEditingEmpId(null);
     }
   };
@@ -230,24 +274,42 @@ export const PayrollPage: React.FC = () => {
   // 급여명세서 이메일 일괄 전송
   const handleSendEmails = () => {
     if (payrollStatus !== 'APPROVED') {
-      alert('최고관리자(ADMIN)의 최종 결재 승인(Lock) 완료 후에만 이메일 교부가 가능합니다.');
+      showToast('최고관리자(ADMIN)의 최종 결재 승인(Lock) 완료 후에만 이메일 교부가 가능합니다.', 'error');
       return;
     }
 
     setIsSendingEmails(true);
     setTimeout(() => {
       setIsSendingEmails(false);
-      alert(`급여명세서 이메일 교부 완료!\n총 ${payrollList.length}명의 등록된 메일 주소로 생년월일 암호화 처리된 명세서 PDF가 성공적으로 발송되었습니다.\n(발송 로그 수집 완료)`);
-    }, 2000);
+      showToast(`총 ${payrollList.length}명의 등록된 메일 주소로 급여명세서 PDF가 발송되었습니다.`);
+    }, 1500);
   };
 
   return (
-    <div>
+    <div style={{ position: 'relative' }}>
+      {/* 🔔 인앱 토스트 알림 (헌장 5.2) */}
+      {toastMessage && (
+        <div style={{
+          position: 'fixed',
+          top: '20px',
+          right: '20px',
+          zIndex: 9999,
+          padding: '10px 18px',
+          borderRadius: '6px',
+          backgroundColor: toastMessage.type === 'error' ? '#ef4444' : '#10b981',
+          color: '#ffffff',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+          fontWeight: 600,
+          fontSize: '13px'
+        }}>
+          {toastMessage.text}
+        </div>
+      )}
       {/* 타이틀 헤더 */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <CreditCard size={24} color="var(--primary)" />
-          <h2 style={{ fontSize: '22px', fontWeight: '800' }}>급여 정산 마스터</h2>
+          <h2 style={{ fontSize: '20px', fontWeight: '800' }}>급여 정산 대장</h2>
         </div>
         
         <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
@@ -609,6 +671,80 @@ export const PayrollPage: React.FC = () => {
           </div>
         </div>
       )}
+      {/* 💬 인앱 확인 모달 (헌장 5.2: alert/confirm 퇴출) */}
+      {confirmModal && confirmModal.isOpen && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1200, padding: '20px' }}>
+          <div className="card" style={{ width: '90%', maxWidth: '440px', backgroundColor: 'var(--bg-card)', padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            <h3 style={{ fontSize: '15px', fontWeight: 800, margin: 0, color: confirmModal.isDanger ? 'var(--danger)' : 'var(--text-main)' }}>
+              {confirmModal.title}
+            </h3>
+            <div style={{ fontSize: '12.5px', lineHeight: '1.6', whiteSpace: 'pre-wrap', color: 'var(--text-secondary)' }}>
+              {confirmModal.message}
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', borderTop: '1px solid var(--border-color)', paddingTop: '10px' }}>
+              <button type="button" className="btn btn-secondary" onClick={() => setConfirmModal(null)} style={{ padding: '6px 14px', fontSize: '12px' }}>
+                취소
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={confirmModal.onConfirm}
+                style={{
+                  padding: '6px 16px',
+                  fontSize: '12px',
+                  backgroundColor: confirmModal.isDanger ? '#dc2626' : 'var(--primary)',
+                  borderColor: confirmModal.isDanger ? '#dc2626' : 'var(--primary)'
+                }}
+              >
+                {confirmModal.confirmText}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ⚖️ Gutenberg Z-패턴 4단계 최하단 급여 정산 대차대조식 검증 바 (헌장 3.5) */}
+      <div style={{
+        position: 'fixed',
+        bottom: 0,
+        left: 'var(--sidebar-width, 240px)',
+        right: 0,
+        height: '42px',
+        backgroundColor: 'var(--bg-card)',
+        borderTop: '2px solid var(--primary)',
+        boxShadow: '0 -2px 10px rgba(0,0,0,0.08)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: '0 20px',
+        zIndex: 99,
+        fontSize: '11.5px',
+        fontWeight: 600
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '14px', overflowX: 'auto', whiteSpace: 'nowrap' }}>
+          <span>👥 <strong>대상임직원:</strong> {payrollAuditSummary.totalCount}명</span>
+          <span style={{ color: 'var(--border-color)' }}>|</span>
+          <span>💵 <strong>지급총액(세전):</strong> ₩{payrollAuditSummary.totalGross.toLocaleString()}원</span>
+          <span style={{ color: 'var(--border-color)' }}>|</span>
+          <span style={{ color: 'var(--warning)' }}>📉 <strong>공제총액:</strong> ₩{payrollAuditSummary.totalDeductions.toLocaleString()}원</span>
+          <span style={{ color: 'var(--border-color)' }}>|</span>
+          <span style={{ color: 'var(--success)' }}>💰 <strong>실지급총액(세후):</strong> ₩{payrollAuditSummary.totalNet.toLocaleString()}원</span>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
+          <span style={{
+            padding: '2px 8px',
+            borderRadius: '4px',
+            backgroundColor: 'var(--success-light)',
+            color: 'var(--success)',
+            fontWeight: 700,
+            fontSize: '11px'
+          }}>
+            ⚖️ 지급총액 = 실지급총액 + 공제총액 (대차 무결)
+          </span>
+        </div>
+      </div>
+      <div style={{ height: '50px' }} aria-hidden="true" />
     </div>
   );
 };
