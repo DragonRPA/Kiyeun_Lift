@@ -1633,8 +1633,8 @@ ${items.map((item, idx) => {
                   닫기
                 </button>
               </div>
-              <table className="table table-sm table-bordered mb-0 align-middle" style={{ backgroundColor: 'white', fontSize: '12.5px' }}>
-                <thead className="table-light">
+              <table className="table table-sm table-bordered mb-0 align-middle" style={{ backgroundColor: 'var(--bg-card)', fontSize: '12.5px' }}>
+                <thead>
                   <tr>
                     <th style={{ width: '20%' }}>고객사</th>
                     <th style={{ width: '25%' }}>계약명(현장)</th>

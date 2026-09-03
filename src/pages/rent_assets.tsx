@@ -1265,7 +1265,7 @@ export const RentAssets: React.FC = () => {
                           </td>
 
                           {/* 자사 등록/반납 기간 */}
-                          <td style={{ padding: '10px', whiteSpace: 'nowrap', color: '#475569' }}>
+                          <td style={{ padding: '10px', whiteSpace: 'nowrap', color: 'var(--text-secondary)' }}>
                             {matched ? (
                               matched.actualRentReturnDate ? (
                                 <span style={{ color: '#059669', fontWeight: '600' }}>반납: {matched.actualRentReturnDate}</span>
@@ -1349,23 +1349,23 @@ export const RentAssets: React.FC = () => {
                 <div style={{ padding: '14px', backgroundColor: 'var(--bg-card)', borderRadius: '10px', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
                   <span style={{ fontSize: '11.5px', color: 'var(--text-secondary)', fontWeight: 600 }}>📄 전대 확정 청구액 (매출)</span>
                   <strong style={{ fontSize: '18px', color: '#2563eb' }}>₩{totalRev.toLocaleString()}</strong>
-                  <span style={{ fontSize: '10.5px', color: '#64748b' }}>확정 매출 세금계산서 기준</span>
+                  <span style={{ fontSize: '10.5px', color: 'var(--text-muted)' }}>확정 매출 세금계산서 기준</span>
                 </div>
 
                 <div style={{ padding: '14px', backgroundColor: 'var(--bg-card)', borderRadius: '10px', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
                   <span style={{ fontSize: '11.5px', color: 'var(--text-secondary)', fontWeight: 600 }}>🏢 매입 임차료 원가 (매입)</span>
                   <strong style={{ fontSize: '18px', color: '#dc2626' }}>₩{totalCost.toLocaleString()}</strong>
-                  <span style={{ fontSize: '10.5px', color: '#64748b' }}>원사 매입세금계산서 기준</span>
+                  <span style={{ fontSize: '10.5px', color: 'var(--text-muted)' }}>원사 매입세금계산서 기준</span>
                 </div>
 
                 <div style={{ padding: '14px', backgroundColor: 'var(--bg-card)', borderRadius: '10px', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
                   <span style={{ fontSize: '11.5px', color: 'var(--text-secondary)', fontWeight: 600 }}>🚚 직송/경유 운송비 원가</span>
                   <strong style={{ fontSize: '18px', color: '#d97706' }}>₩{totalFreight.toLocaleString()}</strong>
-                  <span style={{ fontSize: '10.5px', color: '#64748b' }}>화물 배차 대장 확정액</span>
+                  <span style={{ fontSize: '10.5px', color: 'var(--text-muted)' }}>화물 배차 대장 확정액</span>
                 </div>
 
-                <div style={{ padding: '14px', backgroundColor: '#f0fdf4', borderRadius: '10px', border: '1px solid #bbf7d0', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <span style={{ fontSize: '11.5px', color: '#166534', fontWeight: 700 }}>⚖️ 전대 순마진 (대차대조)</span>
+                <div style={{ padding: '14px', backgroundColor: 'var(--success-light)', borderRadius: '10px', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <span style={{ fontSize: '11.5px', color: 'var(--text-main)', fontWeight: 700 }}>⚖️ 전대 순마진 (대차대조)</span>
                   <strong style={{ fontSize: '18px', color: '#16a34a' }}>₩{netProfit.toLocaleString()}</strong>
                   <span style={{ fontSize: '11px', fontWeight: 700, color: marginRate >= 20 ? '#16a34a' : '#d97706' }}>
                     마진율: {marginRate.toFixed(1)}% ({marginRate >= 0 ? '🟢 흑자' : '🔴 적자'})
@@ -1464,7 +1464,7 @@ export const RentAssets: React.FC = () => {
                           <td style={{ padding: '10px', whiteSpace: 'nowrap' }}>
                             <div style={{ display: 'flex', flexDirection: 'column' }}>
                               <strong style={{ color: '#2563eb' }}>{sc.contract.contractNo}</strong>
-                              <span style={{ fontSize: '11px', color: '#64748b' }}>{sc.site?.name || '현장 미지정'}</span>
+                              <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{sc.site?.name || '현장 미지정'}</span>
                             </div>
                           </td>
                           <td style={{ padding: '10px', whiteSpace: 'nowrap', fontWeight: 600 }}>
@@ -1473,7 +1473,7 @@ export const RentAssets: React.FC = () => {
                           <td style={{ padding: '10px', whiteSpace: 'nowrap' }}>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
                               {sc.assignedRentedAssets.map((ara, idx) => (
-                                <span key={idx} style={{ fontSize: '11.5px', color: '#334155' }}>
+                                <span key={idx} style={{ fontSize: '11.5px', color: 'var(--text-secondary)' }}>
                                   • {ara.ca.assetNo} ({ara.match?.renter || '원사'})
                                 </span>
                               ))}
@@ -1531,10 +1531,10 @@ export const RentAssets: React.FC = () => {
                   <tbody>
                     {assetProfitLedgers.map(apl => (
                       <tr key={apl.asset.id} style={{ borderBottom: '1px solid var(--border-color)', color: 'var(--text-main)' }}>
-                        <td style={{ padding: '10px', whiteSpace: 'nowrap', fontWeight: 800, color: '#0f172a' }}>
+                        <td style={{ padding: '10px', whiteSpace: 'nowrap', fontWeight: 800, color: 'var(--text-main)' }}>
                           {apl.asset.assetNo}
                         </td>
-                        <td style={{ padding: '10px', whiteSpace: 'nowrap', color: '#64748b' }}>
+                        <td style={{ padding: '10px', whiteSpace: 'nowrap', color: 'var(--text-muted)' }}>
                           {apl.asset.vendorAssetNo || '-'}
                         </td>
                         <td style={{ padding: '10px', whiteSpace: 'nowrap' }}>{apl.asset.modelName}</td>
@@ -1781,8 +1781,8 @@ export const RentAssets: React.FC = () => {
 
             {/* 과거 반납 자산 재임차 1초 선택기 (신규 등록 시에만 노출) */}
             {!editingAsset.id && rentedAssets.some(a => a.status === 'RENTED_RETURNED') && (
-              <div style={{ backgroundColor: '#f1f5f9', padding: '10px 12px', borderRadius: '8px', border: '1px solid #cbd5e1', marginBottom: '12px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <span style={{ fontSize: '11.5px', fontWeight: 700, color: '#334155' }}>
+              <div style={{ backgroundColor: 'var(--bg-app)', padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--border-color)', marginBottom: '12px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <span style={{ fontSize: '11.5px', fontWeight: 700, color: 'var(--text-secondary)' }}>
                   🔄 과거 반납된 자산 재임차 선택 (기존 관리번호 재활용):
                 </span>
                 <select

@@ -607,12 +607,12 @@ export const InitialDbUploader: React.FC = () => {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', padding: '24px', maxWidth: '1400px', margin: '0 auto' }}>
       {/* 상단 타이틀 헤더 */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #e2e8f0', paddingBottom: '16px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-color)', paddingBottom: '16px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <Database size={28} color="#2563eb" />
           <div>
-            <h1 style={{ margin: 0, fontSize: '22px', fontWeight: 700, color: '#1e293b', whiteSpace: 'nowrap' }}>초기DB 업로드</h1>
-            <span style={{ fontSize: '13px', color: '#64748b', whiteSpace: 'nowrap' }}>
+            <h1 style={{ margin: 0, fontSize: '22px', fontWeight: 700, color: 'var(--text-main)', whiteSpace: 'nowrap' }}>초기DB 업로드</h1>
+            <span style={{ fontSize: '13px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
               신규 고객 서비스 개시를 위한 과거 라이프사이클 체인 복원 및 청구 마감 일괄 적재
             </span>
           </div>
@@ -629,7 +629,7 @@ export const InitialDbUploader: React.FC = () => {
               padding: '8px 16px',
               borderRadius: '6px',
               border: activeTab === 'INGEST' ? '1px solid #2563eb' : '1px solid #cbd5e1',
-              backgroundColor: activeTab === 'INGEST' ? '#eff6ff' : '#ffffff',
+              backgroundColor: activeTab === 'INGEST' ? '#eff6ff' : 'var(--bg-card)',
               color: activeTab === 'INGEST' ? '#1d4ed8' : '#475569',
               fontWeight: 600,
               cursor: 'pointer',
@@ -649,7 +649,7 @@ export const InitialDbUploader: React.FC = () => {
               padding: '8px 16px',
               borderRadius: '6px',
               border: activeTab === 'BACKUP' ? '1px solid #2563eb' : '1px solid #cbd5e1',
-              backgroundColor: activeTab === 'BACKUP' ? '#eff6ff' : '#ffffff',
+              backgroundColor: activeTab === 'BACKUP' ? '#eff6ff' : 'var(--bg-card)',
               color: activeTab === 'BACKUP' ? '#1d4ed8' : '#475569',
               fontWeight: 600,
               cursor: 'pointer',
@@ -669,7 +669,7 @@ export const InitialDbUploader: React.FC = () => {
               padding: '8px 16px',
               borderRadius: '6px',
               border: activeTab === 'RESET' ? '1px solid #ef4444' : '1px solid #cbd5e1',
-              backgroundColor: activeTab === 'RESET' ? '#fef2f2' : '#ffffff',
+              backgroundColor: activeTab === 'RESET' ? '#fef2f2' : 'var(--bg-card)',
               color: activeTab === 'RESET' ? '#b91c1c' : '#475569',
               fontWeight: 600,
               cursor: 'pointer',
@@ -686,12 +686,12 @@ export const InitialDbUploader: React.FC = () => {
       {activeTab === 'INGEST' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
           {/* 1. 파일 선택 카드 */}
-          <div style={{ backgroundColor: '#ffffff', borderRadius: '8px', border: '1px solid #e2e8f0', padding: '20px' }}>
+          <div style={{ backgroundColor: 'var(--bg-card)', borderRadius: '8px', border: '1px solid var(--border-color)', padding: '20px' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginBottom: '16px' }}>
-              <label style={{ fontSize: '14px', fontWeight: 600, color: '#334155', whiteSpace: 'nowrap' }}>
+              <label style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-main)', whiteSpace: 'nowrap' }}>
                 엑셀 파일 선택
               </label>
-              <span style={{ fontSize: '12px', color: '#64748b', whiteSpace: 'nowrap' }}>
+              <span style={{ fontSize: '12px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
                 5개 시트(보유자산현황, 보유장비 임대현황, 거래처정보현황, 업체별마감일자, 계약현황)가 포함된 초기 현황 엑셀 파일(.xlsx)
               </span>
             </div>
@@ -714,7 +714,7 @@ export const InitialDbUploader: React.FC = () => {
                   gap: '8px',
                   padding: '10px 20px',
                   backgroundColor: '#2563eb',
-                  color: '#ffffff',
+                  color: 'var(--bg-card)',
                   border: 'none',
                   borderRadius: '6px',
                   fontWeight: 600,
@@ -728,9 +728,9 @@ export const InitialDbUploader: React.FC = () => {
               </button>
 
               {fileName && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 14px', backgroundColor: '#f1f5f9', borderRadius: '6px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 14px', backgroundColor: 'var(--bg-secondary)', borderRadius: '6px' }}>
                   <FileText size={16} color="#475569" />
-                  <span style={{ fontSize: '13px', fontWeight: 600, color: '#1e293b', whiteSpace: 'nowrap' }}>{fileName}</span>
+                  <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-main)', whiteSpace: 'nowrap' }}>{fileName}</span>
                 </div>
               )}
 
@@ -744,44 +744,44 @@ export const InitialDbUploader: React.FC = () => {
           </div>
 
           {/* 2. 과거 소급 청구서 선택적 생성 카드 */}
-          <div style={{ backgroundColor: '#ffffff', borderRadius: '8px', border: '1px solid #e2e8f0', padding: '20px' }}>
+          <div style={{ backgroundColor: 'var(--bg-card)', borderRadius: '8px', border: '1px solid var(--border-color)', padding: '20px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
               <Layers size={16} color="#d97706" />
               <span style={{ fontSize: '14px', fontWeight: 600, color: '#d97706', whiteSpace: 'nowrap' }}>
                 과거 소급 청구서 생성 (선택 실행)
               </span>
-              <span style={{ fontSize: '12px', color: '#64748b', whiteSpace: 'nowrap' }}>
+              <span style={{ fontSize: '12px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
                 지정 기간 내 계약별 월별 청구서를 독립적으로 계산하여 DB에 일괄 생성합니다.
               </span>
             </div>
 
             <div style={{ display: 'flex', alignItems: 'flex-end', gap: '16px', flexWrap: 'wrap' }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <label style={{ fontSize: '12px', fontWeight: 600, color: '#64748b', whiteSpace: 'nowrap' }}>시작 월</label>
+                <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>시작 월</label>
                 <input
                   type="month"
                   value={histBillingStart}
                   onChange={e => setHistBillingStart(e.target.value)}
                   disabled={isHistBillingIngesting}
                   style={{
-                    padding: '8px 12px', border: '1px solid #cbd5e1', borderRadius: '6px',
-                    fontSize: '14px', color: '#1e293b', backgroundColor: '#f8fafc', outline: 'none'
+                    padding: '8px 12px', border: '1px solid var(--border-color)', borderRadius: '6px',
+                    fontSize: '14px', color: 'var(--text-main)', backgroundColor: 'var(--bg-app)', outline: 'none'
                   }}
                 />
               </div>
 
-              <span style={{ fontSize: '18px', color: '#64748b', paddingBottom: '8px' }}>~</span>
+              <span style={{ fontSize: '18px', color: 'var(--text-muted)', paddingBottom: '8px' }}>~</span>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <label style={{ fontSize: '12px', fontWeight: 600, color: '#64748b', whiteSpace: 'nowrap' }}>종료 월</label>
+                <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>종료 월</label>
                 <input
                   type="month"
                   value={histBillingEnd}
                   onChange={e => setHistBillingEnd(e.target.value)}
                   disabled={isHistBillingIngesting}
                   style={{
-                    padding: '8px 12px', border: '1px solid #cbd5e1', borderRadius: '6px',
-                    fontSize: '14px', color: '#1e293b', backgroundColor: '#f8fafc', outline: 'none'
+                    padding: '8px 12px', border: '1px solid var(--border-color)', borderRadius: '6px',
+                    fontSize: '14px', color: 'var(--text-main)', backgroundColor: 'var(--bg-app)', outline: 'none'
                   }}
                 />
               </div>
@@ -829,13 +829,13 @@ export const InitialDbUploader: React.FC = () => {
           </div>
 
           {/* ③ 배차 이력 업로드 카드 */}
-          <div style={{ backgroundColor: '#ffffff', borderRadius: '8px', border: '1px solid #e2e8f0', padding: '20px' }}>
+          <div style={{ backgroundColor: 'var(--bg-card)', borderRadius: '8px', border: '1px solid var(--border-color)', padding: '20px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
               <Truck size={16} color="#0369a1" />
               <span style={{ fontSize: '14px', fontWeight: 600, color: '#0369a1', whiteSpace: 'nowrap' }}>
                 배차 이력 업로드
               </span>
-              <span style={{ fontSize: '12px', color: '#64748b', whiteSpace: 'nowrap' }}>
+              <span style={{ fontSize: '12px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
                 배차현황 엑셀 파일 (2025-04 ~ 2026-09)
               </span>
             </div>
@@ -865,7 +865,7 @@ export const InitialDbUploader: React.FC = () => {
               </button>
 
               {dispatchFileName && (
-                <span style={{ fontSize: '13px', color: '#1e293b', whiteSpace: 'nowrap' }}>
+                <span style={{ fontSize: '13px', color: 'var(--text-main)', whiteSpace: 'nowrap' }}>
                   {dispatchFileName}
                 </span>
               )}
@@ -882,15 +882,15 @@ export const InitialDbUploader: React.FC = () => {
               <div style={{ marginTop: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '8px' }}>
                   {[
-                    { label: '총 배차건', value: `${dispatchParsedData.stats.total}건`, color: '#1e293b' },
+                    { label: '총 배차건', value: `${dispatchParsedData.stats.total}건`, color: 'var(--text-main)' },
                     { label: '완료', value: `${dispatchParsedData.stats.completed}건`, color: '#059669' },
                     { label: '왕복(EXCHANGE)', value: `${dispatchParsedData.stats.exchangeCount}건`, color: '#7c3aed' },
                     { label: '2026 운송사', value: `${dispatchParsedData.stats.transportCompaniesCount}개사`, color: '#0284c7' },
                     { label: '고객 미매핑', value: `${dispatchParsedData.stats.customerUnmatched}건`, color: dispatchParsedData.stats.customerUnmatched > 0 ? '#dc2626' : '#059669' },
                     { label: '계약 미매핑', value: `${dispatchParsedData.stats.contractUnmatched}건`, color: dispatchParsedData.stats.contractUnmatched > 0 ? '#d97706' : '#059669' },
                   ].map(({ label, value, color }) => (
-                    <div key={label} style={{ backgroundColor: '#f8fafc', padding: '10px 14px', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
-                      <div style={{ fontSize: '11px', color: '#64748b', whiteSpace: 'nowrap' }}>{label}</div>
+                    <div key={label} style={{ backgroundColor: 'var(--bg-app)', padding: '10px 14px', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
+                      <div style={{ fontSize: '11px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{label}</div>
                       <div style={{ fontSize: '18px', fontWeight: 700, color, marginTop: '2px' }}>{value}</div>
                     </div>
                   ))}
@@ -926,13 +926,13 @@ export const InitialDbUploader: React.FC = () => {
           </div>
 
           {/* ④ 밴드 과거 AS 이력 빅데이터 업로드 카드 */}
-          <div style={{ backgroundColor: '#ffffff', borderRadius: '8px', border: '1px solid #e2e8f0', padding: '20px' }}>
+          <div style={{ backgroundColor: 'var(--bg-card)', borderRadius: '8px', border: '1px solid var(--border-color)', padding: '20px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
               <Wrench size={16} color="#16a34a" />
               <span style={{ fontSize: '14px', fontWeight: 600, color: '#16a34a', whiteSpace: 'nowrap' }}>
                 현장 AS 과거 이력 (네이버 밴드) 빅데이터 업로드
               </span>
-              <span style={{ fontSize: '12px', color: '#64748b', whiteSpace: 'nowrap' }}>
+              <span style={{ fontSize: '12px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
                 네이버 밴드 AS 게시글 텍스트 파일 (총 5,518건, 2,171대 장비 이력 및 단독계약 1대 추정 연동)
               </span>
             </div>
@@ -962,7 +962,7 @@ export const InitialDbUploader: React.FC = () => {
               </button>
 
               {bandFileName && (
-                <span style={{ fontSize: '13px', color: '#1e293b', whiteSpace: 'nowrap', fontWeight: 600 }}>
+                <span style={{ fontSize: '13px', color: 'var(--text-main)', whiteSpace: 'nowrap', fontWeight: 600 }}>
                   📄 {bandFileName}
                 </span>
               )}
@@ -980,14 +980,14 @@ export const InitialDbUploader: React.FC = () => {
                 {/* 5대 지표 바 */}
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '8px' }}>
                   {[
-                    { label: '총 AS 분석 건수', value: `${bandAnalysisResult.totalCount.toLocaleString()}건`, color: '#1e293b' },
+                    { label: '총 AS 분석 건수', value: `${bandAnalysisResult.totalCount.toLocaleString()}건`, color: 'var(--text-main)' },
                     { label: '고유 장비 매핑', value: `${bandAnalysisResult.uniqueAssetsCount.toLocaleString()}대`, color: '#2563eb' },
                     { label: '유효 계약 연동', value: `${bandAnalysisResult.matchedContractCount.toLocaleString()}건`, color: '#7c3aed', sub: bandAnalysisResult.singleAssetGuessedCount > 0 ? `(1대 계약 추정 ${bandAnalysisResult.singleAssetGuessedCount}건)` : undefined },
                     { label: '현장 조치완료', value: `${bandAnalysisResult.completedCount.toLocaleString()}건`, color: '#16a34a' },
                     { label: '익일방문 / 안내', value: `${(bandAnalysisResult.revisitCount + bandAnalysisResult.guidedCount).toLocaleString()}건`, color: '#d97706' },
                   ].map(({ label, value, color, sub }) => (
-                    <div key={label} style={{ backgroundColor: '#f8fafc', padding: '10px 14px', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
-                      <div style={{ fontSize: '11px', color: '#64748b', whiteSpace: 'nowrap' }}>{label}</div>
+                    <div key={label} style={{ backgroundColor: 'var(--bg-app)', padding: '10px 14px', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
+                      <div style={{ fontSize: '11px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{label}</div>
                       <div style={{ fontSize: '18px', fontWeight: 700, color, marginTop: '2px' }}>{value}</div>
                       {sub && <div style={{ fontSize: '10px', color: '#7c3aed', marginTop: '1px' }}>{sub}</div>}
                     </div>
@@ -995,7 +995,7 @@ export const InitialDbUploader: React.FC = () => {
                 </div>
 
                 {/* 검색 및 필터 컨트롤 바 */}
-                <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap', backgroundColor: '#f8fafc', padding: '8px 12px', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap', backgroundColor: 'var(--bg-app)', padding: '8px 12px', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flex: 1, minWidth: '200px' }}>
                     <Search size={14} color="#64748b" />
                     <input
@@ -1003,7 +1003,7 @@ export const InitialDbUploader: React.FC = () => {
                       placeholder="현장명, 고객사, 장비번호, 고장내용, 작성자 검색..."
                       value={bandSearchTerm}
                       onChange={e => setBandSearchTerm(e.target.value)}
-                      style={{ width: '100%', padding: '6px 10px', border: '1px solid #cbd5e1', borderRadius: '4px', fontSize: '12px' }}
+                      style={{ width: '100%', padding: '6px 10px', border: '1px solid var(--border-color)', borderRadius: '4px', fontSize: '12px' }}
                     />
                   </div>
 
@@ -1063,15 +1063,15 @@ export const InitialDbUploader: React.FC = () => {
 
                   return (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '12px', color: '#64748b' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '12px', color: 'var(--text-muted)' }}>
                         <span>필터링된 건수: <strong>{filteredRecords.length.toLocaleString()}건</strong> / 총 {bandAnalysisResult.totalCount.toLocaleString()}건</span>
                         <span style={{ fontSize: '11px' }}>※ 상위 50건 표시 중 (전체 {bandAnalysisResult.totalCount.toLocaleString()}건 일괄 적재 대상)</span>
                       </div>
 
-                      <div style={{ border: '1px solid #e2e8f0', borderRadius: '6px', overflowX: 'auto', maxHeight: '360px', overflowY: 'auto' }}>
+                      <div style={{ border: '1px solid var(--border-color)', borderRadius: '6px', overflowX: 'auto', maxHeight: '360px', overflowY: 'auto' }}>
                         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', whiteSpace: 'nowrap' }}>
-                          <thead style={{ position: 'sticky', top: 0, backgroundColor: '#f1f5f9', zIndex: 1 }}>
-                            <tr style={{ borderBottom: '1px solid #cbd5e1', color: '#475569', textAlign: 'left' }}>
+                          <thead style={{ position: 'sticky', top: 0, backgroundColor: 'var(--bg-secondary)', zIndex: 1 }}>
+                            <tr style={{ borderBottom: '1px solid var(--border-color)', color: 'var(--text-secondary)', textAlign: 'left' }}>
                               <th style={{ padding: '8px 10px' }}>No</th>
                               <th style={{ padding: '8px 10px' }}>접수일자</th>
                               <th style={{ padding: '8px 10px' }}>작성자</th>
@@ -1087,12 +1087,12 @@ export const InitialDbUploader: React.FC = () => {
                           <tbody>
                             {filteredRecords.slice(0, 50).map(r => (
                               <tr key={r.idx} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                                <td style={{ padding: '6px 10px', color: '#64748b' }}>{r.idx}</td>
-                                <td style={{ padding: '6px 10px', color: '#475569' }}>{r.date}</td>
+                                <td style={{ padding: '6px 10px', color: 'var(--text-muted)' }}>{r.idx}</td>
+                                <td style={{ padding: '6px 10px', color: 'var(--text-secondary)' }}>{r.date}</td>
                                 <td style={{ padding: '6px 10px', fontWeight: 600 }}>{r.author || '-'}</td>
                                 <td style={{ padding: '6px 10px' }}>
-                                  <div style={{ fontWeight: 600, color: '#1e293b' }}>{r.matchedCustomerName || r.customer}</div>
-                                  <div style={{ fontSize: '11px', color: '#64748b' }}>{r.matchedSiteName || r.site}</div>
+                                  <div style={{ fontWeight: 600, color: 'var(--text-main)' }}>{r.matchedCustomerName || r.customer}</div>
+                                  <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{r.matchedSiteName || r.site}</div>
                                 </td>
                                 <td style={{ padding: '6px 10px' }}>
                                   <span style={{ fontWeight: 700, color: r.matchedAssetId ? '#2563eb' : '#475569' }}>
@@ -1101,7 +1101,7 @@ export const InitialDbUploader: React.FC = () => {
                                   {r.isSingleAssetGuessed && (
                                     <span className="badge badge-warning" style={{ fontSize: '9px', marginLeft: '4px' }}>1대추정</span>
                                   )}
-                                  <span style={{ fontSize: '11px', color: '#64748b', marginLeft: '4px' }}>({r.matchedModelName})</span>
+                                  <span style={{ fontSize: '11px', color: 'var(--text-muted)', marginLeft: '4px' }}>({r.matchedModelName})</span>
                                 </td>
                                 <td style={{ padding: '6px 10px', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                                   {r.issue}
@@ -1128,7 +1128,7 @@ export const InitialDbUploader: React.FC = () => {
                                 <td style={{ padding: '6px 10px', textAlign: 'center' }}>
                                   <button
                                     onClick={() => setSelectedAsRecord(r)}
-                                    style={{ padding: '2px 6px', fontSize: '10.5px', borderRadius: '4px', border: '1px solid #cbd5e1', backgroundColor: '#ffffff', cursor: 'pointer' }}
+                                    style={{ padding: '2px 6px', fontSize: '10.5px', borderRadius: '4px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-card)', cursor: 'pointer' }}
                                   >
                                     상세
                                   </button>
@@ -1152,7 +1152,7 @@ export const InitialDbUploader: React.FC = () => {
 
                 {/* 우하단 종결 버튼 (Gutenberg Z-Pattern) */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '6px', flexWrap: 'wrap', gap: '8px' }}>
-                  <div style={{ fontSize: '12px', color: '#64748b' }}>
+                  <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
                     💡 총 <strong>{bandAnalysisResult.totalCount.toLocaleString()}건</strong>의 과거 AS 이력을 정비 마스터(`repairs`) 및 자산/계약 타임라인에 무누락 영구 저장합니다.
                   </div>
 
@@ -1178,13 +1178,13 @@ export const InitialDbUploader: React.FC = () => {
           </div>
 
           {/* ⑤ 밴드 출고요청 분석 & 유효 계약처 기본 요구사항(옵션/보양/스펙) 마스터 동기화 카드 */}
-          <div style={{ backgroundColor: '#ffffff', borderRadius: '8px', border: '1px solid #e2e8f0', padding: '20px' }}>
+          <div style={{ backgroundColor: 'var(--bg-card)', borderRadius: '8px', border: '1px solid var(--border-color)', padding: '20px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
               <FileCheck size={16} color="#7c3aed" />
-              <span style={{ fontSize: '15px', fontWeight: 700, color: '#1e293b', whiteSpace: 'nowrap' }}>
+              <span style={{ fontSize: '15px', fontWeight: 700, color: 'var(--text-main)', whiteSpace: 'nowrap' }}>
                 출고요청 이력 분석 & 고객 요구사항 마스터 DB 동기화
               </span>
-              <span style={{ fontSize: '12px', color: '#64748b', whiteSpace: 'nowrap' }}>
+              <span style={{ fontSize: '12px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
                 과거 출고요청 텍스트에서 고객이 요구한 맞춤 옵션·보양·특이사항을 마스터 DB에 정확히 기억하여, 향후 신규 계약 및 출고 시 100% 자동 상속·재사용합니다.
               </span>
             </div>
@@ -1217,8 +1217,8 @@ export const InitialDbUploader: React.FC = () => {
                 onClick={handleCopyBandScraperScript}
                 style={{
                   display: 'flex', alignItems: 'center', gap: '6px',
-                  padding: '8px 14px', backgroundColor: '#f8fafc', color: '#475569',
-                  border: '1px solid #cbd5e1', borderRadius: '6px', cursor: 'pointer',
+                  padding: '8px 14px', backgroundColor: 'var(--bg-app)', color: 'var(--text-secondary)',
+                  border: '1px solid var(--border-color)', borderRadius: '6px', cursor: 'pointer',
                   fontSize: '12.5px', fontWeight: 600, whiteSpace: 'nowrap'
                 }}
                 title="네이버 밴드 화면에서 F12 콘솔에 붙여넣어 중복 없이 전체 출고 이력을 추출하는 자바스크립트 코드를 클립보드에 복사합니다."
@@ -1228,7 +1228,7 @@ export const InitialDbUploader: React.FC = () => {
               </button>
 
               {dispatchHistFileName && (
-                <span style={{ fontSize: '13px', color: '#1e293b', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                <span style={{ fontSize: '13px', color: 'var(--text-main)', fontWeight: 600, whiteSpace: 'nowrap' }}>
                   {dispatchHistFileName}
                 </span>
               )}
@@ -1246,26 +1246,26 @@ export const InitialDbUploader: React.FC = () => {
                 {/* 5대 통계 지표 */}
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '8px' }}>
                   {[
-                    { label: '총 출고요청 건수', value: `${dispatchAnalysisResult.stats.totalParsed}건`, color: '#1e293b' },
+                    { label: '총 출고요청 건수', value: `${dispatchAnalysisResult.stats.totalParsed}건`, color: 'var(--text-main)' },
                     { label: '유효 계약 고객사', value: `${dispatchAnalysisResult.stats.contractedCustomerCount}개사`, color: '#7c3aed' },
                     { label: '유효 계약 현장', value: `${dispatchAnalysisResult.stats.contractedSiteCount}개소`, color: '#2563eb' },
                     { label: '추출 고객 요구사항', value: `${dispatchAnalysisResult.stats.extractedOptionCount + dispatchAnalysisResult.stats.extractedProtectionCount}건`, color: '#059669' },
-                    { label: '제외된 미계약 건', value: `${dispatchAnalysisResult.stats.ignoredCount}건`, color: '#64748b' },
+                    { label: '제외된 미계약 건', value: `${dispatchAnalysisResult.stats.ignoredCount}건`, color: 'var(--text-muted)' },
                   ].map(({ label, value, color }) => (
-                    <div key={label} style={{ backgroundColor: '#f8fafc', padding: '10px 14px', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
-                      <div style={{ fontSize: '11px', color: '#64748b', whiteSpace: 'nowrap' }}>{label}</div>
+                    <div key={label} style={{ backgroundColor: 'var(--bg-app)', padding: '10px 14px', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
+                      <div style={{ fontSize: '11px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{label}</div>
                       <div style={{ fontSize: '18px', fontWeight: 700, color, marginTop: '2px' }}>{value}</div>
                     </div>
                   ))}
                 </div>
 
                 {/* 매칭된 유효 고객사 요구사항 고밀도 대사 그리드 */}
-                <div style={{ border: '1px solid #e2e8f0', borderRadius: '6px', overflow: 'hidden' }}>
-                  <div style={{ padding: '10px 14px', backgroundColor: '#f1f5f9', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontSize: '13px', fontWeight: 700, color: '#334155' }}>
+                <div style={{ border: '1px solid var(--border-color)', borderRadius: '6px', overflow: 'hidden' }}>
+                  <div style={{ padding: '10px 14px', backgroundColor: 'var(--bg-secondary)', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-main)' }}>
                       📋 고객사별 고유 요구사항(옵션·보양·특이사항) 마스터 추출 내역 ({dispatchAnalysisResult.matchedEnrichments.length}개사)
                     </span>
-                    <span style={{ fontSize: '11px', color: '#64748b' }}>
+                    <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
                       * 시계열 최신값 우선 & 빈칸 안전 보완 정책 적용
                     </span>
                   </div>
@@ -1273,7 +1273,7 @@ export const InitialDbUploader: React.FC = () => {
                   <div style={{ maxHeight: '280px', overflowY: 'auto', overflowX: 'auto' }}>
                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', textAlign: 'left' }}>
                       <thead>
-                        <tr style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0', color: '#64748b' }}>
+                        <tr style={{ backgroundColor: 'var(--bg-app)', borderBottom: '1px solid var(--border-color)', color: 'var(--text-muted)' }}>
                           <th style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>고객사명</th>
                           <th style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>계약수</th>
                           <th style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>최신일자</th>
@@ -1288,7 +1288,7 @@ export const InitialDbUploader: React.FC = () => {
                           const specCount = item.extractedDefaults.defaultCheckedSpecs ? Object.keys(item.extractedDefaults.defaultCheckedSpecs).length : 0;
                           return (
                             <tr key={item.customerId} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                              <td style={{ padding: '8px 10px', fontWeight: 600, color: '#1e293b', whiteSpace: 'nowrap' }}>
+                              <td style={{ padding: '8px 10px', fontWeight: 600, color: 'var(--text-main)', whiteSpace: 'nowrap' }}>
                                 {item.customerName}
                               </td>
                               <td style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>
@@ -1296,7 +1296,7 @@ export const InitialDbUploader: React.FC = () => {
                                   {item.contractCount}건
                                 </span>
                               </td>
-                              <td style={{ padding: '8px 10px', color: '#64748b', whiteSpace: 'nowrap' }}>
+                              <td style={{ padding: '8px 10px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
                                 {item.latestDate}
                               </td>
                               <td style={{ padding: '8px 10px', whiteSpace: 'nowrap', color: item.extractedDefaults.defaultPaidOptions ? '#059669' : '#94a3b8' }}>
@@ -1322,8 +1322,8 @@ export const InitialDbUploader: React.FC = () => {
 
                 {/* 제외된 과거/미계약 건 안내 바 */}
                 {dispatchAnalysisResult.ignoredPosts.length > 0 && (
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', backgroundColor: '#f8fafc', borderRadius: '6px', border: '1px solid #e2e8f0', fontSize: '12px' }}>
-                    <span style={{ color: '#64748b' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', backgroundColor: 'var(--bg-app)', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '12px' }}>
+                    <span style={{ color: 'var(--text-muted)' }}>
                       🚫 과거 종료 거래처 / 계약 미보유 건 <strong>{dispatchAnalysisResult.ignoredPosts.length}건</strong>은 대장 오염 방지 원칙에 따라 안전하게 제외되었습니다.
                     </span>
                     <button
@@ -1337,10 +1337,10 @@ export const InitialDbUploader: React.FC = () => {
 
                 {/* 제외 목록 상세 드롭다운 */}
                 {showIgnoredPostsModal && (
-                  <div style={{ maxHeight: '180px', overflowY: 'auto', border: '1px solid #e2e8f0', borderRadius: '6px', backgroundColor: '#fafafa', padding: '8px' }}>
+                  <div style={{ maxHeight: '180px', overflowY: 'auto', border: '1px solid var(--border-color)', borderRadius: '6px', backgroundColor: '#fafafa', padding: '8px' }}>
                     <table style={{ width: '100%', fontSize: '11px', textAlign: 'left', borderCollapse: 'collapse' }}>
                       <thead>
-                        <tr style={{ color: '#64748b', borderBottom: '1px solid #e2e8f0' }}>
+                        <tr style={{ color: 'var(--text-muted)', borderBottom: '1px solid var(--border-color)' }}>
                           <th style={{ padding: '4px 6px' }}>일시</th>
                           <th style={{ padding: '4px 6px' }}>고객사명</th>
                           <th style={{ padding: '4px 6px' }}>현장명</th>
@@ -1394,7 +1394,7 @@ export const InitialDbUploader: React.FC = () => {
           {parsedData && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 700, color: '#1e293b', whiteSpace: 'nowrap' }}>
+                <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 700, color: 'var(--text-main)', whiteSpace: 'nowrap' }}>
                   라이프사이클 이벤트 체인 및 회계 데이터 분석 현황
                 </h3>
                 <span style={{ fontSize: '13px', color: '#059669', fontWeight: 600, whiteSpace: 'nowrap' }}>
@@ -1405,14 +1405,14 @@ export const InitialDbUploader: React.FC = () => {
               {/* 통계 카드 그리드 (라이프사이클 & 회계) */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '12px' }}>
                 {/* 1. 마스터 자산 */}
-                <div style={{ backgroundColor: '#f8fafc', padding: '14px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
-                  <div style={{ fontSize: '12px', color: '#64748b', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <div style={{ backgroundColor: 'var(--bg-app)', padding: '14px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                  <div style={{ fontSize: '12px', color: 'var(--text-muted)', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '4px' }}>
                     <Layers size={14} /> 자산 대장 (assets)
                   </div>
-                  <div style={{ fontSize: '20px', fontWeight: 700, color: '#0f172a', marginTop: '4px' }}>
+                  <div style={{ fontSize: '20px', fontWeight: 700, color: 'var(--text-main)', marginTop: '4px' }}>
                     {parsedData.stats.assetsCount} 대
                   </div>
-                  <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px' }}>
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
                     대여중 계약연동 {parsedData.stats.activeRentedAssetsCount || 0}대 100% 매핑
                   </div>
                 </div>
@@ -1431,14 +1431,14 @@ export const InitialDbUploader: React.FC = () => {
                 </div>
 
                 {/* 3. 렌탈 계약 */}
-                <div style={{ backgroundColor: '#f8fafc', padding: '14px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
-                  <div style={{ fontSize: '12px', color: '#64748b', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <div style={{ backgroundColor: 'var(--bg-app)', padding: '14px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                  <div style={{ fontSize: '12px', color: 'var(--text-muted)', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '4px' }}>
                     <FileCheck size={14} /> 렌탈 계약 (contracts)
                   </div>
-                  <div style={{ fontSize: '20px', fontWeight: 700, color: '#0f172a', marginTop: '4px' }}>
+                  <div style={{ fontSize: '20px', fontWeight: 700, color: 'var(--text-main)', marginTop: '4px' }}>
                     {parsedData.stats.contractsCount} 건
                   </div>
-                  <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px' }}>고객사 {parsedData.stats.customersCount}사 / 현장 {parsedData.stats.sitesCount}개소</div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>고객사 {parsedData.stats.customersCount}사 / 현장 {parsedData.stats.sitesCount}개소</div>
                 </div>
 
                 {/* 4. 출고 배차 체인 */}
@@ -1500,13 +1500,13 @@ export const InitialDbUploader: React.FC = () => {
               </div>
 
               {/* 3. 일괄 적재 실행 버튼 및 프로그레스 바 */}
-              <div style={{ backgroundColor: '#ffffff', borderRadius: '8px', border: '1px solid #e2e8f0', padding: '20px' }}>
+              <div style={{ backgroundColor: 'var(--bg-card)', borderRadius: '8px', border: '1px solid var(--border-color)', padding: '20px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
                   <div>
-                    <div style={{ fontSize: '15px', fontWeight: 700, color: '#1e293b', whiteSpace: 'nowrap' }}>
+                    <div style={{ fontSize: '15px', fontWeight: 700, color: 'var(--text-main)', whiteSpace: 'nowrap' }}>
                       라이프사이클 체인 & 시작점 데이터 일괄 적재 실행
                     </div>
-                    <div style={{ fontSize: '12px', color: '#64748b', whiteSpace: 'nowrap' }}>
+                    <div style={{ fontSize: '12px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
                       13단계 순차 DAG 배치 적재: 구버전 삭제 → 출고/회수 배차 + 검수 + 과거 소급 청구 + 8월 청구 + 매입 정산
                     </div>
                   </div>
@@ -1520,7 +1520,7 @@ export const InitialDbUploader: React.FC = () => {
                       gap: '8px',
                       padding: '12px 28px',
                       backgroundColor: '#059669',
-                      color: '#ffffff',
+                      color: 'var(--bg-card)',
                       border: 'none',
                       borderRadius: '6px',
                       fontWeight: 700,
@@ -1536,7 +1536,7 @@ export const InitialDbUploader: React.FC = () => {
 
                 {isIngesting && (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', color: '#334155' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', color: 'var(--text-main)' }}>
                       <span>{progressInfo.message}</span>
                       <span>{progressInfo.step} / {progressInfo.total} ({Math.round((progressInfo.step / progressInfo.total) * 100)}%)</span>
                     </div>
@@ -1558,10 +1558,10 @@ export const InitialDbUploader: React.FC = () => {
 
           {/* 4. 4대 대차대조(Reconciliation) 검증 리포트 */}
           {reconciliationReport && (
-            <div style={{ backgroundColor: '#ffffff', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '20px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px', borderBottom: '1px solid #e2e8f0', paddingBottom: '12px' }}>
+            <div style={{ backgroundColor: 'var(--bg-card)', borderRadius: '8px', border: '1px solid var(--border-color)', padding: '20px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px', borderBottom: '1px solid var(--border-color)', paddingBottom: '12px' }}>
                 <ShieldCheck size={24} color="#059669" />
-                <h3 style={{ margin: 0, fontSize: '17px', fontWeight: 700, color: '#0f172a', whiteSpace: 'nowrap' }}>
+                <h3 style={{ margin: 0, fontSize: '17px', fontWeight: 700, color: 'var(--text-main)', whiteSpace: 'nowrap' }}>
                   4대 대차대조(Reconciliation) 무결성 검증 증명서
                 </h3>
                 <span
@@ -1582,14 +1582,14 @@ export const InitialDbUploader: React.FC = () => {
 
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '12px' }}>
                 {/* 1. 자산 수량 대사 */}
-                <div style={{ padding: '14px', borderRadius: '6px', border: '1px solid #e2e8f0', backgroundColor: '#f8fafc' }}>
-                  <div style={{ fontSize: '13px', fontWeight: 600, color: '#334155', whiteSpace: 'nowrap' }}>1. 자산 수량 대사</div>
+                <div style={{ padding: '14px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-app)' }}>
+                  <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-main)', whiteSpace: 'nowrap' }}>1. 자산 수량 대사</div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '6px', fontSize: '13px' }}>
-                    <span style={{ color: '#64748b' }}>엑셀 보유자산:</span>
+                    <span style={{ color: 'var(--text-muted)' }}>엑셀 보유자산:</span>
                     <span style={{ fontWeight: 600 }}>{reconciliationReport.assetCountMatch.excel} 대</span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
-                    <span style={{ color: '#64748b' }}>DB 자사 자산:</span>
+                    <span style={{ color: 'var(--text-muted)' }}>DB 자사 자산:</span>
                     <span style={{ fontWeight: 600, color: '#059669' }}>{reconciliationReport.assetCountMatch.db} 대</span>
                   </div>
                   <div style={{ marginTop: '6px', fontSize: '12px', color: reconciliationReport.assetCountMatch.isMatch ? '#059669' : '#dc2626', fontWeight: 600 }}>
@@ -1598,14 +1598,14 @@ export const InitialDbUploader: React.FC = () => {
                 </div>
 
                 {/* 2. 8월 매출 총액 대사 */}
-                <div style={{ padding: '14px', borderRadius: '6px', border: '1px solid #e2e8f0', backgroundColor: '#f8fafc' }}>
-                  <div style={{ fontSize: '13px', fontWeight: 600, color: '#334155', whiteSpace: 'nowrap' }}>2. 8월 청구 총액 대사</div>
+                <div style={{ padding: '14px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-app)' }}>
+                  <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-main)', whiteSpace: 'nowrap' }}>2. 8월 청구 총액 대사</div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '6px', fontSize: '13px' }}>
-                    <span style={{ color: '#64748b' }}>엑셀 청구합계:</span>
+                    <span style={{ color: 'var(--text-muted)' }}>엑셀 청구합계:</span>
                     <span style={{ fontWeight: 600 }}>₩{reconciliationReport.currentBillingTotalMatch.excel.toLocaleString()}</span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
-                    <span style={{ color: '#64748b' }}>DB 청구서 총합:</span>
+                    <span style={{ color: 'var(--text-muted)' }}>DB 청구서 총합:</span>
                     <span style={{ fontWeight: 600, color: '#059669' }}>₩{reconciliationReport.currentBillingTotalMatch.db.toLocaleString()}</span>
                   </div>
                   <div style={{ marginTop: '6px', fontSize: '12px', color: reconciliationReport.currentBillingTotalMatch.isMatch ? '#059669' : '#dc2626', fontWeight: 600 }}>
@@ -1614,14 +1614,14 @@ export const InitialDbUploader: React.FC = () => {
                 </div>
 
                 {/* 3. 청구 상세 라인 대사 */}
-                <div style={{ padding: '14px', borderRadius: '6px', border: '1px solid #e2e8f0', backgroundColor: '#f8fafc' }}>
-                  <div style={{ fontSize: '13px', fontWeight: 600, color: '#334155', whiteSpace: 'nowrap' }}>3. 청구 상세 라인 대사</div>
+                <div style={{ padding: '14px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-app)' }}>
+                  <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-main)', whiteSpace: 'nowrap' }}>3. 청구 상세 라인 대사</div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '6px', fontSize: '13px' }}>
-                    <span style={{ color: '#64748b' }}>청구 헤더 합:</span>
+                    <span style={{ color: 'var(--text-muted)' }}>청구 헤더 합:</span>
                     <span style={{ fontWeight: 600 }}>₩{reconciliationReport.currentDetailsTotalMatch.headerSum.toLocaleString()}</span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
-                    <span style={{ color: '#64748b' }}>청구 상세 합:</span>
+                    <span style={{ color: 'var(--text-muted)' }}>청구 상세 합:</span>
                     <span style={{ fontWeight: 600, color: '#059669' }}>₩{reconciliationReport.currentDetailsTotalMatch.detailSum.toLocaleString()}</span>
                   </div>
                   <div style={{ marginTop: '6px', fontSize: '12px', color: reconciliationReport.currentDetailsTotalMatch.isMatch ? '#059669' : '#dc2626', fontWeight: 600 }}>
@@ -1630,14 +1630,14 @@ export const InitialDbUploader: React.FC = () => {
                 </div>
 
                 {/* 4. 라이프사이클 배차 매핑 대사 */}
-                <div style={{ padding: '14px', borderRadius: '6px', border: '1px solid #e2e8f0', backgroundColor: '#f8fafc' }}>
-                  <div style={{ fontSize: '13px', fontWeight: 600, color: '#334155', whiteSpace: 'nowrap' }}>4. 라이프사이클 배차 매핑</div>
+                <div style={{ padding: '14px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-app)' }}>
+                  <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-main)', whiteSpace: 'nowrap' }}>4. 라이프사이클 배차 매핑</div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '6px', fontSize: '13px' }}>
-                    <span style={{ color: '#64748b' }}>총 계약 건수:</span>
+                    <span style={{ color: 'var(--text-muted)' }}>총 계약 건수:</span>
                     <span style={{ fontWeight: 600 }}>{reconciliationReport.lifecycleChainMatch.contracts} 건</span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
-                    <span style={{ color: '#64748b' }}>출고 배차 건수:</span>
+                    <span style={{ color: 'var(--text-muted)' }}>출고 배차 건수:</span>
                     <span style={{ fontWeight: 600, color: '#059669' }}>{reconciliationReport.lifecycleChainMatch.outboundDeliveries} 건</span>
                   </div>
                   <div style={{ marginTop: '6px', fontSize: '12px', color: '#059669', fontWeight: 600 }}>
@@ -1652,12 +1652,12 @@ export const InitialDbUploader: React.FC = () => {
 
       {/* ── TAB 2: DB 전체 백업 ── */}
       {activeTab === 'BACKUP' && (
-        <div style={{ backgroundColor: '#ffffff', borderRadius: '8px', border: '1px solid #e2e8f0', padding: '24px' }}>
+        <div style={{ backgroundColor: 'var(--bg-card)', borderRadius: '8px', border: '1px solid var(--border-color)', padding: '24px' }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '20px' }}>
-            <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 700, color: '#1e293b', whiteSpace: 'nowrap' }}>
+            <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 700, color: 'var(--text-main)', whiteSpace: 'nowrap' }}>
               전체 데이터베이스 백업 내보내기
             </h3>
-            <span style={{ fontSize: '13px', color: '#64748b' }}>
+            <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
               현재 Supabase / 로컬 DB에 적재된 모든 20개 테이블의 데이터를 JSON 파일로 다운로드하여 영구 보관합니다.
             </span>
           </div>
@@ -1672,7 +1672,7 @@ export const InitialDbUploader: React.FC = () => {
                 gap: '8px',
                 padding: '12px 24px',
                 backgroundColor: '#2563eb',
-                color: '#ffffff',
+                color: 'var(--bg-card)',
                 border: 'none',
                 borderRadius: '6px',
                 fontWeight: 600,
@@ -1696,7 +1696,7 @@ export const InitialDbUploader: React.FC = () => {
 
       {/* ── TAB 3: DB 초기화 ── */}
       {activeTab === 'RESET' && (
-        <div style={{ backgroundColor: '#ffffff', borderRadius: '8px', border: '1px solid #fecaca', padding: '24px' }}>
+        <div style={{ backgroundColor: 'var(--bg-card)', borderRadius: '8px', border: '1px solid #fecaca', padding: '24px' }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '20px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#dc2626' }}>
               <AlertTriangle size={20} />
@@ -1704,7 +1704,7 @@ export const InitialDbUploader: React.FC = () => {
                 데이터베이스 전체 초기화
               </h3>
             </div>
-            <span style={{ fontSize: '13px', color: '#64748b' }}>
+            <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
               기존에 입력된 자산, 고객사, 현장, 계약, 청구서, 수납 등 모든 비즈니스 데이터를 영구 삭제합니다.
             </span>
           </div>
@@ -1728,7 +1728,7 @@ export const InitialDbUploader: React.FC = () => {
                 gap: '8px',
                 padding: '10px 20px',
                 backgroundColor: isResetting ? '#94a3b8' : '#dc2626',
-                color: '#ffffff',
+                color: 'var(--bg-card)',
                 border: 'none',
                 borderRadius: '6px',
                 fontWeight: 600,
@@ -1757,17 +1757,17 @@ export const InitialDbUploader: React.FC = () => {
       {/* 밴드 AS 단건 상세 원문 모달 */}
       {selectedAsRecord && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: '20px' }}>
-          <div style={{ backgroundColor: '#ffffff', borderRadius: '8px', maxWidth: '600px', width: '100%', padding: '24px', boxShadow: '0 10px 25px rgba(0,0,0,0.2)', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #e2e8f0', paddingBottom: '12px' }}>
+          <div style={{ backgroundColor: 'var(--bg-card)', borderRadius: '8px', maxWidth: '600px', width: '100%', padding: '24px', boxShadow: '0 10px 25px rgba(0,0,0,0.2)', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-color)', paddingBottom: '12px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <Wrench size={18} color="#16a34a" />
-                <span style={{ fontSize: '16px', fontWeight: 700, color: '#1e293b' }}>
+                <span style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text-main)' }}>
                   AS 게시글 상세 내역 [No. {selectedAsRecord.idx}]
                 </span>
               </div>
               <button
                 onClick={() => setSelectedAsRecord(null)}
-                style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#64748b' }}
+                style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--text-muted)' }}
               >
                 <X size={20} />
               </button>
@@ -1775,47 +1775,47 @@ export const InitialDbUploader: React.FC = () => {
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', fontSize: '13px' }}>
               <div>
-                <span style={{ color: '#64748b' }}>접수일자:</span> <strong>{selectedAsRecord.date}</strong>
+                <span style={{ color: 'var(--text-muted)' }}>접수일자:</span> <strong>{selectedAsRecord.date}</strong>
               </div>
               <div>
-                <span style={{ color: '#64748b' }}>작성자/정비사:</span> <strong>{selectedAsRecord.author}</strong> ({selectedAsRecord.mechanicName})
+                <span style={{ color: 'var(--text-muted)' }}>작성자/정비사:</span> <strong>{selectedAsRecord.author}</strong> ({selectedAsRecord.mechanicName})
               </div>
               <div>
-                <span style={{ color: '#64748b' }}>고객사:</span> <strong>{selectedAsRecord.matchedCustomerName || selectedAsRecord.customer}</strong>
+                <span style={{ color: 'var(--text-muted)' }}>고객사:</span> <strong>{selectedAsRecord.matchedCustomerName || selectedAsRecord.customer}</strong>
               </div>
               <div>
-                <span style={{ color: '#64748b' }}>현장명:</span> <strong>{selectedAsRecord.matchedSiteName || selectedAsRecord.site}</strong>
+                <span style={{ color: 'var(--text-muted)' }}>현장명:</span> <strong>{selectedAsRecord.matchedSiteName || selectedAsRecord.site}</strong>
               </div>
               <div>
-                <span style={{ color: '#64748b' }}>관리번호:</span> <strong style={{ color: '#2563eb' }}>{selectedAsRecord.matchedAssetNo || selectedAsRecord.assetNo}</strong> ({selectedAsRecord.matchedModelName})
+                <span style={{ color: 'var(--text-muted)' }}>관리번호:</span> <strong style={{ color: '#2563eb' }}>{selectedAsRecord.matchedAssetNo || selectedAsRecord.assetNo}</strong> ({selectedAsRecord.matchedModelName})
                 {selectedAsRecord.isSingleAssetGuessed && (
                   <span className="badge badge-warning" style={{ fontSize: '10px', marginLeft: '6px' }}>1대계약 자동추정</span>
                 )}
               </div>
               <div>
-                <span style={{ color: '#64748b' }}>소속 계약:</span> <strong>{selectedAsRecord.matchedContractNo || '미매핑(일반이력)'}</strong>
+                <span style={{ color: 'var(--text-muted)' }}>소속 계약:</span> <strong>{selectedAsRecord.matchedContractNo || '미매핑(일반이력)'}</strong>
               </div>
               <div style={{ gridColumn: 'span 2' }}>
-                <span style={{ color: '#64748b' }}>장비 세부위치:</span> {selectedAsRecord.location || '미상'}
+                <span style={{ color: 'var(--text-muted)' }}>장비 세부위치:</span> {selectedAsRecord.location || '미상'}
               </div>
               <div style={{ gridColumn: 'span 2' }}>
-                <span style={{ color: '#64748b' }}>현장 접수자 연락처:</span> {selectedAsRecord.contact || '미상'}
+                <span style={{ color: 'var(--text-muted)' }}>현장 접수자 연락처:</span> {selectedAsRecord.contact || '미상'}
               </div>
               <div style={{ gridColumn: 'span 2' }}>
-                <span style={{ color: '#64748b' }}>고장 내용:</span>
+                <span style={{ color: 'var(--text-muted)' }}>고장 내용:</span>
                 <div style={{ marginTop: '4px', padding: '8px 12px', backgroundColor: '#fef2f2', borderRadius: '4px', border: '1px solid #fecaca', color: '#991b1b', fontWeight: 600 }}>
                   {selectedAsRecord.issue}
                 </div>
               </div>
               <div style={{ gridColumn: 'span 2' }}>
-                <span style={{ color: '#64748b' }}>조치 내용:</span>
+                <span style={{ color: 'var(--text-muted)' }}>조치 내용:</span>
                 <div style={{ marginTop: '4px', padding: '8px 12px', backgroundColor: '#f0fdf4', borderRadius: '4px', border: '1px solid #bbf7d0', color: '#166534', fontWeight: 600 }}>
                   {selectedAsRecord.actionTaken}
                 </div>
               </div>
               <div style={{ gridColumn: 'span 2' }}>
-                <span style={{ color: '#64748b' }}>밴드 원문 텍스트:</span>
-                <div style={{ marginTop: '4px', padding: '10px', backgroundColor: '#f8fafc', borderRadius: '4px', border: '1px solid #e2e8f0', fontSize: '12px', color: '#334155', maxHeight: '120px', overflowY: 'auto', whiteSpace: 'pre-wrap' }}>
+                <span style={{ color: 'var(--text-muted)' }}>밴드 원문 텍스트:</span>
+                <div style={{ marginTop: '4px', padding: '10px', backgroundColor: 'var(--bg-app)', borderRadius: '4px', border: '1px solid var(--border-color)', fontSize: '12px', color: 'var(--text-main)', maxHeight: '120px', overflowY: 'auto', whiteSpace: 'pre-wrap' }}>
                   {selectedAsRecord.raw}
                 </div>
               </div>
@@ -1824,7 +1824,7 @@ export const InitialDbUploader: React.FC = () => {
             <div style={{ display: 'flex', justifyContent: 'flex-end', borderTop: '1px solid #e2e8f0', paddingTop: '12px' }}>
               <button
                 onClick={() => setSelectedAsRecord(null)}
-                style={{ padding: '8px 18px', backgroundColor: '#1e293b', color: '#ffffff', border: 'none', borderRadius: '6px', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}
+                style={{ padding: '8px 18px', backgroundColor: '#1e293b', color: 'var(--bg-card)', border: 'none', borderRadius: '6px', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}
               >
                 닫기
               </button>

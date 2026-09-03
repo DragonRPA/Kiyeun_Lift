@@ -18,24 +18,19 @@ import {
 import type { BillingInvoice } from '../services/db';
 
 // ── 상태 배지 ──
-const STATUS_META: Record<string, { label: string; color: string; bg: string }> = {
-  DRAFT:     { label: '초안',    color: '#64748b', bg: '#f1f5f9' },
-  ISSUED:    { label: '발행',    color: '#2563eb', bg: '#eff6ff' },
-  PARTIAL:   { label: '부분수납', color: '#d97706', bg: '#fffbeb' },
-  PAID:      { label: '수납완료', color: '#16a34a', bg: '#f0fdf4' },
-  CANCELLED: { label: '취소',    color: '#dc2626', bg: '#fef2f2' },
-};
-
 function StatusBadge({ status }: { status: string }) {
-  const m = STATUS_META[status] || STATUS_META.DRAFT;
+  const badgeClass = status === 'PAID' ? 'badge-success'
+    : status === 'PARTIAL' ? 'badge-warning'
+    : status === 'ISSUED' ? 'badge-primary'
+    : status === 'CANCELLED' ? 'badge-danger'
+    : 'badge-secondary';
+  const label = status === 'PAID' ? '수납완료'
+    : status === 'PARTIAL' ? '부분수납'
+    : status === 'ISSUED' ? '발행'
+    : status === 'CANCELLED' ? '취소'
+    : '초안';
   return (
-    <span style={{
-      display: 'inline-block', padding: '2px 10px', borderRadius: '999px',
-      fontSize: '12px', fontWeight: 600, whiteSpace: 'nowrap',
-      color: m.color, background: m.bg
-    }}>
-      {m.label}
-    </span>
+    <span className={`badge ${badgeClass}`}>{label}</span>
   );
 }
 
@@ -130,22 +125,22 @@ export const BillingInvoiceTab: React.FC = () => {
 
         {/* 귀속월 */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-          <span style={{ fontSize: '12px', color: '#64748b', fontWeight: 600, whiteSpace: 'nowrap' }}>귀속월</span>
+          <span style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: 600, whiteSpace: 'nowrap' }}>귀속월</span>
           <input
             type="month"
             value={selectedYm}
             onChange={e => setSelectedYm(e.target.value)}
-            style={{ padding: '7px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '13px' }}
+            style={{ padding: '7px 10px', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '13px', backgroundColor: 'var(--bg-card)', color: 'var(--text-main)' }}
           />
         </div>
 
         {/* 통합 단위 */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-          <span style={{ fontSize: '12px', color: '#64748b', fontWeight: 600, whiteSpace: 'nowrap' }}>통합 단위</span>
+          <span style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: 600, whiteSpace: 'nowrap' }}>통합 단위</span>
           <select
             value={groupBy}
             onChange={e => setGroupBy(e.target.value as InvoiceGroupBy)}
-            style={{ padding: '7px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '13px' }}
+            style={{ padding: '7px 10px', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '13px', backgroundColor: 'var(--bg-card)', color: 'var(--text-main)' }}
           >
             <option value="CUSTOMER">고객 단위</option>
             <option value="SITE">현장 단위</option>
@@ -159,7 +154,7 @@ export const BillingInvoiceTab: React.FC = () => {
           style={{
             display: 'flex', alignItems: 'center', gap: '6px',
             padding: '8px 16px', borderRadius: '6px', border: 'none',
-            background: isGenerating ? '#94a3b8' : '#2563eb', color: '#fff',
+            background: isGenerating ? 'var(--text-muted)' : 'var(--primary)', color: 'var(--text-on-primary)',
             fontWeight: 600, fontSize: '13px', cursor: 'pointer', whiteSpace: 'nowrap'
           }}
         >
@@ -172,8 +167,8 @@ export const BillingInvoiceTab: React.FC = () => {
           disabled={isConsolidating}
           style={{
             display: 'flex', alignItems: 'center', gap: '6px',
-            padding: '8px 16px', borderRadius: '6px', border: '1px solid #cbd5e1',
-            background: '#fff', color: '#374151',
+            padding: '8px 16px', borderRadius: '6px', border: '1px solid var(--border-color)',
+            background: 'var(--bg-card)', color: 'var(--text-main)',
             fontWeight: 600, fontSize: '13px', cursor: 'pointer', whiteSpace: 'nowrap'
           }}
         >
@@ -186,8 +181,8 @@ export const BillingInvoiceTab: React.FC = () => {
           disabled={isLoading}
           style={{
             display: 'flex', alignItems: 'center', gap: '6px',
-            padding: '8px 14px', borderRadius: '6px', border: '1px solid #e2e8f0',
-            background: '#f8fafc', color: '#64748b', cursor: 'pointer'
+            padding: '8px 14px', borderRadius: '6px', border: '1px solid var(--border-color)',
+            background: 'var(--bg-app)', color: 'var(--text-muted)', cursor: 'pointer'
           }}
         >
           <RefreshCw size={13} />
@@ -195,47 +190,47 @@ export const BillingInvoiceTab: React.FC = () => {
       </div>
 
       {/* ── 청구서통합 목록 테이블 ── */}
-      <div style={{ overflowX: 'auto', border: '1px solid #e2e8f0', borderRadius: '8px' }}>
+      <div style={{ overflowX: 'auto', border: '1px solid var(--border-color)', borderRadius: '8px', backgroundColor: 'var(--bg-card)' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
           <thead>
-            <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+            <tr style={{ background: 'var(--bg-app)', borderBottom: '1px solid var(--border-color)' }}>
               {['', '통합청구번호', '고객사', '귀속월', '상태', '합계금액', '납기일', '액션'].map(h => (
                 <th key={h} style={{
                   padding: '10px 12px', textAlign: 'left', fontWeight: 600,
-                  color: '#374151', whiteSpace: 'nowrap'
+                  color: 'var(--text-secondary)', whiteSpace: 'nowrap'
                 }}>{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {isLoading ? (
-              <tr><td colSpan={8} style={{ padding: '32px', textAlign: 'center', color: '#94a3b8' }}>로딩 중...</td></tr>
+              <tr><td colSpan={8} style={{ padding: '32px', textAlign: 'center', color: 'var(--text-muted)' }}>로딩 중...</td></tr>
             ) : invoices.length === 0 ? (
-              <tr><td colSpan={8} style={{ padding: '32px', textAlign: 'center', color: '#94a3b8' }}>청구서통합 내역 없음</td></tr>
+              <tr><td colSpan={8} style={{ padding: '32px', textAlign: 'center', color: 'var(--text-muted)' }}>청구서통합 내역 없음</td></tr>
             ) : invoices.map(inv => (
               <React.Fragment key={inv.id}>
                 {/* 청구서통합 행 */}
-                <tr style={{ borderBottom: '1px solid #f1f5f9' }}>
+                <tr style={{ borderBottom: '1px solid var(--border-color)' }}>
                   <td style={{ padding: '8px 12px' }}>
                     <button
                       onClick={() => handleExpand(inv.id)}
-                      style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#64748b' }}
+                      style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}
                     >
                       {expandedId === inv.id ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                     </button>
                   </td>
-                  <td style={{ padding: '8px 12px', fontWeight: 600, color: '#1e293b', whiteSpace: 'nowrap' }}>
+                  <td style={{ padding: '8px 12px', fontWeight: 600, color: 'var(--text-main)', whiteSpace: 'nowrap' }}>
                     {inv.id}
                   </td>
-                  <td style={{ padding: '8px 12px', whiteSpace: 'nowrap' }}>
+                  <td style={{ padding: '8px 12px', whiteSpace: 'nowrap', color: 'var(--text-main)' }}>
                     {customerName(inv.customerId)}
                   </td>
-                  <td style={{ padding: '8px 12px', whiteSpace: 'nowrap' }}>{inv.billingYm}</td>
+                  <td style={{ padding: '8px 12px', whiteSpace: 'nowrap', color: 'var(--text-main)' }}>{inv.billingYm}</td>
                   <td style={{ padding: '8px 12px' }}><StatusBadge status={inv.status} /></td>
-                  <td style={{ padding: '8px 12px', whiteSpace: 'nowrap', textAlign: 'right', fontWeight: 600 }}>
+                  <td style={{ padding: '8px 12px', whiteSpace: 'nowrap', textAlign: 'right', fontWeight: 600, color: 'var(--text-main)' }}>
                     {fmtAmt(inv.totalAmount)}
                   </td>
-                  <td style={{ padding: '8px 12px', whiteSpace: 'nowrap', color: '#64748b' }}>
+                  <td style={{ padding: '8px 12px', whiteSpace: 'nowrap', color: 'var(--text-muted)' }}>
                     {inv.dueDate ?? '-'}
                   </td>
                   <td style={{ padding: '8px 12px' }}>
@@ -246,7 +241,7 @@ export const BillingInvoiceTab: React.FC = () => {
                           title="청구서통합 취소"
                           style={{
                             padding: '4px 8px', borderRadius: '4px', border: '1px solid #fca5a5',
-                            background: '#fff', color: '#dc2626', cursor: 'pointer', fontSize: '12px',
+                            background: 'var(--bg-card)', color: '#dc2626', cursor: 'pointer', fontSize: '12px',
                             whiteSpace: 'nowrap'
                           }}
                         >
@@ -259,40 +254,40 @@ export const BillingInvoiceTab: React.FC = () => {
 
                 {/* 확장 상세 행 */}
                 {expandedId === inv.id && (
-                  <tr style={{ background: '#f8fafc' }}>
+                  <tr style={{ background: 'var(--bg-app)' }}>
                     <td colSpan={8} style={{ padding: '0 12px 12px 32px' }}>
                       {!detail ? (
-                        <div style={{ padding: '16px', color: '#94a3b8' }}>로딩 중...</div>
+                        <div style={{ padding: '16px', color: 'var(--text-muted)' }}>로딩 중...</div>
                       ) : (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                          <div style={{ fontSize: '12px', fontWeight: 600, color: '#64748b', padding: '8px 0 4px' }}>
+                          <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)', padding: '8px 0 4px' }}>
                             포함 청구 {detail.billings?.length ?? 0}건
                           </div>
                           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
                             <thead>
-                              <tr style={{ background: '#e2e8f0' }}>
+                              <tr style={{ background: 'var(--bg-secondary)' }}>
                                 {['청구ID', '계약ID', '청구일', '청구액', '수납액', '상태'].map(h => (
-                                  <th key={h} style={{ padding: '6px 10px', textAlign: 'left', whiteSpace: 'nowrap' }}>{h}</th>
+                                  <th key={h} style={{ padding: '6px 10px', textAlign: 'left', whiteSpace: 'nowrap', color: 'var(--text-secondary)' }}>{h}</th>
                                 ))}
                               </tr>
                             </thead>
                             <tbody>
                               {(detail.billings || []).map(b => (
-                                <tr key={b.id} style={{ borderBottom: '1px solid #e2e8f0' }}>
-                                  <td style={{ padding: '5px 10px', whiteSpace: 'nowrap', color: '#2563eb' }}>{b.id}</td>
-                                  <td style={{ padding: '5px 10px', whiteSpace: 'nowrap', color: '#64748b' }}>{b.contractId ?? '-'}</td>
-                                  <td style={{ padding: '5px 10px', whiteSpace: 'nowrap' }}>{b.billingDate}</td>
-                                  <td style={{ padding: '5px 10px', whiteSpace: 'nowrap', textAlign: 'right' }}>{fmtAmt(b.totalAmount)}</td>
-                                  <td style={{ padding: '5px 10px', whiteSpace: 'nowrap', textAlign: 'right' }}>{fmtAmt(b.paidAmount)}</td>
+                                <tr key={b.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                                  <td style={{ padding: '5px 10px', whiteSpace: 'nowrap', color: 'var(--primary)' }}>{b.id}</td>
+                                  <td style={{ padding: '5px 10px', whiteSpace: 'nowrap', color: 'var(--text-muted)' }}>{b.contractId ?? '-'}</td>
+                                  <td style={{ padding: '5px 10px', whiteSpace: 'nowrap', color: 'var(--text-main)' }}>{b.billingDate}</td>
+                                  <td style={{ padding: '5px 10px', whiteSpace: 'nowrap', textAlign: 'right', color: 'var(--text-main)' }}>{fmtAmt(b.totalAmount)}</td>
+                                  <td style={{ padding: '5px 10px', whiteSpace: 'nowrap', textAlign: 'right', color: 'var(--text-main)' }}>{fmtAmt(b.paidAmount)}</td>
                                   <td style={{ padding: '5px 10px' }}><StatusBadge status={b.status} /></td>
                                 </tr>
                               ))}
                             </tbody>
                             <tfoot>
-                              <tr style={{ background: '#f1f5f9', fontWeight: 700 }}>
-                                <td colSpan={3} style={{ padding: '6px 10px' }}>합계</td>
-                                <td style={{ padding: '6px 10px', textAlign: 'right' }}>{fmtAmt(inv.totalAmount)}</td>
-                                <td style={{ padding: '6px 10px', textAlign: 'right' }}>
+                              <tr style={{ background: 'var(--bg-secondary)', fontWeight: 700 }}>
+                                <td colSpan={3} style={{ padding: '6px 10px', color: 'var(--text-main)' }}>합계</td>
+                                <td style={{ padding: '6px 10px', textAlign: 'right', color: 'var(--text-main)' }}>{fmtAmt(inv.totalAmount)}</td>
+                                <td style={{ padding: '6px 10px', textAlign: 'right', color: 'var(--text-main)' }}>
                                   {fmtAmt((detail.billings || []).reduce((s, b) => s + (b.paidAmount || 0), 0))}
                                 </td>
                                 <td />

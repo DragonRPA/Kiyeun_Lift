@@ -573,17 +573,17 @@ export const FieldAsManagement: React.FC = () => {
     <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px', height: '100%', boxSizing: 'border-box' }}>
       
       {/* ─── 상단 메인 헤더 & 탭 네비게이션 ─── */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #e2e8f0', paddingBottom: '12px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-color)', paddingBottom: '12px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <Wrench size={22} color="#2563eb" />
-            <h1 style={{ fontSize: '20px', fontWeight: 700, color: '#1e293b', margin: 0, whiteSpace: 'nowrap' }}>
+            <h1 style={{ fontSize: '20px', fontWeight: 700, color: 'var(--text-main)', margin: 0, whiteSpace: 'nowrap' }}>
               현장 AS 관리
             </h1>
           </div>
 
           {/* 3대 메인 탭 전환 버튼 */}
-          <div style={{ display: 'flex', backgroundColor: '#f1f5f9', padding: '3px', borderRadius: '8px', gap: '4px' }}>
+          <div style={{ display: 'flex', backgroundColor: 'var(--bg-secondary)', padding: '3px', borderRadius: '8px', gap: '4px' }}>
             <button
               onClick={() => setMainTab('STUDIO')}
               style={{
@@ -668,12 +668,12 @@ export const FieldAsManagement: React.FC = () => {
               alignItems: 'center',
               gap: '6px',
               padding: '7px 12px',
-              backgroundColor: '#f8fafc',
-              border: '1px solid #cbd5e1',
+              backgroundColor: 'var(--bg-app)',
+              border: '1px solid var(--border-color)',
               borderRadius: '6px',
               fontSize: '13px',
               fontWeight: 600,
-              color: '#475569',
+              color: 'var(--text-secondary)',
               cursor: 'pointer',
               whiteSpace: 'nowrap'
             }}
@@ -694,7 +694,7 @@ export const FieldAsManagement: React.FC = () => {
               borderRadius: '6px',
               fontSize: '13px',
               fontWeight: 700,
-              color: '#ffffff',
+              color: 'var(--bg-card)',
               cursor: 'pointer',
               whiteSpace: 'nowrap'
             }}
@@ -798,8 +798,8 @@ export const FieldAsManagement: React.FC = () => {
           </div>
 
           {/* 기본 내비 앱 설정 및 상태 뱃지 */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', backgroundColor: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
-            <span style={{ fontSize: '12px', color: '#64748b' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', backgroundColor: 'var(--bg-app)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+            <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
               🚗 내 기본 내비: <strong style={{ color: '#2563eb' }}>{preferredNavApp === 'TMAP' ? 'T맵' : (preferredNavApp === 'KAKAO' ? '카카오내비' : (preferredNavApp === 'NAVER' ? '네이버지도' : '매번 선택'))}</strong>
             </span>
             <button
@@ -812,11 +812,11 @@ export const FieldAsManagement: React.FC = () => {
               style={{
                 padding: '3px 8px',
                 borderRadius: '4px',
-                border: '1px solid #cbd5e1',
-                backgroundColor: '#ffffff',
+                border: '1px solid var(--border-color)',
+                backgroundColor: 'var(--bg-card)',
                 fontSize: '11px',
                 fontWeight: 700,
-                color: '#334155',
+                color: 'var(--text-main)',
                 cursor: 'pointer'
               }}
             >
@@ -839,7 +839,7 @@ export const FieldAsManagement: React.FC = () => {
                     width: '100%',
                     padding: '10px 12px 10px 38px',
                     borderRadius: '8px',
-                    border: '1px solid #cbd5e1',
+                    border: '1px solid var(--border-color)',
                     fontSize: '14px',
                     boxSizing: 'border-box'
                   }}
@@ -848,9 +848,9 @@ export const FieldAsManagement: React.FC = () => {
 
               {/* 티켓 카드 리스트 */}
               {studioFilteredTickets.filter(t => t.status !== 'COMPLETED').length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '60px 20px', backgroundColor: '#ffffff', borderRadius: '10px', border: '1px solid #e2e8f0', color: '#64748b' }}>
+                <div style={{ textAlign: 'center', padding: '60px 20px', backgroundColor: 'var(--bg-card)', borderRadius: '10px', border: '1px solid var(--border-color)', color: 'var(--text-muted)' }}>
                   <CheckCircle2 size={42} color="#16a34a" style={{ margin: '0 auto 10px auto' }} />
-                  <p style={{ margin: 0, fontSize: '15px', fontWeight: 700, color: '#1e293b' }}>대기 중인 출동 건이 없습니다!</p>
+                  <p style={{ margin: 0, fontSize: '15px', fontWeight: 700, color: 'var(--text-main)' }}>대기 중인 출동 건이 없습니다!</p>
                   <p style={{ margin: '4px 0 0 0', fontSize: '12px' }}>모든 현장 AS가 완료 처리되었습니다.</p>
                 </div>
               ) : (
@@ -862,7 +862,7 @@ export const FieldAsManagement: React.FC = () => {
                     <div
                       key={t.id}
                       style={{
-                        backgroundColor: '#ffffff',
+                        backgroundColor: 'var(--bg-card)',
                         border: isUrgent ? '2px solid #ef4444' : '1px solid #cbd5e1',
                         borderRadius: '12px',
                         padding: '14px',
@@ -887,29 +887,29 @@ export const FieldAsManagement: React.FC = () => {
                           </span>
                           <span style={{ fontSize: '11px', color: '#94a3b8' }}>{t.ticketNo}</span>
                         </div>
-                        <span style={{ fontSize: '12px', color: '#64748b' }}>{t.requestDate}</span>
+                        <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{t.requestDate}</span>
                       </div>
 
                       {/* 현장명 & 장비번호 */}
                       <div>
-                        <div style={{ fontSize: '17px', fontWeight: 800, color: '#0f172a', lineHeight: '1.3' }}>
+                        <div style={{ fontSize: '17px', fontWeight: 800, color: 'var(--text-main)', lineHeight: '1.3' }}>
                           {t.siteName}
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px', fontSize: '13px' }}>
                           <span style={{ fontWeight: 700, color: '#2563eb', backgroundColor: '#eff6ff', padding: '2px 8px', borderRadius: '4px' }}>
                             장비: {t.assetNo || '현장확인'}
                           </span>
-                          <span style={{ color: '#475569' }}>🏢 {t.customerName}</span>
+                          <span style={{ color: 'var(--text-secondary)' }}>🏢 {t.customerName}</span>
                         </div>
                         {t.locationDetail && (
-                          <div style={{ fontSize: '12px', color: '#64748b', marginTop: '3px' }}>
+                          <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '3px' }}>
                             📍 위치: {t.locationDetail}
                           </div>
                         )}
                       </div>
 
                       {/* 고장 증상 박스 */}
-                      <div style={{ backgroundColor: '#f8fafc', padding: '10px 12px', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '13px', color: '#1e293b', lineHeight: '1.4' }}>
+                      <div style={{ backgroundColor: 'var(--bg-app)', padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--border-color)', fontSize: '13px', color: 'var(--text-main)', lineHeight: '1.4' }}>
                         <strong style={{ color: '#dc2626' }}>[{t.issueCategory}]</strong> {t.issueDescription}
                       </div>
 
@@ -963,8 +963,8 @@ export const FieldAsManagement: React.FC = () => {
 
                       {/* 최근 타임라인 활동 이력 (있을 경우 표출) */}
                       {t.timelineEvents && t.timelineEvents.length > 0 && (
-                        <div style={{ backgroundColor: '#f1f5f9', padding: '6px 10px', borderRadius: '6px', fontSize: '11.5px', color: '#475569', display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                          <span style={{ fontWeight: 700, color: '#334155' }}>최근 진행 이력:</span>
+                        <div style={{ backgroundColor: 'var(--bg-secondary)', padding: '6px 10px', borderRadius: '6px', fontSize: '11.5px', color: 'var(--text-secondary)', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                          <span style={{ fontWeight: 700, color: 'var(--text-main)' }}>최근 진행 이력:</span>
                           {t.timelineEvents.slice(-2).map(ev => (
                             <div key={ev.id} style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                               • {ev.label}
@@ -987,7 +987,7 @@ export const FieldAsManagement: React.FC = () => {
                           justifyContent: 'center',
                           gap: '8px',
                           backgroundColor: '#2563eb',
-                          color: '#ffffff',
+                          color: 'var(--bg-card)',
                           border: 'none',
                           borderRadius: '8px',
                           fontSize: '15px',
@@ -1022,7 +1022,7 @@ export const FieldAsManagement: React.FC = () => {
                     padding: '8px 12px',
                     borderRadius: '6px',
                     backgroundColor: '#16a34a',
-                    color: '#ffffff',
+                    color: 'var(--bg-card)',
                     border: 'none',
                     fontSize: '12px',
                     fontWeight: 700,
@@ -1041,18 +1041,18 @@ export const FieldAsManagement: React.FC = () => {
                     <div
                       key={c.id}
                       style={{
-                        backgroundColor: '#ffffff',
+                        backgroundColor: 'var(--bg-card)',
                         padding: '12px 14px',
                         borderRadius: '8px',
-                        border: '1px solid #e2e8f0',
+                        border: '1px solid var(--border-color)',
                         display: 'flex',
                         justifyContent: 'space-between',
                         alignItems: 'center'
                       }}
                     >
                       <div>
-                        <div style={{ fontSize: '14px', fontWeight: 700, color: '#1e293b' }}>{c.modelName}</div>
-                        <div style={{ fontSize: '11px', color: '#64748b' }}>단가: ₩{c.unitPrice.toLocaleString()}</div>
+                        <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-main)' }}>{c.modelName}</div>
+                        <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>단가: ₩{c.unitPrice.toLocaleString()}</div>
                       </div>
                       <div style={{ textAlign: 'right' }}>
                         <span style={{
@@ -1077,19 +1077,19 @@ export const FieldAsManagement: React.FC = () => {
           {mobileActiveTab === 'HISTORY' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
               {fieldAsTickets.filter(t => t.status === 'COMPLETED').slice(0, 30).map(t => (
-                <div key={t.id} style={{ backgroundColor: '#ffffff', padding: '12px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#64748b', marginBottom: '4px' }}>
+                <div key={t.id} style={{ backgroundColor: 'var(--bg-card)', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: 'var(--text-muted)', marginBottom: '4px' }}>
                     <span>{t.ticketNo}</span>
                     <span>{t.completedDate || t.visitDate}</span>
                   </div>
-                  <div style={{ fontSize: '15px', fontWeight: 700, color: '#1e293b' }}>
+                  <div style={{ fontSize: '15px', fontWeight: 700, color: 'var(--text-main)' }}>
                     {t.siteName} ({t.assetNo})
                   </div>
                   <div style={{ fontSize: '12px', color: '#16a34a', fontWeight: 600, marginTop: '4px' }}>
                     ✓ {t.actionTaken}
                   </div>
                   {t.partsUsed && t.partsUsed.length > 0 && (
-                    <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px' }}>
+                    <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
                       사용한 부품: {t.partsUsed.map(p => `${p.modelName} × ${p.quantity}`).join(', ')}
                     </div>
                   )}
@@ -1108,10 +1108,10 @@ export const FieldAsManagement: React.FC = () => {
         <div style={{ display: 'grid', gridTemplateColumns: '420px 1fr', gap: '16px', height: 'calc(100vh - 170px)', minHeight: '600px' }}>
           
           {/* ◀ 좌측: AS 접수 피드 목록 (카드형 피드) */}
-          <div style={{ display: 'flex', flexDirection: 'column', backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '10px', overflow: 'hidden' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '10px', overflow: 'hidden' }}>
             
             {/* 좌측 상단: 상태 필터 & 검색바 */}
-            <div style={{ padding: '12px', borderBottom: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column', gap: '8px', backgroundColor: '#f8fafc' }}>
+            <div style={{ padding: '12px', borderBottom: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '8px', backgroundColor: 'var(--bg-app)' }}>
               <div style={{ display: 'flex', gap: '4px', overflowX: 'auto', paddingBottom: '2px' }}>
                 {[
                   { id: 'UNRESOLVED', label: '미처리 전체' },
@@ -1130,7 +1130,7 @@ export const FieldAsManagement: React.FC = () => {
                       fontSize: '12px',
                       fontWeight: studioStatusFilter === tab.id ? 700 : 500,
                       border: studioStatusFilter === tab.id ? '1px solid #2563eb' : '1px solid #cbd5e1',
-                      backgroundColor: studioStatusFilter === tab.id ? '#2563eb' : '#ffffff',
+                      backgroundColor: studioStatusFilter === tab.id ? '#2563eb' : 'var(--bg-card)',
                       color: studioStatusFilter === tab.id ? '#ffffff' : '#475569',
                       cursor: 'pointer',
                       whiteSpace: 'nowrap',
@@ -1153,7 +1153,7 @@ export const FieldAsManagement: React.FC = () => {
                     width: '100%',
                     padding: '7px 10px 7px 32px',
                     borderRadius: '6px',
-                    border: '1px solid #cbd5e1',
+                    border: '1px solid var(--border-color)',
                     fontSize: '13px',
                     boxSizing: 'border-box'
                   }}
@@ -1183,7 +1183,7 @@ export const FieldAsManagement: React.FC = () => {
                         padding: '12px',
                         borderRadius: '8px',
                         border: isSelected ? '2px solid #2563eb' : '1px solid #e2e8f0',
-                        backgroundColor: isSelected ? '#eff6ff' : '#ffffff',
+                        backgroundColor: isSelected ? '#eff6ff' : 'var(--bg-card)',
                         cursor: 'pointer',
                         transition: 'all 0.15s ease',
                         boxShadow: isSelected ? '0 2px 4px rgba(37,99,235,0.1)' : '0 1px 2px rgba(0,0,0,0.03)'
@@ -1210,7 +1210,7 @@ export const FieldAsManagement: React.FC = () => {
                             </span>
                           )}
 
-                          <span style={{ padding: '2px 5px', borderRadius: '4px', fontSize: '10px', backgroundColor: '#f1f5f9', color: '#64748b' }}>
+                          <span style={{ padding: '2px 5px', borderRadius: '4px', fontSize: '10px', backgroundColor: 'var(--bg-secondary)', color: 'var(--text-muted)' }}>
                             {t.source === 'SALES_REQUEST' ? '영업' : (t.source === 'BAND_IMPORT' ? '밴드' : '직접')}
                           </span>
                         </div>
@@ -1222,7 +1222,7 @@ export const FieldAsManagement: React.FC = () => {
 
                       {/* 현장 및 장비번호 */}
                       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: '4px' }}>
-                        <span style={{ fontSize: '14px', fontWeight: 700, color: '#1e293b' }}>
+                        <span style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-main)' }}>
                           {t.siteName}
                         </span>
                         <span 
@@ -1246,18 +1246,18 @@ export const FieldAsManagement: React.FC = () => {
                       </div>
 
                       {/* 업체명 및 위치 */}
-                      <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                         <span>🏢 {t.customerName}</span>
                         {t.locationDetail && <span>📍 {t.locationDetail}</span>}
                       </div>
 
                       {/* 고장 내용 요약 */}
-                      <p style={{ margin: '0 0 8px 0', fontSize: '12px', color: '#334155', lineHeight: '1.4', backgroundColor: '#f8fafc', padding: '6px 8px', borderRadius: '4px' }}>
+                      <p style={{ margin: '0 0 8px 0', fontSize: '12px', color: 'var(--text-main)', lineHeight: '1.4', backgroundColor: 'var(--bg-app)', padding: '6px 8px', borderRadius: '4px' }}>
                         <strong>[{t.issueCategory}]</strong> {t.issueDescription}
                       </p>
 
                       {/* 카드 하단: 기사 배정 및 조치 결과 요약 */}
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11px', color: '#64748b' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11px', color: 'var(--text-muted)' }}>
                         <span>
                           👨‍🔧 {users.find(u => u.id === t.assignedMechanicId)?.name || '기사 미배정'}
                         </span>
@@ -1275,23 +1275,23 @@ export const FieldAsManagement: React.FC = () => {
           </div>
 
           {/* ▶ 우측: 1-Click 현장 조치 & 검수 스튜디오 패널 */}
-          <div style={{ display: 'flex', flexDirection: 'column', backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '10px', overflowY: 'auto', padding: '20px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '10px', overflowY: 'auto', padding: '20px' }}>
             {selectedTicket ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
                 
                 {/* 1. 건 상세 정보 헤더 카드 */}
-                <div style={{ backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '16px' }}>
+                <div style={{ backgroundColor: 'var(--bg-app)', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '16px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
                     <div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                        <span style={{ fontSize: '12px', fontWeight: 700, color: '#64748b', backgroundColor: '#e2e8f0', padding: '2px 6px', borderRadius: '4px' }}>
+                        <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-muted)', backgroundColor: '#e2e8f0', padding: '2px 6px', borderRadius: '4px' }}>
                           {selectedTicket.ticketNo}
                         </span>
-                        <h2 style={{ fontSize: '18px', fontWeight: 700, color: '#1e293b', margin: 0 }}>
+                        <h2 style={{ fontSize: '18px', fontWeight: 700, color: 'var(--text-main)', margin: 0 }}>
                           {selectedTicket.siteName}
                         </h2>
                       </div>
-                      <p style={{ margin: 0, fontSize: '13px', color: '#64748b' }}>
+                      <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-muted)' }}>
                         업체명: <strong>{selectedTicket.customerName}</strong> {selectedTicket.locationDetail ? `| 위치: ${selectedTicket.locationDetail}` : ''}
                       </p>
                     </div>
@@ -1306,7 +1306,7 @@ export const FieldAsManagement: React.FC = () => {
                           borderRadius: '6px',
                           fontSize: '13px',
                           fontWeight: 700,
-                          color: '#ffffff',
+                          color: 'var(--bg-card)',
                           cursor: 'pointer',
                           display: 'flex',
                           alignItems: 'center',
@@ -1323,11 +1323,11 @@ export const FieldAsManagement: React.FC = () => {
                   </div>
 
                   {/* 고장 원문 박스 */}
-                  <div style={{ backgroundColor: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '6px', padding: '12px' }}>
-                    <div style={{ fontSize: '12px', fontWeight: 700, color: '#475569', marginBottom: '4px' }}>
+                  <div style={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '6px', padding: '12px' }}>
+                    <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '4px' }}>
                       🚨 접수된 고장 증상:
                     </div>
-                    <div style={{ fontSize: '14px', color: '#1e293b', lineHeight: '1.5', whiteSpace: 'pre-wrap' }}>
+                    <div style={{ fontSize: '14px', color: 'var(--text-main)', lineHeight: '1.5', whiteSpace: 'pre-wrap' }}>
                       {selectedTicket.issueDescription}
                     </div>
                     {selectedTicket.errorCode && (
@@ -1341,7 +1341,7 @@ export const FieldAsManagement: React.FC = () => {
                 {/* 2. 출동 기사 배정 및 방문일정 설정 */}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                    <label style={{ fontSize: '13px', fontWeight: 600, color: '#475569', whiteSpace: 'nowrap' }}>
+                    <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
                       담당 AS 기사 지정
                     </label>
                     <select
@@ -1350,9 +1350,9 @@ export const FieldAsManagement: React.FC = () => {
                       style={{
                         padding: '9px 12px',
                         borderRadius: '6px',
-                        border: '1px solid #cbd5e1',
+                        border: '1px solid var(--border-color)',
                         fontSize: '14px',
-                        backgroundColor: '#ffffff'
+                        backgroundColor: 'var(--bg-card)'
                       }}
                     >
                       <option value="">기사 선택</option>
@@ -1363,7 +1363,7 @@ export const FieldAsManagement: React.FC = () => {
                   </div>
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                    <label style={{ fontSize: '13px', fontWeight: 600, color: '#475569', whiteSpace: 'nowrap' }}>
+                    <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
                       현장 방문 일자
                     </label>
                     <input
@@ -1373,7 +1373,7 @@ export const FieldAsManagement: React.FC = () => {
                       style={{
                         padding: '8px 12px',
                         borderRadius: '6px',
-                        border: '1px solid #cbd5e1',
+                        border: '1px solid var(--border-color)',
                         fontSize: '14px'
                       }}
                     />
@@ -1383,7 +1383,7 @@ export const FieldAsManagement: React.FC = () => {
                 {/* 3. 현장 조치 내용 입력 (다빈도 빠른 태그 연동) */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <label style={{ fontSize: '13px', fontWeight: 700, color: '#334155', whiteSpace: 'nowrap' }}>
+                    <label style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-main)', whiteSpace: 'nowrap' }}>
                       현장 정비 및 조치 내용 <span style={{ color: '#ef4444' }}>*</span>
                     </label>
                   </div>
@@ -1400,11 +1400,11 @@ export const FieldAsManagement: React.FC = () => {
                         }}
                         style={{
                           padding: '4px 8px',
-                          backgroundColor: '#f1f5f9',
-                          border: '1px solid #cbd5e1',
+                          backgroundColor: 'var(--bg-secondary)',
+                          border: '1px solid var(--border-color)',
                           borderRadius: '4px',
                           fontSize: '11px',
-                          color: '#334155',
+                          color: 'var(--text-main)',
                           cursor: 'pointer',
                           whiteSpace: 'nowrap'
                         }}
@@ -1422,7 +1422,7 @@ export const FieldAsManagement: React.FC = () => {
                     style={{
                       padding: '10px 12px',
                       borderRadius: '6px',
-                      border: '1px solid #cbd5e1',
+                      border: '1px solid var(--border-color)',
                       fontSize: '14px',
                       lineHeight: '1.4'
                     }}
@@ -1430,8 +1430,8 @@ export const FieldAsManagement: React.FC = () => {
                 </div>
 
                 {/* 4. 처리 결과 판정 및 재방문 연계 설정 */}
-                <div style={{ backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '16px' }}>
-                  <label style={{ fontSize: '13px', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '10px' }}>
+                <div style={{ backgroundColor: 'var(--bg-app)', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '16px' }}>
+                  <label style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-main)', display: 'block', marginBottom: '10px' }}>
                     처리 결과 판정
                   </label>
 
@@ -1443,7 +1443,7 @@ export const FieldAsManagement: React.FC = () => {
                         padding: '10px',
                         borderRadius: '6px',
                         border: actionResolutionType === 'REPAIR_DONE' ? '2px solid #16a34a' : '1px solid #cbd5e1',
-                        backgroundColor: actionResolutionType === 'REPAIR_DONE' ? '#dcfce7' : '#ffffff',
+                        backgroundColor: actionResolutionType === 'REPAIR_DONE' ? '#dcfce7' : 'var(--bg-card)',
                         fontWeight: actionResolutionType === 'REPAIR_DONE' ? 700 : 500,
                         color: actionResolutionType === 'REPAIR_DONE' ? '#166534' : '#475569',
                         cursor: 'pointer'
@@ -1459,7 +1459,7 @@ export const FieldAsManagement: React.FC = () => {
                         padding: '10px',
                         borderRadius: '6px',
                         border: actionResolutionType === 'REVISIT_NEEDED' ? '2px solid #d97706' : '1px solid #cbd5e1',
-                        backgroundColor: actionResolutionType === 'REVISIT_NEEDED' ? '#fef3c7' : '#ffffff',
+                        backgroundColor: actionResolutionType === 'REVISIT_NEEDED' ? '#fef3c7' : 'var(--bg-card)',
                         fontWeight: actionResolutionType === 'REVISIT_NEEDED' ? 700 : 500,
                         color: actionResolutionType === 'REVISIT_NEEDED' ? '#92400e' : '#475569',
                         cursor: 'pointer'
@@ -1475,7 +1475,7 @@ export const FieldAsManagement: React.FC = () => {
                         padding: '10px',
                         borderRadius: '6px',
                         border: actionResolutionType === 'GUIDED_END' ? '2px solid #6366f1' : '1px solid #cbd5e1',
-                        backgroundColor: actionResolutionType === 'GUIDED_END' ? '#e0e7ff' : '#ffffff',
+                        backgroundColor: actionResolutionType === 'GUIDED_END' ? '#e0e7ff' : 'var(--bg-card)',
                         fontWeight: actionResolutionType === 'GUIDED_END' ? 700 : 500,
                         color: actionResolutionType === 'GUIDED_END' ? '#3730a3' : '#475569',
                         cursor: 'pointer'
@@ -1530,13 +1530,13 @@ export const FieldAsManagement: React.FC = () => {
                 </div>
 
                 {/* 5. 🔩 소모품 차량 재고 연동 선택기 */}
-                <div style={{ border: '1px solid #e2e8f0', borderRadius: '8px', padding: '16px' }}>
+                <div style={{ border: '1px solid var(--border-color)', borderRadius: '8px', padding: '16px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-                    <label style={{ fontSize: '14px', fontWeight: 700, color: '#334155', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <label style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '6px' }}>
                       <Truck size={16} color="#2563eb" />
                       사용 소모품 등록 (담당 기사 차량 재고에서 자동 차감)
                     </label>
-                    <span style={{ fontSize: '12px', color: '#64748b' }}>
+                    <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
                       차량 재고 잔여량 실시간 확인
                     </span>
                   </div>
@@ -1549,9 +1549,9 @@ export const FieldAsManagement: React.FC = () => {
                       style={{
                         padding: '8px 10px',
                         borderRadius: '6px',
-                        border: '1px solid #cbd5e1',
+                        border: '1px solid var(--border-color)',
                         fontSize: '13px',
-                        backgroundColor: '#ffffff'
+                        backgroundColor: 'var(--bg-card)'
                       }}
                     >
                       <option value="">소모품 품목 선택</option>
@@ -1570,7 +1570,7 @@ export const FieldAsManagement: React.FC = () => {
                       min={1}
                       value={tempPartQty}
                       onChange={(e) => setTempPartQty(Math.max(1, parseInt(e.target.value) || 1))}
-                      style={{ padding: '8px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '13px' }}
+                      style={{ padding: '8px 10px', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '13px' }}
                     />
 
                     <button
@@ -1583,7 +1583,7 @@ export const FieldAsManagement: React.FC = () => {
                         borderRadius: '6px',
                         fontSize: '13px',
                         fontWeight: 700,
-                        color: '#ffffff',
+                        color: 'var(--bg-card)',
                         cursor: 'pointer'
                       }}
                     >
@@ -1601,17 +1601,17 @@ export const FieldAsManagement: React.FC = () => {
                             display: 'flex',
                             justifyContent: 'space-between',
                             alignItems: 'center',
-                            backgroundColor: '#f8fafc',
+                            backgroundColor: 'var(--bg-app)',
                             padding: '8px 12px',
                             borderRadius: '6px',
-                            border: '1px solid #e2e8f0'
+                            border: '1px solid var(--border-color)'
                           }}
                         >
-                          <span style={{ fontSize: '13px', fontWeight: 600, color: '#1e293b' }}>
+                          <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-main)' }}>
                             {p.modelName} × {p.quantity}개
                           </span>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                            <span style={{ fontSize: '12px', color: '#64748b' }}>
+                            <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
                               {(p.unitPrice * p.quantity).toLocaleString()}원
                             </span>
                             <button
@@ -1633,8 +1633,8 @@ export const FieldAsManagement: React.FC = () => {
                 </div>
 
                 {/* 6. 📦 현장 수거(고장) 부품 관리 */}
-                <div style={{ border: '1px solid #e2e8f0', borderRadius: '8px', padding: '16px' }}>
-                  <label style={{ fontSize: '14px', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '10px' }}>
+                <div style={{ border: '1px solid var(--border-color)', borderRadius: '8px', padding: '16px' }}>
+                  <label style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-main)', display: 'block', marginBottom: '10px' }}>
                     현장 수거(고장) 부품 이력 관리
                   </label>
 
@@ -1644,19 +1644,19 @@ export const FieldAsManagement: React.FC = () => {
                       value={tempCollectedName}
                       onChange={(e) => setTempCollectedName(e.target.value)}
                       placeholder="수거 부품명 (예: 파손 키박스, 불량 충전기)"
-                      style={{ padding: '8px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '13px' }}
+                      style={{ padding: '8px 10px', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '13px' }}
                     />
                     <input
                       type="number"
                       min={1}
                       value={tempCollectedQty}
                       onChange={(e) => setTempCollectedQty(Math.max(1, parseInt(e.target.value) || 1))}
-                      style={{ padding: '8px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '13px' }}
+                      style={{ padding: '8px 10px', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '13px' }}
                     />
                     <select
                       value={tempCollectedStatus}
                       onChange={(e) => setTempCollectedStatus(e.target.value as any)}
-                      style={{ padding: '8px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '13px', backgroundColor: '#fff' }}
+                      style={{ padding: '8px 10px', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '13px', backgroundColor: '#fff' }}
                     >
                       <option value="IN_VEHICLE">차량 보관중</option>
                       <option value="YARD_RETURNED">주기장 반납</option>
@@ -1665,7 +1665,7 @@ export const FieldAsManagement: React.FC = () => {
                     <button
                       type="button"
                       onClick={handleAddCollectedPart}
-                      style={{ padding: '8px', backgroundColor: '#475569', border: 'none', borderRadius: '6px', fontSize: '13px', fontWeight: 700, color: '#ffffff', cursor: 'pointer' }}
+                      style={{ padding: '8px', backgroundColor: '#475569', border: 'none', borderRadius: '6px', fontSize: '13px', fontWeight: 700, color: 'var(--bg-card)', cursor: 'pointer' }}
                     >
                       등록
                     </button>
@@ -1674,8 +1674,8 @@ export const FieldAsManagement: React.FC = () => {
                   {actionCollectedParts.length > 0 && (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                       {actionCollectedParts.map((cp, idx) => (
-                        <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#f8fafc', padding: '6px 12px', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
-                          <span style={{ fontSize: '13px', color: '#334155' }}>
+                        <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'var(--bg-app)', padding: '6px 12px', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
+                          <span style={{ fontSize: '13px', color: 'var(--text-main)' }}>
                             {cp.partName} × {cp.quantity}개 ({cp.status === 'IN_VEHICLE' ? '차량보관중' : (cp.status === 'YARD_RETURNED' ? '주기장반납' : '폐기')})
                           </span>
                           <button type="button" onClick={() => handleRemoveCollectedPart(idx)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer' }}>
@@ -1690,7 +1690,7 @@ export const FieldAsManagement: React.FC = () => {
                 {/* 7. 유상/무상 구분 및 청구금액 */}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                    <label style={{ fontSize: '13px', fontWeight: 600, color: '#475569', whiteSpace: 'nowrap' }}>
+                    <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
                       유상 / 무상 구분
                     </label>
                     <select
@@ -1701,7 +1701,7 @@ export const FieldAsManagement: React.FC = () => {
                         borderRadius: '6px',
                         border: actionBillableType === 'BILLABLE' ? '2px solid #ea580c' : '1px solid #cbd5e1',
                         fontSize: '14px',
-                        backgroundColor: actionBillableType === 'BILLABLE' ? '#fff7ed' : '#ffffff',
+                        backgroundColor: actionBillableType === 'BILLABLE' ? '#fff7ed' : 'var(--bg-card)',
                         fontWeight: 700,
                         color: actionBillableType === 'BILLABLE' ? '#c2410c' : '#334155'
                       }}
@@ -1712,7 +1712,7 @@ export const FieldAsManagement: React.FC = () => {
                   </div>
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                    <label style={{ fontSize: '13px', fontWeight: 600, color: '#475569', whiteSpace: 'nowrap' }}>
+                    <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
                       유상 수리비 청구예정액 (원)
                     </label>
                     <input
@@ -1723,9 +1723,9 @@ export const FieldAsManagement: React.FC = () => {
                       style={{
                         padding: '8px 12px',
                         borderRadius: '6px',
-                        border: '1px solid #cbd5e1',
+                        border: '1px solid var(--border-color)',
                         fontSize: '14px',
-                        backgroundColor: actionBillableType === 'FREE' ? '#f1f5f9' : '#ffffff',
+                        backgroundColor: actionBillableType === 'FREE' ? '#f1f5f9' : 'var(--bg-card)',
                         fontWeight: 700
                       }}
                     />
@@ -1734,7 +1734,7 @@ export const FieldAsManagement: React.FC = () => {
 
                 {/* 8. 고객 확인자 성명 및 서명 (선택) */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <label style={{ fontSize: '13px', fontWeight: 600, color: '#475569', whiteSpace: 'nowrap' }}>
+                  <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
                     현장 고객 확인자 성명 / 직급 (선택)
                   </label>
                   <input
@@ -1742,7 +1742,7 @@ export const FieldAsManagement: React.FC = () => {
                     value={actionConfirmName}
                     onChange={(e) => setActionConfirmName(e.target.value)}
                     placeholder="예: 홍길동 소장, 김반장"
-                    style={{ padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '14px' }}
+                    style={{ padding: '8px 12px', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '14px' }}
                   />
                 </div>
 
@@ -1753,12 +1753,12 @@ export const FieldAsManagement: React.FC = () => {
                     onClick={() => updateFieldAsTicketStatus(selectedTicket.id, 'IN_PROGRESS')}
                     style={{
                       padding: '12px 20px',
-                      backgroundColor: '#f8fafc',
-                      border: '1px solid #cbd5e1',
+                      backgroundColor: 'var(--bg-app)',
+                      border: '1px solid var(--border-color)',
                       borderRadius: '8px',
                       fontSize: '14px',
                       fontWeight: 600,
-                      color: '#475569',
+                      color: 'var(--text-secondary)',
                       cursor: 'pointer'
                     }}
                   >
@@ -1778,7 +1778,7 @@ export const FieldAsManagement: React.FC = () => {
                       borderRadius: '8px',
                       fontSize: '15px',
                       fontWeight: 700,
-                      color: '#ffffff',
+                      color: 'var(--bg-card)',
                       cursor: 'pointer',
                       boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
                     }}
@@ -1791,7 +1791,7 @@ export const FieldAsManagement: React.FC = () => {
             ) : (
               <div style={{ textAlign: 'center', padding: '120px 20px', color: '#94a3b8' }}>
                 <Wrench size={48} style={{ margin: '0 auto 12px auto', opacity: 0.4 }} />
-                <h3 style={{ fontSize: '16px', fontWeight: 600, color: '#64748b', margin: 0 }}>
+                <h3 style={{ fontSize: '16px', fontWeight: 600, color: 'var(--text-muted)', margin: 0 }}>
                   좌측에서 조치할 AS 접수 건을 선택해 주세요.
                 </h3>
               </div>
@@ -1807,20 +1807,20 @@ export const FieldAsManagement: React.FC = () => {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', height: 'calc(100vh - 170px)' }}>
           
           {/* 상단 검색 & 필터 바 */}
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', backgroundColor: '#ffffff', padding: '14px', borderRadius: '8px', border: '1px solid #e2e8f0', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', backgroundColor: 'var(--bg-card)', padding: '14px', borderRadius: '8px', border: '1px solid var(--border-color)', alignItems: 'center', justifyContent: 'space-between' }}>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', alignItems: 'center' }}>
               <input
                 type="text"
                 value={ledgerSearch}
                 onChange={(e) => setLedgerSearch(e.target.value)}
                 placeholder="통합 검색 (현장, 장비, 고장, 기사)..."
-                style={{ padding: '7px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '13px', width: '220px' }}
+                style={{ padding: '7px 12px', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '13px', width: '220px' }}
               />
 
               <select
                 value={ledgerStatus}
                 onChange={(e) => setLedgerStatus(e.target.value)}
-                style={{ padding: '7px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '13px', backgroundColor: '#fff' }}
+                style={{ padding: '7px 10px', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '13px', backgroundColor: '#fff' }}
               >
                 <option value="ALL">전체 상태</option>
                 <option value="REQUESTED">접수대기</option>
@@ -1834,7 +1834,7 @@ export const FieldAsManagement: React.FC = () => {
               <select
                 value={ledgerCategory}
                 onChange={(e) => setLedgerCategory(e.target.value)}
-                style={{ padding: '7px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '13px', backgroundColor: '#fff' }}
+                style={{ padding: '7px 10px', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '13px', backgroundColor: '#fff' }}
               >
                 <option value="ALL">전체 고장분류</option>
                 {CATEGORIES.filter(c => c !== 'ALL').map(c => (
@@ -1845,7 +1845,7 @@ export const FieldAsManagement: React.FC = () => {
               <select
                 value={ledgerMechanic}
                 onChange={(e) => setLedgerMechanic(e.target.value)}
-                style={{ padding: '7px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '13px', backgroundColor: '#fff' }}
+                style={{ padding: '7px 10px', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '13px', backgroundColor: '#fff' }}
               >
                 <option value="ALL">전체 담당기사</option>
                 {mechanics.map(m => (
@@ -1856,7 +1856,7 @@ export const FieldAsManagement: React.FC = () => {
               <select
                 value={ledgerBillable}
                 onChange={(e) => setLedgerBillable(e.target.value)}
-                style={{ padding: '7px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '13px', backgroundColor: '#fff' }}
+                style={{ padding: '7px 10px', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '13px', backgroundColor: '#fff' }}
               >
                 <option value="ALL">유/무상 전체</option>
                 <option value="FREE">무상 AS</option>
@@ -1865,7 +1865,7 @@ export const FieldAsManagement: React.FC = () => {
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <span style={{ fontSize: '13px', fontWeight: 600, color: '#475569' }}>
+              <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)' }}>
                 조회 건수: <strong>{ledgerFilteredTickets.length.toLocaleString()}</strong>건
               </span>
               <button
@@ -1875,12 +1875,12 @@ export const FieldAsManagement: React.FC = () => {
                   alignItems: 'center',
                   gap: '6px',
                   padding: '7px 14px',
-                  backgroundColor: '#ffffff',
-                  border: '1px solid #cbd5e1',
+                  backgroundColor: 'var(--bg-card)',
+                  border: '1px solid var(--border-color)',
                   borderRadius: '6px',
                   fontSize: '13px',
                   fontWeight: 600,
-                  color: '#334155',
+                  color: 'var(--text-main)',
                   cursor: 'pointer'
                 }}
               >
@@ -1891,25 +1891,25 @@ export const FieldAsManagement: React.FC = () => {
           </div>
 
           {/* 고밀도 슬림 테이블 (38~42px row height) */}
-          <div style={{ flex: 1, backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '8px', overflow: 'auto' }}>
+          <div style={{ flex: 1, backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '8px', overflow: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', whiteSpace: 'nowrap' }}>
-              <thead style={{ backgroundColor: '#f8fafc', position: 'sticky', top: 0, zIndex: 1, borderBottom: '2px solid #e2e8f0' }}>
+              <thead style={{ backgroundColor: 'var(--bg-app)', position: 'sticky', top: 0, zIndex: 1, borderBottom: '2px solid #e2e8f0' }}>
                 <tr>
-                  <th style={{ padding: '10px 12px', textAlign: 'center', width: '50px', color: '#475569' }}>상세</th>
-                  <th style={{ padding: '10px 12px', textAlign: 'left', color: '#475569' }}>접수번호</th>
-                  <th style={{ padding: '10px 12px', textAlign: 'left', color: '#475569' }}>접수일</th>
-                  <th style={{ padding: '10px 12px', textAlign: 'left', color: '#475569' }}>현장명</th>
-                  <th style={{ padding: '10px 12px', textAlign: 'left', color: '#475569' }}>업체명</th>
-                  <th style={{ padding: '10px 12px', textAlign: 'left', color: '#475569' }}>관리번호</th>
-                  <th style={{ padding: '10px 12px', textAlign: 'left', color: '#475569' }}>위치</th>
-                  <th style={{ padding: '10px 12px', textAlign: 'left', color: '#475569' }}>고장분류</th>
-                  <th style={{ padding: '10px 12px', textAlign: 'left', color: '#475569' }}>고장증상</th>
-                  <th style={{ padding: '10px 12px', textAlign: 'center', color: '#475569' }}>상태</th>
-                  <th style={{ padding: '10px 12px', textAlign: 'left', color: '#475569' }}>담당기사</th>
-                  <th style={{ padding: '10px 12px', textAlign: 'left', color: '#475569' }}>조치내용</th>
-                  <th style={{ padding: '10px 12px', textAlign: 'left', color: '#475569' }}>사용소모품</th>
-                  <th style={{ padding: '10px 12px', textAlign: 'center', color: '#475569' }}>유/무상</th>
-                  <th style={{ padding: '10px 12px', textAlign: 'right', color: '#475569' }}>청구액</th>
+                  <th style={{ padding: '10px 12px', textAlign: 'center', width: '50px', color: 'var(--text-secondary)' }}>상세</th>
+                  <th style={{ padding: '10px 12px', textAlign: 'left', color: 'var(--text-secondary)' }}>접수번호</th>
+                  <th style={{ padding: '10px 12px', textAlign: 'left', color: 'var(--text-secondary)' }}>접수일</th>
+                  <th style={{ padding: '10px 12px', textAlign: 'left', color: 'var(--text-secondary)' }}>현장명</th>
+                  <th style={{ padding: '10px 12px', textAlign: 'left', color: 'var(--text-secondary)' }}>업체명</th>
+                  <th style={{ padding: '10px 12px', textAlign: 'left', color: 'var(--text-secondary)' }}>관리번호</th>
+                  <th style={{ padding: '10px 12px', textAlign: 'left', color: 'var(--text-secondary)' }}>위치</th>
+                  <th style={{ padding: '10px 12px', textAlign: 'left', color: 'var(--text-secondary)' }}>고장분류</th>
+                  <th style={{ padding: '10px 12px', textAlign: 'left', color: 'var(--text-secondary)' }}>고장증상</th>
+                  <th style={{ padding: '10px 12px', textAlign: 'center', color: 'var(--text-secondary)' }}>상태</th>
+                  <th style={{ padding: '10px 12px', textAlign: 'left', color: 'var(--text-secondary)' }}>담당기사</th>
+                  <th style={{ padding: '10px 12px', textAlign: 'left', color: 'var(--text-secondary)' }}>조치내용</th>
+                  <th style={{ padding: '10px 12px', textAlign: 'left', color: 'var(--text-secondary)' }}>사용소모품</th>
+                  <th style={{ padding: '10px 12px', textAlign: 'center', color: 'var(--text-secondary)' }}>유/무상</th>
+                  <th style={{ padding: '10px 12px', textAlign: 'right', color: 'var(--text-secondary)' }}>청구액</th>
                 </tr>
               </thead>
               <tbody>
@@ -1939,14 +1939,14 @@ export const FieldAsManagement: React.FC = () => {
                         이력 ➔
                       </button>
                     </td>
-                    <td style={{ padding: '6px 12px', fontWeight: 600, color: '#334155' }}>{t.ticketNo}</td>
-                    <td style={{ padding: '6px 12px', color: '#64748b' }}>{t.requestDate}</td>
-                    <td style={{ padding: '6px 12px', fontWeight: 600, color: '#1e293b' }}>{t.siteName}</td>
-                    <td style={{ padding: '6px 12px', color: '#475569' }}>{t.customerName}</td>
+                    <td style={{ padding: '6px 12px', fontWeight: 600, color: 'var(--text-main)' }}>{t.ticketNo}</td>
+                    <td style={{ padding: '6px 12px', color: 'var(--text-muted)' }}>{t.requestDate}</td>
+                    <td style={{ padding: '6px 12px', fontWeight: 600, color: 'var(--text-main)' }}>{t.siteName}</td>
+                    <td style={{ padding: '6px 12px', color: 'var(--text-secondary)' }}>{t.customerName}</td>
                     <td style={{ padding: '6px 12px', fontWeight: 700, color: '#2563eb' }}>{t.assetNo}</td>
-                    <td style={{ padding: '6px 12px', color: '#64748b' }}>{t.locationDetail || '-'}</td>
-                    <td style={{ padding: '6px 12px', color: '#334155' }}>{t.issueCategory}</td>
-                    <td style={{ padding: '6px 12px', color: '#334155', maxWidth: '240px', overflow: 'hidden', textOverflow: 'ellipsis' }} title={t.issueDescription}>
+                    <td style={{ padding: '6px 12px', color: 'var(--text-muted)' }}>{t.locationDetail || '-'}</td>
+                    <td style={{ padding: '6px 12px', color: 'var(--text-main)' }}>{t.issueCategory}</td>
+                    <td style={{ padding: '6px 12px', color: 'var(--text-main)', maxWidth: '240px', overflow: 'hidden', textOverflow: 'ellipsis' }} title={t.issueDescription}>
                       {t.issueDescription}
                     </td>
                     <td style={{ padding: '6px 12px', textAlign: 'center' }}>
@@ -1961,13 +1961,13 @@ export const FieldAsManagement: React.FC = () => {
                         {t.status}
                       </span>
                     </td>
-                    <td style={{ padding: '6px 12px', color: '#334155' }}>
+                    <td style={{ padding: '6px 12px', color: 'var(--text-main)' }}>
                       {users.find(u => u.id === t.assignedMechanicId)?.name || '-'}
                     </td>
                     <td style={{ padding: '6px 12px', color: '#16a34a', fontWeight: 500, maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis' }} title={t.actionTaken}>
                       {t.actionTaken || '-'}
                     </td>
-                    <td style={{ padding: '6px 12px', color: '#475569' }}>
+                    <td style={{ padding: '6px 12px', color: 'var(--text-secondary)' }}>
                       {(t.partsUsed || []).map(p => `${p.modelName} ${p.quantity}개`).join(', ') || '-'}
                     </td>
                     <td style={{ padding: '6px 12px', textAlign: 'center', color: t.billableType === 'BILLABLE' ? '#ea580c' : '#64748b', fontWeight: t.billableType === 'BILLABLE' ? 700 : 400 }}>
@@ -1991,7 +1991,7 @@ export const FieldAsManagement: React.FC = () => {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', overflowY: 'auto' }}>
           
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <h2 style={{ fontSize: '16px', fontWeight: 700, color: '#1e293b', margin: 0 }}>
+            <h2 style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text-main)', margin: 0 }}>
               🚚 AS 담당 기사별 차량 소모품 적재 현황
             </h2>
             <button
@@ -2006,7 +2006,7 @@ export const FieldAsManagement: React.FC = () => {
                 borderRadius: '6px',
                 fontSize: '13px',
                 fontWeight: 700,
-                color: '#ffffff',
+                color: 'var(--bg-card)',
                 cursor: 'pointer'
               }}
             >
@@ -2024,8 +2024,8 @@ export const FieldAsManagement: React.FC = () => {
                 <div
                   key={m.id}
                   style={{
-                    backgroundColor: '#ffffff',
-                    border: '1px solid #e2e8f0',
+                    backgroundColor: 'var(--bg-card)',
+                    border: '1px solid var(--border-color)',
                     borderRadius: '10px',
                     padding: '16px',
                     boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
@@ -2034,7 +2034,7 @@ export const FieldAsManagement: React.FC = () => {
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #f1f5f9', paddingBottom: '10px', marginBottom: '12px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                       <User size={18} color="#2563eb" />
-                      <span style={{ fontSize: '15px', fontWeight: 700, color: '#1e293b' }}>{m.name} 기사 차량</span>
+                      <span style={{ fontSize: '15px', fontWeight: 700, color: 'var(--text-main)' }}>{m.name} 기사 차량</span>
                     </div>
                     <span style={{ fontSize: '12px', fontWeight: 700, color: '#2563eb', backgroundColor: '#dbeafe', padding: '2px 8px', borderRadius: '12px' }}>
                       총 적재 {totalItemsCount}개
@@ -2057,12 +2057,12 @@ export const FieldAsManagement: React.FC = () => {
                               justifyContent: 'space-between',
                               alignItems: 'center',
                               padding: '8px 10px',
-                              backgroundColor: '#f8fafc',
+                              backgroundColor: 'var(--bg-app)',
                               borderRadius: '6px',
-                              border: '1px solid #e2e8f0'
+                              border: '1px solid var(--border-color)'
                             }}
                           >
-                            <span style={{ fontSize: '13px', fontWeight: 600, color: '#334155' }}>
+                            <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-main)' }}>
                               {item?.modelName || '품목명 없음'}
                             </span>
                             <span style={{ fontSize: '13px', fontWeight: 700, color: ms.stockQty <= 1 ? '#ea580c' : '#16a34a' }}>
@@ -2103,7 +2103,7 @@ export const FieldAsManagement: React.FC = () => {
         >
           <div
             style={{
-              backgroundColor: '#ffffff',
+              backgroundColor: 'var(--bg-card)',
               borderTopLeftRadius: '20px',
               borderTopRightRadius: '20px',
               maxHeight: '90vh',
@@ -2118,18 +2118,18 @@ export const FieldAsManagement: React.FC = () => {
             onClick={e => e.stopPropagation()}
           >
             {/* 바텀시트 헤더 */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '1px solid #e2e8f0', paddingBottom: '12px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '1px solid var(--border-color)', paddingBottom: '12px' }}>
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <span style={{ fontSize: '13px', fontWeight: 800, color: '#2563eb', backgroundColor: '#eff6ff', padding: '3px 8px', borderRadius: '4px' }}>
                     {selectedTicket.assetNo || '현장확인'}
                   </span>
-                  <span style={{ fontSize: '12px', color: '#64748b' }}>{selectedTicket.ticketNo}</span>
+                  <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{selectedTicket.ticketNo}</span>
                 </div>
-                <h3 style={{ margin: '4px 0 0 0', fontSize: '18px', fontWeight: 800, color: '#0f172a' }}>
+                <h3 style={{ margin: '4px 0 0 0', fontSize: '18px', fontWeight: 800, color: 'var(--text-main)' }}>
                   {selectedTicket.siteName}
                 </h3>
-                <div style={{ fontSize: '13px', color: '#64748b', marginTop: '2px' }}>
+                <div style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '2px' }}>
                   업체: <strong>{selectedTicket.customerName}</strong>
                 </div>
               </div>
@@ -2139,13 +2139,13 @@ export const FieldAsManagement: React.FC = () => {
                   width: '38px',
                   height: '38px',
                   borderRadius: '50%',
-                  backgroundColor: '#f1f5f9',
+                  backgroundColor: 'var(--bg-secondary)',
                   border: 'none',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   cursor: 'pointer',
-                  color: '#475569'
+                  color: 'var(--text-secondary)'
                 }}
               >
                 <X size={20} />
@@ -2160,11 +2160,11 @@ export const FieldAsManagement: React.FC = () => {
             {/* 1️⃣ 사용 부품 선택 (50px 대형 스텝퍼 카트) */}
             <div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                <label style={{ fontSize: '14px', fontWeight: 800, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <label style={{ fontSize: '14px', fontWeight: 800, color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <Truck size={16} color="#2563eb" />
                   1. 사용 부품 선택 (차량 재고 실시간 차감)
                 </label>
-                <span style={{ fontSize: '11px', color: '#64748b' }}>
+                <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
                   미사용 시 0개 유지
                 </span>
               </div>
@@ -2188,7 +2188,7 @@ export const FieldAsManagement: React.FC = () => {
                       }}
                     >
                       <div style={{ flex: 1, marginRight: '10px' }}>
-                        <div style={{ fontSize: '14px', fontWeight: 700, color: '#1e293b' }}>
+                        <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-main)' }}>
                           {c.modelName}
                         </div>
                         <div style={{ fontSize: '11px', color: stock > 0 ? '#16a34a' : '#dc2626', fontWeight: 600 }}>
@@ -2254,7 +2254,7 @@ export const FieldAsManagement: React.FC = () => {
 
             {/* 2️⃣ 빈출 조치 태그 (1초 원터치 탭) */}
             <div>
-              <label style={{ fontSize: '14px', fontWeight: 800, color: '#0f172a', display: 'block', marginBottom: '8px' }}>
+              <label style={{ fontSize: '14px', fontWeight: 800, color: 'var(--text-main)', display: 'block', marginBottom: '8px' }}>
                 2. 현장 조치 내용 (원터치 탭)
               </label>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '8px' }}>
@@ -2287,13 +2287,13 @@ export const FieldAsManagement: React.FC = () => {
                 onChange={e => setActionTakenText(e.target.value)}
                 placeholder="조치 내용을 직접 입력하거나 위의 태그를 탭하세요..."
                 rows={2}
-                style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '14px', boxSizing: 'border-box' }}
+                style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid var(--border-color)', fontSize: '14px', boxSizing: 'border-box' }}
               />
             </div>
 
             {/* 3️⃣ 처리 판정 버튼 (48px) */}
             <div>
-              <label style={{ fontSize: '14px', fontWeight: 800, color: '#0f172a', display: 'block', marginBottom: '8px' }}>
+              <label style={{ fontSize: '14px', fontWeight: 800, color: 'var(--text-main)', display: 'block', marginBottom: '8px' }}>
                 3. 처리 결과 판정
               </label>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '6px' }}>
@@ -2304,7 +2304,7 @@ export const FieldAsManagement: React.FC = () => {
                     height: '46px',
                     borderRadius: '8px',
                     border: actionResolutionType === 'REPAIR_DONE' ? '2px solid #16a34a' : '1px solid #cbd5e1',
-                    backgroundColor: actionResolutionType === 'REPAIR_DONE' ? '#dcfce7' : '#ffffff',
+                    backgroundColor: actionResolutionType === 'REPAIR_DONE' ? '#dcfce7' : 'var(--bg-card)',
                     color: actionResolutionType === 'REPAIR_DONE' ? '#166534' : '#475569',
                     fontSize: '13px',
                     fontWeight: 700,
@@ -2320,7 +2320,7 @@ export const FieldAsManagement: React.FC = () => {
                     height: '46px',
                     borderRadius: '8px',
                     border: actionResolutionType === 'REVISIT_NEEDED' ? '2px solid #d97706' : '1px solid #cbd5e1',
-                    backgroundColor: actionResolutionType === 'REVISIT_NEEDED' ? '#fef3c7' : '#ffffff',
+                    backgroundColor: actionResolutionType === 'REVISIT_NEEDED' ? '#fef3c7' : 'var(--bg-card)',
                     color: actionResolutionType === 'REVISIT_NEEDED' ? '#92400e' : '#475569',
                     fontSize: '13px',
                     fontWeight: 700,
@@ -2336,7 +2336,7 @@ export const FieldAsManagement: React.FC = () => {
                     height: '46px',
                     borderRadius: '8px',
                     border: actionResolutionType === 'GUIDED_END' ? '2px solid #6366f1' : '1px solid #cbd5e1',
-                    backgroundColor: actionResolutionType === 'GUIDED_END' ? '#e0e7ff' : '#ffffff',
+                    backgroundColor: actionResolutionType === 'GUIDED_END' ? '#e0e7ff' : 'var(--bg-card)',
                     color: actionResolutionType === 'GUIDED_END' ? '#3730a3' : '#475569',
                     fontSize: '13px',
                     fontWeight: 700,
@@ -2374,7 +2374,7 @@ export const FieldAsManagement: React.FC = () => {
 
             {/* 4️⃣ 즉시 사진 촬영 */}
             <div>
-              <label style={{ fontSize: '14px', fontWeight: 800, color: '#0f172a', display: 'block', marginBottom: '8px' }}>
+              <label style={{ fontSize: '14px', fontWeight: 800, color: 'var(--text-main)', display: 'block', marginBottom: '8px' }}>
                 4. 수리 완료 사진 (선택)
               </label>
               <label
@@ -2384,12 +2384,12 @@ export const FieldAsManagement: React.FC = () => {
                   alignItems: 'center',
                   justifyContent: 'center',
                   gap: '8px',
-                  backgroundColor: '#f8fafc',
+                  backgroundColor: 'var(--bg-app)',
                   border: '1px dashed #94a3b8',
                   borderRadius: '8px',
                   fontSize: '14px',
                   fontWeight: 700,
-                  color: '#334155',
+                  color: 'var(--text-main)',
                   cursor: 'pointer'
                 }}
               >
@@ -2428,7 +2428,7 @@ export const FieldAsManagement: React.FC = () => {
                 width: '100%',
                 height: '54px',
                 backgroundColor: '#16a34a',
-                color: '#ffffff',
+                color: 'var(--bg-card)',
                 border: 'none',
                 borderRadius: '10px',
                 fontSize: '16px',
@@ -2454,13 +2454,13 @@ export const FieldAsManagement: React.FC = () => {
       ────────────────────────────────────────────────────────────────────────── */}
       {showCreateModal && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 9999 }}>
-          <div style={{ backgroundColor: '#ffffff', borderRadius: '12px', width: '560px', maxHeight: '90vh', overflowY: 'auto', padding: '24px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.2)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', borderBottom: '1px solid #e2e8f0', paddingBottom: '10px' }}>
-              <h3 style={{ fontSize: '17px', fontWeight: 700, color: '#1e293b', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div style={{ backgroundColor: 'var(--bg-card)', borderRadius: '12px', width: '560px', maxHeight: '90vh', overflowY: 'auto', padding: '24px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.2)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', borderBottom: '1px solid var(--border-color)', paddingBottom: '10px' }}>
+              <h3 style={{ fontSize: '17px', fontWeight: 700, color: 'var(--text-main)', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <Wrench size={18} color="#2563eb" />
                 신규 현장 AS 접수 등록
               </h3>
-              <button onClick={() => setShowCreateModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b' }}>
+              <button onClick={() => setShowCreateModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}>
                 <X size={20} />
               </button>
             </div>
@@ -2468,58 +2468,58 @@ export const FieldAsManagement: React.FC = () => {
             <form onSubmit={handleCreateDirectTicket} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <label style={{ fontSize: '13px', fontWeight: 600, color: '#475569' }}>현장명 *</label>
+                  <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)' }}>현장명 *</label>
                   <input
                     type="text"
                     required
                     value={newSiteName}
                     onChange={(e) => setNewSiteName(e.target.value)}
                     placeholder="예: 용인 SK하이닉스 팹동"
-                    style={{ padding: '8px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '13px' }}
+                    style={{ padding: '8px 10px', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '13px' }}
                   />
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <label style={{ fontSize: '13px', fontWeight: 600, color: '#475569' }}>업체명 (고객사)</label>
+                  <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)' }}>업체명 (고객사)</label>
                   <input
                     type="text"
                     value={newCustomerName}
                     onChange={(e) => setNewCustomerName(e.target.value)}
                     placeholder="예: 세보, 화성"
-                    style={{ padding: '8px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '13px' }}
+                    style={{ padding: '8px 10px', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '13px' }}
                   />
                 </div>
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <label style={{ fontSize: '13px', fontWeight: 600, color: '#475569' }}>관리번호 (장비번호)</label>
+                  <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)' }}>관리번호 (장비번호)</label>
                   <input
                     type="text"
                     value={newAssetNo}
                     onChange={(e) => setNewAssetNo(e.target.value)}
                     placeholder="예: G10032, 전체장비"
-                    style={{ padding: '8px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '13px' }}
+                    style={{ padding: '8px 10px', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '13px' }}
                   />
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <label style={{ fontSize: '13px', fontWeight: 600, color: '#475569' }}>장비 세부 위치</label>
+                  <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)' }}>장비 세부 위치</label>
                   <input
                     type="text"
                     value={newLocationDetail}
                     onChange={(e) => setNewLocationDetail(e.target.value)}
                     placeholder="예: 8층 X27 Y17"
-                    style={{ padding: '8px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '13px' }}
+                    style={{ padding: '8px 10px', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '13px' }}
                   />
                 </div>
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <label style={{ fontSize: '13px', fontWeight: 600, color: '#475569' }}>고장 분류</label>
+                  <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)' }}>고장 분류</label>
                   <select
                     value={newCategory}
                     onChange={(e) => setNewCategory(e.target.value)}
-                    style={{ padding: '8px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '13px', backgroundColor: '#fff' }}
+                    style={{ padding: '8px 10px', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '13px', backgroundColor: '#fff' }}
                   >
                     {CATEGORIES.filter(c => c !== 'ALL').map(c => (
                       <option key={c} value={c}>{c}</option>
@@ -2527,46 +2527,46 @@ export const FieldAsManagement: React.FC = () => {
                   </select>
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <label style={{ fontSize: '13px', fontWeight: 600, color: '#475569' }}>에러코드 (선택)</label>
+                  <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)' }}>에러코드 (선택)</label>
                   <input
                     type="text"
                     value={newErrorCode}
                     onChange={(e) => setNewErrorCode(e.target.value)}
                     placeholder="예: LD, U038"
-                    style={{ padding: '8px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '13px' }}
+                    style={{ padding: '8px 10px', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '13px' }}
                   />
                 </div>
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <label style={{ fontSize: '13px', fontWeight: 600, color: '#475569' }}>고장 상세 내용 *</label>
+                <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)' }}>고장 상세 내용 *</label>
                 <textarea
                   rows={3}
                   required
                   value={newIssueDesc}
                   onChange={(e) => setNewIssueDesc(e.target.value)}
                   placeholder="고장 증상을 입력해 주세요."
-                  style={{ padding: '8px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '13px' }}
+                  style={{ padding: '8px 10px', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '13px' }}
                 />
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <label style={{ fontSize: '13px', fontWeight: 600, color: '#475569' }}>현장 접수자 연락처</label>
+                  <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)' }}>현장 접수자 연락처</label>
                   <input
                     type="text"
                     value={newReporterContact}
                     onChange={(e) => setNewReporterContact(e.target.value)}
                     placeholder="예: 010-1234-5678"
-                    style={{ padding: '8px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '13px' }}
+                    style={{ padding: '8px 10px', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '13px' }}
                   />
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <label style={{ fontSize: '13px', fontWeight: 600, color: '#475569' }}>담당 기사 배정</label>
+                  <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)' }}>담당 기사 배정</label>
                   <select
                     value={newAssignedMechanicId}
                     onChange={(e) => setNewAssignedMechanicId(e.target.value)}
-                    style={{ padding: '8px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '13px', backgroundColor: '#fff' }}
+                    style={{ padding: '8px 10px', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '13px', backgroundColor: '#fff' }}
                   >
                     <option value="">미배정 (추후 배정)</option>
                     {mechanics.map(m => (
@@ -2580,13 +2580,13 @@ export const FieldAsManagement: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setShowCreateModal(false)}
-                  style={{ padding: '8px 16px', backgroundColor: '#f1f5f9', border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '13px', fontWeight: 600, color: '#64748b', cursor: 'pointer' }}
+                  style={{ padding: '8px 16px', backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)', borderRadius: '6px', fontSize: '13px', fontWeight: 600, color: 'var(--text-muted)', cursor: 'pointer' }}
                 >
                   취소
                 </button>
                 <button
                   type="submit"
-                  style={{ padding: '8px 20px', backgroundColor: '#2563eb', border: 'none', borderRadius: '6px', fontSize: '13px', fontWeight: 700, color: '#ffffff', cursor: 'pointer' }}
+                  style={{ padding: '8px 20px', backgroundColor: '#2563eb', border: 'none', borderRadius: '6px', fontSize: '13px', fontWeight: 700, color: 'var(--bg-card)', cursor: 'pointer' }}
                 >
                   접수 등록
                 </button>
@@ -2601,18 +2601,18 @@ export const FieldAsManagement: React.FC = () => {
       ────────────────────────────────────────────────────────────────────────── */}
       {historyModalAssetNo && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 9999 }}>
-          <div style={{ backgroundColor: '#ffffff', borderRadius: '12px', width: '800px', maxHeight: '85vh', overflowY: 'auto', padding: '24px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.2)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', borderBottom: '1px solid #e2e8f0', paddingBottom: '10px' }}>
+          <div style={{ backgroundColor: 'var(--bg-card)', borderRadius: '12px', width: '800px', maxHeight: '85vh', overflowY: 'auto', padding: '24px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.2)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', borderBottom: '1px solid var(--border-color)', paddingBottom: '10px' }}>
               <div>
-                <h3 style={{ fontSize: '18px', fontWeight: 700, color: '#1e293b', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <h3 style={{ fontSize: '18px', fontWeight: 700, color: 'var(--text-main)', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <Layers size={20} color="#2563eb" />
                   장비번호 [{historyModalAssetNo}] AS 수리 이력 대장
                 </h3>
-                <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: '#64748b' }}>
+                <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: 'var(--text-muted)' }}>
                   해당 장비에 누적 기록된 총 <strong>{assetHistoryTickets.length}건</strong>의 AS 이력입니다.
                 </p>
               </div>
-              <button onClick={() => setHistoryModalAssetNo(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b' }}>
+              <button onClick={() => setHistoryModalAssetNo(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}>
                 <X size={22} />
               </button>
             </div>
@@ -2627,14 +2627,14 @@ export const FieldAsManagement: React.FC = () => {
                   <div
                     key={t.id}
                     style={{
-                      border: '1px solid #e2e8f0',
+                      border: '1px solid var(--border-color)',
                       borderRadius: '8px',
                       padding: '14px',
-                      backgroundColor: idx === 0 ? '#eff6ff' : '#ffffff'
+                      backgroundColor: idx === 0 ? '#eff6ff' : 'var(--bg-card)'
                     }}
                   >
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                      <span style={{ fontSize: '13px', fontWeight: 700, color: '#1e293b' }}>
+                      <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-main)' }}>
                         {t.requestDate} | {t.siteName} ({t.customerName})
                       </span>
                       <span style={{
@@ -2649,7 +2649,7 @@ export const FieldAsManagement: React.FC = () => {
                       </span>
                     </div>
 
-                    <div style={{ fontSize: '13px', color: '#334155', marginBottom: '6px' }}>
+                    <div style={{ fontSize: '13px', color: 'var(--text-main)', marginBottom: '6px' }}>
                       <strong>고장증상:</strong> {t.issueDescription}
                     </div>
 
@@ -2674,24 +2674,24 @@ export const FieldAsManagement: React.FC = () => {
       ────────────────────────────────────────────────────────────────────────── */}
       {showTransferModal && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 9999 }}>
-          <div style={{ backgroundColor: '#ffffff', borderRadius: '12px', width: '480px', padding: '24px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.2)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', borderBottom: '1px solid #e2e8f0', paddingBottom: '10px' }}>
-              <h3 style={{ fontSize: '17px', fontWeight: 700, color: '#1e293b', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div style={{ backgroundColor: 'var(--bg-card)', borderRadius: '12px', width: '480px', padding: '24px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.2)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', borderBottom: '1px solid var(--border-color)', paddingBottom: '10px' }}>
+              <h3 style={{ fontSize: '17px', fontWeight: 700, color: 'var(--text-main)', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <Truck size={18} color="#2563eb" />
                 주기장 ➔ 차량 부품 보충(이동)
               </h3>
-              <button onClick={() => setShowTransferModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b' }}>
+              <button onClick={() => setShowTransferModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}>
                 <X size={20} />
               </button>
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <label style={{ fontSize: '13px', fontWeight: 600, color: '#475569' }}>대상 정비 기사 (차량)</label>
+                <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)' }}>대상 정비 기사 (차량)</label>
                 <select
                   value={transferTargetMechId}
                   onChange={(e) => setTransferTargetMechId(e.target.value)}
-                  style={{ padding: '8px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '13px', backgroundColor: '#fff' }}
+                  style={{ padding: '8px 10px', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '13px', backgroundColor: '#fff' }}
                 >
                   <option value="">기사 선택</option>
                   {mechanics.map(m => (
@@ -2701,11 +2701,11 @@ export const FieldAsManagement: React.FC = () => {
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <label style={{ fontSize: '13px', fontWeight: 600, color: '#475569' }}>불출할 소모품 품목</label>
+                <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)' }}>불출할 소모품 품목</label>
                 <select
                   value={transferConsumableId}
                   onChange={(e) => setTransferConsumableId(e.target.value)}
-                  style={{ padding: '8px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '13px', backgroundColor: '#fff' }}
+                  style={{ padding: '8px 10px', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '13px', backgroundColor: '#fff' }}
                 >
                   <option value="">소모품 선택</option>
                   {consumables.map(c => (
@@ -2717,13 +2717,13 @@ export const FieldAsManagement: React.FC = () => {
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <label style={{ fontSize: '13px', fontWeight: 600, color: '#475569' }}>이동 수량</label>
+                <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)' }}>이동 수량</label>
                 <input
                   type="number"
                   min={1}
                   value={transferQty}
                   onChange={(e) => setTransferQty(Math.max(1, parseInt(e.target.value) || 1))}
-                  style={{ padding: '8px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '13px' }}
+                  style={{ padding: '8px 10px', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '13px' }}
                 />
               </div>
 
@@ -2731,7 +2731,7 @@ export const FieldAsManagement: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setShowTransferModal(false)}
-                  style={{ padding: '8px 16px', backgroundColor: '#f1f5f9', border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '13px', fontWeight: 600, color: '#64748b', cursor: 'pointer' }}
+                  style={{ padding: '8px 16px', backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)', borderRadius: '6px', fontSize: '13px', fontWeight: 600, color: 'var(--text-muted)', cursor: 'pointer' }}
                 >
                   취소
                 </button>
@@ -2750,7 +2750,7 @@ export const FieldAsManagement: React.FC = () => {
                       // handled
                     }
                   }}
-                  style={{ padding: '8px 20px', backgroundColor: '#2563eb', border: 'none', borderRadius: '6px', fontSize: '13px', fontWeight: 700, color: '#ffffff', cursor: 'pointer' }}
+                  style={{ padding: '8px 20px', backgroundColor: '#2563eb', border: 'none', borderRadius: '6px', fontSize: '13px', fontWeight: 700, color: 'var(--bg-card)', cursor: 'pointer' }}
                 >
                   차량 재고 이동 확정
                 </button>
@@ -2782,7 +2782,7 @@ export const FieldAsManagement: React.FC = () => {
         >
           <div
             style={{
-              backgroundColor: '#ffffff',
+              backgroundColor: 'var(--bg-card)',
               borderRadius: '16px',
               width: '100%',
               maxWidth: '380px',
@@ -2794,20 +2794,20 @@ export const FieldAsManagement: React.FC = () => {
             }}
             onClick={e => e.stopPropagation()}
           >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #e2e8f0', paddingBottom: '10px' }}>
-              <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 800, color: '#0f172a' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-color)', paddingBottom: '10px' }}>
+              <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 800, color: 'var(--text-main)' }}>
                 🚗 길안내 내비게이션 앱 선택
               </h3>
               <button
                 type="button"
                 onClick={() => setShowNavSelectorTicket(null)}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b' }}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}
               >
                 <X size={18} />
               </button>
             </div>
 
-            <div style={{ fontSize: '13px', color: '#475569' }}>
+            <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
               목적지: <strong>{showNavSelectorTicket.siteName}</strong>
             </div>
 
@@ -2883,7 +2883,7 @@ export const FieldAsManagement: React.FC = () => {
                 checked={rememberDefaultNav}
                 onChange={e => setRememberDefaultNav(e.target.checked)}
               />
-              <label htmlFor="chkRememberNav" style={{ fontSize: '12px', color: '#64748b', cursor: 'pointer' }}>
+              <label htmlFor="chkRememberNav" style={{ fontSize: '12px', color: 'var(--text-muted)', cursor: 'pointer' }}>
                 선택한 앱을 기본 내비로 기억하기 (다음부터 즉시 실행)
               </label>
             </div>

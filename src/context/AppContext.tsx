@@ -131,6 +131,7 @@ interface AppContextType {
   // Asset Mutators
   changeAssetStatus: (assetId: string, status: Asset['status'], extraData?: Partial<Asset>) => Promise<void>;
   acquireAsset: (assetData: Partial<Asset>) => void;
+  batchAcquireAssets: (assetsData: Partial<Asset>[]) => Promise<Asset[]>;
   disposeAsset: (assetId: string, disposalData: { disposalDate: string; disposalPrice: number; buyer: string; billingYm?: string }) => void;
   registerRentedAsset: (assetData: Partial<Asset>) => Promise<any>;
   returnRentedAsset: (assetId: string, returnDate: string) => void;
@@ -1450,11 +1451,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const price = assetData.acquisitionPrice ?? 0;
     const bookVal = price;
     
-    db.insertRow<Asset>('assets', {
+    const newAsset = db.insertRow<Asset>('assets', {
       modelName: assetData.modelName || '',
       assetNo: assetData.assetNo || '',
       serialNo: assetData.serialNo || '',
       manufacturer: assetData.manufacturer || '',
+      manufactureYear: assetData.manufactureYear || '',
       ownerType: 'OWNED',
       status: 'AVAILABLE',
       monthlyRentalFee: assetData.monthlyRentalFee || 0,
@@ -1467,13 +1469,77 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       bookValue: bookVal,
       cumRentalFee: 0,
       cumRepairCost: 0,
+      vendorId: assetData.vendorId || '',
       supplier: assetData.supplier || '',
+      safetyInspectionUrl: assetData.safetyInspectionUrl || '',
       memo1: assetData.memo1 || '',
       memo2: assetData.memo2 || '',
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     });
+
+    // 헌장 1.2 사건 기록 무누락 DB 저장: 취득 이벤트 감사 로그
+    db.insertRow<AssetInOutLog>('assetInOutLogs', {
+      assetId: newAsset.id,
+      assetNo: newAsset.assetNo,
+      modelName: newAsset.modelName,
+      type: 'ACQUISITION',
+      eventDate: newAsset.acquisitionDate || new Date().toISOString().split('T')[0],
+      memo: `신규 당사자산 취득 등록 (취득가: ${(price || 0).toLocaleString()}원 / 공급처: ${newAsset.supplier || '-'})`,
+      createdAt: new Date().toISOString()
+    });
+
     refreshAllData();
+  };
+
+  const batchAcquireAssets = async (assetsData: Partial<Asset>[]): Promise<Asset[]> => {
+    const createdList: Asset[] = [];
+    for (const assetData of assetsData) {
+      const residualRate = assetData.residualValueRate ?? 10;
+      const price = assetData.acquisitionPrice ?? 0;
+      const bookVal = price;
+      
+      const newAsset = db.insertRow<Asset>('assets', {
+        modelName: assetData.modelName || '',
+        assetNo: assetData.assetNo || '',
+        serialNo: assetData.serialNo || '',
+        manufacturer: assetData.manufacturer || '',
+        manufactureYear: assetData.manufactureYear || '',
+        ownerType: 'OWNED',
+        status: 'AVAILABLE',
+        monthlyRentalFee: assetData.monthlyRentalFee || 0,
+        dailyRentalFee: assetData.dailyRentalFee || 0,
+        acquisitionDate: assetData.acquisitionDate || new Date().toISOString().split('T')[0],
+        acquisitionPrice: price,
+        depreciationMonths: assetData.depreciationMonths || 60,
+        residualValueRate: residualRate,
+        accumDepreciation: 0,
+        bookValue: bookVal,
+        cumRentalFee: 0,
+        cumRepairCost: 0,
+        vendorId: assetData.vendorId || '',
+        supplier: assetData.supplier || '',
+        safetyInspectionUrl: assetData.safetyInspectionUrl || '',
+        memo1: assetData.memo1 || '',
+        memo2: assetData.memo2 || '',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      });
+
+      db.insertRow<AssetInOutLog>('assetInOutLogs', {
+        assetId: newAsset.id,
+        assetNo: newAsset.assetNo,
+        modelName: newAsset.modelName,
+        type: 'ACQUISITION',
+        eventDate: newAsset.acquisitionDate || new Date().toISOString().split('T')[0],
+        memo: `신규 당사자산 취득 등록 [일괄] (취득가: ${(price || 0).toLocaleString()}원 / 공급처: ${newAsset.supplier || '-'})`,
+        createdAt: new Date().toISOString()
+      });
+
+      createdList.push(newAsset);
+    }
+    refreshAllData();
+    return createdList;
   };
 
   const disposeAsset = (assetId: string, disposalData: { disposalDate: string; disposalPrice: number; buyer: string }) => {
@@ -5864,7 +5930,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       refreshAllData, fullRefreshFromServer, executeMonthlyDepreciation, loadTablesForMenu, updatePermissions, saveUser, saveCustomer, saveContact, saveSite, saveProduct, saveAsset, updateGoogleConfig,
       saveCashFlowSnapshot, deleteCashFlowSnapshot, saveVendor, deleteVendor, saveBankInitialBalance, saveInspectionChecklistItem, deleteInspectionChecklistItem,
       updateAnnualLeaveQuota, addLeaveUsage, deleteLeaveUsage, addOvertimeRecord, deleteOvertimeRecord, setPayrollClosingStatus,
-      acquireAsset, disposeAsset, registerRentedAsset, returnRentedAsset, createVendorClaimReceivable, changeAssetStatus, registerInboundAsset, cancelInboundAsset,
+      acquireAsset, batchAcquireAssets, disposeAsset, registerRentedAsset, returnRentedAsset, createVendorClaimReceivable, changeAssetStatus, registerInboundAsset, cancelInboundAsset,
       purchaseConsumable, useConsumable, transferConsumableToMechanic, returnConsumableToHq,
       requestConsumablePurchase, acceptConsumablePurchase, completeConsumablePurchase, inboundConsumablePurchase, clearEvidenceFileUrls, updateEvidenceFileUrls,
       createContract, extendContract, shortenContract, succeedContract, exchangeAsset,

@@ -390,7 +390,7 @@ export const Dashboard: React.FC = () => {
       case 'MECHANIC': return { text: '정비담당자 (MECHANIC)', color: '#f59e0b', bg: 'rgba(245,158,11,0.1)' };
       case 'LOGISTICS':
       case 'DELIVERY': return { text: '배차물류담당자 (LOGISTICS)', color: '#06b6d4', bg: 'rgba(6,182,212,0.1)' };
-      default: return { text: '임직원 (USER)', color: '#64748b', bg: 'rgba(100,116,137,0.1)' };
+      default: return { text: '임직원 (USER)', color: 'var(--text-muted)', bg: 'var(--bg-secondary)' };
     }
   };
 

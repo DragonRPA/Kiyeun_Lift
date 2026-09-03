@@ -1738,7 +1738,7 @@ export const TruckDispatch: React.FC = () => {
       case 'CANCELLED':
         return <span style={{ padding: '4px 10px', borderRadius: '20px', fontSize: '11.5px', fontWeight: 700, backgroundColor: 'rgba(239,68,68,0.15)', color: '#dc2626', border: '1px solid rgba(239,68,68,0.3)', display: 'inline-flex', alignItems: 'center', gap: '4px' }}><XCircle size={12} /> 🔴 배차 취소</span>;
       default:
-        return <span style={{ padding: '4px 10px', borderRadius: '20px', fontSize: '11.5px', fontWeight: 700, backgroundColor: 'rgba(148,163,184,0.15)', color: '#64748b' }}>미지정</span>;
+        return <span style={{ padding: '4px 10px', borderRadius: '20px', fontSize: '11.5px', fontWeight: 700, backgroundColor: 'rgba(148,163,184,0.15)', color: 'var(--text-muted)' }}>미지정</span>;
     }
   };
 
@@ -2743,7 +2743,7 @@ export const TruckDispatch: React.FC = () => {
                   { key: 'MISMATCH', label: '🟡 금액 불일치', count: reconStats.mismatchCount, color: '#ca8a04', bg: 'rgba(234,179,8,0.12)' },
                   { key: 'EXCEL_ONLY', label: '🔴 엑셀 단독', count: reconPairs.filter(p => p.matchStatus === 'EXCEL_ONLY').length, color: '#dc2626', bg: 'rgba(239,68,68,0.1)' },
                   { key: 'SYSTEM_ONLY', label: '⚪ 시스템 단독', count: reconPairs.filter(p => p.matchStatus === 'SYSTEM_ONLY').length, color: 'var(--text-muted)', bg: 'var(--bg-body)' },
-                  { key: 'EXCLUDED', label: '🚫 오청구 제외', count: reconStats.excludedCount, color: '#64748b', bg: 'rgba(100,116,139,0.1)' },
+                  { key: 'EXCLUDED', label: '🚫 오청구 제외', count: reconStats.excludedCount, color: 'var(--text-muted)', bg: 'rgba(100,116,139,0.1)' },
                   { key: 'PAYMENT_REQUESTED', label: '💳 지급요청 완료', count: reconStats.paymentRequestedCount, color: '#2563eb', bg: 'rgba(37,99,235,0.1)' }
                 ].map(t => (
                   <button
@@ -3124,9 +3124,9 @@ export const TruckDispatch: React.FC = () => {
                 <span style={{ color: 'var(--text-muted)' }}>+</span>
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <span style={{ color: '#64748b', fontWeight: 700 }}>🚫 반려/제외액:</span>
-                  <strong style={{ fontSize: '13px', color: '#64748b' }}>₩{reconStats.excludedCost.toLocaleString()}원</strong>
-                  <span style={{ fontSize: '11px', color: '#64748b' }}>({reconStats.excludedCount}건)</span>
+                  <span style={{ color: 'var(--text-muted)', fontWeight: 700 }}>🚫 반려/제외액:</span>
+                  <strong style={{ fontSize: '13px', color: 'var(--text-muted)' }}>₩{reconStats.excludedCost.toLocaleString()}원</strong>
+                  <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>({reconStats.excludedCount}건)</span>
                 </div>
 
                 {(() => {

@@ -202,16 +202,16 @@ export const SmartAsRequest: React.FC = () => {
       ) : (
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
           {/* 1. 현장 및 대상 장비 스코핑 카드 */}
-          <div style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '20px', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
-            <h3 style={{ fontSize: '15px', fontWeight: 'bold', color: '#334155', margin: '0 0 16px 0', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <Building2 size={18} color="#64748b" />
+          <div style={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '10px', padding: '20px', boxShadow: 'var(--shadow-sm)' }}>
+            <h3 style={{ fontSize: '15px', fontWeight: 'bold', color: 'var(--text-main)', margin: '0 0 16px 0', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <Building2 size={18} color="var(--primary)" />
               1. 현장 및 대상 장비 선택
             </h3>
             
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
               {/* 고객사 선택 */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <label style={{ fontSize: '13px', fontWeight: 600, color: '#475569', whiteSpace: 'nowrap' }}>
+                <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
                   고객사 (업체명)
                 </label>
                 <select
@@ -224,9 +224,10 @@ export const SmartAsRequest: React.FC = () => {
                   style={{
                     padding: '9px 12px',
                     borderRadius: '6px',
-                    border: '1px solid #cbd5e1',
+                    border: '1px solid var(--border-color)',
                     fontSize: '14px',
-                    backgroundColor: '#ffffff'
+                    backgroundColor: 'var(--bg-card)',
+                    color: 'var(--text-main)'
                   }}
                 >
                   <option value="">고객사 선택 (선택 안 함 가능)</option>
@@ -238,8 +239,8 @@ export const SmartAsRequest: React.FC = () => {
 
               {/* 공사 현장 선택 */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <label style={{ fontSize: '13px', fontWeight: 600, color: '#475569', whiteSpace: 'nowrap' }}>
-                  공사 현장명 <span style={{ color: '#ef4444' }}>*</span>
+                <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
+                  공사 현장명 <span style={{ color: 'var(--danger)' }}>*</span>
                 </label>
                 <select
                   value={selectedSiteId}
@@ -250,9 +251,10 @@ export const SmartAsRequest: React.FC = () => {
                   style={{
                     padding: '9px 12px',
                     borderRadius: '6px',
-                    border: '1px solid #cbd5e1',
+                    border: '1px solid var(--border-color)',
                     fontSize: '14px',
-                    backgroundColor: '#ffffff'
+                    backgroundColor: 'var(--bg-card)',
+                    color: 'var(--text-main)'
                   }}
                 >
                   <option value="">현장 선택</option>
@@ -266,7 +268,7 @@ export const SmartAsRequest: React.FC = () => {
             {/* 관리번호 선택 (대여중 장비 드롭다운 + 직접/유연 입력) */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <label style={{ fontSize: '13px', fontWeight: 600, color: '#475569', whiteSpace: 'nowrap' }}>
+                <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
                   해당 현장 대여 장비 목록
                 </label>
                 <select
@@ -278,9 +280,10 @@ export const SmartAsRequest: React.FC = () => {
                   style={{
                     padding: '9px 12px',
                     borderRadius: '6px',
-                    border: '1px solid #cbd5e1',
+                    border: '1px solid var(--border-color)',
                     fontSize: '14px',
-                    backgroundColor: '#ffffff'
+                    backgroundColor: 'var(--bg-card)',
+                    color: 'var(--text-main)'
                   }}
                 >
                   <option value="">대여 장비 선택</option>
@@ -295,7 +298,7 @@ export const SmartAsRequest: React.FC = () => {
 
               {/* 장비번호 직접입력 또는 위치 상세 */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <label style={{ fontSize: '13px', fontWeight: 600, color: '#475569', whiteSpace: 'nowrap' }}>
+                <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
                   {selectedAssetNo === 'CUSTOM' || !selectedAssetNo ? '장비번호 직접입력 (예: G10032, 14002 외 3대, 전체장비)' : '장비 세부 위치 (층/구역/열)'}
                 </label>
                 {selectedAssetNo === 'CUSTOM' || !selectedAssetNo ? (
@@ -307,8 +310,10 @@ export const SmartAsRequest: React.FC = () => {
                     style={{
                       padding: '9px 12px',
                       borderRadius: '6px',
-                      border: '1px solid #cbd5e1',
-                      fontSize: '14px'
+                      border: '1px solid var(--border-color)',
+                      fontSize: '14px',
+                      backgroundColor: 'var(--bg-card)',
+                      color: 'var(--text-main)'
                     }}
                   />
                 ) : (
@@ -320,8 +325,10 @@ export const SmartAsRequest: React.FC = () => {
                     style={{
                       padding: '9px 12px',
                       borderRadius: '6px',
-                      border: '1px solid #cbd5e1',
-                      fontSize: '14px'
+                      border: '1px solid var(--border-color)',
+                      fontSize: '14px',
+                      backgroundColor: 'var(--bg-card)',
+                      color: 'var(--text-main)'
                     }}
                   />
                 )}
@@ -330,7 +337,7 @@ export const SmartAsRequest: React.FC = () => {
 
             {selectedAssetNo && selectedAssetNo !== 'CUSTOM' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '12px' }}>
-                <label style={{ fontSize: '13px', fontWeight: 600, color: '#475569', whiteSpace: 'nowrap' }}>
+                <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
                   현장 장비 위치 상세 (선택)
                 </label>
                 <input
@@ -341,8 +348,10 @@ export const SmartAsRequest: React.FC = () => {
                   style={{
                     padding: '9px 12px',
                     borderRadius: '6px',
-                    border: '1px solid #cbd5e1',
-                    fontSize: '14px'
+                    border: '1px solid var(--border-color)',
+                    fontSize: '14px',
+                    backgroundColor: 'var(--bg-card)',
+                    color: 'var(--text-main)'
                   }}
                 />
               </div>
@@ -350,15 +359,15 @@ export const SmartAsRequest: React.FC = () => {
           </div>
 
           {/* 2. 고장 증상 및 요청 내용 입력 카드 */}
-          <div style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '20px', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
-            <h3 style={{ fontSize: '15px', fontWeight: 'bold', color: '#334155', margin: '0 0 16px 0', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <Tag size={18} color="#64748b" />
+          <div style={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '10px', padding: '20px', boxShadow: 'var(--shadow-sm)' }}>
+            <h3 style={{ fontSize: '15px', fontWeight: 'bold', color: 'var(--text-main)', margin: '0 0 16px 0', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <Tag size={18} color="var(--primary)" />
               2. 고장 증상 및 요청 내용
             </h3>
 
             {/* 다빈도 고장 1-Click 프리셋 태그 버튼군 */}
             <div style={{ marginBottom: '14px' }}>
-              <label style={{ fontSize: '12px', fontWeight: 600, color: '#64748b', display: 'block', marginBottom: '8px' }}>
+              <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: '8px' }}>
                 ⚡ 자주 접수되는 고장 증상 (클릭 시 자동 입력)
               </label>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
@@ -369,11 +378,11 @@ export const SmartAsRequest: React.FC = () => {
                     onClick={() => handlePresetClick(preset)}
                     style={{
                       padding: '6px 10px',
-                      backgroundColor: '#f1f5f9',
-                      border: '1px solid #cbd5e1',
+                      backgroundColor: 'var(--bg-app)',
+                      border: '1px solid var(--border-color)',
                       borderRadius: '16px',
                       fontSize: '12px',
-                      color: '#334155',
+                      color: 'var(--text-secondary)',
                       cursor: 'pointer',
                       whiteSpace: 'nowrap'
                     }}
@@ -386,7 +395,7 @@ export const SmartAsRequest: React.FC = () => {
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '14px' }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <label style={{ fontSize: '13px', fontWeight: 600, color: '#475569', whiteSpace: 'nowrap' }}>
+                <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
                   고장 분류
                 </label>
                 <select
@@ -395,9 +404,10 @@ export const SmartAsRequest: React.FC = () => {
                   style={{
                     padding: '9px 12px',
                     borderRadius: '6px',
-                    border: '1px solid #cbd5e1',
+                    border: '1px solid var(--border-color)',
                     fontSize: '14px',
-                    backgroundColor: '#ffffff'
+                    backgroundColor: 'var(--bg-card)',
+                    color: 'var(--text-main)'
                   }}
                 >
                   <option value="방지봉/협착">방지봉 / 협착 센서</option>
@@ -413,7 +423,7 @@ export const SmartAsRequest: React.FC = () => {
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <label style={{ fontSize: '13px', fontWeight: 600, color: '#475569', whiteSpace: 'nowrap' }}>
+                <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
                   계기판 표시 에러코드 (선택)
                 </label>
                 <input
@@ -424,16 +434,18 @@ export const SmartAsRequest: React.FC = () => {
                   style={{
                     padding: '9px 12px',
                     borderRadius: '6px',
-                    border: '1px solid #cbd5e1',
-                    fontSize: '14px'
+                    border: '1px solid var(--border-color)',
+                    fontSize: '14px',
+                    backgroundColor: 'var(--bg-card)',
+                    color: 'var(--text-main)'
                   }}
                 />
               </div>
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              <label style={{ fontSize: '13px', fontWeight: 600, color: '#475569', whiteSpace: 'nowrap' }}>
-                상세 증상 및 전달 사항 <span style={{ color: '#ef4444' }}>*</span>
+              <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
+                상세 증상 및 전달 사항 <span style={{ color: 'var(--danger)' }}>*</span>
               </label>
               <textarea
                 rows={4}
@@ -443,25 +455,27 @@ export const SmartAsRequest: React.FC = () => {
                 style={{
                   padding: '10px 12px',
                   borderRadius: '6px',
-                  border: '1px solid #cbd5e1',
+                  border: '1px solid var(--border-color)',
                   fontSize: '14px',
                   resize: 'vertical',
-                  lineHeight: '1.5'
+                  lineHeight: '1.5',
+                  backgroundColor: 'var(--bg-card)',
+                  color: 'var(--text-main)'
                 }}
               />
             </div>
           </div>
 
           {/* 3. 접수자 정보 및 긴급도 */}
-          <div style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '20px', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
-            <h3 style={{ fontSize: '15px', fontWeight: 'bold', color: '#334155', margin: '0 0 16px 0', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <User size={18} color="#64748b" />
+          <div style={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '10px', padding: '20px', boxShadow: 'var(--shadow-sm)' }}>
+            <h3 style={{ fontSize: '15px', fontWeight: 'bold', color: 'var(--text-main)', margin: '0 0 16px 0', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <User size={18} color="var(--primary)" />
               3. 접수자 연락처 및 우선순위
             </h3>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px' }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <label style={{ fontSize: '13px', fontWeight: 600, color: '#475569', whiteSpace: 'nowrap' }}>
+                <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
                   현장 접수자 성명
                 </label>
                 <input
@@ -472,14 +486,16 @@ export const SmartAsRequest: React.FC = () => {
                   style={{
                     padding: '9px 12px',
                     borderRadius: '6px',
-                    border: '1px solid #cbd5e1',
-                    fontSize: '14px'
+                    border: '1px solid var(--border-color)',
+                    fontSize: '14px',
+                    backgroundColor: 'var(--bg-card)',
+                    color: 'var(--text-main)'
                   }}
                 />
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <label style={{ fontSize: '13px', fontWeight: 600, color: '#475569', whiteSpace: 'nowrap' }}>
+                <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
                   접수자 연락처
                 </label>
                 <input
@@ -490,14 +506,16 @@ export const SmartAsRequest: React.FC = () => {
                   style={{
                     padding: '9px 12px',
                     borderRadius: '6px',
-                    border: '1px solid #cbd5e1',
-                    fontSize: '14px'
+                    border: '1px solid var(--border-color)',
+                    fontSize: '14px',
+                    backgroundColor: 'var(--bg-card)',
+                    color: 'var(--text-main)'
                   }}
                 />
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <label style={{ fontSize: '13px', fontWeight: 600, color: '#475569', whiteSpace: 'nowrap' }}>
+                <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
                   출동 긴급도
                 </label>
                 <select
@@ -506,11 +524,11 @@ export const SmartAsRequest: React.FC = () => {
                   style={{
                     padding: '9px 12px',
                     borderRadius: '6px',
-                    border: priority === 'URGENT' ? '2px solid #ef4444' : '1px solid #cbd5e1',
+                    border: priority === 'URGENT' ? '2px solid var(--danger)' : '1px solid var(--border-color)',
                     fontSize: '14px',
-                    backgroundColor: priority === 'URGENT' ? '#fef2f2' : '#ffffff',
+                    backgroundColor: priority === 'URGENT' ? 'var(--danger-light)' : 'var(--bg-card)',
                     fontWeight: priority === 'URGENT' ? 700 : 400,
-                    color: priority === 'URGENT' ? '#dc2626' : '#334155'
+                    color: priority === 'URGENT' ? 'var(--danger)' : 'var(--text-main)'
                   }}
                 >
                   <option value="NORMAL">보통 (일반 순회/익일 일정)</option>
@@ -527,12 +545,12 @@ export const SmartAsRequest: React.FC = () => {
               onClick={handleReset}
               style={{
                 padding: '12px 20px',
-                backgroundColor: '#f8fafc',
-                border: '1px solid #cbd5e1',
+                backgroundColor: 'var(--bg-app)',
+                border: '1px solid var(--border-color)',
                 borderRadius: '8px',
                 fontSize: '14px',
                 fontWeight: 600,
-                color: '#64748b',
+                color: 'var(--text-muted)',
                 cursor: 'pointer'
               }}
             >
@@ -546,12 +564,12 @@ export const SmartAsRequest: React.FC = () => {
                 alignItems: 'center',
                 gap: '8px',
                 padding: '12px 28px',
-                backgroundColor: priority === 'URGENT' ? '#dc2626' : '#2563eb',
+                backgroundColor: priority === 'URGENT' ? 'var(--danger)' : 'var(--primary)',
                 border: 'none',
                 borderRadius: '8px',
                 fontSize: '15px',
                 fontWeight: 700,
-                color: '#ffffff',
+                color: 'var(--text-on-primary)',
                 cursor: isSubmitting ? 'not-allowed' : 'pointer',
                 boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
               }}

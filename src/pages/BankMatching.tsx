@@ -1090,8 +1090,9 @@ export const BankMatching: React.FC = () => {
                                 <span style={{
                                   fontSize: '10.5px',
                                   fontWeight: '500',
-                                  color: '#6b7280',
-                                  backgroundColor: '#f3f4f6',
+                                  color: 'var(--text-muted)',
+                                  backgroundColor: 'var(--bg-app)',
+                                  border: '1px solid var(--border-color)',
                                   padding: '1px 5px',
                                   borderRadius: '3px'
                                 }}>
