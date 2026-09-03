@@ -882,7 +882,7 @@ export interface PrepaidTransaction {
 export interface DelinquencyActionLog {
   id: string;
   customerId: string;
-  actionType: 'CALL' | 'NOTICE_SENT' | 'VISIT' | 'LEGAL';
+  actionType: 'CALL' | 'NOTICE_SENT' | 'VISIT' | 'LEGAL' | 'DIRECTIVE';
   actionDetails: string;
   proofFileName?: string;
   recordedBy: string;
@@ -891,6 +891,8 @@ export interface DelinquencyActionLog {
   promiseAmount?: number;
   promiseStatus?: 'PENDING' | 'KEPT' | 'BROKEN';
   promiseContactPerson?: string;
+  directiveTargetUserId?: string;
+  directiveDueDate?: string;
   createdAt: string;
 }
 
