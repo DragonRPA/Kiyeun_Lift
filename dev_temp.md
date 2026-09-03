@@ -1,6 +1,17 @@
 # 개발 지시 및 개편 완료 내역 (dev_temp.md)
 
-## 🚀 [초기 DB 일괄 업로드] 고객 요구사항 적재 시 'db.getRow is not a function' 오류 긴급 해결 (v1.3.0.Build.79 - 2026-09-03)
+## 🚀 [초기 DB 일괄 업로드] 밴드 AS 이력 적재 시 localStorage QuotaExceeded 방지 및 청킹 Supabase DB 직접 적재 (v1.3.0.Build.80 - 2026-09-03)
+
+### 1. 개발 내용 요약
+- **`src/services/db.ts` (`LocalDB`)**:
+  - `inMemoryCache` 도입 및 브라우저 `localStorage` 5MB 용량 한도 초과(`QuotaExceededError`) 시 비정상 종료 방어.
+  - 대용량 데이터 적재 시 localStorage 용량이 초과되어도 메모리 캐시에서 100% 온전하게 데이터를 유지하고 에러 없이 정상 흐름 보장.
+- **`src/services/migrationEngine.ts`**:
+  - `TABLE_COLUMNS`에 `repairs` 화이트리스트 스키마 공식 등록.
+  - `ingestBandAsHistoryDirect`에서 단순 `db.repairs = ...` 대입 대신 `batchUpsertChunked('repairs', ...)`를 호출하여 수천 건의 AS 이력이 100건 단위 청크로 Supabase 원격 DB에 직접 무누락 분할 적재되도록 전면 개편.
+  - `assets`, `customers`, `customer_sites`, `contracts`, `users` 외래키(FK) 유효성 사전 검증으로 PostgreSQL FK 제약 위반 원천 차단.
+
+---
 
 ### 1. 개발 내용 요약
 - **`src/services/db.ts` (`LocalDB`)**:

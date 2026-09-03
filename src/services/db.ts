@@ -2762,17 +2762,39 @@ export const ALL_DB_KEYS = [
 ];
 
 class LocalDB {
+  private inMemoryCache: Map<string, any> = new Map();
+
   private get<T>(key: string, seed: T[]): T[] {
-    const val = localStorage.getItem(`erp_${key}`);
-    if (!val) {
-      localStorage.setItem(`erp_${key}`, JSON.stringify(seed));
+    if (this.inMemoryCache.has(key)) {
+      return this.inMemoryCache.get(key);
+    }
+    try {
+      const val = localStorage.getItem(`erp_${key}`);
+      if (!val) {
+        this.inMemoryCache.set(key, seed);
+        try {
+          localStorage.setItem(`erp_${key}`, JSON.stringify(seed));
+        } catch {
+          // localStorage 용량 초과 시 인메모리 보존 유지
+        }
+        return seed;
+      }
+      const parsed = JSON.parse(val);
+      this.inMemoryCache.set(key, parsed);
+      return parsed;
+    } catch {
+      this.inMemoryCache.set(key, seed);
       return seed;
     }
-    return JSON.parse(val);
   }
 
   private set<T>(key: string, data: T[]): void {
-    localStorage.setItem(`erp_${key}`, JSON.stringify(data));
+    this.inMemoryCache.set(key, data);
+    try {
+      localStorage.setItem(`erp_${key}`, JSON.stringify(data));
+    } catch (e: any) {
+      console.warn(`[LocalDB Quota Exceeded] localStorage 용량 한도(5MB) 초과로 erp_${key} 키를 인메모리에 안전하게 보존합니다:`, e?.message || e);
+    }
   }
 
   get users() { return this.get<User>('users', SEED_USERS); }
@@ -3577,6 +3599,7 @@ class LocalDB {
 
   // Clear all data from Supabase tables
   async clearAllTables(): Promise<void> {
+    this.inMemoryCache.clear();
     const tables = ALL_DB_KEYS;
     // Clear local storage first
     tables.forEach(key => {

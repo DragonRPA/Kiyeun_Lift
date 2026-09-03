@@ -1,5 +1,22 @@
 ---
 
+# Release Notes (v1.3.0.Build.80 - 2026-09-03 16:37)
+
+## 🛠️ [초기 DB 일괄 업로드] 밴드 AS 이력 적재 시 localStorage QuotaExceeded 방지 & 청킹 Supabase DB 직접 적재
+
+### 🎯 핵심 요약 및 기능 확장 내역
+- **1. `LocalDB`에 `inMemoryCache` 도입 및 브라우저 5MB Quota 초과 방어 (`db.ts`)**:
+  - 수천~수만 건의 대용량 데이터 적재 시 브라우저 `localStorage` 용량 한도가 초과되어도 메모리 캐시에서 100% 온전하게 데이터를 유지하고 에러 없이 정상 흐름 보장.
+  - `localStorage.setItem`을 `try / catch`로 감싸 QuotaExceeded 런타임 크래시 완전 차단.
+- **2. 밴드 AS 이력 Supabase 청킹(`batchUpsertChunked`) 분할 직접 적재 (`migrationEngine.ts`)**:
+  - `TABLE_COLUMNS`에 `repairs` 화이트리스트 스키마 공식 등록.
+  - `ingestBandAsHistoryDirect`에서 `batchUpsertChunked('repairs', newRepairs, 100)`을 호출하여 100건 단위 청크로 Supabase 원격 DB에 직접 무누락 분할 적재.
+- **3. 외래키(FK) 사전 유효성 검증 로직 탑재 (`migrationEngine.ts`)**:
+  - 자산, 고객, 현장, 계약, 정비사 ID가 실제 DB에 존재하는지 Set 검증 후 매핑하여 PostgreSQL FK 제약 위반 사전 방지.
+- **4. 글로벌 학습 지식 베이스 등록**: `경험.md`에 이슈 `E-032` 등록 완료.
+
+---
+
 # Release Notes (v1.3.0.Build.79 - 2026-09-03 16:28)
 
 ## 🛠️ [초기 DB 일괄 업로드] 고객 요구사항 적재 시 'db.getRow is not a function' 오류 긴급 해결

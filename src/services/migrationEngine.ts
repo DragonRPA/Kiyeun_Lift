@@ -140,6 +140,23 @@ export const TABLE_COLUMNS: Record<string, string[]> = {
     'id', 'deliveryId', 'contractId', 'assetId', 'status', 'inspectorId',
     'checkedItems', 'photos', 'notes', 'approvedAt', 'approvedBy', 'createdAt', 'updatedAt'
   ],
+  repairs: [
+    'id', 'ticketNo', 'workCategory', 'workLocation', 'stockSource', 'source',
+    'repairType', 'maintenanceType', 'priority', 'assetId', 'assetNo', 'modelName',
+    'contractId', 'targetContractStatus', 'customerId', 'customerName', 'siteId',
+    'siteName', 'locationDetail', 'reporterName', 'reporterContact', 'issueCategory',
+    'issueDescription', 'details', 'errorCode', 'mechanicId', 'assignedMechanicId',
+    'mechanicName', 'vendorId', 'preferredNavApp', 'requestDate', 'scheduleDate',
+    'visitDate', 'repairDate', 'completedDate', 'outboundDate', 'status',
+    'resolutionType', 'unresolvedReason', 'nextAction', 'actionTaken', 'partsUsed',
+    'collectedParts', 'timelineLogs', 'billableType', 'billableAmount', 'billableToCustomer',
+    'totalCost', 'costTotal', 'billingAmount', 'laborHours', 'isCustomerFault',
+    'faultImageUrl', 'evidenceImages', 'beforeImage', 'afterImage', 'estimateFileUrl',
+    'customerSignature', 'customerConfirmName', 'parentRepairId', 'parentTicketId',
+    'revisitRepairId', 'revisitTicketId', 'revisitDate', 'revisitReason',
+    'exchangeSuggested', 'inboundNo', 'defectsJson', 'billingId', 'purchaseBillId',
+    'memo', 'createdAt', 'updatedAt'
+  ],
   asset_inout_logs: [
     'id', 'assetId', 'assetNo', 'modelName', 'type', 'eventDate',
     'contractId', 'customerId', 'siteId', 'deliveryId', 'details',
@@ -3211,6 +3228,12 @@ export async function ingestBandAsHistoryDirect(
   const total = records.length;
   let importedCount = 0;
 
+  const validAssetIds = new Set((db.assets || []).map(a => a.id));
+  const validCustomerIds = new Set((db.customers || []).map(c => c.id));
+  const validSiteIds = new Set((db.sites || []).map(s => s.id));
+  const validContractIds = new Set((db.contracts || []).map(c => c.id));
+  const validUserIds = new Set((db.users || []).map(u => u.id));
+
   const existingList = db.repairs || [];
   const existingRawSet = new Set(
     existingList.map(t => `${t.siteName}_${t.assetNo}_${t.requestDate}_${(t.issueDescription || t.details || '').slice(0, 20)}`)
@@ -3239,12 +3262,12 @@ export async function ingestBandAsHistoryDirect(
       maintenanceType: 'EMERGENCY_AS',
       repairType: 'INTERNAL',
       source: 'BAND_IMPORT',
-      contractId: r.matchedContractId,
-      customerId: r.matchedCustomerId,
+      contractId: (r.matchedContractId && validContractIds.has(r.matchedContractId)) ? r.matchedContractId : undefined,
+      customerId: (r.matchedCustomerId && validCustomerIds.has(r.matchedCustomerId)) ? r.matchedCustomerId : undefined,
       customerName: r.matchedCustomerName || r.customer || '현장 협력업체',
-      siteId: r.matchedSiteId,
+      siteId: (r.matchedSiteId && validSiteIds.has(r.matchedSiteId)) ? r.matchedSiteId : undefined,
       siteName: r.matchedSiteName || r.site,
-      assetId: r.matchedAssetId,
+      assetId: (r.matchedAssetId && validAssetIds.has(r.matchedAssetId)) ? r.matchedAssetId : undefined,
       assetNo: r.matchedAssetNo || r.assetNo || '현장확인',
       modelName: r.matchedModelName || '고소작업대',
       locationDetail: r.location || '',
@@ -3259,8 +3282,8 @@ export async function ingestBandAsHistoryDirect(
       visitDate: r.date,
       scheduleDate: r.date,
       completedDate: r.status === 'COMPLETED' ? r.date : undefined,
-      mechanicId: r.mechanicId,
-      assignedMechanicId: r.mechanicId,
+      mechanicId: (r.mechanicId && validUserIds.has(r.mechanicId)) ? r.mechanicId : undefined,
+      assignedMechanicId: (r.mechanicId && validUserIds.has(r.mechanicId)) ? r.mechanicId : undefined,
       mechanicName: r.mechanicName,
       actionTaken: r.actionTaken,
       billableType: 'FREE',
@@ -3275,30 +3298,37 @@ export async function ingestBandAsHistoryDirect(
 
     // 자산 이력 로그(AssetInOutLog)
     if (r.matchedAssetNo && r.matchedAssetNo !== '현장확인' && r.matchedAssetNo !== '전체장비') {
-      newAssetLogs.push({
-        id: `aiog-band-${Date.now()}-${idx + 1}`,
-        assetId: r.matchedAssetId || `asset-${r.matchedAssetNo}`,
-        assetNo: r.matchedAssetNo,
-        modelName: r.matchedModelName || '고소작업대',
-        type: 'REPAIR',
-        eventDate: r.date,
-        customerName: repairRow.customerName,
-        siteName: repairRow.siteName,
-        repairId: repairRow.id,
-        memo: `[현장AS] ${r.issue} ➔ ${r.actionTaken} (정비사: ${r.mechanicName})`,
-        createdAt: new Date().toISOString()
-      });
+      const realAssetId = (r.matchedAssetId && validAssetIds.has(r.matchedAssetId))
+        ? r.matchedAssetId
+        : (db.assets || []).find(a => a.assetNo === r.matchedAssetNo)?.id;
+      if (realAssetId) {
+        newAssetLogs.push({
+          id: `aiog-band-${Date.now()}-${idx + 1}`,
+          assetId: realAssetId,
+          assetNo: r.matchedAssetNo,
+          modelName: r.matchedModelName || '고소작업대',
+          type: 'REPAIR',
+          eventDate: r.date,
+          customerName: repairRow.customerName,
+          siteName: repairRow.siteName,
+          repairId: repairRow.id,
+          details: `[현장AS] ${r.issue} ➔ ${r.actionTaken} (정비사: ${r.mechanicName})`,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        });
+      }
     }
 
     // 계약 이력(ContractHistory)
-    if (r.matchedContractId && r.status === 'COMPLETED') {
+    if (r.matchedContractId && validContractIds.has(r.matchedContractId) && r.status === 'COMPLETED') {
       newContractHistories.push({
         id: `ch-as-band-${Date.now()}-${idx + 1}`,
         contractId: r.matchedContractId,
         changeType: 'AS_SERVICE',
         changeDate: r.date,
         description: `[과거 현장 AS] ${r.issue} ➔ ${r.actionTaken} (${r.matchedAssetNo || '현장장비'}, 정비사: ${r.mechanicName})`,
-        createdAt: new Date().toISOString()
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
       });
     }
 
@@ -3310,13 +3340,19 @@ export async function ingestBandAsHistoryDirect(
   }
 
   if (newRepairs.length > 0) {
-    db.repairs = [...newRepairs, ...db.repairs];
+    onProgress?.(total, total, `정비 마스터(repairs) ${newRepairs.length}건 Supabase DB 적재 중...`);
+    await batchUpsertChunked('repairs', newRepairs, 100);
+    db.repairs = [...newRepairs, ...(db.repairs || [])];
   }
   if (newAssetLogs.length > 0) {
-    db.assetInOutLogs = [...newAssetLogs, ...db.assetInOutLogs];
+    onProgress?.(total, total, `자산 입출고/정비 이력 ${newAssetLogs.length}건 적재 중...`);
+    await batchUpsertChunked('asset_inout_logs', newAssetLogs, 100);
+    db.assetInOutLogs = [...newAssetLogs, ...(db.assetInOutLogs || [])];
   }
   if (newContractHistories.length > 0) {
-    db.contractHistories = [...newContractHistories, ...db.contractHistories];
+    onProgress?.(total, total, `계약 AS 이력 ${newContractHistories.length}건 적재 중...`);
+    await batchUpsertChunked('contract_history', newContractHistories, 100);
+    db.contractHistories = [...newContractHistories, ...(db.contractHistories || [])];
   }
 
   await db.awaitPendingWrites();
