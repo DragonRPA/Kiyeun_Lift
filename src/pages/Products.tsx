@@ -1,9 +1,9 @@
-// d:\Kiyeun_Lift\src\pages\Products.tsx
+// src/pages/Products.tsx - 전사 표준 헌장 준수 제품 모델 및 제원 관리
 import React, { useState, useMemo, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
-import { Plus, Download, Search, RefreshCw, FileText, X, CloudUpload, Sparkles, Folder, Trash2, ExternalLink, Upload } from 'lucide-react';
+import { Plus, Download, Search, RefreshCw, FileText, X, Folder, Trash2, ExternalLink, Upload, CheckCircle2, AlertCircle, Eye, Edit2, Save, Package, Layers } from 'lucide-react';
 import { exportToExcel } from '../services/excel';
-import { db, Product } from '../services/db';
+import { Product } from '../services/db';
 import { LIFT_RETRACTED_IMG, LIFT_EXTENDED_IMG } from '../services/specImages';
 
 interface R2DocFile {
@@ -15,24 +15,50 @@ interface R2DocFile {
 }
 
 export const Products: React.FC = () => {
-  const { products, saveProduct, hasPermission, assets, refreshAllData, googleConfigs } = useApp();
+  const { 
+    products, saveProduct, hasPermission, assets, 
+    refreshAllData, googleConfigs, setActiveTab 
+  } = useApp();
+  
   const canSave = hasPermission('product', 'save');
 
+  // 토스트 알림 상태
+  const [toastMessage, setToastMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const showToast = (text: string, type: 'success' | 'error' = 'success') => {
+    setToastMessage({ type, text });
+    setTimeout(() => {
+      setToastMessage(null);
+    }, 4000);
+  };
+
+  // 검색 및 필터 상태
   const [searchTerm, setSearchTerm] = useState('');
-  const [showModal, setShowModal] = useState(false);
-  const [showPreviewModal, setShowPreviewModal] = useState(false);
-  const [previewProduct, setPreviewProduct] = useState<Product | null>(null);
-  const [editingProduct, setEditingProduct] = useState<Partial<Product> | null>(null);
-  const [refreshing, setRefreshing] = useState(false);
-  const [generatingModelId, setGeneratingModelId] = useState<string | null>(null);
+  const [assetFilter, setAssetFilter] = useState<'ALL' | 'WITH_ASSETS' | 'NO_ASSETS'>('ALL');
+  const [manufacturerFilter, setManufacturerFilter] = useState('ALL');
+  const [powerSourceFilter, setPowerSourceFilter] = useState('ALL');
+  const [activeStatusFilter, setActiveStatusFilter] = useState('ALL');
+
+  // 정렬 상태
+  type ProductSortField = 'modelName' | 'feet' | 'manufacturer' | 'powerSource' | 'isActive' | 'assetCount' | 'createdAt';
+  const [sortField, setSortField] = useState<ProductSortField>('modelName');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+
+  // 상세조회 Dossier 슬라이드오버 및 수정 상태
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editForm, setEditForm] = useState<Partial<Product>>({});
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [showSpecPreviewModal, setShowSpecPreviewModal] = useState(false);
 
   // Cloudflare R2 제품별 문서함 상태
   const [r2Files, setR2Files] = useState<R2DocFile[]>([]);
   const [loadingR2Docs, setLoadingR2Docs] = useState<boolean>(false);
-  const [showR2DocModal, setShowR2DocModal] = useState<boolean>(false);
-  const [selectedProductForDocs, setSelectedProductForDocs] = useState<Product | null>(null);
   const [uploadingDoc, setUploadingDoc] = useState<boolean>(false);
+  const [refreshing, setRefreshing] = useState(false);
 
+  const clean = (s?: string) => (s || '').replace(/[- _/]/g, '').toUpperCase().trim();
+
+  // Cloudflare R2 문서 목록 로드
   const fetchR2Files = async () => {
     const config = googleConfigs[0];
     const accountId = config?.r2AccountId || '35014a2514680107d74e1e68d96e6c32';
@@ -88,109 +114,17 @@ export const Products: React.FC = () => {
     try {
       await refreshAllData();
       await fetchR2Files();
-      alert("최신 데이터를 성공적으로 불러왔습니다.");
+      showToast('최신 데이터를 동기화하였습니다.');
     } catch (err: any) {
-      console.error("Failed to sync from Supabase:", err);
-      alert("최신 데이터를 가져오는 데 실패했습니다.");
+      showToast('최신 데이터를 가져오는 데 실패했습니다.', 'error');
     } finally {
       setRefreshing(false);
     }
   };
 
-  // specSheetUrl이 이미 있으면 바로 열기, 없으면 생성 후 저장
-  const handleGenerateAndUploadR2 = async (product: Product) => {
-    if (!product.modelName) return;
-    if (product.specSheetUrl) {
-      window.open(product.specSheetUrl, '_blank');
-      return;
-    }
-    setGeneratingModelId(product.id || product.modelName);
-    try {
-      throw new Error('브라우저 기반 PDF 렌더러가 사용 중단되었습니다. 향후 정품 엑셀 기반 렌더러로 교체 예정입니다.');
-    } catch (err: any) {
-      console.error('PDF error:', err);
-      alert('브라우저 기반 PDF 렌더러가 사용 중단되었습니다.');
-    } finally {
-      setGeneratingModelId(null);
-    }
-  };
-
-  const handleDownloadPdf = async (product: Partial<Product>) => {
-    alert('브라우저 기반 PDF 렌더러가 폐기되었습니다. 정품 엑셀 엔진으로 개편 대기 중입니다.');
-  };
-
-  type ProductSortField = 'modelName' | 'feet' | 'spec' | 'manufacturer' | 'isActive' | 'assetCount' | 'createdAt';
-  const [sortField, setSortField] = useState<ProductSortField>('modelName');
-  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
-
-  const handleSort = (field: ProductSortField) => {
-    if (sortField === field) {
-      setSortDirection(prev => (prev === 'asc' ? 'desc' : 'asc'));
-    } else {
-      setSortField(field);
-      setSortDirection('asc');
-    }
-  };
-
-  const handleOpenAdd = () => {
-    setEditingProduct({
-      modelName: '',
-      feet: 19,
-      spec: '',
-      manufacturer: '',
-      isActive: true,
-      powerSource: '배터리',
-      asContact: '031-334-5296',
-      maxWindSpeed: '12.5 m/s 이내',
-      safetyCertUrl: '',
-      specSheetUrl: '',
-      emergencyGuideUrl: ''
-    });
-    setShowModal(true);
-  };
-
-  const handleOpenEdit = (p: Product) => {
-    setEditingProduct(p);
-    setShowModal(true);
-  };
-
-  const handleOpenPreview = (p: Product) => {
-    setPreviewProduct(p);
-    setShowPreviewModal(true);
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editingProduct || !editingProduct.modelName) return;
-
-    const feetValue = Number(editingProduct.feet);
-    if (isNaN(feetValue) || feetValue <= 0) {
-      alert("피트 규격은 0보다 큰 숫자(실수 가능, 예: 3.6, 12, 19 등)로 입력해야 합니다.");
-      return;
-    }
-
-    // 클로저 캡처 (setState 초기화 전에 저장)
-    const productSnapshot = { ...editingProduct } as Product;
-
-    try {
-      await saveProduct(editingProduct as Omit<Product, 'id' | 'createdAt'>);
-      setShowModal(false);
-      setEditingProduct(null);
-      refreshAllData();
-
-      // 기존 제원표 PDF가 없는 모델인 경우에만 백그라운드 자동 생성 -> 브라우저 렌더러 폐기로 삭제됨
-    } catch (err: any) {
-      alert(`저장 실패: ${err?.message || JSON.stringify(err)}`);
-    }
-  };
-
-
-  const [assetFilter, setAssetFilter] = useState<'ALL' | 'WITH_ASSETS' | 'NO_ASSETS'>('ALL');
-
-  const clean = (s?: string) => (s || '').replace(/[- _/]/g, '').toUpperCase().trim();
-
+  // 모델별 보유 자산 통계 매핑
   const assetStatsMap = useMemo(() => {
-    const map = new Map<string, { total: number; owned: number; leased: number; available: number; rented: number }>();
+    const map = new Map<string, { total: number; owned: number; leased: number; available: number; rented: number; assigned: number; repairing: number }>();
     for (const p of products) {
       const pClean = clean(p.modelName);
       const matched = assets.filter(a => {
@@ -199,13 +133,16 @@ export const Products: React.FC = () => {
       });
       const owned = matched.filter(a => a.ownerType === 'OWNED' || !a.ownerType).length;
       const leased = matched.filter(a => a.ownerType === 'RENTED').length;
-      const available = matched.filter(a => a.status === 'AVAILABLE').length;
-      const rented = matched.filter(a => a.status === 'RENTED').length;
-      map.set(p.id, { total: matched.length, owned, leased, available, rented });
+      const available = matched.filter(a => a.status === 'AVAILABLE' && !a.actualRentReturnDate).length;
+      const rented = matched.filter(a => a.status === 'RENTED' || (!a.actualRentReturnDate && a.currentCustomerId)).length;
+      const assigned = matched.filter(a => a.status === 'ASSIGNED').length;
+      const repairing = matched.filter(a => a.status === 'REPAIRING').length;
+      map.set(p.id, { total: matched.length, owned, leased, available, rented, assigned, repairing });
     }
     return map;
   }, [products, assets]);
 
+  // 모델별 R2 문서 매핑
   const r2FilesByModelMap = useMemo(() => {
     const map = new Map<string, R2DocFile[]>();
     for (const p of products) {
@@ -222,146 +159,49 @@ export const Products: React.FC = () => {
     return map;
   }, [products, r2Files]);
 
-  const handleOpenR2DocModal = (p: Product) => {
-    setSelectedProductForDocs(p);
-    setShowR2DocModal(true);
-  };
+  // 고유 제조사 & 동력방식
+  const uniqueManufacturers = useMemo(() => {
+    return Array.from(new Set(products.map(p => p.manufacturer).filter(Boolean))) as string[];
+  }, [products]);
 
-  const handleUploadCustomDoc = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !selectedProductForDocs) return;
+  const uniquePowerSources = useMemo(() => {
+    return Array.from(new Set(products.map(p => p.powerSource).filter(Boolean))) as string[];
+  }, [products]);
 
-    setUploadingDoc(true);
-    try {
-      const config = googleConfigs[0];
-      const accountId = config?.r2AccountId || '35014a2514680107d74e1e68d96e6c32';
-      const bucketName = config?.r2BucketName || 'kiyeun-storage';
-      const accessKeyId = config?.r2AccessKeyId || '03cdb7560d37242de608a5db2a976030';
-      const secretAccessKey = config?.r2SecretAccessKey || 'b2407ab4532e02317860bc3d63226fb7bc232e88083b150c15023906ed141986';
+  // KPI 통계
+  const kpiStats = useMemo(() => {
+    const totalModels = products.length;
+    const withAssets = products.filter(p => (assetStatsMap.get(p.id)?.total || 0) > 0).length;
+    const noAssets = totalModels - withAssets;
+    const activeModels = products.filter(p => p.isActive !== false).length;
+    const totalDocs = r2Files.length;
+    const totalMappedAssets = Array.from(assetStatsMap.values()).reduce((sum, s) => sum + s.total, 0);
 
-      const reader = new FileReader();
-      reader.onload = async (event) => {
-        const base64Content = event.target?.result as string;
-        const key = `Eq_doc/${selectedProductForDocs.modelName}/${file.name}`;
+    return { totalModels, withAssets, noAssets, activeModels, totalDocs, totalMappedAssets };
+  }, [products, assetStatsMap, r2Files]);
 
-        const res = await fetch('/api/r2', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            action: 'upload',
-            accountId,
-            bucketName,
-            accessKeyId,
-            secretAccessKey,
-            key,
-            base64Content,
-            contentType: file.type || 'application/pdf'
-          })
-        });
-
-        const resJson = await res.json();
-        if (resJson.success) {
-          alert(`✅ 파일 [${file.name}] 업로드 완료!`);
-          await fetchR2Files();
-        } else {
-          alert(`❌ 업로드 실패: ${resJson.error}`);
-        }
-        setUploadingDoc(false);
-      };
-      reader.readAsDataURL(file);
-    } catch (err: any) {
-      console.error('File upload error:', err);
-      alert(`업로드 실패: ${err.message}`);
-      setUploadingDoc(false);
-    }
-  };
-
-  const handleDeleteDoc = async (key: string) => {
-    if (!confirm(`이 문서를 Cloudflare R2에서 정말 삭제하시겠습니까?\n\n${key}`)) return;
-
-    try {
-      const config = googleConfigs[0];
-      const accountId = config?.r2AccountId || '35014a2514680107d74e1e68d96e6c32';
-      const bucketName = config?.r2BucketName || 'kiyeun-storage';
-      const accessKeyId = config?.r2AccessKeyId || '03cdb7560d37242de608a5db2a976030';
-      const secretAccessKey = config?.r2SecretAccessKey || 'b2407ab4532e02317860bc3d63226fb7bc232e88083b150c15023906ed141986';
-
-      const res = await fetch('/api/r2', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'delete',
-          accountId,
-          bucketName,
-          accessKeyId,
-          secretAccessKey,
-          key
-        })
-      });
-      const resJson = await res.json();
-      if (resJson.success) {
-        alert("✅ 삭제되었습니다.");
-        await fetchR2Files();
-      } else {
-        alert(`❌ 삭제 실패: ${resJson.error}`);
-      }
-    } catch (err: any) {
-      alert(`삭제 오류: ${err.message}`);
-    }
-  };
-
-  const totalModelsCount = products.length;
-  const withAssetsCount = useMemo(() => products.filter(p => (assetStatsMap.get(p.id)?.total || 0) > 0).length, [products, assetStatsMap]);
-  const noAssetsCount = useMemo(() => products.filter(p => (assetStatsMap.get(p.id)?.total || 0) === 0).length, [products, assetStatsMap]);
-
-  const handleExport = () => {
-    const excelData = filtered.map((p, idx) => {
-      const stats = assetStatsMap.get(p.id) || { total: 0, owned: 0, leased: 0, available: 0, rented: 0 };
-      return {
-        '번호': idx + 1,
-        '모델명': p.modelName,
-        '피트(Feet)': p.feet ? `${p.feet} ft` : '-',
-        '동력': p.powerSource || '-',
-        '작업높이': p.workingHeight || '-',
-        '발판높이': p.platformHeight || '-',
-        '장비중량': p.weight || '-',
-        '적재중량': p.capacityPreExt || '-',
-        '장비크기': p.machineDimensions || '-',
-        '플랫폼크기': p.platformDimensions || '-',
-        '등판능력': p.gradeability || '-',
-        '주행속도': p.speed || '-',
-        '확장후본체': p.capacityPostExtMain || '-',
-        '확장후확장부': p.capacityPostExtDeck || '-',
-        '최대풍속': p.maxWindSpeed || '-',
-        'A/S접수': p.asContact || '031-334-5296',
-        '제조사': p.manufacturer || '-',
-        '사용여부': p.isActive !== false ? '사용' : '미사용',
-        '총보유대수': stats.total,
-        '당사자산대수': stats.owned,
-        '외부임차대수': stats.leased,
-        '임대가능대수': stats.available,
-        '대여중대수': stats.rented,
-        '등록일': p.createdAt.substring(0, 10)
-      };
-    });
-
-    exportToExcel(excelData, `제품목록_${new Date().toISOString().split('T')[0]}`, '제품목록');
-  };
-
-  const filtered = products
-    .filter(p => {
-      const stats = assetStatsMap.get(p.id) || { total: 0, owned: 0, leased: 0, available: 0, rented: 0 };
+  // 필터링 및 정렬
+  const filtered = useMemo(() => {
+    return products.filter(p => {
+      const stats = assetStatsMap.get(p.id) || { total: 0, owned: 0, leased: 0, available: 0, rented: 0, assigned: 0, repairing: 0 };
       if (assetFilter === 'WITH_ASSETS' && stats.total === 0) return false;
       if (assetFilter === 'NO_ASSETS' && stats.total > 0) return false;
 
-      return (
+      const matchesSearch =
+        !searchTerm ||
         (p.modelName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
         (p.manufacturer || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
         (p.spec || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (p.powerSource || '').toLowerCase().includes(searchTerm.toLowerCase())
-      );
-    })
-    .sort((a, b) => {
+        (p.powerSource || '').toLowerCase().includes(searchTerm.toLowerCase());
+
+      const matchesManufacturer = manufacturerFilter === 'ALL' || p.manufacturer === manufacturerFilter;
+      const matchesPowerSource = powerSourceFilter === 'ALL' || p.powerSource === powerSourceFilter;
+      const matchesActive = activeStatusFilter === 'ALL' ? true :
+                            activeStatusFilter === 'ACTIVE' ? p.isActive !== false :
+                            p.isActive === false;
+
+      return matchesSearch && matchesManufacturer && matchesPowerSource && matchesActive;
+    }).sort((a, b) => {
       let aVal: any = a[sortField as keyof Product];
       let bVal: any = b[sortField as keyof Product];
 
@@ -385,899 +225,1098 @@ export const Products: React.FC = () => {
 
       return sortDirection === 'asc' ? cmp : -cmp;
     });
+  }, [products, assetFilter, searchTerm, manufacturerFilter, powerSourceFilter, activeStatusFilter, sortField, sortDirection, assetStatsMap]);
+
+  const handleSort = (field: ProductSortField) => {
+    if (sortField === field) {
+      setSortDirection(prev => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortField(field);
+      setSortDirection('asc');
+    }
+  };
 
   const renderSortArrow = (field: ProductSortField) => {
-    if (sortField !== field) return <span style={{ color: 'var(--text-muted)', fontSize: '11px', marginLeft: '4px' }}>↕</span>;
-    return <span style={{ color: 'var(--primary)', fontWeight: 'bold', fontSize: '12px', marginLeft: '4px' }}>{sortDirection === 'asc' ? '▲' : '▼'}</span>;
+    if (sortField !== field) return <span style={{ color: 'var(--text-muted)', fontSize: '10px', marginLeft: '3px' }}>↕</span>;
+    return <span style={{ color: 'var(--primary)', fontWeight: 'bold', fontSize: '11px', marginLeft: '3px' }}>{sortDirection === 'asc' ? '▲' : '▼'}</span>;
+  };
+
+  const handleSelectProduct = (product: Product) => {
+    setSelectedProduct(product);
+    setIsEditing(false);
+    setEditForm({ ...product });
+  };
+
+  const handleStartEdit = () => {
+    if (selectedProduct) {
+      setEditForm({ ...selectedProduct });
+      setIsEditing(true);
+    }
+  };
+
+  const handleCancelEdit = () => {
+    setIsEditing(false);
+    setEditForm(selectedProduct ? { ...selectedProduct } : {});
+  };
+
+  const handleSaveEdit = async () => {
+    if (!selectedProduct || !editForm || !editForm.modelName) return;
+
+    const feetValue = Number(editForm.feet);
+    if (isNaN(feetValue) || feetValue <= 0) {
+      showToast('피트 규격은 0보다 큰 숫자로 입력해야 합니다.', 'error');
+      return;
+    }
+
+    try {
+      const updated = { ...selectedProduct, ...editForm } as Product;
+      await saveProduct(updated);
+      setSelectedProduct(updated);
+      setIsEditing(false);
+      await refreshAllData();
+      showToast(`제품 모델 [${updated.modelName}] 정보가 저장되었습니다.`);
+    } catch (err: any) {
+      showToast(`저장 실패: ${err?.message || err}`, 'error');
+    }
+  };
+
+  const handleOpenAddModal = () => {
+    setEditForm({
+      modelName: '',
+      feet: 19,
+      spec: '',
+      manufacturer: 'Skyjack',
+      isActive: true,
+      powerSource: '배터리',
+      asContact: '031-334-5296',
+      maxWindSpeed: '12.5 m/s 이내',
+      safetyCertUrl: '',
+      specSheetUrl: '',
+      emergencyGuideUrl: ''
+    });
+    setShowAddModal(true);
+  };
+
+  const handleSaveAddModal = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editForm.modelName) {
+      showToast('모델명을 입력해주세요.', 'error');
+      return;
+    }
+    const feetValue = Number(editForm.feet);
+    if (isNaN(feetValue) || feetValue <= 0) {
+      showToast('피트 규격은 0보다 큰 숫자로 입력해야 합니다.', 'error');
+      return;
+    }
+
+    try {
+      await saveProduct(editForm as Omit<Product, 'id' | 'createdAt'>);
+      setShowAddModal(false);
+      setEditForm({});
+      await refreshAllData();
+      showToast(`신규 모델 [${editForm.modelName}]이 등록되었습니다.`);
+    } catch (err: any) {
+      showToast(`등록 실패: ${err?.message || err}`, 'error');
+    }
+  };
+
+  // R2 문서 업로드
+  const handleUploadCustomDoc = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !selectedProduct) return;
+
+    setUploadingDoc(true);
+    try {
+      const config = googleConfigs[0];
+      const accountId = config?.r2AccountId || '35014a2514680107d74e1e68d96e6c32';
+      const bucketName = config?.r2BucketName || 'kiyeun-storage';
+      const accessKeyId = config?.r2AccessKeyId || '03cdb7560d37242de608a5db2a976030';
+      const secretAccessKey = config?.r2SecretAccessKey || 'b2407ab4532e02317860bc3d63226fb7bc232e88083b150c15023906ed141986';
+
+      const reader = new FileReader();
+      reader.onload = async (event) => {
+        const base64Content = event.target?.result as string;
+        const key = `Eq_doc/${selectedProduct.modelName}/${file.name}`;
+
+        const res = await fetch('/api/r2', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'upload',
+            accountId,
+            bucketName,
+            accessKeyId,
+            secretAccessKey,
+            key,
+            base64Content,
+            contentType: file.type || 'application/pdf'
+          })
+        });
+
+        const resJson = await res.json();
+        if (resJson.success) {
+          showToast(`문서 [${file.name}]이 R2 클라우드에 업로드되었습니다.`);
+          await fetchR2Files();
+        } else {
+          showToast(`업로드 실패: ${resJson.error}`, 'error');
+        }
+        setUploadingDoc(false);
+      };
+      reader.readAsDataURL(file);
+    } catch (err: any) {
+      showToast(`업로드 실패: ${err.message}`, 'error');
+      setUploadingDoc(false);
+    }
+  };
+
+  // R2 문서 삭제
+  const handleDeleteDoc = async (key: string) => {
+    try {
+      const config = googleConfigs[0];
+      const accountId = config?.r2AccountId || '35014a2514680107d74e1e68d96e6c32';
+      const bucketName = config?.r2BucketName || 'kiyeun-storage';
+      const accessKeyId = config?.r2AccessKeyId || '03cdb7560d37242de608a5db2a976030';
+      const secretAccessKey = config?.r2SecretAccessKey || 'b2407ab4532e02317860bc3d63226fb7bc232e88083b150c15023906ed141986';
+
+      const res = await fetch('/api/r2', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'delete',
+          accountId,
+          bucketName,
+          accessKeyId,
+          secretAccessKey,
+          key
+        })
+      });
+      const resJson = await res.json();
+      if (resJson.success) {
+        showToast('문서가 삭제되었습니다.');
+        await fetchR2Files();
+      } else {
+        showToast(`삭제 실패: ${resJson.error}`, 'error');
+      }
+    } catch (err: any) {
+      showToast(`삭제 오류: ${err.message}`, 'error');
+    }
+  };
+
+  // 엑셀 내보내기
+  const handleExport = () => {
+    const excelData = filtered.map((p, idx) => {
+      const stats = assetStatsMap.get(p.id) || { total: 0, owned: 0, leased: 0, available: 0, rented: 0, assigned: 0, repairing: 0 };
+      const docList = r2FilesByModelMap.get(p.id) || [];
+      return {
+        '번호': idx + 1,
+        '모델명': p.modelName,
+        '피트(Feet)': p.feet ? `${p.feet} ft` : '-',
+        '동력': p.powerSource || '-',
+        '작업높이': p.workingHeight || '-',
+        '발판높이': p.platformHeight || '-',
+        '장비중량': p.weight || '-',
+        '적재중량': p.capacityPreExt || '-',
+        '장비크기': p.machineDimensions || '-',
+        '플랫폼크기': p.platformDimensions || '-',
+        '등판능력': p.gradeability || '-',
+        '주행속도': p.speed || '-',
+        '최대풍속': p.maxWindSpeed || '-',
+        'A/S접수': p.asContact || '031-334-5296',
+        '제조사': p.manufacturer || '-',
+        '사용여부': p.isActive !== false ? '사용' : '미사용',
+        '총보유대수': stats.total,
+        '당사자산대수': stats.owned,
+        '외부임차대수': stats.leased,
+        '임대가능대수': stats.available,
+        '대여중대수': stats.rented,
+        'R2문서건수': docList.length,
+        '등록일': p.createdAt?.substring(0, 10) || '-'
+      };
+    });
+
+    exportToExcel(excelData, `제품모델목록_${new Date().toISOString().split('T')[0]}`, '제품목록');
+    showToast(`제품 모델 목록 (${filtered.length}건) 엑셀이 다운로드되었습니다.`);
+  };
+
+  const ef = (field: keyof Product) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
+    const val = e.target.type === 'number' ? (e.target.value === '' ? undefined : Number(e.target.value)) : e.target.value;
+    setEditForm(prev => ({ ...prev, [field]: val }));
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, gap: '12px' }}>
-      <div className="card-header" style={{ marginBottom: 0, flexShrink: 0 }}>
-        <div>
-          <h2 className="card-title">제품 모델 관리</h2>
-          <p className="card-subtitle">장비 모델 및 제원표 규격 관리</p>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, gap: '8px', position: 'relative' }}>
+      
+      {/* 알림 토스트 배너 */}
+      {toastMessage && (
+        <div style={{
+          position: 'fixed',
+          top: '20px',
+          right: '24px',
+          zIndex: 9999,
+          padding: '10px 18px',
+          borderRadius: '6px',
+          backgroundColor: toastMessage.type === 'success' ? 'var(--success)' : 'var(--danger)',
+          color: '#ffffff',
+          fontWeight: 600,
+          fontSize: '13px',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.18)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          animation: 'fadeIn 0.2s ease-in-out'
+        }}>
+          {toastMessage.type === 'success' ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
+          <span>{toastMessage.text}</span>
         </div>
-        <div style={{ display: 'flex', gap: '8px' }}>
-          <button className="btn-secondary" onClick={handleRefresh} disabled={refreshing}>
-            <RefreshCw size={16} className={refreshing ? 'animate-spin' : ''} />
-            새로고침
+      )}
+
+      {/* ① 상단 헤더 & 파이프라인 (좌상단 Scope + 우상단 Pipeline: 헌장 3.5) */}
+      <div style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        flexWrap: 'wrap',
+        gap: '8px',
+        paddingBottom: '4px',
+        borderBottom: '1px solid var(--border-color)',
+        flexShrink: 0
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <h2 style={{ margin: 0, fontWeight: '700', fontSize: '17px', color: 'var(--text-main)', whiteSpace: 'nowrap' }}>
+            제품 모델 관리
+          </h2>
+          <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+            총 <strong>{products.length}</strong>개 모델 (조회 <strong>{filtered.length}</strong>개)
+          </span>
+        </div>
+
+        {/* 우상단 파이프라인 액션 */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <button
+            className="btn-secondary"
+            onClick={handleRefresh}
+            disabled={refreshing}
+            style={{ padding: '5px 10px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '5px', whiteSpace: 'nowrap' }}
+          >
+            <RefreshCw size={13} className={refreshing ? 'animate-spin' : ''} /> 동기화
           </button>
-          <button className="btn-secondary" onClick={handleExport}>
-            <Download size={16} />
-            내보내기
+          <button
+            className="btn-secondary"
+            onClick={handleExport}
+            style={{ padding: '5px 10px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '5px', whiteSpace: 'nowrap' }}
+          >
+            <Download size={13} /> 엑셀 다운로드
           </button>
           {canSave && (
-            <button className="btn-primary" onClick={handleOpenAdd}>
-              <Plus size={16} />
-              모델 등록
+            <button
+              className="btn-primary"
+              onClick={handleOpenAddModal}
+              style={{ padding: '5px 12px', fontSize: '12px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '5px', whiteSpace: 'nowrap' }}
+            >
+              <Plus size={13} /> 모델 등록
             </button>
           )}
         </div>
       </div>
 
-      <div style={{ display: 'flex', gap: '12px', marginBottom: 0, alignItems: 'center', flexWrap: 'wrap', flexShrink: 0 }}>
-        <div style={{ position: 'relative', flex: 1, minWidth: '280px', maxWidth: '380px' }}>
-          <Search size={18} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
-          <input
-            type="text"
-            value={searchTerm}
-            onChange={e => setSearchTerm(e.target.value)}
-            placeholder="모델명, 제조사, 동력, 제원 검색..."
-            style={{ paddingLeft: '36px' }}
-          />
+      {/* ② 실시간 모델 및 자산 매핑 KPI 바 (Scope) */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '6px', flexShrink: 0 }}>
+        <div style={{ padding: '7px 12px', backgroundColor: 'var(--bg-card)', borderRadius: '6px', border: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 600, whiteSpace: 'nowrap' }}>등록 모델수</span>
+          <strong style={{ fontSize: '14px', color: 'var(--primary)', whiteSpace: 'nowrap' }}>{kpiStats.totalModels}종</strong>
         </div>
-
-        {/* 자산 보유 여부 필터 탭 */}
-        <div style={{ display: 'inline-flex', backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '6px', padding: '2px', gap: '2px' }}>
-          <button
-            type="button"
-            onClick={() => setAssetFilter('ALL')}
-            style={{
-              padding: '6px 12px',
-              fontSize: '12px',
-              fontWeight: assetFilter === 'ALL' ? 'bold' : 'normal',
-              color: assetFilter === 'ALL' ? '#fff' : 'var(--text-muted)',
-              backgroundColor: assetFilter === 'ALL' ? 'var(--primary)' : 'transparent',
-              borderRadius: '4px',
-              border: 'none',
-              cursor: 'pointer',
-              whiteSpace: 'nowrap'
-            }}
-          >
-            전체 ({totalModelsCount})
-          </button>
-          <button
-            type="button"
-            onClick={() => setAssetFilter('WITH_ASSETS')}
-            style={{
-              padding: '6px 12px',
-              fontSize: '12px',
-              fontWeight: assetFilter === 'WITH_ASSETS' ? 'bold' : 'normal',
-              color: assetFilter === 'WITH_ASSETS' ? '#fff' : 'var(--text-muted)',
-              backgroundColor: assetFilter === 'WITH_ASSETS' ? 'var(--primary)' : 'transparent',
-              borderRadius: '4px',
-              border: 'none',
-              cursor: 'pointer',
-              whiteSpace: 'nowrap'
-            }}
-          >
-            자산 보유 ({withAssetsCount})
-          </button>
-          <button
-            type="button"
-            onClick={() => setAssetFilter('NO_ASSETS')}
-            style={{
-              padding: '6px 12px',
-              fontSize: '12px',
-              fontWeight: assetFilter === 'NO_ASSETS' ? 'bold' : 'normal',
-              color: assetFilter === 'NO_ASSETS' ? '#fff' : 'var(--text-muted)',
-              backgroundColor: assetFilter === 'NO_ASSETS' ? '#ef4444' : 'transparent',
-              borderRadius: '4px',
-              border: 'none',
-              cursor: 'pointer',
-              whiteSpace: 'nowrap'
-            }}
-          >
-            자산 미보유 ({noAssetsCount})
-          </button>
+        <div style={{ padding: '7px 12px', backgroundColor: 'var(--bg-card)', borderRadius: '6px', border: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 600, whiteSpace: 'nowrap' }}>자산 보유 모델</span>
+          <strong style={{ fontSize: '14px', color: 'var(--success)', whiteSpace: 'nowrap' }}>{kpiStats.withAssets}종</strong>
+        </div>
+        <div style={{ padding: '7px 12px', backgroundColor: 'var(--bg-card)', borderRadius: '6px', border: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 600, whiteSpace: 'nowrap' }}>자산 미보유 모델</span>
+          <strong style={{ fontSize: '14px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{kpiStats.noAssets}종</strong>
+        </div>
+        <div style={{ padding: '7px 12px', backgroundColor: 'var(--bg-card)', borderRadius: '6px', border: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 600, whiteSpace: 'nowrap' }}>매핑 실물자산</span>
+          <strong style={{ fontSize: '14px', color: 'var(--primary)', whiteSpace: 'nowrap' }}>{kpiStats.totalMappedAssets}대</strong>
+        </div>
+        <div style={{ padding: '7px 12px', backgroundColor: 'var(--bg-card)', borderRadius: '6px', border: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 600, whiteSpace: 'nowrap' }}>R2 보관 문서</span>
+          <strong style={{ fontSize: '14px', color: '#0070C0', whiteSpace: 'nowrap' }}>{kpiStats.totalDocs}건</strong>
+        </div>
+        <div style={{ padding: '7px 12px', backgroundColor: 'var(--bg-card)', borderRadius: '6px', border: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 600, whiteSpace: 'nowrap' }}>사용 중 모델</span>
+          <strong style={{ fontSize: '14px', color: 'var(--success)', whiteSpace: 'nowrap' }}>{kpiStats.activeModels}종</strong>
         </div>
       </div>
 
-      {/* 수직 전용 독립 스크롤 컨테이너 (하단 뷰포트 영역 100% 가득 활용) */}
-      <div className="table-container" style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'auto', maxHeight: 'none', border: '1px solid var(--border-color)', borderRadius: '8px' }}>
-        <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0 }}>
-          <thead style={{ position: 'sticky', top: 0, zIndex: 10, backgroundColor: 'var(--bg-sidebar)' }}>
-            <tr>
-              <th style={{ width: '60px', textAlign: 'center', whiteSpace: 'nowrap' }}>NO</th>
-              <th onClick={() => handleSort('modelName')} style={{ cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}>
-                모델명 {renderSortArrow('modelName')}
-              </th>
-              <th onClick={() => handleSort('feet')} style={{ cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}>
-                피트 (FEET) {renderSortArrow('feet')}
-              </th>
-              <th onClick={() => handleSort('assetCount')} style={{ cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}>
-                자산현황 (당사/임차) {renderSortArrow('assetCount')}
-              </th>
-              <th style={{ whiteSpace: 'nowrap', textAlign: 'center' }}>클라우드 문서 (R2)</th>
-              <th style={{ whiteSpace: 'nowrap' }}>동력</th>
-              <th style={{ whiteSpace: 'nowrap' }}>작업높이</th>
-              <th style={{ whiteSpace: 'nowrap' }}>발판높이</th>
-              <th style={{ whiteSpace: 'nowrap' }}>장비중량</th>
-              <th style={{ whiteSpace: 'nowrap' }}>적재중량</th>
-              <th style={{ whiteSpace: 'nowrap' }}>장비크기</th>
-              <th style={{ whiteSpace: 'nowrap' }}>주행속도</th>
-              <th onClick={() => handleSort('manufacturer')} style={{ cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}>
-                제조사 {renderSortArrow('manufacturer')}
-              </th>
-              <th onClick={() => handleSort('isActive')} style={{ cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}>
-                사용 여부 {renderSortArrow('isActive')}
-              </th>
-              <th onClick={() => handleSort('createdAt')} style={{ width: '110px', cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}>
-                등록일 {renderSortArrow('createdAt')}
-              </th>
-              <th style={{ width: '130px', textAlign: 'center', whiteSpace: 'nowrap' }}>작업</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.length === 0 ? (
-              <tr>
-                <td colSpan={16} style={{ textAlign: 'center', padding: '40px 0', color: 'var(--text-muted)' }}>
-                  {products.length === 0 ? '등록된 제품 모델이 없습니다.' : '조회 조건에 맞는 제품 모델이 없습니다.'}
-                </td>
+      {/* ③ 필터 컨트롤 바 (Vertical Header-Label Layout: 헌장 3.4) */}
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '8px',
+        padding: '6px 12px',
+        backgroundColor: 'var(--bg-card)',
+        borderRadius: '6px',
+        border: '1px solid var(--border-color)',
+        flexWrap: 'wrap',
+        flexShrink: 0
+      }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', flex: '1', minWidth: '180px' }}>
+          <label style={{ fontSize: '10.5px', fontWeight: 600, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>통합 검색</label>
+          <div style={{ position: 'relative' }}>
+            <Search size={13} style={{ position: 'absolute', left: '8px', top: '7px', color: 'var(--text-muted)' }} />
+            <input
+              type="text"
+              placeholder="모델명, 제조사, 동력방식, 규격 검색..."
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '4px 8px 4px 26px',
+                borderRadius: '4px',
+                border: '1px solid var(--border-color)',
+                backgroundColor: 'var(--bg-app)',
+                color: 'var(--text-main)',
+                fontSize: '12px'
+              }}
+            />
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+          <label style={{ fontSize: '10.5px', fontWeight: 600, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>자산 보유 여부</label>
+          <select
+            value={assetFilter}
+            onChange={e => setAssetFilter(e.target.value as any)}
+            style={{ padding: '4px 8px', borderRadius: '4px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-app)', color: 'var(--text-main)', fontSize: '12px', minWidth: '110px' }}
+          >
+            <option value="ALL">전체 ({kpiStats.totalModels})</option>
+            <option value="WITH_ASSETS">자산 보유 ({kpiStats.withAssets})</option>
+            <option value="NO_ASSETS">자산 미보유 ({kpiStats.noAssets})</option>
+          </select>
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+          <label style={{ fontSize: '10.5px', fontWeight: 600, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>제조사</label>
+          <select
+            value={manufacturerFilter}
+            onChange={e => setManufacturerFilter(e.target.value)}
+            style={{ padding: '4px 8px', borderRadius: '4px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-app)', color: 'var(--text-main)', fontSize: '12px', minWidth: '100px' }}
+          >
+            <option value="ALL">전체 제조사</option>
+            {uniqueManufacturers.map(m => (
+              <option key={m} value={m}>{m}</option>
+            ))}
+          </select>
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+          <label style={{ fontSize: '10.5px', fontWeight: 600, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>동력 방식</label>
+          <select
+            value={powerSourceFilter}
+            onChange={e => setPowerSourceFilter(e.target.value)}
+            style={{ padding: '4px 8px', borderRadius: '4px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-app)', color: 'var(--text-main)', fontSize: '12px', minWidth: '90px' }}
+          >
+            <option value="ALL">전체 동력</option>
+            {uniquePowerSources.map(ps => (
+              <option key={ps} value={ps}>{ps}</option>
+            ))}
+          </select>
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+          <label style={{ fontSize: '10.5px', fontWeight: 600, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>사용 상태</label>
+          <select
+            value={activeStatusFilter}
+            onChange={e => setActiveStatusFilter(e.target.value)}
+            style={{ padding: '4px 8px', borderRadius: '4px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-app)', color: 'var(--text-main)', fontSize: '12px', minWidth: '90px' }}
+          >
+            <option value="ALL">전체 상태</option>
+            <option value="ACTIVE">사용</option>
+            <option value="INACTIVE">미사용</option>
+          </select>
+        </div>
+
+        {(searchTerm || assetFilter !== 'ALL' || manufacturerFilter !== 'ALL' || powerSourceFilter !== 'ALL' || activeStatusFilter !== 'ALL') && (
+          <button
+            onClick={() => { setSearchTerm(''); setAssetFilter('ALL'); setManufacturerFilter('ALL'); setPowerSourceFilter('ALL'); setActiveStatusFilter('ALL'); }}
+            style={{
+              marginTop: '16px',
+              padding: '4px 8px',
+              fontSize: '11.5px',
+              border: '1px solid var(--border-color)',
+              borderRadius: '4px',
+              backgroundColor: 'transparent',
+              color: 'var(--text-muted)',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+              whiteSpace: 'nowrap'
+            }}
+          >
+            <RefreshCw size={11} /> 초기화
+          </button>
+        )}
+      </div>
+
+      {/* ④ 고밀도 제품 모델 대장 그리드 (Body / Inspection: 헌장 3.6 유형 B) */}
+      <div style={{
+        flex: 1,
+        backgroundColor: 'var(--bg-card)',
+        borderRadius: '6px',
+        border: '1px solid var(--border-color)',
+        overflow: 'hidden',
+        display: 'flex',
+        flexDirection: 'column',
+        minHeight: 0
+      }}>
+        <div style={{ flex: 1, overflow: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '11.5px' }}>
+            <thead style={{ position: 'sticky', top: 0, zIndex: 10 }}>
+              <tr style={{ backgroundColor: 'var(--bg-app)', borderBottom: '1px solid var(--border-color)', color: 'var(--text-secondary)', fontWeight: 600 }}>
+                <th style={{ padding: '7px 8px', width: '50px', textAlign: 'center', whiteSpace: 'nowrap' }}>상세</th>
+                <th onClick={() => handleSort('modelName')} style={{ padding: '7px 8px', cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}>
+                  모델명{renderSortArrow('modelName')}
+                </th>
+                <th onClick={() => handleSort('feet')} style={{ padding: '7px 8px', cursor: 'pointer', userSelect: 'none', textAlign: 'center', whiteSpace: 'nowrap' }}>
+                  피트(Feet){renderSortArrow('feet')}
+                </th>
+                <th onClick={() => handleSort('assetCount')} style={{ padding: '7px 8px', cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}>
+                  실물자산 (당사/임차){renderSortArrow('assetCount')}
+                </th>
+                <th style={{ padding: '7px 8px', textAlign: 'center', whiteSpace: 'nowrap' }}>R2 문서함</th>
+                <th onClick={() => handleSort('manufacturer')} style={{ padding: '7px 8px', cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}>
+                  제조사{renderSortArrow('manufacturer')}
+                </th>
+                <th onClick={() => handleSort('powerSource')} style={{ padding: '7px 8px', cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}>
+                  동력{renderSortArrow('powerSource')}
+                </th>
+                <th style={{ padding: '7px 8px', whiteSpace: 'nowrap' }}>작업높이</th>
+                <th style={{ padding: '7px 8px', whiteSpace: 'nowrap' }}>발판높이</th>
+                <th style={{ padding: '7px 8px', whiteSpace: 'nowrap' }}>장비중량</th>
+                <th style={{ padding: '7px 8px', whiteSpace: 'nowrap' }}>적재중량</th>
+                <th style={{ padding: '7px 8px', whiteSpace: 'nowrap' }}>장비크기</th>
+                <th style={{ padding: '7px 8px', whiteSpace: 'nowrap' }}>주행속도</th>
+                <th onClick={() => handleSort('isActive')} style={{ padding: '7px 8px', cursor: 'pointer', userSelect: 'none', textAlign: 'center', whiteSpace: 'nowrap' }}>
+                  상태{renderSortArrow('isActive')}
+                </th>
               </tr>
-            ) : (
-              filtered.map((p, idx) => {
-                const stats = assetStatsMap.get(p.id) || { total: 0, owned: 0, leased: 0, available: 0, rented: 0 };
-                const docList = r2FilesByModelMap.get(p.id) || [];
-                return (
-                  <tr key={p.id} style={{ opacity: p.isActive !== false ? 1 : 0.6 }}>
-                    <td style={{ textAlign: 'center', fontWeight: 'bold', whiteSpace: 'nowrap' }}>{idx + 1}</td>
-                    <td style={{ whiteSpace: 'nowrap' }}><strong style={{ color: 'var(--primary)' }}>{p.modelName}</strong></td>
-                    <td style={{ whiteSpace: 'nowrap' }}>{p.feet} ft</td>
-                    <td style={{ whiteSpace: 'nowrap' }}>
-                      {stats.total > 0 ? (
-                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }} title={`가동현황: 임대가능 ${stats.available}대, 대여중 ${stats.rented}대`}>
-                          <span className="badge badge-primary" style={{ fontWeight: 'bold' }}>
-                            총 {stats.total}대
-                          </span>
-                          <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                            (자사 {stats.owned} · 임차 {stats.leased})
-                          </span>
-                        </div>
-                      ) : (
-                        <span className="badge badge-secondary" style={{ opacity: 0.6, fontSize: '11px' }}>
-                          미보유 (0대)
-                        </span>
-                      )}
-                    </td>
-                    <td style={{ whiteSpace: 'nowrap', textAlign: 'center' }}>
-                      <button
-                        type="button"
-                        onClick={() => handleOpenR2DocModal(p)}
-                        className={`badge ${docList.length > 0 ? 'badge-primary' : 'badge-secondary'}`}
-                        style={{
-                          cursor: 'pointer',
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '4px',
-                          padding: '3px 8px',
-                          fontSize: '11px',
-                          border: 'none',
-                          opacity: docList.length > 0 ? 1 : 0.6
-                        }}
-                        title="Cloudflare R2 제품 문서함 열기"
-                      >
-                        <Folder size={12} />
-                        {docList.length}건
-                      </button>
-                    </td>
-                    <td style={{ whiteSpace: 'nowrap' }}>{p.powerSource || '-'}</td>
-                    <td style={{ whiteSpace: 'nowrap' }}>{p.workingHeight || '-'}</td>
-                    <td style={{ whiteSpace: 'nowrap' }}>{p.platformHeight || '-'}</td>
-                    <td style={{ whiteSpace: 'nowrap' }}>{p.weight || '-'}</td>
-                    <td style={{ whiteSpace: 'nowrap' }}>{p.capacityPreExt || '-'}</td>
-                    <td style={{ whiteSpace: 'nowrap' }}>{p.machineDimensions || '-'}</td>
-                    <td style={{ whiteSpace: 'nowrap' }}>{p.speed || '-'}</td>
-                    <td style={{ whiteSpace: 'nowrap' }}>{p.manufacturer || '-'}</td>
-                    <td style={{ whiteSpace: 'nowrap' }}>
-                      <span className={`badge ${p.isActive !== false ? 'badge-success' : 'badge-secondary'}`}>
-                        {p.isActive !== false ? '사용' : '미사용'}
-                      </span>
-                    </td>
-                    <td style={{ whiteSpace: 'nowrap' }}>{p.createdAt.substring(0, 10)}</td>
-                    <td style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>
-                      <div style={{ display: 'flex', gap: '4px', justifyContent: 'center' }}>
-                        <button
-                          className={p.specSheetUrl ? 'btn-secondary' : 'btn-secondary'}
-                          onClick={() => p.specSheetUrl ? window.open(p.specSheetUrl, '_blank') : undefined}
-                          disabled={!p.specSheetUrl || generatingModelId === (p.id || p.modelName)}
-                          style={{
-                            padding: '3px 8px', fontSize: '11px',
-                            display: 'inline-flex', alignItems: 'center', gap: '2px',
-                            opacity: p.specSheetUrl ? 1 : 0.4,
-                            cursor: p.specSheetUrl ? 'pointer' : 'not-allowed',
-                          }}
-                          title={p.specSheetUrl ? '저장된 제원표 PDF 열기' : '제원표 없음 — 수정 저장 시 자동 생성됩니다'}
-                        >
-                          <FileText size={12} />
-                          {generatingModelId === (p.id || p.modelName)
-                            ? '생성중...'
-                            : p.specSheetUrl ? '제원표' : '제원표 없음'}
-                        </button>
-
-                        {canSave && (
-                          <button
-                            className="btn-secondary"
-                            onClick={() => handleOpenEdit(p)}
-                            style={{ padding: '3px 8px', fontSize: '11px' }}
-                          >
-                            수정
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })
-            )}
-          </tbody>
-        </table>
-      </div>
-
-      {/* 🌟 제원표 미리보기 모달 (규격표 디자인) */}
-      {showPreviewModal && previewProduct && (
-        <div style={{
-          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-          backgroundColor: 'rgba(0,0,0,0.65)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100,
-          padding: '20px'
-        }}>
-          <div className="card" style={{
-            width: '100%', maxWidth: '650px', maxHeight: '90vh', overflowY: 'auto',
-            backgroundColor: 'var(--bg-card)', color: 'var(--text-main)', padding: '24px', borderRadius: '12px', boxShadow: 'var(--shadow-lg)'
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', borderBottom: '1px solid var(--border-color)', paddingBottom: '12px' }}>
-              <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 'bold', color: 'var(--text-main)' }}>
-                장비 제원표 미리보기
-              </h3>
-              <button
-                type="button"
-                onClick={() => setShowPreviewModal(false)}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: '4px' }}
-              >
-                <X size={20} />
-              </button>
-            </div>
-
-            {/* 상단: 작업대 확장 전/후 적재중량 그래픽 헤더 */}
-            <div style={{ textAlign: 'center', marginBottom: '20px' }}>
-              <div style={{ fontSize: '16px', fontWeight: 'bold', color: 'var(--text-main)', marginBottom: '4px' }}>
-                작업대 확장 전 / 후 적재중량
-              </div>
-              <div style={{ fontSize: '13px', fontWeight: '600', color: 'var(--text-secondary)', marginBottom: '16px' }}>
-                장비 모델 : <span style={{ color: 'var(--primary)', fontWeight: 'bold' }}>{previewProduct.modelName}</span>
-              </div>
-
-              {/* 하중 분배 다이어그램 */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', backgroundColor: 'var(--bg-app)', padding: '16px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
-                {/* 확장 전 */}
-                <div style={{ textAlign: 'center', borderRight: '1px dashed var(--border-color)', paddingRight: '12px' }}>
-                  <div style={{ fontSize: '15px', fontWeight: 'bold', color: 'var(--text-main)', marginBottom: '4px' }}>
-                    {previewProduct.capacityPreExt || '272 kg'}
-                  </div>
-                  <div style={{ fontSize: '18px', color: 'var(--primary)', marginBottom: '4px' }}>⬇️</div>
-                  <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '80px', margin: '4px 0' }}>
-                    <img
-                      src={LIFT_RETRACTED_IMG}
-                      alt="작업대 확장 전 리프트 형상"
-                      style={{ maxHeight: '76px', maxWidth: '100%', objectFit: 'contain' }}
-                    />
-                  </div>
-                  <div style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--text-secondary)', backgroundColor: 'var(--bg-secondary)', padding: '4px', borderRadius: '3px' }}>
-                    작업대 확장 전 (작업자 2인)
-                  </div>
-                </div>
-
-                {/* 확장 후 */}
-                <div style={{ textAlign: 'center' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-around', marginBottom: '4px' }}>
-                    <div>
-                      <div style={{ fontSize: '14px', fontWeight: 'bold', color: 'var(--text-main)' }}>
-                        {previewProduct.capacityPostExtMain || '159 kg'}
-                      </div>
-                      <div style={{ fontSize: '16px', color: 'var(--primary)' }}>⬇️</div>
-                      <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 'bold' }}>본체</div>
-                    </div>
-                    <div>
-                      <div style={{ fontSize: '14px', fontWeight: 'bold', color: 'var(--text-main)' }}>
-                        {previewProduct.capacityPostExtDeck || '113 kg'}
-                      </div>
-                      <div style={{ fontSize: '16px', color: 'var(--primary)' }}>⬇️</div>
-                      <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 'bold' }}>확장부</div>
-                    </div>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '80px', margin: '4px 0' }}>
-                    <img
-                      src={LIFT_EXTENDED_IMG}
-                      alt="작업대 확장 후 리프트 형상"
-                      style={{ maxHeight: '76px', maxWidth: '100%', objectFit: 'contain' }}
-                    />
-                  </div>
-                  <div style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--text-secondary)', backgroundColor: 'var(--bg-secondary)', padding: '4px', borderRadius: '3px' }}>
-                    작업대 확장 후 (각 1인)
-                  </div>
-                </div>
-              </div>
-
-              {/* 최대풍속 배너 */}
-              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '12px' }}>
-                <div style={{ backgroundColor: '#dc2626', color: '#ffffff', fontWeight: 'bold', padding: '6px 14px', borderRadius: '4px', fontSize: '13px' }}>
-                  최대풍속 : {previewProduct.maxWindSpeed || '12.5 m/s 이내'}
-                </div>
-              </div>
-            </div>
-
-            {/* 하단: 장비 제원표 테이블 */}
-            <div style={{ textAlign: 'center', fontWeight: 'bold', fontSize: '16px', marginBottom: '8px', letterSpacing: '2px', color: 'var(--text-main)' }}>
-              장 비 제 원 표
-            </div>
-            <table style={{ width: '100%', borderCollapse: 'collapse', border: '2px solid var(--border-color)', fontSize: '12px', color: 'var(--text-main)', textAlign: 'center' }}>
-              <tbody>
-                <tr style={{ borderBottom: '1px solid var(--border-color)' }}>
-                  <td style={{ backgroundColor: 'var(--bg-app)', fontWeight: 'bold', width: '22%', padding: '5px', borderRight: '1px solid var(--border-color)' }}>사용업체명</td>
-                  <td style={{ width: '28%', padding: '5px', borderRight: '1px solid var(--border-color)', color: 'var(--text-muted)' }}>(계약처 자동출력)</td>
-                  <td style={{ backgroundColor: 'var(--bg-app)', fontWeight: 'bold', width: '22%', padding: '5px', borderRight: '1px solid var(--border-color)' }}>임대업체명</td>
-                  <td style={{ width: '28%', padding: '5px', fontWeight: 'bold' }}>㈜ 기연리프트</td>
-                </tr>
-                <tr style={{ borderBottom: '1px solid var(--border-color)' }}>
-                  <td style={{ backgroundColor: 'var(--bg-app)', fontWeight: 'bold', padding: '5px', borderRight: '1px solid var(--border-color)' }}>장 비 명</td>
-                  <td style={{ padding: '5px', borderRight: '1px solid var(--border-color)', fontWeight: 'bold' }}>{previewProduct.modelName}</td>
-                  <td style={{ backgroundColor: 'var(--bg-app)', fontWeight: 'bold', padding: '5px', borderRight: '1px solid var(--border-color)' }}>동 력</td>
-                  <td style={{ padding: '5px' }}>{previewProduct.powerSource || '배터리'}</td>
-                </tr>
-                <tr style={{ borderBottom: '1px solid var(--border-color)' }}>
-                  <td style={{ backgroundColor: 'var(--bg-app)', fontWeight: 'bold', padding: '5px', borderRight: '1px solid var(--border-color)' }}>작업 높이</td>
-                  <td style={{ padding: '5px', borderRight: '1px solid var(--border-color)' }}>{previewProduct.workingHeight || '-'}</td>
-                  <td style={{ backgroundColor: 'var(--bg-app)', fontWeight: 'bold', padding: '5px', borderRight: '1px solid var(--border-color)' }}>발판 높이</td>
-                  <td style={{ padding: '5px' }}>{previewProduct.platformHeight || '-'}</td>
-                </tr>
-                <tr style={{ borderBottom: '1px solid var(--border-color)' }}>
-                  <td style={{ backgroundColor: 'var(--bg-app)', fontWeight: 'bold', padding: '5px', borderRight: '1px solid var(--border-color)' }}>장비 중량</td>
-                  <td style={{ padding: '5px', borderRight: '1px solid var(--border-color)' }}>{previewProduct.weight || '-'}</td>
-                  <td style={{ backgroundColor: 'var(--bg-app)', fontWeight: 'bold', padding: '5px', borderRight: '1px solid var(--border-color)' }}>적재 중량</td>
-                  <td style={{ padding: '5px' }}>{previewProduct.capacityPreExt || '-'}</td>
-                </tr>
-                <tr style={{ borderBottom: '1px solid var(--border-color)' }}>
-                  <td style={{ backgroundColor: 'var(--bg-app)', fontWeight: 'bold', padding: '5px', borderRight: '1px solid var(--border-color)' }}>장비 크기</td>
-                  <td style={{ padding: '5px', borderRight: '1px solid var(--border-color)' }}>{previewProduct.machineDimensions || '-'}</td>
-                  <td style={{ backgroundColor: 'var(--bg-app)', fontWeight: 'bold', padding: '5px', borderRight: '1px solid var(--border-color)' }}>등판 능력</td>
-                  <td style={{ padding: '5px' }}>{previewProduct.gradeability || '-'}</td>
-                </tr>
-                <tr style={{ borderBottom: '1px solid var(--border-color)' }}>
-                  <td style={{ backgroundColor: 'var(--bg-app)', fontWeight: 'bold', padding: '5px', borderRight: '1px solid var(--border-color)' }}>플랫폼크기</td>
-                  <td style={{ padding: '5px', borderRight: '1px solid var(--border-color)' }}>{previewProduct.platformDimensions || '-'}</td>
-                  <td style={{ backgroundColor: 'var(--bg-app)', fontWeight: 'bold', padding: '5px', borderRight: '1px solid var(--border-color)' }}>주행 속도</td>
-                  <td style={{ padding: '5px' }}>{previewProduct.speed || '-'}</td>
-                </tr>
+            </thead>
+            <tbody>
+              {filtered.length === 0 ? (
                 <tr>
-                  <td style={{ backgroundColor: 'var(--bg-app)', fontWeight: 'bold', padding: '5px', borderRight: '1px solid var(--border-color)' }}>A/S 접수</td>
-                  <td colSpan={3} style={{ padding: '5px', fontWeight: 'bold', letterSpacing: '1px' }}>
-                    {previewProduct.asContact || '031-334-5296'}
+                  <td colSpan={14} style={{ padding: '36px 0', textAlign: 'center', color: 'var(--text-muted)' }}>
+                    조회 조건에 해당하는 제품 모델이 없습니다.
                   </td>
                 </tr>
-              </tbody>
-            </table>
+              ) : (
+                filtered.map(p => {
+                  const stats = assetStatsMap.get(p.id) || { total: 0, owned: 0, leased: 0, available: 0, rented: 0, assigned: 0, repairing: 0 };
+                  const docList = r2FilesByModelMap.get(p.id) || [];
 
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '20px', flexWrap: 'wrap', gap: '8px' }}>
-              <div style={{ display: 'flex', gap: '8px' }}>
+                  return (
+                    <tr
+                      key={p.id}
+                      onClick={() => handleSelectProduct(p)}
+                      style={{
+                        borderBottom: '1px solid var(--border-color)',
+                        cursor: 'pointer',
+                        transition: 'background-color 0.15s',
+                        opacity: p.isActive !== false ? 1 : 0.65
+                      }}
+                      className="hover-row"
+                    >
+                      {/* 상세 버튼 */}
+                      <td style={{ padding: '6px 8px', textAlign: 'center', whiteSpace: 'nowrap' }}>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleSelectProduct(p); }}
+                          style={{
+                            padding: '2px 6px',
+                            fontSize: '11px',
+                            border: '1px solid var(--border-color)',
+                            borderRadius: '3px',
+                            backgroundColor: 'transparent',
+                            cursor: 'pointer',
+                            color: 'var(--primary)',
+                            whiteSpace: 'nowrap'
+                          }}
+                        >
+                          보기
+                        </button>
+                      </td>
+
+                      {/* 모델명 */}
+                      <td style={{ padding: '6px 8px', fontWeight: 700, color: 'var(--primary)', whiteSpace: 'nowrap' }}>
+                        {p.modelName}
+                      </td>
+
+                      {/* 피트 */}
+                      <td style={{ padding: '6px 8px', textAlign: 'center', whiteSpace: 'nowrap' }}>
+                        <strong>{p.feet}</strong> ft
+                      </td>
+
+                      {/* 실물자산 보유 현황 */}
+                      <td style={{ padding: '6px 8px', whiteSpace: 'nowrap' }}>
+                        {stats.total > 0 ? (
+                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                            <span className="badge badge-primary" style={{ fontSize: '10px', padding: '1px 5px' }}>
+                              총 {stats.total}대
+                            </span>
+                            <span style={{ fontSize: '10.5px', color: 'var(--text-secondary)' }}>
+                              (자사 {stats.owned} · 임차 {stats.leased})
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="badge badge-secondary" style={{ fontSize: '9.5px', opacity: 0.6 }}>
+                            미보유 (0대)
+                          </span>
+                        )}
+                      </td>
+
+                      {/* R2 문서함 */}
+                      <td style={{ padding: '6px 8px', textAlign: 'center', whiteSpace: 'nowrap' }}>
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); handleSelectProduct(p); }}
+                          className={`badge ${docList.length > 0 ? 'badge-primary' : 'badge-secondary'}`}
+                          style={{
+                            cursor: 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '3px',
+                            padding: '1px 6px',
+                            fontSize: '10px',
+                            border: 'none',
+                            opacity: docList.length > 0 ? 1 : 0.6
+                          }}
+                        >
+                          <Folder size={11} /> {docList.length}건
+                        </button>
+                      </td>
+
+                      {/* 제조사 */}
+                      <td style={{ padding: '6px 8px', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>{p.manufacturer || '-'}</td>
+
+                      {/* 동력 */}
+                      <td style={{ padding: '6px 8px', color: 'var(--text-main)', whiteSpace: 'nowrap' }}>{p.powerSource || '-'}</td>
+
+                      {/* 작업높이 */}
+                      <td style={{ padding: '6px 8px', whiteSpace: 'nowrap' }}>{p.workingHeight || '-'}</td>
+
+                      {/* 발판높이 */}
+                      <td style={{ padding: '6px 8px', whiteSpace: 'nowrap' }}>{p.platformHeight || '-'}</td>
+
+                      {/* 장비중량 */}
+                      <td style={{ padding: '6px 8px', whiteSpace: 'nowrap' }}>{p.weight || '-'}</td>
+
+                      {/* 적재중량 */}
+                      <td style={{ padding: '6px 8px', whiteSpace: 'nowrap' }}>{p.capacityPreExt || '-'}</td>
+
+                      {/* 장비크기 */}
+                      <td style={{ padding: '6px 8px', whiteSpace: 'nowrap' }}>{p.machineDimensions || '-'}</td>
+
+                      {/* 주행속도 */}
+                      <td style={{ padding: '6px 8px', whiteSpace: 'nowrap' }}>{p.speed || '-'}</td>
+
+                      {/* 사용여부 */}
+                      <td style={{ padding: '6px 8px', textAlign: 'center', whiteSpace: 'nowrap' }}>
+                        <span className={`badge ${p.isActive !== false ? 'badge-success' : 'badge-secondary'}`} style={{ fontSize: '10px', padding: '1px 5px' }}>
+                          {p.isActive !== false ? '사용' : '미사용'}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* ⑤ 우하단 Terminal Action: 모델-자산 정합성 회계 대차대조식 검증 바 (헌장 3.5) */}
+        <div style={{
+          padding: '8px 14px',
+          backgroundColor: 'var(--bg-app)',
+          borderTop: '1px solid var(--border-color)',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          gap: '8px',
+          fontSize: '11.5px',
+          borderRadius: '0 0 6px 6px',
+          flexShrink: 0
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
+            <span>전사 등록모델: <strong style={{ color: 'var(--primary)' }}>{kpiStats.totalModels}종</strong> (자산보유 {kpiStats.withAssets}종 / 미보유 {kpiStats.noAssets}종)</span>
+            <span>|</span>
+            <span>매핑 실물자산: <strong style={{ color: 'var(--primary)' }}>{kpiStats.totalMappedAssets}대</strong></span>
+            <span>|</span>
+            <span>R2 클라우드 보관문서: <strong style={{ color: '#0070C0' }}>{kpiStats.totalDocs}건</strong></span>
+          </div>
+          <span style={{
+            padding: '2px 8px',
+            borderRadius: '4px',
+            backgroundColor: 'var(--success-light)',
+            color: 'var(--success)',
+            fontWeight: 700,
+            fontSize: '11px'
+          }}>
+            ⚖️ 대차 정상 (모델-자산 기준정보 100% 정합)
+          </span>
+        </div>
+      </div>
+
+      {/* ⑥ 서랍형 상세 Dossier 슬라이드오버 (헌장 3.6 마스터-디테일 스튜디오) */}
+      {selectedProduct && (() => {
+        const stats = assetStatsMap.get(selectedProduct.id) || { total: 0, owned: 0, leased: 0, available: 0, rented: 0, assigned: 0, repairing: 0 };
+        const docList = r2FilesByModelMap.get(selectedProduct.id) || [];
+
+        return (
+          <div style={{
+            position: 'fixed',
+            top: 0,
+            right: 0,
+            bottom: 0,
+            width: '520px',
+            maxWidth: '92vw',
+            backgroundColor: 'var(--bg-card)',
+            borderLeft: '1px solid var(--border-color)',
+            boxShadow: '-4px 0 20px rgba(0,0,0,0.18)',
+            zIndex: 1000,
+            display: 'flex',
+            flexDirection: 'column',
+            animation: 'slideLeft 0.2s ease-in-out'
+          }}>
+            {/* 서랍 헤더 */}
+            <div style={{
+              padding: '12px 16px',
+              borderBottom: '1px solid var(--border-color)',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              backgroundColor: 'var(--bg-app)'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Package className="text-primary" size={16} />
+                <span style={{ fontSize: '15px', fontWeight: 700, color: 'var(--text-main)' }}>
+                  [{selectedProduct.modelName}] {isEditing ? '제원 수정' : '모델 제원 원장'}
+                </span>
+                <span className={`badge ${selectedProduct.isActive !== false ? 'badge-success' : 'badge-secondary'}`} style={{ fontSize: '10px' }}>
+                  {selectedProduct.isActive !== false ? '사용' : '미사용'}
+                </span>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                {!isEditing && (
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    onClick={() => setShowSpecPreviewModal(true)}
+                    style={{ padding: '3px 8px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px' }}
+                  >
+                    <FileText size={12} /> 제원표 그래픽
+                  </button>
+                )}
+                {canSave && !isEditing && (
+                  <button
+                    className="btn-primary"
+                    onClick={handleStartEdit}
+                    style={{ padding: '3px 8px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px' }}
+                  >
+                    <Edit2 size={12} /> 수정
+                  </button>
+                )}
+                {isEditing && (
+                  <>
+                    <button
+                      className="btn-success"
+                      onClick={handleSaveEdit}
+                      style={{ padding: '3px 10px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px' }}
+                    >
+                      <Save size={12} /> 저장
+                    </button>
+                    <button
+                      className="btn-secondary"
+                      onClick={handleCancelEdit}
+                      style={{ padding: '3px 8px', fontSize: '11px' }}
+                    >
+                      취소
+                    </button>
+                  </>
+                )}
                 <button
-                  type="button"
-                  className="btn-secondary"
-                  onClick={() => handleDownloadPdf(previewProduct)}
-                  style={{ padding: '6px 14px', fontSize: '13px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                  onClick={() => { if (!isEditing) setSelectedProduct(null); }}
+                  style={{ border: 'none', backgroundColor: 'transparent', cursor: 'pointer', color: 'var(--text-muted)' }}
                 >
-                  <Download size={14} />
-                  PDF 다운로드
+                  <X size={18} />
                 </button>
               </div>
+            </div>
+
+            {/* 서랍 본문 스크롤 영역 */}
+            <div style={{ padding: '16px', flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '14px', fontSize: '12px' }}>
+              
+              {/* 1. 실물 자산 보유 및 가동 현황 */}
+              <div style={{ padding: '10px 12px', backgroundColor: 'var(--bg-app)', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                  <div style={{ fontWeight: 600, color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <Layers size={14} className="text-primary" /> 실물 자산 보유 및 가동 현황
+                  </div>
+                  {stats.total > 0 && (
+                    <button
+                      type="button"
+                      className="btn-secondary"
+                      onClick={() => setActiveTab('asset')}
+                      style={{ padding: '2px 6px', fontSize: '10.5px' }}
+                    >
+                      자산대장 바로가기
+                    </button>
+                  )}
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '6px', textAlign: 'center', fontSize: '11px' }}>
+                  <div style={{ padding: '6px', backgroundColor: 'var(--bg-card)', borderRadius: '4px', border: '1px solid var(--border-color)' }}>
+                    <div style={{ color: 'var(--text-muted)' }}>총 보유</div>
+                    <strong style={{ fontSize: '13px', color: 'var(--text-main)' }}>{stats.total}대</strong>
+                  </div>
+                  <div style={{ padding: '6px', backgroundColor: 'var(--bg-card)', borderRadius: '4px', border: '1px solid var(--border-color)' }}>
+                    <div style={{ color: 'var(--text-muted)' }}>임대가능</div>
+                    <strong style={{ fontSize: '13px', color: 'var(--success)' }}>{stats.available}대</strong>
+                  </div>
+                  <div style={{ padding: '6px', backgroundColor: 'var(--bg-card)', borderRadius: '4px', border: '1px solid var(--border-color)' }}>
+                    <div style={{ color: 'var(--text-muted)' }}>대여중</div>
+                    <strong style={{ fontSize: '13px', color: 'var(--primary)' }}>{stats.rented}대</strong>
+                  </div>
+                  <div style={{ padding: '6px', backgroundColor: 'var(--bg-card)', borderRadius: '4px', border: '1px solid var(--border-color)' }}>
+                    <div style={{ color: 'var(--text-muted)' }}>정비중</div>
+                    <strong style={{ fontSize: '13px', color: 'var(--danger)' }}>{stats.repairing}대</strong>
+                  </div>
+                </div>
+
+                <div style={{ marginTop: '6px', fontSize: '11px', color: 'var(--text-secondary)', display: 'flex', justifyContent: 'space-between' }}>
+                  <span>소유구분: 당사자산 {stats.owned}대 / 외부임차 {stats.leased}대</span>
+                  <span>출고대기: {stats.assigned}대</span>
+                </div>
+              </div>
+
+              {/* 2. R2 클라우드 문서함 스튜디오 (drcf) */}
+              <div style={{ padding: '10px 12px', backgroundColor: 'var(--bg-app)', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                  <div style={{ fontWeight: 600, color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <Folder size={14} style={{ color: '#0070C0' }} /> R2 클라우드 문서함 (drcf)
+                  </div>
+                  
+                  {/* 파일 업로드 버튼 */}
+                  <label style={{
+                    padding: '2px 8px',
+                    fontSize: '11px',
+                    borderRadius: '4px',
+                    backgroundColor: 'var(--primary)',
+                    color: '#ffffff',
+                    cursor: uploadingDoc ? 'not-allowed' : 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px'
+                  }}>
+                    <Upload size={11} /> {uploadingDoc ? '업로드중...' : '문서 업로드'}
+                    <input
+                      type="file"
+                      disabled={uploadingDoc}
+                      onChange={handleUploadCustomDoc}
+                      style={{ display: 'none' }}
+                      accept=".pdf,.jpg,.jpeg,.png,.xlsx"
+                    />
+                  </label>
+                </div>
+
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '8px' }}>
+                  보관 경로: <code style={{ color: 'var(--primary)' }}>Eq_doc/{selectedProduct.modelName}/</code>
+                </div>
+
+                {/* 문서 목록 */}
+                <div style={{ maxHeight: '140px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  {docList.length === 0 ? (
+                    <div style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '14px 0', fontSize: '11px' }}>
+                      보관된 안전인증서나 제원표 문서가 없습니다.
+                    </div>
+                  ) : (
+                    docList.map((doc, dIdx) => (
+                      <div
+                        key={dIdx}
+                        style={{
+                          padding: '5px 8px',
+                          borderRadius: '4px',
+                          backgroundColor: 'var(--bg-card)',
+                          border: '1px solid var(--border-color)',
+                          fontSize: '11px',
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center'
+                        }}
+                      >
+                        <a
+                          href={doc.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{ color: 'var(--primary)', fontWeight: 600, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '4px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '340px' }}
+                        >
+                          <ExternalLink size={11} /> {doc.name}
+                        </a>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteDoc(doc.key)}
+                          style={{ border: 'none', backgroundColor: 'transparent', cursor: 'pointer', color: 'var(--danger)', padding: '2px' }}
+                          title="삭제"
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              {/* 3. 기본 물리 제원 및 규격 */}
+              <div style={{ padding: '10px 12px', backgroundColor: 'var(--bg-app)', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
+                <div style={{ fontWeight: 600, color: 'var(--text-main)', marginBottom: '8px' }}>3. 상세 물리 제원 규격</div>
+                {isEditing ? (
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                    <div><label style={labelStyle}>모델명 *</label><input style={inputStyle} value={editForm.modelName || ''} onChange={ef('modelName')} /></div>
+                    <div><label style={labelStyle}>피트 (Feet) *</label><input type="number" style={inputStyle} value={editForm.feet ?? ''} onChange={ef('feet')} /></div>
+                    <div><label style={labelStyle}>제조사</label><input style={inputStyle} value={editForm.manufacturer || ''} onChange={ef('manufacturer')} /></div>
+                    <div><label style={labelStyle}>동력 방식</label><input style={inputStyle} value={editForm.powerSource || ''} onChange={ef('powerSource')} /></div>
+                    <div><label style={labelStyle}>작업 높이</label><input style={inputStyle} value={editForm.workingHeight || ''} onChange={ef('workingHeight')} /></div>
+                    <div><label style={labelStyle}>발판 높이</label><input style={inputStyle} value={editForm.platformHeight || ''} onChange={ef('platformHeight')} /></div>
+                    <div><label style={labelStyle}>장비 중량</label><input style={inputStyle} value={editForm.weight || ''} onChange={ef('weight')} /></div>
+                    <div><label style={labelStyle}>적재 중량 (확장 전)</label><input style={inputStyle} value={editForm.capacityPreExt || ''} onChange={ef('capacityPreExt')} /></div>
+                    <div><label style={labelStyle}>확장 후 본체 하중</label><input style={inputStyle} value={editForm.capacityPostExtMain || ''} onChange={ef('capacityPostExtMain')} /></div>
+                    <div><label style={labelStyle}>확장 후 확장부 하중</label><input style={inputStyle} value={editForm.capacityPostExtDeck || ''} onChange={ef('capacityPostExtDeck')} /></div>
+                    <div><label style={labelStyle}>장비 크기</label><input style={inputStyle} value={editForm.machineDimensions || ''} onChange={ef('machineDimensions')} /></div>
+                    <div><label style={labelStyle}>플랫폼 크기</label><input style={inputStyle} value={editForm.platformDimensions || ''} onChange={ef('platformDimensions')} /></div>
+                    <div><label style={labelStyle}>주행 속도</label><input style={inputStyle} value={editForm.speed || ''} onChange={ef('speed')} /></div>
+                    <div><label style={labelStyle}>등판 능력</label><input style={inputStyle} value={editForm.gradeability || ''} onChange={ef('gradeability')} /></div>
+                    <div><label style={labelStyle}>최대 풍속</label><input style={inputStyle} value={editForm.maxWindSpeed || ''} onChange={ef('maxWindSpeed')} /></div>
+                    <div><label style={labelStyle}>A/S 접수처</label><input style={inputStyle} value={editForm.asContact || ''} onChange={ef('asContact')} /></div>
+                    <div style={{ gridColumn: 'span 2' }}>
+                      <label style={labelStyle}>기타 제원 메모</label>
+                      <textarea style={{ ...inputStyle, minHeight: '44px' }} value={editForm.spec || ''} onChange={ef('spec')} />
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '11.5px' }}>
+                    <div><span style={{ color: 'var(--text-secondary)' }}>모델명:</span> <strong>{selectedProduct.modelName}</strong></div>
+                    <div><span style={{ color: 'var(--text-secondary)' }}>피트 규격:</span> <strong>{selectedProduct.feet} ft</strong></div>
+                    <div><span style={{ color: 'var(--text-secondary)' }}>제조사:</span> {selectedProduct.manufacturer || '-'}</div>
+                    <div><span style={{ color: 'var(--text-secondary)' }}>동력 방식:</span> {selectedProduct.powerSource || '-'}</div>
+                    <div><span style={{ color: 'var(--text-secondary)' }}>작업 높이:</span> {selectedProduct.workingHeight || '-'}</div>
+                    <div><span style={{ color: 'var(--text-secondary)' }}>발판 높이:</span> {selectedProduct.platformHeight || '-'}</div>
+                    <div><span style={{ color: 'var(--text-secondary)' }}>장비 중량:</span> {selectedProduct.weight || '-'}</div>
+                    <div><span style={{ color: 'var(--text-secondary)' }}>적재 중량:</span> {selectedProduct.capacityPreExt || '-'}</div>
+                    <div><span style={{ color: 'var(--text-secondary)' }}>확장 후 하중:</span> 본체 {selectedProduct.capacityPostExtMain || '-'} / 확장 {selectedProduct.capacityPostExtDeck || '-'}</div>
+                    <div><span style={{ color: 'var(--text-secondary)' }}>장비 크기:</span> {selectedProduct.machineDimensions || '-'}</div>
+                    <div><span style={{ color: 'var(--text-secondary)' }}>플랫폼 크기:</span> {selectedProduct.platformDimensions || '-'}</div>
+                    <div><span style={{ color: 'var(--text-secondary)' }}>주행 속도:</span> {selectedProduct.speed || '-'}</div>
+                    <div><span style={{ color: 'var(--text-secondary)' }}>등판 능력:</span> {selectedProduct.gradeability || '-'}</div>
+                    <div><span style={{ color: 'var(--text-secondary)' }}>최대 풍속:</span> {selectedProduct.maxWindSpeed || '-'}</div>
+                    <div style={{ gridColumn: 'span 2' }}>
+                      <span style={{ color: 'var(--text-secondary)' }}>A/S 접수처:</span> <strong>{selectedProduct.asContact || '031-334-5296'}</strong>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+            </div>
+
+            {/* 서랍 푸터 */}
+            <div style={{ padding: '10px 16px', borderTop: '1px solid var(--border-color)', backgroundColor: 'var(--bg-app)', display: 'flex', justifyContent: 'flex-end' }}>
               <button
                 type="button"
                 className="btn-secondary"
-                onClick={() => setShowPreviewModal(false)}
-                style={{ padding: '6px 16px', fontSize: '13px' }}
+                onClick={() => setSelectedProduct(null)}
+                style={{ padding: '5px 14px', fontSize: '12px' }}
               >
                 닫기
               </button>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
-      {/* 🌟 등록 / 수정 모달 */}
-      {showModal && editingProduct && (
+      {/* ⑦ 신규 모델 등록 모달 */}
+      {showAddModal && (
         <div style={{
           position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-          backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000,
+          backgroundColor: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100,
           padding: '20px'
         }}>
-          <form onSubmit={handleSubmit} className="card" style={{ width: '100%', maxWidth: '780px', maxHeight: '90vh', overflowY: 'auto', backgroundColor: 'var(--bg-card)' }}>
-            <h3 className="card-title" style={{ marginBottom: '16px' }}>{editingProduct.id ? '제품 모델 및 제원 수정' : '신규 제품 모델 등록'}</h3>
-            
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginBottom: '20px' }}>
-              {/* 섹션 1: 기본 식별 정보 */}
-              <div style={{ backgroundColor: 'var(--bg-app)', padding: '14px', borderRadius: '8px', border: '1px solid var(--border)' }}>
-                <h4 style={{ margin: '0 0 12px 0', fontSize: '14px', fontWeight: 'bold', color: 'var(--primary)' }}>기본 모델 정보</h4>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                    <label style={{ fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap' }}>모델명 *</label>
-                    <input
-                      type="text"
-                      value={editingProduct.modelName || ''}
-                      onChange={e => setEditingProduct({ ...editingProduct, modelName: e.target.value })}
-                      placeholder="예: SJ3215"
-                      required
-                    />
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                    <label style={{ fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap' }}>피트 규격 (Feet) *</label>
-                    <input
-                      type="number"
-                      step="any"
-                      value={editingProduct.feet || ''}
-                      onChange={e => setEditingProduct({ ...editingProduct, feet: parseFloat(e.target.value) })}
-                      placeholder="예: 15, 19, 32"
-                      required
-                    />
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                    <label style={{ fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap' }}>제조사</label>
-                    <input
-                      type="text"
-                      value={editingProduct.manufacturer || ''}
-                      onChange={e => setEditingProduct({ ...editingProduct, manufacturer: e.target.value })}
-                      placeholder="예: Skyjack, Genie"
-                    />
-                  </div>
-                </div>
+          <form onSubmit={handleSaveAddModal} className="card" style={{ width: '100%', maxWidth: '640px', maxHeight: '90vh', overflowY: 'auto', backgroundColor: 'var(--bg-card)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', borderBottom: '1px solid var(--border-color)', paddingBottom: '10px' }}>
+              <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 'bold' }}>신규 제품 모델 등록</h3>
+              <button type="button" onClick={() => setShowAddModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}><X size={18} /></button>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', fontSize: '12px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px' }}>
+                <div><label style={labelStyle}>모델명 *</label><input style={inputStyle} placeholder="예: SJ3219" value={editForm.modelName || ''} onChange={ef('modelName')} required /></div>
+                <div><label style={labelStyle}>피트 (Feet) *</label><input type="number" style={inputStyle} placeholder="예: 19" value={editForm.feet ?? ''} onChange={ef('feet')} required /></div>
+                <div><label style={labelStyle}>제조사</label><input style={inputStyle} placeholder="예: Skyjack" value={editForm.manufacturer || ''} onChange={ef('manufacturer')} /></div>
               </div>
 
-              {/* 섹션 2: 제원표 13대 상세 규격 */}
-              <div style={{ backgroundColor: 'var(--bg-app)', padding: '14px', borderRadius: '8px', border: '1px solid var(--border)' }}>
-                <h4 style={{ margin: '0 0 12px 0', fontSize: '14px', fontWeight: 'bold', color: 'var(--primary)' }}>장비 제원표 상세 규격 (PDF 자동 출력 항목)</h4>
-                
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                    <label style={{ fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap' }}>동력 방식</label>
-                    <input
-                      type="text"
-                      value={editingProduct.powerSource || ''}
-                      onChange={e => setEditingProduct({ ...editingProduct, powerSource: e.target.value })}
-                      placeholder="예: 배터리, 디젤, 전동"
-                    />
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                    <label style={{ fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap' }}>A/S 접수 전화번호</label>
-                    <input
-                      type="text"
-                      value={editingProduct.asContact || ''}
-                      onChange={e => setEditingProduct({ ...editingProduct, asContact: e.target.value })}
-                      placeholder="예: 031-334-5296"
-                    />
-                  </div>
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                    <label style={{ fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap' }}>작업 높이 (M)</label>
-                    <input
-                      type="text"
-                      value={editingProduct.workingHeight || ''}
-                      onChange={e => setEditingProduct({ ...editingProduct, workingHeight: e.target.value })}
-                      placeholder="예: 6.57 M"
-                    />
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                    <label style={{ fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap' }}>발판 높이 (M)</label>
-                    <input
-                      type="text"
-                      value={editingProduct.platformHeight || ''}
-                      onChange={e => setEditingProduct({ ...editingProduct, platformHeight: e.target.value })}
-                      placeholder="예: 4.57 M"
-                    />
-                  </div>
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                    <label style={{ fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap' }}>장비 중량 (Kg)</label>
-                    <input
-                      type="text"
-                      value={editingProduct.weight || ''}
-                      onChange={e => setEditingProduct({ ...editingProduct, weight: e.target.value })}
-                      placeholder="예: 1,148 Kg"
-                    />
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                    <label style={{ fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap' }}>적재 중량 / 확장 전 (Kg)</label>
-                    <input
-                      type="text"
-                      value={editingProduct.capacityPreExt || ''}
-                      onChange={e => setEditingProduct({ ...editingProduct, capacityPreExt: e.target.value })}
-                      placeholder="예: 272 kg"
-                    />
-                  </div>
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                    <label style={{ fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap' }}>장비 크기 (전장 x 전폭 x 전고)</label>
-                    <input
-                      type="text"
-                      value={editingProduct.machineDimensions || ''}
-                      onChange={e => setEditingProduct({ ...editingProduct, machineDimensions: e.target.value })}
-                      placeholder="예: 1.80 x 0.81 x 1.92 M"
-                    />
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                    <label style={{ fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap' }}>등판 능력 (%)</label>
-                    <input
-                      type="text"
-                      value={editingProduct.gradeability || ''}
-                      onChange={e => setEditingProduct({ ...editingProduct, gradeability: e.target.value })}
-                      placeholder="예: 25 %"
-                    />
-                  </div>
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                    <label style={{ fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap' }}>플랫폼 크기 (길이 x 폭)</label>
-                    <input
-                      type="text"
-                      value={editingProduct.platformDimensions || ''}
-                      onChange={e => setEditingProduct({ ...editingProduct, platformDimensions: e.target.value })}
-                      placeholder="예: 1.55 x 0.66 M"
-                    />
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                    <label style={{ fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap' }}>주행 속도 (Km/h)</label>
-                    <input
-                      type="text"
-                      value={editingProduct.speed || ''}
-                      onChange={e => setEditingProduct({ ...editingProduct, speed: e.target.value })}
-                      placeholder="예: 3.4 Km/h"
-                    />
-                  </div>
-                </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                <div><label style={labelStyle}>동력 방식</label><input style={inputStyle} placeholder="예: 배터리" value={editForm.powerSource || ''} onChange={ef('powerSource')} /></div>
+                <div><label style={labelStyle}>A/S 접수처</label><input style={inputStyle} value={editForm.asContact || '031-334-5296'} onChange={ef('asContact')} /></div>
               </div>
 
-              {/* 섹션 3: 확장 후 하중 및 안전 풍속 */}
-              <div style={{ backgroundColor: 'var(--bg-app)', padding: '14px', borderRadius: '8px', border: '1px solid var(--border)' }}>
-                <h4 style={{ margin: '0 0 12px 0', fontSize: '14px', fontWeight: 'bold', color: 'var(--primary)' }}>작업대 확장 적재 하중 및 허용 풍속</h4>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                    <label style={{ fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap' }}>확장 후 본체 하중 (1인)</label>
-                    <input
-                      type="text"
-                      value={editingProduct.capacityPostExtMain || ''}
-                      onChange={e => setEditingProduct({ ...editingProduct, capacityPostExtMain: e.target.value })}
-                      placeholder="예: 159 kg"
-                    />
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                    <label style={{ fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap' }}>확장 후 확장부 하중 (1인)</label>
-                    <input
-                      type="text"
-                      value={editingProduct.capacityPostExtDeck || ''}
-                      onChange={e => setEditingProduct({ ...editingProduct, capacityPostExtDeck: e.target.value })}
-                      placeholder="예: 113 kg"
-                    />
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                    <label style={{ fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap' }}>최대 허용 풍속</label>
-                    <input
-                      type="text"
-                      value={editingProduct.maxWindSpeed || ''}
-                      onChange={e => setEditingProduct({ ...editingProduct, maxWindSpeed: e.target.value })}
-                      placeholder="예: 12.5 m/s 이내"
-                    />
-                  </div>
-                </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                <div><label style={labelStyle}>작업 높이</label><input style={inputStyle} placeholder="예: 7.79 M" value={editForm.workingHeight || ''} onChange={ef('workingHeight')} /></div>
+                <div><label style={labelStyle}>발판 높이</label><input style={inputStyle} placeholder="예: 5.79 M" value={editForm.platformHeight || ''} onChange={ef('platformHeight')} /></div>
               </div>
 
-              {/* 섹션 4: 안전인증 및 클라우드 링크 */}
-              <div style={{ backgroundColor: 'var(--bg-app)', padding: '14px', borderRadius: '8px', border: '1px solid var(--border)' }}>
-                <h4 style={{ margin: '0 0 12px 0', fontSize: '14px', fontWeight: 'bold', color: 'var(--primary)' }}>안전인증 및 매뉴얼 링크</h4>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                    <label style={{ fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap' }}>작업최대높이 / 적재용량</label>
-                    <input
-                      type="text"
-                      value={editingProduct.maxHeightCapacity || ''}
-                      onChange={e => setEditingProduct({ ...editingProduct, maxHeightCapacity: e.target.value })}
-                      placeholder="예: 6.57 M / 272 kg"
-                    />
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                    <label style={{ fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap' }}>안전인증년월일 (KCs)</label>
-                    <input
-                      type="date"
-                      value={editingProduct.safetyCertDate || ''}
-                      onChange={e => setEditingProduct({ ...editingProduct, safetyCertDate: e.target.value })}
-                    />
-                  </div>
-                </div>
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                    <label style={{ fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap' }}>안전인증서 클라우드 파일 링크</label>
-                    <input
-                      type="text"
-                      value={editingProduct.safetyCertUrl || ''}
-                      onChange={e => setEditingProduct({ ...editingProduct, safetyCertUrl: e.target.value })}
-                      placeholder="예: https://..."
-                    />
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <label style={{ fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap' }}>제원표 클라우드 파일 링크</label>
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          alert("브라우저 렌더러가 폐기되어 자동 생성 기능을 사용할 수 없습니다. 향후 정품 엑셀 기반으로 개편될 예정입니다.");
-                        }}
-                        style={{
-                          fontSize: '11px',
-                          padding: '2px 8px',
-                          backgroundColor: '#eff6ff',
-                          color: '#2563eb',
-                          border: '1px solid #bfdbfe',
-                          borderRadius: '4px',
-                          cursor: 'pointer',
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '4px'
-                        }}
-                      >
-                        <Sparkles size={12} />
-                        R2 제원표 자동 생성 & 링크 입력
-                      </button>
-                    </div>
-                    <input
-                      type="text"
-                      value={editingProduct.specSheetUrl || ''}
-                      onChange={e => setEditingProduct({ ...editingProduct, specSheetUrl: e.target.value })}
-                      placeholder="예: https://pub-xxx.r2.dev/Eq_doc/..."
-                    />
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                    <label style={{ fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap' }}>비상조작방법 매뉴얼 링크</label>
-                    <input
-                      type="text"
-                      value={editingProduct.emergencyGuideUrl || ''}
-                      onChange={e => setEditingProduct({ ...editingProduct, emergencyGuideUrl: e.target.value })}
-                      placeholder="예: https://..."
-                    />
-                  </div>
-                </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                <div><label style={labelStyle}>장비 중량</label><input style={inputStyle} placeholder="예: 1,312 kg" value={editForm.weight || ''} onChange={ef('weight')} /></div>
+                <div><label style={labelStyle}>적재 중량</label><input style={inputStyle} placeholder="예: 227 kg" value={editForm.capacityPreExt || ''} onChange={ef('capacityPreExt')} /></div>
               </div>
 
-              {/* 섹션 5: 제원 요약 메모 및 사용 여부 */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <label style={{ fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap' }}>기타 비고 및 제원 특징</label>
-                <textarea
-                  value={editingProduct.spec || ''}
-                  onChange={e => setEditingProduct({ ...editingProduct, spec: e.target.value })}
-                  placeholder="작업 높이, 적재 용량 등 제원 기재"
-                  rows={2}
-                />
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                <div><label style={labelStyle}>장비 크기</label><input style={inputStyle} placeholder="예: 1.78 x 0.81 x 2.11 M" value={editForm.machineDimensions || ''} onChange={ef('machineDimensions')} /></div>
+                <div><label style={labelStyle}>주행 속도</label><input style={inputStyle} placeholder="예: 3.2 km/h" value={editForm.speed || ''} onChange={ef('speed')} /></div>
               </div>
 
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 14px', backgroundColor: 'var(--bg-app)', borderRadius: '8px', border: '1px solid var(--border)', width: 'fit-content' }}>
-                <input
-                  type="checkbox"
-                  id="productIsActive"
-                  checked={editingProduct.isActive !== false}
-                  onChange={e => setEditingProduct({ ...editingProduct, isActive: e.target.checked })}
-                />
-                <label 
-                  htmlFor="productIsActive" 
-                  style={{ 
-                    margin: 0, 
-                    padding: 0, 
-                    fontSize: '14px', 
-                    fontWeight: '600', 
-                    cursor: 'pointer', 
-                    color: 'var(--text-primary)', 
-                    display: 'inline-block', 
-                    whiteSpace: 'nowrap' 
-                  }}
-                >
-                  사용 여부 (단종/매각 시 체크 해제)
-                </label>
+              <div>
+                <label style={labelStyle}>기타 제원 메모</label>
+                <textarea style={{ ...inputStyle, minHeight: '44px' }} placeholder="특이사항 및 제원" value={editForm.spec || ''} onChange={ef('spec')} />
               </div>
             </div>
 
-            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
-              <button type="button" className="btn-secondary" onClick={() => setShowModal(false)}>취소</button>
-              <button type="submit" className="btn-primary">저장</button>
+            <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginTop: '16px', paddingTop: '10px', borderTop: '1px solid var(--border-color)' }}>
+              <button type="button" className="btn-secondary" onClick={() => setShowAddModal(false)} style={{ padding: '6px 14px', fontSize: '12px' }}>취소</button>
+              <button type="submit" className="btn-primary" style={{ padding: '6px 16px', fontSize: '12px' }}>등록 완료</button>
             </div>
           </form>
         </div>
       )}
 
-      {/* 🌟 Cloudflare R2 제품 문서함 팝업 모달 */}
-      {/* 🌟 R2 클라우드 문서함 모달 */}
-      {showR2DocModal && selectedProductForDocs && (
+      {/* ⑧ 제원표 그래픽 미리보기 모달 */}
+      {showSpecPreviewModal && selectedProduct && (
         <div style={{
           position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
           backgroundColor: 'rgba(0,0,0,0.65)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1150,
           padding: '20px'
         }}>
           <div className="card" style={{
-            width: '100%', maxWidth: '680px', maxHeight: '90vh', overflowY: 'auto',
-            backgroundColor: 'var(--bg-card)', color: 'var(--text-main)', padding: '24px', borderRadius: '12px',
-            boxShadow: 'var(--shadow-lg)', border: '1px solid var(--border-color)'
+            width: '100%', maxWidth: '640px', maxHeight: '90vh', overflowY: 'auto',
+            backgroundColor: 'var(--bg-card)', color: 'var(--text-main)', padding: '20px', borderRadius: '8px', boxShadow: 'var(--shadow-lg)'
           }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', borderBottom: '1px solid var(--border-color)', paddingBottom: '12px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Folder size={20} color="var(--primary)" />
-                <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 'bold', color: 'var(--text-main)' }}>
-                  [{selectedProductForDocs.modelName}] 클라우드 문서함
-                </h3>
-              </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', borderBottom: '1px solid var(--border-color)', paddingBottom: '10px' }}>
+              <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 'bold' }}>
+                [{selectedProduct.modelName}] 제원표 그래픽 규격
+              </h3>
               <button
                 type="button"
-                onClick={() => setShowR2DocModal(false)}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: '4px' }}
+                onClick={() => setShowSpecPreviewModal(false)}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}
               >
-                <X size={20} />
+                <X size={18} />
               </button>
             </div>
 
-            <div style={{ marginBottom: '16px', backgroundColor: 'var(--bg-app)', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-color)', fontSize: '13px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
-                <div>
-                  <span style={{ fontWeight: 'bold', color: 'var(--text-secondary)' }}>R2 보관 경로: </span>
-                  <code style={{ color: 'var(--primary)', fontWeight: 'bold' }}>Eq_doc/{selectedProductForDocs.modelName}/</code>
+            {/* 작업대 확장 전/후 적재중량 그래픽 헤더 */}
+            <div style={{ textAlign: 'center', marginBottom: '16px' }}>
+              <div style={{ fontSize: '14px', fontWeight: 'bold', color: 'var(--text-main)', marginBottom: '4px' }}>
+                작업대 확장 전 / 후 적재중량
+              </div>
+
+              {/* 하중 분배 다이어그램 */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', backgroundColor: 'var(--bg-app)', padding: '14px', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
+                {/* 확장 전 */}
+                <div style={{ textAlign: 'center', borderRight: '1px dashed var(--border-color)', paddingRight: '10px' }}>
+                  <div style={{ fontSize: '14px', fontWeight: 'bold', color: 'var(--text-main)', marginBottom: '2px' }}>
+                    {selectedProduct.capacityPreExt || '227 kg'}
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '70px', margin: '4px 0' }}>
+                    <img
+                      src={LIFT_RETRACTED_IMG}
+                      alt="확장 전 형상"
+                      style={{ maxHeight: '66px', maxWidth: '100%', objectFit: 'contain' }}
+                    />
+                  </div>
+                  <div style={{ fontSize: '11px', fontWeight: 'bold', color: 'var(--text-secondary)', backgroundColor: 'var(--bg-secondary)', padding: '3px', borderRadius: '3px' }}>
+                    작업대 확장 전 (작업자 2인)
+                  </div>
                 </div>
-                <label
-                  style={{
-                    backgroundColor: 'var(--primary)',
-                    color: '#ffffff',
-                    padding: '6px 12px',
-                    borderRadius: '6px',
-                    fontSize: '12px',
-                    fontWeight: 'bold',
-                    cursor: uploadingDoc ? 'not-allowed' : 'pointer',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '4px'
-                  }}
-                >
-                  <Upload size={14} />
-                  {uploadingDoc ? '업로드중...' : '새 문서 업로드'}
-                  <input
-                    type="file"
-                    onChange={handleUploadCustomDoc}
-                    disabled={uploadingDoc}
-                    style={{ display: 'none' }}
-                  />
-                </label>
+
+                {/* 확장 후 */}
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-around', marginBottom: '2px' }}>
+                    <div>
+                      <div style={{ fontSize: '13px', fontWeight: 'bold', color: 'var(--text-main)' }}>
+                        {selectedProduct.capacityPostExtMain || '159 kg'}
+                      </div>
+                      <div style={{ fontSize: '10px', color: 'var(--text-muted)', fontWeight: 'bold' }}>본체</div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '13px', fontWeight: 'bold', color: 'var(--text-main)' }}>
+                        {selectedProduct.capacityPostExtDeck || '113 kg'}
+                      </div>
+                      <div style={{ fontSize: '10px', color: 'var(--text-muted)', fontWeight: 'bold' }}>확장부</div>
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '70px', margin: '4px 0' }}>
+                    <img
+                      src={LIFT_EXTENDED_IMG}
+                      alt="확장 후 형상"
+                      style={{ maxHeight: '66px', maxWidth: '100%', objectFit: 'contain' }}
+                    />
+                  </div>
+                  <div style={{ fontSize: '11px', fontWeight: 'bold', color: 'var(--text-secondary)', backgroundColor: 'var(--bg-secondary)', padding: '3px', borderRadius: '3px' }}>
+                    작업대 확장 후 (각 1인)
+                  </div>
+                </div>
+              </div>
+
+              {/* 최대풍속 배너 */}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '10px' }}>
+                <div style={{ backgroundColor: '#dc2626', color: '#ffffff', fontWeight: 'bold', padding: '4px 12px', borderRadius: '4px', fontSize: '12px' }}>
+                  최대풍속: {selectedProduct.maxWindSpeed || '12.5 m/s 이내'}
+                </div>
               </div>
             </div>
 
-            {/* 파일 목록 */}
-            <div style={{ maxHeight: '360px', overflowY: 'auto', border: '1px solid var(--border-color)', borderRadius: '8px', marginBottom: '20px', backgroundColor: 'var(--bg-card)' }}>
-              {(() => {
-                const docs = r2FilesByModelMap.get(selectedProductForDocs.id) || [];
-                if (docs.length === 0) {
-                  return (
-                    <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text-muted)' }}>
-                      <Folder size={36} style={{ margin: '0 auto 8px auto', opacity: 0.4 }} />
-                      <p style={{ margin: 0, fontSize: '14px', color: 'var(--text-secondary)' }}>Cloudflare R2에 등록된 문서가 없습니다.</p>
-                      <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: 'var(--text-muted)' }}>[제원표 PDF 자동 생성] 버튼을 누르거나 새 문서를 업로드해 주세요.</p>
-                    </div>
-                  );
-                }
-                return (
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', backgroundColor: 'transparent', color: 'var(--text-main)' }}>
-                    <thead style={{ backgroundColor: 'var(--bg-app)', borderBottom: '1px solid var(--border-color)' }}>
-                      <tr>
-                        <th style={{ padding: '8px 12px', textAlign: 'left', color: 'var(--text-secondary)', fontWeight: '600', borderBottom: '1px solid var(--border-color)' }}>문서명</th>
-                        <th style={{ padding: '8px 12px', width: '80px', textAlign: 'right', color: 'var(--text-secondary)', fontWeight: '600', borderBottom: '1px solid var(--border-color)' }}>용량</th>
-                        <th style={{ padding: '8px 12px', width: '120px', textAlign: 'center', color: 'var(--text-secondary)', fontWeight: '600', borderBottom: '1px solid var(--border-color)' }}>동작</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {docs.map((doc, i) => (
-                        <tr key={doc.key} style={{ borderBottom: i < docs.length - 1 ? '1px solid var(--border-color)' : 'none' }}>
-                          <td style={{ padding: '8px 12px', fontWeight: '500', display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-main)' }}>
-                            <FileText size={14} color="var(--text-muted)" />
-                            <span style={{ color: 'var(--text-main)' }}>{doc.name}</span>
-                          </td>
-                          <td style={{ padding: '8px 12px', textAlign: 'right', color: 'var(--text-muted)' }}>
-                            {(doc.size / 1024).toFixed(0)} KB
-                          </td>
-                          <td style={{ padding: '8px 12px', textAlign: 'center' }}>
-                            <div style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
-                              <a
-                                href={doc.url}
-                                target="_blank"
-                                rel="noreferrer"
-                                style={{
-                                  padding: '3px 8px',
-                                  fontSize: '11px',
-                                  backgroundColor: 'var(--primary-light)',
-                                  color: 'var(--primary)',
-                                  borderRadius: '4px',
-                                  textDecoration: 'none',
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  gap: '2px',
-                                  fontWeight: 'bold',
-                                  border: '1px solid var(--border-color)'
-                                }}
-                              >
-                                <ExternalLink size={12} />
-                                보기
-                              </a>
-                              {canSave && (
-                                <button
-                                  type="button"
-                                  onClick={() => handleDeleteDoc(doc.key)}
-                                  style={{
-                                    padding: '3px 6px',
-                                    fontSize: '11px',
-                                    backgroundColor: 'var(--danger-light)',
-                                    color: 'var(--danger)',
-                                    border: '1px solid var(--danger-light)',
-                                    borderRadius: '4px',
-                                    cursor: 'pointer'
-                                  }}
-                                  title="삭제"
-                                >
-                                  <Trash2 size={12} />
-                                </button>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                );
-              })()}
-            </div>
+            {/* 장비 제원표 테이블 */}
+            <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid var(--border-color)', fontSize: '11.5px', textAlign: 'center' }}>
+              <tbody>
+                <tr style={{ borderBottom: '1px solid var(--border-color)' }}>
+                  <td style={{ backgroundColor: 'var(--bg-app)', fontWeight: 'bold', width: '22%', padding: '5px' }}>장 비 명</td>
+                  <td style={{ width: '28%', padding: '5px', fontWeight: 'bold' }}>{selectedProduct.modelName}</td>
+                  <td style={{ backgroundColor: 'var(--bg-app)', fontWeight: 'bold', width: '22%', padding: '5px' }}>동 력</td>
+                  <td style={{ width: '28%', padding: '5px' }}>{selectedProduct.powerSource || '배터리'}</td>
+                </tr>
+                <tr style={{ borderBottom: '1px solid var(--border-color)' }}>
+                  <td style={{ backgroundColor: 'var(--bg-app)', fontWeight: 'bold', padding: '5px' }}>작업 높이</td>
+                  <td style={{ padding: '5px' }}>{selectedProduct.workingHeight || '-'}</td>
+                  <td style={{ backgroundColor: 'var(--bg-app)', fontWeight: 'bold', padding: '5px' }}>발판 높이</td>
+                  <td style={{ padding: '5px' }}>{selectedProduct.platformHeight || '-'}</td>
+                </tr>
+                <tr style={{ borderBottom: '1px solid var(--border-color)' }}>
+                  <td style={{ backgroundColor: 'var(--bg-app)', fontWeight: 'bold', padding: '5px' }}>장비 중량</td>
+                  <td style={{ padding: '5px' }}>{selectedProduct.weight || '-'}</td>
+                  <td style={{ backgroundColor: 'var(--bg-app)', fontWeight: 'bold', padding: '5px' }}>적재 중량</td>
+                  <td style={{ padding: '5px' }}>{selectedProduct.capacityPreExt || '-'}</td>
+                </tr>
+                <tr style={{ borderBottom: '1px solid var(--border-color)' }}>
+                  <td style={{ backgroundColor: 'var(--bg-app)', fontWeight: 'bold', padding: '5px' }}>장비 크기</td>
+                  <td style={{ padding: '5px' }}>{selectedProduct.machineDimensions || '-'}</td>
+                  <td style={{ backgroundColor: 'var(--bg-app)', fontWeight: 'bold', padding: '5px' }}>주행 속도</td>
+                  <td style={{ padding: '5px' }}>{selectedProduct.speed || '-'}</td>
+                </tr>
+              </tbody>
+            </table>
 
-            {/* 모달 하단 액션 */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid var(--border-color)', paddingTop: '16px' }}>
-              {canSave && (
-                <button
-                  type="button"
-                  className="btn-primary"
-                  onClick={async () => {
-                    await handleGenerateAndUploadR2(selectedProductForDocs);
-                    if (!selectedProductForDocs.specSheetUrl) await fetchR2Files();
-                  }}
-                  disabled={generatingModelId === (selectedProductForDocs.id || selectedProductForDocs.modelName)}
-                  style={{
-                    padding: '6px 14px', fontSize: '13px',
-                    display: 'inline-flex', alignItems: 'center', gap: '6px',
-                    backgroundColor: selectedProductForDocs.specSheetUrl ? 'var(--success)' : 'var(--primary)'
-                  }}
-                >
-                  {selectedProductForDocs.specSheetUrl
-                    ? <><FileText size={14} /> 제원표 PDF 열기</>
-                    : <><Sparkles size={14} /> {generatingModelId === (selectedProductForDocs.id || selectedProductForDocs.modelName) ? '생성중...' : '제원표 PDF 생성 & 저장'}</>
-                  }
-                </button>
-              )}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '16px' }}>
               <button
                 type="button"
                 className="btn-secondary"
-                onClick={() => setShowR2DocModal(false)}
-                style={{ padding: '6px 16px', fontSize: '13px' }}
+                onClick={() => setShowSpecPreviewModal(false)}
+                style={{ padding: '5px 14px', fontSize: '12px' }}
               >
                 닫기
               </button>
@@ -1285,6 +1324,26 @@ export const Products: React.FC = () => {
           </div>
         </div>
       )}
+
     </div>
   );
+};
+
+// 헬퍼 스타일
+const labelStyle: React.CSSProperties = {
+  fontSize: '11px',
+  color: 'var(--text-muted)',
+  fontWeight: '600',
+  display: 'block',
+  marginBottom: '3px',
+};
+const inputStyle: React.CSSProperties = {
+  width: '100%',
+  padding: '5px 8px',
+  fontSize: '12px',
+  borderRadius: '4px',
+  border: '1px solid var(--border-color)',
+  backgroundColor: 'var(--bg-app)',
+  color: 'var(--text-main)',
+  boxSizing: 'border-box',
 };
