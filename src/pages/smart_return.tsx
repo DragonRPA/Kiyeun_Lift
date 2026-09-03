@@ -7,6 +7,13 @@ export const SmartReturn: React.FC = () => {
   const { hasPermission, saveSmartReturn, contracts, customers, sites, contacts, deliveries, contractAssets, assets, repairs, vendors, currentUser, users } = useApp();
   const canSave = hasPermission('delivery', 'save');
 
+  // 토스트 알림 상태 (헌장 5.2: 브라우저 alert 전면 퇴출)
+  const [toastMessage, setToastMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const showToast = (text: string, type: 'success' | 'error' = 'success') => {
+    setToastMessage({ type, text });
+    setTimeout(() => setToastMessage(null), 3500);
+  };
+
   // 전용 로컬 프린터 드라이버 스토리지 키
   const RETURN_PRINTER_STORAGE_KEY = 'dedicated_printer_smart_return';
   const [printers, setPrinters] = useState<string[]>([]);
@@ -101,18 +108,6 @@ export const SmartReturn: React.FC = () => {
     if (defaultContactPhone) setContactPhone(defaultContactPhone);
   }, [selectedContractId, contracts, deliveries, sites, contacts]);
 
-  // 메신저 텍스트 오더 입력 및 파싱용 상태
-  const [rawText, setRawText] = useState<string>(
-`* 회수 요청 *
-
-고객명 : 현대건설(주)
-현장명 : 삼성동 현장
-회수일 : 2026-07-25
-회수 장비번호 : RENT-0001, RENT-0002
-
-특이사항 : 현장 종료로 인한 장비 조기 반납 및 회수 처리 요청.`
-  );
-  const [showParser, setShowParser] = useState(false);
 
   // ==========================================
   // [2] 정비직원 모드 (MAINTENANCE) 상태
@@ -123,81 +118,6 @@ export const SmartReturn: React.FC = () => {
   const [maintLoadingTime, setMaintLoadingTime] = useState('오전');
   const [maintNote, setMaintNote] = useState('');
 
-  // ==========================================
-  // [3] 공통 및 파서 로직
-  // ==========================================
-  const handleParseText = () => {
-    const lines = rawText.split('\n');
-    let parsedCust = '';
-    let parsedSite = '';
-    let parsedDate = '';
-    let parsedAssets: string[] = [];
-    let parsedMemo = '';
-
-    lines.forEach(line => {
-      const clean = line.trim();
-      if (clean.includes('고객명') || clean.includes('고객')) {
-        parsedCust = clean.split(':')[1]?.trim() || '';
-      } else if (clean.includes('현장명') || clean.includes('현장')) {
-        parsedSite = clean.split(':')[1]?.trim() || '';
-      } else if (clean.includes('회수일') || clean.includes('상차시간') || clean.includes('스케줄')) {
-        const val = clean.split(':')[1]?.trim() || '';
-        const dateMatch = val.match(/\d{4}-\d{2}-\d{2}/);
-        if (dateMatch) {
-          parsedDate = dateMatch[0];
-        } else {
-          parsedDate = val;
-        }
-      } else if (clean.includes('장비번호') || clean.includes('관리번호') || clean.includes('장비')) {
-        const val = clean.split(':')[1]?.trim() || '';
-        parsedAssets = val.split(',').map(v => v.trim()).filter(Boolean);
-      } else if (clean.includes('특이사항') || clean.includes('비고') || clean.includes('메모')) {
-        parsedMemo = clean.split(':')[1]?.trim() || '';
-      }
-    });
-
-    // 고객/현장 계약 매칭
-    const customer = customers.find(c => 
-      c.name.replace(/\s/g, '').includes(parsedCust.replace(/\s/g, '')) || 
-      parsedCust.replace(/\s/g, '').includes(c.name.replace(/\s/g, ''))
-    );
-    const site = sites.find(s => 
-      s.name.replace(/\s/g, '').includes(parsedSite.replace(/\s/g, '')) || 
-      parsedSite.replace(/\s/g, '').includes(s.name.replace(/\s/g, ''))
-    );
-
-    let matchedContract = null;
-    if (customer) {
-      matchedContract = contracts.find(c => 
-        c.customerId === customer.id && 
-        (site ? c.siteId === site.id : true) && 
-        c.status !== 'COMPLETED'
-      );
-    }
-
-    if (matchedContract) {
-      setSelectedContractId(matchedContract.id);
-      
-      const cAssets = contractAssets.filter(ca => ca.contractId === matchedContract.id);
-      const mappedAssetIds: string[] = [];
-      
-      parsedAssets.forEach(aNo => {
-        const realAsset = assets.find(ast => ast.assetNo === aNo || ast.assetNo.includes(aNo));
-        if (realAsset && cAssets.some(ca => ca.assetId === realAsset.id)) {
-          mappedAssetIds.push(realAsset.id);
-        }
-      });
-      setSelectedAssetIds(mappedAssetIds);
-    } else {
-      setSelectedContractId('');
-      setSelectedAssetIds([]);
-      alert('매칭되는 활성 계약을 찾지 못했습니다. 목록에서 직접 선택해 주세요.');
-    }
-
-    if (parsedDate) setReturnDate(parsedDate);
-    if (parsedMemo) setNote(parsedMemo);
-    setShowParser(false); // 분석 완료 후 목록으로 전환
-  };
 
   // ==========================================
   // [4] 영업용 데이터 정렬/필터
@@ -263,15 +183,15 @@ export const SmartReturn: React.FC = () => {
     e.preventDefault();
     if (!canSave) return;
     if (!selectedContractId) {
-      alert('회수할 대상 계약을 목록에서 선택해 주세요.');
+      showToast('회수할 대상 계약을 목록에서 선택해 주세요.', 'error');
       return;
     }
     if (selectedAssetIds.length === 0) {
-      alert('회수할 장비를 1대 이상 선택해 주세요.');
+      showToast('회수할 장비를 1대 이상 선택해 주세요.', 'error');
       return;
     }
     if (!returnDate) {
-      alert('회수 예정일자를 입력해 주세요.');
+      showToast('회수 예정일자를 입력해 주세요.', 'error');
       return;
     }
 
@@ -285,7 +205,7 @@ export const SmartReturn: React.FC = () => {
       note
     });
 
-    alert('영업 계약 장비 스마트 회수의뢰 등록이 성공적으로 완료되었습니다.\n배차관리 화면에 회수(INBOUND) 건이 대기열에 추가되었습니다.');
+    showToast('회수 의뢰 등록이 완료되었습니다. 배차 대기열에 회수(INBOUND) 건이 추가되었습니다.');
     setSelectedContractId('');
     setSelectedAssetIds([]);
     setReturnDate(getTodayString());
@@ -299,7 +219,7 @@ export const SmartReturn: React.FC = () => {
   const handlePrint = () => {
     const printContent = document.getElementById('return-sheet-print');
     if (!printContent) {
-      alert('인쇄할 입고(회수)의뢰서 콘텐츠를 찾을 수 없습니다.');
+      showToast('인쇄할 입고(회수)의뢰서 콘텐츠를 찾을 수 없습니다.', 'error');
       return;
     }
 
@@ -307,7 +227,7 @@ export const SmartReturn: React.FC = () => {
     const printWindow = window.open('', `Print_${uniqueName}`, 'left=150,top=100,width=880,height=950,menubar=no,toolbar=no,location=no,status=no');
     
     if (!printWindow) {
-      alert('⚠️ 브라우저 팝업이 차단되었습니다. 팝업 차단을 해제한 후 다시 시도해 주세요.');
+      showToast('브라우저 팝업이 차단되었습니다.', 'error');
       return;
     }
 
@@ -430,15 +350,15 @@ export const SmartReturn: React.FC = () => {
     e.preventDefault();
     if (!canSave) return;
     if (!selectedVendorId) {
-      alert('회수해 올 외주정비 업체를 선택해 주세요.');
+      showToast('회수해 올 외주정비 업체를 선택해 주세요.', 'error');
       return;
     }
     if (selectedRepairIds.length === 0) {
-      alert('회수할 정비 자산을 1개 이상 선택해 주세요.');
+      showToast('회수할 정비 자산을 1개 이상 선택해 주세요.', 'error');
       return;
     }
     if (!maintReturnDate) {
-      alert('회수 일자를 입력해 주세요.');
+      showToast('회수 일자를 입력해 주세요.', 'error');
       return;
     }
 
@@ -460,7 +380,7 @@ export const SmartReturn: React.FC = () => {
       note: maintNote
     });
 
-    alert('외주 정비 수리완료 자산 스마트 회수의뢰 등록이 성공적으로 완료되었습니다.\n배차관리 화면에 외주정비회수 건이 추가되었습니다.');
+    showToast('외주 정비 완료 자산 회수의뢰 등록이 완료되었습니다.');
     setSelectedVendorId('');
     setSelectedRepairIds([]);
     setMaintReturnDate('');
@@ -469,12 +389,35 @@ export const SmartReturn: React.FC = () => {
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', position: 'relative' }}>
+      {/* 알림 토스트 배너 (헌장 5.2) */}
+      {toastMessage && (
+        <div style={{
+          position: 'fixed',
+          top: '20px',
+          right: '24px',
+          zIndex: 9999,
+          padding: '10px 18px',
+          borderRadius: '6px',
+          backgroundColor: toastMessage.type === 'success' ? 'var(--success)' : 'var(--danger)',
+          color: '#ffffff',
+          fontWeight: 600,
+          fontSize: '13px',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.18)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          animation: 'fadeIn 0.2s ease-in-out'
+        }}>
+          {toastMessage.type === 'success' ? <Check size={16} /> : <AlertTriangle size={16} />}
+          <span>{toastMessage.text}</span>
+        </div>
+      )}
       
       {/* 타이틀 및 가이드 배너 */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
-          <h2 style={{ fontWeight: '700', marginBottom: '4px' }}>회수 의뢰 등록 및 배차 연계</h2>
+          <h2 style={{ fontWeight: '700', marginBottom: '4px' }}>회수 의뢰 관리</h2>
           <p style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
             영업 계약 만료/단축/고장 및 외주정비업체 수리 완료 건에 대한 회수 의뢰(INBOUND) 프로세스를 등록합니다.
           </p>
@@ -521,7 +464,7 @@ export const SmartReturn: React.FC = () => {
           className={activeMode === 'SALES' ? 'btn-primary' : 'btn-secondary'}
           style={{ padding: '8px 18px', fontSize: '14px', fontWeight: 'bold' }}
         >
-          영업용 회수 요청 (계약만료/단축/고장)
+          임대 계약 회수 의뢰
         </button>
         <button
           type="button"
@@ -533,7 +476,7 @@ export const SmartReturn: React.FC = () => {
           className={activeMode === 'MAINTENANCE' ? 'btn-primary' : 'btn-secondary'}
           style={{ padding: '8px 18px', fontSize: '14px', fontWeight: 'bold' }}
         >
-          정비용 회수 요청 (외주정비 완료 자산)
+          외주 정비 수리완료 회수 의뢰
         </button>
       </div>
 
@@ -549,37 +492,10 @@ export const SmartReturn: React.FC = () => {
                 <Search size={16} className="text-primary" />
                 <h4 style={{ margin: 0, fontWeight: '700' }}>임대 계약 조회</h4>
               </div>
-              <button
-                type="button"
-                className="btn-secondary"
-                onClick={() => setShowParser(!showParser)}
-                style={{ fontSize: '12px', padding: '4px 10px', display: 'flex', alignItems: 'center', gap: '4px' }}
-              >
-                <Zap size={12} /> {showParser ? '계약 목록 보기' : '메신저 텍스트 파싱'}
-              </button>
+
             </div>
 
-            {showParser ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                <div style={{ padding: '10px', backgroundColor: 'var(--bg-app)', border: '1px solid var(--border-color)', borderRadius: '6px', fontSize: '12px' }}>
-                  💡 카카오톡/이메일 오더를 분석해 해당 고객의 미종료 계약을 자동 매칭합니다.
-                </div>
-                <textarea
-                  value={rawText}
-                  onChange={e => setRawText(e.target.value)}
-                  style={{ width: '100%', height: '240px', fontFamily: 'monospace', fontSize: '12.5px', padding: '10px', borderRadius: '4px', border: '1px solid var(--border-color)' }}
-                />
-                <button
-                  type="button"
-                  className="btn-primary"
-                  onClick={handleParseText}
-                  style={{ width: '100%', padding: '10px', fontWeight: 'bold' }}
-                >
-                  <Zap size={14} /> 텍스트 구조화 파싱 실행
-                </button>
-              </div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                 
                 {/* 검색 필터 */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -718,7 +634,6 @@ export const SmartReturn: React.FC = () => {
                 </div>
 
               </div>
-            )}
           </div>
 
           {/* 오른쪽: 상세 정보 입력 및 폼 제출 */}
