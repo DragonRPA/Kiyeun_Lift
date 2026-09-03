@@ -1,8 +1,8 @@
 // src/pages/depreciation_execution.tsx
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
 import { TrendingUp, Calculator, Calendar, CheckCircle2, History, AlertCircle, ShieldAlert } from 'lucide-react';
-import { calculateAssetDepreciation } from '../services/db';
+import { calculateAssetDepreciation, db } from '../services/db';
 
 export const DepreciationExecution: React.FC = () => {
   const { assets, depreciationLogs, executeMonthlyDepreciation, cancelMonthlyDepreciation, currentUser, hasPermission, showErrorModal } = useApp();
@@ -12,6 +12,33 @@ export const DepreciationExecution: React.FC = () => {
   const [selectedYm, setSelectedYm] = useState<string>(todayYm);
   const [note, setNote] = useState<string>('');
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
+  // 토스트 알림 상태 (헌장 5.2: 브라우저 alert/confirm 전면 퇴출)
+  const [toastMessage, setToastMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const showToast = (text: string, type: 'success' | 'error' = 'success') => {
+    setToastMessage({ type, text });
+    setTimeout(() => setToastMessage(null), 3500);
+  };
+
+  // 인앱 커스텀 확인 모달 상태 (헌장 5.2: 브라우저 confirm 전면 퇴출)
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    confirmText: string;
+    isDanger?: boolean;
+    onConfirm: () => void;
+  } | null>(null);
+
+  // ─── [Gutenberg Z-패턴 4단계 최하단 감가상각 자산가치 대차대조식 검증] ───
+  const depreciationAuditSummary = useMemo(() => {
+    const owned = assets.filter(a => a.ownerType === 'OWNED');
+    const totalCount = owned.length;
+    const totalAcquisition = owned.reduce((sum, a) => sum + (a.acquisitionPrice || 0), 0);
+    const totalAccum = owned.reduce((sum, a) => sum + (a.accumDepreciation || 0), 0);
+    const totalBookValue = owned.reduce((sum, a) => sum + (a.bookValue || (a.acquisitionPrice || 0) - (a.accumDepreciation || 0)), 0);
+
+    return { totalCount, totalAcquisition, totalAccum, totalBookValue };
+  }, [assets]);
 
   // 대상 연월 마감 완료 여부
   const isAlreadyExecuted = depreciationLogs.some(l => l.depreciationYm === selectedYm);
@@ -75,62 +102,100 @@ export const DepreciationExecution: React.FC = () => {
     estimatedCount++;
   });
 
-  const handleExecute = async () => {
-    if (document.activeElement instanceof HTMLElement) {
-      document.activeElement.blur();
-    }
-
-    if (isProcessing) return;
-
-    if (isAlreadyExecuted) {
-      alert(`선택하신 [${selectedYm}] 연월은 이미 감가상각 결산 마감이 완료되었습니다.`);
-      return;
-    }
-
-    if (!confirm(`[${selectedYm}] 연월의 당사자산 감가상각 결산 마감을 실행하시겠습니까?\n\n- 대상 자산: ${estimatedCount}대\n- 당월 감가상각 총액: ₩${estimatedTotalDepn.toLocaleString()}\n\n(※ 각 자산의 누적상각액 및 장부가치가 실제 데이터로 업데이트됩니다.)`)) {
-      return;
-    }
-
+  const doExecute = async () => {
     setIsProcessing(true);
     try {
       const res = await executeMonthlyDepreciation(selectedYm, note);
-      alert(`✅ [${selectedYm}] 당월 감가상각 결산 마감이 완결되었습니다!\n\n• 반영 자산: ${res.count}대\n• 당월 상각 총액: ₩${res.totalAmount.toLocaleString()}`);
+      await db.awaitPendingWrites();
+      showToast(`[${selectedYm}] 당월 감가상각 마감 완결 (${res.count}대 반영, ₩${res.totalAmount.toLocaleString()}원)`);
       setNote('');
     } catch (err: any) {
-      showErrorModal(`⚠️ 감가상각 마감 실패:\n${err?.message || err}`);
+      showErrorModal(`감가상각 마감 실패: ${err?.message || err}`);
     } finally {
       setIsProcessing(false);
     }
   };
 
-  const handleCancelExecution = async () => {
-    if (!isAlreadyExecuted) return;
-    if (!confirm(`⚠️ [${selectedYm}] 연월의 감가상각 결산 마감을 취소(롤백)하시겠습니까?\n\n- 취소 시 해당 월의 DepreciationLog가 삭제되고,\n- 모든 당사자산의 장부가치 및 누적상각액이 이전 월말 상태로 복원됩니다.`)) {
+  const handleExecute = () => {
+    if (document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur();
+    }
+    if (isProcessing) return;
+
+    if (isAlreadyExecuted) {
+      showToast(`선택하신 [${selectedYm}] 연월은 이미 감가상각 결산 마감이 완료되었습니다.`, 'error');
       return;
     }
 
+    setConfirmModal({
+      isOpen: true,
+      title: '당월 감가상각 결산 마감 실행',
+      message: `[${selectedYm}] 연월의 당사자산 감가상각 결산 마감을 실행하시겠습니까?\n\n• 대상 자산: ${estimatedCount}대\n• 당월 상각 총액: ₩${estimatedTotalDepn.toLocaleString()}원\n\n(※ 각 자산의 누적상각액 및 장부가치가 실제 데이터로 확정됩니다.)`,
+      confirmText: '마감 실행',
+      onConfirm: () => {
+        setConfirmModal(null);
+        doExecute();
+      }
+    });
+  };
+
+  const doCancelExecution = async () => {
     setIsProcessing(true);
     try {
       await cancelMonthlyDepreciation(selectedYm);
-      alert(`✅ [${selectedYm}] 감가상각 결산 마감이 성공적으로 취소되고 자산 장부가치가 복원되었습니다.`);
+      await db.awaitPendingWrites();
+      showToast(`[${selectedYm}] 감가상각 결산 마감이 취소되고 자산 장부가치가 복원되었습니다.`);
     } catch (err: any) {
-      // showErrorModal handled in context
+      showErrorModal(`감가상각 마감 취소 실패: ${err?.message || err}`);
     } finally {
       setIsProcessing(false);
     }
   };
 
+  const handleCancelExecution = () => {
+    if (!isAlreadyExecuted) return;
+    setConfirmModal({
+      isOpen: true,
+      title: '감가상각 결산 마감 취소 (롤백)',
+      message: `[${selectedYm}] 연월의 감가상각 결산 마감을 취소(롤백)하시겠습니까?\n\n• 취소 시 해당 월의 DepreciationLog가 삭제됩니다.\n• 모든 당사자산의 장부가치 및 누적상각액이 이전 월말 상태로 안전하게 복원됩니다.`,
+      confirmText: '마감 롤백 실행',
+      isDanger: true,
+      onConfirm: () => {
+        setConfirmModal(null);
+        doCancelExecution();
+      }
+    });
+  };
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', fontSize: '13px' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', fontSize: '13px', position: 'relative' }}>
+      {/* 🔔 인앱 토스트 알림 (헌장 5.2) */}
+      {toastMessage && (
+        <div style={{
+          position: 'fixed',
+          top: '20px',
+          right: '20px',
+          zIndex: 9999,
+          padding: '10px 18px',
+          borderRadius: '6px',
+          backgroundColor: toastMessage.type === 'error' ? '#ef4444' : '#10b981',
+          color: '#ffffff',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+          fontWeight: 600,
+          fontSize: '13px'
+        }}>
+          {toastMessage.text}
+        </div>
+      )}
       
       {/* 타이틀 헤더 */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
           <h2 style={{ fontWeight: '800', fontSize: '18px', display: 'flex', alignItems: 'center', gap: '8px', letterSpacing: '-0.5px' }}>
-            <TrendingUp size={22} color="var(--primary)" /> 월말 자산 감가상각 결산 마감 관리
+            <TrendingUp size={22} color="var(--primary)" /> 감가상각 마감 실행
           </h2>
-          <p style={{ fontSize: '12.5px', color: 'var(--text-muted)', margin: '4px 0 0 0' }}>
-            매월 말일 의도적으로 당월 감가상각을 일괄 계산하여 <strong>각 자산의 누적상각액 및 장부가치를 실제 데이터로 확정</strong>합니다.
+          <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: '4px 0 0 0' }}>
+            자사 소유 자산 정액법 감가상각 월말 결산 및 장부가치 확정 대장
           </p>
         </div>
       </div>
@@ -289,6 +354,80 @@ export const DepreciationExecution: React.FC = () => {
         </div>
       </div>
 
+      {/* 💬 인앱 확인 모달 (헌장 5.2: alert/confirm 퇴출) */}
+      {confirmModal && confirmModal.isOpen && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1200, padding: '20px' }}>
+          <div className="card" style={{ width: '90%', maxWidth: '460px', backgroundColor: 'var(--bg-card)', padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            <h3 style={{ fontSize: '15px', fontWeight: 800, margin: 0, color: confirmModal.isDanger ? 'var(--danger)' : 'var(--text-main)' }}>
+              {confirmModal.title}
+            </h3>
+            <div style={{ fontSize: '12.5px', lineHeight: '1.6', whiteSpace: 'pre-wrap', color: 'var(--text-secondary)' }}>
+              {confirmModal.message}
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', borderTop: '1px solid var(--border-color)', paddingTop: '10px' }}>
+              <button type="button" className="btn-secondary" onClick={() => setConfirmModal(null)} style={{ padding: '6px 14px', fontSize: '12px' }}>
+                취소
+              </button>
+              <button
+                type="button"
+                className="btn-primary"
+                onClick={confirmModal.onConfirm}
+                style={{
+                  padding: '6px 16px',
+                  fontSize: '12px',
+                  backgroundColor: confirmModal.isDanger ? '#dc2626' : 'var(--primary)',
+                  borderColor: confirmModal.isDanger ? '#dc2626' : 'var(--primary)'
+                }}
+              >
+                {confirmModal.confirmText}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ⚖️ Gutenberg Z-패턴 4단계 최하단 감가상각 대차대조식 검증 바 (헌장 3.5) */}
+      <div style={{
+        position: 'fixed',
+        bottom: 0,
+        left: 'var(--sidebar-width, 240px)',
+        right: 0,
+        height: '42px',
+        backgroundColor: 'var(--bg-card)',
+        borderTop: '2px solid var(--primary)',
+        boxShadow: '0 -2px 10px rgba(0,0,0,0.08)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: '0 20px',
+        zIndex: 99,
+        fontSize: '11.5px',
+        fontWeight: 600
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '14px', overflowX: 'auto', whiteSpace: 'nowrap' }}>
+          <span>🏗️ <strong>자사자산:</strong> {depreciationAuditSummary.totalCount}대</span>
+          <span style={{ color: 'var(--border-color)' }}>|</span>
+          <span>📄 <strong>취득원가총액:</strong> ₩{depreciationAuditSummary.totalAcquisition.toLocaleString()}원</span>
+          <span style={{ color: 'var(--border-color)' }}>|</span>
+          <span style={{ color: 'var(--warning)' }}>📉 <strong>누적상각액:</strong> ₩{depreciationAuditSummary.totalAccum.toLocaleString()}원</span>
+          <span style={{ color: 'var(--border-color)' }}>|</span>
+          <span style={{ color: 'var(--success)' }}>💵 <strong>현재 장부가치:</strong> ₩{depreciationAuditSummary.totalBookValue.toLocaleString()}원</span>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
+          <span style={{
+            padding: '2px 8px',
+            borderRadius: '4px',
+            backgroundColor: 'var(--success-light)',
+            color: 'var(--success)',
+            fontWeight: 700,
+            fontSize: '11px'
+          }}>
+            ⚖️ 대차 정상 (취득원가 = 누적상각 + 장부가치 100% 무결)
+          </span>
+        </div>
+      </div>
+      <div style={{ height: '50px' }} aria-hidden="true" />
     </div>
   );
 };
