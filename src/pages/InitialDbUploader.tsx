@@ -51,7 +51,7 @@ import {
 } from 'lucide-react';
 
 export const InitialDbUploader: React.FC = () => {
-  const { showSuccessToast, showErrorModal, fullRefreshFromServer, users, customers, contracts, contractAssets, customerSites, importBandAsHistory } = useApp();
+  const { showSuccessToast, showErrorModal, fullRefreshFromServer, users, customers, contracts, contractAssets, customerSites, assets, importBandAsHistory } = useApp();
 
   // 상태 관리
   const [activeTab, setActiveTab] = useState<'INGEST' | 'BACKUP' | 'RESET'>('INGEST');
@@ -1116,11 +1116,11 @@ export const InitialDbUploader: React.FC = () => {
           <div style={{ backgroundColor: '#ffffff', borderRadius: '8px', border: '1px solid #e2e8f0', padding: '20px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
               <FileCheck size={16} color="#7c3aed" />
-              <span style={{ fontSize: '14px', fontWeight: 600, color: '#7c3aed', whiteSpace: 'nowrap' }}>
-                출고요청 이력 분석 & 유효 계약처 기본 요구사항(옵션·보양·스펙) 마스터 DB 동기화
+              <span style={{ fontSize: '15px', fontWeight: 700, color: '#1e293b', whiteSpace: 'nowrap' }}>
+                출고요청 이력 분석 & 고객 요구사항 마스터 DB 동기화
               </span>
               <span style={{ fontSize: '12px', color: '#64748b', whiteSpace: 'nowrap' }}>
-                과거 출고요청 텍스트를 분석하여, 유효 계약이 존재하는 고객/현장의 기본 요구사항을 추출하여 마스터 DB에 안전 보완합니다.
+                과거 출고요청 텍스트에서 고객이 요구한 맞춤 옵션·보양·특이사항을 마스터 DB에 정확히 기억하여, 향후 신규 계약 및 출고 시 100% 자동 상속·재사용합니다.
               </span>
             </div>
 
@@ -1170,7 +1170,7 @@ export const InitialDbUploader: React.FC = () => {
                     { label: '총 출고요청 건수', value: `${dispatchAnalysisResult.stats.totalParsed}건`, color: '#1e293b' },
                     { label: '유효 계약 고객사', value: `${dispatchAnalysisResult.stats.contractedCustomerCount}개사`, color: '#7c3aed' },
                     { label: '유효 계약 현장', value: `${dispatchAnalysisResult.stats.contractedSiteCount}개소`, color: '#2563eb' },
-                    { label: '추출 유상옵션/보양', value: `${dispatchAnalysisResult.stats.extractedOptionCount + dispatchAnalysisResult.stats.extractedProtectionCount}건`, color: '#059669' },
+                    { label: '추출 고객 요구사항', value: `${dispatchAnalysisResult.stats.extractedOptionCount + dispatchAnalysisResult.stats.extractedProtectionCount}건`, color: '#059669' },
                     { label: '제외된 미계약 건', value: `${dispatchAnalysisResult.stats.ignoredCount}건`, color: '#64748b' },
                   ].map(({ label, value, color }) => (
                     <div key={label} style={{ backgroundColor: '#f8fafc', padding: '10px 14px', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
@@ -1184,7 +1184,7 @@ export const InitialDbUploader: React.FC = () => {
                 <div style={{ border: '1px solid #e2e8f0', borderRadius: '6px', overflow: 'hidden' }}>
                   <div style={{ padding: '10px 14px', backgroundColor: '#f1f5f9', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <span style={{ fontSize: '13px', fontWeight: 700, color: '#334155' }}>
-                      📋 유효 계약 고객사별 기본 요구사항 마스터 사전 추출 내역 ({dispatchAnalysisResult.matchedEnrichments.length}개사)
+                      📋 고객사별 고유 요구사항(옵션·보양·특이사항) 마스터 추출 내역 ({dispatchAnalysisResult.matchedEnrichments.length}개사)
                     </span>
                     <span style={{ fontSize: '11px', color: '#64748b' }}>
                       * 시계열 최신값 우선 & 빈칸 안전 보완 정책 적용
@@ -1200,9 +1200,8 @@ export const InitialDbUploader: React.FC = () => {
                           <th style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>최신일자</th>
                           <th style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>기본 유상옵션</th>
                           <th style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>기본 보양작업</th>
-                          <th style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>21대 표준 스펙</th>
                           <th style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>현장/담당자</th>
-                          <th style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>특이사항 메모</th>
+                          <th style={{ padding: '8px 10px', minWidth: '180px' }}>고객 특이 요구사항 (반복 재사용 메모)</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -1228,19 +1227,10 @@ export const InitialDbUploader: React.FC = () => {
                                 {item.extractedDefaults.defaultProtection || '(기본)'}
                               </td>
                               <td style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>
-                                {specCount > 0 ? (
-                                  <span style={{ padding: '2px 6px', borderRadius: '4px', backgroundColor: '#f0fdf4', color: '#16a34a', fontSize: '11px', fontWeight: 600 }}>
-                                    {specCount}개 스펙 일치
-                                  </span>
-                                ) : (
-                                  <span style={{ color: '#94a3b8' }}>-</span>
-                                )}
-                              </td>
-                              <td style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>
                                 {item.sites.map(s => s.siteName).join(', ') || '-'}
                                 {item.contacts.length > 0 && ` (${item.contacts[0].name} ${item.contacts[0].contact})`}
                               </td>
-                              <td style={{ padding: '8px 10px', color: '#64748b', whiteSpace: 'nowrap', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                              <td style={{ padding: '8px 10px', color: item.extractedDefaults.specialNotes ? '#1e293b' : '#94a3b8', fontSize: '11.5px', maxWidth: '300px' }}>
                                 {item.extractedDefaults.specialNotes || '-'}
                               </td>
                             </tr>
@@ -1314,7 +1304,7 @@ export const InitialDbUploader: React.FC = () => {
                 >
                   {isIngestingCustomerDefaults
                     ? <><RefreshCw size={15} className="animate-spin" /> 마스터 DB 동기화 중...</>
-                    : <><Upload size={15} /> 유효 계약처 요구사항 마스터 일괄 DB 동기화 실행</>
+                    : <><Upload size={15} /> 고객 요구사항 마스터 일괄 DB 동기화 (영구 기억 및 자동 상속)</>
                   }
                 </button>
               </div>
