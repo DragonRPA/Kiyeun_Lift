@@ -2,10 +2,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   Radio, Volume2, VolumeX, Mic, MicOff, Play, Square,
-  X, Clock, Layers, MessageSquare, ListFilter, ArrowLeft
+  X, Clock, Layers, MessageSquare, ListFilter, ArrowLeft, Bell, BellOff
 } from 'lucide-react';
 import { 
-  walkieService, WalkieTalkieChannel, WalkieMessage, soundEngine, TalkingStatus 
+  walkieService, WalkieTalkieChannel, WalkieReceiveMode, WalkieMessage, soundEngine, TalkingStatus 
 } from '../../services/walkieTalkieService';
 import { useApp } from '../../context/AppContext';
 
@@ -40,6 +40,7 @@ export const MobileWalkieTalkieModal: React.FC<MobileWalkieTalkieModalProps> = (
 
   // 🌟 실시간 발언자 인디케이터 ("누가 말하고 있습니다")
   const [talkingStatus, setTalkingStatus] = useState<TalkingStatus | null>(() => walkieService.getCurrentTalkingStatus());
+  const [receiveMode, setReceiveMode] = useState<WalkieReceiveMode>(() => walkieService.getReceiveMode());
 
   // 🔒 PTT 비동기 트리거 레이스 컨디션 원천 방지용 Refs
   const isTransmittingRef = useRef<boolean>(false);
@@ -71,10 +72,15 @@ export const MobileWalkieTalkieModal: React.FC<MobileWalkieTalkieModalProps> = (
       setTalkingStatus(status);
     });
 
+    const unRecMode = walkieService.onReceiveModeChange((mode) => {
+      setReceiveMode(mode);
+    });
+
     return () => {
       unMsg();
       unQueue();
       unTalking();
+      unRecMode();
     };
   }, [currentUser]);
 
@@ -117,6 +123,11 @@ export const MobileWalkieTalkieModal: React.FC<MobileWalkieTalkieModalProps> = (
     if (next) {
       walkieService.unlockAudio();
     }
+  };
+
+  // 수신 모드 변경 (실시간음성 / 비프알림 / 완전무음)
+  const handleSelectReceiveMode = (mode: WalkieReceiveMode) => {
+    walkieService.setReceiveMode(mode);
   };
 
   // 채널 변경
@@ -334,6 +345,100 @@ export const MobileWalkieTalkieModal: React.FC<MobileWalkieTalkieModalProps> = (
           </div>
         </div>
 
+        {/* 🌟 1.5. 수신 모드 3단 셀렉터 (실시간음성 / 비프알림 / 완전무음) */}
+        <div style={{
+          padding: '6px 14px',
+          backgroundColor: '#090d16',
+          borderBottom: '1px solid #1e293b',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '8px'
+        }}>
+          <span style={{ fontSize: '10.5px', fontWeight: '800', color: '#64748b', whiteSpace: 'nowrap' }}>
+            수신 모드
+          </span>
+
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(3, 1fr)',
+            gap: '4px',
+            flex: 1
+          }}>
+            <button
+              type="button"
+              onClick={() => handleSelectReceiveMode('VOICE')}
+              style={{
+                padding: '5px 4px',
+                borderRadius: '6px',
+                border: receiveMode === 'VOICE' ? '1px solid #10b981' : '1px solid #334155',
+                backgroundColor: receiveMode === 'VOICE' ? 'rgba(16, 185, 129, 0.2)' : '#1e293b',
+                color: receiveMode === 'VOICE' ? '#34d399' : '#94a3b8',
+                fontSize: '11px',
+                fontWeight: '800',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '3px',
+                transition: 'all 0.15s ease'
+              }}
+              title="도착 즉시 스피커로 음성 자동 방송"
+            >
+              <Volume2 size={11} />
+              <span>실시간 음성</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleSelectReceiveMode('BEEP')}
+              style={{
+                padding: '5px 4px',
+                borderRadius: '6px',
+                border: receiveMode === 'BEEP' ? '1px solid #f59e0b' : '1px solid #334155',
+                backgroundColor: receiveMode === 'BEEP' ? 'rgba(245, 158, 11, 0.2)' : '#1e293b',
+                color: receiveMode === 'BEEP' ? '#fbbf24' : '#94a3b8',
+                fontSize: '11px',
+                fontWeight: '800',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '3px',
+                transition: 'all 0.15s ease'
+              }}
+              title="음성 없이 '삑' 알림음만 울려 텍스트 확인 유도"
+            >
+              <Bell size={11} />
+              <span>비프 알림음</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleSelectReceiveMode('MUTE')}
+              style={{
+                padding: '5px 4px',
+                borderRadius: '6px',
+                border: receiveMode === 'MUTE' ? '1px solid #64748b' : '1px solid #334155',
+                backgroundColor: receiveMode === 'MUTE' ? 'rgba(100, 116, 139, 0.25)' : '#1e293b',
+                color: receiveMode === 'MUTE' ? '#cbd5e1' : '#64748b',
+                fontSize: '11px',
+                fontWeight: '800',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '3px',
+                transition: 'all 0.15s ease'
+              }}
+              title="소리 일절 없음, 화면 텍스트만 실시간 적재"
+            >
+              <BellOff size={11} />
+              <span>완전 무음</span>
+            </button>
+          </div>
+        </div>
+
         {/* 2. 상단 뷰 모드 탭 (실시간 무전 vs 당일 대화 로그) */}
         <div style={{
           display: 'grid',
@@ -469,14 +574,16 @@ export const MobileWalkieTalkieModal: React.FC<MobileWalkieTalkieModalProps> = (
                   )}
 
                   <span style={{
-                    fontSize: '11px',
+                    fontSize: '10.5px',
                     fontWeight: '700',
-                    padding: '2px 8px',
+                    padding: '2px 7px',
                     borderRadius: '9999px',
                     backgroundColor: isSomeoneElseTalking ? '#7f1d1d' : isPowerOn ? '#064e3b' : '#334155',
                     color: isSomeoneElseTalking ? '#fecaca' : isPowerOn ? '#a7f3d0' : '#94a3b8'
                   }}>
-                    {isSomeoneElseTalking ? '통화 중' : isPowerOn ? '수신 대기중' : '전원 꺼짐'}
+                    {isSomeoneElseTalking ? '통화 중' : isPowerOn ? (
+                      receiveMode === 'VOICE' ? '🔊 음성방송' : receiveMode === 'BEEP' ? '🔔 삑 알림' : '🔕 완전무음'
+                    ) : '전원 꺼짐'}
                   </span>
                 </div>
               </div>

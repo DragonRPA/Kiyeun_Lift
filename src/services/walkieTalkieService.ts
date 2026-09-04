@@ -3,6 +3,8 @@ import { supabase } from './db';
 
 export type WalkieTalkieChannel = 'ALL' | 'DISPATCH' | 'AS' | 'SALES';
 
+export type WalkieReceiveMode = 'VOICE' | 'BEEP' | 'MUTE';
+
 export interface WalkieMessage {
   id: string;
   channel: WalkieTalkieChannel;
@@ -163,6 +165,8 @@ class WalkieTalkieService {
   private channels: Map<WalkieTalkieChannel, any> = new Map();
   private isPowerOn = true; // 기본값 ON으로 설정하여 수신 누락 방지
   private currentChannel: WalkieTalkieChannel = 'ALL';
+  private receiveMode: WalkieReceiveMode = 'VOICE';
+  private receiveModeListeners: ((mode: WalkieReceiveMode) => void)[] = [];
   private messageListeners: ((msg: WalkieMessage) => void)[] = [];
 
   // 🌟 순차 재생 큐 (FIFO Audio Queue) - 동시 발언 시 소리 겹침 원천 방지
@@ -190,6 +194,10 @@ class WalkieTalkieService {
       const savedPower = localStorage.getItem('walkie_power_on');
       // 기본값: 사용자가 명시적으로 끈 적 없으면 켜진 상태 유지
       this.isPowerOn = savedPower === 'false' ? false : true;
+      const savedRecMode = localStorage.getItem('walkie_receive_mode') as WalkieReceiveMode;
+      if (savedRecMode && ['VOICE', 'BEEP', 'MUTE'].includes(savedRecMode)) {
+        this.receiveMode = savedRecMode;
+      }
       const savedChannel = localStorage.getItem('walkie_channel') as WalkieTalkieChannel;
       if (savedChannel) {
         this.currentChannel = savedChannel;
@@ -222,6 +230,28 @@ class WalkieTalkieService {
       soundEngine.playEndBeep();
       this.playbackQueue = []; // 전원 끄면 대기열 초기화
     }
+  }
+
+  getReceiveMode(): WalkieReceiveMode {
+    return this.receiveMode;
+  }
+
+  setReceiveMode(mode: WalkieReceiveMode) {
+    this.receiveMode = mode;
+    localStorage.setItem('walkie_receive_mode', mode);
+    this.receiveModeListeners.forEach(l => l(mode));
+    if (mode === 'BEEP') {
+      soundEngine.playStartBeep();
+    } else if (mode === 'VOICE') {
+      soundEngine.playReceiveChime();
+    }
+  }
+
+  onReceiveModeChange(listener: (mode: WalkieReceiveMode) => void) {
+    this.receiveModeListeners.push(listener);
+    return () => {
+      this.receiveModeListeners = this.receiveModeListeners.filter(l => l !== listener);
+    };
   }
 
   getCurrentChannel(): WalkieTalkieChannel {
@@ -280,11 +310,25 @@ class WalkieTalkieService {
         // 리스너 호출 (UI 업데이트: 채팅로그에 즉시 말풍선 노출)
         this.messageListeners.forEach(l => l(msg));
 
-        // 🌟 수신자 트리거 조건:
+        // 🌟 수신자 트리거 조건 및 3대 수신 모드 분기:
         // 1. 무전기 전원이 ON 상태여야 함 (isPowerOn)
         // 2. 메시지 채널이 내 채널과 일치하거나 전체(ALL) 공용 무전이어야 함
         if (this.isPowerOn && (this.currentChannel === msg.channel || msg.channel === 'ALL')) {
-          this.enqueuePlayback(msg);
+          if (this.receiveMode === 'VOICE') {
+            // 1) 실시간 음성 모드: 차임 후 스피커 자동 방송
+            this.enqueuePlayback(msg);
+          } else if (this.receiveMode === 'BEEP') {
+            // 2) 비프 알림 모드: 음성은 스피커로 내지 않고 "삑" 알림음만 울려 텍스트 확인 유도
+            try {
+              soundEngine.playStartBeep();
+              if (navigator.vibrate) navigator.vibrate(150);
+            } catch {}
+          } else if (this.receiveMode === 'MUTE') {
+            // 3) 완전 무음 모드: 소리 일절 없음 (조용한 미세 진동만 지원)
+            try {
+              if (navigator.vibrate) navigator.vibrate([80, 50, 80]);
+            } catch {}
+          }
         }
       });
 
