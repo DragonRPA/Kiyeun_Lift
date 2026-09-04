@@ -15,7 +15,8 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
   onOpenAsDetail,
   onOpenCreateAs,
 }) => {
-  const { fieldAsTickets, deliveries, outboundInspections, currentUser } = useApp();
+  const { fieldAsTickets, deliveries, outboundInspections, currentUser, assets } = useApp();
+  const availableAssetCount = assets.filter(a => a.status === 'AVAILABLE').length;
 
   // 당일 미처리 AS 티켓
   const pendingAsTickets = fieldAsTickets.filter(
@@ -70,6 +71,30 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
             <span className="text-[11px] text-slate-400">출고검수</span>
             <span className="text-base font-black text-white">{pendingInspections.length}건</span>
           </button>
+        </div>
+      </div>
+
+      {/* 가용 재고 현황 퀵 카드 */}
+      <div 
+        onClick={() => onNavigate('assets')}
+        className="cursor-pointer bg-gradient-to-r from-emerald-950/60 via-slate-900 to-sky-950/60 border border-emerald-500/30 rounded-2xl p-4 flex items-center justify-between shadow-lg active:scale-98 transition-all"
+      >
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center flex-shrink-0">
+            <Search className="w-5 h-5 text-emerald-400" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-black text-white">가용 재고 현황</span>
+            </div>
+            <div className="text-[11px] text-slate-400 mt-0.5">
+              규격별 출고 가능 자산 <strong className="text-emerald-400 font-bold">{availableAssetCount}대</strong>
+            </div>
+          </div>
+        </div>
+        <div className="flex items-center gap-1 text-xs font-bold text-emerald-400 bg-emerald-500/10 px-2.5 py-1.5 rounded-xl border border-emerald-500/20">
+          <span>조회</span>
+          <ArrowRight className="w-3.5 h-3.5" />
         </div>
       </div>
 
@@ -145,8 +170,8 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
             <Search className="w-5 h-5" />
           </div>
           <div>
-            <div className="text-sm font-bold text-white">가용 렌탈 자산 실시간 조회</div>
-            <div className="text-xs text-slate-400">19ft, 26ft, 32ft 규격별 즉시 출고 가능 재고</div>
+            <div className="text-sm font-bold text-white">가용 자산 조회</div>
+            <div className="text-xs text-slate-400">규격별 출고 가능 자산 목록</div>
           </div>
         </div>
         <ArrowRight className="w-5 h-5 text-slate-500" />

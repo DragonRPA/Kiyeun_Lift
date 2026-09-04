@@ -10,6 +10,7 @@ import { MobileAsCreate } from './pages/MobileAsCreate';
 import { MobileDispatchList } from './pages/MobileDispatchList';
 import { MobileInspectionList } from './pages/MobileInspectionList';
 import { MobileAssetSearch } from './pages/MobileAssetSearch';
+import { PwaInstallBanner } from './components/PwaInstallBanner';
 
 interface MobileAppProps {
   onSwitchToPc: () => void;
@@ -55,6 +56,9 @@ export const MobileApp: React.FC<MobileAppProps> = ({ onSwitchToPc }) => {
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-blue-500 selection:text-white">
       {/* 상단 모바일 헤더 */}
       <MobileHeader onSwitchToPc={onSwitchToPc} />
+
+      {/* 스마트 홈 화면 PWA 설치 유도 배너 (미설치 모바일 시 노출) */}
+      <PwaInstallBanner />
 
       {/* 본문 라우팅 */}
       <main className="flex-1 w-full max-w-lg mx-auto">

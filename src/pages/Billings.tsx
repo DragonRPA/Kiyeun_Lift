@@ -696,9 +696,14 @@ showToast('모든 수납 내역 일괄 취소 및 통장 잔액을 복원합니�
     let totalVat = 0;
 
     const items = details.map(d => {
-      const unitPrice = d.unitPrice || 0;
-      const quantity = d.quantity || 1;
-      const supplyAmount = unitPrice * quantity;
+      let unitPrice = d.unitPrice || 0;
+      let quantity = d.quantity || 1;
+      const supplyAmount = d.amount || (unitPrice * quantity);
+      const isRental = Boolean(d.contractAssetId || d.assetId);
+      if (isRental && quantity >= 28 && supplyAmount > 0) {
+        quantity = 1;
+        unitPrice = supplyAmount;
+      }
       const vatAmount = Math.round(supplyAmount * 0.1);
       totalSupply += supplyAmount;
       totalVat += vatAmount;
@@ -805,9 +810,14 @@ showToast('모든 수납 내역 일괄 취소 및 통장 잔액을 복원합니�
     let totalVat = 0;
 
     const items = details.map(d => {
-      const unitPrice = d.unitPrice || 0;
-      const quantity = d.quantity || 1;
-      const supplyAmount = unitPrice * quantity;
+      let unitPrice = d.unitPrice || 0;
+      let quantity = d.quantity || 1;
+      const supplyAmount = d.amount || (unitPrice * quantity);
+      const isRental = Boolean(d.contractAssetId || d.assetId);
+      if (isRental && quantity >= 28 && supplyAmount > 0) {
+        quantity = 1;
+        unitPrice = supplyAmount;
+      }
       const vatAmount = Math.round(supplyAmount * 0.1);
       totalSupply += supplyAmount;
       totalVat += vatAmount;
@@ -916,9 +926,14 @@ showToast('모든 수납 내역 일괄 취소 및 통장 잔액을 복원합니�
     let totalVat = 0;
 
     const items = details.map(d => {
-      const unitPrice = d.unitPrice || 0;
-      const quantity = d.quantity || 1;
-      const supplyAmount = unitPrice * quantity;
+      let unitPrice = d.unitPrice || 0;
+      let quantity = d.quantity || 1;
+      const supplyAmount = d.amount || (unitPrice * quantity);
+      const isRental = Boolean(d.contractAssetId || d.assetId);
+      if (isRental && quantity >= 28 && supplyAmount > 0) {
+        quantity = 1;
+        unitPrice = supplyAmount;
+      }
       const vatAmount = Math.round(supplyAmount * 0.1);
       totalSupply += supplyAmount;
       totalVat += vatAmount;
@@ -1879,9 +1894,9 @@ ${items.map((item, idx) => {
                     <th style={{ whiteSpace: 'nowrap', width: '190px' }}>관리</th>
                     <th style={{ whiteSpace: 'nowrap' }}>청구월</th>
                     <th style={{ whiteSpace: 'nowrap' }}>고객사</th>
-                    <th style={{ whiteSpace: 'nowrap' }}>공급가액</th>
-                    <th style={{ whiteSpace: 'nowrap' }}>청구합계(VAT포함)</th>
-                    <th style={{ whiteSpace: 'nowrap' }}>미납액</th>
+                    <th style={{ whiteSpace: 'nowrap', textAlign: 'right', paddingRight: '12px' }}>공급가액</th>
+                    <th style={{ whiteSpace: 'nowrap', textAlign: 'right', paddingRight: '12px' }}>청구합계(VAT포함)</th>
+                    <th style={{ whiteSpace: 'nowrap', textAlign: 'right', paddingRight: '12px' }}>미납액</th>
                     <th style={{ whiteSpace: 'nowrap' }}>상태</th>
                   </tr>
                 </thead>
@@ -1968,9 +1983,9 @@ ${items.map((item, idx) => {
                         </td>
                         <td style={{ whiteSpace: 'nowrap' }}><strong>{b.billingYm}</strong></td>
                         <td style={{ whiteSpace: 'nowrap' }}>{getCustName(b.customerId)}</td>
-                        <td style={{ whiteSpace: 'nowrap' }}>₩{supply.toLocaleString()}</td>
-                        <td style={{ whiteSpace: 'nowrap', fontWeight: 700, color: 'var(--primary)' }}>₩{grandTotal.toLocaleString()}</td>
-                        <td style={{ whiteSpace: 'nowrap', color: unpaid > 0 ? 'var(--danger)' : 'var(--text-secondary)' }}>
+                        <td style={{ whiteSpace: 'nowrap', textAlign: 'right', paddingRight: '12px' }}>₩{supply.toLocaleString()}</td>
+                        <td style={{ whiteSpace: 'nowrap', textAlign: 'right', paddingRight: '12px', fontWeight: 700, color: 'var(--primary)' }}>₩{grandTotal.toLocaleString()}</td>
+                        <td style={{ whiteSpace: 'nowrap', textAlign: 'right', paddingRight: '12px', color: unpaid > 0 ? 'var(--danger)' : 'var(--text-secondary)' }}>
                           ₩{unpaid.toLocaleString()}
                         </td>
                         <td style={{ whiteSpace: 'nowrap' }}>
@@ -2169,15 +2184,15 @@ ${items.map((item, idx) => {
                       <table style={{ width: '100%', fontSize: '11.5px', whiteSpace: 'nowrap', borderCollapse: 'collapse' }}>
                         <thead style={{ position: 'sticky', top: 0, zIndex: 1, backgroundColor: 'var(--bg-app)' }}>
                           <tr>
-                            <th style={{ padding: '6px 8px', textAlign: 'center', width: '32px' }}>No</th>
-                            <th style={{ padding: '6px 8px' }}>구분</th>
-                            <th style={{ padding: '6px 8px' }}>모델명 / 자산번호</th>
-                            <th style={{ padding: '6px 8px' }}>적용 기간 / 산출 근거</th>
-                            <th style={{ padding: '6px 8px', textAlign: 'right' }}>수량</th>
-                            <th style={{ padding: '6px 8px', textAlign: 'right' }}>단가</th>
-                            <th style={{ padding: '6px 8px', textAlign: 'right' }}>공급가액</th>
-                            <th style={{ padding: '6px 8px', textAlign: 'right' }}>세액</th>
-                            <th style={{ padding: '6px 8px', textAlign: 'right' }}>합계</th>
+                            <th style={{ padding: '6px 8px', textAlign: 'center', width: '36px', whiteSpace: 'nowrap' }}>순번</th>
+                            <th style={{ padding: '6px 8px', whiteSpace: 'nowrap' }}>구분</th>
+                            <th style={{ padding: '6px 8px', whiteSpace: 'nowrap' }}>모델명/관리번호</th>
+                            <th style={{ padding: '6px 8px', textAlign: 'right', whiteSpace: 'nowrap' }}>월렌탈료</th>
+                            <th style={{ padding: '6px 8px', textAlign: 'right', whiteSpace: 'nowrap' }}>일렌탈료</th>
+                            <th style={{ padding: '6px 8px', textAlign: 'right', whiteSpace: 'nowrap' }}>수량</th>
+                            <th style={{ padding: '6px 8px', textAlign: 'right', whiteSpace: 'nowrap' }}>세액</th>
+                            <th style={{ padding: '6px 8px', textAlign: 'right', whiteSpace: 'nowrap' }}>합계</th>
+                            <th style={{ padding: '6px 8px', whiteSpace: 'nowrap' }}>적용기간(산출근거)</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -2196,13 +2211,75 @@ ${items.map((item, idx) => {
                               
                               const modelName = asset?.modelName || ca?.expectedModel || (bd.displayName || bd.itemName || '추가청구');
                               const assetNo = asset?.assetNo ? asset.assetNo : (ca?.assetId ? ca.assetId : '-');
-                              const isAssetRental = Boolean(bd.contractAssetId);
+                              const isAssetRental = Boolean(bd.contractAssetId || bd.assetId);
                               const category = isAssetRental ? '렌탈료' : (bd.displayName || bd.itemName || '추가청구');
                               
                               const supply = bd.amount || 0;
                               const vat = Math.round(supply * 0.1);
                               const lineTotal = supply + vat;
-                              const unitPrice = bd.unitPrice || (ca?.monthlyRentalFee) || supply;
+
+                              // 1. 기간 및 일수 산출
+                              const periodText = isAssetRental ? calcServicePeriod(bd, activeBilling, contractObj) : '';
+                              const baseMonthlyRental = ca?.monthlyRentalFee || (isAssetRental && (bd.quantity >= 28 || !ca?.dailyRentalFee) ? (supply || bd.unitPrice) : (ca?.dailyRentalFee ? ca.dailyRentalFee * 30 : supply));
+
+                              let isPartialMonth = false;
+                              let calcDays = 0;
+
+                              if (isAssetRental) {
+                                const periodMatch = periodText.match(/(\d{4}-\d{2}-\d{2})\s*~\s*(\d{4}-\d{2}-\d{2})/);
+                                if (periodMatch) {
+                                  const sDate = new Date(periodMatch[1]);
+                                  const eDate = new Date(periodMatch[2]);
+                                  if (!isNaN(sDate.getTime()) && !isNaN(eDate.getTime())) {
+                                    const diff = Math.round((eDate.getTime() - sDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+                                    calcDays = Math.max(1, diff);
+
+                                    const isStartFirst = periodMatch[1].endsWith('-01');
+                                    const lastDayOfMonth = new Date(sDate.getFullYear(), sDate.getMonth() + 1, 0).getDate();
+                                    const isEndLast = sDate.getMonth() === eDate.getMonth() && eDate.getDate() === lastDayOfMonth;
+
+                                    if (isStartFirst && isEndLast) {
+                                      isPartialMonth = false;
+                                    } else if (diff >= 30) {
+                                      isPartialMonth = false;
+                                    } else if (baseMonthlyRental > 0 && supply < baseMonthlyRental * 0.95) {
+                                      isPartialMonth = true;
+                                    } else if (diff < 28) {
+                                      isPartialMonth = true;
+                                    } else {
+                                      isPartialMonth = false;
+                                    }
+                                  }
+                                }
+
+                                // 만약 bd.quantity가 1~27일로 명시되고 금액이 월렌탈료보다 적을 경우 일할로 확정
+                                if (bd.quantity && bd.quantity > 0 && bd.quantity < 28 && baseMonthlyRental > 0 && supply < baseMonthlyRental * 0.95) {
+                                  isPartialMonth = true;
+                                  calcDays = bd.quantity;
+                                }
+                              }
+
+                              // 2. 일렌탈료 산출 (1개월이 안 되는 경우만)
+                              let dailyFee: number | null = null;
+                              if (isAssetRental && isPartialMonth) {
+                                if (ca?.dailyRentalFee && ca.dailyRentalFee > 0) {
+                                  dailyFee = ca.dailyRentalFee;
+                                } else if (baseMonthlyRental > 0) {
+                                  dailyFee = Math.round(baseMonthlyRental / 30);
+                                } else if (calcDays > 0) {
+                                  dailyFee = Math.round(supply / calcDays);
+                                } else if (bd.unitPrice > 0) {
+                                  dailyFee = bd.unitPrice;
+                                }
+                              }
+
+                              // 3. 수량 산출 (월렌탈료 적용의 경우는 1, 일렌탈료 적용의 경우는 날짜수)
+                              let displayQuantity: number = 1;
+                              if (isAssetRental) {
+                                displayQuantity = isPartialMonth ? (calcDays || bd.quantity || 1) : 1;
+                              } else {
+                                displayQuantity = bd.quantity || 1;
+                              }
 
                               return (
                                 <tr key={bd.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
@@ -2227,23 +2304,41 @@ ${items.map((item, idx) => {
                                       </span>
                                     )}
                                   </td>
+                                  <td style={{ padding: '6px 8px', textAlign: 'right' }}>
+                                    {isAssetRental 
+                                      ? (baseMonthlyRental > 0 ? `${baseMonthlyRental.toLocaleString()}원` : `${supply.toLocaleString()}원`)
+                                      : '-'}
+                                  </td>
+                                  <td style={{ padding: '6px 8px', textAlign: 'right', color: dailyFee ? 'var(--text-main)' : 'var(--text-muted)' }}>
+                                    {dailyFee ? `${dailyFee.toLocaleString()}원` : '-'}
+                                  </td>
+                                  <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 600 }}>
+                                    {displayQuantity}
+                                  </td>
+                                  <td style={{ padding: '6px 8px', textAlign: 'right', color: 'var(--text-muted)' }}>
+                                    {vat.toLocaleString()}원
+                                  </td>
+                                  <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 700, color: 'var(--primary)' }}>
+                                    {lineTotal.toLocaleString()}원
+                                  </td>
                                   <td style={{ padding: '6px 8px', color: 'var(--text-secondary)' }}>
                                     {isAssetRental ? (
                                       <span>
-                                        <strong style={{ color: 'var(--text-primary)' }}>{calcServicePeriod(bd, activeBilling, contractObj)}</strong>
-                                        {bd.description && !bd.description.includes('정기') && (
-                                          <span style={{ marginLeft: '6px', fontSize: '11px', color: 'var(--text-muted)' }}>({bd.description})</span>
+                                        <strong style={{ color: 'var(--text-primary)' }}>{periodText}</strong>
+                                        {isPartialMonth ? (
+                                          <span style={{ marginLeft: '6px', fontSize: '11px', color: '#d97706', fontWeight: 600 }}>
+                                            (일할 {displayQuantity}일)
+                                          </span>
+                                        ) : (
+                                          bd.description && !bd.description.includes('정기') && !bd.description.includes('30일') ? (
+                                            <span style={{ marginLeft: '6px', fontSize: '11px', color: 'var(--text-muted)' }}>({bd.description})</span>
+                                          ) : null
                                         )}
                                       </span>
                                     ) : (
                                       bd.description || bd.itemName
                                     )}
                                   </td>
-                                  <td style={{ padding: '6px 8px', textAlign: 'right' }}>{bd.quantity || 1}</td>
-                                  <td style={{ padding: '6px 8px', textAlign: 'right' }}>{unitPrice.toLocaleString()}원</td>
-                                  <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 600 }}>{supply.toLocaleString()}원</td>
-                                  <td style={{ padding: '6px 8px', textAlign: 'right', color: 'var(--text-muted)' }}>{vat.toLocaleString()}원</td>
-                                  <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 700, color: 'var(--primary)' }}>{lineTotal.toLocaleString()}원</td>
                                 </tr>
                               );
                             })
@@ -2251,12 +2346,36 @@ ${items.map((item, idx) => {
                         </tbody>
                         <tfoot style={{ position: 'sticky', bottom: 0, backgroundColor: 'var(--bg-app)', borderTop: '2px solid var(--border-color)', fontWeight: 800 }}>
                           <tr>
-                            <td colSpan={4} style={{ padding: '8px', textAlign: 'center' }}>합계 ({activeBillingDetails.length}건)</td>
-                            <td style={{ padding: '8px', textAlign: 'right' }}>{activeBillingDetails.reduce((s, bd) => s + (bd.quantity || 1), 0)}</td>
-                            <td style={{ padding: '8px' }}>-</td>
-                            <td style={{ padding: '8px', textAlign: 'right' }}>₩{totalSupply.toLocaleString()}</td>
+                            <td colSpan={3} style={{ padding: '8px', textAlign: 'center' }}>합계 ({activeBillingDetails.length}건)</td>
+                            <td style={{ padding: '8px', textAlign: 'right' }}>-</td>
+                            <td style={{ padding: '8px', textAlign: 'right' }}>-</td>
+                            <td style={{ padding: '8px', textAlign: 'right' }}>
+                              {activeBillingDetails.reduce((sum, bd) => {
+                                const isRental = Boolean(bd.contractAssetId || bd.assetId);
+                                if (!isRental) return sum + (bd.quantity || 1);
+                                const pText = calcServicePeriod(bd, activeBilling, contractObj);
+                                const ca = contractAssets.find(cAsset => cAsset.id === bd.contractAssetId);
+                                const baseM = ca?.monthlyRentalFee || bd.amount || 0;
+                                const pMatch = pText.match(/(\d{4}-\d{2}-\d{2})\s*~\s*(\d{4}-\d{2}-\d{2})/);
+                                let isPart = false;
+                                let days = 1;
+                                if (pMatch) {
+                                  const s = new Date(pMatch[1]);
+                                  const e = new Date(pMatch[2]);
+                                  if (!isNaN(s.getTime()) && !isNaN(e.getTime())) {
+                                    const d = Math.round((e.getTime() - s.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+                                    days = Math.max(1, d);
+                                    if (d < 28 || (baseM > 0 && (bd.amount || 0) < baseM * 0.95)) {
+                                      isPart = true;
+                                    }
+                                  }
+                                }
+                                return sum + (isPart ? days : 1);
+                              }, 0)}
+                            </td>
                             <td style={{ padding: '8px', textAlign: 'right', color: '#0070C0' }}>₩{totalVat.toLocaleString()}</td>
                             <td style={{ padding: '8px', textAlign: 'right', color: 'var(--primary)' }}>₩{totalGrand.toLocaleString()}</td>
+                            <td style={{ padding: '8px' }}>-</td>
                           </tr>
                         </tfoot>
                       </table>
