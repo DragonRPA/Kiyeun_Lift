@@ -1,4 +1,4 @@
-﻿# agent/build-agent.ps1
+# agent/build-agent.ps1
 # (주)기연리프트 로컬 에이전트 원클릭 컴파일 및 서명 스크립트
 
 $ErrorActionPreference = "Stop"
@@ -17,7 +17,7 @@ Start-Sleep -Milliseconds 500
 
 # 1. esbuild 번들링
 Write-Host "1. Bundling with esbuild..." -ForegroundColor Yellow
-cmd /c "npx esbuild `"$scriptDir\agent.js`" --bundle --platform=node --external:pdf-lib --external:@pdf-lib/* --outfile=`"$scriptDir\agent-bundle.js`""
+cmd /c "npx esbuild `"$scriptDir\agent.js`" --bundle --platform=node --outfile=`"$scriptDir\agent-bundle.js`""
 if ($LASTEXITCODE -ne 0) {
     Write-Host "❌ esbuild 번들링 실패!" -ForegroundColor Red
     exit 1

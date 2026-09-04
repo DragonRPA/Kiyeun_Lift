@@ -208,16 +208,7 @@ const server = http.createServer(async (req, res) => {
           return;
         }
 
-        let nodemailer;
-        try {
-          nodemailer = require('nodemailer');
-        } catch (e) {
-          try {
-            nodemailer = require(path.join(__dirname, '../node_modules/nodemailer'));
-          } catch (e2) {
-            throw new Error('nodemailer 모듈을 로드할 수 없습니다.');
-          }
-        }
+        const nodemailer = require('nodemailer');
 
         const transporter = nodemailer.createTransport({
           host: 'smtp.gmail.com',
@@ -436,16 +427,7 @@ $excel.Quit()
         execSync(`powershell -NoProfile -ExecutionPolicy Bypass -File "${psFile}"`, { encoding: 'utf8' });
 
         // PDF 병합 (pdf-lib)
-        let PDFDocument;
-        try {
-          PDFDocument = require('pdf-lib').PDFDocument;
-        } catch (e) {
-          try {
-            PDFDocument = require('d:/GoogleDrive/RPA 개발/01.AntiGravity/Kiyuen_Lift/node_modules/pdf-lib').PDFDocument;
-          } catch (e2) {
-            PDFDocument = require('C:/KiyeunAgent/node_modules/pdf-lib').PDFDocument;
-          }
-        }
+        const { PDFDocument } = require('pdf-lib');
 
         const mergedPdf = await PDFDocument.create();
         const pdfSources = [
