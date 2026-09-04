@@ -955,59 +955,145 @@ class WalkieTalkieService {
     });
   }
 
-  // 🌟 Gemini 1.5 Flash를 활용한 고정밀 비동기 한국어 음성 전사(STT) 헬퍼
+  // 🌟 STT 백업 엔진: Gemini (WAV 변환 후 전송) + Whisper 이중 폴백
+  // Web Speech API가 실패했을 때 호출됨. Gemini API 키가 있으면 1순위,
+  // OpenAI API 키가 있으면 2순위로 Whisper를 시도.
   private async tryWhisperTranscription(messageId: string, audioBlob: Blob, channelId: WalkieTalkieChannel) {
-    try {
-      const openAiKey = localStorage.getItem('openai_api_key') || (import.meta.env.VITE_OPENAI_API_KEY as string);
-      if (!openAiKey) {
-        console.warn('OpenAI API Key가 설정되지 않아 Whisper STT를 건너뜁니다.');
-        return;
-      }
+    // ── Gemini STT (WAV 변환 경유) ──────────────────────────
+    const geminiKey = getGeminiApiKey();
+    if (geminiKey) {
+      try {
+        // 1. webm/mp4 → PCM → WAV 변환 (AudioContext decode → encode)
+        const arrayBuffer = await audioBlob.arrayBuffer();
+        const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
+        let wavBase64: string;
+        try {
+          const decoded = await audioCtx.decodeAudioData(arrayBuffer);
+          wavBase64 = this.audioBufferToWavBase64(decoded);
+        } finally {
+          audioCtx.close().catch(() => {});
+        }
 
+        const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`;
+        const payload = {
+          contents: [{
+            parts: [
+              { inlineData: { mimeType: 'audio/wav', data: wavBase64 } },
+              { text: '이 음성 메시지의 한국어 발언 내용을 사족 없이 말한 내용 그대로만 텍스트로 적어줘.' }
+            ]
+          }]
+        };
+
+        const res = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          const text = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+          if (text) {
+            console.log(`🎙️ [Gemini WAV STT] Transcription for ${messageId}: "${text}"`);
+            this.applyTranscript(messageId, text, channelId);
+            return;
+          }
+        } else {
+          console.warn(`[Gemini WAV STT] HTTP ${res.status}:`, await res.text().catch(() => ''));
+        }
+      } catch (e) {
+        console.warn('[Gemini WAV STT] 변환/전송 실패:', e);
+      }
+    }
+
+    // ── Whisper 폴백 (OpenAI 키가 있을 때만) ───────────────
+    const openAiKey = localStorage.getItem('openai_api_key') || (import.meta.env.VITE_OPENAI_API_KEY as string);
+    if (!openAiKey) {
+      console.warn('STT 백업 엔진 없음 — Gemini 키 또는 OpenAI 키를 설정해 주세요.');
+      return;
+    }
+    try {
       const formData = new FormData();
       formData.append('file', audioBlob, 'audio.webm');
       formData.append('model', 'whisper-1');
       formData.append('language', 'ko');
       formData.append('response_format', 'json');
 
-      const endpoint = 'https://api.openai.com/v1/audio/transcriptions';
-      
-      const res = await fetch(endpoint, {
+      const res = await fetch('https://api.openai.com/v1/audio/transcriptions', {
         method: 'POST',
-        headers: { 
-          'Authorization': `Bearer ${openAiKey}` 
-        },
+        headers: { 'Authorization': `Bearer ${openAiKey}` },
         body: formData
       });
 
-      if (!res.ok) {
-        throw new Error(`Whisper API Error (${res.status}): ${await res.text()}`);
-      }
-
+      if (!res.ok) throw new Error(`Whisper API Error (${res.status}): ${await res.text()}`);
       const data = await res.json();
       const text = data.text?.trim();
-
       if (text) {
         console.log(`🎙️ [Whisper STT] Transcription for ${messageId}: "${text}"`);
-        const target = this.history.find(m => m.id === messageId);
-        if (target) {
-          target.textTranscript = text;
-          this.saveHistoryToStorage();
-          this.notifyHistoryChange();
-        }
-
-        const activeCh = this.channels.get(channelId);
-        if (activeCh) {
-          activeCh.send({
-            type: 'broadcast',
-            event: 'transcript_update',
-            payload: { messageId, textTranscript: text }
-          });
-        }
+        this.applyTranscript(messageId, text, channelId);
       }
     } catch (e) {
-      console.warn('Whisper audio transcription failed:', e);
+      console.warn('[Whisper STT] 실패:', e);
     }
+  }
+
+  // 전사 텍스트를 히스토리에 반영하고 실시간 브로드캐스트
+  private applyTranscript(messageId: string, text: string, channelId: WalkieTalkieChannel) {
+    const target = this.history.find(m => m.id === messageId);
+    if (target) {
+      target.textTranscript = text;
+      this.saveHistoryToStorage();
+      this.notifyHistoryChange();
+    }
+    const activeCh = this.channels.get(channelId);
+    if (activeCh) {
+      activeCh.send({
+        type: 'broadcast',
+        event: 'transcript_update',
+        payload: { messageId, textTranscript: text }
+      });
+    }
+  }
+
+  // AudioBuffer → WAV Base64 변환 헬퍼 (16-bit PCM, mono)
+  private audioBufferToWavBase64(buffer: AudioBuffer): string {
+    const numChannels = 1; // mono로 다운믹스
+    const sampleRate = buffer.sampleRate;
+    const samples = buffer.getChannelData(0); // 1채널만 사용
+    const numSamples = samples.length;
+    const byteLength = 44 + numSamples * 2;
+    const ab = new ArrayBuffer(byteLength);
+    const view = new DataView(ab);
+
+    // RIFF header
+    const writeStr = (off: number, str: string) => { for (let i = 0; i < str.length; i++) view.setUint8(off + i, str.charCodeAt(i)); };
+    writeStr(0, 'RIFF');
+    view.setUint32(4, byteLength - 8, true);
+    writeStr(8, 'WAVE');
+    writeStr(12, 'fmt ');
+    view.setUint32(16, 16, true);       // subchunk1 size
+    view.setUint16(20, 1, true);        // PCM
+    view.setUint16(22, numChannels, true);
+    view.setUint32(24, sampleRate, true);
+    view.setUint32(28, sampleRate * numChannels * 2, true); // byte rate
+    view.setUint16(32, numChannels * 2, true); // block align
+    view.setUint16(34, 16, true);       // bits per sample
+    writeStr(36, 'data');
+    view.setUint32(40, numSamples * 2, true);
+
+    // PCM samples (float32 → int16)
+    let off = 44;
+    for (let i = 0; i < numSamples; i++) {
+      const s = Math.max(-1, Math.min(1, samples[i]));
+      view.setInt16(off, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+      off += 2;
+    }
+
+    // ArrayBuffer → Base64
+    const bytes = new Uint8Array(ab);
+    let binary = '';
+    for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
+    return btoa(binary);
   }
 
   private blobToBase64(blob: Blob): Promise<string> {
