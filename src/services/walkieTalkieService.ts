@@ -449,8 +449,8 @@ class WalkieTalkieService {
 
       this.mediaRecorder = new MediaRecorder(this.currentStream, mimeType ? { mimeType } : undefined);
       this.mediaRecorder.ondataavailable = (e) => { if (e.data?.size > 0) this.audioChunks.push(e.data); };
-      this.mediaRecorder.start(100);
-      this.addDebugLog('[PTT] recording started (timeslice=100ms)');
+      this.mediaRecorder.start();
+      this.addDebugLog('[PTT] recording started (finalized container mode)');
 
       // Broadcast talking status
       if (sender) {
@@ -711,7 +711,9 @@ class WalkieTalkieService {
 
         this.liveTranscriptListeners.forEach(l => { try { l(text, 'IDLE'); } catch {} });
       } else {
-        this.addDebugLog(`[CF STT] empty transcript (${elapsed}s)`);
+        const wCount = data?.wordCount ?? 0;
+        const bBytes = data?.bufferBytes ?? 0;
+        this.addDebugLog(`[CF STT] empty transcript (${elapsed}s) | words=${wCount} | bytes=${bBytes}B`);
         this.liveTranscriptListeners.forEach(l => { try { l('', 'IDLE'); } catch {} });
       }
     } catch (e: any) {

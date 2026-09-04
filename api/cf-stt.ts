@@ -6,7 +6,6 @@ const CF_ACCOUNT_ID = process.env.CLOUDFLARE_ACCOUNT_ID || '35014a2514680107d74e
 const CF_API_TOKEN = process.env.CLOUDFLARE_API_TOKEN || Buffer.from('Y2Z1dF9sOTBRY1d6aHBqSzM3b0VzTXlZZld3VjNySTlJc21CZlprYlp4OVRGMDBiZjkxMDg=', 'base64').toString('utf-8');
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // CORS configuration
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
@@ -19,15 +18,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(405).json({ error: 'Method Not Allowed' });
   }
 
-  const { audioBase64 } = req.body || {};
+  const { audioBase64, mimeType } = req.body || {};
   if (!audioBase64 || typeof audioBase64 !== 'string') {
     return res.status(400).json({ error: 'Missing audioBase64' });
   }
 
   try {
-    const audioBuffer = Buffer.from(audioBase64, 'base64');
+    // ⚡ CRITICAL FIX: Strip "data:audio/...;base64," prefix before Buffer.from
+    // Unstripped data URL causes Node.js Buffer.from to decode prefix characters as garbage bytes, corrupting audio!
+    let contentType = mimeType || 'audio/webm';
+    if (audioBase64.startsWith('data:')) {
+      const match = audioBase64.match(/^data:([^;]+);/);
+      if (match && match[1]) {
+        contentType = match[1];
+      }
+    }
+
+    const cleanBase64 = audioBase64.includes(',') ? audioBase64.split(',')[1] : audioBase64;
+    const audioBuffer = Buffer.from(cleanBase64, 'base64');
+
     if (audioBuffer.length < 200) {
-      return res.status(200).json({ textTranscript: '' });
+      return res.status(200).json({ textTranscript: '', wordCount: 0, bufferBytes: audioBuffer.length });
     }
 
     const cfEndpoint = `https://api.cloudflare.com/client/v4/accounts/${CF_ACCOUNT_ID}/ai/run/@cf/openai/whisper`;
@@ -35,7 +46,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${CF_API_TOKEN}`,
-        'Content-Type': 'application/octet-stream'
+        'Content-Type': contentType
       },
       body: audioBuffer
     });
@@ -54,6 +65,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     return res.status(200).json({
       textTranscript,
+      wordCount: data?.result?.word_count ?? 0,
+      bufferBytes: audioBuffer.length,
+      mimeType: contentType,
       success: true
     });
   } catch (error: any) {

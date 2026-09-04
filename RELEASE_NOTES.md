@@ -1,3 +1,15 @@
+## [v1.3.0.Build.137] - 2026-09-04 21:23
+
+### 🎙️ Data URL Base64 디코딩 헤더 오염 결함 원천 해결 및 완결형 WebM 컨테이너 표준화
+- **Base64 디코딩 시 Data URL 헤더 문자열 바이너리 오염 버그 수정 (`api/cf-stt.ts`)**:
+  - `FileReader.readAsDataURL()`이 반환하는 `data:audio/...;base64,` 접두어를 `split(',')[1]`로 완벽히 분리 정제.
+  - 접두어가 포함된 채 `Buffer.from(base64)`을 실행할 경우 Node.js가 접두어 문자열을 잘못 디코딩하여 WebM EBML 헤더가 엉뚱한 쓰레기 바이트(`75 ab 5a...`)로 오염되던 현상을 원천 박멸.
+  - 전송된 Data URL로부터 실제 MIME 타입(`audio/webm;codecs=opus` 등)을 동적으로 추출하여 Cloudflare AI로 정확히 전달.
+- **MediaRecorder 타임슬라이스 단편화 해소 (`walkieTalkieService.ts`)**:
+  - `start(100)` 타임슬라이스 호출로 인해 WebM 클러스터가 미완결 단편으로 쪼개지던 방식을 제거하고 `start()` 무인자 호출로 표준화.
+  - `mediaRecorder.stop()` 시점에 크롬 브라우저가 정확한 트랙 길이(Duration)와 헤더 인덱스를 완벽히 수록한 단일 WebM 파일을 최종 패키징하도록 정돈.
+  - Cloudflare STT 응답 디버그 로그에 단어 수(`words`) 및 수신 바이너리 크기(`bytes`) 실시간 모니터링 표출.
+
 ## [v1.3.0.Build.136] - 2026-09-04 21:15
 
 ### ☁️ Cloudflare Workers AI Whisper 0원 STT 인프라 통합 및 안드로이드 마이크 충돌 완결
