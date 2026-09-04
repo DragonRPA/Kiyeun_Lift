@@ -146,6 +146,27 @@ class WalkieSoundEngine {
       console.warn('AudioContext chime failed:', e);
     }
   }
+
+  // 발언 충돌 또는 오류 경고음 (삐-익)
+  playErrorBeep() {
+    try {
+      const ctx = this.getContext();
+      const now = ctx.currentTime;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(300, now);
+      osc.frequency.setValueAtTime(200, now + 0.08);
+      gain.gain.setValueAtTime(0.18, now);
+      gain.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(now);
+      osc.stop(now + 0.2);
+    } catch (e) {
+      console.warn('AudioContext error beep failed:', e);
+    }
+  }
 }
 
 export const soundEngine = new WalkieSoundEngine();

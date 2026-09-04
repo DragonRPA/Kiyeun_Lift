@@ -46,7 +46,6 @@ export const MobileWalkieTalkieModal: React.FC<MobileWalkieTalkieModalProps> = (
   const isTransmittingRef = useRef<boolean>(false);
   const isStartingRef = useRef<boolean>(false);
   const stopRequestedRef = useRef<boolean>(false);
-  const activePointerIdRef = useRef<number | null>(null);
   const durationTimerRef = useRef<any>(null);
 
   // 초기화 및 실시간 메시지 / 발언 상태 / 큐 리스너 등록
@@ -142,21 +141,27 @@ export const MobileWalkieTalkieModal: React.FC<MobileWalkieTalkieModalProps> = (
     soundEngine.playStartBeep();
   };
 
-  // ── 🌟 PTT 눌렀을 때 (Pointer Down) ──
-  const handlePttDown = async (e: React.PointerEvent<HTMLButtonElement>) => {
-    e.preventDefault();
+  // ── 🌟 토글형 PTT 터치 핸들러 (터치하고 말하고 다시 터치해서 종료 및 전송) ──
+  const handleTogglePtt = async () => {
     if (!isPowerOn) return;
-    if (isTransmittingRef.current || isStartingRef.current) return;
 
-    walkieService.unlockAudio();
-
-    try {
-      e.currentTarget.setPointerCapture(e.pointerId);
-      activePointerIdRef.current = e.pointerId;
-    } catch {
-      // ignore
+    if (isSomeoneElseTalking) {
+      soundEngine.playErrorBeep();
+      return;
     }
 
+    // 1. 이미 발언 중이거나 마이크 기동 중인 경우: 다시 터치했으므로 즉시 종료 및 전송!
+    if (isTransmittingRef.current || isStartingRef.current) {
+      if (isStartingRef.current) {
+        stopRequestedRef.current = true;
+        return;
+      }
+      await finishRecordingAndSend();
+      return;
+    }
+
+    // 2. 발언 시작 (첫 터치)
+    walkieService.unlockAudio();
     isStartingRef.current = true;
     stopRequestedRef.current = false;
 
@@ -171,7 +176,6 @@ export const MobileWalkieTalkieModal: React.FC<MobileWalkieTalkieModalProps> = (
     isStartingRef.current = false;
 
     if (started) {
-      // 만약 startRecording 대기 도중에 사용자가 이미 손을 뗐다면 즉시 전송 후 종료!
       if (stopRequestedRef.current) {
         await finishRecordingAndSend();
         return;
@@ -183,32 +187,16 @@ export const MobileWalkieTalkieModal: React.FC<MobileWalkieTalkieModalProps> = (
 
       if (durationTimerRef.current) clearInterval(durationTimerRef.current);
       durationTimerRef.current = setInterval(() => {
-        setRecordDuration(prev => prev + 1);
+        setRecordDuration(prev => {
+          if (prev >= 45) {
+            // 최대 45초 초과 시 자동 종료 및 전송 세이프가드
+            finishRecordingAndSend();
+            return 45;
+          }
+          return prev + 1;
+        });
       }, 1000);
     }
-  };
-
-  // ── 🌟 PTT 손 뗐을 때 (Pointer Up) ──
-  const handlePttUp = async (e: React.PointerEvent<HTMLButtonElement>) => {
-    e.preventDefault();
-
-    if (activePointerIdRef.current !== null) {
-      try {
-        e.currentTarget.releasePointerCapture(activePointerIdRef.current);
-      } catch {
-        // ignore
-      }
-      activePointerIdRef.current = null;
-    }
-
-    // 마이크 초기화 대기 중에 손을 뗀 경우: 플래그 세팅으로 초기화 완료 즉시 중지 유도
-    if (isStartingRef.current) {
-      stopRequestedRef.current = true;
-      return;
-    }
-
-    if (!isTransmittingRef.current) return;
-    await finishRecordingAndSend();
   };
 
   // ── 송신 완료 및 전송 실행 함수 ──
@@ -646,9 +634,7 @@ export const MobileWalkieTalkieModal: React.FC<MobileWalkieTalkieModalProps> = (
               <button
                 type="button"
                 disabled={!isPowerOn}
-                onPointerDown={handlePttDown}
-                onPointerUp={handlePttUp}
-                onPointerCancel={handlePttUp}
+                onClick={handleTogglePtt}
                 style={{
                   width: '136px',
                   height: '136px',
@@ -676,9 +662,8 @@ export const MobileWalkieTalkieModal: React.FC<MobileWalkieTalkieModalProps> = (
                   cursor: isPowerOn ? 'pointer' : 'not-allowed',
                   userSelect: 'none',
                   WebkitUserSelect: 'none',
-                  touchAction: 'none',
-                  transform: isTransmitting ? 'scale(0.94)' : 'scale(1)',
-                  transition: 'all 0.1s ease',
+                  transform: isTransmitting ? 'scale(0.96)' : 'scale(1)',
+                  transition: 'all 0.15s ease',
                   boxShadow: isTransmitting 
                     ? '0 0 35px rgba(239, 68, 68, 0.8)' 
                     : isSomeoneElseTalking
@@ -699,27 +684,27 @@ export const MobileWalkieTalkieModal: React.FC<MobileWalkieTalkieModalProps> = (
                 )}
                 <span style={{ fontSize: '13px', fontWeight: '900', letterSpacing: '0.5px' }}>
                   {isTransmitting 
-                    ? '손을 떼면 전송' 
+                    ? '터치하여 종료' 
                     : isSomeoneElseTalking
                     ? `[${talkingStatus?.senderName}] 발언 중`
                     : isPowerOn 
-                    ? '누르고 말하기' 
+                    ? '터치하고 말하기' 
                     : '무전 OFF'}
                 </span>
                 {isTransmitting && (
                   <span style={{ fontSize: '11px', color: '#fecaca', fontWeight: '800' }}>
-                    {recordDuration}초
+                    {recordDuration}초 (발언 중)
                   </span>
                 )}
               </button>
 
               <span style={{ fontSize: '11px', color: isSomeoneElseTalking ? '#fbbf24' : '#64748b', marginTop: '10px' }}>
                 {isTransmitting 
-                  ? '마이크로 말씀하신 후 손을 떼시면 즉시 상대방에게 전송됩니다'
+                  ? '마이크로 말씀하신 후 버튼을 다시 터치하면 즉시 전송됩니다'
                   : isSomeoneElseTalking 
-                  ? '동료가 말하고 있습니다. 발언이 끝나면 버튼을 눌러주세요'
+                  ? '동료가 말하고 있습니다. 발언이 끝나면 버튼을 터치하세요'
                   : isPowerOn 
-                  ? '버튼을 누른 채 말씀하시고 손을 떼면 자동 전송됩니다' 
+                  ? '버튼을 터치하여 말씀하시고, 완료 시 다시 터치하세요' 
                   : '상단 무전 ON 스위치를 먼저 켜주세요'}
               </span>
             </div>
