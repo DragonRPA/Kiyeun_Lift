@@ -12,6 +12,7 @@ export interface WalkieMessage {
   senderDept: string;
   audioBase64: string;
   durationSec: number;
+  textTranscript?: string; // 🌟 STT 한국어 음성인식 전사 텍스트
   createdAt: string;
 }
 
@@ -23,12 +24,12 @@ export interface TalkingStatus {
   senderDept: string;
 }
 
-// 1. Web Audio API 기반 무전기 효과음 합성 엔진 (외부 오디오 파일 없이 100% 자체 합성)
+// 1. Web Audio API 기반 무전기 효과음 및 음성 합성 재생 엔진
 class WalkieSoundEngine {
   private ctx: AudioContext | null = null;
 
-  private getContext(): AudioContext {
-    if (!this.ctx || this.ctx.state === 'suspended') {
+  public getContext(): AudioContext {
+    if (!this.ctx || this.ctx.state === 'closed') {
       const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
       this.ctx = new AudioCtx();
     }
@@ -38,6 +39,7 @@ class WalkieSoundEngine {
     return this.ctx;
   }
 
+  // 사용자 인터랙션(터치/클릭) 시 브라우저 오디오 권한 즉시 언락
   unlockAudioOnUserGesture() {
     try {
       const ctx = this.getContext();
@@ -153,9 +155,13 @@ class WalkieTalkieService {
   private recordingStartTime = 0;
   private currentStream: MediaStream | null = null;
 
+  // STT 음성 인식기 (Web Speech API)
+  private speechRecognition: any = null;
+  private currentTranscript = '';
+
   // Supabase Realtime 채널 관리
   private channels: Map<WalkieTalkieChannel, any> = new Map();
-  private isPowerOn = false;
+  private isPowerOn = true; // 기본값 ON으로 설정하여 수신 누락 방지
   private currentChannel: WalkieTalkieChannel = 'ALL';
   private messageListeners: ((msg: WalkieMessage) => void)[] = [];
 
@@ -169,17 +175,21 @@ class WalkieTalkieService {
   private talkingStatusListeners: ((status: TalkingStatus | null) => void)[] = [];
   private talkingTimeoutRef: any = null;
 
-  // 최근 무전 히스토리 (메모리 + localStorage 20건 캐시)
+  // 당일 대화 히스토리 (메모리 + localStorage 당일 누적 캐시)
   private history: WalkieMessage[] = [];
 
   constructor() {
     try {
-      const savedHist = localStorage.getItem('walkie_history_v1');
+      const today = this.getTodayDateStr();
+      const savedHist = localStorage.getItem('walkie_today_history') || localStorage.getItem('walkie_history_v1');
       if (savedHist) {
-        this.history = JSON.parse(savedHist).slice(0, 20);
+        const parsed = JSON.parse(savedHist) as WalkieMessage[];
+        // 당일 대화만 필터링 (자정 넘어가면 이전 날짜 대화 자동 소멸)
+        this.history = parsed.filter(m => m.createdAt && m.createdAt.slice(0, 10) === today).slice(0, 100);
       }
       const savedPower = localStorage.getItem('walkie_power_on');
-      this.isPowerOn = savedPower === 'true';
+      // 기본값: 사용자가 명시적으로 끈 적 없으면 켜진 상태 유지
+      this.isPowerOn = savedPower === 'false' ? false : true;
       const savedChannel = localStorage.getItem('walkie_channel') as WalkieTalkieChannel;
       if (savedChannel) {
         this.currentChannel = savedChannel;
@@ -187,6 +197,15 @@ class WalkieTalkieService {
     } catch (e) {
       console.warn('Failed to load walkie storage:', e);
     }
+  }
+
+  // 오늘 날짜 YYYY-MM-DD 문자열 반환 (로컬 시간 기준)
+  public getTodayDateStr(): string {
+    const d = new Date();
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
   }
 
   getIsPowerOn(): boolean {
@@ -197,6 +216,7 @@ class WalkieTalkieService {
     this.isPowerOn = on;
     localStorage.setItem('walkie_power_on', on ? 'true' : 'false');
     if (on) {
+      soundEngine.unlockAudioOnUserGesture();
       soundEngine.playStartBeep();
     } else {
       soundEngine.playEndBeep();
@@ -225,6 +245,10 @@ class WalkieTalkieService {
     return this.playbackQueue.length;
   }
 
+  unlockAudio() {
+    soundEngine.unlockAudioOnUserGesture();
+  }
+
   // Supabase Realtime 채널 구독
   subscribe(_user?: { id: string; name: string; role: string; deptName?: string }) {
     const client = supabase;
@@ -250,13 +274,15 @@ class WalkieTalkieService {
         const msg = payload as WalkieMessage;
         if (!msg || !msg.audioBase64) return;
 
-        // 히스토리에 추가
+        // 당일 히스토리에 무조건 추가
         this.addHistory(msg);
 
-        // 리스너 호출
+        // 리스너 호출 (UI 업데이트: 채팅로그에 즉시 말풍선 노출)
         this.messageListeners.forEach(l => l(msg));
 
-        // 무전기가 켜져 있고 수신 대상 채널이면 순차 재생 큐에 삽입
+        // 🌟 수신자 트리거 조건:
+        // 1. 무전기 전원이 ON 상태여야 함 (isPowerOn)
+        // 2. 메시지 채널이 내 채널과 일치하거나 전체(ALL) 공용 무전이어야 함
         if (this.isPowerOn && (this.currentChannel === msg.channel || msg.channel === 'ALL')) {
           this.enqueuePlayback(msg);
         }
@@ -354,9 +380,13 @@ class WalkieTalkieService {
   }
 
   private addHistory(msg: WalkieMessage) {
-    this.history = [msg, ...this.history.filter(h => h.id !== msg.id)].slice(0, 20);
+    const today = this.getTodayDateStr();
+    // 당일 대화만 누적 보존 (최대 100건)
+    this.history = [msg, ...this.history.filter(h => h.id !== msg.id)]
+      .filter(m => m.createdAt && m.createdAt.slice(0, 10) === today)
+      .slice(0, 100);
     try {
-      localStorage.setItem('walkie_history_v1', JSON.stringify(this.history));
+      localStorage.setItem('walkie_today_history', JSON.stringify(this.history));
     } catch {
       // ignore
     }
@@ -365,10 +395,13 @@ class WalkieTalkieService {
   // ── 3. PTT 음성 녹음 제어 ──
   async startRecording(sender?: { id: string; name: string; deptName?: string }): Promise<boolean> {
     try {
+      soundEngine.unlockAudioOnUserGesture();
       soundEngine.playStartBeep();
       this.audioChunks = [];
       this.recordingStartTime = Date.now();
+      this.currentTranscript = '';
 
+      // 1. 마이크 스트림 획득
       if (!this.currentStream) {
         this.currentStream = await navigator.mediaDevices.getUserMedia({ 
           audio: {
@@ -379,7 +412,31 @@ class WalkieTalkieService {
         });
       }
 
-      // iOS 사파리 및 안드로이드/PC 크롬 상호 교차 재생 호환성을 위한 MIME 스마트 탐색
+      // 2. 🌟 STT 실시간 음성인식 초기화 (Web Speech API)
+      try {
+        const SpeechRec = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+        if (SpeechRec) {
+          const rec = new SpeechRec();
+          rec.lang = 'ko-KR';
+          rec.continuous = true;
+          rec.interimResults = true;
+          rec.maxAlternatives = 1;
+          rec.onresult = (event: any) => {
+            let transcriptStr = '';
+            for (let i = 0; i < event.results.length; ++i) {
+              transcriptStr += event.results[i][0].transcript;
+            }
+            this.currentTranscript = transcriptStr.trim();
+          };
+          rec.onerror = () => {};
+          rec.start();
+          this.speechRecognition = rec;
+        }
+      } catch (sttErr) {
+        console.warn('STT SpeechRecognition not supported or disabled:', sttErr);
+      }
+
+      // 3. 오디오 MIME 탐색
       const candidates = [
         'audio/mp4',
         'audio/webm;codecs=opus',
@@ -408,7 +465,7 @@ class WalkieTalkieService {
 
       this.mediaRecorder.start(100);
 
-      // 🌟 다른 동료들에게 "내가 지금 말하고 있습니다" 브로드캐스트
+      // 4. 🌟 다른 동료들에게 "내가 지금 말하고 있습니다" 브로드캐스트
       if (sender) {
         const activeCh = this.channels.get(this.currentChannel);
         if (activeCh) {
@@ -440,7 +497,15 @@ class WalkieTalkieService {
   ): Promise<WalkieMessage | null> {
     soundEngine.playEndBeep();
 
-    // 🌟 발언 종료 브로드캐스트
+    // 1. STT 음성인식 중지
+    if (this.speechRecognition) {
+      try {
+        this.speechRecognition.stop();
+      } catch {}
+      this.speechRecognition = null;
+    }
+
+    // 2. 발언 종료 브로드캐스트
     const ch = targetChannel || this.currentChannel;
     const activeCh = this.channels.get(ch);
     if (activeCh) {
@@ -460,6 +525,7 @@ class WalkieTalkieService {
     }
 
     const durationSec = Math.max(1, Math.round((Date.now() - this.recordingStartTime) / 1000));
+    const finalTranscript = this.currentTranscript.trim();
 
     return new Promise((resolve) => {
       this.mediaRecorder!.onstop = async () => {
@@ -476,6 +542,7 @@ class WalkieTalkieService {
             senderDept: sender.deptName || '기연리프트',
             audioBase64: base64,
             durationSec: durationSec,
+            textTranscript: finalTranscript || undefined,
             createdAt: new Date().toISOString()
           };
 
@@ -502,6 +569,13 @@ class WalkieTalkieService {
 
   // 녹음 취소
   cancelRecording(senderId?: string) {
+    if (this.speechRecognition) {
+      try {
+        this.speechRecognition.stop();
+      } catch {}
+      this.speechRecognition = null;
+    }
+
     if (senderId) {
       const activeCh = this.channels.get(this.currentChannel);
       if (activeCh) {
@@ -523,28 +597,49 @@ class WalkieTalkieService {
     soundEngine.playEndBeep();
   }
 
-  // 음성 재생 (Base64)
-  playAudio(base64: string): Promise<void> {
-    return new Promise((resolve) => {
-      try {
-        const audio = new Audio(base64);
-        audio.onended = () => resolve();
-        audio.onerror = (err) => {
-          console.warn('Audio playback error on this device/format:', err);
-          resolve(); // 순차 큐 락업 방지
-        };
-        const playPromise = audio.play();
-        if (playPromise) {
-          playPromise.catch((err) => {
-            console.warn('Audio play() blocked or rejected:', err);
-            resolve();
-          });
-        }
-      } catch (e) {
-        console.warn('playAudio exception:', e);
-        resolve();
+  // 🌟 모바일 브라우저 자동재생 차단(NotAllowedError)을 원천 우회하는 Web Audio API 버퍼 재생
+  async playAudio(base64: string): Promise<void> {
+    try {
+      // 1. DataURL -> ArrayBuffer 변환
+      const res = await fetch(base64);
+      const arrayBuffer = await res.arrayBuffer();
+
+      // 2. 전역 AudioContext 획득 및 활성화
+      const ctx = soundEngine.getContext();
+      if (ctx.state === 'suspended') {
+        await ctx.resume().catch(() => {});
       }
-    });
+
+      // 3. 오디오 데이터 디코딩 (Opus, WebM, AAC, MP4 네이티브 디코딩)
+      const audioBuffer = await new Promise<AudioBuffer>((resolve, reject) => {
+        ctx.decodeAudioData(arrayBuffer, resolve, reject);
+      });
+
+      // 4. 버퍼 소스 노드를 통한 무차단 직접 출력
+      return new Promise<void>((resolve) => {
+        const source = ctx.createBufferSource();
+        source.buffer = audioBuffer;
+        source.connect(ctx.destination);
+        source.onended = () => resolve();
+        source.start(0);
+      });
+    } catch (e) {
+      console.warn('WebAudio decodeAudioData fallback to HTMLAudioElement:', e);
+      // HTML5 Audio fallback
+      return new Promise<void>((resolve) => {
+        try {
+          const audio = new Audio(base64);
+          audio.onended = () => resolve();
+          audio.onerror = () => resolve();
+          const playPromise = audio.play();
+          if (playPromise) {
+            playPromise.catch(() => resolve());
+          }
+        } catch {
+          resolve();
+        }
+      });
+    }
   }
 
   private blobToBase64(blob: Blob): Promise<string> {

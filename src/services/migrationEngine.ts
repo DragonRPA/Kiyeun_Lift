@@ -80,8 +80,8 @@ export const TABLE_COLUMNS: Record<string, string[]> = {
     'specSheetUrl', 'emergencyGuideUrl', 'isActive', 'createdAt', 'updatedAt'
   ],
   vendors: [
-    'id', 'name', 'type', 'types', 'bizRegNo', 'representative', 'contactName', 'contact', 'email', 'address', 'bankName',
-    'bankAccount', 'accountNumber', 'accountHolder', 'memo', 'isActive', 'createdAt', 'updatedAt'
+    'id', 'name', 'type', 'types', 'bizRegNo', 'representative', 'contactName', 'contact', 'email', 'address',
+    'bankAccount', 'memo', 'isActive', 'createdAt', 'updatedAt'
   ],
   customers: [
     'id', 'name', 'bizRegNo', 'representative', 'repContact', 'repEmail',
@@ -98,10 +98,9 @@ export const TABLE_COLUMNS: Record<string, string[]> = {
     'id', 'modelName', 'assetNo', 'vendorAssetNo', 'serialNo', 'manufacturer', 'manufactureYear',
     'ownerType', 'status', 'acquisitionDate', 'acquisitionPrice', 'depreciationMonths',
     'residualValueRate', 'accumDepreciation', 'bookValue', 'vendorId', 'supplier',
-    'renter', 'rentStart', 'rentEnd', 'monthlyRentFee', 'dailyRentFee', 'actualRentReturnDate',
-    'disposalDate', 'disposalPrice', 'buyer', 'safetyInspectionUrl', 'preDeliveryChecklistUrl',
+    'rentStart', 'rentEnd', 'monthlyRentFee', 'dailyRentFee', 'actualRentReturnDate',
     'currentCustomerId', 'currentSiteId', 'contractStart', 'contractEnd',
-    'cumRentalFee', 'cumRepairCost', 'note', 'memo', 'memo1', 'memo2', 'createdAt', 'updatedAt'
+    'cumRentalFee', 'cumRepairCost', 'note', 'memo', 'createdAt', 'updatedAt'
   ],
   contracts: [
     'id', 'contractNo', 'customerId', 'salespersonId', 'contactId', 'siteId',
@@ -129,16 +128,12 @@ export const TABLE_COLUMNS: Record<string, string[]> = {
     'memo', 'requestDate', 'loadingTime', 'unloadingTime', 'createdAt', 'updatedAt',
     'isCostSettled', 'scheduledDate', 'originAddress', 'destinationAddress',
     'transportCompany', 'vehicleNo', 'expectedCost', 'deliveryCostConfirmed',
-    'finalCost', 'costAdjustmentReason', 'reconciliationStatus', 'reconciledAt',
-    'paymentRequestedAt', 'paymentCompletedAt', 'statementFileUrl',
-    'billableToCustomer', 'billableCustomerId', 'vehicleRequirements', 'cargoItems',
-    'vehicles', 'dispatchCategory', 'loadingDate', 'loadingTimeSlot',
+    'finalCost', 'reconciliationStatus', 'dispatchCategory', 'loadingDate', 'loadingTimeSlot',
     'unloadingDate', 'unloadingTimeSlot', 'closingMemo', 'rawText',
     'pickupType', 'pickupVendorName', 'dropoffType', 'viaDropoffName', 'viaDropoffAddress'
   ],
   outbound_inspections: [
-    'id', 'deliveryId', 'contractId', 'assetId', 'status', 'inspectorId',
-    'checkedItems', 'photos', 'notes', 'approvedAt', 'approvedBy', 'createdAt', 'updatedAt'
+    'id', 'contractId', 'assetId', 'status', 'inspectorId', 'createdAt', 'updatedAt'
   ],
   repairs: [
     'id', 'ticketNo', 'workCategory', 'workLocation', 'stockSource', 'source',

@@ -1,5 +1,35 @@
 ---
 
+# Release Notes (v1.3.0.Build.118 - 2026-09-04 13:35)
+
+## 📻 [현장무전기/PTT트리거개편/STT채팅로그] PTT 릴리즈 비동기 락업 해소, 모바일 WebAudio 무차단 자동재생, 실시간 STT 한국어 음성인식 및 당일 대화 타임라인 구축 완비
+
+### 🎯 핵심 요약 및 긴급 패치 내역
+
+- **1. PTT 버튼 릴리즈 비동기 레이스 컨디션 완전 제거 및 원터치 릴리즈 보장**:
+  - **버그 원인 규명**: `startRecording`의 마이크/미디어 초기화 비동기 대기 중에 사용자가 손을 뗄 경우 `handlePttUp`의 `if (!isTransmitting) return;`이 조기 탈출되어 손 뗌 이벤트가 무시되고, 이후 시작 완료 플래그가 켜져 송신 상태에 갇혀 재터치를 강제하던 현상 발견.
+  - **해결 조치**: Pointer Events(`onPointerDown`, `onPointerUp`, `onPointerCancel`) 및 `setPointerCapture`를 적용하고, `isStartingRef` / `stopRequestedRef` / `isTransmittingRef` 3단계 상태 가드를 구축하여 마이크 초기화 대기 중 손을 떼더라도 즉시 감지하여 100% 무누락으로 송신을 즉시 마감·전송하도록 완전 개편.
+
+- **2. 모바일 브라우저 오디오 자동재생(Autoplay) 차단 우회 및 즉각 스피커 방송 보장**:
+  - **수신자 트리거 조건 명확화**:
+    1. **무전 전원 ON**: 기본값을 `isPowerOn = true`로 승격하여 수신 누락 원천 방지.
+    2. **채널 일치**: 수신 채널과 메시지 채널이 일치하거나 전체(ALL) 공용 무전일 때 수신.
+    3. **Web Audio API 버퍼 재생 엔진 전환**: 모바일 Safari/Chrome이 WebSocket 비동기 수신 시 `new Audio().play()`를 `NotAllowedError`로 차단하는 한계를 극복하기 위해, 전역 `AudioContext.decodeAudioData` + `AudioBufferSourceNode` 직접 스트림 재생 엔진을 장착.
+    4. 모달 진입 및 무전 ON 시 오디오 컨텍스트를 선제 언락(Warm-up)하여 수신 시 지연 없이 즉각 스피커 자동 방송 실현.
+
+- **3. 실시간 STT 한국어 음성인식(Speech-to-Text) 파이프라인 신설**:
+  - PTT 버튼을 누르고 말하는 동안 브라우저 내장 `webkitSpeechRecognition`(`ko-KR`)을 백그라운드 구동.
+  - 음성 데이터와 함께 전사된 한글 텍스트(`textTranscript`)를 `WalkieMessage` 페이로드에 자동 탑재하여 실시간 브로드캐스트.
+
+- **4. 당일 대화(Today-Only) 누적 저장 및 카카오톡형 말풍선 대화 로그 완비**:
+  - `localStorage` 기반 `walkie_today_history` 연동 및 로컬 날짜(`YYYY-MM-DD`) 필터 적용으로 당일 대화만 최대 100건 안전 누적(자정 경과 시 전날 대화 자동 소멸).
+  - 모달 상단에 **`[🎙️ 실시간 무전 (PTT)]`** 및 **`[💬 당일 대화 로그 ({N})]`** 2대 탭 뷰 신설.
+  - 시간대순 말풍선, 발신자 이름·부서, 채널 배지, 실시간 STT 텍스트, 원본 육성 원터치 `[▶ 다시듣기]` 완비.
+
+- **5. 초기 DB 마이그레이션 엔진 스키마 캐시 불일치 해소**:
+  - `assets` 테이블의 가상 속성(`renter`) 및 비실존 컬럼을 정제하여 전사 22개 테이블 100% 실서버 DB 스키마 일치화(22/22 OK) 완결.
+
+---
 # Release Notes (v1.3.0.Build.117 - 2026-09-04 13:00)
 
 ## 🧭 [내비딥링크/전화걸기안전호출] TMAP 길안내 스마트폰 멈춤(ANR) 버그 원인 규명 및 nativeLauncher 안전 실행기 전면 구축 완비

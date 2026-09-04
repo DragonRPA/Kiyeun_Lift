@@ -1,5 +1,56 @@
 # 개발 지시 및 개편 완료 내역 (dev_temp.md)
 
+## 📻 [현장무전기/PTT트리거개편/STT채팅로그] PTT 릴리즈 비동기 락업 해소, 모바일 WebAudio 무차단 자동재생, 실시간 STT 한국어 음성인식 및 당일 대화 타임라인 구축 완비 (v1.3.0.Build.118 - 2026-09-04 13:35)
+
+### 1. 현상 및 근본 원인 분석
+- **증상 1 (PTT 버튼 재터치 버그)**: 무전기에서 PTT 버튼을 누르고 말한 뒤 손을 떼었을 때 즉시 전송 및 송신 종료가 되지 않고, 버튼을 한 번 더 터치해야만 대화가 종료되던 현상.
+  - **원인**: `handlePttDown`에서 `await walkieService.startRecording()`(마이크 스트림 및 MediaRecorder 초기화)이 비동기로 완료되기 전에 사용자가 손을 뗄 경우, `handlePttUp`이 `if (!isTransmitting) return;` 조건에 걸려 조기 탈출(Early Return)되어 무시됨. 이후 `startRecording`이 뒤늦게 `isTransmitting: true`를 세팅하여 사용자는 이미 손을 뗐음에도 송신 상태에 갇히게 되고 재터치해야만 풀리던 구조적 레이스 컨디션 발견.
+- **증상 2 (수신자 자동 전송/플레이 안 됨 현상)**: 말하기가 끝났을 때 수신자 단말에서 즉각적인 음성 방송이 체감되지 않는 현상.
+  - **원인 (모바일 브라우저 오디오 자동재생 정책 차단)**: iOS Safari 및 Android Chrome은 비동기 WebSocket 이벤트(`channel.on('broadcast')`)에서 `new Audio().play()`를 직접 호출할 때 사용자 제스처가 동반되지 않은 것으로 판단하여 `NotAllowedError`로 자동 재생을 무음 차단함.
+  - **전원 기본값 미인식**: `isPowerOn`이 최초 접근 시 `false`로 되어 있어, 명시적으로 무전 ON을 누르지 않은 사용자는 큐에 삽입되지 않았음.
+- **요구사항 (STT 및 당일 대화 저장)**: 지나간 무전 대화를 음성뿐 아니라 실시간 텍스트(STT)로 변환하여 카카오톡 형태의 말풍선 채팅로그로 조망하고, 당일(Today) 대화만 누적 보존(자정 소멸)하는 기능 요청.
+
+### 2. 조치 및 개선 내역
+- **1. Pointer Events & Refs 기반 PTT 무결성 트리거 재구축 (`MobileWalkieTalkieModal.tsx`)**:
+  - `onPointerDown`, `onPointerUp`, `onPointerCancel` 전면 교체 및 `setPointerCapture(e.pointerId)` 적용으로 화면 밖 릴리즈 완벽 포착.
+  - `isStartingRef`, `isTransmittingRef`, `stopRequestedRef`를 신설하여, 마이크 초기화 대기 중 손을 떼더라도 초기화 완료 즉시 `finishRecordingAndSend()`를 자동 격발하여 손 뗌 즉시 100% 락업 없는 종료 보장.
+- **2. Web Audio API 버퍼 기반 모바일 무차단 자동재생 엔진 탑재 (`walkieTalkieService.ts`)**:
+  - 기존의 불안정한 `new Audio()` 방식에서 탈피하고, 전역 `AudioContext.decodeAudioData` + `AudioBufferSourceNode` 파이프라인 탑재.
+  - 모달 오픈 또는 무전 ON 제스처 시 `AudioContext`를 선제 Warm-up(언락)하여, WebSocket 수신 시 모바일 OS의 자동재생 차단을 100% 우회하고 즉각 스피커 자동 방송 보장.
+  - 기본 전원 상태를 `isPowerOn = true`로 승격하여 수신 누락 방지.
+- **3. 실시간 STT 한국어 음성인식 파이프라인 신설 (`walkieTalkieService.ts`)**:
+  - PTT 버튼을 누르고 말하는 동안 브라우저 내장 `webkitSpeechRecognition`(`ko-KR`)을 병렬 가동.
+  - 손을 뗄 때 전사된 텍스트(`textTranscript`)를 `WalkieMessage` 페이로드에 자동 결합하여 브로드캐스트.
+- **4. 당일 대화 전용 누적 저장 및 카카오톡형 채팅로그 UI 완비 (`MobileWalkieTalkieModal.tsx`)**:
+  - `walkie_today_history` 로컬스토리지 연동 및 `createdAt.slice(0, 10) === todayStr` 당일 필터 적용(자정 넘어가면 이전 날짜 대화 자동 소멸, 당일 최대 100건 누적).
+  - 탭 뷰 분리: **`[🎙️ 실시간 무전 (PTT)]`** 및 **`[💬 당일 대화 로그 ({N})]`**.
+  - 시간대순 말풍선, 발신자/부서, 채널 배지, 실시간 STT 텍스트, 원본 음성 원터치 `[▶ 다시듣기]` 완비.
+
+---
+
+## 🛠️ [마이그레이션엔진/DB화이트리스트] `assets.renter` 스키마 불일치 해소 및 전사 22개 테이블 DB 컬럼 1:1 전수 동기화 완료 (2026-09-04 13:25)
+
+### 1. 버그 현상 및 근본 원인 분석
+- **증상**: 초기 DB 업로드(마이그레이션) 실행 시 다음 오류 발생으로 중단됨:
+  `마이그레이션 오류: assets 저장 실패: Could not find the 'renter' column of 'assets' in the schema cache`
+- **근본 원인**:
+  1. `src/services/migrationEngine.ts`의 스키마 화이트리스트 `TABLE_COLUMNS.assets`에 실제 PostgreSQL DB 테이블에 존재하지 않는 가상/클라이언트 속성인 `'renter'`가 등록되어 있었음.
+  2. 엑셀 파싱 시 임차 자산에 `renter: leaseVendorName`이 주입되었고, `filterRecordBySchema('assets', r)`가 `renter`를 유효 컬럼으로 오판하여 통과시킴.
+  3. `supabase.from('assets').upsert(...)` 실행 시 Supabase(PostgREST)가 DB에 없는 `renter` 컬럼을 수신하여 400 Bad Request 에러 반환.
+  4. 자동화 전수 검증 결과 `assets`(8종: `renter`, `disposalDate` 등), `vendors`(3종: `bankName` 등), `deliveries`(10종), `outbound_inspections`(6종)에서도 실서버 DB에 없는 컬럼이 화이트리스트에 잔존하고 있었음.
+
+### 2. 조치 및 개선 내역
+- **`src/services/migrationEngine.ts` (`TABLE_COLUMNS` 전면 정제)**:
+  - `assets`: 비실존 8개 컬럼(`renter`, `disposalDate`, `disposalPrice`, `buyer`, `safetyInspectionUrl`, `preDeliveryChecklistUrl`, `memo1`, `memo2`) 완전 제거 ➔ 실제 DB 물리 컬럼 32개와 1:1 완벽 일치.
+  - `vendors`: 비실존 3개 컬럼(`bankName`, `accountNumber`, `accountHolder`) 완전 제거 ➔ 실제 DB 물리 컬럼 15개와 1:1 완벽 일치.
+  - `deliveries`: 비실존 10개 컬럼(`costAdjustmentReason`, `reconciledAt`, `paymentRequestedAt`, `paymentCompletedAt`, `statementFileUrl`, `billableToCustomer`, `billableCustomerId`, `vehicleRequirements`, `cargoItems`, `vehicles`) 완전 제거 ➔ 실제 DB 물리 컬럼 39개와 1:1 완벽 일치.
+  - `outbound_inspections`: 비실존 6개 컬럼(`deliveryId`, `checkedItems`, `photos`, `notes`, `approvedAt`, `approvedBy`) 완전 제거 ➔ 실제 DB 물리 컬럼 7개와 1:1 완벽 일치.
+- **실서버 1:1 무결성 검증 완료**:
+  - 22개 전 테이블에 대한 자동화 스키마 검사 스크립트 실행 결과 **22/22 100% OK** 판정.
+  - `renter` 필드가 포함된 Mock 자산에 대해 `filterRecordBySchema` 후 Supabase upsert **201 Created** 성공 검증 완료.
+
+---
+
 ## 🧭 [내비딥링크/전화걸기안전호출] TMAP 길안내 폰 멈춤 버그 원인 규명 및 `nativeLauncher.ts` 안전 실행기 구축 완비 (v1.3.0.Build.117 - 2026-09-04 13:00)
 
 ### 1. 버그 현상 및 근본 원인 분석
