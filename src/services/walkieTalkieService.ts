@@ -575,53 +575,42 @@ class WalkieTalkieService {
     soundEngine.playEndBeep();
   }
 
-  // ── STT: Gemini 2.5 Flash (audio/webm natively supported, no WAV conversion) ─
+  // ── STT: Secure Server Proxy (/api/gemini-stt) ──────────────────────────────
+  // Kept 100% on the server side: zero key exposure to the client/browser
   private async runGeminiStt(messageId: string, blob: Blob, channelId: WalkieTalkieChannel) {
-    const geminiKey = getGeminiApiKey();
-    if (!geminiKey) {
-      this.addDebugLog('[STT] ERROR: Gemini API key not found in storage');
-      return;
-    }
     if (this.sttInProgress) {
       this.addDebugLog('[STT] skipped: another STT already in progress');
       return;
     }
     this.sttInProgress = true;
-    this.addDebugLog(`[STT] blob size=${blob.size}B, mime="${blob.type}" | key=...${geminiKey.slice(-6)}`);
+    this.addDebugLog(`[STT] blob ready: size=${blob.size}B, mime="${blob.type}"`);
 
     try {
       const fullBase64 = await this.blobToBase64(blob);
-      const base64Data = fullBase64.includes(',') ? fullBase64.split(',')[1] : fullBase64;
       const mimeType = blob.type || 'audio/webm';
-      this.addDebugLog(`[STT] base64 ready (${base64Data.length} chars) — calling Gemini 2.5 Flash...`);
+      this.addDebugLog(`[STT] base64 ready (${fullBase64.length} chars) — calling /api/gemini-stt...`);
 
-      // gemini-2.5-flash: supports audio/webm directly (no WAV conversion needed)
-      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiKey}`;
-      const payload = {
-        contents: [{
-          parts: [
-            { inlineData: { mimeType, data: base64Data } },
-            { text: 'Transcribe this Korean voice message exactly as spoken, no extra commentary.' }
-          ]
-        }]
-      };
-
-      const res = await fetch(endpoint, {
+      // Call secure server proxy: API key is held safely on the server
+      const res = await fetch('/api/gemini-stt', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+        body: JSON.stringify({
+          audioBase64: fullBase64,
+          mimeType
+        })
       });
 
-      this.addDebugLog(`[STT] Gemini response: HTTP ${res.status} ${res.ok ? 'OK' : 'ERROR'}`);
+      this.addDebugLog(`[STT] /api/gemini-stt response: HTTP ${res.status} ${res.ok ? 'OK' : 'ERROR'}`);
 
       if (!res.ok) {
-        const errText = await res.text().catch(() => '');
-        this.addDebugLog(`[STT] ERROR body: ${errText.slice(0, 120)}`);
+        const errJson = await res.json().catch(() => ({}));
+        const errText = errJson?.details || errJson?.error || (await res.text().catch(() => ''));
+        this.addDebugLog(`[STT] ERROR body: ${String(errText).slice(0, 150)}`);
         return;
       }
 
       const data = await res.json();
-      const text = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+      const text = data?.textTranscript?.trim();
 
       if (text) {
         this.addDebugLog(`[STT] transcript OK: "${text.slice(0, 80)}${text.length > 80 ? '...' : ''}"`);
