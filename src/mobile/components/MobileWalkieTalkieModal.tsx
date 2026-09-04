@@ -6,7 +6,7 @@ import {
   FileText, ChevronRight
 } from 'lucide-react';
 import { 
-  walkieService, WalkieTalkieChannel, WalkieReceiveMode, WalkieMessage, soundEngine, TalkingStatus 
+  walkieService, WalkieTalkieChannel, WalkieReceiveMode, WalkieMessage, soundEngine, TalkingStatus, WalkieSttEngine 
 } from '../../services/walkieTalkieService';
 import { useApp } from '../../context/AppContext';
 import { 
@@ -46,6 +46,11 @@ export const MobileWalkieTalkieModal: React.FC<MobileWalkieTalkieModalProps> = (
   const [history, setHistory] = useState<WalkieMessage[]>(() => walkieService.getHistory());
   const [playingMessageId, setPlayingMessageId] = useState<string | null>(null);
   const [recordDuration, setRecordDuration] = useState<number>(0);
+
+  // 🛠️ 디버그 로그 표시 토글 (기본값: OFF — 필요 시 켤 수 있음)
+  const [showDebugLogs, setShowDebugLogs] = useState<boolean>(() => localStorage.getItem('walkie_show_debug') === 'true');
+  // 🎙️ STT 엔진 선택 ('GEMINI' | 'BROWSER')
+  const [sttEngine, setSttEngine] = useState<WalkieSttEngine>(() => walkieService.getSttEngine());
 
   // 🌟 순차 재생 큐 대기 건수
   const [queueLength, setQueueLength] = useState<number>(() => walkieService.getQueueLength());
@@ -104,6 +109,10 @@ export const MobileWalkieTalkieModal: React.FC<MobileWalkieTalkieModalProps> = (
       if (err) setSttErrorDetail(err);
     });
 
+    const unEngine = walkieService.onSttEngineChange((eng) => {
+      setSttEngine(eng);
+    });
+
     return () => {
       unMsg();
       unHist();
@@ -111,8 +120,27 @@ export const MobileWalkieTalkieModal: React.FC<MobileWalkieTalkieModalProps> = (
       unTalking();
       unRecMode();
       unLiveStt();
+      unEngine();
     };
   }, [currentUser]);
+
+  // 디버그 토글 & STT 엔진 토글 핸들러
+  const handleToggleDebug = () => {
+    setShowDebugLogs(prev => {
+      const next = !prev;
+      localStorage.setItem('walkie_show_debug', String(next));
+      return next;
+    });
+  };
+
+  const handleToggleSttEngine = () => {
+    const next: WalkieSttEngine = sttEngine === 'GEMINI' ? 'BROWSER' : 'GEMINI';
+    walkieService.setSttEngine(next);
+    setSttEngine(next);
+  };
+
+  // 🛠️ 디버그 메시지 필터링 (showDebugLogs가 false이면 디버그 로그 숨김)
+  const displayHistory = history.filter(m => showDebugLogs || !m.isDebug);
 
   // 모달 오픈 시 오디오 컨텍스트 언락 & 닫힐 때 오디오 정지
   useEffect(() => {
@@ -587,30 +615,74 @@ export const MobileWalkieTalkieModal: React.FC<MobileWalkieTalkieModalProps> = (
               padding: '6px 10px',
               overflow: 'hidden'
             }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px', flexShrink: 0 }}>
-                <span style={{ fontSize: '11px', fontWeight: '800', color: '#cbd5e1', display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px', flexShrink: 0, gap: '4px' }}>
+                <span style={{ fontSize: '11px', fontWeight: '800', color: '#cbd5e1', display: 'flex', alignItems: 'center', gap: '4px', whiteSpace: 'nowrap' }}>
                   <MessageSquare size={11} color="#38bdf8" />
-                  <span>실시간 대화 피드 ({history.length}건)</span>
+                  <span>대화 피드 ({displayHistory.length}건)</span>
                 </span>
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('LOGS')}
-                  style={{
-                    backgroundColor: 'rgba(56, 189, 248, 0.1)',
-                    border: '1px solid rgba(56, 189, 248, 0.3)',
-                    color: '#38bdf8',
-                    padding: '2px 7px',
-                    borderRadius: '5px',
-                    fontSize: '10px',
-                    fontWeight: '700',
-                    cursor: 'pointer'
-                  }}
-                >
-                  전체 로그 ➔
-                </button>
+                
+                <div style={{ display: 'flex', alignItems: 'center', gap: '3.5px', flexWrap: 'nowrap' }}>
+                  {/* 🎙️ STT 엔진 원터치 전환 버튼 */}
+                  <button
+                    type="button"
+                    onClick={handleToggleSttEngine}
+                    style={{
+                      backgroundColor: sttEngine === 'GEMINI' ? 'rgba(56, 189, 248, 0.15)' : 'rgba(16, 185, 129, 0.15)',
+                      border: sttEngine === 'GEMINI' ? '1px solid #0284c7' : '1px solid #10b981',
+                      color: sttEngine === 'GEMINI' ? '#38bdf8' : '#34d399',
+                      padding: '2px 5.5px',
+                      borderRadius: '5px',
+                      fontSize: '9.5px',
+                      fontWeight: '800',
+                      cursor: 'pointer',
+                      whiteSpace: 'nowrap'
+                    }}
+                    title="STT 엔진 전환 (Gemini AI 서버 ↔ 브라우저 내장)"
+                  >
+                    {sttEngine === 'GEMINI' ? '✨ Gemini' : '🌐 브라우저'}
+                  </button>
+
+                  {/* 🐞 디버그 로그 ON/OFF 토글 버튼 */}
+                  <button
+                    type="button"
+                    onClick={handleToggleDebug}
+                    style={{
+                      backgroundColor: showDebugLogs ? 'rgba(239, 68, 68, 0.2)' : '#1e293b',
+                      border: showDebugLogs ? '1px solid #ef4444' : '1px solid #334155',
+                      color: showDebugLogs ? '#f87171' : '#64748b',
+                      padding: '2px 5.5px',
+                      borderRadius: '5px',
+                      fontSize: '9.5px',
+                      fontWeight: '800',
+                      cursor: 'pointer',
+                      whiteSpace: 'nowrap'
+                    }}
+                    title="디버깅 로그 화면 출력 켜기 / 끄기"
+                  >
+                    {showDebugLogs ? '🐞 디버그ON' : '디버그OFF'}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('LOGS')}
+                    style={{
+                      backgroundColor: 'rgba(56, 189, 248, 0.1)',
+                      border: '1px solid rgba(56, 189, 248, 0.3)',
+                      color: '#38bdf8',
+                      padding: '2px 6px',
+                      borderRadius: '5px',
+                      fontSize: '9.5px',
+                      fontWeight: '700',
+                      cursor: 'pointer',
+                      whiteSpace: 'nowrap'
+                    }}
+                  >
+                    로그 ➔
+                  </button>
+                </div>
               </div>
 
-              {history.length === 0 ? (
+              {displayHistory.length === 0 ? (
                 <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', color: '#64748b' }}>
                   오늘 무전 내역이 없습니다. (하단 버튼을 터치하여 말씀하세요)
                 </div>
@@ -628,7 +700,7 @@ export const MobileWalkieTalkieModal: React.FC<MobileWalkieTalkieModalProps> = (
                   }}
                 >
                   {/* Latest messages at bottom (reverse order, max 80 items) */}
-                  {history.slice(0, 80).reverse().map(msg => {
+                  {displayHistory.slice(0, 80).reverse().map(msg => {
                     // ── [DEBUG] Console-style debug log entry ──
                     if (msg.isDebug) {
                       const ts = new Date(msg.createdAt).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -899,10 +971,31 @@ export const MobileWalkieTalkieModal: React.FC<MobileWalkieTalkieModalProps> = (
                 <ArrowLeft size={14} />
                 <span>무전기로 복귀</span>
               </button>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span style={{ fontSize: '11px', color: '#94a3b8' }}>
-                  당일 ({todayStr}) • {history.length}건
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ fontSize: '11px', color: '#94a3b8', whiteSpace: 'nowrap' }}>
+                  당일 • {displayHistory.length}건
                 </span>
+
+                {/* 🐞 디버그 로그 ON/OFF 토글 버튼 */}
+                <button
+                  type="button"
+                  onClick={handleToggleDebug}
+                  style={{
+                    backgroundColor: showDebugLogs ? 'rgba(239, 68, 68, 0.2)' : '#0f172a',
+                    border: showDebugLogs ? '1px solid #ef4444' : '1px solid #475569',
+                    borderRadius: '5px',
+                    color: showDebugLogs ? '#f87171' : '#94a3b8',
+                    fontSize: '10px',
+                    fontWeight: '700',
+                    padding: '2.5px 6px',
+                    cursor: 'pointer',
+                    whiteSpace: 'nowrap'
+                  }}
+                  title="디버깅 로그 화면 출력 켜기 / 끄기"
+                >
+                  {showDebugLogs ? '🐞 디버그ON' : '디버그OFF'}
+                </button>
+
                 {history.length > 0 && (
                   <button
                     type="button"
@@ -916,9 +1009,10 @@ export const MobileWalkieTalkieModal: React.FC<MobileWalkieTalkieModalProps> = (
                       border: '1px solid #475569',
                       borderRadius: '5px',
                       color: '#cbd5e1',
-                      fontSize: '10.5px',
-                      padding: '3px 7px',
-                      cursor: 'pointer'
+                      fontSize: '10px',
+                      padding: '2.5px 6px',
+                      cursor: 'pointer',
+                      whiteSpace: 'nowrap'
                     }}
                   >
                     대화 비우기
@@ -939,7 +1033,7 @@ export const MobileWalkieTalkieModal: React.FC<MobileWalkieTalkieModalProps> = (
                 gap: '10px'
               }}
             >
-              {history.length === 0 ? (
+              {displayHistory.length === 0 ? (
                 <div style={{
                   padding: '40px 16px',
                   textAlign: 'center',
@@ -954,7 +1048,35 @@ export const MobileWalkieTalkieModal: React.FC<MobileWalkieTalkieModalProps> = (
                   </div>
                 </div>
               ) : (
-                [...history].reverse().map(msg => {
+                [...displayHistory].reverse().map(msg => {
+                  // ── [DEBUG] Console-style debug log entry ──
+                  if (msg.isDebug) {
+                    const ts = new Date(msg.createdAt).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                    const isErr = msg.textTranscript?.includes('ERROR') || msg.textTranscript?.includes('FAIL') || msg.textTranscript?.includes('EXCEPTION');
+                    const isWarn = msg.textTranscript?.includes('WARNING') || msg.textTranscript?.includes('skipped');
+                    const isOk = msg.textTranscript?.includes('OK') || msg.textTranscript?.includes('done') || msg.textTranscript?.includes('ready') || msg.textTranscript?.includes('sent') || msg.textTranscript?.includes('granted') || msg.textTranscript?.includes('started');
+                    return (
+                      <div
+                        key={msg.id}
+                        style={{
+                          padding: '3px 8px',
+                          borderRadius: '4px',
+                          backgroundColor: '#020617',
+                          border: `1px solid ${isErr ? '#7f1d1d' : isWarn ? '#78350f' : '#1e3a5f'}`,
+                          fontFamily: 'monospace',
+                          fontSize: '10px',
+                          lineHeight: 1.4,
+                          color: isErr ? '#f87171' : isWarn ? '#fbbf24' : isOk ? '#4ade80' : '#94a3b8',
+                          wordBreak: 'break-all',
+                          whiteSpace: 'pre-wrap'
+                        }}
+                      >
+                        <span style={{ color: '#475569', marginRight: '6px' }}>{ts}</span>
+                        {msg.textTranscript}
+                      </div>
+                    );
+                  }
+
                   const isPlaying = playingMessageId === msg.id;
                   const isMine = msg.senderId === currentUser?.id;
                   const timeStr = new Date(msg.createdAt).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });

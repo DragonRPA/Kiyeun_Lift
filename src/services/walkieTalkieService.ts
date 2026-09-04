@@ -12,6 +12,7 @@ import { getGeminiApiKey } from './geminiGemsService';
 
 export type WalkieTalkieChannel = 'ALL' | 'DISPATCH' | 'AS' | 'SALES';
 export type WalkieReceiveMode = 'VOICE' | 'BEEP' | 'MUTE';
+export type WalkieSttEngine = 'GEMINI' | 'BROWSER';
 
 export interface WalkieMessage {
   id: string;
@@ -159,6 +160,10 @@ class WalkieTalkieService {
   private liveTranscriptListeners: ((t: string, s: 'IDLE'|'LISTENING'|'ERROR'|'UNSUPPORTED', e?: string) => void)[] = [];
   private sttInProgress = false;
   private history: WalkieMessage[] = [];
+  private sttEngine: WalkieSttEngine = 'GEMINI';
+  private sttEngineListeners: ((engine: WalkieSttEngine) => void)[] = [];
+  private browserRecognizer: any = null;
+  private browserTranscript: string = '';
 
   constructor() {
     try {
@@ -175,6 +180,8 @@ class WalkieTalkieService {
       if (savedMode && ['VOICE', 'BEEP', 'MUTE'].includes(savedMode)) this.receiveMode = savedMode;
       const savedCh = localStorage.getItem('walkie_channel') as WalkieTalkieChannel;
       if (savedCh) this.currentChannel = savedCh;
+      const savedEngine = localStorage.getItem('walkie_stt_engine') as WalkieSttEngine;
+      if (savedEngine && ['GEMINI', 'BROWSER'].includes(savedEngine)) this.sttEngine = savedEngine;
       if (typeof window !== 'undefined') {
         setInterval(() => this.purgeOldHistoryIfNeeded(), 60000);
       }
@@ -216,6 +223,18 @@ class WalkieTalkieService {
     this.receiveModeListeners.forEach(l => l(mode));
     if (mode === 'BEEP') soundEngine.playStartBeep();
     else if (mode === 'VOICE') soundEngine.playReceiveChime();
+  }
+
+  getSttEngine(): WalkieSttEngine { return this.sttEngine; }
+  setSttEngine(engine: WalkieSttEngine) {
+    this.sttEngine = engine;
+    localStorage.setItem('walkie_stt_engine', engine);
+    this.sttEngineListeners.forEach(l => l(engine));
+    this.addDebugLog(`[STT ENGINE] switched to: ${engine === 'GEMINI' ? 'Gemini AI (서버)' : '브라우저 STT (무료)'}`);
+  }
+  onSttEngineChange(l: (engine: WalkieSttEngine) => void) {
+    this.sttEngineListeners.push(l);
+    return () => { this.sttEngineListeners = this.sttEngineListeners.filter(x => x !== l); };
   }
 
   getHistory() { this.purgeOldHistoryIfNeeded(); return this.history; }
@@ -423,6 +442,11 @@ class WalkieTalkieService {
       this.mediaRecorder.start(100);
       this.addDebugLog('[PTT] recording started (timeslice=100ms)');
 
+      // If browser STT is active, start speech recognizer alongside
+      if (this.sttEngine === 'BROWSER') {
+        this.startBrowserRecognition();
+      }
+
       // Broadcast talking status only when NOT in sttOnly mode
       if (!sttOnly && sender) {
         const activeCh = this.channels.get(this.currentChannel);
@@ -461,7 +485,7 @@ class WalkieTalkieService {
     const ch = targetChannel || this.currentChannel;
     const activeCh = this.channels.get(ch);
     const sttOnly = opts?.sttOnly ?? false;
-    this.addDebugLog(`[PTT] stopAndSend() called | ch=${ch} | sttOnly=${sttOnly}`);
+    this.addDebugLog(`[PTT] stopAndSend() called | ch=${ch} | sttOnly=${sttOnly} | engine=${this.sttEngine}`);
 
     if (!sttOnly && activeCh) {
       activeCh.send({
@@ -531,10 +555,30 @@ class WalkieTalkieService {
 
           this.liveTranscriptListeners.forEach(l => { try { l('', 'IDLE'); } catch {} });
 
-          // STT: use a copy of the blob to avoid any GC/reuse issues
-          this.addDebugLog('[STT] starting Gemini 2.5 Flash STT...');
-          const sttBlob = new Blob([blob], { type: mime });
-          this.runGeminiStt(msg.id, sttBlob, ch);
+          // STT Engine Branch: BROWSER vs GEMINI
+          if (this.sttEngine === 'BROWSER') {
+            const browserText = this.stopBrowserRecognition();
+            if (browserText) {
+              this.addDebugLog(`[BROWSER STT] transcript OK: "${browserText}"`);
+              this.applyTranscriptLocally(msg.id, browserText);
+              if (activeCh) {
+                activeCh.send({
+                  type: 'broadcast',
+                  event: 'transcript_update',
+                  payload: { messageId: msg.id, textTranscript: browserText }
+                });
+                this.addDebugLog('[BROWSER STT] transcript_update broadcast sent');
+              }
+            } else {
+              this.addDebugLog('[BROWSER STT] empty transcript — fallback to Gemini server STT...');
+              const sttBlob = new Blob([blob], { type: mime });
+              this.runGeminiStt(msg.id, sttBlob, ch);
+            }
+          } else {
+            this.addDebugLog('[STT] starting Gemini 3.6 Flash Server STT...');
+            const sttBlob = new Blob([blob], { type: mime });
+            this.runGeminiStt(msg.id, sttBlob, ch);
+          }
 
           resolve(msg);
         } catch (e: any) {
@@ -552,6 +596,7 @@ class WalkieTalkieService {
   // ── Cancel recording ──────────────────────────────────────────────────────────
   cancelRecording(senderId?: string) {
     this.addDebugLog('[PTT] cancelRecording() called');
+    this.stopBrowserRecognition();
     if (this.mediaRecorder && this.mediaRecorder.state !== 'inactive') {
       this.mediaRecorder.onstop = null;
       this.mediaRecorder.stop();
@@ -573,6 +618,50 @@ class WalkieTalkieService {
     }
     this.liveTranscriptListeners.forEach(l => { try { l('', 'IDLE'); } catch {} });
     soundEngine.playEndBeep();
+  }
+
+  // ── Browser STT Engine (Web Speech API — LabelPrintStation style) ────────────
+  private startBrowserRecognition() {
+    this.browserTranscript = '';
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      this.addDebugLog('[BROWSER STT] SpeechRecognition not supported on this browser');
+      return;
+    }
+    try {
+      const rec = new SpeechRecognition();
+      rec.continuous = true;
+      rec.interimResults = true;
+      rec.lang = 'ko-KR';
+      rec.onresult = (event: any) => {
+        let text = '';
+        for (let i = event.resultIndex; i < event.results.length; ++i) {
+          text += event.results[i][0].transcript;
+        }
+        if (text.trim()) {
+          this.browserTranscript = text.trim();
+          this.liveTranscriptListeners.forEach(l => { try { l(this.browserTranscript, 'LISTENING'); } catch {} });
+        }
+      };
+      rec.onerror = (e: any) => {
+        this.addDebugLog(`[BROWSER STT] warning/error: ${e?.error}`);
+      };
+      rec.start();
+      this.browserRecognizer = rec;
+      this.addDebugLog('[BROWSER STT] SpeechRecognition started');
+    } catch (e: any) {
+      this.addDebugLog(`[BROWSER STT] start failed: ${e?.message}`);
+    }
+  }
+
+  private stopBrowserRecognition(): string {
+    if (this.browserRecognizer) {
+      try { this.browserRecognizer.stop(); } catch {}
+      this.browserRecognizer = null;
+    }
+    const result = this.browserTranscript.trim();
+    this.browserTranscript = '';
+    return result;
   }
 
   // ── STT: Secure Server Proxy (/api/gemini-stt) ──────────────────────────────
