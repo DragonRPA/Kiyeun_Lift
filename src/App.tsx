@@ -5,7 +5,7 @@ import {
   LayoutDashboard, Users, UserCheck, Package, Layers, PlusCircle,
   Truck, Wrench, Shield, ShoppingBag, CreditCard, LogOut, Sun, Moon, Menu, X, Zap, Settings, Database as DatabaseIcon,
   TrendingUp, Clock, AlertTriangle, Building2, ChevronDown, ChevronRight, Briefcase, Box, FolderKanban, ShieldAlert, Terminal, ArrowLeftRight, CheckSquare,
-  ExternalLink, Sparkles, HelpCircle, Smartphone
+  Smartphone, Monitor
 } from 'lucide-react';
 
 import { WeatherWidget } from './components/WeatherWidget';
@@ -82,16 +82,33 @@ const App: React.FC = () => {
 
   // 모바일 전용 뷰 모드 (PWA / Field App)
   const [isMobileView, setIsMobileView] = useState<boolean>(() => {
-    // 1. URL 쿼리나 해시 확인 (/m 또는 ?view=mobile)
-    if (window.location.pathname.startsWith('/m') || window.location.search.includes('view=mobile')) {
+    // 1. URL 쿼리나 해시 확인 (/m 또는 ?mode=mobile 또는 ?view=mobile)
+    const search = window.location.search;
+    if (
+      window.location.pathname.startsWith('/m') ||
+      search.includes('view=mobile') ||
+      search.includes('mode=mobile')
+    ) {
       return true;
     }
-    // 2. localStorage 저장값 확인
+    // 2. localStorage 저장값 확인 (사용자의 명시적 수동 선택 최우선)
     const savedView = localStorage.getItem('erp_view_mode');
     if (savedView === 'mobile') return true;
     if (savedView === 'desktop') return false;
-    // 3. 기기 화면 너비 768px 미만이면 기본 모바일 모드 진입
-    return window.innerWidth < 768;
+
+    // 3. 디바이스 환경 판별 (아이폰, 아이패드, 안드로이드 모바일 등)
+    const ua = navigator.userAgent;
+    const isIPhone = /iPhone|iPod/i.test(ua);
+    const isIPad = /iPad/i.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    const isMobileWidth = window.innerWidth < 768;
+
+    // 아이폰 또는 768px 미만 소형 기기는 기본 모바일 뷰
+    if (isIPhone || isMobileWidth) return true;
+
+    // 아이패드 세로 모드(portrait <= 834px)는 현장 모바일 뷰 기본 진입 권장
+    if (isIPad && window.innerWidth <= 834) return true;
+
+    return false;
   });
 
   // 컴포넌트 마운트 시 저장된 로그인 편의 정보 로드
@@ -363,6 +380,95 @@ const App: React.FC = () => {
               로그인
             </button>
           </form>
+
+          {/* 접속 화면 모드 선택 (모바일 / PC) */}
+          <div style={{
+            marginTop: '16px',
+            paddingTop: '12px',
+            borderTop: '1px solid var(--border-color)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            fontSize: '12px'
+          }}>
+            <span style={{ color: 'var(--text-secondary)', fontWeight: '600' }}>접속 화면 모드</span>
+            <div style={{
+              display: 'flex',
+              gap: '4px',
+              backgroundColor: 'var(--bg-app)',
+              padding: '3px',
+              borderRadius: '8px',
+              border: '1px solid var(--border-color)'
+            }}>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsMobileView(true);
+                  localStorage.setItem('erp_view_mode', 'mobile');
+                }}
+                style={{
+                  padding: '5px 12px',
+                  borderRadius: '6px',
+                  fontSize: '12px',
+                  fontWeight: '700',
+                  border: 'none',
+                  cursor: 'pointer',
+                  backgroundColor: isMobileView ? 'var(--primary)' : 'transparent',
+                  color: isMobileView ? '#ffffff' : 'var(--text-secondary)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                <Smartphone size={13} />
+                <span>모바일</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsMobileView(false);
+                  localStorage.setItem('erp_view_mode', 'desktop');
+                }}
+                style={{
+                  padding: '5px 12px',
+                  borderRadius: '6px',
+                  fontSize: '12px',
+                  fontWeight: '700',
+                  border: 'none',
+                  cursor: 'pointer',
+                  backgroundColor: !isMobileView ? 'var(--primary)' : 'transparent',
+                  color: !isMobileView ? '#ffffff' : 'var(--text-secondary)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                <Monitor size={13} />
+                <span>PC/대화면</span>
+              </button>
+            </div>
+          </div>
+
+          {/* 아이폰 · 아이패드 사파리(Safari) 최적화 안내 */}
+          <div style={{
+            marginTop: '16px',
+            padding: '12px 14px',
+            borderRadius: '12px',
+            backgroundColor: 'rgba(15, 23, 42, 0.75)',
+            border: '1px solid rgba(59, 130, 246, 0.25)',
+            color: '#94a3b8',
+            fontSize: '11.5px',
+            lineHeight: 1.5
+          }}>
+            <div style={{ fontWeight: '700', color: '#60a5fa', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <Smartphone size={14} />
+              <span>아이폰 · 아이패드 사파리(Safari) 지원</span>
+            </div>
+            <div>• 사파리 브라우저 <strong>[공유]</strong> ➔ <strong>[홈 화면에 추가]</strong> 시 전체화면 단독 앱으로 즉시 실행됩니다.</div>
+            <div>• 아이패드는 화면 회전 및 상단 모드 전환을 통해 모바일/PC 뷰를 자유롭게 선택할 수 있습니다.</div>
+          </div>
 
           {/* 테스트 계정 안내 — 개발 환경(localhost)에서만 표시 */}
           {(window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') && (

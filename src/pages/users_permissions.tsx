@@ -49,8 +49,8 @@ export const UsersPermissions: React.FC = () => {
       allMenuIds.forEach(menuId => {
         const exists = merged.some(p => p.userId === u.id && p.menuId === menuId);
         if (!exists) {
-          const isAdmin = u.role === 'ADMIN' || u.id === 'u-1' || u.id === 'sys-admin';
-          merged.push(createMenuPermission(u.id, menuId, true, isAdmin));
+          const isAdmin = u.role === 'ADMIN' || u.id === 'u-1' || u.id === 'sys-admin' || u.id === 'USR-0000002';
+          merged.push(createMenuPermission(u.id, menuId, isAdmin, isAdmin));
           addedCount++;
         }
       });
@@ -105,9 +105,15 @@ export const UsersPermissions: React.FC = () => {
     if (!canSave || !selectedUserId) return;
     
     const targetUser = localUsers.find(u => u.id === selectedUserId);
-    // 절대 슈퍼 관리자 계정은 권한 회수 불가
-    if (targetUser?.id === 'u-1' || targetUser?.id === 'sys-admin' || targetUser?.loginId === 'admin') {
-      showToast('시스템 최고관리자 계정의 메뉴 권한은 변경할 수 없습니다.', 'error');
+    // 절대 대표이사 및 슈퍼 관리자 계정은 권한 회수 불가
+    if (targetUser?.id === 'u-1' || targetUser?.id === 'sys-admin' || targetUser?.loginId === 'admin' || targetUser?.id === 'USR-0000002' || targetUser?.loginId === '이수용') {
+      showToast('대표이사 및 시스템 최고관리자 계정의 메뉴 권한은 변경할 수 없습니다.', 'error');
+      return;
+    }
+
+    // 사용자 권한 설정(permission) 메뉴는 오직 ADMIN 등급에게만 부여 가능
+    if (menuId === 'permission' && targetUser?.role !== 'ADMIN') {
+      showToast('사용자 권한 설정 메뉴는 오직 최고관리자(ADMIN) 등급에게만 부여할 수 있습니다.', 'error');
       return;
     }
 

@@ -1,6 +1,5 @@
-// src/mobile/MobileHeader.tsx
 import React from 'react';
-import { Monitor, Sun, Moon, LogOut, Wrench, Crown, Shield } from 'lucide-react';
+import { Monitor, LogOut, Wrench, Crown, Radio } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 
 export type MobileDeptMode = 'SALES' | 'AS' | 'OUTBOUND' | 'EXECUTIVE' | 'ADMIN';
@@ -9,14 +8,18 @@ interface MobileHeaderProps {
   onSwitchToPc: () => void;
   deptMode: MobileDeptMode;
   onChangeDeptMode: (mode: MobileDeptMode) => void;
+  isWalkieOn?: boolean;
+  onOpenWalkieTalkie?: () => void;
 }
 
 export const MobileHeader: React.FC<MobileHeaderProps> = ({ 
   onSwitchToPc, 
   deptMode, 
-  onChangeDeptMode 
+  onChangeDeptMode,
+  isWalkieOn = false,
+  onOpenWalkieTalkie
 }) => {
-  const { currentUser, logout, theme, toggleTheme } = useApp();
+  const { currentUser, logout } = useApp();
 
   const deptList: { mode: MobileDeptMode; label: string; activeColor: string }[] = [
     { mode: 'SALES', label: '영업부', activeColor: '#2563eb' },
@@ -36,7 +39,7 @@ export const MobileHeader: React.FC<MobileHeaderProps> = ({
           backgroundColor: 'rgba(15, 23, 42, 0.95)',
           backdropFilter: 'blur(12px)',
           borderBottom: '1px solid #1e293b',
-          padding: '12px 16px',
+          padding: 'max(12px, env(safe-area-inset-top, 12px)) 16px 12px',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
@@ -83,6 +86,38 @@ export const MobileHeader: React.FC<MobileHeaderProps> = ({
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          {/* 📻 현장 무전기 (PTT) 버튼 */}
+          <button
+            type="button"
+            onClick={onOpenWalkieTalkie}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '5px',
+              fontSize: '12px',
+              fontWeight: '700',
+              padding: '6px 10px',
+              borderRadius: '10px',
+              backgroundColor: isWalkieOn ? 'rgba(16, 185, 129, 0.2)' : '#1e293b',
+              border: isWalkieOn ? '1px solid #10b981' : '1px solid #334155',
+              color: isWalkieOn ? '#34d399' : '#cbd5e1',
+              cursor: 'pointer'
+            }}
+            title="현장 무전기 (PTT)"
+          >
+            <Radio size={14} color={isWalkieOn ? '#34d399' : '#94a3b8'} />
+            <span>{isWalkieOn ? '무전ON' : '무전'}</span>
+            {isWalkieOn && (
+              <span style={{
+                width: '6px',
+                height: '6px',
+                borderRadius: '9999px',
+                backgroundColor: '#10b981',
+                boxShadow: '0 0 6px #10b981'
+              }} />
+            )}
+          </button>
+
           <button
             onClick={onSwitchToPc}
             style={{

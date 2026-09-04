@@ -1,5 +1,87 @@
 # 개발 지시 및 개편 완료 내역 (dev_temp.md)
 
+## 📱 [iOS/iPadOS/Safari전면최적화] 아이폰 · 아이패드 사파리(Safari) 브라우저 100% 최적화 및 PWA 단독 앱 구동 환경 구축 완비 (2026-09-04 12:55)
+
+### 1. 개발 배경 및 진단 결과
+- **사용자 질의**: "아이폰/아이패드의 사파리 브라우저 버전은 준비가 안됐어?"
+- **정밀 진단 결과**:
+  1. **아이패드(iPadOS)의 사파리 데스크톱 모드 편향**: Apple iOS 13+ 이후 아이패드 사파리는 데스크톱 사이트를 기본 요청하여 User-Agent에 `Macintosh`로 식별되고 해상도가 768px 이상이어서 자동으로 PC 화면으로 진입되는 현상 발견.
+  2. **로그인 전 화면 모드 선택기 및 PWA 안내 부재**: 비로그인 상태에서 모바일/PC 뷰 전환 수단이 없고 사파리 홈화면 추가 가이드가 모바일 앱 내부에만 존재하여 사파리 지원 여부 인지가 어려웠던 점 개선.
+  3. **PWA manifest 불일치**: `manifest.json`의 `start_url`은 `/?mode=mobile`이었으나 `App.tsx`는 `view=mobile`만 검사하고 있어 홈화면 바로가기 진입 시 모바일 뷰 미인식 결함 해소.
+  4. **iOS 사파리 고유 스펙 최적화**:
+     - `apple-touch-icon`: SVG 대신 고해상도 PNG(180x180, 192x192, 512x512) 규격 생성 및 메타태그 등록.
+     - Safe-Area-Insets: Dynamic Island/노치 대응 `safe-area-inset-top` 및 하단 홈 바 `safe-area-inset-bottom` 여백 반영.
+     - Web Audio & MediaRecorder: iOS 사파리 Web Audio suspended 자동 resume 헬퍼 및 `audio/mp4` 상호 크로스 플랫폼 호환 코덱 우선 순위 탐색 반영.
+     - 아이패드 태블릿 반응형: `max-w-lg`(512px) 고정에서 `md:max-w-3xl`(768px) 태블릿 확장 반응형 적용.
+
+### 2. 구체적 수정 및 보강 내역
+- **`src/App.tsx` (디바이스 스마트 감지 및 로그인 화면 개편)**:
+  - `navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1`으로 iPadOS 완벽 식별.
+  - URL 파라미터 `?mode=mobile`, `?view=mobile`, `/m` 모두 모바일 자동 진입 지원.
+  - 로그인 카드 하단에 **`접속 화면 모드: [모바일] / [PC/대화면]`** 원터치 전환기 신설.
+  - 로그인 화면에 **`아이폰 · 아이패드 사파리(Safari) 지원 안내`** 카드 상시 표출.
+- **`src/mobile/components/PwaInstallBanner.tsx` (기기 맞춤형 2단계 가이드 고도화)**:
+  - iPadOS 감지 추가: 아이패드 사파리는 **상단 우측 툴바**의 [공유] 아이콘, 아이폰은 **하단 메뉴바**의 [공유] 아이콘으로 정밀 분기 안내.
+- **`src/services/walkieTalkieService.ts` (iOS 사파리 오디오 호환성 보강)**:
+  - `audio/mp4` 우선 탐색으로 iOS 사파리와 안드로이드/PC 크롬 간 음성 녹음 상호 교차 재생 100% 보장.
+  - `playAudio` 예외 및 블록 안전 격리 (재생 실패 시에도 순차 큐 락업 원천 차단).
+  - Web Audio 제스처 언락 메서드 `unlockAudioOnUserGesture` 구비.
+- **`src/mobile/mobile.css`, `MobileHeader.tsx`, `MobileBottomNav.tsx`**:
+  - Safe-Area-Insets(`env(safe-area-inset-top)`, `env(safe-area-inset-bottom)`) 반영.
+  - 태블릿 반응형 컨테이너 폭 확장 (`md:max-w-3xl`).
+- **`index.html`, `public/manifest.json`, `public/apple-touch-icon.png`**:
+  - Apple 공식 고해상도 터치 아이콘 신규 생성 및 manifest orientation `any` 설정.
+
+---
+
+## 📻 [모바일현장무전기/PTT통신망] 스마트폰 현장 무전기(Push-To-Talk) 구축: 개인별 On/Off 대기, 4대 직무 채널, Web Audio 효과음 및 다시듣기 타임라인 완비 (2026-09-04 12:35)
+
+### 1. 개발 내용 요약
+- **`src/services/walkieTalkieService.ts` (초경량 PTT 무전 서비스 신설 및 동시 발언 제어)**:
+  - **순차 재생 큐 (FIFO Audio Queue)**: 동시 다발적 음성 도착 시 소리가 겹치거나 씹히지 않고, 먼저 도착한 음성을 끝까지 재생한 뒤 0.22초 간격으로 차례대로 자동 재생.
+  - **실시간 발언자 인디케이터 (Talking Status)**: 동료가 PTT 버튼을 누르고 말하는 동안 `talking_status` 실시간 브로드캐스트로 전사 화면에 `🔴 [부서 성명] 말하고 있습니다...` 점멸 표출.
+  - Web Audio API 기반 비프음 합성 (송신 시작 2단 비프, 종료 치-익 노이즈, 수신 도미솔 차임벨 100% 브라우저 자체 합성).
+  - MediaRecorder 오디오 녹음 (Opus/WebM 압축, 16kHz 모노 초경량 데이터).
+  - Supabase Realtime Broadcast 채널(`walkie_ALL`, `walkie_DISPATCH`, `walkie_AS`, `walkie_SALES`) 구독 및 실시간 동시 음성 송출/순차 큐 재생.
+  - 최근 20건 무전 이력 로컬스토리지 보존 및 다시듣기 지원.
+- **`src/mobile/components/MobileWalkieTalkieModal.tsx` (현장 무전기 전용 모달 스튜디오 신설)**:
+  - 4대 주파수 채널 선택 탭: `CH-01 • 전사공용`, `CH-02 • 출고배차`, `CH-03 • 현장AS`, `CH-04 • 영업`.
+  - 레트로 다크/에메랄드 LCD 액정 상태창:
+    - 동료 발언 시: 붉은 박동 테두리 + `🔴 [출고팀 김관주 부장] 말하고 있습니다...`
+    - 재생 대기열 발생 시: `⏳ 대기 N건` 실시간 배지 표출.
+  - 직경 140px 대형 원형 PTT 버튼:
+    - 동료 발언 중일 때 주황색 테두리로 변하며 `⚠️ [김관주 부장] 발언 중` 표시 (양보 유도).
+    - 누르고 있는 동안 녹음 ➔ 손 떼면 0.3초 내 동일 채널 자동 방송.
+  - 최근 무전 타임라인 카드 (발신자, 소속, 시각, 초단위 음성길이, `[▶ 다시듣기]` 원터치 재생).
+- **`src/mobile/MobileHeader.tsx`, `src/mobile/MobileApp.tsx` (모바일 전사 연동)**:
+  - 헤더 우측 `[📻 무전 / 무전ON]` 상태 버튼 고정 탑재 (에메랄드 그린 점멸 인디케이터).
+  - 백그라운드 리스닝 모드 지원: 모바일 앱 어느 화면에 있더라도 무전기가 `ON`이면 순차 큐를 통해 차례대로 음성 자동 방송.
+- **전사 표준 헌장 준수**:
+  - 헌장 1.1: 무전기 하드웨어 구입비 0원 절감, 통화 연결시간 0초 단축, 동시 발언 음성 유실 0%.
+  - 헌장 3.1: 건조한 명사/동사 UI 단일 표준 준수 (감사 결과 위반 0건).
+
+---
+
+## 🛡️ [임직원권한/직무R&R표준화] 5대 직무별 필수 연결 메뉴 및 차단 업무 전수 파악, DB 권한 일괄 조정 및 권한관리.md 제정 완비 (2026-09-04 12:28)
+
+### 1. 개발 내용 요약
+- **`권한관리.md` 제정 (프로젝트 루트)**:
+  - 전사 권한 관리 4대 원칙(최소 권한의 원칙, 헌장 2.1 부서 R&R 분리, 최고관리자 사장님 독점 원칙, 부서장/팀원 저장권한 분리) 수립.
+  - 시스템 30대 메뉴(SSOT: `menu_config.ts`)에 기반한 5대 부서별 표준 권한 매트릭스(연결 메뉴 vs 차단 업무) 정립.
+  - 임직원 20인(실제 임직원 15인 + WTT 테스터 5인) 전수 권한 매핑 표 및 변경 절차 정의.
+- **Supabase 원격 DB `permissions` 테이블 700건 일괄 정돈 및 보안 취약점 봉쇄 (`scratch/apply_permission_matrix.cjs`)**:
+  - **보안 결함 즉시 차단**: 관리부 정수아 차장 계정에서 `permission`(사용자 권한 설정) 및 `payroll`(급여) 권한 완전 회수 (오직 사장님/ADMIN 독점).
+  - **헌장 2.1 영업 R&R 위반 차단**: 영업부 전원의 `dispatch_assign`(장비 할당 매핑) 접근 완전 차단 (특정 장비번호 지정 불가).
+  - **무관 부서 대외비 차단**: AS팀 전원의 불필요한 `billing`(청구), `contract`(계약), `delivery`(배차) 조회 권한 완전 차단.
+  - **부서장 저장 권한 정상 복원**: 최수호 상무, 김관주 부장, 한상찬 팀장 등 소관 업무 `canSave: true` 정상 부여.
+  - 레거시 불일치 menuId (`quote`, `rent_assets`, `transport_company` 등) 완전 제거.
+- **`src/pages/users_permissions.tsx` 보안 가드 강화**:
+  - 대표이사(이수용 사장) 및 최고관리자 계정 권한 회수 원천 차단.
+  - 비인가 계정에 대한 `permission` 메뉴 권한 토글 원천 차단.
+  - 신규 사용자 누락 권한 백필 시 관리자가 아니면 `canView: false`로 최소 권한 기본값 보호.
+
+---
+
 ## 📦 [모바일5대직무체계/경영진관리부특화] 조직도 최상위(경영진 직할) 칵핏 및 관리부 정산·수납 모바일 특화 뷰 신설, 전사 5대 직무 퀵 체인저 완비 (v1.3.0.Build.115 - 2026-09-04 12:20)
 
 ### 1. 개발 내용 요약

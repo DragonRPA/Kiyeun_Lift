@@ -4,7 +4,7 @@ import { Download, Share, PlusSquare, X, Smartphone, MoreVertical } from 'lucide
 
 export const PwaInstallBanner: React.FC = () => {
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
-  const [isIos, setIsIos] = useState(false);
+  const [isIPad, setIsIPad] = useState(false);
   const [isAndroid, setIsAndroid] = useState(false);
   const [isStandalone, setIsStandalone] = useState(false);
   const [showGuideModal, setShowGuideModal] = useState(false);
@@ -17,11 +17,11 @@ export const PwaInstallBanner: React.FC = () => {
       (navigator as any).standalone === true;
     setIsStandalone(isStandaloneMode);
 
-    // 2. 기기 판별 (iOS vs Android)
+    // 2. 기기 판별 (iOS/iPadOS vs Android)
     const userAgent = window.navigator.userAgent.toLowerCase();
-    const isIosDevice = /iphone|ipad|ipod/.test(userAgent);
+    const isIPadOS = /ipad/.test(userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
     const isAndroidDevice = /android/.test(userAgent);
-    setIsIos(isIosDevice);
+    setIsIPad(isIPadOS);
     setIsAndroid(isAndroidDevice);
 
     // 3. 안드로이드 beforeinstallprompt 이벤트 캡처
@@ -270,7 +270,11 @@ export const PwaInstallBanner: React.FC = () => {
                       1
                     </div>
                     <div style={{ fontSize: '12px', color: '#e2e8f0', lineHeight: 1.4 }}>
-                      화면 하단 메뉴의 <strong style={{ color: '#60a5fa' }}><Share size={13} style={{ display: 'inline', verticalAlign: '-2px' }} /> 공유</strong> 버튼을 터치합니다.
+                      {isIPad ? (
+                        <>사파리 브라우저 <strong>상단 우측 툴바</strong>의 <strong style={{ color: '#60a5fa' }}><Share size={13} style={{ display: 'inline', verticalAlign: '-2px' }} /> 공유</strong> 아이콘을 터치합니다.</>
+                      ) : (
+                        <>사파리 브라우저 <strong>하단 메뉴바</strong>의 <strong style={{ color: '#60a5fa' }}><Share size={13} style={{ display: 'inline', verticalAlign: '-2px' }} /> 공유</strong> 아이콘을 터치합니다.</>
+                      )}
                     </div>
                   </div>
 

@@ -130,6 +130,15 @@
 .max-w-sm { max-width: 384px; }
 .max-w-md { max-width: 448px; }
 .max-w-lg { max-width: 512px; }
+.max-w-xl { max-width: 576px; }
+.max-w-2xl { max-width: 672px; }
+.max-w-3xl { max-width: 768px; }
+.max-w-4xl { max-width: 896px; }
+
+@media (min-width: 768px) {
+  .md\:max-w-2xl { max-width: 672px; }
+  .md\:max-w-3xl { max-width: 768px; }
+}
 
 .w-1 { width: 4px; }
 .h-1 { height: 4px; }

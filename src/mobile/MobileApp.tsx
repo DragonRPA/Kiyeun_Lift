@@ -15,6 +15,8 @@ import { MobileAssetSearch } from './pages/MobileAssetSearch';
 import { MobileDispatchOrderCreate } from './pages/MobileDispatchOrderCreate';
 import { MobileMyContracts } from './pages/MobileMyContracts';
 import { PwaInstallBanner } from './components/PwaInstallBanner';
+import { MobileWalkieTalkieModal } from './components/MobileWalkieTalkieModal';
+import { walkieService } from '../services/walkieTalkieService';
 import './mobile.css';
 
 interface MobileAppProps {
@@ -41,6 +43,29 @@ export const MobileApp: React.FC<MobileAppProps> = ({ onSwitchToPc }) => {
   const [activeTab, setActiveTab] = useState<MobileTabType>('home');
   const [selectedAsTicketId, setSelectedAsTicketId] = useState<string | null>(null);
   const [isCreatingAs, setIsCreatingAs] = useState(false);
+
+  // 📻 무전기 모달 및 전원 상태
+  const [isWalkieModalOpen, setIsWalkieModalOpen] = useState(false);
+  const [isWalkieOn, setIsWalkieOn] = useState(() => walkieService.getIsPowerOn());
+
+  // 무전기 서비스 자동 구독 (백그라운드 수신 대기)
+  useEffect(() => {
+    if (currentUser) {
+      walkieService.subscribe({
+        id: currentUser.id,
+        name: currentUser.name,
+        role: currentUser.role,
+        deptName: currentUser.department || '기연리프트'
+      });
+    }
+
+    // 전원 변경 체크 인터벌
+    const interval = setInterval(() => {
+      setIsWalkieOn(walkieService.getIsPowerOn());
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [currentUser]);
 
   // 부서 모드 변경 핸들러
   const handleDeptModeChange = (mode: MobileDeptMode) => {
@@ -83,18 +108,20 @@ export const MobileApp: React.FC<MobileAppProps> = ({ onSwitchToPc }) => {
 
   return (
     <div className="mobile-app-root min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-blue-500 selection:text-white">
-      {/* 상단 모바일 헤더 + 부서 퀵 체인저 */}
+      {/* 상단 모바일 헤더 + 부서 퀵 체인저 + 무전기 버튼 */}
       <MobileHeader 
         onSwitchToPc={onSwitchToPc}
         deptMode={deptMode}
         onChangeDeptMode={handleDeptModeChange}
+        isWalkieOn={isWalkieOn}
+        onOpenWalkieTalkie={() => setIsWalkieModalOpen(true)}
       />
 
       {/* 홈 화면 PWA 설치 안내 배너 */}
       <PwaInstallBanner />
 
       {/* 본문 라우팅 */}
-      <main className="flex-1 w-full max-w-lg mx-auto">
+      <main className="flex-1 w-full max-w-lg md:max-w-3xl mx-auto px-1 sm:px-3">
         {selectedAsTicketId ? (
           <MobileAsDetail
             ticketId={selectedAsTicketId}
@@ -133,7 +160,7 @@ export const MobileApp: React.FC<MobileAppProps> = ({ onSwitchToPc }) => {
           />
         ) : activeTab === 'my_contracts' ? (
           <MobileMyContracts
-            onOpenCreateAsForAsset={(assetNo, siteId) => handleOpenCreateAs()}
+            onOpenCreateAsForAsset={(_assetNo, _siteId) => handleOpenCreateAs()}
           />
         ) : activeTab === 'as_create' ? (
           <MobileAsCreate
@@ -167,6 +194,12 @@ export const MobileApp: React.FC<MobileAppProps> = ({ onSwitchToPc }) => {
           pendingInspectionCount={pendingInspectionCount}
         />
       )}
+
+      {/* 📻 현장 무전기 (PTT) 모달 */}
+      <MobileWalkieTalkieModal
+        isOpen={isWalkieModalOpen}
+        onClose={() => setIsWalkieModalOpen(false)}
+      />
     </div>
   );
 };
