@@ -17,7 +17,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(405).json({ error: 'Method Not Allowed' });
   }
 
-  const { audioBase64, mimeType } = req.body || {};
+  const { audioBase64, mimeType, language = 'ko', prompt } = req.body || {};
   if (!audioBase64 || typeof audioBase64 !== 'string') {
     return res.status(400).json({ error: 'Missing audioBase64' });
   }
@@ -44,8 +44,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const blob = new Blob([audioBuffer], { type: contentType });
     const formData = new FormData();
     formData.append('file', blob, `audio.${ext}`);
-    formData.append('model', 'whisper-large-v3-turbo');
-    formData.append('language', 'ko');
+    formData.append('model', 'whisper-large-v3'); // ⚡ 풀사이즈 whisper-large-v3 (한국어 전사 정확도 및 어휘력 극대화)
+    formData.append('language', language); // ⚡ 한국어 강제
+    formData.append('prompt', prompt || '기연리프트 무전 통신.'); // ⚡ 한글 토큰 앵커링 프롬프트
+    formData.append('temperature', '0'); // ⚡ 환각 및 영어 번역 이탈 차단
     formData.append('response_format', 'json');
 
     const groqRes = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
@@ -75,7 +77,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       wordCount: textTranscript ? textTranscript.split(/\s+/).length : 0,
       bufferBytes: audioBuffer.length,
       mimeType: contentType,
-      model: 'whisper-large-v3-turbo',
+      model: 'whisper-large-v3',
       elapsedMs,
       success: true
     });

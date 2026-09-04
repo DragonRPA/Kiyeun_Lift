@@ -438,7 +438,6 @@ class WalkieTalkieService {
         this.currentStream = await navigator.mediaDevices.getUserMedia({
           audio: {
             channelCount: 1,
-            sampleRate: 16000,
             echoCancellation: true,
             noiseSuppression: true,
             autoGainControl: true
@@ -457,7 +456,7 @@ class WalkieTalkieService {
       try {
         this.mediaRecorder = new MediaRecorder(this.currentStream, {
           ...(mimeType ? { mimeType } : {}),
-          audioBitsPerSecond: 16000
+          audioBitsPerSecond: 32000
         });
       } catch (recErr) {
         this.addDebugLog(`[PTT] MediaRecorder fallback without audioBitsPerSecond: ${recErr}`);
@@ -465,7 +464,7 @@ class WalkieTalkieService {
       }
       this.mediaRecorder.ondataavailable = (e) => { if (e.data?.size > 0) this.audioChunks.push(e.data); };
       this.mediaRecorder.start();
-      this.addDebugLog('[PTT] recording started (16kHz mono, 16kbps compression)');
+      this.addDebugLog('[PTT] recording started (32kbps mono voice)');
 
       // Broadcast talking status
       if (sender) {
@@ -706,7 +705,12 @@ class WalkieTalkieService {
       const res = await fetch('/api/groq-stt', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ audioBase64: base64Data, mimeType })
+        body: JSON.stringify({
+          audioBase64: base64Data,
+          mimeType,
+          language: 'ko',
+          prompt: '기연리프트 무전 통신.'
+        })
       });
 
       const elapsed = ((Date.now() - t0) / 1000).toFixed(2);
@@ -723,7 +727,7 @@ class WalkieTalkieService {
       const text = data?.textTranscript?.trim();
 
       if (text) {
-        this.addDebugLog(`[GROQ STT] transcript OK (${elapsed}s) [${data?.model || 'turbo'}]: "${text}"`);
+        this.addDebugLog(`[GROQ STT] transcript OK (${elapsed}s) [${data?.model || 'large-v3'}]: "${text}"`);
         this.applyTranscriptLocally(messageId, text);
 
         const activeCh = this.channels.get(channelId);

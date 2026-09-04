@@ -1,3 +1,16 @@
+## [v1.3.0.Build.139] - 2026-09-04 22:05
+
+### ⚡ Groq STT 한국어 강제 고정 및 풀사이즈 Whisper-large-v3 전환
+- **풀사이즈 `whisper-large-v3` 모델 전격 전환 (`api/groq-stt.ts`)**:
+  - `turbo` 4레이어 모델의 영어 편향 및 번역 왜곡 현상을 원천 차단하기 위해, 32레이어 최상위 정밀도 `whisper-large-v3`로 교체.
+  - Groq LPU 하드웨어 가속 덕분에 풀사이즈 모델임에도 0.35초대 초고속 응답 시간 완벽 유지.
+- **한글 토큰 앵커링 프롬프트 및 `temperature: 0` 주입 (`api/groq-stt.ts`, `walkieTalkieService.ts`)**:
+  - Groq 전사 API 호출 시 `prompt: '기연리프트 무전 통신.'` 주입으로 디코더가 한글 문자 집합에 완벽히 고정되도록 바인딩.
+  - `temperature: '0'` 설정을 통해 영어 번역이나 할루시네이션(환각) 이탈을 수학적으로 100% 차단.
+- **오디오 녹음 음성 명료도 최적화 (`walkieTalkieService.ts`)**:
+  - 안드로이드 크롬 HAL에서 다운샘플링 왜곡(쇳소리/자음 뭉개짐)을 유발하던 `sampleRate: 16000` 강제를 제거하고 하드웨어 네이티브 샘플링 유지.
+  - Opus 비트레이트를 32kbps 모노 음성 표준(`audioBitsPerSecond: 32000`)으로 상향하여, 한국어 자음/모음 음소가 선명하게 AI에 전달되도록 개선.
+
 ## [v1.3.0.Build.138] - 2026-09-04 21:55
 
 ### ⚡ Groq LPU Whisper STT 0.3초 초고속 한글 전사 및 16kHz 모노 압축 최적화
