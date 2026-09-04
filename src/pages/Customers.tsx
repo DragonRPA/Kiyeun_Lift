@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { db, Customer, CustomerContact, CustomerSite, CustomerBankAccount, STANDARD_SPECS } from '../services/db';
 import { exportToExcel } from '../services/excel';
+import { matchHangul } from '../utils/hangulSearch';
 
 export const Customers: React.FC = () => {
   const {
@@ -114,9 +115,9 @@ export const Customers: React.FC = () => {
     return customers.filter(c => {
       const matchesSearch = 
         !searchTerm ||
-        c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        matchHangul(c.name, searchTerm) ||
         (c.bizRegNo || '').includes(searchTerm) ||
-        (c.representative || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+        matchHangul(c.representative, searchTerm) ||
         (c.repContact || '').includes(searchTerm);
 
       const matchesStatus = 

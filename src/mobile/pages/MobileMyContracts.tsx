@@ -5,6 +5,7 @@ import {
   Building2, MapPin, Phone, Calendar, Clock, Layers, 
   Search, ChevronRight, AlertCircle, Wrench 
 } from 'lucide-react';
+import { matchHangul } from '../../utils/hangulSearch';
 
 interface MobileMyContractsProps {
   onOpenCreateAsForAsset?: (assetNo: string, siteId: string) => void;
@@ -27,13 +28,13 @@ export const MobileMyContracts: React.FC<MobileMyContractsProps> = ({ onOpenCrea
           return false;
         }
         if (searchTerm.trim()) {
-          const q = searchTerm.toLowerCase();
+          const q = searchTerm.trim();
           const cust = customers.find(cu => cu.id === c.customerId);
           const site = sites.find(s => s.id === c.siteId);
-          const custName = (cust?.name || '').toLowerCase();
-          const siteName = (site?.name || '').toLowerCase();
-          const contractNo = (c.contractNo || '').toLowerCase();
-          return custName.includes(q) || siteName.includes(q) || contractNo.includes(q);
+          const custName = cust?.name || '';
+          const siteName = site?.name || '';
+          const contractNo = c.contractNo || '';
+          return matchHangul(custName, q) || matchHangul(siteName, q) || contractNo.toLowerCase().includes(q.toLowerCase());
         }
         return true;
       })

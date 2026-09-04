@@ -7,6 +7,7 @@ import { emailService } from '../services/email';
 import { exportToExcel, exportTransactionStatementExcel, exportTransactionStatementExcelBuffer, calcServicePeriod, formatStatementItemName } from '../services/excel';
 import { generateTransactionStatementPdf, generateTransactionStatementExcel } from '../services/excelTemplateEngine';
 import { BillingInvoiceTab } from '../components/BillingInvoiceTab';
+import { matchHangul } from '../utils/hangulSearch';
 
 
 export const Billings: React.FC = () => {
@@ -185,7 +186,7 @@ export const Billings: React.FC = () => {
       const contractObj = contracts.find(c => c.id === b.contractId);
       const contractNoStr = (contractObj?.contractNo || b.contractId || '').toLowerCase();
 
-      if (sTerm && !custName.includes(sTerm.toLowerCase())) return false;
+      if (sTerm && !matchHangul(getCustName(b.customerId), sTerm)) return false;
       if (cFilter && !contractNoStr.includes(cFilter.trim().toLowerCase())) return false;
       if (startYm && b.billingYm < startYm) return false;
       if (endYm && b.billingYm > endYm) return false;
@@ -1199,9 +1200,9 @@ ${items.map((item, idx) => {
     const contractNoStr = c.contractNo.toLowerCase();
 
     const matchesDue = isDuePeriod(c);
-    const matchesCustomer = !wizardCustomerFilter || custName.includes(wizardCustomerFilter.trim().toLowerCase());
+    const matchesCustomer = !wizardCustomerFilter || matchHangul(getCustName(c.customerId), wizardCustomerFilter);
     const matchesContractNo = !wizardContractNoFilter || contractNoStr.includes(wizardContractNoFilter.trim().toLowerCase());
-    const matchesSite = !wizardSiteFilter || siteName.includes(wizardSiteFilter.trim().toLowerCase());
+    const matchesSite = !wizardSiteFilter || matchHangul(getSiteName(c.siteId), wizardSiteFilter);
 
     return matchesDue && matchesCustomer && matchesContractNo && matchesSite;
   });
@@ -3276,17 +3277,17 @@ ${items.map((item, idx) => {
           }, 0);
 
         // ── 통합 검색 필터: 고객명 / 입금자명 / 계좌번호 / 비고 ──
-        const searchQ = depSearchQuery.trim().toLowerCase();
+        const searchQ = depSearchQuery.trim();
         const filteredDeposits = bankTransactions
           .filter(t => {
             if (!t.isDeposit) return false;
             if (!searchQ) return true;
             const mappedCustName = customers.find(c => c.id === t.customerId)?.name || '';
             return (
-              t.senderName.toLowerCase().includes(searchQ) ||
-              mappedCustName.toLowerCase().includes(searchQ) ||
-              (t.senderAccount || '').toLowerCase().includes(searchQ) ||
-              (t.memo || '').toLowerCase().includes(searchQ)
+              matchHangul(t.senderName, searchQ) ||
+              matchHangul(mappedCustName, searchQ) ||
+              (t.senderAccount || '').toLowerCase().includes(searchQ.toLowerCase()) ||
+              matchHangul(t.memo, searchQ)
             );
           })
           .map(dep => ({ ...dep, balance: getDepositBalance(dep.id) }))

@@ -9,6 +9,7 @@ import {
 import { exportToExcel } from '../services/excel';
 import { BankTransaction } from '../services/db';
 import { parseBankExcelFile } from '../services/bankParser';
+import { matchHangul } from '../utils/hangulSearch';
 
 export const BankMatching: React.FC = () => {
   const {
@@ -405,12 +406,14 @@ export const BankMatching: React.FC = () => {
       if (tBank !== appliedBankFilter) return false;
     }
 
-    const sender = (t.counterparty || t.senderName || '').toLowerCase();
-    const memoStr = (t.memo || '').toLowerCase();
-    const summaryStr = (t.summary || '').toLowerCase();
-    const searchLower = appliedSearchTerm.toLowerCase();
+    const sender = t.counterparty || t.senderName || '';
+    const memoStr = t.memo || '';
+    const summaryStr = t.summary || '';
 
-    const matchesSearch = sender.includes(searchLower) || memoStr.includes(searchLower) || summaryStr.includes(searchLower);
+    const matchesSearch = !appliedSearchTerm ||
+      matchHangul(sender, appliedSearchTerm) ||
+      matchHangul(memoStr, appliedSearchTerm) ||
+      matchHangul(summaryStr, appliedSearchTerm);
     if (!matchesSearch) return false;
 
     const txDate = (t.transactionDate || '').split('T')[0];
@@ -549,9 +552,9 @@ export const BankMatching: React.FC = () => {
       const vName = s.vendorName || '';
       const bYm = s.settlementYm || '';
       
-      const search = settlementSearchTerm.toLowerCase();
+      const search = settlementSearchTerm.trim();
       if (search) {
-        return vName.toLowerCase().includes(search) || bYm.includes(search);
+        return matchHangul(vName, search) || bYm.includes(search);
       }
       return true;
     }).sort((a, b) => {
@@ -579,9 +582,9 @@ export const BankMatching: React.FC = () => {
       const custName = cust?.name || '';
       const bYm = b.billingYm || '';
       
-      const search = billingSearchTerm.toLowerCase();
+      const search = billingSearchTerm.trim();
       if (search) {
-        return custName.toLowerCase().includes(search) || bYm.includes(search);
+        return matchHangul(custName, search) || bYm.includes(search);
       }
       return true;
     }).sort((a, b) => {

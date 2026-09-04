@@ -5,6 +5,7 @@ import {
   Building2, MapPin, Phone, Calendar, Clock, Plus, Minus, 
   Send, AlertTriangle, CheckCircle2, ChevronRight, ArrowLeft 
 } from 'lucide-react';
+import { matchHangul } from '../../utils/hangulSearch';
 
 interface MobileDispatchOrderCreateProps {
   onBack: () => void;
@@ -61,11 +62,24 @@ export const MobileDispatchOrderCreate: React.FC<MobileDispatchOrderCreateProps>
     setTimeout(() => setToastMessage(null), 3000);
   };
 
+  const [customerSearchText, setCustomerSearchText] = useState('');
+  const [siteSearchText, setSiteSearchText] = useState('');
+
   // 선택된 고객사의 등록 현장 목록
   const customerSites = useMemo(() => {
     if (!selectedCustomerId) return [];
     return sites.filter(s => s.customerId === selectedCustomerId);
   }, [sites, selectedCustomerId]);
+
+  const filteredCustomersList = useMemo(() => {
+    return customers
+      .filter(c => c.transactionStatus !== 'BLOCKED')
+      .filter(c => !customerSearchText.trim() || matchHangul(c.name, customerSearchText) || matchHangul(c.representative, customerSearchText));
+  }, [customers, customerSearchText]);
+
+  const filteredCustomerSites = useMemo(() => {
+    return customerSites.filter(s => !siteSearchText.trim() || matchHangul(s.name, siteSearchText) || matchHangul(s.address, siteSearchText));
+  }, [customerSites, siteSearchText]);
 
   // 고객사 변경 핸들러
   const handleCustomerChange = (custId: string) => {
@@ -273,25 +287,63 @@ export const MobileDispatchOrderCreate: React.FC<MobileDispatchOrderCreateProps>
           </span>
 
           <div className="flex flex-col gap-1">
-            <label className="text-[11px] text-slate-400">거래처 (고객사) 선택 *</label>
+            <div className="flex items-center justify-between">
+              <label className="text-[11px] text-slate-400">거래처 (고객사) 선택 *</label>
+              {customerSearchText && (
+                <button
+                  type="button"
+                  onClick={() => setCustomerSearchText('')}
+                  className="text-[10px] text-sky-400 font-bold"
+                >
+                  초기화
+                </button>
+              )}
+            </div>
+            <input
+              type="text"
+              value={customerSearchText}
+              onChange={(e) => setCustomerSearchText(e.target.value)}
+              placeholder="🔍 고객사명 / 초성 검색 (예: ㅅㅅ, ㅇㅈㅇ)"
+              className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2 text-xs text-white placeholder-slate-500 mb-0.5"
+            />
             <select
               value={selectedCustomerId}
               onChange={(e) => handleCustomerChange(e.target.value)}
               className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-xs text-white"
               required
             >
-              <option value="">고객사를 선택하세요</option>
-              {customers
-                .filter(c => c.transactionStatus !== 'BLOCKED')
-                .map(c => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
+              <option value="">
+                {customerSearchText ? `검색 결과 (${filteredCustomersList.length}개사)` : '고객사를 선택하세요'}
+              </option>
+              {filteredCustomersList.map(c => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
             </select>
           </div>
 
           {selectedCustomerId && (
             <div className="flex flex-col gap-1">
-              <label className="text-[11px] text-slate-400">납품 현장 선택 *</label>
+              <div className="flex items-center justify-between">
+                <label className="text-[11px] text-slate-400">납품 현장 선택 *</label>
+                {siteSearchText && (
+                  <button
+                    type="button"
+                    onClick={() => setSiteSearchText('')}
+                    className="text-[10px] text-sky-400 font-bold"
+                  >
+                    초기화
+                  </button>
+                )}
+              </div>
+              {customerSites.length > 3 && (
+                <input
+                  type="text"
+                  value={siteSearchText}
+                  onChange={(e) => setSiteSearchText(e.target.value)}
+                  placeholder="🔍 현장명 초성 검색 (예: ㅍㅌ)"
+                  className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2 text-xs text-white placeholder-slate-500 mb-0.5"
+                />
+              )}
               <select
                 value={selectedSiteId}
                 onChange={(e) => handleSiteChange(e.target.value)}
@@ -299,7 +351,7 @@ export const MobileDispatchOrderCreate: React.FC<MobileDispatchOrderCreateProps>
                 required
               >
                 <option value="">현장을 선택하세요</option>
-                {customerSites.map(s => (
+                {filteredCustomerSites.map(s => (
                   <option key={s.id} value={s.id}>{s.name} ({s.address || '주소미상'})</option>
                 ))}
                 <option value="NEW">+ [신규 현장 직접 입력]</option>

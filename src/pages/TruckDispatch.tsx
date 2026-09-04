@@ -11,6 +11,7 @@ import {
 import * as XLSX from 'xlsx';
 import { Delivery, TransportCompany, TransportDriver, db, DeliveryStatus, Asset } from '../services/db';
 import { DestinationWeatherModal } from '../components/DestinationWeatherModal';
+import { matchHangul } from '../utils/hangulSearch';
 
 const VEHICLE_TYPE_OPTIONS = ['1.4T', '2.5T', '3.5T', '5T', '5T장축', '8.5T', '11T', '노배드'];
 
@@ -636,14 +637,14 @@ export const TruckDispatch: React.FC = () => {
 
       // 5. 검색어 (배차ID, 기사명, 거래처, 고객사명)
       if (reconSearchQuery) {
-        const q = reconSearchQuery.toLowerCase();
+        const q = reconSearchQuery.trim();
         const contract = contracts.find(c => c.id === d.contractId);
         const customer = contract ? customers.find(c => c.id === contract.customerId) : null;
-        const match = (d.id && d.id.toLowerCase().includes(q)) ||
-          (d.driverName && d.driverName.toLowerCase().includes(q)) ||
-          (d.destinationAddress && d.destinationAddress.toLowerCase().includes(q)) ||
-          (contract && contract.contractNo.toLowerCase().includes(q)) ||
-          (customer && customer.name.toLowerCase().includes(q));
+        const match = (d.id && d.id.toLowerCase().includes(q.toLowerCase())) ||
+          (d.driverName && matchHangul(d.driverName, q)) ||
+          (d.destinationAddress && matchHangul(d.destinationAddress, q)) ||
+          (contract && contract.contractNo.toLowerCase().includes(q.toLowerCase())) ||
+          (customer && matchHangul(customer.name, q));
         if (!match) return false;
       }
 
@@ -1450,17 +1451,17 @@ export const TruckDispatch: React.FC = () => {
       if (startDate && dDate && dDate < startDate) return false;
       if (endDate && dDate && dDate > endDate) return false;
 
-      if (!searchQuery) return true;
-      const q = searchQuery.toLowerCase();
+      if (!searchQuery || !searchQuery.trim()) return true;
+      const q = searchQuery.trim();
       const contract = getContract(d.contractId);
       const customer = contract ? getCustomer(contract.customerId) : null;
 
       return (
-        (d.id && d.id.toLowerCase().includes(q)) ||
-        (d.driverName && d.driverName.toLowerCase().includes(q)) ||
-        (d.destinationAddress && d.destinationAddress.toLowerCase().includes(q)) ||
-        (contract && contract.contractNo.toLowerCase().includes(q)) ||
-        (customer && customer.name.toLowerCase().includes(q))
+        (d.id && d.id.toLowerCase().includes(q.toLowerCase())) ||
+        (d.driverName && matchHangul(d.driverName, q)) ||
+        (d.destinationAddress && matchHangul(d.destinationAddress, q)) ||
+        (contract && contract.contractNo.toLowerCase().includes(q.toLowerCase())) ||
+        (customer && matchHangul(customer.name, q))
       );
     });
   }, [deliveries, activeDispatchStatusTab, startDate, endDate, searchQuery, contracts, customers]);

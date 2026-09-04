@@ -5,6 +5,7 @@ import {
   Search, RefreshCw, Layers, CheckCircle2, AlertTriangle, 
   XCircle, Clock, MapPin, ChevronRight, X, PhoneCall, Calendar
 } from 'lucide-react';
+import { matchHangul } from '../../utils/hangulSearch';
 
 // 고소작업대 표준 6대 높이 규격 프리셋
 interface SpecPreset {
@@ -183,11 +184,11 @@ export const MobileAssetSearch: React.FC = () => {
   // 검색어 필터링된 개별 장비 목록 (바텀시트 또는 하단용)
   const searchResults = useMemo(() => {
     if (!searchTerm.trim()) return [];
-    const q = searchTerm.toLowerCase();
+    const q = searchTerm.trim();
     return yardFilteredAssets.filter(a => 
-      (a.assetNo || '').toLowerCase().includes(q) ||
-      (a.modelName || '').toLowerCase().includes(q) ||
-      (a.serialNo || '').toLowerCase().includes(q)
+      (a.assetNo || '').toLowerCase().includes(q.toLowerCase()) ||
+      matchHangul(a.modelName, q) ||
+      (a.serialNo || '').toLowerCase().includes(q.toLowerCase())
     );
   }, [yardFilteredAssets, searchTerm]);
 

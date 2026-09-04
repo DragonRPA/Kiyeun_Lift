@@ -9,6 +9,7 @@ import { Contract, db, Customer, CustomerContact, CustomerSite, ContractAsset, C
 import { exportToExcel } from '../services/excel';
 import { ContractDocumentBundleModal } from '../components/ContractDocumentBundleModal';
 import { FileText, CheckCircle2 } from 'lucide-react';
+import { matchHangul } from '../utils/hangulSearch';
 
 export const Contracts: React.FC = () => {
   const {
@@ -164,13 +165,14 @@ export const Contracts: React.FC = () => {
       const cas = contractAssets.filter(ca => ca.contractId === c.id);
       const assetNos = cas.map(ca => assets.find(a => a.id === ca.assetId)?.assetNo || '').join(' ').toLowerCase();
 
-      const q = searchTerm.trim().toLowerCase();
+      const q = searchTerm.trim();
       const matchesSearch = !q ||
-        c.contractNo.toLowerCase().includes(q) ||
-        custName.includes(q) ||
-        siteName.includes(q) ||
-        contactName.includes(q) ||
-        assetNos.includes(q);
+        c.contractNo.toLowerCase().includes(q.toLowerCase()) ||
+        matchHangul(custName, q) ||
+        matchHangul(siteName, q) ||
+        matchHangul(contactName, q) ||
+        assetNos.includes(q.toLowerCase()) ||
+        matchHangul(assetNos, q);
 
       const matchesStatus = statusFilter === 'ALL' || c.status === statusFilter;
       const matchesCustomer = customerFilter === 'ALL' || c.customerId === customerFilter;
@@ -847,7 +849,7 @@ export const Contracts: React.FC = () => {
                         style={{ padding: '8px 12px', fontSize: '12.5px', cursor: 'pointer', color: customerFilter === 'ALL' ? 'var(--primary)' : 'var(--text-primary)', fontWeight: customerFilter === 'ALL' ? 700 : 400 }}
                       >전체 고객사</div>
                       {customers
-                        .filter(c => !customerInputText || c.name.toLowerCase().includes(customerInputText.toLowerCase()))
+                        .filter(c => !customerInputText || matchHangul(c.name, customerInputText))
                         .map(c => (
                           <div
                             key={c.id}
@@ -891,7 +893,7 @@ export const Contracts: React.FC = () => {
                         style={{ padding: '8px 12px', fontSize: '12.5px', cursor: 'pointer', color: siteFilter === 'ALL' ? 'var(--primary)' : 'var(--text-primary)', fontWeight: siteFilter === 'ALL' ? 700 : 400 }}
                       >전체 현장</div>
                       {(customerFilter === 'ALL' ? sites : sites.filter(s => s.customerId === customerFilter))
-                        .filter(s => !siteInputText || s.name.toLowerCase().includes(siteInputText.toLowerCase()))
+                        .filter(s => !siteInputText || matchHangul(s.name, siteInputText))
                         .map(s => (
                           <div
                             key={s.id}
