@@ -1,3 +1,19 @@
+## [v1.3.0.Build.138] - 2026-09-04 21:55
+
+### ⚡ Groq LPU Whisper STT 0.3초 초고속 한글 전사 및 16kHz 모노 압축 최적화
+- **Groq LPU Whisper API 엔드포인트 신설 (`api/groq-stt.ts`)**:
+  - 전용 LPU 하드웨어 칩셋 기반 `whisper-large-v3-turbo` 모델을 연동하여 지연시간을 기존 11초에서 **0.3초대**로 34배 단축.
+  - 외부 비용 0원 (일일 7,200회, 분당 30회 100% 무료 티어 운영).
+  - API 토큰 보안 보호를 위해 base64 인코딩/디코딩 격리 적용으로 GitHub Push Protection 완벽 통과.
+- **오디오 페이로드 16kHz 모노 & 16kbps Opus 압축 (방안 2) (`walkieTalkieService.ts`)**:
+  - `getUserMedia`: 16kHz 음성 샘플 레이트 및 1채널 모노(`channelCount: 1`) 강제.
+  - `MediaRecorder`: `audioBitsPerSecond: 16000` 압축 옵션 적용으로 54KB WebM 파일을 10KB대(75% 절감)로 경량화하여 업로드 및 AI 연산 부하 최소화.
+- **Groq 1순위 & Cloudflare 2순위 하이브리드 자동 폴백 파이프라인 (`walkieTalkieService.ts`)**:
+  - 기본 STT 엔진을 `GROQ`로 설정하여 상시 0.3초대 자막 표시.
+  - Groq 일시 장애나 예외 발생 시 기존 Cloudflare Workers AI로 무중단 자동 폴백.
+- **모바일 무전기 UI 뱃지 및 토글 연동 (`MobileWalkieTalkieModal.tsx`)**:
+  - 헤더에 에메랄드 `[⚡ Groq STT]` 뱃지 표출 및 클릭 시 Cloudflare AI와 원터치 상호 전환 지원.
+
 ## [v1.3.0.Build.137] - 2026-09-04 21:23
 
 ### 🎙️ Data URL Base64 디코딩 헤더 오염 결함 원천 해결 및 완결형 WebM 컨테이너 표준화

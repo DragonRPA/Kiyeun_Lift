@@ -12,7 +12,7 @@ import { supabase } from './db';
 
 export type WalkieTalkieChannel = 'ALL' | 'DISPATCH' | 'AS' | 'SALES';
 export type WalkieReceiveMode = 'VOICE' | 'BEEP' | 'MUTE';
-export type WalkieSttEngine = 'CLOUDFLARE' | 'BROWSER';
+export type WalkieSttEngine = 'GROQ' | 'CLOUDFLARE' | 'BROWSER';
 
 export interface WalkieMessage {
   id: string;
@@ -160,7 +160,7 @@ class WalkieTalkieService {
   private liveTranscriptListeners: ((t: string, s: 'IDLE'|'LISTENING'|'ERROR'|'UNSUPPORTED', e?: string) => void)[] = [];
   private sttInProgress = false;
   private history: WalkieMessage[] = [];
-  private sttEngine: WalkieSttEngine = 'CLOUDFLARE';
+  private sttEngine: WalkieSttEngine = 'GROQ';
   private sttEngineListeners: ((engine: WalkieSttEngine) => void)[] = [];
   private browserRecognizer: any = null;
   private browserTranscript: string = '';
@@ -181,7 +181,7 @@ class WalkieTalkieService {
       const savedCh = localStorage.getItem('walkie_channel') as WalkieTalkieChannel;
       if (savedCh) this.currentChannel = savedCh;
       const savedEngine = localStorage.getItem('walkie_stt_engine') as WalkieSttEngine;
-      if (savedEngine && ['CLOUDFLARE', 'BROWSER'].includes(savedEngine)) this.sttEngine = savedEngine; else this.sttEngine = 'CLOUDFLARE';
+      if (savedEngine && ['GROQ', 'CLOUDFLARE', 'BROWSER'].includes(savedEngine)) this.sttEngine = savedEngine; else this.sttEngine = 'GROQ';
       if (typeof window !== 'undefined') {
         setInterval(() => this.purgeOldHistoryIfNeeded(), 60000);
       }
@@ -230,7 +230,8 @@ class WalkieTalkieService {
     this.sttEngine = engine;
     localStorage.setItem('walkie_stt_engine', engine);
     this.sttEngineListeners.forEach(l => l(engine));
-    this.addDebugLog(`[STT ENGINE] switched to: ${engine === 'CLOUDFLARE' ? 'Cloudflare AI (무료)' : '브라우저 STT (무료)'}`);
+    const engineLabel = engine === 'GROQ' ? 'Groq LPU' : engine === 'CLOUDFLARE' ? 'Cloudflare AI' : '브라우저 STT';
+    this.addDebugLog(`[STT ENGINE] switched to: ${engineLabel}`);
   }
   onSttEngineChange(l: (engine: WalkieSttEngine) => void) {
     this.sttEngineListeners.push(l);
@@ -435,7 +436,13 @@ class WalkieTalkieService {
       this.addDebugLog('[PTT] getUserMedia() requesting mic...');
       if (!this.currentStream) {
         this.currentStream = await navigator.mediaDevices.getUserMedia({
-          audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+          audio: {
+            channelCount: 1,
+            sampleRate: 16000,
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true
+          }
         });
       }
       this.addDebugLog('[PTT] mic granted: ' + (this.currentStream.getAudioTracks()[0]?.label || 'unknown'));
@@ -447,10 +454,18 @@ class WalkieTalkieService {
       const mimeType = candidates.find(t => { try { return MediaRecorder.isTypeSupported(t); } catch { return false; } }) || '';
       this.addDebugLog(`[PTT] MediaRecorder mimeType="${mimeType || '(browser default)'}"`);
 
-      this.mediaRecorder = new MediaRecorder(this.currentStream, mimeType ? { mimeType } : undefined);
+      try {
+        this.mediaRecorder = new MediaRecorder(this.currentStream, {
+          ...(mimeType ? { mimeType } : {}),
+          audioBitsPerSecond: 16000
+        });
+      } catch (recErr) {
+        this.addDebugLog(`[PTT] MediaRecorder fallback without audioBitsPerSecond: ${recErr}`);
+        this.mediaRecorder = new MediaRecorder(this.currentStream, mimeType ? { mimeType } : undefined);
+      }
       this.mediaRecorder.ondataavailable = (e) => { if (e.data?.size > 0) this.audioChunks.push(e.data); };
       this.mediaRecorder.start();
-      this.addDebugLog('[PTT] recording started (finalized container mode)');
+      this.addDebugLog('[PTT] recording started (16kHz mono, 16kbps compression)');
 
       // Broadcast talking status
       if (sender) {
@@ -582,8 +597,8 @@ class WalkieTalkieService {
               .catch((e: any) => this.addDebugLog(`[PTT] voice broadcast err: ${e?.message}`));
           }
 
-          // ⚡ [3] Cloudflare Workers AI Whisper로 음성 파일 전사 백그라운드 호출
-          this.runCloudflareStt(msg.id, base64, mime, ch);
+          // ⚡ [3] Groq LPU Whisper (기본) 및 Cloudflare 백그라운드 전사 호출
+          this.runStt(msg.id, base64, mime, ch);
 
           this.liveTranscriptListeners.forEach(l => { try { l('', 'IDLE'); } catch {} });
           resolve(msg);
@@ -662,6 +677,80 @@ class WalkieTalkieService {
       this.addDebugLog('[BROWSER STT] SpeechRecognition started');
     } catch (e: any) {
       this.addDebugLog(`[BROWSER STT] start failed: ${e?.message}`);
+    }
+  }
+
+  // ── Unified STT Dispatcher (Groq LPU primary, Cloudflare Workers AI fallback) ─
+  private async runStt(messageId: string, base64Data: string, mimeType: string, channelId: WalkieTalkieChannel) {
+    if (this.sttEngine === 'GROQ') {
+      const ok = await this.runGroqStt(messageId, base64Data, mimeType, channelId);
+      if (!ok) {
+        this.addDebugLog('[STT] Groq returned empty or error — fallback to Cloudflare Workers AI...');
+        await this.runCloudflareStt(messageId, base64Data, mimeType, channelId);
+      }
+    } else {
+      await this.runCloudflareStt(messageId, base64Data, mimeType, channelId);
+    }
+  }
+
+  // ── Groq LPU Whisper STT (whisper-large-v3-turbo, sub-second latency) ───────
+  private async runGroqStt(messageId: string, base64Data: string, mimeType: string, channelId: WalkieTalkieChannel): Promise<boolean> {
+    if (this.sttInProgress) {
+      this.addDebugLog('[GROQ STT] another STT in progress, waiting...');
+    }
+    this.sttInProgress = true;
+    const t0 = Date.now();
+    this.addDebugLog('[GROQ STT] sending audio to Groq LPU Whisper (/api/groq-stt)...');
+
+    try {
+      const res = await fetch('/api/groq-stt', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ audioBase64: base64Data, mimeType })
+      });
+
+      const elapsed = ((Date.now() - t0) / 1000).toFixed(2);
+      this.addDebugLog(`[GROQ STT] response: HTTP ${res.status} (${elapsed}s)`);
+
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        const errText = errJson?.details || errJson?.error || (await res.text().catch(() => ''));
+        this.addDebugLog(`[GROQ STT] ERROR body: ${String(errText).slice(0, 150)}`);
+        return false;
+      }
+
+      const data = await res.json();
+      const text = data?.textTranscript?.trim();
+
+      if (text) {
+        this.addDebugLog(`[GROQ STT] transcript OK (${elapsed}s) [${data?.model || 'turbo'}]: "${text}"`);
+        this.applyTranscriptLocally(messageId, text);
+
+        const activeCh = this.channels.get(channelId);
+        if (activeCh) {
+          activeCh.send({
+            type: 'broadcast',
+            event: 'transcript_update',
+            payload: { messageId, textTranscript: text }
+          });
+          this.addDebugLog('[GROQ STT] transcript_update broadcast sent to receivers');
+        }
+
+        this.liveTranscriptListeners.forEach(l => { try { l(text, 'IDLE'); } catch {} });
+        return true;
+      } else {
+        const bBytes = data?.bufferBytes ?? 0;
+        this.addDebugLog(`[GROQ STT] empty transcript (${elapsed}s) | bytes=${bBytes}B`);
+        this.liveTranscriptListeners.forEach(l => { try { l('', 'IDLE'); } catch {} });
+        return false;
+      }
+    } catch (e: any) {
+      this.addDebugLog(`[GROQ STT] fetch EXCEPTION: ${e?.message}`);
+      console.warn('[GROQ STT] request failed:', e);
+      return false;
+    } finally {
+      this.sttInProgress = false;
+      this.addDebugLog('[GROQ STT] done (sttInProgress=false)');
     }
   }
 

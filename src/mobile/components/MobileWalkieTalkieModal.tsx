@@ -134,7 +134,7 @@ export const MobileWalkieTalkieModal: React.FC<MobileWalkieTalkieModalProps> = (
   };
 
   const handleToggleSttEngine = () => {
-    const next: WalkieSttEngine = sttEngine === 'CLOUDFLARE' ? 'BROWSER' : 'CLOUDFLARE';
+    const next: WalkieSttEngine = sttEngine === 'GROQ' ? 'CLOUDFLARE' : 'GROQ';
     walkieService.setSttEngine(next);
     setSttEngine(next);
   };
@@ -622,22 +622,25 @@ export const MobileWalkieTalkieModal: React.FC<MobileWalkieTalkieModalProps> = (
                 </span>
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '3.5px', flexWrap: 'nowrap' }}>
-                  {/* 🎙️ 100% 무료 Cloudflare AI Whisper STT 뱃지 (비용 0원) */}
-                  <span
+                  {/* 🎙️ 100% 무료 Groq LPU / Cloudflare AI Whisper STT 뱃지 */}
+                  <button
+                    type="button"
+                    onClick={handleToggleSttEngine}
                     style={{
-                      backgroundColor: 'rgba(249, 115, 22, 0.15)',
-                      border: '1px solid #f97316',
-                      color: '#fb923c',
+                      backgroundColor: sttEngine === 'GROQ' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(249, 115, 22, 0.15)',
+                      border: sttEngine === 'GROQ' ? '1px solid #10b981' : '1px solid #f97316',
+                      color: sttEngine === 'GROQ' ? '#34d399' : '#fb923c',
                       padding: '2px 5.5px',
                       borderRadius: '5px',
                       fontSize: '9.5px',
                       fontWeight: '800',
-                      whiteSpace: 'nowrap'
+                      whiteSpace: 'nowrap',
+                      cursor: 'pointer'
                     }}
-                    title="Cloudflare Workers AI Whisper (비용 0원, 일 10,000건 무료)"
+                    title={sttEngine === 'GROQ' ? 'Groq LPU Whisper (0.3초) - 클릭 시 Cloudflare 전환' : 'Cloudflare Workers AI Whisper - 클릭 시 Groq 전환'}
                   >
-                    ☁️ Cloudflare STT
-                  </span>
+                    {sttEngine === 'GROQ' ? '⚡ Groq STT' : '☁️ Cloudflare STT'}
+                  </button>
 
                   {/* 🐞 디버그 로그 ON/OFF 토글 버튼 */}
                   <button
