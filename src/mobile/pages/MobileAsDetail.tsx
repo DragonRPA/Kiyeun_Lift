@@ -1,11 +1,11 @@
 // src/mobile/pages/MobileAsDetail.tsx
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useApp } from '../../context/AppContext';
 import { CameraUploader } from '../components/CameraUploader';
 import { SignatureCanvas } from '../components/SignatureCanvas';
-import { ArrowLeft, Navigation, Phone, CheckCircle2, Wrench, Plus, Trash2, ChevronDown } from 'lucide-react';
+import { ArrowLeft, Navigation, Phone, CheckCircle2, Wrench, Plus, Trash2, ChevronDown, MapPin } from 'lucide-react';
 import { db, RepairPartUsed } from '../../services/db';
-import { launchNavigation, safePhoneCall, NavAppType } from '../../utils/nativeLauncher';
+import { launchNavigation, safePhoneCall, resolveSiteDetailedAddress, NavAppType } from '../../utils/nativeLauncher';
 
 interface MobileAsDetailProps {
   ticketId: string;
@@ -69,20 +69,27 @@ export const MobileAsDetail: React.FC<MobileAsDetailProps> = ({ ticketId, onBack
     );
   }
 
-  // 안전한 길안내 열기 (정밀 주소 우선 매핑, 길안내 모드 및 프리징 방지)
+  // 🌟 정밀 도로명 주소 다단계 역추적 (siteId -> siteName -> contract -> asset 계약 -> 고객사 현장)
+  const resolvedAddress = useMemo(() => {
+    if (!ticket) return '';
+    return resolveSiteDetailedAddress({
+      siteId: ticket.siteId,
+      siteName: ticket.siteName,
+      contractId: ticket.contractId,
+      assetNo: ticket.assetNo,
+      assetId: ticket.assetId,
+      customerName: ticket.customerName,
+      locationDetail: ticket.locationDetail,
+      customerSites: db.customerSites,
+      contracts: db.contracts,
+      contractAssets: db.contractAssets,
+      customers: db.customers,
+    });
+  }, [ticket, db.customerSites, db.contracts, db.contractAssets, db.customers]);
+
+  // 안전한 길안내 열기 (현장명 대신 실제 상세 도로명 주소 우선 전송)
   const handleOpenNav = (app: NavAppType = selectedNavApp) => {
-    let destination = '';
-    // 1. 등록된 현장 ID가 있는 경우 현장 마스터의 정밀 도로명/지번 주소 우선 조회
-    if (ticket.siteId) {
-      const site = db.customerSites.find((s) => s.id === ticket.siteId);
-      if (site && site.address && site.address.trim()) {
-        destination = site.address.trim();
-      }
-    }
-    // 2. 현장명 또는 상세위치로 폴백
-    if (!destination) {
-      destination = ticket.siteName || ticket.locationDetail || ticket.customerName || '현장';
-    }
+    const destination = resolvedAddress || ticket.siteName || ticket.locationDetail || ticket.customerName || '현장';
     launchNavigation(destination, app);
   };
 
@@ -177,8 +184,24 @@ export const MobileAsDetail: React.FC<MobileAsDetailProps> = ({ ticketId, onBack
 
         <div>
           <div className="text-base font-black text-white">{ticket.customerName}</div>
-          <div className="text-xs text-slate-300 mt-0.5">
-            현장: <span className="text-white font-semibold">{ticket.siteName || ticket.locationDetail || '현장위치미상'}</span>
+          <div className="text-xs text-slate-300 mt-1 flex flex-col gap-1">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="text-slate-400 font-bold">현장:</span>
+              <span className="text-white font-semibold">{ticket.siteName || '현장위치미상'}</span>
+              {ticket.locationDetail && (
+                <span className="text-slate-400 font-mono text-[11px]">({ticket.locationDetail})</span>
+              )}
+            </div>
+            {resolvedAddress && resolvedAddress !== ticket.siteName ? (
+              <div className="flex items-center gap-1 text-sky-300 font-medium bg-sky-950/40 border border-sky-800/40 rounded-lg px-2 py-1">
+                <MapPin className="w-3.5 h-3.5 text-sky-400 flex-shrink-0" />
+                <span className="text-[11.5px] truncate">{resolvedAddress}</span>
+              </div>
+            ) : (
+              <div className="text-slate-500 text-[11px] italic">
+                (상세 도로명 주소 미등록 - 현장명으로 검색됨)
+              </div>
+            )}
           </div>
         </div>
 

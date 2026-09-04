@@ -10,7 +10,7 @@ import {
 import { db, FieldAsTicket, FieldAsPartUsed, FieldAsCollectedPart } from '../services/db';
 import { exportToExcel } from '../services/excel';
 import { compressImageFile } from '../utils/imageCompressor';
-import { launchNavigation, safePhoneCall } from '../utils/nativeLauncher';
+import { launchNavigation, safePhoneCall, resolveSiteDetailedAddress } from '../utils/nativeLauncher';
 
 // 자주 쓰이는 조치 내용 프리셋 태그 (5,518건 빅데이터 기반)
 const QUICK_ACTION_TAGS = [
@@ -183,17 +183,20 @@ export const FieldAsManagement: React.FC = () => {
 
     setShowNavSelectorTicket(null);
 
-    // 2. 실제 앱 딥링크 호출 (현장 정밀 주소 우선 매핑, 길안내 모드 및 프리징 방지)
-    let targetDest = '';
-    if (ticket.siteId) {
-      const site = db.customerSites.find(s => s.id === ticket.siteId);
-      if (site && site.address && site.address.trim()) {
-        targetDest = site.address.trim();
-      }
-    }
-    if (!targetDest) {
-      targetDest = ticket.siteName || ticket.locationDetail || ticket.customerName || '현장';
-    }
+    // 2. 실제 앱 딥링크 호출 (현장 정밀 도로명 주소 다단계 역추적)
+    const targetDest = resolveSiteDetailedAddress({
+      siteId: ticket.siteId,
+      siteName: ticket.siteName,
+      contractId: ticket.contractId,
+      assetNo: ticket.assetNo,
+      assetId: ticket.assetId,
+      customerName: ticket.customerName,
+      locationDetail: ticket.locationDetail,
+      customerSites: db.customerSites,
+      contracts: db.contracts,
+      contractAssets: db.contractAssets,
+      customers: db.customers,
+    });
     launchNavigation(targetDest, app);
   };
 

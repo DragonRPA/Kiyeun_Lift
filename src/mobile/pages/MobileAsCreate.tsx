@@ -151,9 +151,18 @@ export const MobileAsCreate: React.FC<MobileAsCreateProps> = ({ onBack, onCreate
 
     setIsSubmitting(true);
     try {
+      // 🌟 고객사 및 현장 마스터 ID 자동 매핑 (도로명 주소 상속 보장)
+      const matchedCust = customers.find(c => c.name.trim() === customerName.trim() || c.name.includes(customerName.trim()));
+      const matchedSite = sites.find(s => 
+        (matchedCust ? s.customerId === matchedCust.id : true) && 
+        (s.name.trim() === siteName.trim() || s.name.includes(siteName.trim()) || siteName.trim().includes(s.name))
+      );
+
       const ticket = await createFieldAsTicket({
-        customerName,
-        siteName,
+        customerId: matchedCust?.id,
+        customerName: customerName.trim(),
+        siteId: matchedSite?.id,
+        siteName: siteName.trim(),
         assetNo: assetNo.toUpperCase(),
         locationDetail,
         reporterName,

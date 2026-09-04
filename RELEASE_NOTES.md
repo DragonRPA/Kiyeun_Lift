@@ -1,3 +1,20 @@
+## [v1.3.0.Build.133] - 2026-09-04 16:31
+
+### 📍 T맵 내비게이션 현장 상세 도로명 주소 6단계 역추적 및 무전기 STT 엔진 개편
+- **T맵 정밀 도로명 주소 6단계 역추적 엔진 구축 (`nativeLauncher.ts`, `MobileAsDetail.tsx`)**:
+  - `siteId` 부재 시 단순 현장명이 TMap으로 전달되던 결함을 해결하기 위해 `resolveSiteDetailedAddress` 엔진 신설.
+  - `siteId` ➔ `siteName` 마스터 검색 ➔ `contractId` 주소 ➔ `assetNo` 현재 가동 계약 주소 ➔ `locationDetail` 정규식 ➔ `customerName` 현장으로 이어지는 6단계 정밀 역추적.
+  - 현장 상세 화면에 실제 매핑된 도로명 주소 시각 배지(`📍`) 노출 및 TMap 검색창 자동 전달.
+  - AS 신규 접수(`MobileAsCreate.tsx`) 시 고객사/현장 마스터 ID 자동 선제 매핑.
+- **모바일 무전기 UI 건조 표기 간소화 (`MobileWalkieTalkieModal.tsx`)**:
+  - `🎙️ 음성 (5초)` ➔ `(5s)` 로 간소화, 마이크/말풍선 이모지 전면 삭제(헌장 3.1).
+  - 텍스트 인식 시 `텍스트 내용 (5s)` 병기 및 상태 바 `송신 중 (5s)`으로 정돈.
+- **안드로이드 크롬 맞춤형 STT 엔진 개편 (`walkieTalkieService.ts`)**:
+  - `rec.continuous = false` 표준화로 모바일 크롬 음성인식 세션 비정상 종료 방지.
+  - 발언 종료 시 `rec.stop()` 선제 호출 및 최대 500ms 수신 대기 파이프라인 정립.
+  - 오디오 녹음 완료 시 `track.stop()`으로 마이크 스트림 완전 릴리즈.
+  - `[📄 독백의뢰]` 모드 STT 전용 격리(`sttOnly`)로 오디오 충돌 없는 100% 텍스트 인식 보장.
+
 ## [v1.3.0.Build.132] - 2026-09-04 16:13
 
 ### 📱 모바일 무전기 UI 뷰포트 극대화 및 T맵 주소 자동 복사 내비 연동

@@ -184,3 +184,123 @@ export function safePhoneCall(phone: string | undefined | null) {
     }
   }, 300);
 }
+
+/**
+ * 현장 티켓/의뢰 정보로부터 실제 내비게이션 목적지 상세 도로명 주소를 정밀 다단계 역추적
+ * 1. siteId 기준 customerSites.address 매핑
+ * 2. siteName 기준 customerSites 공백 무시 일치 검색
+ * 3. contractId 기준 contracts.siteAddress / customerSites 매핑
+ * 4. assetNo / assetId 기준 현재 가동 중인 계약의 현장 도로명 주소 매핑
+ * 5. locationDetail 내 도로명 주소 패턴 정규식 매칭
+ * 6. customerName 기준 고객사 소속 현장 주소 역추적
+ * 7. 최후 폴백: siteName 또는 '현장'
+ */
+export function resolveSiteDetailedAddress(params: {
+  siteId?: string;
+  siteName?: string;
+  contractId?: string;
+  assetNo?: string;
+  assetId?: string;
+  customerName?: string;
+  locationDetail?: string;
+  customerSites?: Array<{ id: string; customerId?: string; name: string; address?: string }>;
+  contracts?: Array<{ id: string; siteId?: string; siteAddress?: string }>;
+  contractAssets?: Array<{ contractId: string; assetId?: string; assetNo?: string; actualReturnDate?: string | null }>;
+  customers?: Array<{ id: string; name: string }>;
+}): string {
+  const {
+    siteId,
+    siteName,
+    contractId,
+    assetNo,
+    assetId,
+    customerName,
+    locationDetail,
+    customerSites = [],
+    contracts = [],
+    contractAssets = [],
+    customers = []
+  } = params;
+
+  // 1. siteId 기준 매핑
+  if (siteId) {
+    const site = customerSites.find(s => s.id === siteId);
+    if (site?.address && site.address.trim()) {
+      return site.address.trim();
+    }
+  }
+
+  // 2. siteName 기준 customerSites 공백 무시/포함 검색
+  if (siteName && siteName.trim()) {
+    const sClean = siteName.replace(/\s+/g, '');
+    const site = customerSites.find(s => {
+      if (!s.name || !s.address?.trim()) return false;
+      const msClean = s.name.replace(/\s+/g, '');
+      return msClean === sClean || msClean.includes(sClean) || sClean.includes(msClean);
+    });
+    if (site?.address && site.address.trim()) {
+      return site.address.trim();
+    }
+  }
+
+  // 3. contractId 기준 매핑
+  if (contractId) {
+    const contract = contracts.find(c => c.id === contractId);
+    if (contract?.siteAddress && contract.siteAddress.trim()) {
+      return contract.siteAddress.trim();
+    }
+    if (contract?.siteId) {
+      const site = customerSites.find(s => s.id === contract.siteId);
+      if (site?.address && site.address.trim()) {
+        return site.address.trim();
+      }
+    }
+  }
+
+  // 4. assetNo / assetId 기준 현재 대여 중인 계약 현장 역추적
+  if (assetNo || assetId) {
+    const targetNo = assetNo?.trim();
+    const ca = contractAssets.find(c => 
+      !c.actualReturnDate && 
+      ((assetId && c.assetId === assetId) || (targetNo && c.assetNo === targetNo))
+    );
+    if (ca) {
+      const contract = contracts.find(c => c.id === ca.contractId);
+      if (contract?.siteAddress && contract.siteAddress.trim()) {
+        return contract.siteAddress.trim();
+      }
+      if (contract?.siteId) {
+        const site = customerSites.find(s => s.id === contract.siteId);
+        if (site?.address && site.address.trim()) {
+          return site.address.trim();
+        }
+      }
+    }
+  }
+
+  // 5. locationDetail 내에 도로명/지번 주소 패턴이 있는 경우
+  if (locationDetail && /(?:시|군|구)\s+[가-힣0-9]+(?:로|길|읍|면|동)/.test(locationDetail)) {
+    return locationDetail.trim();
+  }
+
+  // 6. customerName 기준 고객사 소속 현장 주소 역추적
+  if (customerName && customerName.trim()) {
+    const cClean = customerName.replace(/\s+/g, '');
+    const cust = customers.find(c => {
+      const mcClean = c.name.replace(/\s+/g, '');
+      return mcClean === cClean || mcClean.includes(cClean) || cClean.includes(mcClean);
+    });
+    if (cust) {
+      const cSites = customerSites.filter(s => s.customerId === cust.id && s.address?.trim());
+      if (cSites.length === 1) {
+        return cSites[0].address!.trim();
+      } else if (cSites.length > 1 && siteName) {
+        const matched = cSites.find(s => s.name.includes(siteName) || siteName.includes(s.name));
+        if (matched?.address?.trim()) return matched.address.trim();
+      }
+    }
+  }
+
+  // 7. 최후 폴백: 현장명 또는 상세위치
+  return siteName || locationDetail || customerName || '현장';
+}

@@ -184,6 +184,7 @@ class WalkieTalkieService {
   private sttStatus: 'IDLE' | 'LISTENING' | 'ERROR' | 'UNSUPPORTED' = 'IDLE';
   private lastSttErrorDetail = '';
   private liveTranscriptListeners: ((transcript: string, status: 'IDLE' | 'LISTENING' | 'ERROR' | 'UNSUPPORTED', errorDetail?: string) => void)[] = [];
+  private isSttOnlyMode: boolean = false;
 
   // Supabase Realtime 채널 관리
   private channels: Map<WalkieTalkieChannel, any> = new Map();
@@ -564,32 +565,26 @@ class WalkieTalkieService {
   }
 
   // ── 3. PTT 음성 녹음 제어 ──
-  async startRecording(sender?: { id: string; name: string; deptName?: string }): Promise<boolean> {
+  async startRecording(
+    sender?: { id: string; name: string; deptName?: string },
+    options?: { sttOnly?: boolean }
+  ): Promise<boolean> {
     try {
       soundEngine.unlockAudioOnUserGesture();
       soundEngine.playStartBeep();
       this.audioChunks = [];
       this.recordingStartTime = Date.now();
       this.currentTranscript = '';
+      this.isSttOnlyMode = Boolean(options?.sttOnly);
 
-      // 1. 마이크 스트림 획득
-      if (!this.currentStream) {
-        this.currentStream = await navigator.mediaDevices.getUserMedia({ 
-          audio: {
-            echoCancellation: true,
-            noiseSuppression: true,
-            autoGainControl: true,
-          } 
-        });
-      }
-
-      // 2. 🌟 STT 실시간 음성인식 초기화 (Web Speech API)
+      // 1. 🌟 STT 실시간 음성인식 초기화 (Web Speech API)
       try {
         const SpeechRec = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
         if (SpeechRec) {
           const rec = new SpeechRec();
           rec.lang = 'ko-KR';
-          rec.continuous = true; // 모바일 발언 중 끊김 방지
+          // ⚠️ 안드로이드 크롬 모바일 호환을 위해 continuous는 반드시 false로 설정
+          rec.continuous = false;
           rec.interimResults = true;
           rec.maxAlternatives = 1;
 
@@ -611,47 +606,67 @@ class WalkieTalkieService {
             this.notifyLiveTranscript(this.currentTranscript, 'ERROR', e?.error || 'error');
           };
 
-          rec.start();
-          this.speechRecognition = rec;
-          this.notifyLiveTranscript('', 'LISTENING');
+          rec.onend = () => {
+            // 발화 감지 종료 시 유지
+          };
+
+          try {
+            rec.start();
+            this.speechRecognition = rec;
+            this.notifyLiveTranscript('', 'LISTENING');
+          } catch (sttStartErr) {
+            console.warn('rec.start failed:', sttStartErr);
+          }
         } else {
           this.notifyLiveTranscript('', 'UNSUPPORTED', '브라우저 음성인식 미지원');
         }
       } catch (sttErr: any) {
-        console.warn('STT SpeechRecognition not supported or disabled:', sttErr);
+        console.warn('STT SpeechRecognition init error:', sttErr);
         this.notifyLiveTranscript('', 'ERROR', sttErr?.message || 'init_failed');
       }
 
-      // 3. 오디오 MIME 탐색
-      const candidates = [
-        'audio/mp4',
-        'audio/webm;codecs=opus',
-        'audio/webm',
-        'audio/aac'
-      ];
-      let mimeType = '';
-      if (typeof MediaRecorder !== 'undefined' && typeof MediaRecorder.isTypeSupported === 'function') {
-        mimeType = candidates.find(type => {
-          try {
-            return MediaRecorder.isTypeSupported(type);
-          } catch {
-            return false;
+      // 2. sttOnly 모드가 아닐 때만 getUserMedia 및 MediaRecorder 가동 (독백의뢰 모드에서는 마이크 점유 충돌 차단)
+      if (!this.isSttOnlyMode) {
+        if (!this.currentStream) {
+          this.currentStream = await navigator.mediaDevices.getUserMedia({ 
+            audio: {
+              echoCancellation: true,
+              noiseSuppression: true,
+              autoGainControl: true,
+            } 
+          });
+        }
+
+        const candidates = [
+          'audio/mp4',
+          'audio/webm;codecs=opus',
+          'audio/webm',
+          'audio/aac'
+        ];
+        let mimeType = '';
+        if (typeof MediaRecorder !== 'undefined' && typeof MediaRecorder.isTypeSupported === 'function') {
+          mimeType = candidates.find(type => {
+            try {
+              return MediaRecorder.isTypeSupported(type);
+            } catch {
+              return false;
+            }
+          }) || '';
+        }
+
+        const opts = mimeType ? { mimeType } : undefined;
+        this.mediaRecorder = new MediaRecorder(this.currentStream, opts);
+
+        this.mediaRecorder.ondataavailable = (e) => {
+          if (e.data && e.data.size > 0) {
+            this.audioChunks.push(e.data);
           }
-        }) || '';
+        };
+
+        this.mediaRecorder.start(100);
       }
 
-      const options = mimeType ? { mimeType } : undefined;
-      this.mediaRecorder = new MediaRecorder(this.currentStream, options);
-
-      this.mediaRecorder.ondataavailable = (e) => {
-        if (e.data && e.data.size > 0) {
-          this.audioChunks.push(e.data);
-        }
-      };
-
-      this.mediaRecorder.start(100);
-
-      // 4. 🌟 다른 동료들에게 "내가 지금 말하고 있습니다" 브로드캐스트
+      // 3. 🌟 다른 동료들에게 "내가 지금 말하고 있습니다" 브로드캐스트
       if (sender) {
         const activeCh = this.channels.get(this.currentChannel);
         if (activeCh) {
@@ -698,31 +713,85 @@ class WalkieTalkieService {
       });
     }
 
-    if (!this.mediaRecorder || this.mediaRecorder.state === 'inactive') {
-      return null;
-    }
-
-    // 2. 단기(최대 300ms) 초기 전사 대기
+    // 2. 🌟 STT 음성인식기 강제 플러시 (종료 명령을 내려야 구글 음성인식이 최종 텍스트를 방출함)
     const recInstance = this.speechRecognition;
-    if (recInstance && !this.currentTranscript) {
-      await new Promise<void>((resolve) => {
-        const timer = setTimeout(resolve, 300);
-        const origResult = recInstance.onresult;
-        recInstance.onresult = (e: any) => {
-          if (origResult) origResult(e);
-          clearTimeout(timer);
-          resolve();
-        };
-      });
+    if (recInstance) {
+      try {
+        recInstance.stop();
+      } catch (e) {
+        // ignore
+      }
+      if (!this.currentTranscript) {
+        await new Promise<void>((resolve) => {
+          const timer = setTimeout(resolve, 500);
+          recInstance.onresult = (event: any) => {
+            let transcriptStr = '';
+            for (let i = 0; i < event.results.length; ++i) {
+              transcriptStr += event.results[i][0].transcript;
+            }
+            if (transcriptStr.trim()) {
+              this.currentTranscript = transcriptStr.trim();
+            }
+            clearTimeout(timer);
+            resolve();
+          };
+          recInstance.onend = () => {
+            clearTimeout(timer);
+            resolve();
+          };
+        });
+      }
     }
 
     const durationSec = Math.max(1, Math.round((Date.now() - this.recordingStartTime) / 1000));
     const initialTranscript = this.currentTranscript.trim();
     this.currentTranscript = '';
 
+    // 3. 🌟 sttOnly 모드 (독백의뢰 등) 즉시 완료 처리
+    if (this.isSttOnlyMode) {
+      this.isSttOnlyMode = false;
+      this.speechRecognition = null;
+      this.notifyLiveTranscript('', 'IDLE');
+
+      const msg: WalkieMessage = {
+        id: `walkie-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        channel: ch,
+        senderId: sender.id,
+        senderName: sender.name,
+        senderRole: sender.role,
+        senderDept: sender.deptName || '기연리프트',
+        audioBase64: '',
+        durationSec: durationSec,
+        textTranscript: initialTranscript || undefined,
+        createdAt: new Date().toISOString()
+      };
+
+      this.addHistory(msg);
+      if (activeCh) {
+        await activeCh.send({
+          type: 'broadcast',
+          event: 'voice',
+          payload: msg
+        });
+      }
+      return msg;
+    }
+
+    if (!this.mediaRecorder || this.mediaRecorder.state === 'inactive') {
+      return null;
+    }
+
     return new Promise((resolve) => {
       this.mediaRecorder!.onstop = async () => {
         try {
+          // 마이크 스트림 트랙 완전 해제 (안드로이드 OS 마이크 영구 독점 방지)
+          if (this.currentStream) {
+            try {
+              this.currentStream.getTracks().forEach(t => t.stop());
+            } catch {}
+            this.currentStream = null;
+          }
+
           const blob = new Blob(this.audioChunks, { type: this.mediaRecorder?.mimeType || 'audio/webm' });
           const base64 = await this.blobToBase64(blob);
 
@@ -749,54 +818,7 @@ class WalkieTalkieService {
             });
           }
 
-          // 3. 🌟 후속 STT 비동기 전사 완료 감지 (음성은 즉시 전송 후 텍스트 지연 도착 시 실시간 패치)
-          if (recInstance) {
-            const msgId = msg.id;
-            const applyFinalText = (txt: string) => {
-              const cleanTxt = txt.trim();
-              if (cleanTxt && cleanTxt !== initialTranscript) {
-                const target = this.history.find(m => m.id === msgId);
-                if (target) {
-                  target.textTranscript = cleanTxt;
-                  this.saveHistoryToStorage();
-                  this.notifyHistoryChange();
-                }
-                if (activeCh) {
-                  activeCh.send({
-                    type: 'broadcast',
-                    event: 'transcript_update',
-                    payload: { messageId: msgId, textTranscript: cleanTxt }
-                  });
-                }
-              }
-            };
-
-            recInstance.onresult = (event: any) => {
-              let transcriptStr = '';
-              for (let i = 0; i < event.results.length; ++i) {
-                transcriptStr += event.results[i][0].transcript;
-              }
-              applyFinalText(transcriptStr);
-            };
-
-            recInstance.onend = () => {
-              this.speechRecognition = null;
-            };
-
-            // 4초 후 가비지 수거
-            setTimeout(() => {
-              if (this.speechRecognition === recInstance) {
-                this.speechRecognition = null;
-              }
-            }, 4000);
-
-            try {
-              recInstance.stop();
-            } catch {
-              this.speechRecognition = null;
-            }
-          }
-
+          this.speechRecognition = null;
           this.notifyLiveTranscript('', 'IDLE');
           resolve(msg);
         } catch (e) {

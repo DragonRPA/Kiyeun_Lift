@@ -224,7 +224,8 @@ export const MobileWalkieTalkieModal: React.FC<MobileWalkieTalkieModalProps> = (
         id: currentUser.id,
         name: currentUser.name,
         deptName: currentUser.department || '기연리프트'
-      } : undefined
+      } : undefined,
+      { sttOnly: isMonologueOrderMode }
     );
 
     isStartingRef.current = false;
@@ -512,7 +513,7 @@ export const MobileWalkieTalkieModal: React.FC<MobileWalkieTalkieModalProps> = (
                 flexShrink: 0
               }}>
                 <span style={{ width: '7px', height: '7px', borderRadius: '9999px', backgroundColor: '#ef4444', boxShadow: '0 0 6px #ef4444' }} />
-                <span>🔴 송신 중... ({recordDuration}초) [말씀하세요]</span>
+                <span>송신 중 ({recordDuration}s) [말씀하세요]</span>
               </div>
             ) : isSomeoneElseTalking ? (
               <div style={{
@@ -668,7 +669,14 @@ export const MobileWalkieTalkieModal: React.FC<MobileWalkieTalkieModalProps> = (
                             color: msg.textTranscript ? '#ffffff' : '#94a3b8',
                             fontWeight: msg.textTranscript ? '600' : '400'
                           }}>
-                            {msg.textTranscript ? `💬 ${msg.textTranscript}` : `🎙️ 음성 (${msg.durationSec}초)`}
+                            {msg.textTranscript ? (
+                              <span>
+                                <span style={{ color: '#f8fafc', fontWeight: '600' }}>{msg.textTranscript}</span>
+                                <span style={{ color: '#64748b', marginLeft: '4px', fontSize: '9px' }}>({msg.durationSec}s)</span>
+                              </span>
+                            ) : (
+                              <span style={{ color: '#94a3b8' }}>({msg.durationSec}s)</span>
+                            )}
                           </span>
                         </div>
 
@@ -676,7 +684,7 @@ export const MobileWalkieTalkieModal: React.FC<MobileWalkieTalkieModalProps> = (
                         <button
                           type="button"
                           onClick={() => handlePlayAudio(msg)}
-                          title={isPlaying ? '정지' : `음성 재생 (${msg.durationSec}초)`}
+                          title={isPlaying ? '정지' : `재생 (${msg.durationSec}s)`}
                           style={{
                             flexShrink: 0,
                             width: '20px',
@@ -734,7 +742,7 @@ export const MobileWalkieTalkieModal: React.FC<MobileWalkieTalkieModalProps> = (
                     </div>
                   ) : (
                     <span style={{ fontSize: '11px', color: '#38bdf8' }}>
-                      🎙️ 한국어 실시간 인식 중... (말씀하세요)
+                      한국어 실시간 인식 중... (말씀하세요)
                     </span>
                   )}
                 </div>
@@ -785,7 +793,7 @@ export const MobileWalkieTalkieModal: React.FC<MobileWalkieTalkieModalProps> = (
                   <>
                     <Mic size={20} color="#ffffff" />
                     <span style={{ fontSize: '14.5px', fontWeight: '900', letterSpacing: '0.5px' }}>
-                      🔴 발언 중... ({recordDuration}초) [터치하여 전송]
+                      발언 중 ({recordDuration}s) [터치하여 전송]
                     </span>
                   </>
                 ) : isSomeoneElseTalking ? (
@@ -959,7 +967,14 @@ export const MobileWalkieTalkieModal: React.FC<MobileWalkieTalkieModalProps> = (
                           color: msg.textTranscript ? '#ffffff' : '#94a3b8',
                           fontWeight: msg.textTranscript ? '600' : '400'
                         }}>
-                          {msg.textTranscript ? `💬 ${msg.textTranscript}` : `🎙️ 음성 (${msg.durationSec}초)`}
+                          {msg.textTranscript ? (
+                          <span>
+                            <span style={{ color: '#f8fafc', fontWeight: '600' }}>{msg.textTranscript}</span>
+                            <span style={{ color: '#64748b', marginLeft: '4px', fontSize: '9.5px' }}>({msg.durationSec}s)</span>
+                          </span>
+                        ) : (
+                          <span style={{ color: '#94a3b8' }}>({msg.durationSec}s)</span>
+                        )}
                         </span>
                       </div>
 
@@ -967,7 +982,7 @@ export const MobileWalkieTalkieModal: React.FC<MobileWalkieTalkieModalProps> = (
                       <button
                         type="button"
                         onClick={() => handlePlayAudio(msg)}
-                        title={isPlaying ? '정지' : `음성 재생 (${msg.durationSec}초)`}
+                        title={isPlaying ? '정지' : `재생 (${msg.durationSec}s)`}
                         style={{
                           flexShrink: 0,
                           width: '22px',
