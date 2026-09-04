@@ -1,10 +1,11 @@
 // src/services/walkieTalkieService.ts
-// Build.141 - Redesign: Gemini 2.5 Flash STT (webm direct, no conversion)
+// Build.142 - DEBUG mode: inline debug log messages in history
 // Design:
 //   1. MediaRecorder only. SpeechRecognition removed (avoids mic conflict)
 //   2. STT: raw blob -> Gemini 2.5 Flash (supports audio/webm natively)
 //   3. self=false bypass: sender applies transcript locally via applyTranscriptLocally()
 //      receivers get transcript_update broadcast
+//   4. [DEBUG] addDebugLog() injects console-style messages into history feed
 
 import { supabase } from './db';
 import { getGeminiApiKey } from './geminiGemsService';
@@ -23,6 +24,8 @@ export interface WalkieMessage {
   durationSec: number;
   textTranscript?: string;
   createdAt: string;
+  // [DEBUG] temporary flag — remove after verification
+  isDebug?: boolean;
 }
 
 export interface TalkingStatus {
@@ -244,7 +247,27 @@ class WalkieTalkieService {
     this.notifyHistoryChange();
   }
 
+  // [DEBUG] Inject a debug log entry into the history feed (visible in UI, not broadcast)
+  addDebugLog(text: string) {
+    const msg: WalkieMessage = {
+      id: `dbg-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`,
+      channel: this.currentChannel,
+      senderId: '__debug__',
+      senderName: 'DEBUG',
+      senderRole: 'debug',
+      senderDept: '',
+      audioBase64: '',
+      durationSec: 0,
+      textTranscript: text,
+      createdAt: new Date().toISOString(),
+      isDebug: true
+    };
+    this.history = [msg, ...this.history];
+    this.notifyHistoryChange();
+  }
+
   private notifyHistoryChange() { this.historyListeners.forEach(l => { try { l(this.history); } catch {} }); }
+
 
   onHistoryChange(l: (h: WalkieMessage[]) => void) {
     this.historyListeners.push(l);
@@ -373,27 +396,32 @@ class WalkieTalkieService {
     options?: { sttOnly?: boolean }
   ): Promise<boolean> {
     const sttOnly = options?.sttOnly ?? false;
+    this.addDebugLog(`[PTT] startRecording() called | sttOnly=${sttOnly} | sender=${sender?.name ?? 'none'}`);
     try {
       soundEngine.unlockAudioOnUserGesture();
       soundEngine.playStartBeep();
       this.audioChunks = [];
       this.recordingStartTime = Date.now();
 
+      this.addDebugLog('[PTT] getUserMedia() requesting mic...');
       if (!this.currentStream) {
         this.currentStream = await navigator.mediaDevices.getUserMedia({
           audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
         });
       }
+      this.addDebugLog('[PTT] mic granted: ' + (this.currentStream.getAudioTracks()[0]?.label || 'unknown'));
 
       const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
       const candidates = isSafari
         ? ['audio/mp4', 'audio/aac']
         : ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/mp4'];
       const mimeType = candidates.find(t => { try { return MediaRecorder.isTypeSupported(t); } catch { return false; } }) || '';
+      this.addDebugLog(`[PTT] MediaRecorder mimeType="${mimeType || '(browser default)'}"`);
 
       this.mediaRecorder = new MediaRecorder(this.currentStream, mimeType ? { mimeType } : undefined);
       this.mediaRecorder.ondataavailable = (e) => { if (e.data?.size > 0) this.audioChunks.push(e.data); };
       this.mediaRecorder.start(100);
+      this.addDebugLog('[PTT] recording started (timeslice=100ms)');
 
       // Broadcast talking status only when NOT in sttOnly mode
       if (!sttOnly && sender) {
@@ -410,12 +438,14 @@ class WalkieTalkieService {
               senderDept: sender.deptName || 'KiyeunLift'
             }
           });
+          this.addDebugLog(`[PTT] talking_status broadcast sent (ch=${this.currentChannel})`);
         }
       }
 
       this.liveTranscriptListeners.forEach(l => { try { l('', 'LISTENING'); } catch {} });
       return true;
-    } catch (err) {
+    } catch (err: any) {
+      this.addDebugLog(`[PTT] startRecording FAILED: ${err?.name} — ${err?.message}`);
       console.error('startRecording failed:', err);
       return false;
     }
@@ -431,6 +461,7 @@ class WalkieTalkieService {
     const ch = targetChannel || this.currentChannel;
     const activeCh = this.channels.get(ch);
     const sttOnly = opts?.sttOnly ?? false;
+    this.addDebugLog(`[PTT] stopAndSend() called | ch=${ch} | sttOnly=${sttOnly}`);
 
     if (!sttOnly && activeCh) {
       activeCh.send({
@@ -442,7 +473,10 @@ class WalkieTalkieService {
 
     const durationSec = Math.max(1, Math.round((Date.now() - this.recordingStartTime) / 1000));
 
-    if (!this.mediaRecorder || this.mediaRecorder.state === 'inactive') return null;
+    if (!this.mediaRecorder || this.mediaRecorder.state === 'inactive') {
+      this.addDebugLog('[PTT] ERROR: mediaRecorder is null or inactive — nothing to stop');
+      return null;
+    }
 
     return new Promise((resolve) => {
       this.mediaRecorder!.onstop = async () => {
@@ -452,19 +486,21 @@ class WalkieTalkieService {
             this.currentStream.getTracks().forEach(t => t.stop());
             this.currentStream = null;
           }
+          this.addDebugLog('[PTT] mic released');
 
           const mime = this.mediaRecorder?.mimeType || 'audio/webm';
           const blob = new Blob(this.audioChunks, { type: mime });
-          console.log(`[PTT] chunks=${this.audioChunks.length} size=${blob.size}B mime=${mime}`);
+          this.addDebugLog(`[PTT] blob ready: chunks=${this.audioChunks.length}, size=${blob.size}B, mime="${mime}"`);
 
           if (blob.size < 200) {
-            console.error('[PTT] blob too small — check mic permission');
+            this.addDebugLog(`[PTT] ERROR: blob too small (${blob.size}B) — mic permission or stream issue`);
             this.liveTranscriptListeners.forEach(l => { try { l('', 'ERROR', 'blob_too_small'); } catch {} });
             resolve(null);
             return;
           }
 
           const base64 = await this.blobToBase64(blob);
+          this.addDebugLog(`[PTT] base64 encoded: length=${base64.length} chars`);
 
           const msg: WalkieMessage = {
             id: `walkie-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
@@ -481,31 +517,41 @@ class WalkieTalkieService {
 
           // Add to sender's own history immediately
           this.addHistory(msg);
+          this.addDebugLog(`[PTT] msg added to local history: id=${msg.id}`);
 
           // Broadcast voice to receivers (skip in sttOnly mode)
           if (!sttOnly && activeCh) {
             await activeCh.send({ type: 'broadcast', event: 'voice', payload: msg });
+            this.addDebugLog('[PTT] voice broadcast sent to receivers');
+          } else if (sttOnly) {
+            this.addDebugLog('[PTT] sttOnly mode: voice broadcast skipped');
+          } else {
+            this.addDebugLog('[PTT] WARNING: activeCh not found — broadcast skipped');
           }
 
           this.liveTranscriptListeners.forEach(l => { try { l('', 'IDLE'); } catch {} });
 
           // STT: use a copy of the blob to avoid any GC/reuse issues
+          this.addDebugLog('[STT] starting Gemini 2.5 Flash STT...');
           const sttBlob = new Blob([blob], { type: mime });
           this.runGeminiStt(msg.id, sttBlob, ch);
 
           resolve(msg);
-        } catch (e) {
+        } catch (e: any) {
+          this.addDebugLog(`[PTT] stopAndSend onstop ERROR: ${e?.message}`);
           console.error('stopAndSend error:', e);
           resolve(null);
         }
       };
 
       this.mediaRecorder!.stop();
+      this.addDebugLog('[PTT] mediaRecorder.stop() called — waiting for onstop...');
     });
   }
 
   // ── Cancel recording ──────────────────────────────────────────────────────────
   cancelRecording(senderId?: string) {
+    this.addDebugLog('[PTT] cancelRecording() called');
     if (this.mediaRecorder && this.mediaRecorder.state !== 'inactive') {
       this.mediaRecorder.onstop = null;
       this.mediaRecorder.stop();
@@ -533,16 +579,21 @@ class WalkieTalkieService {
   private async runGeminiStt(messageId: string, blob: Blob, channelId: WalkieTalkieChannel) {
     const geminiKey = getGeminiApiKey();
     if (!geminiKey) {
-      console.warn('[STT] Gemini API key not found');
+      this.addDebugLog('[STT] ERROR: Gemini API key not found in storage');
       return;
     }
-    if (this.sttInProgress) return;
+    if (this.sttInProgress) {
+      this.addDebugLog('[STT] skipped: another STT already in progress');
+      return;
+    }
     this.sttInProgress = true;
+    this.addDebugLog(`[STT] blob size=${blob.size}B, mime="${blob.type}" | key=...${geminiKey.slice(-6)}`);
 
     try {
       const fullBase64 = await this.blobToBase64(blob);
       const base64Data = fullBase64.includes(',') ? fullBase64.split(',')[1] : fullBase64;
       const mimeType = blob.type || 'audio/webm';
+      this.addDebugLog(`[STT] base64 ready (${base64Data.length} chars) — calling Gemini 2.5 Flash...`);
 
       // gemini-2.5-flash: supports audio/webm directly (no WAV conversion needed)
       const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiKey}`;
@@ -561,9 +612,11 @@ class WalkieTalkieService {
         body: JSON.stringify(payload)
       });
 
+      this.addDebugLog(`[STT] Gemini response: HTTP ${res.status} ${res.ok ? 'OK' : 'ERROR'}`);
+
       if (!res.ok) {
         const errText = await res.text().catch(() => '');
-        console.warn(`[STT] Gemini HTTP ${res.status}:`, errText);
+        this.addDebugLog(`[STT] ERROR body: ${errText.slice(0, 120)}`);
         return;
       }
 
@@ -571,10 +624,11 @@ class WalkieTalkieService {
       const text = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
 
       if (text) {
-        console.log(`[STT] done (${messageId}): "${text}"`);
+        this.addDebugLog(`[STT] transcript OK: "${text.slice(0, 80)}${text.length > 80 ? '...' : ''}"`);
 
         // Apply to sender's history directly (bypass self:false)
         this.applyTranscriptLocally(messageId, text);
+        this.addDebugLog('[STT] applyTranscriptLocally() done (sender side)');
 
         // Broadcast to receivers
         const activeCh = this.channels.get(channelId);
@@ -584,22 +638,26 @@ class WalkieTalkieService {
             event: 'transcript_update',
             payload: { messageId, textTranscript: text }
           });
+          this.addDebugLog('[STT] transcript_update broadcast sent to receivers');
         }
 
         this.liveTranscriptListeners.forEach(l => { try { l(text, 'IDLE'); } catch {} });
       } else {
-        console.warn('[STT] empty response from Gemini');
+        this.addDebugLog('[STT] WARNING: Gemini returned empty text. Raw candidates: ' + JSON.stringify(data?.candidates?.slice(0,1)));
         this.liveTranscriptListeners.forEach(l => { try { l('', 'IDLE'); } catch {} });
       }
-    } catch (e) {
+    } catch (e: any) {
+      this.addDebugLog(`[STT] fetch EXCEPTION: ${e?.message}`);
       console.warn('[STT] request failed:', e);
     } finally {
       this.sttInProgress = false;
+      this.addDebugLog('[STT] done (sttInProgress=false)');
     }
   }
 
   // Apply STT transcript to local history (used by both sender and receiver)
   private applyTranscriptLocally(messageId: string, text: string) {
+
     const target = this.history.find(m => m.id === messageId);
     if (target) {
       target.textTranscript = text;

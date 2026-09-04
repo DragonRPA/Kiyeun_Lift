@@ -627,12 +627,41 @@ export const MobileWalkieTalkieModal: React.FC<MobileWalkieTalkieModalProps> = (
                     paddingRight: '2px'
                   }}
                 >
-                  {/* 최신 대화가 맨 아래에 오도록 역전 (최대 50건까지 대화 피드 확장) */}
-                  {history.slice(0, 50).reverse().map(msg => {
+                  {/* Latest messages at bottom (reverse order, max 80 items) */}
+                  {history.slice(0, 80).reverse().map(msg => {
+                    // ── [DEBUG] Console-style debug log entry ──
+                    if (msg.isDebug) {
+                      const ts = new Date(msg.createdAt).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                      const isErr = msg.textTranscript?.includes('ERROR') || msg.textTranscript?.includes('FAIL') || msg.textTranscript?.includes('EXCEPTION');
+                      const isWarn = msg.textTranscript?.includes('WARNING') || msg.textTranscript?.includes('skipped');
+                      const isOk = msg.textTranscript?.includes('OK') || msg.textTranscript?.includes('done') || msg.textTranscript?.includes('ready') || msg.textTranscript?.includes('sent') || msg.textTranscript?.includes('granted') || msg.textTranscript?.includes('started');
+                      return (
+                        <div
+                          key={msg.id}
+                          style={{
+                            padding: '2px 8px',
+                            borderRadius: '4px',
+                            backgroundColor: '#020617',
+                            border: `1px solid ${isErr ? '#7f1d1d' : isWarn ? '#78350f' : '#1e3a5f'}`,
+                            fontFamily: 'monospace',
+                            fontSize: '10px',
+                            lineHeight: 1.4,
+                            color: isErr ? '#f87171' : isWarn ? '#fbbf24' : isOk ? '#4ade80' : '#94a3b8',
+                            wordBreak: 'break-all',
+                            whiteSpace: 'pre-wrap'
+                          }}
+                        >
+                          <span style={{ color: '#475569', marginRight: '6px' }}>{ts}</span>
+                          {msg.textTranscript}
+                        </div>
+                      );
+                    }
+
                     const isPlaying = playingMessageId === msg.id;
                     const isMine = msg.senderId === currentUser?.id;
                     const timeStr = new Date(msg.createdAt).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
                     return (
+
                       <div
                         key={msg.id}
                         style={{
