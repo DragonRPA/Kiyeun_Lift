@@ -1,5 +1,25 @@
 ---
 
+# Release Notes (v1.3.0.Build.113 - 2026-09-04 11:35)
+
+## 📦 [모바일PWA/CSS패치] 모바일 전용 독립 CSS 시스템(mobile.css) 구축, 안드로이드 PWA 서비스워커(sw.js) 탑재 및 기기별(Android vs iOS) 맞춤 설치 가이드 전면 개편
+
+### 🎯 핵심 요약 및 기능 확장 내역
+- **1. 모바일 전용 독립 CSS 시스템 구축 (`src/mobile/mobile.css`, `src/mobile/MobileApp.tsx`)**:
+  - Tailwind 의존성 없이 순수 CSS로 동작하는 모바일 전용 다크 테마 UI 시스템 구축.
+  - 모바일 컴포넌트(`MobileApp`, `MobileHeader`, `MobileBottomNav`, `MobileHome`, `MobileAssetSearch`)의 레이아웃, 플렉스, 그리드, 폰트, 색상, 애니메이션 100% 정상 렌더링 복원.
+- **2. 크롬/안드로이드 공식 PWA 요건 충족용 서비스 워커 배포 (`public/sw.js`, `index.html`)**:
+  - `public/sw.js` (Fetch 핸들러 기반 Service Worker) 신규 생성 및 `index.html` 내 자동 등록 파이프라인 완비.
+  - Chrome 브라우저의 `beforeinstallprompt` 자동 트리거 및 주소창 [앱 설치] 정식 활성화.
+- **3. 기기별 맞춤 홈 화면 추가 가이드 모달 및 인라인 스타일 완비 (`src/mobile/components/PwaInstallBanner.tsx`)**:
+  - **100% 인라인 스타일 고정**: 모달이 본문에 깨져 나오는 현상을 원천 방지하고 화면 중앙 `fixed z-index: 99999` 오버레이 팝업으로 정상 렌더링.
+  - **안드로이드(갤럭시 S24 등)**: 우측 상단 메뉴(⋮) ➔ [앱 설치] / [홈 화면에 추가] 정확한 2단계 안내.
+  - **아이폰(iOS Safari)**: 하단 공유 [⎋] ➔ [+] 홈 화면에 추가 2단계 안내.
+- **4. 모바일 헤더 및 하단 네비게이션 고정 스타일 보강 (`MobileHeader.tsx`, `MobileBottomNav.tsx`)**:
+  - 상단/하단 safe-area 지원 및 백드롭 블러 인라인 스타일 강화로 안정적인 조작성 확보.
+
+---
+
 # Release Notes (v1.3.0.Build.112 - 2026-09-04 10:55)
 
 ## 📦 [청구그리드개편/모바일재고매트릭스] 청구 목록 화폐 우측 정렬·세부 청구 명세 그리드 개편 및 외근영업 실시간 3초 가용재고 신호등 보드·PWA 단독앱 설치 인프라 구축 완비

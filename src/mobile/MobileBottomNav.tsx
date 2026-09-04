@@ -28,7 +28,23 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
   ];
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-40 bg-slate-900/98 backdrop-blur-lg border-t border-slate-800 px-2 py-1.5 flex items-center justify-around safe-area-bottom shadow-2xl">
+    <nav 
+      style={{
+        position: 'fixed',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        zIndex: 9000,
+        backgroundColor: 'rgba(15, 23, 42, 0.98)',
+        backdropFilter: 'blur(16px)',
+        borderTop: '1px solid #1e293b',
+        padding: '6px 8px env(safe-area-inset-bottom, 8px)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-around',
+        boxShadow: '0 -4px 16px rgba(0, 0, 0, 0.4)'
+      }}
+    >
       {navItems.map((item) => {
         const Icon = item.icon;
         const isActive = activeTab === item.id;
@@ -36,25 +52,62 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
           <button
             key={item.id}
             onClick={() => onChangeTab(item.id)}
-            className={`relative flex flex-col items-center justify-center flex-1 py-1.5 px-1 rounded-2xl transition-all duration-150 active:scale-95 ${
-              isActive
-                ? 'text-blue-400 font-bold'
-                : 'text-slate-400 hover:text-slate-200'
-            }`}
+            style={{
+              position: 'relative',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flex: 1,
+              padding: '6px 4px',
+              borderRadius: '12px',
+              backgroundColor: 'transparent',
+              border: 'none',
+              cursor: 'pointer',
+              color: isActive ? '#60a5fa' : '#94a3b8',
+              fontWeight: isActive ? '700' : '500'
+            }}
           >
-            <div className="relative">
-              <Icon className={`w-6 h-6 ${isActive ? 'stroke-[2.5]' : 'stroke-[1.8]'}`} />
+            <div style={{ position: 'relative' }}>
+              <Icon size={22} color={isActive ? '#60a5fa' : '#94a3b8'} strokeWidth={isActive ? 2.4 : 1.8} />
               {item.badge > 0 && (
-                <span className="absolute -top-1.5 -right-2.5 min-w-[18px] h-[18px] px-1 bg-red-500 text-white text-[10px] font-black rounded-full flex items-center justify-center shadow-lg border border-slate-900 animate-pulse">
+                <span style={{
+                  position: 'absolute',
+                  top: '-6px',
+                  right: '-10px',
+                  minWidth: '18px',
+                  height: '18px',
+                  padding: '0 4px',
+                  backgroundColor: '#ef4444',
+                  color: '#ffffff',
+                  fontSize: '10px',
+                  fontWeight: '900',
+                  borderRadius: '9999px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  border: '1px solid #0f172a'
+                }}>
                   {item.badge > 99 ? '99+' : item.badge}
                 </span>
               )}
             </div>
-            <span className={`text-[11px] mt-1 ${isActive ? 'text-blue-400 font-black' : 'text-slate-400'}`}>
+            <span style={{
+              fontSize: '11px',
+              marginTop: '4px',
+              color: isActive ? '#60a5fa' : '#94a3b8',
+              fontWeight: isActive ? '800' : '500'
+            }}>
               {item.label}
             </span>
             {isActive && (
-              <span className="w-1.5 h-1.5 rounded-full bg-blue-500 mt-0.5 shadow-md shadow-blue-500/50" />
+              <span style={{
+                width: '4px',
+                height: '4px',
+                borderRadius: '9999px',
+                backgroundColor: '#3b82f6',
+                marginTop: '2px'
+              }} />
             )}
           </button>
         );

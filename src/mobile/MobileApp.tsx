@@ -11,6 +11,7 @@ import { MobileDispatchList } from './pages/MobileDispatchList';
 import { MobileInspectionList } from './pages/MobileInspectionList';
 import { MobileAssetSearch } from './pages/MobileAssetSearch';
 import { PwaInstallBanner } from './components/PwaInstallBanner';
+import './mobile.css';
 
 interface MobileAppProps {
   onSwitchToPc: () => void;
@@ -53,7 +54,7 @@ export const MobileApp: React.FC<MobileAppProps> = ({ onSwitchToPc }) => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-blue-500 selection:text-white">
+    <div className="mobile-app-root min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-blue-500 selection:text-white">
       {/* 상단 모바일 헤더 */}
       <MobileHeader onSwitchToPc={onSwitchToPc} />
 

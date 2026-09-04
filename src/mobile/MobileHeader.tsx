@@ -11,40 +11,94 @@ export const MobileHeader: React.FC<MobileHeaderProps> = ({ onSwitchToPc }) => {
   const { currentUser, logout, theme, toggleTheme } = useApp();
 
   return (
-    <header className="sticky top-0 z-40 bg-slate-900/95 backdrop-blur-md border-b border-slate-800 px-4 py-3 flex items-center justify-between safe-area-top shadow-md">
-      <div className="flex items-center gap-2">
-        <div className="w-8 h-8 rounded-xl bg-blue-600 flex items-center justify-center shadow-lg shadow-blue-500/30">
-          <Wrench className="w-4 h-4 text-white" />
+    <header 
+      style={{
+        position: 'sticky',
+        top: 0,
+        zIndex: 40,
+        backgroundColor: 'rgba(15, 23, 42, 0.95)',
+        backdropFilter: 'blur(12px)',
+        borderBottom: '1px solid #1e293b',
+        padding: '12px 16px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.2)'
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+        <div style={{
+          width: '32px',
+          height: '32px',
+          borderRadius: '10px',
+          backgroundColor: '#2563eb',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          boxShadow: '0 4px 10px rgba(37, 99, 235, 0.35)',
+          flexShrink: 0
+        }}>
+          <Wrench size={16} color="#ffffff" />
         </div>
         <div>
-          <div className="flex items-center gap-1.5">
-            <span className="text-base font-black tracking-tight text-white">기연리프트</span>
-            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-blue-500/20 text-blue-400 border border-blue-500/30">
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span style={{ fontSize: '15px', fontWeight: '800', color: '#ffffff', letterSpacing: '-0.02em' }}>기연리프트</span>
+            <span style={{
+              fontSize: '10px',
+              fontWeight: '700',
+              padding: '2px 6px',
+              borderRadius: '9999px',
+              backgroundColor: 'rgba(59, 130, 246, 0.2)',
+              color: '#60a5fa',
+              border: '1px solid rgba(59, 130, 246, 0.3)'
+            }}>
               FIELD
             </span>
           </div>
-          <div className="text-[11px] text-slate-400">
+          <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '1px' }}>
             {currentUser?.name || '현장 담당자'} ({currentUser?.role === 'MECHANIC' ? '기사' : '관리자'})
           </div>
         </div>
       </div>
 
-      <div className="flex items-center gap-1.5">
+      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
         <button
           onClick={onSwitchToPc}
-          className="flex items-center gap-1 text-xs font-semibold py-1.5 px-2.5 rounded-xl bg-slate-800 border border-slate-700 text-slate-300 hover:text-white active:scale-95 transition-transform"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '4px',
+            fontSize: '12px',
+            fontWeight: '600',
+            padding: '6px 10px',
+            borderRadius: '10px',
+            backgroundColor: '#1e293b',
+            border: '1px solid #334155',
+            color: '#cbd5e1',
+            cursor: 'pointer'
+          }}
           title="PC 대장 화면으로 전환"
         >
-          <Monitor className="w-3.5 h-3.5 text-sky-400" />
+          <Monitor size={14} color="#38bdf8" />
           <span>PC화면</span>
         </button>
 
         <button
           onClick={logout}
-          className="p-2 rounded-xl bg-slate-800/80 border border-slate-700 text-slate-400 hover:text-red-400 active:scale-95 transition-transform"
+          style={{
+            padding: '8px',
+            borderRadius: '10px',
+            backgroundColor: '#1e293b',
+            border: '1px solid #334155',
+            color: '#94a3b8',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
+          }}
           title="로그아웃"
         >
-          <LogOut className="w-4 h-4" />
+          <LogOut size={16} />
         </button>
       </div>
     </header>

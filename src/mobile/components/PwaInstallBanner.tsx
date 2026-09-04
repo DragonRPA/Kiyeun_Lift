@@ -1,25 +1,28 @@
 // src/mobile/components/PwaInstallBanner.tsx
 import React, { useState, useEffect } from 'react';
-import { Download, Share, PlusSquare, X, Smartphone } from 'lucide-react';
+import { Download, Share, PlusSquare, X, Smartphone, MoreVertical } from 'lucide-react';
 
 export const PwaInstallBanner: React.FC = () => {
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [isIos, setIsIos] = useState(false);
+  const [isAndroid, setIsAndroid] = useState(false);
   const [isStandalone, setIsStandalone] = useState(false);
-  const [showIosModal, setShowIosModal] = useState(false);
+  const [showGuideModal, setShowGuideModal] = useState(false);
   const [isDismissed, setIsDismissed] = useState(false);
 
   useEffect(() => {
-    // 1. 이미 홈 화면 단독 앱(Standalone)으로 실행 중인지 확인
+    // 1. 홈 화면 단독 앱(Standalone) 실행 여부 확인
     const isStandaloneMode = 
       window.matchMedia('(display-mode: standalone)').matches ||
       (navigator as any).standalone === true;
     setIsStandalone(isStandaloneMode);
 
-    // 2. iOS Safari 판별
+    // 2. 기기 판별 (iOS vs Android)
     const userAgent = window.navigator.userAgent.toLowerCase();
     const isIosDevice = /iphone|ipad|ipod/.test(userAgent);
+    const isAndroidDevice = /android/.test(userAgent);
     setIsIos(isIosDevice);
+    setIsAndroid(isAndroidDevice);
 
     // 3. 안드로이드 beforeinstallprompt 이벤트 캡처
     const handleBeforeInstallPrompt = (e: Event) => {
@@ -41,11 +44,8 @@ export const PwaInstallBanner: React.FC = () => {
 
   // 설치 버튼 클릭 핸들러
   const handleInstallClick = async () => {
-    if (isIos) {
-      // iOS인 경우 가이드 모달 표출
-      setShowIosModal(true);
-    } else if (deferredPrompt) {
-      // 안드로이드 브라우저 기본 설치 팝업 호출
+    if (deferredPrompt) {
+      // 크롬/웨일 등 브라우저 기본 네이티브 설치 프롬프트 직접 호출
       deferredPrompt.prompt();
       const choice = await deferredPrompt.userChoice;
       if (choice.outcome === 'accepted') {
@@ -53,94 +53,267 @@ export const PwaInstallBanner: React.FC = () => {
         setIsDismissed(true);
       }
     } else {
-      // 기타 브라우저 (삼성인터넷 등에서 프롬프트가 안 떴을 때) 안내 모달
-      setShowIosModal(true);
+      // 브라우저 프롬프트가 아직 준비되지 않은 경우 기기 맞춤 가이드 모달 표출
+      setShowGuideModal(true);
     }
   };
 
   return (
     <>
-      {/* 상단 스마트 슬림 설치 배너 */}
-      <div className="bg-gradient-to-r from-blue-950/90 via-slate-900 to-indigo-950/90 border-b border-blue-500/30 px-3.5 py-2.5 flex items-center justify-between gap-3 text-xs shadow-lg backdrop-blur-md">
-        <div className="flex items-center gap-2.5 min-w-0">
-          <div className="w-8 h-8 rounded-xl bg-blue-600/20 border border-blue-500/40 flex items-center justify-center flex-shrink-0">
-            <Smartphone className="w-4 h-4 text-blue-400" />
+      {/* ── 1. 상단 슬림 설치 배너 (인라인 스타일 100% 보장) ── */}
+      <div style={{
+        backgroundColor: '#0f172a',
+        borderBottom: '1px solid #1e293b',
+        padding: '10px 14px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: '10px',
+        fontSize: '12px',
+        color: '#f8fafc',
+        boxShadow: '0 4px 12px rgba(0,0,0,0.25)',
+        zIndex: 40,
+        position: 'relative'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
+          <div style={{
+            width: '32px',
+            height: '32px',
+            borderRadius: '10px',
+            backgroundColor: 'rgba(59, 130, 246, 0.15)',
+            border: '1px solid rgba(59, 130, 246, 0.3)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            flexShrink: 0
+          }}>
+            <Smartphone size={17} color="#60a5fa" />
           </div>
-          <div className="min-w-0">
-            <div className="font-bold text-slate-100 flex items-center gap-1">
-              <span>홈 화면 앱 설치</span>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontWeight: '700', fontSize: '13px', color: '#ffffff', lineHeight: 1.2 }}>
+              홈 화면 바로가기 추가
             </div>
-            <div className="text-[11px] text-slate-400 truncate">
-              가용 재고 조회 앱 홈 화면 추가
+            <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              가용 재고 조회 화면 단독 실행
             </div>
           </div>
         </div>
 
-        <div className="flex items-center gap-1.5 flex-shrink-0">
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
           <button
             type="button"
             onClick={handleInstallClick}
-            className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-bold text-[11.5px] flex items-center gap-1 shadow-md shadow-blue-600/30 active:scale-95 transition-all"
+            style={{
+              padding: '6px 12px',
+              borderRadius: '8px',
+              backgroundColor: '#2563eb',
+              color: '#ffffff',
+              fontWeight: '700',
+              fontSize: '12px',
+              border: 'none',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+              boxShadow: '0 2px 6px rgba(37, 99, 235, 0.4)'
+            }}
           >
-            <Download className="w-3.5 h-3.5" />
+            <Download size={14} />
             <span>설치</span>
           </button>
           <button
             type="button"
             onClick={() => setIsDismissed(true)}
-            className="p-1.5 text-slate-500 hover:text-slate-300 rounded-lg"
+            style={{
+              padding: '6px',
+              backgroundColor: 'transparent',
+              border: 'none',
+              color: '#64748b',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}
             title="닫기"
           >
-            <X className="w-4 h-4" />
+            <X size={16} />
           </button>
         </div>
       </div>
 
-      {/* iOS 사파리 및 수동 안내 모달 */}
-      {showIosModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
-          <div className="bg-slate-900 border border-slate-700 rounded-3xl p-6 max-w-sm w-full shadow-2xl flex flex-col gap-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-base font-bold text-white flex items-center gap-2">
-                <Smartphone className="w-5 h-5 text-blue-400" />
-                홈 화면에 앱 추가 방법
+      {/* ── 2. 기기별 맞춤 홈 화면 추가 가이드 모달 (Fixed 화면 중앙 오버레이) ── */}
+      {showGuideModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.75)',
+          backdropFilter: 'blur(4px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '16px',
+          zIndex: 99999
+        }}>
+          <div style={{
+            backgroundColor: '#0f172a',
+            border: '1px solid #334155',
+            borderRadius: '20px',
+            padding: '20px',
+            maxWidth: '350px',
+            width: '100%',
+            color: '#f8fafc',
+            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '14px'
+          }}>
+            {/* 헤더 */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <h3 style={{ margin: 0, fontSize: '15px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '8px', color: '#ffffff' }}>
+                <Smartphone size={18} color="#60a5fa" />
+                <span>홈 화면 앱 추가 방법</span>
               </h3>
               <button
-                onClick={() => setShowIosModal(false)}
-                className="p-1 text-slate-400 hover:text-white"
+                type="button"
+                onClick={() => setShowGuideModal(false)}
+                style={{
+                  backgroundColor: 'transparent',
+                  border: 'none',
+                  color: '#94a3b8',
+                  cursor: 'pointer',
+                  padding: '4px'
+                }}
               >
-                <X className="w-5 h-5" />
+                <X size={18} />
               </button>
             </div>
 
-            <p className="text-xs text-slate-300 leading-relaxed">
-              브라우저 메뉴에서 아래 절차를 진행하여 홈 화면에 앱을 추가합니다.
+            <p style={{ margin: 0, fontSize: '12px', color: '#cbd5e1', lineHeight: 1.5 }}>
+              브라우저 메뉴를 통해 홈 화면에 추가하시면 전체화면 단독 앱으로 사용하실 수 있습니다.
             </p>
 
-            <div className="bg-slate-950/80 border border-slate-800 rounded-2xl p-4 flex flex-col gap-3">
-              <div className="flex items-start gap-3">
-                <div className="w-7 h-7 rounded-lg bg-blue-500/20 text-blue-400 font-black flex items-center justify-center flex-shrink-0 text-xs border border-blue-500/30">
-                  1
-                </div>
-                <div className="text-xs text-slate-200">
-                  화면 하단 메뉴의 <strong className="text-blue-400 flex inline-flex items-center gap-1"><Share className="w-3.5 h-3.5" /> 공유</strong> 버튼을 터치합니다.
-                </div>
-              </div>
+            {/* 단계별 가이드 박스 (Android vs iOS 맞춤 분기) */}
+            <div style={{
+              backgroundColor: '#020617',
+              border: '1px solid #1e293b',
+              borderRadius: '14px',
+              padding: '14px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '12px'
+            }}>
+              {isAndroid ? (
+                // 안드로이드 (크롬 / 삼성인터넷 / 웨일 등)
+                <>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
+                    <div style={{
+                      width: '24px',
+                      height: '24px',
+                      borderRadius: '6px',
+                      backgroundColor: 'rgba(59, 130, 246, 0.2)',
+                      color: '#60a5fa',
+                      fontWeight: '800',
+                      fontSize: '12px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0
+                    }}>
+                      1
+                    </div>
+                    <div style={{ fontSize: '12px', color: '#e2e8f0', lineHeight: 1.4 }}>
+                      브라우저 우측 상단의 <strong style={{ color: '#60a5fa' }}><MoreVertical size={13} style={{ display: 'inline', verticalAlign: '-2px' }} /> 메뉴(점 세 개)</strong>를 터치합니다.
+                    </div>
+                  </div>
 
-              <div className="flex items-start gap-3">
-                <div className="w-7 h-7 rounded-lg bg-blue-500/20 text-blue-400 font-black flex items-center justify-center flex-shrink-0 text-xs border border-blue-500/30">
-                  2
-                </div>
-                <div className="text-xs text-slate-200">
-                  메뉴를 스크롤하여 <strong className="text-emerald-400 flex inline-flex items-center gap-1"><PlusSquare className="w-3.5 h-3.5" /> 홈 화면에 추가</strong>를 선택합니다.
-                </div>
-              </div>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
+                    <div style={{
+                      width: '24px',
+                      height: '24px',
+                      borderRadius: '6px',
+                      backgroundColor: 'rgba(59, 130, 246, 0.2)',
+                      color: '#60a5fa',
+                      fontWeight: '800',
+                      fontSize: '12px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0
+                    }}>
+                      2
+                    </div>
+                    <div style={{ fontSize: '12px', color: '#e2e8f0', lineHeight: 1.4 }}>
+                      메뉴에서 <strong style={{ color: '#34d399' }}>[앱 설치]</strong> 또는 <strong style={{ color: '#34d399' }}>[홈 화면에 추가]</strong>를 선택합니다.
+                    </div>
+                  </div>
+                </>
+              ) : (
+                // iOS 사파리 등
+                <>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
+                    <div style={{
+                      width: '24px',
+                      height: '24px',
+                      borderRadius: '6px',
+                      backgroundColor: 'rgba(59, 130, 246, 0.2)',
+                      color: '#60a5fa',
+                      fontWeight: '800',
+                      fontSize: '12px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0
+                    }}>
+                      1
+                    </div>
+                    <div style={{ fontSize: '12px', color: '#e2e8f0', lineHeight: 1.4 }}>
+                      화면 하단 메뉴의 <strong style={{ color: '#60a5fa' }}><Share size={13} style={{ display: 'inline', verticalAlign: '-2px' }} /> 공유</strong> 버튼을 터치합니다.
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
+                    <div style={{
+                      width: '24px',
+                      height: '24px',
+                      borderRadius: '6px',
+                      backgroundColor: 'rgba(59, 130, 246, 0.2)',
+                      color: '#60a5fa',
+                      fontWeight: '800',
+                      fontSize: '12px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0
+                    }}>
+                      2
+                    </div>
+                    <div style={{ fontSize: '12px', color: '#e2e8f0', lineHeight: 1.4 }}>
+                      메뉴를 스크롤하여 <strong style={{ color: '#34d399' }}><PlusSquare size={13} style={{ display: 'inline', verticalAlign: '-2px' }} /> 홈 화면에 추가</strong>를 선택합니다.
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
 
+            {/* 닫기 버튼 */}
             <button
               type="button"
-              onClick={() => setShowIosModal(false)}
-              className="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm shadow-lg shadow-blue-600/30 active:scale-98 transition-all"
+              onClick={() => setShowGuideModal(false)}
+              style={{
+                width: '100%',
+                padding: '10px',
+                borderRadius: '10px',
+                backgroundColor: '#2563eb',
+                color: '#ffffff',
+                fontWeight: '700',
+                fontSize: '13px',
+                border: 'none',
+                cursor: 'pointer',
+                boxShadow: '0 4px 10px rgba(37, 99, 235, 0.3)'
+              }}
             >
               확인 완료
             </button>

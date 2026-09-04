@@ -1,5 +1,23 @@
 # 개발 지시 및 개편 완료 내역 (dev_temp.md)
 
+## 📦 [모바일PWA/CSS패치] 모바일 전용 독립 CSS 시스템(mobile.css) 구축, 안드로이드 PWA 서비스워커(sw.js) 탑재 및 기기별(Android vs iOS) 맞춤 설치 가이드 전면 개편 (v1.3.0.Build.113 - 2026-09-04 11:35)
+
+### 1. 개발 내용 요약
+- **`src/mobile/mobile.css`, `src/mobile/MobileApp.tsx` (모바일 전용 독립 CSS 시스템 구축)**:
+  - Tailwind 의존성 없이 순수 CSS로 동작하는 모바일 전용 다크 테마 UI 시스템 완비.
+  - 레이아웃 깨짐, 배경 미적용, 텍스트 줄바꿈 현상 전면 해결.
+- **`public/sw.js`, `index.html` (크롬/안드로이드 공식 PWA 요건 충족용 서비스 워커 배포)**:
+  - `sw.js` (Fetch 핸들러 기반 Service Worker) 신규 생성 및 `index.html` 자동 등록 파이프라인 완비.
+  - Chrome 브라우저의 `beforeinstallprompt` 이벤트 자동 트리거 및 주소창 [앱 설치] 정식 활성화.
+- **`src/mobile/components/PwaInstallBanner.tsx` (기기별 맞춤 홈 화면 추가 가이드 모달 및 인라인 스타일 완비)**:
+  - 100% 인라인 스타일 고정으로 모달이 본문에 깨져 나오는 현상 원천 방지 (`fixed z-index: 99999` 중앙 오버레이 팝업).
+  - 안드로이드(갤럭시 S24 등): 우측 상단 메뉴(⋮) ➔ [앱 설치] / [홈 화면에 추가] 정확한 2단계 안내.
+  - 아이폰(iOS Safari): 하단 공유 [⎋] ➔ [+] 홈 화면에 추가 2단계 안내.
+- **`MobileHeader.tsx`, `MobileBottomNav.tsx` (헤더/네비게이션 인라인 스타일 보강)**:
+  - 상단 헤더 및 하단 네비게이션 고정 배치, safe-area 및 백드롭 블러 스타일 강화.
+
+---
+
 ## 📦 [청구그리드개편/모바일재고매트릭스] 청구 목록 화폐 우측 정렬·세부 청구 명세 그리드 개편 및 외근영업 가용재고 매트릭스 보드·PWA 단독앱 설치 인프라 구축 완비 (v1.3.0.Build.112 - 2026-09-04 10:55)
 
 ### 1. 개발 내용 요약
