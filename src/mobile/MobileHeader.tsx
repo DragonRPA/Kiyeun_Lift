@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Monitor, LogOut, Wrench, Crown, Radio, RotateCw } from 'lucide-react';
+import { Monitor, LogOut, Wrench, Crown, Radio, RotateCw, Sparkles } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 
 export type MobileDeptMode = 'SALES' | 'AS' | 'OUTBOUND' | 'EXECUTIVE' | 'ADMIN';
@@ -10,6 +10,7 @@ interface MobileHeaderProps {
   onChangeDeptMode: (mode: MobileDeptMode) => void;
   isWalkieOn?: boolean;
   onOpenWalkieTalkie?: () => void;
+  onOpenGems?: () => void;
 }
 
 export const MobileHeader: React.FC<MobileHeaderProps> = ({ 
@@ -17,7 +18,8 @@ export const MobileHeader: React.FC<MobileHeaderProps> = ({
   deptMode, 
   onChangeDeptMode,
   isWalkieOn = false,
-  onOpenWalkieTalkie
+  onOpenWalkieTalkie,
+  onOpenGems
 }) => {
   const { currentUser, logout } = useApp();
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -174,6 +176,30 @@ export const MobileHeader: React.FC<MobileHeaderProps> = ({
                 boxShadow: '0 0 5px #10b981'
               }} />
             )}
+          </button>
+
+          {/* ✨ 기연 렌탈 GEMS AI 음성비서 버튼 */}
+          <button
+            type="button"
+            onClick={onOpenGems}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+              fontSize: '11px',
+              fontWeight: '800',
+              padding: '6px 8px',
+              borderRadius: '10px',
+              backgroundColor: 'rgba(2, 132, 199, 0.25)',
+              border: '1px solid #38bdf8',
+              color: '#38bdf8',
+              cursor: 'pointer',
+              flexShrink: 0
+            }}
+            title="GEMS AI 음성 비서"
+          >
+            <Sparkles size={13} color="#38bdf8" />
+            <span>AI비서</span>
           </button>
 
           <button

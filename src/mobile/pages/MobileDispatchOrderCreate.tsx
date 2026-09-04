@@ -1,21 +1,25 @@
 // src/mobile/pages/MobileDispatchOrderCreate.tsx
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useApp } from '../../context/AppContext';
 import { 
   Building2, MapPin, Phone, Calendar, Clock, Plus, Minus, 
-  Send, AlertTriangle, CheckCircle2, ChevronRight, ArrowLeft 
+  Send, AlertTriangle, CheckCircle2, ChevronRight, ArrowLeft, Bot,
+  Mic, MicOff, RotateCcw, FileText, Check, Sparkles, ClipboardList
 } from 'lucide-react';
 import { matchHangul } from '../../utils/hangulSearch';
+import { 
+  loadVoiceOrderDraft, 
+  saveVoiceOrderDraft, 
+  clearVoiceOrderDraft, 
+  mergeVoiceFragmentToDraft, 
+  VoiceOrderDraft, 
+  EquipmentOrderItem 
+} from '../../services/voiceOrderDraftService';
 
 interface MobileDispatchOrderCreateProps {
   onBack: () => void;
   onSuccess: () => void;
-}
-
-interface EquipmentOrderItem {
-  ft: string;
-  modelName: string;
-  count: number;
+  onOpenGems?: () => void;
 }
 
 const SPEC_OPTIONS = [
@@ -27,7 +31,7 @@ const SPEC_OPTIONS = [
   { ft: '53ft', defaultModel: '1612' },
 ];
 
-export const MobileDispatchOrderCreate: React.FC<MobileDispatchOrderCreateProps> = ({ onBack, onSuccess }) => {
+export const MobileDispatchOrderCreate: React.FC<MobileDispatchOrderCreateProps> = ({ onBack, onSuccess, onOpenGems }) => {
   const { customers, sites, currentUser, saveSmartDispatch } = useApp();
 
   // 폼 상태
@@ -57,6 +61,15 @@ export const MobileDispatchOrderCreate: React.FC<MobileDispatchOrderCreateProps>
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [toastMessage, setToastMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
+  // 음성 조각 입력 및 임시저장 상태
+  const [isListening, setIsListening] = useState(false);
+  const [interimText, setInterimText] = useState('');
+  const [hasRestoredDraft, setHasRestoredDraft] = useState(false);
+  const [recentModifiedFields, setRecentModifiedFields] = useState<string[]>([]);
+  const [snippetsHistory, setSnippetsHistory] = useState<{ text: string; timestamp: string }[]>([]);
+  const [createdResult, setCreatedResult] = useState<{ contractNo: string; siteName: string; totalCount: number } | null>(null);
+  const recognitionRef = useRef<any>(null);
+
   const showToast = (text: string, type: 'success' | 'error' = 'success') => {
     setToastMessage({ type, text });
     setTimeout(() => setToastMessage(null), 3000);
@@ -64,6 +77,201 @@ export const MobileDispatchOrderCreate: React.FC<MobileDispatchOrderCreateProps>
 
   const [customerSearchText, setCustomerSearchText] = useState('');
   const [siteSearchText, setSiteSearchText] = useState('');
+
+  // 1. 마운트 시 이전 임시저장 의뢰서 복원 (이어하기 지원)
+  useEffect(() => {
+    const saved = loadVoiceOrderDraft();
+    if (saved) {
+      if (saved.customerId) setSelectedCustomerId(saved.customerId);
+      if (saved.siteId) setSelectedSiteId(saved.siteId);
+      if (saved.newSiteName) setNewSiteName(saved.newSiteName);
+      if (saved.siteAddress) setSiteAddress(saved.siteAddress);
+      if (saved.siteContactName) setSiteContactName(saved.siteContactName);
+      if (saved.siteContactPhone) setSiteContactPhone(saved.siteContactPhone);
+      if (saved.deliveryDate) setDeliveryDate(saved.deliveryDate);
+      if (saved.deliveryTime) setDeliveryTime(saved.deliveryTime);
+      if (saved.orders && saved.orders.length > 0) setOrders(saved.orders);
+      if (saved.memo) setMemo(saved.memo);
+      if (saved.snippets && saved.snippets.length > 0) setSnippetsHistory(saved.snippets);
+      setHasRestoredDraft(true);
+    }
+  }, []);
+
+  // 2. 값 변경 시 로컬스토리지 자동 임시저장
+  useEffect(() => {
+    if (selectedCustomerId || siteAddress || siteContactPhone || memo || orders.length > 1 || orders[0]?.count > 1 || snippetsHistory.length > 0) {
+      const cust = customers.find(c => c.id === selectedCustomerId);
+      const site = sites.find(s => s.id === selectedSiteId);
+      const draft: VoiceOrderDraft = {
+        customerId: selectedCustomerId,
+        customerName: cust?.name || '',
+        siteId: selectedSiteId,
+        siteName: site?.name || newSiteName,
+        newSiteName,
+        siteAddress,
+        siteContactName,
+        siteContactPhone,
+        deliveryDate,
+        deliveryTime,
+        orders,
+        memo,
+        snippets: snippetsHistory,
+        updatedAt: new Date().toISOString()
+      };
+      saveVoiceOrderDraft(draft);
+      setHasRestoredDraft(true);
+    }
+  }, [selectedCustomerId, selectedSiteId, newSiteName, siteAddress, siteContactName, siteContactPhone, deliveryDate, deliveryTime, orders, memo, snippetsHistory, customers, sites]);
+
+  // 임시저장 초기화 핸들러
+  const handleResetDraft = () => {
+    if (!window.confirm('작성 중인 임시저장 내용을 모두 초기화하시겠습니까?')) return;
+    clearVoiceOrderDraft();
+    setSelectedCustomerId('');
+    setSelectedSiteId('');
+    setNewSiteName('');
+    setSiteAddress('');
+    setSiteContactName('');
+    setSiteContactPhone('');
+    setDeliveryDate(tomorrow);
+    setDeliveryTime('08:00');
+    setOrders([{ ft: '19ft', modelName: '1930', count: 1 }]);
+    setMemo('');
+    setSnippetsHistory([]);
+    setRecentModifiedFields([]);
+    setHasRestoredDraft(false);
+    showToast('임시저장이 초기화되었습니다.');
+  };
+
+  // 음성 조각 증분 병합 처리 함수
+  const processSpokenFragment = (text: string) => {
+    const cust = customers.find(c => c.id === selectedCustomerId);
+    const site = sites.find(s => s.id === selectedSiteId);
+    const currentDraft: VoiceOrderDraft = {
+      customerId: selectedCustomerId,
+      customerName: cust?.name || '',
+      siteId: selectedSiteId,
+      siteName: site?.name || newSiteName,
+      newSiteName,
+      siteAddress,
+      siteContactName,
+      siteContactPhone,
+      deliveryDate,
+      deliveryTime,
+      orders,
+      memo,
+      snippets: snippetsHistory,
+      updatedAt: new Date().toISOString()
+    };
+
+    const { updatedDraft, modifiedFields } = mergeVoiceFragmentToDraft(
+      currentDraft,
+      text,
+      customers,
+      sites
+    );
+
+    if (updatedDraft.customerId) setSelectedCustomerId(updatedDraft.customerId);
+    if (updatedDraft.siteId) setSelectedSiteId(updatedDraft.siteId);
+    if (updatedDraft.newSiteName) setNewSiteName(updatedDraft.newSiteName);
+    if (updatedDraft.siteAddress) setSiteAddress(updatedDraft.siteAddress);
+    if (updatedDraft.siteContactName) setSiteContactName(updatedDraft.siteContactName);
+    if (updatedDraft.siteContactPhone) setSiteContactPhone(updatedDraft.siteContactPhone);
+    if (updatedDraft.deliveryDate) setDeliveryDate(updatedDraft.deliveryDate);
+    if (updatedDraft.deliveryTime) setDeliveryTime(updatedDraft.deliveryTime);
+    if (updatedDraft.orders && updatedDraft.orders.length > 0) setOrders(updatedDraft.orders);
+    if (updatedDraft.memo) setMemo(updatedDraft.memo);
+    if (updatedDraft.snippets) setSnippetsHistory(updatedDraft.snippets);
+
+    setRecentModifiedFields(modifiedFields);
+    setHasRestoredDraft(true);
+
+    if (modifiedFields.length > 0) {
+      showToast(`음성 반영: ${modifiedFields.join(' | ')}`);
+    } else {
+      showToast('음성을 인식했습니다.');
+    }
+  };
+
+  // 음성인식 토글 핸들러
+  const handleToggleListening = () => {
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      showToast('이 브라우저는 음성인식을 지원하지 않습니다.', 'error');
+      return;
+    }
+
+    if (isListening) {
+      if (recognitionRef.current) {
+        try { recognitionRef.current.stop(); } catch (e) {}
+      }
+      setIsListening(false);
+      return;
+    }
+
+    try {
+      const rec = new SpeechRecognition();
+      rec.lang = 'ko-KR';
+      rec.continuous = false;
+      rec.interimResults = true;
+      recognitionRef.current = rec;
+
+      rec.onstart = () => {
+        setIsListening(true);
+        setInterimText('');
+      };
+
+      rec.onresult = (event: any) => {
+        let transcript = '';
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          transcript += event.results[i][0].transcript;
+        }
+        setInterimText(transcript);
+      };
+
+      rec.onerror = (event: any) => {
+        console.warn('SpeechRecognition error:', event.error);
+        setIsListening(false);
+        if (event.error !== 'no-speech') {
+          showToast('음성 인식 오류: ' + event.error, 'error');
+        }
+      };
+
+      rec.onend = () => {
+        setIsListening(false);
+        if (interimText.trim()) {
+          processSpokenFragment(interimText.trim());
+          setInterimText('');
+        }
+      };
+
+      rec.start();
+    } catch (err: any) {
+      console.error('Failed to start SpeechRecognition:', err);
+      setIsListening(false);
+      showToast('마이크 시작 실패: ' + err.message, 'error');
+    }
+  };
+
+  // 클립보드 통화 텍스트 읽어서 자동 완성 핸들러 (갤럭시 통화녹음 텍스트 연동)
+  const handlePasteCallTranscript = async () => {
+    try {
+      if (!navigator.clipboard || !navigator.clipboard.readText) {
+        showToast('클립보드 읽기를 지원하지 않는 브라우저입니다.', 'error');
+        return;
+      }
+      const text = await navigator.clipboard.readText();
+      if (!text || !text.trim()) {
+        showToast('클립보드에 복사된 통화 텍스트가 없습니다.', 'error');
+        return;
+      }
+      processSpokenFragment(text.trim());
+      showToast('복사된 통화 텍스트를 파싱하여 반영했습니다.');
+    } catch (err: any) {
+      console.warn('Clipboard read error:', err);
+      showToast('클립보드 읽기 권한이 필요합니다.', 'error');
+    }
+  };
 
   // 선택된 고객사의 등록 현장 목록
   const customerSites = useMemo(() => {
@@ -222,10 +430,12 @@ export const MobileDispatchOrderCreate: React.FC<MobileDispatchOrderCreateProps>
     try {
       const res = await saveSmartDispatch(payload as any, true);
       if (res && res.success) {
-        showToast('출고 의뢰가 정상 접수되었습니다.');
-        setTimeout(() => {
-          onSuccess();
-        }, 1200);
+        clearVoiceOrderDraft();
+        setCreatedResult({
+          contractNo: res.contractNo || '신규 계약 생성됨',
+          siteName: finalSiteName,
+          totalCount: totalEquipCount
+        });
       } else {
         showToast(res?.errorMessage || '출고 의뢰 접수에 실패했습니다.', 'error');
       }
@@ -264,6 +474,65 @@ export const MobileDispatchOrderCreate: React.FC<MobileDispatchOrderCreateProps>
         </div>
       )}
 
+      {/* 완료 모달 */}
+      {createdResult && (
+        <div 
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 999999,
+            backgroundColor: 'rgba(2, 6, 23, 0.9)',
+            backdropFilter: 'blur(8px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '16px'
+          }}
+        >
+          <div className="w-full max-w-sm bg-slate-900 border border-emerald-500/40 rounded-2xl p-5 flex flex-col gap-4 shadow-2xl animate-in fade-in zoom-in duration-200">
+            <div className="w-12 h-12 rounded-2xl bg-emerald-500/20 border border-emerald-400/40 flex items-center justify-center text-emerald-400 mx-auto">
+              <Check className="w-6 h-6" />
+            </div>
+
+            <div className="text-center">
+              <div className="text-base font-bold text-white">출고 의뢰 접수 완료</div>
+              <div className="text-xs text-slate-400 mt-1">임대차 계약서 및 출고 배차가 자동 생성되었습니다.</div>
+            </div>
+
+            <div className="bg-slate-950 border border-slate-800 rounded-xl p-3 flex flex-col gap-2 text-xs">
+              <div className="flex justify-between">
+                <span className="text-slate-400">발급 계약번호</span>
+                <span className="font-mono font-bold text-emerald-400">{createdResult.contractNo}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">납품 현장</span>
+                <span className="font-bold text-white">{createdResult.siteName}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">출고 장비 수량</span>
+                <span className="font-bold text-white">{createdResult.totalCount}대</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">배차 상태</span>
+                <span className="text-amber-400 font-bold">출고대기 (REQUESTED)</span>
+              </div>
+            </div>
+
+            <div className="text-[11px] text-slate-400 bg-slate-800/40 p-2.5 rounded-lg border border-slate-800">
+              배차 관리 대장에서 기사를 배정하고, 출고 검수 대장에서 장비 번호를 매핑할 수 있습니다.
+            </div>
+
+            <button
+              type="button"
+              onClick={onSuccess}
+              className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm transition-all"
+            >
+              확인 및 계약 목록 이동
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* 헤더 바 */}
       <div className="flex items-center justify-between pt-1">
         <button
@@ -276,6 +545,89 @@ export const MobileDispatchOrderCreate: React.FC<MobileDispatchOrderCreateProps>
         </button>
         <h2 className="text-base font-bold text-white">모바일 출고 의뢰</h2>
         <div className="w-10" />
+      </div>
+
+      {/* 🎙️ 음성 조각 입력 및 임시저장 패널 */}
+      <div className="bg-slate-900 border border-blue-500/30 rounded-2xl p-3.5 flex flex-col gap-2.5 shadow-sm">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-1.5">
+            <Mic className="w-3.5 h-3.5 text-blue-400" />
+            <span className="text-xs font-bold text-slate-200">음성 조각 입력 (임시저장 및 이어하기)</span>
+          </div>
+          {hasRestoredDraft && (
+            <button
+              type="button"
+              onClick={handleResetDraft}
+              className="text-[11px] text-rose-400 hover:text-rose-300 flex items-center gap-1 active:scale-95"
+            >
+              <RotateCcw className="w-3 h-3" />
+              <span>초기화</span>
+            </button>
+          )}
+        </div>
+
+        {/* 큰 터치 녹음 버튼 */}
+        <button
+          type="button"
+          onClick={handleToggleListening}
+          className={`w-full py-3 px-4 rounded-xl flex items-center justify-center gap-2 font-bold text-xs transition-all active:scale-[0.98] ${
+            isListening
+              ? 'bg-rose-600 text-white animate-pulse shadow-lg shadow-rose-900/50'
+              : 'bg-blue-600 hover:bg-blue-500 text-white shadow-md shadow-blue-900/30'
+          }`}
+        >
+          {isListening ? (
+            <>
+              <MicOff className="w-4 h-4" />
+              <span>듣는 중... (터치 시 완료)</span>
+            </>
+          ) : (
+            <>
+              <Mic className="w-4 h-4" />
+              <span>터치하여 말하기 (단문/조각 이어하기 가능)</span>
+            </>
+          )}
+        </button>
+
+        {/* 클립보드 통화 녹음 텍스트 붙여넣기 버튼 (갤럭시 AI 통화 텍스트 연동) */}
+        <button
+          type="button"
+          onClick={handlePasteCallTranscript}
+          className="w-full py-2.5 px-3 rounded-xl bg-slate-800 hover:bg-slate-750 border border-slate-700 text-xs font-bold text-slate-200 flex items-center justify-center gap-1.5 transition-all active:scale-[0.98]"
+        >
+          <ClipboardList className="w-3.5 h-3.5 text-sky-400" />
+          <span>통화 텍스트 붙여넣기 (갤럭시 통화녹음 복사본)</span>
+        </button>
+
+        {/* 실시간 말풍선 */}
+        {(isListening || interimText) && (
+          <div className="bg-slate-950 border border-blue-500/40 rounded-xl p-2.5 text-xs text-blue-200 animate-in fade-in duration-150">
+            <div className="text-[10px] text-slate-400 mb-0.5">실시간 음성 전사:</div>
+            <div className="font-mono">{interimText || '말씀하시면 텍스트가 표시됩니다...'}</div>
+          </div>
+        )}
+
+        {/* 최근 반영된 항목 뱃지 */}
+        {recentModifiedFields.length > 0 && (
+          <div className="bg-emerald-950/40 border border-emerald-500/30 rounded-lg px-2.5 py-1.5 text-[11px] text-emerald-300 flex items-center gap-1.5 flex-wrap">
+            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+            <span className="font-bold">반영 항목:</span>
+            {recentModifiedFields.map((f, i) => (
+              <span key={i} className="bg-emerald-900/50 px-1.5 py-0.5 rounded text-[10px] text-emerald-200 font-mono">{f}</span>
+            ))}
+          </div>
+        )}
+
+        {/* 임시저장 상태 안내 */}
+        {hasRestoredDraft && (
+          <div className="flex items-center justify-between text-[10px] text-slate-400 pt-0.5 px-0.5">
+            <span className="flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block" />
+              임시저장 보존 중 (앱을 닫아도 유지됨)
+            </span>
+            <span>누적 발화: {snippetsHistory.length}회</span>
+          </div>
+        )}
       </div>
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">

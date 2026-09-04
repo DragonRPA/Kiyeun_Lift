@@ -2,16 +2,25 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   Radio, Volume2, VolumeX, Mic, MicOff, Play, Square,
-  X, Clock, Layers, MessageSquare, ListFilter, ArrowLeft, Bell, BellOff
+  X, Clock, Layers, MessageSquare, ListFilter, ArrowLeft, Bell, BellOff,
+  FileText, ChevronRight
 } from 'lucide-react';
 import { 
   walkieService, WalkieTalkieChannel, WalkieReceiveMode, WalkieMessage, soundEngine, TalkingStatus 
 } from '../../services/walkieTalkieService';
 import { useApp } from '../../context/AppContext';
+import { 
+  loadVoiceOrderDraft, 
+  saveVoiceOrderDraft, 
+  mergeVoiceFragmentToDraft, 
+  VoiceOrderDraft, 
+  createEmptyDraft 
+} from '../../services/voiceOrderDraftService';
 
 interface MobileWalkieTalkieModalProps {
   isOpen: boolean;
   onClose: () => void;
+  onNavigateToDispatchOrder?: () => void;
 }
 
 const CHANNELS: { id: WalkieTalkieChannel; name: string; code: string; desc: string }[] = [
@@ -23,9 +32,12 @@ const CHANNELS: { id: WalkieTalkieChannel; name: string; code: string; desc: str
 
 export const MobileWalkieTalkieModal: React.FC<MobileWalkieTalkieModalProps> = ({
   isOpen,
-  onClose
+  onClose,
+  onNavigateToDispatchOrder
 }) => {
-  const { currentUser } = useApp();
+  const { currentUser, customers, sites } = useApp();
+  const [isMonologueOrderMode, setIsMonologueOrderMode] = useState<boolean>(false);
+  const [currentOrderDraft, setCurrentOrderDraft] = useState<VoiceOrderDraft | null>(() => loadVoiceOrderDraft());
 
   const [activeTab, setActiveTab] = useState<'PTT' | 'LOGS'>('PTT');
   const [isPowerOn, setIsPowerOn] = useState<boolean>(() => walkieService.getIsPowerOn());
@@ -256,6 +268,12 @@ export const MobileWalkieTalkieModal: React.FC<MobileWalkieTalkieModalProps> = (
       );
       if (sent) {
         setHistory([...walkieService.getHistory()]);
+        if (isMonologueOrderMode && sent.textTranscript) {
+          const base = currentOrderDraft || loadVoiceOrderDraft() || createEmptyDraft();
+          const { updatedDraft } = mergeVoiceFragmentToDraft(base, sent.textTranscript, customers, sites);
+          setCurrentOrderDraft(updatedDraft);
+          saveVoiceOrderDraft(updatedDraft);
+        }
       }
     }
     setRecordDuration(0);
@@ -355,6 +373,35 @@ export const MobileWalkieTalkieModal: React.FC<MobileWalkieTalkieModalProps> = (
             >
               {isPowerOn ? <Volume2 size={12} /> : <VolumeX size={12} />}
               <span>{isPowerOn ? '무전 ON' : '무전 OFF'}</span>
+            </button>
+
+            {/* 독백의뢰 모드 토글 버튼 */}
+            <button
+              type="button"
+              onClick={() => {
+                const next = !isMonologueOrderMode;
+                setIsMonologueOrderMode(next);
+                if (next) {
+                  setCurrentOrderDraft(loadVoiceOrderDraft() || createEmptyDraft());
+                }
+              }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+                padding: '4px 9px',
+                borderRadius: '9999px',
+                border: isMonologueOrderMode ? '1px solid #38bdf8' : '1px solid #334155',
+                backgroundColor: isMonologueOrderMode ? '#0284c7' : '#1e293b',
+                color: isMonologueOrderMode ? '#ffffff' : '#94a3b8',
+                fontSize: '11px',
+                fontWeight: '800',
+                cursor: 'pointer'
+              }}
+              title="독백 모드로 출고의뢰 음성 조각 수집"
+            >
+              <FileText size={12} />
+              <span>{isMonologueOrderMode ? '독백의뢰 ON' : '독백의뢰'}</span>
             </button>
 
             <button
@@ -659,6 +706,55 @@ export const MobileWalkieTalkieModal: React.FC<MobileWalkieTalkieModalProps> = (
                 )}
               </div>
             </div>
+
+            {/* 🌟 독백 의뢰 모드 실시간 수집 패널 */}
+            {isMonologueOrderMode && (
+              <div style={{
+                margin: '0 12px 6px',
+                padding: '8px 12px',
+                backgroundColor: 'rgba(2, 132, 199, 0.15)',
+                border: '1px solid rgba(56, 189, 248, 0.4)',
+                borderRadius: '12px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: '8px'
+              }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', overflow: 'hidden' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', fontWeight: '800', color: '#38bdf8' }}>
+                    <FileText size={12} />
+                    <span>출고의뢰 조각 수집 중</span>
+                  </div>
+                  <div style={{ fontSize: '10px', color: '#cbd5e1', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {currentOrderDraft?.customerName || '고객사 미정'} / {currentOrderDraft?.siteName || '현장 미정'} | 장비: {currentOrderDraft?.orders?.map(o => `${o.modelName}(${o.count}대)`).join(', ') || '1930(1대)'}
+                  </div>
+                </div>
+
+                {onNavigateToDispatchOrder && (
+                  <button
+                    type="button"
+                    onClick={onNavigateToDispatchOrder}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '3px',
+                      padding: '5px 9px',
+                      borderRadius: '8px',
+                      border: 'none',
+                      backgroundColor: '#0284c7',
+                      color: '#ffffff',
+                      fontSize: '11px',
+                      fontWeight: '800',
+                      cursor: 'pointer',
+                      flexShrink: 0
+                    }}
+                  >
+                    <span>의뢰서 작성</span>
+                    <ChevronRight size={12} />
+                  </button>
+                )}
+              </div>
+            )}
 
             {/* ── 실시간 당일 무전 피드 (LCD 바로 아래 선행 배치) ── */}
             <div style={{

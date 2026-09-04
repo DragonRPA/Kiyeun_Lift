@@ -16,6 +16,7 @@ import { MobileDispatchOrderCreate } from './pages/MobileDispatchOrderCreate';
 import { MobileMyContracts } from './pages/MobileMyContracts';
 import { PwaInstallBanner } from './components/PwaInstallBanner';
 import { MobileWalkieTalkieModal } from './components/MobileWalkieTalkieModal';
+import { MobileGemsAgentModal } from './components/MobileGemsAgentModal';
 import { walkieService } from '../services/walkieTalkieService';
 import './mobile.css';
 
@@ -47,6 +48,9 @@ export const MobileApp: React.FC<MobileAppProps> = ({ onSwitchToPc }) => {
   // 📻 무전기 모달 및 전원 상태
   const [isWalkieModalOpen, setIsWalkieModalOpen] = useState(false);
   const [isWalkieOn, setIsWalkieOn] = useState(() => walkieService.getIsPowerOn());
+
+  // ✨ 기연 렌탈 GEMS AI 비서 모달 상태
+  const [isGemsModalOpen, setIsGemsModalOpen] = useState(false);
 
   // 무전기 서비스 자동 구독 (백그라운드 수신 대기)
   useEffect(() => {
@@ -115,6 +119,7 @@ export const MobileApp: React.FC<MobileAppProps> = ({ onSwitchToPc }) => {
         onChangeDeptMode={handleDeptModeChange}
         isWalkieOn={isWalkieOn}
         onOpenWalkieTalkie={() => setIsWalkieModalOpen(true)}
+        onOpenGems={() => setIsGemsModalOpen(true)}
       />
 
       {/* 홈 화면 PWA 설치 안내 배너 */}
@@ -157,6 +162,7 @@ export const MobileApp: React.FC<MobileAppProps> = ({ onSwitchToPc }) => {
           <MobileDispatchOrderCreate
             onBack={() => handleTabChange('home')}
             onSuccess={() => handleTabChange('my_contracts')}
+            onOpenGems={() => setIsGemsModalOpen(true)}
           />
         ) : activeTab === 'my_contracts' ? (
           <MobileMyContracts
@@ -199,6 +205,16 @@ export const MobileApp: React.FC<MobileAppProps> = ({ onSwitchToPc }) => {
       <MobileWalkieTalkieModal
         isOpen={isWalkieModalOpen}
         onClose={() => setIsWalkieModalOpen(false)}
+        onNavigateToDispatchOrder={() => {
+          setIsWalkieModalOpen(false);
+          handleTabChange('sales_order');
+        }}
+      />
+
+      {/* ✨ 기연 렌탈 GEMS AI 비서 모달 */}
+      <MobileGemsAgentModal
+        isOpen={isGemsModalOpen}
+        onClose={() => setIsGemsModalOpen(false)}
       />
     </div>
   );
