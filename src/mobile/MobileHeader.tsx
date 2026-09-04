@@ -1,5 +1,5 @@
-import React from 'react';
-import { Monitor, LogOut, Wrench, Crown, Radio } from 'lucide-react';
+import React, { useState } from 'react';
+import { Monitor, LogOut, Wrench, Crown, Radio, RotateCw } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 
 export type MobileDeptMode = 'SALES' | 'AS' | 'OUTBOUND' | 'EXECUTIVE' | 'ADMIN';
@@ -20,6 +20,14 @@ export const MobileHeader: React.FC<MobileHeaderProps> = ({
   onOpenWalkieTalkie
 }) => {
   const { currentUser, logout } = useApp();
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const handleRefresh = () => {
+    setIsRefreshing(true);
+    setTimeout(() => {
+      window.location.reload();
+    }, 200);
+  };
 
   const deptList: { mode: MobileDeptMode; label: string; activeColor: string }[] = [
     { mode: 'SALES', label: '영업부', activeColor: '#2563eb' },
@@ -39,14 +47,14 @@ export const MobileHeader: React.FC<MobileHeaderProps> = ({
           backgroundColor: 'rgba(15, 23, 42, 0.95)',
           backdropFilter: 'blur(12px)',
           borderBottom: '1px solid #1e293b',
-          padding: 'max(12px, env(safe-area-inset-top, 12px)) 16px 12px',
+          padding: 'max(10px, env(safe-area-inset-top, 10px)) 12px 10px',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
           boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.2)'
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0, flex: 1, marginRight: '6px' }}>
           <div style={{
             width: '32px',
             height: '32px',
@@ -64,28 +72,61 @@ export const MobileHeader: React.FC<MobileHeaderProps> = ({
               <Wrench size={16} color="#ffffff" />
             )}
           </div>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <span style={{ fontSize: '15px', fontWeight: '800', color: '#ffffff', letterSpacing: '-0.02em' }}>기연리프트</span>
+          <div style={{ minWidth: 0, overflow: 'hidden' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '5px', whiteSpace: 'nowrap' }}>
+              <span style={{ fontSize: '14px', fontWeight: '800', color: '#ffffff', letterSpacing: '-0.02em' }}>기연리프트</span>
               <span style={{
-                fontSize: '10px',
+                fontSize: '9px',
                 fontWeight: '700',
-                padding: '2px 6px',
+                padding: '1px 5px',
                 borderRadius: '9999px',
                 backgroundColor: 'rgba(59, 130, 246, 0.2)',
                 color: '#60a5fa',
-                border: '1px solid rgba(59, 130, 246, 0.3)'
+                border: '1px solid rgba(59, 130, 246, 0.3)',
+                flexShrink: 0
               }}>
                 FIELD
               </span>
             </div>
-            <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '1px' }}>
+            <div style={{ fontSize: '10px', color: '#94a3b8', marginTop: '1px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
               {currentUser?.name || '담당자'} ({currentUser?.role === 'ADMIN' ? '최고관리자' : currentUser?.role === 'MECHANIC' ? '정비기사' : '임직원'})
             </div>
           </div>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '5px', flexShrink: 0 }}>
+          {/* 🔄 화면 새로고침 버튼 (헌장 3.1 무수식어 건조한 명사) */}
+          <button
+            type="button"
+            onClick={handleRefresh}
+            disabled={isRefreshing}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+              fontSize: '11px',
+              fontWeight: '600',
+              padding: '6px 8px',
+              borderRadius: '10px',
+              backgroundColor: '#1e293b',
+              border: '1px solid #334155',
+              color: '#38bdf8',
+              cursor: 'pointer',
+              flexShrink: 0
+            }}
+            title="새로고침"
+          >
+            <RotateCw 
+              size={13} 
+              style={{
+                transition: 'transform 0.4s ease',
+                transform: isRefreshing ? 'rotate(360deg)' : 'none'
+              }} 
+              color="#38bdf8" 
+            />
+            <span>새로고침</span>
+          </button>
+
           {/* 📻 현장 무전기 (PTT) 버튼 */}
           <button
             type="button"
@@ -93,27 +134,28 @@ export const MobileHeader: React.FC<MobileHeaderProps> = ({
             style={{
               display: 'flex',
               alignItems: 'center',
-              gap: '5px',
-              fontSize: '12px',
+              gap: '4px',
+              fontSize: '11px',
               fontWeight: '700',
-              padding: '6px 10px',
+              padding: '6px 8px',
               borderRadius: '10px',
               backgroundColor: isWalkieOn ? 'rgba(16, 185, 129, 0.2)' : '#1e293b',
               border: isWalkieOn ? '1px solid #10b981' : '1px solid #334155',
               color: isWalkieOn ? '#34d399' : '#cbd5e1',
-              cursor: 'pointer'
+              cursor: 'pointer',
+              flexShrink: 0
             }}
-            title="현장 무전기 (PTT)"
+            title="무전기"
           >
-            <Radio size={14} color={isWalkieOn ? '#34d399' : '#94a3b8'} />
+            <Radio size={13} color={isWalkieOn ? '#34d399' : '#94a3b8'} />
             <span>{isWalkieOn ? '무전ON' : '무전'}</span>
             {isWalkieOn && (
               <span style={{
-                width: '6px',
-                height: '6px',
+                width: '5px',
+                height: '5px',
                 borderRadius: '9999px',
                 backgroundColor: '#10b981',
-                boxShadow: '0 0 6px #10b981'
+                boxShadow: '0 0 5px #10b981'
               }} />
             )}
           </button>
@@ -124,25 +166,26 @@ export const MobileHeader: React.FC<MobileHeaderProps> = ({
               display: 'flex',
               alignItems: 'center',
               gap: '4px',
-              fontSize: '12px',
+              fontSize: '11px',
               fontWeight: '600',
-              padding: '6px 10px',
+              padding: '6px 8px',
               borderRadius: '10px',
               backgroundColor: '#1e293b',
               border: '1px solid #334155',
               color: '#cbd5e1',
-              cursor: 'pointer'
+              cursor: 'pointer',
+              flexShrink: 0
             }}
-            title="PC 대장 화면으로 전환"
+            title="PC화면"
           >
-            <Monitor size={14} color="#38bdf8" />
+            <Monitor size={13} color="#38bdf8" />
             <span>PC화면</span>
           </button>
 
           <button
             onClick={logout}
             style={{
-              padding: '8px',
+              padding: '7px',
               borderRadius: '10px',
               backgroundColor: '#1e293b',
               border: '1px solid #334155',
@@ -150,11 +193,12 @@ export const MobileHeader: React.FC<MobileHeaderProps> = ({
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
-              justifyContent: 'center'
+              justifyContent: 'center',
+              flexShrink: 0
             }}
             title="로그아웃"
           >
-            <LogOut size={16} />
+            <LogOut size={15} />
           </button>
         </div>
       </header>
