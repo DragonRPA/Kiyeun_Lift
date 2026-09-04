@@ -41,6 +41,9 @@ export const MobileWalkieTalkieModal: React.FC<MobileWalkieTalkieModalProps> = (
   // 🌟 실시간 발언자 인디케이터 ("누가 말하고 있습니다")
   const [talkingStatus, setTalkingStatus] = useState<TalkingStatus | null>(() => walkieService.getCurrentTalkingStatus());
   const [receiveMode, setReceiveMode] = useState<WalkieReceiveMode>(() => walkieService.getReceiveMode());
+  const [liveTranscript, setLiveTranscript] = useState<string>('');
+  const [sttStatus, setSttStatus] = useState<'IDLE' | 'LISTENING' | 'ERROR' | 'UNSUPPORTED'>('IDLE');
+  const [sttErrorDetail, setSttErrorDetail] = useState<string>('');
 
   // 🔒 PTT 비동기 트리거 레이스 컨디션 원천 방지용 Refs
   const isTransmittingRef = useRef<boolean>(false);
@@ -79,12 +82,19 @@ export const MobileWalkieTalkieModal: React.FC<MobileWalkieTalkieModalProps> = (
       setReceiveMode(mode);
     });
 
+    const unLiveStt = walkieService.onLiveTranscript((txt, status, err) => {
+      setLiveTranscript(txt);
+      setSttStatus(status);
+      if (err) setSttErrorDetail(err);
+    });
+
     return () => {
       unMsg();
       unHist();
       unQueue();
       unTalking();
       unRecMode();
+      unLiveStt();
     };
   }, [currentUser]);
 
@@ -707,6 +717,39 @@ export const MobileWalkieTalkieModal: React.FC<MobileWalkieTalkieModalProps> = (
                   ? '버튼을 터치하여 말씀하시고, 완료 시 다시 터치하세요' 
                   : '상단 무전 ON 스위치를 먼저 켜주세요'}
               </span>
+
+              {/* 🌟 발언 중 실시간 STT 음성인식 라이브 피드 */}
+              {isTransmitting && (
+                <div style={{
+                  marginTop: '10px',
+                  padding: '8px 12px',
+                  borderRadius: '8px',
+                  backgroundColor: 'rgba(15, 23, 42, 0.95)',
+                  border: sttStatus === 'ERROR' ? '1px solid #ef4444' : sttStatus === 'UNSUPPORTED' ? '1px solid #f59e0b' : '1px solid #38bdf8',
+                  width: '90%',
+                  maxWidth: '320px',
+                  textAlign: 'center',
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.5)'
+                }}>
+                  {sttStatus === 'UNSUPPORTED' ? (
+                    <span style={{ fontSize: '11px', color: '#fbbf24', fontWeight: '700' }}>
+                      ⚠️ 브라우저 음성인식 미지원 (모바일 Chrome 권장)
+                    </span>
+                  ) : sttStatus === 'ERROR' ? (
+                    <span style={{ fontSize: '11px', color: '#f87171', fontWeight: '700' }}>
+                      ⚠️ 음성인식 대기중 ({sttErrorDetail || '마이크 확인'})
+                    </span>
+                  ) : liveTranscript ? (
+                    <div style={{ fontSize: '12.5px', color: '#fef08a', fontWeight: '800', wordBreak: 'break-all' }}>
+                      💬 "{liveTranscript}"
+                    </div>
+                  ) : (
+                    <span style={{ fontSize: '11px', color: '#38bdf8' }}>
+                      🎙️ 한국어 실시간 인식 중... (말씀하세요)
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* 실시간 당일 무전 피드 (최근 대화 & STT 전사 텍스트 상시 노출) */}
@@ -870,9 +913,32 @@ export const MobileWalkieTalkieModal: React.FC<MobileWalkieTalkieModalProps> = (
                 <ArrowLeft size={14} />
                 <span>무전기로 복귀</span>
               </button>
-              <span style={{ fontSize: '11px', color: '#94a3b8' }}>
-                당일 대화 ({todayStr}) • 총 {history.length}건
-              </span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ fontSize: '11px', color: '#94a3b8' }}>
+                  당일 ({todayStr}) • {history.length}건
+                </span>
+                {history.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (window.confirm('오늘의 무전 대화 기록을 모두 비우시겠습니까?')) {
+                        walkieService.clearTodayHistory();
+                      }
+                    }}
+                    style={{
+                      backgroundColor: '#0f172a',
+                      border: '1px solid #475569',
+                      borderRadius: '5px',
+                      color: '#cbd5e1',
+                      fontSize: '10.5px',
+                      padding: '3px 7px',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    대화 비우기
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* 대화 말풍선 스크롤 영역 */}

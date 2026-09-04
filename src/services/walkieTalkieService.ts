@@ -178,9 +178,12 @@ class WalkieTalkieService {
   private recordingStartTime = 0;
   private currentStream: MediaStream | null = null;
 
-  // STT 음성 인식기 (Web Speech API)
+  // STT 실시간 음성 인식기 (Web Speech API)
   private speechRecognition: any = null;
   private currentTranscript = '';
+  private sttStatus: 'IDLE' | 'LISTENING' | 'ERROR' | 'UNSUPPORTED' = 'IDLE';
+  private lastSttErrorDetail = '';
+  private liveTranscriptListeners: ((transcript: string, status: 'IDLE' | 'LISTENING' | 'ERROR' | 'UNSUPPORTED', errorDetail?: string) => void)[] = [];
 
   // Supabase Realtime 채널 관리
   private channels: Map<WalkieTalkieChannel, any> = new Map();
@@ -519,6 +522,36 @@ class WalkieTalkieService {
     };
   }
 
+  clearTodayHistory() {
+    this.history = [];
+    try {
+      localStorage.removeItem('walkie_today_history');
+    } catch {}
+    this.notifyHistoryChange();
+  }
+
+  isSttSupported(): boolean {
+    if (typeof window === 'undefined') return false;
+    return Boolean((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition);
+  }
+
+  onLiveTranscript(callback: (transcript: string, status: 'IDLE' | 'LISTENING' | 'ERROR' | 'UNSUPPORTED', errorDetail?: string) => void) {
+    this.liveTranscriptListeners.push(callback);
+    return () => {
+      this.liveTranscriptListeners = this.liveTranscriptListeners.filter(cb => cb !== callback);
+    };
+  }
+
+  private notifyLiveTranscript(text: string, status: 'IDLE' | 'LISTENING' | 'ERROR' | 'UNSUPPORTED', errorDetail?: string) {
+    this.sttStatus = status;
+    if (errorDetail) this.lastSttErrorDetail = errorDetail;
+    this.liveTranscriptListeners.forEach(cb => {
+      try {
+        cb(text, status, errorDetail);
+      } catch {}
+    });
+  }
+
   private addHistory(msg: WalkieMessage) {
     this.purgeOldHistoryIfNeeded();
     const today = this.getTodayDateStr();
@@ -556,24 +589,37 @@ class WalkieTalkieService {
         if (SpeechRec) {
           const rec = new SpeechRec();
           rec.lang = 'ko-KR';
-          rec.continuous = false; // 모바일 단문 PTT 전용 (Google 음성인식 즉시 종결 모드)
+          rec.continuous = true; // 모바일 발언 중 끊김 방지
           rec.interimResults = true;
           rec.maxAlternatives = 1;
+
+          rec.onstart = () => {
+            this.notifyLiveTranscript('', 'LISTENING');
+          };
+
           rec.onresult = (event: any) => {
             let transcriptStr = '';
             for (let i = 0; i < event.results.length; ++i) {
               transcriptStr += event.results[i][0].transcript;
             }
             this.currentTranscript = transcriptStr.trim();
+            this.notifyLiveTranscript(this.currentTranscript, 'LISTENING');
           };
+
           rec.onerror = (e: any) => {
             console.warn('STT SpeechRec error:', e?.error);
+            this.notifyLiveTranscript(this.currentTranscript, 'ERROR', e?.error || 'error');
           };
+
           rec.start();
           this.speechRecognition = rec;
+          this.notifyLiveTranscript('', 'LISTENING');
+        } else {
+          this.notifyLiveTranscript('', 'UNSUPPORTED', '브라우저 음성인식 미지원');
         }
-      } catch (sttErr) {
+      } catch (sttErr: any) {
         console.warn('STT SpeechRecognition not supported or disabled:', sttErr);
+        this.notifyLiveTranscript('', 'ERROR', sttErr?.message || 'init_failed');
       }
 
       // 3. 오디오 MIME 탐색
@@ -751,6 +797,7 @@ class WalkieTalkieService {
             }
           }
 
+          this.notifyLiveTranscript('', 'IDLE');
           resolve(msg);
         } catch (e) {
           console.error('Failed to encode and send walkie message:', e);
