@@ -1,6 +1,10 @@
 // src/services/walkieTalkieService.ts
-// Build.140 - Full redesign
-// STT: Gemini 2.0 Flash (webm direct), no SpeechRecognition, self=false bypass
+// Build.141 - Redesign: Gemini 2.5 Flash STT (webm direct, no conversion)
+// Design:
+//   1. MediaRecorder only. SpeechRecognition removed (avoids mic conflict)
+//   2. STT: raw blob -> Gemini 2.5 Flash (supports audio/webm natively)
+//   3. self=false bypass: sender applies transcript locally via applyTranscriptLocally()
+//      receivers get transcript_update broadcast
 
 import { supabase } from './db';
 import { getGeminiApiKey } from './geminiGemsService';
@@ -29,6 +33,7 @@ export interface TalkingStatus {
   senderDept: string;
 }
 
+// ── Sound engine ──────────────────────────────────────────────────────────────
 class WalkieSoundEngine {
   private ctx: AudioContext | null = null;
 
@@ -128,6 +133,7 @@ class WalkieSoundEngine {
 
 export const soundEngine = new WalkieSoundEngine();
 
+// ── Walkie-Talkie Service (singleton) ─────────────────────────────────────────
 class WalkieTalkieService {
   private mediaRecorder: MediaRecorder | null = null;
   private audioChunks: Blob[] = [];
@@ -270,6 +276,7 @@ class WalkieTalkieService {
   isSttSupported() { return true; }
   unlockAudio() { soundEngine.unlockAudioOnUserGesture(); }
 
+  // ── Supabase Realtime channel subscription ───────────────────────────────────
   subscribe(_user?: { id: string; name: string; role: string; deptName?: string }) {
     if (!supabase) { console.warn('Supabase unavailable'); return; }
 
@@ -277,10 +284,14 @@ class WalkieTalkieService {
     allChannels.forEach(ch => {
       if (this.channels.has(ch)) return;
 
+      // NOTE: self:false means sender does NOT receive their own broadcast.
+      // STT transcript for the sender is applied via applyTranscriptLocally() directly.
+      // Receivers get it via transcript_update broadcast.
       const channel = supabase!.channel(`walkie_${ch}`, {
         config: { broadcast: { self: false } }
       });
 
+      // 1. Receive voice message (receiver side only - sender excluded by self:false)
       channel.on('broadcast', { event: 'voice' }, async ({ payload }: { payload: any }) => {
         const msg = payload as WalkieMessage;
         if (!msg?.id || !msg?.audioBase64) return;
@@ -297,6 +308,7 @@ class WalkieTalkieService {
         }
       });
 
+      // 2. Receive talking status indicator
       channel.on('broadcast', { event: 'talking_status' }, ({ payload }: { payload: any }) => {
         const status = payload as TalkingStatus;
         if (status?.isTalking) {
@@ -316,9 +328,8 @@ class WalkieTalkieService {
         }
       });
 
-      // STT 전사 수신 (수신자 측 처리)
-      // 발신자 자신은 self=false라서 이 이벤트를 받지 못하므로
-      // 발신자는 runGeminiStt 내에서 applyTranscriptLocally()로 직접 처리
+      // 3. Receive STT transcript (receiver side)
+      // Sender uses applyTranscriptLocally() directly to bypass self:false
       channel.on('broadcast', { event: 'transcript_update' }, ({ payload }: { payload: any }) => {
         const { messageId, textTranscript } = payload || {};
         if (!messageId || !textTranscript) return;
@@ -333,6 +344,7 @@ class WalkieTalkieService {
     });
   }
 
+  // ── Playback queue ────────────────────────────────────────────────────────────
   private enqueuePlayback(msg: WalkieMessage) {
     this.playbackQueue.push(msg);
     this.queueListeners.forEach(l => l(this.playbackQueue.length));
@@ -354,7 +366,8 @@ class WalkieTalkieService {
     if (this.playbackQueue.length > 0) this.processPlaybackQueue();
   }
 
-  // options.sttOnly: 음성 전송 없이 STT 텍스트만 추출하는 독백의뢰 모드
+  // ── PTT record start ──────────────────────────────────────────────────────────
+  // options.sttOnly: monologue-order mode — record audio for STT only, do not broadcast voice
   async startRecording(
     sender?: { id: string; name: string; deptName?: string },
     options?: { sttOnly?: boolean }
@@ -382,7 +395,7 @@ class WalkieTalkieService {
       this.mediaRecorder.ondataavailable = (e) => { if (e.data?.size > 0) this.audioChunks.push(e.data); };
       this.mediaRecorder.start(100);
 
-      // sttOnly 모드가 아닐 때만 발언 상태 브로드캐스트
+      // Broadcast talking status only when NOT in sttOnly mode
       if (!sttOnly && sender) {
         const activeCh = this.channels.get(this.currentChannel);
         if (activeCh) {
@@ -394,7 +407,7 @@ class WalkieTalkieService {
               channel: this.currentChannel,
               senderId: sender.id,
               senderName: sender.name,
-              senderDept: sender.deptName || '\uae30\uc5f0\ub9ac\ud504\ud2b8'
+              senderDept: sender.deptName || 'KiyeunLift'
             }
           });
         }
@@ -408,6 +421,7 @@ class WalkieTalkieService {
     }
   }
 
+  // ── PTT record stop and send ──────────────────────────────────────────────────
   async stopAndSend(
     sender: { id: string; name: string; role: string; deptName?: string },
     targetChannel?: WalkieTalkieChannel,
@@ -433,6 +447,7 @@ class WalkieTalkieService {
     return new Promise((resolve) => {
       this.mediaRecorder!.onstop = async () => {
         try {
+          // Release mic immediately (prevent Android mic lock)
           if (this.currentStream) {
             this.currentStream.getTracks().forEach(t => t.stop());
             this.currentStream = null;
@@ -457,24 +472,24 @@ class WalkieTalkieService {
             senderId: sender.id,
             senderName: sender.name,
             senderRole: sender.role,
-            senderDept: sender.deptName || '\uae30\uc5f0\ub9ac\ud504\ud2b8',
+            senderDept: sender.deptName || 'KiyeunLift',
             audioBase64: base64,
             durationSec,
             textTranscript: undefined,
             createdAt: new Date().toISOString()
           };
 
-          // 발신자 자신의 히스토리에 즉시 추가
+          // Add to sender's own history immediately
           this.addHistory(msg);
 
-          // sttOnly가 아닐 때만 수신자들에게 음성 broadcast
+          // Broadcast voice to receivers (skip in sttOnly mode)
           if (!sttOnly && activeCh) {
             await activeCh.send({ type: 'broadcast', event: 'voice', payload: msg });
           }
 
           this.liveTranscriptListeners.forEach(l => { try { l('', 'IDLE'); } catch {} });
 
-          // STT 비동기 실행 (blob 복사본 사용)
+          // STT: use a copy of the blob to avoid any GC/reuse issues
           const sttBlob = new Blob([blob], { type: mime });
           this.runGeminiStt(msg.id, sttBlob, ch);
 
@@ -489,6 +504,7 @@ class WalkieTalkieService {
     });
   }
 
+  // ── Cancel recording ──────────────────────────────────────────────────────────
   cancelRecording(senderId?: string) {
     if (this.mediaRecorder && this.mediaRecorder.state !== 'inactive') {
       this.mediaRecorder.onstop = null;
@@ -513,7 +529,7 @@ class WalkieTalkieService {
     soundEngine.playEndBeep();
   }
 
-  // STT: Gemini 2.0 Flash (audio/webm 직접 지원, WAV 변환 없음)
+  // ── STT: Gemini 2.5 Flash (audio/webm natively supported, no WAV conversion) ─
   private async runGeminiStt(messageId: string, blob: Blob, channelId: WalkieTalkieChannel) {
     const geminiKey = getGeminiApiKey();
     if (!geminiKey) {
@@ -528,13 +544,13 @@ class WalkieTalkieService {
       const base64Data = fullBase64.includes(',') ? fullBase64.split(',')[1] : fullBase64;
       const mimeType = blob.type || 'audio/webm';
 
-      // gemini-2.0-flash supports audio/webm directly
-      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`;
+      // gemini-2.5-flash: supports audio/webm directly (no WAV conversion needed)
+      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiKey}`;
       const payload = {
         contents: [{
           parts: [
             { inlineData: { mimeType, data: base64Data } },
-            { text: '\uc774 \uc74c\uc131 \uba54\uc2dc\uc9c0\uc758 \ud55c\uad6d\uc5b4 \ubc1c\uc5b8 \ub0b4\uc6a9\uc744 \uc0ac\uc871 \uc5c6\uc774 \ub9d0\ud55c \ub0b4\uc6a9 \uadf8\ub300\ub85c\ub9cc \ud14d\uc2a4\ud2b8\ub85c \uc801\uc5b4\uc918.' }
+            { text: 'Transcribe this Korean voice message exactly as spoken, no extra commentary.' }
           ]
         }]
       };
@@ -557,10 +573,10 @@ class WalkieTalkieService {
       if (text) {
         console.log(`[STT] done (${messageId}): "${text}"`);
 
-        // 발신자 자신에게 직접 반영 (self=false 우회)
+        // Apply to sender's history directly (bypass self:false)
         this.applyTranscriptLocally(messageId, text);
 
-        // 수신자들에게 broadcast
+        // Broadcast to receivers
         const activeCh = this.channels.get(channelId);
         if (activeCh) {
           activeCh.send({
@@ -572,16 +588,17 @@ class WalkieTalkieService {
 
         this.liveTranscriptListeners.forEach(l => { try { l(text, 'IDLE'); } catch {} });
       } else {
-        console.warn('[STT] empty response');
+        console.warn('[STT] empty response from Gemini');
         this.liveTranscriptListeners.forEach(l => { try { l('', 'IDLE'); } catch {} });
       }
     } catch (e) {
-      console.warn('[STT] failed:', e);
+      console.warn('[STT] request failed:', e);
     } finally {
       this.sttInProgress = false;
     }
   }
 
+  // Apply STT transcript to local history (used by both sender and receiver)
   private applyTranscriptLocally(messageId: string, text: string) {
     const target = this.history.find(m => m.id === messageId);
     if (target) {
@@ -591,6 +608,7 @@ class WalkieTalkieService {
     }
   }
 
+  // ── Audio playback ────────────────────────────────────────────────────────────
   stopAudio() {
     if (this.activeAudio) {
       try { this.activeAudio.pause(); this.activeAudio.currentTime = 0; } catch {}
@@ -627,6 +645,7 @@ class WalkieTalkieService {
     });
   }
 
+  // ── Utilities ─────────────────────────────────────────────────────────────────
   private blobToBase64(blob: Blob): Promise<string> {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
