@@ -122,6 +122,8 @@ export const FieldAsManagement: React.FC = () => {
   const [actionConfirmName, setActionConfirmName] = useState('');
   const [actionBeforeImage, setActionBeforeImage] = useState('');
   const [actionAfterImage, setActionAfterImage] = useState('');
+  const [actionInspectionItemCode, setActionInspectionItemCode] = useState('');
+  const [actionDegradationScore, setActionDegradationScore] = useState<number>(0);
 
   // 소모품 선택 임시 목록
   const [actionPartsUsed, setActionPartsUsed] = useState<FieldAsPartUsed[]>([]);
@@ -309,6 +311,8 @@ export const FieldAsManagement: React.FC = () => {
     setActionAfterImage(t.afterImage || '');
     setActionPartsUsed(t.partsUsed || []);
     setActionCollectedParts(t.collectedParts || []);
+    setActionInspectionItemCode(t.inspectionItemCode || '');
+    setActionDegradationScore(t.degradationScore || 0);
   };
 
   // 소모품 추가 핸들러
@@ -454,7 +458,9 @@ export const FieldAsManagement: React.FC = () => {
         customerConfirmName: actionConfirmName.trim(),
         revisitDate: actionResolutionType === 'REVISIT_NEEDED' ? actionRevisitDate : undefined,
         revisitReason: actionResolutionType === 'REVISIT_NEEDED' ? actionRevisitReason : undefined,
-        exchangeSuggested: actionExchangeSuggested
+        exchangeSuggested: actionExchangeSuggested,
+        inspectionItemCode: actionInspectionItemCode,
+        degradationScore: actionDegradationScore
       });
       showToast('AS 현장 조치가 성공적으로 등록되고 차량 소모품 재고가 차감되었습니다.');
     } catch (err: any) {
@@ -1526,7 +1532,7 @@ showToast('밴드 과거 AS 빅데이터 탑재를 시작합니다.');
                     rows={3}
                     value={actionTakenText}
                     onChange={(e) => setActionTakenText(e.target.value)}
-                    placeholder="현장에서 수행한 조치 내용과 원인을 구체적으로 적어주세요. (예: 방지봉 상단 브라켓 파손 확인되어 신품 교체 및 테스트 완료)"
+                    placeholder="조치 내용 입력"
                     style={{
                       padding: '10px 12px',
                       borderRadius: '6px',
@@ -1535,6 +1541,34 @@ showToast('밴드 과거 AS 빅데이터 탑재를 시작합니다.');
                       lineHeight: '1.4'
                     }}
                   />
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginTop: '10px' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <label style={{ fontSize: '11px', fontWeight: '600', whiteSpace: 'nowrap' }}>정비 항목 분류 코드</label>
+                      <select
+                        value={actionInspectionItemCode}
+                        onChange={(e) => setActionInspectionItemCode(e.target.value)}
+                        style={{ padding: '8px', fontSize: '13px', borderRadius: '6px', border: '1px solid var(--border-color)' }}
+                      >
+                        <option value="">분류 선택</option>
+                        <option value="CHK-000001">외관/바디 (CHK-000001)</option>
+                        <option value="CHK-000002">유압/동력 (CHK-000002)</option>
+                        <option value="CHK-000003">전기/배터리 (CHK-000003)</option>
+                        <option value="CHK-000004">주행/타이어 (CHK-000004)</option>
+                        <option value="CHK-000005">기타/접수 (CHK-000005)</option>
+                      </select>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <label style={{ fontSize: '11px', fontWeight: '600', whiteSpace: 'nowrap' }}>자산 노후도 누적 점수 (+)</label>
+                      <input
+                        type="number"
+                        min={0}
+                        value={actionDegradationScore}
+                        onChange={(e) => setActionDegradationScore(parseInt(e.target.value) || 0)}
+                        placeholder="0"
+                        style={{ padding: '8px', fontSize: '13px', borderRadius: '6px', border: '1px solid var(--border-color)' }}
+                      />
+                    </div>
+                  </div>
                 </div>
 
                 {/* 4. 처리 결과 판정 및 재방문 연계 설정 */}

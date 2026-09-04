@@ -27,7 +27,7 @@ const QUICK_WORK_TAGS = [
 export const Repairs: React.FC = () => {
   const {
     repairs, assets, consumables, repairConsumables, registerRepair, updateRepairStatus, 
-    hasPermission, users, currentUser, vendors, assetInOutLogs
+    hasPermission, users, currentUser, vendors, assetInOutLogs, showErrorModal
   } = useApp();
 
   const canSave = hasPermission('repair', 'save');
@@ -56,6 +56,8 @@ export const Repairs: React.FC = () => {
   const [selectedMechanicId, setSelectedMechanicId] = useState<string>(currentUser?.id || '');
   const [selectedVendorId, setSelectedVendorId] = useState<string>('');
   const [repairDetails, setRepairDetails] = useState<string>('');
+  const [inspectionItemCode, setInspectionItemCode] = useState<string>('');
+  const [degradationScore, setDegradationScore] = useState<number>(0);
   const [externalCost, setExternalCost] = useState<number>(0);
 
   // 사용 소모품 목록: { consumableId, quantity, unitPrice }
@@ -198,6 +200,8 @@ export const Repairs: React.FC = () => {
     setUsedConsumables([]);
     setBeforeImage('');
     setAfterImage('');
+    setInspectionItemCode('');
+    setDegradationScore(0);
   };
 
   const handleAddQuickTag = (tag: string) => {
@@ -238,8 +242,9 @@ export const Repairs: React.FC = () => {
       if (type === 'BEFORE') setBeforeImage(compressed.base64);
       else setAfterImage(compressed.base64);
       setIsProcessingImage(false);
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
+      showErrorModal(`사진 처리 실패: ${err?.message || err}`);
       setIsProcessingImage(false);
     }
   };
@@ -281,7 +286,9 @@ export const Repairs: React.FC = () => {
       beforeImage,
       afterImage,
       evidenceImages,
-      billableToCustomer: false
+      billableToCustomer: false,
+      inspectionItemCode,
+      degradationScore
     };
 
     registerRepair(payload, usedConsumables);
@@ -293,6 +300,8 @@ export const Repairs: React.FC = () => {
     setUsedConsumables([]);
     setBeforeImage('');
     setAfterImage('');
+    setInspectionItemCode('');
+    setDegradationScore(0);
   };
 
   // ⏸️ 부품대기 (수리중 REPAIRING 유지)
@@ -328,7 +337,9 @@ export const Repairs: React.FC = () => {
       beforeImage,
       afterImage,
       evidenceImages,
-      billableToCustomer: false
+      billableToCustomer: false,
+      inspectionItemCode,
+      degradationScore
     };
 
     registerRepair(payload, usedConsumables);
@@ -364,7 +375,9 @@ export const Repairs: React.FC = () => {
       requestDate: repairDate,
       details: repairDetails || `외주정비 위탁 반출: ${getVendorName(selectedVendorId)}`,
       totalCost: externalCost,
-      billableToCustomer: false
+      billableToCustomer: false,
+      inspectionItemCode,
+      degradationScore
     };
 
     registerRepair(payload, []);
@@ -617,7 +630,7 @@ export const Repairs: React.FC = () => {
                 </div>
 
                 {/* 2. 정비 기본 설정 (헌장 3.4 상하 수직 스택) */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr 1fr', gap: '10px' }}>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                     <label style={{ fontSize: '11px', fontWeight: '600', whiteSpace: 'nowrap' }}>정비 구분 *</label>
                     <select
@@ -652,6 +665,33 @@ export const Repairs: React.FC = () => {
                         <option key={u.id} value={u.id}>{u.name} ({u.role})</option>
                       ))}
                     </select>
+                  </div>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <label style={{ fontSize: '11px', fontWeight: '600', whiteSpace: 'nowrap' }}>정비 항목 코드 (Inspection Code)</label>
+                    <select
+                      value={inspectionItemCode}
+                      onChange={e => setInspectionItemCode(e.target.value)}
+                      style={{ padding: '6px 8px', fontSize: '12.5px' }}
+                    >
+                      <option value="">분류 선택</option>
+                      <option value="CHK-000001">외관/바디 (CHK-000001)</option>
+                      <option value="CHK-000002">유압/동력 (CHK-000002)</option>
+                      <option value="CHK-000003">전기/배터리 (CHK-000003)</option>
+                      <option value="CHK-000004">주행/타이어 (CHK-000004)</option>
+                      <option value="CHK-000005">기타/접수 (CHK-000005)</option>
+                    </select>
+                  </div>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <label style={{ fontSize: '11px', fontWeight: '600', whiteSpace: 'nowrap' }}>노후도 점수 (Degradation)</label>
+                    <input
+                      type="number"
+                      value={degradationScore}
+                      onChange={e => setDegradationScore(Number(e.target.value) || 0)}
+                      placeholder="+/- 점수"
+                      style={{ padding: '6px 8px', fontSize: '12.5px' }}
+                    />
                   </div>
                 </div>
 
@@ -721,7 +761,7 @@ export const Repairs: React.FC = () => {
                     rows={4}
                     value={repairDetails}
                     onChange={e => setRepairDetails(e.target.value)}
-                    placeholder="수리 조치 사항, 교체 부품, 상태 점검 결과를 구체적으로 입력하십시오..."
+                    placeholder="수리 조치 사항, 교체 부품, 상태 점검 결과 입력"
                     style={{ width: '100%', padding: '8px', fontSize: '12.5px', resize: 'vertical' }}
                   />
                 </div>

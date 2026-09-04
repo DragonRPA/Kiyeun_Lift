@@ -50,6 +50,8 @@ export const MobileAsDetail: React.FC<MobileAsDetailProps> = ({ ticketId, onBack
   const [partsUsed, setPartsUsed] = useState<RepairPartUsed[]>(ticket?.partsUsed || []);
   const [selectedStockId, setSelectedStockId] = useState('');
   const [selectedQty, setSelectedQty] = useState(1);
+  const [inspectionItemCode, setInspectionItemCode] = useState<string>(ticket?.inspectionItemCode || '');
+  const [degradationScore, setDegradationScore] = useState<number>(ticket?.degradationScore || 0);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // 내비게이션 앱 선택 상태 (로컬스토리지 기억)
@@ -143,6 +145,8 @@ export const MobileAsDetail: React.FC<MobileAsDetailProps> = ({ ticketId, onBack
         afterImage: afterImages[0] || '',
         customerConfirmName: customerConfirmName || ticket.reporterName || '현장확인자',
         partsUsed,
+        inspectionItemCode,
+        degradationScore,
       });
       alert('AS 조치가 성공적으로 완료 등록되었습니다.');
       onBack();
@@ -327,9 +331,37 @@ export const MobileAsDetail: React.FC<MobileAsDetailProps> = ({ ticketId, onBack
           rows={3}
           value={actionTaken}
           onChange={(e) => setActionTaken(e.target.value)}
-          placeholder="현장에서 조치한 구체적 수리 내용을 기록해 주세요..."
+          placeholder="조치 내용 입력"
           className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
         />
+
+        <div className="flex flex-col gap-1.5 mt-2">
+          <label className="text-xs font-bold text-slate-300 whitespace-nowrap">정비 항목 분류 코드</label>
+          <select
+            value={inspectionItemCode}
+            onChange={(e) => setInspectionItemCode(e.target.value)}
+            className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-sm text-white focus:outline-none focus:border-blue-500"
+          >
+            <option value="">분류 선택</option>
+            <option value="CHK-000001">외관/바디 (CHK-000001)</option>
+            <option value="CHK-000002">유압/동력 (CHK-000002)</option>
+            <option value="CHK-000003">전기/배터리 (CHK-000003)</option>
+            <option value="CHK-000004">주행/타이어 (CHK-000004)</option>
+            <option value="CHK-000005">기타/접수 (CHK-000005)</option>
+          </select>
+        </div>
+
+        <div className="flex flex-col gap-1.5 mt-2">
+          <label className="text-xs font-bold text-slate-300 whitespace-nowrap">자산 노후도 누적 점수 (+)</label>
+          <input
+            type="number"
+            min={0}
+            value={degradationScore}
+            onChange={(e) => setDegradationScore(parseInt(e.target.value) || 0)}
+            placeholder="노후도 점수"
+            className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-sm text-white focus:outline-none focus:border-blue-500"
+          />
+        </div>
       </div>
 
       {/* 부품 사용 차감 섹션 (탑차 재고 연동) */}

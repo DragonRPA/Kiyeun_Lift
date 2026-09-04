@@ -516,7 +516,7 @@ export const MobileAsCreate: React.FC<MobileAsCreateProps> = ({ onBack, onCreate
             rows={3}
             value={issueDescription}
             onChange={(e) => setIssueDescription(e.target.value)}
-            placeholder="현장 작업자의 구체적 고장 호소 내용..."
+            placeholder="고장 호소 내용 입력"
             className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-sm text-white focus:outline-none focus:border-blue-500"
           />
         </div>
@@ -591,9 +591,9 @@ export const MobileAsCreate: React.FC<MobileAsCreateProps> = ({ onBack, onCreate
               className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 font-sans leading-relaxed"
             />
 
-            {/* 빠른 테스트용 예시 버튼 */}
+            {/* 테스트용 예시 버튼 */}
             <div className="flex flex-col gap-1.5">
-              <span className="text-[11px] font-bold text-slate-400">빠른 테스트 예시:</span>
+              <span className="text-[11px] font-bold text-slate-400">테스트 예시:</span>
               <div className="flex flex-col gap-1">
                 <button
                   type="button"

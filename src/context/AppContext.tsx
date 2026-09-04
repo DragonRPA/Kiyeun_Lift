@@ -182,6 +182,8 @@ interface AppContextType {
     revisitDate?: string;
     revisitReason?: string;
     exchangeSuggested?: boolean;
+    inspectionItemCode?: string;
+    degradationScore?: number;
   }) => Promise<void>;
   createRevisitAsTicket: (parentTicketId: string, revisitDate: string, revisitReason: string, mechanicId?: string) => Promise<FieldAsTicket>;
   importBandAsHistory: (records: any[]) => Promise<number>;
@@ -2103,6 +2105,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     revisitDate?: string;
     revisitReason?: string;
     exchangeSuggested?: boolean;
+    inspectionItemCode?: string;
+    degradationScore?: number;
   }): Promise<void> => {
     try {
       const ticket = db.repairs.find(t => t.id === ticketId);
@@ -2237,6 +2241,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         revisitRepairId: revisitRepairId || ticket.revisitRepairId,
         revisitTicketId: revisitRepairId || ticket.revisitTicketId,
         exchangeSuggested: !!data.exchangeSuggested,
+        inspectionItemCode: data.inspectionItemCode !== undefined ? data.inspectionItemCode : ticket.inspectionItemCode,
+        degradationScore: data.degradationScore !== undefined ? data.degradationScore : ticket.degradationScore,
         completedDate: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       });
@@ -4885,6 +4891,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         billableToCustomer: false,
         inboundNo: assignedInboundNo,
         defectsJson: defectsJsonStr,
+        inspectionItemCode: processedDefects.length > 0 ? processedDefects.map(d => d.checkitemId).join(',') : undefined,
+        degradationScore: score,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       });

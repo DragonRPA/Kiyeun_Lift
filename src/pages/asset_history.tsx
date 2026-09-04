@@ -10,7 +10,7 @@ import { uploadToSupabaseStorage } from '../services/supabaseStorage';
 export const AssetHistory: React.FC = () => {
   const { 
     assetInOutLogs, assets, customers, sites, contractAssets, contracts, repairs, repairConsumables, consumables, navigationPayload, setNavigationPayload,
-    inspectionChecklistItems, registerInboundAsset, cancelInboundAsset, fullRefreshFromServer
+    inspectionChecklistItems, registerInboundAsset, cancelInboundAsset, fullRefreshFromServer, googleConfigs, showErrorModal
   } = useApp();
 
   // 1. 탭 상태: 'INBOUND_REGISTER' | 'INBOUND' | 'OUTBOUND' | 'REPAIR'
@@ -177,27 +177,45 @@ export const AssetHistory: React.FC = () => {
         ? `[정비 필요 항목: ${selectedChecklistSummary}] ${inboundMemo}`.trim()
         : (inboundMemo.trim() || '입고 검수 이상 무');
 
-      // 📸 사진을 Supabase Storage에 업로드 → URL로 교체 (base64 통째로 DB에 넣으면 payload 크기 초과로 저장 실패)
+      // 📸 사진을 Cloudflare R2 스토리지(drcf)에 업로드 → URL로 교체
       const uploadedPhotoUrls: Record<string, string> = {};
+      const config = googleConfigs[0];
+      const accountId = config?.r2AccountId || '35014a2514680107d74e1e68d96e6c32';
+      const bucketName = config?.r2BucketName || 'kiyeun-storage';
+      const accessKeyId = config?.r2AccessKeyId || '03cdb7560d37242de608a5db2a976030';
+      const secretAccessKey = config?.r2SecretAccessKey || 'b2407ab4532e02317860bc3d63226fb7bc232e88083b150c15023906ed141986';
+
       for (const item of selectedChecklistObjects) {
         const base64 = defectPhotos[item.id];
         if (!base64) continue;
         try {
-          // base64 → Blob → File 변환
-          const res = await fetch(base64);
-          const blob = await res.blob();
           const dateStr = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
           const fileName = `inbound_${inboundTargetAsset.assetNo}_${item.id}_${dateStr}.jpg`;
-          const photoFile = new File([blob], fileName, { type: 'image/jpeg' });
-          const uploadResult = await uploadToSupabaseStorage({
-            file: photoFile,
-            fileName,
-            folder: 'inbound'
+          const key = `inbound/${inboundTargetAsset.assetNo}/${fileName}`;
+
+          const res = await fetch('/api/r2', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              action: 'upload',
+              accountId,
+              bucketName,
+              accessKeyId,
+              secretAccessKey,
+              key,
+              base64Content: base64,
+              contentType: 'image/jpeg'
+            })
           });
-          uploadedPhotoUrls[item.id] = uploadResult.fileUrl;
-        } catch (uploadErr) {
-          console.warn(`사진 업로드 실패 (${item.id}):`, uploadErr);
-          // 업로드 실패 시 사진 없이 진행 (입고 등록 자체는 차단하지 않음)
+
+          const resJson = await res.json();
+          if (resJson.success) {
+            uploadedPhotoUrls[item.id] = resJson.publicUrl || `https://pub-drcf-bucket.r2.dev/${key}`; // Replace with your actual public URL pattern if available, or assume successful path
+          } else {
+            showErrorModal(`사진 업로드 실패 (${item.name}): ${resJson.error}`, '입고검수 첨부 오류');
+          }
+        } catch (uploadErr: any) {
+          showErrorModal(`사진 네트워크 업로드 실패 (${item.name}): ${uploadErr.message || uploadErr}`, '입고검수 첨부 오류');
         }
       }
 
@@ -684,7 +702,7 @@ export const AssetHistory: React.FC = () => {
             {/* 2. 조회기간 빠른 선택 버튼 (오늘 / 1주 / 1개월 / 전체) */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
               <label style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
-                기간 빠른 선택
+                기간 선택
               </label>
               <div style={{ display: 'flex', gap: '4px' }}>
                 <button
@@ -892,7 +910,7 @@ export const AssetHistory: React.FC = () => {
                     <th style={{ whiteSpace: 'nowrap' }}>고객사 (거래처)</th>
                     <th style={{ whiteSpace: 'nowrap' }}>현장명</th>
                     <th style={{ whiteSpace: 'nowrap' }}>정비 점수</th>
-                    <th>불량 증상 상세 (하위번호/사진)</th>
+                    <th style={{ whiteSpace: 'nowrap' }}>불량 증상 상세 (하위번호/사진)</th>
                     <th style={{ whiteSpace: 'nowrap' }}>작업 (휴먼에러 복원)</th>
                   </tr>
                 )}
