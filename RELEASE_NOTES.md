@@ -1,3 +1,17 @@
+## [v1.3.0.Build.135] - 2026-09-04 20:54
+
+### 🎙️ 100% 무료 브라우저 STT 단일 표준화 및 음성·텍스트 1-Step 동시 브로드캐스트 개편
+- **Gemini STT 영구 배제 및 외부 과금 리스크 100% 원천 차단 (`api/gemini-stt.ts`, `walkieTalkieService.ts`)**:
+  - `api/gemini-stt.ts`를 `410 Gone`으로 비활성화하여 외부 결제/과금 리스크 완전 차단.
+  - 서비스 내 Gemini 호출 함수 및 서버 프록시 로직을 전면 제거하고 100% 무료 브라우저 Web Speech API로 단일화.
+- **안드로이드 크롬 마이크 선점 충돌 해소 및 비동기 완료 대기 파이프라인 (`walkieTalkieService.ts`)**:
+  - `startRecording()` 시 STT를 `getUserMedia`보다 0순위로 먼저 구동하여 마이크 세션을 선점, 안드로이드 크롬 마이크 잠금 충돌 원천 해결.
+  - `stopBrowserRecognition()`을 `Promise<string>` 비동기 구조로 개편하여 발언 종료 후 `onend` 이벤트(최대 500ms 안전 타임아웃)를 대기함으로써 마지막 발언 누락 버그 완전 해소.
+  - 오디오 Blob과 전사 텍스트를 단일 메시지(`msg.textTranscript`)로 통합 패키징하여 1회 즉시 브로드캐스트, 음성 재생과 자막이 동시에 화면에 표시되도록 순서 정돈.
+- **모바일 무전기 디버그 로그 토글 및 JSX 레이아웃 보정 (`MobileWalkieTalkieModal.tsx`)**:
+  - 상단 헤더에 `[🌐 브라우저STT]` 뱃지와 함께 `[디버그OFF / 🐞 디버그ON]` 실시간 토글 버튼 제공 (기본값 OFF).
+  - 헤더 조작부 닫는 태그 불일치 이슈를 정돈하여 프로덕션 빌드 0 Error 완결.
+
 ## [v1.3.0.Build.134] - 2026-09-04 16:55
 
 ### 📍 AS 접수 도로명 상세 주소 실시간 자동 연동 및 T맵 딥링크 1:1 연동 개편 (PC & 모바일)

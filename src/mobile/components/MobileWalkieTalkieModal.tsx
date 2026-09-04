@@ -620,27 +620,24 @@ export const MobileWalkieTalkieModal: React.FC<MobileWalkieTalkieModalProps> = (
                   <MessageSquare size={11} color="#38bdf8" />
                   <span>대화 피드 ({displayHistory.length}건)</span>
                 </span>
-                
+
                 <div style={{ display: 'flex', alignItems: 'center', gap: '3.5px', flexWrap: 'nowrap' }}>
-                  {/* 🎙️ STT 엔진 원터치 전환 버튼 */}
-                  <button
-                    type="button"
-                    onClick={handleToggleSttEngine}
+                  {/* 🎙️ 100% 무료 브라우저 STT 뱃지 (과금 위험 0%) */}
+                  <span
                     style={{
-                      backgroundColor: sttEngine === 'GEMINI' ? 'rgba(56, 189, 248, 0.15)' : 'rgba(16, 185, 129, 0.15)',
-                      border: sttEngine === 'GEMINI' ? '1px solid #0284c7' : '1px solid #10b981',
-                      color: sttEngine === 'GEMINI' ? '#38bdf8' : '#34d399',
+                      backgroundColor: 'rgba(16, 185, 129, 0.15)',
+                      border: '1px solid #10b981',
+                      color: '#34d399',
                       padding: '2px 5.5px',
                       borderRadius: '5px',
                       fontSize: '9.5px',
                       fontWeight: '800',
-                      cursor: 'pointer',
                       whiteSpace: 'nowrap'
                     }}
-                    title="STT 엔진 전환 (Gemini AI 서버 ↔ 브라우저 내장)"
+                    title="100% 무료 브라우저 내장 음성인식 (비용 0원, 무제한)"
                   >
-                    {sttEngine === 'GEMINI' ? '✨ Gemini' : '🌐 브라우저'}
-                  </button>
+                    🌐 브라우저STT
+                  </span>
 
                   {/* 🐞 디버그 로그 ON/OFF 토글 버튼 */}
                   <button

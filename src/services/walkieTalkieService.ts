@@ -422,6 +422,9 @@ class WalkieTalkieService {
       this.audioChunks = [];
       this.recordingStartTime = Date.now();
 
+      // 1. Start browser speech recognition FIRST (seizes mic session in Android Chrome)
+      this.startBrowserRecognition();
+
       this.addDebugLog('[PTT] getUserMedia() requesting mic...');
       if (!this.currentStream) {
         this.currentStream = await navigator.mediaDevices.getUserMedia({
@@ -441,11 +444,6 @@ class WalkieTalkieService {
       this.mediaRecorder.ondataavailable = (e) => { if (e.data?.size > 0) this.audioChunks.push(e.data); };
       this.mediaRecorder.start(100);
       this.addDebugLog('[PTT] recording started (timeslice=100ms)');
-
-      // If browser STT is active, start speech recognizer alongside
-      if (this.sttEngine === 'BROWSER') {
-        this.startBrowserRecognition();
-      }
 
       // Broadcast talking status only when NOT in sttOnly mode
       if (!sttOnly && sender) {
@@ -512,6 +510,15 @@ class WalkieTalkieService {
           }
           this.addDebugLog('[PTT] mic released');
 
+          // ⚡ [100% Free Browser STT] Await final recognition from Web Speech API
+          this.addDebugLog('[BROWSER STT] finalizing recognition...');
+          const transcriptText = await this.stopBrowserRecognition();
+          if (transcriptText) {
+            this.addDebugLog(`[BROWSER STT] transcript OK: "${transcriptText}"`);
+          } else {
+            this.addDebugLog('[BROWSER STT] empty (no speech captured)');
+          }
+
           const mime = this.mediaRecorder?.mimeType || 'audio/webm';
           const blob = new Blob(this.audioChunks, { type: mime });
           this.addDebugLog(`[PTT] blob ready: chunks=${this.audioChunks.length}, size=${blob.size}B, mime="${mime}"`);
@@ -535,48 +542,23 @@ class WalkieTalkieService {
             senderDept: sender.deptName || 'KiyeunLift',
             audioBase64: base64,
             durationSec,
-            textTranscript: undefined,
+            textTranscript: transcriptText || undefined,
             createdAt: new Date().toISOString()
           };
 
-          // ⚡ [병렬 1] 로컬 화면에 음성 카드 즉시 표출 (0초 반응)
+          // ⚡ Add to sender's own history immediately (text already included!)
           this.addHistory(msg);
           this.addDebugLog(`[PTT] msg added to local history: id=${msg.id}`);
 
-          // 🚀 [병렬 2] 음성 브로드캐스트 비동기 전송 (STT를 기다리지 않고 바로 날림!)
+          // 🚀 Broadcast voice + text together in a single instant broadcast!
           if (!sttOnly && activeCh) {
-            activeCh.send({ type: 'broadcast', event: 'voice', payload: msg })
-              .then(() => this.addDebugLog('[PTT] voice broadcast sent to receivers'))
-              .catch((e: any) => this.addDebugLog(`[PTT] voice broadcast err: ${e?.message}`));
+            await activeCh.send({ type: 'broadcast', event: 'voice', payload: msg });
+            this.addDebugLog('[PTT] voice+text broadcast sent to receivers (1-step instant)');
           } else if (sttOnly) {
             this.addDebugLog('[PTT] sttOnly mode: voice broadcast skipped');
           }
 
           this.liveTranscriptListeners.forEach(l => { try { l('', 'IDLE'); } catch {} });
-
-          // ⚡ [병렬 3] 즉시 1초도 지체 없이 STT 처리 시작!
-          if (this.sttEngine === 'BROWSER') {
-            const browserText = this.stopBrowserRecognition();
-            if (browserText) {
-              this.addDebugLog(`[BROWSER STT] transcript OK: "${browserText}"`);
-              this.applyTranscriptLocally(msg.id, browserText);
-              if (activeCh) {
-                activeCh.send({
-                  type: 'broadcast',
-                  event: 'transcript_update',
-                  payload: { messageId: msg.id, textTranscript: browserText }
-                });
-                this.addDebugLog('[BROWSER STT] transcript_update broadcast sent');
-              }
-            } else {
-              this.addDebugLog('[BROWSER STT] empty transcript (mic locked by recorder) — auto-fallback to ultra-fast Gemini 3.1...');
-              this.runGeminiSttFast(msg.id, base64, mime, ch);
-            }
-          } else {
-            this.addDebugLog('[STT] ultra-fast Gemini 3.1 Flash Lite launched immediately...');
-            this.runGeminiSttFast(msg.id, base64, mime, ch);
-          }
-
           resolve(msg);
         } catch (e: any) {
           this.addDebugLog(`[PTT] stopAndSend onstop ERROR: ${e?.message}`);
@@ -626,22 +608,27 @@ class WalkieTalkieService {
       return;
     }
     try {
+      if (this.browserRecognizer) {
+        try { this.browserRecognizer.stop(); } catch {}
+        this.browserRecognizer = null;
+      }
       const rec = new SpeechRecognition();
       rec.continuous = true;
       rec.interimResults = true;
       rec.lang = 'ko-KR';
       rec.onresult = (event: any) => {
-        let text = '';
-        for (let i = event.resultIndex; i < event.results.length; ++i) {
-          text += event.results[i][0].transcript;
+        let full = '';
+        for (let i = 0; i < event.results.length; ++i) {
+          full += event.results[i][0].transcript;
         }
-        if (text.trim()) {
-          this.browserTranscript = text.trim();
+        if (full.trim()) {
+          this.browserTranscript = full.trim();
+          this.addDebugLog(`[BROWSER STT] interim: "${this.browserTranscript}"`);
           this.liveTranscriptListeners.forEach(l => { try { l(this.browserTranscript, 'LISTENING'); } catch {} });
         }
       };
       rec.onerror = (e: any) => {
-        this.addDebugLog(`[BROWSER STT] warning/error: ${e?.error}`);
+        this.addDebugLog(`[BROWSER STT] event error: ${e?.error}`);
       };
       rec.start();
       this.browserRecognizer = rec;
@@ -651,80 +638,29 @@ class WalkieTalkieService {
     }
   }
 
-  private stopBrowserRecognition(): string {
-    if (this.browserRecognizer) {
-      try { this.browserRecognizer.stop(); } catch {}
-      this.browserRecognizer = null;
+  private async stopBrowserRecognition(): Promise<string> {
+    if (!this.browserRecognizer) {
+      return this.browserTranscript.trim();
     }
-    const result = this.browserTranscript.trim();
-    this.browserTranscript = '';
-    return result;
-  }
+    return new Promise((resolve) => {
+      let resolved = false;
+      const finish = () => {
+        if (resolved) return;
+        resolved = true;
+        const text = this.browserTranscript.trim();
+        this.browserRecognizer = null;
+        resolve(text);
+      };
 
-  // ── STT: Ultra-fast Gemini 3.1 Flash Lite Server Proxy ───────────────────────
-  // Uses pre-computed base64 directly (no redundant conversion, zero thinking delay)
-  private async runGeminiSttFast(messageId: string, base64Data: string, mimeType: string, channelId: WalkieTalkieChannel) {
-    if (this.sttInProgress) {
-      this.addDebugLog('[STT] skipped: another STT already in progress');
-      return;
-    }
-    this.sttInProgress = true;
-    const t0 = Date.now();
-    this.addDebugLog(`[STT] sending audio to server (/api/gemini-stt)...`);
+      this.browserRecognizer.onend = finish;
+      setTimeout(finish, 500); // 500ms safety timeout
 
-    try {
-      const res = await fetch('/api/gemini-stt', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          audioBase64: base64Data,
-          mimeType
-        })
-      });
-
-      const elapsed = ((Date.now() - t0) / 1000).toFixed(2);
-      this.addDebugLog(`[STT] /api/gemini-stt response: HTTP ${res.status} (${elapsed}s)`);
-
-      if (!res.ok) {
-        const errJson = await res.json().catch(() => ({}));
-        const errText = errJson?.details || errJson?.error || (await res.text().catch(() => ''));
-        this.addDebugLog(`[STT] ERROR body: ${String(errText).slice(0, 150)}`);
-        return;
+      try {
+        this.browserRecognizer.stop();
+      } catch {
+        finish();
       }
-
-      const data = await res.json();
-      const text = data?.textTranscript?.trim();
-
-      if (text) {
-        this.addDebugLog(`[STT] transcript OK (${elapsed}s): "${text}"`);
-
-        // Apply to sender's history directly
-        this.applyTranscriptLocally(messageId, text);
-        this.addDebugLog('[STT] applyTranscriptLocally() done');
-
-        // Broadcast to receivers
-        const activeCh = this.channels.get(channelId);
-        if (activeCh) {
-          activeCh.send({
-            type: 'broadcast',
-            event: 'transcript_update',
-            payload: { messageId, textTranscript: text }
-          });
-          this.addDebugLog('[STT] transcript_update broadcast sent');
-        }
-
-        this.liveTranscriptListeners.forEach(l => { try { l(text, 'IDLE'); } catch {} });
-      } else {
-        this.addDebugLog(`[STT] empty response (${elapsed}s)`);
-        this.liveTranscriptListeners.forEach(l => { try { l('', 'IDLE'); } catch {} });
-      }
-    } catch (e: any) {
-      this.addDebugLog(`[STT] fetch EXCEPTION: ${e?.message}`);
-      console.warn('[STT] request failed:', e);
-    } finally {
-      this.sttInProgress = false;
-      this.addDebugLog('[STT] done (sttInProgress=false)');
-    }
+    });
   }
 
   // Apply STT transcript to local history (used by both sender and receiver)
