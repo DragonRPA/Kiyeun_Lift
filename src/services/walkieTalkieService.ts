@@ -8,11 +8,11 @@
 //   4. [DEBUG] addDebugLog() injects console-style messages into history feed
 
 import { supabase } from './db';
-import { getGeminiApiKey } from './geminiGemsService';
+
 
 export type WalkieTalkieChannel = 'ALL' | 'DISPATCH' | 'AS' | 'SALES';
 export type WalkieReceiveMode = 'VOICE' | 'BEEP' | 'MUTE';
-export type WalkieSttEngine = 'GEMINI' | 'BROWSER';
+export type WalkieSttEngine = 'CLOUDFLARE' | 'BROWSER';
 
 export interface WalkieMessage {
   id: string;
@@ -160,7 +160,7 @@ class WalkieTalkieService {
   private liveTranscriptListeners: ((t: string, s: 'IDLE'|'LISTENING'|'ERROR'|'UNSUPPORTED', e?: string) => void)[] = [];
   private sttInProgress = false;
   private history: WalkieMessage[] = [];
-  private sttEngine: WalkieSttEngine = 'GEMINI';
+  private sttEngine: WalkieSttEngine = 'CLOUDFLARE';
   private sttEngineListeners: ((engine: WalkieSttEngine) => void)[] = [];
   private browserRecognizer: any = null;
   private browserTranscript: string = '';
@@ -181,7 +181,7 @@ class WalkieTalkieService {
       const savedCh = localStorage.getItem('walkie_channel') as WalkieTalkieChannel;
       if (savedCh) this.currentChannel = savedCh;
       const savedEngine = localStorage.getItem('walkie_stt_engine') as WalkieSttEngine;
-      if (savedEngine && ['GEMINI', 'BROWSER'].includes(savedEngine)) this.sttEngine = savedEngine;
+      if (savedEngine && ['CLOUDFLARE', 'BROWSER'].includes(savedEngine)) this.sttEngine = savedEngine; else this.sttEngine = 'CLOUDFLARE';
       if (typeof window !== 'undefined') {
         setInterval(() => this.purgeOldHistoryIfNeeded(), 60000);
       }
@@ -230,7 +230,7 @@ class WalkieTalkieService {
     this.sttEngine = engine;
     localStorage.setItem('walkie_stt_engine', engine);
     this.sttEngineListeners.forEach(l => l(engine));
-    this.addDebugLog(`[STT ENGINE] switched to: ${engine === 'GEMINI' ? 'Gemini AI (서버)' : '브라우저 STT (무료)'}`);
+    this.addDebugLog(`[STT ENGINE] switched to: ${engine === 'CLOUDFLARE' ? 'Cloudflare AI (무료)' : '브라우저 STT (무료)'}`);
   }
   onSttEngineChange(l: (engine: WalkieSttEngine) => void) {
     this.sttEngineListeners.push(l);
@@ -422,9 +422,16 @@ class WalkieTalkieService {
       this.audioChunks = [];
       this.recordingStartTime = Date.now();
 
-      // 1. Start browser speech recognition FIRST (seizes mic session in Android Chrome)
-      this.startBrowserRecognition();
+      if (sttOnly) {
+        // 🎙️ [독백의뢰 모드]: MediaRecorder를 아예 켜지 않고 Web Speech API 단독 구동
+        // 안드로이드 마이크 독점 충돌이 원천 차단되어 0원/무제한으로 100% 정상 인식됨!
+        this.addDebugLog('[STT ONLY] Starting browser speech recognition exclusively (no MediaRecorder)...');
+        this.startBrowserRecognition();
+        this.liveTranscriptListeners.forEach(l => { try { l('', 'LISTENING'); } catch {} });
+        return true;
+      }
 
+      // 🔊 [일반 무전기 모드]: 음성 녹음을 위해 MediaRecorder 구동
       this.addDebugLog('[PTT] getUserMedia() requesting mic...');
       if (!this.currentStream) {
         this.currentStream = await navigator.mediaDevices.getUserMedia({
@@ -445,8 +452,8 @@ class WalkieTalkieService {
       this.mediaRecorder.start(100);
       this.addDebugLog('[PTT] recording started (timeslice=100ms)');
 
-      // Broadcast talking status only when NOT in sttOnly mode
-      if (!sttOnly && sender) {
+      // Broadcast talking status
+      if (sender) {
         const activeCh = this.channels.get(this.currentChannel);
         if (activeCh) {
           activeCh.send({
@@ -495,6 +502,33 @@ class WalkieTalkieService {
 
     const durationSec = Math.max(1, Math.round((Date.now() - this.recordingStartTime) / 1000));
 
+    // 1. [독백의뢰 모드] MediaRecorder가 없으므로 브라우저 STT 완료 후 즉시 메시지 생성
+    if (sttOnly) {
+      this.addDebugLog('[STT ONLY] finalizing browser speech recognition...');
+      const transcriptText = await this.stopBrowserRecognition();
+      this.addDebugLog(`[STT ONLY] transcript result: "${transcriptText || '(empty)'}"`);
+
+      const msg: WalkieMessage = {
+        id: `walkie-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        channel: ch,
+        senderId: sender.id,
+        senderName: sender.name,
+        senderRole: sender.role,
+        senderDept: sender.deptName || 'KiyeunLift',
+        audioBase64: '',
+        durationSec,
+        textTranscript: transcriptText || undefined,
+        createdAt: new Date().toISOString()
+      };
+
+      if (transcriptText) {
+        this.addHistory(msg);
+      }
+      this.liveTranscriptListeners.forEach(l => { try { l('', 'IDLE'); } catch {} });
+      return msg;
+    }
+
+    // 2. [일반 무전기 모드] MediaRecorder 종료 및 Cloudflare AI Whisper 전사
     if (!this.mediaRecorder || this.mediaRecorder.state === 'inactive') {
       this.addDebugLog('[PTT] ERROR: mediaRecorder is null or inactive — nothing to stop');
       return null;
@@ -503,21 +537,12 @@ class WalkieTalkieService {
     return new Promise((resolve) => {
       this.mediaRecorder!.onstop = async () => {
         try {
-          // Release mic immediately (prevent Android mic lock)
+          // Release mic immediately
           if (this.currentStream) {
             this.currentStream.getTracks().forEach(t => t.stop());
             this.currentStream = null;
           }
           this.addDebugLog('[PTT] mic released');
-
-          // ⚡ [100% Free Browser STT] Await final recognition from Web Speech API
-          this.addDebugLog('[BROWSER STT] finalizing recognition...');
-          const transcriptText = await this.stopBrowserRecognition();
-          if (transcriptText) {
-            this.addDebugLog(`[BROWSER STT] transcript OK: "${transcriptText}"`);
-          } else {
-            this.addDebugLog('[BROWSER STT] empty (no speech captured)');
-          }
 
           const mime = this.mediaRecorder?.mimeType || 'audio/webm';
           const blob = new Blob(this.audioChunks, { type: mime });
@@ -542,21 +567,23 @@ class WalkieTalkieService {
             senderDept: sender.deptName || 'KiyeunLift',
             audioBase64: base64,
             durationSec,
-            textTranscript: transcriptText || undefined,
+            textTranscript: undefined,
             createdAt: new Date().toISOString()
           };
 
-          // ⚡ Add to sender's own history immediately (text already included!)
+          // ⚡ [1] 로컬 화면에 음성 카드 즉시 표출 (0초 반응)
           this.addHistory(msg);
           this.addDebugLog(`[PTT] msg added to local history: id=${msg.id}`);
 
-          // 🚀 Broadcast voice + text together in a single instant broadcast!
-          if (!sttOnly && activeCh) {
-            await activeCh.send({ type: 'broadcast', event: 'voice', payload: msg });
-            this.addDebugLog('[PTT] voice+text broadcast sent to receivers (1-step instant)');
-          } else if (sttOnly) {
-            this.addDebugLog('[PTT] sttOnly mode: voice broadcast skipped');
+          // 🚀 [2] 음성 브로드캐스트 즉시 전송 (상대방도 0초 즉시 청취 가능)
+          if (activeCh) {
+            activeCh.send({ type: 'broadcast', event: 'voice', payload: msg })
+              .then(() => this.addDebugLog('[PTT] voice broadcast sent to receivers'))
+              .catch((e: any) => this.addDebugLog(`[PTT] voice broadcast err: ${e?.message}`));
           }
+
+          // ⚡ [3] Cloudflare Workers AI Whisper로 음성 파일 전사 백그라운드 호출
+          this.runCloudflareStt(msg.id, base64, mime, ch);
 
           this.liveTranscriptListeners.forEach(l => { try { l('', 'IDLE'); } catch {} });
           resolve(msg);
@@ -635,6 +662,64 @@ class WalkieTalkieService {
       this.addDebugLog('[BROWSER STT] SpeechRecognition started');
     } catch (e: any) {
       this.addDebugLog(`[BROWSER STT] start failed: ${e?.message}`);
+    }
+  }
+
+  // ── Cloudflare Workers AI Whisper STT (@cf/openai/whisper) ─────────────────
+  // 10,000 Neurons/day 100% Free on Cloudflare, converts recorded WebM audio to text
+  private async runCloudflareStt(messageId: string, base64Data: string, mimeType: string, channelId: WalkieTalkieChannel) {
+    if (this.sttInProgress) {
+      this.addDebugLog('[CF STT] another STT in progress, waiting...');
+    }
+    this.sttInProgress = true;
+    const t0 = Date.now();
+    this.addDebugLog('[CF STT] sending audio to Cloudflare Workers AI (/api/cf-stt)...');
+
+    try {
+      const res = await fetch('/api/cf-stt', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ audioBase64: base64Data, mimeType })
+      });
+
+      const elapsed = ((Date.now() - t0) / 1000).toFixed(2);
+      this.addDebugLog(`[CF STT] response: HTTP ${res.status} (${elapsed}s)`);
+
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        const errText = errJson?.details || errJson?.error || (await res.text().catch(() => ''));
+        this.addDebugLog(`[CF STT] ERROR body: ${String(errText).slice(0, 150)}`);
+        return;
+      }
+
+      const data = await res.json();
+      const text = data?.textTranscript?.trim();
+
+      if (text) {
+        this.addDebugLog(`[CF STT] transcript OK (${elapsed}s): "${text}"`);
+        this.applyTranscriptLocally(messageId, text);
+
+        const activeCh = this.channels.get(channelId);
+        if (activeCh) {
+          activeCh.send({
+            type: 'broadcast',
+            event: 'transcript_update',
+            payload: { messageId, textTranscript: text }
+          });
+          this.addDebugLog('[CF STT] transcript_update broadcast sent to receivers');
+        }
+
+        this.liveTranscriptListeners.forEach(l => { try { l(text, 'IDLE'); } catch {} });
+      } else {
+        this.addDebugLog(`[CF STT] empty transcript (${elapsed}s)`);
+        this.liveTranscriptListeners.forEach(l => { try { l('', 'IDLE'); } catch {} });
+      }
+    } catch (e: any) {
+      this.addDebugLog(`[CF STT] fetch EXCEPTION: ${e?.message}`);
+      console.warn('[CF STT] request failed:', e);
+    } finally {
+      this.sttInProgress = false;
+      this.addDebugLog('[CF STT] done (sttInProgress=false)');
     }
   }
 

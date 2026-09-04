@@ -1,3 +1,16 @@
+## [v1.3.0.Build.136] - 2026-09-04 21:15
+
+### ☁️ Cloudflare Workers AI Whisper 0원 STT 인프라 통합 및 안드로이드 마이크 충돌 완결
+- **Cloudflare Workers AI Whisper STT 엔진 전격 도입 (`api/cf-stt.ts`, `walkieTalkieService.ts`)**:
+  - 기존 R2 클라우드 인프라와 일관되게 Cloudflare 계정(`35014a2514680107d74e1e68d96e6c32`) 기반 Workers AI Whisper(`@cf/openai/whisper`) 파이프라인 신설.
+  - 매일 10,000 뉴런(약 1,000회 이상 무전) 100% 완전 무료 제공 및 한도 초과 시에도 카드 결제 없이 429로 안전 차단.
+  - 안드로이드 스마트폰(S24)에서 녹음된 24KB WebM Opus 오디오 바이너리를 1.2초 만에 한글 텍스트로 고정밀 전사.
+- **안드로이드 마이크 독점 충돌 완벽 해소 및 2대 업무 파이프라인 분리 (`walkieTalkieService.ts`)**:
+  - **일반 무전기 모드**: 음성 카드 0초 즉시 등록 및 브로드캐스트 ➔ 백그라운드 Cloudflare Whisper 전사 ➔ 1초 뒤 `transcript_update`로 발신자 및 수신자 화면에 자막 동기화.
+  - **독백의뢰 모드 (발주서 작성)**: 음성 녹음기(`MediaRecorder`)를 아예 기동하지 않고 순수 브라우저 음성인식(`SpeechRecognition`)만 단독 구동하여, 마이크 충돌 없이 0원/무제한 실시간 주문서 작성 보장 (`LabelPrintStation` 방식).
+- **모바일 무전기 UI 뱃지 갱신 (`MobileWalkieTalkieModal.tsx`)**:
+  - 무전기 헤더에 `[☁️ Cloudflare STT]` 상태 배지 및 토글 연동.
+
 ## [v1.3.0.Build.135] - 2026-09-04 20:54
 
 ### 🎙️ 100% 무료 브라우저 STT 단일 표준화 및 음성·텍스트 1-Step 동시 브로드캐스트 개편

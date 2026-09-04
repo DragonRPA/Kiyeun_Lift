@@ -134,7 +134,7 @@ export const MobileWalkieTalkieModal: React.FC<MobileWalkieTalkieModalProps> = (
   };
 
   const handleToggleSttEngine = () => {
-    const next: WalkieSttEngine = sttEngine === 'GEMINI' ? 'BROWSER' : 'GEMINI';
+    const next: WalkieSttEngine = sttEngine === 'CLOUDFLARE' ? 'BROWSER' : 'CLOUDFLARE';
     walkieService.setSttEngine(next);
     setSttEngine(next);
   };
@@ -622,21 +622,21 @@ export const MobileWalkieTalkieModal: React.FC<MobileWalkieTalkieModalProps> = (
                 </span>
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '3.5px', flexWrap: 'nowrap' }}>
-                  {/* 🎙️ 100% 무료 브라우저 STT 뱃지 (과금 위험 0%) */}
+                  {/* 🎙️ 100% 무료 Cloudflare AI Whisper STT 뱃지 (비용 0원) */}
                   <span
                     style={{
-                      backgroundColor: 'rgba(16, 185, 129, 0.15)',
-                      border: '1px solid #10b981',
-                      color: '#34d399',
+                      backgroundColor: 'rgba(249, 115, 22, 0.15)',
+                      border: '1px solid #f97316',
+                      color: '#fb923c',
                       padding: '2px 5.5px',
                       borderRadius: '5px',
                       fontSize: '9.5px',
                       fontWeight: '800',
                       whiteSpace: 'nowrap'
                     }}
-                    title="100% 무료 브라우저 내장 음성인식 (비용 0원, 무제한)"
+                    title="Cloudflare Workers AI Whisper (비용 0원, 일 10,000건 무료)"
                   >
-                    🌐 브라우저STT
+                    ☁️ Cloudflare STT
                   </span>
 
                   {/* 🐞 디버그 로그 ON/OFF 토글 버튼 */}
