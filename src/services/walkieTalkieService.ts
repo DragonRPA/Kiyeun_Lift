@@ -539,23 +539,22 @@ class WalkieTalkieService {
             createdAt: new Date().toISOString()
           };
 
-          // Add to sender's own history immediately
+          // ⚡ [병렬 1] 로컬 화면에 음성 카드 즉시 표출 (0초 반응)
           this.addHistory(msg);
           this.addDebugLog(`[PTT] msg added to local history: id=${msg.id}`);
 
-          // Broadcast voice to receivers (skip in sttOnly mode)
+          // 🚀 [병렬 2] 음성 브로드캐스트 비동기 전송 (STT를 기다리지 않고 바로 날림!)
           if (!sttOnly && activeCh) {
-            await activeCh.send({ type: 'broadcast', event: 'voice', payload: msg });
-            this.addDebugLog('[PTT] voice broadcast sent to receivers');
+            activeCh.send({ type: 'broadcast', event: 'voice', payload: msg })
+              .then(() => this.addDebugLog('[PTT] voice broadcast sent to receivers'))
+              .catch((e: any) => this.addDebugLog(`[PTT] voice broadcast err: ${e?.message}`));
           } else if (sttOnly) {
             this.addDebugLog('[PTT] sttOnly mode: voice broadcast skipped');
-          } else {
-            this.addDebugLog('[PTT] WARNING: activeCh not found — broadcast skipped');
           }
 
           this.liveTranscriptListeners.forEach(l => { try { l('', 'IDLE'); } catch {} });
 
-          // STT Engine Branch: BROWSER vs GEMINI
+          // ⚡ [병렬 3] 즉시 1초도 지체 없이 STT 처리 시작!
           if (this.sttEngine === 'BROWSER') {
             const browserText = this.stopBrowserRecognition();
             if (browserText) {
@@ -570,14 +569,12 @@ class WalkieTalkieService {
                 this.addDebugLog('[BROWSER STT] transcript_update broadcast sent');
               }
             } else {
-              this.addDebugLog('[BROWSER STT] empty transcript — fallback to Gemini server STT...');
-              const sttBlob = new Blob([blob], { type: mime });
-              this.runGeminiStt(msg.id, sttBlob, ch);
+              this.addDebugLog('[BROWSER STT] empty transcript (mic locked by recorder) — auto-fallback to ultra-fast Gemini 3.1...');
+              this.runGeminiSttFast(msg.id, base64, mime, ch);
             }
           } else {
-            this.addDebugLog('[STT] starting Gemini 3.6 Flash Server STT...');
-            const sttBlob = new Blob([blob], { type: mime });
-            this.runGeminiStt(msg.id, sttBlob, ch);
+            this.addDebugLog('[STT] ultra-fast Gemini 3.1 Flash Lite launched immediately...');
+            this.runGeminiSttFast(msg.id, base64, mime, ch);
           }
 
           resolve(msg);
@@ -664,32 +661,29 @@ class WalkieTalkieService {
     return result;
   }
 
-  // ── STT: Secure Server Proxy (/api/gemini-stt) ──────────────────────────────
-  // Kept 100% on the server side: zero key exposure to the client/browser
-  private async runGeminiStt(messageId: string, blob: Blob, channelId: WalkieTalkieChannel) {
+  // ── STT: Ultra-fast Gemini 3.1 Flash Lite Server Proxy ───────────────────────
+  // Uses pre-computed base64 directly (no redundant conversion, zero thinking delay)
+  private async runGeminiSttFast(messageId: string, base64Data: string, mimeType: string, channelId: WalkieTalkieChannel) {
     if (this.sttInProgress) {
       this.addDebugLog('[STT] skipped: another STT already in progress');
       return;
     }
     this.sttInProgress = true;
-    this.addDebugLog(`[STT] blob ready: size=${blob.size}B, mime="${blob.type}"`);
+    const t0 = Date.now();
+    this.addDebugLog(`[STT] sending audio to server (/api/gemini-stt)...`);
 
     try {
-      const fullBase64 = await this.blobToBase64(blob);
-      const mimeType = blob.type || 'audio/webm';
-      this.addDebugLog(`[STT] base64 ready (${fullBase64.length} chars) — calling /api/gemini-stt...`);
-
-      // Call secure server proxy: API key is held safely on the server
       const res = await fetch('/api/gemini-stt', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          audioBase64: fullBase64,
+          audioBase64: base64Data,
           mimeType
         })
       });
 
-      this.addDebugLog(`[STT] /api/gemini-stt response: HTTP ${res.status} ${res.ok ? 'OK' : 'ERROR'}`);
+      const elapsed = ((Date.now() - t0) / 1000).toFixed(2);
+      this.addDebugLog(`[STT] /api/gemini-stt response: HTTP ${res.status} (${elapsed}s)`);
 
       if (!res.ok) {
         const errJson = await res.json().catch(() => ({}));
@@ -702,11 +696,11 @@ class WalkieTalkieService {
       const text = data?.textTranscript?.trim();
 
       if (text) {
-        this.addDebugLog(`[STT] transcript OK: "${text.slice(0, 80)}${text.length > 80 ? '...' : ''}"`);
+        this.addDebugLog(`[STT] transcript OK (${elapsed}s): "${text}"`);
 
-        // Apply to sender's history directly (bypass self:false)
+        // Apply to sender's history directly
         this.applyTranscriptLocally(messageId, text);
-        this.addDebugLog('[STT] applyTranscriptLocally() done (sender side)');
+        this.addDebugLog('[STT] applyTranscriptLocally() done');
 
         // Broadcast to receivers
         const activeCh = this.channels.get(channelId);
@@ -716,12 +710,12 @@ class WalkieTalkieService {
             event: 'transcript_update',
             payload: { messageId, textTranscript: text }
           });
-          this.addDebugLog('[STT] transcript_update broadcast sent to receivers');
+          this.addDebugLog('[STT] transcript_update broadcast sent');
         }
 
         this.liveTranscriptListeners.forEach(l => { try { l(text, 'IDLE'); } catch {} });
       } else {
-        this.addDebugLog('[STT] WARNING: Gemini returned empty text. Raw candidates: ' + JSON.stringify(data?.candidates?.slice(0,1)));
+        this.addDebugLog(`[STT] empty response (${elapsed}s)`);
         this.liveTranscriptListeners.forEach(l => { try { l('', 'IDLE'); } catch {} });
       }
     } catch (e: any) {

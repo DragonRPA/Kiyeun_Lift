@@ -52,15 +52,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const rawBase64 = audioBase64.includes(',') ? audioBase64.split(',')[1] : audioBase64;
     const mediaMime = mimeType || 'audio/webm';
 
-    // Call Google Gemini 3.6 Flash API
-    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${apiKey}`;
+    // Call Google Gemini 3.1 Flash Lite API (ultra-fast 1s response, zero thinking delay)
+    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent?key=${apiKey}`;
     const payload = {
       contents: [{
         parts: [
           { inlineData: { mimeType: mediaMime, data: rawBase64 } },
-          { text: 'Transcribe this Korean voice message exactly as spoken. Return only the spoken transcript, no commentary, no markdown, no quotes.' }
+          { text: 'Transcribe this Korean voice message exactly as spoken. Return only the spoken transcript, no commentary, no quotes.' }
         ]
-      }]
+      }],
+      generationConfig: {
+        thinkingConfig: { thinkingBudget: 0 },
+        temperature: 0.0
+      }
     };
 
     const response = await fetch(endpoint, {
