@@ -602,11 +602,46 @@ class WalkieTalkieService {
   ): Promise<WalkieMessage | null> {
     soundEngine.playEndBeep();
 
-    // 1. STT 음성인식 중지
+    // 1. STT 음성인식 최종 전사 결과 스마트 Flush 대기
     if (this.speechRecognition) {
-      try {
-        this.speechRecognition.stop();
-      } catch {}
+      const rec = this.speechRecognition;
+      await new Promise<void>((resolve) => {
+        let finished = false;
+        const done = () => {
+          if (!finished) {
+            finished = true;
+            resolve();
+          }
+        };
+
+        // 타이머: 음성인식 엔진이 문장을 정리할 수 있도록 최대 450ms (이미 중간 텍스트가 있으면 200ms) 대기
+        const maxWait = this.currentTranscript ? 200 : 450;
+        const timer = setTimeout(done, maxWait);
+
+        rec.onend = () => {
+          clearTimeout(timer);
+          done();
+        };
+        rec.onerror = (err: any) => {
+          console.warn('SpeechRec error during stop:', err?.error);
+          clearTimeout(timer);
+          done();
+        };
+        // 추가 전사 텍스트 도착 시 즉시 갱신 후 80ms 대기 후 완료
+        const origOnResult = rec.onresult;
+        rec.onresult = (event: any) => {
+          if (origOnResult) origOnResult(event);
+          clearTimeout(timer);
+          setTimeout(done, 80);
+        };
+
+        try {
+          rec.stop();
+        } catch {
+          clearTimeout(timer);
+          done();
+        }
+      });
       this.speechRecognition = null;
     }
 
@@ -631,6 +666,7 @@ class WalkieTalkieService {
 
     const durationSec = Math.max(1, Math.round((Date.now() - this.recordingStartTime) / 1000));
     const finalTranscript = this.currentTranscript.trim();
+    this.currentTranscript = '';
 
     return new Promise((resolve) => {
       this.mediaRecorder!.onstop = async () => {
@@ -680,6 +716,7 @@ class WalkieTalkieService {
       } catch {}
       this.speechRecognition = null;
     }
+    this.currentTranscript = '';
 
     if (senderId) {
       const activeCh = this.channels.get(this.currentChannel);

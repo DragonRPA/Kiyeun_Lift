@@ -620,6 +620,13 @@ export const MobileWalkieTalkieModal: React.FC<MobileWalkieTalkieModalProps> = (
                       🔴 [{talkingStatus?.senderDept} {talkingStatus?.senderName}] 말하고 있습니다...
                     </span>
                   </div>
+                ) : history.length > 0 && history[0].textTranscript ? (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', overflow: 'hidden', width: '100%' }}>
+                    <span style={{ fontSize: '12px', color: '#38bdf8', fontWeight: '800', flexShrink: 0 }}>💬 최신:</span>
+                    <span style={{ fontSize: '12px', color: '#f1f5f9', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {history[0].textTranscript}
+                    </span>
+                  </div>
                 ) : (
                   <span style={{ fontSize: '12px', color: isPowerOn ? '#6ee7b7' : '#64748b' }}>
                     {isPowerOn ? currentChInfo.desc : '무전기 전원을 켜면 실시간 음성을 수신할 수 있습니다.'}
@@ -717,47 +724,55 @@ export const MobileWalkieTalkieModal: React.FC<MobileWalkieTalkieModalProps> = (
               </span>
             </div>
 
-            {/* 직전 당일 무전 2건 빠른 미리보기 */}
+            {/* 실시간 당일 무전 피드 (최근 대화 & STT 전사 텍스트 상시 노출) */}
             <div style={{
               borderTop: '1px solid #1e293b',
               backgroundColor: '#090d16',
               padding: '12px 16px'
             }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-                <span style={{ fontSize: '11.5px', fontWeight: '800', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                  <Clock size={12} />
-                  <span>직전 대화 (당일 기록)</span>
+                <span style={{ fontSize: '12px', fontWeight: '800', color: '#cbd5e1', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                  <MessageSquare size={13} color="#38bdf8" />
+                  <span>실시간 대화 피드 (당일 {history.length}건)</span>
                 </span>
                 <button
                   type="button"
                   onClick={() => setActiveTab('LOGS')}
                   style={{
-                    backgroundColor: 'transparent',
-                    border: 'none',
+                    backgroundColor: 'rgba(56, 189, 248, 0.1)',
+                    border: '1px solid rgba(56, 189, 248, 0.3)',
                     color: '#38bdf8',
+                    padding: '3px 8px',
+                    borderRadius: '6px',
                     fontSize: '11px',
                     fontWeight: '700',
                     cursor: 'pointer'
                   }}
                 >
-                  전체 로그 ({history.length}건) ➔
+                  전체 대화록 ➔
                 </button>
               </div>
 
               {history.length === 0 ? (
-                <div style={{ padding: '8px', textAlign: 'center', fontSize: '11px', color: '#475569' }}>
-                  오늘 주고받은 무전 내역이 없습니다.
+                <div style={{ padding: '12px', textAlign: 'center', fontSize: '11.5px', color: '#64748b' }}>
+                  오늘 주고받은 무전 내역이 없습니다. (PTT 버튼을 눌러 말씀하세요)
                 </div>
               ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                  {history.slice(0, 2).map(msg => {
+                <div style={{ 
+                  display: 'flex', 
+                  flexDirection: 'column', 
+                  gap: '6px',
+                  maxHeight: '170px',
+                  overflowY: 'auto'
+                }}>
+                  {history.slice(0, 4).map(msg => {
                     const isPlaying = playingMessageId === msg.id;
                     const timeStr = new Date(msg.createdAt).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
                     return (
                       <div
                         key={msg.id}
                         style={{
-                          padding: '7px 10px',
+                          padding: '8px 10px',
                           borderRadius: '10px',
                           backgroundColor: '#1e293b',
                           border: '1px solid #334155',
@@ -774,12 +789,19 @@ export const MobileWalkieTalkieModal: React.FC<MobileWalkieTalkieModalProps> = (
                             <span style={{ fontSize: '10px', color: '#64748b', fontWeight: '500' }}>{timeStr}</span>
                           </div>
                           {msg.textTranscript ? (
-                            <div style={{ fontSize: '11.5px', color: '#e2e8f0', marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            <div style={{ 
+                              fontSize: '12px', 
+                              color: '#ffffff', 
+                              fontWeight: '600',
+                              marginTop: '2px', 
+                              lineHeight: 1.35,
+                              wordBreak: 'break-all'
+                            }}>
                               💬 {msg.textTranscript}
                             </div>
                           ) : (
-                            <div style={{ fontSize: '10.5px', color: '#94a3b8', marginTop: '2px' }}>
-                              🎙️ {msg.durationSec}초 음성 메시지
+                            <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '2px' }}>
+                              🎙️ 음성 메시지 ({msg.durationSec}초)
                             </div>
                           )}
                         </div>
