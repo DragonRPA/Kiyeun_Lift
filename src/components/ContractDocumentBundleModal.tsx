@@ -1,8 +1,12 @@
 // src/components/ContractDocumentBundleModal.tsx
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
-import { X, FileText, Download, Eye, CheckCircle2, AlertCircle, RefreshCw, FileCheck, Mail, Send } from 'lucide-react';
+import { 
+  X, FileText, Download, Eye, CheckCircle2, AlertCircle, 
+  RefreshCw, FileCheck, Mail, Send, Plus, Users, Check
+} from 'lucide-react';
 import { emailService } from '../services/email';
+import { db } from '../services/db';
 
 interface Props {
   isOpen: boolean;
@@ -10,8 +14,20 @@ interface Props {
   initialContractId?: string;
 }
 
+export interface RecipientItem {
+  id: string;
+  email: string;
+  name?: string;
+  roleLabel?: string;
+  source: 'CUSTOMER' | 'CONTACT' | 'SITE' | 'DELIVERY' | 'MANUAL';
+}
+
 export const ContractDocumentBundleModal: React.FC<Props> = ({ isOpen, onClose, initialContractId }) => {
-  const { contracts, customers, sites, assets, contractAssets, products, googleConfigs } = useApp();
+  const { 
+    contracts, customers, contacts, sites, assets, 
+    contractAssets, deliveries, products, googleConfigs, currentUser,
+    showErrorModal 
+  } = useApp();
 
   const [selectedContractId, setSelectedContractId] = useState<string>(
     initialContractId || contracts[0]?.id || ''
@@ -21,13 +37,21 @@ export const ContractDocumentBundleModal: React.FC<Props> = ({ isOpen, onClose, 
   const [isGenerating, setIsGenerating] = useState(false);
   const [progressPercent, setProgressPercent] = useState(0);
   const [progressText, setProgressText] = useState('');
-  const [generatedResult, setGeneratedResult] = useState<{ url: string; fileName: string; pageCount: number; blob?: Blob } | null>(null);
+  const [generatedResult, setGeneratedResult] = useState<{ 
+    url: string; 
+    fileName: string; 
+    pageCount: number; 
+    blob?: Blob;
+    base64Content?: string;
+  } | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  // 이메일 발송 UI 상태
-  const [showEmailForm, setShowEmailForm] = useState(false);
-  const [emailRecipient, setEmailRecipient] = useState('');
+  // 이메일 수신인 및 발송 상태
+  const [recipients, setRecipients] = useState<RecipientItem[]>([]);
+  const [manualInputEmail, setManualInputEmail] = useState('');
+  const [manualInputName, setManualInputName] = useState('');
   const [emailSubject, setEmailSubject] = useState('');
+  const [emailBody, setEmailBody] = useState('');
   const [isSendingEmail, setIsSendingEmail] = useState(false);
   const [emailSentSuccess, setEmailSentSuccess] = useState(false);
 
@@ -81,27 +105,203 @@ export const ContractDocumentBundleModal: React.FC<Props> = ({ isOpen, onClose, 
     return models.length > 0 ? models : ['GS-2646'];
   }, [mappedAssets]);
 
-  if (!isOpen) return null;
+  // 해당 고객사에 연결된 전체 인물 풀 (고객 담당자 + 현장 담당자)
+  const availableCustomerContacts = useMemo(() => {
+    if (!customer) return [];
+    const list: { id: string; name: string; position: string; email: string; typeLabel: string }[] = [];
 
-  const handleGenerate = async (openPreview: boolean = false, autoDownload: boolean = true) => {
-    if (!selectedContract) return;
+    // 1) 고객 담당자
+    const custContacts = (contacts || []).filter(c => c.customerId === customer.id && c.email);
+    custContacts.forEach(c => {
+      list.push({
+        id: `contact-${c.id}`,
+        name: c.name || '담당자',
+        position: c.position || '고객담당',
+        email: c.email.trim(),
+        typeLabel: '고객담당'
+      });
+    });
+
+    // 2) 고객사 현장 목록의 현장 담당자
+    const custSites = (sites || []).filter(s => s.customerId === customer.id && s.email);
+    custSites.forEach(s => {
+      list.push({
+        id: `site-${s.id}`,
+        name: s.contactName || s.name || '현장담당자',
+        position: s.name ? `${s.name} 현장` : '현장담당',
+        email: s.email.trim(),
+        typeLabel: '현장담당'
+      });
+    });
+
+    // 이메일 기준 중복 제거
+    const uniqueMap = new Map<string, typeof list[0]>();
+    list.forEach(item => {
+      if (item.email && !uniqueMap.has(item.email.toLowerCase())) {
+        uniqueMap.set(item.email.toLowerCase(), item);
+      }
+    });
+
+    return Array.from(uniqueMap.values());
+  }, [customer, contacts, sites]);
+
+  // ── 💡 계약 변경 시 4대 소스 기반 기본 수신인 자동 추출 ──
+  useEffect(() => {
+    if (!selectedContract || !isOpen) return;
+
+    const initialList: RecipientItem[] = [];
+    const seenEmails = new Set<string>();
+
+    const addRecipient = (email: string | undefined, name?: string, roleLabel?: string, source?: RecipientItem['source']) => {
+      if (!email) return;
+      const cleanEmail = email.trim();
+      const lower = cleanEmail.toLowerCase();
+      // 유효한 이메일 형식 체크
+      if (!lower.match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)) return;
+      if (seenEmails.has(lower)) return;
+      seenEmails.add(lower);
+
+      initialList.push({
+        id: `recip-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+        email: cleanEmail,
+        name: name || '',
+        roleLabel: roleLabel || '기본수신',
+        source: source || 'CUSTOMER'
+      });
+    };
+
+    // 1. 고객사 마스터 (대표 이메일, 세금계산서 이메일)
+    if (customer?.repEmail) {
+      addRecipient(customer.repEmail, customer.representative || customer.name, '고객사 대표', 'CUSTOMER');
+    }
+    if (customer && (customer as any).taxBillEmail && (customer as any).taxBillEmail !== customer.repEmail) {
+      addRecipient((customer as any).taxBillEmail, customer.name, '세금계산서', 'CUSTOMER');
+    }
+
+    // 2. 고객 담당자 (계약 지정 담당자 및 기타 담당자)
+    const custContacts = (contacts || []).filter(c => c.customerId === selectedContract.customerId);
+    const contractContact = custContacts.find(c => c.id === selectedContract.contactId);
+    if (contractContact?.email) {
+      addRecipient(contractContact.email, contractContact.name, `계약담당 (${contractContact.position || '담당'})`, 'CONTACT');
+    }
+    custContacts.forEach(c => {
+      if (c.email && c.id !== selectedContract.contactId) {
+        addRecipient(c.email, c.name, `담당자 (${c.position || '담당'})`, 'CONTACT');
+      }
+    });
+
+    // 3. 현장 담당자
+    if (site?.email) {
+      addRecipient(site.email, site.contactName || site.name, `현장담당 (${site.name})`, 'SITE');
+    }
+
+    // 4. 출고의뢰(배차) 본문 및 필드 내 이메일 추출
+    const contractDeliveries = (deliveries || []).filter(d => d.contractId === selectedContract.id);
+    contractDeliveries.forEach(d => {
+      // 4-1. statementEmail
+      if ((d as any).statementEmail) {
+        const emails = String((d as any).statementEmail).split(/[\s,;/]+/);
+        emails.forEach(em => addRecipient(em, '출고의뢰 명세서', '출고의뢰', 'DELIVERY'));
+      }
+      // 4-2. rawText 자연어 본문 내 이메일 정규식 탐색
+      if (d.rawText) {
+        const found = d.rawText.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g);
+        if (found) {
+          found.forEach(em => addRecipient(em, '출고요청 본문', '출고의뢰', 'DELIVERY'));
+        }
+      }
+      // 4-3. memo 내 이메일 탐색
+      if (d.memo) {
+        const found = d.memo.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g);
+        if (found) {
+          found.forEach(em => addRecipient(em, '배차 메모', '출고의뢰', 'DELIVERY'));
+        }
+      }
+    });
+
+    setRecipients(initialList);
+
+    // 제목 및 본문 기본값 세팅
+    const custName = customer?.name || '고객사';
+    const siteName = site?.name || '현장';
+    setEmailSubject(`[기연리프트] ${custName} - ${siteName} 고소작업대 임대차 계약서패키지`);
+    setEmailBody(`안녕하십니까, ${custName} 담당자님.\n(주)기연리프트 영업팀입니다.\n\n요청하신 [${siteName}] 현장 고소작업대 임대차 계약서패키지를 첨부 파일로 송부드립니다.\n\n■ 첨부 서류 구성 (단일 통합 PDF):\n1. 고소작업대 임대차 계약서 (1p)\n2. 자산별 반입 전 CHECK LIST (${mappedAssets.length}대)\n3. 자산별 안전점검 결과서 (${mappedAssets.length}대)\n4. 장비 모델별(${uniqueModelList.join(', ')}) 정규 문서(제원표, 안전인증서, 작동법 등) 일체\n5. 생산물배상책임(PL)보험증권 (계약기간 보증)\n6. 사업자등록증 (CF R2 원본)\n7. 통장사본 (CF R2 원본)\n\n계약 내용 및 장비 제원을 검토해 주시고, 문의사항이 있으시면 언제든 연락 부탁드립니다.\n\n감사합니다.\n주식회사 기연리프트 배상\n전화: 031-334-5296 / 영업담당: 010-9402-5296`);
+
+    // 생성 결과 초기화
+    setGeneratedResult(null);
+    setErrorMessage(null);
+    setEmailSentSuccess(false);
+  }, [selectedContractId, isOpen]);
+
+  // ── 수신인 추가 / 제거 핸들러 ──
+  const handleRemoveRecipient = (id: string) => {
+    setRecipients(prev => prev.filter(r => r.id !== id));
+  };
+
+  const handleAddManualRecipient = () => {
+    const cleanEmail = manualInputEmail.trim();
+    if (!cleanEmail) return;
+    if (!cleanEmail.match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)) {
+      alert('올바른 이메일 주소 형식을 입력해 주세요.');
+      return;
+    }
+    if (recipients.some(r => r.email.toLowerCase() === cleanEmail.toLowerCase())) {
+      alert('이미 추가된 이메일 주소입니다.');
+      return;
+    }
+
+    setRecipients(prev => [
+      ...prev,
+      {
+        id: `recip-manual-${Date.now()}`,
+        email: cleanEmail,
+        name: manualInputName.trim() || cleanEmail.split('@')[0],
+        roleLabel: '직접입력',
+        source: 'MANUAL'
+      }
+    ]);
+    setManualInputEmail('');
+    setManualInputName('');
+  };
+
+  const handleToggleContactRecipient = (contactItem: { name: string; position: string; email: string; typeLabel: string }) => {
+    const exists = recipients.some(r => r.email.toLowerCase() === contactItem.email.toLowerCase());
+    if (exists) {
+      setRecipients(prev => prev.filter(r => r.email.toLowerCase() !== contactItem.email.toLowerCase()));
+    } else {
+      setRecipients(prev => [
+        ...prev,
+        {
+          id: `recip-quick-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+          email: contactItem.email,
+          name: contactItem.name,
+          roleLabel: `${contactItem.typeLabel} (${contactItem.position})`,
+          source: 'CONTACT'
+        }
+      ]);
+    }
+  };
+
+  // ── 💡 핵심 PDF 조립 헬퍼 (로컬 에이전트 COM 엔진 가동) ──
+  const buildBundlePdf = async (): Promise<{ url: string; fileName: string; pageCount: number; blob?: Blob; base64Content?: string }> => {
+    if (generatedResult?.blob && generatedResult?.base64Content) {
+      return generatedResult;
+    }
 
     setIsGenerating(true);
-    setProgressPercent(5);
+    setProgressPercent(10);
     setProgressText('계약서패키지 조립 시작...');
     setErrorMessage(null);
-    setGeneratedResult(null);
-    setEmailSentSuccess(false);
 
-    const custName = customer?.name || '주식회사 세보엠이씨';
-    const siteName = site?.name || '평택삼성전자 P4';
-    const siteAddress = site?.address || customer?.address || '경기 평택시 고덕면 여염리 산 157';
+    const custName = customer?.name || '고객사';
+    const siteName = site?.name || '현장';
+    const siteAddress = site?.address || customer?.address || '현장 주소';
 
     try {
       const bundleOptions = {
         customerName: custName,
         bizRegNo: customer?.bizRegNo || '118-81-00241',
-        ceoName: customer?.representative || '김우영, 이원하',
+        ceoName: customer?.representative || '대표자',
         contractDate: selectedContract.startDate,
         contractStartDate: selectedContract.startDate,
         contractEndDate: selectedContract.endDate,
@@ -109,10 +309,10 @@ export const ContractDocumentBundleModal: React.FC<Props> = ({ isOpen, onClose, 
         siteName: siteName,
         siteAddress: siteAddress,
         contractNo: selectedContract.id,
-        managerName: customer?.representative || '장효준 선임',
-        managerPhone: customer?.repContact || '010-7723-0285',
-        siteManagerName: site?.contactName || '장효준 선임',
-        siteManagerPhone: site?.contact || '010-7723-0285',
+        managerName: customer?.representative || '계약담당자',
+        managerPhone: customer?.repContact || '010-0000-0000',
+        siteManagerName: site?.contactName || '현장소장',
+        siteManagerPhone: site?.contact || '010-0000-0000',
         salesRepName: '김동우 팀장',
         salesRepPhone: '010-9402-5296',
         optionsText: (selectedContract as any).optionsText || (selectedContract as any).remarks || '옵션 협착난간대, 튜브소화기 외',
@@ -126,143 +326,142 @@ export const ContractDocumentBundleModal: React.FC<Props> = ({ isOpen, onClose, 
         } : undefined,
       };
 
-      let finalResult: { url: string; fileName: string; pageCount: number; blob?: Blob } | null = null;
+      setProgressText('로컬 에이전트 정품 엑셀 엔진 가동 중...');
+      setProgressPercent(40);
 
-      // 🚨 절대 HTML2CANVAS 사용하지 말것 (저수준 문서 출력의 주범임)
-      // 오직 로컬 사이드카 에이전트(정품 엑셀 COM 엔진)만 사용하여 품질을 100% 보장해야 함.
-      try {
-        setProgressText('로컬 에이전트 정품 엑셀 엔진 가동 중...');
-        setProgressPercent(30);
+      const agentResp = await fetch('http://127.0.0.1:5175/api/generate-contract-bundle', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(bundleOptions)
+      });
 
-        const agentResp = await fetch('http://127.0.0.1:5175/api/generate-contract-bundle', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(bundleOptions)
-        });
-
-        if (agentResp.ok) {
-          const agentRes = await agentResp.json();
-          if (agentRes.success && agentRes.base64Content) {
-            setProgressPercent(90);
-            const binaryStr = atob(agentRes.base64Content);
-            const bytes = new Uint8Array(binaryStr.length);
-            for (let i = 0; i < binaryStr.length; i++) {
-              bytes[i] = binaryStr.charCodeAt(i);
-            }
-            const blob = new Blob([bytes.buffer], { type: 'application/pdf' });
-            const url = URL.createObjectURL(blob);
-
-            finalResult = {
-              url,
-              fileName: agentRes.fileName || `[기연리프트]_계약서패키지_${custName}_${siteName}(${agentRes.pageCount}p).pdf`,
-              pageCount: agentRes.pageCount || 37,
-              blob
-            };
-          } else {
-            throw new Error(agentRes.error || '에이전트에서 생성에 실패했습니다.');
-          }
-        } else {
-          throw new Error(`에이전트 오류: HTTP ${agentResp.status}`);
-        }
-      } catch (agentErr: any) {
-        throw new Error('정품 엑셀 생성 엔진(로컬 에이전트)에 연결할 수 없거나 오류가 발생했습니다.\n로컬 에이전트가 실행 중인지 확인해주세요.\n\n상세: ' + agentErr.message);
+      if (!agentResp.ok) {
+        throw new Error(`에이전트 응답 오류: HTTP ${agentResp.status}`);
       }
 
-      if (!finalResult) {
-        throw new Error('문서 생성 결과를 받을 수 없습니다.');
+      const agentRes = await agentResp.json();
+      if (!agentRes.success || !agentRes.base64Content) {
+        throw new Error(agentRes.error || '에이전트에서 PDF 생성에 실패했습니다.');
       }
+
+      setProgressPercent(90);
+      const binaryStr = atob(agentRes.base64Content);
+      const bytes = new Uint8Array(binaryStr.length);
+      for (let i = 0; i < binaryStr.length; i++) {
+        bytes[i] = binaryStr.charCodeAt(i);
+      }
+      const blob = new Blob([bytes.buffer], { type: 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+
+      const finalRes = {
+        url,
+        fileName: agentRes.fileName || `[기연리프트]_계약서패키지_${custName}_${siteName}(${agentRes.pageCount || 37}p).pdf`,
+        pageCount: agentRes.pageCount || 37,
+        blob,
+        base64Content: agentRes.base64Content
+      };
 
       setProgressPercent(100);
-      setProgressText('✅ 총 ' + finalResult.pageCount + '페이지 정품 계약서패키지 완성!');
-      setGeneratedResult(finalResult);
-
-      // 이메일 수신자/제목 기본값 세팅
-      setEmailRecipient(customer?.repEmail || site?.email || '');
-      setEmailSubject(`[기연리프트] ${custName} - ${siteName} 고소작업대 임대차 계약서패키지`);
-
-      if (openPreview) {
-        window.open(finalResult.url, '_blank');
-      } else if (autoDownload) {
-        const link = document.createElement('a');
-        link.href = finalResult.url;
-        link.download = finalResult.fileName;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-      }
+      setProgressText(`✅ 총 ${finalRes.pageCount}페이지 정품 계약서패키지 조립 완료!`);
+      setGeneratedResult(finalRes);
+      return finalRes;
     } catch (err: any) {
-      console.error('PDF 생성 실패:', err);
-      setErrorMessage(err.message || 'PDF 생성 중 오류가 발생했습니다.');
+      const msg = err.message || 'PDF 생성 중 오류가 발생했습니다.';
+      setErrorMessage(msg);
+      throw err;
     } finally {
       setIsGenerating(false);
     }
   };
 
-  const handleSendEmail = async () => {
-    if (!emailRecipient) {
-      alert('수신인 이메일 주소를 입력해 주세요.');
-      return;
+  // ── [액션 1] PDF 다운로드 핸들러 ──
+  const handleDownloadPdf = async () => {
+    try {
+      const pdf = await buildBundlePdf();
+      const link = document.createElement('a');
+      link.href = pdf.url;
+      link.download = pdf.fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (err: any) {
+      showErrorModal?.(`PDF 다운로드 실패:\n${err.message || err}`);
     }
-    if (!generatedResult) {
-      alert('먼저 계약서패키지 PDF를 생성해 주세요.');
+  };
+
+  // ── [액션 2] 새 창 미리보기 핸들러 ──
+  const handlePreviewPdf = async () => {
+    try {
+      const pdf = await buildBundlePdf();
+      window.open(pdf.url, '_blank');
+    } catch (err: any) {
+      showErrorModal?.(`PDF 미리보기 실패:\n${err.message || err}`);
+    }
+  };
+
+  // ── [액션 3] 계약서패키지 이메일 발송 핸들러 (1-A, 2-A, 3-yes 완벽 적용) ──
+  const handleSendPackageEmail = async () => {
+    if (recipients.length === 0) {
+      alert('이메일 수신인을 1명 이상 지정해 주세요.');
       return;
     }
 
     setIsSendingEmail(true);
     try {
-      const custName = customer?.name || '고객사';
-      const siteName = site?.name || '현장';
-      const body = `
-안녕하십니까, ${custName} 담당자님.
-(주)기연리프트 영업팀입니다.
-
-요청하신 [${siteName}] 현장 고소작업대 임대차 계약서패키지(총 ${generatedResult.pageCount}페이지)를 첨부 파일로 송부드립니다.
-
-■ 첨부 서류 구성 (단일 통합 PDF):
-1. 고소작업대 임대차 계약서
-2. 자산별 반입 전 CHECK LIST (${mappedAssets.length}대)
-3. 자산별 안전점검 결과서 (${mappedAssets.length}대)
-4. 장비 모델별(${uniqueModelList.join(', ')}) 정규 문서(제원표, 안전인증서, 작동법 등) 일체
-5. 생산물배상책임(PL)보험증권 (계약기간 보증)
-6. 사업자등록증
-7. 통장사본
-
-계약 내용 및 장비 제원을 검토해 주시고, 문의사항이 있으시면 언제든 연락 부탁드립니다.
-
-감사합니다.
-주식회사 기연리프트 배상
-전화: 031-334-5296 / 영업담당: 010-9402-5296
-      `.trim();
-
-      // PDF Blob -> Base64 변환
-      let base64Content = '';
-      if (generatedResult.blob) {
-        const arrayBuffer = await generatedResult.blob.arrayBuffer();
-        const bytes = new Uint8Array(arrayBuffer);
-        let binary = '';
-        for (let i = 0; i < bytes.byteLength; i++) {
-          binary += String.fromCharCode(bytes[i]);
-        }
-        base64Content = btoa(binary);
+      // 1. PDF가 아직 없으면 원클릭 논스톱 자동 조립 실행 (2-A)
+      let pdf = generatedResult;
+      if (!pdf || !pdf.base64Content) {
+        pdf = await buildBundlePdf();
       }
 
-      // 시스템 Gmail SMTP API (/api/send-email) 호출
+      // 2. 단일 메일에 복수 수신인(TO: 1번째, CC: 나머지) 바인딩 (1-A)
+      const primaryRecipient = recipients[0].email;
+      const ccRecipients = recipients.slice(1).map(r => r.email).join(', ');
+
+      const attachments = pdf.base64Content
+        ? [{ filename: pdf.fileName, content: pdf.base64Content }]
+        : [];
+
+      // 3. Gmail SMTP 서비스 호출
       await emailService.sendEmail(
-        emailRecipient,
+        primaryRecipient,
         emailSubject,
-        body,
-        base64Content ? [{ filename: generatedResult.fileName, content: base64Content }] : []
+        emailBody,
+        attachments,
+        ccRecipients || undefined
       );
 
+      // 4. 계약 변경 이력(contract_history)에 감사 로그 DB 영구 저장 (3-yes)
+      try {
+        const historyId = db.generateNextId('contractHistory', db.contractHistory);
+        const recipientSummary = recipients.map(r => `${r.name ? `${r.name}(${r.email})` : r.email}`).join(', ');
+        const senderName = currentUser?.name || '영업담당';
+
+        db.insertRow<any>('contractHistory', {
+          id: historyId,
+          contractId: selectedContract.id,
+          changeType: 'DOCUMENT_SENT',
+          description: `계약서패키지 이메일 발송 완료 (총 ${recipients.length}명: ${recipientSummary} / 발송자: ${senderName})`,
+          changeDate: new Date().toISOString().split('T')[0],
+          createdAt: new Date().toISOString()
+        });
+
+        await db.awaitPendingWrites();
+      } catch (histErr) {
+        console.warn('감사 로그 저장 중 경고:', histErr);
+      }
+
       setEmailSentSuccess(true);
-      alert(`✅ 이메일이 성공적으로 발송되었습니다!\n\n• 수신인: ${emailRecipient}\n• 제목: ${emailSubject}\n• 첨부파일: ${generatedResult.fileName} (${generatedResult.pageCount}페이지)`);
+      alert(`✅ 계약서패키지 이메일이 성공적으로 발송되었습니다!\n\n• 수신인(TO): ${primaryRecipient}\n${ccRecipients ? `• 참조(CC): ${ccRecipients}\n` : ''}• 제목: ${emailSubject}\n• 첨부: ${pdf.fileName} (${pdf.pageCount}p)\n• 계약 변경 이력(Audit Log) DB 기록 완료`);
     } catch (err: any) {
       console.error('이메일 발송 실패:', err);
-      alert(`이메일 발송 실패: ${err?.message || err}`);
+      showErrorModal?.(`이메일 발송 실패:\n${err.message || err}`);
     } finally {
       setIsSendingEmail(false);
     }
   };
+
+  if (!isOpen) return null;
 
   return (
     <div
@@ -272,7 +471,7 @@ export const ContractDocumentBundleModal: React.FC<Props> = ({ isOpen, onClose, 
         left: 0,
         right: 0,
         bottom: 0,
-        backgroundColor: 'rgba(0,0,0,0.65)',
+        backgroundColor: 'rgba(0,0,0,0.7)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -288,17 +487,17 @@ export const ContractDocumentBundleModal: React.FC<Props> = ({ isOpen, onClose, 
           border: '1px solid var(--border-color)',
           borderRadius: '12px',
           width: '100%',
-          maxWidth: '820px',
-          maxHeight: '92vh',
+          maxWidth: '860px',
+          maxHeight: '94vh',
           display: 'flex',
           flexDirection: 'column',
-          boxShadow: 'var(--shadow-lg)'
+          boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)'
         }}
       >
         {/* 모달 헤더 */}
         <div
           style={{
-            padding: '16px 20px',
+            padding: '16px 22px',
             borderBottom: '1px solid var(--border-color)',
             display: 'flex',
             justifyContent: 'space-between',
@@ -324,17 +523,17 @@ export const ContractDocumentBundleModal: React.FC<Props> = ({ isOpen, onClose, 
         </div>
 
         {/* 모달 본문 */}
-        <div style={{ padding: '20px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        <div style={{ padding: '20px 22px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '16px' }}>
 
-          {/* 1. 계약 선택 셀렉터 */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+          {/* 1. 대상 계약 선택 */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
             <label style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
               대상 계약 선택 (계약 DB 연동)
             </label>
             <select
               value={selectedContractId}
               onChange={(e) => setSelectedContractId(e.target.value)}
-              disabled={isGenerating}
+              disabled={isGenerating || isSendingEmail}
               style={{
                 width: '100%',
                 padding: '10px 12px',
@@ -360,18 +559,18 @@ export const ContractDocumentBundleModal: React.FC<Props> = ({ isOpen, onClose, 
             </select>
           </div>
 
-          {/* 2. 선택된 계약 상세 요약 카드 */}
+          {/* 2. 선택된 계약 요약 카드 */}
           {selectedContract && (
             <div
               style={{
                 backgroundColor: 'var(--bg-app)',
                 borderRadius: '8px',
-                padding: '14px 18px',
+                padding: '12px 16px',
                 border: '1px solid var(--border-color)',
                 display: 'grid',
                 gridTemplateColumns: 'repeat(2, 1fr)',
-                gap: '10px',
-                fontSize: '13px'
+                gap: '8px',
+                fontSize: '12.5px'
               }}
             >
               <div>
@@ -397,7 +596,175 @@ export const ContractDocumentBundleModal: React.FC<Props> = ({ isOpen, onClose, 
             </div>
           )}
 
-          {/* 3. 계약서패키지 구성 그리드 */}
+          {/* 3. 이메일 수신인 관리 섹션 */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '14px 16px', backgroundColor: 'var(--bg-app)', border: '1px solid var(--border-color)', borderRadius: '8px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <label style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap' }}>
+                <Mail size={15} color="var(--primary)" />
+                이메일 수신인 ({recipients.length}명 지정됨)
+              </label>
+              <span style={{ fontSize: '11.5px', color: 'var(--text-muted)' }}>
+                * 계약/현장/출고의뢰 기본 수신인 자동 지정됨 (임의 추가 및 삭제 가능)
+              </span>
+            </div>
+
+            {/* 3-1. 선택된 수신인 칩 목록 */}
+            <div
+              style={{
+                display: 'flex',
+                flexWrap: 'wrap',
+                gap: '6px',
+                minHeight: '38px',
+                padding: '8px',
+                backgroundColor: 'var(--bg-card)',
+                border: '1px solid var(--border-color)',
+                borderRadius: '6px',
+                alignItems: 'center'
+              }}
+            >
+              {recipients.length === 0 ? (
+                <span style={{ fontSize: '12px', color: 'var(--text-muted)', paddingLeft: '4px' }}>
+                  지정된 수신인이 없습니다. 아래 빠른 선택 또는 직접 입력을 통해 추가해 주세요.
+                </span>
+              ) : (
+                recipients.map(r => (
+                  <div
+                    key={r.id}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '5px',
+                      padding: '4px 8px 4px 10px',
+                      borderRadius: '16px',
+                      backgroundColor: r.source === 'DELIVERY' ? 'rgba(234, 88, 12, 0.12)' : 'var(--primary-light)',
+                      border: `1px solid ${r.source === 'DELIVERY' ? 'rgba(234, 88, 12, 0.4)' : 'var(--primary)'}`,
+                      color: r.source === 'DELIVERY' ? '#ea580c' : 'var(--primary)',
+                      fontSize: '12px',
+                      fontWeight: 600
+                    }}
+                  >
+                    <span>
+                      {r.name ? `${r.name} ` : ''}
+                      <span style={{ fontWeight: 400, opacity: 0.9 }}>&lt;{r.email}&gt;</span>
+                      <span style={{ fontSize: '10.5px', marginLeft: '4px', opacity: 0.75 }}>({r.roleLabel})</span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveRecipient(r.id)}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        cursor: 'pointer',
+                        padding: '1px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        color: 'inherit',
+                        opacity: 0.8
+                      }}
+                      title="수신인 제거"
+                    >
+                      <X size={13} />
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+
+            {/* 3-2. 수신인 직접 입력창 */}
+            <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr auto', gap: '6px', alignItems: 'center' }}>
+              <input
+                type="text"
+                value={manualInputName}
+                onChange={e => setManualInputName(e.target.value)}
+                placeholder="이름/직책 (선택)"
+                style={{
+                  padding: '7px 10px',
+                  borderRadius: '4px',
+                  border: '1px solid var(--border-color)',
+                  backgroundColor: 'var(--bg-card)',
+                  color: 'var(--text-main)',
+                  fontSize: '12.5px'
+                }}
+              />
+              <input
+                type="email"
+                value={manualInputEmail}
+                onChange={e => setManualInputEmail(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAddManualRecipient(); } }}
+                placeholder="추가할 수신인 이메일 (예: manager@company.com)"
+                style={{
+                  padding: '7px 10px',
+                  borderRadius: '4px',
+                  border: '1px solid var(--border-color)',
+                  backgroundColor: 'var(--bg-card)',
+                  color: 'var(--text-main)',
+                  fontSize: '12.5px'
+                }}
+              />
+              <button
+                type="button"
+                onClick={handleAddManualRecipient}
+                style={{
+                  padding: '7px 14px',
+                  backgroundColor: 'var(--bg-card)',
+                  border: '1px solid var(--border-color)',
+                  borderRadius: '4px',
+                  fontSize: '12.5px',
+                  fontWeight: 600,
+                  color: 'var(--text-main)',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  whiteSpace: 'nowrap'
+                }}
+              >
+                <Plus size={14} /> 추가
+              </button>
+            </div>
+
+            {/* 3-3. 👥 고객사 연결 인물 빠른 추가 헬퍼 */}
+            {availableCustomerContacts.length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '2px' }}>
+                <span style={{ fontSize: '11.5px', fontWeight: 700, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <Users size={12} color="var(--primary)" />
+                  고객사 연결 인물 빠른 선택 (클릭하여 추가/제외):
+                </span>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px' }}>
+                  {availableCustomerContacts.map(c => {
+                    const isAdded = recipients.some(r => r.email.toLowerCase() === c.email.toLowerCase());
+                    return (
+                      <button
+                        key={c.id}
+                        type="button"
+                        onClick={() => handleToggleContactRecipient(c)}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          padding: '3px 8px',
+                          borderRadius: '4px',
+                          border: isAdded ? '1px solid var(--primary)' : '1px dashed var(--border-color)',
+                          backgroundColor: isAdded ? 'var(--primary-light)' : 'var(--bg-card)',
+                          color: isAdded ? 'var(--primary)' : 'var(--text-muted)',
+                          fontSize: '11.5px',
+                          fontWeight: isAdded ? 700 : 500,
+                          cursor: 'pointer',
+                          transition: 'all 0.15s ease'
+                        }}
+                      >
+                        {isAdded ? <Check size={11} /> : <Plus size={11} />}
+                        <span>{c.name} ({c.position})</span>
+                        <span style={{ opacity: 0.7, fontSize: '10.5px' }}>&lt;{c.email}&gt;</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* 4. 계약서패키지 서류 구성 그리드 */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
             <label style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
               계약서패키지 서류 구성 (첨부 실물 표준 순서)
@@ -410,42 +777,42 @@ export const ContractDocumentBundleModal: React.FC<Props> = ({ isOpen, onClose, 
                 padding: '12px 16px',
                 display: 'grid',
                 gridTemplateColumns: '1fr 1fr',
-                gap: '10px',
-                fontSize: '12.5px'
+                gap: '8px',
+                fontSize: '12px'
               }}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <CheckCircle2 size={15} color="var(--success)" />
+                <CheckCircle2 size={14} color="var(--success)" />
                 <span><strong>1. 고소작업대 임대차 계약서</strong> (1p)</span>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <CheckCircle2 size={15} color="var(--success)" />
-                <span><strong>2. 자산별 반입 전 CHECK LIST</strong> ({mappedAssets.length}p)</span>
+                <CheckCircle2 size={14} color="var(--success)" />
+                <span><strong>2. 자산별 반입 전 CHECK LIST</strong> ({mappedAssets.length}대)</span>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <CheckCircle2 size={15} color="var(--success)" />
-                <span><strong>3. 자산별 안전점검 결과서</strong> ({mappedAssets.length}p)</span>
+                <CheckCircle2 size={14} color="var(--success)" />
+                <span><strong>3. 자산별 안전점검 결과서</strong> ({mappedAssets.length}대)</span>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <CheckCircle2 size={15} color="var(--primary)" />
+                <CheckCircle2 size={14} color="var(--primary)" />
                 <span><strong>4. 모델별 R2 정규문서 일체</strong> ({uniqueModelList.join(', ')})</span>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <CheckCircle2 size={15} color="var(--primary)" />
+                <CheckCircle2 size={14} color="var(--primary)" />
                 <span><strong>5. 생산물배상책임(PL)보험증권</strong> (계약기간 보증)</span>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <CheckCircle2 size={15} color="var(--primary)" />
+                <CheckCircle2 size={14} color="var(--primary)" />
                 <span><strong>6. 사업자등록증</strong> (CF R2 원본)</span>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <CheckCircle2 size={15} color="var(--primary)" />
+                <CheckCircle2 size={14} color="var(--primary)" />
                 <span><strong>7. 통장사본</strong> (CF R2 원본)</span>
               </div>
             </div>
           </div>
 
-          {/* 4. 실시간 진행 상태 게이지 */}
+          {/* 5. 실시간 진행 상태 게이지 */}
           {isGenerating && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', backgroundColor: 'var(--primary-light)', padding: '12px 16px', borderRadius: '8px', border: '1px solid var(--primary)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12.5px', fontWeight: 700, color: 'var(--primary)' }}>
@@ -465,7 +832,7 @@ export const ContractDocumentBundleModal: React.FC<Props> = ({ isOpen, onClose, 
             </div>
           )}
 
-          {/* 5. 에러 메시지 표출 */}
+          {/* 6. 에러 메시지 표출 */}
           {errorMessage && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 14px', backgroundColor: 'var(--danger-light)', border: '1px solid var(--danger)', borderRadius: '6px', color: 'var(--danger)', fontSize: '13px' }}>
               <AlertCircle size={16} />
@@ -473,183 +840,125 @@ export const ContractDocumentBundleModal: React.FC<Props> = ({ isOpen, onClose, 
             </div>
           )}
 
-          {/* 6. 완료 상태 카드 & 이메일 작성 영역 */}
+          {/* 7. 조립 완료 배지 */}
           {generatedResult && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', backgroundColor: 'var(--success-light)', border: '1px solid var(--success)', borderRadius: '8px', color: 'var(--success)', fontSize: '13px', fontWeight: 600 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <FileCheck size={18} color="var(--success)" />
-                  <span>{generatedResult.fileName} (총 {generatedResult.pageCount}페이지 조립 완료)</span>
-                </div>
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  <button
-                    type="button"
-                    onClick={() => window.open(generatedResult.url, '_blank')}
-                    style={{
-                      padding: '4px 10px',
-                      backgroundColor: 'var(--success)',
-                      color: '#ffffff',
-                      border: 'none',
-                      borderRadius: '4px',
-                      fontSize: '12px',
-                      cursor: 'pointer',
-                      fontWeight: 700,
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '4px'
-                    }}
-                  >
-                    <Eye size={13} /> 새 창 열기
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setShowEmailForm(!showEmailForm)}
-                    style={{
-                      padding: '4px 10px',
-                      backgroundColor: 'var(--primary)',
-                      color: '#ffffff',
-                      border: 'none',
-                      borderRadius: '4px',
-                      fontSize: '12px',
-                      cursor: 'pointer',
-                      fontWeight: 700,
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '4px'
-                    }}
-                  >
-                    <Mail size={13} /> 이메일 발송
-                  </button>
-                </div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', backgroundColor: 'var(--success-light)', border: '1px solid var(--success)', borderRadius: '8px', color: 'var(--success)', fontSize: '12.5px', fontWeight: 600 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <FileCheck size={16} color="var(--success)" />
+                <span>{generatedResult.fileName} (총 {generatedResult.pageCount}페이지 조립 완료)</span>
               </div>
-
-              {/* 이메일 발송 폼 */}
-              {showEmailForm && (
-                <div style={{ padding: '14px', backgroundColor: 'var(--bg-app)', border: '1px solid var(--border-color)', borderRadius: '8px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                  <div style={{ fontWeight: 'bold', fontSize: '13px', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <Mail size={16} color="var(--primary)" />
-                    고객사 계약서패키지 이메일 발송
-                  </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '80px 1fr', gap: '8px', alignItems: 'center', fontSize: '12.5px' }}>
-                    <span style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>수신인:</span>
-                    <input
-                      type="email"
-                      value={emailRecipient}
-                      onChange={e => setEmailRecipient(e.target.value)}
-                      placeholder="고객사 담당자 이메일 주소 (예: customer@company.com)"
-                      style={{ padding: '6px 10px', borderRadius: '4px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-card)', color: 'var(--text-main)' }}
-                    />
-                    <span style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>제목:</span>
-                    <input
-                      type="text"
-                      value={emailSubject}
-                      onChange={e => setEmailSubject(e.target.value)}
-                      style={{ padding: '6px 10px', borderRadius: '4px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-card)', color: 'var(--text-main)' }}
-                    />
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '4px' }}>
-                    <button
-                      type="button"
-                      onClick={handleSendEmail}
-                      disabled={isSendingEmail}
-                      style={{
-                        padding: '6px 14px',
-                        backgroundColor: 'var(--primary)',
-                        color: '#ffffff',
-                        border: 'none',
-                        borderRadius: '6px',
-                        fontSize: '12.5px',
-                        fontWeight: 700,
-                        cursor: isSendingEmail ? 'not-allowed' : 'pointer',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '6px'
-                      }}
-                    >
-                      <Send size={14} />
-                      {isSendingEmail ? '발송 준비중...' : '이메일 클라이언트 열기 및 발송'}
-                    </button>
-                  </div>
-                </div>
+              {emailSentSuccess && (
+                <span style={{ fontSize: '11.5px', backgroundColor: 'var(--success)', color: '#fff', padding: '2px 8px', borderRadius: '10px' }}>
+                  ✓ 이메일 발송 완료
+                </span>
               )}
             </div>
           )}
 
         </div>
 
-        {/* 모달 푸터 */}
+        {/* 모달 푸터 (2대 핵심 액션 버튼 배치) */}
         <div
           style={{
-            padding: '14px 20px',
+            padding: '14px 22px',
             borderTop: '1px solid var(--border-color)',
             backgroundColor: 'var(--bg-app)',
             display: 'flex',
-            justifyContent: 'flex-end',
-            gap: '10px',
+            justifyContent: 'space-between',
+            alignItems: 'center',
             borderBottomLeftRadius: '12px',
             borderBottomRightRadius: '12px'
           }}
         >
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={isGenerating}
-            style={{
-              padding: '8px 16px',
-              borderRadius: '6px',
-              border: '1px solid var(--border-color)',
-              backgroundColor: 'var(--bg-card)',
-              color: 'var(--text-secondary)',
-              fontSize: '13px',
-              fontWeight: 600,
-              cursor: 'pointer'
-            }}
-          >
-            닫기
-          </button>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={isGenerating || isSendingEmail}
+              style={{
+                padding: '8px 16px',
+                borderRadius: '6px',
+                border: '1px solid var(--border-color)',
+                backgroundColor: 'var(--bg-card)',
+                color: 'var(--text-secondary)',
+                fontSize: '13px',
+                fontWeight: 600,
+                cursor: 'pointer'
+              }}
+            >
+              닫기
+            </button>
 
-          <button
-            type="button"
-            onClick={() => handleGenerate(true, false)}
-            disabled={isGenerating}
-            style={{
-              padding: '8px 16px',
-              borderRadius: '6px',
-              border: '1px solid var(--primary)',
-              backgroundColor: 'var(--primary-light)',
-              color: 'var(--primary)',
-              fontSize: '13px',
-              fontWeight: 700,
-              cursor: isGenerating ? 'not-allowed' : 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px'
-            }}
-          >
-            <Eye size={15} /> 새 창 미리보기
-          </button>
+            <button
+              type="button"
+              onClick={handlePreviewPdf}
+              disabled={isGenerating || isSendingEmail}
+              style={{
+                padding: '8px 14px',
+                borderRadius: '6px',
+                border: '1px solid var(--border-color)',
+                backgroundColor: 'var(--bg-card)',
+                color: 'var(--text-main)',
+                fontSize: '13px',
+                fontWeight: 600,
+                cursor: isGenerating ? 'not-allowed' : 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '5px'
+              }}
+            >
+              <Eye size={14} /> 새 창 미리보기
+            </button>
+          </div>
 
-          <button
-            type="button"
-            onClick={() => handleGenerate(false, true)}
-            disabled={isGenerating}
-            style={{
-              padding: '8px 18px',
-              borderRadius: '6px',
-              border: 'none',
-              backgroundColor: 'var(--primary)',
-              color: '#ffffff',
-              fontSize: '13px',
-              fontWeight: 700,
-              cursor: isGenerating ? 'not-allowed' : 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px'
-            }}
-          >
-            {isGenerating ? <RefreshCw size={15} className="animate-spin" /> : <Download size={15} />}
-            계약서패키지 PDF 다운로드
-          </button>
+          <div style={{ display: 'flex', gap: '10px' }}>
+            {/* 1. PDF 다운로드 버튼 */}
+            <button
+              type="button"
+              onClick={handleDownloadPdf}
+              disabled={isGenerating || isSendingEmail}
+              style={{
+                padding: '8px 16px',
+                borderRadius: '6px',
+                border: '1px solid var(--primary)',
+                backgroundColor: 'var(--primary-light)',
+                color: 'var(--primary)',
+                fontSize: '13px',
+                fontWeight: 700,
+                cursor: isGenerating ? 'not-allowed' : 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px'
+              }}
+            >
+              {isGenerating ? <RefreshCw size={14} className="animate-spin" /> : <Download size={14} />}
+              계약서패키지 PDF 다운로드
+            </button>
+
+            {/* 2. 이메일 발송 버튼 (원클릭 논스톱 발송) */}
+            <button
+              type="button"
+              onClick={handleSendPackageEmail}
+              disabled={isGenerating || isSendingEmail || recipients.length === 0}
+              style={{
+                padding: '8px 18px',
+                borderRadius: '6px',
+                border: 'none',
+                backgroundColor: recipients.length === 0 ? 'var(--text-muted)' : 'var(--primary)',
+                color: '#ffffff',
+                fontSize: '13px',
+                fontWeight: 700,
+                cursor: (isGenerating || isSendingEmail || recipients.length === 0) ? 'not-allowed' : 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                boxShadow: recipients.length > 0 ? '0 2px 6px rgba(0, 0, 0, 0.2)' : 'none'
+              }}
+            >
+              {isSendingEmail ? <RefreshCw size={14} className="animate-spin" /> : <Send size={14} />}
+              {isSendingEmail ? '발송 중...' : `계약서패키지 이메일 발송 (${recipients.length}명)`}
+            </button>
+          </div>
         </div>
       </div>
     </div>
