@@ -5,7 +5,7 @@ import { ShieldCheck, Plus, Trash2, Edit2, Save, X, Search, AlertCircle } from '
 import { InspectionChecklistItem, db } from '../services/db';
 
 export const InspectionChecklistManage: React.FC = () => {
-  const { inspectionChecklistItems, saveInspectionChecklistItem, deleteInspectionChecklistItem } = useApp();
+  const { inspectionChecklistItems, saveInspectionChecklistItem, deleteInspectionChecklistItem, repairs } = useApp();
 
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -42,6 +42,26 @@ export const InspectionChecklistManage: React.FC = () => {
 
     return { totalCount, categoryCount: categories.length, totalScore, avgScore };
   }, [inspectionChecklistItems]);
+
+  // 💡 [Phase 2/3] 각 정비 항목(Inspection Item Code)별 과거 AS 발생 누적 통계
+  const repairMappingStats = useMemo(() => {
+    const stats: Record<string, { count: number; lastOccurred?: string }> = {};
+    (repairs || []).forEach(r => {
+      if (r.inspectionItemCode) {
+        const code = r.inspectionItemCode;
+        if (!stats[code]) stats[code] = { count: 0 };
+        const stat = stats[code]!;
+        stat.count += 1;
+        
+        if (r.requestDate) {
+          if (!stat.lastOccurred || r.requestDate > stat.lastOccurred) {
+            stat.lastOccurred = r.requestDate;
+          }
+        }
+      }
+    });
+    return stats;
+  }, [repairs]);
 
   const handleOpenAddModal = () => {
     setEditingItem(null);
@@ -218,6 +238,7 @@ export const InspectionChecklistManage: React.FC = () => {
                 <th style={{ whiteSpace: 'nowrap' }}>항목 코드</th>
                 <th style={{ whiteSpace: 'nowrap' }}>정비 필요 항목명</th>
                 <th style={{ whiteSpace: 'nowrap' }}>연동 정비 필요 점수</th>
+                <th style={{ whiteSpace: 'nowrap' }}>누적 AS 발생(데이터)</th>
                 <th>상세 설명 / 세부 가이드</th>
                 <th style={{ whiteSpace: 'nowrap' }}>관리</th>
               </tr>
@@ -225,12 +246,14 @@ export const InspectionChecklistManage: React.FC = () => {
             <tbody>
               {filteredItems.length === 0 ? (
                 <tr>
-                  <td colSpan={7} style={{ textAlign: 'center', padding: '36px 0', color: 'var(--text-muted)' }}>
+                  <td colSpan={8} style={{ textAlign: 'center', padding: '36px 0', color: 'var(--text-muted)' }}>
                     등록된 입고 검수 항목이 없습니다.
                   </td>
                 </tr>
               ) : (
-                filteredItems.map((item, idx) => (
+                filteredItems.map((item, idx) => {
+                  const stat = repairMappingStats[item.code] || { count: 0 };
+                  return (
                   <tr key={item.id}>
                     <td style={{ whiteSpace: 'nowrap' }}>{idx + 1}</td>
                     <td style={{ whiteSpace: 'nowrap' }}>
@@ -245,6 +268,16 @@ export const InspectionChecklistManage: React.FC = () => {
                         +{item.score}점
                       </span>
                     </td>
+                    <td style={{ whiteSpace: 'nowrap' }}>
+                      {stat.count > 0 ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                          <span style={{ fontSize: '13px', fontWeight: 'bold', color: 'var(--primary)' }}>{stat.count.toLocaleString()}건</span>
+                          {stat.lastOccurred && <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>최근: {stat.lastOccurred}</span>}
+                        </div>
+                      ) : (
+                        <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>-</span>
+                      )}
+                    </td>
                     <td style={{ fontSize: '12.5px', color: 'var(--text-secondary)' }}>{item.description || '-'}</td>
                     <td style={{ whiteSpace: 'nowrap' }}>
                       <div style={{ display: 'flex', gap: '6px' }}>
@@ -257,7 +290,8 @@ export const InspectionChecklistManage: React.FC = () => {
                       </div>
                     </td>
                   </tr>
-                ))
+                  );
+                })
               )}
             </tbody>
           </table>

@@ -762,6 +762,8 @@ export interface Repair {
   
   // 4. 고장 증상 및 정비 내용
   issueCategory?: string;
+  inspectionItemCode?: string; // [NEW] 정비 항목 코드 맵핑 (e.g. CHK-000003)
+  degradationScore?: number;   // [NEW] 자산 노후도 누적 점수 (e.g. +15)
   issueDescription?: string;
   details: string; // 레거시 details 호환
   errorCode?: string;
@@ -3420,8 +3422,8 @@ class LocalDB {
       if (tableName === 'purchase_settlements' && key === 'bankTransactionId') {
         continue;
       }
-      // DB repairs 스키마에 아직 없는 siteAddress 컬럼 오염 및 PostgreSQL 42703 에러 방지 (대신 locationDetail/memo에 안전 보존)
-      if (tableName === 'repairs' && key === 'siteAddress') {
+      // DB repairs 스키마에 아직 없는 siteAddress, inspectionItemCode, degradationScore 컬럼 오염 및 PostgreSQL 42703 에러 방지
+      if (tableName === 'repairs' && (key === 'siteAddress' || key === 'inspectionItemCode' || key === 'degradationScore')) {
         continue;
       }
       if (typeof val === 'string' && (key === 'userId' || key === 'salespersonId' || key === 'requesterId' || key === 'accepterId' || key === 'completerId' || key === 'inbounderId' || key === 'createdById' || key === 'updatedById' || key.toLowerCase().includes('user'))) {

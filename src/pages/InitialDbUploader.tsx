@@ -343,6 +343,28 @@ export const InitialDbUploader: React.FC = () => {
       issue = raw.slice(0, 100);
     }
 
+    let inspectionItemCode = '';
+    let degradationScore = 0;
+    
+    // 💡 [Phase 1/2] 밴드 빅데이터 고장 증상 키워드 기반 정비 마스터 코드 및 노후도 점수 1:1 매핑 (Data Tagging)
+    const lowerIssue = issue.toLowerCase();
+    if (lowerIssue.includes('타이어') || lowerIssue.includes('바퀴') || lowerIssue.includes('주행') || lowerIssue.includes('궤도')) {
+      inspectionItemCode = 'CHK-000004'; // 주행/타이어
+      degradationScore = 20;
+    } else if (lowerIssue.includes('배터리') || lowerIssue.includes('충전') || lowerIssue.includes('전기') || lowerIssue.includes('차단기')) {
+      inspectionItemCode = 'CHK-000003'; // 전기/배터리
+      degradationScore = 15;
+    } else if (lowerIssue.includes('유압') || lowerIssue.includes('실린더') || lowerIssue.includes('모터') || lowerIssue.includes('동력') || lowerIssue.includes('누유')) {
+      inspectionItemCode = 'CHK-000002'; // 유압/동력
+      degradationScore = 10;
+    } else if (lowerIssue.includes('외관') || lowerIssue.includes('파손') || lowerIssue.includes('안전바') || lowerIssue.includes('찌그러짐') || lowerIssue.includes('데칼')) {
+      inspectionItemCode = 'CHK-000001'; // 외관/바디
+      degradationScore = 5;
+    } else {
+      inspectionItemCode = 'CHK-000005'; // 기타/접수
+      degradationScore = 5;
+    }
+
     return {
       site: site || '미지정현장',
       contractor: contractor || '협력업체',
@@ -352,7 +374,9 @@ export const InitialDbUploader: React.FC = () => {
       issue,
       date,
       author,
-      raw
+      raw,
+      inspectionItemCode,
+      degradationScore
     };
   };
 

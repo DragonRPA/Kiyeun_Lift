@@ -2978,6 +2978,8 @@ export interface ParsedBandAsRecord {
   resolutionType: 'REPAIR_DONE' | 'REVISIT_NEEDED' | 'GUIDED_END';
   actionTaken: string;
   isSingleAssetGuessed: boolean;
+  inspectionItemCode?: string;
+  degradationScore?: number;
 }
 
 export interface BandAsAnalysisResult {
@@ -3183,6 +3185,24 @@ export function analyzeBandAsHistory(
       uniqueAssetSet.add(finalAssetNo);
     }
 
+    let inspectionItemCode = 'CHK-000005'; // 기본값: 기타/접수
+    let degradationScore = 5;
+    
+    const lowerIssue = post.issue.toLowerCase();
+    if (lowerIssue.includes('타이어') || lowerIssue.includes('바퀴') || lowerIssue.includes('주행') || lowerIssue.includes('궤도')) {
+      inspectionItemCode = 'CHK-000004'; // 주행/타이어
+      degradationScore = 20;
+    } else if (lowerIssue.includes('배터리') || lowerIssue.includes('충전') || lowerIssue.includes('전기') || lowerIssue.includes('차단기')) {
+      inspectionItemCode = 'CHK-000003'; // 전기/배터리
+      degradationScore = 15;
+    } else if (lowerIssue.includes('유압') || lowerIssue.includes('실린더') || lowerIssue.includes('모터') || lowerIssue.includes('동력') || lowerIssue.includes('누유')) {
+      inspectionItemCode = 'CHK-000002'; // 유압/동력
+      degradationScore = 10;
+    } else if (lowerIssue.includes('외관') || lowerIssue.includes('파손') || lowerIssue.includes('안전바') || lowerIssue.includes('찌그러짐') || lowerIssue.includes('데칼')) {
+      inspectionItemCode = 'CHK-000001'; // 외관/바디
+      degradationScore = 5;
+    }
+
     parsedRecords.push({
       idx: idx + 1,
       author: authorName,
@@ -3208,7 +3228,9 @@ export function analyzeBandAsHistory(
       status,
       resolutionType,
       actionTaken: actionText,
-      isSingleAssetGuessed: isSingleGuessed
+      isSingleAssetGuessed: isSingleGuessed,
+      inspectionItemCode,
+      degradationScore
     });
   });
 
@@ -3277,6 +3299,8 @@ export async function ingestBandAsHistoryDirect(
       locationDetail: r.location || '',
       reporterContact: r.contact || '',
       issueCategory: r.issue.includes('방지봉') ? '방지봉/협착' : r.issue.includes('상승') || r.issue.includes('하강') ? '상하강불량' : r.issue.includes('배터리') ? '충전/전원' : '점검요청',
+      inspectionItemCode: r.inspectionItemCode,
+      degradationScore: r.degradationScore,
       issueDescription: r.issue,
       details: r.issue,
       status: r.status,
