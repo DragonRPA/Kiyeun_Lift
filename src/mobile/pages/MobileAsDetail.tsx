@@ -4,7 +4,7 @@ import { useApp } from '../../context/AppContext';
 import { CameraUploader } from '../components/CameraUploader';
 import { SignatureCanvas } from '../components/SignatureCanvas';
 import { ArrowLeft, Navigation, Phone, CheckCircle2, Wrench, Plus, Trash2, ChevronDown } from 'lucide-react';
-import { RepairPartUsed } from '../../services/db';
+import { db, RepairPartUsed } from '../../services/db';
 import { launchNavigation, safePhoneCall, NavAppType } from '../../utils/nativeLauncher';
 
 interface MobileAsDetailProps {
@@ -69,9 +69,20 @@ export const MobileAsDetail: React.FC<MobileAsDetailProps> = ({ ticketId, onBack
     );
   }
 
-  // 안전한 길안내 열기 (안드로이드 Intent 및 iOS 스킴, 멈춤 유발하는 setTimeout 완전 제거)
+  // 안전한 길안내 열기 (정밀 주소 우선 매핑, 길안내 모드 및 프리징 방지)
   const handleOpenNav = (app: NavAppType = selectedNavApp) => {
-    const destination = ticket.siteName || ticket.locationDetail || ticket.customerName || '현장';
+    let destination = '';
+    // 1. 등록된 현장 ID가 있는 경우 현장 마스터의 정밀 도로명/지번 주소 우선 조회
+    if (ticket.siteId) {
+      const site = db.customerSites.find((s) => s.id === ticket.siteId);
+      if (site && site.address && site.address.trim()) {
+        destination = site.address.trim();
+      }
+    }
+    // 2. 현장명 또는 상세위치로 폴백
+    if (!destination) {
+      destination = ticket.siteName || ticket.locationDetail || ticket.customerName || '현장';
+    }
     launchNavigation(destination, app);
   };
 

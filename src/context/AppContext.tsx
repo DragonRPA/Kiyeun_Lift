@@ -468,6 +468,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     'google_config':        ['googleConfigs'],
     'depreciation_execution': ['depreciationLogs', 'assets'],
     'leave_ot':             ['users', 'annualLeaveQuotas', 'leaveUsages', 'overtimeRecords'],
+    'initial_db_upload':    ['contracts', 'contractAssets', 'customers', 'assets', 'sites', 'billings', 'billingDetails'],
   };
 
   const loadTablesForMenu = async (menuId: string) => {

@@ -51,6 +51,10 @@ export const MobileWalkieTalkieModal: React.FC<MobileWalkieTalkieModalProps> = (
   const stopRequestedRef = useRef<boolean>(false);
   const durationTimerRef = useRef<any>(null);
 
+  // 📜 최신 대화 하단 자동 스크롤용 Refs
+  const logContainerRef = useRef<HTMLDivElement | null>(null);
+  const pttFeedContainerRef = useRef<HTMLDivElement | null>(null);
+
   // 초기화 및 실시간 메시지 / 발언 상태 / 큐 리스너 등록
   useEffect(() => {
     if (!currentUser) return;
@@ -105,6 +109,27 @@ export const MobileWalkieTalkieModal: React.FC<MobileWalkieTalkieModalProps> = (
       setHistory([...walkieService.getHistory()]);
     }
   }, [isOpen]);
+
+  // 최신 대화(하단) 자동 스크롤
+  useEffect(() => {
+    if (activeTab === 'LOGS' && logContainerRef.current) {
+      setTimeout(() => {
+        if (logContainerRef.current) {
+          logContainerRef.current.scrollTop = logContainerRef.current.scrollHeight;
+        }
+      }, 50);
+    }
+  }, [history, activeTab]);
+
+  useEffect(() => {
+    if (activeTab === 'PTT' && pttFeedContainerRef.current) {
+      setTimeout(() => {
+        if (pttFeedContainerRef.current) {
+          pttFeedContainerRef.current.scrollTop = pttFeedContainerRef.current.scrollHeight;
+        }
+      }, 50);
+    }
+  }, [history, activeTab]);
 
   // 전역 pointerup 안전망 (화면 밖 릴리즈 대응)
   useEffect(() => {
@@ -283,32 +308,33 @@ export const MobileWalkieTalkieModal: React.FC<MobileWalkieTalkieModalProps> = (
         style={{
           width: '100%',
           maxWidth: '430px',
+          maxHeight: 'calc(100dvh - 24px)',
           backgroundColor: '#0f172a',
           border: '2px solid #334155',
-          borderRadius: '28px',
+          borderRadius: '24px',
           boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.7)',
           display: 'flex',
           flexDirection: 'column',
           overflow: 'hidden'
         }}
       >
-        {/* 1. 상단 무전기 헤더 & 전원 스위치 */}
+        {/* 1. 상단 무전기 헤더 & 전원 스위치 (공간 축소 슬림화) */}
         <div style={{
-          padding: '14px 18px',
+          padding: '8px 14px',
           backgroundColor: '#1e293b',
           borderBottom: '1px solid #334155',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between'
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Radio size={19} color={isPowerOn ? '#38bdf8' : '#64748b'} />
-            <span style={{ fontSize: '15px', fontWeight: '900', color: '#f8fafc' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <Radio size={16} color={isPowerOn ? '#38bdf8' : '#64748b'} />
+            <span style={{ fontSize: '13.5px', fontWeight: '900', color: '#f8fafc' }}>
               현장 무전기 (PTT)
             </span>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             {/* 전원 ON / OFF 버튼 */}
             <button
               type="button"
@@ -316,18 +342,18 @@ export const MobileWalkieTalkieModal: React.FC<MobileWalkieTalkieModalProps> = (
               style={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: '5px',
-                padding: '5px 11px',
+                gap: '4px',
+                padding: '4px 9px',
                 borderRadius: '9999px',
                 border: 'none',
                 backgroundColor: isPowerOn ? '#059669' : '#475569',
                 color: '#ffffff',
-                fontSize: '12px',
+                fontSize: '11px',
                 fontWeight: '800',
                 cursor: 'pointer'
               }}
             >
-              {isPowerOn ? <Volume2 size={13} /> : <VolumeX size={13} />}
+              {isPowerOn ? <Volume2 size={12} /> : <VolumeX size={12} />}
               <span>{isPowerOn ? '무전 ON' : '무전 OFF'}</span>
             </button>
 
@@ -339,56 +365,56 @@ export const MobileWalkieTalkieModal: React.FC<MobileWalkieTalkieModalProps> = (
                 border: 'none',
                 color: '#94a3b8',
                 cursor: 'pointer',
-                padding: '4px'
+                padding: '2px'
               }}
               title="닫기"
             >
-              <X size={20} />
+              <X size={18} />
             </button>
           </div>
         </div>
 
         {/* 🌟 1.5. 수신 모드 3단 셀렉터 (실시간음성 / 비프알림 / 완전무음) */}
         <div style={{
-          padding: '6px 14px',
+          padding: '4px 12px',
           backgroundColor: '#090d16',
           borderBottom: '1px solid #1e293b',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          gap: '8px'
+          gap: '6px'
         }}>
-          <span style={{ fontSize: '10.5px', fontWeight: '800', color: '#64748b', whiteSpace: 'nowrap' }}>
+          <span style={{ fontSize: '10px', fontWeight: '800', color: '#64748b', whiteSpace: 'nowrap' }}>
             수신 모드
           </span>
 
           <div style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(3, 1fr)',
-            gap: '4px',
+            gap: '3px',
             flex: 1
           }}>
             <button
               type="button"
               onClick={() => handleSelectReceiveMode('VOICE')}
               style={{
-                padding: '5px 4px',
-                borderRadius: '6px',
+                padding: '3px 2px',
+                borderRadius: '5px',
                 border: receiveMode === 'VOICE' ? '1px solid #10b981' : '1px solid #334155',
                 backgroundColor: receiveMode === 'VOICE' ? 'rgba(16, 185, 129, 0.2)' : '#1e293b',
                 color: receiveMode === 'VOICE' ? '#34d399' : '#94a3b8',
-                fontSize: '11px',
+                fontSize: '10px',
                 fontWeight: '800',
                 cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                gap: '3px',
+                gap: '2px',
                 transition: 'all 0.15s ease'
               }}
               title="도착 즉시 스피커로 음성 자동 방송"
             >
-              <Volume2 size={11} />
+              <Volume2 size={10} />
               <span>실시간 음성</span>
             </button>
 
@@ -396,23 +422,23 @@ export const MobileWalkieTalkieModal: React.FC<MobileWalkieTalkieModalProps> = (
               type="button"
               onClick={() => handleSelectReceiveMode('BEEP')}
               style={{
-                padding: '5px 4px',
-                borderRadius: '6px',
+                padding: '3px 2px',
+                borderRadius: '5px',
                 border: receiveMode === 'BEEP' ? '1px solid #f59e0b' : '1px solid #334155',
                 backgroundColor: receiveMode === 'BEEP' ? 'rgba(245, 158, 11, 0.2)' : '#1e293b',
                 color: receiveMode === 'BEEP' ? '#fbbf24' : '#94a3b8',
-                fontSize: '11px',
+                fontSize: '10px',
                 fontWeight: '800',
                 cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                gap: '3px',
+                gap: '2px',
                 transition: 'all 0.15s ease'
               }}
               title="음성 없이 '삑' 알림음만 울려 텍스트 확인 유도"
             >
-              <Bell size={11} />
+              <Bell size={10} />
               <span>비프 알림음</span>
             </button>
 
@@ -420,23 +446,23 @@ export const MobileWalkieTalkieModal: React.FC<MobileWalkieTalkieModalProps> = (
               type="button"
               onClick={() => handleSelectReceiveMode('MUTE')}
               style={{
-                padding: '5px 4px',
-                borderRadius: '6px',
+                padding: '3px 2px',
+                borderRadius: '5px',
                 border: receiveMode === 'MUTE' ? '1px solid #64748b' : '1px solid #334155',
                 backgroundColor: receiveMode === 'MUTE' ? 'rgba(100, 116, 139, 0.25)' : '#1e293b',
                 color: receiveMode === 'MUTE' ? '#cbd5e1' : '#64748b',
-                fontSize: '11px',
+                fontSize: '10px',
                 fontWeight: '800',
                 cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                gap: '3px',
+                gap: '2px',
                 transition: 'all 0.15s ease'
               }}
               title="소리 일절 없음, 화면 텍스트만 실시간 적재"
             >
-              <BellOff size={11} />
+              <BellOff size={10} />
               <span>완전 무음</span>
             </button>
           </div>
@@ -453,21 +479,21 @@ export const MobileWalkieTalkieModal: React.FC<MobileWalkieTalkieModalProps> = (
             type="button"
             onClick={() => setActiveTab('PTT')}
             style={{
-              padding: '10px',
+              padding: '8px',
               border: 'none',
               borderBottom: activeTab === 'PTT' ? '2px solid #38bdf8' : '2px solid transparent',
               backgroundColor: activeTab === 'PTT' ? 'rgba(56, 189, 248, 0.08)' : 'transparent',
               color: activeTab === 'PTT' ? '#38bdf8' : '#94a3b8',
-              fontSize: '12.5px',
+              fontSize: '12px',
               fontWeight: '800',
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              gap: '6px'
+              gap: '5px'
             }}
           >
-            <Mic size={14} />
+            <Mic size={13} />
             <span>실시간 무전 (PTT)</span>
           </button>
 
@@ -475,21 +501,21 @@ export const MobileWalkieTalkieModal: React.FC<MobileWalkieTalkieModalProps> = (
             type="button"
             onClick={() => setActiveTab('LOGS')}
             style={{
-              padding: '10px',
+              padding: '8px',
               border: 'none',
               borderBottom: activeTab === 'LOGS' ? '2px solid #38bdf8' : '2px solid transparent',
               backgroundColor: activeTab === 'LOGS' ? 'rgba(56, 189, 248, 0.08)' : 'transparent',
               color: activeTab === 'LOGS' ? '#38bdf8' : '#94a3b8',
-              fontSize: '12.5px',
+              fontSize: '12px',
               fontWeight: '800',
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              gap: '6px'
+              gap: '5px'
             }}
           >
-            <MessageSquare size={14} />
+            <MessageSquare size={13} />
             <span>당일 대화 로그 ({history.length})</span>
           </button>
         </div>
@@ -497,12 +523,12 @@ export const MobileWalkieTalkieModal: React.FC<MobileWalkieTalkieModalProps> = (
         {/* ── [뷰 1] 실시간 무전 (PTT 화면) ── */}
         {activeTab === 'PTT' ? (
           <>
-            {/* 채널 셀렉터 버튼바 */}
+            {/* 채널 셀렉터 버튼바 (컴팩트 그리드) */}
             <div style={{
               display: 'grid',
               gridTemplateColumns: 'repeat(4, 1fr)',
               gap: '6px',
-              padding: '12px 16px',
+              padding: '8px 12px',
               backgroundColor: '#0f172a',
               borderBottom: '1px solid #1e293b'
             }}>
@@ -514,8 +540,8 @@ export const MobileWalkieTalkieModal: React.FC<MobileWalkieTalkieModalProps> = (
                     type="button"
                     onClick={() => handleSelectChannel(ch.id)}
                     style={{
-                      padding: '8px 4px',
-                      borderRadius: '10px',
+                      padding: '6px 2px',
+                      borderRadius: '8px',
                       border: isSelected ? '1px solid #38bdf8' : '1px solid #334155',
                       backgroundColor: isSelected ? '#0369a1' : '#1e293b',
                       color: isSelected ? '#ffffff' : '#94a3b8',
@@ -523,37 +549,37 @@ export const MobileWalkieTalkieModal: React.FC<MobileWalkieTalkieModalProps> = (
                       display: 'flex',
                       flexDirection: 'column',
                       alignItems: 'center',
-                      gap: '2px',
+                      gap: '1px',
                       transition: 'all 0.15s ease'
                     }}
                   >
-                    <span style={{ fontSize: '10px', opacity: 0.8, letterSpacing: '0.5px' }}>{ch.code}</span>
-                    <span style={{ fontSize: '12px', fontWeight: '800' }}>{ch.name}</span>
+                    <span style={{ fontSize: '9.5px', opacity: 0.8, letterSpacing: '0.5px' }}>{ch.code}</span>
+                    <span style={{ fontSize: '11.5px', fontWeight: '800' }}>{ch.name}</span>
                   </button>
                 );
               })}
             </div>
 
-            {/* 디지털 LCD 패널 */}
+            {/* 디지털 LCD 패널 (슬림 상태바 형태) */}
             <div style={{
-              margin: '12px 16px',
-              padding: '12px 14px',
-              borderRadius: '16px',
+              margin: '8px 12px 6px',
+              padding: '8px 12px',
+              borderRadius: '12px',
               backgroundColor: '#020617',
               border: isSomeoneElseTalking 
                 ? '1px solid #ef4444' 
                 : isTransmitting 
                 ? '1px solid #f87171' 
                 : '1px solid #1e293b',
-              boxShadow: 'inset 0 2px 8px rgba(0,0,0,0.8)',
+              boxShadow: 'inset 0 2px 6px rgba(0,0,0,0.8)',
               transition: 'all 0.2s ease'
             }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={{ 
-                  fontSize: '12px', 
+                  fontSize: '11.5px', 
                   fontWeight: '900', 
                   color: isSomeoneElseTalking ? '#fca5a5' : '#34d399', 
-                  letterSpacing: '1px' 
+                  letterSpacing: '0.5px' 
                 }}>
                   {currentChInfo.code} • {currentChInfo.name}
                 </span>
@@ -561,207 +587,96 @@ export const MobileWalkieTalkieModal: React.FC<MobileWalkieTalkieModalProps> = (
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                   {queueLength > 0 && (
                     <span style={{
-                      fontSize: '10px',
+                      fontSize: '9.5px',
                       fontWeight: '800',
-                      padding: '2px 6px',
-                      borderRadius: '6px',
+                      padding: '1.5px 5px',
+                      borderRadius: '5px',
                       backgroundColor: '#0284c7',
                       color: '#ffffff',
                       display: 'flex',
                       alignItems: 'center',
                       gap: '3px'
                     }}>
-                      <Layers size={11} />
-                      <span>대기 {queueLength}건</span>
+                      <Layers size={10} />
+                      <span>대기 {queueLength}</span>
                     </span>
                   )}
 
                   <span style={{
-                    fontSize: '10.5px',
+                    fontSize: '10px',
                     fontWeight: '700',
-                    padding: '2px 7px',
+                    padding: '1.5px 6px',
                     borderRadius: '9999px',
                     backgroundColor: isSomeoneElseTalking ? '#7f1d1d' : isPowerOn ? '#064e3b' : '#334155',
                     color: isSomeoneElseTalking ? '#fecaca' : isPowerOn ? '#a7f3d0' : '#94a3b8'
                   }}>
                     {isSomeoneElseTalking ? '통화 중' : isPowerOn ? (
-                      receiveMode === 'VOICE' ? '🔊 음성방송' : receiveMode === 'BEEP' ? '🔔 삑 알림' : '🔕 완전무음'
+                      receiveMode === 'VOICE' ? '🔊 음성' : receiveMode === 'BEEP' ? '🔔 알림' : '🔕 무음'
                     ) : '전원 꺼짐'}
                   </span>
                 </div>
               </div>
 
-              <div style={{ marginTop: '8px', minHeight: '34px', display: 'flex', alignItems: 'center' }}>
+              {/* 하단 상태 또는 발언자 표시 */}
+              <div style={{ marginTop: '4px', minHeight: '22px', display: 'flex', alignItems: 'center' }}>
                 {isTransmitting ? (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#f87171' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#f87171' }}>
                     <span style={{
-                      width: '10px',
-                      height: '10px',
+                      width: '8px',
+                      height: '8px',
                       borderRadius: '9999px',
                       backgroundColor: '#ef4444',
-                      boxShadow: '0 0 8px #ef4444'
+                      boxShadow: '0 0 6px #ef4444'
                     }} />
-                    <span style={{ fontSize: '13.5px', fontWeight: '900' }}>
+                    <span style={{ fontSize: '12px', fontWeight: '900' }}>
                       🔴 내가 송신 중... ({recordDuration}초) [말씀하세요]
                     </span>
                   </div>
                 ) : isSomeoneElseTalking ? (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#f87171' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#f87171' }}>
                     <span style={{
-                      width: '10px',
-                      height: '10px',
+                      width: '8px',
+                      height: '8px',
                       borderRadius: '9999px',
                       backgroundColor: '#ef4444',
-                      boxShadow: '0 0 10px #ef4444'
+                      boxShadow: '0 0 8px #ef4444'
                     }} />
-                    <span style={{ fontSize: '13.5px', fontWeight: '900' }}>
-                      🔴 [{talkingStatus?.senderDept} {talkingStatus?.senderName}] 말하고 있습니다...
+                    <span style={{ fontSize: '12px', fontWeight: '900' }}>
+                      🔴 [{talkingStatus?.senderDept} {talkingStatus?.senderName}] 발언 중...
                     </span>
                   </div>
                 ) : history.length > 0 && history[0].textTranscript ? (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', overflow: 'hidden', width: '100%' }}>
-                    <span style={{ fontSize: '12px', color: '#38bdf8', fontWeight: '800', flexShrink: 0 }}>💬 최신:</span>
-                    <span style={{ fontSize: '12px', color: '#f1f5f9', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '5px', overflow: 'hidden', width: '100%' }}>
+                    <span style={{ fontSize: '11px', color: '#38bdf8', fontWeight: '800', flexShrink: 0 }}>최신:</span>
+                    <span style={{ fontSize: '11px', color: '#f1f5f9', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                       {history[0].textTranscript}
                     </span>
                   </div>
                 ) : (
-                  <span style={{ fontSize: '12px', color: isPowerOn ? '#6ee7b7' : '#64748b' }}>
-                    {isPowerOn ? currentChInfo.desc : '무전기 전원을 켜면 실시간 음성을 수신할 수 있습니다.'}
+                  <span style={{ fontSize: '11px', color: isPowerOn ? '#6ee7b7' : '#64748b' }}>
+                    {isPowerOn ? currentChInfo.desc : '전원을 켜면 실시간 음성을 수신할 수 있습니다.'}
                   </span>
                 )}
               </div>
             </div>
 
-            {/* 대형 원형 PTT (Push-To-Talk) 버튼 */}
+            {/* ── 실시간 당일 무전 피드 (LCD 바로 아래 선행 배치) ── */}
             <div style={{
+              flex: 1,
+              minHeight: '180px',
+              maxHeight: '260px',
+              backgroundColor: '#090d16',
+              borderTop: '1px solid #1e293b',
+              borderBottom: '1px solid #1e293b',
               display: 'flex',
               flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
-              padding: '10px 0 16px'
+              padding: '8px 12px',
+              overflow: 'hidden'
             }}>
-              <button
-                type="button"
-                disabled={!isPowerOn}
-                onClick={handleTogglePtt}
-                style={{
-                  width: '136px',
-                  height: '136px',
-                  borderRadius: '9999px',
-                  border: isTransmitting 
-                    ? '6px solid #ef4444' 
-                    : isSomeoneElseTalking
-                    ? '6px solid #f59e0b'
-                    : isPowerOn 
-                    ? '6px solid #0284c7' 
-                    : '6px solid #475569',
-                  backgroundColor: isTransmitting 
-                    ? '#b91c1c' 
-                    : isSomeoneElseTalking
-                    ? '#78350f'
-                    : isPowerOn 
-                    ? '#0369a1' 
-                    : '#334155',
-                  color: '#ffffff',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '5px',
-                  cursor: isPowerOn ? 'pointer' : 'not-allowed',
-                  userSelect: 'none',
-                  WebkitUserSelect: 'none',
-                  transform: isTransmitting ? 'scale(0.96)' : 'scale(1)',
-                  transition: 'all 0.15s ease',
-                  boxShadow: isTransmitting 
-                    ? '0 0 35px rgba(239, 68, 68, 0.8)' 
-                    : isSomeoneElseTalking
-                    ? '0 0 25px rgba(245, 158, 11, 0.5)'
-                    : isPowerOn 
-                    ? '0 10px 25px rgba(2, 132, 199, 0.4)' 
-                    : 'none'
-                }}
-              >
-                {isTransmitting ? (
-                  <Mic size={40} color="#ffffff" />
-                ) : isSomeoneElseTalking ? (
-                  <Volume2 size={36} color="#fde68a" />
-                ) : isPowerOn ? (
-                  <Radio size={36} color="#ffffff" />
-                ) : (
-                  <MicOff size={36} color="#94a3b8" />
-                )}
-                <span style={{ fontSize: '13px', fontWeight: '900', letterSpacing: '0.5px' }}>
-                  {isTransmitting 
-                    ? '터치하여 종료' 
-                    : isSomeoneElseTalking
-                    ? `[${talkingStatus?.senderName}] 발언 중`
-                    : isPowerOn 
-                    ? '터치하고 말하기' 
-                    : '무전 OFF'}
-                </span>
-                {isTransmitting && (
-                  <span style={{ fontSize: '11px', color: '#fecaca', fontWeight: '800' }}>
-                    {recordDuration}초 (발언 중)
-                  </span>
-                )}
-              </button>
-
-              <span style={{ fontSize: '11px', color: isSomeoneElseTalking ? '#fbbf24' : '#64748b', marginTop: '10px' }}>
-                {isTransmitting 
-                  ? '마이크로 말씀하신 후 버튼을 다시 터치하면 즉시 전송됩니다'
-                  : isSomeoneElseTalking 
-                  ? '동료가 말하고 있습니다. 발언이 끝나면 버튼을 터치하세요'
-                  : isPowerOn 
-                  ? '버튼을 터치하여 말씀하시고, 완료 시 다시 터치하세요' 
-                  : '상단 무전 ON 스위치를 먼저 켜주세요'}
-              </span>
-
-              {/* 🌟 발언 중 실시간 STT 음성인식 라이브 피드 */}
-              {isTransmitting && (
-                <div style={{
-                  marginTop: '10px',
-                  padding: '8px 12px',
-                  borderRadius: '8px',
-                  backgroundColor: 'rgba(15, 23, 42, 0.95)',
-                  border: sttStatus === 'ERROR' ? '1px solid #ef4444' : sttStatus === 'UNSUPPORTED' ? '1px solid #f59e0b' : '1px solid #38bdf8',
-                  width: '90%',
-                  maxWidth: '320px',
-                  textAlign: 'center',
-                  boxShadow: '0 4px 12px rgba(0,0,0,0.5)'
-                }}>
-                  {sttStatus === 'UNSUPPORTED' ? (
-                    <span style={{ fontSize: '11px', color: '#fbbf24', fontWeight: '700' }}>
-                      ⚠️ 브라우저 음성인식 미지원 (모바일 Chrome 권장)
-                    </span>
-                  ) : sttStatus === 'ERROR' ? (
-                    <span style={{ fontSize: '11px', color: '#f87171', fontWeight: '700' }}>
-                      ⚠️ 음성인식 대기중 ({sttErrorDetail || '마이크 확인'})
-                    </span>
-                  ) : liveTranscript ? (
-                    <div style={{ fontSize: '12.5px', color: '#fef08a', fontWeight: '800', wordBreak: 'break-all' }}>
-                      💬 "{liveTranscript}"
-                    </div>
-                  ) : (
-                    <span style={{ fontSize: '11px', color: '#38bdf8' }}>
-                      🎙️ 한국어 실시간 인식 중... (말씀하세요)
-                    </span>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* 실시간 당일 무전 피드 (최근 대화 & STT 전사 텍스트 상시 노출) */}
-            <div style={{
-              borderTop: '1px solid #1e293b',
-              backgroundColor: '#090d16',
-              padding: '12px 16px'
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-                <span style={{ fontSize: '12px', fontWeight: '800', color: '#cbd5e1', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                  <MessageSquare size={13} color="#38bdf8" />
-                  <span>실시간 대화 피드 (당일 {history.length}건)</span>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                <span style={{ fontSize: '11.5px', fontWeight: '800', color: '#cbd5e1', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <MessageSquare size={12} color="#38bdf8" />
+                  <span>실시간 대화 피드 ({history.length}건)</span>
                 </span>
                 <button
                   type="button"
@@ -770,30 +685,35 @@ export const MobileWalkieTalkieModal: React.FC<MobileWalkieTalkieModalProps> = (
                     backgroundColor: 'rgba(56, 189, 248, 0.1)',
                     border: '1px solid rgba(56, 189, 248, 0.3)',
                     color: '#38bdf8',
-                    padding: '3px 8px',
-                    borderRadius: '6px',
-                    fontSize: '11px',
+                    padding: '2px 7px',
+                    borderRadius: '5px',
+                    fontSize: '10.5px',
                     fontWeight: '700',
                     cursor: 'pointer'
                   }}
                 >
-                  전체 대화록 ➔
+                  전체 로그 ➔
                 </button>
               </div>
 
               {history.length === 0 ? (
-                <div style={{ padding: '12px', textAlign: 'center', fontSize: '11.5px', color: '#64748b' }}>
-                  오늘 주고받은 무전 내역이 없습니다. (PTT 버튼을 눌러 말씀하세요)
+                <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11.5px', color: '#64748b' }}>
+                  오늘 무전 내역이 없습니다. (하단 버튼을 터치하여 말씀하세요)
                 </div>
               ) : (
-                <div style={{ 
-                  display: 'flex', 
-                  flexDirection: 'column', 
-                  gap: '6px',
-                  maxHeight: '170px',
-                  overflowY: 'auto'
-                }}>
-                  {history.slice(0, 4).map(msg => {
+                <div 
+                  ref={pttFeedContainerRef}
+                  style={{ 
+                    flex: 1,
+                    display: 'flex', 
+                    flexDirection: 'column', 
+                    gap: '5px',
+                    overflowY: 'auto',
+                    paddingRight: '2px'
+                  }}
+                >
+                  {/* 최신 대화가 맨 아래에 오도록 reverse */}
+                  {history.slice(0, 6).reverse().map(msg => {
                     const isPlaying = playingMessageId === msg.id;
                     const isMine = msg.senderId === currentUser?.id;
                     const timeStr = new Date(msg.createdAt).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
@@ -815,7 +735,7 @@ export const MobileWalkieTalkieModal: React.FC<MobileWalkieTalkieModalProps> = (
                         <div style={{
                           flex: 1,
                           minWidth: 0,
-                          fontSize: '11.5px',
+                          fontSize: '11px',
                           lineHeight: 1.4,
                           wordBreak: 'break-all',
                           whiteSpace: 'pre-wrap'
@@ -833,10 +753,10 @@ export const MobileWalkieTalkieModal: React.FC<MobileWalkieTalkieModalProps> = (
                           }}>
                             {msg.channel}
                           </span>
-                          <span style={{ fontSize: '10.5px', fontWeight: '700', color: isMine ? '#93c5fd' : '#cbd5e1', marginRight: '4px' }}>
+                          <span style={{ fontSize: '10px', fontWeight: '700', color: isMine ? '#93c5fd' : '#cbd5e1', marginRight: '4px' }}>
                             {isMine ? '나' : `${msg.senderDept} ${msg.senderName}`}
                           </span>
-                          <span style={{ fontSize: '9.5px', color: '#64748b', marginRight: '6px' }}>
+                          <span style={{ fontSize: '9px', color: '#64748b', marginRight: '5px' }}>
                             {timeStr}
                           </span>
                           <span style={{
@@ -875,6 +795,120 @@ export const MobileWalkieTalkieModal: React.FC<MobileWalkieTalkieModalProps> = (
                   })}
                 </div>
               )}
+            </div>
+
+            {/* ── 최하단 인체공학적 가로 와이드 PTT 버튼 (오른손 엄지 영역) ── */}
+            <div style={{
+              padding: '10px 14px 14px',
+              backgroundColor: '#0f172a',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '6px'
+            }}>
+              {/* 발언 중 실시간 STT 라이브 버블 */}
+              {isTransmitting && (
+                <div style={{
+                  padding: '6px 10px',
+                  borderRadius: '8px',
+                  backgroundColor: 'rgba(2, 6, 23, 0.95)',
+                  border: sttStatus === 'ERROR' ? '1px solid #ef4444' : sttStatus === 'UNSUPPORTED' ? '1px solid #f59e0b' : '1px solid #38bdf8',
+                  textAlign: 'center',
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.5)'
+                }}>
+                  {sttStatus === 'UNSUPPORTED' ? (
+                    <span style={{ fontSize: '10.5px', color: '#fbbf24', fontWeight: '700' }}>
+                      ⚠️ 브라우저 음성인식 미지원 (음성은 정상 녹음·전송됨)
+                    </span>
+                  ) : sttStatus === 'ERROR' ? (
+                    <span style={{ fontSize: '10.5px', color: '#f87171', fontWeight: '700' }}>
+                      ⚠️ 음성인식 대기중 ({sttErrorDetail || '마이크 확인'})
+                    </span>
+                  ) : liveTranscript ? (
+                    <div style={{ fontSize: '12px', color: '#fef08a', fontWeight: '800', wordBreak: 'break-all' }}>
+                      💬 "{liveTranscript}"
+                    </div>
+                  ) : (
+                    <span style={{ fontSize: '11px', color: '#38bdf8' }}>
+                      🎙️ 한국어 실시간 인식 중... (말씀하세요)
+                    </span>
+                  )}
+                </div>
+              )}
+
+              {/* 가로 와이드 PTT 바 버튼 */}
+              <button
+                type="button"
+                disabled={!isPowerOn}
+                onClick={handleTogglePtt}
+                style={{
+                  width: '100%',
+                  height: '52px',
+                  borderRadius: '14px',
+                  border: isTransmitting 
+                    ? '2px solid #f87171' 
+                    : isSomeoneElseTalking
+                    ? '2px solid #f59e0b'
+                    : isPowerOn 
+                    ? '1.5px solid #38bdf8' 
+                    : '1px solid #475569',
+                  background: isTransmitting 
+                    ? 'linear-gradient(135deg, #dc2626 0%, #991b1b 100%)' 
+                    : isSomeoneElseTalking
+                    ? 'linear-gradient(135deg, #78350f 0%, #451a03 100%)'
+                    : isPowerOn 
+                    ? 'linear-gradient(135deg, #0284c7 0%, #0369a1 100%)' 
+                    : '#334155',
+                  color: '#ffffff',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px',
+                  cursor: isPowerOn ? 'pointer' : 'not-allowed',
+                  userSelect: 'none',
+                  WebkitUserSelect: 'none',
+                  boxShadow: isTransmitting 
+                    ? '0 0 20px rgba(239, 68, 68, 0.7)' 
+                    : isSomeoneElseTalking
+                    ? '0 0 15px rgba(245, 158, 11, 0.4)'
+                    : isPowerOn 
+                    ? '0 4px 14px rgba(2, 132, 199, 0.35)' 
+                    : 'none',
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                {isTransmitting ? (
+                  <>
+                    <Mic size={20} color="#ffffff" />
+                    <span style={{ fontSize: '14.5px', fontWeight: '900', letterSpacing: '0.5px' }}>
+                      🔴 발언 중... ({recordDuration}초) [터치하여 전송]
+                    </span>
+                  </>
+                ) : isSomeoneElseTalking ? (
+                  <>
+                    <Volume2 size={20} color="#fde68a" />
+                    <span style={{ fontSize: '14px', fontWeight: '800', color: '#fef08a' }}>
+                      [{talkingStatus?.senderName}] 발언 중... (잠시 대기)
+                    </span>
+                  </>
+                ) : isPowerOn ? (
+                  <>
+                    <Radio size={20} color="#ffffff" />
+                    <span style={{ fontSize: '14.5px', fontWeight: '800' }}>
+                      터치하고 말하기
+                    </span>
+                    <span style={{ fontSize: '11px', opacity: 0.85, fontWeight: '500' }}>
+                      (완료 시 다시 터치)
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <MicOff size={18} color="#94a3b8" />
+                    <span style={{ fontSize: '13.5px', fontWeight: '700', color: '#94a3b8' }}>
+                      무전기 전원 OFF (상단 전원을 켜주세요)
+                    </span>
+                  </>
+                )}
+              </button>
             </div>
           </>
         ) : (
@@ -941,15 +975,18 @@ export const MobileWalkieTalkieModal: React.FC<MobileWalkieTalkieModalProps> = (
               </div>
             </div>
 
-            {/* 대화 말풍선 스크롤 영역 */}
-            <div style={{
-              flex: 1,
-              padding: '14px 16px',
-              overflowY: 'auto',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '10px'
-            }}>
+            {/* 대화 말풍선 스크롤 영역 (최신 대화가 아래에 위치하도록 역전) */}
+            <div 
+              ref={logContainerRef}
+              style={{
+                flex: 1,
+                padding: '14px 16px',
+                overflowY: 'auto',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '10px'
+              }}
+            >
               {history.length === 0 ? (
                 <div style={{
                   padding: '40px 16px',
@@ -965,7 +1002,7 @@ export const MobileWalkieTalkieModal: React.FC<MobileWalkieTalkieModalProps> = (
                   </div>
                 </div>
               ) : (
-                history.map(msg => {
+                [...history].reverse().map(msg => {
                   const isPlaying = playingMessageId === msg.id;
                   const isMine = msg.senderId === currentUser?.id;
                   const timeStr = new Date(msg.createdAt).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });

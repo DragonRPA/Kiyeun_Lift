@@ -211,7 +211,18 @@ export const Billings: React.FC = () => {
   // 최초 1회 초기 필터 조건으로 조회 스냅샷 생성
   useEffect(() => {
     if (searchedBillingIds === null && billings.length > 0) {
-      const ids = computeMatchedBillingIds(searchTerm, contractNoFilter, startBillingYmFilter, endBillingYmFilter, paymentFilter, mailSentFilter);
+      let effectiveStartYm = startBillingYmFilter;
+      let effectiveEndYm = endBillingYmFilter;
+      // 당월 청구 데이터가 없고 과거 청구 내역이 있는 경우 가장 최신 청구월로 자동 포커스
+      if (!billings.some(b => b.billingYm === initialYm) && billingMonths.length > 0) {
+        effectiveStartYm = billingMonths[0];
+        effectiveEndYm = billingMonths[0];
+        setTempStartBillingYmFilter(effectiveStartYm);
+        setTempEndBillingYmFilter(effectiveEndYm);
+        setStartBillingYmFilter(effectiveStartYm);
+        setEndBillingYmFilter(effectiveEndYm);
+      }
+      const ids = computeMatchedBillingIds(searchTerm, contractNoFilter, effectiveStartYm, effectiveEndYm, paymentFilter, mailSentFilter);
       setSearchedBillingIds(ids);
     }
   }, [billings.length]);
@@ -237,22 +248,22 @@ export const Billings: React.FC = () => {
   };
 
   const handleResetFilters = () => {
-    const nowYm = new Date().toISOString().slice(0, 7);
+    const defaultYm = billings.some(b => b.billingYm === initialYm) ? initialYm : (billingMonths[0] || initialYm);
     setTempSearchTerm('');
     setTempContractNoFilter('');
-    setTempStartBillingYmFilter(nowYm);
-    setTempEndBillingYmFilter(nowYm);
+    setTempStartBillingYmFilter(defaultYm);
+    setTempEndBillingYmFilter(defaultYm);
     setTempPaymentFilter('ALL');
     setTempMailSentFilter('ALL');
 
     setSearchTerm('');
     setContractNoFilter('');
-    setStartBillingYmFilter(nowYm);
-    setEndBillingYmFilter(nowYm);
+    setStartBillingYmFilter(defaultYm);
+    setEndBillingYmFilter(defaultYm);
     setPaymentFilter('ALL');
     setMailSentFilter('ALL');
 
-    const matched = computeMatchedBillingIds('', '', nowYm, nowYm, 'ALL', 'ALL');
+    const matched = computeMatchedBillingIds('', '', defaultYm, defaultYm, 'ALL', 'ALL');
     setSearchedBillingIds(matched);
   };
 

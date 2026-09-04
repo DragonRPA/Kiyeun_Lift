@@ -1330,6 +1330,7 @@ export function parseInitialExcelWorkbook(
         billings.push({
           id: histBillId,
           customerId: customer.id,
+          contractId: contractId,
           billingYm: ymStr,
           billingDate: billDateStr,
           totalAmount: histBillAmount,
@@ -2272,14 +2273,17 @@ export async function generateAndIngestHistoricalBillingsDirect(
 
   for (const contract of contracts) {
     const startYmd = contract.startDate;
-    if (!startYmd || startYmd >= '2026-08-01') continue;
+    if (!startYmd) continue;
+
+    const startParts = startYmd.split('-');
+    const contractStartYm = `${startParts[0]}-${startParts[1]}`;
+    if (contractStartYm > range.end) continue;
+    if (contract.endDate && contract.endDate < `${range.start}-01`) continue;
 
     const cust = customerMap.get(contract.customerId) || {};
     const caList = contractAssetsByContract.get(contract.id) || [];
     if (caList.length === 0) continue;
 
-    const startParts = startYmd.split('-');
-    const contractStartYm = `${startParts[0]}-${startParts[1]}`;
     const loopStartYm = contractStartYm >= range.start ? contractStartYm : range.start;
     const [loopStartY, loopStartM] = loopStartYm.split('-').map(Number);
 

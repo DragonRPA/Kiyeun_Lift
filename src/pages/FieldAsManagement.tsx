@@ -7,7 +7,7 @@ import {
   Truck, ShieldAlert, FileText, ChevronRight, Layers, MessageSquare, ExternalLink, ArrowDownLeft,
   PhoneCall, Navigation, Smartphone, Monitor, Minus
 } from 'lucide-react';
-import { FieldAsTicket, FieldAsPartUsed, FieldAsCollectedPart } from '../services/db';
+import { db, FieldAsTicket, FieldAsPartUsed, FieldAsCollectedPart } from '../services/db';
 import { exportToExcel } from '../services/excel';
 import { compressImageFile } from '../utils/imageCompressor';
 import { launchNavigation, safePhoneCall } from '../utils/nativeLauncher';
@@ -183,8 +183,18 @@ export const FieldAsManagement: React.FC = () => {
 
     setShowNavSelectorTicket(null);
 
-    // 2. 실제 앱 딥링크 호출 (안드로이드 Intent 및 iOS 스킴 완벽 준수, 멈춤 방지)
-    launchNavigation(ticket.siteName, app);
+    // 2. 실제 앱 딥링크 호출 (현장 정밀 주소 우선 매핑, 길안내 모드 및 프리징 방지)
+    let targetDest = '';
+    if (ticket.siteId) {
+      const site = db.customerSites.find(s => s.id === ticket.siteId);
+      if (site && site.address && site.address.trim()) {
+        targetDest = site.address.trim();
+      }
+    }
+    if (!targetDest) {
+      targetDest = ticket.siteName || ticket.locationDetail || ticket.customerName || '현장';
+    }
+    launchNavigation(targetDest, app);
   };
 
   const handleNavButtonClick = (ticket: FieldAsTicket) => {
