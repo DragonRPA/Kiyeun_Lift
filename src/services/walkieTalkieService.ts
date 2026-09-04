@@ -840,9 +840,9 @@ class WalkieTalkieService {
           this.speechRecognition = null;
           this.notifyLiveTranscript('', 'IDLE');
 
-          // 🌟 Web Speech API에서 전사 텍스트가 추출되지 않았을 때, Gemini API 키가 있으면 비동기 음성 전사(STT) 보강 수행
+          // 🌟 Web Speech API에서 전사 텍스트가 추출되지 않았을 때, 비동기 음성 전사(STT) 보강 수행
           if (!msg.textTranscript && blob.size >= 500) {
-            this.tryGeminiTranscription(msg.id, base64, ch);
+            this.tryWhisperTranscription(msg.id, blob, ch);
           }
 
           resolve(msg);
@@ -956,46 +956,39 @@ class WalkieTalkieService {
   }
 
   // 🌟 Gemini 1.5 Flash를 활용한 고정밀 비동기 한국어 음성 전사(STT) 헬퍼
-  private async tryGeminiTranscription(messageId: string, audioBase64: string, channel: WalkieTalkieChannel) {
+  private async tryWhisperTranscription(messageId: string, audioBlob: Blob, channelId: WalkieTalkieChannel) {
     try {
-      const apiKey = getGeminiApiKey();
-      if (!apiKey) return;
+      const openAiKey = localStorage.getItem('openai_api_key') || (import.meta.env.VITE_OPENAI_API_KEY as string);
+      if (!openAiKey) {
+        console.warn('OpenAI API Key가 설정되지 않아 Whisper STT를 건너뜁니다.');
+        return;
+      }
 
-      const base64Data = audioBase64.includes(',') ? audioBase64.split(',')[1] : audioBase64;
-      const mimeMatch = audioBase64.match(/^data:([^;]+);/);
-      const mimeType = mimeMatch ? mimeMatch[1] : 'audio/webm';
+      const formData = new FormData();
+      formData.append('file', audioBlob, 'audio.webm');
+      formData.append('model', 'whisper-1');
+      formData.append('language', 'ko');
+      formData.append('response_format', 'json');
 
-      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
-      const payload = {
-        contents: [
-          {
-            parts: [
-              {
-                inlineData: {
-                  mimeType: mimeType,
-                  data: base64Data
-                }
-              },
-              {
-                text: "이 음성 메시지의 한국어 발언 내용을 사족 없이 말한 내용 그대로만 텍스트로 적어줘."
-              }
-            ]
-          }
-        ]
-      };
-
+      const endpoint = 'https://api.openai.com/v1/audio/transcriptions';
+      
       const res = await fetch(endpoint, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+        headers: { 
+          'Authorization': `Bearer ${openAiKey}` 
+        },
+        body: formData
       });
 
-      if (!res.ok) return;
+      if (!res.ok) {
+        throw new Error(`Whisper API Error (${res.status}): ${await res.text()}`);
+      }
+
       const data = await res.json();
-      const text = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+      const text = data.text?.trim();
 
       if (text) {
-        console.log(`🎙️ [Gemini STT] Transcription for ${messageId}: "${text}"`);
+        console.log(`🎙️ [Whisper STT] Transcription for ${messageId}: "${text}"`);
         const target = this.history.find(m => m.id === messageId);
         if (target) {
           target.textTranscript = text;
@@ -1003,7 +996,7 @@ class WalkieTalkieService {
           this.notifyHistoryChange();
         }
 
-        const activeCh = this.channels.get(channel);
+        const activeCh = this.channels.get(channelId);
         if (activeCh) {
           activeCh.send({
             type: 'broadcast',
@@ -1013,7 +1006,7 @@ class WalkieTalkieService {
         }
       }
     } catch (e) {
-      console.warn('Gemini audio transcription failed:', e);
+      console.warn('Whisper audio transcription failed:', e);
     }
   }
 
