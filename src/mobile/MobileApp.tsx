@@ -111,7 +111,7 @@ export const MobileApp: React.FC<MobileAppProps> = ({ onSwitchToPc }) => {
   };
 
   return (
-    <div className="mobile-app-root min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-blue-500 selection:text-white">
+    <div className="mobile-app-root min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-blue-500 selection:text-white w-full max-w-full overflow-x-hidden">
       {/* 상단 모바일 헤더 + 부서 퀵 체인저 + 무전기 버튼 */}
       <MobileHeader 
         onSwitchToPc={onSwitchToPc}
@@ -126,7 +126,7 @@ export const MobileApp: React.FC<MobileAppProps> = ({ onSwitchToPc }) => {
       <PwaInstallBanner />
 
       {/* 본문 라우팅 */}
-      <main className="flex-1 w-full max-w-lg md:max-w-3xl mx-auto px-1 sm:px-3">
+      <main className="flex-1 w-full max-w-lg md:max-w-3xl mx-auto px-1 sm:px-3 min-w-0 max-w-full overflow-x-hidden">
         {selectedAsTicketId ? (
           <MobileAsDetail
             ticketId={selectedAsTicketId}

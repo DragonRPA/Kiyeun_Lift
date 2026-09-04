@@ -1924,6 +1924,37 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
       }
 
+      // 💡 도로명 상세 주소(siteAddress) 자동 역추적 및 매핑 (T맵/내비 연동 단일 진실의 원천)
+      let resolvedSiteAddress = data.siteAddress?.trim();
+      if (!resolvedSiteAddress) {
+        resolvedSiteAddress = resolveSiteDetailedAddress({
+          siteId: data.siteId,
+          siteName: data.siteName,
+          contractId: resolvedContractId,
+          assetNo: resolvedAssetNo,
+          assetId: resolvedAssetId,
+          customerName: data.customerName,
+          locationDetail: data.locationDetail,
+          customerSites: db.customerSites,
+          contracts: db.contracts,
+          contractAssets: db.contractAssets,
+          customers: db.customers,
+        });
+        if (resolvedSiteAddress === (data.siteName || data.customerName || '현장')) {
+          const cust = db.customers.find(c => (data.customerId && c.id === data.customerId) || (data.customerName && c.name === data.customerName));
+          if (cust?.address?.trim()) {
+            resolvedSiteAddress = cust.address.trim();
+          } else {
+            resolvedSiteAddress = '';
+          }
+        }
+      }
+
+      const initialMemo = data.memo || '';
+      const finalMemo = (resolvedSiteAddress && !initialMemo.includes(resolvedSiteAddress))
+        ? (initialMemo ? `${initialMemo}\n[현장도로명: ${resolvedSiteAddress}]` : `[현장도로명: ${resolvedSiteAddress}]`)
+        : initialMemo;
+
       const newTicket = db.insertRow<Repair>('repairs', {
         id: newRepairId,
         ticketNo: data.ticketNo || ticketNo,
@@ -1938,10 +1969,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         customerName: data.customerName || '',
         siteId: data.siteId || '',
         siteName: data.siteName || '',
+        siteAddress: resolvedSiteAddress || '',
         assetId: resolvedAssetId || '',
         assetNo: resolvedAssetNo || '현장확인',
         modelName: resolvedModelName || '고소작업대',
-        locationDetail: data.locationDetail || '',
+        locationDetail: data.locationDetail || (resolvedSiteAddress ? resolvedSiteAddress : ''),
         reporterName: data.reporterName || '',
         reporterContact: data.reporterContact || '',
         issueCategory: data.issueCategory || '기타',
@@ -1972,7 +2004,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         revisitDate: data.revisitDate || '',
         revisitReason: data.revisitReason || '',
         exchangeSuggested: !!data.exchangeSuggested,
-        memo: data.memo || '',
+        memo: finalMemo,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       });

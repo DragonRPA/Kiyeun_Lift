@@ -114,11 +114,14 @@ export const MobileWalkieTalkieModal: React.FC<MobileWalkieTalkieModalProps> = (
     };
   }, [currentUser]);
 
-  // 모달 오픈 시 오디오 컨텍스트 언락
+  // 모달 오픈 시 오디오 컨텍스트 언락 & 닫힐 때 오디오 정지
   useEffect(() => {
     if (isOpen) {
       walkieService.unlockAudio();
       setHistory([...walkieService.getHistory()]);
+    } else {
+      walkieService.stopAudio();
+      setPlayingMessageId(null);
     }
   }, [isOpen]);
 
@@ -287,17 +290,23 @@ export const MobileWalkieTalkieModal: React.FC<MobileWalkieTalkieModalProps> = (
     setRecordDuration(0);
   };
 
-  // 다시듣기 재생
+  // 다시듣기 재생 (토글 정지 및 빈 오디오/오류 검증 피드백)
   const handlePlayAudio = async (msg: WalkieMessage) => {
     if (playingMessageId === msg.id) {
+      walkieService.stopAudio();
       setPlayingMessageId(null);
+      return;
+    }
+    if (!msg.audioBase64 || msg.audioBase64.trim().length < 50) {
+      alert('음성 데이터가 비어있거나 저장되지 않은 메시지입니다.');
       return;
     }
     setPlayingMessageId(msg.id);
     try {
       await walkieService.playAudio(msg.audioBase64);
-    } catch (e) {
+    } catch (e: any) {
       console.warn('Playback error:', e);
+      alert('음성 재생 실패: ' + (e?.message || '알 수 없는 오류'));
     } finally {
       setPlayingMessageId(null);
     }

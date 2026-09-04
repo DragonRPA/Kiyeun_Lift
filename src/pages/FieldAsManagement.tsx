@@ -97,6 +97,7 @@ export const FieldAsManagement: React.FC = () => {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newCustomerName, setNewCustomerName] = useState('');
   const [newSiteName, setNewSiteName] = useState('');
+  const [newSiteAddress, setNewSiteAddress] = useState('');
   const [newAssetNo, setNewAssetNo] = useState('');
   const [newLocationDetail, setNewLocationDetail] = useState('');
   const [newReporterName, setNewReporterName] = useState('');
@@ -185,6 +186,7 @@ export const FieldAsManagement: React.FC = () => {
 
     // 2. 실제 앱 딥링크 호출 (현장 정밀 도로명 주소 다단계 역추적)
     const targetDest = resolveSiteDetailedAddress({
+      siteAddress: ticket.siteAddress,
       siteId: ticket.siteId,
       siteName: ticket.siteName,
       contractId: ticket.contractId,
@@ -477,6 +479,7 @@ export const FieldAsManagement: React.FC = () => {
         source: 'DIRECT_INTAKE',
         customerName: newCustomerName.trim() || '현장 협력업체',
         siteName: newSiteName.trim(),
+        siteAddress: newSiteAddress.trim(),
         assetNo: newAssetNo.trim() || '현장확인',
         locationDetail: newLocationDetail.trim(),
         reporterName: newReporterName.trim(),
@@ -1379,6 +1382,23 @@ showToast('밴드 과거 AS 빅데이터 탑재를 시작합니다.');
                       <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-muted)' }}>
                         업체명: <strong>{selectedTicket.customerName}</strong> {selectedTicket.locationDetail ? `| 위치: ${selectedTicket.locationDetail}` : ''}
                       </p>
+                      <div style={{ marginTop: '4px', fontSize: '12px', color: '#0284c7', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <MapPin size={13} color="#0284c7" />
+                        <span>도로명 주소: <strong>{selectedTicket.siteAddress || resolveSiteDetailedAddress({
+                          siteAddress: selectedTicket.siteAddress,
+                          siteId: selectedTicket.siteId,
+                          siteName: selectedTicket.siteName,
+                          contractId: selectedTicket.contractId,
+                          assetNo: selectedTicket.assetNo,
+                          assetId: selectedTicket.assetId,
+                          customerName: selectedTicket.customerName,
+                          locationDetail: selectedTicket.locationDetail,
+                          customerSites: db.customerSites,
+                          contracts: db.contracts,
+                          contractAssets: db.contractAssets,
+                          customers: db.customers
+                        })}</strong></span>
+                      </div>
                     </div>
 
                     <div style={{ textAlign: 'right' }}>
@@ -2553,26 +2573,54 @@ showToast('밴드 과거 AS 빅데이터 탑재를 시작합니다.');
             <form onSubmit={handleCreateDirectTicket} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)' }}>현장명 *</label>
+                  <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>현장명 *</label>
                   <input
                     type="text"
                     required
                     value={newSiteName}
-                    onChange={(e) => setNewSiteName(e.target.value)}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setNewSiteName(val);
+                      const s = db.customerSites.find(cs => cs.name.includes(val.trim()) || val.trim().includes(cs.name));
+                      if (s?.address?.trim()) setNewSiteAddress(s.address.trim());
+                    }}
                     placeholder="예: 용인 SK하이닉스 팹동"
                     style={{ padding: '8px 10px', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '13px' }}
                   />
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)' }}>업체명 (고객사)</label>
+                  <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>업체명 (고객사)</label>
                   <input
                     type="text"
                     value={newCustomerName}
-                    onChange={(e) => setNewCustomerName(e.target.value)}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setNewCustomerName(val);
+                      const cust = db.customers.find(c => c.name.includes(val.trim()) || val.trim().includes(c.name));
+                      if (cust) {
+                        const cs = db.customerSites.find(s => s.customerId === cust.id);
+                        if (cs?.address?.trim()) setNewSiteAddress(cs.address.trim());
+                        else if (cust.address?.trim()) setNewSiteAddress(cust.address.trim());
+                      }
+                    }}
                     placeholder="예: 세보, 화성"
                     style={{ padding: '8px 10px', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '13px' }}
                   />
                 </div>
+              </div>
+
+              {/* 도로명 상세 주소 */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
+                  현장 도로명 주소 (T맵 연동)
+                </label>
+                <input
+                  type="text"
+                  value={newSiteAddress}
+                  onChange={(e) => setNewSiteAddress(e.target.value)}
+                  placeholder="도로명 주소 입력 (고객 정보 자동 연동)"
+                  style={{ padding: '8px 10px', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '13px' }}
+                />
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>

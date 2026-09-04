@@ -111,6 +111,7 @@ export const SmartAsRequest: React.FC = () => {
         customerName: customer?.name || (site?.name ? `${site.name} 협력사` : '영업 의뢰 고객사'),
         siteId: site?.id || '',
         siteName: site?.name || '현장 지정 요청',
+        siteAddress: site?.address?.trim() || customer?.address?.trim() || '',
         assetId: matchedAsset?.id || '',
         assetNo: finalAssetNo,
         locationDetail: locationDetail.trim(),

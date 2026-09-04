@@ -1,5 +1,6 @@
 // src/services/walkieTalkieService.ts
 import { supabase } from './db';
+import { getGeminiApiKey } from './geminiGemsService';
 
 export type WalkieTalkieChannel = 'ALL' | 'DISPATCH' | 'AS' | 'SALES';
 
@@ -41,13 +42,19 @@ class WalkieSoundEngine {
     return this.ctx;
   }
 
-  // 사용자 인터랙션(터치/클릭) 시 브라우저 오디오 권한 즉시 언락
+  // 사용자 인터랙션(터치/클릭) 시 브라우저 오디오 권한 즉시 언락 (Web Audio + HTML5 Audio)
   unlockAudioOnUserGesture() {
     try {
       const ctx = this.getContext();
       if (ctx.state === 'suspended') {
         ctx.resume().catch(() => {});
       }
+      // 모바일 브라우저 HTMLAudioElement 자동재생 권한 동시 언락
+      const dummy = new Audio('data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA');
+      dummy.volume = 0.01;
+      dummy.play().then(() => {
+        dummy.pause();
+      }).catch(() => {});
     } catch {
       // ignore
     }
@@ -177,6 +184,7 @@ class WalkieTalkieService {
   private audioChunks: Blob[] = [];
   private recordingStartTime = 0;
   private currentStream: MediaStream | null = null;
+  private activeAudio: HTMLAudioElement | null = null;
 
   // STT 실시간 음성 인식기 (Web Speech API)
   private speechRecognition: any = null;
@@ -577,55 +585,8 @@ class WalkieTalkieService {
       this.currentTranscript = '';
       this.isSttOnlyMode = Boolean(options?.sttOnly);
 
-      // 1. 🌟 STT 실시간 음성인식 초기화 (Web Speech API)
-      try {
-        const SpeechRec = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-        if (SpeechRec) {
-          const rec = new SpeechRec();
-          rec.lang = 'ko-KR';
-          // ⚠️ 안드로이드 크롬 모바일 호환을 위해 continuous는 반드시 false로 설정
-          rec.continuous = false;
-          rec.interimResults = true;
-          rec.maxAlternatives = 1;
-
-          rec.onstart = () => {
-            this.notifyLiveTranscript('', 'LISTENING');
-          };
-
-          rec.onresult = (event: any) => {
-            let transcriptStr = '';
-            for (let i = 0; i < event.results.length; ++i) {
-              transcriptStr += event.results[i][0].transcript;
-            }
-            this.currentTranscript = transcriptStr.trim();
-            this.notifyLiveTranscript(this.currentTranscript, 'LISTENING');
-          };
-
-          rec.onerror = (e: any) => {
-            console.warn('STT SpeechRec error:', e?.error);
-            this.notifyLiveTranscript(this.currentTranscript, 'ERROR', e?.error || 'error');
-          };
-
-          rec.onend = () => {
-            // 발화 감지 종료 시 유지
-          };
-
-          try {
-            rec.start();
-            this.speechRecognition = rec;
-            this.notifyLiveTranscript('', 'LISTENING');
-          } catch (sttStartErr) {
-            console.warn('rec.start failed:', sttStartErr);
-          }
-        } else {
-          this.notifyLiveTranscript('', 'UNSUPPORTED', '브라우저 음성인식 미지원');
-        }
-      } catch (sttErr: any) {
-        console.warn('STT SpeechRecognition init error:', sttErr);
-        this.notifyLiveTranscript('', 'ERROR', sttErr?.message || 'init_failed');
-      }
-
-      // 2. sttOnly 모드가 아닐 때만 getUserMedia 및 MediaRecorder 가동 (독백의뢰 모드에서는 마이크 점유 충돌 차단)
+      // 1. 일반 무전 모드(!isSttOnlyMode): 마이크 하드웨어 스트림 및 MediaRecorder를 최우선 선제 가동
+      // (안드로이드 OS 마이크 하드웨어 파이프라인을 미디어레코더가 안정적으로 확보하도록 보장)
       if (!this.isSttOnlyMode) {
         if (!this.currentStream) {
           this.currentStream = await navigator.mediaDevices.getUserMedia({ 
@@ -637,12 +598,14 @@ class WalkieTalkieService {
           });
         }
 
-        const candidates = [
-          'audio/mp4',
-          'audio/webm;codecs=opus',
-          'audio/webm',
-          'audio/aac'
-        ];
+        // 🌟 모바일 OS별 최적 코덱 선별:
+        // 안드로이드 크롬/PC는 WebM Opus가 절대 표준 (audio/mp4는 크롬에서 재생 불가 fMP4를 생성하므로 제외)
+        // iOS 사파리만 audio/mp4 선별
+        const isSafari = typeof navigator !== 'undefined' && /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+        const candidates = isSafari
+          ? ['audio/mp4', 'audio/aac']
+          : ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/mp4'];
+
         let mimeType = '';
         if (typeof MediaRecorder !== 'undefined' && typeof MediaRecorder.isTypeSupported === 'function') {
           mimeType = candidates.find(type => {
@@ -664,6 +627,57 @@ class WalkieTalkieService {
         };
 
         this.mediaRecorder.start(100);
+      }
+
+      // 2. 🌟 STT 실시간 음성인식 초기화 (Web Speech API)
+      // 독백의뢰 모드에서는 단독 구동되며, 일반 무전 모드에서도 지원 시 보조 전사로 작동
+      try {
+        const SpeechRec = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+        if (SpeechRec) {
+          const rec = new SpeechRec();
+          rec.lang = 'ko-KR';
+          rec.continuous = false;
+          rec.interimResults = true;
+          rec.maxAlternatives = 1;
+
+          rec.onstart = () => {
+            this.notifyLiveTranscript('', 'LISTENING');
+          };
+
+          rec.onresult = (event: any) => {
+            let transcriptStr = '';
+            for (let i = 0; i < event.results.length; ++i) {
+              transcriptStr += event.results[i][0].transcript;
+            }
+            this.currentTranscript = transcriptStr.trim();
+            this.notifyLiveTranscript(this.currentTranscript, 'LISTENING');
+          };
+
+          rec.onerror = (e: any) => {
+            const err = e?.error || 'error';
+            console.warn('STT SpeechRec error:', err);
+            // 안드로이드에서 getUserMedia와의 마이크 경합으로 인한 audio-capture 등 발생 시 상태 알림
+            this.notifyLiveTranscript(this.currentTranscript, 'ERROR', err);
+          };
+
+          rec.onend = () => {
+            // 발화 감지 종료 시 유지
+          };
+
+          try {
+            rec.start();
+            this.speechRecognition = rec;
+            this.notifyLiveTranscript('', 'LISTENING');
+          } catch (sttStartErr: any) {
+            console.warn('rec.start failed:', sttStartErr);
+            this.notifyLiveTranscript('', 'ERROR', sttStartErr?.message || 'start_failed');
+          }
+        } else {
+          this.notifyLiveTranscript('', 'UNSUPPORTED', '브라우저 음성인식 미지원');
+        }
+      } catch (sttErr: any) {
+        console.warn('STT SpeechRecognition init error:', sttErr);
+        this.notifyLiveTranscript('', 'ERROR', sttErr?.message || 'init_failed');
       }
 
       // 3. 🌟 다른 동료들에게 "내가 지금 말하고 있습니다" 브로드캐스트
@@ -718,12 +732,10 @@ class WalkieTalkieService {
     if (recInstance) {
       try {
         recInstance.stop();
-      } catch (e) {
-        // ignore
-      }
+      } catch {}
       if (!this.currentTranscript) {
         await new Promise<void>((resolve) => {
-          const timer = setTimeout(resolve, 500);
+          const timer = setTimeout(resolve, 450);
           recInstance.onresult = (event: any) => {
             let transcriptStr = '';
             for (let i = 0; i < event.results.length; ++i) {
@@ -792,7 +804,14 @@ class WalkieTalkieService {
             this.currentStream = null;
           }
 
-          const blob = new Blob(this.audioChunks, { type: this.mediaRecorder?.mimeType || 'audio/webm' });
+          const mime = this.mediaRecorder?.mimeType || 'audio/webm';
+          const blob = new Blob(this.audioChunks, { type: mime });
+          console.log(`🎙️ [PTT] Recorded chunks: ${this.audioChunks.length}, total blob size: ${blob.size} bytes (${mime})`);
+
+          if (blob.size < 200) {
+            console.error(`🚨 [PTT] Recorded audio is too small (${blob.size} bytes)! Microphone may have been muted or blocked.`);
+          }
+
           const base64 = await this.blobToBase64(blob);
 
           const msg: WalkieMessage = {
@@ -820,6 +839,12 @@ class WalkieTalkieService {
 
           this.speechRecognition = null;
           this.notifyLiveTranscript('', 'IDLE');
+
+          // 🌟 Web Speech API에서 전사 텍스트가 추출되지 않았을 때, Gemini API 키가 있으면 비동기 음성 전사(STT) 보강 수행
+          if (!msg.textTranscript && blob.size >= 500) {
+            this.tryGeminiTranscription(msg.id, base64, ch);
+          }
+
           resolve(msg);
         } catch (e) {
           console.error('Failed to encode and send walkie message:', e);
@@ -862,48 +887,133 @@ class WalkieTalkieService {
     soundEngine.playEndBeep();
   }
 
-  // 🌟 모바일 브라우저 자동재생 차단(NotAllowedError)을 원천 우회하는 Web Audio API 버퍼 재생
+  // 재생 중인 오디오 즉시 정지
+  stopAudio() {
+    if (this.activeAudio) {
+      try {
+        this.activeAudio.pause();
+        this.activeAudio.currentTime = 0;
+      } catch {}
+      this.activeAudio = null;
+    }
+  }
+
+  // 🌟 모바일 브라우저 즉시 재생 (사용자 인터랙션 제스처 토큰 보존 & WebM Opus / MP4 네이티브 다이렉트 재생)
   async playAudio(base64: string): Promise<void> {
-    try {
-      // 1. DataURL -> ArrayBuffer 변환
-      const res = await fetch(base64);
-      const arrayBuffer = await res.arrayBuffer();
+    if (!base64 || base64.trim().length < 50) {
+      throw new Error('음성 데이터가 비어있습니다.');
+    }
 
-      // 2. 전역 AudioContext 획득 및 활성화
-      const ctx = soundEngine.getContext();
-      if (ctx.state === 'suspended') {
-        await ctx.resume().catch(() => {});
-      }
+    // 기존 재생 중인 오디오가 있다면 정지
+    this.stopAudio();
 
-      // 3. 오디오 데이터 디코딩 (Opus, WebM, AAC, MP4 네이티브 디코딩)
-      const audioBuffer = await new Promise<AudioBuffer>((resolve, reject) => {
-        ctx.decodeAudioData(arrayBuffer, resolve, reject);
-      });
+    return new Promise<void>((resolve, reject) => {
+      try {
+        const audio = new Audio();
+        this.activeAudio = audio;
+        audio.preload = 'auto';
+        audio.volume = 1.0;
 
-      // 4. 버퍼 소스 노드를 통한 무차단 직접 출력
-      return new Promise<void>((resolve) => {
-        const source = ctx.createBufferSource();
-        source.buffer = audioBuffer;
-        source.connect(ctx.destination);
-        source.onended = () => resolve();
-        source.start(0);
-      });
-    } catch (e) {
-      console.warn('WebAudio decodeAudioData fallback to HTMLAudioElement:', e);
-      // HTML5 Audio fallback
-      return new Promise<void>((resolve) => {
-        try {
-          const audio = new Audio(base64);
-          audio.onended = () => resolve();
-          audio.onerror = () => resolve();
-          const playPromise = audio.play();
-          if (playPromise) {
-            playPromise.catch(() => resolve());
+        let isFinished = false;
+        const cleanup = () => {
+          if (isFinished) return;
+          isFinished = true;
+          if (this.activeAudio === audio) {
+            this.activeAudio = null;
           }
-        } catch {
+        };
+
+        audio.onended = () => {
+          cleanup();
           resolve();
+        };
+
+        audio.onerror = (e) => {
+          cleanup();
+          const errCode = audio.error ? audio.error.code : 'unknown';
+          const errMsg = audio.error ? audio.error.message : '';
+          console.error(`Audio playback error (code ${errCode}):`, errMsg, e);
+          reject(new Error(`오디오 재생 실패 (코드: ${errCode})`));
+        };
+
+        // base64 src 설정 및 즉시 동기 재생 (사용자 제스처 컨텍스트 100% 유지)
+        audio.src = base64;
+        const playPromise = audio.play();
+        if (playPromise !== undefined) {
+          playPromise.catch((playErr) => {
+            cleanup();
+            console.error('audio.play() rejected:', playErr);
+            reject(playErr);
+          });
         }
+      } catch (err) {
+        if (this.activeAudio) {
+          this.activeAudio = null;
+        }
+        reject(err);
+      }
+    });
+  }
+
+  // 🌟 Gemini 1.5 Flash를 활용한 고정밀 비동기 한국어 음성 전사(STT) 헬퍼
+  private async tryGeminiTranscription(messageId: string, audioBase64: string, channel: WalkieTalkieChannel) {
+    try {
+      const apiKey = getGeminiApiKey();
+      if (!apiKey) return;
+
+      const base64Data = audioBase64.replace(/^data:audio\/[^;]+;base64,/, '');
+      const mimeMatch = audioBase64.match(/^data:(audio\/[^;]+);/);
+      const mimeType = mimeMatch ? mimeMatch[1] : 'audio/webm';
+
+      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+      const payload = {
+        contents: [
+          {
+            parts: [
+              {
+                inlineData: {
+                  mimeType: mimeType,
+                  data: base64Data
+                }
+              },
+              {
+                text: "이 음성 메시지의 한국어 발언 내용을 사족 없이 말한 내용 그대로만 텍스트로 적어줘."
+              }
+            ]
+          }
+        ]
+      };
+
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
       });
+
+      if (!res.ok) return;
+      const data = await res.json();
+      const text = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+
+      if (text) {
+        console.log(`🎙️ [Gemini STT] Transcription for ${messageId}: "${text}"`);
+        const target = this.history.find(m => m.id === messageId);
+        if (target) {
+          target.textTranscript = text;
+          this.saveHistoryToStorage();
+          this.notifyHistoryChange();
+        }
+
+        const activeCh = this.channels.get(channel);
+        if (activeCh) {
+          activeCh.send({
+            type: 'broadcast',
+            event: 'transcript_update',
+            payload: { messageId, textTranscript: text }
+          });
+        }
+      }
+    } catch (e) {
+      console.warn('Gemini audio transcription failed:', e);
     }
   }
 

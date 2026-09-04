@@ -755,6 +755,7 @@ export interface Repair {
   customerName: string;
   siteId?: string;
   siteName: string;
+  siteAddress?: string; // 🌟 도로명 상세주소 (T맵/내비/지도 자동 길안내 SSOT)
   locationDetail?: string; // 예: 팹동 8층 X27 Y17
   reporterName?: string;
   reporterContact?: string;
@@ -2933,7 +2934,22 @@ class LocalDB {
   get payrollClosings() { return this.get<PayrollClosing>('payrollClosings', []); }
   set payrollClosings(val: PayrollClosing[]) { this.set('payrollClosings', val); }
 
-  get repairs() { return this.get<Repair>('repairs', SEED_REPAIRS); }
+  get repairs() {
+    const list = this.get<Repair>('repairs', SEED_REPAIRS);
+    // 🌟 현장 도로명 주소(siteAddress) 보강 (원격 DB 미반영 환경에서도 무누락 상속)
+    return list.map(r => {
+      if (r.siteAddress && r.siteAddress.trim()) return r;
+      let addr = '';
+      if (r.locationDetail && /(?:시|군|구)\s+[가-힣0-9]+(?:로|길|읍|면|동)/.test(r.locationDetail)) {
+        addr = r.locationDetail.trim();
+      } else if (r.memo && r.memo.includes('[현장도로명:')) {
+        const match = r.memo.match(/\[현장도로명:\s*([^\]]+)\]/);
+        if (match) addr = match[1].trim();
+      }
+      if (addr) return { ...r, siteAddress: addr };
+      return r;
+    });
+  }
   set repairs(val: Repair[]) { this.set('repairs', val); }
 
   get vendors() { return this.get<Vendor>('vendors', SEED_VENDORS); }
@@ -3404,6 +3420,10 @@ class LocalDB {
       if (tableName === 'purchase_settlements' && key === 'bankTransactionId') {
         continue;
       }
+      // DB repairs 스키마에 아직 없는 siteAddress 컬럼 오염 및 PostgreSQL 42703 에러 방지 (대신 locationDetail/memo에 안전 보존)
+      if (tableName === 'repairs' && key === 'siteAddress') {
+        continue;
+      }
       if (typeof val === 'string' && (key === 'userId' || key === 'salespersonId' || key === 'requesterId' || key === 'accepterId' || key === 'completerId' || key === 'inbounderId' || key === 'createdById' || key === 'updatedById' || key.toLowerCase().includes('user'))) {
         const userExists = this.users.some(u => u.id === val);
         sanitized[key] = userExists ? val : (this.users[0]?.id || null);
@@ -3414,6 +3434,17 @@ class LocalDB {
         sanitized[key] = null;
       } else {
         sanitized[key] = val;
+      }
+    }
+    // repairs 테이블의 경우 siteAddress를 locationDetail 또는 memo에 무누락 백업 (원격 DB 컬럼 미반영 환경 100% 호환)
+    if (tableName === 'repairs' && obj.siteAddress && typeof obj.siteAddress === 'string' && obj.siteAddress.trim()) {
+      const addr = obj.siteAddress.trim();
+      if (!sanitized.locationDetail || !sanitized.locationDetail.trim()) {
+        sanitized.locationDetail = addr;
+      } else if (!sanitized.locationDetail.includes(addr)) {
+        if (!sanitized.memo || !sanitized.memo.includes(addr)) {
+          sanitized.memo = sanitized.memo ? `${sanitized.memo}\n[현장도로명: ${addr}]` : `[현장도로명: ${addr}]`;
+        }
       }
     }
     return sanitized;

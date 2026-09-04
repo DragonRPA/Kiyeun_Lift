@@ -327,6 +327,7 @@ export function mergeVoiceFragmentToDraft(
 export interface AsCallParseResult {
   customerName: string;
   siteName: string;
+  siteAddress?: string;
   assetNo: string;
   reporterName: string;
   reporterContact: string;
@@ -348,6 +349,7 @@ export function parseAsCallTranscript(
 
   let customerName = '';
   let siteName = '';
+  let siteAddress = '';
   let assetNo = '';
   let reporterName = '';
   let reporterContact = '';
@@ -355,6 +357,13 @@ export function parseAsCallTranscript(
   let issueDescription = cleanText;
   let priority: 'NORMAL' | 'URGENT' = 'NORMAL';
   let locationDetail = '';
+
+  // 0. 본문 내 도로명/지번 주소 정규식 추출
+  const addrMatch = cleanText.match(/(?:[가-힣]+(?:시|도)\s+)?[가-힣]+(?:시|군|구)\s+[가-힣0-9\s]+(?:로|길|번길)\s*\d+(?:-\d+)?/);
+  if (addrMatch) {
+    siteAddress = addrMatch[0].trim();
+    modifiedFields.push(`도로명주소: ${siteAddress}`);
+  }
 
   // 1. 긴급도 판별
   if (/급해|당장|중단|작업\s*못해|사고|위험|빨리/i.test(cleanText)) {
@@ -436,9 +445,19 @@ export function parseAsCallTranscript(
 
     if (isDirectMatch || isKeywordMatch) {
       siteName = s.name;
+      if (s.address && s.address.trim() && !siteAddress) {
+        siteAddress = s.address.trim();
+        modifiedFields.push(`현장주소: ${s.address.trim()}`);
+      }
       if (!customerName) {
         const parentCust = customers.find(c => c.id === s.customerId);
-        if (parentCust) customerName = parentCust.name;
+        if (parentCust) {
+          customerName = parentCust.name;
+          if (!siteAddress && parentCust.address?.trim()) {
+            siteAddress = parentCust.address.trim();
+            modifiedFields.push(`고객사주소: ${parentCust.address.trim()}`);
+          }
+        }
       }
       modifiedFields.push(`현장: ${s.name}`);
       break;
@@ -452,9 +471,19 @@ export function parseAsCallTranscript(
     modifiedFields.push(`상세위치: ${locationDetail}`);
   }
 
+  // 고객사가 매칭되었으나 아직 주소가 없으면 고객사 주소 상속
+  if (customerName && !siteAddress) {
+    const parentCust = customers.find(c => c.name === customerName);
+    if (parentCust?.address?.trim()) {
+      siteAddress = parentCust.address.trim();
+      modifiedFields.push(`고객사주소: ${parentCust.address.trim()}`);
+    }
+  }
+
   return {
     customerName,
     siteName,
+    siteAddress,
     assetNo,
     reporterName,
     reporterContact,

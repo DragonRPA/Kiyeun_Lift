@@ -1,5 +1,81 @@
 # 개발 지시 및 개편 완료 내역 (dev_temp.md)
 
+## 📍 [AS접수도로명주소자동연동 & T맵딥링크연동] AS 접수 단계 도로명 상세 주소 실시간 자동 역추적 및 T맵 1:1 연동 완성 (Build.134)
+
+### 1. 개발 배경 및 사장님 지시사항
+- **사용자 요구사항**:
+  > "T맵 연결은 최초에 AS 접수(불러오기) 단계에서 주소연동을 안한거였어. 고객 정보에서 상세주소를 확인할 수 있는 경우에는 상세주소를 가져와줘. 메뉴 구성에 스키마 변동가지 고려해서 모두 개편해줘. UI 무너지지 않도록 글로벌원칙을 준수해서 개편해. ㄹㅇ"
+- **도메인 핵심 가치 및 R&R (헌장 1.1, 1.2, 3.1, 3.4)**:
+  - 현장 AS 출동 기사가 스마트폰에서 T맵 버튼을 눌렀을 때, 단순 현장 텍스트명이 아닌 실제 도로명 상세 주소가 T맵에 100% 전달되어야 함.
+  - 이를 위해 접수(인테이크) 단계에서 장비번호나 고객사/현장명을 선택하는 즉시 등록된 도로명 상세주소가 자동으로 연동되어 저장되어야 함.
+
+### 2. 주요 구현 내용
+1. **장비번호 및 고객사/현장 입력 시 실시간 주소 역추적 상속 (`MobileAsCreate.tsx`, `FieldAsManagement.tsx`)**:
+   - `handleAssetNoChange`: 장비번호 입력 시 `assets ➔ contractAssets ➔ contracts ➔ customerSites/customers`를 실시간 역추적하여 고객사명, 현장명, 도로명 주소를 1초 만에 자동 채움.
+   - `handleCustomerNameChange`: 고객사 선택 시 등록된 현장 목록 퀵 칩 노출 및 도로명 주소(`siteAddress`) 자동 입력.
+   - 1-Click `[고객사 주소 적용]` 헬퍼 칩 지원.
+2. **전사 AS 데이터 모델 및 원격 DB 스키마 정합성 보장 (`db.ts`, `AppContext.tsx`, `nativeLauncher.ts`)**:
+   - `interface Repair`에 `siteAddress?: string;` 정식 추가.
+   - Supabase `repairs` 테이블 컬럼 미반영 환경에서 PostgreSQL `42703` 오류를 차단하기 위해 `sanitizeSupabasePayload` 필터링 및 `locationDetail` / `memo` 무누락 백업 복원 레이어 구축.
+   - `createFieldAsTicket` 시 누락 시에도 다단계 역추적 엔진을 통해 `siteAddress` 100% 자동 보강.
+   - `resolveSiteDetailedAddress`에 `siteAddress`를 0순위 SSOT로 설정하고 고객사 등록 주소까지 역추적 확장.
+   - AS 상세 화면(`MobileAsDetail.tsx`, `FieldAsManagement.tsx`)에 도로명 주소 1-Click 클립보드 복사 및 TMap 길안내 연동.
+3. **전사 UI 표준 헌장 엄격 준수**:
+   - 레이블-입력창 상하 세로 스택 구조 (헌장 3.4).
+   - 무수식어 건조한 명사/동사 표준화 (헌장 3.1).
+   - 줄바꿈 방지 `whitespace-nowrap flex-shrink-0` (헌장 3.2).
+
+### 3. 검증 결과
+- `cmd /c "npm run build"`: 타입 에러 0건, 876ms 프로덕션 빌드 정상 완료.
+- "ㄹㅇ" 단축어 규칙에 따라 즉시 커밋 & 푸시 및 Vercel 배포 슬롯 자동 정리 집행.
+
+## 🎙️ [무전기음성재생복원 & 모바일STT파이프라인] 안드로이드 크롬 MediaRecorder 오디오 무음 결함 해결 및 즉시 재생·비동기 전사 아키텍처 (Build.134)
+
+### 1. 개발 배경 및 사장님 지시사항
+- **사용자 보고 사항**:
+  > "음성 자체가 저장이 안되나? STT 가 안되는 것이 이상해서 재생을 시도해봤는데 아무 소리도 안나"
+- **도메인 핵심 가치 및 문제 본질 (헌장 1.1, 5.2)**:
+  - 렌탈 현장 무전기 시스템에서 가장 본질적인 기능은 **음성의 무누락 저장 및 즉각적인 청취(재생)**임.
+  - 갤럭시 S24(안드로이드 크롬)에서 PTT로 녹음된 카드의 재생 버튼(`[▶]`)을 눌렀을 때 완전한 무음이 발생하여 사용자가 음성이 저장되지 않은 것으로 오인하는 치명적 결함을 원천 해결.
+
+### 2. 기술적 원인 분석
+1. **Chromium `decodeAudioData` 결함**:
+   - `MediaRecorder`가 생성한 WebM은 스트리밍 특성상 헤더에 duration이 없으며, 크롬의 `AudioContext.decodeAudioData`는 이를 디코딩하지 못하고 `DOMException`을 던짐.
+2. **모바일 브라우저 사용자 제스처 토큰(User Activation) 만료**:
+   - `decodeAudioData` 실패 후 `catch` 블록에서 `new Audio(base64).play()`를 시도했으나, 앞선 `fetch`, `arrayBuffer`, `decodeAudioData` 다단계 비동기 microtask 대기로 인해 터치 제스처 토큰이 만료되어 안드로이드 크롬 자동재생 방지 정책(`NotAllowedError`)에 의해 무음 차단됨.
+3. **MimeType 후보 순서 결함**:
+   - 후보 1순위가 `audio/mp4`로 설정되어 안드로이드 크롬에서 불안정한 fMP4로 녹음됨.
+4. **마이크 하드웨어 점유 경합**:
+   - `SpeechRecognition.start()`가 `getUserMedia`보다 먼저 실행되어 안드로이드 OS 오디오 HAL에서 마이크를 선점함으로써 오디오 트랙이 묵음 처리되거나 STT가 `audio-capture` 에러로 단절됨.
+
+### 3. 주요 구현 내용
+1. **동기식 HTML5 Audio 즉시 재생 아키텍처 (`walkieTalkieService.ts`)**:
+   - 비동기 `fetch -> arrayBuffer -> decodeAudioData` 파이프라인을 전면 철거.
+   - 사용자 터치 직후 동기(Synchronous)로 `const audio = new Audio(); audio.src = base64; audio.volume = 1.0; audio.play();`를 1마이크로초 지연 없이 실행하여 브라우저 제스처 토큰 100% 보존.
+   - `stopAudio()` 메서드 신설로 재생 중 재터치 또는 모달 닫기 시 즉시 멈춤 토글 지원.
+2. **브라우저 OS별 코덱 최우선 배치**:
+   - 안드로이드/PC는 `'audio/webm;codecs=opus'`, `'audio/webm'`을 최우선 강제하여 완벽한 고음질 Opus WebM 캡처 보장.
+   - iOS 사파리만 `'audio/mp4'` 채택.
+3. **마이크 하드웨어 스트림 선제 확보 & `blob.size` 안전 검증**:
+   - `getUserMedia`를 최우선 가동하여 `MediaRecorder`가 실제 음성 데이터를 100% 온전하게 캡처하도록 보장한 후 STT를 보조 구동.
+   - 녹음 완료 후 `blob.size < 200` 감지 시 콘솔 경고 및 0바이트 유실 방지.
+4. **Gemini 1.5 Flash 비동기 STT 백그라운드 보강**:
+   - 모바일 마이크 경합으로 Web Speech API가 텍스트를 추출하지 못하더라도, Gemini API 키가 있는 경우 녹음된 WebM 오디오를 백그라운드로 전달하여 텍스트를 전사하고 `transcript_update` 브로드캐스트로 카드를 자동 보강.
+5. **UI 재생 피드백 및 오류 가드 (`MobileWalkieTalkieModal.tsx`)**:
+   - `msg.audioBase64` 검증을 추가하여 빈 데이터 재생 시 "음성 데이터가 비어있거나 저장되지 않은 메시지입니다." 명확한 안내 표출.
+   - 재생 실패 시 구체적 오류 메시지 alert 표출 (무음 실패 방지).
+   - 모달 닫힐 때 활성 오디오 즉각 정지.
+6. **모바일 가로 뷰포트 밀착 및 칩 슬라이드 스크롤 표준화 (`index.css`, `MobileApp.tsx`, `MobileHeader.tsx`, `MobileDispatchOrderCreate.tsx`)**:
+   - `html, body, #root`에 `overflow-x: hidden !important`, `max-width: 100vw`, `width: 100%` 강제로 화면 우측 여백 붕괴 현상 원천 차단.
+   - 규격 퀵 버튼 컨테이너에 `w-full min-w-0 max-w-full overflow-x-auto`, `WebkitOverflowScrolling: 'touch'`, `overscrollBehaviorX: 'contain'`, `scrollSnapType: 'x proximity'`, `touchAction: 'pan-x'` 적용하여 네이티브 앱처럼 부드러운 가로 슬라이드 스와이프 구현.
+   - 상단 헤더 우측 조작 버튼군도 `min-w-0 flex-shrink: 1 overflow-x-auto` 적용으로 소형 화면(360px)에서 헤더가 뷰포트를 밀어내지 않도록 방어.
+
+### 4. 검증 결과
+- `cmd /c "npm run build"`: 타입 에러 0건, 904ms 프로덕션 빌드 정상 완료.
+- 글로벌 학습 지식 베이스 `경험.md`에 E-051 등록 완료.
+- 성장 골격 레포지터리(`skelton`)에 경험 문서 커밋 및 원격 푸시 완료.
+
+
 ## 📍 [T맵상세주소역추적 & 무전기STT엔진개편] T맵 현장 도로명 주소 6단계 역추적 및 모바일 무전기 STT 호환·UI 간소화 (Build.133)
 
 ### 1. 개발 배경 및 사장님 지시사항

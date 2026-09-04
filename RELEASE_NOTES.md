@@ -1,3 +1,34 @@
+## [v1.3.0.Build.134] - 2026-09-04 16:55
+
+### 📍 AS 접수 도로명 상세 주소 실시간 자동 연동 및 T맵 딥링크 1:1 연동 개편 (PC & 모바일)
+- **AS 접수 단계 장비번호 입력 시 현장/고객사/도로명 주소 실시간 자동 상속 (`MobileAsCreate.tsx`, `FieldAsManagement.tsx`, `SmartAsRequest.tsx`)**:
+  - 장비번호(`assetNo`) 입력 즉시 `assets` ➔ `contractAssets` ➔ `contracts` ➔ `customerSites` / `customers` 체인을 실시간 역추적하여 고객사명, 현장명, 상세 도로명 주소를 1초 만에 자동 완성.
+  - 고객사명 입력 시 등록된 현장 목록 퀵 칩 노출 및 해당 현장/고객사의 도로명 주소(`siteAddress`) 즉각 자동 입력.
+  - 고객사 마스터 주소와 현장 주소가 다를 경우 1-Click `[고객사 주소 적용]` 헬퍼 칩 지원.
+- **AS 데이터 모델 및 원격 DB 스키마 정합성 보장 (`db.ts`, `AppContext.tsx`, `nativeLauncher.ts`)**:
+  - `interface Repair`에 `siteAddress?: string;` 정식 추가.
+  - 원격 Supabase DB 테이블 컬럼 미반영 환경에서 PostgreSQL `42703 (column does not exist)` 거부 오류를 원천 차단하기 위해 `sanitizeSupabasePayload` 필터링 및 `locationDetail` / `memo` 무누락 백업 복원 레이어 구축.
+  - `createFieldAsTicket` 시 `siteAddress` 누락 시에도 다단계 역추적 엔진을 통해 `siteAddress`를 100% 자동 채번/보강.
+  - `resolveSiteDetailedAddress`에 `siteAddress`를 0순위 SSOT로 설정하고 고객사 등록 주소까지 역추적 확장.
+  - AS 상세 화면(`MobileAsDetail.tsx`, `FieldAsManagement.tsx`)에 도로명 주소 1-Click 클립보드 복사 및 TMap 길안내 연동.
+- **전사 UI 표준 헌장 엄격 준수**:
+  - 레이블-입력창 상하 세로 스택 구조 (헌장 3.4).
+  - 무수식어 건조한 명사/동사 표준화 (헌장 3.1): `현장 도로명 주소`, `고객사 주소 적용`.
+  - 줄바꿈 방지 `whitespace-nowrap flex-shrink-0` (헌장 3.2).
+
+### 🎙️ 안드로이드 크롬 MediaRecorder 오디오 무음 결함 해결 및 동기식 HTML5 Audio 즉시 재생 (`walkieTalkieService.ts`, `MobileWalkieTalkieModal.tsx`)
+- **Chromium `decodeAudioData` 스트리밍 헤더 결함 및 사용자 제스처 토큰 만료 원천 해결**:
+  - `fetch` ➔ `arrayBuffer` ➔ `decodeAudioData` 비동기 파이프라인을 전면 철거하고 동기식 `new Audio(base64).play()` 도입으로 0ms 무지연 재생.
+  - 재생 중 재터치 또는 모달 닫기 시 활성 오디오 즉시 멈춤 토글(`stopAudio()`) 지원.
+  - 안드로이드/PC는 `'audio/webm;codecs=opus'`, `'audio/webm'`을 최우선 강제하여 깨끗한 Opus 음성 캡처 보장.
+  - 녹음 완료 즉시 마이크 하드웨어 스트림 완전 릴리즈(`track.stop()`).
+
+### 📱 모바일 가로 뷰포트 밀착 및 규격 퀵 버튼 가로 슬라이더 터치 스와이프 표준화 (`index.css`, `MobileApp.tsx`, `MobileHeader.tsx`, `MobileDispatchOrderCreate.tsx`)
+- **소형 모바일 화면 가로 스크롤 밀림(`overflow-x`) 원천 차단**:
+  - `html, body, #root`에 `overflow-x: hidden !important`, `max-width: 100vw`, `width: 100%` 강제로 화면 우측 여백 붕괴 현상 원천 차단.
+  - 규격 퀵 버튼 컨테이너에 `w-full min-w-0 max-w-full overflow-x-auto`, `touchAction: 'pan-x'`, `scrollSnapType: 'x proximity'` 적용하여 네이티브 앱처럼 부드러운 가로 슬라이드 스와이프 구현.
+  - 상단 헤더 우측 조작 버튼군도 `min-w-0 flex-shrink: 1 overflow-x-auto` 적용으로 소형 화면(360px)에서 헤더가 뷰포트를 밀어내지 않도록 방어.
+
 ## [v1.3.0.Build.133] - 2026-09-04 16:31
 
 ### 📍 T맵 내비게이션 현장 상세 도로명 주소 6단계 역추적 및 무전기 STT 엔진 개편

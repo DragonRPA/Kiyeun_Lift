@@ -5,7 +5,7 @@ import { CameraUploader } from '../components/CameraUploader';
 import { SignatureCanvas } from '../components/SignatureCanvas';
 import { ArrowLeft, Navigation, Phone, CheckCircle2, Wrench, Plus, Trash2, ChevronDown, MapPin } from 'lucide-react';
 import { db, RepairPartUsed } from '../../services/db';
-import { launchNavigation, safePhoneCall, resolveSiteDetailedAddress, NavAppType } from '../../utils/nativeLauncher';
+import { launchNavigation, safePhoneCall, resolveSiteDetailedAddress, copyToClipboard, NavAppType } from '../../utils/nativeLauncher';
 
 interface MobileAsDetailProps {
   ticketId: string;
@@ -73,6 +73,7 @@ export const MobileAsDetail: React.FC<MobileAsDetailProps> = ({ ticketId, onBack
   const resolvedAddress = useMemo(() => {
     if (!ticket) return '';
     return resolveSiteDetailedAddress({
+      siteAddress: ticket.siteAddress,
       siteId: ticket.siteId,
       siteName: ticket.siteName,
       contractId: ticket.contractId,
@@ -89,7 +90,7 @@ export const MobileAsDetail: React.FC<MobileAsDetailProps> = ({ ticketId, onBack
 
   // 안전한 길안내 열기 (현장명 대신 실제 상세 도로명 주소 우선 전송)
   const handleOpenNav = (app: NavAppType = selectedNavApp) => {
-    const destination = resolvedAddress || ticket.siteName || ticket.locationDetail || ticket.customerName || '현장';
+    const destination = ticket.siteAddress || resolvedAddress || ticket.siteName || ticket.locationDetail || ticket.customerName || '현장';
     launchNavigation(destination, app);
   };
 
@@ -192,14 +193,23 @@ export const MobileAsDetail: React.FC<MobileAsDetailProps> = ({ ticketId, onBack
                 <span className="text-slate-400 font-mono text-[11px]">({ticket.locationDetail})</span>
               )}
             </div>
-            {resolvedAddress && resolvedAddress !== ticket.siteName ? (
-              <div className="flex items-center gap-1 text-sky-300 font-medium bg-sky-950/40 border border-sky-800/40 rounded-lg px-2 py-1">
-                <MapPin className="w-3.5 h-3.5 text-sky-400 flex-shrink-0" />
-                <span className="text-[11.5px] truncate">{resolvedAddress}</span>
+            {(ticket.siteAddress || resolvedAddress) ? (
+              <div className="flex items-center justify-between text-sky-300 font-medium bg-sky-950/40 border border-sky-800/40 rounded-lg px-2 py-1">
+                <div className="flex items-center gap-1 min-w-0">
+                  <MapPin className="w-3.5 h-3.5 text-sky-400 flex-shrink-0" />
+                  <span className="text-[11.5px] truncate">{ticket.siteAddress || resolvedAddress}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => copyToClipboard(ticket.siteAddress || resolvedAddress)}
+                  className="text-[10px] text-sky-400 hover:text-white px-1.5 py-0.5 rounded bg-sky-900/60 flex-shrink-0 ml-1 whitespace-nowrap"
+                >
+                  복사
+                </button>
               </div>
             ) : (
-              <div className="text-slate-500 text-[11px] italic">
-                (상세 도로명 주소 미등록 - 현장명으로 검색됨)
+              <div className="text-slate-500 text-[11px]">
+                (상세 도로명 주소 미등록)
               </div>
             )}
           </div>

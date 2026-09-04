@@ -4,9 +4,10 @@ import { useApp } from '../../context/AppContext';
 import { CameraUploader } from '../components/CameraUploader';
 import { 
   ArrowLeft, Check, Plus, AlertTriangle, Mic, MicOff, 
-  FileText, RotateCcw, Sparkles, X, CheckCircle2 
+  FileText, RotateCcw, Sparkles, X, CheckCircle2, MapPin
 } from 'lucide-react';
 import { parseAsCallTranscript } from '../../services/voiceOrderDraftService';
+import { resolveSiteDetailedAddress } from '../../utils/nativeLauncher';
 
 interface MobileAsCreateProps {
   onBack: () => void;
@@ -26,10 +27,11 @@ const CATEGORIES = [
 ];
 
 export const MobileAsCreate: React.FC<MobileAsCreateProps> = ({ onBack, onCreated }) => {
-  const { createFieldAsTicket, showErrorModal, customers, sites, assets } = useApp();
+  const { createFieldAsTicket, showErrorModal, customers, sites, assets, contracts, contractAssets } = useApp();
 
   const [customerName, setCustomerName] = useState('');
   const [siteName, setSiteName] = useState('');
+  const [siteAddress, setSiteAddress] = useState('');
   const [assetNo, setAssetNo] = useState('');
   const [locationDetail, setLocationDetail] = useState('');
   const [reporterName, setReporterName] = useState('');
@@ -48,6 +50,71 @@ export const MobileAsCreate: React.FC<MobileAsCreateProps> = ({ onBack, onCreate
   const [recentModifiedFields, setRecentModifiedFields] = useState<string[]>([]);
   const recognitionRef = useRef<any>(null);
 
+  // 🌟 1. 장비번호 입력 시 계약 현장 및 고객사·도로명 주소 실시간 자동 역추적
+  const handleAssetNoChange = (val: string) => {
+    setAssetNo(val);
+    const clean = val.trim().toUpperCase();
+    if (!clean) return;
+
+    const matchedAsset = assets.find(a => a.assetNo.toUpperCase() === clean);
+    if (matchedAsset) {
+      const ca = contractAssets.find(c => c.assetId === matchedAsset.id && !c.actualReturnDate);
+      if (ca) {
+        const contract = contracts.find(c => c.id === ca.contractId);
+        if (contract) {
+          const cust = customers.find(c => c.id === contract.customerId);
+          if (cust && !customerName) setCustomerName(cust.name);
+          if (contract.siteId) {
+            const site = sites.find(s => s.id === contract.siteId);
+            if (site) {
+              setSiteName(site.name);
+              if (site.address?.trim()) setSiteAddress(site.address.trim());
+              else if (cust?.address?.trim()) setSiteAddress(cust.address.trim());
+            }
+          } else if (cust?.address?.trim()) {
+            setSiteAddress(cust.address.trim());
+          }
+        }
+      }
+    }
+  };
+
+  // 🌟 2. 고객사명 입력 시 마스터 일치 및 현장·도로명 주소 상속
+  const handleCustomerNameChange = (val: string) => {
+    setCustomerName(val);
+    const clean = val.trim();
+    if (!clean) return;
+
+    const cust = customers.find(c => c.name.trim() === clean || c.name.includes(clean));
+    if (cust) {
+      const cSites = sites.filter(s => s.customerId === cust.id);
+      if (cSites.length === 1) {
+        setSiteName(cSites[0].name);
+        if (cSites[0].address?.trim()) {
+          setSiteAddress(cSites[0].address.trim());
+        } else if (cust.address?.trim()) {
+          setSiteAddress(cust.address.trim());
+        }
+      } else if (cust.address?.trim() && !siteAddress) {
+        setSiteAddress(cust.address.trim());
+      }
+    }
+  };
+
+  // 🌟 3. 현장명 입력 시 현장 상세 주소 상속
+  const handleSiteNameChange = (val: string) => {
+    setSiteName(val);
+    const clean = val.trim();
+    if (!clean) return;
+
+    const matchedCust = customers.find(c => c.name.trim() === customerName.trim() || c.name.includes(customerName.trim()));
+    const cSites = matchedCust ? sites.filter(s => s.customerId === matchedCust.id) : sites;
+    const site = cSites.find(s => s.name.trim() === clean || s.name.includes(clean) || clean.includes(s.name.trim()));
+    if (site?.address?.trim()) {
+      setSiteAddress(site.address.trim());
+    }
+  };
+
   // 통화 텍스트 파싱 및 폼 자동 반영 공통 함수
   const applyTranscript = (text: string) => {
     if (!text.trim()) return;
@@ -55,6 +122,23 @@ export const MobileAsCreate: React.FC<MobileAsCreateProps> = ({ onBack, onCreate
 
     if (result.customerName) setCustomerName(result.customerName);
     if (result.siteName) setSiteName(result.siteName);
+    if (result.siteAddress) {
+      setSiteAddress(result.siteAddress);
+    } else {
+      const resolved = resolveSiteDetailedAddress({
+        siteName: result.siteName || siteName,
+        customerName: result.customerName || customerName,
+        assetNo: result.assetNo || assetNo,
+        locationDetail: result.locationDetail || locationDetail,
+        customerSites: sites,
+        contracts,
+        contractAssets,
+        customers,
+      });
+      if (resolved && resolved !== (result.siteName || result.customerName || '현장')) {
+        setSiteAddress(resolved);
+      }
+    }
     if (result.assetNo) setAssetNo(result.assetNo);
     if (result.locationDetail) setLocationDetail(result.locationDetail);
     if (result.reporterName) setReporterName(result.reporterName);
@@ -163,6 +247,7 @@ export const MobileAsCreate: React.FC<MobileAsCreateProps> = ({ onBack, onCreate
         customerName: customerName.trim(),
         siteId: matchedSite?.id,
         siteName: siteName.trim(),
+        siteAddress: siteAddress.trim(),
         assetNo: assetNo.toUpperCase(),
         locationDetail,
         reporterName,
@@ -182,6 +267,14 @@ export const MobileAsCreate: React.FC<MobileAsCreateProps> = ({ onBack, onCreate
       setIsSubmitting(false);
     }
   };
+
+  const matchedCustomer = customers.find(c => 
+    c.name.trim() === customerName.trim() || 
+    (customerName.trim().length >= 2 && c.name.includes(customerName.trim()))
+  );
+  const matchedCustomerSites = matchedCustomer 
+    ? sites.filter(s => s.customerId === matchedCustomer.id) 
+    : [];
 
   return (
     <div className="flex flex-col gap-4 pb-28 p-4 bg-slate-950 min-h-screen">
@@ -266,14 +359,14 @@ export const MobileAsCreate: React.FC<MobileAsCreateProps> = ({ onBack, onCreate
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         {/* 장비번호 */}
         <div className="flex flex-col gap-1.5">
-          <label className="text-xs font-bold text-slate-300">
+          <label className="text-xs font-bold text-slate-300 whitespace-nowrap flex-shrink-0">
             장비번호 <span className="text-red-400">*</span>
           </label>
           <input
             type="text"
             required
             value={assetNo}
-            onChange={(e) => setAssetNo(e.target.value)}
+            onChange={(e) => handleAssetNoChange(e.target.value)}
             placeholder="예: 102, G19-01, 1001"
             className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-sm text-white font-mono uppercase focus:outline-none focus:border-blue-500"
           />
@@ -281,33 +374,62 @@ export const MobileAsCreate: React.FC<MobileAsCreateProps> = ({ onBack, onCreate
 
         {/* 고객사명 */}
         <div className="flex flex-col gap-1.5">
-          <label className="text-xs font-bold text-slate-300">
+          <label className="text-xs font-bold text-slate-300 whitespace-nowrap flex-shrink-0">
             고객사명 <span className="text-red-400">*</span>
           </label>
           <input
             type="text"
             required
             value={customerName}
-            onChange={(e) => setCustomerName(e.target.value)}
+            onChange={(e) => handleCustomerNameChange(e.target.value)}
             placeholder="고객사 상호명 입력"
             className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-sm text-white focus:outline-none focus:border-blue-500"
           />
         </div>
 
+        {/* 고객사 소속 현장 퀵 셀렉트 칩 */}
+        {matchedCustomerSites.length > 0 && (
+          <div className="flex flex-col gap-1">
+            <span className="text-[11px] font-bold text-slate-400 whitespace-nowrap flex-shrink-0">
+              등록 현장 선택
+            </span>
+            <div className="w-full min-w-0 max-w-full overflow-x-auto flex items-center gap-1.5 pb-1 scrollbar-none">
+              {matchedCustomerSites.map(s => (
+                <button
+                  key={s.id}
+                  type="button"
+                  onClick={() => {
+                    setSiteName(s.name);
+                    if (s.address?.trim()) setSiteAddress(s.address.trim());
+                    else if (matchedCustomer?.address?.trim()) setSiteAddress(matchedCustomer.address.trim());
+                  }}
+                  className={`text-xs px-2.5 py-1 rounded-lg border whitespace-nowrap flex-shrink-0 transition-colors ${
+                    siteName === s.name
+                      ? 'bg-blue-600 text-white border-blue-500 font-bold'
+                      : 'bg-slate-900 text-slate-300 border-slate-700 hover:bg-slate-800'
+                  }`}
+                >
+                  {s.name}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* 현장명 / 상세 위치 */}
         <div className="grid grid-cols-2 gap-2">
           <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-bold text-slate-300">현장명</label>
+            <label className="text-xs font-bold text-slate-300 whitespace-nowrap flex-shrink-0">현장명</label>
             <input
               type="text"
               value={siteName}
-              onChange={(e) => setSiteName(e.target.value)}
-              placeholder="현장 이름 또는 주소"
+              onChange={(e) => handleSiteNameChange(e.target.value)}
+              placeholder="현장 이름"
               className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-sm text-white focus:outline-none focus:border-blue-500"
             />
           </div>
           <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-bold text-slate-300">상세 위치</label>
+            <label className="text-xs font-bold text-slate-300 whitespace-nowrap flex-shrink-0">상세 위치</label>
             <input
               type="text"
               value={locationDetail}
@@ -315,6 +437,38 @@ export const MobileAsCreate: React.FC<MobileAsCreateProps> = ({ onBack, onCreate
               placeholder="예: 지하 1층, 하역장"
               className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-sm text-white focus:outline-none focus:border-blue-500"
             />
+          </div>
+        </div>
+
+        {/* 현장 도로명 주소 (T맵/카카오내비/네이버지도 연동) */}
+        <div className="flex flex-col gap-1.5">
+          <div className="flex items-center justify-between">
+            <label className="text-xs font-bold text-slate-300 whitespace-nowrap flex-shrink-0">
+              현장 도로명 주소
+            </label>
+            {matchedCustomer?.address && siteAddress !== matchedCustomer.address.trim() && (
+              <button
+                type="button"
+                onClick={() => setSiteAddress(matchedCustomer.address.trim())}
+                className="text-[10px] font-bold text-sky-400 bg-sky-950/40 hover:bg-sky-900/60 px-2 py-0.5 rounded border border-sky-800/40 whitespace-nowrap flex-shrink-0"
+              >
+                고객사 주소 적용
+              </button>
+            )}
+          </div>
+          <div className="relative">
+            <input
+              type="text"
+              value={siteAddress}
+              onChange={(e) => setSiteAddress(e.target.value)}
+              placeholder="도로명 주소 입력 (고객 정보 자동 연동)"
+              className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-sm text-white focus:outline-none focus:border-blue-500 pr-9"
+            />
+            {siteAddress && (
+              <div className="absolute right-3 top-1/2 -translate-y-1/2 text-sky-400 pointer-events-none">
+                <MapPin className="w-4 h-4" />
+              </div>
+            )}
           </div>
         </div>
 

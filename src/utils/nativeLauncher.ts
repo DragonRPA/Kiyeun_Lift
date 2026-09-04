@@ -196,6 +196,7 @@ export function safePhoneCall(phone: string | undefined | null) {
  * 7. 최후 폴백: siteName 또는 '현장'
  */
 export function resolveSiteDetailedAddress(params: {
+  siteAddress?: string;
   siteId?: string;
   siteName?: string;
   contractId?: string;
@@ -206,9 +207,10 @@ export function resolveSiteDetailedAddress(params: {
   customerSites?: Array<{ id: string; customerId?: string; name: string; address?: string }>;
   contracts?: Array<{ id: string; siteId?: string; siteAddress?: string }>;
   contractAssets?: Array<{ contractId: string; assetId?: string; assetNo?: string; actualReturnDate?: string | null }>;
-  customers?: Array<{ id: string; name: string }>;
+  customers?: Array<{ id: string; name: string; address?: string }>;
 }): string {
   const {
+    siteAddress,
     siteId,
     siteName,
     contractId,
@@ -221,6 +223,11 @@ export function resolveSiteDetailedAddress(params: {
     contractAssets = [],
     customers = []
   } = params;
+
+  // 0. 티켓 자체에 명시된 siteAddress가 있는 경우 최우선 반환 (단일 진실의 원천 SSOT)
+  if (siteAddress && siteAddress.trim()) {
+    return siteAddress.trim();
+  }
 
   // 1. siteId 기준 매핑
   if (siteId) {
@@ -297,6 +304,10 @@ export function resolveSiteDetailedAddress(params: {
       } else if (cSites.length > 1 && siteName) {
         const matched = cSites.find(s => s.name.includes(siteName) || siteName.includes(s.name));
         if (matched?.address?.trim()) return matched.address.trim();
+      }
+      // 고객사에 등록된 기본 도로명 주소가 있는 경우 상속
+      if (cust.address && cust.address.trim()) {
+        return cust.address.trim();
       }
     }
   }

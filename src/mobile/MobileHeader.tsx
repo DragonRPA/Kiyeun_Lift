@@ -69,7 +69,10 @@ export const MobileHeader: React.FC<MobileHeaderProps> = ({
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.2)'
+          boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.2)',
+          width: '100%',
+          maxWidth: '100vw',
+          overflowX: 'hidden'
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0, flex: 1, marginRight: '6px' }}>
@@ -112,7 +115,21 @@ export const MobileHeader: React.FC<MobileHeaderProps> = ({
           </div>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '5px', flexShrink: 0 }}>
+        <div 
+          style={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            gap: '4px', 
+            flexShrink: 1,
+            minWidth: 0,
+            overflowX: 'auto',
+            scrollbarWidth: 'none',
+            msOverflowStyle: 'none',
+            WebkitOverflowScrolling: 'touch',
+            touchAction: 'pan-x'
+          }}
+          className="scrollbar-none"
+        >
           {/* 🔄 화면 새로고침 버튼 (헌장 3.1 무수식어 건조한 명사) */}
           <button
             type="button"
