@@ -316,7 +316,7 @@ export const MobileAsDetail: React.FC<MobileAsDetailProps> = ({ ticketId, onBack
               key={idx}
               type="button"
               onClick={() => setActionTaken((prev) => (prev ? `${prev}, ${tag}` : tag))}
-              className="text-[11px] font-medium py-1 px-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 active:scale-95 transition-transform"
+              className="text-[11px] font-medium py-1.5 px-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 active:scale-95 transition-transform whitespace-nowrap shrink-0 flex-shrink-0"
             >
               + {tag}
             </button>

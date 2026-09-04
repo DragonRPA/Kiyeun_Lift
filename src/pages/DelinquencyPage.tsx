@@ -837,7 +837,7 @@ export const DelinquencyPage: React.FC = () => {
                               🚨 방치 {del.directiveNeglectedDays}일
                             </span>
                           ) : del.hasPendingDirective ? (
-                            <span style={{ padding: '2px 6px', borderRadius: '3px', fontSize: '10px', fontWeight: 700, backgroundColor: '#dbeafe', color: '#1d4ed8' }}>
+                            <span style={{ padding: '2px 6px', borderRadius: '3px', fontSize: '10px', fontWeight: 700, backgroundColor: 'rgba(37, 99, 235, 0.12)', border: '1px solid rgba(59, 130, 246, 0.3)', color: '#3b82f6' }}>
                               지시 진행중
                             </span>
                           ) : (
@@ -1005,13 +1005,13 @@ export const DelinquencyPage: React.FC = () => {
                       style={{ 
                         padding: '10px', 
                         borderRadius: '6px', 
-                        backgroundColor: log.actionType === 'DIRECTIVE' ? '#eff6ff' : 'var(--bg-app)', 
-                        border: log.actionType === 'DIRECTIVE' ? '1px solid #93c5fd' : '1px solid var(--border-color)',
+                        backgroundColor: log.actionType === 'DIRECTIVE' ? 'rgba(37, 99, 235, 0.12)' : 'var(--bg-app)', 
+                        border: log.actionType === 'DIRECTIVE' ? '1px solid rgba(59, 130, 246, 0.3)' : '1px solid var(--border-color)',
                         fontSize: '11.5px'
                       }}
                     >
                       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                        <span style={{ fontWeight: '700', color: log.actionType === 'DIRECTIVE' ? '#1d4ed8' : 'var(--text-main)' }}>
+                        <span style={{ fontWeight: '700', color: log.actionType === 'DIRECTIVE' ? '#3b82f6' : 'var(--text-main)' }}>
                           {log.actionType === 'DIRECTIVE' ? '📢 [경영진 수금지시]' : log.actionType === 'CALL' ? '📞 [전화독촉]' : log.actionType === 'VISIT' ? '🚗 [현장방문]' : log.actionType === 'NOTICE_SENT' ? '✉️ [최고장]' : '⚖️ [법적조치]'} ({log.recordedBy})
                         </span>
                         <span style={{ color: 'var(--text-muted)', fontSize: '10.5px' }}>

@@ -73,7 +73,7 @@ export const MobileAsList: React.FC<MobileAsListProps> = ({
       <div className="flex items-center gap-1 bg-slate-900/80 p-1 rounded-xl border border-slate-800">
         <button
           onClick={() => setStatusFilter('UNRESOLVED')}
-          className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${
+          className={`flex-1 py-2 px-1 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
             statusFilter === 'UNRESOLVED'
               ? 'bg-blue-600 text-white shadow-md'
               : 'text-slate-400 hover:text-white'
@@ -83,7 +83,7 @@ export const MobileAsList: React.FC<MobileAsListProps> = ({
         </button>
         <button
           onClick={() => setStatusFilter('ALL')}
-          className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${
+          className={`flex-1 py-2 px-1 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
             statusFilter === 'ALL'
               ? 'bg-blue-600 text-white shadow-md'
               : 'text-slate-400 hover:text-white'
@@ -93,7 +93,7 @@ export const MobileAsList: React.FC<MobileAsListProps> = ({
         </button>
         <button
           onClick={() => setStatusFilter('COMPLETED')}
-          className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${
+          className={`flex-1 py-2 px-1 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
             statusFilter === 'COMPLETED'
               ? 'bg-blue-600 text-white shadow-md'
               : 'text-slate-400 hover:text-white'

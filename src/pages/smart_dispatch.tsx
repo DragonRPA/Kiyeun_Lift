@@ -1249,14 +1249,14 @@ ${activeSpecs.map((s, idx) => `  ${idx + 1}. [적용] ${s.label}`).join('\n') ||
                 alignItems: 'center',
                 gap: '8px',
                 padding: '8px 12px',
-                backgroundColor: '#f0fdf4',
-                border: '1px solid #86efac',
+                backgroundColor: 'rgba(16, 185, 129, 0.12)',
+                border: '1px solid rgba(16, 185, 129, 0.25)',
                 borderRadius: '6px',
-                color: '#166534',
+                color: '#10b981',
                 fontSize: '12px',
                 fontWeight: '600'
               }}>
-                <CheckCircle2 size={16} color="#16a34a" />
+                <CheckCircle2 size={16} color="#10b981" />
                 <span>⚡ 기존 DB 자동 상속: {inheritedFieldList.join(', ')}</span>
                 <span style={{ fontSize: '11px', color: '#15803d', fontWeight: '400', marginLeft: 'auto' }}>
                   (새로운 입력 시 고객/현장 마스터가 자동 최신화됩니다)

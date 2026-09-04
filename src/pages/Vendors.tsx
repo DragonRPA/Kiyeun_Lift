@@ -7,11 +7,11 @@ import { Vendor } from '../services/db';
 type VendorTypeOption = 'RENTAL' | 'PURCHASE' | 'TRANSPORT' | 'REPAIR' | 'OTHER';
 
 const VENDOR_TYPE_CONFIG: Record<VendorTypeOption, { label: string; color: string; bg: string }> = {
-  RENTAL: { label: '임차', color: '#2563eb', bg: '#dbeafe' },
-  PURCHASE: { label: '구매', color: '#16a34a', bg: '#dcfce7' },
-  TRANSPORT: { label: '운송', color: '#d97706', bg: '#fef3c7' },
-  REPAIR: { label: '정비', color: '#dc2626', bg: '#fee2e2' },
-  OTHER: { label: '기타', color: '#6b7280', bg: '#f3f4f6' }
+  RENTAL: { label: '임차', color: '#3b82f6', bg: 'rgba(37, 99, 235, 0.15)' },
+  PURCHASE: { label: '구매', color: '#22c55e', bg: 'rgba(34, 197, 94, 0.15)' },
+  TRANSPORT: { label: '운송', color: '#f59e0b', bg: 'rgba(245, 158, 11, 0.15)' },
+  REPAIR: { label: '정비', color: '#ef4444', bg: 'rgba(239, 68, 68, 0.15)' },
+  OTHER: { label: '기타', color: 'var(--text-secondary)', bg: 'var(--bg-secondary)' }
 };
 
 export const Vendors: React.FC = () => {
@@ -137,11 +137,11 @@ export const Vendors: React.FC = () => {
   // 어떤 형식의 Supabase 반환값이든 알려진 키워드를 스캔해 컬러 pill JSX 배열 반환
   const renderTypePills = (v: Vendor): React.ReactNode[] => {
     const TYPE_MAP: { key: string; label: string; color: string; bg: string }[] = [
-      { key: 'RENTAL',    label: '임차', color: '#2563eb', bg: '#dbeafe' },
-      { key: 'PURCHASE',  label: '구매', color: '#16a34a', bg: '#dcfce7' },
-      { key: 'TRANSPORT', label: '운송', color: '#d97706', bg: '#fef3c7' },
-      { key: 'REPAIR',    label: '정비', color: '#dc2626', bg: '#fee2e2' },
-      { key: 'OTHER',     label: '기타', color: '#6b7280', bg: '#f3f4f6' },
+      { key: 'RENTAL',    label: '임차', color: '#3b82f6', bg: 'rgba(37, 99, 235, 0.15)' },
+      { key: 'PURCHASE',  label: '구매', color: '#22c55e', bg: 'rgba(34, 197, 94, 0.15)' },
+      { key: 'TRANSPORT', label: '운송', color: '#f59e0b', bg: 'rgba(245, 158, 11, 0.15)' },
+      { key: 'REPAIR',    label: '정비', color: '#ef4444', bg: 'rgba(239, 68, 68, 0.15)' },
+      { key: 'OTHER',     label: '기타', color: 'var(--text-secondary)', bg: 'var(--bg-secondary)' },
     ];
     // 원시 데이터를 문자열로 직렬화하여 키워드 존재 여부 스캔
     const raw = JSON.stringify(v.types ?? v.type ?? '');

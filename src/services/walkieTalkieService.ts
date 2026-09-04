@@ -961,8 +961,8 @@ class WalkieTalkieService {
       const apiKey = getGeminiApiKey();
       if (!apiKey) return;
 
-      const base64Data = audioBase64.replace(/^data:audio\/[^;]+;base64,/, '');
-      const mimeMatch = audioBase64.match(/^data:(audio\/[^;]+);/);
+      const base64Data = audioBase64.includes(',') ? audioBase64.split(',')[1] : audioBase64;
+      const mimeMatch = audioBase64.match(/^data:([^;]+);/);
       const mimeType = mimeMatch ? mimeMatch[1] : 'audio/webm';
 
       const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;

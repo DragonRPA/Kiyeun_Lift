@@ -628,9 +628,9 @@ export const InitialDbUploader: React.FC = () => {
               gap: '6px',
               padding: '8px 16px',
               borderRadius: '6px',
-              border: activeTab === 'INGEST' ? '1px solid #2563eb' : '1px solid #cbd5e1',
-              backgroundColor: activeTab === 'INGEST' ? '#eff6ff' : 'var(--bg-card)',
-              color: activeTab === 'INGEST' ? '#1d4ed8' : '#475569',
+              border: activeTab === 'INGEST' ? '1px solid var(--primary)' : '1px solid var(--border-color)',
+              backgroundColor: activeTab === 'INGEST' ? 'rgba(37, 99, 235, 0.15)' : 'var(--bg-card)',
+              color: activeTab === 'INGEST' ? 'var(--primary)' : 'var(--text-secondary)',
               fontWeight: 600,
               cursor: 'pointer',
               whiteSpace: 'nowrap'
@@ -648,9 +648,9 @@ export const InitialDbUploader: React.FC = () => {
               gap: '6px',
               padding: '8px 16px',
               borderRadius: '6px',
-              border: activeTab === 'BACKUP' ? '1px solid #2563eb' : '1px solid #cbd5e1',
-              backgroundColor: activeTab === 'BACKUP' ? '#eff6ff' : 'var(--bg-card)',
-              color: activeTab === 'BACKUP' ? '#1d4ed8' : '#475569',
+              border: activeTab === 'BACKUP' ? '1px solid var(--primary)' : '1px solid var(--border-color)',
+              backgroundColor: activeTab === 'BACKUP' ? 'rgba(37, 99, 235, 0.15)' : 'var(--bg-card)',
+              color: activeTab === 'BACKUP' ? 'var(--primary)' : 'var(--text-secondary)',
               fontWeight: 600,
               cursor: 'pointer',
               whiteSpace: 'nowrap'
@@ -714,7 +714,7 @@ export const InitialDbUploader: React.FC = () => {
                   gap: '8px',
                   padding: '10px 20px',
                   backgroundColor: '#2563eb',
-                  color: 'var(--bg-card)',
+                  color: '#ffffff',
                   border: 'none',
                   borderRadius: '6px',
                   fontWeight: 600,
@@ -1144,7 +1144,7 @@ export const InitialDbUploader: React.FC = () => {
 
                 {/* 진행 메시지 */}
                 {bandProgressMsg && (
-                  <div style={{ fontSize: '13px', color: '#16a34a', display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: '#f0fdf4', padding: '8px 12px', borderRadius: '6px', border: '1px solid #bbf7d0' }}>
+                  <div style={{ fontSize: '13px', color: '#10b981', display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: 'rgba(16, 185, 129, 0.12)', padding: '8px 12px', borderRadius: '6px', border: '1px solid rgba(16, 185, 129, 0.25)' }}>
                     <RefreshCw size={14} className="animate-spin" />
                     <strong>{bandProgressMsg}</strong>
                   </div>
@@ -1292,7 +1292,7 @@ export const InitialDbUploader: React.FC = () => {
                                 {item.customerName}
                               </td>
                               <td style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>
-                                <span style={{ padding: '2px 6px', borderRadius: '4px', backgroundColor: '#eff6ff', color: '#2563eb', fontSize: '11px', fontWeight: 600 }}>
+                                <span style={{ padding: '2px 6px', borderRadius: '4px', backgroundColor: 'rgba(37, 99, 235, 0.12)', color: 'var(--primary)', fontSize: '11px', fontWeight: 600 }}>
                                   {item.contractCount}건
                                 </span>
                               </td>
@@ -1442,22 +1442,22 @@ export const InitialDbUploader: React.FC = () => {
                 </div>
 
                 {/* 4. 출고 배차 체인 */}
-                <div style={{ backgroundColor: '#eff6ff', padding: '14px', borderRadius: '8px', border: '1px solid #bfdbfe' }}>
-                  <div style={{ fontSize: '12px', color: '#1d4ed8', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <div style={{ backgroundColor: 'rgba(37, 99, 235, 0.12)', padding: '14px', borderRadius: '8px', border: '1px solid rgba(59, 130, 246, 0.3)' }}>
+                  <div style={{ fontSize: '12px', color: '#3b82f6', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '4px' }}>
                     <Truck size={14} /> 출고 배차 (deliveries)
                   </div>
-                  <div style={{ fontSize: '20px', fontWeight: 700, color: '#1e40af', marginTop: '4px' }}>
+                  <div style={{ fontSize: '20px', fontWeight: 700, color: 'var(--text-main)', marginTop: '4px' }}>
                     {parsedData.stats.outboundDeliveriesCount} 건
                   </div>
-                  <div style={{ fontSize: '11px', color: '#3b82f6', marginTop: '2px' }}>출고검수 {parsedData.stats.outboundInspectionsCount}건 자동 승인</div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>출고검수 {parsedData.stats.outboundInspectionsCount}건 자동 승인</div>
                 </div>
 
                 {/* 5. 회수 배차 체인 */}
-                <div style={{ backgroundColor: '#f0fdf4', padding: '14px', borderRadius: '8px', border: '1px solid #bbf7d0' }}>
-                  <div style={{ fontSize: '12px', color: '#15803d', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <div style={{ backgroundColor: 'rgba(16, 185, 129, 0.12)', padding: '14px', borderRadius: '8px', border: '1px solid rgba(16, 185, 129, 0.3)' }}>
+                  <div style={{ fontSize: '12px', color: '#10b981', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '4px' }}>
                     <RotateCcw size={14} /> 회수 배차 (deliveries)
                   </div>
-                  <div style={{ fontSize: '20px', fontWeight: 700, color: '#166534', marginTop: '4px' }}>
+                  <div style={{ fontSize: '20px', fontWeight: 700, color: 'var(--text-main)', marginTop: '4px' }}>
                     {parsedData.stats.inboundDeliveriesCount} 건
                   </div>
                   <div style={{ fontSize: '11px', color: '#22c55e', marginTop: '2px' }}>종료 계약 입고 등록 100% 매핑</div>
@@ -1520,7 +1520,7 @@ export const InitialDbUploader: React.FC = () => {
                       gap: '8px',
                       padding: '12px 28px',
                       backgroundColor: '#059669',
-                      color: 'var(--bg-card)',
+                      color: '#ffffff',
                       border: 'none',
                       borderRadius: '6px',
                       fontWeight: 700,
@@ -1672,7 +1672,7 @@ export const InitialDbUploader: React.FC = () => {
                 gap: '8px',
                 padding: '12px 24px',
                 backgroundColor: '#2563eb',
-                color: 'var(--bg-card)',
+                color: '#ffffff',
                 border: 'none',
                 borderRadius: '6px',
                 fontWeight: 600,
@@ -1709,8 +1709,8 @@ export const InitialDbUploader: React.FC = () => {
             </span>
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', backgroundColor: '#fef2f2', padding: '16px', borderRadius: '6px', border: '1px solid #fee2e2' }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: '#991b1b', fontWeight: 600, cursor: 'pointer' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', backgroundColor: 'rgba(239, 68, 68, 0.08)', padding: '16px', borderRadius: '6px', border: '1px solid rgba(239, 68, 68, 0.25)' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: '#ef4444', fontWeight: 600, cursor: 'pointer' }}>
               <input
                 type="checkbox"
                 checked={keepAdminUser}
@@ -1728,7 +1728,7 @@ export const InitialDbUploader: React.FC = () => {
                 gap: '8px',
                 padding: '10px 20px',
                 backgroundColor: isResetting ? '#94a3b8' : '#dc2626',
-                color: 'var(--bg-card)',
+                color: '#ffffff',
                 border: 'none',
                 borderRadius: '6px',
                 fontWeight: 600,
@@ -1803,13 +1803,13 @@ export const InitialDbUploader: React.FC = () => {
               </div>
               <div style={{ gridColumn: 'span 2' }}>
                 <span style={{ color: 'var(--text-muted)' }}>고장 내용:</span>
-                <div style={{ marginTop: '4px', padding: '8px 12px', backgroundColor: '#fef2f2', borderRadius: '4px', border: '1px solid #fecaca', color: '#991b1b', fontWeight: 600 }}>
+                <div style={{ marginTop: '4px', padding: '8px 12px', backgroundColor: 'rgba(239, 68, 68, 0.12)', borderRadius: '4px', border: '1px solid rgba(239, 68, 68, 0.25)', color: '#ef4444', fontWeight: 600 }}>
                   {selectedAsRecord.issue}
                 </div>
               </div>
               <div style={{ gridColumn: 'span 2' }}>
                 <span style={{ color: 'var(--text-muted)' }}>조치 내용:</span>
-                <div style={{ marginTop: '4px', padding: '8px 12px', backgroundColor: '#f0fdf4', borderRadius: '4px', border: '1px solid #bbf7d0', color: '#166534', fontWeight: 600 }}>
+                <div style={{ marginTop: '4px', padding: '8px 12px', backgroundColor: 'rgba(16, 185, 129, 0.12)', borderRadius: '4px', border: '1px solid rgba(16, 185, 129, 0.25)', color: '#10b981', fontWeight: 600 }}>
                   {selectedAsRecord.actionTaken}
                 </div>
               </div>
@@ -1824,7 +1824,7 @@ export const InitialDbUploader: React.FC = () => {
             <div style={{ display: 'flex', justifyContent: 'flex-end', borderTop: '1px solid #e2e8f0', paddingTop: '12px' }}>
               <button
                 onClick={() => setSelectedAsRecord(null)}
-                style={{ padding: '8px 18px', backgroundColor: '#1e293b', color: 'var(--bg-card)', border: 'none', borderRadius: '6px', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}
+                style={{ padding: '8px 18px', backgroundColor: 'var(--bg-secondary)', color: 'var(--text-main)', border: '1px solid var(--border-color)', borderRadius: '6px', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}
               >
                 닫기
               </button>

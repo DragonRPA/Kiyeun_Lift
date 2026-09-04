@@ -750,7 +750,7 @@ export const Dashboard: React.FC = () => {
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
                           <span style={{ fontSize: '13px', fontWeight: '800', color: '#2563eb' }}>{c.contractNo}</span>
                           <span style={{ fontSize: '14px', fontWeight: '700', color: 'var(--text-primary)' }}>{cust?.name || '고객사'}</span>
-                          <span style={{ fontSize: '11px', padding: '2px 6px', borderRadius: '4px', background: '#dbeafe', color: '#1d4ed8', fontWeight: 'bold' }}>
+                          <span style={{ fontSize: '11px', padding: '2px 6px', borderRadius: '4px', background: 'rgba(37, 99, 235, 0.12)', color: 'var(--primary)', border: '1px solid rgba(59, 130, 246, 0.25)', fontWeight: 'bold' }}>
                             장비 {cAssetCount}대
                           </span>
                         </div>

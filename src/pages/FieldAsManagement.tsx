@@ -735,12 +735,12 @@ showToast('밴드 과거 AS 빅데이터 탑재를 시작합니다.');
               alignItems: 'center',
               gap: '6px',
               padding: '7px 12px',
-              backgroundColor: '#eff6ff',
-              border: '1px solid #bfdbfe',
+              backgroundColor: 'rgba(37, 99, 235, 0.12)',
+              border: '1px solid rgba(59, 130, 246, 0.3)',
               borderRadius: '6px',
               fontSize: '13px',
               fontWeight: 600,
-              color: '#1d4ed8',
+              color: 'var(--primary)',
               cursor: 'pointer',
               whiteSpace: 'nowrap'
             }}
@@ -782,7 +782,7 @@ showToast('밴드 과거 AS 빅데이터 탑재를 시작합니다.');
               borderRadius: '6px',
               fontSize: '13px',
               fontWeight: 700,
-              color: 'var(--bg-card)',
+              color: '#ffffff',
               cursor: 'pointer',
               whiteSpace: 'nowrap'
             }}
@@ -968,8 +968,9 @@ showToast('밴드 과거 AS 빅데이터 탑재를 시작합니다.');
                             borderRadius: '6px',
                             fontSize: '12px',
                             fontWeight: 700,
-                            backgroundColor: isRevisit ? '#fef3c7' : (isUrgent ? '#fee2e2' : '#dbeafe'),
-                            color: isRevisit ? '#92400e' : (isUrgent ? '#991b1b' : '#1e40af')
+                            backgroundColor: isRevisit ? 'rgba(245, 158, 11, 0.15)' : (isUrgent ? 'rgba(239, 68, 68, 0.2)' : 'rgba(37, 99, 235, 0.15)'),
+                            color: isRevisit ? '#f59e0b' : (isUrgent ? '#ef4444' : '#3b82f6'),
+                            border: `1px solid ${isRevisit ? 'rgba(245, 158, 11, 0.3)' : (isUrgent ? 'rgba(239, 68, 68, 0.3)' : 'rgba(59, 130, 246, 0.3)')}`
                           }}>
                             {isRevisit ? '🔄 재방문' : (isUrgent ? '🚨 긴급' : '⚡ 출동대기')}
                           </span>
@@ -984,7 +985,7 @@ showToast('밴드 과거 AS 빅데이터 탑재를 시작합니다.');
                           {t.siteName}
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px', fontSize: '13px' }}>
-                          <span style={{ fontWeight: 700, color: '#2563eb', backgroundColor: '#eff6ff', padding: '2px 8px', borderRadius: '4px' }}>
+                          <span style={{ fontWeight: 700, color: 'var(--primary)', backgroundColor: 'rgba(37, 99, 235, 0.12)', border: '1px solid rgba(59, 130, 246, 0.25)', padding: '2px 8px', borderRadius: '4px' }}>
                             장비: {t.assetNo || '현장확인'}
                           </span>
                           <span style={{ color: 'var(--text-secondary)' }}>🏢 {t.customerName}</span>
@@ -1014,9 +1015,9 @@ showToast('밴드 과거 AS 빅데이터 탑재를 시작합니다.');
                               gap: '6px',
                               padding: '10px',
                               borderRadius: '8px',
-                              backgroundColor: '#f0fdf4',
-                              border: '1px solid #bbf7d0',
-                              color: '#166534',
+                              backgroundColor: 'rgba(16, 185, 129, 0.12)',
+                              border: '1px solid rgba(16, 185, 129, 0.3)',
+                              color: '#10b981',
                               fontSize: '13px',
                               fontWeight: 700,
                               cursor: 'pointer'
@@ -1036,9 +1037,9 @@ showToast('밴드 과거 AS 빅데이터 탑재를 시작합니다.');
                             gap: '6px',
                             padding: '10px',
                             borderRadius: '8px',
-                            backgroundColor: '#eff6ff',
-                            border: '1px solid #bfdbfe',
-                            color: '#1d4ed8',
+                            backgroundColor: 'rgba(37, 99, 235, 0.12)',
+                            border: '1px solid rgba(59, 130, 246, 0.3)',
+                            color: '#3b82f6',
                             fontSize: '13px',
                             fontWeight: 700,
                             cursor: 'pointer'
@@ -1075,7 +1076,7 @@ showToast('밴드 과거 AS 빅데이터 탑재를 시작합니다.');
                           justifyContent: 'center',
                           gap: '8px',
                           backgroundColor: '#2563eb',
-                          color: 'var(--bg-card)',
+                          color: '#ffffff',
                           border: 'none',
                           borderRadius: '8px',
                           fontSize: '15px',
@@ -1097,10 +1098,10 @@ showToast('밴드 과거 AS 빅데이터 탑재를 시작합니다.');
           {/* 2. 모바일 내차 부품고 탭 */}
           {mobileActiveTab === 'VAN_STOCK' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              <div style={{ backgroundColor: '#f0fdf4', padding: '12px 14px', borderRadius: '8px', border: '1px solid #bbf7d0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ backgroundColor: 'rgba(16, 185, 129, 0.12)', padding: '12px 14px', borderRadius: '8px', border: '1px solid rgba(16, 185, 129, 0.3)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div>
-                  <div style={{ fontSize: '11px', color: '#166534', fontWeight: 600 }}>담당 차량 보관소</div>
-                  <div style={{ fontSize: '16px', fontWeight: 800, color: '#14532d' }}>
+                  <div style={{ fontSize: '11px', color: '#10b981', fontWeight: 600 }}>담당 차량 보관소</div>
+                  <div style={{ fontSize: '16px', fontWeight: 800, color: 'var(--text-main)' }}>
                     🚐 {users.find(u => u.id === actionAssignMechanicId)?.name || currentUser?.name || '내 차량'}
                   </div>
                 </div>
@@ -1110,7 +1111,7 @@ showToast('밴드 과거 AS 빅데이터 탑재를 시작합니다.');
                     padding: '8px 12px',
                     borderRadius: '6px',
                     backgroundColor: '#16a34a',
-                    color: 'var(--bg-card)',
+                    color: '#ffffff',
                     border: 'none',
                     fontSize: '12px',
                     fontWeight: 700,
@@ -1270,11 +1271,11 @@ showToast('밴드 과거 AS 빅데이터 탑재를 시작합니다.');
                       style={{
                         padding: '12px',
                         borderRadius: '8px',
-                        border: isSelected ? '2px solid #2563eb' : '1px solid #e2e8f0',
-                        backgroundColor: isSelected ? '#eff6ff' : 'var(--bg-card)',
+                        border: isSelected ? '2px solid #3b82f6' : '1px solid var(--border-color)',
+                        backgroundColor: isSelected ? 'rgba(37, 99, 235, 0.2)' : 'var(--bg-card)',
                         cursor: 'pointer',
                         transition: 'all 0.15s ease',
-                        boxShadow: isSelected ? '0 2px 4px rgba(37,99,235,0.1)' : '0 1px 2px rgba(0,0,0,0.03)'
+                        boxShadow: isSelected ? '0 2px 8px rgba(37,99,235,0.25)' : '0 1px 2px rgba(0,0,0,0.03)'
                       }}
                     >
                       {/* 카드 상단 헤더: 뱃지군 & 날짜 */}
@@ -1285,8 +1286,9 @@ showToast('밴드 과거 AS 빅데이터 탑재를 시작합니다.');
                             borderRadius: '4px',
                             fontSize: '11px',
                             fontWeight: 700,
-                            backgroundColor: isDone ? '#dcfce7' : (isRevisit ? '#fef3c7' : (isUrgent ? '#fee2e2' : '#e0e7ff')),
-                            color: isDone ? '#166534' : (isRevisit ? '#92400e' : (isUrgent ? '#991b1b' : '#3730a3')),
+                            backgroundColor: isDone ? 'rgba(34, 197, 94, 0.15)' : (isRevisit ? 'rgba(245, 158, 11, 0.15)' : (isUrgent ? 'rgba(239, 68, 68, 0.2)' : 'rgba(99, 102, 241, 0.15)')),
+                            color: isDone ? '#22c55e' : (isRevisit ? '#f59e0b' : (isUrgent ? '#ef4444' : '#818cf8')),
+                            border: `1px solid ${isDone ? 'rgba(34, 197, 94, 0.3)' : (isRevisit ? 'rgba(245, 158, 11, 0.3)' : (isUrgent ? 'rgba(239, 68, 68, 0.4)' : 'rgba(99, 102, 241, 0.3)'))}`,
                             whiteSpace: 'nowrap'
                           }}>
                             {isDone ? '완료' : (isRevisit ? '재방문' : (t.status === 'SCHEDULED' ? '방문예정' : (t.status === 'GUIDED' ? '안내종결' : '접수대기')))}
@@ -1303,14 +1305,14 @@ showToast('밴드 과거 AS 빅데이터 탑재를 시작합니다.');
                           </span>
                         </div>
 
-                        <span style={{ fontSize: '11px', color: '#94a3b8', whiteSpace: 'nowrap' }}>
+                        <span style={{ fontSize: '11px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
                           {t.requestDate}
                         </span>
                       </div>
 
                       {/* 현장 및 장비번호 */}
                       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: '4px' }}>
-                        <span style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-main)' }}>
+                        <span style={{ fontSize: '14px', fontWeight: 700, color: isSelected ? '#60a5fa' : 'var(--text-main)' }}>
                           {t.siteName}
                         </span>
                         <span 
@@ -1321,8 +1323,9 @@ showToast('밴드 과거 AS 빅데이터 탑재를 시작합니다.');
                           style={{ 
                             fontSize: '13px', 
                             fontWeight: 700, 
-                            color: '#2563eb', 
-                            backgroundColor: '#dbeafe', 
+                            color: '#3b82f6', 
+                            backgroundColor: 'rgba(37, 99, 235, 0.15)', 
+                            border: '1px solid rgba(59, 130, 246, 0.3)',
                             padding: '1px 6px', 
                             borderRadius: '4px',
                             cursor: 'pointer'
@@ -1340,8 +1343,8 @@ showToast('밴드 과거 AS 빅데이터 탑재를 시작합니다.');
                       </div>
 
                       {/* 고장 내용 요약 */}
-                      <p style={{ margin: '0 0 8px 0', fontSize: '12px', color: 'var(--text-main)', lineHeight: '1.4', backgroundColor: 'var(--bg-app)', padding: '6px 8px', borderRadius: '4px' }}>
-                        <strong>[{t.issueCategory}]</strong> {t.issueDescription}
+                      <p style={{ margin: '0 0 8px 0', fontSize: '12px', color: 'var(--text-main)', lineHeight: '1.4', backgroundColor: 'var(--bg-app)', border: '1px solid var(--border-color)', padding: '6px 8px', borderRadius: '4px' }}>
+                        <strong style={{ color: isSelected ? '#60a5fa' : 'var(--primary)' }}>[{t.issueCategory}]</strong> {t.issueDescription}
                       </p>
 
                       {/* 카드 하단: 기사 배정 및 조치 결과 요약 */}
@@ -1372,7 +1375,7 @@ showToast('밴드 과거 AS 빅데이터 탑재를 시작합니다.');
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
                     <div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                        <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-muted)', backgroundColor: '#e2e8f0', padding: '2px 6px', borderRadius: '4px' }}>
+                        <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)', backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)', padding: '2px 6px', borderRadius: '4px' }}>
                           {selectedTicket.ticketNo}
                         </span>
                         <h2 style={{ fontSize: '18px', fontWeight: 700, color: 'var(--text-main)', margin: 0 }}>
@@ -1411,7 +1414,7 @@ showToast('밴드 과거 AS 빅데이터 탑재를 시작합니다.');
                           borderRadius: '6px',
                           fontSize: '13px',
                           fontWeight: 700,
-                          color: 'var(--bg-card)',
+                          color: '#ffffff',
                           cursor: 'pointer',
                           display: 'flex',
                           alignItems: 'center',
@@ -1688,7 +1691,7 @@ showToast('밴드 과거 AS 빅데이터 탑재를 시작합니다.');
                         borderRadius: '6px',
                         fontSize: '13px',
                         fontWeight: 700,
-                        color: 'var(--bg-card)',
+                        color: '#ffffff',
                         cursor: 'pointer'
                       }}
                     >
@@ -1761,7 +1764,7 @@ showToast('밴드 과거 AS 빅데이터 탑재를 시작합니다.');
                     <select
                       value={tempCollectedStatus}
                       onChange={(e) => setTempCollectedStatus(e.target.value as any)}
-                      style={{ padding: '8px 10px', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '13px', backgroundColor: '#fff' }}
+                      style={{ padding: '8px 10px', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '13px', backgroundColor: 'var(--bg-card)', color: 'var(--text-main)' }}
                     >
                       <option value="IN_VEHICLE">차량 보관중</option>
                       <option value="YARD_RETURNED">주기장 반납</option>
@@ -1770,7 +1773,7 @@ showToast('밴드 과거 AS 빅데이터 탑재를 시작합니다.');
                     <button
                       type="button"
                       onClick={handleAddCollectedPart}
-                      style={{ padding: '8px', backgroundColor: '#475569', border: 'none', borderRadius: '6px', fontSize: '13px', fontWeight: 700, color: 'var(--bg-card)', cursor: 'pointer' }}
+                      style={{ padding: '8px', backgroundColor: '#475569', border: 'none', borderRadius: '6px', fontSize: '13px', fontWeight: 700, color: '#ffffff', cursor: 'pointer' }}
                     >
                       등록
                     </button>
@@ -1883,7 +1886,7 @@ showToast('밴드 과거 AS 빅데이터 탑재를 시작합니다.');
                       borderRadius: '8px',
                       fontSize: '15px',
                       fontWeight: 700,
-                      color: 'var(--bg-card)',
+                      color: '#ffffff',
                       cursor: 'pointer',
                       boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
                     }}
@@ -1925,7 +1928,7 @@ showToast('밴드 과거 AS 빅데이터 탑재를 시작합니다.');
               <select
                 value={ledgerStatus}
                 onChange={(e) => setLedgerStatus(e.target.value)}
-                style={{ padding: '7px 10px', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '13px', backgroundColor: '#fff' }}
+                style={{ padding: '7px 10px', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '13px', backgroundColor: 'var(--bg-card)', color: 'var(--text-main)' }}
               >
                 <option value="ALL">전체 상태</option>
                 <option value="REQUESTED">접수대기</option>
@@ -1939,7 +1942,7 @@ showToast('밴드 과거 AS 빅데이터 탑재를 시작합니다.');
               <select
                 value={ledgerCategory}
                 onChange={(e) => setLedgerCategory(e.target.value)}
-                style={{ padding: '7px 10px', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '13px', backgroundColor: '#fff' }}
+                style={{ padding: '7px 10px', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '13px', backgroundColor: 'var(--bg-card)', color: 'var(--text-main)' }}
               >
                 <option value="ALL">전체 고장분류</option>
                 {CATEGORIES.filter(c => c !== 'ALL').map(c => (
@@ -1950,7 +1953,7 @@ showToast('밴드 과거 AS 빅데이터 탑재를 시작합니다.');
               <select
                 value={ledgerMechanic}
                 onChange={(e) => setLedgerMechanic(e.target.value)}
-                style={{ padding: '7px 10px', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '13px', backgroundColor: '#fff' }}
+                style={{ padding: '7px 10px', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '13px', backgroundColor: 'var(--bg-card)', color: 'var(--text-main)' }}
               >
                 <option value="ALL">전체 담당기사</option>
                 {mechanics.map(m => (
@@ -1961,7 +1964,7 @@ showToast('밴드 과거 AS 빅데이터 탑재를 시작합니다.');
               <select
                 value={ledgerBillable}
                 onChange={(e) => setLedgerBillable(e.target.value)}
-                style={{ padding: '7px 10px', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '13px', backgroundColor: '#fff' }}
+                style={{ padding: '7px 10px', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '13px', backgroundColor: 'var(--bg-card)', color: 'var(--text-main)' }}
               >
                 <option value="ALL">유/무상 전체</option>
                 <option value="FREE">무상 AS</option>
@@ -1998,7 +2001,7 @@ showToast('밴드 과거 AS 빅데이터 탑재를 시작합니다.');
           {/* 고밀도 슬림 테이블 (38~42px row height) */}
           <div style={{ flex: 1, backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '8px', overflow: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', whiteSpace: 'nowrap' }}>
-              <thead style={{ backgroundColor: 'var(--bg-app)', position: 'sticky', top: 0, zIndex: 1, borderBottom: '2px solid #e2e8f0' }}>
+              <thead style={{ backgroundColor: 'var(--bg-app)', position: 'sticky', top: 0, zIndex: 1, borderBottom: '2px solid var(--border-color)' }}>
                 <tr>
                   <th style={{ padding: '10px 12px', textAlign: 'center', width: '50px', color: 'var(--text-secondary)' }}>상세</th>
                   <th style={{ padding: '10px 12px', textAlign: 'left', color: 'var(--text-secondary)' }}>접수번호</th>
@@ -2022,9 +2025,9 @@ showToast('밴드 과거 AS 빅데이터 탑재를 시작합니다.');
                   <tr
                     key={t.id}
                     style={{
-                      borderBottom: '1px solid #f1f5f9',
+                      borderBottom: '1px solid var(--border-color)',
                       height: '40px',
-                      backgroundColor: idx % 2 === 0 ? '#ffffff' : '#fafafa'
+                      backgroundColor: idx % 2 === 0 ? 'var(--bg-card)' : 'var(--bg-app)'
                     }}
                   >
                     <td style={{ textAlign: 'center', padding: '4px 8px' }}>
@@ -2033,9 +2036,9 @@ showToast('밴드 과거 AS 빅데이터 탑재를 시작합니다.');
                         style={{
                           padding: '3px 6px',
                           borderRadius: '4px',
-                          backgroundColor: '#eff6ff',
-                          border: '1px solid #bfdbfe',
-                          color: '#2563eb',
+                          backgroundColor: 'rgba(37, 99, 235, 0.12)',
+                          border: '1px solid rgba(59, 130, 246, 0.3)',
+                          color: '#3b82f6',
                           fontSize: '11px',
                           fontWeight: 700,
                           cursor: 'pointer'
@@ -2111,7 +2114,7 @@ showToast('밴드 과거 AS 빅데이터 탑재를 시작합니다.');
                 borderRadius: '6px',
                 fontSize: '13px',
                 fontWeight: 700,
-                color: 'var(--bg-card)',
+                color: '#ffffff',
                 cursor: 'pointer'
               }}
             >
@@ -2136,12 +2139,12 @@ showToast('밴드 과거 AS 빅데이터 탑재를 시작합니다.');
                     boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
                   }}
                 >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #f1f5f9', paddingBottom: '10px', marginBottom: '12px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-color)', paddingBottom: '10px', marginBottom: '12px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                       <User size={18} color="#2563eb" />
                       <span style={{ fontSize: '15px', fontWeight: 700, color: 'var(--text-main)' }}>{m.name} 기사 차량</span>
                     </div>
-                    <span style={{ fontSize: '12px', fontWeight: 700, color: '#2563eb', backgroundColor: '#dbeafe', padding: '2px 8px', borderRadius: '12px' }}>
+                    <span style={{ fontSize: '12px', fontWeight: 700, color: '#3b82f6', backgroundColor: 'rgba(37, 99, 235, 0.12)', border: '1px solid rgba(59, 130, 246, 0.25)', padding: '2px 8px', borderRadius: '12px' }}>
                       총 적재 {totalItemsCount}개
                     </span>
                   </div>
@@ -2226,7 +2229,7 @@ showToast('밴드 과거 AS 빅데이터 탑재를 시작합니다.');
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '1px solid var(--border-color)', paddingBottom: '12px' }}>
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <span style={{ fontSize: '13px', fontWeight: 800, color: '#2563eb', backgroundColor: '#eff6ff', padding: '3px 8px', borderRadius: '4px' }}>
+                  <span style={{ fontSize: '13px', fontWeight: 800, color: '#3b82f6', backgroundColor: 'rgba(37, 99, 235, 0.15)', border: '1px solid rgba(59, 130, 246, 0.3)', padding: '3px 8px', borderRadius: '4px' }}>
                     {selectedTicket.assetNo || '현장확인'}
                   </span>
                   <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{selectedTicket.ticketNo}</span>
@@ -2258,7 +2261,7 @@ showToast('밴드 과거 AS 빅데이터 탑재를 시작합니다.');
             </div>
 
             {/* 고장 증상 원문 */}
-            <div style={{ backgroundColor: '#fff1f2', border: '1px solid #fecdd3', padding: '10px 12px', borderRadius: '8px', fontSize: '13px', color: '#9f1239' }}>
+            <div style={{ backgroundColor: 'rgba(244, 63, 94, 0.1)', border: '1px solid rgba(244, 63, 94, 0.3)', padding: '10px 12px', borderRadius: '8px', fontSize: '13px', color: '#fb7185' }}>
               🚨 <strong>[{selectedTicket.issueCategory}]</strong> {selectedTicket.issueDescription}
             </div>
 
@@ -2283,8 +2286,8 @@ showToast('밴드 과거 AS 빅데이터 탑재를 시작합니다.');
                     <div
                       key={c.id}
                       style={{
-                        backgroundColor: selectedQty > 0 ? '#eff6ff' : '#f8fafc',
-                        border: selectedQty > 0 ? '2px solid #2563eb' : '1px solid #e2e8f0',
+                        backgroundColor: selectedQty > 0 ? 'rgba(37, 99, 235, 0.15)' : 'var(--bg-app)',
+                        border: selectedQty > 0 ? '2px solid #3b82f6' : '1px solid var(--border-color)',
                         borderRadius: '10px',
                         padding: '10px 12px',
                         display: 'flex',
@@ -2311,9 +2314,9 @@ showToast('밴드 과거 AS 빅데이터 탑재를 시작합니다.');
                             width: '46px',
                             height: '46px',
                             borderRadius: '8px',
-                            backgroundColor: selectedQty > 0 ? '#ffffff' : '#f1f5f9',
-                            border: selectedQty > 0 ? '1px solid #cbd5e1' : '1px solid #e2e8f0',
-                            color: selectedQty > 0 ? '#1e293b' : '#94a3b8',
+                            backgroundColor: selectedQty > 0 ? 'var(--bg-card)' : 'var(--bg-secondary)',
+                            border: '1px solid var(--border-color)',
+                            color: selectedQty > 0 ? 'var(--text-main)' : 'var(--text-muted)',
                             fontSize: '20px',
                             fontWeight: 800,
                             display: 'flex',
@@ -2337,9 +2340,9 @@ showToast('밴드 과거 AS 빅데이터 탑재를 시작합니다.');
                             width: '46px',
                             height: '46px',
                             borderRadius: '8px',
-                            backgroundColor: stock > selectedQty ? '#2563eb' : '#e2e8f0',
-                            color: stock > selectedQty ? '#ffffff' : '#94a3b8',
-                            border: 'none',
+                            backgroundColor: stock > selectedQty ? '#2563eb' : 'var(--bg-secondary)',
+                            color: stock > selectedQty ? '#ffffff' : 'var(--text-muted)',
+                            border: stock > selectedQty ? 'none' : '1px solid var(--border-color)',
                             fontSize: '20px',
                             fontWeight: 800,
                             display: 'flex',
@@ -2375,9 +2378,9 @@ showToast('밴드 과거 AS 빅데이터 탑재를 시작합니다.');
                         borderRadius: '20px',
                         fontSize: '12.5px',
                         fontWeight: isSelected ? 700 : 500,
-                        backgroundColor: isSelected ? '#1e293b' : '#f1f5f9',
-                        color: isSelected ? '#ffffff' : '#334155',
-                        border: 'none',
+                        backgroundColor: isSelected ? '#2563eb' : 'var(--bg-secondary)',
+                        color: isSelected ? '#ffffff' : 'var(--text-secondary)',
+                        border: isSelected ? '1px solid #2563eb' : '1px solid var(--border-color)',
                         cursor: 'pointer',
                         whiteSpace: 'nowrap'
                       }}
@@ -2533,7 +2536,7 @@ showToast('밴드 과거 AS 빅데이터 탑재를 시작합니다.');
                 width: '100%',
                 height: '54px',
                 backgroundColor: '#16a34a',
-                color: 'var(--bg-card)',
+                color: '#ffffff',
                 border: 'none',
                 borderRadius: '10px',
                 fontSize: '16px',
@@ -2719,7 +2722,7 @@ showToast('밴드 과거 AS 빅데이터 탑재를 시작합니다.');
                 </button>
                 <button
                   type="submit"
-                  style={{ padding: '8px 20px', backgroundColor: '#2563eb', border: 'none', borderRadius: '6px', fontSize: '13px', fontWeight: 700, color: 'var(--bg-card)', cursor: 'pointer' }}
+                  style={{ padding: '8px 20px', backgroundColor: '#2563eb', border: 'none', borderRadius: '6px', fontSize: '13px', fontWeight: 700, color: '#ffffff', cursor: 'pointer' }}
                 >
                   접수 등록
                 </button>
@@ -2760,10 +2763,10 @@ showToast('밴드 과거 AS 빅데이터 탑재를 시작합니다.');
                   <div
                     key={t.id}
                     style={{
-                      border: '1px solid var(--border-color)',
+                      border: idx === 0 ? '1px solid rgba(59, 130, 246, 0.4)' : '1px solid var(--border-color)',
                       borderRadius: '8px',
                       padding: '14px',
-                      backgroundColor: idx === 0 ? '#eff6ff' : 'var(--bg-card)'
+                      backgroundColor: idx === 0 ? 'rgba(37, 99, 235, 0.12)' : 'var(--bg-card)'
                     }}
                   >
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
@@ -2775,8 +2778,9 @@ showToast('밴드 과거 AS 빅데이터 탑재를 시작합니다.');
                         borderRadius: '4px',
                         fontSize: '11px',
                         fontWeight: 700,
-                        backgroundColor: t.status === 'COMPLETED' ? '#dcfce7' : '#fef3c7',
-                        color: t.status === 'COMPLETED' ? '#166534' : '#92400e'
+                        backgroundColor: t.status === 'COMPLETED' ? 'rgba(34, 197, 94, 0.15)' : 'rgba(245, 158, 11, 0.15)',
+                        color: t.status === 'COMPLETED' ? '#22c55e' : '#f59e0b',
+                        border: `1px solid ${t.status === 'COMPLETED' ? 'rgba(34, 197, 94, 0.3)' : 'rgba(245, 158, 11, 0.3)'}`
                       }}>
                         {t.status}
                       </span>
@@ -2787,7 +2791,7 @@ showToast('밴드 과거 AS 빅데이터 탑재를 시작합니다.');
                     </div>
 
                     {t.actionTaken && (
-                      <div style={{ fontSize: '13px', color: '#16a34a', backgroundColor: '#f0fdf4', padding: '6px 10px', borderRadius: '4px' }}>
+                      <div style={{ fontSize: '13px', color: '#10b981', backgroundColor: 'rgba(16, 185, 129, 0.12)', border: '1px solid rgba(16, 185, 129, 0.25)', padding: '6px 10px', borderRadius: '4px' }}>
                         <strong>조치내용:</strong> {t.actionTaken}
                         {t.partsUsed && t.partsUsed.length > 0 && (
                           <span> (사용 부품: {t.partsUsed.map(p => `${p.modelName} ${p.quantity}개`).join(', ')})</span>
@@ -2883,7 +2887,7 @@ showToast('밴드 과거 AS 빅데이터 탑재를 시작합니다.');
                       // handled
                     }
                   }}
-                  style={{ padding: '8px 20px', backgroundColor: '#2563eb', border: 'none', borderRadius: '6px', fontSize: '13px', fontWeight: 700, color: 'var(--bg-card)', cursor: 'pointer' }}
+                  style={{ padding: '8px 20px', backgroundColor: '#2563eb', border: 'none', borderRadius: '6px', fontSize: '13px', fontWeight: 700, color: '#ffffff', cursor: 'pointer' }}
                 >
                   차량 재고 이동 확정
                 </button>

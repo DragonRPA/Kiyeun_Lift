@@ -183,11 +183,11 @@ export const SmartAsRequest: React.FC = () => {
           onClick={() => setActiveTab('field_as')}
           style={{
             padding: '8px 14px',
-            backgroundColor: '#f8fafc',
-            border: '1px solid #cbd5e1',
+            backgroundColor: 'var(--bg-secondary)',
+            border: '1px solid var(--border-color)',
             borderRadius: '6px',
             fontSize: '13px',
-            color: '#475569',
+            color: 'var(--text-secondary)',
             cursor: 'pointer',
             fontWeight: 600
           }}
@@ -197,12 +197,12 @@ export const SmartAsRequest: React.FC = () => {
       </div>
 
       {submitSuccessTicket ? (
-        <div style={{ backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '12px', padding: '32px', textAlign: 'center' }}>
-          <CheckCircle2 size={48} color="#16a34a" style={{ margin: '0 auto 16px auto' }} />
-          <h2 style={{ fontSize: '20px', fontWeight: 'bold', color: '#166534', margin: '0 0 8px 0' }}>
+        <div style={{ backgroundColor: 'rgba(16, 185, 129, 0.12)', border: '1px solid rgba(16, 185, 129, 0.3)', borderRadius: '12px', padding: '32px', textAlign: 'center' }}>
+          <CheckCircle2 size={48} color="#10b981" style={{ margin: '0 auto 16px auto' }} />
+          <h2 style={{ fontSize: '20px', fontWeight: 'bold', color: 'var(--text-main)', margin: '0 0 8px 0' }}>
             AS 의뢰가 성공적으로 접수되었습니다!
           </h2>
-          <p style={{ fontSize: '14px', color: '#15803d', margin: '0 0 20px 0' }}>
+          <p style={{ fontSize: '14px', color: '#10b981', margin: '0 0 20px 0' }}>
             접수번호: <strong>{submitSuccessTicket.ticketNo}</strong> (현장: {submitSuccessTicket.siteName} / 장비: {submitSuccessTicket.assetNo})
           </p>
           <div style={{ display: 'flex', justifyContent: 'center', gap: '12px' }}>
@@ -210,12 +210,12 @@ export const SmartAsRequest: React.FC = () => {
               onClick={handleReset}
               style={{
                 padding: '10px 20px',
-                backgroundColor: '#ffffff',
-                border: '1px solid #cbd5e1',
+                backgroundColor: 'var(--bg-card)',
+                border: '1px solid var(--border-color)',
                 borderRadius: '6px',
                 fontSize: '14px',
                 fontWeight: 600,
-                color: '#334155',
+                color: 'var(--text-main)',
                 cursor: 'pointer'
               }}
             >

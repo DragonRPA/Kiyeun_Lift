@@ -399,7 +399,7 @@ export const AgentHeaderBadge: React.FC<Props> = ({ currentUser }) => {
                   href={NODEJS_INSTALL_URL}
                   target="_blank"
                   rel="noreferrer"
-                  style={{ width: '100%', padding: '8px 10px', fontSize: '12px', fontWeight: '700', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', background: '#f0fdf4', border: '1.5px solid #16a34a', borderRadius: '7px', color: '#15803d', textDecoration: 'none', boxSizing: 'border-box' }}
+                  style={{ width: '100%', padding: '8px 10px', fontSize: '12px', fontWeight: '700', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', background: 'rgba(16, 185, 129, 0.12)', border: '1.5px solid #16a34a', borderRadius: '7px', color: '#10b981', textDecoration: 'none', boxSizing: 'border-box' }}
                 >
                   1단계: 🟢 Node.js 설치 (nodejs.org)
                 </a>

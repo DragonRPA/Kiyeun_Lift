@@ -207,7 +207,7 @@ export const MobileDispatchList: React.FC = () => {
       <div className="flex items-center gap-1 bg-slate-900/80 p-1 rounded-xl border border-slate-800">
         <button
           onClick={() => setFilter('PENDING')}
-          className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${
+          className={`flex-1 py-2 px-1 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
             filter === 'PENDING'
               ? 'bg-blue-600 text-white shadow-md'
               : 'text-slate-400 hover:text-white'
@@ -217,7 +217,7 @@ export const MobileDispatchList: React.FC = () => {
         </button>
         <button
           onClick={() => setFilter('DISPATCHED')}
-          className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${
+          className={`flex-1 py-2 px-1 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
             filter === 'DISPATCHED'
               ? 'bg-blue-600 text-white shadow-md'
               : 'text-slate-400 hover:text-white'
@@ -227,7 +227,7 @@ export const MobileDispatchList: React.FC = () => {
         </button>
         <button
           onClick={() => setFilter('DELIVERED')}
-          className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${
+          className={`flex-1 py-2 px-1 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
             filter === 'DELIVERED'
               ? 'bg-blue-600 text-white shadow-md'
               : 'text-slate-400 hover:text-white'
