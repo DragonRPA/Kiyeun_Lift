@@ -64,6 +64,10 @@ export const MobileWalkieTalkieModal: React.FC<MobileWalkieTalkieModalProps> = (
       setHistory([...walkieService.getHistory()]);
     });
 
+    const unHist = walkieService.onHistoryChange((newHist) => {
+      setHistory([...newHist]);
+    });
+
     const unQueue = walkieService.onQueueChange((len) => {
       setQueueLength(len);
     });
@@ -78,6 +82,7 @@ export const MobileWalkieTalkieModal: React.FC<MobileWalkieTalkieModalProps> = (
 
     return () => {
       unMsg();
+      unHist();
       unQueue();
       unTalking();
       unRecMode();

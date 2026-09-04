@@ -179,8 +179,10 @@ class WalkieTalkieService {
   private talkingStatusListeners: ((status: TalkingStatus | null) => void)[] = [];
   private talkingTimeoutRef: any = null;
 
-  // 당일 대화 히스토리 (메모리 + localStorage 당일 누적 캐시)
+  // 당일 대화 히스토리 (메모리 + localStorage 당일 누적 캐시, 건수 제한 없음)
   private history: WalkieMessage[] = [];
+  private historyListeners: Array<(history: WalkieMessage[]) => void> = [];
+  private dateCheckIntervalRef: any = null;
 
   constructor() {
     try {
@@ -188,8 +190,12 @@ class WalkieTalkieService {
       const savedHist = localStorage.getItem('walkie_today_history') || localStorage.getItem('walkie_history_v1');
       if (savedHist) {
         const parsed = JSON.parse(savedHist) as WalkieMessage[];
-        // 당일 대화만 필터링 (자정 넘어가면 이전 날짜 대화 자동 소멸)
-        this.history = parsed.filter(m => m.createdAt && m.createdAt.slice(0, 10) === today).slice(0, 100);
+        // 당일 대화만 필터링 (자정 넘어가면 이전 날짜 대화 자동 소멸, 당일 건수 무제한 관리)
+        this.history = parsed.filter(m => m.createdAt && m.createdAt.slice(0, 10) === today);
+        // 이전 일자 잔여 데이터가 존재하면 스토리지 즉시 정비 동기화
+        if (parsed.length !== this.history.length) {
+          this.saveHistoryToStorage();
+        }
       }
       const savedPower = localStorage.getItem('walkie_power_on');
       // 기본값: 사용자가 명시적으로 끈 적 없으면 켜진 상태 유지
@@ -201,6 +207,13 @@ class WalkieTalkieService {
       const savedChannel = localStorage.getItem('walkie_channel') as WalkieTalkieChannel;
       if (savedChannel) {
         this.currentChannel = savedChannel;
+      }
+
+      // 일자 변경(자정) 자동 감지: 1분마다 주기 점검하여 날짜 변경 시 이전 날짜 대화 즉시 제거
+      if (typeof window !== 'undefined') {
+        this.dateCheckIntervalRef = setInterval(() => {
+          this.purgeOldHistoryIfNeeded();
+        }, 60000);
       }
     } catch (e) {
       console.warn('Failed to load walkie storage:', e);
@@ -264,6 +277,7 @@ class WalkieTalkieService {
   }
 
   getHistory(): WalkieMessage[] {
+    this.purgeOldHistoryIfNeeded();
     return this.history;
   }
 
@@ -423,16 +437,63 @@ class WalkieTalkieService {
     };
   }
 
-  private addHistory(msg: WalkieMessage) {
+  // 날짜 변경 시 이전 날짜 대화 즉시 일괄 제거 (당일 대화만 전량 보존)
+  public purgeOldHistoryIfNeeded(): boolean {
     const today = this.getTodayDateStr();
-    // 당일 대화만 누적 보존 (최대 100건)
-    this.history = [msg, ...this.history.filter(h => h.id !== msg.id)]
-      .filter(m => m.createdAt && m.createdAt.slice(0, 10) === today)
-      .slice(0, 100);
+    const hasOld = this.history.some(m => !m.createdAt || m.createdAt.slice(0, 10) !== today);
+    if (hasOld) {
+      this.history = this.history.filter(m => m.createdAt && m.createdAt.slice(0, 10) === today);
+      this.saveHistoryToStorage();
+      this.notifyHistoryChange();
+      return true;
+    }
+    return false;
+  }
+
+  // 스토리지 안전 저장 (브라우저 할당량 초과 시 과거 음성은 경량화하되 텍스트/메타데이터는 당일 전량 100% 보존)
+  private saveHistoryToStorage() {
     try {
       localStorage.setItem('walkie_today_history', JSON.stringify(this.history));
-    } catch {
-      // ignore
+    } catch (e) {
+      console.warn('localStorage quota exceeded, saving full metadata with compressed older audios:', e);
+      try {
+        // 용량 초과 시 최근 25건만 음성 유지하고 이전 대화는 audioBase64만 비워 텍스트/시간/발신자 전량 영구 유지
+        const compressed = this.history.map((m, idx) => {
+          if (idx < 25) return m;
+          return { ...m, audioBase64: '' };
+        });
+        localStorage.setItem('walkie_today_history', JSON.stringify(compressed));
+      } catch (e2) {
+        console.error('Failed to save compressed walkie history:', e2);
+      }
+    }
+  }
+
+  private notifyHistoryChange() {
+    for (const listener of this.historyListeners) {
+      try {
+        listener(this.history);
+      } catch (e) {
+        console.warn('Error in historyListener:', e);
+      }
+    }
+  }
+
+  onHistoryChange(listener: (history: WalkieMessage[]) => void) {
+    this.historyListeners.push(listener);
+    return () => {
+      this.historyListeners = this.historyListeners.filter(l => l !== listener);
+    };
+  }
+
+  private addHistory(msg: WalkieMessage) {
+    this.purgeOldHistoryIfNeeded();
+    const today = this.getTodayDateStr();
+    // 당일 대화만 누적 보존 (건수 제한 없이 전건 관리)
+    if (msg.createdAt && msg.createdAt.slice(0, 10) === today) {
+      this.history = [msg, ...this.history.filter(h => h.id !== msg.id)];
+      this.saveHistoryToStorage();
+      this.notifyHistoryChange();
     }
   }
 
