@@ -204,7 +204,7 @@ export const Contracts: React.FC = () => {
   const activeTimeline = useMemo(() => {
     if (!activeContract) return [];
 
-    const timeline: { id: string; date: string; title: string; desc: string; category: 'CONTRACT' | 'INSPECTION' | 'TRUCK' | 'REPAIR' }[] = [];
+    const timeline: { id: string; date: string; title: string; desc: string; category: 'CONTRACT' | 'INSPECTION' | 'TRUCK' }[] = [];
 
     // 1. 계약 변경 및 대차 교체 이력
     activeContractHistory.forEach(h => {
@@ -267,31 +267,10 @@ export const Contracts: React.FC = () => {
       });
     });
 
-    // 4. 현장 AS 및 수리 이력 (5대 매트릭스 양방향 매핑)
-    const relAssetIds = activeContractAssets.map(ca => ca.assetId).filter((id): id is string => Boolean(id));
-    const relReps = repairs.filter(r => 
-      r.contractId === activeContract.id ||
-      (r.assetId && relAssetIds.includes(r.assetId)) ||
-      (!r.assetId && r.customerId === activeContract.customerId && (r.siteId === activeContract.siteId || r.siteName === getSiteName(activeContract.siteId)))
-    );
-
-    relReps.forEach(r => {
-      const asset = assets.find(a => a.id === r.assetId);
-      const rDate = r.visitDate || r.repairDate || r.completedDate || r.requestDate || r.createdAt.split('T')[0];
-      const isFieldAs = r.workCategory === 'FIELD_AS' || r.maintenanceType === 'EMERGENCY_AS';
-      const assetLabel = asset?.assetNo || r.assetNo || (activeContractAssets.length === 1 ? (assets.find(a => a.id === activeContractAssets[0].assetId)?.assetNo || '단독장비') : '현장확인');
-      
-      timeline.push({
-        id: `r-${r.id}`,
-        date: rDate,
-        title: isFieldAs ? `🛠️ 현장 AS (${assetLabel})` : `🔧 자산 정비 (${assetLabel})`,
-        desc: `증상: ${r.issueDescription || r.details || '점검'} ➔ 조치: ${r.actionTaken || '정비 완료'}${r.mechanicName ? ` (정비사: ${r.mechanicName})` : ''}${r.billableAmount && r.billableAmount > 0 ? ` [유상 ₩${r.billableAmount.toLocaleString()}]` : ''}`,
-        category: 'REPAIR'
-      });
-    });
+    // ※ 현장 AS 및 정비 이력은 하단 '계약 현장 AS 및 정비 이력' 전용 그리드에서 관리되므로 계약 흐름 타임라인에서는 제외함.
 
     return timeline.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, [activeContract, activeContractHistory, outboundInspections, deliveries, repairs, activeContractAssets, assets, todayStr]);
+  }, [activeContract, activeContractHistory, outboundInspections, deliveries, activeContractAssets, assets, todayStr]);
 
   // 핸들러
   const handleSelectContract = (contractId: string) => {

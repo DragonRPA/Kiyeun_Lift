@@ -1,3 +1,17 @@
+## [v1.3.0.Build.127] - 2026-09-04 14:43
+
+### 🚀 스마트폰 모바일 웹앱 캐시 고착 원천 해소 및 강력 동기화(Hard Reload) 인프라 구축
+- **Vercel CDN 및 브라우저 no-cache HTTP 헤더 탑재 (`vercel.json`, `index.html`)**:
+  - HTML 및 서비스워커 파일에 대한 `Cache-Control: no-cache, no-store, must-revalidate` 적용으로 새 빌드 배포 시 모바일 단말기가 100% 즉시 최신 번들을 다운로드하도록 보장.
+- **Service Worker v2 캐시 자동 퍼지 및 네트워크 우선 탐색 (`public/sw.js`)**:
+  - 새 배포 활성화 시 구버전 캐시 자동 전액 삭제 및 HTML 문서 네트워크 우선 페치 적용.
+- **모바일 원터치 강력 새로고침(Hard Reload) 파이프라인 (`src/mobile/MobileHeader.tsx`)**:
+  - 브라우저 캐시 스토리지 전면 삭제 + 서비스워커 업데이트 + 타임스탬프 캐시 버스팅 URL 리로드 연동.
+- **계약 상세 타임라인 내 현장 AS 이력 분리 완료 (`src/pages/Contracts.tsx`)**:
+  - 계약 변경 및 이력 타임라인에서 AS 이력을 분리하여 순수 계약 흐름만 집중 관리.
+
+---
+
 ## [v1.3.0.Build.126] - 2026-09-04 14:36
 
 ### 📱 모바일 웹앱 최상단 헤더 원터치 새로고침 버튼 신설 및 상단 바 레이아웃 최적화

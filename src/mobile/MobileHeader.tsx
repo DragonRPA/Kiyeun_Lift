@@ -22,10 +22,26 @@ export const MobileHeader: React.FC<MobileHeaderProps> = ({
   const { currentUser, logout } = useApp();
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  const handleRefresh = () => {
+  const handleRefresh = async () => {
     setIsRefreshing(true);
+    try {
+      if ('caches' in window) {
+        const keys = await caches.keys();
+        await Promise.all(keys.map(k => caches.delete(k)));
+      }
+      if ('serviceWorker' in navigator) {
+        const regs = await navigator.serviceWorker.getRegistrations();
+        for (const reg of regs) {
+          await reg.update();
+        }
+      }
+    } catch (e) {
+      console.error('캐시 초기화 오류:', e);
+    }
     setTimeout(() => {
-      window.location.reload();
+      const url = new URL(window.location.href);
+      url.searchParams.set('t', Date.now().toString());
+      window.location.replace(url.toString());
     }, 200);
   };
 
