@@ -368,6 +368,18 @@ class WalkieTalkieService {
         }
       });
 
+      // 3. 🌟 STT 전사 텍스트 비동기 후속 업데이트 수신
+      channel.on('broadcast', { event: 'transcript_update' }, ({ payload }) => {
+        const { messageId, textTranscript } = payload || {};
+        if (!messageId || !textTranscript) return;
+        const target = this.history.find(m => m.id === messageId);
+        if (target) {
+          target.textTranscript = textTranscript;
+          this.saveHistoryToStorage();
+          this.notifyHistoryChange();
+        }
+      });
+
       channel.subscribe((status) => {
         if (status === 'SUBSCRIBED') {
           console.log(`Walkie channel ${chName} subscribed.`);
@@ -523,7 +535,7 @@ class WalkieTalkieService {
         if (SpeechRec) {
           const rec = new SpeechRec();
           rec.lang = 'ko-KR';
-          rec.continuous = true;
+          rec.continuous = false; // 모바일 단문 PTT 전용 (Google 음성인식 즉시 종결 모드)
           rec.interimResults = true;
           rec.maxAlternatives = 1;
           rec.onresult = (event: any) => {
@@ -533,7 +545,9 @@ class WalkieTalkieService {
             }
             this.currentTranscript = transcriptStr.trim();
           };
-          rec.onerror = () => {};
+          rec.onerror = (e: any) => {
+            console.warn('STT SpeechRec error:', e?.error);
+          };
           rec.start();
           this.speechRecognition = rec;
         }
@@ -602,50 +616,7 @@ class WalkieTalkieService {
   ): Promise<WalkieMessage | null> {
     soundEngine.playEndBeep();
 
-    // 1. STT 음성인식 최종 전사 결과 스마트 Flush 대기
-    if (this.speechRecognition) {
-      const rec = this.speechRecognition;
-      await new Promise<void>((resolve) => {
-        let finished = false;
-        const done = () => {
-          if (!finished) {
-            finished = true;
-            resolve();
-          }
-        };
-
-        // 타이머: 음성인식 엔진이 문장을 정리할 수 있도록 최대 450ms (이미 중간 텍스트가 있으면 200ms) 대기
-        const maxWait = this.currentTranscript ? 200 : 450;
-        const timer = setTimeout(done, maxWait);
-
-        rec.onend = () => {
-          clearTimeout(timer);
-          done();
-        };
-        rec.onerror = (err: any) => {
-          console.warn('SpeechRec error during stop:', err?.error);
-          clearTimeout(timer);
-          done();
-        };
-        // 추가 전사 텍스트 도착 시 즉시 갱신 후 80ms 대기 후 완료
-        const origOnResult = rec.onresult;
-        rec.onresult = (event: any) => {
-          if (origOnResult) origOnResult(event);
-          clearTimeout(timer);
-          setTimeout(done, 80);
-        };
-
-        try {
-          rec.stop();
-        } catch {
-          clearTimeout(timer);
-          done();
-        }
-      });
-      this.speechRecognition = null;
-    }
-
-    // 2. 발언 종료 브로드캐스트
+    // 1. 발언 종료 브로드캐스트
     const ch = targetChannel || this.currentChannel;
     const activeCh = this.channels.get(ch);
     if (activeCh) {
@@ -664,8 +635,22 @@ class WalkieTalkieService {
       return null;
     }
 
+    // 2. 단기(최대 300ms) 초기 전사 대기
+    const recInstance = this.speechRecognition;
+    if (recInstance && !this.currentTranscript) {
+      await new Promise<void>((resolve) => {
+        const timer = setTimeout(resolve, 300);
+        const origResult = recInstance.onresult;
+        recInstance.onresult = (e: any) => {
+          if (origResult) origResult(e);
+          clearTimeout(timer);
+          resolve();
+        };
+      });
+    }
+
     const durationSec = Math.max(1, Math.round((Date.now() - this.recordingStartTime) / 1000));
-    const finalTranscript = this.currentTranscript.trim();
+    const initialTranscript = this.currentTranscript.trim();
     this.currentTranscript = '';
 
     return new Promise((resolve) => {
@@ -683,7 +668,7 @@ class WalkieTalkieService {
             senderDept: sender.deptName || '기연리프트',
             audioBase64: base64,
             durationSec: durationSec,
-            textTranscript: finalTranscript || undefined,
+            textTranscript: initialTranscript || undefined,
             createdAt: new Date().toISOString()
           };
 
@@ -695,6 +680,54 @@ class WalkieTalkieService {
               event: 'voice',
               payload: msg
             });
+          }
+
+          // 3. 🌟 후속 STT 비동기 전사 완료 감지 (음성은 즉시 전송 후 텍스트 지연 도착 시 실시간 패치)
+          if (recInstance) {
+            const msgId = msg.id;
+            const applyFinalText = (txt: string) => {
+              const cleanTxt = txt.trim();
+              if (cleanTxt && cleanTxt !== initialTranscript) {
+                const target = this.history.find(m => m.id === msgId);
+                if (target) {
+                  target.textTranscript = cleanTxt;
+                  this.saveHistoryToStorage();
+                  this.notifyHistoryChange();
+                }
+                if (activeCh) {
+                  activeCh.send({
+                    type: 'broadcast',
+                    event: 'transcript_update',
+                    payload: { messageId: msgId, textTranscript: cleanTxt }
+                  });
+                }
+              }
+            };
+
+            recInstance.onresult = (event: any) => {
+              let transcriptStr = '';
+              for (let i = 0; i < event.results.length; ++i) {
+                transcriptStr += event.results[i][0].transcript;
+              }
+              applyFinalText(transcriptStr);
+            };
+
+            recInstance.onend = () => {
+              this.speechRecognition = null;
+            };
+
+            // 4초 후 가비지 수거
+            setTimeout(() => {
+              if (this.speechRecognition === recInstance) {
+                this.speechRecognition = null;
+              }
+            }, 4000);
+
+            try {
+              recInstance.stop();
+            } catch {
+              this.speechRecognition = null;
+            }
           }
 
           resolve(msg);

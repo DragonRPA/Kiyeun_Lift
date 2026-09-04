@@ -767,65 +767,77 @@ export const MobileWalkieTalkieModal: React.FC<MobileWalkieTalkieModalProps> = (
                 }}>
                   {history.slice(0, 4).map(msg => {
                     const isPlaying = playingMessageId === msg.id;
+                    const isMine = msg.senderId === currentUser?.id;
                     const timeStr = new Date(msg.createdAt).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
                     return (
                       <div
                         key={msg.id}
                         style={{
-                          padding: '8px 10px',
-                          borderRadius: '10px',
-                          backgroundColor: '#1e293b',
-                          border: '1px solid #334155',
+                          padding: '6px 10px',
+                          borderRadius: '8px',
+                          backgroundColor: isMine ? 'rgba(30, 58, 138, 0.35)' : '#1e293b',
+                          border: isMine ? '1px solid #2563eb' : '1px solid #334155',
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'space-between',
-                          gap: '8px'
+                          gap: '8px',
+                          minHeight: '38px',
+                          whiteSpace: 'nowrap'
                         }}
                       >
-                        <div style={{ minWidth: 0, flex: 1 }}>
-                          <div style={{ fontSize: '11px', fontWeight: '800', color: '#f1f5f9', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                            <span style={{ color: '#38bdf8' }}>[{msg.channel}]</span>
-                            <span>{msg.senderDept} {msg.senderName}</span>
-                            <span style={{ fontSize: '10px', color: '#64748b', fontWeight: '500' }}>{timeStr}</span>
-                          </div>
-                          {msg.textTranscript ? (
-                            <div style={{ 
-                              fontSize: '12px', 
-                              color: '#ffffff', 
-                              fontWeight: '600',
-                              marginTop: '2px', 
-                              lineHeight: 1.35,
-                              wordBreak: 'break-all'
-                            }}>
-                              💬 {msg.textTranscript}
-                            </div>
-                          ) : (
-                            <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '2px' }}>
-                              🎙️ 음성 메시지 ({msg.durationSec}초)
-                            </div>
-                          )}
+                        {/* 좌측: [채널] 발신자 시간 | 💬 STT 텍스트 (또는 🎙️ 음성 N초) */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0, flex: 1, overflow: 'hidden' }}>
+                          <span style={{
+                            padding: '1px 5px',
+                            borderRadius: '4px',
+                            backgroundColor: '#0f172a',
+                            color: '#38bdf8',
+                            fontSize: '10px',
+                            fontWeight: '800',
+                            flexShrink: 0
+                          }}>
+                            {msg.channel}
+                          </span>
+                          <span style={{ fontSize: '11.5px', fontWeight: '800', color: isMine ? '#93c5fd' : '#f8fafc', flexShrink: 0 }}>
+                            {isMine ? '나' : `${msg.senderDept} ${msg.senderName}`}
+                          </span>
+                          <span style={{ fontSize: '10px', color: '#64748b', flexShrink: 0 }}>
+                            {timeStr}
+                          </span>
+                          <span style={{
+                            fontSize: '12px',
+                            color: msg.textTranscript ? '#ffffff' : '#94a3b8',
+                            fontWeight: msg.textTranscript ? '700' : '500',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                            marginLeft: '4px'
+                          }}>
+                            {msg.textTranscript ? `💬 ${msg.textTranscript}` : `🎙️ 음성 ${msg.durationSec}초`}
+                          </span>
                         </div>
 
                         <button
                           type="button"
                           onClick={() => handlePlayAudio(msg)}
                           style={{
-                            padding: '5px 8px',
+                            flexShrink: 0,
+                            padding: '3px 8px',
                             borderRadius: '6px',
                             border: 'none',
-                            backgroundColor: isPlaying ? '#0284c7' : '#334155',
+                            backgroundColor: isPlaying ? '#ef4444' : isMine ? '#2563eb' : '#0284c7',
                             color: '#ffffff',
                             fontSize: '11px',
-                            fontWeight: '800',
+                            fontWeight: '700',
                             cursor: 'pointer',
                             display: 'flex',
                             alignItems: 'center',
                             gap: '4px',
-                            flexShrink: 0
+                            height: '26px'
                           }}
                         >
                           {isPlaying ? <Square size={10} fill="#ffffff" /> : <Play size={10} fill="#ffffff" />}
-                          <span>{isPlaying ? '정지' : '듣기'}</span>
+                          <span>{isPlaying ? '정지' : `듣기 (${msg.durationSec}초)`}</span>
                         </button>
                       </div>
                     );
@@ -909,90 +921,72 @@ export const MobileWalkieTalkieModal: React.FC<MobileWalkieTalkieModalProps> = (
                       key={msg.id}
                       style={{
                         display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: isMine ? 'flex-end' : 'flex-start'
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: '8px',
+                        padding: '6px 10px',
+                        borderRadius: '8px',
+                        backgroundColor: isMine ? 'rgba(30, 58, 138, 0.35)' : '#1e293b',
+                        border: isMine ? '1px solid #2563eb' : '1px solid #334155',
+                        minHeight: '38px',
+                        whiteSpace: 'nowrap'
                       }}
                     >
-                      {/* 발신자 정보 및 시간 */}
-                      <div style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '6px',
-                        marginBottom: '4px',
-                        fontSize: '11px',
-                        color: '#94a3b8'
-                      }}>
+                      {/* 좌측: [채널] 발신자 시간 | 💬 STT 전사 텍스트 or 음성 N초 */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0, flex: 1, overflow: 'hidden' }}>
                         <span style={{
                           padding: '1px 5px',
                           borderRadius: '4px',
-                          backgroundColor: '#1e293b',
+                          backgroundColor: '#0f172a',
                           color: '#38bdf8',
                           fontSize: '10px',
-                          fontWeight: '800'
+                          fontWeight: '800',
+                          flexShrink: 0
                         }}>
                           {msg.channel}
                         </span>
-                        <span style={{ fontWeight: '800', color: isMine ? '#60a5fa' : '#f8fafc' }}>
+                        <span style={{ fontSize: '11.5px', fontWeight: '800', color: isMine ? '#93c5fd' : '#f8fafc', flexShrink: 0 }}>
                           {isMine ? '나' : `${msg.senderDept} ${msg.senderName}`}
                         </span>
-                        <span style={{ fontSize: '10px', color: '#64748b' }}>{timeStr}</span>
+                        <span style={{ fontSize: '10px', color: '#64748b', flexShrink: 0 }}>
+                          {timeStr}
+                        </span>
+                        <span style={{
+                          fontSize: '12px',
+                          color: msg.textTranscript ? '#ffffff' : '#94a3b8',
+                          fontWeight: msg.textTranscript ? '700' : '500',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                          marginLeft: '4px'
+                        }}>
+                          {msg.textTranscript ? `💬 ${msg.textTranscript}` : `🎙️ 음성 ${msg.durationSec}초`}
+                        </span>
                       </div>
 
-                      {/* 말풍선 본문 */}
-                      <div style={{
-                        maxWidth: '85%',
-                        padding: '10px 12px',
-                        borderRadius: isMine ? '14px 2px 14px 14px' : '2px 14px 14px 14px',
-                        backgroundColor: isMine ? '#1e3a8a' : '#1e293b',
-                        border: isMine ? '1px solid #2563eb' : '1px solid #334155',
-                        boxShadow: '0 2px 6px rgba(0,0,0,0.25)'
-                      }}>
-                        {/* STT 텍스트 */}
-                        <div style={{
-                          fontSize: '13px',
-                          color: '#f8fafc',
-                          lineHeight: 1.45,
-                          fontWeight: '600'
-                        }}>
-                          {msg.textTranscript ? msg.textTranscript : `🎙️ [음성 메시지: ${msg.durationSec}초]`}
-                        </div>
-
-                        {/* 음성 다시듣기 플레이어 바 */}
-                        <div style={{
-                          marginTop: '8px',
-                          paddingTop: '6px',
-                          borderTop: isMine ? '1px solid rgba(255,255,255,0.15)' : '1px solid rgba(255,255,255,0.08)',
+                      {/* 우측: 다시듣기 재생 버튼 */}
+                      <button
+                        type="button"
+                        onClick={() => handlePlayAudio(msg)}
+                        style={{
+                          flexShrink: 0,
+                          padding: '3px 8px',
+                          borderRadius: '6px',
+                          border: 'none',
+                          backgroundColor: isPlaying ? '#ef4444' : isMine ? '#2563eb' : '#0284c7',
+                          color: '#ffffff',
+                          fontSize: '11px',
+                          fontWeight: '700',
+                          cursor: 'pointer',
                           display: 'flex',
                           alignItems: 'center',
-                          justifyContent: 'space-between',
-                          gap: '8px'
-                        }}>
-                          <span style={{ fontSize: '10.5px', color: isMine ? '#93c5fd' : '#94a3b8' }}>
-                            음성 {msg.durationSec}초
-                          </span>
-
-                          <button
-                            type="button"
-                            onClick={() => handlePlayAudio(msg)}
-                            style={{
-                              padding: '4px 8px',
-                              borderRadius: '6px',
-                              border: 'none',
-                              backgroundColor: isPlaying ? '#ef4444' : isMine ? '#2563eb' : '#0284c7',
-                              color: '#ffffff',
-                              fontSize: '11px',
-                              fontWeight: '800',
-                              cursor: 'pointer',
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '4px'
-                            }}
-                          >
-                            {isPlaying ? <Square size={10} fill="#ffffff" /> : <Play size={10} fill="#ffffff" />}
-                            <span>{isPlaying ? '정지' : '다시듣기'}</span>
-                          </button>
-                        </div>
-                      </div>
+                          gap: '4px',
+                          height: '26px'
+                        }}
+                      >
+                        {isPlaying ? <Square size={10} fill="#ffffff" /> : <Play size={10} fill="#ffffff" />}
+                        <span>{isPlaying ? '정지' : `다시듣기 (${msg.durationSec}초)`}</span>
+                      </button>
                     </div>
                   );
                 })
