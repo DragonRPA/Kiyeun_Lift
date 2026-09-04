@@ -1,12 +1,36 @@
 // src/mobile/pages/MobileDispatchList.tsx
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useApp } from '../../context/AppContext';
 import { db, Delivery } from '../../services/db';
-import { Truck, Phone, CheckCircle2 } from 'lucide-react';
+import { 
+  Truck, Phone, CheckCircle2, Mic, MicOff, FileText, 
+  Sparkles, X, Check, UserCheck, AlertCircle 
+} from 'lucide-react';
+import { parseDispatchDriverCallTranscript } from '../../services/voiceOrderDraftService';
 
 export const MobileDispatchList: React.FC = () => {
   const { deliveries, refreshAllData, showErrorModal } = useApp();
-  const [filter, setFilter] = useState<'PENDING' | 'DISPATCHED' | 'DELIVERED'>('DISPATCHED');
+  const [filter, setFilter] = useState<'PENDING' | 'DISPATCHED' | 'DELIVERED'>('PENDING');
+
+  // 기사 배정 모달 상태
+  const [showAssignModal, setShowAssignModal] = useState(false);
+  const [targetDeliveryId, setTargetDeliveryId] = useState('');
+  const [vehicleNo, setVehicleNo] = useState('');
+  const [driverName, setDriverName] = useState('');
+  const [driverContact, setDriverContact] = useState('');
+  const [vehicleType, setVehicleType] = useState('5톤');
+  const [finalCost, setFinalCost] = useState<number>(0);
+  const [assignMemo, setAssignMemo] = useState('');
+  const [recentModifiedFields, setRecentModifiedFields] = useState<string[]>([]);
+
+  // 음성 및 텍스트 붙여넣기 상태
+  const [isListening, setIsListening] = useState(false);
+  const [interimText, setInterimText] = useState('');
+  const [pastedTranscript, setPastedTranscript] = useState('');
+  const [showPasteBox, setShowPasteBox] = useState(false);
+  const recognitionRef = useRef<any>(null);
+
+  const pendingDeliveries = deliveries.filter(d => d.status === 'PENDING' || d.status === 'REQUESTED');
 
   const filteredDeliveries = deliveries.filter((d) => {
     if (filter === 'PENDING') return d.status === 'PENDING' || d.status === 'REQUESTED';
@@ -14,6 +38,138 @@ export const MobileDispatchList: React.FC = () => {
     if (filter === 'DELIVERED') return d.status === 'DELIVERED' || d.status === 'COMPLETED';
     return true;
   });
+
+  // 통화 텍스트 파싱 및 폼 자동 반영
+  const applyDriverTranscript = (text: string) => {
+    if (!text.trim()) return;
+    const result = parseDispatchDriverCallTranscript(text, pendingDeliveries);
+
+    if (result.matchedDeliveryId && !targetDeliveryId) {
+      setTargetDeliveryId(result.matchedDeliveryId);
+    }
+    if (result.vehicleNo) setVehicleNo(result.vehicleNo);
+    if (result.driverName) setDriverName(result.driverName);
+    if (result.driverContact) setDriverContact(result.driverContact);
+    if (result.vehicleType) setVehicleType(result.vehicleType);
+    if (result.finalCost > 0) setFinalCost(result.finalCost);
+    if (result.memo) setAssignMemo(result.memo);
+
+    setRecentModifiedFields(result.modifiedFields);
+  };
+
+  // 음성 인식 토글
+  const toggleListening = () => {
+    if (isListening) {
+      if (recognitionRef.current) recognitionRef.current.stop();
+      setIsListening(false);
+      return;
+    }
+
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      showErrorModal('이 브라우저는 음성 인식을 지원하지 않습니다. 최신 브라우저를 이용하세요.');
+      return;
+    }
+
+    try {
+      const recognition = new SpeechRecognition();
+      recognition.lang = 'ko-KR';
+      recognition.continuous = true;
+      recognition.interimResults = true;
+
+      recognition.onstart = () => {
+        setIsListening(true);
+        setInterimText('음성 듣는 중...');
+      };
+
+      recognition.onresult = (event: any) => {
+        let currentInterim = '';
+        let finalChunk = '';
+
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const transcript = event.results[i][0].transcript;
+          if (event.results[i].isFinal) {
+            finalChunk += transcript;
+          } else {
+            currentInterim += transcript;
+          }
+        }
+
+        if (finalChunk.trim()) {
+          applyDriverTranscript(finalChunk.trim());
+          setInterimText('');
+        } else if (currentInterim.trim()) {
+          setInterimText(currentInterim);
+        }
+      };
+
+      recognition.onerror = (event: any) => {
+        console.error('Speech recognition error:', event.error);
+        setIsListening(false);
+        setInterimText('');
+      };
+
+      recognition.onend = () => {
+        setIsListening(false);
+        setInterimText('');
+      };
+
+      recognitionRef.current = recognition;
+      recognition.start();
+    } catch (err: any) {
+      showErrorModal('음성 인식 시작 실패: ' + err.message);
+      setIsListening(false);
+    }
+  };
+
+  const handleOpenAssignModal = (deliveryId?: string) => {
+    if (deliveryId) {
+      setTargetDeliveryId(deliveryId);
+    } else if (pendingDeliveries.length > 0) {
+      setTargetDeliveryId(pendingDeliveries[0].id);
+    }
+    setVehicleNo('');
+    setDriverName('');
+    setDriverContact('');
+    setVehicleType('5톤');
+    setFinalCost(0);
+    setAssignMemo('');
+    setRecentModifiedFields([]);
+    setShowAssignModal(true);
+  };
+
+  const handleSaveDriverAssignment = async () => {
+    if (!targetDeliveryId) {
+      showErrorModal('배정할 배차 건을 선택하세요.');
+      return;
+    }
+    if (!driverName.trim() && !vehicleNo.trim()) {
+      showErrorModal('기사명 또는 차량번호를 입력하세요.');
+      return;
+    }
+
+    try {
+      db.updateRow<Delivery>('deliveries', targetDeliveryId, {
+        vehicleNo,
+        driverName,
+        driverContact,
+        vehicleType,
+        transportCompany: vehicleType,
+        finalCost: finalCost > 0 ? finalCost : undefined,
+        deliveryCost: finalCost > 0 ? finalCost : undefined,
+        status: 'DISPATCHED',
+        memo: assignMemo ? `[기사배정] ${assignMemo}` : undefined,
+        updatedAt: new Date().toISOString(),
+      });
+
+      await db.awaitPendingWrites();
+      refreshAllData();
+      alert('기사 배정이 완료되어 운송중(DISPATCHED)으로 전환되었습니다.');
+      setShowAssignModal(false);
+    } catch (err: any) {
+      showErrorModal('기사 배정 실패: ' + (err.message || ''));
+    }
+  };
 
   const handleUpdateStatus = async (deliveryId: string, nextStatus: any) => {
     try {
@@ -30,16 +186,35 @@ export const MobileDispatchList: React.FC = () => {
   };
 
   return (
-    <div className="flex flex-col gap-3 pb-24 p-4">
+    <div className="flex flex-col gap-3 pb-24 p-4 bg-slate-950 min-h-screen">
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-black text-white flex items-center gap-2">
           <Truck className="w-5 h-5 text-blue-400" />
           배차 운송 지시 ({filteredDeliveries.length})
         </h2>
+        {/* 통화 텍스트/음성 기사 배정 퀵 버튼 */}
+        <button
+          type="button"
+          onClick={() => handleOpenAssignModal()}
+          className="flex items-center gap-1.5 py-2 px-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-black shadow-lg active:scale-95 transition-all"
+        >
+          <UserCheck className="w-4 h-4" />
+          통화로 기사 배정
+        </button>
       </div>
 
       {/* 상태 필터 */}
       <div className="flex items-center gap-1 bg-slate-900/80 p-1 rounded-xl border border-slate-800">
+        <button
+          onClick={() => setFilter('PENDING')}
+          className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${
+            filter === 'PENDING'
+              ? 'bg-blue-600 text-white shadow-md'
+              : 'text-slate-400 hover:text-white'
+          }`}
+        >
+          배차 대기 ({pendingDeliveries.length})
+        </button>
         <button
           onClick={() => setFilter('DISPATCHED')}
           className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${
@@ -49,16 +224,6 @@ export const MobileDispatchList: React.FC = () => {
           }`}
         >
           운송중 (진행)
-        </button>
-        <button
-          onClick={() => setFilter('PENDING')}
-          className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${
-            filter === 'PENDING'
-              ? 'bg-blue-600 text-white shadow-md'
-              : 'text-slate-400 hover:text-white'
-          }`}
-        >
-          배차 대기
         </button>
         <button
           onClick={() => setFilter('DELIVERED')}
@@ -114,6 +279,11 @@ export const MobileDispatchList: React.FC = () => {
                     <div className="font-bold text-white">
                       {delivery.destinationAddress || '고객사 현장'}
                     </div>
+                    {delivery.cargoItems && (
+                      <div className="text-slate-400 text-[11px] mt-0.5">
+                        화물: {delivery.cargoItems}
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -134,7 +304,26 @@ export const MobileDispatchList: React.FC = () => {
                 )}
               </div>
 
-              {/* 상태 조작 버튼 */}
+              {/* 운송료 표시 */}
+              {delivery.finalCost ? (
+                <div className="text-right text-xs font-bold text-slate-300">
+                  운송료: <span className="text-emerald-400 font-mono">{delivery.finalCost.toLocaleString()}원</span>
+                </div>
+              ) : null}
+
+              {/* 대기 상태일 때 기사 배정 액션 버튼 */}
+              {(delivery.status === 'PENDING' || delivery.status === 'REQUESTED') && (
+                <button
+                  type="button"
+                  onClick={() => handleOpenAssignModal(delivery.id)}
+                  className="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs flex items-center justify-center gap-2 active:scale-98 transition-transform shadow-md"
+                >
+                  <UserCheck className="w-4 h-4" />
+                  기사/차량 배정하기
+                </button>
+              )}
+
+              {/* 운송중일 때 하차 완료 액션 버튼 */}
               {delivery.status === 'DISPATCHED' && (
                 <button
                   type="button"
@@ -149,6 +338,210 @@ export const MobileDispatchList: React.FC = () => {
           ))
         )}
       </div>
+
+      {/* 🚚 통화 텍스트/음성 기사 배정 모달 */}
+      {showAssignModal && (
+        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
+          <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-5 flex flex-col gap-4 shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-black text-white flex items-center gap-2">
+                <Truck className="w-4 h-4 text-blue-400" />
+                화물 기사 배정 (통화/음성 연동)
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowAssignModal(false)}
+                className="text-slate-400 hover:text-white p-1"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* 통화 텍스트 및 음성 바 */}
+            <div className="p-3 rounded-xl bg-slate-950 border border-blue-900/40 flex flex-col gap-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-black text-blue-300 flex items-center gap-1">
+                  <Sparkles className="w-3.5 h-3.5 text-blue-400" />
+                  기사 통화 내용 자동 파싱
+                </span>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setShowPasteBox(!showPasteBox)}
+                    className="py-1 px-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px] font-bold border border-slate-700"
+                  >
+                    <FileText className="w-3 h-3 inline mr-1" />
+                    {showPasteBox ? '입력창 닫기' : '텍스트 붙여넣기'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={toggleListening}
+                    className={`py-1 px-2.5 rounded-lg text-[11px] font-black flex items-center gap-1 transition-all ${
+                      isListening
+                        ? 'bg-rose-600 text-white animate-pulse'
+                        : 'bg-blue-600 hover:bg-blue-500 text-white'
+                    }`}
+                  >
+                    {isListening ? <MicOff className="w-3 h-3" /> : <Mic className="w-3 h-3" />}
+                    {isListening ? '듣는중...' : '음성입력'}
+                  </button>
+                </div>
+              </div>
+
+              {isListening && interimText && (
+                <div className="p-2 rounded-lg bg-rose-950/30 border border-rose-800/40 text-rose-200 text-xs">
+                  🎙️ {interimText}
+                </div>
+              )}
+
+              {showPasteBox && (
+                <div className="flex flex-col gap-2 pt-1 border-t border-slate-800">
+                  <textarea
+                    rows={3}
+                    value={pastedTranscript}
+                    onChange={(e) => setPastedTranscript(e.target.value)}
+                    placeholder="기사 통화 내용 붙여넣기...\n예: 경기88바1234 이기사 010-1234-5678 5톤 축차 12만원 판교 현장"
+                    className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-xs text-white focus:outline-none focus:border-blue-500"
+                  />
+                  <div className="flex items-center justify-between gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setPastedTranscript('경기88바1234 이기사 010-1234-5678 5톤 축차 12만원')}
+                      className="text-[10px] text-slate-400 hover:text-white underline"
+                    >
+                      테스트 예시 1
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        applyDriverTranscript(pastedTranscript);
+                        setShowPasteBox(false);
+                      }}
+                      className="py-1 px-3 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold"
+                    >
+                      파싱 적용
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {recentModifiedFields.length > 0 && (
+                <div className="flex flex-wrap gap-1 pt-1">
+                  {recentModifiedFields.map((f, i) => (
+                    <span
+                      key={i}
+                      className="px-2 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-500/30 text-[10px] font-bold flex items-center gap-1"
+                    >
+                      <Check className="w-2.5 h-2.5 text-blue-400" />
+                      {f}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* 대상 배차건 선택 */}
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-bold text-slate-300">
+                대상 배차 건 <span className="text-red-400">*</span>
+              </label>
+              <select
+                value={targetDeliveryId}
+                onChange={(e) => setTargetDeliveryId(e.target.value)}
+                className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-blue-500"
+              >
+                <option value="">-- 배차건 선택 --</option>
+                {pendingDeliveries.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    [{d.dispatchCategory || d.type}] {d.destinationAddress || '현장'} ({d.loadingDate || d.requestDate})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* 차량번호 & 차종 */}
+            <div className="grid grid-cols-2 gap-2">
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-bold text-slate-300">
+                  차량번호 <span className="text-red-400">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={vehicleNo}
+                  onChange={(e) => setVehicleNo(e.target.value)}
+                  placeholder="예: 경기88바1234"
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-white uppercase focus:outline-none focus:border-blue-500"
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-bold text-slate-300">차종</label>
+                <input
+                  type="text"
+                  value={vehicleType}
+                  onChange={(e) => setVehicleType(e.target.value)}
+                  placeholder="예: 5톤 축차, 셀프로더"
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-blue-500"
+                />
+              </div>
+            </div>
+
+            {/* 기사명 & 연락처 */}
+            <div className="grid grid-cols-2 gap-2">
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-bold text-slate-300">
+                  기사 성함 <span className="text-red-400">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={driverName}
+                  onChange={(e) => setDriverName(e.target.value)}
+                  placeholder="예: 이기사, 김철수"
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-blue-500"
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-bold text-slate-300">기사 연락처</label>
+                <input
+                  type="tel"
+                  value={driverContact}
+                  onChange={(e) => setDriverContact(e.target.value)}
+                  placeholder="010-0000-0000"
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-blue-500"
+                />
+              </div>
+            </div>
+
+            {/* 확정 운송료 */}
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-bold text-slate-300">확정 운송료 (원)</label>
+              <input
+                type="number"
+                value={finalCost || ''}
+                onChange={(e) => setFinalCost(Number(e.target.value))}
+                placeholder="예: 120000"
+                className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-white font-mono focus:outline-none focus:border-blue-500"
+              />
+            </div>
+
+            <div className="flex items-center gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowAssignModal(false)}
+                className="flex-1 py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold"
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveDriverAssignment}
+                className="flex-1 py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-black shadow-lg"
+              >
+                기사 배정 확정 (운송중)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

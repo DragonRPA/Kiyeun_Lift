@@ -1,5 +1,5 @@
 // src/services/voiceOrderDraftService.ts
-import { Customer, CustomerSite } from './db';
+import { Customer, CustomerSite, Asset, Delivery } from './db';
 
 export interface EquipmentOrderItem {
   ft: string;
@@ -264,9 +264,14 @@ export function mergeVoiceFragmentToDraft(
     ? sites.filter(s => s.customerId === matchedCustomer!.id)
     : sites;
 
+  const siteWordMatch = cleanText.match(/([가-힣A-Za-z0-9]{2,10})\s*(?:현장|신축|공사|캠퍼스|밸리|호텔|타워)/);
+  const siteKeyword = siteWordMatch ? siteWordMatch[1].replace(/\s/g, '') : '';
+
   for (const s of sitePool) {
     const simpleSite = s.name.replace(/\s/g, '');
-    if (simpleSite.length >= 2 && cleanText.replace(/\s/g, '').includes(simpleSite)) {
+    const isDirectMatch = simpleSite.length >= 2 && cleanText.replace(/\s/g, '').includes(simpleSite);
+    const isKeywordMatch = siteKeyword.length >= 2 && simpleSite.includes(siteKeyword);
+    if (isDirectMatch || isKeywordMatch) {
       matchedSite = s;
       break;
     }
@@ -313,4 +318,293 @@ export function mergeVoiceFragmentToDraft(
   saveVoiceOrderDraft(updated);
 
   return { updatedDraft: updated, modifiedFields };
+}
+
+
+// ─────────────────────────────────────────────────────────────
+// 🔧 2. 현장 AS 접수 통화 텍스트 파서 (Field AS Intake Parser)
+// ─────────────────────────────────────────────────────────────
+export interface AsCallParseResult {
+  customerName: string;
+  siteName: string;
+  assetNo: string;
+  reporterName: string;
+  reporterContact: string;
+  issueCategory: string;
+  issueDescription: string;
+  priority: 'NORMAL' | 'URGENT';
+  locationDetail: string;
+  modifiedFields: string[];
+}
+
+export function parseAsCallTranscript(
+  speechText: string,
+  customers: Customer[],
+  sites: CustomerSite[],
+  assets: Asset[]
+): AsCallParseResult {
+  const cleanText = speechText.trim();
+  const modifiedFields: string[] = [];
+
+  let customerName = '';
+  let siteName = '';
+  let assetNo = '';
+  let reporterName = '';
+  let reporterContact = '';
+  let issueCategory = '기타';
+  let issueDescription = cleanText;
+  let priority: 'NORMAL' | 'URGENT' = 'NORMAL';
+  let locationDetail = '';
+
+  // 1. 긴급도 판별
+  if (/급해|당장|중단|작업\s*못해|사고|위험|빨리/i.test(cleanText)) {
+    priority = 'URGENT';
+    modifiedFields.push('우선순위: 긴급(URGENT)');
+  }
+
+  // 2. 카테고리 매핑
+  if (/상승|하강|올라|내려|리프트/i.test(cleanText)) {
+    issueCategory = '상하강불량';
+  } else if (/충전|전원|배터리|방전|시동|차단기/i.test(cleanText)) {
+    issueCategory = '충전/전원';
+  } else if (/오일|누유|기름|유압/i.test(cleanText)) {
+    issueCategory = '오일누유';
+  } else if (/키|스위치|비상정지|레버|조이스틱/i.test(cleanText)) {
+    issueCategory = '키박스/스위치';
+  } else if (/에러|경고등|삐|부저|코드/i.test(cleanText)) {
+    issueCategory = '에러코드';
+  } else if (/협착|방지봉|안전바/i.test(cleanText)) {
+    issueCategory = '방지봉/협착';
+  } else if (/파이프|걸림|끼임/i.test(cleanText)) {
+    issueCategory = '파이프걸림';
+  } else if (/점검|확인/i.test(cleanText)) {
+    issueCategory = '점검요청';
+  }
+  if (issueCategory !== '기타') {
+    modifiedFields.push(`증상분류: ${issueCategory}`);
+  }
+
+  // 3. 장비 번호 추출 (예: 102호기, 102호, 205호, 1930 등)
+  const assetMatch = cleanText.match(/(\d{2,4})\s*호기?/) ||
+                     cleanText.match(/(?:장비|번호|관리번호)\s*([0-9A-Za-z]{2,8})/);
+  if (assetMatch) {
+    const rawNo = assetMatch[1].trim();
+    // 실제 assets 목록에서 해당 번호로 시작하거나 일치하는 자산 탐색
+    const matchedAsset = assets.find(a => a.assetNo.includes(rawNo) || rawNo.includes(a.assetNo));
+    assetNo = matchedAsset ? matchedAsset.assetNo : rawNo;
+    modifiedFields.push(`장비번호: ${assetNo}`);
+  }
+
+  // 4. 전화번호 추출
+  const phoneMatch = cleanText.match(/010[-.\s]?\d{3,4}[-.\s]?\d{4}/);
+  if (phoneMatch) {
+    const raw = phoneMatch[0].replace(/[-.\s]/g, '');
+    if (raw.length === 11) {
+      reporterContact = `${raw.slice(0, 3)}-${raw.slice(3, 7)}-${raw.slice(7)}`;
+      modifiedFields.push(`연락처: ${reporterContact}`);
+    }
+  }
+
+  // 5. 담당자명 추출
+  const nameMatch = cleanText.match(/([가-힣]{1,4}\s*(?:소장님?|반장님?|과장님?|부장님?|팀장님?))/);
+  const explicitMatch = cleanText.match(/(?:담당자|이름은?)\s*([가-힣]{2,4})/);
+  if (nameMatch) {
+    reporterName = nameMatch[0].trim().replace(/님$/, '');
+    modifiedFields.push(`담당자: ${reporterName}`);
+  } else if (explicitMatch) {
+    reporterName = explicitMatch[1].trim();
+    modifiedFields.push(`담당자: ${reporterName}`);
+  }
+
+  // 6. 거래처 및 현장 탐색
+  for (const c of customers) {
+    const sName = c.name.replace(/주식회사|\(주\)|\s/g, '');
+    if (sName.length >= 2 && cleanText.replace(/\s/g, '').includes(sName)) {
+      customerName = c.name;
+      modifiedFields.push(`고객사: ${c.name}`);
+      break;
+    }
+  }
+
+  const siteWordMatch = cleanText.match(/([가-힣A-Za-z0-9]{2,10})\s*(?:현장|신축|공사|캠퍼스|밸리|호텔|타워)/);
+  const siteKeyword = siteWordMatch ? siteWordMatch[1].replace(/\s/g, '') : '';
+
+  for (const s of sites) {
+    const sName = s.name.replace(/\s/g, '');
+    const isDirectMatch = sName.length >= 2 && cleanText.replace(/\s/g, '').includes(sName);
+    const isKeywordMatch = siteKeyword.length >= 2 && sName.includes(siteKeyword);
+
+    if (isDirectMatch || isKeywordMatch) {
+      siteName = s.name;
+      if (!customerName) {
+        const parentCust = customers.find(c => c.id === s.customerId);
+        if (parentCust) customerName = parentCust.name;
+      }
+      modifiedFields.push(`현장: ${s.name}`);
+      break;
+    }
+  }
+
+  // 7. 위치 상세 (예: 지하 1층, 3층 하역장 등)
+  const locMatch = cleanText.match(/(지하\s*\d+층|지상\s*\d+층|\d+층|[가-힣A-Za-z0-9]+\s*(?:하역장|주차장|동|구역|게이트))/);
+  if (locMatch) {
+    locationDetail = locMatch[0].trim();
+    modifiedFields.push(`상세위치: ${locationDetail}`);
+  }
+
+  return {
+    customerName,
+    siteName,
+    assetNo,
+    reporterName,
+    reporterContact,
+    issueCategory,
+    issueDescription,
+    priority,
+    locationDetail,
+    modifiedFields
+  };
+}
+
+
+// ─────────────────────────────────────────────────────────────
+// 🚚 3. 배차 담당자 기사 배정 통화 파서 (Dispatch Driver Call Parser)
+// ─────────────────────────────────────────────────────────────
+export interface DispatchDriverParseResult {
+  matchedDeliveryId?: string;
+  matchedDeliverySummary?: string;
+  vehicleNo: string;
+  driverName: string;
+  driverContact: string;
+  vehicleType: string;
+  finalCost: number;
+  loadingTime?: string;
+  unloadingTime?: string;
+  memo?: string;
+  modifiedFields: string[];
+}
+
+export function parseDispatchDriverCallTranscript(
+  speechText: string,
+  pendingDeliveries: Delivery[]
+): DispatchDriverParseResult {
+  const cleanText = speechText.trim();
+  const modifiedFields: string[] = [];
+
+  let vehicleNo = '';
+  let driverName = '';
+  let driverContact = '';
+  let vehicleType = '';
+  let finalCost = 0;
+  let loadingTime = '';
+  let unloadingTime = '';
+  let matchedDeliveryId: string | undefined = undefined;
+  let matchedDeliverySummary: string | undefined = undefined;
+
+  // 1. 차량 번호 추출 (대한민국 영업용 화물차 번호판: 경기88바1234, 88바1234, 12가3456 등)
+  const plateMatch = cleanText.match(/([가-힣]{2})?\s*(\d{2,3})\s*([가-힣])\s*(\d{4})/);
+  if (plateMatch) {
+    const area = plateMatch[1] || '';
+    vehicleNo = `${area}${plateMatch[2]}${plateMatch[3]}${plateMatch[4]}`.replace(/\s/g, '');
+    modifiedFields.push(`차량번호: ${vehicleNo}`);
+  }
+
+  // 2. 기사 연락처 추출
+  const phoneMatch = cleanText.match(/010[-.\s]?\d{3,4}[-.\s]?\d{4}/);
+  if (phoneMatch) {
+    const raw = phoneMatch[0].replace(/[-.\s]/g, '');
+    if (raw.length === 11) {
+      driverContact = `${raw.slice(0, 3)}-${raw.slice(3, 7)}-${raw.slice(7)}`;
+      modifiedFields.push(`기사연락처: ${driverContact}`);
+    }
+  }
+
+  // 3. 기사명 추출 (이기사, 김기사, 홍길동 기사님 등)
+  const driverMatch = cleanText.match(/([가-힣]{1,4})\s*(?:기사님?|사장님?)/);
+  if (driverMatch && driverMatch[0]) {
+    const cand = driverMatch[0].trim().replace(/님$/, '');
+    if (!['경기', '서울', '인천', '충남', '강원', '전북', '내일', '오늘'].some(w => cand.startsWith(w))) {
+      driverName = cand;
+      modifiedFields.push(`기사명: ${driverName}`);
+    }
+  }
+
+  // 4. 차종 추출
+  const typeMatch = cleanText.match(/(5톤\s*축차|5톤|3\.5톤\s*광폭|3\.5톤|2\.5톤|1톤\s*카고|1톤|윙바디|셀프로더|평판|추레라)/i);
+  if (typeMatch) {
+    vehicleType = typeMatch[0].trim();
+    modifiedFields.push(`차종: ${vehicleType}`);
+  }
+
+  // 5. 확정 운송료 추출 (예: 12만원, 12만, 15만원, 130,000원)
+  const costMatch1 = cleanText.match(/(\d{1,3})\s*만(?:\s*원)?/);
+  const costMatch2 = cleanText.match(/(\d{1,3}(?:,\d{3})+)\s*원/);
+  if (costMatch1) {
+    finalCost = parseInt(costMatch1[1], 10) * 10000;
+    modifiedFields.push(`확정운송비: ${finalCost.toLocaleString()}원`);
+  } else if (costMatch2) {
+    finalCost = parseInt(costMatch2[1].replace(/,/g, ''), 10);
+    modifiedFields.push(`확정운송비: ${finalCost.toLocaleString()}원`);
+  }
+
+  // 6. 상하차 시간
+  const timeMatch = cleanText.match(/(상차|하차)?\s*(새벽|아침|오전|오후)?\s*(\d{1,2})시(?:\s*(\d{1,2})분)?/);
+  if (timeMatch) {
+    let hour = parseInt(timeMatch[3], 10);
+    const minute = timeMatch[4] ? parseInt(timeMatch[4], 10) : 0;
+    if (timeMatch[2] === '오후' && hour < 12) hour += 12;
+    const formattedTime = `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+    if (timeMatch[1] === '상차') {
+      loadingTime = formattedTime;
+      modifiedFields.push(`상차시간: ${loadingTime}`);
+    } else {
+      unloadingTime = formattedTime;
+      modifiedFields.push(`도착시간: ${unloadingTime}`);
+    }
+  }
+
+  // 7. 대기 중인 배차건 1순위 자동 매칭
+  // pendingDeliveries 중 목적지나 메모에 텍스트 속 키워드가 포함된 건 탐색
+  for (const d of pendingDeliveries) {
+    const dest = (d.destinationAddress || '').replace(/\s/g, '');
+    const memo = (d.memo || '').replace(/\s/g, '');
+    const raw = (d.rawText || '').replace(/\s/g, '');
+
+    // 현장명 매칭
+    const siteMatches = cleanText.match(/([가-힣A-Za-z0-9]+?)\s*(?:현장|신축|공사|호텔|타워)/);
+    if (siteMatches && siteMatches[1]) {
+      const kw = siteMatches[1].replace(/\s/g, '');
+      if (kw.length >= 2 && (dest.includes(kw) || memo.includes(kw) || raw.includes(kw))) {
+        matchedDeliveryId = d.id;
+        matchedDeliverySummary = `${d.destinationAddress || '목적지'} (${d.cargoItems || d.type})`;
+        modifiedFields.push(`대상배차: ${matchedDeliverySummary}`);
+        break;
+      }
+    }
+
+    // 또는 장비 모델 매칭
+    if (!matchedDeliveryId && /1930|2632|3246|4047/.test(cleanText)) {
+      const model = cleanText.match(/1930|2632|3246|4047/)![0];
+      if (memo.includes(model) || (d.cargoItems && d.cargoItems.includes(model))) {
+        matchedDeliveryId = d.id;
+        matchedDeliverySummary = `${d.destinationAddress || '목적지'} (${model})`;
+        modifiedFields.push(`대상배차: ${matchedDeliverySummary}`);
+        break;
+      }
+    }
+  }
+
+  return {
+    matchedDeliveryId,
+    matchedDeliverySummary,
+    vehicleNo,
+    driverName,
+    driverContact,
+    vehicleType,
+    finalCost,
+    loadingTime,
+    unloadingTime,
+    memo: cleanText,
+    modifiedFields
+  };
 }
