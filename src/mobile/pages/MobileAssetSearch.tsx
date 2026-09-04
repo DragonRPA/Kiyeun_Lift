@@ -13,8 +13,6 @@ interface SpecPreset {
   subModels: string;
   workHeight: string;
   modelMatchRegex: RegExp;
-  defaultMonthlyRent: number;
-  defaultDailyRent: number;
 }
 
 const SPEC_PRESETS: SpecPreset[] = [
@@ -24,54 +22,42 @@ const SPEC_PRESETS: SpecPreset[] = [
     subModels: '1330 / 3215',
     workHeight: '작업높이 ~7.8m',
     modelMatchRegex: /(19|1330|3215)/i,
-    defaultMonthlyRent: 280000,
-    defaultDailyRent: 10000,
-  },
+    },
   {
     id: '26ft',
     ft: '26ft',
     subModels: '0812 / 3219',
     workHeight: '작업높이 ~9.8m',
     modelMatchRegex: /(26|0812|3219)/i,
-    defaultMonthlyRent: 350000,
-    defaultDailyRent: 15000,
-  },
+    },
   {
     id: '32ft',
     ft: '32ft',
     subModels: '1012 / 3246',
     workHeight: '작업높이 ~11.8m',
     modelMatchRegex: /(32|1012|3246)/i,
-    defaultMonthlyRent: 500000,
-    defaultDailyRent: 20000,
-  },
+    },
   {
     id: '40ft',
     ft: '40ft',
     subModels: '1212 / 4047',
     workHeight: '작업높이 ~13.8m',
     modelMatchRegex: /(40|1212|4047)/i,
-    defaultMonthlyRent: 700000,
-    defaultDailyRent: 30000,
-  },
+    },
   {
     id: '46ft',
     ft: '46ft',
     subModels: '1412',
     workHeight: '작업높이 ~15.8m',
     modelMatchRegex: /(46|1412)/i,
-    defaultMonthlyRent: 900000,
-    defaultDailyRent: 40000,
-  },
+    },
   {
     id: '53ft',
     ft: '53ft',
     subModels: '1612 / 특수',
     workHeight: '작업높이 ~17.8m',
     modelMatchRegex: /(53|1612)/i,
-    defaultMonthlyRent: 1200000,
-    defaultDailyRent: 50000,
-  },
+    },
 ];
 
 export const MobileAssetSearch: React.FC = () => {
@@ -79,7 +65,8 @@ export const MobileAssetSearch: React.FC = () => {
 
   // 검색 및 필터 상태
   const [searchTerm, setSearchTerm] = useState('');
-  const [yardFilter, setYardFilter] = useState<'ALL' | 'MOHYEON' | 'VENDOR'>('ALL');
+  // 자사 보유 자산 전용 집계 (타사 재고 배제)
+  const [yardFilter, setYardFilter] = useState<'ALL' | 'MOHYEON'>('ALL');
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastSyncTime, setLastSyncTime] = useState(() => new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
 
@@ -122,14 +109,14 @@ export const MobileAssetSearch: React.FC = () => {
     setTimeout(() => setIsSyncing(false), 400);
   };
 
-  // 2. 주기장 필터 적용된 기본 자산 풀
+  // 2. 자사 보유 자산 풀 (타사 임차 장비 ownerType === 'RENTED' 제외)
   const yardFilteredAssets = useMemo(() => {
     return assets.filter(a => {
-      if (yardFilter === 'MOHYEON' && a.ownerType === 'RENTED') return false; // 본사 모현 주기장 (자사자산 위주)
-      if (yardFilter === 'VENDOR' && a.ownerType !== 'RENTED') return false;  // 협력타사 주기장
+      // 타사 재고 배제: 자사 소유 자산만 대상
+      if (a.ownerType === 'RENTED') return false;
       return true;
     });
-  }, [assets, yardFilter]);
+  }, [assets]);
 
   // 3. 오늘 ~ 3일 이내 반납(입고) 예정 장비 매핑
   const upcomingReturns = useMemo(() => {
@@ -177,11 +164,6 @@ export const MobileAssetSearch: React.FC = () => {
       // 반납 예정 대수
       const returnDueAssets = matchedAssets.filter(a => a.id && upcomingReturns[a.id]);
 
-      // 가용 장비들 중 월단가/일단가 기준값 (평균 또는 첫 장비 단가, 없으면 기본 프리셋 단가)
-      const firstWithRent = matchedAssets.find(a => (a.monthlyRentalFee || a.monthlyRentFee || 0) > 0);
-      const monthlyPrice = firstWithRent?.monthlyRentalFee || firstWithRent?.monthlyRentFee || preset.defaultMonthlyRent;
-      const dailyPrice = firstWithRent?.dailyRentalFee || firstWithRent?.dailyRentFee || preset.defaultDailyRent;
-
       return {
         ...preset,
         matchedAssets,
@@ -189,8 +171,6 @@ export const MobileAssetSearch: React.FC = () => {
         rentedCount: rentedAssets.length,
         returnDueCount: returnDueAssets.length,
         availableCount: availableAssets.length,
-        monthlyPrice,
-        dailyPrice,
       };
     });
   }, [yardFilteredAssets, upcomingReturns]);
@@ -260,41 +240,13 @@ export const MobileAssetSearch: React.FC = () => {
           )}
         </div>
 
-        {/* 주기장 칩 필터 */}
-        <div className="flex items-center gap-1.5 bg-slate-900/90 p-1 rounded-xl border border-slate-800">
-          <button
-            type="button"
-            onClick={() => setYardFilter('ALL')}
-            className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all ${
-              yardFilter === 'ALL'
-                ? 'bg-blue-600 text-white shadow-md'
-                : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            전체 주기장
-          </button>
-          <button
-            type="button"
-            onClick={() => setYardFilter('MOHYEON')}
-            className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all ${
-              yardFilter === 'MOHYEON'
-                ? 'bg-emerald-600 text-white shadow-md'
-                : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            본사 모현 주기장
-          </button>
-          <button
-            type="button"
-            onClick={() => setYardFilter('VENDOR')}
-            className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all ${
-              yardFilter === 'VENDOR'
-                ? 'bg-amber-600 text-white shadow-md'
-                : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            협력사 타사보관
-          </button>
+        {/* 주기장 안내 배지 (자사 자산 한정) */}
+        <div className="flex items-center justify-between px-2.5 py-1.5 bg-slate-900/90 rounded-xl border border-slate-800 text-[11px] text-slate-400">
+          <span className="flex items-center gap-1.5">
+            <MapPin className="w-3.5 h-3.5 text-emerald-400" />
+            <span>본사 모현 주기장 (자사 보유 자산)</span>
+          </span>
+          <span className="text-emerald-400 font-bold">출고가능 {totalAvailableCount}대</span>
         </div>
       </div>
 
@@ -319,7 +271,7 @@ export const MobileAssetSearch: React.FC = () => {
                       <span>{a.modelName}</span>
                     </div>
                     <div className="text-[11px] text-slate-400 mt-0.5">
-                      {a.ownerType === 'RENTED' ? '타사임차' : '본사 모현'} • ₩{(a.monthlyRentalFee || a.monthlyRentFee || 0).toLocaleString()}원/월
+                      본사 모현 주기장
                     </div>
                   </div>
                   <span className={`px-2 py-0.5 rounded-full text-[10.5px] font-bold border ${
@@ -406,13 +358,10 @@ export const MobileAssetSearch: React.FC = () => {
                   )}
                 </div>
 
-                {/* 카드 하단: 기준 단가 정보 */}
+                {/* 카드 하단: 보유 및 대여 현황 요약 */}
                 <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-[11px]">
-                  <span className="text-slate-400">기준단가</span>
-                  <div className="text-right">
-                    <span className="font-bold text-slate-200">₩{(stat.monthlyPrice / 10000).toFixed(0)}만</span>
-                    <span className="text-slate-500 text-[9.5px]">/월</span>
-                  </div>
+                  <span className="text-slate-400">총 보유</span>
+                  <span className="font-bold text-slate-200">{stat.matchedAssets.length}대</span>
                 </div>
               </div>
             );
@@ -439,7 +388,7 @@ export const MobileAssetSearch: React.FC = () => {
                     </span>
                   </div>
                   <div className="text-xs text-slate-400 mt-0.5">
-                    기준단가: 월 ₩{selectedSpec.defaultMonthlyRent.toLocaleString()}원 / 일 ₩{selectedSpec.defaultDailyRent.toLocaleString()}원
+                    {selectedSpec.workHeight} ({selectedSpec.subModels})
                   </div>
                 </div>
                 <button
@@ -480,7 +429,7 @@ export const MobileAssetSearch: React.FC = () => {
                               </span>
                             </div>
                             <div className="text-[11px] text-slate-400 mt-1 flex items-center gap-2">
-                              <span>위치: <strong className="text-slate-300">{asset.ownerType === 'RENTED' ? '협력원사' : '본사 모현 주기장'}</strong></span>
+                              <span>위치: <strong className="text-slate-300">본사 모현 주기장</strong></span>
                               <span>•</span>
                               <span>상태: <strong className="text-emerald-400">출고검수 합격</strong></span>
                             </div>
@@ -488,9 +437,9 @@ export const MobileAssetSearch: React.FC = () => {
 
                           <div className="text-right">
                             <div className="text-xs font-bold text-slate-200">
-                              ₩{(asset.monthlyRentalFee || asset.monthlyRentFee || selectedSpec.defaultMonthlyRent).toLocaleString()}원
+                              {asset.serialNo || '자사보유'}
                             </div>
-                            <div className="text-[10px] text-slate-500">월 렌탈 단가</div>
+                            <div className="text-[10px] text-slate-500">{asset.manufacturer || '자사자산'}</div>
                           </div>
                         </div>
                       ))}
@@ -549,4 +498,4 @@ export const MobileAssetSearch: React.FC = () => {
       })()}
     </div>
   );
-};
+};

@@ -1,10 +1,20 @@
 // src/mobile/MobileBottomNav.tsx
 import React from 'react';
-import { Home, Wrench, Truck, CheckSquare, Search } from 'lucide-react';
+import { Home, Wrench, Truck, CheckSquare, Search, Send, Building2, PlusCircle } from 'lucide-react';
+import { MobileDeptMode } from './MobileHeader';
 
-export type MobileTabType = 'home' | 'as' | 'dispatch' | 'inspection' | 'assets';
+export type MobileTabType = 
+  | 'home' 
+  | 'assets' 
+  | 'sales_order' 
+  | 'my_contracts' 
+  | 'as_create' 
+  | 'as' 
+  | 'dispatch' 
+  | 'inspection';
 
 interface MobileBottomNavProps {
+  deptMode: MobileDeptMode;
   activeTab: MobileTabType;
   onChangeTab: (tab: MobileTabType) => void;
   pendingAsCount?: number;
@@ -13,19 +23,62 @@ interface MobileBottomNavProps {
 }
 
 export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
+  deptMode,
   activeTab,
   onChangeTab,
   pendingAsCount = 0,
   pendingDispatchCount = 0,
   pendingInspectionCount = 0,
 }) => {
-  const navItems = [
-    { id: 'home' as MobileTabType, label: '홈', icon: Home, badge: 0 },
-    { id: 'as' as MobileTabType, label: '현장AS', icon: Wrench, badge: pendingAsCount },
-    { id: 'dispatch' as MobileTabType, label: '배차확인', icon: Truck, badge: pendingDispatchCount },
-    { id: 'inspection' as MobileTabType, label: '출고검수', icon: CheckSquare, badge: pendingInspectionCount },
-    { id: 'assets' as MobileTabType, label: '가용자산', icon: Search, badge: 0 },
-  ];
+  // 부서별 하단 5대 탭 동적 매핑
+  let navItems: { id: MobileTabType; label: string; icon: any; badge: number }[] = [];
+
+  if (deptMode === 'SALES') {
+    // 💼 영업부 모바일 탭
+    navItems = [
+      { id: 'home', label: '홈', icon: Home, badge: 0 },
+      { id: 'assets', label: '가용재고', icon: Search, badge: 0 },
+      { id: 'sales_order', label: '출고요청', icon: Send, badge: 0 },
+      { id: 'my_contracts', label: '내현장', icon: Building2, badge: 0 },
+      { id: 'as_create', label: 'AS접수', icon: PlusCircle, badge: 0 },
+    ];
+  } else if (deptMode === 'AS') {
+    // 🔧 AS팀 모바일 탭
+    navItems = [
+      { id: 'home', label: '홈', icon: Home, badge: 0 },
+      { id: 'as', label: '출동티켓', icon: Wrench, badge: pendingAsCount },
+      { id: 'as_create', label: 'AS신규', icon: PlusCircle, badge: 0 },
+      { id: 'inspection', label: '검수지원', icon: CheckSquare, badge: pendingInspectionCount },
+      { id: 'assets', label: '가용자산', icon: Search, badge: 0 },
+    ];
+  } else if (deptMode === 'OUTBOUND') {
+    // 🏗️ 출고/자산팀 모바일 탭
+    navItems = [
+      { id: 'home', label: '홈', icon: Home, badge: 0 },
+      { id: 'inspection', label: '출고검수', icon: CheckSquare, badge: pendingInspectionCount },
+      { id: 'dispatch', label: '배차상차', icon: Truck, badge: pendingDispatchCount },
+      { id: 'assets', label: '주기장자산', icon: Search, badge: 0 },
+      { id: 'as', label: '현장AS', icon: Wrench, badge: pendingAsCount },
+    ];
+  } else if (deptMode === 'EXECUTIVE') {
+    // 👑 경영진 모바일 탭
+    navItems = [
+      { id: 'home', label: '경영홈', icon: Home, badge: 0 },
+      { id: 'assets', label: '자산가동', icon: Search, badge: 0 },
+      { id: 'my_contracts', label: '계약현황', icon: Building2, badge: 0 },
+      { id: 'inspection', label: '출고승인', icon: CheckSquare, badge: pendingInspectionCount },
+      { id: 'as', label: 'AS현황', icon: Wrench, badge: pendingAsCount },
+    ];
+  } else {
+    // 📊 관리부 모바일 탭
+    navItems = [
+      { id: 'home', label: '관리홈', icon: Home, badge: 0 },
+      { id: 'my_contracts', label: '채권/계약', icon: Building2, badge: 0 },
+      { id: 'sales_order', label: '출고요청', icon: Send, badge: 0 },
+      { id: 'assets', label: '자산목록', icon: Search, badge: 0 },
+      { id: 'inspection', label: '출고관리', icon: CheckSquare, badge: pendingInspectionCount },
+    ];
+  }
 
   return (
     <nav 
@@ -96,7 +149,8 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
               fontSize: '11px',
               marginTop: '4px',
               color: isActive ? '#60a5fa' : '#94a3b8',
-              fontWeight: isActive ? '800' : '500'
+              fontWeight: isActive ? '800' : '500',
+              whiteSpace: 'nowrap'
             }}>
               {item.label}
             </span>
