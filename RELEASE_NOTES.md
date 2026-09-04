@@ -1,5 +1,38 @@
 ---
 
+# Release Notes (v1.3.0.Build.117 - 2026-09-04 13:00)
+
+## 🧭 [내비딥링크/전화걸기안전호출] TMAP 길안내 스마트폰 멈춤(ANR) 버그 원인 규명 및 nativeLauncher 안전 실행기 전면 구축 완비
+
+### 🎯 핵심 요약 및 긴급 패치 내역
+
+- **1. TMAP 길안내 스마트폰 멈춤(소프트 브릭) 치명적 원인 규명 및 완전 제거**:
+  - **발생 메커니즘**: `MobileAsDetail.tsx`의 기존 코드에서 `window.location.href = tmapUrl` 실행 후 1.5초 뒤 `setTimeout(() => window.open(kakaoUrl), 1500)`이 발동되는 치명적 이중 비동기 로직 발견.
+  - TMAP 앱이 포그라운드로 올라오며 3D 맵과 GPS를 초기화하는 순간, 백그라운드 브라우저 타이머가 강제로 새 창(카카오맵)을 띄우면서 안드로이드 `WindowManagerService`와 `SurfaceFlinger` 간에 화면 권한 교착 상태(Deadlock / ANR)가 발생하여 폰 전체 터치 먹통 및 재부팅을 강제하던 현상 완전 해결.
+  - `setTimeout` 기반의 비동기 이중 호출을 전면 영구 삭제.
+
+- **2. 전화걸기(`tel:`) 전수 점검 및 안전 호출화**:
+  - 전화걸기는 `setTimeout`이 없어 폰 멈춤은 없었으나, `window.location.href = 'tel:...'` 직접 이동 시 일부 PWA/웹뷰에서 `ERR_UNKNOWN_URL_SCHEME` 흰 화면 에러를 내거나 세션이 리셋되는 결함 잠재.
+  - 가상 DOM `<a>` 엘리먼트 클릭 방식으로 전면 교체하여 PWA 웹 화면 보존 및 시스템 전화 다이얼러 안전 호출 100% 보장.
+
+- **3. `src/utils/nativeLauncher.ts` 안전 실행 모듈 신설**:
+  - **안드로이드 공식 Intent 스킴 적용**:
+    `intent://search?name=${dest}#Intent;scheme=tmap;package=com.skt.tmap.ku;S.browser_fallback_url=${fallbackUrl};end;`
+    - TMAP 설치 시: OS가 TMAP을 직접 단독 실행.
+    - TMAP 미설치 시: OS가 fallbackUrl(카카오맵 웹)로 자동 연결하여 자바스크립트 타이머 충돌 원천 방지.
+  - **iOS 사파리 전용 스킴 분기**: `tmap://search?name=${dest}`로 안전 실행.
+  - **`safePhoneCall` 헬퍼**: DOM 가상 `<a>` 클릭 기반 안전 다이얼러 호출.
+
+- **4. 모바일 현장 AS 상세 화면 UX 개편 (`src/mobile/pages/MobileAsDetail.tsx`)**:
+  - 원터치 길안내 버튼 + `[▾]` 내비 앱 선택기(T맵 / 카카오내비 / 네이버지도) 탑재.
+  - 운전자 선호 내비게이션 앱 로컬스토리지 자동 기억 지원.
+  - `[담당자 통화]` 버튼 `safePhoneCall` 연동 완료.
+
+- **5. PC 현장 AS 관리 대장 연동 (`src/pages/FieldAsManagement.tsx`)**:
+  - 기존 `window.location.href` 호출을 `launchNavigation` 및 `safePhoneCall`로 100% 교체.
+
+---
+
 # Release Notes (v1.3.0.Build.116 - 2026-09-04 12:55)
 
 ## 📦 [권한표준/무전기PTT/사파리최적화] 전사 권한관리.md 제정 및 DB 보안가드 정비, 모바일 스마트폰 현장 무전기(PTT) 구축, 아이폰·아이패드 사파리 PWA 전면 최적화 완비

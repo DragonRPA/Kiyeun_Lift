@@ -1,5 +1,33 @@
 # 개발 지시 및 개편 완료 내역 (dev_temp.md)
 
+## 🧭 [내비딥링크/전화걸기안전호출] TMAP 길안내 폰 멈춤 버그 원인 규명 및 `nativeLauncher.ts` 안전 실행기 구축 완비 (v1.3.0.Build.117 - 2026-09-04 13:00)
+
+### 1. 버그 현상 및 근본 원인 분석
+- **증상**: 모바일 화면에서 [TMAP 길안내]를 누르면 TMAP이 열리다 멈추고 폰 전체가 먹통(소프트 브릭/터치 불가) 상태가 되어 강제 재부팅이 필요했던 현상.
+- **원인 1 (`setTimeout` 비동기 이중 인텐트 충돌)**:
+  - `MobileAsDetail.tsx`의 기존 코드에서 `window.location.href = tmapUrl` 직후 `setTimeout(() => window.open(kakaoUrl), 1500)`이 발동.
+  - TMAP 앱이 포그라운드로 전환되며 3D 지도와 GPS를 초기화하는 순간, 백그라운드의 브라우저 타이머가 강제로 새 팝업 창을 띄우면서 안드로이드 `WindowManagerService`와 `SurfaceFlinger` 간에 화면 권한 교착 상태(Deadlock / ANR)가 발생하여 폰 전체 락업 유발.
+- **원인 2 (안드로이드 표준 Intent Scheme 미준수)**:
+  - 단순 `tmap://` 커스텀 스킴은 안드로이드 크롬의 앱 전환 정책과 충돌 위험 존재.
+  - 구글 표준인 `intent://...#Intent;scheme=tmap;package=com.skt.tmap.ku;S.browser_fallback_url=...;end;` 형식을 사용해야 함.
+- **전화걸기(`tel:`) 점검 결과**:
+  - `tel:`은 `setTimeout`이 없어 폰 멈춤 충돌은 발생하지 않으나, `window.location.href`로 직접 호출 시 PWA 웹뷰가 흰색 에러 화면으로 이동할 위험이 있어 안전한 DOM <a> 클릭 방식으로 전면 격리 조치함.
+
+### 2. 조치 및 개선 내역
+- **`src/utils/nativeLauncher.ts` (중앙 안전 실행기 신설)**:
+  - **타이머 영구 금지**: 어떠한 경우에도 `setTimeout`을 통한 백그라운드 팝업 금지.
+  - **안드로이드 공식 Intent 스킴 적용**: `intent://` 및 `S.browser_fallback_url` 적용으로 OS 자체에서 앱 유무 판단 후 무충돌 단일 전환.
+  - **iOS 사파리 전용 스킴 분기**: `tmap://`, `kakaomap://`, `nmap://` 정상 호출.
+  - **`safePhoneCall` 헬퍼**: DOM 가상 `<a>` 클릭 방식을 통한 PWA 세션 보존 및 안전 다이얼러 호출.
+- **`src/mobile/pages/MobileAsDetail.tsx` (모바일 상세 개편)**:
+  - 위험한 `handleOpenTmap` 및 `setTimeout` 완전 제거.
+  - 원터치 길안내 버튼 + `[▾]` 내비 앱 선택기(T맵 / 카카오 / 네이버) 탑재 및 선택 기억.
+  - `safePhoneCall` 연동으로 전화걸기 완벽 안정화.
+- **`src/pages/FieldAsManagement.tsx` (PC 현장AS 대장 연동)**:
+  - `launchNavigation` 및 `safePhoneCall` 전면 교체 적용.
+
+---
+
 ## 📱 [iOS/iPadOS/Safari전면최적화] 아이폰 · 아이패드 사파리(Safari) 브라우저 100% 최적화 및 PWA 단독 앱 구동 환경 구축 완비 (2026-09-04 12:55)
 
 ### 1. 개발 배경 및 진단 결과

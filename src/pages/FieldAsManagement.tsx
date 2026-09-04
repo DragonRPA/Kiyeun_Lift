@@ -10,6 +10,7 @@ import {
 import { FieldAsTicket, FieldAsPartUsed, FieldAsCollectedPart } from '../services/db';
 import { exportToExcel } from '../services/excel';
 import { compressImageFile } from '../utils/imageCompressor';
+import { launchNavigation, safePhoneCall } from '../utils/nativeLauncher';
 
 // 자주 쓰이는 조치 내용 프리셋 태그 (5,518건 빅데이터 기반)
 const QUICK_ACTION_TAGS = [
@@ -170,7 +171,6 @@ export const FieldAsManagement: React.FC = () => {
 
   // ─── [내비게이션 실행 및 타임라인 자동 로깅 핸들러] ───
   const handleLaunchNav = async (ticket: FieldAsTicket, app: 'TMAP' | 'KAKAO' | 'NAVER') => {
-    const encodedSite = encodeURIComponent(ticket.siteName);
     const navLabel = app === 'TMAP' ? 'T맵' : (app === 'KAKAO' ? '카카오내비' : '네이버지도');
     
     // 1. 타임라인 이벤트 무자각 자동 저장
@@ -183,14 +183,8 @@ export const FieldAsManagement: React.FC = () => {
 
     setShowNavSelectorTicket(null);
 
-    // 2. 실제 앱 딥링크 호출
-    if (app === 'TMAP') {
-      window.location.href = `tmap://search?name=${encodedSite}`;
-    } else if (app === 'KAKAO') {
-      window.location.href = `https://map.kakao.com/link/search/${encodedSite}`;
-    } else if (app === 'NAVER') {
-      window.location.href = `nmap://search?query=${encodedSite}&appname=com.kiyuen.lift`;
-    }
+    // 2. 실제 앱 딥링크 호출 (안드로이드 Intent 및 iOS 스킴 완벽 준수, 멈춤 방지)
+    launchNavigation(ticket.siteName, app);
   };
 
   const handleNavButtonClick = (ticket: FieldAsTicket) => {
@@ -205,7 +199,7 @@ export const FieldAsManagement: React.FC = () => {
   const handlePhoneCallClick = async (ticket: FieldAsTicket) => {
     if (ticket.reporterContact) {
       await logFieldAsTimelineEvent(ticket.id, 'CALL_MADE', ticket.reporterContact);
-      window.location.href = `tel:${ticket.reporterContact.replace(/[^0-9]/g, '')}`;
+      safePhoneCall(ticket.reporterContact);
     }
   };
 

@@ -3,8 +3,9 @@ import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { CameraUploader } from '../components/CameraUploader';
 import { SignatureCanvas } from '../components/SignatureCanvas';
-import { ArrowLeft, Navigation, Phone, CheckCircle2, Wrench, Plus, Trash2 } from 'lucide-react';
+import { ArrowLeft, Navigation, Phone, CheckCircle2, Wrench, Plus, Trash2, ChevronDown } from 'lucide-react';
 import { RepairPartUsed } from '../../services/db';
+import { launchNavigation, safePhoneCall, NavAppType } from '../../utils/nativeLauncher';
 
 interface MobileAsDetailProps {
   ticketId: string;
@@ -51,6 +52,12 @@ export const MobileAsDetail: React.FC<MobileAsDetailProps> = ({ ticketId, onBack
   const [selectedQty, setSelectedQty] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // 내비게이션 앱 선택 상태 (로컬스토리지 기억)
+  const [selectedNavApp, setSelectedNavApp] = useState<NavAppType>(() => {
+    return (localStorage.getItem('preferred_nav_app') as NavAppType) || 'TMAP';
+  });
+  const [showNavOptions, setShowNavOptions] = useState(false);
+
   if (!ticket) {
     return (
       <div className="p-8 text-center text-slate-400">
@@ -62,21 +69,15 @@ export const MobileAsDetail: React.FC<MobileAsDetailProps> = ({ ticketId, onBack
     );
   }
 
-  // TMAP 길안내 열기
-  const handleOpenTmap = () => {
+  // 안전한 길안내 열기 (안드로이드 Intent 및 iOS 스킴, 멈춤 유발하는 setTimeout 완전 제거)
+  const handleOpenNav = (app: NavAppType = selectedNavApp) => {
     const destination = ticket.siteName || ticket.locationDetail || ticket.customerName || '현장';
-    const tmapUrl = `tmap://search?name=${encodeURIComponent(destination)}`;
-    window.location.href = tmapUrl;
-    setTimeout(() => {
-      window.open(`https://map.kakao.com/link/search/${encodeURIComponent(destination)}`, '_blank');
-    }, 1500);
+    launchNavigation(destination, app);
   };
 
-  // 전화 걸기
+  // 안전한 전화 걸기 (DOM <a> 클릭 방식으로 PWA 세션 보존)
   const handleCall = () => {
-    if (ticket.reporterContact) {
-      window.location.href = `tel:${ticket.reporterContact.replace(/[^0-9]/g, '')}`;
-    }
+    safePhoneCall(ticket.reporterContact);
   };
 
   // 부품 추가
@@ -175,24 +176,86 @@ export const MobileAsDetail: React.FC<MobileAsDetailProps> = ({ ticketId, onBack
           <div>{ticket.issueDescription || ticket.issueCategory || '고장 점검 요청'}</div>
         </div>
 
-        {/* 1-Click 길안내 & 전화 버튼 */}
+        {/* 1-Click 안전 길안내 & 전화 버튼 */}
         <div className="grid grid-cols-2 gap-2 pt-1">
+          <div className="flex gap-1">
+            <button
+              type="button"
+              onClick={() => handleOpenNav(selectedNavApp)}
+              className="flex-1 py-3 px-2 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 active:scale-95 transition-transform shadow-md"
+              title={`${selectedNavApp === 'TMAP' ? 'T맵' : selectedNavApp === 'KAKAO' ? '카카오내비' : '네이버지도'} 실행`}
+            >
+              <Navigation className="w-4 h-4 flex-shrink-0" />
+              <span className="truncate">{selectedNavApp === 'TMAP' ? 'T맵 길안내' : selectedNavApp === 'KAKAO' ? '카카오내비' : '네이버지도'}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowNavOptions(!showNavOptions)}
+              className="px-2.5 rounded-xl bg-sky-700 hover:bg-sky-600 text-white text-xs flex items-center justify-center active:scale-95"
+              title="내비 앱 선택"
+            >
+              <ChevronDown className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
           <button
-            onClick={handleOpenTmap}
-            className="py-3 px-4 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs flex items-center justify-center gap-2 active:scale-95 transition-transform shadow-md"
-          >
-            <Navigation className="w-4 h-4" />
-            TMAP 길안내
-          </button>
-          <button
+            type="button"
             onClick={handleCall}
             disabled={!ticket.reporterContact}
-            className="py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-800 disabled:text-slate-500 text-white font-bold text-xs flex items-center justify-center gap-2 active:scale-95 transition-transform shadow-md"
+            className="py-3 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-800 disabled:text-slate-500 text-white font-bold text-xs flex items-center justify-center gap-2 active:scale-95 transition-transform shadow-md"
           >
-            <Phone className="w-4 h-4" />
-            담당자 전화
+            <Phone className="w-4 h-4 flex-shrink-0" />
+            <span>담당자 통화</span>
           </button>
         </div>
+
+        {/* 내비게이션 앱 선택 패널 */}
+        {showNavOptions && (
+          <div className="p-2.5 rounded-xl bg-slate-950 border border-slate-800 flex flex-col gap-2 animate-fade-in text-xs">
+            <div className="flex items-center justify-between font-bold text-slate-300">
+              <span>내비게이션 선택:</span>
+              <button type="button" onClick={() => setShowNavOptions(false)} className="text-slate-500 text-[11px]">닫기</button>
+            </div>
+            <div className="grid grid-cols-3 gap-1.5">
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedNavApp('TMAP');
+                  localStorage.setItem('preferred_nav_app', 'TMAP');
+                  setShowNavOptions(false);
+                  handleOpenNav('TMAP');
+                }}
+                className={`py-2 px-1 rounded-lg border font-bold text-center ${selectedNavApp === 'TMAP' ? 'bg-sky-600 border-sky-400 text-white' : 'bg-slate-900 border-slate-700 text-slate-300'}`}
+              >
+                🔴 T맵
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedNavApp('KAKAO');
+                  localStorage.setItem('preferred_nav_app', 'KAKAO');
+                  setShowNavOptions(false);
+                  handleOpenNav('KAKAO');
+                }}
+                className={`py-2 px-1 rounded-lg border font-bold text-center ${selectedNavApp === 'KAKAO' ? 'bg-yellow-600 border-yellow-400 text-white' : 'bg-slate-900 border-slate-700 text-slate-300'}`}
+              >
+                🟡 카카오
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedNavApp('NAVER');
+                  localStorage.setItem('preferred_nav_app', 'NAVER');
+                  setShowNavOptions(false);
+                  handleOpenNav('NAVER');
+                }}
+                className={`py-2 px-1 rounded-lg border font-bold text-center ${selectedNavApp === 'NAVER' ? 'bg-emerald-600 border-emerald-400 text-white' : 'bg-slate-900 border-slate-700 text-slate-300'}`}
+              >
+                🟢 네이버
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* 조치 내용 입력 섹션 */}
