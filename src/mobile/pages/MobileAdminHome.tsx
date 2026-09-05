@@ -3,7 +3,7 @@ import React, { useMemo, useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { 
   Building2, Calendar, CheckCircle2, AlertCircle, ArrowRight, 
-  Search, Phone, FileText, Check, Clock 
+  Search, Phone, FileText, Check, Clock, Truck, Layers 
 } from 'lucide-react';
 import { MobileTabType } from '../MobileBottomNav';
 
@@ -12,8 +12,14 @@ interface MobileAdminHomeProps {
 }
 
 export const MobileAdminHome: React.FC<MobileAdminHomeProps> = ({ onNavigate }) => {
-  const { customers, billings, sites, currentUser } = useApp();
+  const { customers, billings, sites, currentUser, deliveries, assets } = useApp();
   const [toast, setToast] = useState<string | null>(null);
+
+  // 전대 장비 및 주기장 유휴 누수 건수
+  const subleaseAssets = useMemo(() => (assets || []).filter(a => a.ownerType === 'RENTED'), [assets]);
+  const subleaseLeakCount = useMemo(() => {
+    return subleaseAssets.filter(a => !a.actualRentReturnDate && a.status !== 'RENTED_RETURNED' && a.status !== 'RENTED').length;
+  }, [subleaseAssets]);
 
   const triggerToast = (msg: string) => {
     setToast(msg);
@@ -90,6 +96,67 @@ export const MobileAdminHome: React.FC<MobileAdminHomeProps> = ({ onNavigate }) 
           {currentUser?.name || '관리담당'}님,<br />
           마감 임박 <span className="text-sky-400 font-mono">{closingDueCustomers.length}개사</span> • 미수 채권 관리
         </h2>
+      </div>
+
+      {/* ── 전대 장비 운용 & 원사 반납 관제 퀵 배너 (신규) ── */}
+      <div
+        onClick={() => onNavigate('sublease')}
+        className={`p-4 rounded-2xl border flex items-center justify-between active:scale-98 transition-all cursor-pointer shadow-lg ${
+          subleaseLeakCount > 0 
+            ? 'bg-gradient-to-r from-rose-950/60 via-slate-900 to-slate-900 border-rose-500/50 ring-1 ring-rose-500/30' 
+            : 'bg-gradient-to-r from-slate-900 via-slate-900 to-blue-950/40 border-slate-800'
+        }`}
+      >
+        <div className="flex items-center gap-3">
+          <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+            subleaseLeakCount > 0 
+              ? 'bg-rose-600/20 border border-rose-500/40 text-rose-400' 
+              : 'bg-sky-600/20 border border-sky-500/30 text-sky-400'
+          }`}>
+            <Layers className="w-5 h-5 stroke-[2.2]" />
+          </div>
+          <div>
+            <div className="text-sm font-bold text-white flex items-center gap-2">
+              <span>전대 장비 운용 & 반납 관제</span>
+              <span className="text-xs font-mono font-bold px-1.5 py-0.5 rounded bg-sky-500/20 text-sky-300 border border-sky-500/30">
+                {subleaseAssets.length}대
+              </span>
+              {subleaseLeakCount > 0 && (
+                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-rose-600 text-white animate-pulse">
+                  누수경보 {subleaseLeakCount}대
+                </span>
+              )}
+            </div>
+            <div className="text-xs text-slate-400">
+              {subleaseLeakCount > 0 
+                ? `🚨 주기장 미반납 유휴 장비 ${subleaseLeakCount}대 방치 중!` 
+                : '외부 원사 임차 장비 및 반납 기한 관리'}
+            </div>
+          </div>
+        </div>
+        <ArrowRight className="w-5 h-5 text-slate-500" />
+      </div>
+
+      {/* ── 배차 상차 관제 퀵 배너 (관리부 이동 탑재) ── */}
+      <div
+        onClick={() => onNavigate('dispatch')}
+        className="p-4 rounded-2xl bg-gradient-to-r from-blue-950/60 to-slate-900 border border-blue-500/30 flex items-center justify-between active:scale-98 transition-all cursor-pointer shadow-lg"
+      >
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-blue-600/20 border border-blue-500/30 flex items-center justify-center text-sky-400">
+            <Truck className="w-5 h-5 stroke-[2.2]" />
+          </div>
+          <div>
+            <div className="text-sm font-bold text-white flex items-center gap-2">
+              <span>배차 운송 & 상차 관제</span>
+              <span className="text-xs font-mono font-bold px-1.5 py-0.5 rounded bg-sky-500/20 text-sky-300 border border-sky-500/30">
+                {(deliveries || []).filter(d => d.status === 'PENDING' || d.status === 'REQUESTED' || d.status === 'DISPATCHED').length}건
+              </span>
+            </div>
+            <div className="text-xs text-slate-400">화물 트럭 기사 배정 및 상차 완료 승인</div>
+          </div>
+        </div>
+        <ArrowRight className="w-5 h-5 text-slate-500" />
       </div>
 
       {/* ── 2. 통장 입금 1:1 즉시 수납 매칭 카드 ── */}

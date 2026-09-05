@@ -134,7 +134,7 @@ interface AppContextType {
   batchAcquireAssets: (assetsData: Partial<Asset>[]) => Promise<Asset[]>;
   disposeAsset: (assetId: string, disposalData: { disposalDate: string; disposalPrice: number; buyer: string; billingYm?: string }) => void;
   registerRentedAsset: (assetData: Partial<Asset>) => Promise<any>;
-  returnRentedAsset: (assetId: string, returnDate: string) => void;
+  returnRentedAsset: (assetId: string, returnDate: string) => Promise<void>;
   createVendorClaimReceivable: (data: {
     contractId?: string;
     customerId?: string;
@@ -145,7 +145,17 @@ interface AppContextType {
     displayName?: string;
     occurredDate?: string;
   }) => Promise<void>;
-  registerInboundAsset: (data: { assetId: string; returnDate: string; maintenanceScore?: number; memo?: string; inboundNo?: string; defects?: InboundDefectDetail[] }) => Promise<void>;
+  registerInboundAsset: (data: {
+    assetId: string;
+    returnDate: string;
+    maintenanceScore?: number;
+    memo?: string;
+    inboundNo?: string;
+    defects?: InboundDefectDetail[];
+    photos?: string[];
+    otherDefectText?: string;
+    targetAssetStatus?: Asset['status'];
+  }) => Promise<void>;
   cancelInboundAsset: (logId: string, cancelReason?: string) => Promise<void>;
   
   // Consumables Mutators
@@ -1627,6 +1637,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updatedAt: new Date().toISOString()
       });
     }
+    // 헌장 1.2 무누락 감사 로그: 원사 임차 반입
+    db.insertRow<AssetInOutLog>('assetInOutLogs', {
+      assetId: result.id,
+      assetNo: result.assetNo,
+      modelName: result.modelName,
+      type: 'INBOUND',
+      eventDate: result.rentStart || new Date().toISOString().split('T')[0],
+      memo: `[원사 임차 반입] 공급원사: ${result.renter || '원사'} (원사번호: ${result.vendorAssetNo || '-'})`,
+      createdAt: new Date().toISOString()
+    });
+
     try {
       await db.awaitPendingWrites();
     } catch (err: any) {
@@ -1638,13 +1659,38 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return result;
   };
 
-  const returnRentedAsset = (assetId: string, returnDate: string) => {
-    db.updateRow<Asset>('assets', assetId, {
-      status: 'RENTED_RETURNED',
-      actualRentReturnDate: returnDate,
-      updatedAt: new Date().toISOString()
-    });
-    refreshAllData();
+  const returnRentedAsset = async (assetId: string, returnDate: string): Promise<void> => {
+    const target = db.assets.find(a => a.id === assetId);
+    if (!target) return;
+
+    try {
+      db.updateRow<Asset>('assets', assetId, {
+        status: 'RENTED_RETURNED',
+        actualRentReturnDate: returnDate,
+        currentCustomerId: '',
+        currentSiteId: '',
+        updatedAt: new Date().toISOString()
+      });
+
+      // 헌장 1.2 무누락 감사 로그: 원사 반납 반출 (사법 감사 판정: type OUTBOUND)
+      db.insertRow<AssetInOutLog>('assetInOutLogs', {
+        assetId: target.id,
+        assetNo: target.assetNo,
+        modelName: target.modelName,
+        type: 'OUTBOUND',
+        eventDate: returnDate,
+        memo: `[원사 최종 반납] 반납처: ${target.renter || '원사'} (원사번호: ${target.vendorAssetNo || '-'})`,
+        createdAt: new Date().toISOString()
+      });
+
+      // 헌장 5.2 준수: CUD 동기 검증
+      await db.awaitPendingWrites();
+      refreshAllData();
+    } catch (err: any) {
+      console.error('returnRentedAsset 동기화 실패:', err);
+      showErrorModal(`⚠️ 원사 반납 마감 처리 중 DB 동기화 오류가 발생했습니다:\n${err.message || err}`, 'DB 동기화 오류');
+      throw err;
+    }
   };
 
   const createVendorClaimReceivable = async (data: {
@@ -4806,8 +4852,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     refreshAllData();
   };
 
-  // 💡 [사장님 지시] 입고 등록 (입고번호, 하위번호 INB-XXXX-01, 증상별 사진 및 자산정비수리 자동연동)
-  const registerInboundAsset = async (data: { assetId: string; returnDate: string; maintenanceScore?: number; memo?: string; inboundNo?: string; defects?: InboundDefectDetail[] }) => {
+  // 💡 [사장님 지시] 입고 등록 (입고번호, 하위번호 INB-XXXX-01, 증상별 사진 및 자산정비수리 자동연동, 불량 시 REPAIRING 전환)
+  const registerInboundAsset = async (data: {
+    assetId: string;
+    returnDate: string;
+    maintenanceScore?: number;
+    memo?: string;
+    inboundNo?: string;
+    defects?: InboundDefectDetail[];
+    photos?: string[];
+    otherDefectText?: string;
+    targetAssetStatus?: Asset['status'];
+  }) => {
     const asset = db.assets.find(a => a.id === data.assetId);
     if (!asset) throw new Error('해당 자산을 찾을 수 없습니다.');
 
@@ -4820,8 +4876,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const site = contract ? db.sites.find(s => s.id === contract.siteId) : null;
 
     const score = data.maintenanceScore || 0;
-    // 자산 상태: 점수 0점이면 AVAILABLE(임대가능), 이상 시 RENTED_RETURNED(입고반납/검수대기)
-    const nextAssetStatus: Asset['status'] = score === 0 ? 'AVAILABLE' : 'RENTED_RETURNED';
+    const hasDefect = score > 0 || (data.defects && data.defects.length > 0) || Boolean(data.otherDefectText);
+    // 자산 상태: 점수 0점이고 결함 없으면 AVAILABLE(임대가능), 이상 시 REPAIRING(정비중) 또는 전달된 targetAssetStatus
+    const nextAssetStatus: Asset['status'] = data.targetAssetStatus || (!hasDefect ? 'AVAILABLE' : 'REPAIRING');
 
     // 💡 [입고 번호 채번]
     const assignedInboundNo = data.inboundNo || db.generateNextId('inboundNo', db.assetInOutLogs as any);
@@ -4833,11 +4890,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }));
 
     const defectsJsonStr = processedDefects.length > 0 ? JSON.stringify(processedDefects) : undefined;
+    const defectSummary = processedDefects.map(d => `[${d.subNo}] ${d.checkitemName}(+${d.score}점)`).join(', ');
+    const fullDefectSummary = [defectSummary, data.otherDefectText ? `[기타] ${data.otherDefectText}` : ''].filter(Boolean).join(' | ');
 
-    // 1. 자산 마스터 갱신
+    // 1. 자산 마스터 갱신 (정비필요항목 note 저장)
     db.updateRow<Asset>('assets', asset.id, {
       status: nextAssetStatus,
       maintenanceScore: score,
+      note: hasDefect ? fullDefectSummary : (score === 0 ? '정상 입고 점검 완료' : asset.note),
       currentCustomerId: '',
       currentSiteId: '',
       contractStart: '',
@@ -4854,23 +4914,34 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       });
     }
 
-    // 3. 자산 정비수리 대장 연동 (점수가 1점 이상일 때 자동 PENDING 정비 건 발행)
+    // 3. 자산 정비수리 대장 연동 (결함 발생 시 자동 PENDING 정비 건 발행)
     let createdRepairId: string | undefined = undefined;
-    if (score > 0) {
+    if (hasDefect) {
       const repairId = db.generateNextId('repairs', db.repairs);
       createdRepairId = repairId;
-      const defectSummary = processedDefects.map(d => `[${d.subNo}] ${d.checkitemName}(+${d.score}점)`).join(', ');
       
       db.insertRow<Repair>('repairs', {
         id: repairId,
         assetId: asset.id,
+        assetNo: asset.assetNo,
+        modelName: asset.modelName,
+        contractId: contract?.id,
+        customerId: customer?.id,
+        customerName: customer?.name || '입고 점검처',
+        siteId: site?.id,
+        siteName: site?.name || '주기장',
         requestDate: data.returnDate,
         status: 'PENDING',
-        details: `[입고검수 자동 정비 접수 - ${assignedInboundNo}]\n정비 필요 항목: ${defectSummary}\n비고: ${data.memo || '이상 무'}`,
+        workCategory: 'YARD_INTERNAL',
+        workLocation: 'YARD',
+        source: 'INBOUND_INSPECTION',
+        details: `[입고검수 자동 정비 접수 - ${assignedInboundNo}]\n정비 필요 항목: ${fullDefectSummary}\n비고: ${data.memo || '이상 무'}`,
         totalCost: 0,
         billableToCustomer: false,
         inboundNo: assignedInboundNo,
         defectsJson: defectsJsonStr,
+        evidenceImages: data.photos || [],
+        targetAssetStatus: 'REPAIRING',
         inspectionItemCode: processedDefects.length > 0 ? processedDefects.map(d => d.checkitemId).join(',') : undefined,
         degradationScore: score,
         createdAt: new Date().toISOString(),
@@ -4893,7 +4964,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       repairId: createdRepairId,
       maintenanceScore: score,
       defectsJson: defectsJsonStr,
-      memo: data.memo || '입고 등록 완결',
+      memo: data.memo || (hasDefect ? `불량 입고 등록 (${fullDefectSummary})` : '정상 입고 등록 완결'),
       createdAt: new Date().toISOString()
     });
 

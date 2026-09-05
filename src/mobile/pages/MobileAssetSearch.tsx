@@ -3,7 +3,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { 
   Search, RefreshCw, Layers, CheckCircle2, AlertTriangle, 
-  XCircle, Clock, MapPin, ChevronRight, X, PhoneCall, Calendar
+  XCircle, Clock, MapPin, ChevronRight, X, PhoneCall, Calendar, Wrench
 } from 'lucide-react';
 import { matchHangul } from '../../utils/hangulSearch';
 
@@ -277,26 +277,37 @@ export const MobileAssetSearch: React.FC<MobileAssetSearchProps> = ({ onNavigate
             </div>
           ) : (
             <div className="flex flex-col gap-2 max-h-60 overflow-y-auto pr-1">
-              {searchResults.map(a => (
-                <div key={a.id} className="p-3 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-between text-xs">
-                  <div>
-                    <div className="font-bold text-white flex items-center gap-1.5">
-                      <span className="font-mono text-blue-400">{a.assetNo}</span>
-                      <span>{a.modelName}</span>
+              {searchResults.map(a => {
+                const score = Number(a.maintenanceScore) || 0;
+                return (
+                  <div key={a.id} className="p-3 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-between text-xs">
+                    <div>
+                      <div className="font-bold text-white flex items-center gap-1.5 flex-wrap">
+                        <span className="font-mono text-blue-400">{a.assetNo}</span>
+                        <span>{a.modelName}</span>
+                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold border flex items-center gap-1 whitespace-nowrap ${
+                          score === 0
+                            ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                            : 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+                        }`}>
+                          <Wrench className="w-2.5 h-2.5" />
+                          <span>정비점수 {score}점</span>
+                        </span>
+                      </div>
+                      <div className="text-[11px] text-slate-400 mt-0.5">
+                        본사 모현 주기장
+                      </div>
                     </div>
-                    <div className="text-[11px] text-slate-400 mt-0.5">
-                      본사 모현 주기장
-                    </div>
+                    <span className={`px-2 py-0.5 rounded-full text-[10.5px] font-bold border flex-shrink-0 ${
+                      a.status === 'AVAILABLE'
+                        ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                        : 'bg-blue-500/20 text-blue-300 border-blue-500/30'
+                    }`}>
+                      {a.status === 'AVAILABLE' ? '임대가능' : '대여중'}
+                    </span>
                   </div>
-                  <span className={`px-2 py-0.5 rounded-full text-[10.5px] font-bold border ${
-                    a.status === 'AVAILABLE'
-                      ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
-                      : 'bg-blue-500/20 text-blue-300 border-blue-500/30'
-                  }`}>
-                    {a.status === 'AVAILABLE' ? '임대가능' : '대여중'}
-                  </span>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
@@ -417,35 +428,47 @@ export const MobileAssetSearch: React.FC<MobileAssetSearchProps> = ({ onNavigate
                     </div>
                   ) : (
                     <div className="flex flex-col gap-2">
-                      {availList.map(asset => (
-                        <div
-                          key={asset.id}
-                          className="p-3 rounded-xl bg-slate-950/80 border border-slate-800 flex items-center justify-between"
-                        >
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <span className="px-2 py-0.5 rounded-md bg-blue-500/20 text-blue-400 font-mono font-bold text-xs">
-                                {asset.assetNo}
-                              </span>
-                              <span className="text-xs font-bold text-white">
-                                {asset.modelName}
-                              </span>
+                      {availList.map(asset => {
+                        const score = Number(asset.maintenanceScore) || 0;
+                        return (
+                          <div
+                            key={asset.id}
+                            className="p-3 rounded-xl bg-slate-950/80 border border-slate-800 flex items-center justify-between"
+                          >
+                            <div>
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="px-2 py-0.5 rounded-md bg-blue-500/20 text-blue-400 font-mono font-bold text-xs">
+                                  {asset.assetNo}
+                                </span>
+                                <span className="text-xs font-bold text-white">
+                                  {asset.modelName}
+                                </span>
+                                {/* 🌟 정비점수 뱃지 */}
+                                <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold border flex items-center gap-1 whitespace-nowrap ${
+                                  score === 0
+                                    ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                                    : 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+                                }`}>
+                                  <Wrench className="w-2.5 h-2.5" />
+                                  <span>정비 {score}점{score === 0 ? ' (최상)' : ''}</span>
+                                </span>
+                              </div>
+                              <div className="text-[11px] text-slate-400 mt-1 flex items-center gap-2">
+                                <span>위치: <strong className="text-slate-300">본사 모현 주기장</strong></span>
+                                <span>•</span>
+                                <span>상태: <strong className="text-emerald-400">출고검수 합격</strong></span>
+                              </div>
                             </div>
-                            <div className="text-[11px] text-slate-400 mt-1 flex items-center gap-2">
-                              <span>위치: <strong className="text-slate-300">본사 모현 주기장</strong></span>
-                              <span>•</span>
-                              <span>상태: <strong className="text-emerald-400">출고검수 합격</strong></span>
-                            </div>
-                          </div>
 
-                          <div className="text-right">
-                            <div className="text-xs font-bold text-slate-200">
-                              {asset.serialNo || '자사보유'}
+                            <div className="text-right flex-shrink-0">
+                              <div className="text-xs font-bold text-slate-200 font-mono">
+                                {asset.serialNo || '자사보유'}
+                              </div>
+                              <div className="text-[10px] text-slate-500">{asset.manufacturer || '자사자산'}</div>
                             </div>
-                            <div className="text-[10px] text-slate-500">{asset.manufacturer || '자사자산'}</div>
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
                 </div>
@@ -462,21 +485,29 @@ export const MobileAssetSearch: React.FC<MobileAssetSearchProps> = ({ onNavigate
                         .filter(a => a.id && upcomingReturns[a.id])
                         .map(asset => {
                           const retInfo = upcomingReturns[asset.id];
+                          const score = Number(asset.maintenanceScore) || 0;
                           return (
                             <div
                               key={asset.id}
                               className="p-2.5 rounded-xl bg-slate-950/40 border border-sky-900/40 flex items-center justify-between text-xs"
                             >
                               <div>
-                                <div className="font-bold text-slate-200 flex items-center gap-1.5">
+                                <div className="font-bold text-slate-200 flex items-center gap-1.5 flex-wrap">
                                   <span className="font-mono text-sky-400">{asset.assetNo}</span>
                                   <span>{asset.modelName}</span>
+                                  <span className={`px-1.5 py-0.2 rounded text-[9.5px] font-bold border whitespace-nowrap ${
+                                    score === 0 
+                                      ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                                      : 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+                                  }`}>
+                                    정비 {score}점
+                                  </span>
                                 </div>
                                 <div className="text-[10.5px] text-slate-400 mt-0.5">
                                   현장: {retInfo.siteName}
                                 </div>
                               </div>
-                              <span className="px-2 py-0.5 rounded-lg bg-sky-500/20 text-sky-300 text-[11px] font-bold border border-sky-500/30">
+                              <span className="px-2 py-0.5 rounded-lg bg-sky-500/20 text-sky-300 text-[11px] font-bold border border-sky-500/30 flex-shrink-0">
                                 {retInfo.endDate} 입고예정
                               </span>
                             </div>

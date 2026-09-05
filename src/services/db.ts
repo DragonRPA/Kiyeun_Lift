@@ -1004,7 +1004,7 @@ export interface CashFlowSnapshot {
 }
 
 export interface InboundDefectDetail {
-  subNo: string; // 입고하위번호 (예: INB-20260809-001-01)
+  subNo?: string; // 입고하위번호 (예: INB-20260809-001-01)
   checkitemId: string;
   checkitemName: string;
   score: number;

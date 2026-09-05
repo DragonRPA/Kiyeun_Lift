@@ -224,7 +224,7 @@ const App: React.FC = () => {
         { id: 'product', name: '제품 관리', icon: <Package size={16} />, component: <Products /> },
         { id: 'asset', name: '자산 관리 (대장)', icon: <Layers size={16} />, component: <Assets /> },
         { id: 'acquisition_disposal', name: '당사자산 취득 / 매각', icon: <PlusCircle size={16} />, component: <AssetAcquisitionDisposal /> },
-        { id: 'rent_asset', name: '임차자산 관리', icon: <ShoppingBag size={16} />, component: <RentAssets /> },
+        { id: 'rent_asset', name: '전대 / 임차 관리', icon: <ShoppingBag size={16} />, component: <RentAssets /> },
       ]
     },
     {

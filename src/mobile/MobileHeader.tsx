@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
-import { Monitor, LogOut, Wrench, Crown, Radio, RotateCw, Sparkles } from 'lucide-react';
+import { LogOut, Wrench, Crown, Radio, RotateCw, Sparkles } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 
 export type MobileDeptMode = 'SALES' | 'AS' | 'OUTBOUND' | 'EXECUTIVE' | 'ADMIN';
 
 interface MobileHeaderProps {
-  onSwitchToPc: () => void;
+  onSwitchToPc?: () => void;
   deptMode: MobileDeptMode;
   onChangeDeptMode: (mode: MobileDeptMode) => void;
   isWalkieOn?: boolean;
@@ -14,7 +14,7 @@ interface MobileHeaderProps {
 }
 
 export const MobileHeader: React.FC<MobileHeaderProps> = ({ 
-  onSwitchToPc, 
+  onSwitchToPc: _onSwitchToPc, 
   deptMode, 
   onChangeDeptMode,
   isWalkieOn = false,
@@ -217,28 +217,6 @@ export const MobileHeader: React.FC<MobileHeaderProps> = ({
           >
             <Sparkles size={13} color="#38bdf8" />
             <span>AI비서</span>
-          </button>
-
-          <button
-            onClick={onSwitchToPc}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '4px',
-              fontSize: '11px',
-              fontWeight: '600',
-              padding: '6px 8px',
-              borderRadius: '10px',
-              backgroundColor: '#1e293b',
-              border: '1px solid #334155',
-              color: '#cbd5e1',
-              cursor: 'pointer',
-              flexShrink: 0
-            }}
-            title="PC화면"
-          >
-            <Monitor size={13} color="#38bdf8" />
-            <span>PC화면</span>
           </button>
 
           <button

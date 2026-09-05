@@ -1,5 +1,5 @@
 // src/mobile/MobileApp.tsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
 import { MobileHeader, MobileDeptMode } from './MobileHeader';
 import { MobileBottomNav, MobileTabType } from './MobileBottomNav';
@@ -15,6 +15,8 @@ import { MobileAssetSearch } from './pages/MobileAssetSearch';
 import { MobileDispatchOrderCreate } from './pages/MobileDispatchOrderCreate';
 import { MobileMyContracts } from './pages/MobileMyContracts';
 import { MobileVehicleStock } from './pages/MobileVehicleStock';
+import { MobileInboundRegister } from './pages/MobileInboundRegister';
+import { MobileSubleaseManage } from './pages/MobileSubleaseManage';
 import { PwaInstallBanner } from './components/PwaInstallBanner';
 import { MobileWalkieTalkieModal } from './components/MobileWalkieTalkieModal';
 import { MobileGemsAgentModal } from './components/MobileGemsAgentModal';
@@ -26,7 +28,17 @@ interface MobileAppProps {
 }
 
 export const MobileApp: React.FC<MobileAppProps> = ({ onSwitchToPc }) => {
-  const { fieldAsTickets, deliveries, outboundInspections, currentUser } = useApp();
+  const { fieldAsTickets, deliveries, outboundInspections, currentUser, assets } = useApp();
+
+  // 전대 장비 주기장 유휴 누수 위험 건수
+  const subleaseLeakCount = useMemo(() => {
+    return (assets || []).filter(a => 
+      a.ownerType === 'RENTED' && 
+      !a.actualRentReturnDate && 
+      a.status !== 'RENTED_RETURNED' && 
+      a.status !== 'RENTED'
+    ).length;
+  }, [assets]);
 
   // 1. 초기 부서 모드 감지 (사용자 역할 기반 또는 저장된 모드)
   const [deptMode, setDeptMode] = useState<MobileDeptMode>(() => {
@@ -199,8 +211,18 @@ export const MobileApp: React.FC<MobileAppProps> = ({ onSwitchToPc }) => {
           />
         ) : activeTab === 'dispatch' ? (
           <MobileDispatchList />
+        ) : activeTab === 'sublease' ? (
+          <MobileSubleaseManage
+            onNavigate={(tab) => handleTabChange(tab)}
+            onBack={() => handleTabChange('home')}
+          />
         ) : activeTab === 'inspection' ? (
           <MobileInspectionList />
+        ) : activeTab === 'inbound_register' ? (
+          <MobileInboundRegister 
+            onSuccess={() => handleTabChange('inspection')}
+            onBack={() => handleTabChange('home')}
+          />
         ) : activeTab === 'vehicle_stock' ? (
           <MobileVehicleStock />
         ) : (
@@ -221,6 +243,7 @@ export const MobileApp: React.FC<MobileAppProps> = ({ onSwitchToPc }) => {
           pendingAsCount={pendingAsCount}
           pendingDispatchCount={pendingDispatchCount}
           pendingInspectionCount={pendingInspectionCount}
+          subleaseLeakCount={subleaseLeakCount}
         />
       )}
 

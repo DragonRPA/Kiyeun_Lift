@@ -3,7 +3,7 @@ import React from 'react';
 import { useApp } from '../../context/AppContext';
 import { 
   Wrench, Truck, CheckSquare, Search, Send, Building2, 
-  ArrowRight, AlertTriangle, Clock, Plus, Boxes 
+  ArrowRight, AlertTriangle, Clock, Plus, Boxes, ArrowDownToLine 
 } from 'lucide-react';
 import { MobileTabType } from '../MobileBottomNav';
 import { MobileDeptMode } from '../MobileHeader';
@@ -154,7 +154,7 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
           </div>
           <h2 className="text-xl font-black text-white leading-tight">
             출고 검수 대기 <span className="text-emerald-400">{pendingInspections.length}건</span><br />
-            배차 상차 대기 <span className="text-sky-400">{pendingDeliveries.length}건</span>
+            임대 가능 자산 <span className="text-sky-400">{availableAssetCount}대</span>
           </h2>
         </div>
 
@@ -173,22 +173,20 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
           <ArrowRight className="w-5 h-5" />
         </button>
 
-        {/* 배차 상차 확인 */}
-        <div
-          onClick={() => onNavigate('dispatch')}
-          className="p-4 rounded-2xl bg-slate-900 border border-slate-800 flex items-center justify-between active:scale-98 transition-all cursor-pointer"
+        {/* 장비 입고 등록 대형 버튼 (신규) */}
+        <button
+          type="button"
+          onClick={() => onNavigate('inbound_register')}
+          className="w-full py-4 px-5 rounded-2xl bg-teal-600 hover:bg-teal-500 text-white font-black text-base flex items-center justify-between shadow-xl shadow-teal-600/30 active:scale-98 transition-all"
         >
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center text-blue-400">
-              <Truck className="w-5 h-5" />
+            <div className="w-9 h-9 rounded-xl bg-white/20 flex items-center justify-center">
+              <ArrowDownToLine className="w-5 h-5 stroke-[2.5]" />
             </div>
-            <div>
-              <div className="text-sm font-bold text-white">배차 운송 & 상차 확인</div>
-              <div className="text-xs text-slate-400">트럭 기사 배정 및 상차 완료 처리 ({pendingDeliveries.length}건)</div>
-            </div>
+            <span>회수 장비 입고 등록</span>
           </div>
-          <ArrowRight className="w-5 h-5 text-slate-500" />
-        </div>
+          <ArrowRight className="w-5 h-5" />
+        </button>
 
         {/* 주기장 자산 조회 */}
         <div
@@ -202,6 +200,23 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
             <div>
               <div className="text-sm font-bold text-white">주기장 자산 상태 조회</div>
               <div className="text-xs text-slate-400">임대가능 자산 {availableAssetCount}대</div>
+            </div>
+          </div>
+          <ArrowRight className="w-5 h-5 text-slate-500" />
+        </div>
+
+        {/* 출고 의뢰 조회 */}
+        <div
+          onClick={() => onNavigate('sales_order')}
+          className="p-4 rounded-2xl bg-slate-900 border border-slate-800 flex items-center justify-between active:scale-98 transition-all cursor-pointer"
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center text-sky-400">
+              <Send className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="text-sm font-bold text-white">출고 의뢰 접수 현황</div>
+              <div className="text-xs text-slate-400">영업부 출고요청 파이프라인</div>
             </div>
           </div>
           <ArrowRight className="w-5 h-5 text-slate-500" />

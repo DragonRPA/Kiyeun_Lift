@@ -1,12 +1,13 @@
 // src/mobile/pages/MobileVehicleStock.tsx
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { 
   Boxes, Search, Plus, Minus, ArrowDownLeft, ArrowUpRight, 
   Zap, RotateCcw, CheckCircle2, AlertTriangle, Clock, 
-  ClipboardList, X, Filter, Wrench, Truck, ChevronRight
+  ClipboardList, X, Filter, Wrench, Truck, ChevronRight,
+  ChevronDown, Check, UserCheck
 } from 'lucide-react';
-import { Consumable, MechanicConsumableStock, ConsumableLog, db } from '../../services/db';
+import { Consumable, MechanicConsumableStock, ConsumableLog, User, db } from '../../services/db';
 import { matchHangul } from '../../utils/hangulSearch';
 
 export type StockProcessType = 'RESTOCK' | 'RETURN' | 'USE' | 'DEFECTIVE' | 'ADJUST';
@@ -27,16 +28,75 @@ export const MobileVehicleStock: React.FC = () => {
     showErrorModal
   } = useApp();
 
-  // 1. 담당 정비사 선택 (기본: 본인 계정)
-  const mechanics = useMemo(() => {
-    return (users || []).filter(u => u.role === 'MECHANIC' || u.role === 'ADMIN' || u.department?.includes('정비') || u.department?.includes('AS'));
-  }, [users]);
+  // 1. 최고관리자 (개발자/총괄관리자) 판별 (헌장 2.1)
+  const isAdmin = useMemo(() => {
+    return Boolean(
+      currentUser?.role === 'ADMIN' ||
+      currentUser?.id === 'u-1' ||
+      currentUser?.loginId === 'admin' ||
+      currentUser?.name?.includes('관리자') ||
+      currentUser?.name?.includes('개발자')
+    );
+  }, [currentUser]);
 
-  const [selectedMechanicId, setSelectedMechanicId] = useState<string>(currentUser?.id || (mechanics[0]?.id || ''));
+  // 2. 전체 AS팀원 및 정비 인력 목록 전수 추출 (헌장 5.3 SSOT)
+  const asTeamMembers = useMemo(() => {
+    const asDeptIds = new Set(
+      (db.departments || [])
+        .filter(d => d.name?.includes('AS') || d.name?.includes('정비'))
+        .map(d => d.id)
+    );
+    asDeptIds.add('DEPT-0000005'); // 표준 AS팀 부서 ID
+
+    // AS팀 소속원, 정비 역할, 또는 AS/정비 부서명 사용자 전수 필터링
+    const asList = (users || []).filter(u => {
+      const isAsDept = u.departmentId && asDeptIds.has(u.departmentId);
+      const isAsName = Boolean(u.department?.includes('AS') || u.department?.includes('정비'));
+      const isMechanicRole = u.role === 'MECHANIC';
+      const isTesterMechanic = u.id === 'usr-tester-mechanic';
+      return isAsDept || isAsName || isMechanicRole || isTesterMechanic;
+    });
+
+    // 정렬: 팀장/매니저 우선 후 이름순
+    asList.sort((a, b) => {
+      if (a.role === 'MANAGER' && b.role !== 'MANAGER') return -1;
+      if (b.role === 'MANAGER' && a.role !== 'MANAGER') return 1;
+      return a.name.localeCompare(b.name, 'ko');
+    });
+
+    // 관리자 본인이 AS팀 목록에 없을 경우 맨 앞에 추가하여 본인 차량도 선택 가능하도록 보장
+    const result: User[] = [];
+    if (currentUser && !asList.some(u => u.id === currentUser.id)) {
+      result.push(currentUser);
+    }
+    result.push(...asList);
+
+    return result;
+  }, [users, currentUser]);
+
+  const [selectedMechanicId, setSelectedMechanicId] = useState<string>(currentUser?.id || '');
+  const [isMechanicSheetOpen, setIsMechanicSheetOpen] = useState<boolean>(false);
+
+  // currentUser가 준비되거나 관리자/일반사용자 상태 전환 시 본인 차량으로 기본 동기화
+  useEffect(() => {
+    if (currentUser?.id) {
+      if (!selectedMechanicId || (!isAdmin && selectedMechanicId !== currentUser.id)) {
+        setSelectedMechanicId(currentUser.id);
+      }
+    }
+  }, [currentUser?.id, isAdmin]);
+
+  // 일반 임직원은 본인 차량으로 강제 고정, 최고관리자만 선택된 기사 차량 반영
+  const effectiveMechanicId = useMemo(() => {
+    if (!isAdmin) {
+      return currentUser?.id || '';
+    }
+    return selectedMechanicId || currentUser?.id || asTeamMembers[0]?.id || '';
+  }, [isAdmin, currentUser?.id, selectedMechanicId, asTeamMembers]);
 
   const activeMechanic = useMemo(() => {
-    return (users || []).find(u => u.id === selectedMechanicId) || currentUser;
-  }, [users, selectedMechanicId, currentUser]);
+    return (users || []).find(u => u.id === effectiveMechanicId) || currentUser;
+  }, [users, effectiveMechanicId, currentUser]);
 
   // 2. 검색 및 필터 상태
   const [searchQuery, setSearchQuery] = useState('');
@@ -53,14 +113,14 @@ export const MobileVehicleStock: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [defectiveCondition, setDefectiveCondition] = useState<'REPAIRABLE' | 'SCRAP'>('REPAIRABLE');
 
-  // 4. 차량 적재 재고 집계
+  // 4. 차량 적재 재고 집계 (일반 사원은 본인 차량, 관리자는 선택 기사 차량)
   const myStocksMap = useMemo(() => {
     const map = new Map<string, MechanicConsumableStock>();
     (mechanicConsumableStocks || [])
-      .filter(s => s.mechanicId === selectedMechanicId)
+      .filter(s => s.mechanicId === effectiveMechanicId)
       .forEach(s => map.set(s.consumableId, s));
     return map;
-  }, [mechanicConsumableStocks, selectedMechanicId]);
+  }, [mechanicConsumableStocks, effectiveMechanicId]);
 
   // 차량 요약 지표
   const stockSummary = useMemo(() => {
@@ -113,10 +173,10 @@ export const MobileVehicleStock: React.FC = () => {
   // 차량 최근 수불 로그
   const myLogs = useMemo(() => {
     return (consumableLogs || [])
-      .filter(l => l.mechanicId === selectedMechanicId || l.fromLocation?.includes(activeMechanic?.name || '') || l.toLocation?.includes(activeMechanic?.name || ''))
+      .filter(l => l.mechanicId === effectiveMechanicId || l.fromLocation?.includes(activeMechanic?.name || '') || l.toLocation?.includes(activeMechanic?.name || ''))
       .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''))
       .slice(0, 30);
-  }, [consumableLogs, selectedMechanicId, activeMechanic]);
+  }, [consumableLogs, effectiveMechanicId, activeMechanic]);
 
   // 모달 열기 헬퍼
   const openProcessModal = (consumable: Consumable, type: StockProcessType) => {
@@ -151,7 +211,7 @@ export const MobileVehicleStock: React.FC = () => {
           throw new Error(`본사 중앙창고 잔여 수량(${hqQty}개)이 부족합니다.`);
         }
         await transferConsumableToMechanic(
-          selectedMechanicId, 
+          effectiveMechanicId, 
           processingConsumable.id, 
           processQty, 
           processMemo || `[차량 보충] ${mechName} 탑차 보충 수령 (${processQty}개)`
@@ -162,7 +222,7 @@ export const MobileVehicleStock: React.FC = () => {
           throw new Error(`차량 보유 수량(${vQty}개)을 초과하여 반납할 수 없습니다.`);
         }
         await returnConsumableToHq(
-          selectedMechanicId,
+          effectiveMechanicId,
           processingConsumable.id,
           processQty,
           processMemo || `[차량 반납] ${mechName} 탑차 ➔ 본사창고 반납 (${processQty}개)`
@@ -186,7 +246,7 @@ export const MobileVehicleStock: React.FC = () => {
           quantity: processQty,
           unitPrice: processingConsumable.unitPrice,
           userId: currentUser?.id,
-          mechanicId: selectedMechanicId,
+          mechanicId: effectiveMechanicId,
           fromLocation: `${mechName} 차량`,
           toLocation: selectedSiteId ? `현장 (${selectedSiteId})` : '현장 AS 긴급소모',
           targetAssetId: selectedAssetNo,
@@ -204,7 +264,7 @@ export const MobileVehicleStock: React.FC = () => {
           quantity: processQty,
           unitPrice: 0,
           userId: currentUser?.id,
-          mechanicId: selectedMechanicId,
+          mechanicId: effectiveMechanicId,
           fromLocation: '현장 고품 탈거',
           toLocation: `${mechName} 차량 (고품 보관)`,
           targetAssetId: selectedAssetNo,
@@ -226,7 +286,7 @@ export const MobileVehicleStock: React.FC = () => {
         } else {
           db.insertRow<MechanicConsumableStock>('mechanicConsumableStocks', {
             id: `mcs-${Date.now()}-${Math.random().toString(36).substring(2, 5)}`,
-            mechanicId: selectedMechanicId,
+            mechanicId: effectiveMechanicId,
             consumableId: processingConsumable.id,
             stockQty: newQty,
             updatedAt: new Date().toISOString()
@@ -239,7 +299,7 @@ export const MobileVehicleStock: React.FC = () => {
           quantity: Math.abs(diff),
           unitPrice: processingConsumable.unitPrice,
           userId: currentUser?.id,
-          mechanicId: selectedMechanicId,
+          mechanicId: effectiveMechanicId,
           fromLocation: `${mechName} 차량`,
           toLocation: `${mechName} 차량 실사보정`,
           actionDate: new Date().toISOString().split('T')[0],
@@ -263,38 +323,53 @@ export const MobileVehicleStock: React.FC = () => {
       
       {/* 1. 상단 탑차 요약 대시보드 카드 */}
       <div className="bg-gradient-to-br from-slate-900 via-slate-900 to-amber-950/40 border border-amber-500/30 rounded-2xl p-4 shadow-xl">
-        <div className="flex items-center justify-between mb-2">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400">
-              <Truck className="w-4 h-4" />
+        <div className="flex items-center justify-between gap-2 mb-3">
+          <div className="flex items-center gap-2.5 min-w-0 flex-1">
+            <div className="w-9 h-9 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 flex-shrink-0">
+              <Truck className="w-5 h-5" />
             </div>
-            <div>
-              <span className="text-[11px] font-bold text-amber-400 tracking-wider">서비스 탑차 재고</span>
-              <h2 className="text-sm font-black text-white flex items-center gap-1.5">
-                <span>{activeMechanic?.name || '정비사'} 탑차 적재함</span>
+            <div className="min-w-0 flex-1">
+              <span className="text-[11px] font-bold text-amber-400 tracking-wider whitespace-nowrap block">
+                서비스 탑차 재고
+              </span>
+              <h2 className="text-sm font-black text-white whitespace-nowrap truncate flex items-center gap-1.5">
+                <span>{activeMechanic?.name || currentUser?.name || '본인'} 기사 탑차</span>
+                {effectiveMechanicId === currentUser?.id && (
+                  <span className="text-[10px] font-bold px-1.5 py-0.5 bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 rounded-full flex-shrink-0">
+                    본인
+                  </span>
+                )}
               </h2>
             </div>
           </div>
 
-          {/* 기사 전환 (관리자/동료 지원용) */}
-          {mechanics.length > 1 && (
-            <select
-              value={selectedMechanicId}
-              onChange={(e) => setSelectedMechanicId(e.target.value)}
-              className="bg-slate-800 border border-slate-700 text-xs text-slate-200 rounded-lg px-2 py-1 focus:outline-none"
-            >
-              {mechanics.map(m => (
-                <option key={m.id} value={m.id}>{m.name} 기사</option>
-              ))}
-            </select>
+          {/* 최고관리자(개발자) 전용: 전 AS팀원 차량 전환 버튼 (일반 임직원 화면에는 완전히 미노출) */}
+          {isAdmin && asTeamMembers.length > 0 && (
+            <div className="flex flex-col items-end flex-shrink-0">
+              <span className="text-[9px] text-amber-400/80 font-semibold mb-0.5 whitespace-nowrap">
+                AS팀원 선택
+              </span>
+              <button
+                type="button"
+                onClick={() => setIsMechanicSheetOpen(true)}
+                className="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-750 border border-amber-500/50 text-xs text-amber-200 font-bold rounded-xl px-2.5 py-1.5 active:scale-95 transition-all shadow-md cursor-pointer"
+                title="AS팀원 차량 선택"
+              >
+                <UserCheck className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />
+                <span className="truncate max-w-[100px] whitespace-nowrap">
+                  {activeMechanic?.id === currentUser?.id ? `${activeMechanic?.name || '본인'} (본인)` : `${activeMechanic?.name || '팀원'} 기사`}
+                </span>
+                <ChevronDown className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />
+              </button>
+            </div>
           )}
         </div>
 
         {/* 3대 핵심 수치 지표 */}
-        <div className="grid grid-cols-3 gap-2 pt-2 border-t border-slate-800/80 mt-2">
+        <div className="grid grid-cols-3 gap-2 pt-2.5 border-t border-slate-800/80">
           <div className="flex flex-col items-center bg-slate-950/50 rounded-xl p-2 border border-slate-800/60">
             <span className="text-[10px] text-slate-400 font-bold whitespace-nowrap">적재 품목</span>
-            <span className="text-base font-black text-amber-400 mt-0.5">
+            <span className="text-base font-black text-amber-400 mt-0.5 whitespace-nowrap">
               {stockSummary.totalLoadedItems}
               <span className="text-[10px] text-slate-400 font-normal ml-0.5">종</span>
             </span>
@@ -302,7 +377,7 @@ export const MobileVehicleStock: React.FC = () => {
 
           <div className="flex flex-col items-center bg-slate-950/50 rounded-xl p-2 border border-slate-800/60">
             <span className="text-[10px] text-slate-400 font-bold whitespace-nowrap">총 보유 수량</span>
-            <span className="text-base font-black text-white mt-0.5">
+            <span className="text-base font-black text-white mt-0.5 whitespace-nowrap">
               {stockSummary.totalLoadedQty}
               <span className="text-[10px] text-slate-400 font-normal ml-0.5">개</span>
             </span>
@@ -310,9 +385,8 @@ export const MobileVehicleStock: React.FC = () => {
 
           <div className="flex flex-col items-center bg-slate-950/50 rounded-xl p-2 border border-slate-800/60">
             <span className="text-[10px] text-slate-400 font-bold whitespace-nowrap">적재 자산가치</span>
-            <span className="text-xs font-black text-emerald-400 mt-1 truncate max-w-full">
-              ₩{(stockSummary.totalValue / 10000).toFixed(0)}
-              <span className="text-[10px] text-slate-400 font-normal ml-0.5">만원</span>
+            <span className="text-xs font-black text-emerald-400 mt-1 truncate max-w-full whitespace-nowrap">
+              {stockSummary.totalValue > 0 ? `₩${Math.round(stockSummary.totalValue / 10000).toLocaleString('ko-KR')}만원` : '₩0원'}
             </span>
           </div>
         </div>
@@ -854,6 +928,97 @@ export const MobileVehicleStock: React.FC = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── 📱 대안 2: 전사 표준 다크 커스텀 바텀시트 (AS팀원 차량 선택 모달) ── */}
+      {isMechanicSheetOpen && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/75 backdrop-blur-sm animate-fade-in">
+          <div className="bg-slate-900 border-t border-slate-700 rounded-t-3xl p-5 max-w-md w-full max-h-[75vh] flex flex-col gap-3.5 shadow-2xl overflow-hidden">
+            {/* 시트 헤더 */}
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center flex-shrink-0">
+                  <Truck className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-white whitespace-nowrap">AS팀원 탑차 차량 선택</h3>
+                  <p className="text-[10.5px] text-slate-400 whitespace-nowrap">차량 적재 재고를 조회 및 관리할 팀원을 선택하십시오</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsMechanicSheetOpen(false)}
+                className="p-1.5 text-slate-400 hover:text-white rounded-xl bg-slate-800"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* 팀원 리스트 */}
+            <div className="flex-1 overflow-y-auto flex flex-col gap-2 pr-0.5">
+              {asTeamMembers.map(m => {
+                const isSelected = m.id === effectiveMechanicId;
+                const isSelf = m.id === currentUser?.id;
+                // 해당 기사의 현재 차량 적재 품목수 계산
+                const loadedCount = (mechanicConsumableStocks || [])
+                  .filter(s => s.mechanicId === m.id && s.stockQty > 0).length;
+
+                return (
+                  <div
+                    key={m.id}
+                    onClick={() => {
+                      setSelectedMechanicId(m.id);
+                      setIsMechanicSheetOpen(false);
+                    }}
+                    className={`p-3 rounded-2xl border transition-all cursor-pointer flex items-center justify-between ${
+                      isSelected
+                        ? 'bg-amber-500/15 border-amber-500/60 text-white shadow-md'
+                        : 'bg-slate-950/60 border-slate-800 hover:bg-slate-800/80 text-slate-300'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold text-xs flex-shrink-0 ${
+                        isSelected 
+                          ? 'bg-amber-500 text-slate-950 shadow' 
+                          : 'bg-slate-800 text-slate-300 border border-slate-700'
+                      }`}>
+                        {m.name.slice(0, 2)}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5 whitespace-nowrap">
+                          <span className="font-bold text-xs text-white">{m.name}</span>
+                          {isSelf && (
+                            <span className="px-1.5 py-0.2 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[9.5px] font-bold whitespace-nowrap">
+                              본인
+                            </span>
+                          )}
+                          <span className="text-[10px] text-slate-400 whitespace-nowrap">
+                            {m.role === 'MANAGER' ? '팀장' : '기사'}
+                          </span>
+                        </div>
+                        <div className="text-[11px] text-slate-400 mt-0.5 flex items-center gap-1.5 whitespace-nowrap">
+                          <span className="text-amber-400 font-mono font-bold">{loadedCount}종 적재중</span>
+                          <span>•</span>
+                          <span>AS팀</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      {isSelected ? (
+                        <div className="w-6 h-6 rounded-full bg-amber-500 text-slate-950 flex items-center justify-center shadow">
+                          <Check className="w-3.5 h-3.5 stroke-[3]" />
+                        </div>
+                      ) : (
+                        <div className="w-6 h-6 rounded-full border border-slate-700 bg-slate-900" />
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         </div>
       )}
