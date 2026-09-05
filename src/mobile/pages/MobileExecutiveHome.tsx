@@ -1,10 +1,10 @@
 // src/mobile/pages/MobileExecutiveHome.tsx
 import React, { useMemo, useState } from 'react';
 import { useApp } from '../../context/AppContext';
-import { db, Todo, Customer } from '../../services/db';
+import { db, Todo, Customer, DelinquencyActionLog } from '../../services/db';
 import { 
   Crown, TrendingUp, AlertTriangle, ShieldCheck, CreditCard, 
-  Clock, CheckCircle2, ChevronRight, Ban, Send, ArrowRight 
+  Clock, CheckCircle2, ChevronRight, Ban, Send, ArrowRight, Users
 } from 'lucide-react';
 import { MobileTabType } from '../MobileBottomNav';
 
@@ -58,12 +58,11 @@ export const MobileExecutiveHome: React.FC<MobileExecutiveHomeProps> = ({ onNavi
     return { totalBilled, totalCollected, unpaid, collectRate };
   }, [billings]);
 
-  // 3. 주거래 통장 잔고
+  // 3. 주거래 통장 잔고 (실제 입출금 및 초기잔액 무결성 집계)
   const totalCashBalance = useMemo(() => {
     const initSum = (bankInitialBalances || []).reduce((sum: number, b) => sum + (b.initialBalance || 0), 0);
     const transSum = (bankTransactions || []).reduce((sum: number, t) => sum + ((t.depositAmount || 0) - (t.withdrawAmount || 0)), 0);
-    const result = initSum + transSum;
-    return result > 0 ? result : 124500000;
+    return initSum + transSum;
   }, [bankInitialBalances, bankTransactions]);
 
   // 4. 고위험 상습연체 거래처 (미수금 200만원 이상 또는 거래제한)
@@ -82,8 +81,8 @@ export const MobileExecutiveHome: React.FC<MobileExecutiveHomeProps> = ({ onNavi
     .slice(0, 5);
   }, [customers, billings]);
 
-  // 수금 지시 하달 핸들러
-  const handleDirective = async (custName: string) => {
+  // 수금 지시 하달 핸들러 (Todo + DelinquencyActionLog 동시 불변 기록)
+  const handleDirective = async (custName: string, customerId?: string) => {
     try {
       db.insertRow<Todo>('todos', {
         userId: currentUser?.id || 'admin',
@@ -91,8 +90,20 @@ export const MobileExecutiveHome: React.FC<MobileExecutiveHomeProps> = ({ onNavi
         title: `[경영진 지시] ${custName} 수금 독촉 방문/유선 상담`,
         content: '경영진 모바일 긴급 지시 하달: 수금 독촉 및 유선 상담 진행 요망',
         isCompleted: false,
+        relatedEntityId: customerId,
         createdAt: new Date().toISOString(),
       });
+      if (customerId) {
+        db.insertRow<DelinquencyActionLog>('delinquencyActionLogs', {
+          customerId: customerId,
+          actionType: 'DIRECTIVE',
+          actionDetails: '경영진 모바일 홈 긴급 수금지시 하달: 전담 영업팀 수금 독촉 및 유선 상담 요망',
+          recordedBy: currentUser?.name || '대표이사',
+          mandateType: 'CEO_AUTO_MANDATE',
+          promiseContactPerson: '전담 영업팀',
+          createdAt: new Date().toISOString(),
+        });
+      }
       await db.awaitPendingWrites();
       refreshAllData();
       triggerToast(`[${custName}] 담당 영업팀에게 수금 지시를 공식 하달했습니다.`);
@@ -101,11 +112,22 @@ export const MobileExecutiveHome: React.FC<MobileExecutiveHomeProps> = ({ onNavi
     }
   };
 
-  // 출고 금지 처분 토글 핸들러
+  // 출고 금지 처분 토글 핸들러 (Customer + DelinquencyActionLog 동시 기록)
   const handleToggleBlock = async (cust: Customer) => {
     const nextStatus = cust.transactionStatus === 'BLOCKED' ? 'ALLOWED' : 'BLOCKED';
     try {
       await saveCustomer({ ...cust, transactionStatus: nextStatus });
+      db.insertRow<DelinquencyActionLog>('delinquencyActionLogs', {
+        customerId: cust.id,
+        actionType: nextStatus === 'BLOCKED' ? 'LEGAL' : 'CALL',
+        actionDetails: `경영진 모바일 홈 직권 상태 변경: ${nextStatus === 'BLOCKED' ? '신규 장비 출고금지(BLOCKED)' : '정상거래(ALLOWED) 허용'}`,
+        recordedBy: currentUser?.name || '대표이사',
+        mandateType: 'CEO_AUTO_MANDATE',
+        promiseContactPerson: cust.representative || '대표자',
+        createdAt: new Date().toISOString(),
+      });
+      await db.awaitPendingWrites();
+      refreshAllData();
       triggerToast(`[${cust.name}] 거래처 출고금지 상태를 '${nextStatus === 'BLOCKED' ? '출고금지' : '정상거래'}'(으)로 변경했습니다.`);
     } catch (e) {
       triggerToast('상태 변경에 실패했습니다.');
@@ -197,21 +219,28 @@ export const MobileExecutiveHome: React.FC<MobileExecutiveHomeProps> = ({ onNavi
         </div>
       </div>
 
-      {/* ── 3. 유동 자금 현황 및 출고/결재 즉시 판단 바 ── */}
+      {/* ── 3. 유동 자금 현황 및 연체관리 바로가기 바 ── */}
       <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex items-center justify-between shadow-lg">
         <div>
           <span className="text-xs text-slate-400 font-bold block">주거래 계좌 가용 잔고</span>
-          <span className="text-lg font-black text-emerald-400 font-mono">
-            ₩{totalCashBalance.toLocaleString()}원
-          </span>
+          <div className="flex items-center gap-2 mt-0.5">
+            <span className={`text-lg font-black font-mono ${totalCashBalance < 0 ? 'text-rose-400' : totalCashBalance === 0 ? 'text-amber-400' : 'text-emerald-400'}`}>
+              ₩{totalCashBalance.toLocaleString()}원
+            </span>
+            {totalCashBalance <= 0 && (
+              <span className="px-1.5 py-0.5 rounded bg-rose-950/80 border border-rose-800/80 text-rose-300 text-[10px] font-bold">
+                유동자금 주의
+              </span>
+            )}
+          </div>
         </div>
         <button
           type="button"
-          onClick={() => onNavigate('inspection')}
-          className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold flex items-center gap-1 active:scale-95"
+          onClick={() => onNavigate('delinquency')}
+          className="px-3 py-2 rounded-xl bg-rose-950/60 border border-rose-800/60 hover:bg-rose-900/60 text-rose-200 text-xs font-bold flex items-center gap-1 active:scale-95"
         >
-          <span>출고승인검토</span>
-          <ChevronRight className="w-4 h-4 text-slate-400" />
+          <span>연체관리</span>
+          <ChevronRight className="w-4 h-4 text-rose-400" />
         </button>
       </div>
 
@@ -269,7 +298,14 @@ export const MobileExecutiveHome: React.FC<MobileExecutiveHomeProps> = ({ onNavi
             <AlertTriangle className="w-4 h-4" />
             <span>고위험 연체 거래처 & 즉시 처분</span>
           </h3>
-          <span className="text-[11px] text-slate-500">집중 관리 {highRiskCustomers.length}사</span>
+          <button
+            type="button"
+            onClick={() => onNavigate('delinquency')}
+            className="text-[11px] font-bold text-rose-400 flex items-center gap-0.5 hover:underline"
+          >
+            <span>전체보기({highRiskCustomers.length})</span>
+            <ChevronRight className="w-3.5 h-3.5" />
+          </button>
         </div>
 
         {highRiskCustomers.length === 0 ? (
@@ -312,7 +348,7 @@ export const MobileExecutiveHome: React.FC<MobileExecutiveHomeProps> = ({ onNavi
                 <div className="flex items-center gap-2 mt-1 pt-2 border-t border-slate-800/60">
                   <button
                     type="button"
-                    onClick={() => handleDirective(c.name)}
+                    onClick={() => handleDirective(c.name, c.id)}
                     className="flex-1 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs flex items-center justify-center gap-1 active:scale-95"
                   >
                     <Send className="w-3.5 h-3.5" />

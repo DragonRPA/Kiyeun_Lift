@@ -2273,6 +2273,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updatedAt: new Date().toISOString()
       });
 
+      // 🌟 [헌장 2.3 준수] 현장 수리 불능 대차 제안 시 단일 'EXCHANGE' 왕복 배차 의뢰 1건 자동 발행
+      if (data.exchangeSuggested) {
+        const deliveryId = db.generateNextId('deliveries', db.deliveries);
+        db.insertRow<Delivery>('deliveries', {
+          id: deliveryId,
+          contractId: ticket.contractId,
+          type: 'EXCHANGE',
+          dispatchCategory: '교환',
+          status: 'PENDING',
+          requestDate: new Date().toISOString().split('T')[0],
+          originAddress: '본사 주기장 (경기 용인시 모현읍)',
+          pickupType: 'HQ_YARD',
+          destinationAddress: ticket.locationDetail || ticket.siteName || '현장',
+          dropoffType: 'CUSTOMER_SITE',
+          deliveryCost: 0,
+          memo: `[현장AS 대차 요청] 회수대상 자산: ${ticket.assetNo || '현장고장장비'} / 현장: ${ticket.siteName || ''} (${ticket.customerName || ''}) / 사유: ${data.actionTaken || '현장 수리불능 대차'}`,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        });
+      }
+
       // 4. 자산 이력(AssetInOutLog)에 정비 사건 무누락 DB 저장
       const targetAssetNo = ticket.assetNo;
       if (targetAssetNo && targetAssetNo !== '현장확인' && targetAssetNo !== '전체장비') {

@@ -6,13 +6,24 @@ import {
   Search, Phone, FileText, Check, Clock, Truck, Layers 
 } from 'lucide-react';
 import { MobileTabType } from '../MobileBottomNav';
+import { db, BankTransaction } from '../../services/db';
 
 interface MobileAdminHomeProps {
   onNavigate: (tab: MobileTabType) => void;
 }
 
 export const MobileAdminHome: React.FC<MobileAdminHomeProps> = ({ onNavigate }) => {
-  const { customers, billings, sites, currentUser, deliveries, assets } = useApp();
+  const { 
+    customers, 
+    billings, 
+    sites, 
+    currentUser, 
+    deliveries, 
+    assets,
+    bankTransactions,
+    matchTransactionManual,
+    showErrorModal
+  } = useApp();
   const [toast, setToast] = useState<string | null>(null);
 
   // 전대 장비 및 주기장 유휴 누수 건수
@@ -26,14 +37,25 @@ export const MobileAdminHome: React.FC<MobileAdminHomeProps> = ({ onNavigate }) 
     setTimeout(() => setToast(null), 3000);
   };
 
-  // 1. 오늘/이번 주 마감 도래 업체 목록 (defaultBillingDay or defaultStatementClosingDay)
+  // 1. 오늘/이번 주 마감 도래 업체 목록 및 D-Day 실연산 (헌장 1.1 & 과제 8)
   const closingDueCustomers = useMemo(() => {
-    const todayDay = new Date().getDate();
-    return customers.filter(c => {
-      const closing = c.defaultBillingDay || c.defaultStatementClosingDay;
-      if (!closing) return false;
-      return Math.abs(closing - todayDay) <= 4;
-    }).slice(0, 5);
+    const today = new Date();
+    const currentDay = today.getDate();
+    return customers
+      .map(c => {
+        const closing = c.defaultBillingDay || c.defaultStatementClosingDay;
+        if (!closing) return null;
+        const diff = closing - currentDay;
+        return {
+          ...c,
+          closingDay: closing,
+          diffDays: diff,
+          dDayText: diff === 0 ? 'D-Day' : diff > 0 ? `D-${diff}` : `D+${Math.abs(diff)} (경과)`
+        };
+      })
+      .filter((item): item is NonNullable<typeof item> => item !== null && Math.abs(item.diffDays) <= 5)
+      .sort((a, b) => a.diffDays - b.diffDays)
+      .slice(0, 5);
   }, [customers]);
 
   // 2. 미수 청구서
@@ -51,9 +73,35 @@ export const MobileAdminHome: React.FC<MobileAdminHomeProps> = ({ onNavigate }) 
       .slice(0, 5);
   }, [billings, customers]);
 
-  // 통장 입금 모의 확인
-  const handleBankMatchConfirm = (depositName: string, amount: number) => {
-    triggerToast(`[${depositName}] ₩${amount.toLocaleString()}원 입금 건이 수납 완료 매칭되었습니다.`);
+  // 3. 통장 실데이터 미매칭 입금 건 (헌장 1.2 & 과제 8)
+  const unmatchedDeposits = useMemo(() => {
+    return (bankTransactions || [])
+      .filter(tx => (tx.depositAmount || 0) > 0 && !tx.matchedBillingId)
+      .slice(0, 5);
+  }, [bankTransactions]);
+
+  // 통장 입금 실데이터 1:1 수납 매칭 승인 (헌장 5.2 준수)
+  const handleBankMatchConfirm = async (tx: BankTransaction) => {
+    try {
+      const matchedCust = customers.find(c => 
+        tx.senderName.includes(c.name) || c.name.includes(tx.senderName)
+      );
+      
+      const activeBilling = matchedCust 
+        ? billings.find(b => b.customerId === matchedCust.id && (b.totalAmount - (b.paidAmount || 0)) > 0)
+        : billings.find(b => (b.totalAmount - (b.paidAmount || 0)) === tx.depositAmount);
+
+      if (!activeBilling) {
+        showErrorModal(`[${tx.senderName}] 매칭 대상 청구서를 자동으로 찾을 수 없습니다. PC 통장 대사 메뉴에서 수동 지정하십시오.`);
+        return;
+      }
+
+      matchTransactionManual(tx.id, activeBilling.id, true);
+      await db.awaitPendingWrites(); // 헌장 5.2 동기 검증
+      triggerToast(`[${tx.senderName}] ₩${tx.depositAmount.toLocaleString()}원 매칭 승인 완료`);
+    } catch (err: any) {
+      showErrorModal(`매칭 승인 실패: ${err?.message || 'DB 에러'}`);
+    }
   };
 
   return (
@@ -159,54 +207,50 @@ export const MobileAdminHome: React.FC<MobileAdminHomeProps> = ({ onNavigate }) 
         <ArrowRight className="w-5 h-5 text-slate-500" />
       </div>
 
-      {/* ── 2. 통장 입금 1:1 즉시 수납 매칭 카드 ── */}
+      {/* ── 2. 통장 입금 1:1 즉시 수납 매칭 카드 (실데이터 연동 - 과제 8) ── */}
       <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex flex-col gap-3 shadow-lg">
         <div className="flex items-center justify-between">
           <h3 className="text-xs font-bold text-emerald-400 flex items-center gap-1.5">
             <CheckCircle2 className="w-4 h-4" />
             <span>통장 입금 1:1 수납 대사</span>
           </h3>
-          <span className="text-[11px] text-slate-500">대사 대기 2건</span>
+          <span className="text-[11px] text-slate-400 font-mono">
+            대사 대기 <span className="text-emerald-400 font-bold">{unmatchedDeposits.length}건</span>
+          </span>
         </div>
 
-        <div className="flex flex-col gap-2">
-          <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-between text-xs">
-            <div>
-              <div className="font-bold text-white flex items-center gap-1.5">
-                <span className="text-sky-400 font-mono">[신한 110]</span>
-                <span>(주)삼우건설</span>
-              </div>
-              <div className="text-[11px] text-slate-400 mt-0.5">입금액: ₩4,400,000원 (8월 청구분)</div>
-            </div>
-            <button
-              type="button"
-              onClick={() => handleBankMatchConfirm('(주)삼우건설', 4400000)}
-              className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs active:scale-95"
-            >
-              매칭승인
-            </button>
+        {unmatchedDeposits.length === 0 ? (
+          <div className="p-4 text-center text-xs text-slate-500 bg-slate-950 rounded-xl">
+            미대사 통장 입금 내역이 없습니다.
           </div>
-
-          <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-between text-xs">
-            <div>
-              <div className="font-bold text-white flex items-center gap-1.5">
-                <span className="text-sky-400 font-mono">[국민 240]</span>
-                <span>대현이엔지</span>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {unmatchedDeposits.map((tx) => (
+              <div key={tx.id} className="p-3 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-between text-xs">
+                <div className="min-w-0 pr-2">
+                  <div className="font-bold text-white flex items-center gap-1.5 truncate">
+                    <span className="text-sky-400 font-mono flex-shrink-0">[{tx.bankName || '통장'}]</span>
+                    <span className="truncate">{tx.senderName || tx.counterparty || '미확인'}</span>
+                  </div>
+                  <div className="text-[11px] text-slate-400 mt-0.5 font-mono">
+                    입금: <span className="text-emerald-400 font-bold">₩{tx.depositAmount.toLocaleString()}원</span>
+                    {tx.transactionDate && <span className="text-slate-500 ml-1.5">({tx.transactionDate.slice(5, 10)})</span>}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleBankMatchConfirm(tx)}
+                  className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex-shrink-0 active:scale-95 transition-transform"
+                >
+                  매칭승인
+                </button>
               </div>
-              <div className="text-[11px] text-slate-400 mt-0.5">입금액: ₩2,200,000원 (8월 청구분)</div>
-            </div>
-            <button
-              type="button"
-              onClick={() => handleBankMatchConfirm('대현이엔지', 2200000)}
-              className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs active:scale-95"
-            >
-              매칭승인
-            </button>
+            ))}
           </div>
-        </div>
+        )}
       </div>
 
-      {/* ── 3. 업체별 마감 도래 현황 (계약서/명세서 발송) ── */}
+      {/* ── 3. 업체별 마감 도래 현황 (D-Day 실연산 - 과제 8) ── */}
       <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex flex-col gap-3 shadow-lg">
         <div className="flex items-center justify-between">
           <h3 className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
@@ -223,21 +267,31 @@ export const MobileAdminHome: React.FC<MobileAdminHomeProps> = ({ onNavigate }) 
         ) : (
           <div className="flex flex-col gap-2">
             {closingDueCustomers.map(c => {
-              const closing = c.defaultBillingDay || c.defaultStatementClosingDay || 30;
               return (
                 <div key={c.id} className="p-3 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-between text-xs">
                   <div>
-                    <div className="font-bold text-white">{c.name}</div>
+                    <div className="font-bold text-white flex items-center gap-1.5">
+                      <span>{c.name}</span>
+                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded font-mono ${
+                        c.diffDays === 0 
+                          ? 'bg-rose-600 text-white animate-pulse' 
+                          : c.diffDays > 0 
+                            ? 'bg-sky-500/20 text-sky-300 border border-sky-500/30' 
+                            : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                      }`}>
+                        {c.dDayText}
+                      </span>
+                    </div>
                     <div className="text-[11px] text-slate-400 mt-0.5">
-                      마감일: 매월 {closing}일 • 담당자: {c.repEmail || '미등록'}
+                      약정 마감일: 매월 {c.closingDay}일 • 이메일: {c.repEmail || '미등록'}
                     </div>
                   </div>
                   <button
                     type="button"
                     onClick={() => triggerToast(`[${c.name}] 계약서/청구명세서 발송 큐에 등록되었습니다.`)}
-                    className="px-2.5 py-1.5 rounded-lg bg-blue-600/80 hover:bg-blue-600 text-white font-bold text-xs"
+                    className="px-2.5 py-1.5 rounded-lg bg-blue-600/80 hover:bg-blue-600 text-white font-bold text-xs active:scale-95"
                   >
-                    패키지발송
+                    명세서발송
                   </button>
                 </div>
               );

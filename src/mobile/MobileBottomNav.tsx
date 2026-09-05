@@ -1,6 +1,6 @@
 // src/mobile/MobileBottomNav.tsx
 import React from 'react';
-import { Home, Wrench, Truck, CheckSquare, Search, Send, Building2, PlusCircle, Boxes, ArrowDownToLine, Layers } from 'lucide-react';
+import { Home, Wrench, Truck, CheckSquare, Search, Send, Building2, PlusCircle, Boxes, ArrowDownToLine, Layers, Users, AlertTriangle } from 'lucide-react';
 import { MobileDeptMode } from './MobileHeader';
 
 export type MobileTabType = 
@@ -14,7 +14,9 @@ export type MobileTabType =
   | 'inspection'
   | 'vehicle_stock'
   | 'inbound_register'
-  | 'sublease';
+  | 'sublease'
+  | 'customers'
+  | 'delinquency';
 
 interface MobileBottomNavProps {
   deptMode: MobileDeptMode;
@@ -24,6 +26,8 @@ interface MobileBottomNavProps {
   pendingDispatchCount?: number;
   pendingInspectionCount?: number;
   subleaseLeakCount?: number;
+  overdueBadgeCount?: number;
+  incompleteCustomerCount?: number;
 }
 
 export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
@@ -34,18 +38,20 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
   pendingDispatchCount = 0,
   pendingInspectionCount = 0,
   subleaseLeakCount = 0,
+  overdueBadgeCount = 0,
+  incompleteCustomerCount = 0,
 }) => {
   // 부서별 하단 5대 탭 동적 매핑
   let navItems: { id: MobileTabType; label: string; icon: any; badge: number }[] = [];
 
   if (deptMode === 'SALES') {
-    // 💼 영업부 모바일 탭
+    // 💼 영업부 모바일 5대 정예 탭 (헌장 3.1 & 과제 10: 홈, 고객관리, 가용재고, 출고요청, 내현장)
     navItems = [
       { id: 'home', label: '홈', icon: Home, badge: 0 },
+      { id: 'customers', label: '고객관리', icon: Users, badge: incompleteCustomerCount },
       { id: 'assets', label: '가용재고', icon: Search, badge: 0 },
       { id: 'sales_order', label: '출고요청', icon: Send, badge: 0 },
       { id: 'my_contracts', label: '내현장', icon: Building2, badge: 0 },
-      { id: 'as_create', label: 'AS접수', icon: PlusCircle, badge: 0 },
     ];
   } else if (deptMode === 'AS') {
     // 🔧 AS팀 모바일 탭 (검수지원 제거 ➔ 차량 소모품재고 신설)
@@ -57,22 +63,21 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
       { id: 'assets', label: '가용자산', icon: Search, badge: 0 },
     ];
   } else if (deptMode === 'OUTBOUND') {
-    // 🏗️ 출고/자산팀 모바일 탭 (현장AS 및 배차상차 제거 ➔ 입고등록 신규 탑재)
+    // 🏗️ 출고/자산팀 모바일 4대 전용 탭 (R&R 위반 발주작성 영구 배제 - 과제 10)
     navItems = [
       { id: 'home', label: '홈', icon: Home, badge: 0 },
       { id: 'inspection', label: '출고검수', icon: CheckSquare, badge: pendingInspectionCount },
       { id: 'inbound_register', label: '입고등록', icon: ArrowDownToLine, badge: 0 },
       { id: 'assets', label: '주기장자산', icon: Search, badge: 0 },
-      { id: 'sales_order', label: '출고요청', icon: Send, badge: 0 },
     ];
   } else if (deptMode === 'EXECUTIVE') {
-    // 👑 경영진 모바일 탭
+    // 👑 경영진 모바일 탭 (출고승인, AS현황 영구 제거 ➔ 고객관리, 연체관리 신규 탑재)
     navItems = [
       { id: 'home', label: '경영홈', icon: Home, badge: 0 },
-      { id: 'assets', label: '자산가동', icon: Search, badge: 0 },
+      { id: 'customers', label: '고객관리', icon: Users, badge: incompleteCustomerCount },
+      { id: 'delinquency', label: '연체관리', icon: AlertTriangle, badge: overdueBadgeCount },
       { id: 'my_contracts', label: '계약현황', icon: Building2, badge: 0 },
-      { id: 'inspection', label: '출고승인', icon: CheckSquare, badge: pendingInspectionCount },
-      { id: 'as', label: 'AS현황', icon: Wrench, badge: pendingAsCount },
+      { id: 'assets', label: '자산가동', icon: Search, badge: 0 },
     ];
   } else {
     // 📊 관리부 모바일 4대 전용 탭 (출고관리, 채권/계약, 출고요청 전면 제거)

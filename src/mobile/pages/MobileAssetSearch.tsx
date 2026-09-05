@@ -62,10 +62,11 @@ const SPEC_PRESETS: SpecPreset[] = [
 ];
 
 interface MobileAssetSearchProps {
+  deptMode?: string;
   onNavigateToOrder?: (specFt: string) => void;
 }
 
-export const MobileAssetSearch: React.FC<MobileAssetSearchProps> = ({ onNavigateToOrder }) => {
+export const MobileAssetSearch: React.FC<MobileAssetSearchProps> = ({ deptMode, onNavigateToOrder }) => {
   const { assets, contracts, contractAssets, sites, refreshAllData, fullRefreshFromServer } = useApp();
 
   // 검색 및 필터 상태
@@ -301,9 +302,13 @@ export const MobileAssetSearch: React.FC<MobileAssetSearchProps> = ({ onNavigate
                     <span className={`px-2 py-0.5 rounded-full text-[10.5px] font-bold border flex-shrink-0 ${
                       a.status === 'AVAILABLE'
                         ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                        : a.status === 'REPAIRING'
+                        ? 'bg-rose-500/20 text-rose-300 border-rose-500/30'
+                        : a.status === 'ASSIGNED'
+                        ? 'bg-amber-500/20 text-amber-300 border-amber-500/30'
                         : 'bg-blue-500/20 text-blue-300 border-blue-500/30'
                     }`}>
-                      {a.status === 'AVAILABLE' ? '임대가능' : '대여중'}
+                      {a.status === 'AVAILABLE' ? '임대가능' : a.status === 'REPAIRING' ? '정비중' : a.status === 'ASSIGNED' ? '배차대기' : '대여중'}
                     </span>
                   </div>
                 );
@@ -518,9 +523,9 @@ export const MobileAssetSearch: React.FC<MobileAssetSearchProps> = ({ onNavigate
                 )}
               </div>
 
-              {/* 바텀시트 하단 액션 버튼군 (헌장 1.1 최소 조작 최대 편익 1-Click 발주 연계) */}
+              {/* 바텀시트 하단 액션 버튼군 (헌장 2.1 영업부 전용 발주의뢰 R&R 격리) */}
               <div className="flex items-center gap-2 pt-1 border-t border-slate-800">
-                {onNavigateToOrder && (
+                {(deptMode === 'SALES' || !deptMode) && onNavigateToOrder && (
                   <button
                     type="button"
                     onClick={() => {
@@ -537,7 +542,7 @@ export const MobileAssetSearch: React.FC<MobileAssetSearchProps> = ({ onNavigate
                 <button
                   type="button"
                   onClick={() => setSelectedSpec(null)}
-                  className={`${onNavigateToOrder ? 'w-24' : 'w-full'} py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs active:scale-98 transition-all`}
+                  className={`${(deptMode === 'SALES' || !deptMode) && onNavigateToOrder ? 'w-24' : 'w-full'} py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs active:scale-98 transition-all`}
                 >
                   닫기
                 </button>

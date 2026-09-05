@@ -1,5 +1,5 @@
 // src/mobile/pages/MobileAsCreate.tsx
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { CameraUploader } from '../components/CameraUploader';
 import { 
@@ -12,6 +12,8 @@ import { resolveSiteDetailedAddress } from '../../utils/nativeLauncher';
 interface MobileAsCreateProps {
   onBack: () => void;
   onCreated: (ticketId: string) => void;
+  initialAssetNo?: string;
+  initialSiteId?: string;
 }
 
 const CATEGORIES = [
@@ -26,13 +28,18 @@ const CATEGORIES = [
   '기타',
 ];
 
-export const MobileAsCreate: React.FC<MobileAsCreateProps> = ({ onBack, onCreated }) => {
+export const MobileAsCreate: React.FC<MobileAsCreateProps> = ({ 
+  onBack, 
+  onCreated,
+  initialAssetNo,
+  initialSiteId
+}) => {
   const { createFieldAsTicket, showErrorModal, customers, sites, assets, contracts, contractAssets } = useApp();
 
   const [customerName, setCustomerName] = useState('');
   const [siteName, setSiteName] = useState('');
   const [siteAddress, setSiteAddress] = useState('');
-  const [assetNo, setAssetNo] = useState('');
+  const [assetNo, setAssetNo] = useState(initialAssetNo || '');
   const [locationDetail, setLocationDetail] = useState('');
   const [reporterName, setReporterName] = useState('');
   const [reporterContact, setReporterContact] = useState('');
@@ -78,6 +85,22 @@ export const MobileAsCreate: React.FC<MobileAsCreateProps> = ({ onBack, onCreate
       }
     }
   };
+
+  // 🌟 초기 인계 파라미터(내현장/자산조회 등에서 유입) 자동 바인딩 (헌장 1.1 & 과제 6)
+  useEffect(() => {
+    if (initialAssetNo) {
+      handleAssetNoChange(initialAssetNo);
+    }
+    if (initialSiteId) {
+      const site = sites.find(s => s.id === initialSiteId);
+      if (site) {
+        setSiteName(site.name);
+        if (site.address?.trim()) setSiteAddress(site.address.trim());
+        const cust = customers.find(c => c.id === site.customerId);
+        if (cust && !customerName) setCustomerName(cust.name);
+      }
+    }
+  }, [initialAssetNo, initialSiteId]);
 
   // 🌟 2. 고객사명 입력 시 마스터 일치 및 현장·도로명 주소 상속
   const handleCustomerNameChange = (val: string) => {

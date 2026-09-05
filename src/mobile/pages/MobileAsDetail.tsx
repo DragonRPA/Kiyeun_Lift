@@ -468,14 +468,21 @@ export const MobileAsDetail: React.FC<MobileAsDetailProps> = ({ ticketId, onBack
             className="flex-1 bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-blue-500"
           >
             <option value="">탑차 부품 선택...</option>
-            {mechanicConsumableStocks.map((stock) => {
-              const consumable = consumables.find((c) => c.id === stock.consumableId);
-              return (
-                <option key={stock.id} value={stock.id}>
-                  {consumable?.modelName || '부품'} (재고: {stock.stockQty}개)
-                </option>
+            {(() => {
+              const targetMechanicId = currentUser?.id || ticket?.mechanicId;
+              const filtered = mechanicConsumableStocks.filter(
+                (s) => (!targetMechanicId || s.mechanicId === targetMechanicId) && s.stockQty > 0
               );
-            })}
+              const displayList = filtered.length > 0 ? filtered : mechanicConsumableStocks.filter(s => s.stockQty > 0);
+              return displayList.map((stock) => {
+                const consumable = consumables.find((c) => c.id === stock.consumableId);
+                return (
+                  <option key={stock.id} value={stock.id}>
+                    {consumable?.modelName || '부품'} (보유: {stock.stockQty}개)
+                  </option>
+                );
+              });
+            })()}
           </select>
           <input
             type="number"

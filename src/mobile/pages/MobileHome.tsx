@@ -3,7 +3,7 @@ import React from 'react';
 import { useApp } from '../../context/AppContext';
 import { 
   Wrench, Truck, CheckSquare, Search, Send, Building2, 
-  ArrowRight, AlertTriangle, Clock, Plus, Boxes, ArrowDownToLine 
+  ArrowRight, AlertTriangle, Clock, Plus, Boxes, ArrowDownToLine, Users
 } from 'lucide-react';
 import { MobileTabType } from '../MobileBottomNav';
 import { MobileDeptMode } from '../MobileHeader';
@@ -21,7 +21,7 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
   onOpenAsDetail,
   onOpenCreateAs,
 }) => {
-  const { fieldAsTickets, deliveries, outboundInspections, currentUser, assets, contracts, mechanicConsumableStocks } = useApp();
+  const { fieldAsTickets, deliveries, outboundInspections, currentUser, assets, contracts, mechanicConsumableStocks, customers } = useApp();
   
   // 자사 가용 자산 (ownerType !== 'RENTED')
   const availableAssetCount = assets.filter(a => a.status === 'AVAILABLE' && a.ownerType !== 'RENTED').length;
@@ -103,7 +103,29 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
           <ArrowRight className="w-5 h-5" />
         </button>
 
-        {/* [핵심 3] 내 계약 & 투입현장 조회 배너 */}
+        {/* [핵심 3] 고객사 및 거래처 관리 배너 (경영진 연동 기능) */}
+        <div
+          onClick={() => onNavigate('customers')}
+          className="p-4 rounded-2xl bg-slate-900 border border-indigo-500/40 flex items-center justify-between active:scale-98 transition-all cursor-pointer shadow-lg"
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center text-indigo-400 flex-shrink-0">
+              <Users className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="text-sm font-bold text-white flex items-center gap-1.5">
+                <span>고객사 및 거래처 관리</span>
+                <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 font-bold">
+                  {customers.length}개사
+                </span>
+              </div>
+              <div className="text-xs text-slate-400 mt-0.5">대표자 직통전화, 현장 목록, 결제약정 확인</div>
+            </div>
+          </div>
+          <ArrowRight className="w-5 h-5 text-indigo-400" />
+        </div>
+
+        {/* [핵심 4] 내 계약 & 투입현장 조회 배너 */}
         <div
           onClick={() => onNavigate('my_contracts')}
           className="p-4 rounded-2xl bg-slate-900 border border-slate-800 flex items-center justify-between active:scale-98 transition-all cursor-pointer"

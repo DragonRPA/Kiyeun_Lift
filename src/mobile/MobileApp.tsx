@@ -17,6 +17,8 @@ import { MobileMyContracts } from './pages/MobileMyContracts';
 import { MobileVehicleStock } from './pages/MobileVehicleStock';
 import { MobileInboundRegister } from './pages/MobileInboundRegister';
 import { MobileSubleaseManage } from './pages/MobileSubleaseManage';
+import { MobileCustomerManage } from './pages/MobileCustomerManage';
+import { MobileDelinquencyManage } from './pages/MobileDelinquencyManage';
 import { PwaInstallBanner } from './components/PwaInstallBanner';
 import { MobileWalkieTalkieModal } from './components/MobileWalkieTalkieModal';
 import { MobileGemsAgentModal } from './components/MobileGemsAgentModal';
@@ -28,7 +30,7 @@ interface MobileAppProps {
 }
 
 export const MobileApp: React.FC<MobileAppProps> = ({ onSwitchToPc }) => {
-  const { fieldAsTickets, deliveries, outboundInspections, currentUser, assets } = useApp();
+  const { fieldAsTickets, deliveries, outboundInspections, currentUser, assets, customers, billings } = useApp();
 
   // 전대 장비 주기장 유휴 누수 위험 건수
   const subleaseLeakCount = useMemo(() => {
@@ -39,6 +41,54 @@ export const MobileApp: React.FC<MobileAppProps> = ({ onSwitchToPc }) => {
       a.status !== 'RENTED'
     ).length;
   }, [assets]);
+
+  // 🚨 약정 납기일 도과 연체 고객사 수 배지 (헌장 4.1 & 5.1 준수)
+  const overdueBadgeCount = useMemo(() => {
+    const todayStr = new Date().toISOString().split('T')[0];
+    const overdueCustIds = new Set<string>();
+
+    (billings || []).forEach(b => {
+      if (b.status === 'REJECTED' || b.status === 'PAID') return;
+      const unpaid = (b.totalAmount || 0) - (b.paidAmount || 0);
+      if (unpaid <= 0) return;
+
+      const customer = (customers || []).find(c => c.id === b.customerId);
+      let dueDate = '';
+      if (customer?.paymentDueDay) {
+        const ym = b.billingYm || b.createdAt.slice(0, 7);
+        const [y, m] = ym.split('-');
+        let year = parseInt(y, 10);
+        let month = parseInt(m, 10) + 1;
+        if (month > 12) { month = 1; year += 1; }
+        const lastDay = new Date(year, month, 0).getDate();
+        dueDate = `${year}-${String(month).padStart(2, '0')}-${String(Math.min(customer.paymentDueDay, lastDay)).padStart(2, '0')}`;
+      } else if (customer?.paymentTermDays) {
+        const baseDate = new Date(b.billingDate || b.createdAt.split('T')[0]);
+        baseDate.setDate(baseDate.getDate() + customer.paymentTermDays);
+        dueDate = baseDate.toISOString().split('T')[0];
+      } else {
+        const baseDate = new Date(b.billingDate || b.createdAt.split('T')[0]);
+        baseDate.setDate(baseDate.getDate() + 30);
+        dueDate = baseDate.toISOString().split('T')[0];
+      }
+
+      if (dueDate < todayStr) {
+        overdueCustIds.add(b.customerId);
+      }
+    });
+
+    return overdueCustIds.size;
+  }, [billings, customers]);
+
+  // 📋 정보 누락 고객사 수 배지 (헌장 1.2 준수)
+  const incompleteCustomerCount = useMemo(() => {
+    return (customers || []).filter(c => 
+      !c.bizRegNo || c.bizRegNo === '미상' ||
+      !c.representative || c.representative === '미상' ||
+      !c.repContact || c.repContact === '미상' ||
+      !c.address || c.address === '미상'
+    ).length;
+  }, [customers]);
 
   // 1. 초기 부서 모드 감지 (사용자 역할 기반 또는 저장된 모드)
   const [deptMode, setDeptMode] = useState<MobileDeptMode>(() => {
@@ -57,6 +107,8 @@ export const MobileApp: React.FC<MobileAppProps> = ({ onSwitchToPc }) => {
   const [activeTab, setActiveTab] = useState<MobileTabType>('home');
   const [selectedAsTicketId, setSelectedAsTicketId] = useState<string | null>(null);
   const [isCreatingAs, setIsCreatingAs] = useState(false);
+  const [orderInitialParams, setOrderInitialParams] = useState<{ customerId?: string; specFt?: string } | null>(null);
+  const [asInitialParams, setAsInitialParams] = useState<{ assetNo?: string; siteId?: string } | null>(null);
 
   // 📻 무전기 모달 및 전원 상태
   const [isWalkieModalOpen, setIsWalkieModalOpen] = useState(false);
@@ -131,7 +183,8 @@ export const MobileApp: React.FC<MobileAppProps> = ({ onSwitchToPc }) => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const handleOpenCreateAs = () => {
+  const handleOpenCreateAs = (assetNo?: string, siteId?: string) => {
+    setAsInitialParams(assetNo || siteId ? { assetNo, siteId } : null);
     setIsCreatingAs(true);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -163,6 +216,8 @@ export const MobileApp: React.FC<MobileAppProps> = ({ onSwitchToPc }) => {
           />
         ) : isCreatingAs ? (
           <MobileAsCreate
+            initialAssetNo={asInitialParams?.assetNo}
+            initialSiteId={asInitialParams?.siteId}
             onBack={() => setIsCreatingAs(false)}
             onCreated={(ticketId) => {
               setIsCreatingAs(false);
@@ -189,16 +244,20 @@ export const MobileApp: React.FC<MobileAppProps> = ({ onSwitchToPc }) => {
           )
         ) : activeTab === 'sales_order' ? (
           <MobileDispatchOrderCreate
+            initialCustomerId={orderInitialParams?.customerId}
+            initialSpecFt={orderInitialParams?.specFt}
             onBack={() => handleTabChange('home')}
             onSuccess={() => handleTabChange('my_contracts')}
             onOpenGems={() => setIsGemsModalOpen(true)}
           />
         ) : activeTab === 'my_contracts' ? (
           <MobileMyContracts
-            onOpenCreateAsForAsset={(_assetNo, _siteId) => handleOpenCreateAs()}
+            onOpenCreateAsForAsset={(assetNo, siteId) => handleOpenCreateAs(assetNo, siteId)}
           />
         ) : activeTab === 'as_create' ? (
           <MobileAsCreate
+            initialAssetNo={asInitialParams?.assetNo}
+            initialSiteId={asInitialParams?.siteId}
             onBack={() => handleTabChange('home')}
             onCreated={(ticketId) => {
               setSelectedAsTicketId(ticketId);
@@ -216,6 +275,15 @@ export const MobileApp: React.FC<MobileAppProps> = ({ onSwitchToPc }) => {
             onNavigate={(tab) => handleTabChange(tab)}
             onBack={() => handleTabChange('home')}
           />
+        ) : activeTab === 'customers' ? (
+          <MobileCustomerManage 
+            onNavigateToOrder={(customerId) => {
+              setOrderInitialParams({ customerId });
+              handleTabChange('sales_order');
+            }}
+          />
+        ) : activeTab === 'delinquency' ? (
+          <MobileDelinquencyManage />
         ) : activeTab === 'inspection' ? (
           <MobileInspectionList />
         ) : activeTab === 'inbound_register' ? (
@@ -227,7 +295,8 @@ export const MobileApp: React.FC<MobileAppProps> = ({ onSwitchToPc }) => {
           <MobileVehicleStock />
         ) : (
           <MobileAssetSearch
-            onNavigateToOrder={(_specFt) => {
+            onNavigateToOrder={(specFt) => {
+              setOrderInitialParams({ specFt });
               handleTabChange('sales_order');
             }}
           />
@@ -244,6 +313,8 @@ export const MobileApp: React.FC<MobileAppProps> = ({ onSwitchToPc }) => {
           pendingDispatchCount={pendingDispatchCount}
           pendingInspectionCount={pendingInspectionCount}
           subleaseLeakCount={subleaseLeakCount}
+          overdueBadgeCount={overdueBadgeCount}
+          incompleteCustomerCount={incompleteCustomerCount}
         />
       )}
 

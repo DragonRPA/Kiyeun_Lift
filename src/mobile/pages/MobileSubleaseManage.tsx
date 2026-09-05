@@ -1,7 +1,7 @@
 // src/mobile/pages/MobileSubleaseManage.tsx
 import React, { useState, useMemo } from 'react';
 import { useApp } from '../../context/AppContext';
-import { Asset, Vendor } from '../../services/db';
+import { Asset, Vendor, ContractAsset, db } from '../../services/db';
 import { 
   Layers, 
   Search, 
@@ -17,7 +17,9 @@ import {
   ArrowLeft,
   Phone,
   Clock,
-  ChevronDown
+  ChevronDown,
+  ArrowRight,
+  Send
 } from 'lucide-react';
 import { MobileTabType } from '../MobileBottomNav';
 
@@ -30,7 +32,19 @@ export const MobileSubleaseManage: React.FC<MobileSubleaseManageProps> = ({
   onNavigate,
   onBack,
 }) => {
-  const { assets, vendors, contracts, customers, sites, registerRentedAsset, returnRentedAsset, showErrorModal } = useApp();
+  const { 
+    assets, 
+    vendors, 
+    contracts, 
+    contractAssets,
+    customers, 
+    sites, 
+    registerRentedAsset, 
+    returnRentedAsset, 
+    refreshAllData,
+    currentUser,
+    showErrorModal 
+  } = useApp();
 
   // 검색 및 필터 상태
   const [searchQuery, setSearchQuery] = useState('');
@@ -54,11 +68,121 @@ export const MobileSubleaseManage: React.FC<MobileSubleaseManageProps> = ({
   const [actualReturnDate, setActualReturnDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [isReturning, setIsReturning] = useState(false);
 
+  // 현장 투입 매핑 모달 상태 (헌장 2.2 & 과제 10)
+  const [isDeployModalOpen, setIsDeployModalOpen] = useState(false);
+  const [targetAssetForDeploy, setTargetAssetForDeploy] = useState<Asset | null>(null);
+  const [deployCustomerId, setDeployCustomerId] = useState('');
+  const [deploySiteId, setDeploySiteId] = useState('');
+  const [deployStartDate, setDeployStartDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [deployMonthlyRent, setDeployMonthlyRent] = useState<number>(400000);
+  const [isDeploying, setIsDeploying] = useState(false);
+
   // 성공 피드백 토스트
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3500);
+  };
+
+  // 고객사 선택 시 현장 및 최근 계약 단가 자동 상속 (헌장 2.2)
+  const handleDeployCustomerChange = (custId: string) => {
+    setDeployCustomerId(custId);
+    const custSites = sites.filter(s => s.customerId === custId);
+    if (custSites.length > 0) setDeploySiteId(custSites[0].id);
+    else setDeploySiteId('');
+
+    const custContractIds = contracts.filter(c => c.customerId === custId).map(c => c.id);
+    const recentCa = contractAssets
+      .filter(ca => custContractIds.includes(ca.contractId) && ca.monthlyRentalFee > 0)
+      .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''))[0];
+    if (recentCa && recentCa.monthlyRentalFee) {
+      setDeployMonthlyRent(recentCa.monthlyRentalFee);
+    } else {
+      setDeployMonthlyRent(400000);
+    }
+  };
+
+  // 현장 투입 매핑 실행 (헌장 1.2, 1.3, 2.2, 5.2 준수)
+  const handleConfirmDeploy = async () => {
+    if (!targetAssetForDeploy || !deployCustomerId) {
+      showErrorModal('투입할 고객사를 선택하십시오.');
+      return;
+    }
+    setIsDeploying(true);
+    try {
+      let targetContract = contracts.find(
+        c => c.customerId === deployCustomerId && c.status === 'ACTIVE' && (!deploySiteId || c.siteId === deploySiteId)
+      );
+      let contractId = targetContract?.id;
+
+      if (!contractId) {
+        const custObj = customers.find(c => c.id === deployCustomerId);
+        const newContract = db.insertRow<any>('contracts', {
+          contractNo: `CT-SUB-${Date.now().toString().slice(-6)}`,
+          customerId: deployCustomerId,
+          customerName: custObj?.name || '고객사',
+          siteId: deploySiteId || undefined,
+          startDate: deployStartDate,
+          endDate: new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0],
+          billingDay: 30,
+          lateInterestRate: 0,
+          status: 'ACTIVE',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          salespersonName: currentUser?.name || '관리부',
+        });
+        contractId = newContract.id;
+      }
+
+      if (!contractId) {
+        showErrorModal('계약 생성에 실패하였습니다.');
+        return;
+      }
+
+      db.insertRow<ContractAsset>('contractAssets', {
+        contractId,
+        assetId: targetAssetForDeploy.id,
+        startDate: deployStartDate,
+        endDate: new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0],
+        monthlyRentalFee: deployMonthlyRent,
+        dailyRentalFee: Math.round(deployMonthlyRent / 30),
+        status: 'RENTED',
+        createdAt: new Date().toISOString(),
+      });
+
+      db.updateRow<Asset>('assets', targetAssetForDeploy.id, {
+        status: 'RENTED',
+        currentCustomerId: deployCustomerId,
+        currentSiteId: deploySiteId || undefined,
+        note: `[전대 직결 투입] ${deployStartDate} 현장 투입 매핑`,
+        updatedAt: new Date().toISOString(),
+      });
+
+      const custName = customers.find(c => c.id === deployCustomerId)?.name || '';
+      const sName = sites.find(s => s.id === deploySiteId)?.name || '';
+      db.insertRow<any>('assetInOutLogs', {
+        assetId: targetAssetForDeploy.id,
+        assetNo: targetAssetForDeploy.assetNo,
+        type: 'OUTBOUND',
+        date: deployStartDate,
+        customerId: deployCustomerId,
+        customerName: custName,
+        siteId: deploySiteId || undefined,
+        siteName: sName,
+        note: `전대 장비 고객사 현장 투입 매핑 출고 (${custName} - ${sName})`,
+        createdAt: new Date().toISOString(),
+      });
+
+      await db.awaitPendingWrites();
+      await refreshAllData();
+      setIsDeployModalOpen(false);
+      setTargetAssetForDeploy(null);
+      showToast(`[${targetAssetForDeploy.assetNo}] 장비가 ${custName} 현장으로 정상 투입 매핑되었습니다.`);
+    } catch (err: any) {
+      showErrorModal(`현장 투입 매핑 실패: ${err?.message || err}`);
+    } finally {
+      setIsDeploying(false);
+    }
   };
 
   // 임차처(원사) 공급자 목록 (type === 'RENTAL' 또는 types 포함)
@@ -96,7 +220,7 @@ export const MobileSubleaseManage: React.FC<MobileSubleaseManageProps> = ({
         // 3. 🚨 주기장 유휴 누수 위험: 원사에 아직 안 돌려줬는데(미반납), 현장에도 안 나가있는 상태(AVAILABLE or ASSIGNED or REPAIRING)
         const isIdleLeakRisk = !isReturnedToVendor && !isDeployedToCustomer;
 
-        // 유휴 누수 일수 계산
+        // 유휴 누수 일수 계산 (당일 입고 시 0일 보정 - 과제 10)
         let idleDays = 0;
         let leakAmount = 0;
         if (isIdleLeakRisk && a.rentStart) {
@@ -104,7 +228,7 @@ export const MobileSubleaseManage: React.FC<MobileSubleaseManageProps> = ({
           const baseDate = a.contractEnd ? new Date(a.contractEnd) : new Date(a.rentStart);
           baseDate.setHours(0, 0, 0, 0);
           const diffTime = today.getTime() - baseDate.getTime();
-          idleDays = Math.max(1, Math.floor(diffTime / (1000 * 60 * 60 * 24)));
+          idleDays = Math.max(0, Math.floor(diffTime / (1000 * 60 * 60 * 24)));
           const dailyFee = a.dailyRentFee || Math.floor((a.monthlyRentFee || 0) / 30);
           leakAmount = idleDays * dailyFee;
         }
@@ -543,28 +667,44 @@ export const MobileSubleaseManage: React.FC<MobileSubleaseManageProps> = ({
                 </div>
               </div>
 
-              {/* 하단 원터치 액션 버튼군 */}
+              {/* 하단 원터치 액션 버튼군 (현장투입 매핑 추가 - 과제 10) */}
               <div className="flex items-center gap-2 pt-1">
                 {asset.isIdleLeakRisk ? (
-                  <>
+                  <div className="grid grid-cols-3 gap-1.5 w-full">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTargetAssetForDeploy(asset);
+                        setDeployCustomerId('');
+                        setDeploySiteId('');
+                        setDeployStartDate(new Date().toISOString().split('T')[0]);
+                        setDeployMonthlyRent(asset.monthlyRentFee || 400000);
+                        setIsDeployModalOpen(true);
+                      }}
+                      className="py-2 px-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs flex items-center justify-center gap-1 shadow-md active:scale-95 transition-all whitespace-nowrap"
+                    >
+                      <Send className="w-3 h-3" />
+                      <span>현장투입</span>
+                    </button>
+
                     <button
                       type="button"
                       onClick={() => onNavigate && onNavigate('dispatch')}
-                      className="flex-1 py-2.5 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs flex items-center justify-center gap-1.5 active:scale-98 transition-all whitespace-nowrap flex-shrink-0"
+                      className="py-2 px-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs flex items-center justify-center gap-1 active:scale-95 transition-all whitespace-nowrap"
                     >
-                      <Truck className="w-3.5 h-3.5 text-sky-400" />
-                      <span>반납 배차 의뢰</span>
+                      <Truck className="w-3 h-3 text-sky-400" />
+                      <span>배차의뢰</span>
                     </button>
 
                     <button
                       type="button"
                       onClick={() => handleOpenReturnModal(asset)}
-                      className="flex-1 py-2.5 px-3 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-md shadow-rose-950 active:scale-98 transition-all whitespace-nowrap flex-shrink-0"
+                      className="py-2 px-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs flex items-center justify-center gap-1 shadow-md active:scale-95 transition-all whitespace-nowrap"
                     >
-                      <Check className="w-3.5 h-3.5 stroke-[3]" />
-                      <span>원사 반납 마감</span>
+                      <Check className="w-3 h-3" />
+                      <span>반납마감</span>
                     </button>
-                  </>
+                  </div>
                 ) : asset.isDeployedToCustomer ? (
                   <>
                     <button
@@ -849,6 +989,125 @@ export const MobileSubleaseManage: React.FC<MobileSubleaseManageProps> = ({
               >
                 <Check className="w-4 h-4 stroke-[2.5]" />
                 <span>{isReturning ? '반납 마감 처리 중...' : '원사 반납 확정 마감 실행'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 현장 투입 매핑 모달 (헌장 2.2, 3.4 & 과제 10) */}
+      {isDeployModalOpen && targetAssetForDeploy && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
+          <div className="w-full max-w-lg bg-slate-900 border border-slate-800 rounded-t-3xl sm:rounded-2xl p-5 flex flex-col gap-4 shadow-2xl animate-in slide-in-from-bottom duration-200">
+            <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+              <div>
+                <span className="font-black text-sm text-white flex items-center gap-1.5">
+                  <Send className="w-4 h-4 text-sky-400" />
+                  <span>전대 장비 현장 투입 매핑</span>
+                </span>
+                <div className="text-xs text-slate-400 mt-0.5">
+                  [{targetAssetForDeploy.assetNo}] {targetAssetForDeploy.modelName}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsDeployModalOpen(false)}
+                className="text-slate-400 hover:text-white p-1"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* 대상 고객사 선택 (헌장 3.4 상하 세로 스택) */}
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-bold text-slate-300 whitespace-nowrap">
+                투입 고객사 *
+              </label>
+              <select
+                value={deployCustomerId}
+                onChange={(e) => handleDeployCustomerChange(e.target.value)}
+                className="w-full py-2.5 px-3 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:outline-none focus:border-blue-500"
+              >
+                <option value="">고객사를 선택하십시오...</option>
+                {customers.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name} {c.representative ? `(대표: ${c.representative})` : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* 현장 선택 */}
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-bold text-slate-300 whitespace-nowrap">
+                투입 현장
+              </label>
+              <select
+                value={deploySiteId}
+                onChange={(e) => setDeploySiteId(e.target.value)}
+                className="w-full py-2.5 px-3 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:outline-none focus:border-blue-500"
+              >
+                <option value="">현장 선택 (선택사항)...</option>
+                {sites
+                  .filter((s) => !deployCustomerId || s.customerId === deployCustomerId)
+                  .map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name} {s.address ? `(${s.address})` : ''}
+                    </option>
+                  ))}
+              </select>
+            </div>
+
+            {/* 투입 시작일 및 월 임대료 (헌장 2.2 계약 속성 상속) */}
+            <div className="grid grid-cols-2 gap-2">
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-bold text-slate-300 whitespace-nowrap">
+                  투입 일자
+                </label>
+                <input
+                  type="date"
+                  value={deployStartDate}
+                  onChange={(e) => setDeployStartDate(e.target.value)}
+                  className="w-full py-2 px-3 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs font-mono focus:outline-none focus:border-blue-500"
+                />
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-bold text-slate-300 whitespace-nowrap">
+                  월 렌탈료 (상속단가)
+                </label>
+                <input
+                  type="number"
+                  value={deployMonthlyRent}
+                  onChange={(e) => setDeployMonthlyRent(parseInt(e.target.value, 10) || 0)}
+                  className="w-full py-2 px-3 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs font-mono focus:outline-none focus:border-blue-500"
+                />
+              </div>
+            </div>
+
+            {/* 안내 배너 */}
+            <div className="p-3 rounded-xl bg-blue-950/40 border border-blue-900/60 text-xs text-blue-300 flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-blue-400 flex-shrink-0" />
+              <span>확인 시 자산 상태가 [대여중]으로 전환되며 계약 속성이 자동 상속됩니다.</span>
+            </div>
+
+            {/* 제출 버튼 */}
+            <div className="pt-2 flex gap-2">
+              <button
+                type="button"
+                onClick={() => setIsDeployModalOpen(false)}
+                className="flex-1 py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs active:scale-95"
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                disabled={isDeploying || !deployCustomerId}
+                onClick={handleConfirmDeploy}
+                className="flex-2 py-3 px-4 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-lg active:scale-95 disabled:opacity-50"
+              >
+                <Check className="w-4 h-4" />
+                <span>{isDeploying ? '매핑 등록 중...' : '현장 투입 매핑 완료'}</span>
               </button>
             </div>
           </div>

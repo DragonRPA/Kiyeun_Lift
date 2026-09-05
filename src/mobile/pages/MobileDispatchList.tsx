@@ -288,6 +288,17 @@ export const MobileDispatchList: React.FC = () => {
                 </div>
               </div>
 
+              {/* 지시 메모 및 특이사항 (대차/교환 대상 등 - 과제 10 복원) */}
+              {delivery.memo && (
+                <div className="p-2.5 rounded-xl bg-slate-950 border border-blue-900/40 text-xs text-slate-300 flex items-start gap-1.5">
+                  <FileText className="w-3.5 h-3.5 text-sky-400 mt-0.5 flex-shrink-0" />
+                  <div className="flex-1 leading-relaxed">
+                    <span className="text-sky-400 font-bold mr-1">[배차메모]</span>
+                    <span>{delivery.memo}</span>
+                  </div>
+                </div>
+              )}
+
               {/* 기사/차량 정보 */}
               <div className="flex items-center justify-between text-xs text-slate-400">
                 <span>

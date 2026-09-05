@@ -19,7 +19,7 @@ const INSPECTION_ITEMS = [
 ];
 
 export const MobileInspectionList: React.FC = () => {
-  const { outboundInspections, currentUser, refreshAllData, showErrorModal } = useApp();
+  const { outboundInspections, assets, contracts, customers, sites, currentUser, refreshAllData, showErrorModal } = useApp();
   const [selectedInspectionId, setSelectedInspectionId] = useState<string>('');
   const [checkedList, setCheckedList] = useState<Record<string, boolean>>({});
   const [photos, setPhotos] = useState<string[]>([]);
@@ -46,6 +46,13 @@ export const MobileInspectionList: React.FC = () => {
   const handleApprove = async () => {
     if (!activeInspection) return;
 
+    // 🌟 [사법 감사 판정 과제 4] 점검 항목 0개 승인 방지 가드
+    const checkedCount = Object.values(checkedList).filter(Boolean).length;
+    if (checkedCount === 0) {
+      showErrorModal('점검 항목을 최소 1개 이상 검수 완료해야 출고 승인이 가능합니다.');
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       const nowIso = new Date().toISOString();
@@ -55,7 +62,7 @@ export const MobileInspectionList: React.FC = () => {
       const inspectionPayload = {
         checklist: checkedList,
         photos: photos,
-        checkedCount: Object.values(checkedList).filter(Boolean).length,
+        checkedCount,
         completedAt: nowIso,
       };
 
@@ -75,15 +82,23 @@ export const MobileInspectionList: React.FC = () => {
           updatedAt: nowIso,
         });
 
-        // 🟢 [헌장 1.2] 발생 사건 무누락 DB 저장: 자산 출고 이벤트 1:1 영구 기록
+        // 🟢 [헌장 1.2] 발생 사건 무누락 DB 저장: 자산 출고 이벤트 1:1 정규화 영구 기록
         const targetAsset = db.assets.find((a) => a.id === activeInspection.assetId);
+        const contract = db.contracts.find((c) => c.id === activeInspection.contractId);
+        const customer = contract ? db.customers.find((c) => c.id === contract.customerId) : undefined;
+        const site = contract ? db.sites.find((s) => s.id === contract.siteId) : undefined;
+
         db.insertRow<AssetInOutLog>('assetInOutLogs', {
           assetId: activeInspection.assetId,
           assetNo: targetAsset?.assetNo || '',
           modelName: targetAsset?.modelName || '',
           type: 'OUTBOUND',
           eventDate: nowIso.split('T')[0],
-          memo: `[출고검수 승인] 계약(${activeInspection.contractId || '직출고'}) 기사(${inspectorName}) 기능 점검 완료 (자산 대여중 전환)`,
+          customerId: contract?.customerId,
+          customerName: customer?.name,
+          siteId: contract?.siteId,
+          siteName: site?.name,
+          memo: `[출고검수 승인] 계약(${contract?.contractNo || activeInspection.contractId || '직출고'}) 현장(${site?.name || '현장'}) 기사(${inspectorName}) 기능 점검 완료 (자산 대여중 전환)`,
           createdAt: nowIso,
         });
       }
@@ -128,31 +143,48 @@ export const MobileInspectionList: React.FC = () => {
               대기 중인 출고 검수 의뢰가 없습니다.
             </div>
           ) : (
-            pendingInspections.map((ins) => (
-              <div
-                key={ins.id}
-                onClick={() => {
-                  setSelectedInspectionId(ins.id);
-                  handleCheckAll();
-                }}
-                className="p-4 rounded-2xl bg-slate-900 border border-slate-800 hover:border-emerald-500/50 active:scale-98 transition-all cursor-pointer flex flex-col gap-2 shadow-lg"
-              >
-                <div className="flex items-center justify-between">
-                  <span className="px-2.5 py-0.5 rounded-lg bg-emerald-500/20 text-emerald-300 text-xs font-black font-mono border border-emerald-500/30">
-                    자산 #{ins.assetId || '미지정'}
-                  </span>
-                  <span className="text-xs px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-bold">
-                    검수 대기
-                  </span>
+            pendingInspections.map((ins) => {
+              const asset = assets.find((a) => a.id === ins.assetId);
+              const contract = contracts.find((c) => c.id === ins.contractId);
+              const customer = contract ? customers.find((c) => c.id === contract.customerId) : undefined;
+              const site = contract ? sites.find((s) => s.id === contract.siteId) : undefined;
+
+              return (
+                <div
+                  key={ins.id}
+                  onClick={() => {
+                    setSelectedInspectionId(ins.id);
+                    handleCheckAll();
+                  }}
+                  className="p-4 rounded-2xl bg-slate-900 border border-slate-800 hover:border-emerald-500/50 active:scale-98 transition-all cursor-pointer flex flex-col gap-2 shadow-lg"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="px-2.5 py-0.5 rounded-lg bg-emerald-500/20 text-emerald-300 text-xs font-black font-mono border border-emerald-500/30">
+                        {asset?.assetNo || `자산 #${ins.assetId || '미지정'}`}
+                      </span>
+                      {asset?.modelName && (
+                        <span className="text-xs text-white font-bold">
+                          {asset.modelName}
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-bold">
+                      검수 대기
+                    </span>
+                  </div>
+                  <div className="text-sm font-bold text-white flex items-center gap-1.5 truncate">
+                    <span>{customer?.name || '직출고 거래처'}</span>
+                    <span className="text-slate-500">•</span>
+                    <span className="text-slate-300 font-normal">{site?.name || '현장'}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs text-slate-400 font-mono pt-1 border-t border-slate-800/60">
+                    <span>계약: {contract?.contractNo || ins.contractId || '직출고'}</span>
+                    <span>의뢰일: {ins.createdAt ? new Date(ins.createdAt).toLocaleDateString() : ''}</span>
+                  </div>
                 </div>
-                <div className="text-sm font-bold text-white">
-                  계약 ID: {ins.contractId || '직출고'}
-                </div>
-                <div className="text-xs text-slate-400">
-                  의뢰일: {ins.createdAt ? new Date(ins.createdAt).toLocaleDateString() : ''}
-                </div>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
       ) : (

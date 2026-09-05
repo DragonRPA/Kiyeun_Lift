@@ -22,6 +22,8 @@ interface MobileDispatchOrderCreateProps {
   onBack: () => void;
   onSuccess: () => void;
   onOpenGems?: () => void;
+  initialCustomerId?: string;
+  initialSpecFt?: string;
 }
 
 const SPEC_OPTIONS = [
@@ -44,7 +46,13 @@ const inferFeetFromModel = (modelName: string): string => {
   return '19ft';
 };
 
-export const MobileDispatchOrderCreate: React.FC<MobileDispatchOrderCreateProps> = ({ onBack, onSuccess, onOpenGems }) => {
+export const MobileDispatchOrderCreate: React.FC<MobileDispatchOrderCreateProps> = ({ 
+  onBack, 
+  onSuccess, 
+  onOpenGems,
+  initialCustomerId,
+  initialSpecFt
+}) => {
   const { 
     customers, sites, currentUser, saveSmartDispatch,
     contracts, contractAssets, assets, saveSmartReturn, refreshAllData 
@@ -121,6 +129,18 @@ export const MobileDispatchOrderCreate: React.FC<MobileDispatchOrderCreateProps>
       setHasRestoredDraft(true);
     }
   }, []);
+
+  // 1-1. 외부 네비게이션(가용재고 조회, 고객관리 등)에서 유입된 초기 파라미터 우선 적용 (헌장 2.1 & 과제 6)
+  useEffect(() => {
+    if (initialCustomerId) {
+      setSelectedCustomerId(initialCustomerId);
+    }
+    if (initialSpecFt) {
+      setActiveFt(initialSpecFt);
+      const defaultModel = SPEC_OPTIONS.find(s => s.ft === initialSpecFt)?.defaultModel || 'GS-1930';
+      setOrders([{ ft: initialSpecFt, modelName: defaultModel, count: 1 }]);
+    }
+  }, [initialCustomerId, initialSpecFt]);
 
   // 2. 값 변경 시 로컬스토리지 자동 임시저장
   useEffect(() => {
@@ -654,13 +674,32 @@ export const MobileDispatchOrderCreate: React.FC<MobileDispatchOrderCreateProps>
       }
 
       const equipmentsList: any[] = [];
+      // 헌장 2.2 준수: 표준 6대 규격 기본 단가 (19ft: 40만, 26ft: 50만, 32ft: 60만, 40ft: 90만, 46ft: 120만, 53ft: 150만)
+      const SPEC_DEFAULT_MONTHLY_RENT: Record<string, number> = {
+        '19ft': 400000,
+        '26ft': 500000,
+        '32ft': 600000,
+        '40ft': 900000,
+        '46ft': 1200000,
+        '53ft': 1500000,
+      };
+
+      const custContractIds = contracts.filter(c => c.customerId === selectedCustomerId).map(c => c.id);
+      const recentCa = contractAssets
+        .filter(ca => custContractIds.includes(ca.contractId) && ca.monthlyRentalFee > 0)
+        .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''))[0];
+
       orders.forEach(o => {
+        const standardRent = SPEC_DEFAULT_MONTHLY_RENT[o.ft] || 400000;
+        const assignedMonthly = recentCa?.monthlyRentalFee || standardRent;
+        const assignedDaily = Math.round(assignedMonthly / 30);
+
         for (let i = 0; i < o.count; i++) {
           equipmentsList.push({
             modelName: o.modelName || o.ft,
             spec: o.ft,
-            monthlyRent: 0,
-            dailyRent: 0,
+            monthlyRent: assignedMonthly,
+            dailyRent: assignedDaily,
           });
         }
       });

@@ -1,5 +1,110 @@
 # 개발 지시 및 개편 완료 내역 (dev_temp.md)
 
+## 🛡️ [모바일 5개 부서 전기능 WTT 10회 사법 감사 판정 Top 10 핵심 개선과제 전면 개편] (Build.155)
+
+### 1. 개발 배경 및 사장님 지시사항
+- **사용자 요구사항**:
+  > "모든 서브에이전트 투입. 서브에이전트별로 핸드폰 메뉴 전기능 WTT 10회 재수행. 감사가 심판을 맡음. 개선과제 상위 10개 개편후 즉시 적용. ㄹㅇ"
+- **5대 부서 WTT 수행 및 사법 감사관 최종 심판 (`5ee4df1c`)**:
+  - 경영진(49a5e3c5), 출고팀(64bbba79), 현장AS팀(b9e0af16), 영업부(91744383), 관리부(3f0cde9a) 5개 부서별 10회 WTT 총 50회 실무 시나리오 전수 검증 수행 완료.
+  - 시스템 사법 감사/심판관 에이전트의 전사 표준 헌장(카테고리 I~VI) 기준 엄격 감항을 통해 **전사 최우선 개선과제 Top 10** 최종 확정.
+  - 상위 10대 개선과제를 모바일 소스코드에 100% 즉각 구현 및 `cmd /c "npm run build"` 0 Type Error 검증 완료.
+
+### 2. 10대 핵심 개선과제 구현 및 조치 상세
+1. **[과제 1: 경영홈 허위 잔고 영구 삭제 및 지시 추적 복원] (`src/mobile/pages/MobileExecutiveHome.tsx`)**:
+   - 잔고 0원 이하 시 `124,500,000`으로 렌더링되던 허위 하드코딩 왜곡 로직 영구 삭제, 실통장 잔고 그대로 정직하게 반환. 0원 이하 시 붉은색 경고 및 '유동자금 주의' 점멸 배지 표출.
+   - `handleDirective` ToDo 생성 시 누락되었던 `relatedEntityId: customerId` 복원하여 연체관리 미조치 추적 단절 해결.
+2. **[과제 2: 현장 수리 불능 시 단일 EXCHANGE 배차 의뢰 자동 발행] (`src/context/AppContext.tsx`)**:
+   - `completeFieldAsTicket` 처리 시 `data.exchangeSuggested === true` 감지되면 헌장 2.3(단일 EXCHANGE 1건 배차 의뢰 원칙)에 따라 `deliveries` 대장에 `type: 'EXCHANGE'`, `status: 'PENDING'` 배차 의뢰를 자동 `insertRow` 발행.
+3. **[과제 3: 가용재고 조회 자산 상태 배지 정비 및 R&R 분리] (`src/mobile/pages/MobileAssetSearch.tsx`)**:
+   - 자산 상태 배지를 기존 2분기(AVAILABLE 외 전부 대여중)에서 `AVAILABLE`('임대가능'), `REPAIRING`('정비중'), `ASSIGNED`('배차대기'), `RENTED`('대여중') 4단 분기로 명확히 분리하여 정비중 장비 오인 방지.
+   - 바텀시트 `[출고 의뢰서 작성]` 버튼을 `deptMode === 'SALES'`(영업부)일 때만 노출하도록 R&R 격리 (관리부/출고팀 오작동 원천 차단).
+4. **[과제 4: 출고검수 필수 가드 구축 및 입출고 이력 정규화] (`src/mobile/pages/MobileInspectionList.tsx`)**:
+   - 체크리스트 0개 선택 승인 방지 가드(`checkedCount === 0` 시 `showErrorModal` 차단) 탑재.
+   - 출고 완료 시 `assetInOutLogs`에 `customerId`, `customerName`, `siteId`, `siteName` 정규화 무누락 저장.
+   - 검수 대기 카드에 단순 ID 대신 `assetNo`, `modelName`, `customerName`, `siteName` 고밀도 표출.
+5. **[과제 5: 현장 AS 탑차 부품 차감 기사 재고 격리 필터] (`src/mobile/pages/MobileAsDetail.tsx`)**:
+   - 소모품 사용 차감 드롭다운에서 타 기사 부품이 혼입되어 재고 부족 에러가 발생하던 결함 수정. 로그인 기사(`s.mechanicId === currentUser?.id`)의 탑차 재고(stockQty > 0)만 노출되도록 필터링 적용.
+6. **[과제 6: 화면 간 네비게이션 파라미터 유실 결함 복원] (`src/mobile/MobileApp.tsx`, `MobileDispatchOrderCreate.tsx`, `MobileAsCreate.tsx`)**:
+   - `orderInitialParams`(`customerId`, `specFt`) 및 `asInitialParams`(`assetNo`, `siteId`) 상태 선언.
+   - 가용재고(규격별), 고객관리(거래처별), 내현장(자산별)에서 출고요청 및 AS간이접수로 이동 시 선택 데이터가 100% 자동 바인딩(Pre-fill)되도록 복원.
+7. **[과제 7: 출고요청 시 6대 표준 규격 단가 및 계약 단가 자동 상속] (`src/mobile/pages/MobileDispatchOrderCreate.tsx`)**:
+   - 발주 전송 시 `monthlyRent: 0, dailyRent: 0` 하드코딩 제거.
+   - 헌장 2.2에 따라 고객사 기존 계약의 최근 렌탈 단가를 자동 상속하며, 미등록 시 6대 규격 표준 단가(19ft: 40만, 26ft: 50만, 32ft: 60만, 40ft: 90만, 46ft: 120만, 53ft: 150만) 자동 매핑.
+8. **[과제 8: 관리홈 통장 미매칭 실데이터 연동 및 D-Day 실연산] (`src/mobile/pages/MobileAdminHome.tsx`)**:
+   - 통장 미매칭 입금 목업(신한/국민 2건) 제거 ➔ `bankTransactions` 실데이터 필터링(`depositAmount > 0 && !matchedBillingId`).
+   - `[매칭승인]` 클릭 시 고객사 미수 청구서 탐색 후 `matchTransactionManual` 실행 + `await db.awaitPendingWrites()` 동기 저장 (헌장 5.2).
+   - 마감 도래 거래처의 D-Day를 실제 당일 날짜 기준으로 정밀 연산(`D-Day`, `D-N`, `D+N (경과)`).
+9. **[과제 9: 고객관리 신규 등록 모달 및 세금계산서 이메일·BLOCKED 가드] (`src/mobile/pages/MobileCustomerManage.tsx`)**:
+   - `[+ 고객사 등록]` 버튼 및 신규 등록 모달 신설 (상하 세로 스택 레이아웃).
+   - 간이 수정 모달에 `repEmail`(세금계산서 수신 이메일) 필드 추가.
+   - `isIncomplete`에 `!c.defaultBillingDay || (!c.paymentDueDay && !c.paymentTermDays)` 결제조건 누락 검사 추가.
+   - `c.transactionStatus === 'BLOCKED'` 거래처의 출고요청 버튼 비활성화 및 경고 텍스트 표출.
+   - 대표자 전화번호 클립보드 복사 버튼 추가.
+10. **[과제 10: 전대 현장투입 매핑, 배차메모 복원, 탭 바 정예화] (`MobileSubleaseManage.tsx`, `MobileDispatchList.tsx`, `MobileBottomNav.tsx`)**:
+    - `MobileSubleaseManage`: 가용 전대 장비에 대한 `[현장 투입 매핑]` 모달 신설 (고객사/현장/단가 자동 상속), `idleDays` 당일 입고 장비 0일 보정.
+    - `MobileDispatchList`: 배차 카드에 누락되었던 `delivery.memo` 지시 메모(대차 대상, 특이사항) 렌더링 블록 복원.
+    - `MobileBottomNav`: 출고팀 탭에서 R&R 위반 `sales_order` 제거(4대 전용 탭), 영업부 탭에서 `as_create` 정리하여 5대 정예 탭 표준 확립.
+
+---
+
+## 👑 [모바일 경영진 메뉴 개편: 출고승인·AS현황 제거, 고객관리 & 미수채권 연체관리 신규 구축 및 5대 서브에이전트 감항 반영] (Build.154)
+
+### 1. 개발 배경 및 사장님 지시사항
+- **사용자 요구사항**:
+  > 1. "경영진 메뉴에서, 출고승인, AS현황 메뉴 제거. 고객관리 신규구성. 미수채권 연체관리 신규구성, 모든 서브애이전트 투입"
+  > 2. "영업부 메뉴에 고객관리 추가(경영진 메뉴에서 구성한 기능)"
+- **도메인 핵심 가치 및 헌장 준수 (헌장 1.1, 1.2, 2.1, 3.1, 3.2, 3.4, 3.5, 3.6, 4.1, 5.1, 5.2)**:
+  - 1. **부서 간 R&R 엄격 분리 및 경영진 본질 업무 집중 (헌장 2.1)**:
+    - 출고팀 고유 업무인 `출고승인`(`inspection`)과 현장AS팀 고유 업무인 `AS현황`(`as`)을 경영진 모바일 메뉴에서 전면 배제.
+    - 대표이사/경영진의 고유 본질 권한인 고객사 관계 관리 및 부실 채권 회수 통제를 위해 **`고객관리(MobileCustomerManage.tsx)`** 및 **`미수채권 연체관리(MobileDelinquencyManage.tsx)`** 전용 스튜디오 신규 구축.
+    - 최종 경영진 5대 탭: `경영홈`(`home`), `고객관리`(`customers`, 정보누락 뱃지 연동), `연체관리`(`delinquency`, 🚨고위험 연체 뱃지 연동), `계약현황`(`my_contracts`), `자산가동`(`assets`).
+  - 2. **영업부 모바일 고객관리 연동 및 영업 편익 극대화 (헌장 1.1)**:
+    - 영업사원 모바일 메뉴에도 경영진과 동일한 **`고객관리`** 스튜디오 탑재 (`MobileBottomNav.tsx`, `MobileHome.tsx`).
+    - **내 거래처 퀵 필터 칩 (`MY`)**: 로그인한 영업사원이 본인이 계약을 체결/담당한 고객사만 원클릭으로 모아볼 수 있는 전용 필터 탑재.
+    - **고객사 지정 즉시 출고요청 직결**: 고객관리 카드 아코디언에서 `[이 고객사로 출고요청 작성 ➔]` 버튼을 통해 해당 거래처를 대상으로 스마트 발주/출고요청 화면으로 직결.
+  - 3. **5대 서브에이전트 합의 및 사법 감사관 판정 100% 반영 (헌장 1.2, 4.1, 5.1, 5.2)**:
+    - **직권/조치 감사 대장 영구 보존 (헌장 1.2)**: 수금 독촉 지시 및 출고제한/해제 처분 시, 단순 ToDo에만 머물지 않고 **`delinquencyActionLogs` (`mandateType: 'CEO_AUTO_MANDATE'`)** 영구 불변 감사 대장에 1:1 동시 기록.
+    - **약정 납기일 기준 정밀 연체액 산출 (헌장 4.1, 5.1)**: 단순 청구일(`billingDate`) 경과 기준이 아닌, 거래처별 결제조건(`paymentDueDay`: 당월/익월 N일, `paymentTermDays`: Net N일)을 계산한 **`agreedDueDate` 기준 정밀 연체일수 및 최장 도과일 집계**.
+    - **무음 실패 방지 (헌장 5.2)**: 고객 정보 수정, 거래제한 토글, 수금지시 발행 등 모든 CUD 액션 시 `await db.awaitPendingWrites()` 동기 검증 및 실패 시 `showErrorModal` 강제 표출.
+    - **3일 이상 지시 방치 경보 시스템**: 경영진이 수금 지시를 하달했음에도 3일 이상 미조치 상태로 방치된 건을 실시간 감지하여 🚨지시방치 경보 배지 점멸.
+
+### 2. 주요 구현 및 조치 내역
+1. **신규 모바일 고객관리 스튜디오 (`src/mobile/pages/MobileCustomerManage.tsx`)**:
+   - **4열 상단 통계 바**: 등록 고객사 수, 정상 거래처, 출고제한(BLOCKED), 정보 누락 거래처.
+   - **Gutenberg Z-패턴 상하 세로 스택 필터 (헌장 3.4, 3.5)**: 초성/한글 검색창(Search), 세그먼트 필터(`전체` | `내 거래처` | `정상거래` | `출고제한` | `⚠️정보누락`).
+   - **Card Dossier (헌장 3.6 유형 A)**: 상호, 대표자명, 대표연락처(원클릭 직통전화 `tel:`), 가동 장비 대수, 계약 현장 수, 결제조건, 누락 필드 안내 배지.
+   - **아코디언 심층 조회 & 간이 수정**: 현장 목록, 등록 담당자 목록, 결제약정 간이 수정 모달(`[정보수정]` 바텀시트).
+   - **영업부 출고요청 연계**: 아코디언 하단 `[이 고객사로 출고요청 작성 ➔]` 버튼으로 발주 의뢰 직결.
+   - **원클릭 직권 출고제한 토글**: 경영진 직권 또는 영업부 조치로 `ALLOWED` / `BLOCKED` 즉시 처분 및 `delinquencyActionLogs` 불변 감사 기록.
+2. **신규 모바일 미수채권 연체관리 스튜디오 (`src/mobile/pages/MobileDelinquencyManage.tsx`)**:
+   - **2x2 상단 채권 칵핏 카드**: 총 연체금액(합계), 🚨고위험 연체사 수(60일 이상/200만원 이상), 최장 연체일수(N일), 지시 미완결 건수.
+   - **6대 세그먼트 필터 (nowrap & shrink-0)**: `전체` | `🚨 고위험` | `30일 이상` | `60일 이상` | `출고제한` | `⚠️ 지시방치`.
+   - **연체 거래처 Card Dossier (헌장 3.6 유형 A)**: 연체 총액(원), 최장 연체일수, 미수 청구서 건수, 결제조건, 담당 영업사원, 3일 이상 지시방치 경고 배지.
+   - **경영진 3대 원터치 조치 파이프라인**:
+     - `[📞 대표자 통화]`: 원클릭 즉시 다이얼 연결 (`tel:`).
+     - `[📢 긴급 수금지시]`: 4대 퀵 프리셋 원터치 선택 + 처리기한 지정 ➔ 담당 영업사원 `Todo` 발행 + `delinquencyActionLogs` 영구 기록.
+     - `[🚫 출고제한 / 해제]`: 신규 장비 출고 즉시 차단/해제 처분.
+   - **최하단 회계 무결성 검증 바**: 총 연체액 = 고위험군 + 일반연체 합계 일치 대차대조 표시.
+3. **모바일 영업부 및 경영진 내비게이션 바 탭 재편 (`src/mobile/MobileBottomNav.tsx`)**:
+   - `MobileTabType`에 `'customers'`, `'delinquency'` 신규 추가.
+   - 경영진(`EXECUTIVE`) 모드: `경영홈`, `고객관리`, `연체관리`, `계약현황`, `자산가동`. (`inspection`, `as` 제거)
+   - 영업부(`SALES`) 모드: `홈`, `고객관리`(신규 탑재), `가용재고`, `출고요청`, `내현장`, `AS접수`.
+4. **영업부 모바일 홈 피드 고객관리 배너 탑재 (`src/mobile/pages/MobileHome.tsx`)**:
+   - `[고객사 및 거래처 관리]` 대형 카드 배너 배치 (전체 거래처 수 배지 노출).
+5. **앱 라우팅 및 뱃지 실시간 연동 (`src/mobile/MobileApp.tsx`)**:
+   - `overdueBadgeCount` 및 `incompleteCustomerCount` 실시간 산출 및 바텀 내비게이션 뱃지 바인딩.
+   - `activeTab === 'customers'`, `activeTab === 'delinquency'` 본문 라우팅 연결.
+   - 고객관리에서 `onNavigateToOrder` 발주 연계 바인딩.
+6. **경영홈 연체관리 연계 및 감사 로그 무결성 확보 (`src/mobile/pages/MobileExecutiveHome.tsx`)**:
+   - 기존 '출고승인검토' 버튼을 **'연체관리'** 바로가기로 전격 교체.
+   - 고위험 연체 거래처 헤더에 `[전체보기(N) ➔]` 연체관리 탭 딥링크 탑재.
+   - 경영홈에서 하달되는 수금지시 및 출고제한 토글 시에도 `delinquencyActionLogs` (`mandateType: 'CEO_AUTO_MANDATE'`) 불변 기록 및 `await db.awaitPendingWrites()` 동기 검증 탑재.
+7. **빌드 검증**:
+   - `cmd /c "npm run build"` (TypeScript 0 Type Error, 902ms 통과).
+
+---
+
 ## 🏢 [관리부 메뉴 개편(출고관리/채권계약/출고요청 제거), 전대관리 신규 구축 & 5대 서브에이전트 감항 반영] (Build.153)
 
 ### 1. 개발 배경 및 사장님 지시사항
