@@ -1,3 +1,53 @@
+## [v1.3.0.Build.148] - 2026-09-05 10:28
+
+### 📱 모바일 전 메뉴 WTT 전수 기획·감사 심판 및 상위 5대 핵심 파이프라인 즉각 개편
+- **[개편 항목 1 - 데이터 영구 유실 박멸] `MobileAsDetail.tsx` 고객 서명(`customerSignature`) DB 전달 복구 및 조치 종결 유형 3단 세그먼트 UI 탑재**:
+  - 현장 기사가 고객에게 직접 수령한 전자서명이 `completeFieldAsTicket` 호출 객체에 누락되어 DB로 전송되지 않고 영구 증발하던 치명적 결함 복구 (`customerSignature` 무누락 전달).
+  - 조치 종결 유형 3단 세그먼트 버튼 (`수리 완료` | `재방문 필요` | `유선 안내`) 신설.
+  - `재방문 필요` 선택 시: 재방문 사유(`revisitReason`) 필수 입력, 재방문 예정일(`revisitDate`) 선택, 동급 장비 대차(교환) 필요 토글(`exchangeSuggested`) 연동.
+  - 브라우저 기본 `alert()` 퇴출 및 부드러운 화면 전환.
+- **[개편 항목 2 - 데이터 유실 방지 & 헌장 1.2 무누락 저장] `MobileInspectionList.tsx` 10대 검수 체크리스트 & 4방향 외관 사진 `specsJson` DB 영구 보존 + `assetInOutLogs` 출고 이벤트 기록 + `alert()` 퇴출**:
+  - 10개 점검 항목 체크 결과(`checkedList`)와 외관 4방향 사진 배열(`photos`)이 승인 시 DB 어디에도 저장되지 않고 버려지던 버그 수정 ➔ `specsJson`에 JSON 직렬화하여 무누락 영구 보존.
+  - 자산 상태 `RENTED` 전환 시(헌장 1.3), `assetInOutLogs`에 `type: 'OUTBOUND'` 이벤트 로그를 1:1로 영구 기록하여 추적성 무결성 확보 (헌장 1.2).
+  - 브라우저 `alert()` 전면 퇴출 및 인앱 피드백 배너(`successToast`) 탑재.
+- **[개편 항목 3 - 전사 헌장 2.3 준수] `MobileDispatchOrderCreate.tsx` 모바일 단일 'EXCHANGE' (대차/교체 왕복 배차) 의뢰 모드 신설**:
+  - 기존 `DISPATCH`(출고)와 `RETURN`(회수)의 이분법으로 인해 현장 장비 교체 시 출고 1건 + 회수 1건으로 쪼개서 발주해야 했던 중대 결함 해결.
+  - 3대 모드(`출고 의뢰` | `회수 의뢰` | `대차 교체`) 탭 신설.
+  - `EXCHANGE` 모드 시 현장 가동 장비 중 회수 대상 1대 선택 + 투입 요구 신장비 규격 1대 지정 ➔ `contractHistory`에 `changeType: 'EXCHANGE'`(기존 계약 조건 100% 자동 상속 - 헌장 2.2) 기록 + `deliveries`에 `type: 'EXCHANGE'`, `dispatchCategory: '교환'` 단일 왕복 배차 1건 자동 발행 (헌장 2.3).
+  - 헌장 3.1 무수식어 건조 표준: 괄호 설명 문구 전면 정돈.
+- **[개편 항목 4 - 자산 상태 왜곡 방지 & 헌장 5.2 무음 실패 차단] `AppContext.tsx` `saveSmartReturn` 비동기 개편 및 `await db.awaitPendingWrites()` 동기 검증 탑재 + 자산 상태 조기 변경 버그 제거**:
+  - 회수 배차 의뢰(REQUESTED) 단계에서 자산 상태를 `RENTED_RETURNED`로 미리 바꾸고 허위 입고 로그를 기록하던 결함 원천 제거 (실제 입고 검수 완료 시점까지 자산 상태 유지 - 헌장 1.2, 1.3).
+  - `saveSmartReturn`을 `async` 함수로 전면 개편하고 `await db.awaitPendingWrites()` 동기 대기 검증을 탑재하여 회수 의뢰 무음 실패(Silent Swallow) 원천 차단 (헌장 5.2).
+- **[개편 항목 5 - 헌장 1.1 최소 조작 최대 편익 & 헌장 5.3 SSOT] `MobileAssetSearch.tsx` 가용 재고 바텀시트 ➔ 출고 의뢰서 1-Click 연계 탑재 및 표준 규격 정규식 보강**:
+  - 가용 재고 바텀시트 하단에 `[${selectedSpec.ft} 출고 의뢰서 작성 ➔]` 버튼을 신설하여, 재고를 확인한 영업사원이 단 1번의 터치로 출고 의뢰 작성 화면(`sales_order`)으로 규격을 자동 상속받아 직통 이동하도록 연동 (`MobileApp.tsx` 네비게이션 연계).
+  - 3일 이내 반납 예정 장비 카운트 시 이미 반납된 장비(`status === 'RETURNED'` 또는 `actualReturnDate`) 제외 필터 적용.
+  - 6대 높이 규격 프리셋 정규식 전수 보강 (`0608`, `1230`, `2646`, `1008`, `4069`, `4655` 등 누락 모델 완비).
+
+## [v1.3.0.Build.147] - 2026-09-05 10:20
+
+### 📍 모바일 AS 출동티켓 카드 현장 상세주소 & 현장 담당자 정보/원터치 통화 탑재
+- **7단계 데이터 역추적 무누락 도로명 상세 주소 표출 (`MobileAsList.tsx`)**:
+  - AS 티켓에 주소나 담당자 정보가 직접 기재되지 않은 과거 데이터나 간이 접수 건도 계약(`contracts`), 현장(`sites`), 고객사(`customers`) 마스터 데이터로부터 도로명 상세 주소와 담당자 연락처를 7단계 체인으로 자동 역추적(`resolveSiteDetailedAddress`)하여 100% 무누락 표출.
+  - `MapPin` 아이콘 + 도로명 주소 + `locationDetail`(예: `[지하 1층 B구역]`) 뱃지 결합 표출.
+- **현장 담당자 성함/연락처 & 원터치 직통 통화 연동 (`MobileAsList.tsx`)**:
+  - `reporterName`/`contactName` 및 `reporterContact`/`contactPhone` 표출, 초록색 테마의 `[📞 통화]` 원터치 버튼 제공 (`e.stopPropagation()` 적용 및 `safePhoneCall` 직결).
+- **검색 필터 다크모드 인라인 스타일링 및 전방위 검색 확장 (`MobileAsList.tsx`)**:
+  - 상단 검색창에 모바일 다크 배경(`backgroundColor: '#090d16'`, `color: '#f8fafc'`) 인라인 스타일 주입으로 White-on-White 원천 차단.
+  - 도로명 상세 주소, 상세 위치, 현장 담당자명, 연락처까지 실시간 전방위 검색 지원.
+
+## [v1.3.0.Build.146] - 2026-09-05 10:18
+
+### 🚚 모바일 AS팀 검수지원 제거 & 본인차량 소모품재고 조회 및 5대 재고 처리 파이프라인 구축
+- **부서 간 R&R 분리 (헌장 2.1) 및 AS 탭 재편 (`MobileBottomNav.tsx`, `MobileApp.tsx`)**:
+  - 출고/입고 검수는 출고/자산팀 고유 권한이므로 외근 현장 정비가 주 임무인 AS팀 모바일 메뉴에서 '검수지원'을 완전히 제거하고 `차량재고`(`vehicle_stock`) 탭 신설.
+- **외근 AS 기사 본인 탑차(서비스 밴) 소모품 재고 스튜디오 신설 (`MobileVehicleStock.tsx`)**:
+  - 상단 탑차 요약 대시보드: 기사명 식별 배너, 적재 품목 수, 총 보유 수량, 적재 자산가치 카드.
+  - 고밀도 부품 카드 리스트: 부품명, 단가, 차량 보유 수량, 본사 창고 보유 수량 병기, `[+ 보충]`, `[- 반납]`, `[⚡ 소모]`, `[실사]` 원터치 버튼.
+  - 5대 차량 재고 처리 유형 탑재: `보충 수령 (HQ➔차량)`, `본사 반납 (차량➔HQ)`, `현장 소모 (차량➔현장)`, `고품 회수 (현장➔차량)`, `실사 보정 (오차 조정)`.
+  - 동기 저장(`await db.awaitPendingWrites()`) 및 타임라인 수불 이력 관리.
+- **무전기 STT 벤치마크 및 기술 검토 보고서 영구 보존 (`docs/WALKIE_TALKIE_STT_BENCHMARK.md`)**:
+  - Deepgram, Cloudflare Workers AI Whisper, Groq LPU Whisper, OpenAI Whisper API 4대 엔진 비교 벤치마크 및 채택/탈락 사유, 장비 모델명 알파벳 처리 프롬프트 가이드 문서화.
+
 ## [v1.3.0.Build.145] - 2026-09-05 10:15
 
 ### 🛠️ 모바일 AS접수 다크모드 색상 결함 해결 & 스마트폰 앨범 사진 첨부 기능 복원

@@ -1,6 +1,6 @@
 // src/mobile/MobileBottomNav.tsx
 import React from 'react';
-import { Home, Wrench, Truck, CheckSquare, Search, Send, Building2, PlusCircle } from 'lucide-react';
+import { Home, Wrench, Truck, CheckSquare, Search, Send, Building2, PlusCircle, Boxes } from 'lucide-react';
 import { MobileDeptMode } from './MobileHeader';
 
 export type MobileTabType = 
@@ -11,7 +11,8 @@ export type MobileTabType =
   | 'as_create' 
   | 'as' 
   | 'dispatch' 
-  | 'inspection';
+  | 'inspection'
+  | 'vehicle_stock';
 
 interface MobileBottomNavProps {
   deptMode: MobileDeptMode;
@@ -43,12 +44,12 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
       { id: 'as_create', label: 'AS접수', icon: PlusCircle, badge: 0 },
     ];
   } else if (deptMode === 'AS') {
-    // 🔧 AS팀 모바일 탭
+    // 🔧 AS팀 모바일 탭 (검수지원 제거 ➔ 차량 소모품재고 신설)
     navItems = [
       { id: 'home', label: '홈', icon: Home, badge: 0 },
       { id: 'as', label: '출동티켓', icon: Wrench, badge: pendingAsCount },
       { id: 'as_create', label: 'AS신규', icon: PlusCircle, badge: 0 },
-      { id: 'inspection', label: '검수지원', icon: CheckSquare, badge: pendingInspectionCount },
+      { id: 'vehicle_stock', label: '차량재고', icon: Boxes, badge: 0 },
       { id: 'assets', label: '가용자산', icon: Search, badge: 0 },
     ];
   } else if (deptMode === 'OUTBOUND') {

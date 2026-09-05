@@ -203,7 +203,7 @@ interface AppContextType {
   batchUnassignAssetsFromContract: (contractAssetIds: string[]) => Promise<void>;
   exchangeOutboundAsset: (contractAssetId: string, oldAssetId: string, newAssetId: string, reason?: string, markOldAsRepairing?: boolean, customPenaltyScore?: number) => Promise<void>;
   saveSmartDispatch: (data: SmartDispatchData, autoRegister: boolean, onProgress?: (log: string, percent: number) => void) => Promise<{ success: boolean; requiresConfirm?: boolean; missingFields?: string[]; errorMessage?: string; contractId?: string; contractNo?: string }>;
-  saveSmartReturn: (data: SmartReturnData) => void;
+  saveSmartReturn: (data: SmartReturnData) => Promise<any>;
   
   // Todos
   completeTodo: (todoId: string) => void;
@@ -1321,138 +1321,118 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return { success: true, contractId: contract.id, contractNo: contract.contractNo };
   };
 
-  const saveSmartReturn = (data: SmartReturnData) => {
-    if (data.contractId) {
-      const contract = db.contracts.find(c => c.id === data.contractId);
-      if (!contract) return;
+  const saveSmartReturn = async (data: SmartReturnData) => {
+    try {
+      if (data.contractId) {
+        const contract = db.contracts.find(c => c.id === data.contractId);
+        if (!contract) return { success: false, errorMessage: '계약 정보를 찾을 수 없습니다.' };
 
-      db.updateRow<Contract>('contracts', data.contractId, {
-        endDate: data.returnDate,
-        status: 'SHORTENED',
-        updatedAt: new Date().toISOString()
-      });
-
-      // 새로운 고객담당자(처음 등장하는 사람)라면 자동 등록!
-      if (data.contactName) {
-        const existingContact = db.contacts.find(ct => ct.customerId === contract.customerId && ct.name.replace(/\s/g, '') === data.contactName!.replace(/\s/g, ''));
-        if (!existingContact) {
-          db.insertRow<CustomerContact>('contacts', {
-            customerId: contract.customerId,
-            name: data.contactName,
-            position: '담당자',
-            contact: data.contactPhone || '미상',
-            email: '미상',
-            createdAt: new Date().toISOString()
-          });
+        // 새로운 고객담당자(처음 등장하는 사람)라면 자동 등록!
+        if (data.contactName) {
+          const existingContact = db.contacts.find(ct => ct.customerId === contract.customerId && ct.name.replace(/\s/g, '') === data.contactName!.replace(/\s/g, ''));
+          if (!existingContact) {
+            db.insertRow<CustomerContact>('contacts', {
+              customerId: contract.customerId,
+              name: data.contactName,
+              position: '담당자',
+              contact: data.contactPhone || '미상',
+              email: '미상',
+              createdAt: new Date().toISOString()
+            });
+          }
         }
-      }
 
-      data.assetIds.forEach(assetId => {
-        const ca = db.contractAssets.find(c => c.contractId === data.contractId && c.assetId === assetId);
-        if (ca) {
-          db.updateRow<ContractAsset>('contractAssets', ca.id, {
-            endDate: data.returnDate
-          });
-        }
-        db.updateRow<Asset>('assets', assetId, {
-          status: 'RENTED_RETURNED',
-          contractEnd: data.returnDate,
-          updatedAt: new Date().toISOString()
-        });
-
-        const targetAsset = db.assets.find(a => a.id === assetId);
-        // 자산 입출고/반납 이력 자동 기록
-        db.insertRow<AssetInOutLog>('assetInOutLogs', {
-          assetId: assetId,
-          assetNo: targetAsset?.assetNo || '',
-          modelName: targetAsset?.modelName || '',
-          type: 'INBOUND',
-          eventDate: data.returnDate || new Date().toISOString().split('T')[0],
-          memo: `[스마트반납 완료] 계약번호(${contract.contractNo}) 현장 반납 입고 완료`,
+        // 💡 헌장 1.2 & 1.3 준수:
+        // 회수 배차 의뢰 단계에서는 현장 장비의 실제 가동 상태를 조기 종료하거나 RENTED_RETURNED로 바꾸지 않음.
+        // 자산 상태는 실제 운송 및 입고 검수가 완료되는 시점에 전환됨.
+        // 다만 의뢰 이력 관리를 위해 contractHistory에 회수 의뢰 접수 이력만 기록.
+        db.insertRow<ContractHistory>('contractHistory', {
+          contractId: data.contractId,
+          changeType: 'SHORTEN',
+          changeDate: new Date().toISOString().split('T')[0],
+          prevEndDate: contract.endDate,
+          newEndDate: data.returnDate,
+          description: `스마트 회수 의뢰 접수 (회수 대상: ${data.assetIds.length}대, 희망일: ${data.returnDate})`,
           createdAt: new Date().toISOString()
         });
-      });
 
-      db.insertRow<ContractHistory>('contractHistory', {
-        contractId: data.contractId,
-        changeType: 'SHORTEN',
-        changeDate: new Date().toISOString().split('T')[0],
-        prevEndDate: contract.endDate,
-        newEndDate: data.returnDate,
-        description: `스마트 회수 등록 (회수 자산: ${data.assetIds.length}대)`,
-        createdAt: new Date().toISOString()
-      });
+        const contactInfoMemo = data.contactName || data.contactPhone
+          ? `[고객담당자: ${data.contactName || '-'} (${data.contactPhone || '-'})] `
+          : '';
+        const cust = db.customers.find(c => c.id === contract.customerId);
+        const site = db.sites.find(s => s.id === contract.siteId);
+        const returnAssets = db.assets.filter(a => data.assetIds.includes(a.id));
+        const modelCountsMap: Record<string, number> = {};
+        returnAssets.forEach(a => {
+          modelCountsMap[a.modelName] = (modelCountsMap[a.modelName] || 0) + 1;
+        });
+        const cargoItems = JSON.stringify(Object.entries(modelCountsMap).map(([modelName, count]) => ({ modelName, count })));
 
-      const contactInfoMemo = data.contactName || data.contactPhone
-        ? `[고객담당자: ${data.contactName || '-'} (${data.contactPhone || '-'})] `
-        : '';
-      const cust = db.customers.find(c => c.id === contract.customerId);
-      const site = db.sites.find(s => s.id === contract.siteId);
-      const returnAssets = db.assets.filter(a => data.assetIds.includes(a.id));
-      const modelCountsMap: Record<string, number> = {};
-      returnAssets.forEach(a => {
-        modelCountsMap[a.modelName] = (modelCountsMap[a.modelName] || 0) + 1;
-      });
-      const cargoItems = JSON.stringify(Object.entries(modelCountsMap).map(([modelName, count]) => ({ modelName, count })));
+        db.insertRow<Delivery>('deliveries', {
+          contractId: data.contractId,
+          assetIds: data.assetIds.join(','),
+          type: 'INBOUND',
+          dispatchCategory: '입고',
+          status: 'REQUESTED',
+          requestDate: data.returnDate,
+          loadingDate: data.returnDate,
+          loadingTimeSlot: data.loadingTime || '오전',
+          scheduledDate: data.returnDate,
+          unloadingDate: data.returnDate,
+          unloadingTimeSlot: data.loadingTime || '오전',
+          originAddress: `${cust?.name || '고객사'} (${site?.name || '현장'})`,
+          destinationAddress: '당사 보관소',
+          transportCompany: '',
+          vehicleType: '',
+          vehicleNo: '',
+          driverName: '',
+          driverContact: '',
+          deliveryCost: 0,
+          expectedCost: 0,
+          finalCost: 0,
+          reconciliationStatus: 'PENDING',
+          cargoItems,
+          isCostSettled: false,
+          memo: `${contactInfoMemo}${data.note || ''}`,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        });
+      } else {
+        // Case 4: 외주정비 회수
+        db.insertRow<Delivery>('deliveries', {
+          assetIds: data.assetIds.join(','),
+          type: 'INBOUND',
+          dispatchCategory: '입고',
+          status: 'REQUESTED',
+          requestDate: data.returnDate,
+          loadingDate: data.returnDate,
+          loadingTimeSlot: data.loadingTime || '오전',
+          scheduledDate: data.returnDate,
+          unloadingDate: data.returnDate,
+          unloadingTimeSlot: data.loadingTime || '오전',
+          originAddress: '외주정비업체',
+          destinationAddress: '당사 보관소',
+          transportCompany: '',
+          vehicleType: '',
+          vehicleNo: '',
+          driverName: '',
+          driverContact: '',
+          deliveryCost: 0,
+          isCostSettled: false,
+          memo: `[외주정비회수] 정비건: ${data.repairId || '-'} / 외주업체: ${data.vendorId || '-'} | ${data.note || ''}`,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        });
+      }
 
-      db.insertRow<Delivery>('deliveries', {
-        contractId: data.contractId,
-        assetIds: data.assetIds.join(','),
-        type: 'INBOUND',
-        dispatchCategory: '입고',
-        status: 'REQUESTED',
-        requestDate: data.returnDate,
-        loadingDate: data.returnDate,
-        loadingTimeSlot: data.loadingTime || '오전',
-        scheduledDate: data.returnDate,
-        unloadingDate: data.returnDate,
-        unloadingTimeSlot: data.loadingTime || '오전',
-        originAddress: `${cust?.name || '고객사'} (${site?.name || '현장'})`,
-        destinationAddress: '당사 보관소',
-        transportCompany: '',
-        vehicleType: '',
-        vehicleNo: '',
-        driverName: '',
-        driverContact: '',
-        deliveryCost: 0,
-        expectedCost: 0,
-        finalCost: 0,
-        reconciliationStatus: 'PENDING',
-        cargoItems,
-        isCostSettled: false,
-        memo: `${contactInfoMemo}${data.note || ''}`,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      });
-    } else {
-      // Case 4: 외주정비 회수
-      db.insertRow<Delivery>('deliveries', {
-        assetIds: data.assetIds.join(','),
-        type: 'INBOUND',
-        dispatchCategory: '입고',
-        status: 'REQUESTED',
-        requestDate: data.returnDate,
-        loadingDate: data.returnDate,
-        loadingTimeSlot: data.loadingTime || '오전',
-        scheduledDate: data.returnDate,
-        unloadingDate: data.returnDate,
-        unloadingTimeSlot: data.loadingTime || '오전',
-        originAddress: '외주정비업체',
-        destinationAddress: '당사 보관소',
-        transportCompany: '',
-        vehicleType: '',
-        vehicleNo: '',
-        driverName: '',
-        driverContact: '',
-        deliveryCost: 0,
-        isCostSettled: false,
-        memo: `[외주정비회수] 정비건: ${data.repairId || '-'} / 외주업체: ${data.vendorId || '-'} | ${data.note || ''}`,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      });
+      await db.awaitPendingWrites();
+      refreshAllData();
+      return { success: true };
+    } catch (err: any) {
+      console.error('saveSmartReturn error:', err);
+      showErrorModal(`회수 의뢰 저장 실패:\n${err?.message || err}`);
+      return { success: false, errorMessage: err?.message || String(err) };
     }
-
-    refreshAllData();
   };
 
   const completeTodo = (todoId: string) => {

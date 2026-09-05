@@ -14,6 +14,7 @@ import { MobileInspectionList } from './pages/MobileInspectionList';
 import { MobileAssetSearch } from './pages/MobileAssetSearch';
 import { MobileDispatchOrderCreate } from './pages/MobileDispatchOrderCreate';
 import { MobileMyContracts } from './pages/MobileMyContracts';
+import { MobileVehicleStock } from './pages/MobileVehicleStock';
 import { PwaInstallBanner } from './components/PwaInstallBanner';
 import { MobileWalkieTalkieModal } from './components/MobileWalkieTalkieModal';
 import { MobileGemsAgentModal } from './components/MobileGemsAgentModal';
@@ -200,8 +201,14 @@ export const MobileApp: React.FC<MobileAppProps> = ({ onSwitchToPc }) => {
           <MobileDispatchList />
         ) : activeTab === 'inspection' ? (
           <MobileInspectionList />
+        ) : activeTab === 'vehicle_stock' ? (
+          <MobileVehicleStock />
         ) : (
-          <MobileAssetSearch />
+          <MobileAssetSearch
+            onNavigateToOrder={(_specFt) => {
+              handleTabChange('sales_order');
+            }}
+          />
         )}
       </main>
 

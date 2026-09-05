@@ -16,6 +16,7 @@ import {
   VoiceOrderDraft, 
   EquipmentOrderItem 
 } from '../../services/voiceOrderDraftService';
+import { db, ContractHistory, Delivery } from '../../services/db';
 
 interface MobileDispatchOrderCreateProps {
   onBack: () => void;
@@ -46,11 +47,11 @@ const inferFeetFromModel = (modelName: string): string => {
 export const MobileDispatchOrderCreate: React.FC<MobileDispatchOrderCreateProps> = ({ onBack, onSuccess, onOpenGems }) => {
   const { 
     customers, sites, currentUser, saveSmartDispatch,
-    contracts, contractAssets, assets, saveSmartReturn 
+    contracts, contractAssets, assets, saveSmartReturn, refreshAllData 
   } = useApp();
 
-  // 의뢰 유형 모드 (출고 DISPATCH vs 회수 RETURN)
-  const [dispatchMode, setDispatchMode] = useState<'DISPATCH' | 'RETURN'>('DISPATCH');
+  // 의뢰 유형 모드 (출고 DISPATCH vs 회수 RETURN vs 대차교체 EXCHANGE - 헌장 2.3)
+  const [dispatchMode, setDispatchMode] = useState<'DISPATCH' | 'RETURN' | 'EXCHANGE'>('DISPATCH');
 
   // 폼 상태
   const [selectedCustomerId, setSelectedCustomerId] = useState('');
@@ -576,6 +577,74 @@ export const MobileDispatchOrderCreate: React.FC<MobileDispatchOrderCreateProps>
         return;
       }
 
+      // 🔄 CASE 2: 대차/교체 의뢰 (EXCHANGE - 헌장 2.3 단일 EXCHANGE 왕복 배차 1건 발행)
+      if (dispatchMode === 'EXCHANGE') {
+        if (selectedReturnAssetIds.length === 0) {
+          showToast('교체할 기존 대여 장비를 선택해주세요.', 'error');
+          setIsSubmitting(false);
+          return;
+        }
+
+        const oldAssetId = selectedReturnAssetIds[0];
+        const oldAssetObj = assets.find(a => a.id === oldAssetId);
+        const targetContractId = siteRentedAssets.find(ra => ra.assetId === oldAssetId)?.contractId || '';
+        const targetModelName = orders[0]?.modelName || orders[0]?.ft || oldAssetObj?.modelName || '동일/동급 모델';
+
+        // 1. contractHistory 기록 (헌장 2.2 계약 속성 100% 자동 상속)
+        db.insertRow<ContractHistory>('contractHistory', {
+          contractId: targetContractId,
+          changeType: 'EXCHANGE',
+          changeDate: deliveryDate,
+          description: `[모바일 대차/교체 의뢰 접수] 회수: ${oldAssetObj?.assetNo || '미지정'}(${oldAssetObj?.modelName || '기존'}) ➔ 투입요구: ${targetModelName} (기존 계약조건 100% 자동 상속)`,
+          createdAt: new Date().toISOString()
+        });
+
+        // 2. 단일 대차 요구에 대해 'EXCHANGE' (교환 왕복 배차) 1건만 발행 (헌장 2.3)
+        const contactInfoMemo = siteContactName || siteContactPhone
+          ? `[고객담당자: ${siteContactName || '-'} (${siteContactPhone || '-'})] `
+          : '';
+
+        db.insertRow<Delivery>('deliveries', {
+          contractId: targetContractId,
+          assetIds: oldAssetId,
+          type: 'EXCHANGE',
+          dispatchCategory: '교환',
+          status: 'REQUESTED',
+          requestDate: deliveryDate,
+          scheduledDate: deliveryDate,
+          loadingDate: deliveryDate,
+          loadingTimeSlot: deliveryTime,
+          unloadingDate: deliveryDate,
+          unloadingTimeSlot: deliveryTime,
+          originAddress: `${selectedCust.name} (${finalSiteName})`,
+          destinationAddress: `${selectedCust.name} (${finalSiteName})`,
+          memo: `[모바일 대차/교환 왕복 배차] ${contactInfoMemo}회수대상: ${oldAssetObj?.assetNo || '미지정'}(${oldAssetObj?.modelName || '기존장비'}) ➔ 대차출고요구: ${targetModelName} | 사유: ${memo.trim() || '현장 고장 교체'}`,
+          vehicleType: '5톤 렉카',
+          driverName: '',
+          deliveryCost: 0,
+          expectedCost: 0,
+          finalCost: 0,
+          deliveryCostConfirmed: 0,
+          isCostSettled: false,
+          reconciliationStatus: 'PENDING',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        });
+
+        await db.awaitPendingWrites();
+        refreshAllData();
+
+        clearVoiceOrderDraft();
+        setCreatedResult({
+          isReturn: false,
+          contractNo: `대차교환 (회수:${oldAssetObj?.assetNo || '기존'} ➔ 투입:${targetModelName})`,
+          siteName: finalSiteName,
+          totalCount: 1
+        });
+        setIsSubmitting(false);
+        return;
+      }
+
       // 🚀 CASE 2: 출고의뢰 (DISPATCH)
       const totalEquipCount = orders.reduce((sum, o) => sum + o.count, 0);
       if (totalEquipCount === 0) {
@@ -709,36 +778,48 @@ export const MobileDispatchOrderCreate: React.FC<MobileDispatchOrderCreateProps>
           <span>취소</span>
         </button>
         <h2 className="text-base font-bold text-white">
-          {dispatchMode === 'RETURN' ? '모바일 장비 회수 의뢰' : '모바일 출고 의뢰'}
+          {dispatchMode === 'EXCHANGE' ? '대차 교체 의뢰' : dispatchMode === 'RETURN' ? '장비 회수 의뢰' : '출고 의뢰'}
         </h2>
         <div className="w-10" />
       </div>
 
-      {/* 🔄 모드 선택 탭 (출고 의뢰 vs 회수 의뢰) */}
-      <div className="grid grid-cols-2 gap-1.5 bg-slate-900/90 p-1 rounded-xl border border-slate-800">
+      {/* 🔄 모드 선택 탭 (출고 의뢰 vs 회수 의뢰 vs 대차 교체 - 헌장 2.3) */}
+      <div className="grid grid-cols-3 gap-1.5 bg-slate-900/90 p-1 rounded-xl border border-slate-800">
         <button
           type="button"
           onClick={() => setDispatchMode('DISPATCH')}
-          className={`py-2 rounded-lg text-xs font-black flex items-center justify-center gap-1.5 transition-all ${
+          className={`py-2 rounded-lg text-xs font-black flex items-center justify-center gap-1 transition-all ${
             dispatchMode === 'DISPATCH'
               ? 'bg-blue-600 text-white shadow-md'
               : 'text-slate-400 hover:text-white'
           }`}
         >
           <ArrowUpRight className="w-3.5 h-3.5" />
-          출고 의뢰 (DISPATCH)
+          <span>출고 의뢰</span>
         </button>
         <button
           type="button"
           onClick={() => setDispatchMode('RETURN')}
-          className={`py-2 rounded-lg text-xs font-black flex items-center justify-center gap-1.5 transition-all ${
+          className={`py-2 rounded-lg text-xs font-black flex items-center justify-center gap-1 transition-all ${
             dispatchMode === 'RETURN'
               ? 'bg-amber-600 text-white shadow-md'
               : 'text-slate-400 hover:text-white'
           }`}
         >
           <ArrowDownLeft className="w-3.5 h-3.5" />
-          회수 의뢰 (RETURN)
+          <span>회수 의뢰</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setDispatchMode('EXCHANGE')}
+          className={`py-2 rounded-lg text-xs font-black flex items-center justify-center gap-1 transition-all ${
+            dispatchMode === 'EXCHANGE'
+              ? 'bg-purple-600 text-white shadow-md'
+              : 'text-slate-400 hover:text-white'
+          }`}
+        >
+          <RotateCw className="w-3.5 h-3.5" />
+          <span>대차 교체</span>
         </button>
       </div>
 
@@ -748,7 +829,7 @@ export const MobileDispatchOrderCreate: React.FC<MobileDispatchOrderCreateProps>
           <div className="flex items-center gap-1.5">
             <Mic className="w-3.5 h-3.5 text-blue-400" />
             <span className="text-xs font-bold text-slate-200">
-              {dispatchMode === 'RETURN' ? '회수 음성/통화 입력 (임시저장)' : '출고 음성/통화 입력 (임시저장)'}
+              {dispatchMode === 'EXCHANGE' ? '대차 교체 음성 입력' : dispatchMode === 'RETURN' ? '회수 음성 입력' : '출고 음성 입력'}
             </span>
           </div>
           {hasRestoredDraft && (
@@ -770,20 +851,22 @@ export const MobileDispatchOrderCreate: React.FC<MobileDispatchOrderCreateProps>
           className={`w-full py-3 px-4 rounded-xl flex items-center justify-center gap-2 font-bold text-xs transition-all active:scale-[0.98] ${
             isListening
               ? 'bg-rose-600 text-white animate-pulse shadow-lg shadow-rose-900/50'
+              : dispatchMode === 'EXCHANGE'
+              ? 'bg-purple-600 hover:bg-purple-500 text-white shadow-md shadow-purple-900/30'
               : dispatchMode === 'RETURN'
-                ? 'bg-amber-600 hover:bg-amber-500 text-white shadow-md shadow-amber-900/30'
-                : 'bg-blue-600 hover:bg-blue-500 text-white shadow-md shadow-blue-900/30'
+              ? 'bg-amber-600 hover:bg-amber-500 text-white shadow-md shadow-amber-900/30'
+              : 'bg-blue-600 hover:bg-blue-500 text-white shadow-md shadow-blue-900/30'
           }`}
         >
           {isListening ? (
             <>
               <MicOff className="w-4 h-4" />
-              <span>듣는 중... (터치 시 완료)</span>
+              <span>음성 수신 중</span>
             </>
           ) : (
             <>
               <Mic className="w-4 h-4" />
-              <span>터치하여 말하기 (단문/조각 이어하기 가능)</span>
+              <span>음성 입력</span>
             </>
           )}
         </button>
@@ -795,7 +878,7 @@ export const MobileDispatchOrderCreate: React.FC<MobileDispatchOrderCreateProps>
           className="w-full py-2.5 px-3 rounded-xl bg-slate-800 hover:bg-slate-750 border border-slate-700 text-xs font-bold text-slate-200 flex items-center justify-center gap-1.5 transition-all active:scale-[0.98]"
         >
           <ClipboardList className="w-3.5 h-3.5 text-sky-400" />
-          <span>통화 텍스트 붙여넣기 (갤럭시 통화녹음 복사본)</span>
+          <span>통화 텍스트 붙여넣기</span>
         </button>
 
         {/* 실시간 말풍선 */}
@@ -1017,74 +1100,56 @@ export const MobileDispatchOrderCreate: React.FC<MobileDispatchOrderCreateProps>
           )}
         </div>
 
-        {/* 2. 장비 규격 및 수량 (출고 모드일 때) */}
-        {dispatchMode === 'DISPATCH' && (
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex flex-col gap-3 w-full min-w-0 max-w-full overflow-hidden">
+        {/* 1. 출고/대차 요구 장비 선택 (출고/대차 모드일 때) */}
+        {dispatchMode !== 'RETURN' && (
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex flex-col gap-3">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-emerald-400 flex items-center gap-1.5">
-                <CheckCircle2 className="w-3.5 h-3.5" />
-                출고 요청 장비 규격 (영업 R&R: 규격 의뢰)
+              <span className="text-xs font-bold text-sky-400 flex items-center gap-1.5">
+                <Truck className="w-3.5 h-3.5" />
+                {dispatchMode === 'EXCHANGE' ? '현장 투입 요구 장비 규격' : '출고 요구 장비 규격 및 수량'}
               </span>
-              <span className="text-[11px] text-slate-400 font-mono">
-                총 {orders.reduce((sum, o) => sum + o.count, 0)}대 의뢰
+              <span className="text-xs text-slate-400 font-bold font-mono">
+                총 {orders.reduce((sum, o) => sum + o.count, 0)}대
               </span>
             </div>
 
-            {/* 규격 퀵 선택 탭 - 가로 슬라이드 스크롤 */}
-            <div 
-              className="w-full min-w-0 max-w-full overflow-x-auto pb-1.5 flex items-center gap-2 scrollbar-none"
-              style={{
-                WebkitOverflowScrolling: 'touch',
-                overscrollBehaviorX: 'contain',
-                scrollSnapType: 'x proximity',
-                touchAction: 'pan-x'
-              }}
-            >
-              {SPEC_OPTIONS.map(spec => {
+            {/* 고소작업대 6대 높이 규격 탭 (19ft ~ 53ft) */}
+            <div className="grid grid-cols-6 gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800">
+              {SPEC_OPTIONS.map((spec) => {
                 const isSelected = activeFt === spec.ft;
-                const availCount = availableInventory[spec.ft]?.total || 0;
+                const specStat = availableInventory[spec.ft];
+                const totalAvail = specStat?.total || 0;
                 return (
                   <button
                     key={spec.ft}
                     type="button"
                     onClick={() => handleSelectFt(spec.ft)}
-                    className={`flex-shrink-0 flex items-center gap-2 px-3.5 py-2.5 rounded-xl border text-xs font-bold whitespace-nowrap active:scale-95 transition-all shadow-sm ${
+                    className={`py-2 flex flex-col items-center justify-center rounded-lg transition-all active:scale-95 ${
                       isSelected
-                        ? 'bg-emerald-950/60 border-emerald-500 text-white shadow-emerald-950/40 ring-1 ring-emerald-500/40'
-                        : 'bg-slate-800 border-slate-700 text-slate-300 hover:border-slate-600 hover:text-white'
+                        ? 'bg-blue-600 text-white shadow-md'
+                        : 'bg-slate-900/80 text-slate-300 hover:bg-slate-800'
                     }`}
-                    style={{ scrollSnapAlign: 'start' }}
                   >
-                    <span>{spec.ft}</span>
-                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold ${
-                      availCount > 0
-                        ? isSelected
-                          ? 'bg-emerald-600 text-white'
-                          : 'bg-emerald-950 border border-emerald-700/50 text-emerald-400'
-                        : 'bg-slate-900 text-slate-500 border border-slate-700'
+                    <span className="text-xs font-black">{spec.ft}</span>
+                    <span className={`text-[10px] font-mono mt-0.5 font-bold ${
+                      isSelected ? 'text-blue-100' : totalAvail > 0 ? 'text-emerald-400' : 'text-slate-500'
                     }`}>
-                      {availCount}대
+                      {totalAvail}대
                     </span>
                   </button>
                 );
               })}
             </div>
 
-            {/* 터치한 피트 규격의 가용 재고 모델 목록 패널 */}
-            <div className="bg-slate-950 border border-slate-800/90 rounded-xl p-3 flex flex-col gap-2.5">
+            {/* 선택된 피트의 모델 리스트 */}
+            <div className="flex flex-col gap-1.5 pt-1">
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-1.5">
-                  <span className="text-xs font-bold text-white font-mono">{activeFt}</span>
-                  <span className="text-xs text-slate-300 font-bold">재고 보유 모델</span>
-                  <span className={`text-[11px] font-bold font-mono px-1.5 py-0.5 rounded ${
-                    (availableInventory[activeFt]?.total || 0) > 0
-                      ? 'bg-emerald-950 border border-emerald-700/50 text-emerald-400'
-                      : 'bg-slate-900 text-slate-500'
-                  }`}>
-                    가용 {availableInventory[activeFt]?.total || 0}대
-                  </span>
-                </div>
-                <span className="text-[10px] text-slate-400">모델 터치 시 의뢰 추가</span>
+                <span className="text-[11px] font-bold text-slate-400">
+                  {activeFt} 가용 모델 (터치 시 목록 추가)
+                </span>
+                <span className="text-[10.5px] text-slate-500">
+                  총 {availableInventory[activeFt]?.total || 0}대 보유
+                </span>
               </div>
 
               {availableInventory[activeFt]?.models && availableInventory[activeFt].models.length > 0 ? (
@@ -1135,7 +1200,9 @@ export const MobileDispatchOrderCreate: React.FC<MobileDispatchOrderCreateProps>
 
             {/* 선택된 규격 목록 헤더 */}
             <div className="flex items-center justify-between pt-1">
-              <span className="text-xs font-bold text-slate-300">출고 의뢰 장비 목록</span>
+              <span className="text-xs font-bold text-slate-300">
+                {dispatchMode === 'EXCHANGE' ? '대차 투입 장비 목록' : '출고 의뢰 장비 목록'}
+              </span>
               <span className="text-[11px] text-slate-400">
                 {orders.length}개 모델 ({orders.reduce((sum, o) => sum + o.count, 0)}대)
               </span>
@@ -1147,18 +1214,17 @@ export const MobileDispatchOrderCreate: React.FC<MobileDispatchOrderCreateProps>
                 <div key={idx} className="p-3 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-between">
                   <div className="flex flex-col gap-0.5">
                     <div className="flex items-center gap-2">
-                      <span className="text-sm font-black text-white">{item.ft}</span>
-                      <span className="text-xs font-bold text-emerald-300 font-mono bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-600/30">
-                        {item.modelName}
+                      <span className="px-2 py-0.5 rounded bg-blue-500/20 text-blue-400 text-xs font-bold font-mono">
+                        {item.ft}
+                      </span>
+                      <span className="text-xs font-bold text-white">
+                        {item.modelName || '지정 모델'}
                       </span>
                     </div>
-                    <span className="text-[10px] text-slate-400">
-                      의뢰 수량 {item.count}대
-                    </span>
                   </div>
 
-                  <div className="flex items-center gap-3">
-                    <div className="flex items-center gap-2 bg-slate-900 rounded-lg p-1 border border-slate-800">
+                  <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1 bg-slate-900 border border-slate-800 rounded-lg p-1">
                       <button
                         type="button"
                         onClick={() => handleCountChange(idx, -1)}
@@ -1194,8 +1260,8 @@ export const MobileDispatchOrderCreate: React.FC<MobileDispatchOrderCreateProps>
           </div>
         )}
 
-        {/* 2. 회수 대상 장비 선택 (회수 모드일 때) */}
-        {dispatchMode === 'RETURN' && (
+        {/* 2. 회수 대상 장비 선택 (회수 및 대차 모드일 때) */}
+        {dispatchMode !== 'DISPATCH' && (
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex flex-col gap-3">
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-amber-400 flex items-center gap-1.5">
@@ -1311,13 +1377,20 @@ export const MobileDispatchOrderCreate: React.FC<MobileDispatchOrderCreateProps>
           type="submit"
           disabled={isSubmitting}
           className={`w-full py-4 rounded-2xl text-white font-black text-sm shadow-xl active:scale-[0.98] transition-all flex items-center justify-center gap-2 ${
-            dispatchMode === 'RETURN'
+            dispatchMode === 'EXCHANGE'
+              ? 'bg-purple-600 hover:bg-purple-500 shadow-purple-900/30'
+              : dispatchMode === 'RETURN'
               ? 'bg-amber-600 hover:bg-amber-500 shadow-amber-900/30'
               : 'bg-blue-600 hover:bg-blue-500 shadow-blue-900/30'
           }`}
         >
           {isSubmitting ? (
             <span>처리 중...</span>
+          ) : dispatchMode === 'EXCHANGE' ? (
+            <>
+              <RotateCw className="w-4 h-4" />
+              <span>대차(교환) 의뢰 접수 (단일 왕복 배차)</span>
+            </>
           ) : dispatchMode === 'RETURN' ? (
             <>
               <ArrowDownLeft className="w-4 h-4" />

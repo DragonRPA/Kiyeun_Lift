@@ -2,8 +2,8 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { CameraUploader } from '../components/CameraUploader';
-import { db, OutboundInspection, Asset } from '../../services/db';
-import { CheckSquare, Check, ShieldCheck } from 'lucide-react';
+import { db, OutboundInspection, Asset, AssetInOutLog } from '../../services/db';
+import { CheckSquare, Check, ShieldCheck, CheckCircle2 } from 'lucide-react';
 
 const INSPECTION_ITEMS = [
   '상하강/주행 리미트 정상',
@@ -24,6 +24,7 @@ export const MobileInspectionList: React.FC = () => {
   const [checkedList, setCheckedList] = useState<Record<string, boolean>>({});
   const [photos, setPhotos] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [successToast, setSuccessToast] = useState('');
 
   const pendingInspections = outboundInspections.filter((ins) => ins.status === 'PENDING');
   const activeInspection = outboundInspections.find((ins) => ins.id === selectedInspectionId);
@@ -50,25 +51,49 @@ export const MobileInspectionList: React.FC = () => {
       const nowIso = new Date().toISOString();
       const inspectorName = currentUser?.name || '담당기사';
 
+      // 🟢 [누락 복구] 10대 체크리스트 및 외관 사진 무누락 영구 보존
+      const inspectionPayload = {
+        checklist: checkedList,
+        photos: photos,
+        checkedCount: Object.values(checkedList).filter(Boolean).length,
+        completedAt: nowIso,
+      };
+
       db.updateRow<OutboundInspection>('outboundInspections', activeInspection.id, {
         status: 'COMPLETED',
         inspectorId: inspectorName,
         inspectedAt: nowIso,
-        note: `[모바일 검수 승인 완료]`,
+        specsJson: JSON.stringify(inspectionPayload),
+        note: `[모바일 검수 완료] 정상 점검 ${inspectionPayload.checkedCount}/${INSPECTION_ITEMS.length}개소 (사진 ${photos.length}매)`,
         updatedAt: nowIso,
       });
 
-      // 🟢 출고 승인 마감 시 자산 status ➔ 'RENTED' 자동 전환
+      // 🟢 출고 승인 마감 시 자산 status ➔ 'RENTED' 자동 전환 (헌장 1.3)
       if (activeInspection.assetId) {
         db.updateRow<Asset>('assets', activeInspection.assetId, {
           status: 'RENTED',
           updatedAt: nowIso,
         });
+
+        // 🟢 [헌장 1.2] 발생 사건 무누락 DB 저장: 자산 출고 이벤트 1:1 영구 기록
+        const targetAsset = db.assets.find((a) => a.id === activeInspection.assetId);
+        db.insertRow<AssetInOutLog>('assetInOutLogs', {
+          assetId: activeInspection.assetId,
+          assetNo: targetAsset?.assetNo || '',
+          modelName: targetAsset?.modelName || '',
+          type: 'OUTBOUND',
+          eventDate: nowIso.split('T')[0],
+          memo: `[출고검수 승인] 계약(${activeInspection.contractId || '직출고'}) 기사(${inspectorName}) 기능 점검 완료 (자산 대여중 전환)`,
+          createdAt: nowIso,
+        });
       }
 
       await db.awaitPendingWrites();
       refreshAllData();
-      alert('출고 검수가 최종 승인 마감되었습니다. 자산 상태가 대여중(RENTED)으로 전환되었습니다.');
+      
+      setSuccessToast('출고 검수 승인 완료: 자산 상태가 대여중(RENTED)으로 전환되었습니다.');
+      setTimeout(() => setSuccessToast(''), 3500);
+
       setSelectedInspectionId('');
       setCheckedList({});
       setPhotos([]);
@@ -87,6 +112,14 @@ export const MobileInspectionList: React.FC = () => {
           출고 전 기능 검수 ({pendingInspections.length})
         </h2>
       </div>
+
+      {/* 성공 피드백 배너 */}
+      {successToast && (
+        <div className="p-3 rounded-xl bg-emerald-950/80 border border-emerald-500/50 text-emerald-300 text-xs font-bold flex items-center gap-2 animate-in fade-in">
+          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+          <span>{successToast}</span>
+        </div>
+      )}
 
       {!activeInspection ? (
         <div className="flex flex-col gap-2.5">

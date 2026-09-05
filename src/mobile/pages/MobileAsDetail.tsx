@@ -36,9 +36,11 @@ export const MobileAsDetail: React.FC<MobileAsDetailProps> = ({ ticketId, onBack
 
   const ticket = fieldAsTickets.find((t) => t.id === ticketId);
 
-  // 조치 폼 상태
   const [actionTaken, setActionTaken] = useState(ticket?.actionTaken || '');
   const [resolutionType, setResolutionType] = useState<'REPAIR_DONE' | 'REVISIT_NEEDED' | 'GUIDED_END'>('REPAIR_DONE');
+  const [isExchangeNeeded, setIsExchangeNeeded] = useState(ticket?.exchangeSuggested || false);
+  const [revisitReason, setRevisitReason] = useState(ticket?.revisitReason || '');
+  const [revisitDate, setRevisitDate] = useState(ticket?.revisitDate || new Date(Date.now() + 86400000).toISOString().split('T')[0]);
   const [beforeImages, setBeforeImages] = useState<string[]>(
     ticket?.beforeImage ? [ticket.beforeImage] : ticket?.faultImageUrl ? [ticket.faultImageUrl] : []
   );
@@ -133,6 +135,11 @@ export const MobileAsDetail: React.FC<MobileAsDetailProps> = ({ ticketId, onBack
       return;
     }
 
+    if (resolutionType === 'REVISIT_NEEDED' && !revisitReason.trim()) {
+      showErrorModal('재방문 사유를 입력해 주세요.');
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       await completeFieldAsTicket(ticket.id, {
@@ -143,12 +150,15 @@ export const MobileAsDetail: React.FC<MobileAsDetailProps> = ({ ticketId, onBack
         billableAmount: 0,
         beforeImage: beforeImages[0] || '',
         afterImage: afterImages[0] || '',
+        customerSignature: customerSignature || '', // 🟢 [누락 복구] 서명 데이터 무누락 DB 전달
         customerConfirmName: customerConfirmName || ticket.reporterName || '현장확인자',
         partsUsed,
         inspectionItemCode,
         degradationScore,
+        exchangeSuggested: resolutionType === 'REVISIT_NEEDED' && isExchangeNeeded,
+        revisitReason: resolutionType === 'REVISIT_NEEDED' ? revisitReason.trim() : undefined,
+        revisitDate: resolutionType === 'REVISIT_NEEDED' ? revisitDate : undefined,
       });
-      alert('AS 조치가 성공적으로 완료 등록되었습니다.');
       onBack();
     } catch (err: any) {
       showErrorModal('완료 처리 중 오류가 발생했습니다: ' + (err.message || ''));
@@ -362,6 +372,86 @@ export const MobileAsDetail: React.FC<MobileAsDetailProps> = ({ ticketId, onBack
             className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-sm text-white focus:outline-none focus:border-blue-500"
           />
         </div>
+
+        {/* 조치 종결 유형 3단 세그먼트 */}
+        <div className="flex flex-col gap-1.5 mt-2 pt-3 border-t border-slate-800">
+          <label className="text-xs font-bold text-slate-300 whitespace-nowrap">조치 종결 유형</label>
+          <div className="grid grid-cols-3 gap-1.5 bg-slate-950 p-1.5 rounded-xl border border-slate-800">
+            <button
+              type="button"
+              onClick={() => setResolutionType('REPAIR_DONE')}
+              className={`py-2 rounded-lg text-xs font-bold transition-all ${
+                resolutionType === 'REPAIR_DONE'
+                  ? 'bg-emerald-600 text-white shadow-md'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              수리 완료
+            </button>
+            <button
+              type="button"
+              onClick={() => setResolutionType('REVISIT_NEEDED')}
+              className={`py-2 rounded-lg text-xs font-bold transition-all ${
+                resolutionType === 'REVISIT_NEEDED'
+                  ? 'bg-rose-600 text-white shadow-md'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              재방문 필요
+            </button>
+            <button
+              type="button"
+              onClick={() => setResolutionType('GUIDED_END')}
+              className={`py-2 rounded-lg text-xs font-bold transition-all ${
+                resolutionType === 'GUIDED_END'
+                  ? 'bg-amber-600 text-white shadow-md'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              유선 안내
+            </button>
+          </div>
+        </div>
+
+        {/* 재방문 필요 시 세부 설정 */}
+        {resolutionType === 'REVISIT_NEEDED' && (
+          <div className="flex flex-col gap-3 p-3 rounded-xl bg-rose-950/20 border border-rose-500/30 animate-in fade-in">
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-bold text-rose-300">재방문 사유 <span className="text-rose-400">*</span></label>
+              <input
+                type="text"
+                value={revisitReason}
+                onChange={(e) => setRevisitReason(e.target.value)}
+                placeholder="예: 특수부품 수급 필요, 모터 소손 공장입고"
+                className="w-full bg-slate-950 border border-rose-900/50 rounded-lg p-2 text-xs text-white placeholder-slate-500"
+              />
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-bold text-slate-300">재방문 예정일</label>
+              <input
+                type="date"
+                value={revisitDate}
+                onChange={(e) => setRevisitDate(e.target.value)}
+                className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-xs text-white"
+              />
+            </div>
+
+            {/* 대차(EXCHANGE) 제안 토글 */}
+            <label className="flex items-center gap-2 p-2 rounded-lg bg-purple-950/30 border border-purple-800/40 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={isExchangeNeeded}
+                onChange={(e) => setIsExchangeNeeded(e.target.checked)}
+                className="w-4 h-4 rounded text-purple-600"
+              />
+              <div className="flex flex-col">
+                <span className="text-xs font-bold text-purple-300">동급 장비 대차(교환) 필요</span>
+                <span className="text-[10px] text-slate-400">체크 시 본사 배차실에 단일 교환 배차 연계</span>
+              </div>
+            </label>
+          </div>
+        )}
       </div>
 
       {/* 부품 사용 차감 섹션 (탑차 재고 연동) */}

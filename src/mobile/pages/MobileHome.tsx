@@ -3,7 +3,7 @@ import React from 'react';
 import { useApp } from '../../context/AppContext';
 import { 
   Wrench, Truck, CheckSquare, Search, Send, Building2, 
-  ArrowRight, AlertTriangle, Clock, Plus 
+  ArrowRight, AlertTriangle, Clock, Plus, Boxes 
 } from 'lucide-react';
 import { MobileTabType } from '../MobileBottomNav';
 import { MobileDeptMode } from '../MobileHeader';
@@ -21,7 +21,7 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
   onOpenAsDetail,
   onOpenCreateAs,
 }) => {
-  const { fieldAsTickets, deliveries, outboundInspections, currentUser, assets, contracts } = useApp();
+  const { fieldAsTickets, deliveries, outboundInspections, currentUser, assets, contracts, mechanicConsumableStocks } = useApp();
   
   // 자사 가용 자산 (ownerType !== 'RENTED')
   const availableAssetCount = assets.filter(a => a.status === 'AVAILABLE' && a.ownerType !== 'RENTED').length;
@@ -289,6 +289,30 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
             </div>
           ))
         )}
+      </div>
+
+      {/* 본인 차량 소모품 재고 조회 */}
+      <div
+        onClick={() => onNavigate('vehicle_stock')}
+        className="p-4 rounded-2xl bg-slate-900 border border-slate-800 hover:border-amber-500/40 flex items-center justify-between active:scale-98 transition-all cursor-pointer shadow-md"
+      >
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-amber-400 flex-shrink-0">
+            <Boxes className="w-5 h-5" />
+          </div>
+          <div>
+            <div className="text-sm font-bold text-white flex items-center gap-1.5">
+              <span>내 차량 소모품 재고</span>
+              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-mono font-bold">
+                {(mechanicConsumableStocks || [])
+                  .filter(s => s.mechanicId === currentUser?.id && s.stockQty > 0)
+                  .reduce((sum, s) => sum + s.stockQty, 0)}개 적재
+              </span>
+            </div>
+            <div className="text-xs text-slate-400">보충 수령, 본사 반납 및 실사 관리</div>
+          </div>
+        </div>
+        <ArrowRight className="w-5 h-5 text-slate-500" />
       </div>
 
       {/* 가용 자산 빠른 조회 */}

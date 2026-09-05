@@ -20,48 +20,52 @@ const SPEC_PRESETS: SpecPreset[] = [
   {
     id: '19ft',
     ft: '19ft',
-    subModels: '1330 / 3215',
+    subModels: '1330 / 3215 / 0608',
     workHeight: '작업높이 ~7.8m',
-    modelMatchRegex: /(19|1330|3215)/i,
-    },
+    modelMatchRegex: /(19|1330|3215|0608|1230)/i,
+  },
   {
     id: '26ft',
     ft: '26ft',
-    subModels: '0812 / 3219',
+    subModels: '0812 / 3219 / 2646',
     workHeight: '작업높이 ~9.8m',
-    modelMatchRegex: /(26|0812|3219)/i,
-    },
+    modelMatchRegex: /(26|0812|3219|2646|0808)/i,
+  },
   {
     id: '32ft',
     ft: '32ft',
     subModels: '1012 / 3246',
     workHeight: '작업높이 ~11.8m',
-    modelMatchRegex: /(32|1012|3246)/i,
-    },
+    modelMatchRegex: /(32|1012|3246|1008)/i,
+  },
   {
     id: '40ft',
     ft: '40ft',
     subModels: '1212 / 4047',
     workHeight: '작업높이 ~13.8m',
-    modelMatchRegex: /(40|1212|4047)/i,
-    },
+    modelMatchRegex: /(40|1212|4047|4069)/i,
+  },
   {
     id: '46ft',
     ft: '46ft',
-    subModels: '1412',
+    subModels: '1412 / 4655',
     workHeight: '작업높이 ~15.8m',
-    modelMatchRegex: /(46|1412)/i,
-    },
+    modelMatchRegex: /(46|1412|4655|1414)/i,
+  },
   {
     id: '53ft',
     ft: '53ft',
     subModels: '1612 / 특수',
     workHeight: '작업높이 ~17.8m',
-    modelMatchRegex: /(53|1612)/i,
-    },
+    modelMatchRegex: /(53|1612|1614|5390)/i,
+  },
 ];
 
-export const MobileAssetSearch: React.FC = () => {
+interface MobileAssetSearchProps {
+  onNavigateToOrder?: (specFt: string) => void;
+}
+
+export const MobileAssetSearch: React.FC<MobileAssetSearchProps> = ({ onNavigateToOrder }) => {
   const { assets, contracts, contractAssets, sites, refreshAllData, fullRefreshFromServer } = useApp();
 
   // 검색 및 필터 상태
@@ -130,6 +134,9 @@ export const MobileAssetSearch: React.FC = () => {
     const returningMap: Record<string, { assetId?: string; expectedModel?: string; endDate: string; siteName: string }> = {};
 
     contractAssets.forEach(ca => {
+      // 🟢 이미 반납 완료된 자산 제외 (허위 반납예정 집계 차단)
+      if (ca.status === 'RETURNED' || ca.actualReturnDate) return;
+
       const contract = contracts.find(c => c.id === ca.contractId);
       const endDate = ca.endDate || contract?.endDate || '';
       if (endDate >= todayStr && endDate <= targetLimitStr) {
@@ -480,14 +487,30 @@ export const MobileAssetSearch: React.FC = () => {
                 )}
               </div>
 
-              {/* 바텀시트 하단 닫기 버튼 */}
-              <button
-                type="button"
-                onClick={() => setSelectedSpec(null)}
-                className="w-full py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs active:scale-98 transition-all"
-              >
-                닫기
-              </button>
+              {/* 바텀시트 하단 액션 버튼군 (헌장 1.1 최소 조작 최대 편익 1-Click 발주 연계) */}
+              <div className="flex items-center gap-2 pt-1 border-t border-slate-800">
+                {onNavigateToOrder && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const ft = selectedSpec.ft;
+                      setSelectedSpec(null);
+                      onNavigateToOrder(ft);
+                    }}
+                    className="flex-1 py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-black text-xs active:scale-98 transition-all shadow-lg flex items-center justify-center gap-1.5"
+                  >
+                    <span>{selectedSpec.ft} 출고 의뢰서 작성</span>
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setSelectedSpec(null)}
+                  className={`${onNavigateToOrder ? 'w-24' : 'w-full'} py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs active:scale-98 transition-all`}
+                >
+                  닫기
+                </button>
+              </div>
             </div>
           </div>
         );
