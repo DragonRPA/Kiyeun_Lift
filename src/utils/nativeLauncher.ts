@@ -315,3 +315,167 @@ export function resolveSiteDetailedAddress(params: {
   // 7. 최후 폴백: 현장명 또는 상세위치
   return siteName || locationDetail || customerName || '현장';
 }
+
+/**
+ * 🚚 화물 기사 배차 안내 문자 포맷팅 파라미터
+ */
+export interface DispatchSmsParams {
+  delivery: {
+    id?: string;
+    type?: string;
+    dispatchCategory?: string;
+    loadingDate?: string;
+    loadingTimeSlot?: string;
+    unloadingDate?: string;
+    unloadingTimeSlot?: string;
+    scheduledDate?: string;
+    requestDate?: string;
+    originAddress?: string;
+    destinationAddress?: string;
+    vehicleNo?: string;
+    vehicleType?: string;
+    driverName?: string;
+    driverContact?: string;
+    deliveryCost?: number;
+    finalCost?: number;
+    cargoItems?: string;
+    memo?: string;
+  };
+  siteName?: string;
+  siteAddress?: string;
+  siteContactName?: string;
+  siteContactPhone?: string;
+  customerName?: string;
+  hqYardAddress?: string;
+  hqYardPhone?: string;
+}
+
+/**
+ * 🚚 기사 배차 안내 문자 전문 조립기 (한글 표준 템플릿)
+ */
+export function buildDispatchSmsText(params: DispatchSmsParams): string {
+  const { delivery } = params;
+  const hqAddress = params.hqYardAddress || '경기도 용인시 처인구 모현읍 백옥대로 2420 (기연 본사주기장)';
+  const hqPhone = params.hqYardPhone || '배차/출고팀';
+
+  const type = delivery.type || 'OUTBOUND';
+  const typeLabel = 
+    type === 'EXCHANGE' ? '🔄 [왕복 교환배차]' :
+    type === 'RETURN' || type === 'INBOUND' ? '📦 [장비 회수배차]' :
+    '🚚 [장비 출고배차]';
+
+  const category = delivery.dispatchCategory || (type === 'EXCHANGE' ? '교환' : type === 'RETURN' ? '반납' : '출고');
+  const dNo = delivery.id ? delivery.id.slice(0, 8).toUpperCase() : 'NEW';
+
+  const driver = delivery.driverName || '기사님';
+  const vehicle = [delivery.vehicleType, delivery.vehicleNo].filter(Boolean).join(' ') || '지정차량';
+  const cost = delivery.finalCost || delivery.deliveryCost || 0;
+  const costStr = cost > 0 ? `${cost.toLocaleString()}원 (부가세별도)` : '운송사 약정단가';
+
+  const loadingDate = delivery.loadingDate || delivery.scheduledDate || delivery.requestDate || '일정 확인요망';
+  const loadingTime = delivery.loadingTimeSlot || '오전';
+
+  const siteName = params.siteName || params.customerName || '현장';
+  const siteAddress = delivery.destinationAddress || params.siteAddress || '하차지 주소 확인요망';
+  const contactName = params.siteContactName || '현장담당자';
+  const contactPhone = params.siteContactPhone || '';
+
+  let cargoSummary = '';
+  if (delivery.cargoItems) {
+    try {
+      if (typeof delivery.cargoItems === 'string' && delivery.cargoItems.startsWith('[')) {
+        const parsed = JSON.parse(delivery.cargoItems);
+        if (Array.isArray(parsed)) {
+          cargoSummary = parsed.map((p: any) => `${p.modelName || p.ft || '장비'} ${p.count || 1}대`).join(', ');
+        }
+      } else {
+        cargoSummary = delivery.cargoItems;
+      }
+    } catch {
+      cargoSummary = delivery.cargoItems;
+    }
+  }
+
+  // 상차지와 하차지 분기
+  let origin = delivery.originAddress || hqAddress;
+  let destination = siteAddress;
+  let originContact = hqPhone;
+  let destContact = [contactName, contactPhone].filter(Boolean).join(' ');
+
+  // 회수(INBOUND/RETURN)인 경우: 상차지가 현장, 하차지가 주기장
+  if (type === 'RETURN' || type === 'INBOUND') {
+    origin = siteAddress;
+    originContact = [contactName, contactPhone].filter(Boolean).join(' ');
+    destination = hqAddress;
+    destContact = hqPhone;
+  }
+
+  const lines = [
+    `[기연리프트 배차안내]`,
+    `■ 배차유형: ${typeLabel} (${category})`,
+    `■ 배차번호: DP-${dNo}`,
+    `■ 배정기사: ${driver} (${vehicle})`,
+    `■ 확정운송료: ${costStr}`,
+    ``,
+    `[1. 상차지 (출발지)]`,
+    `- 일시: ${loadingDate} ${loadingTime}`,
+    `- 위치: ${origin}`,
+    `- 연락처: ${originContact}`,
+    ``,
+    `[2. 하차지 (도착지)]`,
+    `- 현장명: ${siteName}`,
+    `- 위치: ${destination}`,
+    `- 현장연락처: ${destContact || '도착 전 확인'}`,
+  ];
+
+  if (cargoSummary) {
+    lines.push(``, `[3. 적재 장비]`, `- ${cargoSummary}`);
+  }
+
+  if (type === 'EXCHANGE') {
+    lines.push(``, `※ [교환 배차 주의사항]`, `- 신규 장비 하차 후, 현장 회수 장비를 상차하여 모현 주기장으로 복귀하는 왕복 배차입니다.`);
+  }
+
+  if (delivery.memo && delivery.memo.trim()) {
+    lines.push(``, `[특이사항]`, `- ${delivery.memo.trim()}`);
+  }
+
+  lines.push(``, `※ 현장 도착 30분 전 인수자에게 사전 연락 부탁드립니다.`);
+
+  return lines.join('\n');
+}
+
+/**
+ * 📲 스마트폰 기본 문자메시지 앱 딥링크 호출 (sms:?body=...)
+ * - 선제 클립보드 복사(copyToClipboard)를 수행하여 앱 미연동 환경에서도 1-Click 붙여넣기 지원
+ */
+export async function launchDispatchSms(options: {
+  driverContact: string;
+  smsBody: string;
+}): Promise<boolean> {
+  const { driverContact, smsBody } = options;
+  if (!driverContact || !driverContact.trim()) {
+    alert('화물 기사 연락처가 없습니다.');
+    return false;
+  }
+
+  // 1. 선제 클립보드 안전 복사
+  await copyToClipboard(smsBody);
+
+  // 2. 모바일 브라우저 sms: 딥링크 호출
+  const cleanPhone = driverContact.replace(/[^0-9]/g, '');
+  const isApple = typeof navigator !== 'undefined' && /iphone|ipad|ipod/i.test(navigator.userAgent);
+  const separator = isApple ? '&' : '?';
+  const smsUrl = `sms:${cleanPhone}${separator}body=${encodeURIComponent(smsBody)}`;
+
+  try {
+    window.location.href = smsUrl;
+    showFloatingToast('기사 배차 안내문이 문자 앱에 입력되었습니다.\n(클립보드에도 복사 완료)');
+    return true;
+  } catch (err) {
+    console.warn('launchDispatchSms failed:', err);
+    alert('문자 앱을 호출하지 못했습니다. 배차 안내문이 클립보드에 복사되었으니 메시지 창에 붙여넣기 하세요.');
+    return false;
+  }
+}
+

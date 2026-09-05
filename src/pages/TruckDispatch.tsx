@@ -12,6 +12,7 @@ import * as XLSX from 'xlsx';
 import { Delivery, TransportCompany, TransportDriver, db, DeliveryStatus, Asset } from '../services/db';
 import { DestinationWeatherModal } from '../components/DestinationWeatherModal';
 import { matchHangul } from '../utils/hangulSearch';
+import { buildDispatchSmsText, launchDispatchSms } from '../utils/nativeLauncher';
 
 const VEHICLE_TYPE_OPTIONS = ['1.4T', '2.5T', '3.5T', '5T', '5T장축', '8.5T', '11T', '노배드'];
 
@@ -1571,6 +1572,53 @@ export const TruckDispatch: React.FC = () => {
     setAssignedVehicles(prev => prev.filter((_, i) => i !== index));
   };
 
+  // 📲 기사 배차 안내 문자 발송 / 클립보드 복사
+  const handleSendDriverSms = (targetDelivery: Delivery) => {
+    const mainVeh = assignedVehicles.find(v => v.driverContact && v.driverContact.trim()) || assignedVehicles[0];
+    const contact = mainVeh?.driverContact || targetDelivery.driverContact;
+    const name = mainVeh?.driverName || targetDelivery.driverName;
+    const vNo = mainVeh?.vehicleNo || targetDelivery.vehicleNo;
+    const vType = mainVeh?.vehicleType || targetDelivery.vehicleType;
+    const cost = (mainVeh?.finalCost && mainVeh.finalCost > 0 ? mainVeh.finalCost : mainVeh?.expectedCost) || targetDelivery.finalCost || targetDelivery.deliveryCost;
+
+    if (!contact || !contact.trim()) {
+      showErrorModal('기사 연락처가 등록되지 않았습니다. 차량/기사 배정 란에 기사 연락처를 입력해 주세요.');
+      return;
+    }
+
+    const contract = contracts.find(c => c.id === targetDelivery.contractId);
+    const customer = customers.find(c => c.id === contract?.customerId || c.id === targetDelivery.billableCustomerId);
+    const site = sites.find(s => s.id === contract?.siteId || (targetDelivery.destinationAddress && s.name.includes(targetDelivery.destinationAddress)));
+
+    const dObj = {
+      ...targetDelivery,
+      driverName: name,
+      driverContact: contact,
+      vehicleNo: vNo,
+      vehicleType: vType,
+      finalCost: cost,
+      destinationAddress: destinationAddress || targetDelivery.destinationAddress,
+      originAddress: originAddress || targetDelivery.originAddress,
+      loadingDate: loadingDate || targetDelivery.loadingDate,
+      loadingTimeSlot: (loadingTimeSlot === '희망시간' ? loadingCustomTime : loadingTimeSlot) || targetDelivery.loadingTimeSlot,
+      memo: closingMemo || targetDelivery.memo
+    };
+
+    const smsBody = buildDispatchSmsText({
+      delivery: dObj,
+      siteName: site?.name || targetDelivery.destinationAddress,
+      siteAddress: targetDelivery.destinationAddress || site?.address,
+      siteContactName: site?.contactName,
+      siteContactPhone: site?.contact,
+      customerName: customer?.name,
+    });
+
+    launchDispatchSms({
+      driverContact: contact,
+      smsBody
+    });
+  };
+
   // 3. 배차 배정 저장 (status: 'DISPATCHED' 배차 완료 전환!)
   const handleSaveDispatch = async () => {
     if (!selectedDelivery) return;
@@ -2144,6 +2192,29 @@ export const TruckDispatch: React.FC = () => {
                       >
                         <Printer size={13} className="text-primary" />
                         {(selectedDelivery.type === 'INBOUND' || selectedDelivery.dispatchCategory === '입고' || selectedDelivery.dispatchCategory === '반납') ? '입고요청서 출력' : '출고요청서 출력'}
+                      </button>
+
+                      {/* 📲 기사 배차 안내 문자 발송 / 클립보드 복사 버튼 */}
+                      <button
+                        type="button"
+                        onClick={() => handleSendDriverSms(selectedDelivery)}
+                        style={{
+                          padding: '6px 12px',
+                          borderRadius: '7px',
+                          backgroundColor: 'rgba(56, 189, 248, 0.12)',
+                          color: '#0284c7',
+                          border: '1px solid rgba(56, 189, 248, 0.35)',
+                          fontSize: '12px',
+                          fontWeight: 800,
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '5px',
+                          boxShadow: '0 1px 3px rgba(0,0,0,0.08)'
+                        }}
+                      >
+                        <MessageSquare size={13} color="#0284c7" />
+                        기사 배차문자
                       </button>
 
                       {/* 💡 상단 배차/운송완료/취소 액션 버튼 */}

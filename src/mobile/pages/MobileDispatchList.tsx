@@ -4,12 +4,13 @@ import { useApp } from '../../context/AppContext';
 import { db, Delivery } from '../../services/db';
 import { 
   Truck, Phone, CheckCircle2, Mic, MicOff, FileText, 
-  Sparkles, X, Check, UserCheck, AlertCircle 
+  Sparkles, X, Check, UserCheck, AlertCircle, MessageSquare, Send 
 } from 'lucide-react';
 import { parseDispatchDriverCallTranscript } from '../../services/voiceOrderDraftService';
+import { buildDispatchSmsText, launchDispatchSms } from '../../utils/nativeLauncher';
 
 export const MobileDispatchList: React.FC = () => {
-  const { deliveries, refreshAllData, showErrorModal } = useApp();
+  const { deliveries, contracts, customers, sites, refreshAllData, showErrorModal } = useApp();
   const [filter, setFilter] = useState<'PENDING' | 'DISPATCHED' | 'DELIVERED'>('PENDING');
 
   // 기사 배정 모달 상태
@@ -138,7 +139,34 @@ export const MobileDispatchList: React.FC = () => {
     setShowAssignModal(true);
   };
 
-  const handleSaveDriverAssignment = async () => {
+  // 🚚 기사 배차 안내 문자 발송 (핸드폰 기본 문자 앱 sms: 딥링크 연동)
+  const handleSendDriverSms = (targetDelivery: Delivery, overrideFields?: Partial<Delivery>) => {
+    const d = { ...targetDelivery, ...overrideFields };
+    if (!d.driverContact || !d.driverContact.trim()) {
+      showErrorModal('기사 연락처가 등록되지 않았습니다.');
+      return;
+    }
+
+    const contract = contracts.find(c => c.id === d.contractId);
+    const customer = customers.find(c => c.id === contract?.customerId || c.name === d.destinationAddress);
+    const site = sites.find(s => s.id === contract?.siteId || s.name === d.destinationAddress);
+
+    const smsBody = buildDispatchSmsText({
+      delivery: d,
+      siteName: site?.name || d.destinationAddress,
+      siteAddress: d.destinationAddress || site?.address,
+      siteContactName: site?.contactName,
+      siteContactPhone: site?.contact,
+      customerName: customer?.name,
+    });
+
+    launchDispatchSms({
+      driverContact: d.driverContact,
+      smsBody
+    });
+  };
+
+  const handleSaveDriverAssignment = async (andSendSms = false) => {
     if (!targetDeliveryId) {
       showErrorModal('배정할 배차 건을 선택하세요.');
       return;
@@ -148,23 +176,31 @@ export const MobileDispatchList: React.FC = () => {
       return;
     }
 
+    const updatedFields: Partial<Delivery> = {
+      vehicleNo,
+      driverName,
+      driverContact,
+      vehicleType,
+      transportCompany: vehicleType,
+      finalCost: finalCost > 0 ? finalCost : undefined,
+      deliveryCost: finalCost > 0 ? finalCost : undefined,
+      status: 'DISPATCHED',
+      memo: assignMemo ? `[기사배정] ${assignMemo}` : undefined,
+      updatedAt: new Date().toISOString(),
+    };
+
     try {
-      db.updateRow<Delivery>('deliveries', targetDeliveryId, {
-        vehicleNo,
-        driverName,
-        driverContact,
-        vehicleType,
-        transportCompany: vehicleType,
-        finalCost: finalCost > 0 ? finalCost : undefined,
-        deliveryCost: finalCost > 0 ? finalCost : undefined,
-        status: 'DISPATCHED',
-        memo: assignMemo ? `[기사배정] ${assignMemo}` : undefined,
-        updatedAt: new Date().toISOString(),
-      });
+      db.updateRow<Delivery>('deliveries', targetDeliveryId, updatedFields);
 
       await db.awaitPendingWrites();
       refreshAllData();
-      alert('기사 배정이 완료되어 운송중(DISPATCHED)으로 전환되었습니다.');
+
+      const currentDelivery = deliveries.find(d => d.id === targetDeliveryId);
+      if (andSendSms && driverContact && currentDelivery) {
+        handleSendDriverSms(currentDelivery, updatedFields);
+      } else {
+        alert('기사 배정이 완료되어 운송중(DISPATCHED)으로 전환되었습니다.');
+      }
       setShowAssignModal(false);
     } catch (err: any) {
       showErrorModal('기사 배정 실패: ' + (err.message || ''));
@@ -305,13 +341,23 @@ export const MobileDispatchList: React.FC = () => {
                   기사: <strong className="text-white">{delivery.driverName || '미지정'}</strong> ({delivery.vehicleNo || '차량번호미상'})
                 </span>
                 {delivery.driverContact && (
-                  <a
-                    href={`tel:${delivery.driverContact}`}
-                    className="flex items-center gap-1 text-emerald-400 font-bold bg-emerald-950/40 py-1 px-2.5 rounded-lg border border-emerald-900/50"
-                  >
-                    <Phone className="w-3.5 h-3.5" />
-                    통화
-                  </a>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => handleSendDriverSms(delivery)}
+                      className="flex items-center gap-1 text-sky-400 font-bold bg-sky-950/50 hover:bg-sky-900/60 py-1 px-2.5 rounded-lg border border-sky-800/60 active:scale-95 text-xs transition-all"
+                    >
+                      <MessageSquare className="w-3.5 h-3.5 text-sky-400" />
+                      배차문자
+                    </button>
+                    <a
+                      href={`tel:${delivery.driverContact}`}
+                      className="flex items-center gap-1 text-emerald-400 font-bold bg-emerald-950/40 py-1 px-2.5 rounded-lg border border-emerald-900/50 text-xs"
+                    >
+                      <Phone className="w-3.5 h-3.5" />
+                      통화
+                    </a>
+                  </div>
                 )}
               </div>
 
@@ -527,20 +573,30 @@ export const MobileDispatchList: React.FC = () => {
               />
             </div>
 
-            <div className="flex items-center gap-2 pt-2">
+            <div className="flex flex-col gap-2 pt-2">
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowAssignModal(false)}
+                  className="flex-1 py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold"
+                >
+                  취소
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSaveDriverAssignment(false)}
+                  className="flex-1 py-3 rounded-xl bg-slate-700 hover:bg-slate-600 text-white text-xs font-bold"
+                >
+                  배정 확정
+                </button>
+              </div>
               <button
                 type="button"
-                onClick={() => setShowAssignModal(false)}
-                className="flex-1 py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold"
+                onClick={() => handleSaveDriverAssignment(true)}
+                className="w-full py-3.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-black shadow-lg flex items-center justify-center gap-1.5 active:scale-98 transition-transform"
               >
-                취소
-              </button>
-              <button
-                type="button"
-                onClick={handleSaveDriverAssignment}
-                className="flex-1 py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-black shadow-lg"
-              >
-                기사 배정 확정 (운송중)
+                <Send className="w-4 h-4" />
+                기사 배정 확정 + 배차문자 즉시 발송
               </button>
             </div>
           </div>
