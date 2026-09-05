@@ -641,10 +641,17 @@ CREATE TABLE outbound_inspections (
     "inspectorId"         TEXT REFERENCES users(id) ON DELETE SET NULL,
     "inspectedAt"         TEXT,
     "approvedAt"          TEXT,
+    "rejectReason"        TEXT,
+    "repairId"            TEXT REFERENCES repairs(id) ON DELETE SET NULL,
     note                  TEXT,
     "createdAt"           TEXT NOT NULL,
     "updatedAt"           TEXT NOT NULL
 );
+
+CREATE INDEX IF NOT EXISTS idx_outbound_inspections_contract_id ON outbound_inspections("contractId");
+CREATE INDEX IF NOT EXISTS idx_outbound_inspections_asset_id ON outbound_inspections("assetId");
+CREATE INDEX IF NOT EXISTS idx_outbound_inspections_status ON outbound_inspections(status);
+CREATE INDEX IF NOT EXISTS idx_outbound_inspections_delivery_id ON outbound_inspections("deliveryId");
 
 -- 3-6. 입고 하자 상세 (inbound_defect_details)
 CREATE TABLE inbound_defect_details (
@@ -1393,6 +1400,30 @@ CREATE INDEX IF NOT EXISTS idx_vlog_vehicle_date ON vehicle_operation_logs("vehi
 CREATE INDEX IF NOT EXISTS idx_vlog_driver ON vehicle_operation_logs("driverId");
 CREATE INDEX IF NOT EXISTS idx_vfuel_vehicle_date ON vehicle_fuel_logs("vehicleId", "fuelDate");
 CREATE INDEX IF NOT EXISTS idx_vfuel_driver ON vehicle_fuel_logs("driverId");
+
+-- 4-8. 장비 기술 매뉴얼 라이브러리 (equipment_manuals)
+CREATE TABLE IF NOT EXISTS equipment_manuals (
+    id                    TEXT PRIMARY KEY,
+    "modelName"           TEXT NOT NULL,
+    manufacturer          TEXT NOT NULL,
+    "targetSpecFt"        INTEGER,
+    category              TEXT NOT NULL CHECK (category IN ('PARTS_BOOK', 'ERROR_CODE', 'WIRING_DIAGRAM', 'OPERATOR_MANUAL')),
+    title                 TEXT NOT NULL,
+    "fileUrl"             TEXT NOT NULL,
+    "fileName"            TEXT NOT NULL,
+    "fileSize"            BIGINT NOT NULL DEFAULT 0,
+    "fileSizeLabel"       TEXT,
+    version               TEXT DEFAULT 'Rev. 1.0',
+    "uploadDate"          TEXT NOT NULL DEFAULT CURRENT_DATE::TEXT,
+    "uploadedBy"          TEXT NOT NULL,
+    memo                  TEXT,
+    "inspectionItemCodes" JSONB DEFAULT '[]'::jsonb,
+    "createdAt"           TEXT NOT NULL,
+    "updatedAt"           TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_manuals_model ON equipment_manuals("modelName");
+CREATE INDEX IF NOT EXISTS idx_manuals_category ON equipment_manuals(category);
 
 -- ==============================================================================
 -- 🔒 전 테이블 Row Level Security (RLS) 및 권한 일괄 활성화

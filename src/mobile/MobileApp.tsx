@@ -20,6 +20,7 @@ import { MobileSubleaseManage } from './pages/MobileSubleaseManage';
 import { MobileCustomerManage } from './pages/MobileCustomerManage';
 import { MobileDelinquencyManage } from './pages/MobileDelinquencyManage';
 import { MobileVehicleLog } from './pages/MobileVehicleLog';
+import { MobileManualViewer } from './pages/MobileManualViewer';
 import { PwaInstallBanner } from './components/PwaInstallBanner';
 import { MobileWalkieTalkieModal } from './components/MobileWalkieTalkieModal';
 import { MobileGemsAgentModal } from './components/MobileGemsAgentModal';
@@ -298,6 +299,8 @@ export const MobileApp: React.FC<MobileAppProps> = ({ onSwitchToPc }) => {
           />
         ) : activeTab === 'vehicle_log' ? (
           <MobileVehicleLog onBack={() => handleTabChange('home')} />
+        ) : activeTab === 'manual_viewer' ? (
+          <MobileManualViewer onBack={() => handleTabChange('home')} />
         ) : activeTab === 'vehicle_stock' ? (
           <MobileVehicleStock />
         ) : (

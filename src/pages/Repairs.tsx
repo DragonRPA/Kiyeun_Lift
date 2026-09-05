@@ -192,18 +192,37 @@ export const Repairs: React.FC = () => {
   // =========================================================================
   const handleSelectAsset = (asset: Asset) => {
     setSelectedAssetId(asset.id);
-    // 폼 초기화 및 자산 상태에 맞춘 기본 세팅
-    setMaintenanceType('INHOUSE_REPAIR');
+    
+    // 진행 중인 외주정비 또는 보류 건 탐색
+    const activeExternal = repairs.find(r => r.assetId === asset.id && r.status === 'IN_PROGRESS' && r.maintenanceType === 'EXTERNAL');
+    const unresolvedRepair = repairs.find(r => r.assetId === asset.id && r.status === 'UNRESOLVED');
+
     setRepairDate(new Date().toISOString().split('T')[0]);
     setSelectedMechanicId(currentUser?.id || '');
-    setSelectedVendorId('');
-    setRepairDetails(asset.memo ? `[입고 메모] ${asset.memo}\n` : '');
-    setExternalCost(0);
     setUsedConsumables([]);
     setBeforeImage('');
     setAfterImage('');
     setInspectionItemCode('');
-    setDegradationScore(0);
+    setDegradationScore(asset.maintenanceScore || 0);
+
+    if (activeExternal) {
+      // 🌟 외주정비 완료/입고 모드로 자동 프리셋
+      setMaintenanceType('EXTERNAL');
+      setSelectedVendorId(activeExternal.vendorId || '');
+      setExternalCost(activeExternal.totalCost || 0);
+      setRepairDetails(`[외주정비 완료 입고검수] 업체: ${getVendorName(activeExternal.vendorId)}\n• 외주 수리내역 확인 및 장비 정상 작동 테스트 완료`);
+    } else if (unresolvedRepair) {
+      // 🌟 부품대기 보류 해제 모드로 자동 프리셋
+      setMaintenanceType(unresolvedRepair.maintenanceType === 'EXTERNAL' ? 'EXTERNAL' : unresolvedRepair.maintenanceType === 'PREVENTIVE' ? 'PREVENTIVE' : 'INHOUSE_REPAIR');
+      setSelectedVendorId(unresolvedRepair.vendorId || '');
+      setExternalCost(unresolvedRepair.totalCost || 0);
+      setRepairDetails(`[부품대기 해제 및 정비 재개]\n• 보류사유: ${unresolvedRepair.unresolvedReason || '부품 대기'}\n• 부품 장착 및 정비 완료 조치`);
+    } else {
+      setMaintenanceType('INHOUSE_REPAIR');
+      setSelectedVendorId('');
+      setExternalCost(0);
+      setRepairDetails(asset.memo ? `[입고 메모] ${asset.memo}\n` : '');
+    }
   };
 
   const handleAddQuickTag = (tag: string) => {
@@ -557,6 +576,10 @@ export const Repairs: React.FC = () => {
                   const isRepairing = asset.status === 'REPAIRING';
                   const isAvailable = asset.status === 'AVAILABLE';
 
+                  // 외주정비 및 부품대기 활성 건 탐색
+                  const activeExternal = repairs.find(r => r.assetId === asset.id && r.status === 'IN_PROGRESS' && r.maintenanceType === 'EXTERNAL');
+                  const unresolvedRepair = repairs.find(r => r.assetId === asset.id && r.status === 'UNRESOLVED');
+
                   return (
                     <div
                       key={asset.id}
@@ -578,19 +601,42 @@ export const Repairs: React.FC = () => {
                           <strong style={{ fontSize: '13px', color: 'var(--primary)' }}>[{asset.assetNo}]</strong>
                           <span style={{ fontSize: '12px', fontWeight: '600', color: 'var(--text-main)' }}>{asset.modelName}</span>
                         </div>
-                        <span className={`badge ${
-                          isRepairing ? 'badge-danger' :
-                          isReturned ? 'badge-warning' :
-                          isAvailable ? 'badge-success' : 'badge-secondary'
-                        }`} style={{ fontSize: '10px', padding: '2px 6px' }}>
-                          {isRepairing ? '수리중' : isReturned ? '입고검수대기' : isAvailable ? '임대가능' : asset.status}
-                        </span>
+                        <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                          {activeExternal ? (
+                            <span className="badge" style={{ fontSize: '10px', padding: '2px 6px', backgroundColor: '#8b5cf6', color: '#ffffff' }}>
+                              외주:{getVendorName(activeExternal.vendorId)}
+                            </span>
+                          ) : unresolvedRepair ? (
+                            <span className="badge badge-warning" style={{ fontSize: '10px', padding: '2px 6px' }}>
+                              부품대기
+                            </span>
+                          ) : (
+                            <span className={`badge ${
+                              isRepairing ? 'badge-danger' :
+                              isReturned ? 'badge-warning' :
+                              isAvailable ? 'badge-success' : 'badge-secondary'
+                            }`} style={{ fontSize: '10px', padding: '2px 6px' }}>
+                              {isRepairing ? '수리중' : isReturned ? '입고검수대기' : isAvailable ? '임대가능' : asset.status}
+                            </span>
+                          )}
+                          {(asset.maintenanceScore || 0) > 0 && (
+                            <span className="badge badge-danger" style={{ fontSize: '10px', padding: '2px 5px' }}>
+                              {asset.maintenanceScore}점
+                            </span>
+                          )}
+                        </div>
                       </div>
 
                       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: 'var(--text-muted)' }}>
                         <span>구분: {asset.ownerType === 'RENTED' ? '타사임차' : '자사보유'}</span>
                         {asset.serialNo && <span>S/N: {asset.serialNo}</span>}
                       </div>
+
+                      {unresolvedRepair && unresolvedRepair.unresolvedReason && (
+                        <div style={{ fontSize: '11px', color: '#b45309', backgroundColor: 'rgba(245, 158, 11, 0.1)', padding: '2px 6px', borderRadius: '4px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          ⏸️ 부품대기: {unresolvedRepair.unresolvedReason}
+                        </div>
+                      )}
 
                       {asset.memo && (
                         <div style={{ fontSize: '11px', color: '#b91c1c', backgroundColor: 'rgba(239, 68, 68, 0.08)', padding: '3px 6px', borderRadius: '4px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -638,6 +684,20 @@ export const Repairs: React.FC = () => {
                     {assetInboundNote && (
                       <div style={{ marginTop: '6px', fontSize: '11.5px', color: '#b91c1c', backgroundColor: 'rgba(239, 68, 68, 0.08)', padding: '4px 8px', borderRadius: '4px' }}>
                         📌 <strong>최근 입고/검수 메모:</strong> {assetInboundNote.memo || '이상 없음'} ({assetInboundNote.eventDate})
+                      </div>
+                    )}
+                    {/* 진행 중인 외주정비 안내 배너 */}
+                    {repairs.some(r => r.assetId === selectedAsset.id && r.status === 'IN_PROGRESS' && r.maintenanceType === 'EXTERNAL') && (
+                      <div style={{ marginTop: '6px', fontSize: '11.5px', color: '#6d28d9', backgroundColor: 'rgba(139, 92, 246, 0.1)', padding: '5px 10px', borderRadius: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <Truck size={14} />
+                        <strong>외주정비 위탁 진행 중:</strong> 협력업체 정비 완료 후 수리내역 확인 및 [외주 입고 검수 완료]를 실행하면 임대가능(AVAILABLE)으로 복원됩니다.
+                      </div>
+                    )}
+                    {/* 부품대기 안내 배너 */}
+                    {repairs.some(r => r.assetId === selectedAsset.id && r.status === 'UNRESOLVED') && (
+                      <div style={{ marginTop: '6px', fontSize: '11.5px', color: '#b45309', backgroundColor: 'rgba(245, 158, 11, 0.12)', padding: '5px 10px', borderRadius: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <AlertTriangle size={14} />
+                        <strong>부품 수급 대기 중인 장비:</strong> 입고된 부품을 아래 소모품 목록에서 투입한 후 [정비 완료]를 실행하면 정상 임대가능으로 전환됩니다.
                       </div>
                     )}
                   </div>
@@ -955,21 +1015,33 @@ export const Repairs: React.FC = () => {
                     </button>
 
                     {maintenanceType === 'EXTERNAL' ? (
-                      <button
-                        type="button"
-                        className="btn-primary"
-                        onClick={handleOutsourceRepair}
-                        disabled={!canSave}
-                        style={{ padding: '8px 16px', fontSize: '13px', fontWeight: '700', backgroundColor: '#7c3aed', borderColor: '#7c3aed', display: 'flex', alignItems: 'center', gap: '6px' }}
-                      >
-                        <Truck size={14} /> 외주 위탁 등록
-                      </button>
+                      repairs.some(r => r.assetId === selectedAsset.id && r.status === 'IN_PROGRESS' && r.maintenanceType === 'EXTERNAL') ? (
+                        <button
+                          type="button"
+                          className="btn-primary"
+                          onClick={handleCompleteRepair}
+                          disabled={!canSave || isProcessingImage}
+                          style={{ padding: '8px 18px', fontSize: '13.5px', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: '#16a34a', borderColor: '#16a34a' }}
+                        >
+                          <CheckCircle size={15} /> 외주 입고 검수 완료 (임대가능 AVAILABLE 복원)
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          className="btn-primary"
+                          onClick={handleOutsourceRepair}
+                          disabled={!canSave || isProcessingImage}
+                          style={{ padding: '8px 16px', fontSize: '13px', fontWeight: '700', backgroundColor: '#7c3aed', borderColor: '#7c3aed', display: 'flex', alignItems: 'center', gap: '6px' }}
+                        >
+                          <Truck size={14} /> 외주 위탁 등록
+                        </button>
+                      )
                     ) : (
                       <button
                         type="button"
                         className="btn-primary"
                         onClick={handleCompleteRepair}
-                        disabled={!canSave}
+                        disabled={!canSave || isProcessingImage}
                         style={{ padding: '8px 18px', fontSize: '13.5px', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: '#16a34a', borderColor: '#16a34a' }}
                       >
                         <CheckCircle size={15} /> 정비 완료 (임대가능 AVAILABLE 전환)

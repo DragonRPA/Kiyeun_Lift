@@ -16,7 +16,8 @@ export type MobileTabType =
   | 'sublease'
   | 'customers'
   | 'delinquency'
-  | 'vehicle_log';
+  | 'vehicle_log'
+  | 'manual_viewer';
 
 interface MobileBottomNavProps {
   deptMode: MobileDeptMode;

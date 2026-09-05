@@ -502,21 +502,25 @@ export const Contracts: React.FC = () => {
           : (ca.id === exchangeContractAssetId || ca.expectedModel === exchangeContractAssetId || assets.find(a => a.id === ca.assetId)?.modelName === exchangeContractAssetId))
       );
 
+      const prevDateObj = new Date(exchangeDate);
+      prevDateObj.setDate(prevDateObj.getDate() - 1);
+      const dayBeforeExchange = prevDateObj.toISOString().split('T')[0];
+
       if (targetOldContractAsset) {
         db.updateRow<ContractAsset>('contractAssets', targetOldContractAsset.id, {
-          endDate: exchangeDate,
+          endDate: dayBeforeExchange,
           status: 'RETURNED',
           actualReturnDate: exchangeDate,
           updatedAt: new Date().toISOString()
         });
       }
 
-      // 1. contractHistory 기록
+      // 1. contractHistory 기록 (헌장 4.1 & 4.2 전자산 전일 마감 ➔ 후장비 당일 승계)
       db.insertRow<ContractHistory>('contractHistory', {
         contractId: selectedContractId,
         changeType: 'EXCHANGE',
         changeDate: exchangeDate,
-        description: `[대차/교체 의뢰 접수] ${identifyTag} / 회수모델: ${targetModelName} / 사유: ${exchangeReason || '현장 고장/스펙 변경 요청'} — 기존 계약 조건(렌탈료, 마감일, 현장조건) 100% 자동 상속 (기존자산 종료일: ${exchangeDate})`,
+        description: `[대차/교체 의뢰 접수] ${identifyTag} / 회수모델: ${targetModelName} / 사유: ${exchangeReason || '현장 고장/스펙 변경 요청'} — 기존 계약 조건(렌탈료, 마감일, 현장조건) 100% 자동 상속 (전자산 마감: ${dayBeforeExchange} / 후장비 개시: ${exchangeDate})`,
         createdAt: new Date().toISOString()
       });
 

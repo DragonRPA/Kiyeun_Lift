@@ -625,11 +625,15 @@ export const MobileDispatchOrderCreate: React.FC<MobileDispatchOrderCreateProps>
           createdAt: new Date().toISOString()
         });
 
-        // 1-1. 기존 ContractAsset 종료 처리 (헌장 1.2)
+        // 1-1. 기존 ContractAsset 종료 처리 (헌장 1.2 & 4.1 전자산 교체 전일 마감)
+        const prevDateObj = new Date(deliveryDate);
+        prevDateObj.setDate(prevDateObj.getDate() - 1);
+        const dayBeforeDelivery = prevDateObj.toISOString().split('T')[0];
+
         const targetOldCA = contractAssets.find(ca => ca.contractId === targetContractId && ca.assetId === oldAssetId);
         if (targetOldCA) {
           db.updateRow<ContractAsset>('contractAssets', targetOldCA.id, {
-            endDate: deliveryDate,
+            endDate: dayBeforeDelivery,
             status: 'RETURNED',
             actualReturnDate: deliveryDate,
             updatedAt: new Date().toISOString()

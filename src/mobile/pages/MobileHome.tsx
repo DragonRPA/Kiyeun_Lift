@@ -3,7 +3,7 @@ import React from 'react';
 import { useApp } from '../../context/AppContext';
 import { 
   Wrench, Truck, CheckSquare, Search, Send, Building2, 
-  ArrowRight, AlertTriangle, Clock, Plus, Boxes, ArrowDownToLine, Users, Car
+  ArrowRight, AlertTriangle, Clock, Plus, Boxes, ArrowDownToLine, Users, Car, BookOpen
 } from 'lucide-react';
 import { MobileTabType } from '../MobileBottomNav';
 import { MobileDeptMode } from '../MobileHeader';
@@ -287,6 +287,28 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
           </div>
           <ArrowRight className="w-5 h-5 text-amber-400" />
         </div>
+
+        {/* [장비 매뉴얼] 장비 매뉴얼 라이브러리 바로가기 */}
+        <div
+          onClick={() => onNavigate('manual_viewer')}
+          className="p-4 rounded-2xl bg-slate-900 border border-blue-500/30 flex items-center justify-between active:scale-98 transition-all cursor-pointer shadow-md"
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-blue-500/20 border border-blue-500/30 flex items-center justify-center text-blue-400 flex-shrink-0">
+              <BookOpen className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="text-sm font-bold text-white flex items-center gap-1.5">
+                <span>장비 매뉴얼 라이브러리</span>
+                <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-500/20 text-blue-300 font-bold">
+                  출고·정비
+                </span>
+              </div>
+              <div className="text-xs text-slate-400 mt-0.5">파츠북, 에러코드 진단표, 전기/유압 회로도 열람</div>
+            </div>
+          </div>
+          <ArrowRight className="w-5 h-5 text-blue-400" />
+        </div>
       </div>
     );
   }
@@ -433,6 +455,28 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
           </div>
         </div>
         <ArrowRight className="w-5 h-5 text-amber-400" />
+      </div>
+
+      {/* [장비 매뉴얼] 장비 매뉴얼 라이브러리 바로가기 */}
+      <div
+        onClick={() => onNavigate('manual_viewer')}
+        className="p-4 rounded-2xl bg-slate-900 border border-blue-500/30 flex items-center justify-between active:scale-98 transition-all cursor-pointer shadow-md"
+      >
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-blue-500/20 border border-blue-500/30 flex items-center justify-center text-blue-400 flex-shrink-0">
+            <BookOpen className="w-5 h-5" />
+          </div>
+          <div>
+            <div className="text-sm font-bold text-white flex items-center gap-1.5">
+              <span>장비 매뉴얼 라이브러리</span>
+              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-500/20 text-blue-300 font-bold">
+                현장 AS 필수
+              </span>
+            </div>
+            <div className="text-xs text-slate-400 mt-0.5">파츠북, 에러코드 진단표, 전기/유압 회로도 열람</div>
+          </div>
+        </div>
+        <ArrowRight className="w-5 h-5 text-blue-400" />
       </div>
     </div>
   );

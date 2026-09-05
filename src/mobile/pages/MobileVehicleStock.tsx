@@ -7,7 +7,7 @@ import {
   ClipboardList, X, Filter, Wrench, Truck, ChevronRight,
   ChevronDown, Check, UserCheck
 } from 'lucide-react';
-import { Consumable, MechanicConsumableStock, ConsumableLog, User, db } from '../../services/db';
+import { Consumable, MechanicConsumableStock, ConsumableLog, CollectedPart, User, db } from '../../services/db';
 import { matchHangul } from '../../utils/hangulSearch';
 
 export type StockProcessType = 'RESTOCK' | 'RETURN' | 'USE' | 'DEFECTIVE' | 'ADJUST';
@@ -21,6 +21,7 @@ export const MobileVehicleStock: React.FC = () => {
     consumableLogs,
     transferConsumableToMechanic,
     returnConsumableToHq,
+    createStocktakingAudit,
     assets,
     customers,
     sites,
@@ -261,23 +262,51 @@ export const MobileVehicleStock: React.FC = () => {
         await db.awaitPendingWrites();
         refreshAllData();
       } else if (processType === 'DEFECTIVE') {
-        // [유형 4: 고품 회수 등록]
-        db.insertRow<ConsumableLog>('consumableLogs', {
-          consumableId: processingConsumable.id,
-          type: 'ADJUST',
-          quantity: processQty,
-          unitPrice: 0,
-          userId: currentUser?.id,
-          mechanicId: effectiveMechanicId,
-          fromLocation: '현장 고품 탈거',
-          toLocation: `${mechName} 차량 (고품 보관)`,
-          targetAssetId: selectedAssetNo,
-          actionDate: new Date().toISOString().split('T')[0],
-          description: `[고품 회수] ${processingConsumable.modelName} ${processQty}개 (${defectiveCondition === 'REPAIRABLE' ? '재생수리 대상' : '폐기 대상'})${processMemo ? ` - ${processMemo}` : ''}`,
-          createdAt: new Date().toISOString()
-        });
-        await db.awaitPendingWrites();
-        refreshAllData();
+        // [유형 4: 고품 회수 및 본사 격리 등록]
+        const disp = defectiveCondition === 'REPAIRABLE' ? 'REBUILD' : 'SCRAP';
+        if (vQty >= processQty) {
+          await returnConsumableToHq(
+            effectiveMechanicId,
+            processingConsumable.id,
+            processQty,
+            processMemo || `[고품 수거] ${mechName} 차량 ➔ 고품 격리 (${disp})`,
+            true,
+            disp
+          );
+        } else {
+          // 차량 전산에 없던 현장 고품 즉시 수거 격리
+          const todayStr = new Date().toISOString().split('T')[0].replace(/-/g, '');
+          db.insertRow<CollectedPart>('collectedParts', {
+            id: `col-${Date.now()}-${Math.random().toString(36).substring(2, 5)}`,
+            partNo: `COL-${todayStr}-${Math.floor(1000 + Math.random() * 9000)}`,
+            consumableId: processingConsumable.id,
+            modelName: processingConsumable.modelName,
+            mechanicId: effectiveMechanicId,
+            mechanicName: mechName,
+            quantity: processQty,
+            disposition: disp,
+            status: 'RECEIVED',
+            receivedDate: new Date().toISOString().split('T')[0],
+            memo: processMemo || `[현장 고품 수거] ${mechName} (${disp})`,
+            createdAt: new Date().toISOString()
+          });
+          db.insertRow<ConsumableLog>('consumableLogs', {
+            consumableId: processingConsumable.id,
+            type: 'ADJUST',
+            quantity: processQty,
+            unitPrice: 0,
+            userId: currentUser?.id,
+            mechanicId: effectiveMechanicId,
+            fromLocation: '현장 고품 탈거',
+            toLocation: `고품 격리실 (${disp})`,
+            targetAssetId: selectedAssetNo,
+            actionDate: new Date().toISOString().split('T')[0],
+            description: `[고품 회수 격리] ${processingConsumable.modelName} ${processQty}개 (${disp})${processMemo ? ` - ${processMemo}` : ''}`,
+            createdAt: new Date().toISOString()
+          });
+          await db.awaitPendingWrites();
+          refreshAllData();
+        }
       } else if (processType === 'ADJUST') {
         // [유형 5: 차량 실사 수량 보정]
         const newQty = processQty;
@@ -393,6 +422,27 @@ export const MobileVehicleStock: React.FC = () => {
               {stockSummary.totalValue > 0 ? `₩${Math.round(stockSummary.totalValue / 10000).toLocaleString('ko-KR')}만원` : '₩0원'}
             </span>
           </div>
+        </div>
+
+        {/* 모바일 차량 재고실사 전표 원클릭 발의 액션 */}
+        <div className="mt-2.5 pt-2.5 border-t border-slate-800/80 flex items-center justify-between">
+          <span className="text-[11px] text-slate-400">차량 전산-실물 재고 감사</span>
+          <button
+            type="button"
+            onClick={async () => {
+              const mechName = activeMechanic?.name || '정비사';
+              try {
+                const audit = await createStocktakingAudit('VEHICLE', effectiveMechanicId, `${mechName} 차량 모바일 현장 실사`);
+                showErrorModal(`✅ 차량 실사 전표(${audit.auditNo})가 성공적으로 발행되었습니다.\n\n전산 재고가 스냅샷으로 고정되었으며, 관리자 검토 후 최종 확정됩니다.`, '차량 실사 전표 발행 완료');
+              } catch (err: any) {
+                showErrorModal(err?.message || '실사 전표 생성 실패');
+              }
+            }}
+            className="px-3 py-1.5 rounded-lg bg-blue-600/20 text-blue-400 border border-blue-500/40 text-xs font-bold hover:bg-blue-600/30 flex items-center gap-1.5 transition-colors"
+          >
+            <ClipboardList className="w-3.5 h-3.5" />
+            <span>차량 재고실사 전표 발의</span>
+          </button>
         </div>
       </div>
 

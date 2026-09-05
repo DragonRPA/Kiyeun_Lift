@@ -46,6 +46,14 @@ export const MobileInspectionList: React.FC = () => {
   const handleApprove = async () => {
     if (!activeInspection) return;
 
+    // 🔴 [출고제한 가드] 연체 및 거래차단(BLOCKED) 고객사 모바일 출고 승인 원천 차단
+    const contract = db.contracts.find((c) => c.id === activeInspection.contractId);
+    const customer = contract ? db.customers.find((c) => c.id === contract.customerId) : undefined;
+    if (customer && customer.transactionStatus === 'BLOCKED') {
+      showErrorModal(`⚠️ [출고제한 가드] 연체 및 거래차단(BLOCKED) 상태인 고객사(${customer.name})의 장비는 출고 승인할 수 없습니다.\n관리부 채권 확인 및 거래 제한 해제 후 진행해 주십시오.`);
+      return;
+    }
+
     // 🌟 [사법 감사 판정 과제 4] 점검 항목 0개 승인 방지 가드
     const checkedCount = Object.values(checkedList).filter(Boolean).length;
     if (checkedCount === 0) {
@@ -71,6 +79,7 @@ export const MobileInspectionList: React.FC = () => {
         deliveryId: activeInspection.deliveryId,
         inspectorId: inspectorName,
         inspectedAt: nowIso,
+        approvedAt: nowIso,
         specsJson: JSON.stringify(inspectionPayload),
         note: `[모바일 검수 완료] 정상 점검 ${inspectionPayload.checkedCount}/${INSPECTION_ITEMS.length}개소 (사진 ${photos.length}매)`,
         updatedAt: nowIso,

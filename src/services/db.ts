@@ -459,6 +459,62 @@ export interface ConsumablePurchaseRequest {
   updatedAt: string;
 }
 
+export interface StocktakingAudit {
+  id: string;
+  auditNo: string; // STK-YYYYMMDD-XXXX
+  targetType: 'HQ' | 'VEHICLE'; // 실사 대상 (HQ: 본사 중앙창고, VEHICLE: 정비사 차량)
+  mechanicId?: string; // VEHICLE인 경우 정비사 ID
+  mechanicName?: string;
+  vehicleNo?: string;
+  auditDate: string; // YYYY-MM-DD
+  auditorId: string;
+  auditorName: string;
+  status: 'DRAFT' | 'CONFIRMED' | 'CANCELLED';
+  totalSystemQty: number;
+  totalActualQty: number;
+  totalDiffQty: number;
+  totalSystemAmount: number;
+  totalActualAmount: number;
+  totalDiffAmount: number;
+  memo?: string;
+  confirmedAt?: string;
+  confirmedBy?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface StocktakingAuditItem {
+  id: string;
+  auditId: string;
+  consumableId: string;
+  modelName: string;
+  unit: string;
+  unitPrice: number;
+  systemQty: number;
+  actualQty: number;
+  diffQty: number; // actualQty - systemQty
+  diffAmount: number; // diffQty * unitPrice
+  diffReason?: 'LOST' | 'DAMAGED' | 'UNRECORDED_USAGE' | 'SURPLUS' | 'OTHER';
+  note?: string;
+}
+
+export interface CollectedPart {
+  id: string;
+  partNo: string; // COL-YYYYMMDD-XXXX
+  consumableId: string;
+  modelName: string;
+  mechanicId: string;
+  mechanicName: string;
+  quantity: number;
+  disposition: 'REBUILD' | 'SCRAP' | 'VENDOR_WARRANTY';
+  status: 'RECEIVED' | 'IN_PROCESS' | 'COMPLETED';
+  receivedDate: string;
+  actionDate?: string;
+  actionMemo?: string;
+  memo?: string;
+  createdAt: string;
+}
+
 export interface ContractAsset {
   id: string;
   contractId: string;
@@ -888,7 +944,31 @@ export interface InspectionChecklistItem {
   name: string;
   score: number;
   description?: string;
+  recommendedConsumableIds?: string[]; // 추천 소모품 ID 목록
+  standardManHours?: number;           // 표준 작업 공수 (M/H 단위, 예: 0.5, 1.5)
+  actionGuide?: string;                // 표준 조치 절차 (SOP)
   createdAt: string;
+  updatedAt?: string;
+}
+
+export interface EquipmentManual {
+  id: string;
+  modelName: string;            // 대상 장비 모델명 (예: 'SJ-3219', 'GS-1930', '공통')
+  manufacturer: string;         // 제조사 (Skyjack, Genie, Dingli 등)
+  targetSpecFt?: number;        // 규격 피트수 (19, 26, 32, 40 등)
+  category: 'PARTS_BOOK' | 'ERROR_CODE' | 'WIRING_DIAGRAM' | 'OPERATOR_MANUAL'; // 파츠북 | 에러코드 | 회로도 | 취급설명서
+  title: string;                // 매뉴얼 명칭 (예: 'Skyjack SJIII 3219 부품 매뉴얼')
+  fileUrl: string;              // 파일 URL 또는 base64 데이터
+  fileName: string;             // 파일명 (예: 'SJ3219_parts_manual_rev2.pdf')
+  fileSize: number;             // 바이트 단위 용량
+  fileSizeLabel?: string;       // 표시용 크기 (예: '14.2 MB')
+  version: string;              // 개정 버전 (예: 'Rev. 2024-C')
+  uploadDate: string;           // 등록일자 (YYYY-MM-DD)
+  uploadedBy: string;           // 등록자
+  memo?: string;                // 비고 및 가이드 요약
+  inspectionItemCodes?: string[];// 연계 정비점검항목 코드 (선택)
+  createdAt: string;
+  updatedAt?: string;
 }
 
 export interface Todo {
@@ -1076,6 +1156,9 @@ export interface OutboundInspection {
   specsJson?: string;
   inspectorId?: string;
   inspectedAt?: string;
+  approvedAt?: string;
+  rejectReason?: string;
+  repairId?: string;
   note?: string;
   createdAt: string;
   updatedAt: string;
@@ -2891,6 +2974,93 @@ const SEED_OVERTIME_RECORDS: OvertimeRecord[] = [
 // 실제 운영 데이터는 Supabase에 저장되며, 신규 설치 시에는 체크리스트 관리 메뉴에서 직접 등록한다.
 const SEED_INSPECTION_CHECKLIST_ITEMS: InspectionChecklistItem[] = [];
 
+export const SEED_EQUIPMENT_MANUALS: EquipmentManual[] = [
+  {
+    id: 'MAN-0000001',
+    modelName: 'SJ-3219',
+    manufacturer: 'Skyjack',
+    targetSpecFt: 19,
+    category: 'PARTS_BOOK',
+    title: '[Skyjack] SJ-3219/3226 부품 카탈로그 (Parts Manual)',
+    fileName: 'Skyjack_SJ3219_Parts_Manual_RevC.pdf',
+    fileSize: 18450000,
+    fileSizeLabel: '17.6 MB',
+    fileUrl: 'https://example.com/manuals/Skyjack_SJ3219_Parts_Manual_RevC.pdf',
+    version: 'Rev. 2024-C',
+    uploadDate: '2026-08-15',
+    uploadedBy: '관리자',
+    memo: 'SJ-3219 및 SJ-3226 공용 유압 실린더 및 휠모터 분해도 수록',
+    createdAt: '2026-08-15T09:00:00.000Z'
+  },
+  {
+    id: 'MAN-0000002',
+    modelName: 'SJ-3219',
+    manufacturer: 'Skyjack',
+    targetSpecFt: 19,
+    category: 'ERROR_CODE',
+    title: '[Skyjack] 시저리프트 플래시 에러코드 진단표 (Fault Codes)',
+    fileName: 'Skyjack_Flash_Code_Guide_2024.pdf',
+    fileSize: 4200000,
+    fileSizeLabel: '4.0 MB',
+    fileUrl: 'https://example.com/manuals/Skyjack_Flash_Code_Guide_2024.pdf',
+    version: 'v2.1',
+    uploadDate: '2026-08-20',
+    uploadedBy: '김정비',
+    memo: 'Flash 02~18 플래시 횟수별 고장 원인 및 현장 조치 트리',
+    createdAt: '2026-08-20T10:30:00.000Z'
+  },
+  {
+    id: 'MAN-0000003',
+    modelName: 'GS-1930',
+    manufacturer: 'Genie',
+    targetSpecFt: 19,
+    category: 'WIRING_DIAGRAM',
+    title: '[Genie] GS-1930/2032 전기배선 및 유압 회로도 (Schematics)',
+    fileName: 'Genie_GS1930_Schematic_RevE.pdf',
+    fileSize: 9800000,
+    fileSizeLabel: '9.3 MB',
+    fileUrl: 'https://example.com/manuals/Genie_GS1930_Schematic_RevE.pdf',
+    version: 'Rev. E',
+    uploadDate: '2026-08-22',
+    uploadedBy: '최정비',
+    memo: '조이스틱 컨트롤러 ECM 배선도 및 비상정지 릴레이 맵 포함',
+    createdAt: '2026-08-22T14:15:00.000Z'
+  },
+  {
+    id: 'MAN-0000004',
+    modelName: 'SJ-3219',
+    manufacturer: 'Skyjack',
+    targetSpecFt: 19,
+    category: 'OPERATOR_MANUAL',
+    title: '[Skyjack] SJ-3219 운전자 조작 매뉴얼 (User Guide)',
+    fileName: 'Skyjack_SJ3219_Operator_Manual.pdf',
+    fileSize: 12100000,
+    fileSizeLabel: '11.5 MB',
+    fileUrl: 'https://example.com/manuals/Skyjack_SJ3219_Operator_Manual.pdf',
+    version: 'Rev. 2024-B',
+    uploadDate: '2026-08-25',
+    uploadedBy: '관리자',
+    memo: '출고 전 작업자 안전 수칙 및 비상 하강 레버 작동 요령',
+    createdAt: '2026-08-25T11:00:00.000Z'
+  },
+  {
+    id: 'MAN-0000005',
+    modelName: '공통',
+    manufacturer: 'Delta-Q',
+    category: 'ERROR_CODE',
+    title: '[Delta-Q] IC650 배터리 충전기 에러코드 조치표',
+    fileName: 'DeltaQ_IC650_Error_Codes.pdf',
+    fileSize: 2600000,
+    fileSizeLabel: '2.5 MB',
+    fileUrl: 'https://example.com/manuals/DeltaQ_IC650_Error_Codes.pdf',
+    version: 'v1.4',
+    uploadDate: '2026-08-28',
+    uploadedBy: '김정비',
+    memo: '적색 LED 점멸 횟수별(1~6회) 배터리 저전압 및 충전기 불량 진단',
+    createdAt: '2026-08-28T16:00:00.000Z'
+  }
+];
+
 export const SEED_BANK_INITIAL_BALANCES: BankAccountInitialBalance[] = [
   { id: 'bank-init-우리은행', bankName: '우리은행', accountNumber: 'XXXX-XX-XXXXXXX01', initialBalance: 0, updatedAt: new Date().toISOString() },
   { id: 'bank-init-신한은행', bankName: '신한은행', accountNumber: 'XXX-XXXXXXXXX-XX', initialBalance: 0, updatedAt: new Date().toISOString() }
@@ -3103,7 +3273,8 @@ export const ALL_DB_KEYS = [
   'purchaseSettlements', 'purchaseSettlementItems', 'settlementPaymentLogs', 'externalLeases',
   'annualLeaveQuotas', 'leaveUsages', 'overtimeRecords', 'payrollClosings', 'inspectionChecklistItems',
   'prepaidTransactions', 'delinquencyActionLogs', 'mechanicConsumableStocks', 'receivables', 'legalNoticeLogs', 'legalNoticeTemplates',
-  'corporateVehicles', 'vehicleOperationLogs', 'vehicleFuelLogs'
+  'corporateVehicles', 'vehicleOperationLogs', 'vehicleFuelLogs',
+  'stocktakingAudits', 'stocktakingAuditItems', 'collectedParts', 'equipmentManuals'
 ];
 
 class LocalDB {
@@ -3200,6 +3371,15 @@ class LocalDB {
 
   get mechanicConsumableStocks() { return this.get<MechanicConsumableStock>('mechanicConsumableStocks', []); }
   set mechanicConsumableStocks(val: MechanicConsumableStock[]) { this.set('mechanicConsumableStocks', val); }
+
+  get stocktakingAudits() { return this.get<StocktakingAudit>('stocktakingAudits', []); }
+  set stocktakingAudits(val: StocktakingAudit[]) { this.set('stocktakingAudits', val); }
+
+  get stocktakingAuditItems() { return this.get<StocktakingAuditItem>('stocktakingAuditItems', []); }
+  set stocktakingAuditItems(val: StocktakingAuditItem[]) { this.set('stocktakingAuditItems', val); }
+
+  get collectedParts() { return this.get<CollectedPart>('collectedParts', []); }
+  set collectedParts(val: CollectedPart[]) { this.set('collectedParts', val); }
 
   get contracts() { return this.get<Contract>('contracts', SEED_CONTRACTS); }
   set contracts(val: Contract[]) { this.set('contracts', val); }
@@ -3361,6 +3541,9 @@ class LocalDB {
   get vehicleFuelLogs() { return this.get<VehicleFuelLog>('vehicleFuelLogs', SEED_VEHICLE_FUEL_LOGS); }
   set vehicleFuelLogs(val: VehicleFuelLog[]) { this.set('vehicleFuelLogs', val); }
 
+  get equipmentManuals() { return this.get<EquipmentManual>('equipmentManuals', SEED_EQUIPMENT_MANUALS); }
+  set equipmentManuals(val: EquipmentManual[]) { this.set('equipmentManuals', val); }
+
   // Supabase 테이블 맵핑
   private mapToSupabaseTable(key: string): string {
     const mapping: Record<string, string> = {
@@ -3414,6 +3597,10 @@ class LocalDB {
       corporateVehicles: 'corporate_vehicles',
       vehicleOperationLogs: 'vehicle_operation_logs',
       vehicleFuelLogs: 'vehicle_fuel_logs',
+      stocktakingAudits: 'stocktaking_audits',
+      stocktakingAuditItems: 'stocktaking_audit_items',
+      collectedParts: 'collected_parts',
+      equipmentManuals: 'equipment_manuals',
     };
     return mapping[key] || key;
   }
@@ -3713,6 +3900,7 @@ class LocalDB {
       case 'corporateVehicles':   prefix = 'VEH-';    break;
       case 'vehicleOperationLogs':prefix = 'VLOG-';   break;
       case 'vehicleFuelLogs':     prefix = 'VFUEL-';  break;
+      case 'equipmentManuals':    prefix = 'MAN-';    break;
       default:
         prefix = key.slice(0, 4).toUpperCase() + '-';
     }
@@ -3826,6 +4014,10 @@ class LocalDB {
       leave_usages: 'leaveUsages',
       overtime_records: 'overtimeRecords',
       payroll_closings: 'payrollClosings',
+      stocktaking_audits: 'stocktakingAudits',
+      stocktaking_audit_items: 'stocktakingAuditItems',
+      collected_parts: 'collectedParts',
+      equipment_manuals: 'equipmentManuals',
     };
     return (reverseMapping[key] || key) as keyof LocalDB;
   }

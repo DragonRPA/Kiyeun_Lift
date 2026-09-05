@@ -775,9 +775,23 @@ export const Assets: React.FC = () => {
                         ) : a.status === 'SOLD' ? (
                           <span className="badge badge-danger" style={{ fontSize: '10px', padding: '1px 5px' }}>매각 처분완료</span>
                         ) : (
-                          <span className={`badge ${getAssetStatusBadgeClass(a.status)}`} style={{ fontSize: '10px', padding: '1px 5px' }}>
-                            {getAssetStatusLabel(a.status)}
-                          </span>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', alignItems: 'center' }}>
+                            <span className={`badge ${getAssetStatusBadgeClass(a.status)}`} style={{ fontSize: '10px', padding: '1px 5px' }}>
+                              {getAssetStatusLabel(a.status)}
+                            </span>
+                            {a.status === 'REPAIRING' && (() => {
+                              const extRep = repairs?.find(r => r.assetId === a.id && r.status === 'IN_PROGRESS' && r.maintenanceType === 'EXTERNAL');
+                              if (extRep) {
+                                const vName = vendors?.find(v => v.id === extRep.vendorId)?.name || '외주처';
+                                return (
+                                  <span className="badge" style={{ fontSize: '9px', padding: '1px 4px', backgroundColor: '#8b5cf6', color: '#ffffff', whiteSpace: 'nowrap' }}>
+                                    외주:{vName}
+                                  </span>
+                                );
+                              }
+                              return null;
+                            })()}
+                          </div>
                         )}
                       </td>
 

@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
-import { db, supabase, User, MenuPermission, createMenuPermission, Customer, CustomerContact, CustomerSite, Product, Asset, Consumable, ConsumableLog, ConsumablePurchaseRequest, MechanicConsumableStock, Contract, ContractAsset, ContractHistory, Delivery, Billing, BillingDetail, Receivable, Payment, PaymentDepositLink, Repair, RepairConsumable, Todo, BankTransaction, BankMatchingRule, BankAccountInitialBalance, AssetInOutLog, GoogleConfig, Vendor, CashFlowSnapshot, OutboundInspection, TransportCompany, TransportDriver, DepreciationLog, PurchaseSettlement, PurchaseSettlementItem, SettlementPaymentLog, ExternalLease, PurchaseSettlementType, PurchaseSettlementStatus, findCustomerByNormalizedName, AnnualLeaveQuota, LeaveUsage, OvertimeRecord, PayrollClosing, InspectionChecklistItem, InboundDefectDetail, PrepaidTransaction, DelinquencyActionLog, LegalNoticeLog, LegalNoticeTemplate, calculateAssetDepreciation, FieldAsTicket, FieldAsPartUsed, FieldAsCollectedPart, CorporateVehicle, VehicleOperationLog, VehicleFuelLog, RepairPartUsed, RepairCollectedPart, SaleContractTerms } from '../services/db';
+import { db, supabase, User, MenuPermission, createMenuPermission, Customer, CustomerContact, CustomerSite, Product, Asset, Consumable, ConsumableLog, ConsumablePurchaseRequest, MechanicConsumableStock, Contract, ContractAsset, ContractHistory, Delivery, Billing, BillingType, BillingDetail, Receivable, Payment, PaymentDepositLink, Repair, RepairConsumable, Todo, BankTransaction, BankMatchingRule, BankAccountInitialBalance, AssetInOutLog, GoogleConfig, Vendor, CashFlowSnapshot, OutboundInspection, TransportCompany, TransportDriver, DepreciationLog, PurchaseSettlement, PurchaseSettlementItem, SettlementPaymentLog, ExternalLease, PurchaseSettlementType, PurchaseSettlementStatus, findCustomerByNormalizedName, AnnualLeaveQuota, LeaveUsage, OvertimeRecord, PayrollClosing, InspectionChecklistItem, EquipmentManual, InboundDefectDetail, PrepaidTransaction, DelinquencyActionLog, LegalNoticeLog, LegalNoticeTemplate, calculateAssetDepreciation, FieldAsTicket, FieldAsPartUsed, FieldAsCollectedPart, CorporateVehicle, VehicleOperationLog, VehicleFuelLog, RepairPartUsed, RepairCollectedPart, SaleContractTerms, StocktakingAudit, StocktakingAuditItem, CollectedPart } from '../services/db';
 import { ErrorModal } from '../components/ErrorModal';
 import { getAllSystemMenuIds } from '../config/menu_config';
 import { broadcastWorkNotification } from '../utils/workNotificationService';
@@ -119,6 +119,7 @@ interface AppContextType {
   settlementPaymentLogs: SettlementPaymentLog[];
   externalLeases: ExternalLease[];
   inspectionChecklistItems: InspectionChecklistItem[];
+  equipmentManuals: EquipmentManual[];
 
   annualLeaveQuotas: AnnualLeaveQuota[];
   leaveUsages: LeaveUsage[];
@@ -155,6 +156,8 @@ interface AppContextType {
   deleteVendor: (id: string) => void;
   saveInspectionChecklistItem: (item: Omit<InspectionChecklistItem, 'id' | 'createdAt'> & { id?: string }) => Promise<void>;
   deleteInspectionChecklistItem: (id: string) => Promise<void>;
+  saveEquipmentManual: (item: Omit<EquipmentManual, 'id' | 'createdAt'> & { id?: string }) => Promise<void>;
+  deleteEquipmentManual: (id: string) => Promise<void>;
   
   // Asset Mutators
   changeAssetStatus: (assetId: string, status: Asset['status'], extraData?: Partial<Asset>) => Promise<void>;
@@ -200,7 +203,18 @@ interface AppContextType {
   // AS 기사 차량별 이동재고 (Van Stock)
   mechanicConsumableStocks: MechanicConsumableStock[];
   transferConsumableToMechanic: (mechanicId: string, consumableId: string, quantity: number, memo?: string) => Promise<void>;
-  returnConsumableToHq: (mechanicId: string, consumableId: string, quantity: number, memo?: string) => Promise<void>;
+  returnConsumableToHq: (mechanicId: string, consumableId: string, quantity: number, memo?: string, isDefective?: boolean, disposition?: 'REBUILD' | 'SCRAP' | 'VENDOR_WARRANTY') => Promise<void>;
+  transferConsumableBetweenMechanics: (fromMechanicId: string, toMechanicId: string, consumableId: string, quantity: number, memo?: string) => Promise<void>;
+
+  // 재고실사(Stocktaking Audit) & 고품 관리
+  stocktakingAudits: StocktakingAudit[];
+  stocktakingAuditItems: StocktakingAuditItem[];
+  collectedParts: CollectedPart[];
+  createStocktakingAudit: (targetType: 'HQ' | 'VEHICLE', mechanicId?: string, memo?: string) => Promise<StocktakingAudit>;
+  updateStocktakingItem: (auditId: string, itemId: string, actualQty: number, diffReason?: StocktakingAuditItem['diffReason'], note?: string) => Promise<void>;
+  confirmStocktakingAudit: (auditId: string) => Promise<void>;
+  cancelStocktakingAudit: (auditId: string) => Promise<void>;
+  processCollectedPart: (partId: string, actionStatus: 'IN_PROCESS' | 'COMPLETED', actionMemo?: string) => Promise<void>;
 
   // 현장 AS 관리
   fieldAsTickets: FieldAsTicket[];
@@ -378,6 +392,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [purchaseSettlementItems, setPurchaseSettlementItems] = useState<PurchaseSettlementItem[]>([]);
   const [externalLeases, setExternalLeases] = useState<ExternalLease[]>([]);
   const [inspectionChecklistItems, setInspectionChecklistItems] = useState<InspectionChecklistItem[]>([]);
+  const [equipmentManuals, setEquipmentManuals] = useState<EquipmentManual[]>([]);
   const [annualLeaveQuotas, setAnnualLeaveQuotas] = useState<AnnualLeaveQuota[]>([]);
   const [leaveUsages, setLeaveUsages] = useState<LeaveUsage[]>([]);
   const [overtimeRecords, setOvertimeRecords] = useState<OvertimeRecord[]>([]);
@@ -389,6 +404,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [corporateVehicles, setCorporateVehicles] = useState<CorporateVehicle[]>([]);
   const [vehicleOperationLogs, setVehicleOperationLogs] = useState<VehicleOperationLog[]>([]);
   const [vehicleFuelLogs, setVehicleFuelLogs] = useState<VehicleFuelLog[]>([]);
+  const [stocktakingAudits, setStocktakingAudits] = useState<StocktakingAudit[]>([]);
+  const [stocktakingAuditItems, setStocktakingAuditItems] = useState<StocktakingAuditItem[]>([]);
+  const [collectedParts, setCollectedParts] = useState<CollectedPart[]>([]);
 
 
   // Navigation / Routing states
@@ -466,6 +484,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setPurchaseSettlementItems([...db.purchaseSettlementItems]);
     setExternalLeases([...db.externalLeases]);
     setInspectionChecklistItems([...db.inspectionChecklistItems]);
+    setEquipmentManuals([...db.equipmentManuals]);
     setAnnualLeaveQuotas([...db.annualLeaveQuotas]);
     setLeaveUsages([...db.leaveUsages]);
     setOvertimeRecords([...db.overtimeRecords]);
@@ -477,6 +496,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setCorporateVehicles([...db.corporateVehicles]);
     setVehicleOperationLogs([...db.vehicleOperationLogs]);
     setVehicleFuelLogs([...db.vehicleFuelLogs]);
+    setStocktakingAudits([...db.stocktakingAudits]);
+    setStocktakingAuditItems([...db.stocktakingAuditItems]);
+    setCollectedParts([...db.collectedParts]);
   };
 
   // 전체 테이블 Supabase pull 후 state 동기화 (초기 로딩 전용)
@@ -506,7 +528,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     'asset':                ['assets', 'products', 'vendors'],
     'acquisition_disposal': ['assets', 'products', 'vendors'],
     'rent_asset':           ['assets', 'vendors'],
-    'consumable':           ['consumables', 'consumableLogs', 'consumablePurchases', 'vendors'],
+    'consumable':           ['consumables', 'consumableLogs', 'consumablePurchases', 'vendors', 'mechanicConsumableStocks', 'stocktakingAudits', 'stocktakingAuditItems', 'collectedParts'],
     'smart_dispatch':       ['deliveries', 'contracts', 'assets', 'transportCompanies', 'transportDrivers'],
     'smart_return':         ['deliveries', 'contracts', 'assets', 'transportCompanies', 'transportDrivers'],
     'asset_inout_history':  ['assetInOutLogs', 'assets', 'customers'],
@@ -910,6 +932,31 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     refreshAllData();
   };
 
+  const saveEquipmentManual = async (manualData: Omit<EquipmentManual, 'id' | 'createdAt'> & { id?: string }) => {
+    if (manualData.id) {
+      db.updateRow<EquipmentManual>('equipmentManuals', manualData.id, {
+        ...manualData,
+        updatedAt: new Date().toISOString()
+      });
+    } else {
+      const nextId = db.generateNextId('equipmentManuals', db.equipmentManuals);
+      db.insertRow<EquipmentManual>('equipmentManuals', {
+        ...manualData,
+        id: nextId,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      });
+    }
+    await db.awaitPendingWrites();
+    refreshAllData();
+  };
+
+  const deleteEquipmentManual = async (id: string) => {
+    db.deleteRow('equipmentManuals', id);
+    await db.awaitPendingWrites();
+    refreshAllData();
+  };
+
   const saveAsset = async (asset: Omit<Asset, 'id' | 'createdAt' | 'updatedAt'> & { id?: string }) => {
     let result;
     const isNew = !asset.id;
@@ -1299,15 +1346,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
     const contractBillingDay = parseDayNumber(rawData.closingDay, finalCustomer.defaultBillingDay || 30);
     const contractPaymentDueDay = parseDayNumber(rawData.paymentDay, finalCustomer.paymentDueDay || 25);
+    const contractLateInterestRate = (rawData.lateInterestRate !== undefined && rawData.lateInterestRate !== '') ? (Number(rawData.lateInterestRate) || 0) : ((finalCustomer as any).defaultLateInterestRate || 0);
+
+    const extractDate = (dateTimeStr?: string): string => {
+      if (!dateTimeStr) return '';
+      const match = dateTimeStr.match(/\d{4}-\d{2}-\d{2}/);
+      return match ? match[0] : '';
+    };
+    const targetStartDate = extractDate(data.loadingTime) || extractDate(data.unloadingTime) || new Date().toISOString().split('T')[0];
 
     const contract = db.insertRow<Contract>('contracts', {
       contractNo: nextContractNo,
+      contractType: 'RENTAL',
       customerId: finalCustomer.id,
       siteId: finalSite.id,
-      startDate: new Date().toISOString().split('T')[0],
+      startDate: targetStartDate,
       endDate: '', 
       billingDay: contractBillingDay,
-      lateInterestRate: 0,
+      lateInterestRate: contractLateInterestRate,
       paymentDueDay: contractPaymentDueDay,
       salespersonId: validSalespersonId,
       status: 'ACTIVE',
@@ -1324,16 +1380,67 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return { success: false, errorMessage: err.message || err.details };
     }
 
-    await notify('🏗️ [4/5 장비 매핑] 계약 투입 장비 모델 및 수량 매핑 중...', 80);
+    // 📜 [헌장 1.2] 발생 사건 무누락 DB 저장: 스마트 출고 신규 계약 체결 이력 등록
+    db.insertRow<ContractHistory>('contractHistory', {
+      contractId: contract.id,
+      changeType: 'REGISTER',
+      changeDate: contract.startDate,
+      newEndDate: '',
+      description: `[스마트출고] 신규 임대차 계약 체결 (${finalCustomer.name} / ${finalSite.name} - ${data.equipments.map(e => `${e.modelName} ${e.qty}대`).join(', ')})`,
+      createdAt: new Date().toISOString()
+    });
+
+    await notify('🏗️ [4/5 장비 매핑] 계약 투입 장비 모델 및 단가 자동 상속 중...', 80);
+
+    const custContractIds = db.contracts.filter(c => c.customerId === finalCustomer.id).map(c => c.id);
 
     data.equipments.forEach((eq) => {
-      for(let i=0; i<eq.qty; i++) {
+      const eqData = eq as any;
+      const count = Math.max(1, Math.floor(Number(eq.qty) || 1));
+
+      // 1. 명시된 단가 확인 (모바일 발주 등)
+      let determinedMonthly = Number(eqData.monthlyRent || eqData.monthlyRentalFee) || 0;
+      let determinedDaily = Number(eqData.dailyRent || eqData.dailyRentalFee) || 0;
+
+      // 2. 미입력 시 고객사의 동일 모델 최근 계약 단가 자동 상속 (헌장 2.2)
+      if (!determinedMonthly && finalCustomer?.id) {
+        const recentCustCA = db.contractAssets
+          .filter(ca => custContractIds.includes(ca.contractId) && ca.expectedModel === eq.modelName && ca.monthlyRentalFee > 0)
+          .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''))[0];
+        if (recentCustCA) {
+          determinedMonthly = recentCustCA.monthlyRentalFee;
+          determinedDaily = recentCustCA.dailyRentalFee || Math.round(determinedMonthly / 30);
+        }
+      }
+
+      // 3. 미입력 시 자산 마스터 동일 모델의 표준 월 렌탈료 상속
+      if (!determinedMonthly) {
+        const peerAsset = db.assets.find(a => a.modelName === eq.modelName && (a.monthlyRentalFee || a.dailyRentalFee));
+        if (peerAsset) {
+          determinedMonthly = peerAsset.monthlyRentalFee || 0;
+          determinedDaily = peerAsset.dailyRentalFee || (determinedMonthly ? Math.round(determinedMonthly / 30) : 0);
+        }
+      }
+
+      // 4. 모델명 규격 기반 표준 단가 추정
+      if (!determinedMonthly) {
+        const m = (eq.modelName || '').toUpperCase();
+        if (m.includes('53') || m.includes('1614')) determinedMonthly = 1500000;
+        else if (m.includes('46') || m.includes('1412')) determinedMonthly = 1200000;
+        else if (m.includes('40') || m.includes('1212')) determinedMonthly = 900000;
+        else if (m.includes('32') || m.includes('1012')) determinedMonthly = 600000;
+        else if (m.includes('26') || m.includes('0812')) determinedMonthly = 500000;
+        else determinedMonthly = 400000;
+        determinedDaily = Math.round(determinedMonthly / 30);
+      }
+
+      for(let i=0; i<count; i++) {
         db.insertRow<ContractAsset>('contractAssets', {
           contractId: contract.id,
           assetId: '',
           expectedModel: eq.modelName,
-          monthlyRentalFee: 0,
-          dailyRentalFee: 0,
+          monthlyRentalFee: determinedMonthly,
+          dailyRentalFee: determinedDaily,
           startDate: contract.startDate,
           endDate: '',
           createdAt: new Date().toISOString()
@@ -1344,14 +1451,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     await notify('🚚 [5/5 배차 생성] 배차/운송 관리 출고대기 지시건 생성 중...', 90);
 
     // 신규 배차(Delivery) - 출고 대기 건 자동 생성
-    const cargoItems = JSON.stringify(data.equipments.map(e => ({ modelName: e.modelName, count: e.qty })));
+    const cargoItems = JSON.stringify(data.equipments.map(e => ({ modelName: e.modelName, count: Number(e.qty) || 1 })));
     const dData = data as any;
+    const loadingDateStr = extractDate(data.loadingTime) || contract.startDate;
+    const loadingTimeSlotStr = (data.loadingTime && data.loadingTime.includes(':')) ? data.loadingTime.split(' ')[1] : '오전';
+    const unloadingDateStr = extractDate(data.unloadingTime) || contract.startDate;
+    const unloadingTimeSlotStr = (data.unloadingTime && data.unloadingTime.includes(':')) ? data.unloadingTime.split(' ')[1] : '오전';
+
     db.insertRow<Delivery>('deliveries', {
       contractId: contract.id,
       type: 'OUTBOUND',
+      dispatchCategory: '출고',
       status: 'REQUESTED',
       requestDate: contract.startDate,
-      scheduledDate: data.loadingTime || contract.startDate,
+      scheduledDate: loadingDateStr,
+      loadingDate: loadingDateStr,
+      loadingTimeSlot: loadingTimeSlotStr,
+      unloadingDate: unloadingDateStr,
+      unloadingTimeSlot: unloadingTimeSlotStr,
       originAddress: '당사 보관소',
       destinationAddress: `${finalCustomer.name} (${finalSite.name} - ${finalSite.address || ''})`,
       transportCompany: '',
@@ -1379,13 +1496,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } catch (err: any) {
       console.error('Supabase sync error during saveSmartDispatch:', err);
       
-      // 💥 DB 저장 실패 시 생성되었던 임시 계약/배차/슬롯 레코드 롤백 삭제!
+      // 💥 DB 저장 실패 시 생성되었던 임시 계약/배차/슬롯/이력 레코드 롤백 삭제!
       if (contract?.id) {
         db.deleteRow('contracts', contract.id);
         const addedCAssets = db.contractAssets.filter(ca => ca.contractId === contract.id);
         addedCAssets.forEach(ca => db.deleteRow('contractAssets', ca.id));
         const addedDeliveries = db.deliveries.filter(d => d.contractId === contract.id);
         addedDeliveries.forEach(d => db.deleteRow('deliveries', d.id));
+        const addedHistories = db.contractHistory.filter(h => h.contractId === contract.id);
+        addedHistories.forEach(h => db.deleteRow('contractHistory', h.id));
       }
       refreshAllData();
 
@@ -2207,7 +2326,14 @@ ${payload.memo ? `\n[특이사항 / 메모]\n${payload.memo}\n` : ''}
     }
   };
 
-  const returnConsumableToHq = async (mechanicId: string, consumableId: string, quantity: number, memo?: string): Promise<void> => {
+  const returnConsumableToHq = async (
+    mechanicId: string, 
+    consumableId: string, 
+    quantity: number, 
+    memo?: string,
+    isDefective: boolean = false,
+    disposition: 'REBUILD' | 'SCRAP' | 'VENDOR_WARRANTY' = 'REBUILD'
+  ): Promise<void> => {
     try {
       if (quantity <= 0) {
         showErrorModal('반납 수량은 1개 이상이어야 합니다.');
@@ -2230,11 +2356,32 @@ ${payload.memo ? `\n[특이사항 / 메모]\n${payload.memo}\n` : ''}
         updatedAt: new Date().toISOString()
       });
 
-      // 2. 본사 재고 증가
-      if (consumable) {
-        db.updateRow<Consumable>('consumables', consumableId, {
-          stockQty: consumable.stockQty + quantity,
-          updatedAt: new Date().toISOString()
+      // 2. 신품 정상 반납 vs 고품 격리 처리
+      if (!isDefective) {
+        // 정상 신품 반납: 본사 중앙창고 가용 재고 증가
+        if (consumable) {
+          db.updateRow<Consumable>('consumables', consumableId, {
+            stockQty: consumable.stockQty + quantity,
+            updatedAt: new Date().toISOString()
+          });
+        }
+      } else {
+        // 고품(불량품) 반납: 본사 신품 가용재고 가산 차단 및 고품 관리 대장(collectedParts) 격리 적재
+        const todayStr = new Date().toISOString().split('T')[0].replace(/-/g, '');
+        const newPartNo = `COL-${todayStr}-${Math.floor(1000 + Math.random() * 9000)}`;
+        db.insertRow<CollectedPart>('collectedParts', {
+          id: `col-${Date.now()}-${Math.random().toString(36).substring(2, 5)}`,
+          partNo: newPartNo,
+          consumableId,
+          modelName: consumable?.modelName || '부품',
+          mechanicId,
+          mechanicName,
+          quantity,
+          disposition,
+          status: 'RECEIVED',
+          receivedDate: new Date().toISOString().split('T')[0],
+          memo: memo || `[고품 수거] ${mechanicName} 차량 반납 (${disposition})`,
+          createdAt: new Date().toISOString()
         });
       }
 
@@ -2247,9 +2394,11 @@ ${payload.memo ? `\n[특이사항 / 메모]\n${payload.memo}\n` : ''}
         userId: currentUser?.id,
         mechanicId,
         fromLocation: `${mechanicName} 차량`,
-        toLocation: '본사 중앙창고',
+        toLocation: !isDefective ? '본사 중앙창고' : `고품 격리실 (${disposition})`,
         actionDate: new Date().toISOString().split('T')[0],
-        description: memo || `[본사 반납] ${mechanicName} 차량 ➔ 본사창고 회수 (${quantity}개)`,
+        description: memo || (!isDefective 
+          ? `[본사 반납] ${mechanicName} 차량 ➔ 본사창고 회수 (${quantity}개)`
+          : `[고품 반납] ${mechanicName} 차량 ➔ 고품 격리 (${disposition}, ${quantity}개)`),
         createdAt: new Date().toISOString()
       });
 
@@ -2257,6 +2406,365 @@ ${payload.memo ? `\n[특이사항 / 메모]\n${payload.memo}\n` : ''}
       refreshAllData();
     } catch (err: any) {
       showErrorModal(`⚠️ 본사 반납 처리 실패:\n${err?.message || err}`);
+      throw err;
+    }
+  };
+
+  const transferConsumableBetweenMechanics = async (
+    fromMechanicId: string,
+    toMechanicId: string,
+    consumableId: string,
+    quantity: number,
+    memo?: string
+  ): Promise<void> => {
+    try {
+      if (fromMechanicId === toMechanicId) {
+        showErrorModal('동일한 정비사 차량 간에는 이동할 수 없습니다.');
+        throw new Error('동일한 정비사 차량 간에는 이동할 수 없습니다.');
+      }
+      if (quantity <= 0) {
+        showErrorModal('이동 수량은 1개 이상이어야 합니다.');
+        throw new Error('이동 수량은 1개 이상이어야 합니다.');
+      }
+
+      const fromStock = db.mechanicConsumableStocks.find(s => s.mechanicId === fromMechanicId && s.consumableId === consumableId);
+      if (!fromStock || fromStock.stockQty < quantity) {
+        const msg = `양도 정비사 차량의 보유 재고가 부족합니다. (현재고: ${fromStock?.stockQty || 0}개)`;
+        showErrorModal(`⚠️ ${msg}`);
+        throw new Error(msg);
+      }
+
+      const fromUser = db.users.find(u => u.id === fromMechanicId);
+      const toUser = db.users.find(u => u.id === toMechanicId);
+      const consumable = db.consumables.find(c => c.id === consumableId);
+
+      // 1. 양도 차량 재고 차감
+      db.updateRow<MechanicConsumableStock>('mechanicConsumableStocks', fromStock.id, {
+        stockQty: fromStock.stockQty - quantity,
+        updatedAt: new Date().toISOString()
+      });
+
+      // 2. 양수 차량 재고 증가
+      const toStock = db.mechanicConsumableStocks.find(s => s.mechanicId === toMechanicId && s.consumableId === consumableId);
+      if (toStock) {
+        db.updateRow<MechanicConsumableStock>('mechanicConsumableStocks', toStock.id, {
+          stockQty: toStock.stockQty + quantity,
+          updatedAt: new Date().toISOString()
+        });
+      } else {
+        db.insertRow<MechanicConsumableStock>('mechanicConsumableStocks', {
+          id: `mcs-${Date.now()}-${Math.random().toString(36).substring(2, 5)}`,
+          mechanicId: toMechanicId,
+          consumableId,
+          stockQty: quantity,
+          updatedAt: new Date().toISOString()
+        });
+      }
+
+      // 3. 수불 로그 기록
+      db.insertRow<ConsumableLog>('consumableLogs', {
+        consumableId,
+        type: 'TRANSFER_TO_VEHICLE',
+        quantity,
+        unitPrice: consumable?.unitPrice || 0,
+        userId: currentUser?.id,
+        mechanicId: toMechanicId,
+        fromLocation: `${fromUser?.name || '정비사'} 차량`,
+        toLocation: `${toUser?.name || '정비사'} 차량`,
+        actionDate: new Date().toISOString().split('T')[0],
+        description: memo || `[차량 간 융통] ${fromUser?.name} 차량 ➔ ${toUser?.name} 차량 (${quantity}개)`,
+        createdAt: new Date().toISOString()
+      });
+
+      await db.awaitPendingWrites();
+      refreshAllData();
+    } catch (err: any) {
+      showErrorModal(`⚠️ 차량 간 부품 융통 처리 실패:\n${err?.message || err}`);
+      throw err;
+    }
+  };
+
+  const createStocktakingAudit = async (
+    targetType: 'HQ' | 'VEHICLE',
+    mechanicId?: string,
+    memo?: string
+  ): Promise<StocktakingAudit> => {
+    try {
+      const today = new Date();
+      const dateStr = today.toISOString().split('T')[0];
+      const ymdCompact = dateStr.replace(/-/g, '');
+      const auditNo = `STK-${ymdCompact}-${Math.floor(1000 + Math.random() * 9000)}`;
+
+      let mechanicName: string | undefined;
+      let vehicleNo: string | undefined;
+
+      if (targetType === 'VEHICLE') {
+        if (!mechanicId) throw new Error('차량 실사의 경우 담당 정비사를 지정해야 합니다.');
+        const mech = db.users.find(u => u.id === mechanicId);
+        mechanicName = mech?.name;
+        const corpVehicle = db.corporateVehicles.find(v => v.primaryDriverId === mechanicId);
+        vehicleNo = corpVehicle?.vehicleNo || (mech as any)?.vehicleNo || '';
+      }
+
+      // 1. 실사 마스터 생성
+      const newAuditId = `stk-${Date.now()}-${Math.random().toString(36).substring(2, 5)}`;
+      
+      // 2. 당시 전산 재고 스냅샷 생성
+      const itemsToInsert: StocktakingAuditItem[] = [];
+      let totalSystemQty = 0;
+      let totalSystemAmount = 0;
+
+      if (targetType === 'HQ') {
+        // 본사 중앙창고: 전체 consumable 목록 스냅샷
+        db.consumables.forEach(c => {
+          const sysQty = c.stockQty || 0;
+          const uPrice = c.unitPrice || 0;
+          totalSystemQty += sysQty;
+          totalSystemAmount += sysQty * uPrice;
+
+          itemsToInsert.push({
+            id: `stki-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+            auditId: newAuditId,
+            consumableId: c.id,
+            modelName: c.modelName,
+            unit: c.unit || '개',
+            unitPrice: uPrice,
+            systemQty: sysQty,
+            actualQty: sysQty,
+            diffQty: 0,
+            diffAmount: 0
+          });
+        });
+      } else {
+        // 특정 정비사 차량: 해당 정비사의 보유 부품 또는 전사 부품 스냅샷
+        const mechStocks = db.mechanicConsumableStocks.filter(s => s.mechanicId === mechanicId);
+        const stockMap = new Map<string, number>();
+        mechStocks.forEach(s => stockMap.set(s.consumableId, s.stockQty || 0));
+
+        db.consumables.forEach(c => {
+          const sysQty = stockMap.get(c.id) || 0;
+          const uPrice = c.unitPrice || 0;
+          totalSystemQty += sysQty;
+          totalSystemAmount += sysQty * uPrice;
+
+          itemsToInsert.push({
+            id: `stki-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+            auditId: newAuditId,
+            consumableId: c.id,
+            modelName: c.modelName,
+            unit: c.unit || '개',
+            unitPrice: uPrice,
+            systemQty: sysQty,
+            actualQty: sysQty,
+            diffQty: 0,
+            diffAmount: 0
+          });
+        });
+      }
+
+      const newAudit: StocktakingAudit = {
+        id: newAuditId,
+        auditNo,
+        targetType,
+        mechanicId,
+        mechanicName,
+        vehicleNo,
+        auditDate: dateStr,
+        auditorId: currentUser?.id || 'admin',
+        auditorName: currentUser?.name || '실사담당자',
+        status: 'DRAFT',
+        totalSystemQty,
+        totalActualQty: totalSystemQty,
+        totalDiffQty: 0,
+        totalSystemAmount,
+        totalActualAmount: totalSystemAmount,
+        totalDiffAmount: 0,
+        memo,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+
+      db.insertRow<StocktakingAudit>('stocktakingAudits', newAudit);
+      itemsToInsert.forEach(item => {
+        db.insertRow<StocktakingAuditItem>('stocktakingAuditItems', item);
+      });
+
+      await db.awaitPendingWrites();
+      refreshAllData();
+      return newAudit;
+    } catch (err: any) {
+      showErrorModal(`⚠️ 실사 전표 생성 실패:\n${err?.message || err}`);
+      throw err;
+    }
+  };
+
+  const updateStocktakingItem = async (
+    auditId: string,
+    itemId: string,
+    actualQty: number,
+    diffReason?: StocktakingAuditItem['diffReason'],
+    note?: string
+  ): Promise<void> => {
+    try {
+      const item = db.stocktakingAuditItems.find(i => i.id === itemId && i.auditId === auditId);
+      if (!item) throw new Error('실사 품목을 찾을 수 없습니다.');
+
+      const clampedActualQty = Math.max(0, actualQty);
+      const diffQty = clampedActualQty - item.systemQty;
+      const diffAmount = diffQty * item.unitPrice;
+
+      db.updateRow<StocktakingAuditItem>('stocktakingAuditItems', itemId, {
+        actualQty: clampedActualQty,
+        diffQty,
+        diffAmount,
+        diffReason: diffQty !== 0 ? (diffReason || item.diffReason || 'OTHER') : undefined,
+        note
+      });
+
+      // 마스터 합계 갱신
+      const allItems = db.stocktakingAuditItems.filter(i => i.auditId === auditId);
+      const updatedItems = allItems.map(i => i.id === itemId ? { ...i, actualQty: clampedActualQty, diffQty, diffAmount } : i);
+      const totalSystemQty = updatedItems.reduce((acc, i) => acc + (i.systemQty || 0), 0);
+      const totalActualQty = updatedItems.reduce((acc, i) => acc + (i.actualQty || 0), 0);
+      const totalDiffQty = totalActualQty - totalSystemQty;
+      const totalSystemAmount = updatedItems.reduce((acc, i) => acc + ((i.systemQty || 0) * (i.unitPrice || 0)), 0);
+      const totalActualAmount = updatedItems.reduce((acc, i) => acc + ((i.actualQty || 0) * (i.unitPrice || 0)), 0);
+      const totalDiffAmount = totalActualAmount - totalSystemAmount;
+
+      db.updateRow<StocktakingAudit>('stocktakingAudits', auditId, {
+        totalSystemQty,
+        totalActualQty,
+        totalDiffQty,
+        totalSystemAmount,
+        totalActualAmount,
+        totalDiffAmount,
+        updatedAt: new Date().toISOString()
+      });
+
+      await db.awaitPendingWrites();
+      refreshAllData();
+    } catch (err: any) {
+      showErrorModal(`⚠️ 실사 품목 수량 수정 실패:\n${err?.message || err}`);
+      throw err;
+    }
+  };
+
+  const confirmStocktakingAudit = async (auditId: string): Promise<void> => {
+    try {
+      const audit = db.stocktakingAudits.find(a => a.id === auditId);
+      if (!audit) throw new Error('실사 전표를 찾을 수 없습니다.');
+      if (audit.status === 'CONFIRMED') throw new Error('이미 확정 완료된 실사 전표입니다.');
+
+      const items = db.stocktakingAuditItems.filter(i => i.auditId === auditId);
+      const targetLocation = audit.targetType === 'HQ' ? '본사 중앙창고' : `${audit.mechanicName || '정비사'} 차량`;
+
+      // 1. 차이가 있는 품목들에 대해 전산 재고 강제 보정 & ADJUST 수불 로그 발행
+      items.forEach(item => {
+        if (item.diffQty !== 0) {
+          if (audit.targetType === 'HQ') {
+            // 본사 창고 전산재고 강제 보정
+            const c = db.consumables.find(con => con.id === item.consumableId);
+            if (c) {
+              db.updateRow<Consumable>('consumables', c.id, {
+                stockQty: item.actualQty,
+                updatedAt: new Date().toISOString()
+              });
+            }
+          } else {
+            // 특정 정비사 차량 전산재고 강제 보정
+            const mStock = db.mechanicConsumableStocks.find(s => s.mechanicId === audit.mechanicId && s.consumableId === item.consumableId);
+            if (mStock) {
+              db.updateRow<MechanicConsumableStock>('mechanicConsumableStocks', mStock.id, {
+                stockQty: item.actualQty,
+                updatedAt: new Date().toISOString()
+              });
+            } else {
+              db.insertRow<MechanicConsumableStock>('mechanicConsumableStocks', {
+                id: `mcs-${Date.now()}-${Math.random().toString(36).substring(2, 5)}`,
+                mechanicId: audit.mechanicId!,
+                consumableId: item.consumableId,
+                stockQty: item.actualQty,
+                updatedAt: new Date().toISOString()
+              });
+            }
+          }
+
+          // ADJUST 감사 로그 자동 적재
+          const reasonText = item.diffReason === 'LOST' ? '망실/도난' 
+            : item.diffReason === 'DAMAGED' ? '파손/폐기'
+            : item.diffReason === 'UNRECORDED_USAGE' ? '미기록현장소모'
+            : item.diffReason === 'SURPLUS' ? '미등록잉여' : '기타사유';
+
+          db.insertRow<ConsumableLog>('consumableLogs', {
+            consumableId: item.consumableId,
+            type: 'ADJUST',
+            quantity: Math.abs(item.diffQty),
+            unitPrice: item.unitPrice,
+            userId: currentUser?.id,
+            mechanicId: audit.mechanicId,
+            fromLocation: targetLocation,
+            toLocation: targetLocation,
+            actionDate: audit.auditDate,
+            description: `[실사 ${item.diffQty > 0 ? '잉여' : '감모'}] ${audit.auditNo} | ${item.modelName} ${item.diffQty > 0 ? `+${item.diffQty}` : item.diffQty}개 보정 (${reasonText}${item.note ? `: ${item.note}` : ''})`,
+            createdAt: new Date().toISOString()
+          });
+        }
+      });
+
+      // 2. 실사 전표 확정 완료 처리
+      db.updateRow<StocktakingAudit>('stocktakingAudits', auditId, {
+        status: 'CONFIRMED',
+        confirmedAt: new Date().toISOString(),
+        confirmedBy: currentUser?.name || '관리자',
+        updatedAt: new Date().toISOString()
+      });
+
+      await db.awaitPendingWrites();
+      refreshAllData();
+    } catch (err: any) {
+      showErrorModal(`⚠️ 실사 확정 처리 실패:\n${err?.message || err}`);
+      throw err;
+    }
+  };
+
+  const cancelStocktakingAudit = async (auditId: string): Promise<void> => {
+    try {
+      const audit = db.stocktakingAudits.find(a => a.id === auditId);
+      if (!audit) throw new Error('실사 전표를 찾을 수 없습니다.');
+      if (audit.status === 'CONFIRMED') throw new Error('이미 확정된 실사 전표는 취소할 수 없습니다.');
+
+      db.updateRow<StocktakingAudit>('stocktakingAudits', auditId, {
+        status: 'CANCELLED',
+        updatedAt: new Date().toISOString()
+      });
+
+      await db.awaitPendingWrites();
+      refreshAllData();
+    } catch (err: any) {
+      showErrorModal(`⚠️ 실사 전표 취소 실패:\n${err?.message || err}`);
+      throw err;
+    }
+  };
+
+  const processCollectedPart = async (
+    partId: string, 
+    actionStatus: 'IN_PROCESS' | 'COMPLETED', 
+    actionMemo?: string
+  ): Promise<void> => {
+    try {
+      const part = db.collectedParts.find(p => p.id === partId);
+      if (!part) throw new Error('수거 고품을 찾을 수 없습니다.');
+
+      db.updateRow<CollectedPart>('collectedParts', partId, {
+        status: actionStatus,
+        actionDate: actionStatus === 'COMPLETED' ? new Date().toISOString().split('T')[0] : part.actionDate,
+        actionMemo: actionMemo || part.actionMemo
+      });
+
+      await db.awaitPendingWrites();
+      refreshAllData();
+    } catch (err: any) {
+      showErrorModal(`⚠️ 고품 사후처리 갱신 실패:\n${err?.message || err}`);
       throw err;
     }
   };
@@ -3855,7 +4363,17 @@ ${payload.memo ? `\n[특이사항 / 메모]\n${payload.memo}\n` : ''}
       }
 
       const originalEndDate = ca.endDate;
-      db.updateRow<ContractAsset>('contractAssets', ca.id, { endDate: exchangeDate });
+      const prevDateObj = new Date(exchangeDate);
+      prevDateObj.setDate(prevDateObj.getDate() - 1);
+      const dayBeforeExchange = prevDateObj.toISOString().split('T')[0];
+
+      // 헌장 4.1: 전자산은 교체 전일까지 일할 마감
+      db.updateRow<ContractAsset>('contractAssets', ca.id, { 
+        endDate: dayBeforeExchange,
+        status: 'RETURNED',
+        actualReturnDate: exchangeDate,
+        updatedAt: new Date().toISOString()
+      });
 
       const oldAsset = db.assets.find(a => a.id === oldAssetId);
       if (oldAsset) {
@@ -3869,7 +4387,7 @@ ${payload.memo ? `\n[특이사항 / 메모]\n${payload.memo}\n` : ''}
         });
       }
 
-      const nextDay = new Date(new Date(exchangeDate).getTime() + 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+      // 헌장 4.1: 후장비는 교체 당일부터 가동 승계
       const newAsset = db.assets.find(a => a.id === newAssetId);
       if (newAsset) {
         db.insertRow<ContractAsset>('contractAssets', {
@@ -3877,7 +4395,7 @@ ${payload.memo ? `\n[특이사항 / 메모]\n${payload.memo}\n` : ''}
           assetId: newAssetId,
           monthlyRentalFee: ca.monthlyRentalFee,
           dailyRentalFee: ca.dailyRentalFee,
-          startDate: nextDay,
+          startDate: exchangeDate,
           endDate: originalEndDate || contract.endDate,
           createdAt: new Date().toISOString()
         });
@@ -3887,7 +4405,7 @@ ${payload.memo ? `\n[특이사항 / 메모]\n${payload.memo}\n` : ''}
           status: 'ASSIGNED',
           currentCustomerId: contract.customerId,
           currentSiteId: contract.siteId,
-          contractStart: nextDay,
+          contractStart: exchangeDate,
           contractEnd: originalEndDate || contract.endDate,
           monthlyRentalFee: ca.monthlyRentalFee,
           dailyRentalFee: ca.dailyRentalFee,
@@ -4155,7 +4673,14 @@ ${payload.memo ? `\n[특이사항 / 메모]\n${payload.memo}\n` : ''}
     const billingYm = now.substring(0, 7);
     const billingDate = now.split('T')[0];
 
+    // 결정: rcv.type에 따라 적절한 billingType 매핑 (Gap 2 방어)
+    let bType: BillingType = 'REPAIR';
+    if (rcv.type === 'TRANSPORT') bType = 'TRANSPORT';
+    else if (rcv.type === 'CLEANING' || rcv.type === 'REPAIR') bType = 'REPAIR';
+    else if (rcv.type === 'VENDOR_CLAIM' || rcv.type === 'OTHER') bType = 'REPAIR';
+
     const newBilling = db.insertRow<Billing>('billings', {
+      billingType: bType,
       customerId: rcv.customerId,
       contractId: rcv.contractId || (null as any),
       billingYm,
@@ -4201,8 +4726,14 @@ ${payload.memo ? `\n[특이사항 / 메모]\n${payload.memo}\n` : ''}
       if (!cust) return;
       const site = db.sites.find(s => s.id === c.siteId);
 
-      // 이미 해당 귀속월(targetYm)에 유효한(비취소) 청구서가 있는지 확인
-      const existingBilling = db.billings.find(b => b.contractId === c.id && b.billingYm === targetYm && b.status !== 'REJECTED');
+      // 💡 [Gap 1 방어] 이미 해당 귀속월(targetYm)에 유효한 '정기 렌탈료(RENTAL)' 청구서가 있는지 확인
+      // 수리비(REPAIR), 운반비(TRANSPORT), 자산매각(ASSET_SALE) 단독 청구서와 엄격 분리
+      const existingBilling = db.billings.find(b => 
+        b.contractId === c.id && 
+        b.billingYm === targetYm && 
+        (b.billingType === 'RENTAL' || !b.billingType) && 
+        b.status !== 'REJECTED'
+      );
       if (existingBilling) return;
 
       // 고객/계약의 청구 기준일(billingDay) 또는 거래명세서 마감일(statementClosingDay)
@@ -4256,26 +4787,26 @@ ${payload.memo ? `\n[특이사항 / 메모]\n${payload.memo}\n` : ''}
   ) => {
     const [year, month] = billingYm.split('-').map(Number);
 
-    // 당월 billingDay 보정 (A-5)
-    const lastDayOfCurrent = new Date(year, month, 0).getDate();
+    // 당월 billingDay 보정 (A-5, UTC 기준)
+    const lastDayOfCurrent = new Date(Date.UTC(year, month, 0)).getUTCDate();
     const effectiveBillingDay = Math.min(billingDay, lastDayOfCurrent);
 
     // 청구 기간 끝: 당월 billingDay
-    const periodEnd = new Date(year, month - 1, effectiveBillingDay);
+    const periodEnd = new Date(Date.UTC(year, month - 1, effectiveBillingDay));
 
     // 청구 기간 시작: 전월 (billingDay+1)일
     const prevMonth = month === 1 ? 12 : month - 1;
     const prevYear = month === 1 ? year - 1 : year;
-    const lastDayOfPrev = new Date(prevYear, prevMonth, 0).getDate();
+    const lastDayOfPrev = new Date(Date.UTC(prevYear, prevMonth, 0)).getUTCDate();
     const prevEffectiveBillingDay = Math.min(billingDay, lastDayOfPrev);
-    const periodStart = new Date(prevYear, prevMonth - 1, prevEffectiveBillingDay + 1);
+    const periodStart = new Date(Date.UTC(prevYear, prevMonth - 1, prevEffectiveBillingDay + 1));
 
     // 실제 자산 사용 기간: 계약 startDate 보정 (A-2)
-    const contractStart = new Date(contractStartDate);
+    const contractStart = new Date(contractStartDate.includes('T') ? contractStartDate : `${contractStartDate}T00:00:00Z`);
     const actualStart = contractStart > periodStart ? contractStart : periodStart;
 
     // 실제 자산 사용 기간: 계약 endDate 보정 (A-3)
-    const contractEnd = contractEndDate ? new Date(contractEndDate) : null;
+    const contractEnd = contractEndDate ? new Date(contractEndDate.includes('T') ? contractEndDate : `${contractEndDate}T00:00:00Z`) : null;
     const actualEnd = contractEnd && contractEnd < periodEnd ? contractEnd : periodEnd;
 
     // 첫 달 / 마지막 달 판단 → 일할 계산 여부 (B-2)
@@ -4551,6 +5082,18 @@ ${payload.memo ? `\n[특이사항 / 메모]\n${payload.memo}\n` : ''}
               updatedAt: new Date().toISOString()
             });
           }
+        }
+      }
+      // 💡 [Gap 4 방어] 외상미수금 청구액 롤백
+      if (bd.receivableId) {
+        const rcv = db.receivables.find(r => r.id === bd.receivableId);
+        if (rcv) {
+          const newBilled = Math.max(0, rcv.billedAmount - (bd.amount || 0));
+          db.updateRow<Receivable>('receivables', rcv.id, {
+            billedAmount: newBilled,
+            status: newBilled === 0 ? 'PENDING' : (newBilled >= rcv.totalAmount ? 'CLEARED' : 'PARTIAL'),
+            updatedAt: new Date().toISOString()
+          });
         }
       }
     });
@@ -5745,10 +6288,18 @@ ${payload.memo ? `\n[특이사항 / 메모]\n${payload.memo}\n` : ''}
         nextMaintenanceScore = 0;
       }
 
+      let nextMemo = targetAsset.memo;
+      if (repairStatus === 'COMPLETED' && nextAssetStatus === 'AVAILABLE') {
+        const dateTag = repairData.repairDate || new Date().toISOString().split('T')[0];
+        const detailSnippet = repairData.details ? repairData.details.slice(0, 30) : '점검 완료';
+        nextMemo = `[정비완료 ${dateTag}] ${detailSnippet}`;
+      }
+
       db.updateRow<Asset>('assets', targetAsset.id, {
         status: nextAssetStatus,
         maintenanceScore: nextMaintenanceScore,
         cumRepairCost: (targetAsset.cumRepairCost || 0) + totalRepairCost,
+        memo: nextMemo,
         updatedAt: new Date().toISOString()
       });
 
@@ -6809,15 +7360,18 @@ ${payload.memo ? `\n[특이사항 / 메모]\n${payload.memo}\n` : ''}
     <AppContext.Provider value={{ receivables: db.receivables as any[], refreshReceivables: () => {}, 
       currentUser, theme, toggleTheme, login, logout, hasPermission, showErrorModal,
       users, permissions, customers, contacts, sites, products, assets, consumables, consumableLogs, consumablePurchases, mechanicConsumableStocks: db.mechanicConsumableStocks, contracts, contractAssets, contractHistory, deliveries, billings, billingDetails, payments, paymentDepositLinks, repairs, repairConsumables, transportCompanies, transportDrivers, todos,
+      stocktakingAudits, stocktakingAuditItems, collectedParts,
       bankTransactions, bankMatchingRules, bankInitialBalances, assetInOutLogs, vendors, googleConfigs, cashFlowSnapshots, outboundInspections, depreciationLogs,
       purchaseSettlements, purchaseSettlementItems, settlementPaymentLogs: db.settlementPaymentLogs, externalLeases, inspectionChecklistItems,
+      equipmentManuals, saveEquipmentManual, deleteEquipmentManual,
       annualLeaveQuotas, leaveUsages, overtimeRecords, payrollClosings, prepaidTransactions, delinquencyActionLogs, legalNoticeLogs, legalNoticeTemplates, saveLegalNoticeLog, saveLegalNoticeTemplate,
       corporateVehicles, vehicleOperationLogs, vehicleFuelLogs, registerCorporateVehicle, updateCorporateVehicle, deleteCorporateVehicle, registerVehicleOperationLog, updateVehicleOperationLog, deleteVehicleOperationLog, registerVehicleFuelLog, deleteVehicleFuelLog,
       refreshAllData, fullRefreshFromServer, executeMonthlyDepreciation, loadTablesForMenu, updatePermissions, saveUser, saveCustomer, saveContact, saveSite, saveProduct, saveAsset, updateGoogleConfig,
       saveCashFlowSnapshot, deleteCashFlowSnapshot, saveVendor, deleteVendor, saveBankInitialBalance, saveInspectionChecklistItem, deleteInspectionChecklistItem,
       updateAnnualLeaveQuota, addLeaveUsage, deleteLeaveUsage, addOvertimeRecord, deleteOvertimeRecord, setPayrollClosingStatus,
       acquireAsset, batchAcquireAssets, disposeAsset, executeAssetSale, registerRentedAsset, returnRentedAsset, createVendorClaimReceivable, changeAssetStatus, registerInboundAsset, cancelInboundAsset,
-      purchaseConsumable, useConsumable, transferConsumableToMechanic, returnConsumableToHq,
+      purchaseConsumable, useConsumable, transferConsumableToMechanic, returnConsumableToHq, transferConsumableBetweenMechanics,
+      createStocktakingAudit, updateStocktakingItem, confirmStocktakingAudit, cancelStocktakingAudit, processCollectedPart,
       requestConsumablePurchase, acceptConsumablePurchase, completeConsumablePurchase, inboundConsumablePurchase, clearEvidenceFileUrls, updateEvidenceFileUrls,
       createContract, extendContract, shortenContract, succeedContract, exchangeAsset,
       assignAssetToContract, batchAssignAssetsToContract, unassignAssetFromContract, batchUnassignAssetsFromContract, exchangeOutboundAsset,

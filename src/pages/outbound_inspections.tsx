@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
 import { ToggleSwitch } from '../components/ToggleSwitch';
-import { OutboundInspection, OutboundInspectionStatus, Asset, Contract, Customer, CustomerSite, AssetInOutLog, db } from '../services/db';
+import { OutboundInspection, OutboundInspectionStatus, Asset, Contract, Customer, CustomerSite, AssetInOutLog, Repair, ContractAsset, db } from '../services/db';
 import {
   CheckSquare,
   AlertTriangle,
@@ -360,6 +360,14 @@ export const OutboundInspections: React.FC = () => {
   const handleApproveGroup = async () => {
     if (!selectedGroup || !canEdit) return;
 
+    // 🔴 [출고제한 가드] 연체 및 거래차단(BLOCKED) 고객사 최종 출고 승인 원천 차단
+    const contract = db.contracts.find(c => c.id === selectedGroup.contractId);
+    const customer = contract ? db.customers.find(c => c.id === contract.customerId) : undefined;
+    if (customer && customer.transactionStatus === 'BLOCKED') {
+      showErrorModal(`⚠️ [출고제한 가드] 연체 및 거래차단(BLOCKED) 상태인 고객사(${customer.name})의 장비는 출고 승인할 수 없습니다.\n관리부 채권 확인 및 거래 제한 해제 후 진행해 주십시오.`);
+      return;
+    }
+
     const checkedCount = Object.values(checkedItems).filter(Boolean).length;
     const totalCount = selectedGroup.requestedSpecs.length;
 
@@ -379,17 +387,19 @@ export const OutboundInspections: React.FC = () => {
       const resultNote = `[검수완료 ${checkedCount}/${totalCount}항목 합격] ${inspectionNote}`;
 
       selectedGroup.items.forEach(item => {
+        const itemDeliveryId = item.deliveryId || selectedGroup.deliveryId || undefined;
         db.updateRow<OutboundInspection>('outboundInspections', item.id, {
           status: 'COMPLETED',
           inspectorId: inspectorName,
           inspectedAt: nowIso,
+          approvedAt: nowIso,
           specsJson: JSON.stringify({
             checkedItems,
             inspectionNote,
             inspectorName,
             approvedAt: nowIso
           }),
-          deliveryId: item.deliveryId || selectedGroup.deliveryId || undefined,
+          deliveryId: itemDeliveryId,
           note: resultNote,
           updatedAt: nowIso
         });
@@ -403,14 +413,13 @@ export const OutboundInspections: React.FC = () => {
 
           // 🟢 [헌장 1.2] 발생 사건 무누락 DB 저장: 출고 검수 승인 시 자산 입출고 이력 1:1 정규화 영구 저장
           const targetAsset = db.assets.find(a => a.id === item.assetId);
-          const contract = db.contracts.find(c => c.id === item.contractId);
-          const customer = contract ? db.customers.find(c => c.id === contract.customerId) : undefined;
           const site = contract ? db.sites.find(s => s.id === contract.siteId) : undefined;
 
           db.insertRow<AssetInOutLog>('assetInOutLogs', {
             assetId: item.assetId,
             assetNo: targetAsset?.assetNo || '',
             modelName: targetAsset?.modelName || '',
+            deliveryId: itemDeliveryId,
             type: 'OUTBOUND',
             eventDate: nowIso.split('T')[0],
             customerId: contract?.customerId,
@@ -450,18 +459,81 @@ export const OutboundInspections: React.FC = () => {
       const inspectorName = currentUser?.name || '담당엔지니어';
 
       selectedGroup.items.forEach(item => {
+        const targetAsset = item.assetId ? db.assets.find(a => a.id === item.assetId) : undefined;
+        const contract = db.contracts.find(c => c.id === item.contractId || c.id === selectedGroup.contractId);
+        const customer = contract ? db.customers.find(c => c.id === contract.customerId) : undefined;
+        const site = contract ? db.sites.find(s => s.id === contract.siteId) : undefined;
+        let createdRepairId: string | undefined = undefined;
+
+        // 🔴 1. 수리정비중(REPAIRING) 전환 시 긴급 수리 티켓(repairs) 1:1 자동 발행 (헌장 1.2 무누락 저장)
+        if (item.assetId && rejectToRepairing) {
+          const newRepair = db.insertRow<Repair>('repairs', {
+            assetId: item.assetId,
+            assetNo: targetAsset?.assetNo || '',
+            modelName: targetAsset?.modelName || '',
+            workCategory: 'YARD_INTERNAL',
+            workLocation: 'YARD',
+            stockSource: 'CENTRAL_HQ',
+            source: 'INBOUND_INSPECTION',
+            repairType: 'INTERNAL',
+            status: 'PENDING',
+            priority: 'URGENT',
+            issueDescription: `[출고검수 반려 긴급점검] 사유: ${rejectReason.trim()}`,
+            details: `[출고검수 반려 긴급점검] 사유: ${rejectReason.trim()}`,
+            actionTaken: '',
+            mechanicName: inspectorName,
+            requestDate: nowIso.split('T')[0],
+            createdAt: nowIso,
+            updatedAt: nowIso
+          });
+          createdRepairId = newRepair.id;
+
+          // 정비 입고 이력 1:1 무누락 DB 저장
+          db.insertRow<AssetInOutLog>('assetInOutLogs', {
+            assetId: item.assetId,
+            assetNo: targetAsset?.assetNo || '',
+            modelName: targetAsset?.modelName || '',
+            type: 'REPAIR',
+            repairId: createdRepairId,
+            eventDate: nowIso.split('T')[0],
+            customerId: contract?.customerId,
+            customerName: customer?.name || selectedGroup.customerName,
+            siteId: contract?.siteId,
+            siteName: site?.name || selectedGroup.siteName,
+            memo: `[출고검수 반려 긴급입고] 사유: ${rejectReason.trim()} (정비대장 티켓 ${createdRepairId} 자동발행)`,
+            createdAt: nowIso
+          });
+
+          // 🔴 2. 계약자산(contractAssets)에서 결함 장비 안전 해제 (계약 결함장비 잔류 원천 방어)
+          if (item.contractAssetId) {
+            db.updateRow<ContractAsset>('contractAssets', item.contractAssetId, {
+              assetId: null as any
+            });
+          } else if (item.contractId) {
+            const relCa = db.contractAssets.find(ca => ca.contractId === item.contractId && ca.assetId === item.assetId);
+            if (relCa) {
+              db.updateRow<ContractAsset>('contractAssets', relCa.id, {
+                assetId: null as any
+              });
+            }
+          }
+        }
+
         db.updateRow<OutboundInspection>('outboundInspections', item.id, {
           status: 'REJECTED',
           inspectorId: inspectorName,
-          note: `[출고반려] ${rejectReason}`,
+          rejectReason: rejectReason.trim(),
+          repairId: createdRepairId,
+          note: `[출고반려] ${rejectReason.trim()}`,
           updatedAt: nowIso
         });
 
-        // 🔴 사용자 선택에 따라 수리정비중(REPAIRING) 또는 임대가능(AVAILABLE) 전환!
+        // 사용자 선택에 따라 수리정비중(REPAIRING) 또는 임대가능(AVAILABLE) 전환!
         if (item.assetId) {
           const targetStatus = rejectToRepairing ? 'REPAIRING' : 'AVAILABLE';
           db.updateRow<Asset>('assets', item.assetId, {
             status: targetStatus,
+            maintenanceScore: rejectToRepairing ? Math.max(targetAsset?.maintenanceScore || 0, 7) : targetAsset?.maintenanceScore,
             updatedAt: nowIso
           });
         }
@@ -469,7 +541,7 @@ export const OutboundInspections: React.FC = () => {
 
       await db.awaitPendingWrites();
       refreshAllData();
-      const statusText = rejectToRepairing ? '[수리정비중]으로 전환되었습니다.' : '[임대가능] 재고로 복원되었습니다.';
+      const statusText = rejectToRepairing ? '[수리정비중]으로 전환되고 긴급 수리 티켓이 정비대장에 등록되었습니다.' : '[임대가능] 재고로 복원되었습니다.';
       showToast(`출고 의뢰가 반려되었습니다. 장비 상태가 ${statusText}`);
       setShowRejectModal(false);
       setRejectReason('');

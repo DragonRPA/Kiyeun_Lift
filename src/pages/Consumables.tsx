@@ -4,17 +4,20 @@ import { useApp } from '../context/AppContext';
 import { 
   ShoppingCart, Hammer, ListCollapse, Layers, Plus, ClipboardList, PackagePlus, 
   CheckCircle2, XCircle, Search, Download, FileText, Camera, Upload, RefreshCw, 
-  Truck, ArrowRightLeft, ArrowUpRight, ArrowDownLeft, User, ShieldCheck, X
+  Truck, ArrowRightLeft, ArrowUpRight, ArrowDownLeft, User, ShieldCheck, X,
+  FileCheck, AlertOctagon, CheckSquare, Boxes, Archive, AlertTriangle
 } from 'lucide-react';
 import { exportToExcel } from '../services/excel';
-import { Consumable, MechanicConsumableStock, db } from '../services/db';
+import { Consumable, MechanicConsumableStock, StocktakingAudit, StocktakingAuditItem, CollectedPart, db } from '../services/db';
 import { compressFileIfNeeded } from '../utils/imageCompressor';
 import { uploadToSupabaseStorage } from '../services/supabaseStorage';
 
 export const Consumables: React.FC = () => {
   const {
     consumables, consumableLogs, consumablePurchases, mechanicConsumableStocks, assets, purchaseConsumable, useConsumable,
-    transferConsumableToMechanic, returnConsumableToHq,
+    transferConsumableToMechanic, returnConsumableToHq, transferConsumableBetweenMechanics,
+    stocktakingAudits, stocktakingAuditItems, collectedParts,
+    createStocktakingAudit, updateStocktakingItem, confirmStocktakingAudit, cancelStocktakingAudit, processCollectedPart,
     requestConsumablePurchase, acceptConsumablePurchase, completeConsumablePurchase, inboundConsumablePurchase,
     hasPermission, users, currentUser, showErrorModal
   } = useApp();
@@ -59,8 +62,35 @@ export const Consumables: React.FC = () => {
     const totalAmount = thisMonthLogs.reduce((acc, l) => acc + (l.quantity * (l.unitPrice || 0)), 0);
     return { totalCount, totalAmount };
   }, [consumableLogs]);
-  // 탭 구성: STOCK (본사 재고), VEHICLE_STOCK (차량별 이동재고), REQ_LIST (신청 내역 조회), REQ_WRITE (구매신청 작성), REQ_INBOUND (구매물품 입고처리), USE (소모품 사용), LOGS (입출고 로그)
-  const [activeTab, setActiveTab] = useState<'STOCK' | 'VEHICLE_STOCK' | 'REQ_LIST' | 'REQ_WRITE' | 'REQ_INBOUND' | 'USE' | 'LOGS'>('STOCK');
+  // 탭 구성: STOCK (본사 재고), VEHICLE_STOCK (차량별 이동재고), STOCKTAKING (재고 실사), COLLECTED_PARTS (고품 관리), REQ_LIST (신청 내역 조회), REQ_WRITE (구매신청 작성), REQ_INBOUND (구매물품 입고처리), USE (소모품 사용), LOGS (입출고 로그)
+  const [activeTab, setActiveTab] = useState<'STOCK' | 'VEHICLE_STOCK' | 'STOCKTAKING' | 'COLLECTED_PARTS' | 'REQ_LIST' | 'REQ_WRITE' | 'REQ_INBOUND' | 'USE' | 'LOGS'>('STOCK');
+
+  // --- [신규] 재고 실사 스튜디오 상태 ---
+  const [selectedAuditId, setSelectedAuditId] = useState<string>('');
+  const [auditTargetFilter, setAuditTargetFilter] = useState<'ALL' | 'HQ' | 'VEHICLE'>('ALL');
+  const [auditStatusFilter, setAuditStatusFilter] = useState<'ALL' | 'DRAFT' | 'CONFIRMED' | 'CANCELLED'>('ALL');
+  const [showCreateAuditModal, setShowCreateAuditModal] = useState<boolean>(false);
+  const [newAuditTargetType, setNewAuditTargetType] = useState<'HQ' | 'VEHICLE'>('HQ');
+  const [newAuditMechanicId, setNewAuditMechanicId] = useState<string>('');
+  const [newAuditMemo, setNewAuditMemo] = useState<string>('');
+  const [auditItemSearch, setAuditItemSearch] = useState<string>('');
+
+  // --- [신규] 수거 고품 관리 상태 ---
+  const [partDispositionFilter, setPartDispositionFilter] = useState<'ALL' | 'REBUILD' | 'SCRAP' | 'VENDOR_WARRANTY'>('ALL');
+  const [partStatusFilter, setPartStatusFilter] = useState<'ALL' | 'RECEIVED' | 'IN_PROCESS' | 'COMPLETED'>('ALL');
+  const [partSearch, setPartSearch] = useState<string>('');
+
+  // --- [신규] 차량 간(P2P) 이동 모달 상태 ---
+  const [showP2PModal, setShowP2PModal] = useState<boolean>(false);
+  const [p2pFromMechanicId, setP2pFromMechanicId] = useState<string>('');
+  const [p2pToMechanicId, setP2pToMechanicId] = useState<string>('');
+  const [p2pConsumableId, setP2pConsumableId] = useState<string>('');
+  const [p2pQty, setP2pQty] = useState<number>(1);
+  const [p2pMemo, setP2pMemo] = useState<string>('');
+
+  // --- [신규] 차량 반납 모달 내 고품 격리 상태 ---
+  const [isReturnDefective, setIsReturnDefective] = useState<boolean>(false);
+  const [returnDisposition, setReturnDisposition] = useState<'REBUILD' | 'SCRAP' | 'VENDOR_WARRANTY'>('REBUILD');
 
   // --- [1] 구매신청 조회용 필터 상태 ---
   const [reqSearchTerm, setReqSearchTerm] = useState('');
@@ -359,14 +389,116 @@ export const Consumables: React.FC = () => {
     }
 
     try {
-      await returnConsumableToHq(returnMechanicId, returnConsumableId, clampedQty, returnMemo);
+      await returnConsumableToHq(returnMechanicId, returnConsumableId, clampedQty, returnMemo, isReturnDefective, returnDisposition);
       await db.awaitPendingWrites();
-      showToast('정비사 차량에서 본사 창고로 소모품 반납이 완료되었습니다.');
+      showToast(isReturnDefective 
+        ? `수거 고품(${returnDisposition === 'REBUILD' ? '재생' : returnDisposition === 'SCRAP' ? '폐기' : '무상보증'}) 반납 격리 처리가 완료되었습니다.`
+        : '정비사 차량에서 본사 창고로 정상 소모품 반납이 완료되었습니다.');
       setShowReturnModal(false);
       setReturnQty(1);
       setReturnMemo('');
+      setIsReturnDefective(false);
+      setReturnDisposition('REBUILD');
     } catch (err: any) {
       showErrorModal(err?.message || '소모품 반납 중 오류가 발생했습니다.');
+    }
+  };
+
+  // --- 차량 ➔ 차량(P2P) 이동 제출 ---
+  const handleP2PSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!p2pFromMechanicId || !p2pToMechanicId || !p2pConsumableId || p2pQty <= 0) {
+      showToast('양도/양수 정비사 및 부품, 수량을 올바르게 지정해 주세요.', 'error');
+      return;
+    }
+    if (p2pFromMechanicId === p2pToMechanicId) {
+      showToast('동일한 정비사 간에는 이동할 수 없습니다.', 'error');
+      return;
+    }
+    const fromStock = (mechanicConsumableStocks || []).find(
+      ms => ms.mechanicId === p2pFromMechanicId && ms.consumableId === p2pConsumableId
+    )?.stockQty || 0;
+    if (p2pQty > fromStock) {
+      showErrorModal(`양도 정비사 차량의 보유 재고(${fromStock}개)를 초과할 수 없습니다.`);
+      return;
+    }
+
+    try {
+      await transferConsumableBetweenMechanics(p2pFromMechanicId, p2pToMechanicId, p2pConsumableId, p2pQty, p2pMemo);
+      await db.awaitPendingWrites();
+      showToast('정비사 차량 간 부품 융통 이동이 성공적으로 완료되었습니다.');
+      setShowP2PModal(false);
+      setP2pQty(1);
+      setP2pMemo('');
+    } catch (err: any) {
+      showErrorModal(err?.message || '차량 간 부품 이동 중 오류가 발생했습니다.');
+    }
+  };
+
+  // --- 신규 실사 전표 생성 제출 ---
+  const handleCreateAuditSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!canSave) return;
+    if (newAuditTargetType === 'VEHICLE' && !newAuditMechanicId) {
+      showToast('차량 실사의 경우 담당 정비사를 선택해 주세요.', 'error');
+      return;
+    }
+
+    try {
+      const newAudit = await createStocktakingAudit(newAuditTargetType, newAuditTargetType === 'VEHICLE' ? newAuditMechanicId : undefined, newAuditMemo);
+      await db.awaitPendingWrites();
+      showToast(`재고실사 전표(${newAudit.auditNo})가 성공적으로 생성되었습니다.`);
+      setSelectedAuditId(newAudit.id);
+      setShowCreateAuditModal(false);
+      setNewAuditMemo('');
+    } catch (err: any) {
+      showErrorModal(`⚠️ 실사 전표 생성 실패:\n${err?.message || err}`);
+    }
+  };
+
+  // --- 실사 품목 수량 인라인 수정 핸들러 ---
+  const handleAuditItemQtyChange = async (itemId: string, newActualQty: number, diffReason?: StocktakingAuditItem['diffReason'], note?: string) => {
+    if (!selectedAuditId) return;
+    try {
+      await updateStocktakingItem(selectedAuditId, itemId, newActualQty, diffReason, note);
+    } catch (err: any) {
+      showToast(err?.message || '수량 반영 실패', 'error');
+    }
+  };
+
+  // --- 실사 확정 및 전산재고 강제 반영 핸들러 ---
+  const handleConfirmAudit = async (auditId: string) => {
+    if (!canSave) return;
+    try {
+      await confirmStocktakingAudit(auditId);
+      await db.awaitPendingWrites();
+      showToast('재고 실사가 최종 확정되어 전산 재고가 강제 보정되었습니다.');
+    } catch (err: any) {
+      showErrorModal(`⚠️ 실사 확정 실패:\n${err?.message || err}`);
+    }
+  };
+
+  // --- 실사 취소 핸들러 ---
+  const handleCancelAudit = async (auditId: string) => {
+    if (!canSave) return;
+    try {
+      await cancelStocktakingAudit(auditId);
+      await db.awaitPendingWrites();
+      showToast('실사 전표가 취소되었습니다.');
+    } catch (err: any) {
+      showErrorModal(`⚠️ 실사 취소 실패:\n${err?.message || err}`);
+    }
+  };
+
+  // --- 수거 고품 처리 상태 변경 핸들러 ---
+  const handleProcessCollectedPart = async (partId: string, actionStatus: 'IN_PROCESS' | 'COMPLETED', actionMemo?: string) => {
+    if (!canSave) return;
+    try {
+      await processCollectedPart(partId, actionStatus, actionMemo);
+      await db.awaitPendingWrites();
+      showToast(`고품 상태가 '${actionStatus === 'COMPLETED' ? '완료' : '처리중'}'으로 갱신되었습니다.`);
+    } catch (err: any) {
+      showErrorModal(`⚠️ 고품 상태 갱신 실패:\n${err?.message || err}`);
     }
   };
 
@@ -458,13 +590,38 @@ export const Consumables: React.FC = () => {
                   setReturnMechanicId(mechanics[0]?.id || '');
                   setReturnConsumableId(consumables[0]?.id || '');
                 }
+                setIsReturnDefective(false);
+                setReturnDisposition('REBUILD');
                 setShowReturnModal(true);
               }} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                 <ArrowDownLeft size={14} /> 차량 ➔ 본사 반납
               </button>
+              <button className="btn-secondary" onClick={() => {
+                setP2pFromMechanicId(mechanics[0]?.id || '');
+                setP2pToMechanicId(mechanics[1]?.id || mechanics[0]?.id || '');
+                const firstAvailable = (mechanicConsumableStocks || []).find(ms => ms.mechanicId === (mechanics[0]?.id || '') && ms.stockQty > 0);
+                setP2pConsumableId(firstAvailable?.consumableId || consumables[0]?.id || '');
+                setShowP2PModal(true);
+              }} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <ArrowRightLeft size={14} /> 차량 ➔ 차량 이동 (P2P)
+              </button>
               <button className="btn-secondary" onClick={handleExportVehicleStock} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                 <Download size={14} /> 차량재고 엑셀
               </button>
+            </div>
+          )}
+          {activeTab === 'STOCKTAKING' && (
+            <div style={{ display: 'flex', gap: '6px' }}>
+              {canSave && (
+                <button className="btn-primary" onClick={() => {
+                  setNewAuditTargetType('HQ');
+                  setNewAuditMechanicId(mechanics[0]?.id || '');
+                  setNewAuditMemo('');
+                  setShowCreateAuditModal(true);
+                }} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <Plus size={14} /> 새 실사 전표 생성
+                </button>
+              )}
             </div>
           )}
           {activeTab === 'LOGS' && (
@@ -490,6 +647,20 @@ export const Consumables: React.FC = () => {
           style={{ padding: '8px 14px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '4px', position: 'relative' }}
         >
           <Truck size={14} /> 차량 이동 재고
+        </button>
+        <button
+          className={activeTab === 'STOCKTAKING' ? 'btn-primary' : 'btn-secondary'}
+          onClick={() => setActiveTab('STOCKTAKING')}
+          style={{ padding: '8px 14px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '4px' }}
+        >
+          <CheckSquare size={14} /> 재고 실사
+        </button>
+        <button
+          className={activeTab === 'COLLECTED_PARTS' ? 'btn-primary' : 'btn-secondary'}
+          onClick={() => setActiveTab('COLLECTED_PARTS')}
+          style={{ padding: '8px 14px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '4px' }}
+        >
+          <Archive size={14} /> 고품 관리
         </button>
         <button
           className={activeTab === 'REQ_LIST' ? 'btn-primary' : 'btn-secondary'}
@@ -820,6 +991,556 @@ export const Consumables: React.FC = () => {
                 </tbody>
               </table>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ──────────────────────────────────────────────────────────────────────── */}
+      {/* [신규 TAB] 재고 실사 스튜디오 (Stocktaking Audit Studio) */}
+      {/* ──────────────────────────────────────────────────────────────────────── */}
+      {activeTab === 'STOCKTAKING' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          {/* 상단: 실사 전표 스코프 및 필터 바 */}
+          <div className="card" style={{ margin: 0, padding: '14px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)' }}>실사 대상 구분</label>
+                  <select
+                    value={auditTargetFilter}
+                    onChange={e => setAuditTargetFilter(e.target.value as any)}
+                    style={{ padding: '5px 8px', fontSize: '12px' }}
+                  >
+                    <option value="ALL">전체 실사 대상</option>
+                    <option value="HQ">본사 중앙창고</option>
+                    <option value="VEHICLE">AS 기사 정비차량</option>
+                  </select>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)' }}>실사 상태</label>
+                  <select
+                    value={auditStatusFilter}
+                    onChange={e => setAuditStatusFilter(e.target.value as any)}
+                    style={{ padding: '5px 8px', fontSize: '12px' }}
+                  >
+                    <option value="ALL">전체 상태</option>
+                    <option value="DRAFT">작성중 (DRAFT)</option>
+                    <option value="CONFIRMED">실사확정 (CONFIRMED)</option>
+                    <option value="CANCELLED">취소 (CANCELLED)</option>
+                  </select>
+                </div>
+              </div>
+
+              {canSave && (
+                <button
+                  className="btn-primary"
+                  onClick={() => {
+                    setNewAuditTargetType('HQ');
+                    setNewAuditMechanicId(mechanics[0]?.id || '');
+                    setNewAuditMemo('');
+                    setShowCreateAuditModal(true);
+                  }}
+                  style={{ display: 'flex', alignItems: 'center', gap: '4px' }}
+                >
+                  <Plus size={14} /> 새 실사 전표 생성
+                </button>
+              )}
+            </div>
+
+            {/* 실사 전표 가로 스크롤 카드/배너 목록 */}
+            <div style={{ marginTop: '12px', borderTop: '1px solid var(--border-color)', paddingTop: '10px' }}>
+              <div style={{ fontSize: '11.5px', fontWeight: 700, marginBottom: '8px', color: 'var(--text-secondary)' }}>
+                실사 전표 목록 ({stocktakingAudits.length}건)
+              </div>
+              <div style={{ display: 'flex', gap: '10px', overflowX: 'auto', paddingBottom: '6px' }}>
+                {(() => {
+                  const filteredAudits = stocktakingAudits.filter(a => {
+                    const matchTarget = auditTargetFilter === 'ALL' || a.targetType === auditTargetFilter;
+                    const matchStatus = auditStatusFilter === 'ALL' || a.status === auditStatusFilter;
+                    return matchTarget && matchStatus;
+                  });
+
+                  if (filteredAudits.length === 0) {
+                    return (
+                      <div style={{ fontSize: '12px', color: 'var(--text-muted)', padding: '10px 0' }}>
+                        조건에 맞는 실사 전표가 없습니다. [새 실사 전표 생성] 버튼을 눌러 실사를 시작하세요.
+                      </div>
+                    );
+                  }
+
+                  return filteredAudits.map(a => {
+                    const isSelected = selectedAuditId === a.id;
+                    const statusColor = a.status === 'CONFIRMED' ? 'var(--success)' : (a.status === 'CANCELLED' ? 'var(--danger)' : '#d97706');
+                    const statusBg = a.status === 'CONFIRMED' ? 'var(--success-light)' : (a.status === 'CANCELLED' ? 'var(--danger-light)' : '#fef3c7');
+
+                    return (
+                      <div
+                        key={a.id}
+                        onClick={() => setSelectedAuditId(a.id)}
+                        style={{
+                          minWidth: '240px',
+                          padding: '10px 14px',
+                          borderRadius: '8px',
+                          border: isSelected ? '2px solid var(--primary)' : '1px solid var(--border-color)',
+                          backgroundColor: isSelected ? 'rgba(37, 99, 235, 0.05)' : 'var(--bg-app)',
+                          cursor: 'pointer',
+                          transition: 'all 0.15s ease'
+                        }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                          <strong style={{ fontSize: '12.5px', color: isSelected ? 'var(--primary)' : 'inherit' }}>{a.auditNo}</strong>
+                          <span style={{ fontSize: '10.5px', fontWeight: 700, padding: '1px 6px', borderRadius: '4px', color: statusColor, backgroundColor: statusBg }}>
+                            {a.status === 'CONFIRMED' ? '확정완료' : (a.status === 'CANCELLED' ? '취소' : '실사중')}
+                          </span>
+                        </div>
+                        <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)' }}>
+                          {a.targetType === 'HQ' ? '🏢 본사 중앙창고' : `🚚 ${a.mechanicName || '정비사'} 차량`}
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', marginTop: '6px', color: 'var(--text-muted)' }}>
+                          <span>실사일: {a.auditDate}</span>
+                          <span>오차: <strong style={{ color: a.totalDiffQty === 0 ? 'inherit' : (a.totalDiffQty > 0 ? '#2563eb' : '#ef4444') }}>
+                            {a.totalDiffQty > 0 ? `+${a.totalDiffQty}` : a.totalDiffQty}개
+                          </strong></span>
+                        </div>
+                      </div>
+                    );
+                  });
+                })()}
+              </div>
+            </div>
+          </div>
+
+          {/* 중앙: 선택된 실사 전표의 고밀도 멀티컬럼 대사 그리드 */}
+          {(() => {
+            const currentAudit = stocktakingAudits.find(a => a.id === selectedAuditId) || stocktakingAudits[0];
+            if (!currentAudit) {
+              return (
+                <div className="card" style={{ textAlign: 'center', padding: '40px 0', color: 'var(--text-muted)' }}>
+                  등록된 재고실사 전표가 없습니다. 상단의 [새 실사 전표 생성]을 눌러 첫 실사를 시작하세요.
+                </div>
+              );
+            }
+
+            const currentItems = stocktakingAuditItems.filter(i => i.auditId === currentAudit.id)
+              .filter(i => !auditItemSearch || i.modelName.toLowerCase().includes(auditItemSearch.toLowerCase()));
+
+            const isDraft = currentAudit.status === 'DRAFT';
+
+            return (
+              <div className="card" style={{ margin: 0 }}>
+                <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+                  <div>
+                    <h3 className="card-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <CheckSquare size={16} className="text-primary" />
+                      실사 상세 대사 그리드: {currentAudit.auditNo}
+                      <span style={{
+                        fontSize: '11px',
+                        padding: '2px 8px',
+                        borderRadius: '4px',
+                        backgroundColor: currentAudit.status === 'CONFIRMED' ? 'var(--success-light)' : '#fef3c7',
+                        color: currentAudit.status === 'CONFIRMED' ? 'var(--success)' : '#d97706',
+                        fontWeight: 700
+                      }}>
+                        {currentAudit.targetType === 'HQ' ? '본사 중앙창고' : `${currentAudit.mechanicName} 차량`} ({currentAudit.status})
+                      </span>
+                    </h3>
+                    <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                      실사자: {currentAudit.auditorName} | 실사일자: {currentAudit.auditDate}
+                      {currentAudit.confirmedAt && ` | 확정: ${currentAudit.confirmedAt.substring(0, 16)} (${currentAudit.confirmedBy})`}
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <input
+                      type="text"
+                      value={auditItemSearch}
+                      onChange={e => setAuditItemSearch(e.target.value)}
+                      placeholder="실사 품목 검색..."
+                      style={{ padding: '5px 8px', fontSize: '12px', width: '160px' }}
+                    />
+                    {isDraft && canSave && (
+                      <>
+                        <button
+                          type="button"
+                          className="btn-secondary"
+                          onClick={() => handleCancelAudit(currentAudit.id)}
+                          style={{ padding: '6px 12px', fontSize: '12px', color: 'var(--danger)' }}
+                        >
+                          전표 취소
+                        </button>
+                        <button
+                          type="button"
+                          className="btn-primary"
+                          onClick={() => handleConfirmAudit(currentAudit.id)}
+                          style={{ padding: '6px 14px', fontSize: '12px', fontWeight: 700 }}
+                        >
+                          실사 확정 및 재고 강제 반영
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                {/* 4대 KPI 요약 바 */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '10px', padding: '12px 16px', backgroundColor: 'var(--bg-app)', borderBottom: '1px solid var(--border-color)' }}>
+                  <div>
+                    <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600 }}>전산 총수량</div>
+                    <div style={{ fontSize: '15px', fontWeight: 800 }}>{currentAudit.totalSystemQty.toLocaleString()}개</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600 }}>실물 총수량</div>
+                    <div style={{ fontSize: '15px', fontWeight: 800, color: 'var(--primary)' }}>{currentAudit.totalActualQty.toLocaleString()}개</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600 }}>차이 수량 (실물 - 전산)</div>
+                    <div style={{ fontSize: '15px', fontWeight: 800, color: currentAudit.totalDiffQty === 0 ? 'inherit' : (currentAudit.totalDiffQty > 0 ? '#2563eb' : '#ef4444') }}>
+                      {currentAudit.totalDiffQty > 0 ? `+${currentAudit.totalDiffQty}` : currentAudit.totalDiffQty}개
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600 }}>재고 감모/잉여 차액</div>
+                    <div style={{ fontSize: '15px', fontWeight: 800, color: currentAudit.totalDiffAmount === 0 ? 'inherit' : (currentAudit.totalDiffAmount > 0 ? '#2563eb' : '#ef4444') }}>
+                      ₩{currentAudit.totalDiffAmount.toLocaleString()}원
+                    </div>
+                  </div>
+                </div>
+
+                {/* 고밀도 품목 그리드 (행 높이 38~42px 슬림) */}
+                <div className="table-container" style={{ border: 'none', boxShadow: 'none' }}>
+                  <table>
+                    <thead>
+                      <tr>
+                        <th style={{ width: '40px', textAlign: 'center' }}>No</th>
+                        <th>자재 품목명</th>
+                        <th style={{ width: '60px' }}>단위</th>
+                        <th style={{ width: '90px', textAlign: 'right' }}>기준단가</th>
+                        <th style={{ width: '90px', textAlign: 'center' }}>전산재고</th>
+                        <th style={{ width: '110px', textAlign: 'center', backgroundColor: isDraft ? 'rgba(37, 99, 235, 0.05)' : 'inherit' }}>
+                          실물재고 (실사)
+                        </th>
+                        <th style={{ width: '100px', textAlign: 'center' }}>차이수량</th>
+                        <th style={{ width: '110px', textAlign: 'right' }}>차이금액</th>
+                        <th style={{ width: '130px' }}>차이사유</th>
+                        <th>비고 / 특이사항</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {currentItems.length === 0 ? (
+                        <tr>
+                          <td colSpan={10} style={{ textAlign: 'center', padding: '30px 0', color: 'var(--text-muted)' }}>
+                            실사 대상 품목이 없습니다.
+                          </td>
+                        </tr>
+                      ) : (
+                        currentItems.map((item, idx) => {
+                          const hasDiff = item.diffQty !== 0;
+
+                          return (
+                            <tr key={item.id} style={{ backgroundColor: hasDiff ? 'rgba(239, 68, 68, 0.03)' : 'inherit' }}>
+                              <td style={{ textAlign: 'center', fontSize: '11.5px', color: 'var(--text-muted)' }}>{idx + 1}</td>
+                              <td>
+                                <strong style={{ color: 'var(--primary)' }}>{item.modelName}</strong>
+                              </td>
+                              <td style={{ fontSize: '12px' }}>{item.unit}</td>
+                              <td style={{ textAlign: 'right', fontSize: '12px' }}>₩{item.unitPrice.toLocaleString()}</td>
+                              <td style={{ textAlign: 'center', fontWeight: 700, fontSize: '13px' }}>{item.systemQty}</td>
+                              <td style={{ textAlign: 'center' }}>
+                                {isDraft ? (
+                                  <input
+                                    type="number"
+                                    min={0}
+                                    value={item.actualQty}
+                                    onChange={e => {
+                                      const val = parseInt(e.target.value) || 0;
+                                      handleAuditItemQtyChange(item.id, val, item.diffReason, item.note);
+                                    }}
+                                    style={{
+                                      width: '70px',
+                                      padding: '3px 6px',
+                                      fontSize: '12.5px',
+                                      fontWeight: 800,
+                                      textAlign: 'center',
+                                      borderRadius: '4px',
+                                      border: hasDiff ? '2px solid #ef4444' : '1px solid var(--border-color)',
+                                      backgroundColor: hasDiff ? '#fff1f2' : 'var(--bg-app)'
+                                    }}
+                                  />
+                                ) : (
+                                  <strong style={{ fontSize: '13px', color: 'var(--primary)' }}>{item.actualQty}</strong>
+                                )}
+                              </td>
+                              <td style={{ textAlign: 'center' }}>
+                                {item.diffQty === 0 ? (
+                                  <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>0</span>
+                                ) : item.diffQty > 0 ? (
+                                  <span className="badge badge-primary" style={{ fontSize: '11px', fontWeight: 800 }}>
+                                    +{item.diffQty} (잉여)
+                                  </span>
+                                ) : (
+                                  <span className="badge badge-danger" style={{ fontSize: '11px', fontWeight: 800 }}>
+                                    {item.diffQty} (감모)
+                                  </span>
+                                )}
+                              </td>
+                              <td style={{ textAlign: 'right', fontWeight: 700, fontSize: '12px', color: item.diffAmount === 0 ? 'inherit' : (item.diffAmount > 0 ? '#2563eb' : '#ef4444') }}>
+                                {item.diffAmount === 0 ? '-' : `₩${item.diffAmount.toLocaleString()}`}
+                              </td>
+                              <td>
+                                {isDraft ? (
+                                  <select
+                                    value={item.diffReason || 'OTHER'}
+                                    disabled={!hasDiff}
+                                    onChange={e => handleAuditItemQtyChange(item.id, item.actualQty, e.target.value as any, item.note)}
+                                    style={{ padding: '2px 4px', fontSize: '11px', width: '100%', opacity: hasDiff ? 1 : 0.4 }}
+                                  >
+                                    <option value="LOST">망실/도난</option>
+                                    <option value="DAMAGED">파손/부식/폐기</option>
+                                    <option value="UNRECORDED_USAGE">미기록 현장소모</option>
+                                    <option value="SURPLUS">미등록 잉여수거</option>
+                                    <option value="OTHER">기타 사유</option>
+                                  </select>
+                                ) : (
+                                  <span style={{ fontSize: '11.5px', color: 'var(--text-secondary)' }}>
+                                    {item.diffReason === 'LOST' ? '망실/도난'
+                                      : item.diffReason === 'DAMAGED' ? '파손/부식'
+                                      : item.diffReason === 'UNRECORDED_USAGE' ? '미기록 현장소모'
+                                      : item.diffReason === 'SURPLUS' ? '미등록 잉여' : (item.diffQty !== 0 ? '기타' : '-')}
+                                  </span>
+                                )}
+                              </td>
+                              <td>
+                                {isDraft ? (
+                                  <input
+                                    type="text"
+                                    value={item.note || ''}
+                                    placeholder="특이사항 메모..."
+                                    onChange={e => handleAuditItemQtyChange(item.id, item.actualQty, item.diffReason, e.target.value)}
+                                    style={{ width: '100%', padding: '2px 6px', fontSize: '11px' }}
+                                  />
+                                ) : (
+                                  <span style={{ fontSize: '11.5px', color: 'var(--text-muted)' }}>{item.note || '-'}</span>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* 하단 Gutenberg Z-패턴 터미널 대차대조식 바 */}
+                <div style={{
+                  padding: '12px 18px',
+                  backgroundColor: 'var(--bg-app)',
+                  borderTop: '1px solid var(--border-color)',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  flexWrap: 'wrap',
+                  gap: '10px'
+                }}>
+                  <div style={{ fontSize: '12px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                    <span>📦 <strong>실물 총액:</strong> ₩{currentAudit.totalActualAmount.toLocaleString()}원</span>
+                    <span>=</span>
+                    <span>💻 <strong>전산 총액:</strong> ₩{currentAudit.totalSystemAmount.toLocaleString()}원</span>
+                    <span>+</span>
+                    <span>⚖️ <strong>실사 차액:</strong> ₩{currentAudit.totalDiffAmount.toLocaleString()}원</span>
+                    <span style={{ color: 'var(--border-color)' }}>|</span>
+                    <span style={{ color: 'var(--success)', fontWeight: 800 }}>⚖️ 대차 차액 ₩0 무결 확정</span>
+                  </div>
+
+                  {isDraft && canSave && (
+                    <button
+                      className="btn-primary"
+                      onClick={() => handleConfirmAudit(currentAudit.id)}
+                      style={{ padding: '8px 18px', fontSize: '13px', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '6px' }}
+                    >
+                      <CheckCircle2 size={16} /> 실사 확정 및 재고 강제 반영
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
+        </div>
+      )}
+
+      {/* ──────────────────────────────────────────────────────────────────────── */}
+      {/* [신규 TAB] 수거 고품(폐부품/교체부품) 관리 대장 */}
+      {/* ──────────────────────────────────────────────────────────────────────── */}
+      {activeTab === 'COLLECTED_PARTS' && (
+        <div className="card" style={{ margin: 0 }}>
+          <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+            <div>
+              <h3 className="card-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Archive size={16} className="text-primary" />
+                수거 고품 사후처리(재생/폐기/보증) 관리 대장
+              </h3>
+              <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                현장 AS 및 입고 정비 시 교체 수거된 불량 부품의 격리 및 사후처리 파이프라인
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <select
+                value={partDispositionFilter}
+                onChange={e => setPartDispositionFilter(e.target.value as any)}
+                style={{ padding: '5px 8px', fontSize: '12px' }}
+              >
+                <option value="ALL">전체 처분구분</option>
+                <option value="REBUILD">재생 대상 (REBUILD)</option>
+                <option value="SCRAP">폐기/고철 (SCRAP)</option>
+                <option value="VENDOR_WARRANTY">제조사 무상보증 (WARRANTY)</option>
+              </select>
+
+              <select
+                value={partStatusFilter}
+                onChange={e => setPartStatusFilter(e.target.value as any)}
+                style={{ padding: '5px 8px', fontSize: '12px' }}
+              >
+                <option value="ALL">전체 상태</option>
+                <option value="RECEIVED">수거 접수 (RECEIVED)</option>
+                <option value="IN_PROCESS">처리 진행중 (IN_PROCESS)</option>
+                <option value="COMPLETED">조치 완료 (COMPLETED)</option>
+              </select>
+
+              <input
+                type="text"
+                value={partSearch}
+                onChange={e => setPartSearch(e.target.value)}
+                placeholder="고품 부품명 검색..."
+                style={{ padding: '5px 8px', fontSize: '12px', width: '160px' }}
+              />
+            </div>
+          </div>
+
+          {/* 고품 4대 요약 카드 */}
+          {(() => {
+            const totalCount = collectedParts.length;
+            const rebuildCount = collectedParts.filter(p => p.disposition === 'REBUILD').length;
+            const scrapCount = collectedParts.filter(p => p.disposition === 'SCRAP').length;
+            const warrantyCount = collectedParts.filter(p => p.disposition === 'VENDOR_WARRANTY').length;
+
+            return (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '10px', padding: '12px 16px', backgroundColor: 'var(--bg-app)', borderBottom: '1px solid var(--border-color)' }}>
+                <div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600 }}>총 수거 건수</div>
+                  <div style={{ fontSize: '15px', fontWeight: 800 }}>{totalCount}건</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600 }}>재생 대기 (REBUILD)</div>
+                  <div style={{ fontSize: '15px', fontWeight: 800, color: '#7c3aed' }}>{rebuildCount}건</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600 }}>폐기/고철 (SCRAP)</div>
+                  <div style={{ fontSize: '15px', fontWeight: 800, color: '#ea580c' }}>{scrapCount}건</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600 }}>제조사 무상보증 클레임</div>
+                  <div style={{ fontSize: '15px', fontWeight: 800, color: '#2563eb' }}>{warrantyCount}건</div>
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* 고품 목록 테이블 */}
+          <div className="table-container" style={{ border: 'none', boxShadow: 'none' }}>
+            <table>
+              <thead>
+                <tr>
+                  <th>고품 관리번호</th>
+                  <th>부품 품목명</th>
+                  <th style={{ textAlign: 'center' }}>수량</th>
+                  <th>수거 정비사</th>
+                  <th style={{ textAlign: 'center' }}>처분 구분</th>
+                  <th style={{ textAlign: 'center' }}>처리 상태</th>
+                  <th>수거 일자</th>
+                  <th>조치 일자</th>
+                  <th>메모 / 조치내용</th>
+                  <th style={{ textAlign: 'center' }}>관리 액션</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(() => {
+                  const filtered = collectedParts.filter(p => {
+                    const matchDisp = partDispositionFilter === 'ALL' || p.disposition === partDispositionFilter;
+                    const matchStatus = partStatusFilter === 'ALL' || p.status === partStatusFilter;
+                    const matchSearch = !partSearch || p.modelName.toLowerCase().includes(partSearch.toLowerCase()) || p.partNo.toLowerCase().includes(partSearch.toLowerCase());
+                    return matchDisp && matchStatus && matchSearch;
+                  });
+
+                  if (filtered.length === 0) {
+                    return (
+                      <tr>
+                        <td colSpan={10} style={{ textAlign: 'center', padding: '30px 0', color: 'var(--text-muted)' }}>
+                          수거된 고품 내역이 없습니다. (차량 반납 시 고품 체크 시 자동 등재됩니다)
+                        </td>
+                      </tr>
+                    );
+                  }
+
+                  return filtered.map(p => {
+                    const dispLabel = p.disposition === 'REBUILD' ? '재생 대상' : (p.disposition === 'SCRAP' ? '폐기/고철' : '제조사 보증');
+                    const dispColor = p.disposition === 'REBUILD' ? '#7c3aed' : (p.disposition === 'SCRAP' ? '#ea580c' : '#2563eb');
+                    const dispBg = p.disposition === 'REBUILD' ? '#f5f3ff' : (p.disposition === 'SCRAP' ? '#fff7ed' : '#eff6ff');
+
+                    const statusLabel = p.status === 'COMPLETED' ? '조치 완료' : (p.status === 'IN_PROCESS' ? '처리중' : '수거 접수');
+                    const statusColor = p.status === 'COMPLETED' ? 'var(--success)' : (p.status === 'IN_PROCESS' ? '#2563eb' : '#d97706');
+
+                    return (
+                      <tr key={p.id}>
+                        <td><strong>{p.partNo}</strong></td>
+                        <td><strong style={{ color: 'var(--primary)' }}>{p.modelName}</strong></td>
+                        <td style={{ textAlign: 'center', fontWeight: 800 }}>{p.quantity}개</td>
+                        <td>{p.mechanicName}</td>
+                        <td style={{ textAlign: 'center' }}>
+                          <span style={{ fontSize: '11px', fontWeight: 700, padding: '2px 8px', borderRadius: '4px', color: dispColor, backgroundColor: dispBg }}>
+                            {dispLabel}
+                          </span>
+                        </td>
+                        <td style={{ textAlign: 'center' }}>
+                          <span style={{ fontSize: '11.5px', fontWeight: 700, color: statusColor }}>
+                            {statusLabel}
+                          </span>
+                        </td>
+                        <td style={{ fontSize: '11.5px' }}>{p.receivedDate}</td>
+                        <td style={{ fontSize: '11.5px' }}>{p.actionDate || '-'}</td>
+                        <td style={{ fontSize: '12px' }}>{p.actionMemo || p.memo || '-'}</td>
+                        <td style={{ textAlign: 'center' }}>
+                          {canSave && p.status !== 'COMPLETED' && (
+                            <div style={{ display: 'inline-flex', gap: '4px' }}>
+                              {p.status === 'RECEIVED' && (
+                                <button
+                                  type="button"
+                                  className="btn-secondary"
+                                  onClick={() => handleProcessCollectedPart(p.id, 'IN_PROCESS', '재생/외주 정비 또는 폐기 착수')}
+                                  style={{ padding: '2px 6px', fontSize: '11px' }}
+                                >
+                                  처리 착수
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                className="btn-primary"
+                                onClick={() => handleProcessCollectedPart(p.id, 'COMPLETED', `${dispLabel} 최종 조치 완료`)}
+                                style={{ padding: '2px 8px', fontSize: '11px' }}
+                              >
+                                조치 완료
+                              </button>
+                            </div>
+                          )}
+                          {p.status === 'COMPLETED' && (
+                            <span style={{ fontSize: '11px', color: 'var(--success)', fontWeight: 700 }}>✓ 종결</span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  });
+                })()}
+              </tbody>
+            </table>
           </div>
         </div>
       )}
@@ -1281,15 +2002,232 @@ export const Consumables: React.FC = () => {
                 );
               })()}
 
+              {/* 고품(불량품) 반납 격리 스위치 */}
+              <div style={{ padding: '10px', backgroundColor: isReturnDefective ? '#fff7ed' : 'var(--bg-app)', borderRadius: '6px', border: isReturnDefective ? '1px solid #fdba74' : '1px solid var(--border-color)' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontWeight: 600, fontSize: '12px' }}>
+                  <input
+                    type="checkbox"
+                    checked={isReturnDefective}
+                    onChange={e => setIsReturnDefective(e.target.checked)}
+                  />
+                  <span>⚠️ 교체 수거 고품(불량/고장 부품) 반납 (본사 신품재고 가산 차단)</span>
+                </label>
+
+                {isReturnDefective && (
+                  <div style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px dashed #fdba74' }}>
+                    <label style={{ fontSize: '11px', fontWeight: 600, display: 'block', marginBottom: '4px', color: '#ea580c' }}>
+                      고품 사후처리 판정 구분 *
+                    </label>
+                    <select
+                      value={returnDisposition}
+                      onChange={e => setReturnDisposition(e.target.value as any)}
+                      style={{ width: '100%', padding: '5px', fontSize: '12px' }}
+                    >
+                      <option value="REBUILD">재생 판정 (오버홀 / 자체 수리 재생 대상)</option>
+                      <option value="SCRAP">폐기 처분 (수리 불가 고철 매각/폐기)</option>
+                      <option value="VENDOR_WARRANTY">제조사 무상보증 클레임 대상</option>
+                    </select>
+                  </div>
+                )}
+              </div>
+
               <div>
                 <label style={{ fontSize: '11.5px', fontWeight: '600', display: 'block', marginBottom: '4px' }}>비고 / 메모</label>
-                <input type="text" value={returnMemo} onChange={e => setReturnMemo(e.target.value)} placeholder="예: 잔여분 본사 회수" style={{ width: '100%', padding: '6px' }} />
+                <input type="text" value={returnMemo} onChange={e => setReturnMemo(e.target.value)} placeholder="예: 잔여분 본사 회수 or 현장 모터 교체 수거품" style={{ width: '100%', padding: '6px' }} />
               </div>
             </div>
 
             <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', borderTop: '1px solid var(--border-color)', paddingTop: '10px' }}>
               <button type="button" className="btn-secondary" onClick={() => setShowReturnModal(false)}>취소</button>
-              <button type="submit" className="btn-primary" style={{ backgroundColor: '#d97706', borderColor: '#d97706' }}>본사 반납 실행</button>
+              <button type="submit" className="btn-primary" style={{ backgroundColor: isReturnDefective ? '#ea580c' : '#d97706', borderColor: isReturnDefective ? '#ea580c' : '#d97706' }}>
+                {isReturnDefective ? '고품 격리 반납 실행' : '본사 정상 반납 실행'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* ──────────────────────────────────────────────────────────────────────── */}
+      {/* 정비사 차량 간 (P2P) 부품 융통 이동 모달 */}
+      {/* ──────────────────────────────────────────────────────────────────────── */}
+      {showP2PModal && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000
+        }}>
+          <form onSubmit={handleP2PSubmit} className="card" style={{ width: '90%', maxWidth: '450px', backgroundColor: 'var(--bg-card)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-color)', paddingBottom: '10px', marginBottom: '14px' }}>
+              <h3 className="card-title" style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--primary)' }}>
+                <ArrowRightLeft size={16} /> AS 차량 ➔ 차량 부품 이동 (P2P 융통)
+              </h3>
+              <button type="button" className="btn-secondary" onClick={() => setShowP2PModal(false)} style={{ padding: '3px 8px' }}>
+                <X size={14} />
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '16px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                <div>
+                  <label style={{ fontSize: '11.5px', fontWeight: '600', display: 'block', marginBottom: '4px' }}>양도 정비사 (출처) *</label>
+                  <select
+                    value={p2pFromMechanicId}
+                    onChange={e => {
+                      setP2pFromMechanicId(e.target.value);
+                      const available = (mechanicConsumableStocks || []).find(ms => ms.mechanicId === e.target.value && ms.stockQty > 0);
+                      if (available) setP2pConsumableId(available.consumableId);
+                    }}
+                    required
+                    style={{ width: '100%', padding: '6px' }}
+                  >
+                    {mechanics.map(m => (
+                      <option key={m.id} value={m.id}>{m.name} 차량</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label style={{ fontSize: '11.5px', fontWeight: '600', display: 'block', marginBottom: '4px' }}>양수 정비사 (도착) *</label>
+                  <select
+                    value={p2pToMechanicId}
+                    onChange={e => setP2pToMechanicId(e.target.value)}
+                    required
+                    style={{ width: '100%', padding: '6px' }}
+                  >
+                    {mechanics.map(m => (
+                      <option key={m.id} value={m.id}>{m.name} 차량</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label style={{ fontSize: '11.5px', fontWeight: '600', display: 'block', marginBottom: '4px' }}>이동할 부품 품목 *</label>
+                <select value={p2pConsumableId} onChange={e => setP2pConsumableId(e.target.value)} required style={{ width: '100%', padding: '6px' }}>
+                  {(() => {
+                    const fromStocks = (mechanicConsumableStocks || []).filter(ms => ms.mechanicId === p2pFromMechanicId && ms.stockQty > 0);
+                    if (fromStocks.length === 0) {
+                      return <option value="">-- 양도 정비사 차량에 보유 재고 없음 --</option>;
+                    }
+                    return fromStocks.map(ms => {
+                      const item = consumables.find(c => c.id === ms.consumableId);
+                      return (
+                        <option key={ms.consumableId} value={ms.consumableId}>
+                          {item?.modelName || '품목'} (보유: {ms.stockQty}개)
+                        </option>
+                      );
+                    });
+                  })()}
+                </select>
+              </div>
+
+              {(() => {
+                const targetStock = (mechanicConsumableStocks || []).find(ms => ms.mechanicId === p2pFromMechanicId && ms.consumableId === p2pConsumableId);
+                const maxStock = targetStock ? targetStock.stockQty : 1;
+                return (
+                  <div>
+                    <label style={{ fontSize: '11.5px', fontWeight: '600', display: 'block', marginBottom: '4px' }}>이동 수량 (보유: {maxStock}개) *</label>
+                    <input
+                      type="number"
+                      value={p2pQty}
+                      onChange={e => setP2pQty(Math.min(maxStock, Math.max(1, parseInt(e.target.value) || 1)))}
+                      min={1}
+                      max={maxStock}
+                      required
+                      style={{ width: '100%', padding: '6px' }}
+                    />
+                  </div>
+                );
+              })()}
+
+              <div>
+                <label style={{ fontSize: '11.5px', fontWeight: '600', display: 'block', marginBottom: '4px' }}>융통 사유 / 메모</label>
+                <input type="text" value={p2pMemo} onChange={e => setP2pMemo(e.target.value)} placeholder="예: 천안 현장 긴급 지원용 차대차 이관" style={{ width: '100%', padding: '6px' }} />
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', borderTop: '1px solid var(--border-color)', paddingTop: '10px' }}>
+              <button type="button" className="btn-secondary" onClick={() => setShowP2PModal(false)}>취소</button>
+              <button type="submit" className="btn-primary">차량 간 이동 실행</button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* ──────────────────────────────────────────────────────────────────────── */}
+      {/* 새 재고실사 전표 생성 모달 */}
+      {/* ──────────────────────────────────────────────────────────────────────── */}
+      {showCreateAuditModal && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000
+        }}>
+          <form onSubmit={handleCreateAuditSubmit} className="card" style={{ width: '90%', maxWidth: '460px', backgroundColor: 'var(--bg-card)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-color)', paddingBottom: '10px', marginBottom: '14px' }}>
+              <h3 className="card-title" style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <CheckSquare size={16} className="text-primary" /> 새 재고실사 전표 생성
+              </h3>
+              <button type="button" className="btn-secondary" onClick={() => setShowCreateAuditModal(false)} style={{ padding: '3px 8px' }}>
+                <X size={14} />
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '16px' }}>
+              <div>
+                <label style={{ fontSize: '11.5px', fontWeight: '600', display: 'block', marginBottom: '4px' }}>실사 대상 창고 / 장소 *</label>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                  <button
+                    type="button"
+                    onClick={() => setNewAuditTargetType('HQ')}
+                    className={newAuditTargetType === 'HQ' ? 'btn-primary' : 'btn-secondary'}
+                    style={{ padding: '8px', fontSize: '12.5px', fontWeight: 700 }}
+                  >
+                    🏢 본사 중앙창고
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setNewAuditTargetType('VEHICLE')}
+                    className={newAuditTargetType === 'VEHICLE' ? 'btn-primary' : 'btn-secondary'}
+                    style={{ padding: '8px', fontSize: '12.5px', fontWeight: 700 }}
+                  >
+                    🚚 AS 정비차량
+                  </button>
+                </div>
+              </div>
+
+              {newAuditTargetType === 'VEHICLE' && (
+                <div>
+                  <label style={{ fontSize: '11.5px', fontWeight: '600', display: 'block', marginBottom: '4px' }}>대상 정비사 (차량) *</label>
+                  <select
+                    value={newAuditMechanicId}
+                    onChange={e => setNewAuditMechanicId(e.target.value)}
+                    required
+                    style={{ width: '100%', padding: '6px' }}
+                  >
+                    {mechanics.map(m => (
+                      <option key={m.id} value={m.id}>{m.name} 정비사 차량</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              <div>
+                <label style={{ fontSize: '11.5px', fontWeight: '600', display: 'block', marginBottom: '4px' }}>실사 비고 / 감사 목적</label>
+                <input
+                  type="text"
+                  value={newAuditMemo}
+                  onChange={e => setNewAuditMemo(e.target.value)}
+                  placeholder="예: 2026년 상반기 정기 차량 재고 실사"
+                  style={{ width: '100%', padding: '6px' }}
+                />
+              </div>
+
+              <div style={{ padding: '10px', backgroundColor: 'var(--bg-app)', borderRadius: '6px', fontSize: '11.5px', color: 'var(--text-secondary)' }}>
+                ℹ️ 전표 생성 시 당시의 전산 재고 수량이 스냅샷으로 자동 동결되며, 생성 즉시 상세 대사 그리드에서 실물 수량을 카운트하여 입력할 수 있습니다.
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', borderTop: '1px solid var(--border-color)', paddingTop: '10px' }}>
+              <button type="button" className="btn-secondary" onClick={() => setShowCreateAuditModal(false)}>취소</button>
+              <button type="submit" className="btn-primary">실사 전표 생성</button>
             </div>
           </form>
         </div>
