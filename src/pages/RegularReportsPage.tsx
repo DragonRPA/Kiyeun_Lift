@@ -1,19 +1,28 @@
-// @ts-nocheck
+﻿// @ts-nocheck
 import React, { useState, useMemo, useEffect } from 'react';
 import { 
   FileBarChart2, Download, Printer, RefreshCw, CheckCircle2, 
   AlertTriangle, ArrowUpRight, TrendingUp, Truck, Wrench, 
-  DollarSign, Building2, Save, Sparkles, Clock, Ban, ChevronRight
+  DollarSign, Building2, Save, Sparkles, Clock, Ban, ChevronRight,
+  MessageSquare, Link, Plus, Trash2, ChevronDown, ChevronUp
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { 
   aggregateExecutiveMonthlyReport, 
   getStoredExecutiveDirective, 
   saveExecutiveDirective,
+  getStoredTeamComment,
+  saveTeamComment,
+  getAllTeamComments,
   ExecutiveMonthlyReport,
-  ExecutiveDirective
+  ExecutiveDirective,
+  TeamComment,
+  TeamCommentLink,
+  TeamKey,
+  TEAM_META
 } from '../services/monthlyReportEngine';
 import { downloadExecutiveReportPdf } from '../services/monthlyReportPdfBuilder';
+
 
 export const RegularReportsPage: React.FC = () => {
   const context = useApp();
@@ -28,9 +37,28 @@ export const RegularReportsPage: React.FC = () => {
     getStoredExecutiveDirective('2026-08')
   );
 
-  // 대상 연월 변경 시 지시사항 리로드
+  // 팀별 코멘트 로컬 상태 (5개 팀)
+  const [teamComments, setTeamComments] = useState<Record<TeamKey, TeamComment>>(() => {
+    const init = {} as Record<TeamKey, TeamComment>;
+    (['SALES', 'LOGISTICS', 'YARD', 'MAINTENANCE', 'FINANCE'] as TeamKey[]).forEach(k => {
+      init[k] = getStoredTeamComment('2026-08', k);
+    });
+    return init;
+  });
+
+  // 팀별 코멘트 패널 접힘 상태
+  const [commentPanelOpen, setCommentPanelOpen] = useState<Record<TeamKey, boolean>>({
+    SALES: false, LOGISTICS: false, YARD: false, MAINTENANCE: false, FINANCE: false
+  });
+
+  // 대상 연월 변경 시 지시사항 및 팀별 코멘트 리로드
   useEffect(() => {
     setDirective(getStoredExecutiveDirective(targetYm));
+    const refreshed = {} as Record<TeamKey, TeamComment>;
+    (['SALES', 'LOGISTICS', 'YARD', 'MAINTENANCE', 'FINANCE'] as TeamKey[]).forEach(k => {
+      refreshed[k] = getStoredTeamComment(targetYm, k);
+    });
+    setTeamComments(refreshed);
   }, [targetYm]);
 
   // 실데이터 기반 전사 월간 종합 리포트 집계
@@ -51,11 +79,46 @@ export const RegularReportsPage: React.FC = () => {
     showToast('경영진 종합 총평 및 차월 중점 지시사항이 저장되었습니다.');
   };
 
+  // 팀별 코멘트 저장
+  const handleSaveTeamComment = (teamKey: TeamKey) => {
+    const comment = teamComments[teamKey];
+    saveTeamComment({ ...comment, targetYm });
+    showToast(`${TEAM_META[teamKey].name} 코멘트가 저장되었습니다.`);
+  };
+
+  // 팀별 코멘트 필드 업데이트
+  const updateTeamComment = (teamKey: TeamKey, field: keyof TeamComment, value: any) => {
+    setTeamComments(prev => ({
+      ...prev,
+      [teamKey]: { ...prev[teamKey], [field]: value }
+    }));
+  };
+
+  // 팀별 링크 추가
+  const addTeamLink = (teamKey: TeamKey) => {
+    const current = teamComments[teamKey].links;
+    if (current.length >= 3) return;
+    updateTeamComment(teamKey, 'links', [...current, { title: '', url: '' }]);
+  };
+
+  // 팀별 링크 수정
+  const updateTeamLink = (teamKey: TeamKey, idx: number, field: 'title' | 'url', val: string) => {
+    const links = [...teamComments[teamKey].links];
+    links[idx] = { ...links[idx], [field]: val };
+    updateTeamComment(teamKey, 'links', links);
+  };
+
+  // 팀별 링크 삭제
+  const removeTeamLink = (teamKey: TeamKey, idx: number) => {
+    const links = teamComments[teamKey].links.filter((_, i) => i !== idx);
+    updateTeamComment(teamKey, 'links', links);
+  };
+
   // 공식 PDF 다운로드
   const handleDownloadPdf = async () => {
     setIsDownloading(true);
     try {
-      await downloadExecutiveReportPdf({ ...reportData, executiveDirective: directive });
+      await downloadExecutiveReportPdf({ ...reportData, executiveDirective: directive, teamComments: Object.values(teamComments) });
       showToast(`${period.year}년 ${period.month}월 경영 정기보고서 PDF 다운로드가 완료되었습니다.`);
     } catch (err: any) {
       console.error('PDF generation error:', err);
@@ -70,319 +133,336 @@ export const RegularReportsPage: React.FC = () => {
     window.print();
   };
 
+  // 팀별 코멘트 패널 컴포넌트 (각 보고서 섹션 하단에 삽입)
+  const TeamCommentPanel = ({ teamKey }: { teamKey: TeamKey }) => {
+    const meta = TEAM_META[teamKey];
+    const tc = teamComments[teamKey];
+    const isOpen = commentPanelOpen[teamKey];
+    const hasContent = tc.comment.trim() || tc.links.some(l => l.url.trim());
+
+    return (
+      <div className="mt-3 rounded-lg border border-dashed transition-all"
+        style={{ borderColor: hasContent ? 'rgba(99,102,241,0.5)' : 'var(--border-color)', backgroundColor: hasContent ? 'rgba(99,102,241,0.04)' : 'transparent' }}>
+        {/* 헤더 토글 */}
+        <button
+          onClick={() => setCommentPanelOpen(prev => ({ ...prev, [teamKey]: !prev[teamKey] }))}
+          className="w-full flex items-center justify-between px-4 py-2.5 text-left rounded-lg"
+        >
+          <div className="flex items-center gap-2">
+            <MessageSquare size={13} className={hasContent ? 'text-indigo-400' : 'text-slate-500'} />
+            <span className={`text-[11px] font-bold ${hasContent ? 'text-indigo-300' : 'text-slate-500'}`}>
+              {meta.icon} {meta.name} 코멘트
+            </span>
+            {hasContent && tc.savedAt && (
+              <span className="text-[10px] text-slate-500">· 저장: {tc.savedAt.slice(0, 16)}</span>
+            )}
+            {hasContent && !tc.savedAt && (
+              <span className="text-[10px] text-amber-500">· 미저장</span>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            {hasContent && (
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                내용 있음
+              </span>
+            )}
+            {isOpen ? <ChevronUp size={13} className="text-slate-400" /> : <ChevronDown size={13} className="text-slate-400" />}
+          </div>
+        </button>
+
+        {/* 펼친 상태 */}
+        {isOpen && (
+          <div className="px-4 pb-4 flex flex-col gap-3">
+            {/* 코멘트 작성자 + 텍스트 */}
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] font-bold text-slate-400">작성자</label>
+              <input
+                type="text"
+                value={tc.authorName}
+                onChange={e => updateTeamComment(teamKey, 'authorName', e.target.value)}
+                placeholder="이름 또는 직책"
+                className="w-full px-2.5 py-1.5 rounded text-xs text-white border focus:outline-none focus:border-indigo-500"
+                style={{ backgroundColor: 'var(--bg-app)', borderColor: 'var(--border-color)', maxWidth: '200px' }}
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] font-bold text-slate-400">부서 코멘트 / 부연 설명</label>
+              <textarea
+                rows={3}
+                value={tc.comment}
+                onChange={e => updateTeamComment(teamKey, 'comment', e.target.value)}
+                placeholder={`${meta.name}에서 이 보고 항목에 대한 추가 설명이나 특이 사항을 입력하세요...`}
+                className="w-full p-2.5 rounded-lg text-xs text-white border focus:outline-none focus:border-indigo-500 leading-relaxed resize-none"
+                style={{ backgroundColor: 'var(--bg-app)', borderColor: 'var(--border-color)' }}
+              />
+            </div>
+
+            {/* 참고 링크 */}
+            <div className="flex flex-col gap-1.5">
+              <div className="flex items-center justify-between">
+                <label className="text-[10px] font-bold text-slate-400">참고 링크 (최대 3개)</label>
+                {tc.links.length < 3 && (
+                  <button
+                    onClick={() => addTeamLink(teamKey)}
+                    className="flex items-center gap-1 text-[10px] text-indigo-400 hover:text-indigo-300 font-semibold"
+                  >
+                    <Plus size={11} /> 링크 추가
+                  </button>
+                )}
+              </div>
+              {tc.links.map((lnk, idx) => (
+                <div key={idx} className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={lnk.title}
+                    onChange={e => updateTeamLink(teamKey, idx, 'title', e.target.value)}
+                    placeholder="링크 제목"
+                    className="flex-shrink-0 w-32 px-2 py-1.5 rounded text-[11px] text-white border focus:outline-none focus:border-indigo-500"
+                    style={{ backgroundColor: 'var(--bg-app)', borderColor: 'var(--border-color)' }}
+                  />
+                  <input
+                    type="url"
+                    value={lnk.url}
+                    onChange={e => updateTeamLink(teamKey, idx, 'url', e.target.value)}
+                    placeholder="https://"
+                    className="flex-1 px-2 py-1.5 rounded text-[11px] text-white border focus:outline-none focus:border-indigo-500 font-mono"
+                    style={{ backgroundColor: 'var(--bg-app)', borderColor: 'var(--border-color)' }}
+                  />
+                  <button
+                    onClick={() => removeTeamLink(teamKey, idx)}
+                    className="p-1 text-slate-500 hover:text-red-400 transition-colors flex-shrink-0"
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                </div>
+              ))}
+              {tc.links.length === 0 && (
+                <span className="text-[10px] text-slate-600 italic">첨부할 참고 문서나 URL 링크가 있으면 추가하세요.</span>
+              )}
+            </div>
+
+            {/* 저장 버튼 */}
+            <div className="flex justify-end">
+              <button
+                onClick={() => handleSaveTeamComment(teamKey)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-[11px] font-bold shadow transition-all active:scale-98"
+              >
+                <Save size={12} />
+                <span>저장</span>
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+
+  // ─── 전사 표준 스타일 상수 ────────────────────────────────────────────────
+  const S = {
+    card: { backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '14px 18px' } as React.CSSProperties,
+    cardSm: { backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '6px', padding: '10px 14px' } as React.CSSProperties,
+    cardDanger: { backgroundColor: 'var(--bg-card)', border: '1px solid var(--danger)', borderRadius: '8px', padding: '14px 18px' } as React.CSSProperties,
+    kpiChip: { backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '6px', padding: '7px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' } as React.CSSProperties,
+    sectionLabel: { fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 600, whiteSpace: 'nowrap' } as React.CSSProperties,
+    sectionTitle: { fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)', margin: 0 } as React.CSSProperties,
+    subTitle: { fontSize: '12px', fontWeight: 700, color: 'var(--text-primary)', margin: 0 } as React.CSSProperties,
+    muted: { fontSize: '12px', color: 'var(--text-muted)' } as React.CSSProperties,
+    tableHeader: { fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 600, paddingBottom: '6px', borderBottom: '1px solid var(--border-color)', whiteSpace: 'nowrap' } as React.CSSProperties,
+    tableCell: { fontSize: '12px', color: 'var(--text-primary)', padding: '7px 0', whiteSpace: 'nowrap' } as React.CSSProperties,
+    tableCellMuted: { fontSize: '12px', color: 'var(--text-secondary)', padding: '7px 0', whiteSpace: 'nowrap' } as React.CSSProperties,
+    divider: { borderTop: '1px solid var(--border-color)', margin: '10px 0' } as React.CSSProperties,
+    input: { padding: '6px 10px', borderRadius: '6px', fontSize: '12.5px', border: '1px solid var(--border-color)', outline: 'none', backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)', width: '100%' } as React.CSSProperties,
+    textarea: { padding: '8px 10px', borderRadius: '6px', fontSize: '12.5px', border: '1px solid var(--border-color)', outline: 'none', backgroundColor: 'var(--bg-app)', color: 'var(--text-primary)', width: '100%', resize: 'vertical' } as React.CSSProperties,
+  };
+
   return (
-    <div className="min-h-full pb-16 text-slate-100 regular-reports-container" style={{ backgroundColor: 'var(--bg-app)' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', fontSize: '13px', paddingBottom: '32px' }}>
+
       {/* 토스트 알림 */}
       {toastMessage && (
-        <div className="fixed top-5 right-5 z-50 bg-slate-900 text-white px-4 py-3 rounded-lg shadow-2xl flex items-center gap-2 text-sm border border-slate-700 animate-in fade-in slide-in-from-top-2 no-print">
-          <CheckCircle2 size={18} className="text-emerald-400 flex-shrink-0" />
-          <span className="font-semibold">{toastMessage}</span>
+        <div style={{ position: 'fixed', top: '20px', right: '20px', zIndex: 9999, backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '10px 16px', display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 8px 24px rgba(0,0,0,0.3)', fontSize: '13px', color: 'var(--text-primary)' }}>
+          <CheckCircle2 size={16} style={{ color: 'var(--success)', flexShrink: 0 }} />
+          <span style={{ fontWeight: 600 }}>{toastMessage}</span>
         </div>
       )}
 
-      {/* ─────────────────────────────────────────────────────────────
-          상단 제어 헤더 (Z-Pattern Step 1 & 2: Scope & Pipeline)
-      ───────────────────────────────────────────────────────────── */}
-      <div className="border-b sticky top-0 z-30 shadow-md backdrop-blur-md no-print" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-color)' }}>
-        <div className="max-w-7xl mx-auto px-6 py-4 flex flex-wrap items-center justify-between gap-4">
-          {/* 좌상단: 스코프 (대상 연월 및 리포트 명칭) */}
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 bg-blue-600/15 text-blue-400 rounded-xl border border-blue-500/30 flex-shrink-0">
-              <FileBarChart2 size={24} />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-lg font-extrabold text-white tracking-tight whitespace-nowrap">
-                  정기보고서 생성
-                </h1>
-                <span className="px-2 py-0.5 text-[11px] font-bold rounded bg-blue-500/20 text-blue-300 border border-blue-500/30 whitespace-nowrap">
-                  월간 경영 종합 브리핑
-                </span>
-              </div>
-              <p className="text-xs text-slate-400 mt-0.5 whitespace-nowrap">
-                전사 5대 핵심 도메인(손익·자산가동·영업·물류정비·채권누수) 실데이터 통합 리포트
-              </p>
-            </div>
-
-            {/* 마감 연월 드롭다운 */}
-            <div className="flex items-center gap-2 ml-4 pl-4 border-l border-slate-700">
-              <div className="flex flex-col gap-1">
-                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 whitespace-nowrap">
-                  마감 연월
-                </label>
-                <select 
-                  value={targetYm} 
-                  onChange={(e) => setTargetYm(e.target.value)}
-                  className="px-3 py-1.5 rounded-lg text-xs font-bold text-white border transition-colors cursor-pointer"
-                  style={{ backgroundColor: 'var(--bg-app)', borderColor: 'var(--border-color)' }}
-                >
-                  <option value="2026-08">2026년 08월 (8월 마감)</option>
-                  <option value="2026-07">2026년 07월 (7월 마감)</option>
-                  <option value="2026-06">2026년 06월 (6월 마감)</option>
-                  <option value="2026-05">2026년 05월 (5월 마감)</option>
-                </select>
-              </div>
-            </div>
+      {/* ── 최상단 헤더 (Z-Pattern Scope + Pipeline) ── */}
+      <div style={{ ...S.card, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+        {/* 좌측: 메뉴명 + 마감연월 */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+          <div>
+            <h2 style={{ fontWeight: 700, fontSize: '18px', marginBottom: '2px', color: 'var(--text-primary)' }}>정기보고서 생성</h2>
+            <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: 0 }}>전사 5대 핵심 도메인 실데이터 통합 보고서</p>
           </div>
-
-          {/* 우상단: 핵심 액션 버튼군 */}
-          <div className="flex items-center gap-2 flex-shrink-0">
-            <button
-              onClick={() => showToast('최신 실데이터를 다시 집계했습니다.')}
-              className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg border text-slate-300 hover:text-white transition-colors"
-              style={{ backgroundColor: 'var(--bg-app)', borderColor: 'var(--border-color)' }}
-              title="원천 DB 재집계"
+          <div style={{ borderLeft: '1px solid var(--border-color)', paddingLeft: '16px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+            <label style={{ fontSize: '10px', color: 'var(--text-secondary)', fontWeight: 600, whiteSpace: 'nowrap' }}>마감 연월</label>
+            <select
+              value={targetYm}
+              onChange={(e) => setTargetYm(e.target.value)}
+              style={{ ...S.input, width: 'auto', fontWeight: 700, cursor: 'pointer' }}
             >
-              <RefreshCw size={14} />
-              <span>새로고침</span>
-            </button>
-
-            <button
-              onClick={handlePrint}
-              className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-lg border text-slate-200 hover:text-white transition-colors"
-              style={{ backgroundColor: 'var(--bg-app)', borderColor: 'var(--border-color)' }}
-            >
-              <Printer size={14} />
-              <span>공식 보고서 인쇄</span>
-            </button>
-
-            <button
-              onClick={handleDownloadPdf}
-              disabled={isDownloading}
-              className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-blue-800 text-white text-xs font-bold rounded-lg shadow-lg shadow-blue-600/30 transition-all active:scale-98 whitespace-nowrap"
-            >
-              {isDownloading ? (
-                <>
-                  <RefreshCw size={14} className="animate-spin" />
-                  <span>PDF 빌드 중...</span>
-                </>
-              ) : (
-                <>
-                  <Download size={14} />
-                  <span>공식 PDF 다운로드</span>
-                </>
-              )}
-            </button>
+              <option value="2026-08">2026년 08월 (8월 마감)</option>
+              <option value="2026-07">2026년 07월 (7월 마감)</option>
+              <option value="2026-06">2026년 06월 (6월 마감)</option>
+              <option value="2026-05">2026년 05월 (5월 마감)</option>
+            </select>
           </div>
         </div>
 
-        {/* 뷰 모드 탭 (기본: 단일 경영 종합 보고서 / 드릴다운: 부서별) */}
-        <div className="max-w-7xl mx-auto px-6 flex items-center justify-between border-t border-slate-800/80">
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setViewMode('EXECUTIVE')}
-              className={`py-3 px-4 text-xs font-bold border-b-2 flex items-center gap-1.5 transition-colors ${
-                viewMode === 'EXECUTIVE'
-                  ? 'border-blue-500 text-blue-400 bg-blue-500/10'
-                  : 'border-transparent text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              <FileBarChart2 size={14} />
-              <span>📑 경영 종합 보고서 (전사 통합 뷰)</span>
-            </button>
-
-            <button
-              onClick={() => setViewMode('DRILLDOWN')}
-              className={`py-3 px-4 text-xs font-bold border-b-2 flex items-center gap-1.5 transition-colors ${
-                viewMode === 'DRILLDOWN'
-                  ? 'border-blue-500 text-blue-400 bg-blue-500/10'
-                  : 'border-transparent text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              <Building2 size={14} />
-              <span>🏢 부서별 상세 분석 뷰 (드릴다운)</span>
-            </button>
-          </div>
-
-          <div className="text-[11px] text-slate-400 flex items-center gap-2">
-            <span>마감 스냅샷: <strong className="text-slate-300">{period.closingDate}</strong></span>
-            <span>•</span>
-            <span>발행일시: <strong className="text-slate-300">{period.generatedAt}</strong></span>
-          </div>
+        {/* 우측: 액션 버튼군 */}
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexShrink: 0 }}>
+          <button
+            className="btn-secondary"
+            onClick={() => showToast('최신 실데이터를 다시 집계했습니다.')}
+            style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '7px 12px', fontSize: '12px' }}
+          >
+            <RefreshCw size={13} /> 새로고침
+          </button>
+          <button
+            className="btn-secondary"
+            onClick={handlePrint}
+            style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '7px 12px', fontSize: '12px' }}
+          >
+            <Printer size={13} /> 공식 보고서 인쇄
+          </button>
+          <button
+            className="btn-primary"
+            onClick={handleDownloadPdf}
+            disabled={isDownloading}
+            style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '7px 14px', fontSize: '12px', fontWeight: 700 }}
+          >
+            {isDownloading ? <><RefreshCw size={13} /> PDF 빌드 중...</> : <><Download size={13} /> 공식 PDF 다운로드</>}
+          </button>
         </div>
       </div>
 
-      {/* ─────────────────────────────────────────────────────────────
-          중앙 본문 영역 (Z-Pattern Step 3: High-Density Dossier)
-      ───────────────────────────────────────────────────────────── */}
-      <div className="max-w-7xl mx-auto px-6 pt-6 space-y-6">
+      {/* ── 뷰 모드 탭 + 메타 정보 ── */}
+      <div style={{ ...S.card, padding: '0 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: '2px' }}>
+          {[
+            { key: 'EXECUTIVE', label: '경영 종합 보고서', icon: <FileBarChart2 size={13} /> },
+            { key: 'DRILLDOWN', label: '부서별 상세 분석', icon: <Building2 size={13} /> },
+          ].map((tab) => (
+            <button
+              key={tab.key}
+              onClick={() => setViewMode(tab.key as any)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: '6px',
+                padding: '12px 14px', fontSize: '12px', fontWeight: 700,
+                borderBottom: viewMode === tab.key ? '2px solid var(--primary)' : '2px solid transparent',
+                color: viewMode === tab.key ? 'var(--primary)' : 'var(--text-secondary)',
+                background: 'none', cursor: 'pointer', whiteSpace: 'nowrap', transition: 'all 0.15s',
+              }}
+            >
+              {tab.icon}
+              {tab.label}
+            </button>
+          ))}
+        </div>
+        <span style={{ fontSize: '11px', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
+          스냅샷: <strong style={{ color: 'var(--text-primary)' }}>{period.closingDate}</strong>
+          &nbsp;·&nbsp;발행: <strong style={{ color: 'var(--text-primary)' }}>{period.generatedAt}</strong>
+        </span>
+      </div>
 
-        {/* [모드 1] 📑 경영 종합 보고서 (단일 마스터 도시에) */}
+      {/* ── 본문 ── */}
+      <div>
+
+        {/* [모드 1] 경영 종합 보고서 */}
         {viewMode === 'EXECUTIVE' && (
-          <>
-            {/* 1. 핵심 성과 지표 (Executive KPIs) 4대 카드 & 3대 건전성 인디케이터 */}
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <h2 className="text-xs font-extrabold uppercase tracking-wider text-slate-300 flex items-center gap-1.5">
-                  <span>1. 경영 종합 성과 및 핵심 KPI</span>
-                  <span className="text-[10px] text-blue-400 font-normal">(Executive Summary)</span>
-                </h2>
-                <div className="flex items-center gap-3 text-[11px] text-slate-400">
-                  <span className="flex items-center gap-1">
-                    <span className="w-2 h-2 rounded-full bg-emerald-400" />
-                    가동률 건전
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <span className="w-2 h-2 rounded-full bg-blue-400" />
-                    수납 진척 양호
-                  </span>
-                  {kpis.totalWaivedAmount > 0 && (
-                    <span className="flex items-center gap-1 text-amber-400 font-semibold">
-                      <span className="w-2 h-2 rounded-full bg-amber-400" />
-                      영업면제 ₩{kpis.totalWaivedAmount.toLocaleString()} 주의
-                    </span>
-                  )}
-                </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+
+            {/* 1. KPI 바 — 전사 표준 소형 칩 그리드 */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '6px' }}>
+              <div style={S.kpiChip}>
+                <span style={S.sectionLabel}>총 매출 청구액</span>
+                <strong style={{ fontSize: '14px', color: 'var(--primary)', whiteSpace: 'nowrap' }}>₩{kpis.totalRevenue.toLocaleString()}</strong>
               </div>
-
-              {/* 4대 핵심 지표 카드 */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                {/* 1) 총 매출 청구액 */}
-                <div className="p-4 rounded-xl border flex flex-col gap-1 shadow-sm transition-all" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-color)' }}>
-                  <span className="text-[11px] font-semibold text-slate-400">총 매출 청구액</span>
-                  <div className="flex items-baseline justify-between mt-0.5">
-                    <span className="text-2xl font-black text-white tracking-tight">
-                      ₩{kpis.totalRevenue.toLocaleString()}
-                    </span>
-                    <span className="text-[11px] font-bold text-emerald-400 flex items-center">
-                      <TrendingUp size={12} className="mr-0.5" /> +5.3%
-                    </span>
-                  </div>
-                  <div className="text-[11px] text-slate-400 pt-1 border-t border-slate-800 flex justify-between mt-1">
-                    <span>렌탈료: ₩{kpis.rentalRevenue.toLocaleString()}</span>
-                    <span>운송/기타: ₩{kpis.otherRevenue.toLocaleString()}</span>
-                  </div>
-                </div>
-
-                {/* 2) 플릿 장비 가동률 */}
-                <div className="p-4 rounded-xl border flex flex-col gap-1 shadow-sm transition-all" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-color)' }}>
-                  <span className="text-[11px] font-semibold text-slate-400">장비 가동률 (플릿 운용)</span>
-                  <div className="flex items-baseline justify-between mt-0.5">
-                    <span className="text-2xl font-black text-teal-400 tracking-tight">
-                      {kpis.fleetUtilizationRate}%
-                    </span>
-                    <span className="text-xs text-slate-300 font-bold">
-                      {kpis.activeAssetCount}대 가동
-                    </span>
-                  </div>
-                  <div className="text-[11px] text-slate-400 pt-1 border-t border-slate-800 flex justify-between mt-1">
-                    <span>총 플릿: {kpis.totalFleetCount}대</span>
-                    <span>자사 {kpis.ownedCount} / 전대 {kpis.leasedCount}</span>
-                  </div>
-                </div>
-
-                {/* 3) 수납률 및 미수금 잔액 */}
-                <div className="p-4 rounded-xl border flex flex-col gap-1 shadow-sm transition-all" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-color)' }}>
-                  <span className="text-[11px] font-semibold text-slate-400">수납률 (당월 수금 진척)</span>
-                  <div className="flex items-baseline justify-between mt-0.5">
-                    <span className="text-2xl font-black text-blue-400 tracking-tight">
-                      {kpis.collectionRate}%
-                    </span>
-                    <span className="text-xs text-emerald-400 font-bold">
-                      ₩{kpis.collectedAmount.toLocaleString()} 수납
-                    </span>
-                  </div>
-                  <div className="text-[11px] text-slate-400 pt-1 border-t border-slate-800 flex justify-between mt-1">
-                    <span>미수 잔액:</span>
-                    <span className="text-amber-400 font-bold">₩{kpis.unpaidAmount.toLocaleString()}</span>
-                  </div>
-                </div>
-
-                {/* 4) 추정 영업 공헌이익 */}
-                <div className="p-4 rounded-xl border flex flex-col gap-1 shadow-sm transition-all" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-color)' }}>
-                  <span className="text-[11px] font-semibold text-slate-400">추정 영업 공헌이익</span>
-                  <div className="flex items-baseline justify-between mt-0.5">
-                    <span className="text-2xl font-black text-indigo-400 tracking-tight">
-                      ₩{kpis.estimatedMargin.toLocaleString()}
-                    </span>
-                    <span className="text-xs text-indigo-300 font-bold">
-                      마진율 {kpis.marginRate}%
-                    </span>
-                  </div>
-                  <div className="text-[11px] text-slate-400 pt-1 border-t border-slate-800 flex justify-between mt-1">
-                    <span>직접비용:</span>
-                    <span>₩{kpis.totalOperatingCost.toLocaleString()}</span>
-                  </div>
-                </div>
+              <div style={S.kpiChip}>
+                <span style={S.sectionLabel}>플릿 가동률</span>
+                <strong style={{ fontSize: '14px', color: 'var(--success)', whiteSpace: 'nowrap' }}>{kpis.fleetUtilizationRate}% ({kpis.activeAssetCount}대)</strong>
               </div>
+              <div style={S.kpiChip}>
+                <span style={S.sectionLabel}>수납률 / 미수 잔액</span>
+                <strong style={{ fontSize: '14px', color: 'var(--primary)', whiteSpace: 'nowrap' }}>{kpis.collectionRate}% / ₩{kpis.unpaidAmount.toLocaleString()}</strong>
+              </div>
+              <div style={S.kpiChip}>
+                <span style={S.sectionLabel}>추정 공헌이익</span>
+                <strong style={{ fontSize: '14px', color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>₩{kpis.estimatedMargin.toLocaleString()} ({kpis.marginRate}%)</strong>
+              </div>
+              <div style={S.kpiChip}>
+                <span style={S.sectionLabel}>EXCHANGE 절감</span>
+                <strong style={{ fontSize: '14px', color: 'var(--success)', whiteSpace: 'nowrap' }}>+₩{kpis.exchangeSavedCost.toLocaleString()}</strong>
+              </div>
+              {kpis.totalWaivedAmount > 0 && (
+                <div style={{ ...S.kpiChip, border: '1px solid var(--warning)' }}>
+                  <span style={{ ...S.sectionLabel, color: 'var(--warning)' }}>영업 면제(Waiver) 주의</span>
+                  <strong style={{ fontSize: '14px', color: 'var(--warning)', whiteSpace: 'nowrap' }}>₩{kpis.totalWaivedAmount.toLocaleString()}</strong>
+                </div>
+              )}
             </div>
 
-            {/* 2. 렌탈 자산 플릿 현황 & 30일 이상 장기 유휴 장비 경고 */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* 좌측: 규격별 플릿 현황 테이블 */}
-              <div className="p-5 rounded-xl border flex flex-col gap-3 shadow-sm" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-color)' }}>
-                <div className="flex items-center justify-between">
-                  <h3 className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
-                    <span>2. 모델 규격별 플릿(Fleet) 가동 현황</span>
-                  </h3>
-                  <span className="text-[11px] text-slate-400">총 {kpis.totalFleetCount}대 운용</span>
+            {/* 2. 플릿 현황 + 장기유휴 경고 */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+              {/* 좌측: 규격별 플릿 가동 현황 */}
+              <div style={{ ...S.card, display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <strong style={S.subTitle}>1. 모델 규격별 플릿 가동 현황</strong>
+                  <span style={S.muted}>총 {kpis.totalFleetCount}대 운용</span>
                 </div>
-
-                <div className="overflow-x-auto">
-                  <table className="w-full text-xs">
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                     <thead>
-                      <tr className="text-slate-400 border-b border-slate-800 text-[11px]">
-                        <th className="py-2 text-left">규격 그룹</th>
-                        <th className="py-2 text-center">총보유</th>
-                        <th className="py-2 text-center">대여중</th>
-                        <th className="py-2 text-center">유휴(가용)</th>
-                        <th className="py-2 text-center">수리중</th>
-                        <th className="py-2 text-right">가동률</th>
+                      <tr>
+                        {['규격 그룹', '총보유', '대여중', '유휴(가용)', '수리중', '가동률'].map((h, i) => (
+                          <th key={h} style={{ ...S.tableHeader, textAlign: i === 0 ? 'left' : i === 5 ? 'right' : 'center', padding: '5px 6px 7px' }}>{h}</th>
+                        ))}
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-800/60">
+                    <tbody>
                       {fleet.specSummaries.map((spec) => (
-                        <tr key={spec.specName} className="hover:bg-slate-800/30 transition-colors">
-                          <td className="py-2.5 font-bold text-white whitespace-nowrap">{spec.specName}</td>
-                          <td className="py-2.5 text-center text-slate-300">{spec.totalCount}대</td>
-                          <td className="py-2.5 text-center text-teal-400 font-bold">{spec.rentedCount}대</td>
-                          <td className="py-2.5 text-center text-slate-300">{spec.availableCount}대</td>
-                          <td className="py-2.5 text-center text-amber-400">{spec.repairingCount}대</td>
-                          <td className="py-2.5 text-right font-black text-teal-300 whitespace-nowrap">
-                            {spec.utilizationRate}%
-                          </td>
+                        <tr key={spec.specName} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                          <td style={{ ...S.tableCell, fontWeight: 700 }}>{spec.specName}</td>
+                          <td style={{ ...S.tableCellMuted, textAlign: 'center' }}>{spec.totalCount}대</td>
+                          <td style={{ ...S.tableCell, textAlign: 'center', color: 'var(--success)', fontWeight: 700 }}>{spec.rentedCount}대</td>
+                          <td style={{ ...S.tableCellMuted, textAlign: 'center' }}>{spec.availableCount}대</td>
+                          <td style={{ ...S.tableCell, textAlign: 'center', color: 'var(--warning)' }}>{spec.repairingCount}대</td>
+                          <td style={{ ...S.tableCell, textAlign: 'right', fontWeight: 700, color: 'var(--success)' }}>{spec.utilizationRate}%</td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </div>
+                <TeamCommentPanel teamKey="YARD" />
               </div>
 
-              {/* 우측: ⚠️ 30일 이상 장기 유휴 장비 경고 리스트 */}
-              <div className="p-5 rounded-xl border border-red-500/30 bg-red-950/20 flex flex-col gap-3 shadow-sm">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-1.5">
-                    <AlertTriangle size={15} className="text-red-400 flex-shrink-0" />
-                    <h3 className="text-xs font-bold text-red-300">
-                      30일 이상 장기 유휴 장비 리스트 (집중영업/기회손실 대상)
-                    </h3>
+              {/* 우측: 30일 이상 장기 유휴 경고 */}
+              <div style={{ ...S.cardDanger, display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <AlertTriangle size={14} style={{ color: 'var(--danger)', flexShrink: 0 }} />
+                    <strong style={{ ...S.subTitle, color: 'var(--danger)' }}>30일 이상 장기 유휴 장비 (기회손실)</strong>
                   </div>
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-red-500/20 text-red-300 border border-red-500/30">
-                    월 기회손실 발생
-                  </span>
+                  <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--danger)', padding: '2px 8px', border: '1px solid var(--danger)', borderRadius: '4px' }}>집중영업 대상</span>
                 </div>
-
-                <div className="overflow-x-auto">
-                  <table className="w-full text-xs">
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                     <thead>
-                      <tr className="text-red-300/70 border-b border-red-900/40 text-[11px]">
-                        <th className="py-2 text-left">자산번호</th>
-                        <th className="py-2 text-left">모델(규격)</th>
-                        <th className="py-2 text-center">유휴일수</th>
-                        <th className="py-2 text-right">월 임대단가</th>
-                        <th className="py-2 text-right">월 기회손실</th>
+                      <tr>
+                        {['자산번호', '모델(규격)', '유휴일수', '월 임대단가', '월 기회손실'].map((h, i) => (
+                          <th key={h} style={{ ...S.tableHeader, textAlign: i < 2 ? 'left' : i === 2 ? 'center' : 'right', padding: '5px 6px 7px', color: 'var(--danger)' }}>{h}</th>
+                        ))}
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-red-900/30">
+                    <tbody>
                       {fleet.longIdleAssets.map((idle) => (
-                        <tr key={idle.assetId} className="hover:bg-red-950/40 transition-colors">
-                          <td className="py-2 font-mono font-bold text-white whitespace-nowrap">{idle.assetNumber}</td>
-                          <td className="py-2 text-slate-300 whitespace-nowrap">{idle.modelName} ({idle.spec})</td>
-                          <td className="py-2 text-center font-bold text-amber-300">{idle.daysIdle}일</td>
-                          <td className="py-2 text-right text-slate-300">₩{idle.monthlyRate.toLocaleString()}</td>
-                          <td className="py-2 text-right font-bold text-red-400 whitespace-nowrap">
-                            -₩{idle.estimatedOpportunityLoss.toLocaleString()}
-                          </td>
+                        <tr key={idle.assetId} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                          <td style={{ ...S.tableCell, fontFamily: 'monospace', fontWeight: 700 }}>{idle.assetNumber}</td>
+                          <td style={{ ...S.tableCellMuted }}>{idle.modelName} ({idle.spec})</td>
+                          <td style={{ ...S.tableCell, textAlign: 'center', color: 'var(--warning)', fontWeight: 700 }}>{idle.daysIdle}일</td>
+                          <td style={{ ...S.tableCellMuted, textAlign: 'right' }}>₩{idle.monthlyRate.toLocaleString()}</td>
+                          <td style={{ ...S.tableCell, textAlign: 'right', color: 'var(--danger)', fontWeight: 700 }}>-₩{idle.estimatedOpportunityLoss.toLocaleString()}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -428,6 +508,7 @@ export const RegularReportsPage: React.FC = () => {
                     </tbody>
                   </table>
                 </div>
+                <TeamCommentPanel teamKey="SALES" />
               </div>
 
               {/* 우측: 물류 배차 효율 및 스펙 오발주 손실 배차 */}
@@ -492,182 +573,241 @@ export const RegularReportsPage: React.FC = () => {
                     </div>
                   )}
                 </div>
+                <TeamCommentPanel teamKey="LOGISTICS" />
               </div>
             </div>
 
-            {/* 4. 채권 에이징 분석 & 영업 청구 면제(Waiver) 투명성 */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* 좌측: 채권 연체 에이징 분석 */}
-              <div className="p-5 rounded-xl border flex flex-col gap-3 shadow-sm" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-color)' }}>
-                <div className="flex items-center justify-between">
-                  <h3 className="text-xs font-bold text-slate-200">
-                    5. 미수 채권 연체 에이징(Aging) 분석
-                  </h3>
-                  <span className="text-[11px] text-amber-400 font-bold">
-                    총 미수 ₩{finance.receivablesAging.totalUnpaid.toLocaleString()}
-                  </span>
-                </div>
 
-                <div className="grid grid-cols-4 gap-2">
-                  <div className="p-3 rounded-lg bg-slate-900/80 border border-slate-800 text-center">
-                    <span className="text-[10px] text-emerald-400 font-semibold block">정상(30일 이하)</span>
-                    <span className="text-xs font-bold text-white mt-1 block">₩{finance.receivablesAging.under30Days.toLocaleString()}</span>
-                  </div>
-                  <div className="p-3 rounded-lg bg-slate-900/80 border border-slate-800 text-center">
-                    <span className="text-[10px] text-blue-400 font-semibold block">31일 ~ 60일</span>
-                    <span className="text-xs font-bold text-white mt-1 block">₩{finance.receivablesAging.days31To60.toLocaleString()}</span>
-                  </div>
-                  <div className="p-3 rounded-lg bg-slate-900/80 border border-slate-800 text-center">
-                    <span className="text-[10px] text-amber-400 font-semibold block">61일 ~ 90일</span>
-                    <span className="text-xs font-bold text-white mt-1 block">₩{finance.receivablesAging.days61To90.toLocaleString()}</span>
-                  </div>
-                  <div className="p-3 rounded-lg bg-red-950/40 border border-red-900/50 text-center">
-                    <span className="text-[10px] text-red-400 font-bold block">90일 초과(고위험)</span>
-                    <span className="text-xs font-bold text-red-300 mt-1 block">₩{finance.receivablesAging.over90Days.toLocaleString()}</span>
-                  </div>
+            {/* 3. 영업 실적 + 배차 물류 섹션 — 전사 표준 */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+              {/* 영업 TOP5 */}
+              <div style={{ ...S.card, display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <strong style={S.subTitle}>2. 당월 최다 매출 기여 거래처 TOP 5</strong>
+                  <span style={{ ...S.muted, color: 'var(--primary)', fontWeight: 600 }}>신규 {sales.newContractsCount}건 / 종료 {sales.endedContractsCount}건</span>
                 </div>
-
-                {/* 상위 연체 거래처 */}
-                <div className="mt-2 space-y-1.5">
-                  <span className="text-[11px] font-bold text-slate-300 block">집중 관리 대상 연체 거래처</span>
-                  <div className="divide-y divide-slate-800/60">
-                    {finance.topDelinquentCustomers.map((dc) => (
-                      <div key={dc.customerId} className="py-2 flex items-center justify-between text-xs">
-                        <div className="flex items-center gap-2">
-                          <span className="font-bold text-white">{dc.customerName}</span>
-                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                            {dc.status}
-                          </span>
-                        </div>
-                        <span className="font-bold text-red-400">₩{dc.unpaidAmount.toLocaleString()}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              {/* 우측: 영업 청구 면제(Waiver) 손실 투명 보고 */}
-              <div className="p-5 rounded-xl border flex flex-col gap-3 shadow-sm" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-color)' }}>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-1.5">
-                    <Ban size={15} className="text-amber-400 flex-shrink-0" />
-                    <h3 className="text-xs font-bold text-slate-200">
-                      6. 영업 청구 면제(Waiver) 손실 투명 보고
-                    </h3>
-                  </div>
-                  <span className="text-[11px] font-bold text-red-400">
-                    총 면제액: ₩{finance.waiverSummary.totalWaived.toLocaleString()}
-                  </span>
-                </div>
-
-                <div className="p-3 rounded-lg bg-amber-950/20 border border-amber-900/40 text-xs text-amber-200/90 leading-relaxed">
-                  💡 고객 과실 현장 AS, 반납 파손 수리비, 추가 운송료를 영업이 임의 감면/면제하여 회사의 비용으로 흡수된 내역을 투명하게 보고합니다.
-                </div>
-
-                <div className="overflow-x-auto">
-                  <table className="w-full text-xs">
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                     <thead>
-                      <tr className="text-slate-400 border-b border-slate-800 text-[11px]">
-                        <th className="py-2 text-left">구분</th>
-                        <th className="py-2 text-left">고객사</th>
-                        <th className="py-2 text-left">면제 사유</th>
-                        <th className="py-2 text-right">면제액</th>
+                      <tr>
+                        {['순위', '거래처명', '가동대수', '당월 청구액', '점유율'].map((h, i) => (
+                          <th key={h} style={{ ...S.tableHeader, textAlign: i === 0 || i === 4 ? 'center' : i === 3 || i === 4 ? 'right' : 'left', padding: '5px 6px 7px' }}>{h}</th>
+                        ))}
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-800/60">
-                      {finance.waivers.map((wv) => (
-                        <tr key={wv.id} className="hover:bg-slate-800/30 transition-colors">
-                          <td className="py-2 font-semibold text-slate-300 whitespace-nowrap">{wv.typeLabel}</td>
-                          <td className="py-2 font-bold text-white whitespace-nowrap">{wv.customerName}</td>
-                          <td className="py-2 text-slate-400 truncate max-w-xs">{wv.reason}</td>
-                          <td className="py-2 text-right font-bold text-red-400 whitespace-nowrap">
-                            ₩{wv.waivedAmount.toLocaleString()}
-                          </td>
+                    <tbody>
+                      {sales.topCustomers.map((c, idx) => (
+                        <tr key={c.customerId} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                          <td style={{ ...S.tableCellMuted, textAlign: 'center', fontWeight: 700 }}>{idx + 1}</td>
+                          <td style={{ ...S.tableCell, fontWeight: 700 }}>{c.customerName}</td>
+                          <td style={{ ...S.tableCell, textAlign: 'center', color: 'var(--success)', fontWeight: 600 }}>{c.assetCount}대</td>
+                          <td style={{ ...S.tableCell, textAlign: 'right', color: 'var(--primary)', fontWeight: 700 }}>₩{c.totalBilled.toLocaleString()}</td>
+                          <td style={{ ...S.tableCellMuted, textAlign: 'right', fontWeight: 700 }}>{c.sharePct}%</td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </div>
+                <TeamCommentPanel teamKey="SALES" />
+              </div>
+
+              {/* 배차 물류 효율 */}
+              <div style={{ ...S.card, display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <strong style={S.subTitle}>3. 배차 물류 효율 및 오발주 손실 배차</strong>
+                  <span style={{ ...S.muted, color: 'var(--success)', fontWeight: 600 }}>EXCHANGE 절감 +₩{kpis.exchangeSavedCost.toLocaleString()}</span>
+                </div>
+                {/* 배차 요약 칩 */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '6px', padding: '8px', backgroundColor: 'var(--bg-app)', borderRadius: '6px', border: '1px solid var(--border-color)', textAlign: 'center' }}>
+                  {[
+                    { label: '총 배차', val: `${operations.dispatchByType.total}건`, color: 'var(--text-primary)' },
+                    { label: '출고', val: `${operations.dispatchByType.outbound}건`, color: 'var(--primary)' },
+                    { label: '회수', val: `${operations.dispatchByType.inbound}건`, color: 'var(--text-secondary)' },
+                    { label: '교환(왕복)', val: `${operations.dispatchByType.exchange}건`, color: 'var(--success)' },
+                  ].map((item) => (
+                    <div key={item.label}>
+                      <span style={{ fontSize: '10px', color: 'var(--text-secondary)', display: 'block' }}>{item.label}</span>
+                      <span style={{ fontSize: '13px', fontWeight: 700, color: item.color }}>{item.val}</span>
+                    </div>
+                  ))}
+                </div>
+                {/* 오발주 손실 배차 */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', fontWeight: 700, color: 'var(--danger)' }}>
+                    <AlertTriangle size={13} />
+                    현장 진입불가 / 스펙 오발주 긴급 교환 (당사 손실)
+                  </div>
+                  {operations.specMismatchEvents.length === 0 ? (
+                    <div style={{ fontSize: '12px', color: 'var(--text-muted)', textAlign: 'center', padding: '10px', border: '1px dashed var(--border-color)', borderRadius: '6px' }}>
+                      당월 스펙 오발주 손실 배차 없음 (무결점)
+                    </div>
+                  ) : operations.specMismatchEvents.map((evt) => (
+                    <div key={evt.id} style={{ padding: '8px', borderRadius: '6px', border: '1px solid var(--danger)', backgroundColor: 'var(--bg-app)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontWeight: 700, fontSize: '12px', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <span>{evt.customerName}</span>
+                          <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>({evt.assetNumber})</span>
+                        </div>
+                        <p style={{ fontSize: '11px', color: 'var(--text-muted)', margin: '2px 0 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{evt.reason}</p>
+                      </div>
+                      <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                        <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--danger)', display: 'block' }}>-₩{evt.extraCost.toLocaleString()}</span>
+                        <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>{evt.paidBy}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <TeamCommentPanel teamKey="LOGISTICS" />
               </div>
             </div>
 
-            {/* 5. 경영진 종합 진단 및 차월 중점 지시사항 입력 패널 */}
-            <div className="p-5 rounded-xl border flex flex-col gap-4 shadow-sm" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-color)' }}>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Sparkles size={16} className="text-blue-400" />
-                  <h3 className="text-xs font-bold text-white uppercase tracking-wider">
-                    7. 경영진 종합 진단 및 차월 중점 지시사항 (Executive Directives)
-                  </h3>
+            {/* 4. 채권 에이징 + Waiver 투명 보고 */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+              {/* 채권 에이징 */}
+              <div style={{ ...S.card, display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <strong style={S.subTitle}>4. 미수 채권 연체 에이징 분석</strong>
+                  <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--warning)' }}>총 미수 ₩{finance.receivablesAging.totalUnpaid.toLocaleString()}</span>
                 </div>
-                <button
-                  onClick={handleSaveDirective}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold shadow transition-all active:scale-98"
-                >
-                  <Save size={13} />
-                  <span>지시사항 저장</span>
-                </button>
+                {/* 에이징 4구간 칩 */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '6px' }}>
+                  {[
+                    { label: '정상(30일↓)', val: finance.receivablesAging.under30Days, color: 'var(--success)' },
+                    { label: '31~60일', val: finance.receivablesAging.days31To60, color: 'var(--primary)' },
+                    { label: '61~90일', val: finance.receivablesAging.days61To90, color: 'var(--warning)' },
+                    { label: '90일↑(고위험)', val: finance.receivablesAging.over90Days, color: 'var(--danger)' },
+                  ].map((item) => (
+                    <div key={item.label} style={{ padding: '8px', borderRadius: '6px', border: `1px solid ${item.color}`, textAlign: 'center', backgroundColor: 'var(--bg-app)' }}>
+                      <span style={{ fontSize: '10px', fontWeight: 600, color: item.color, display: 'block' }}>{item.label}</span>
+                      <span style={{ fontSize: '12px', fontWeight: 700, color: item.color, display: 'block', marginTop: '4px' }}>₩{item.val.toLocaleString()}</span>
+                    </div>
+                  ))}
+                </div>
+                {/* 집중 관리 대상 연체 거래처 */}
+                <div>
+                  <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-primary)', display: 'block', marginBottom: '6px' }}>집중 관리 대상 연체 거래처</span>
+                  {finance.topDelinquentCustomers.map((dc) => (
+                    <div key={dc.customerId} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderBottom: '1px solid var(--border-color)' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-primary)' }}>{dc.customerName}</span>
+                        <span style={{ fontSize: '10px', fontWeight: 600, color: 'var(--warning)', padding: '1px 6px', border: '1px solid var(--warning)', borderRadius: '4px' }}>{dc.status}</span>
+                      </div>
+                      <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--danger)' }}>₩{dc.unpaidAmount.toLocaleString()}</span>
+                    </div>
+                  ))}
+                </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-[11px] font-bold text-slate-300">
-                    당월 마감 경영 총평 (인쇄 및 PDF에 공식 반영)
-                  </label>
+              {/* Waiver 투명 보고 */}
+              <div style={{ ...S.card, display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <Ban size={14} style={{ color: 'var(--warning)' }} />
+                    <strong style={S.subTitle}>5. 영업 청구 면제(Waiver) 손실 투명 보고</strong>
+                  </div>
+                  <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--danger)' }}>총 면제액: ₩{finance.waiverSummary.totalWaived.toLocaleString()}</span>
+                </div>
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <thead>
+                      <tr>
+                        {['구분', '고객사', '면제 사유', '면제액'].map((h, i) => (
+                          <th key={h} style={{ ...S.tableHeader, textAlign: i === 3 ? 'right' : 'left', padding: '5px 6px 7px' }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {finance.waivers.map((wv) => (
+                        <tr key={wv.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                          <td style={{ ...S.tableCellMuted, fontWeight: 600 }}>{wv.typeLabel}</td>
+                          <td style={{ ...S.tableCell, fontWeight: 700 }}>{wv.customerName}</td>
+                          <td style={{ ...S.tableCellMuted, maxWidth: '160px', overflow: 'hidden', textOverflow: 'ellipsis' }}>{wv.reason}</td>
+                          <td style={{ ...S.tableCell, textAlign: 'right', color: 'var(--danger)', fontWeight: 700 }}>₩{wv.waivedAmount.toLocaleString()}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <TeamCommentPanel teamKey="FINANCE" />
+              </div>
+            </div>
+
+            {/* 정비팀 코멘트 섹션 */}
+            <div style={{ ...S.card, display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Wrench size={14} style={{ color: 'var(--warning)' }} />
+                <strong style={S.subTitle}>정비 품질 및 AS 현황</strong>
+                <span style={S.muted}>MTTR {kpis.avgMttrHours}h · 완료 {kpis.totalRepairs}건 · 조기고장 {kpis.earlyFailuresCount}건</span>
+              </div>
+              <TeamCommentPanel teamKey="MAINTENANCE" />
+            </div>
+
+            {/* 6. 경영진 지시사항 */}
+            <div style={{ ...S.card, display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Sparkles size={15} style={{ color: 'var(--primary)' }} />
+                  <strong style={S.subTitle}>6. 경영진 종합 진단 및 차월 중점 지시사항</strong>
+                </div>
+                <button
+                  className="btn-primary"
+                  onClick={handleSaveDirective}
+                  style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '6px 12px', fontSize: '12px' }}
+                >
+                  <Save size={13} /> 지시사항 저장
+                </button>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label style={S.sectionLabel}>당월 마감 경영 총평</label>
                   <textarea
-                    rows={3}
+                    rows={4}
                     value={directive.remarks}
                     onChange={(e) => setDirective({ ...directive, remarks: e.target.value })}
                     placeholder="당월 매출 실적 및 장비 가동률에 대한 경영진 평가를 입력하십시오..."
-                    className="w-full p-3 rounded-lg text-xs text-white border focus:outline-none focus:border-blue-500 leading-relaxed"
-                    style={{ backgroundColor: 'var(--bg-app)', borderColor: 'var(--border-color)' }}
+                    style={S.textarea as any}
                   />
                 </div>
-
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-[11px] font-bold text-slate-300">
-                    차월 부서별 중점 실행 과제 및 하달 지시
-                  </label>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label style={S.sectionLabel}>차월 부서별 중점 실행 과제</label>
                   <textarea
-                    rows={3}
+                    rows={4}
                     value={directive.priorityTasks}
                     onChange={(e) => setDirective({ ...directive, priorityTasks: e.target.value })}
                     placeholder="1. 30일 이상 유휴 32ft 장비 대형 현장 프로모션  2. 고위험 연체처 출고 제한..."
-                    className="w-full p-3 rounded-lg text-xs text-white border focus:outline-none focus:border-blue-500 leading-relaxed"
-                    style={{ backgroundColor: 'var(--bg-app)', borderColor: 'var(--border-color)' }}
+                    style={S.textarea as any}
                   />
                 </div>
               </div>
             </div>
 
-            {/* 6. Gutenberg 대차대조식 검증 바 (Z-Pattern Step 4: Terminal Action) */}
-            <div className="p-4 rounded-xl border bg-slate-950/80 border-slate-800 shadow-lg flex flex-wrap items-center justify-between gap-4">
-              <div className="flex items-center gap-3">
-                <span className="text-xs font-bold text-slate-400">📄 대차대조 검증:</span>
-                <span className="text-xs text-slate-200">
-                  매출청구총액 <strong className="text-white">₩{kpis.totalRevenue.toLocaleString()}</strong> =
-                  🟢 수납액 <strong className="text-emerald-400">₩{kpis.collectedAmount.toLocaleString()}</strong> +
-                  🔴 미수잔액 <strong className="text-amber-400">₩{kpis.unpaidAmount.toLocaleString()}</strong>
+            {/* 7. Gutenberg 대차대조식 검증 바 — Terminal Action */}
+            <div style={{ ...S.card, backgroundColor: 'var(--bg-app)', display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '12px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)' }}>📄 대차대조 검증:</span>
+                <span style={{ fontSize: '12px', color: 'var(--text-primary)' }}>
+                  매출청구총액 <strong style={{ color: 'var(--text-primary)' }}>₩{kpis.totalRevenue.toLocaleString()}</strong> =
+                  🟢 수납액 <strong style={{ color: 'var(--success)' }}>₩{kpis.collectedAmount.toLocaleString()}</strong> +
+                  🔴 미수잔액 <strong style={{ color: 'var(--warning)' }}>₩{kpis.unpaidAmount.toLocaleString()}</strong>
                 </span>
-                <span className="text-xs font-bold text-emerald-400 px-2 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/30">
+                <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--success)', padding: '2px 10px', border: '1px solid var(--success)', borderRadius: '4px' }}>
                   ⚖️ 대차 차액 ₩{conservation.delta.toLocaleString()} (100% 무결성 확정)
                 </span>
               </div>
-
-              <div className="text-xs text-slate-400 flex items-center gap-2">
-                <span>작성자: <strong>대표이사</strong></span>
-                <span>•</span>
-                <span>결재상태: <strong className="text-emerald-400">공식 확정됨</strong></span>
+              <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
+                작성자: <strong style={{ color: 'var(--text-primary)' }}>대표이사</strong>
+                &nbsp;·&nbsp;
+                결재상태: <strong style={{ color: 'var(--success)' }}>공식 확정됨</strong>
               </div>
             </div>
-          </>
+          </div>
         )}
 
-        {/* [모드 2] 🏢 부서별 상세 분석 뷰 (드릴다운) */}
+        {/* [모드 2] 부서별 상세 분석 (드릴다운) */}
         {viewMode === 'DRILLDOWN' && (
-          <div className="space-y-4">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             {/* 드릴다운 서브 탭 */}
-            <div className="flex items-center gap-2 border-b border-slate-800 pb-2">
+            <div style={{ ...S.card, padding: '0 18px', display: 'flex', gap: '2px', flexWrap: 'wrap' }}>
               {[
                 { key: 'FLEET', label: '자산·플릿 운용', count: `${kpis.totalFleetCount}대` },
                 { key: 'SALES', label: '영업·계약 실적', count: `₩${kpis.totalRevenue.toLocaleString()}` },
@@ -678,44 +818,41 @@ export const RegularReportsPage: React.FC = () => {
                 <button
                   key={tab.key}
                   onClick={() => setDrilldownTab(tab.key as any)}
-                  className={`px-3 py-2 rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5 ${
-                    drilldownTab === tab.key
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
-                  }`}
+                  style={{
+                    padding: '11px 14px', fontSize: '12px', fontWeight: 700,
+                    borderBottom: drilldownTab === tab.key ? '2px solid var(--primary)' : '2px solid transparent',
+                    color: drilldownTab === tab.key ? 'var(--primary)' : 'var(--text-secondary)',
+                    background: 'none', cursor: 'pointer', whiteSpace: 'nowrap',
+                  }}
                 >
-                  <span>{tab.label}</span>
-                  <span className="text-[10px] opacity-75">({tab.count})</span>
+                  {tab.label} <span style={{ fontSize: '10px', opacity: 0.75 }}>({tab.count})</span>
                 </button>
               ))}
             </div>
 
             {/* 드릴다운 본문 */}
-            <div className="p-6 rounded-xl border" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-color)' }}>
+            <div style={{ ...S.card }}>
               {drilldownTab === 'FLEET' && (
-                <div className="space-y-4">
-                  <h3 className="text-sm font-bold text-white">전체 장비 플릿 상세 명세 및 가동 상태</h3>
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-xs">
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <strong style={S.subTitle}>전체 장비 플릿 상세 명세 및 가동 상태</strong>
+                  <div style={{ overflowX: 'auto' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                       <thead>
-                        <tr className="text-slate-400 border-b border-slate-800">
-                          <th className="py-2 text-left">규격명</th>
-                          <th className="py-2 text-center">총 대수</th>
-                          <th className="py-2 text-center">대여중 (가동)</th>
-                          <th className="py-2 text-center">대여가능 (유휴)</th>
-                          <th className="py-2 text-center">정비중</th>
-                          <th className="py-2 text-right">가동률 (%)</th>
+                        <tr>
+                          {['규격명', '총 대수', '대여중', '대여가능', '정비중', '가동률'].map((h, i) => (
+                            <th key={h} style={{ ...S.tableHeader, textAlign: i === 0 ? 'left' : i === 5 ? 'right' : 'center', padding: '5px 6px 7px' }}>{h}</th>
+                          ))}
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-slate-800/60">
+                      <tbody>
                         {fleet.specSummaries.map(s => (
-                          <tr key={s.specName}>
-                            <td className="py-2.5 font-bold text-white">{s.specName}</td>
-                            <td className="py-2.5 text-center">{s.totalCount}대</td>
-                            <td className="py-2.5 text-center text-teal-400 font-bold">{s.rentedCount}대</td>
-                            <td className="py-2.5 text-center text-slate-300">{s.availableCount}대</td>
-                            <td className="py-2.5 text-center text-amber-400">{s.repairingCount}대</td>
-                            <td className="py-2.5 text-right font-bold text-teal-300">{s.utilizationRate}%</td>
+                          <tr key={s.specName} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                            <td style={{ ...S.tableCell, fontWeight: 700 }}>{s.specName}</td>
+                            <td style={{ ...S.tableCellMuted, textAlign: 'center' }}>{s.totalCount}대</td>
+                            <td style={{ ...S.tableCell, textAlign: 'center', color: 'var(--success)', fontWeight: 700 }}>{s.rentedCount}대</td>
+                            <td style={{ ...S.tableCellMuted, textAlign: 'center' }}>{s.availableCount}대</td>
+                            <td style={{ ...S.tableCell, textAlign: 'center', color: 'var(--warning)' }}>{s.repairingCount}대</td>
+                            <td style={{ ...S.tableCell, textAlign: 'right', fontWeight: 700, color: 'var(--success)' }}>{s.utilizationRate}%</td>
                           </tr>
                         ))}
                       </tbody>
@@ -723,27 +860,25 @@ export const RegularReportsPage: React.FC = () => {
                   </div>
                 </div>
               )}
-
               {drilldownTab === 'SALES' && (
-                <div className="space-y-4">
-                  <h3 className="text-sm font-bold text-white">영업사원별 계약 수주 및 매출 기여 실적</h3>
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-xs">
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <strong style={S.subTitle}>영업사원별 계약 수주 및 매출 기여 실적</strong>
+                  <div style={{ overflowX: 'auto' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                       <thead>
-                        <tr className="text-slate-400 border-b border-slate-800">
-                          <th className="py-2 text-left">영업담당자</th>
-                          <th className="py-2 text-center">담당 계약건수</th>
-                          <th className="py-2 text-center">가동 장비수</th>
-                          <th className="py-2 text-right">당월 매출 기여액</th>
+                        <tr>
+                          {['영업담당자', '담당 계약건수', '가동 장비수', '당월 매출 기여액'].map((h, i) => (
+                            <th key={h} style={{ ...S.tableHeader, textAlign: i === 0 ? 'left' : i === 3 ? 'right' : 'center', padding: '5px 6px 7px' }}>{h}</th>
+                          ))}
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-slate-800/60">
+                      <tbody>
                         {sales.salespersonPerformance.map(sp => (
-                          <tr key={sp.name}>
-                            <td className="py-2.5 font-bold text-white">{sp.name}</td>
-                            <td className="py-2.5 text-center">{sp.contractCount}건</td>
-                            <td className="py-2.5 text-center text-teal-400 font-bold">{sp.activeAssetCount}대</td>
-                            <td className="py-2.5 text-right font-bold text-blue-300">₩{sp.totalBilled.toLocaleString()}</td>
+                          <tr key={sp.name} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                            <td style={{ ...S.tableCell, fontWeight: 700 }}>{sp.name}</td>
+                            <td style={{ ...S.tableCellMuted, textAlign: 'center' }}>{sp.contractCount}건</td>
+                            <td style={{ ...S.tableCell, textAlign: 'center', color: 'var(--success)', fontWeight: 700 }}>{sp.activeAssetCount}대</td>
+                            <td style={{ ...S.tableCell, textAlign: 'right', color: 'var(--primary)', fontWeight: 700 }}>₩{sp.totalBilled.toLocaleString()}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -751,71 +886,61 @@ export const RegularReportsPage: React.FC = () => {
                   </div>
                 </div>
               )}
-
               {drilldownTab === 'LOGISTICS' && (
-                <div className="space-y-4">
-                  <h3 className="text-sm font-bold text-white">배차 물류 실적 및 운송비 지출 분석</h3>
-                  <div className="grid grid-cols-3 gap-4">
-                    <div className="p-4 rounded-lg bg-slate-900/60 border border-slate-800">
-                      <span className="text-xs text-slate-400">총 운송비 지출</span>
-                      <span className="text-xl font-bold text-white mt-1 block">₩{operations.transportCostTotal.toLocaleString()}</span>
-                    </div>
-                    <div className="p-4 rounded-lg bg-slate-900/60 border border-slate-800">
-                      <span className="text-xs text-slate-400">고객 청구 운송비</span>
-                      <span className="text-xl font-bold text-blue-400 mt-1 block">₩{operations.customerBorneTransport.toLocaleString()}</span>
-                    </div>
-                    <div className="p-4 rounded-lg bg-slate-900/60 border border-slate-800">
-                      <span className="text-xs text-slate-400">당사 순부담 운송비</span>
-                      <span className="text-xl font-bold text-red-400 mt-1 block">₩{operations.companyBorneTransport.toLocaleString()}</span>
-                    </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <strong style={S.subTitle}>배차 물류 실적 및 운송비 지출 분석</strong>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
+                    {[
+                      { label: '총 운송비 지출', val: operations.transportCostTotal, color: 'var(--text-primary)' },
+                      { label: '고객 청구 운송비', val: operations.customerBorneTransport, color: 'var(--primary)' },
+                      { label: '당사 순부담 운송비', val: operations.companyBorneTransport, color: 'var(--danger)' },
+                    ].map((item) => (
+                      <div key={item.label} style={{ ...S.cardSm, display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        <span style={S.sectionLabel}>{item.label}</span>
+                        <strong style={{ fontSize: '18px', color: item.color }}>₩{item.val.toLocaleString()}</strong>
+                      </div>
+                    ))}
                   </div>
                 </div>
               )}
-
               {drilldownTab === 'MAINTENANCE' && (
-                <div className="space-y-4">
-                  <h3 className="text-sm font-bold text-white">정비 및 AS 처리 내역 및 조기 고장 분석</h3>
-                  <div className="grid grid-cols-3 gap-4">
-                    <div className="p-4 rounded-lg bg-slate-900/60 border border-slate-800">
-                      <span className="text-xs text-slate-400">현장 AS 처리</span>
-                      <span className="text-xl font-bold text-white mt-1 block">{operations.maintenanceByType.fieldAs}건</span>
-                    </div>
-                    <div className="p-4 rounded-lg bg-slate-900/60 border border-slate-800">
-                      <span className="text-xs text-slate-400">주기장 오버홀</span>
-                      <span className="text-xl font-bold text-white mt-1 block">{operations.maintenanceByType.overhaul}건</span>
-                    </div>
-                    <div className="p-4 rounded-lg bg-slate-900/60 border border-slate-800">
-                      <span className="text-xs text-slate-400">출고 7일내 조기고장</span>
-                      <span className="text-xl font-bold text-amber-400 mt-1 block">{kpis.earlyFailuresCount}건</span>
-                    </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <strong style={S.subTitle}>정비 및 AS 처리 내역 및 조기 고장 분석</strong>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
+                    {[
+                      { label: '현장 AS 처리', val: `${operations.maintenanceByType.fieldAs}건`, color: 'var(--text-primary)' },
+                      { label: '주기장 오버홀', val: `${operations.maintenanceByType.overhaul}건`, color: 'var(--text-primary)' },
+                      { label: '출고 7일내 조기고장', val: `${kpis.earlyFailuresCount}건`, color: 'var(--warning)' },
+                    ].map((item) => (
+                      <div key={item.label} style={{ ...S.cardSm, display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        <span style={S.sectionLabel}>{item.label}</span>
+                        <strong style={{ fontSize: '18px', color: item.color }}>{item.val}</strong>
+                      </div>
+                    ))}
                   </div>
                 </div>
               )}
-
               {drilldownTab === 'FINANCE' && (
-                <div className="space-y-4">
-                  <h3 className="text-sm font-bold text-white">채권 에이징 상세 및 연체 집중 관리 대장</h3>
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-xs">
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <strong style={S.subTitle}>채권 에이징 상세 및 연체 집중 관리 대장</strong>
+                  <div style={{ overflowX: 'auto' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                       <thead>
-                        <tr className="text-slate-400 border-b border-slate-800">
-                          <th className="py-2 text-left">거래처명</th>
-                          <th className="py-2 text-center">연체 일수</th>
-                          <th className="py-2 text-center">관리 상태</th>
-                          <th className="py-2 text-right">미수 잔액</th>
+                        <tr>
+                          {['거래처명', '연체 일수', '관리 상태', '미수 잔액'].map((h, i) => (
+                            <th key={h} style={{ ...S.tableHeader, textAlign: i === 0 ? 'left' : i === 3 ? 'right' : 'center', padding: '5px 6px 7px' }}>{h}</th>
+                          ))}
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-slate-800/60">
+                      <tbody>
                         {finance.topDelinquentCustomers.map(dc => (
-                          <tr key={dc.customerId}>
-                            <td className="py-2.5 font-bold text-white">{dc.customerName}</td>
-                            <td className="py-2.5 text-center text-amber-400 font-bold">{dc.overdueDays}일</td>
-                            <td className="py-2.5 text-center">
-                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-300">
-                                {dc.status}
-                              </span>
+                          <tr key={dc.customerId} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                            <td style={{ ...S.tableCell, fontWeight: 700 }}>{dc.customerName}</td>
+                            <td style={{ ...S.tableCell, textAlign: 'center', color: 'var(--warning)', fontWeight: 700 }}>{dc.overdueDays}일</td>
+                            <td style={{ textAlign: 'center', padding: '7px 0' }}>
+                              <span style={{ fontSize: '10px', fontWeight: 600, color: 'var(--text-secondary)', padding: '2px 6px', border: '1px solid var(--border-color)', borderRadius: '4px' }}>{dc.status}</span>
                             </td>
-                            <td className="py-2.5 text-right font-bold text-red-400">₩{dc.unpaidAmount.toLocaleString()}</td>
+                            <td style={{ ...S.tableCell, textAlign: 'right', color: 'var(--danger)', fontWeight: 700 }}>₩{dc.unpaidAmount.toLocaleString()}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -826,49 +951,8 @@ export const RegularReportsPage: React.FC = () => {
             </div>
           </div>
         )}
-
       </div>
-
-      {/* 인쇄 전용 전역 스타일 (@media print) */}
-      <style>{`
-        @media print {
-          body, html, #root {
-            background-color: #ffffff !important;
-            color: #0f172a !important;
-          }
-          .no-print, header, aside, .sidebar-nav {
-            display: none !important;
-          }
-          .main-content-area {
-            padding: 0 !important;
-            margin: 0 !important;
-          }
-          .regular-reports-container {
-            background-color: #ffffff !important;
-            color: #0f172a !important;
-            padding: 0 !important;
-          }
-          .regular-reports-container * {
-            color: #0f172a !important;
-            background-color: transparent !important;
-            border-color: #cbd5e1 !important;
-          }
-          .text-white {
-            color: #0f172a !important;
-          }
-          .text-slate-400, .text-slate-300 {
-            color: #475569 !important;
-          }
-          .text-teal-400, .text-teal-300, .text-blue-400, .text-indigo-400 {
-            color: #1e3a8a !important;
-            font-weight: bold !important;
-          }
-          .text-red-400, .text-red-300 {
-            color: #b91c1c !important;
-            font-weight: bold !important;
-          }
-        }
-      `}</style>
     </div>
   );
 };
+

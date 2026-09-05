@@ -1,4 +1,41 @@
+## [v1.8.0.Build.201] - 2026-09-05 21:15
+
+### 🎨 [경영관리 > 정기보고서 생성] 전사 UI/UX 톤앤매너 글로벌 정책 전면 적용
+- **헌장 3.1 무수식어 건조한 명사 UI / 3.2 셀 줄바꿈 방지 / 3.4 레이블 상하 스택 / 3.5 Gutenberg Z-Pattern**:
+  - **Tailwind `slate-*` / `blue-*` / `teal-*` 하드코딩 컬러 클래스 100% 퇴출**: `text-slate-400`, `bg-slate-900`, `border-red-500/30`, `bg-blue-600/15`, `text-teal-400`, `bg-emerald-400` 등 테마를 파괴하는 모든 고정 색상 Tailwind 클래스를 전면 제거.
+  - **전사 표준 CSS 변수 100% 적용**: `var(--bg-card)`, `var(--bg-app)`, `var(--border-color)`, `var(--text-primary)`, `var(--text-secondary)`, `var(--text-muted)`, `var(--primary)`, `var(--success)`, `var(--warning)`, `var(--danger)` 변수 기반 `style={{ ... }}` 인라인 스타일 패턴으로 전면 전환. 다크/라이트 테마 완벽 대응.
+  - **전사 표준 스타일 상수 `S` 객체 도입**: `S.card`, `S.cardSm`, `S.cardDanger`, `S.kpiChip`, `S.sectionLabel`, `S.subTitle`, `S.muted`, `S.tableHeader`, `S.tableCell`, `S.tableCellMuted`, `S.divider`, `S.input`, `S.textarea` 13종 스타일 상수로 전 컴포넌트에서 DRY하게 재사용.
+  - **KPI 4대 독립 대형 카드 → 소형 인라인 칩 그리드로 압축**: 기존 `p-4 rounded-xl` 대형 카드 4개를 `S.kpiChip` (padding 7px 12px, 행 높이 ~38px) 소형 칩 6개 그리드로 압축. 화면 밀도 2~3배 향상, 세로 스크롤 대폭 단축.
+  - **테이블 스타일 전환**: `className="text-slate-400 border-b border-slate-800 text-[11px]"` 등 Tailwind 테이블 스타일을 `style={{ ...S.tableHeader }}` 기반으로 전환. `borderCollapse: 'collapse'` + `S.tableCell/tableCellMuted` 전사 표준 적용.
+  - **헤더 및 탭 바 전면 재설계**: 기존 `sticky top-0 backdrop-blur-md` 스크롤 고정 헤더를 제거하고 전사 표준 `S.card` 기반 플랫 헤더로 교체. 탭 바 `border-blue-500 text-blue-400 bg-blue-500/10` 스타일을 `var(--primary)` CSS 변수 기반으로 교체.
+  - **버튼 클래스 표준화**: `bg-blue-600 hover:bg-blue-500 text-white` 등 Tailwind 색상 버튼을 `className="btn-primary"`, `className="btn-secondary"` 전사 표준 버튼 클래스로 통일.
+  - **경고/위험 카드 전사화**: `bg-red-950/20 border-red-500/30` 패턴을 `S.cardDanger` (`var(--danger)` 테두리) 로 교체. `var(--danger)` 컬러 기반 일관적 위험 표기.
+  - **드릴다운 서브 탭, 모든 섹션**: 경영 종합 보고서 영업/물류/채권/Waiver/정비팀/경영진 지시사항/대차대조식 검증 바 및 드릴다운 5개 서브 탭 전 구역 CSS 변수 기반으로 전환 완료.
+- **빌드 검증**: `tsc -b && vite build` Exit Code 0 확인.
+
+---
+
+## [v1.8.0.Build.200] - 2026-09-05 21:00
+
+
+### 📋 [경영관리 > 정기보고서 생성] 팀별 코멘트/참고 문서 어태치 기능 구현
+- **헌장 1.2 ③ 임직원 업무 최소 조작 & 최상의 편의성 / 헌장 3.6 카드형 요청 처리 아키타입**:
+  - **`TeamComment` 인터페이스 신설 (`monthlyReportEngine.ts`)**: `teamKey (SALES|LOGISTICS|YARD|MAINTENANCE|FINANCE)`, `comment`, `authorName`, `links[] (title+url, 최대 3개)`, `savedAt` 구조. `TEAM_META` 상수로 팀명/아이콘 SSOT 관리.
+  - **localStorage 기반 팀별 코멘트 영구 보존**: `getStoredTeamComment()`, `saveTeamComment()`, `getAllTeamComments()` 3개 함수 신설. 저장 키: `monthly_report_team_comment_{targetYm}_{teamKey}` 패턴으로 연월별 격리 저장.
+  - **경영 종합 보고서 5개 섹션 하단 팀별 코멘트 패널 삽입 (`RegularReportsPage.tsx`)**:
+    - 플릿/자산 섹션 하단 → **🏗️ 자산팀 (YARD)** 코멘트 패널
+    - 영업 실적 섹션 하단 → **📊 영업팀 (SALES)** 코멘트 패널
+    - 물류 배차 섹션 하단 → **🚛 물류팀 (LOGISTICS)** 코멘트 패널
+    - 채권/Waiver 섹션 하단 → **💰 재무팀 (FINANCE)** 코멘트 패널
+    - 독립 정비팀 섹션 → **🔧 정비팀 (MAINTENANCE)** 코멘트 패널 (MTTR, 완료건, 조기고장 KPI 함께 노출)
+  - **`TeamCommentPanel` 컴포넌트**: 접힘/펼침 토글(ChevronDown/Up), 내용 있을 때 인디고 강조 테두리/배경 및 `내용 있음` 뱃지, 저장 시각 표시, 미저장 경고. 작성자명 + 코멘트 textarea + 참고 링크(URL+제목, 최대 3개, 삭제 버튼) + 팀별 개별 저장 버튼.
+  - **PDF 3페이지 `Section 9. 부서별 코멘트` 자동 반영 (`monthlyReportPdfBuilder.ts`)**: 코멘트 있는 팀만 인디고 뱃지+텍스트 행 형태로 최대 4개까지 인쇄. 링크 첫 번째 항목은 🔗 아이콘과 함께 PDF에 표기. 코멘트 없으면 기존 3페이지 레이아웃 유지.
+  - **연월 변경 시 자동 리로드**: `targetYm` 변경 시 해당 연월의 팀별 코멘트 일괄 갱신.
+
+---
+
 ## [v1.8.0.Build.199] - 2026-09-05 20:45
+
 
 ### 📑 [경영관리 > 정기보고서 생성] 기능 본질 목적(Executive Monthly Dossier) 전면 재구성 & 🎬 멀티미디어(유튜브·웹문서·PDF) MRO 기술지식 허브 및 비동기 AI 색인 시스템 탑재
 - **도메인 사명 및 시스템 핵심 가치 (헌장 1.1, 1.2, 2.1, 2.3, 3.1, 3.2, 3.4, 3.5, 3.6, 4.1, 5.1, 5.2, 5.5)**:

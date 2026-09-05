@@ -82,6 +82,31 @@ export interface WaiverItem {
   waivedBy: string;
 }
 
+export interface TeamCommentLink {
+  title: string;
+  url: string;
+}
+
+export type TeamKey = 'SALES' | 'LOGISTICS' | 'YARD' | 'MAINTENANCE' | 'FINANCE';
+
+export interface TeamComment {
+  teamKey: TeamKey;
+  teamName: string;
+  targetYm: string;
+  comment: string;
+  authorName: string;
+  links: TeamCommentLink[];
+  savedAt?: string;
+}
+
+export const TEAM_META: Record<TeamKey, { name: string; icon: string }> = {
+  SALES:       { name: '영업팀',   icon: '📊' },
+  LOGISTICS:   { name: '물류팀',   icon: '🚛' },
+  YARD:        { name: '자산팀',   icon: '🏗️' },
+  MAINTENANCE: { name: '정비팀',   icon: '🔧' },
+  FINANCE:     { name: '재무팀',   icon: '💰' },
+};
+
 export interface ExecutiveDirective {
   targetYm: string;
   remarks: string;
@@ -177,6 +202,7 @@ export interface ExecutiveMonthlyReport {
     delta: number;
   };
   executiveDirective: ExecutiveDirective;
+  teamComments: TeamComment[];
 }
 
 const DIRECTIVE_STORAGE_KEY_PREFIX = 'monthly_report_directive_';
@@ -212,6 +238,51 @@ export function saveExecutiveDirective(directive: ExecutiveDirective): void {
     console.error('Failed to save executive directive:', e);
   }
 }
+
+// ─── 팀별 코멘트 localStorage 관리 ────────────────────────────────────────
+
+const TEAM_COMMENT_KEY_PREFIX = 'monthly_report_team_comment_';
+
+/** 팀별 코멘트 조회 */
+export function getStoredTeamComment(targetYm: string, teamKey: TeamKey): TeamComment {
+  try {
+    const raw = localStorage.getItem(`${TEAM_COMMENT_KEY_PREFIX}${targetYm}_${teamKey}`);
+    if (raw) return JSON.parse(raw);
+  } catch (e) {
+    console.error('Failed to load team comment:', e);
+  }
+  return {
+    teamKey,
+    teamName: TEAM_META[teamKey].name,
+    targetYm,
+    comment: '',
+    authorName: '',
+    links: [],
+    savedAt: undefined
+  };
+}
+
+/** 팀별 코멘트 저장 */
+export function saveTeamComment(comment: TeamComment): void {
+  try {
+    localStorage.setItem(
+      `${TEAM_COMMENT_KEY_PREFIX}${comment.targetYm}_${comment.teamKey}`,
+      JSON.stringify({
+        ...comment,
+        savedAt: new Date().toISOString().replace('T', ' ').slice(0, 19)
+      })
+    );
+  } catch (e) {
+    console.error('Failed to save team comment:', e);
+  }
+}
+
+/** 전체 팀 코멘트 일괄 조회 */
+export function getAllTeamComments(targetYm: string): TeamComment[] {
+  const keys: TeamKey[] = ['SALES', 'LOGISTICS', 'YARD', 'MAINTENANCE', 'FINANCE'];
+  return keys.map((k) => getStoredTeamComment(targetYm, k));
+}
+
 
 /**
  * 전사 월간 경영 정기보고서 종합 집계 메인 함수
@@ -593,6 +664,8 @@ export function aggregateExecutiveMonthlyReport(targetYm: string, context: any):
 
   // 경영진 지시사항 로드
   const executiveDirective = getStoredExecutiveDirective(targetYm);
+  // 팀별 코멘트 로드
+  const teamComments = getAllTeamComments(targetYm);
 
   return {
     period: {
@@ -680,6 +753,7 @@ export function aggregateExecutiveMonthlyReport(targetYm: string, context: any):
       unpaidAmount,
       delta
     },
-    executiveDirective
+    executiveDirective,
+    teamComments
   };
 }

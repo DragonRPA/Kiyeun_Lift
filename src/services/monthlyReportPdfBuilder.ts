@@ -63,7 +63,7 @@ export async function downloadExecutiveReportPdf(data: ExecutiveMonthlyReport): 
   const canvasW = Math.round(a4W * scale);
   const canvasH = Math.round(a4H * scale);
 
-  const { period, kpis, fleet, sales, operations, finance, conservation, executiveDirective } = data;
+  const { period, kpis, fleet, sales, operations, finance, conservation, executiveDirective, teamComments = [] } = data;
 
   // =========================================================================
   // [1페이지: 표지 헤더 + 경영 종합 KPI + 렌탈 자산 플릿 현황]
@@ -490,24 +490,94 @@ export async function downloadExecutiveReportPdf(data: ExecutiveMonthlyReport): 
     const tasks = executiveDirective.priorityTasks || '1. 32ft 장기 유휴 장비 대형 현장 우선 투입  2. 스펙 오발주 교환 손실 방지를 위한 계약 전 실측 강화  3. 연체 200만원 이상 거래처 직권 결재 집행';
     ctx.fillText(tasks.slice(0, 56), 55 * scale, (directiveBoxY + 84) * scale);
 
-    // 4. 최하단 Gutenberg 대차대조식 검증 바 및 결재/서명란
-    const auditBarY = directiveBoxY + 105;
-    ctx.fillStyle = '#0F172A';
-    ctx.fillRect(40 * scale, auditBarY * scale, (a4W - 80) * scale, 34 * scale);
+    // ── 팀별 코멘트 요약 섹션 ─────────────────────────────────────────
+    const teamCommentY = directiveBoxY + 105;
+    const activeComments = teamComments.filter((tc: any) => tc && tc.comment && tc.comment.trim());
 
-    ctx.fillStyle = '#38BDF8';
-    ctx.font = 'bold ' + (9 * scale) + 'px "Malgun Gothic", sans-serif';
-    ctx.fillText(`📄 매출청구총액 ₩${kpis.totalRevenue.toLocaleString()} = 🟢 수납액 ₩${kpis.collectedAmount.toLocaleString()} + 🔴 미수잔액 ₩${kpis.unpaidAmount.toLocaleString()}`, 55 * scale, (auditBarY + 21) * scale);
+    if (activeComments.length > 0) {
+      ctx.fillStyle = '#1E293B';
+      ctx.font = 'bold ' + (11 * scale) + 'px "Malgun Gothic", sans-serif';
+      ctx.textAlign = 'left';
+      ctx.fillText('9. 부서별 코멘트 (팀별 부연 의견)', 40 * scale, teamCommentY * scale);
 
-    ctx.fillStyle = '#4ADE80';
-    ctx.fillText(`⚖️ 대차 차액 ₩${conservation.delta.toLocaleString()} (100% 일치)`, 390 * scale, (auditBarY + 21) * scale);
+      let tcRowY = teamCommentY + 12;
+      activeComments.slice(0, 4).forEach((tc: any) => {
+        const tcBoxH = 36;
+        ctx.fillStyle = '#F8FAFC';
+        ctx.fillRect(40 * scale, tcRowY * scale, (a4W - 80) * scale, tcBoxH * scale);
+        ctx.strokeStyle = '#E2E8F0';
+        ctx.lineWidth = 0.8 * scale;
+        ctx.strokeRect(40 * scale, tcRowY * scale, (a4W - 80) * scale, tcBoxH * scale);
 
-    // 대표이사 결재란
-    const signBoxY = auditBarY + 45;
-    ctx.fillStyle = '#1E293B';
-    ctx.font = 'bold ' + (10 * scale) + 'px "Malgun Gothic", sans-serif';
-    ctx.textAlign = 'right';
-    ctx.fillText(`보고 확정일: ${period.generatedAt.slice(0, 10)}    |    대표이사:  (인) / 서명`, (a4W - 45) * scale, signBoxY * scale);
+        // 팀명 뱃지
+        ctx.fillStyle = '#4F46E5';
+        ctx.fillRect(40 * scale, tcRowY * scale, 68 * scale, tcBoxH * scale);
+        ctx.fillStyle = '#FFFFFF';
+        ctx.font = 'bold ' + (9 * scale) + 'px "Malgun Gothic", sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(tc.teamName || '팀', 74 * scale, (tcRowY + 15) * scale);
+        if (tc.authorName) {
+          ctx.font = '500 ' + (8 * scale) + 'px "Malgun Gothic", sans-serif';
+          ctx.fillText(tc.authorName.slice(0, 6), 74 * scale, (tcRowY + 27) * scale);
+        }
+
+        // 코멘트 텍스트
+        ctx.fillStyle = '#334155';
+        ctx.font = '500 ' + (9 * scale) + 'px "Malgun Gothic", sans-serif';
+        ctx.textAlign = 'left';
+        const commentText = (tc.comment || '').slice(0, 58);
+        ctx.fillText(commentText, 118 * scale, (tcRowY + 16) * scale);
+
+        // 링크 있으면 표시
+        if (tc.links && tc.links.length > 0 && tc.links[0].url) {
+          ctx.fillStyle = '#6366F1';
+          ctx.font = '500 ' + (8 * scale) + 'px "Malgun Gothic", sans-serif';
+          ctx.fillText(`🔗 ${tc.links[0].title || tc.links[0].url.slice(0, 40)}`, 118 * scale, (tcRowY + 28) * scale);
+        }
+
+        tcRowY += tcBoxH + 6;
+      });
+
+      // 4. 최하단 Gutenberg 대차대조식 검증 바 및 결재/서명란
+      const auditBarY = tcRowY + 8;
+      ctx.fillStyle = '#0F172A';
+      ctx.fillRect(40 * scale, auditBarY * scale, (a4W - 80) * scale, 34 * scale);
+
+      ctx.fillStyle = '#38BDF8';
+      ctx.font = 'bold ' + (9 * scale) + 'px "Malgun Gothic", sans-serif';
+      ctx.textAlign = 'left';
+      ctx.fillText(`📄 매출청구총액 ₩${kpis.totalRevenue.toLocaleString()} = 🟢 수납액 ₩${kpis.collectedAmount.toLocaleString()} + 🔴 미수잔액 ₩${kpis.unpaidAmount.toLocaleString()}`, 55 * scale, (auditBarY + 21) * scale);
+
+      ctx.fillStyle = '#4ADE80';
+      ctx.fillText(`⚖️ 대차 차액 ₩${conservation.delta.toLocaleString()} (100% 일치)`, 390 * scale, (auditBarY + 21) * scale);
+
+      // 대표이사 결재란
+      const signBoxY = auditBarY + 45;
+      ctx.fillStyle = '#1E293B';
+      ctx.font = 'bold ' + (10 * scale) + 'px "Malgun Gothic", sans-serif';
+      ctx.textAlign = 'right';
+      ctx.fillText(`보고 확정일: ${period.generatedAt.slice(0, 10)}    |    대표이사:  (인) / 서명`, (a4W - 45) * scale, signBoxY * scale);
+    } else {
+      // 4. 최하단 Gutenberg 대차대조식 검증 바 및 결재/서명란
+      const auditBarY = teamCommentY;
+      ctx.fillStyle = '#0F172A';
+      ctx.fillRect(40 * scale, auditBarY * scale, (a4W - 80) * scale, 34 * scale);
+
+      ctx.fillStyle = '#38BDF8';
+      ctx.font = 'bold ' + (9 * scale) + 'px "Malgun Gothic", sans-serif';
+      ctx.textAlign = 'left';
+      ctx.fillText(`📄 매출청구총액 ₩${kpis.totalRevenue.toLocaleString()} = 🟢 수납액 ₩${kpis.collectedAmount.toLocaleString()} + 🔴 미수잔액 ₩${kpis.unpaidAmount.toLocaleString()}`, 55 * scale, (auditBarY + 21) * scale);
+
+      ctx.fillStyle = '#4ADE80';
+      ctx.fillText(`⚖️ 대차 차액 ₩${conservation.delta.toLocaleString()} (100% 일치)`, 390 * scale, (auditBarY + 21) * scale);
+
+      // 대표이사 결재란
+      const signBoxY = auditBarY + 45;
+      ctx.fillStyle = '#1E293B';
+      ctx.font = 'bold ' + (10 * scale) + 'px "Malgun Gothic", sans-serif';
+      ctx.textAlign = 'right';
+      ctx.fillText(`보고 확정일: ${period.generatedAt.slice(0, 10)}    |    대표이사:  (인) / 서명`, (a4W - 45) * scale, signBoxY * scale);
+    }
 
     // 3페이지 하단 페이지 번호
     ctx.fillStyle = '#94A3B8';
@@ -515,6 +585,7 @@ export async function downloadExecutiveReportPdf(data: ExecutiveMonthlyReport): 
     ctx.textAlign = 'center';
     ctx.fillText(`Page 3 of 3  •  기연리프트 ERP 시스템 자동 생성`, (a4W / 2) * scale, (a4H - 25) * scale);
   });
+
 
   // 3개 페이지를 순서대로 PDF 문서에 추가
   const p1 = await pdfDoc.embedPng(page1Bytes);
