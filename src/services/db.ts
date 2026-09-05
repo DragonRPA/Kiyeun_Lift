@@ -198,6 +198,7 @@ export interface Customer {
   specialNotes?: string;             // 고객사 특이사항 메모 (예: '재임대 출고건으로 운반비 및 배차 한솔렌탈 부담')
 
   createdAt: string;
+  updatedAt?: string;
 }
 
 export interface CustomerContact {
@@ -209,6 +210,7 @@ export interface CustomerContact {
   email: string;
   isActive?: boolean; // 사용/미사용 (퇴사/부서이동 등)
   createdAt: string;
+  updatedAt?: string;
 }
 
 export interface CustomerSite {
@@ -227,6 +229,7 @@ export interface CustomerSite {
   checkedSpecs?: Record<string, boolean>; // 현장 전용 21대 표준 스펙 체크 상태
 
   createdAt: string;
+  updatedAt?: string;
 }
 
 export interface Product {
@@ -506,7 +509,7 @@ export interface ContractHistory {
   id: string;
   contractId: string;
   changeType: 'REGISTER' | 'EXTEND' | 'SHORTEN' | 'SUCCEED' | 'TERMINATE' | 'EXCHANGE' | 'FEE_CHANGE' | 'AS_SERVICE'
-           | 'BILLING_CREATED' | 'BILLING_SENT' | 'BILLING_CANCELLED' | 'BILLING_REGENERATED' | 'PAYMENT_RECEIVED' | 'DOCUMENT_SENT';
+           | 'BILLING_CREATED' | 'BILLING_SENT' | 'BILLING_CANCELLED' | 'BILLING_REGENERATED' | 'PAYMENT_RECEIVED' | 'PAYMENT_CANCELLED' | 'DOCUMENT_SENT';
   changeDate: string;
   prevEndDate?: string;
   newEndDate?: string;
@@ -597,6 +600,7 @@ export interface Payment {
   method: string; // 'BANK_TRANSFER' | 'CARD' | 'CASH'
   memo: string;
   createdAt: string;
+  updatedAt?: string;
 }
 
 /** 통장입금-수납 마늤투마니 연결 테이블 (1건 수납 : N건 입금건) */
@@ -650,7 +654,7 @@ export interface Delivery {
   assignedVehicles?: any[]; // 배정 차량 목록 배열
   vehicleRequirements?: string; // 차량 종류별 대수 지정 JSON: [{ vehicleType: string, count: number }]
   cargoItems?: string; // 운반 장비 명세 JSON: [{ modelName: string, count: number }]
-  isCostSettled: boolean;
+  isCostSettled?: boolean;
   rawText?: string; // 스마트 출고 시 입력된 자연어 원문 텍스트
   memo: string;
   closingMemo?: string; // 실무자 마감 비고
@@ -752,9 +756,9 @@ export interface Repair {
   
   // 3. 고객사 및 현장 정보
   customerId?: string;
-  customerName: string;
+  customerName?: string;
   siteId?: string;
-  siteName: string;
+  siteName?: string;
   siteAddress?: string; // 🌟 도로명 상세주소 (T맵/내비/지도 자동 길안내 SSOT)
   locationDetail?: string; // 예: 팹동 8층 X27 Y17
   reporterName?: string;
@@ -803,8 +807,8 @@ export interface Repair {
   // 8. 비용 및 청구
   billableType?: 'FREE' | 'BILLABLE';
   billableAmount?: number;
-  billableToCustomer: boolean;
-  totalCost: number;
+  billableToCustomer?: boolean;
+  totalCost?: number;
   billingId?: string;
   purchaseBillId?: string;
   isCustomerFault?: boolean;
@@ -1028,7 +1032,7 @@ export interface AssetInOutLog {
   maintenanceScore?: number;
   defectsJson?: string; // InboundDefectDetail[] JSON 문자열
   memo?: string;
-  createdAt: string;
+  createdAt?: string;
 }
 
 export type OutboundInspectionStatus = 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'REJECTED';
@@ -1038,6 +1042,7 @@ export interface OutboundInspection {
   contractId?: string;
   contractAssetId?: string;
   assetId?: string;
+  deliveryId?: string;
   status: OutboundInspectionStatus;
   specsJson?: string;
   inspectorId?: string;
@@ -1160,6 +1165,87 @@ export interface DocumentJob {
   createdAt: string;
   lockedAt?: string;
   completedAt?: string;
+}
+
+// ============================================================
+// 7. 법인 차량 및 차량운행일지/주유 영수증 관리 (Corporate Fleet & Logs)
+// ============================================================
+
+export type CorporateVehicleType = '승합차' | '화물/탑차' | '승용차' | '전기차';
+export type CorporateVehicleOwnership = 'OWNED' | 'LEASE' | 'RENTAL';
+export type CorporateVehicleFuelType = 'DIESEL' | 'GASOLINE' | 'LPG' | 'HYBRID' | 'ELECTRIC';
+
+export interface CorporateVehicle {
+  id: string;
+  vehicleNo: string;
+  modelName: string;
+  vehicleType: CorporateVehicleType;
+  ownershipType: CorporateVehicleOwnership;
+  fuelType: CorporateVehicleFuelType;
+  assignedDepartment: string;
+  primaryDriverId?: string;
+  primaryDriverName?: string;
+  initialMileage: number;
+  currentMileage: number;
+  insuranceExpiryDate?: string;
+  inspectionExpiryDate?: string;
+  isActive: boolean;
+  memo?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type OperationPurposeType = 'COMMUTE' | 'BUSINESS_GENERAL' | 'CLIENT_MEETING' | 'SITE_AS' | 'LOGISTICS_DELIVERY' | 'OTHER';
+export type OperationLogStatus = 'SUBMITTED' | 'CONFIRMED' | 'REJECTED';
+
+export interface VehicleOperationLog {
+  id: string;
+  vehicleId: string;
+  vehicleNo: string;
+  driverId: string;
+  driverName: string;
+  driverDept?: string;
+  operationDate: string; // YYYY-MM-DD
+  purposeType: OperationPurposeType;
+  purposeDetail?: string;
+  departureLocation: string;
+  arrivalLocation: string;
+  departureMileage: number;
+  arrivalMileage: number;
+  driveDistance: number; // arrivalMileage - departureMileage
+  businessDistance: number;
+  commuteDistance: number;
+  dashboardPhotoStart?: string;
+  dashboardPhotoEnd?: string;
+  memo?: string;
+  status: OperationLogStatus;
+  confirmedBy?: string;
+  confirmedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface VehicleFuelLog {
+  id: string;
+  vehicleId: string;
+  vehicleNo: string;
+  driverId: string;
+  driverName: string;
+  fuelDate: string; // YYYY-MM-DD HH:mm or YYYY-MM-DD
+  fuelType: string;
+  fuelVolume: number; // 리터 L
+  fuelAmount: number; // 금액 ₩
+  fuelUnitPrice?: number; // ₩/L
+  currentMileage: number; // 주유 시 계기판 km
+  dashboardPhotoUrl?: string; // 계기판 사진 URL / Base64
+  receiptPhotoUrl: string; // 영수증 사진 URL / Base64
+  gasStationName?: string;
+  paymentMethod?: string; // CORPORATE_CARD, PERSONAL_EXPENSE
+  cardLast4?: string;
+  fuelEfficiency?: number; // km/L
+  memo?: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 // 초기 로컬 스토리지 데이터 생성
@@ -2781,6 +2867,202 @@ export const SEED_BANK_INITIAL_BALANCES: BankAccountInitialBalance[] = [
   { id: 'bank-init-신한은행', bankName: '신한은행', accountNumber: 'XXX-XXXXXXXXX-XX', initialBalance: 0, updatedAt: new Date().toISOString() }
 ];
 
+export const SEED_CORPORATE_VEHICLES: CorporateVehicle[] = [
+  {
+    id: 'veh-01',
+    vehicleNo: '82가 1024',
+    modelName: '스타리아 카고 5인승',
+    vehicleType: '승합차',
+    ownershipType: 'OWNED',
+    fuelType: 'DIESEL',
+    assignedDepartment: 'AS팀',
+    primaryDriverId: 'usr-mech1',
+    primaryDriverName: '김정비',
+    initialMileage: 12500,
+    currentMileage: 28450,
+    insuranceExpiryDate: '2027-03-15',
+    inspectionExpiryDate: '2026-11-20',
+    isActive: true,
+    memo: '경기/인천 현장 AS 1호 출동차량',
+    createdAt: '2026-01-10T09:00:00.000Z',
+    updatedAt: '2026-09-01T08:00:00.000Z'
+  },
+  {
+    id: 'veh-02',
+    vehicleNo: '83나 5678',
+    modelName: '포터II 특장 윙바디',
+    vehicleType: '화물/탑차',
+    ownershipType: 'OWNED',
+    fuelType: 'DIESEL',
+    assignedDepartment: '출고관리부',
+    primaryDriverId: 'usr-outbound1',
+    primaryDriverName: '박출고',
+    initialMileage: 5400,
+    currentMileage: 41200,
+    insuranceExpiryDate: '2027-05-20',
+    inspectionExpiryDate: '2027-02-10',
+    isActive: true,
+    memo: '소형 고소작업대 긴급 근거리 탁송 전용',
+    createdAt: '2026-01-10T09:00:00.000Z',
+    updatedAt: '2026-09-01T08:00:00.000Z'
+  },
+  {
+    id: 'veh-03',
+    vehicleNo: '24너 9182',
+    modelName: '아반떼 하이브리드',
+    vehicleType: '승용차',
+    ownershipType: 'LEASE',
+    fuelType: 'HYBRID',
+    assignedDepartment: '영업부',
+    primaryDriverId: 'usr-sales1',
+    primaryDriverName: '이영업',
+    initialMileage: 3000,
+    currentMileage: 18900,
+    insuranceExpiryDate: '2027-08-31',
+    inspectionExpiryDate: '2027-08-31',
+    isActive: true,
+    memo: '수도권 건설사 현장영업 및 계약 체결용',
+    createdAt: '2026-02-01T09:00:00.000Z',
+    updatedAt: '2026-09-02T10:00:00.000Z'
+  },
+  {
+    id: 'veh-04',
+    vehicleNo: '11다 3456',
+    modelName: '카니발 하이리무진 7인승',
+    vehicleType: '승용차',
+    ownershipType: 'LEASE',
+    fuelType: 'GASOLINE',
+    assignedDepartment: '경영지원부',
+    primaryDriverId: 'usr-admin',
+    primaryDriverName: '관리자',
+    initialMileage: 1000,
+    currentMileage: 15300,
+    insuranceExpiryDate: '2027-12-31',
+    inspectionExpiryDate: '2028-01-15',
+    isActive: true,
+    memo: '임원 의전 및 본사 경영관리 출장용',
+    createdAt: '2026-01-15T09:00:00.000Z',
+    updatedAt: '2026-09-03T11:00:00.000Z'
+  },
+  {
+    id: 'veh-05',
+    vehicleNo: '95라 7731',
+    modelName: '봉고III EV (전기화물)',
+    vehicleType: '화물/탑차',
+    ownershipType: 'OWNED',
+    fuelType: 'ELECTRIC',
+    assignedDepartment: 'AS팀',
+    primaryDriverId: 'usr-mech2',
+    primaryDriverName: '최기사',
+    initialMileage: 500,
+    currentMileage: 9800,
+    insuranceExpiryDate: '2027-09-10',
+    inspectionExpiryDate: '2027-09-10',
+    isActive: true,
+    memo: '주기장 및 시흥 배곧 관내 순회 긴급 정비용',
+    createdAt: '2026-03-01T09:00:00.000Z',
+    updatedAt: '2026-09-04T15:00:00.000Z'
+  }
+];
+
+export const SEED_VEHICLE_OPERATION_LOGS: VehicleOperationLog[] = [
+  {
+    id: 'vlog-01',
+    vehicleId: 'veh-01',
+    vehicleNo: '82가 1024',
+    driverId: 'usr-mech1',
+    driverName: '김정비',
+    driverDept: 'AS팀',
+    operationDate: '2026-09-04',
+    purposeType: 'SITE_AS',
+    purposeDetail: '시흥 배곧 건설현장 유압 호스 누유 긴급 출장 수리',
+    departureLocation: '본사 주기장 (화성)',
+    arrivalLocation: '시흥 배곧 2차 현장',
+    departureMileage: 28350,
+    arrivalMileage: 28450,
+    driveDistance: 100,
+    businessDistance: 100,
+    commuteDistance: 0,
+    memo: '정상 수리 완료 후 본사 복귀',
+    status: 'CONFIRMED',
+    confirmedBy: '관리자',
+    confirmedAt: '2026-09-04 18:30',
+    createdAt: '2026-09-04T17:40:00.000Z',
+    updatedAt: '2026-09-04T18:30:00.000Z'
+  },
+  {
+    id: 'vlog-02',
+    vehicleId: 'veh-03',
+    vehicleNo: '24너 9182',
+    driverId: 'usr-sales1',
+    driverName: '이영업',
+    driverDept: '영업부',
+    operationDate: '2026-09-03',
+    purposeType: 'CLIENT_MEETING',
+    purposeDetail: '평택 고덕 삼성 반도체 4기 신축현장 렌탈 계약 미팅',
+    departureLocation: '본사 사무실',
+    arrivalLocation: '평택 고덕 현장사무소',
+    departureMileage: 18760,
+    arrivalMileage: 18900,
+    driveDistance: 140,
+    businessDistance: 140,
+    commuteDistance: 0,
+    memo: '고소작업대 6대 6개월 장기계약 협의',
+    status: 'CONFIRMED',
+    confirmedBy: '관리자',
+    confirmedAt: '2026-09-03 19:10',
+    createdAt: '2026-09-03T18:20:00.000Z',
+    updatedAt: '2026-09-03T19:10:00.000Z'
+  }
+];
+
+export const SEED_VEHICLE_FUEL_LOGS: VehicleFuelLog[] = [
+  {
+    id: 'vfuel-01',
+    vehicleId: 'veh-01',
+    vehicleNo: '82가 1024',
+    driverId: 'usr-mech1',
+    driverName: '김정비',
+    fuelDate: '2026-09-04 08:30',
+    fuelType: '경유',
+    fuelVolume: 55.4,
+    fuelAmount: 85000,
+    fuelUnitPrice: 1534,
+    currentMileage: 28350,
+    gasStationName: 'SK에너지 서해로주유소',
+    paymentMethod: 'CORPORATE_CARD',
+    cardLast4: '7721',
+    fuelEfficiency: 11.2,
+    receiptPhotoUrl: '',
+    dashboardPhotoUrl: '',
+    memo: '출장 전 만땅 주유',
+    createdAt: '2026-09-04T08:35:00.000Z',
+    updatedAt: '2026-09-04T08:35:00.000Z'
+  },
+  {
+    id: 'vfuel-02',
+    vehicleId: 'veh-03',
+    vehicleNo: '24너 9182',
+    driverId: 'usr-sales1',
+    driverName: '이영업',
+    fuelDate: '2026-09-03 09:15',
+    fuelType: '휘발유',
+    fuelVolume: 42.0,
+    fuelAmount: 71000,
+    fuelUnitPrice: 1690,
+    currentMileage: 18760,
+    gasStationName: 'GS칼텍스 평택스마트주유소',
+    paymentMethod: 'CORPORATE_CARD',
+    cardLast4: '4490',
+    fuelEfficiency: 16.8,
+    receiptPhotoUrl: '',
+    dashboardPhotoUrl: '',
+    memo: '평택 출장길 주유',
+    createdAt: '2026-09-03T09:20:00.000Z',
+    updatedAt: '2026-09-03T09:20:00.000Z'
+  }
+];
+
 export const ALL_DB_KEYS = [
   'users', 'departments', 'permissions', 'customers', 'contacts', 'sites', 
   'products', 'assets', 'consumables', 'consumableLogs', 'consumablePurchases',
@@ -2791,7 +3073,8 @@ export const ALL_DB_KEYS = [
   'cashFlowSnapshots', 'outboundInspections', 'depreciationLogs',
   'purchaseSettlements', 'purchaseSettlementItems', 'settlementPaymentLogs', 'externalLeases',
   'annualLeaveQuotas', 'leaveUsages', 'overtimeRecords', 'payrollClosings', 'inspectionChecklistItems',
-  'prepaidTransactions', 'delinquencyActionLogs', 'mechanicConsumableStocks', 'receivables', 'legalNoticeLogs', 'legalNoticeTemplates'
+  'prepaidTransactions', 'delinquencyActionLogs', 'mechanicConsumableStocks', 'receivables', 'legalNoticeLogs', 'legalNoticeTemplates',
+  'corporateVehicles', 'vehicleOperationLogs', 'vehicleFuelLogs'
 ];
 
 class LocalDB {
@@ -3040,6 +3323,15 @@ class LocalDB {
   get delinquencyActionLogs() { return this.get<DelinquencyActionLog>('delinquencyActionLogs', []); }
   set delinquencyActionLogs(val: DelinquencyActionLog[]) { this.set('delinquencyActionLogs', val); }
 
+  get corporateVehicles() { return this.get<CorporateVehicle>('corporateVehicles', SEED_CORPORATE_VEHICLES); }
+  set corporateVehicles(val: CorporateVehicle[]) { this.set('corporateVehicles', val); }
+
+  get vehicleOperationLogs() { return this.get<VehicleOperationLog>('vehicleOperationLogs', SEED_VEHICLE_OPERATION_LOGS); }
+  set vehicleOperationLogs(val: VehicleOperationLog[]) { this.set('vehicleOperationLogs', val); }
+
+  get vehicleFuelLogs() { return this.get<VehicleFuelLog>('vehicleFuelLogs', SEED_VEHICLE_FUEL_LOGS); }
+  set vehicleFuelLogs(val: VehicleFuelLog[]) { this.set('vehicleFuelLogs', val); }
+
   // Supabase 테이블 맵핑
   private mapToSupabaseTable(key: string): string {
     const mapping: Record<string, string> = {
@@ -3090,6 +3382,9 @@ class LocalDB {
       leaveUsages: 'leave_usages',
       overtimeRecords: 'overtime_records',
       payrollClosings: 'payroll_closings',
+      corporateVehicles: 'corporate_vehicles',
+      vehicleOperationLogs: 'vehicle_operation_logs',
+      vehicleFuelLogs: 'vehicle_fuel_logs',
     };
     return mapping[key] || key;
   }
@@ -3216,6 +3511,14 @@ class LocalDB {
         .range(from, from + PAGE_SIZE - 1);
 
       if (error) {
+        if (tableName === 'bank_initial_balances') {
+          const fallback = await this.fetchAllRowsFromSupabase('bank_account_initial_balances');
+          if (fallback !== null) return fallback;
+        }
+        if (tableName === 'asset_inout_logs') {
+          const fallback = await this.fetchAllRowsFromSupabase('asset_in_out_logs');
+          if (fallback !== null) return fallback;
+        }
         console.warn(`[db.ts] Supabase fetchAllRows failed for ${tableName} (range ${from}-${from + PAGE_SIZE - 1}):`, error);
         if (allRows.length > 0) return allRows;
         return null;
@@ -3378,6 +3681,9 @@ class LocalDB {
       case 'depreciationLogs':   prefix = 'DEP-';    break;
       case 'receivables':        prefix = 'RCV-';    break;
       case 'fieldAsTickets':     prefix = 'AS-';     break;
+      case 'corporateVehicles':   prefix = 'VEH-';    break;
+      case 'vehicleOperationLogs':prefix = 'VLOG-';   break;
+      case 'vehicleFuelLogs':     prefix = 'VFUEL-';  break;
       default:
         prefix = key.slice(0, 4).toUpperCase() + '-';
     }
@@ -3463,6 +3769,7 @@ class LocalDB {
       contract_history: 'contractHistory',
       contractHistories: 'contractHistory',
       asset_inout_logs: 'assetInOutLogs',
+      asset_in_out_logs: 'assetInOutLogs',
       outbound_inspections: 'outboundInspections',
       billing_details: 'billingDetails',
       transport_companies: 'transportCompanies',
@@ -3470,6 +3777,7 @@ class LocalDB {
       bank_transactions: 'bankTransactions',
       bank_matching_rules: 'bankMatchingRules',
       bank_initial_balances: 'bankInitialBalances',
+      bank_account_initial_balances: 'bankInitialBalances',
       payment_deposit_links: 'paymentDepositLinks',
       repair_consumables: 'repairConsumables',
       consumable_logs: 'consumableLogs',
@@ -3533,6 +3841,12 @@ class LocalDB {
             console.error(`Supabase upsert failed for ${tableName}:`, error);
             const msg = error.message || String(error);
             if (msg.includes('Could not find the table') || error.code === 'PGRST204' || error.code === '42P01') {
+              if (tableName === 'bank_initial_balances') {
+                return supabase.from('bank_account_initial_balances').upsert([payloadForSupabase], { onConflict: 'id' }).then(({ data: fd }) => fd);
+              }
+              if (tableName === 'asset_inout_logs') {
+                return supabase.from('asset_in_out_logs').upsert([payloadForSupabase], { onConflict: 'id' }).then(({ data: fd }) => fd);
+              }
               console.warn(`[Graceful Isolation] 원격 Supabase DB에 ${tableName} 테이블이 존재하지 않습니다. 로컬 저장을 완결합니다.`);
               return null;
             }
@@ -3607,6 +3921,12 @@ class LocalDB {
             console.error(`Supabase update failed for ${tableName}:`, error);
             const msg = error.message || String(error);
             if (msg.includes('Could not find the table') || error.code === 'PGRST204' || error.code === '42P01') {
+              if (tableName === 'bank_initial_balances') {
+                return supabase.from('bank_account_initial_balances').update(payloadForSupabase as any).eq('id', id).then(({ data: fd }) => fd);
+              }
+              if (tableName === 'asset_inout_logs') {
+                return supabase.from('asset_in_out_logs').update(payloadForSupabase as any).eq('id', id).then(({ data: fd }) => fd);
+              }
               console.warn(`[Graceful Isolation] 원격 Supabase DB에 ${tableName} 테이블이 존재하지 않습니다. 로컬 저장을 완결합니다.`);
               return null;
             }
@@ -3644,6 +3964,12 @@ class LocalDB {
             console.error(`Supabase delete failed for ${tableName}:`, error);
             const msg = error.message || String(error);
             if (msg.includes('Could not find the table') || error.code === 'PGRST204' || error.code === '42P01') {
+              if (tableName === 'bank_initial_balances') {
+                return supabase.from('bank_account_initial_balances').delete().eq('id', id);
+              }
+              if (tableName === 'asset_inout_logs') {
+                return supabase.from('asset_in_out_logs').delete().eq('id', id);
+              }
               console.warn(`[Graceful Isolation] 원격 Supabase DB에 ${tableName} 테이블이 존재하지 않습니다. 로컬 저장을 완결합니다.`);
               return null;
             }

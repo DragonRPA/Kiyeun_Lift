@@ -2961,6 +2961,7 @@ export interface ParsedBandAsRecord {
   issue: string;
   contact: string;
   raw: string;
+  address?: string;
   
   // 분석 및 매핑 결과
   matchedAssetId?: string;
@@ -2970,6 +2971,7 @@ export interface ParsedBandAsRecord {
   matchedCustomerName?: string;
   matchedSiteId?: string;
   matchedSiteName?: string;
+  matchedSiteAddress?: string;
   matchedContractId?: string;
   matchedContractNo?: string;
   mechanicId?: string;
@@ -3051,6 +3053,7 @@ export function parseBandAsHistoryText(rawText: string): { author: string; date:
 
       if (['현장명:', '현장명 :', '업체명:', '업체명 :', '업체 :', '업체:', '관리번호', '고장내용:', '고장내용 :', '접수자:'].some(k => full.includes(k))) {
         const site = extractKeywordSection(full, ['현장명:', '현장명 :', '현장 :'], ['업체명:', '업체명 :', '업체 :', '업체:', '장비위치:', '관리번호', '고장내용', '접수자:']);
+        const addr = extractKeywordSection(full, ['현장주소:', '현장주소 :', '주소:', '주소 :', '상세주소:', '상세주소 :'], ['장비위치:', '관리번호', '고장내용', '접수자:']);
         const cust = extractKeywordSection(full, ['업체명:', '업체명 :', '업체 :', '업체:'], ['장비위치:', '장비위치 :', '관리번호', '고장내용', '접수자:']);
         const loc = extractKeywordSection(full, ['장비위치:', '장비위치 :', '위치:', '위치 :'], ['관리번호', '고장내용', '접수자:']);
         let assetNo = extractKeywordSection(full, ['관리번호 :', '관리번호:', '관리번호'], ['고장내용:', '고장내용 :', '고장내용', '접수자:']);
@@ -3063,6 +3066,7 @@ export function parseBandAsHistoryText(rawText: string): { author: string; date:
           author,
           date: dateStr,
           site: site || '미지정현장',
+          address: addr || '',
           customer: cust || '현장 협력업체',
           location: loc,
           assetNo: assetNo || '현장확인',
@@ -3214,6 +3218,7 @@ export function analyzeBandAsHistory(
       issue: post.issue,
       contact: post.contact,
       raw: post.raw,
+      address: post.address || '',
       matchedAssetId: matchedAsset?.id,
       matchedAssetNo: finalAssetNo,
       matchedModelName: matchedAsset?.modelName || '고소작업대',
@@ -3221,6 +3226,7 @@ export function analyzeBandAsHistory(
       matchedCustomerName: matchedCustomer?.name || post.customer,
       matchedSiteId: matchedSite?.id,
       matchedSiteName: matchedSite?.name || post.site,
+      matchedSiteAddress: matchedSite?.address || matchedContract?.siteAddress || matchedCustomer?.address || post.address || '',
       matchedContractId: matchedContract?.id,
       matchedContractNo: matchedContract?.contractNo,
       mechanicId,
@@ -3293,6 +3299,7 @@ export async function ingestBandAsHistoryDirect(
       customerName: r.matchedCustomerName || r.customer || '현장 협력업체',
       siteId: (r.matchedSiteId && validSiteIds.has(r.matchedSiteId)) ? r.matchedSiteId : undefined,
       siteName: r.matchedSiteName || r.site,
+      siteAddress: r.matchedSiteAddress || r.address || '',
       assetId: (r.matchedAssetId && validAssetIds.has(r.matchedAssetId)) ? r.matchedAssetId : undefined,
       assetNo: r.matchedAssetNo || r.assetNo || '현장확인',
       modelName: r.matchedModelName || '고소작업대',

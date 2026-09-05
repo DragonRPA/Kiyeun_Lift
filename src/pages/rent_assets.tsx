@@ -406,7 +406,7 @@ export const RentAssets: React.FC = () => {
           setSelectedReconcileIds(parseResult.rows.map(r => r.id));
 
           const vendorNotice = parseResult.detectedVendor ? `[${parseResult.detectedVendor}]` : 'PDF 거래명세서';
-          alert(`✅ ${vendorNotice} PDF 파싱 완결!\n- 파싱 항목: 총 ${parseResult.totalParsedCount}건\n- 총 공급가액: ₩${parseResult.totalParsedAmount.toLocaleString()}\n- 부가세: ₩${parseResult.totalParsedTax.toLocaleString()}\n\n자사 DB 자산대장과의 1:1 대사가 자동으로 완료되었습니다.`);
+          showToast(`${vendorNotice} PDF 파싱 완료 (${parseResult.totalParsedCount}건, ₩${parseResult.totalParsedAmount.toLocaleString()}원)`);
         } else {
           // 엑셀 파일 (.xlsx / .xls) 스마트 범용 파서 연동
           const workbook = XLSX.read(new Uint8Array(data), { type: 'array' });
@@ -424,7 +424,7 @@ export const RentAssets: React.FC = () => {
 
           const vendorNotice = parseResult.detectedVendor ? `[${parseResult.detectedVendor}]` : '거래명세서';
           const headerNotice = parseResult.headerRowIndex >= 0 ? ` (헤더 ${parseResult.headerRowIndex + 1}행 인식)` : '';
-          alert(`✅ ${vendorNotice} 엑셀 업로드 완결!${headerNotice}\n- 파싱 항목: 총 ${parseResult.totalParsedCount}건\n- 총 공급가액: ₩${parseResult.totalParsedAmount.toLocaleString()}\n- 세액: ₩${parseResult.totalParsedTax.toLocaleString()}\n\n자사 DB 자산대장과의 1:1 대사가 자동으로 완료되었습니다.`);
+          showToast(`${vendorNotice} 엑셀 업로드 완료${headerNotice} (${parseResult.totalParsedCount}건, ₩${parseResult.totalParsedAmount.toLocaleString()}원)`);
         }
       } catch (err: any) {
         showToast(`명세서 파일 파싱 오류: ${err?.message || err}`, 'error');
@@ -720,6 +720,10 @@ export const RentAssets: React.FC = () => {
   };
 
   const handleOpenReturn = (asset: Asset) => {
+    if (asset.status === 'RENTED') {
+      showToast(`자산 [${asset.assetNo}]은 현재 고객사에 대여중(RENTED)입니다. 회수 입고 전에는 원사 반납이 불가합니다.`, 'error');
+      return;
+    }
     setReturnAssetId(asset.id);
     setReturnDate(new Date().toISOString().split('T')[0]);
     const cust = customers.find(c => c.id === asset.currentCustomerId);
@@ -764,6 +768,10 @@ export const RentAssets: React.FC = () => {
     }
     const target = assets.find(a => a.id === returnAssetId);
     if (!target) return;
+    if (target.status === 'RENTED') {
+      showToast(`자산 [${target.assetNo}]은 현재 고객사에 대여중(RENTED)입니다. 원사 반납이 불가합니다.`, 'error');
+      return;
+    }
 
     if (isDispatchRequested) {
       db.insertRow<Delivery>('deliveries', {
@@ -782,7 +790,8 @@ export const RentAssets: React.FC = () => {
       });
     }
 
-    returnRentedAsset(returnAssetId, returnDate);
+    await returnRentedAsset(returnAssetId, returnDate);
+    await db.awaitPendingWrites();
     showToast(`임차 자산 [${target.assetNo}] 반납 처리가 완결되었습니다.`);
     setShowReturnModal(false);
   };
@@ -847,7 +856,7 @@ export const RentAssets: React.FC = () => {
         occurredDate: claimOccurredDate
       });
 
-      alert(`✅ [외상미수금 대장]에 타사 구상채권(₩${claimAmount.toLocaleString()})이 성공적으로 등록되었습니다!\n\n고객사 매출 청구서(Billings) 발행 시 분할 청구 및 상계할 수 있습니다.`);
+      showToast(`외상미수금 대장에 타사 구상채권(₩${claimAmount.toLocaleString()}원)이 등록되었습니다.`);
       setShowClaimModal(false);
     } catch (err: any) {
       showToast(`구상 미수금 등록 실패: ${err?.message || err}`, 'error');
@@ -1014,8 +1023,8 @@ export const RentAssets: React.FC = () => {
 
       {/* 📊 전대/임차 장비 보유 및 월 임차료 실시간 요약 바 */}
       {(() => {
-        const activeRentedList = rentedAssets.filter(a => !a.actualRentReturnDate);
-        const returnedList = rentedAssets.filter(a => Boolean(a.actualRentReturnDate));
+        const activeRentedList = rentedAssets.filter(a => !a.actualRentReturnDate && a.status !== 'RENTED_RETURNED');
+        const returnedList = rentedAssets.filter(a => Boolean(a.actualRentReturnDate) || a.status === 'RENTED_RETURNED');
         const totalMonthlyRentCost = activeRentedList.reduce((sum, a) => sum + (a.monthlyRentFee || 0), 0);
 
         return (
@@ -1882,7 +1891,9 @@ export const RentAssets: React.FC = () => {
                                 {canSave && !isReturned && (
                                   <button
                                     onClick={() => handleOpenReturn(a)}
-                                    style={{ padding: '2px 5px', fontSize: '10.5px', backgroundColor: 'var(--danger)', color: '#fff', border: 'none', borderRadius: '3px', cursor: 'pointer', whiteSpace: 'nowrap' }}
+                                    disabled={a.status === 'RENTED'}
+                                    title={a.status === 'RENTED' ? '대여중인 자산은 원사 반납이 불가합니다' : '원사 반납'}
+                                    style={{ padding: '2px 5px', fontSize: '10.5px', backgroundColor: a.status === 'RENTED' ? 'var(--bg-card)' : 'var(--danger)', color: a.status === 'RENTED' ? 'var(--text-muted)' : '#fff', border: a.status === 'RENTED' ? '1px solid var(--border-color)' : 'none', borderRadius: '3px', cursor: a.status === 'RENTED' ? 'not-allowed' : 'pointer', opacity: a.status === 'RENTED' ? 0.6 : 1, whiteSpace: 'nowrap' }}
                                   >
                                     반납
                                   </button>

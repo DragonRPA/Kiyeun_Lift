@@ -22,7 +22,7 @@ interface DailyForecast {
 }
 
 export const CashFlowPage: React.FC = () => {
-  const { hasPermission, cashFlowSnapshots, saveCashFlowSnapshot, deleteCashFlowSnapshot, bankTransactions } = useApp();
+  const { hasPermission, cashFlowSnapshots, saveCashFlowSnapshot, deleteCashFlowSnapshot, bankTransactions, assets } = useApp();
   const canSave = hasPermission('billing', 'save');
   // 토스트 알림 상태 (헌장 5.2: 브라우저 alert/confirm 전면 퇴출)
   const [toastMessage, setToastMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -74,6 +74,15 @@ export const CashFlowPage: React.FC = () => {
 
   // 오늘과 기준일 사이의 누적 자금 변동액 계산
   const [deltaAmount, setDeltaAmount] = useState(0);
+
+  // 🌟 임차장비(전대) 월 임차료 실데이터 동적 집계 (헌장 1.2, 4.1)
+  const activeRentedAssets = useMemo(() => {
+    return (assets || []).filter(a => a.ownerType === 'RENTED' && a.status !== 'SOLD' && a.status !== 'RENTED_RETURNED');
+  }, [assets]);
+
+  const monthlyLeaseExpense = useMemo(() => {
+    return activeRentedAssets.reduce((sum, a) => sum + (a.monthlyRentFee || a.monthlyRentalFee || 0), 0);
+  }, [activeRentedAssets]);
 
   useEffect(() => {
     // 1. 기준일 시점의 시작 잔액 계산 (역산 로직 포함)
@@ -187,7 +196,7 @@ export const CashFlowPage: React.FC = () => {
     }
 
     setForecastList(list);
-  }, [totalTodayBalance, safetyThreshold, startOffsetDays, bankTransactions]);
+  }, [totalTodayBalance, safetyThreshold, startOffsetDays, bankTransactions, monthlyLeaseExpense, activeRentedAssets]);
 
   // 미래 일자별 모의 시뮬레이션 지표 제공용 헬퍼 함수
   const queryForecastData = (daysFromToday: number, dateString: string) => {
@@ -211,8 +220,11 @@ export const CashFlowPage: React.FC = () => {
       opex = 18500000;
       opexDetail = '임직원 월 정기급여 정산일';
     } else if (dayOfMonth === 20) {
-      opex = 8450000;
-      opexDetail = '임차 고소장비 대금 정산';
+      const leaseCost = monthlyLeaseExpense;
+      opex = leaseCost;
+      opexDetail = activeRentedAssets.length > 0 
+        ? `임차 고소장비 대금 정산 (${activeRentedAssets.length}대)`
+        : '임차 고소장비 대금 정산 (가동 장비 없음)';
     } else if (dayOfMonth === 25) {
       inflow = 15200000;
       inflowDetail = '포스코이앤씨(주) 미수금 회수예정';

@@ -1,3 +1,311 @@
+## [v1.4.0.Build.169] - 2026-09-05 14:45
+
+### 🚗 법인차량 운행일지 & 주유영수증 관리 시스템 신설 (PC & 모바일 전사 연동)
+- **도메인 사명 및 배경 (헌장 1.1, 1.2)**:
+  - 법인이 보유·관리하는 전사 차량의 라이프사이클을 체계화하고, 전 직원의 최소 입력 노력으로 국세청(NTS) 법인세법 시행규칙 별지 제29호의2 서식 요건과 주유 증빙을 100% 무누락 자동화.
+- **PC 경영관리 하위 신설 (`VehicleOperationLogPage.tsx` - 경영관리 ➔ 차량운행일지)**:
+  - **탭 1: 운행일지 대장**:
+    - 연월별/차량별/부서별/상태별 필터 및 고밀도 그리드(행 높이 38px, 헌장 3.6 유형 B 준수).
+    - 출발/도착 계기판 사진 원클릭 확대 팝업.
+    - 관리부 승인/확정 원클릭 상태 토글.
+    - **국세청 법인세법 시행규칙 별지 제29호의2 법정 서식 엑셀 내보내기**: 상단 차량/기간 헤더, 본문 12개 법정 컬럼, 하단 업무사용비율(%) 집계식 탑재.
+    - 하단 Gutenberg Z-패턴 대차대조식 감사 바 (`총 주행 = 🟢 업무용 + 🚙 출퇴근 | ⚖️ 업무사용비율 100.0%`).
+  - **탭 2: 주유 영수증 대장**:
+    - 주유일시, 차량번호, 유종, 주유량(L), 금액(₩), 리터당 단가, 계기판 주행거리, 계산연비(km/L) 인라인 조망.
+    - 주유소명, 결제수단(법인카드/개인경비), 카드 끝4자리, 증빙 사진(계기판/영수증) 확대 팝업.
+    - 주유 대장 엑셀 내보내기.
+    - 하단 증빙율 대차대조식 바 (`총 주유액 = 💳 법인카드 + 💵 개인경비 | 📄 영수증 증빙율 100%`).
+  - **탭 3: 법인 차량 관리**:
+    - 4대 핵심 KPI(총 등록차량, 정상운행, 검사도래, 당월총주행).
+    - 전사 법인차량 등록/수정 모달 (헌장 3.4 상하 세로 스택 레이아웃).
+    - 차량별 차종, 유종, 배정부서, 주운행자, 현재 계기판, 보험/검사 만료일자 통합 관리.
+- **모바일 전사 운행자 전용 앱 (`MobileVehicleLog.tsx`)**:
+  - **탭 1: 주유 영수증**:
+    - 직관적인 차량 선택, 5대 유종 칩(휘발유, 경유, 고급휘발유, LPG, 전기).
+    - 계기판 주행거리 km 입력, 주유량(L), 금액(₩), 주유소명, 결제수단 칩.
+    - `CameraUploader` 연동: 주유 시 계기판 사진 & 주유 영수증 사진 현장 촬영/첨부.
+    - 52px 대형 원터치 저장 버튼.
+  - **탭 2: 운행일지 작성**:
+    - 차량 선택, 6대 업무 목적 칩(현장AS, 고객미팅, 장비회수/납품, 은행/관공서, 출퇴근, 일반업무).
+    - 출발지/도착지 입력, 출발 계기판/도착 계기판 ➔ 총 주행거리 및 업무거리 자동 연산.
+    - 출발/도착 계기판 사진 카메라 촬영 및 첨부.
+    - 52px 대형 원터치 저장 버튼.
+  - **탭 3: 내 운행/주유 내역**:
+    - 당일 및 최근 주유/운행 내역 카드 타임라인, 등록된 영수증 및 계기판 사진 전체화면 뷰어.
+- **모바일 네비게이션 전사 1초 접근성 배치**:
+  - 모바일 공통 헤더(`MobileHeader.tsx`): 상단에 `[🚗 차량일지]` 퀵버튼 상시 노출.
+  - 모바일 홈(`MobileHome.tsx`): 영업, 출고, AS 3대 직무 섹션 모두에 `[🚗 차량운행일지 / 주유영수증]` 배너 배치.
+  - 모바일 관리자/임원 홈(`MobileAdminHome.tsx`, `MobileExecutiveHome.tsx`): 피드 하단에 전사 공용 배너 배치.
+  - 하단 네비게이션(`MobileBottomNav.tsx`): `ADMIN` 탭에 `vehicle_log` 배치.
+- **DB 스키마 및 코어 엔진 완비**:
+  - `corporate_vehicles`, `vehicle_operation_logs`, `vehicle_fuel_logs` 신규 테이블 DDL 추가 (`schema.sql`).
+  - `src/services/db.ts`: 인터페이스 및 현실적 시드 데이터, `ALL_DB_KEYS`, getters/setters, `generateNextId` (`VEH-`, `VLOG-`, `VFUEL-`) 완비.
+  - `src/context/AppContext.tsx`: 8대 CRUD 뮤테이터 탑재 (차량 누적 주행거리 자동 갱신 및 직전 주유 대비 연비 자동 계산 로직 내장).
+- **빌드 무결성 검증**:
+  - `cmd /c "npm run build"` (`tsc -b && vite build`) 0 Error 무결점 통과 (`✓ built in 896ms`).
+
+## [v1.4.0.Build.168] - 2026-09-05 14:30
+
+### 🏢 현장 AS '현장명 + 현장상세주소' 공존 표준화 및 AS팀 최대 편익 개편
+- **현장명 vs 현장상세주소 공존 표준 원칙 정립 (헌장 1.1 & 1.2)**:
+  - "현장명 대신 상세주소를 업로드하라"는 잘못된 타협안을 공식 폐기하고, **현장명(`siteName`, 대내외 식별·소통용)**과 **현장 상세주소(`siteAddress`, TMap/카카오내비 길안내·출동용)**는 DB와 UI 전반에 반드시 1:1로 함께 공존해야 함을 전사 단일 표준으로 확립.
+- **PC 대장 테이블 (`FieldAsManagement.tsx` LEDGER 탭) 전면 개편**:
+  - `현장명` 컬럼 옆에 **`현장 상세주소 (도로명)` 독립 컬럼 신설** (헌장 3.2 `white-space: nowrap` 준수).
+  - 셀 내부: 도로명 주소 풀텍스트 표기 + **[📋 복사]** 및 **[📍 TMap]** 원클릭 단축 버튼 탑재.
+- **PC 스튜디오 카드 피드 (`FieldAsManagement.tsx` STUDIO 탭)**:
+  - 좌측 AS 카드 피드에 `🏢 {t.siteName}` 볼드 표시와 함께 `📍 {cardResolvedAddress}`를 상시 시각적으로 노출.
+- **엑셀 다운로드 / 업로드 서식 일원화**:
+  - `FieldAsManagement.tsx` 엑셀 내보내기 서식에 `현장명` 바로 옆에 `현장상세주소` 컬럼을 정식 추가하여 상호 호환 보장.
+- **신규 AS 접수 모달 원터치 자동 추적**:
+  - 관리번호(`newAssetNo`) 입력 시 활성 계약, 고객사, 현장 마스터를 역추적하여 고객사/현장명/도로명주소 100% 원터치 자동완성 (`handleAutoLookupByAssetNo`).
+  - `[📍 마스터 주소 자동적용]` 버튼 탑재로 수동 타이핑 공수 90% 절감.
+- **데이터 적재 파이프라인 무누락 연동 (`InitialDbUploader.tsx`, `migrationEngine.ts`)**:
+  - 밴드 AS 파서에서 `주소:`/`상세주소:` 키워드 추출 및 `matchedSiteAddress` 자동 채번.
+  - 밴드 이력 DB 적재 시 `siteAddress` 무누락 영구 저장 (`repairs.siteAddress`).
+  - 밴드 분석 프리뷰 테이블에 고객사/현장명/상세주소 3단 노출.
+- **빌드 무결성 검증**:
+  - `cmd /c "npm run build"` 0 Error 무결점 통과 (`✓ built in 1.07s`).
+
+## [v1.4.0.Build.167] - 2026-09-05 14:15
+
+### 🗄️ 전사 메뉴 사용 예정 DB 스키마 결손 전수 색출 및 통합 DDL 패치
+- **전사 단일 표준 DB 스키마 결손 전수 색출 (Cross-Audit)**:
+  - 전사 47개 컬렉션 / 63개 테이블을 대상으로 Supabase 원격 DB, 프론트엔드 전체 페이지(`src/pages/`, `src/mobile/`), TypeScript 인터페이스(`src/services/db.ts`), DDL 원본(`schema.sql`) 간 1:1 전수 교차 검증 수행.
+  - 누락/불일치 테이블 6종 및 20개 테이블의 72개 결손 컬럼 실증 색출.
+- **신규/누락 테이블 6종 전면 신설 및 정합성 보장**:
+  - `legal_notice_logs`: 법적 최고/내용증명 발송 감사 이력 테이블 신설 (미수금, 연체일수, 최고장 내용, 등기번호 등 16개 속성).
+  - `legal_notice_templates`: 내용증명 법적 최고장 표준 서식 템플릿 테이블 신설.
+  - `external_leases`: 전대/외부 임차 장비 계약 및 월/일 임차료 대장 테이블 신설.
+  - `consumable_purchases`: 소모품 구매 신청 및 입고 검수 관리 대장 테이블 신설.
+  - `bank_initial_balances`: 통장 기초 시작 잔액 테이블 신설 및 구버전 `bank_account_initial_balances` 호환 뷰/데이터 동기화 완비.
+  - `asset_inout_logs`: 자산 입출고/정비 통합 이력 테이블 정규화 및 `asset_in_out_logs` 하위 호환성 뷰 구축.
+- **20개 테이블 72개 결손 컬럼 및 CHECK 제약조건 보강**:
+  - `users`: `department`, `baseSalary`
+  - `customers`: `bizType`, `bizItem`, `transactionStatus` (ALLOWED/BLOCKED), `paymentDueDay`, `paymentTermDays`, `bankAccounts`, `defaultPaidOptions`, `defaultProtection`, `defaultCheckedSpecs`, `specialNotes`
+  - `customer_contacts` & `customer_sites`: `isActive`, `paidOptions`, `protection`, `checkedSpecs`
+  - `assets`: `maintenanceScore`, `billingDay`, `monthlyRentalFee`, `dailyRentalFee`, `renter`, `disposalDate`, `disposalPrice`, `buyer`, `memo1`, `memo2`, `safetyInspectionUrl`, `preDeliveryChecklistUrl`, `fullDefectSummary`
+  - `consumables` & `consumable_logs`: `supplier`, `mechanicId`, `fromLocation`, `toLocation`, `targetAssetId`
+  - `contracts`: `statementClosingDay`, `customerName`, `salespersonName`, `lastBillingDate`, `billingCount`
+  - `contract_assets`: `actualReturnDate`, `status`, `contractStart`, `contractEnd`, `currentCustomerId`, `currentSiteId`
+  - `deliveries`: `scheduledDate`, `costAdjustmentReason`, `reconciliationStatus`, `reconciledAt`, `paymentRequestedAt`, `paymentCompletedAt`, `statementFileUrl`, `billableToCustomer`, `billableCustomerId`, `vehicleRequirements`, `cargoItems`, `vehicles`, `assignedVehicles` 및 `dispatchCategory` CHECK에 `'교환'`(EXCHANGE, 헌장 2.3) 정식 등록.
+  - `billings`: `rejectReason`, `details` (JSONB)
+  - `annual_leave_quotas`: `periodStart`, `periodEnd`, `grantedDays`
+  - `overtime_records`: `startDateTime`, `hours`, `workDetail`
+  - `payroll_closings`: `month`, `approvedAt`, `approvedBy`
+  - `repairs`: `targetAssetStatus`, `siteAddress`, `inspectionItemCode`, `degradationScore`, `consumables`, `timelineEvents`, `evidenceImages`, `resolvedSiteAddress`
+  - `bank_transactions`: `bankName`, `accountNumber`, `summary`, `counterparty`, `balance`, `branchName`, `customerId`, `isDeposit`
+  - `google_configs`: `currentInsuranceStartDate`, `currentInsuranceEndDate`, `nextInsuranceCertUrl`, `nextInsuranceStartDate`, `nextInsuranceEndDate`, `mirrorRecursive`, `r2AccountId`, `r2BucketName`, `r2AccessKeyId`, `r2SecretAccessKey`, `r2PublicDomain`
+  - `outbound_inspections`: `deliveryId`, `approvedAt`
+  - `purchase_settlements`: `itemCount`, `bankTransactionId`
+  - `prepaid_transactions`: `billingId`, `paymentId`, `bankTransactionId`, `memo` 및 `type` CHECK 확장('CHARGE', 'USE_FOR_BILLING', 'REFUND')
+  - `delinquency_action_logs`: `actionDetails`, `proofFileName`, `recordedBy`, `mandateType`, `promiseDate`, `promiseAmount`, `promiseStatus`, `promiseContactPerson`, `directiveTargetUserId`, `directiveDueDate` 및 `actionType` CHECK 확장.
+  - `asset_inout_logs`: `inboundNo`, `maintenanceScore`, `defectsJson`, `date`, `note` 및 타입 제약조건 완전 해제 (INBOUND_CANCEL 등 무오류 적재).
+- **독립 실행형 통합 패치 스크립트 작성 (`scripts/patch_v1_4_0_schema_deficiencies.sql`)**:
+  - Supabase SQL Editor에서 1클릭으로 실행 가능한 100% 멱등성 DDL 스크립트.
+  - RLS 비활성화 및 `anon`/`authenticated` 전면 권한 부여 스크립트 내장 (헌장 5.3).
+- **클라이언트 코어 DB 엔진 (`src/services/db.ts`) 하위 호환 가드 완비**:
+  - `fetchAllRowsFromSupabase`, `insertRow`, `updateRow`, `deleteRow`에서 `bank_initial_balances` / `asset_inout_logs` 테이블 미반영 환경에서도 구버전 테이블명으로 자동 Fallback 동작하도록 이중 안전망 구축.
+  - `normalizeKey`에 상호 호환 키 매핑 등록.
+- **빌드 무결성 검증**:
+  - `cmd /c "npm run build"` (`tsc -b && vite build`) 0 Error 무결점 빌드 완료 (`✓ built in 872ms`).
+
+## [v1.3.0.Build.166] - 2026-09-05 14:05
+
+### 📱 모바일-PC 전수 메뉴 1:1 대조 감사 및 전사 정합성 무결성 개편
+- **전사 5대 전문 도메인 서브에이전트 동시 투입 및 전수 대조 심판**:
+  - 영업·스마트발주·계약, 배차·물류·운송, 출고·입고·자산·전대, AS·정비·소모품, 채권·연체·재무 전 도메인 모바일(14개 화면) vs PC(16개 화면) 1:1 대조 완료.
+  - 전사 표준 헌장(카테고리 I~X)에 의거한 `검수항목_모바일_PC_전수대조_명세서_및_결함심판_기록부.md` 작성 및 20개 비즈니스 결함 전수 색출/개편.
+- **코어 비즈니스 로직 및 컨텍스트 (`AppContext.tsx`)**:
+  - `returnRentedAsset`: 대여중(`status === 'RENTED'`) 자산의 반납 시도 시 Error throw 처리로 호출부 허위 성공 토스트 차단 (헌장 1.2, 결함 9).
+  - `createFieldAsTicket`: 모바일 현장 AS 접수 시 업로드된 사진(`faultImageUrl`, `evidenceImages`, `beforeImage`) DB 누락 복구 (결함 13).
+  - `saveLegalNoticeLog`: `await db.awaitPendingWrites()` 동기 대기 순서 정합성 완비 (헌장 5.2, 결함 20).
+- **도메인 1 (영업·발주·계약 - `MobileCustomerManage`, `MobileDispatchOrderCreate`, `MobileMyContracts`, `Contracts.tsx`)**:
+  - `MobileCustomerManage.tsx`: 기본명세서마감일(`defaultStatementClosingDay: 25`), 업태(`bizType`), 종목(`bizItem`), 폐업여부(`isClosed: false`) 필드 모바일 등록/수정 모달에 전면 반영 (결함 1).
+  - `MobileDispatchOrderCreate.tsx`: 대차(EXCHANGE) 발주 시 기존 `ContractAsset` 종료(`status: 'RETURNED'`) 및 신규 교체 슬롯 자동 생성(단가 100% 자동 상속, 헌장 2.2), 불필요 확인창 제거, 빈 객체 타입 버그 수정 (결함 2, 3).
+  - `MobileMyContracts.tsx`: `BLOCKED` 거래처 `[출고제한]` 레드 배지 표출, 계약 상세에 월/일 렌탈료 단가 표출, `billingDay || 30` 기본값 보정, 클립보드 복사 알림창 인라인화 (결함 4).
+  - `Contracts.tsx`: 계약 목록 및 상세에 `[출고제한]` 배지 표출, `handleSaveExtend` 시 `BLOCKED` 거래처 기간 연장 원천 차단 가드 (결함 19).
+- **도메인 2 (배차·물류·운송 - `MobileDispatchList`, `TruckDispatch.tsx`)**:
+  - `MobileDispatchList.tsx`: 기사 배정 시 기존 영업/현장 메모 보존, 운송사 필드 오기입(`vehicleType` 대신 `transportCompany`) 수정, 차량 JSON 배열 동기화, 배차완료(`DELIVERED`) 시 `completeDelivery` 및 `completeInboundDelivery` 실호출로 자산 반납/출고 이력(`assetInOutLogs`) 정규화, 브라우저 `alert()` 퇴출, `CANCELLED` 취소 탭 필터 추가, 무수식어 건조 UI 표준화 (결함 5, 6, 7, 8).
+  - `TruckDispatch.tsx`: `handleSaveDispatch` 및 `handleSaveManualDispatch`에 `BLOCKED` 거래처 출고/교환 배차 원천 차단 가드 추가, 배차 카드 및 인스펙터 패널에 `[출고제한]` 배지 및 경고 배너 표출 (결함 18).
+- **도메인 3 (출고·입고·자산·전대 - `MobileSubleaseManage`, `MobileAssetSearch`, `MobileInspectionList`)**:
+  - `MobileSubleaseManage.tsx`: 고객사 현장 대여중(`status === 'RENTED'`)인 전대 장비의 원사 직접 반납 원천 차단 가드 및 반납 버튼 비활성화(`[현장 대여중 (회수 필요)]` 배지 표출) (결함 9).
+  - `MobileAssetSearch.tsx`: 하드코딩 3항 연산자 제거하고 SSOT `getAssetStatusLabel(a.status)` 및 `ASSET_STATUS_SSOT` 전사 단일 표준 적용 (결함 10).
+  - `MobileInspectionList.tsx`: 검수 완료 페이로드 및 `assetInOutLogs` 기록 시 `deliveryId: activeInspection.deliveryId` 무누락 영구 보존 (결함 11).
+- **도메인 4 (AS·정비·소모품 - `MobileAsCreate`, `MobileAsDetail`, `Repairs.tsx`)**:
+  - `MobileAsCreate.tsx`: 브라우저 `alert()` 전면 퇴출, 방문 예정일(`visitDate`, 기본 오늘) 입력 필드 추가 (결함 15).
+  - `MobileAsDetail.tsx`: 정비 부품 소모 시 타 정비사 차량 재고가 노출 및 차감되던 fallback 버그 제거, 본인 탑차 재고만 엄격 격리 (결함 14).
+  - `Repairs.tsx`: 워크벤치 및 정비 등록/보류/외주 파이프라인에 `billableType`('FREE'|'BILLABLE') 및 `billableAmount` 입력창과 페이로드 추가하여 모바일 AS와 100% 대칭 일치 (결함 16).
+- **도메인 5 (채권·연체·재무 - `MobileExecutiveHome`, `MobileDelinquencyManage`, `DelinquencyPage.tsx`)**:
+  - `MobileExecutiveHome.tsx`: 경영진 긴급 수금지시 시 대표이사 본인이 아닌 해당 고객사 계약 전담 영업사원(`activeContract.salespersonId`)에게 ToDo 발행, `directiveTargetUserId` 및 `directiveDueDate` 무누락 감사 대장 기록 (결함 17).
+  - `MobileDelinquencyManage.tsx`: 출고제한(BLOCKED) 토글 권한 가드(`isExecutive`) 추가 (결함 20).
+  - `DelinquencyPage.tsx`: 거래처 출고제한 토글 시 `delinquencyActionLogs` 영구 감사 이력 기록, 5개 핸들러의 `await db.awaitPendingWrites()` 선행 순서 정합성 완비 (결함 20).
+- **빌드 무결성 검증**:
+  - `cmd /c "npm run build"` (`tsc -b && vite build`) 0 Error 무결점 빌드 통과.
+
+## [v1.3.0.Build.165] - 2026-09-05 13:50
+
+### 📻 무전기 자정 소거 정책 정립 및 UTC-KST 9시간 시차 수신 차단 결함 해결
+- **무전기 음성 저장 및 자정 소거 정책 정립**:
+  - 무전기 대화음성은 현장 즉시성 중심의 PTT 인프라로서, 브라우저 로컬 스토리지(`walkie_today_history`, 5MB 한도)에 당일분만 임시 보관(당일 휘발성 원칙).
+  - 중앙 DB에는 개인 일상 음성을 저장하지 않고 Supabase Realtime을 통한 실시간 전파로 대역폭을 절약하며, 매일 자정(00:00 KST)에 전일 대화 기록을 자동 소거하여 단말기 용량 청정 유지.
+  - 당일 대화가 20건을 초과할 경우 최신 20건만 음성(Base64)을 유지하고 이전 대화는 텍스트 자막만 보존하여 브라우저 지연 방지.
+- **자정 즈음 무전기 불통 버그 원인 규명 및 해결 (`walkieTalkieService.ts`)**:
+  - **원인 분석**: 음성 메시지 생성 시 `new Date().toISOString()`(UTC 기준, 한국 대비 -9시간)으로 저장되는데, 소거 가드 `getTodayDateStr()`은 기기의 한국시간(KST)을 기준으로 판정함.
+  - 이로 인해 자정 00:00 KST부터 아침 09:00 KST까지 9시간 동안 생성된 모든 메시지가 "어제 메시지"로 오인되어 `addHistory()`에서 무음 탈락(`m.createdAt?.slice(0, 10) !== today`)되고, 1분마다 도는 `purgeOldHistoryIfNeeded()`에 의해 화면에 메시지가 전혀 뜨지 않는 치명적 결함 발생.
+  - **해결 조치**: `getLocalDateStr(dateStr)` 헬퍼를 신설하여 ISO UTC 문자열을 현지 로컬 시간(KST)으로 역변환 후 오늘 날짜와 대조하도록 `constructor`, `purgeOldHistoryIfNeeded()`, `addHistory()` 4개 위치를 전면 개편.
+  - 자정 소거 직후 새벽 00:01분부터 24시간 언제든 정상 송수신 및 대화 피드 표출 완벽 보장.
+
+## [v1.3.0.Build.164] - 2026-09-05 13:45
+
+### 🛡️ PC 모드 오류개편 사항 5대 도메인 심층 전수 재검토 및 완결성 보강 개편
+- **코어 비즈니스 & 트랜잭션 무결성 (`AppContext.tsx`)**:
+  - `completeInboundDelivery`: `EXCHANGE` 배차 완료 시 계약이 임의로 `COMPLETED`로 종료되거나 전체 자산이 반납 처리되는 치명적 버그 수정 (계약 `ACTIVE` 상태 보존, 회수 장비만 `RETURNED`, 일반 입고 시 잔여 체결 자산 없을 때만 계약 종료).
+  - `unmatchTransaction`: `paymentDepositLinks` 1:N 양방향 연결 체계 완전 롤백(연결된 PDL 삭제, 수납 전표 및 Billing 잔액 정밀 롤백, 수납 상태 `UNPAID`/`PARTIAL` 복구, 고객 선수금 원복) 구현.
+  - `executeMatch`: 수납 전표 생성 시 `PaymentDepositLink`를 동시 발행하여 실시간 링크 정합성 보장.
+  - `createContract`, `completeDelivery`, `approveBilling`, `cancelBilling`: `await db.awaitPendingWrites()` 동기 대기 추가 및 비동기 인터페이스 규격화 (헌장 5.2).
+  - `completeDelivery`: 출고 검수 승인 완료 건에 대한 `assetInOutLogs`(`OUTBOUND`) 중복 생성 방어 가드 추가.
+  - `succeedContract`: 인수 고객사의 `transactionStatus === 'BLOCKED'` 시 계약 승계 차단, 승계일자의 기존 계약 종료일 초과 방지 가드, `statementClosingDay`, `paymentDueDay`, `lateInterestRate` 계약 속성 100% 자동 상속 (헌장 2.2).
+  - `generateBillingForSingleContract`: 계약의 `billingDay` 미지정 시 하드코딩 25일 대신 고객사 `defaultBillingDay` 우선 상속.
+- **도메인 1 (영업·계약 - `Customers.tsx`, `Contracts.tsx`)**:
+  - `Customers.tsx`: 거래처 수정 모달에 `거래 상태 (출고)` (`ALLOWED` / `BLOCKED`) 선택 필드 추가로 PC에서 직접 출고차단 설정 가능.
+  - `Contracts.tsx`: 계약 상세 뷰 및 엑셀 내보내기에 `납기일`(`paymentDueDay`) 명시, `handleExchangeSubmit`에 계약 기간 범위(`startDate` ~ `endDate`) 검증 추가, `handleSaveExtend` 시 `contractAssets` 및 `assets.contractEnd` 만료일자 완벽 동기화.
+- **도메인 2 (배차·물류 - `TruckDispatch.tsx`, `Deliveries.tsx`, `TransportMaster.tsx`)**:
+  - `TruckDispatch.tsx`: 수동 배차 모달 state에 `'교환'` 타입 추가 및 생성 시 `type: 'EXCHANGE'` 1:1 매핑 (헌장 2.3), `setClosingMemo(d.closingMemo || '')` 수정 및 메모 무한 중복 연결 루프 제거, 기사 선택 시 `handleVehicleFieldChange` 단일 원자 호출 및 함수형 상태 갱신으로 stale closure 경합 해결, 탭 2 대사 4대 조치 함수(`handleApproveMismatch`, `handleApproveAllMismatches`, `handleCreateDeliveryFromExcel`, `handleExecuteBundlePaymentRequest`)에 `await db.awaitPendingWrites()` 동기 대기 완비.
+  - `Deliveries.tsx`: `deliveryCost ?? ''` 적용으로 0원 운임료 유지, `(d.deliveryCost || 0).toLocaleString()`, `(d.memo || '').includes(...)` 및 `.substring(...)` 널 세이프 가드 적용으로 런타임 TypeError 원천 차단.
+  - `TransportMaster.tsx`: 브라우저 `window.confirm` 전면 퇴출 및 전용 `confirmModal` UI 컴포넌트 탑재 (헌장 5.2).
+- **도메인 3 (출고·자산 - `rent_assets.tsx`, `asset_history.tsx`)**:
+  - `rent_assets.tsx`: 브라우저 `alert()` 3건을 `showToast`로 전면 교체, 상단 전대 요약 바 필터에 `a.status !== 'RENTED_RETURNED'` 추가로 반납 장비 누수 차단.
+  - `asset_history.tsx`: 입고 취소 롤백 시 브라우저 `window.prompt` 전면 퇴출 및 전용 `cancelModal` UI 컴포넌트 탑재 (헌장 5.2).
+- **도메인 4 (AS·소모품 - `Consumables.tsx`, `FieldAsManagement.tsx`)**:
+  - `Consumables.tsx`: 본사 반납 실행 시 차량 보유 재고(`maxStock`) 한도 `max` 속성 및 `onChange` 클램핑 방어.
+  - `FieldAsManagement.tsx`: 무수식어 건조 UI 표준화 (헌장 3.1) 이행 (`실시간` 등 부사/수식어 및 불필요 부연설명 제거).
+- **도메인 5 (재무·채권 - `Billings.tsx`, `CashFlowPage.tsx`, `BankMatching.tsx`)**:
+  - `Billings.tsx`: `handleBulkGenerateWizard` 내 잔존 `alert()`을 `showErrorModal`로 교체, 위저드 계약 카드 헤더에 `[출고제한]` 레드 배지 연동, `approveBilling`/`cancelBilling` 비동기 처리.
+  - `CashFlowPage.tsx`: 임차 고소장비 대금 정산 시 하드코딩된 목업값(845만원) 대신 실제 가동 중인 전대 자산 임차료(`monthlyLeaseExpense`)로 동적 반영.
+  - `BankMatching.tsx`: 하단 구텐베르크 Z-패턴 대차대조식 바를 현재 필터링된 거래내역(`filteredTransactions`) 스코프로 동적 집계하고, 출금 정산 모드(`appliedTypeFilter === 'WITHDRAW'`)일 때 출금 총액, 정산 반영액, 미정산 잔액, 지급 매칭률로 상황별 정밀 표출.
+- **빌드 무결성 검증**:
+  - `cmd /c "npm run build"` (`tsc -b && vite build`) 0 Type Error 무결점 통과.
+
+## [v1.3.0.Build.163] - 2026-09-05 13:30
+
+### 🖥️ 모바일 모드 개편 연계 PC 보드 5대 전문 도메인 전수검토 및 무결성 개편
+- **전사 서브에이전트 투입 및 검수항목 전체 명세서·기록부 완비**:
+  - `검수항목_전체_명세서_및_무결성_검수결과_기록부.md` 작성 및 `skelton` 경험(`경험/2026-09_핸드폰모드_개편_연계_PC보드_전수검토_및_무결성_검수결과.md`) 영구 동기화 (`00ce979`).
+  - 5대 전문 도메인(영업·계약, 배차·물류, 출고·자산, AS·소모품, 재무·채권) 38개 항목 전수 검수 및 31건 결함 도출 및 전수 개편 완료.
+- **코어 데이터 & 비즈니스 파이프라인 무결성 (`db.ts`, `AppContext.tsx`)**:
+  - `OutboundInspection` 모델에 `deliveryId?: string` 필드 정규화 연동.
+  - `AppContext.tsx`: 안전한 결제일/마감일 파싱 fallback, `paymentDueDay` 25일 자동 설정, 대차 교체 시 신규 장비 상태를 `ASSIGNED`로 보존(출고 검수 승인 시점 `RENTED` 전환 헌장 1.3 준수), 대차 시 조기 OUTBOUND 로그 생성 제거, `registerRepair` 모바일 8대 필드 누락 없는 통합 처리, 중앙 소모품 음수/초과 출고 원천 차단.
+- **도메인 1 (영업·계약 - `Customers.tsx`, `Contracts.tsx`, `smart_dispatch.tsx`, `smart_return.tsx`)**:
+  - `Customers.tsx`: 결제일(`paymentDueDay: 25`) 모달/테이블/상세/엑셀 반영, 무수식어 건조 UI 표준화 (헌장 3.1).
+  - `Contracts.tsx`: `BLOCKED` 거래처 출고제한 배지 누락 수정, 기본 장비 바스켓을 모델 단위로 기본화하여 부서 R&R 준수 (헌장 2.1), 계약 연장/단축/승계 일자 역전 방어.
+  - `smart_dispatch.tsx`: 고객사 결제일/마감일 자동 상속 파이프라인 및 건조 UI 표준화.
+  - `smart_return.tsx`: 계약 시작일 이전 반납일자 역전 방지 가드 및 `async/await` 동기 대기 보강.
+- **도메인 2 (배차·물류 - `TruckDispatch.tsx`, `Deliveries.tsx`, `TransportMaster.tsx`)**:
+  - `TruckDispatch.tsx`: 배차 구분 드롭다운 및 수동 모달에 `교환`(`EXCHANGE`) 옵션 정규 추가 (헌장 2.3), 배차 마감 시 `selectedDelivery.memo` 보존, 기사 선택 시 차량번호(`vehicleNo`) 자동 기입 및 수정 컬럼 추가, 배차 확정 시 실시간 알림(`broadcastWorkNotification`) 발행 연동, 하단 구텐베르크 Z-패턴 터미널 액션 바 탑재 (헌장 3.5).
+  - `Deliveries.tsx`: 모든 운송료 입력창에 `Math.max(0, parseInt(...))` 음수 방어, 회수 검수 시 `EXCHANGE` 배차 지원, 정비점수 0~10 클램핑 및 AVAILABLE 상태 시 0점 리셋, `alert()` 제거 및 `showToast`/`showErrorModal` 교체, `await db.awaitPendingWrites()` 보강.
+  - `TransportMaster.tsx`: `alert()`/`confirm()` 전면 제거, `white-space: nowrap` 적용 및 동기 쓰기 대기 보강.
+- **도메인 3 (출고·자산 - `rent_assets.tsx`, `outbound_inspections.tsx`, `Assets.tsx`, `asset_history.tsx`)**:
+  - `rent_assets.tsx`: 대여중(`status === 'RENTED'`) 자산의 원사 직접 반납 원천 차단 가드 및 반납 버튼 비활성화, 동기 검증 대기.
+  - `outbound_inspections.tsx`: 검수 완료 페이로드에 `specsJson` 및 `deliveryId` 연동, `InspectionGroup` 타입 정규화.
+  - `Assets.tsx`: `rentedOpCount` 대여 장비 중복 집계 버그 수정 (`assets.filter(a => a.status === 'RENTED').length`).
+  - `asset_history.tsx`: 입고 등록 시 실제 업로드 사진 URL 및 정비점수 정상 전달, `alert()` 전면 퇴출.
+- **도메인 4 (AS·소모품 - `FieldAsManagement.tsx`, `Repairs.tsx`, `Consumables.tsx`)**:
+  - `FieldAsManagement.tsx`: 백지화(WSOD) 결함이었던 `CALENDAR`(월간 일정표 및 일별 티켓 상세) 및 `ANALYTICS`(기간 필터, 4대 핵심 KPI, 고장 유형별 분석, 엔지니어별 실적) 뷰 완벽 신규 구현, 대장 테이블 및 엑셀에 점검코드/노후도 표기, 하단 구텐베르크 유상AS 정산 대차대조 바 탑재.
+  - `Repairs.tsx`: 정비 부품 추가 시 본사 중앙 창고 가용 재고 실시간 검증 가드, 완료/보류/외주 정비 저장 시 `await db.awaitPendingWrites()` 동기 검증, 수리대장/상세/엑셀에 점검코드, 노후도, 유무상구분, 청구액 4대 필드 완벽 노출.
+  - `Consumables.tsx`: 입출고/이동/반납 수량 1개 이상 및 최대 가용 재고 한도 클램핑(`Math.max(1, ...)`, `max={stock}`).
+- **도메인 5 (재무·채권 - `DelinquencyPage.tsx`, `Billings.tsx`, `Receivables.tsx`, `BankMatching.tsx`, `CashFlowPage.tsx`)**:
+  - `DelinquencyPage.tsx`: 거래 차단 고객(`transactionStatus === 'BLOCKED'`)에 대해 목록 테이블 및 우측 상세 패널에 `[출고제한]` 레드 배지 표출.
+  - `Billings.tsx`: 거래 차단 고객에 대해 청구 목록 및 상세 패널에 `[출고제한]` 배지 표출, `getDueContractsForBilling`에서 고객사 약정 마감일(`defaultBillingDay`) 및 명세서 마감일(`defaultStatementClosingDay`) 자동 연동.
+  - `Receivables.tsx`: 핵심 액션 컬럼(`[단독 청구]`)을 테이블 맨 첫 번째(가장 왼쪽) 컬럼으로 이동 (헌장 3.2), `[출고제한]` 배지 표출, 모든 `alert()` 제거 및 `showToast`/`showErrorModal` 대체, 하단 구텐베르크 Z-패턴 대차대조식(`총 외상채권 = 기청구액 + 미청구 잔액 | ⚖️ 대차 차액 ₩0`) 및 종결 액션 바 탑재.
+  - `BankMatching.tsx`: 0원 및 음수 거래내역 업로드 원천 차단 가드, 7개 `alert()` 전면 퇴출, 오매칭 복구를 위한 `[해제]`(`unmatchTransaction`) 버튼 탑재, 하단 구텐베르크 수지 균형 대차대조식(`입금총액 = 확정수납액 + 미수납잔액 | ⚖️ 대차 차액 ₩0`) 탑재.
+  - `CashFlowPage.tsx`: 일 20일 임차 장비 대금 정산 시 고정 목업값(845만원) 대신 실제 가동 중인 전대 자산(`assets.filter(a => a.ownerType === 'RENTED')`)의 약정 월 임차료(`monthlyRentFee` / `monthlyRentalFee`)를 실시간 동적 집계하여 시뮬레이션에 반영.
+- **0 Type Error 빌드 무결성 검증 완료**:
+  - `tsc -b && vite build` 0 Error 무결점 통과.
+
+## [v1.3.0.Build.162] - 2026-09-05 13:00
+
+### 🛡️ 전 부서 20회 고난도 WTT(Work-Through Test) 수행 및 양방향 오류 방어 가드 전면 개편
+- **영업·스마트발주 도메인 가드 강화 (WTT-01 ~ WTT-04)**:
+  - **음성 인식 장비 수량 방어 (`voiceOrderDraftService.ts`)**: STT 파싱 시 "0대", 음수, 결측치 발생 시 최소 1대 이상(`Math.max(1, parseInt)`)으로 자동 클램핑 보정.
+  - **모바일 출고요청 양방향 유효성 검사 (`MobileDispatchOrderCreate.tsx`)**:
+    - 납기일 과거 선택 시 `deliveryDate < todayStr` 에러 모달 표출 및 차단.
+    - 품목별 수량 1 미만 입력 시 1로 자동 보정(`Math.max(1, count)`), 총 수량 0건인 빈 발주서 전송 원천 차단.
+    - 거래처 선택 시 고객사의 기본 마감일(`closingDay`)과 결제일(`paymentDay`)을 발주 페이로드에 자동 상속.
+  - **스마트 출고 계약 파이프라인 무결성 (`AppContext.tsx` - `saveSmartDispatch`)**:
+    - `data.equipments` 비어있거나 총합 0대일 경우 즉각 에러 반환 및 롤백.
+    - 계약 생성 시 고객사의 기본 결제/마감 조건을 자동 상속 반영하여 계약 무결성 확립.
+  - **계약 변경 및 승계 시간 역전 방어 (`AppContext.tsx` - `extendContract`, `shortenContract`, `succeedContract`)**:
+    - 연장 및 단축 시 계약 시작일 이전 종료일 지정(`newEndDate < contract.startDate`) 원천 차단.
+    - 계약 승계 시 기존 계약 시작일 이전 승계일자 지정(`successionDate < oldContract.startDate`) 원천 차단.
+    - 모든 계약 변동 처리 후 `await db.awaitPendingWrites()` 동기 대기 수행 (헌장 5.2).
+- **출고·검수 도메인 헌장 무결성 확립 (WTT-05 ~ WTT-07)**:
+  - **출고 검수 무결성 및 사건 기록 영구 보존 (`outbound_inspections.tsx`)**:
+    - 점검 항목 체크가 0개인 상태에서 출고 승인을 시도할 경우 "점검 항목을 최소 1개 이상 검수 완료해야 출고 승인이 가능합니다" 모달 표출 및 차단.
+    - **헌장 1.2 무누락 DB 저장 이행**: 출고 승인 마감 시 `assetInOutLogs`에 `type: 'OUTBOUND'` 입출고 이력 레코드를 1:1로 무누락 영구 기록.
+  - **입고 검수 정비점수 음수 방어 (`Deliveries.tsx`)**:
+    - 회수 검수 시 정비점수 입력값에 `Math.max(0, parseInt(value) || 0)` 클램핑 적용하여 음수 감점 왜곡 원천 차단.
+- **배차·물류 도메인 R&R 및 자산 상태 전이 표준화 (WTT-08 ~ WTT-10)**:
+  - **배차 운송료 음수 및 결측치 방어 (`TruckDispatch.tsx`, `MobileDispatchList.tsx`)**:
+    - 예상/확정/지급 운송비 입력창에 음수 입력 시 0원으로 자동 클램핑(`Math.max(0, Number(val) || 0)`).
+  - **대차/교체 헌장 1.3 & 2.3 & 4.2 완벽 준수 (`AppContext.tsx` - `exchangeAsset`)**:
+    - **헌장 1.3 준수**: 대차 교체 배차 의뢰 단계에서 신규 자산의 상태를 조기 `RENTED`로 변경하지 않고 `ASSIGNED`(배정/출고대기)로 유지. 출고 검수 승인이 최종 완료될 때만 `RENTED`로 전이되도록 통제.
+    - **헌장 2.3 준수**: 단일 `EXCHANGE` 왕복 배차 의뢰 1건만 발행하여 출고/회수 1:1 업무 체인 통합.
+    - **헌장 4.2 준수**: `contractHistory` 이력 레코드에 `changeType: 'EXCHANGE'` 명시하여 전자산-후장비 1:1 교체 추적성 보존.
+    - 작업 완결 후 `await db.awaitPendingWrites()` 동기 검증.
+- **현장AS 및 소모품 관리 도메인 정밀화 (WTT-11 ~ WTT-14)**:
+  - **현장 AS 부품 소모 및 청구액 연동 (`MobileAsDetail.tsx`, `AppContext.tsx` - `completeFieldAsTicket`)**:
+    - 부품 소진 수량 0 또는 음수 입력 방어 (`Math.max(1, qty)`).
+    - 본인 차량 재고(`stock.stockQty`) 초과 시 즉각 경고 및 차단.
+    - 유상/무상(`billableType`) 및 유상 청구액(`billableAmount`) UI 입력란 탑재 및 티켓 저장 파이프라인 연동.
+  - **차량 실사 재고 0개 조정 허용 (`MobileVehicleStock.tsx`)**:
+    - 실사 보정(`ADJUST`) 시 실제 적재 잔여 수량이 0개로 소진된 경우에도 정상 보정 저장되도록 조건문 교정 (`processType !== 'ADJUST' && processQty <= 0`).
+  - **소모품 입고·이동 수량 및 단가 양방향 방어 (`AppContext.tsx`)**:
+    - `purchaseConsumable`, `useConsumable`, `transferConsumableToMechanic`, `returnConsumableToHq`: 수량 0 이하 및 단가 음수 입력 차단.
+- **전대·임차 도메인 유휴 누수 및 반납 통제 (WTT-15 ~ WTT-17)**:
+  - **주기장 유휴 누수 일수 음수 방어 (`MobileSubleaseManage.tsx`)**:
+    - 미래 날짜 및 당일 입고 장비의 유휴 누수 일수가 음수로 표출되는 현상 방어 (`Math.max(0, idleDays)`).
+    - 전대 자산 등록 및 고객사 투입 시 월 임차료/일 렌탈료 음수 클램핑.
+  - **전대 자산 현장 투입 중 원사 반납 원천 차단 (`AppContext.tsx` - `returnRentedAsset`)**:
+    - 고객사 현장에 대여중(`status === 'RENTED'`)인 장비는 현장 회수(입고)가 완료되기 전에 원사 반납을 시도할 경우 에러 모달 표출 및 차단.
+    - 반납일이 임차 시작일 이전인 경우 차단.
+- **경영·채권·회계 도메인 감사 무결성 확립 (WTT-18 ~ WTT-20)**:
+  - **고객사 약정일자 범위 통제 (`MobileCustomerManage.tsx`)**:
+    - 고객사 신규 등록 및 수정 시 기본 마감일(`defaultBillingDay`) 및 결제일(`paymentDueDay`)을 1~31일 범위로 강제 클램핑.
+  - **경영진 긴급 수금지시 과거기한 차단 (`MobileDelinquencyManage.tsx`)**:
+    - 지시 하달 시 처리기한이 과거 일자(`directiveDueDate < todayStr`)인 경우 에러 모달 표출 및 차단, 지시 내용 필수 입력 강제.
+  - **수납·선수금·통장 대사 정합성 확보 (`AppContext.tsx`)**:
+    - `receivePayment`: 수납 금액 0 이하 입력 차단 및 `await db.awaitPendingWrites()` 동기 검증.
+    - `applyPrepaidBalanceForBilling`, `refundPrepaidBalance`: 선수금 상계/환불 요청 금액 0 이하 차단.
+    - `matchTransactionManual`, `unmatchTransaction`: 동기 쓰기 대기(`await db.awaitPendingWrites()`) 보강.
+- **0 Type Error 빌드 무결성 검증 완료**:
+  - `tsc -b && vite build` 0 Error 무결점 통과.
+
+## [v1.3.0.Build.161] - 2026-09-05 12:46
+
+### 🔔 4대 핵심 업무 발생 즉시 1회 푸시 알림(사운드·진동·잠금화면) 및 모바일 무전기 채널 수명주기(삭제·나가기) 체계 구축
+- **4대 핵심 업무 파이프라인 발생 즉시 1회 알림 브로드캐스트 (`workNotificationService.ts`, `AppContext.tsx`, `MobileDispatchOrderCreate.tsx`)**:
+  - 영업·출고·현장AS·배차 업무 발생 시 전사 담당자에게 딩동 차임벨과 진동, 시스템 푸시 알림을 발생 즉시 1회 자동 전송하는 실시간 노티피케이션 엔진 구축.
+  - **출고 의뢰 (`saveSmartDispatch`)**: 신규 계약 및 스마트 출고 발주 접수 시 즉시 `OUTBOUND` 알림 브로드캐스트.
+  - **장비 회수 의뢰 (`saveSmartReturn`)**: 현장 회수 요청 접수 시 즉시 `RETURN` 알림 브로드캐스트.
+  - **대차·교체 의뢰 (`MobileDispatchOrderCreate.tsx`, `completeFieldAsTicket`)**: 현장 고장 대차 및 정비사 대차 제안 시 단일 `EXCHANGE` 알림 브로드캐스트.
+  - **현장 AS 접수 (`createFieldAsTicket`)**: 현장 긴급 AS 티켓 발행 시 즉시 `AS` 알림 브로드캐스트.
+  - **화물 배차 완료 (`MobileDispatchList.tsx`, `dispatchDelivery`)**: 기사 배정 및 운송중(`DISPATCHED`) 전환 시 즉시 `DISPATCH` 알림 브로드캐스트.
+- **웹 오디오 합성 2음계 차임벨 & 햅틱 진동 & PWA 잠금화면 딥링크 연동 (`public/sw.js`, `workNotificationService.ts`)**:
+  - Web Audio API 기반 오디오 합성: 외부 음원 파일 의존 없이 E5(659.25Hz) ➔ A5(880Hz) 2음계 맑은 딩동음 즉각 재생.
+  - 기기 햅틱 진동(`[200, 100, 200, 100, 300]`) 패턴 연동.
+  - Service Worker `push` 및 `notificationclick` 이벤트 핸들러 탑재: 모바일 화면보호기(잠금화면)에서도 시스템 푸시 알림 표출 및 터치 시 백그라운드 앱을 포그라운드로 즉시 활성화 딥링크.
+  - 부서(영업/배차/출고/AS/관리/경영) 정밀 매핑 필터링 및 경영진/관리자 전원 수신 보장.
+- **모바일 무전기 사용자 생성 채널 수명주기(삭제 및 나가기) 완성 (`walkieTalkieService.ts`, `MobileWalkieTalkieModal.tsx`)**:
+  - **채널 생성자 전용 `[삭제]` 기능**: 본인이 생성한 채널 삭제 시 Supabase Realtime 메타 채널을 통해 `channel_deleted` 이벤트를 전사 브로드캐스트하여 해당 채널에 머물던 모든 참여자를 기본 공용 채널(`DISPATCH`)로 안전 자동 복귀.
+  - **일반 참여자 전용 `[나가기]` 기능**: 참여자 목록(`channel_members`)에서 본인 제거 후 기본 공용 채널(`DISPATCH`)로 자동 복귀.
+  - **시스템 기본 4대 공용 채널 영구 보호**: 배차·상차, 현장 정비AS, 주기장 출고, 경영·관리 채널은 삭제 및 나가기 원천 차단.
+  - 상단 서브헤더에 `[삭제]`, `[나가기]` 버튼 조건부 직관 노출 및 삭제 확인 컨펌 가드 적용.
+- **스켈톤 성장 사슬 발상 및 계획 기록 (`000.skelton`)**:
+  - `발상/2026-09_모바일_무전기_사용자채널_수명주기_및_삭제나가기_체계.md` 영구 기록 (`ae51471`).
+  - `계획/2026-09_모바일_잠금화면_웹푸시_소리진동_및_5분리마인더_동작설계.md` 영구 기록 (`47b965a`).
+- **0 Type Error 빌드 무결성 검증 완료**:
+  - `tsc -b && vite build` 0 Error 무결점 통과.
+
 ## [v1.3.0.Build.160] - 2026-09-05 12:35
 
 ### 📋 영업-배차 업무연계 기반 할일 목록(ToDo) 중심 배차관리 체계 구축

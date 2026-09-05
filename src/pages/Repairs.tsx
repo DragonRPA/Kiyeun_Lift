@@ -6,7 +6,7 @@ import {
   Camera, Plus, Trash2, ShieldCheck, ChevronRight, X, Truck, 
   Layers, Package, Check, RefreshCw, FileText
 } from 'lucide-react';
-import { Repair, Asset } from '../services/db';
+import { Repair, Asset, db } from '../services/db';
 import { exportToExcel } from '../services/excel';
 import { compressFileIfNeeded } from '../utils/imageCompressor';
 
@@ -59,6 +59,8 @@ export const Repairs: React.FC = () => {
   const [inspectionItemCode, setInspectionItemCode] = useState<string>('');
   const [degradationScore, setDegradationScore] = useState<number>(0);
   const [externalCost, setExternalCost] = useState<number>(0);
+  const [billableType, setBillableType] = useState<'FREE' | 'BILLABLE'>('FREE');
+  const [billableAmount, setBillableAmount] = useState<number>(0);
 
   // 사용 소모품 목록: { consumableId, quantity, unitPrice }
   const [usedConsumables, setUsedConsumables] = useState<{ consumableId: string; quantity: number }[]>([]);
@@ -215,7 +217,14 @@ export const Repairs: React.FC = () => {
 
   const handleAddConsumable = () => {
     if (!tempConsumableId) return;
+    const targetItem = consumables.find(c => c.id === tempConsumableId);
+    if (!targetItem) return;
     const qty = Math.max(1, tempConsumableQty);
+    const existingUsed = usedConsumables.find(item => item.consumableId === tempConsumableId)?.quantity || 0;
+    if (existingUsed + qty > (targetItem.stockQty || 0)) {
+      showToast(`소모품 [${targetItem.modelName}] 본사 가용 재고(${targetItem.stockQty || 0}개)를 초과하여 추가할 수 없습니다.`, 'error');
+      return;
+    }
     setUsedConsumables(prev => {
       const idx = prev.findIndex(item => item.consumableId === tempConsumableId);
       if (idx >= 0) {
@@ -286,12 +295,15 @@ export const Repairs: React.FC = () => {
       beforeImage,
       afterImage,
       evidenceImages,
-      billableToCustomer: false,
+      billableType,
+      billableAmount: billableType === 'BILLABLE' ? billableAmount : 0,
+      billableToCustomer: billableType === 'BILLABLE',
       inspectionItemCode,
       degradationScore
     };
 
-    registerRepair(payload, usedConsumables);
+    await registerRepair(payload, usedConsumables);
+    await db.awaitPendingWrites();
     showToast(`[${selectedAsset.assetNo}] 정비 완료: 임대가능(AVAILABLE) 복원 및 소모품 차감 완료`);
 
     // 폼 초기화
@@ -302,6 +314,8 @@ export const Repairs: React.FC = () => {
     setAfterImage('');
     setInspectionItemCode('');
     setDegradationScore(0);
+    setBillableType('FREE');
+    setBillableAmount(0);
   };
 
   // ⏸️ 부품대기 (수리중 REPAIRING 유지)
@@ -337,12 +351,15 @@ export const Repairs: React.FC = () => {
       beforeImage,
       afterImage,
       evidenceImages,
-      billableToCustomer: false,
+      billableType,
+      billableAmount: billableType === 'BILLABLE' ? billableAmount : 0,
+      billableToCustomer: billableType === 'BILLABLE',
       inspectionItemCode,
       degradationScore
     };
 
-    registerRepair(payload, usedConsumables);
+    await registerRepair(payload, usedConsumables);
+    await db.awaitPendingWrites();
     showToast(`[${selectedAsset.assetNo}] 장비가 수리정비중(REPAIRING) 상태로 보존되었습니다.`);
     setShowUnresolvedModal(false);
     setSelectedAssetId('');
@@ -357,8 +374,6 @@ export const Repairs: React.FC = () => {
       showToast('외주 정비 업체를 선택해 주십시오.', 'error');
       return;
     }
-
-
 
     const payload: Partial<Repair> = {
       assetId: selectedAsset.id,
@@ -375,12 +390,15 @@ export const Repairs: React.FC = () => {
       requestDate: repairDate,
       details: repairDetails || `외주정비 위탁 반출: ${getVendorName(selectedVendorId)}`,
       totalCost: externalCost,
-      billableToCustomer: false,
+      billableType,
+      billableAmount: billableType === 'BILLABLE' ? billableAmount : 0,
+      billableToCustomer: billableType === 'BILLABLE',
       inspectionItemCode,
       degradationScore
     };
 
-    registerRepair(payload, []);
+    await registerRepair(payload, []);
+    await db.awaitPendingWrites();
     showToast(`[${selectedAsset.assetNo}] 외주 정비 위탁 등록 완료`);
     setSelectedAssetId('');
     setRepairDetails('');
@@ -400,7 +418,11 @@ export const Repairs: React.FC = () => {
       '총비용(원)': r.totalCost || 0,
       '담당정비사': getMechanicName(r.mechanicId),
       '외주거래처': r.vendorId ? getVendorName(r.vendorId) : '-',
-      '진행상태': r.status === 'COMPLETED' ? '정비완료' : r.status === 'UNRESOLVED' ? '부품대기' : '진행중'
+      '진행상태': r.status === 'COMPLETED' ? '정비완료' : r.status === 'UNRESOLVED' ? '부품대기' : '진행중',
+      '점검코드': r.inspectionItemCode || '-',
+      '노후도점수': r.degradationScore ? `${r.degradationScore}점` : '0점',
+      '유무상구분': r.billableType === 'BILLABLE' ? '유상' : '무상',
+      '고객청구액': r.billableAmount ? `${r.billableAmount.toLocaleString()}원` : '0원'
     }));
     exportToExcel(data, `주기장정비대장_${new Date().toISOString().split('T')[0]}`, '정비대장');
   };
@@ -693,6 +715,37 @@ export const Repairs: React.FC = () => {
                       style={{ padding: '6px 8px', fontSize: '12.5px' }}
                     />
                   </div>
+                </div>
+
+                {/* 2-1. 유무상 청구 구분 및 청구금액 (헌장 3.4 상하 수직 스택) */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginTop: '10px' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <label style={{ fontSize: '11px', fontWeight: '600', whiteSpace: 'nowrap' }}>유/무상 구분</label>
+                    <select
+                      value={billableType}
+                      onChange={e => setBillableType(e.target.value as any)}
+                      style={{ padding: '6px 8px', fontSize: '12.5px' }}
+                    >
+                      <option value="FREE">무상 (회사부담 / 기본보증)</option>
+                      <option value="BILLABLE">유상 (고객사 청구)</option>
+                    </select>
+                  </div>
+                  {billableType === 'BILLABLE' ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <label style={{ fontSize: '11px', fontWeight: '600', color: '#ea580c', whiteSpace: 'nowrap' }}>고객사 청구금액 (원) *</label>
+                      <input
+                        type="number"
+                        min={0}
+                        step={1000}
+                        value={billableAmount}
+                        onChange={e => setBillableAmount(Number(e.target.value) || 0)}
+                        placeholder="청구 금액 입력"
+                        style={{ padding: '6px 8px', fontSize: '12.5px' }}
+                      />
+                    </div>
+                  ) : (
+                    <div />
+                  )}
                 </div>
 
                 {/* 외주 정비 선택 시 외주업체 및 비용 패널 */}
@@ -1032,6 +1085,8 @@ export const Repairs: React.FC = () => {
                   <th style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>모델명</th>
                   <th style={{ padding: '8px 10px' }}>정비 상세 내용</th>
                   <th style={{ padding: '8px 10px', textAlign: 'right', whiteSpace: 'nowrap' }}>정비비용</th>
+                  <th style={{ padding: '8px 10px', textAlign: 'center', whiteSpace: 'nowrap' }}>점검코드</th>
+                  <th style={{ padding: '8px 10px', textAlign: 'center', whiteSpace: 'nowrap' }}>노후도</th>
                   <th style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>담당정비사</th>
                   <th style={{ padding: '8px 10px', textAlign: 'center', whiteSpace: 'nowrap' }}>상태</th>
                   <th style={{ padding: '8px 10px', textAlign: 'center', whiteSpace: 'nowrap', width: '60px' }}>상세</th>
@@ -1040,7 +1095,7 @@ export const Repairs: React.FC = () => {
               <tbody>
                 {filteredLedgerRepairs.length === 0 ? (
                   <tr>
-                    <td colSpan={10} style={{ padding: '40px 0', textAlign: 'center', color: 'var(--text-muted)' }}>
+                    <td colSpan={12} style={{ padding: '40px 0', textAlign: 'center', color: 'var(--text-muted)' }}>
                       조회 조건에 해당하는 주기장 정비 이력이 없습니다.
                     </td>
                   </tr>
@@ -1076,6 +1131,12 @@ export const Repairs: React.FC = () => {
                       </td>
                       <td style={{ padding: '8px', textAlign: 'right', fontWeight: '700', whiteSpace: 'nowrap' }}>
                         {(r.totalCost || 0).toLocaleString()}원
+                      </td>
+                      <td style={{ padding: '8px', textAlign: 'center', fontSize: '11px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                        {r.inspectionItemCode || '-'}
+                      </td>
+                      <td style={{ padding: '8px', textAlign: 'center', fontSize: '11px', color: r.degradationScore ? '#d97706' : 'var(--text-muted)', fontWeight: r.degradationScore ? 700 : 400, whiteSpace: 'nowrap' }}>
+                        {r.degradationScore ? `${r.degradationScore}점` : '-'}
                       </td>
                       <td style={{ padding: '8px', whiteSpace: 'nowrap' }}>{getMechanicName(r.mechanicId)}</td>
                       <td style={{ padding: '8px', textAlign: 'center', whiteSpace: 'nowrap' }}>
@@ -1232,6 +1293,16 @@ export const Repairs: React.FC = () => {
                 <div>
                   <div style={{ color: 'var(--text-muted)', fontSize: '11px' }}>담당 정비사</div>
                   <span>{getMechanicName(selectedDetailRepair.mechanicId)}</span>
+                </div>
+                <div>
+                  <div style={{ color: 'var(--text-muted)', fontSize: '11px' }}>점검코드 / 노후도</div>
+                  <span>{selectedDetailRepair.inspectionItemCode || '-'} / {selectedDetailRepair.degradationScore ? `${selectedDetailRepair.degradationScore}점` : '0점'}</span>
+                </div>
+                <div>
+                  <div style={{ color: 'var(--text-muted)', fontSize: '11px' }}>유무상 / 고객청구액</div>
+                  <span style={{ color: selectedDetailRepair.billableType === 'BILLABLE' ? '#ea580c' : 'inherit', fontWeight: 600 }}>
+                    {selectedDetailRepair.billableType === 'BILLABLE' ? `유상 (₩${(selectedDetailRepair.billableAmount || 0).toLocaleString()}원)` : '무상'}
+                  </span>
                 </div>
               </div>
 

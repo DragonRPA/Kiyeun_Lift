@@ -229,8 +229,14 @@ export const MobileDelinquencyManage: React.FC = () => {
   const blockedCount = useMemo(() => calculatedList.filter(i => i.transactionStatus === 'BLOCKED').length, [calculatedList]);
   const neglectedCount = useMemo(() => calculatedList.filter(i => i.hasPendingDirective && i.directiveNeglectedDays >= 3).length, [calculatedList]);
 
-  // 헌장 1.2 & 5.2 준수: 직권 출고금지 / 해제 처분 트랜잭션
+  const isExecutive = currentUser?.role === 'ADMIN' || currentUser?.role === 'EXECUTIVE';
+
+  // 헌장 1.2 & 5.2 준수: 직권 출고금지 / 해제 처분 트랜잭션 (경영진/관리자 전용)
   const handleToggleBlock = async (item: CalculatedDelinquency) => {
+    if (!isExecutive) {
+      showErrorModal('신규계약 및 출고금지(BLOCKED) 처분은 경영진/관리자 고유 권한입니다.', '권한 없음');
+      return;
+    }
     const cust = customers.find(c => c.id === item.customerId);
     if (!cust) return;
     const nextStatus = cust.transactionStatus === 'BLOCKED' ? 'ALLOWED' : 'BLOCKED';
@@ -259,7 +265,15 @@ export const MobileDelinquencyManage: React.FC = () => {
 
   // 헌장 1.2 & 5.2 준수: 경영진 수금지시 하달 (Todo + DelinquencyActionLog 1:1 트랜잭션)
   const handleSubmitDirective = async () => {
-    if (!directiveTarget || !directiveText.trim()) return;
+    if (!directiveTarget) return;
+    if (!directiveText.trim()) {
+      showErrorModal('지시 내용을 입력하십시오.');
+      return;
+    }
+    if (directiveDueDate < todayStr) {
+      showErrorModal('처리기한은 오늘 이후 날짜를 선택해야 합니다.');
+      return;
+    }
     try {
       // 1. 담당 영업사원 ToDo 발행
       db.insertRow<Todo>('todos', {

@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
 import { ToggleSwitch } from '../components/ToggleSwitch';
-import { OutboundInspection, OutboundInspectionStatus, Asset, Contract, Customer, CustomerSite, db } from '../services/db';
+import { OutboundInspection, OutboundInspectionStatus, Asset, Contract, Customer, CustomerSite, AssetInOutLog, db } from '../services/db';
 import {
   CheckSquare,
   AlertTriangle,
@@ -90,6 +90,7 @@ interface InspectionGroup {
   siteName: string;
   requestDate: string;
   loadingDate: string; // 🚚 상차일자 (YYYY-MM-DD)
+  deliveryId?: string; // 연결된 출고 배차 ID
   status: OutboundInspectionStatus;
   items: OutboundInspection[];
   assets: Asset[];
@@ -257,6 +258,7 @@ export const OutboundInspections: React.FC = () => {
         requestDate: firstItem.createdAt ? firstItem.createdAt.substring(0, 10) : new Date().toISOString().split('T')[0],
         loadingDate: loadingDateVal,
         status: groupStatus,
+        deliveryId: delivery?.id,
         items,
         assets: groupAssets,
         equipmentsSummary: summaryText,
@@ -361,6 +363,11 @@ export const OutboundInspections: React.FC = () => {
     const checkedCount = Object.values(checkedItems).filter(Boolean).length;
     const totalCount = selectedGroup.requestedSpecs.length;
 
+    if (checkedCount === 0) {
+      showErrorModal('점검 항목을 최소 1개 이상 검수 완료해야 출고 승인이 가능합니다.');
+      return;
+    }
+
     if (checkedCount < totalCount) {
       showToast(`요구 항목 ${totalCount}개 중 ${checkedCount}개 검수 완료 상태로 승인 마감합니다.`);
     }
@@ -376,6 +383,13 @@ export const OutboundInspections: React.FC = () => {
           status: 'COMPLETED',
           inspectorId: inspectorName,
           inspectedAt: nowIso,
+          specsJson: JSON.stringify({
+            checkedItems,
+            inspectionNote,
+            inspectorName,
+            approvedAt: nowIso
+          }),
+          deliveryId: item.deliveryId || selectedGroup.deliveryId || undefined,
           note: resultNote,
           updatedAt: nowIso
         });
@@ -385,6 +399,26 @@ export const OutboundInspections: React.FC = () => {
           db.updateRow<Asset>('assets', item.assetId, {
             status: 'RENTED',
             updatedAt: nowIso
+          });
+
+          // 🟢 [헌장 1.2] 발생 사건 무누락 DB 저장: 출고 검수 승인 시 자산 입출고 이력 1:1 정규화 영구 저장
+          const targetAsset = db.assets.find(a => a.id === item.assetId);
+          const contract = db.contracts.find(c => c.id === item.contractId);
+          const customer = contract ? db.customers.find(c => c.id === contract.customerId) : undefined;
+          const site = contract ? db.sites.find(s => s.id === contract.siteId) : undefined;
+
+          db.insertRow<AssetInOutLog>('assetInOutLogs', {
+            assetId: item.assetId,
+            assetNo: targetAsset?.assetNo || '',
+            modelName: targetAsset?.modelName || '',
+            type: 'OUTBOUND',
+            eventDate: nowIso.split('T')[0],
+            customerId: contract?.customerId,
+            customerName: customer?.name || selectedGroup.customerName,
+            siteId: contract?.siteId,
+            siteName: site?.name || selectedGroup.siteName,
+            memo: `[PC 출고검수 승인] 계약(${contract?.contractNo || item.contractId || '직출고'}) 현장(${site?.name || selectedGroup.siteName || '현장'}) 기사(${inspectorName}) 기능 점검 완료 (자산 대여중 전환)`,
+            createdAt: nowIso,
           });
         }
       });

@@ -229,7 +229,7 @@ export function mergeVoiceFragmentToDraft(
         if (KOREAN_COUNT_MAP[rawNum]) {
           count = KOREAN_COUNT_MAP[rawNum];
         } else if (!isNaN(parseInt(rawNum, 10))) {
-          count = parseInt(rawNum, 10);
+          count = Math.max(1, parseInt(rawNum, 10));
         }
       }
 

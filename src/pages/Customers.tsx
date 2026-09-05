@@ -170,6 +170,7 @@ export const Customers: React.FC = () => {
       '사업자등록번호': c.bizRegNo || '-',
       '세금계산서 마감일': `매월 ${c.defaultBillingDay || 30}일`,
       '거래명세서 마감일': `매월 ${c.defaultStatementClosingDay || 25}일`,
+      '약정 결제일': c.paymentDueDay ? `익월 ${c.paymentDueDay}일` : '익월 25일',
       '본사 주소': c.address || '-',
       '영업 상태': c.isClosed ? '폐업' : '영업중',
       '거래 상태': c.transactionStatus === 'BLOCKED' ? '거래제한' : '거래가능',
@@ -218,7 +219,7 @@ export const Customers: React.FC = () => {
     setEditingCust({ 
       name: '', bizRegNo: '', isClosed: false, address: '', 
       representative: '', repContact: '', repEmail: '', 
-      defaultBillingDay: 30, defaultStatementClosingDay: 25,
+      defaultBillingDay: 30, defaultStatementClosingDay: 25, paymentDueDay: 25,
       transactionStatus: 'ALLOWED'
     });
     setShowCustModal(true);
@@ -228,6 +229,7 @@ export const Customers: React.FC = () => {
     setEditingCust({
       defaultBillingDay: 30,
       defaultStatementClosingDay: 25,
+      paymentDueDay: cust.paymentDueDay || 25,
       ...cust
     });
     setShowCustModal(true);
@@ -510,7 +512,7 @@ export const Customers: React.FC = () => {
         flexShrink: 0
       }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', flex: '1', minWidth: '180px' }}>
-          <label style={{ fontSize: '10.5px', fontWeight: 600, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>실시간 통합 검색</label>
+          <label style={{ fontSize: '10.5px', fontWeight: 600, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>통합 검색</label>
           <div style={{ position: 'relative' }}>
             <Search size={13} style={{ position: 'absolute', left: '8px', top: '7px', color: 'var(--text-muted)' }} />
             <input
@@ -763,6 +765,7 @@ export const Customers: React.FC = () => {
                   <div><span style={{ color: 'var(--text-secondary)' }}>종목:</span> {activeCustomer.bizItem || '-'}</div>
                   <div><span style={{ color: 'var(--text-secondary)' }}>청구서 마감:</span> 매월 <strong>{activeCustomer.defaultBillingDay || 30}일</strong></div>
                   <div><span style={{ color: 'var(--text-secondary)' }}>명세서 마감:</span> 매월 <strong>{activeCustomer.defaultStatementClosingDay || 25}일</strong></div>
+                  <div><span style={{ color: 'var(--text-secondary)' }}>약정 결제일:</span> 익월 <strong>{activeCustomer.paymentDueDay || 25}일</strong></div>
                   <div style={{ gridColumn: 'span 4' }}>
                     <span style={{ color: 'var(--text-secondary)' }}>사업장 주소:</span> {activeCustomer.address || '-'}
                   </div>
@@ -1117,7 +1120,7 @@ export const Customers: React.FC = () => {
                 />
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1.2fr', gap: '8px' }}>
                 <div>
                   <label style={labelStyle}>사업자등록번호</label>
                   <input
@@ -1137,6 +1140,17 @@ export const Customers: React.FC = () => {
                   >
                     <option value="false">운영중</option>
                     <option value="true">폐업</option>
+                  </select>
+                </div>
+                <div>
+                  <label style={labelStyle}>거래 상태 (출고)</label>
+                  <select
+                    style={{ ...inputStyle, fontWeight: editingCust.transactionStatus === 'BLOCKED' ? 700 : 400, color: editingCust.transactionStatus === 'BLOCKED' ? '#dc2626' : 'inherit' }}
+                    value={editingCust.transactionStatus || 'ALLOWED'}
+                    onChange={e => setEditingCust({ ...editingCust, transactionStatus: e.target.value as 'ALLOWED' | 'BLOCKED' })}
+                  >
+                    <option value="ALLOWED">정상 (출고가능)</option>
+                    <option value="BLOCKED">거래제한 (출고차단)</option>
                   </select>
                 </div>
               </div>
@@ -1187,8 +1201,8 @@ export const Customers: React.FC = () => {
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', padding: '8px 10px', backgroundColor: 'var(--bg-app)', borderRadius: '6px', border: '1px dashed var(--border-color)' }}>
-                <div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', padding: '8px 10px', backgroundColor: 'var(--bg-app)', borderRadius: '6px', border: '1px dashed var(--border-color)' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                   <label style={labelStyle}>청구서(세금계산서) 마감일</label>
                   <select
                     style={inputStyle}
@@ -1200,7 +1214,7 @@ export const Customers: React.FC = () => {
                     ))}
                   </select>
                 </div>
-                <div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                   <label style={labelStyle}>거래명세서 마감일</label>
                   <select
                     style={inputStyle}
@@ -1209,6 +1223,18 @@ export const Customers: React.FC = () => {
                   >
                     {Array.from({ length: 31 }, (_, i) => i + 1).map(day => (
                       <option key={day} value={day}>{day === 31 ? '31일 (월말)' : `매월 ${day}일`}</option>
+                    ))}
+                  </select>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label style={labelStyle}>약정 결제일 (익월 N일)</label>
+                  <select
+                    style={inputStyle}
+                    value={editingCust.paymentDueDay || 25}
+                    onChange={e => setEditingCust({ ...editingCust, paymentDueDay: Number(e.target.value) })}
+                  >
+                    {Array.from({ length: 31 }, (_, i) => i + 1).map(day => (
+                      <option key={day} value={day}>{day === 31 ? '익월 말일' : `익월 ${day}일`}</option>
                     ))}
                   </select>
                 </div>

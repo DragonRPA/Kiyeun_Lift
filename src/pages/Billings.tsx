@@ -468,24 +468,33 @@ export const Billings: React.FC = () => {
   };
 
   // 거래명세서 발송: UNPAID → REQUESTED (F-2 원칙)
-  const handleApprove = (id: string, e: React.MouseEvent) => {
+  const handleApprove = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    approveBilling(id);
+    try {
+      await approveBilling(id);
+      showToast('거래명세서가 발송되었습니다.');
+    } catch (err: any) {
+      showErrorModal(`발송 실패: ${err?.message || err}`);
+    }
   };
 
   // 청구 취소: 환불/비환불 2-path (J-2 원칙)
-  const handleCancel = (id: string, e: React.MouseEvent) => {
+  const handleCancel = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
     const billing = billings.find(b => b.id === id);
     const hasPaid = billing && billing.paidAmount > 0;
 
     showToast('청구서를 취소(REJECTED) 마감합니다.');
 
-    if (hasPaid) {
-      const refund = true;
-      cancelBilling(id, refund);
-    } else {
-      cancelBilling(id, false);
+    try {
+      if (hasPaid) {
+        const refund = true;
+        await cancelBilling(id, refund);
+      } else {
+        await cancelBilling(id, false);
+      }
+    } catch (err: any) {
+      showErrorModal(`청구 취소 실패: ${err?.message || err}`);
     }
   };
 
@@ -1240,9 +1249,10 @@ ${items.map((item, idx) => {
     }
 
     if (contractsWithoutReceivables.length === 0) {
-      alert(
-        `⚠️ 현재 조회된 정산 대상 계약(${contractsWithReceivables.length}건)은 모두 미청구 외상미수금(수리비/운송비 등)이 존재합니다.\n\n` +
-        `외상미수금 포함 여부를 검토/반영하기 위해 개별 카드를 클릭하여 수동으로 청구를 생성해 주세요.`
+      showErrorModal(
+        `현재 조회된 정산 대상 계약(${contractsWithReceivables.length}건)은 모두 미청구 외상미수금(수리비/운송비 등)이 존재합니다.\n\n` +
+        `외상미수금 포함 여부를 검토/반영하기 위해 개별 카드를 클릭하여 수동으로 청구를 생성해 주세요.`,
+        '일괄 청구 불가'
       );
       return;
     }
@@ -1994,7 +2004,14 @@ ${items.map((item, idx) => {
                           </div>
                         </td>
                         <td style={{ whiteSpace: 'nowrap' }}><strong>{b.billingYm}</strong></td>
-                        <td style={{ whiteSpace: 'nowrap' }}>{getCustName(b.customerId)}</td>
+                        <td style={{ whiteSpace: 'nowrap' }}>
+                          <span>{getCustName(b.customerId)}</span>
+                          {customers.find(c => c.id === b.customerId)?.transactionStatus === 'BLOCKED' && (
+                            <span style={{ marginLeft: '6px', padding: '1px 5px', fontSize: '10px', backgroundColor: '#fee2e2', color: '#b91c1c', borderRadius: '3px', fontWeight: 800 }}>
+                              출고제한
+                            </span>
+                          )}
+                        </td>
                         <td style={{ whiteSpace: 'nowrap', textAlign: 'right', paddingRight: '12px' }}>₩{supply.toLocaleString()}</td>
                         <td style={{ whiteSpace: 'nowrap', textAlign: 'right', paddingRight: '12px', fontWeight: 700, color: 'var(--primary)' }}>₩{grandTotal.toLocaleString()}</td>
                         <td style={{ whiteSpace: 'nowrap', textAlign: 'right', paddingRight: '12px', color: unpaid > 0 ? 'var(--danger)' : 'var(--text-secondary)' }}>
@@ -2136,7 +2153,14 @@ ${items.map((item, idx) => {
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '8px', padding: '10px 12px', backgroundColor: 'var(--bg-app)', borderRadius: '6px', fontSize: '12px' }}>
                     <div>
                       <span style={{ fontSize: '10.5px', color: 'var(--text-muted)', display: 'block' }}>고객사명</span>
-                      <strong style={{ fontSize: '12.5px' }}>{custObj?.name || getCustName(activeBilling.customerId)}</strong>
+                      <strong style={{ fontSize: '12.5px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        {custObj?.name || getCustName(activeBilling.customerId)}
+                        {custObj?.transactionStatus === 'BLOCKED' && (
+                          <span style={{ padding: '1px 5px', fontSize: '10px', backgroundColor: '#fee2e2', color: '#b91c1c', borderRadius: '3px', fontWeight: 800 }}>
+                            출고제한
+                          </span>
+                        )}
+                      </strong>
                     </div>
                     <div>
                       <span style={{ fontSize: '10.5px', color: 'var(--text-muted)', display: 'block' }}>현장명</span>
@@ -2711,8 +2735,13 @@ ${items.map((item, idx) => {
                           )}
                         </div>
                       </div>
-                      <h4 style={{ margin: '0 0 6px 0', fontSize: '15px', fontWeight: '700', color: 'var(--text-primary)' }}>
-                        {customerName}
+                      <h4 style={{ margin: '0 0 6px 0', fontSize: '15px', fontWeight: '700', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span>{customerName}</span>
+                        {customers.find(cu => cu.id === c.customerId)?.transactionStatus === 'BLOCKED' && (
+                          <span style={{ fontSize: '11px', padding: '1px 6px', borderRadius: '4px', backgroundColor: '#fee2e2', color: '#dc2626', fontWeight: 800, border: '1px solid #fca5a5' }}>
+                            출고제한
+                          </span>
+                        )}
                       </h4>
                       <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '8px' }}>
                         현장: {siteName}

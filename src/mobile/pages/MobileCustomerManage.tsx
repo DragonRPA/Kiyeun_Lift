@@ -36,8 +36,12 @@ export const MobileCustomerManage: React.FC<MobileCustomerManageProps> = ({ onNa
     repContact: '',
     repEmail: '',
     address: '',
+    bizType: '',
+    bizItem: '',
     defaultBillingDay: 30,
+    defaultStatementClosingDay: 25,
     paymentDueDay: 25,
+    isClosed: false
   });
 
   // 정보 누락 여부 판정 (헌장 1.2 & 과제 9: 사업자, 대표자, 연락처, 주소 + 결제조건 마감일/약정일 무누락 검증)
@@ -151,7 +155,15 @@ export const MobileCustomerManage: React.FC<MobileCustomerManageProps> = ({ onNa
     e.preventDefault();
     if (!editingCustomer || !editingCustomer.name) return;
     try {
-      await saveCustomer(editingCustomer as Omit<Customer, 'id' | 'createdAt'>);
+      const sanitizedBillingDay = Math.min(31, Math.max(1, Number(editingCustomer.defaultBillingDay) || 30));
+      const sanitizedStatementClosingDay = Math.min(31, Math.max(1, Number(editingCustomer.defaultStatementClosingDay) || 25));
+      const sanitizedPaymentDueDay = Math.min(31, Math.max(1, Number(editingCustomer.paymentDueDay) || 25));
+      await saveCustomer({
+        ...editingCustomer,
+        defaultBillingDay: sanitizedBillingDay,
+        defaultStatementClosingDay: sanitizedStatementClosingDay,
+        paymentDueDay: sanitizedPaymentDueDay
+      } as Omit<Customer, 'id' | 'createdAt'>);
       await db.awaitPendingWrites();
       await refreshAllData();
       setEditingCustomer(null);
@@ -168,6 +180,9 @@ export const MobileCustomerManage: React.FC<MobileCustomerManageProps> = ({ onNa
       return;
     }
     try {
+      const sanitizedBillingDay = Math.min(31, Math.max(1, Number(newCustomerForm.defaultBillingDay) || 30));
+      const sanitizedStatementClosingDay = Math.min(31, Math.max(1, Number(newCustomerForm.defaultStatementClosingDay) || 25));
+      const sanitizedPaymentDueDay = Math.min(31, Math.max(1, Number(newCustomerForm.paymentDueDay) || 25));
       await saveCustomer({
         name: newCustomerForm.name.trim(),
         bizRegNo: newCustomerForm.bizRegNo?.trim() || '',
@@ -175,9 +190,13 @@ export const MobileCustomerManage: React.FC<MobileCustomerManageProps> = ({ onNa
         repContact: newCustomerForm.repContact?.trim() || '',
         repEmail: newCustomerForm.repEmail?.trim() || '',
         address: newCustomerForm.address?.trim() || '',
-        defaultBillingDay: newCustomerForm.defaultBillingDay || 30,
-        paymentDueDay: newCustomerForm.paymentDueDay || 25,
-        transactionStatus: 'ALLOWED'
+        bizType: newCustomerForm.bizType?.trim() || '',
+        bizItem: newCustomerForm.bizItem?.trim() || '',
+        defaultBillingDay: sanitizedBillingDay,
+        defaultStatementClosingDay: sanitizedStatementClosingDay,
+        paymentDueDay: sanitizedPaymentDueDay,
+        transactionStatus: 'ALLOWED',
+        isClosed: false
       } as any);
       await db.awaitPendingWrites();
       await refreshAllData();
@@ -189,8 +208,12 @@ export const MobileCustomerManage: React.FC<MobileCustomerManageProps> = ({ onNa
         repContact: '',
         repEmail: '',
         address: '',
+        bizType: '',
+        bizItem: '',
         defaultBillingDay: 30,
+        defaultStatementClosingDay: 25,
         paymentDueDay: 25,
+        isClosed: false
       });
     } catch (err: any) {
       showErrorModal(`신규 고객사 등록 실패: ${err?.message || err}`);
@@ -584,26 +607,60 @@ export const MobileCustomerManage: React.FC<MobileCustomerManageProps> = ({ onNa
               </div>
             </div>
 
-            {/* 계산서 마감일 & 결제일 */}
-            <div className="grid grid-cols-2 gap-2">
+            {/* 마감 및 결제조건 (3종) */}
+            <div className="grid grid-cols-3 gap-2">
               <div className="flex flex-col gap-1">
-                <label className="text-[11px] font-bold text-slate-400 whitespace-nowrap">계산서 마감일 (일)</label>
+                <label className="text-[11px] font-bold text-slate-400 whitespace-nowrap">청구 마감일 (일)</label>
                 <input 
                   type="number" 
                   value={editingCustomer.defaultBillingDay ?? ''} 
                   onChange={e => setEditingCustomer({...editingCustomer, defaultBillingDay: parseInt(e.target.value, 10) || undefined})} 
                   className="bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-white font-mono focus:outline-none focus:border-blue-500" 
-                  placeholder="예: 30"
+                  placeholder="30"
                 />
               </div>
               <div className="flex flex-col gap-1">
-                <label className="text-[11px] font-bold text-slate-400 whitespace-nowrap">익월 결제일 (일)</label>
+                <label className="text-[11px] font-bold text-slate-400 whitespace-nowrap">명세서 마감일 (일)</label>
+                <input 
+                  type="number" 
+                  value={editingCustomer.defaultStatementClosingDay ?? ''} 
+                  onChange={e => setEditingCustomer({...editingCustomer, defaultStatementClosingDay: parseInt(e.target.value, 10) || undefined})} 
+                  className="bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-white font-mono focus:outline-none focus:border-blue-500" 
+                  placeholder="25"
+                />
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-[11px] font-bold text-slate-400 whitespace-nowrap">약정 결제일 (일)</label>
                 <input 
                   type="number" 
                   value={editingCustomer.paymentDueDay ?? ''} 
                   onChange={e => setEditingCustomer({...editingCustomer, paymentDueDay: parseInt(e.target.value, 10) || undefined})} 
                   className="bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-white font-mono focus:outline-none focus:border-blue-500" 
-                  placeholder="예: 10"
+                  placeholder="25"
+                />
+              </div>
+            </div>
+
+            {/* 업태 & 종목 */}
+            <div className="grid grid-cols-2 gap-2">
+              <div className="flex flex-col gap-1">
+                <label className="text-[11px] font-bold text-slate-400 whitespace-nowrap">업태</label>
+                <input 
+                  type="text" 
+                  value={editingCustomer.bizType || ''} 
+                  onChange={e => setEditingCustomer({...editingCustomer, bizType: e.target.value})} 
+                  placeholder="건설, 임대"
+                  className="bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-blue-500" 
+                />
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-[11px] font-bold text-slate-400 whitespace-nowrap">종목</label>
+                <input 
+                  type="text" 
+                  value={editingCustomer.bizItem || ''} 
+                  onChange={e => setEditingCustomer({...editingCustomer, bizItem: e.target.value})} 
+                  placeholder="고소작업대 임대"
+                  className="bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-blue-500" 
                 />
               </div>
             </div>
@@ -729,10 +786,10 @@ export const MobileCustomerManage: React.FC<MobileCustomerManageProps> = ({ onNa
               />
             </div>
 
-            {/* 계산서 마감일 & 결제일 */}
-            <div className="grid grid-cols-2 gap-2">
+            {/* 마감 및 결제조건 (3종) */}
+            <div className="grid grid-cols-3 gap-2">
               <div className="flex flex-col gap-1">
-                <label className="text-[11px] font-bold text-slate-400 whitespace-nowrap">계산서 마감일 (일)</label>
+                <label className="text-[11px] font-bold text-slate-400 whitespace-nowrap">청구 마감일 (일)</label>
                 <input 
                   type="number" 
                   value={newCustomerForm.defaultBillingDay ?? ''} 
@@ -742,13 +799,47 @@ export const MobileCustomerManage: React.FC<MobileCustomerManageProps> = ({ onNa
                 />
               </div>
               <div className="flex flex-col gap-1">
-                <label className="text-[11px] font-bold text-slate-400 whitespace-nowrap">익월 결제일 (일)</label>
+                <label className="text-[11px] font-bold text-slate-400 whitespace-nowrap">명세서 마감일 (일)</label>
+                <input 
+                  type="number" 
+                  value={newCustomerForm.defaultStatementClosingDay ?? ''} 
+                  onChange={e => setNewCustomerForm({...newCustomerForm, defaultStatementClosingDay: parseInt(e.target.value, 10) || 25})} 
+                  className="bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-white font-mono focus:outline-none focus:border-blue-500" 
+                  placeholder="25"
+                />
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-[11px] font-bold text-slate-400 whitespace-nowrap">약정 결제일 (일)</label>
                 <input 
                   type="number" 
                   value={newCustomerForm.paymentDueDay ?? ''} 
                   onChange={e => setNewCustomerForm({...newCustomerForm, paymentDueDay: parseInt(e.target.value, 10) || 25})} 
                   className="bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-white font-mono focus:outline-none focus:border-blue-500" 
                   placeholder="25"
+                />
+              </div>
+            </div>
+
+            {/* 업태 & 종목 */}
+            <div className="grid grid-cols-2 gap-2">
+              <div className="flex flex-col gap-1">
+                <label className="text-[11px] font-bold text-slate-400 whitespace-nowrap">업태</label>
+                <input 
+                  type="text" 
+                  value={newCustomerForm.bizType || ''} 
+                  onChange={e => setNewCustomerForm({...newCustomerForm, bizType: e.target.value})} 
+                  placeholder="건설, 임대"
+                  className="bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-blue-500" 
+                />
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-[11px] font-bold text-slate-400 whitespace-nowrap">종목</label>
+                <input 
+                  type="text" 
+                  value={newCustomerForm.bizItem || ''} 
+                  onChange={e => setNewCustomerForm({...newCustomerForm, bizItem: e.target.value})} 
+                  placeholder="고소작업대 임대"
+                  className="bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-blue-500" 
                 />
               </div>
             </div>

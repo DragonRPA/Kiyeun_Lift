@@ -193,8 +193,12 @@ export const MobileVehicleStock: React.FC = () => {
   const handleSubmitProcess = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!processingConsumable) return;
-    if (processQty <= 0) {
+    if (processType !== 'ADJUST' && processQty <= 0) {
       showErrorModal('수량은 1개 이상이어야 합니다.');
+      return;
+    }
+    if (processType === 'ADJUST' && processQty < 0) {
+      showErrorModal('재고 실사 수량은 0개 이상이어야 합니다.');
       return;
     }
 

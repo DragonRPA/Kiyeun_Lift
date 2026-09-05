@@ -237,7 +237,7 @@ class WalkieTalkieService {
       const saved = localStorage.getItem('walkie_today_history');
       if (saved) {
         const parsed = JSON.parse(saved) as WalkieMessage[];
-        this.history = parsed.filter(m => m.createdAt?.slice(0, 10) === today);
+        this.history = parsed.filter(m => this.getLocalDateStr(m.createdAt) === today);
         if (parsed.length !== this.history.length) this.saveHistoryToStorage();
       }
       const savedPower = localStorage.getItem('walkie_power_on');
@@ -287,11 +287,22 @@ class WalkieTalkieService {
     return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
   }
 
+  getLocalDateStr(dateStr?: string): string {
+    if (!dateStr) return '';
+    try {
+      const d = new Date(dateStr);
+      if (isNaN(d.getTime())) return '';
+      return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    } catch {
+      return '';
+    }
+  }
+
   purgeOldHistoryIfNeeded(): boolean {
     const today = this.getTodayDateStr();
-    const hasOld = this.history.some(m => !m.createdAt || m.createdAt.slice(0,10) !== today);
+    const hasOld = this.history.some(m => !m.createdAt || this.getLocalDateStr(m.createdAt) !== today);
     if (hasOld) {
-      this.history = this.history.filter(m => m.createdAt?.slice(0,10) === today);
+      this.history = this.history.filter(m => this.getLocalDateStr(m.createdAt) === today);
       this.saveHistoryToStorage();
       this.notifyHistoryChange();
       return true;
@@ -437,12 +448,70 @@ class WalkieTalkieService {
     return ch;
   }
 
+  deleteChannel(channelId: string, userId: string): boolean {
+    const ch = this.channelsList.find(c => c.id === channelId);
+    if (!ch || ch.isDefault) return false;
+    // 개설자 본인 또는 관리자만 삭제 가능
+    if (ch.createdById !== userId) return false;
+
+    this.channelsList = this.channelsList.filter(c => c.id !== channelId);
+    this.saveChannelsToStorage();
+    this.notifyChannelsChange();
+
+    if (this.currentChannel === channelId) {
+      const fallback = DEFAULT_WALKIE_CHANNELS[0]?.id || 'DISPATCH';
+      this.setChannel(fallback);
+    }
+
+    if (this.metaChannel) {
+      this.metaChannel.send({
+        type: 'broadcast',
+        event: 'channel_deleted',
+        payload: { channelId }
+      }).catch((e: any) => console.warn('meta broadcast delete err:', e));
+    }
+
+    this.addDebugLog(`[CHANNEL] deleted "${ch.name}" (${channelId})`);
+    return true;
+  }
+
+  leaveChannel(channelId: string, userId: string): boolean {
+    const ch = this.channelsList.find(c => c.id === channelId);
+    if (!ch || ch.isDefault) return false;
+
+    const remaining = ch.memberIds.filter(id => id !== userId);
+    // 참여자가 0명이 되면 고아 채널 자동 소멸
+    if (remaining.length === 0) {
+      return this.deleteChannel(channelId, ch.createdById);
+    }
+
+    ch.memberIds = remaining;
+    this.saveChannelsToStorage();
+    this.notifyChannelsChange();
+
+    if (this.currentChannel === channelId) {
+      const fallback = DEFAULT_WALKIE_CHANNELS[0]?.id || 'DISPATCH';
+      this.setChannel(fallback);
+    }
+
+    if (this.metaChannel) {
+      this.metaChannel.send({
+        type: 'broadcast',
+        event: 'channel_updated',
+        payload: { channelId, memberIds: remaining }
+      }).catch((e: any) => console.warn('meta broadcast leave err:', e));
+    }
+
+    this.addDebugLog(`[CHANNEL] user "${userId}" left "${ch.name}"`);
+    return true;
+  }
+
   getHistory() { this.purgeOldHistoryIfNeeded(); return this.history; }
 
   private addHistory(msg: WalkieMessage) {
     this.purgeOldHistoryIfNeeded();
     const today = this.getTodayDateStr();
-    if (msg.createdAt?.slice(0,10) === today) {
+    if (this.getLocalDateStr(msg.createdAt) === today) {
       this.history = [msg, ...this.history.filter(h => h.id !== msg.id)];
       this.saveHistoryToStorage();
       this.notifyHistoryChange();
@@ -563,6 +632,23 @@ class WalkieTalkieService {
           this.subscribeToChannelTopic(ch.id);
         }
         this.addDebugLog(`[META] channel members updated: "${ch.name}" (${payload.memberIds.length} members)`);
+      }
+    });
+
+    // 타 사원(개설자)이 채널을 삭제했을 때 수신
+    this.metaChannel.on('broadcast', { event: 'channel_deleted' }, ({ payload }: { payload: { channelId: string } }) => {
+      if (!payload?.channelId) return;
+      const targetId = payload.channelId;
+      const exists = this.channelsList.some(c => c.id === targetId);
+      if (exists) {
+        this.channelsList = this.channelsList.filter(c => c.id !== targetId);
+        this.saveChannelsToStorage();
+        this.notifyChannelsChange();
+        if (this.currentChannel === targetId) {
+          const fallback = DEFAULT_WALKIE_CHANNELS[0]?.id || 'DISPATCH';
+          this.setChannel(fallback);
+        }
+        this.addDebugLog(`[META] channel deleted by creator: "${targetId}"`);
       }
     });
 

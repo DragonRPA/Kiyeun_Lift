@@ -52,6 +52,8 @@ export const MobileAsDetail: React.FC<MobileAsDetailProps> = ({ ticketId, onBack
   const [partsUsed, setPartsUsed] = useState<RepairPartUsed[]>(ticket?.partsUsed || []);
   const [selectedStockId, setSelectedStockId] = useState('');
   const [selectedQty, setSelectedQty] = useState(1);
+  const [billableType, setBillableType] = useState<'FREE' | 'BILLABLE'>(ticket?.billableType === 'BILLABLE' ? 'BILLABLE' : 'FREE');
+  const [billableAmount, setBillableAmount] = useState<number>(ticket?.billableAmount || 0);
   const [inspectionItemCode, setInspectionItemCode] = useState<string>(ticket?.inspectionItemCode || '');
   const [degradationScore, setDegradationScore] = useState<number>(ticket?.degradationScore || 0);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -110,10 +112,16 @@ export const MobileAsDetail: React.FC<MobileAsDetailProps> = ({ ticketId, onBack
     if (!stock) return;
     const consumable = consumables.find((c) => c.id === stock.consumableId);
 
+    const safeQty = Math.max(1, Math.floor(selectedQty || 1));
+    if (safeQty > (stock.stockQty || 0)) {
+      showErrorModal(`차량 적재 수량(${stock.stockQty || 0}개)을 초과할 수 없습니다.`);
+      return;
+    }
+
     const newPart: RepairPartUsed = {
       consumableId: stock.consumableId,
       modelName: consumable?.modelName || '소모부품',
-      quantity: selectedQty,
+      quantity: safeQty,
       unitPrice: consumable?.unitPrice || 0,
       stockSource: 'VEHICLE_VAN',
     };
@@ -146,8 +154,8 @@ export const MobileAsDetail: React.FC<MobileAsDetailProps> = ({ ticketId, onBack
         mechanicId: currentUser?.id || ticket.mechanicId || '',
         actionTaken,
         resolutionType,
-        billableType: 'FREE',
-        billableAmount: 0,
+        billableType,
+        billableAmount: billableType === 'BILLABLE' ? Math.max(0, Number(billableAmount) || 0) : 0,
         beforeImage: beforeImages[0] || '',
         afterImage: afterImages[0] || '',
         customerSignature: customerSignature || '', // 🟢 [누락 복구] 서명 데이터 무누락 DB 전달
@@ -470,10 +478,9 @@ export const MobileAsDetail: React.FC<MobileAsDetailProps> = ({ ticketId, onBack
             <option value="">탑차 부품 선택...</option>
             {(() => {
               const targetMechanicId = currentUser?.id || ticket?.mechanicId;
-              const filtered = mechanicConsumableStocks.filter(
+              const displayList = mechanicConsumableStocks.filter(
                 (s) => (!targetMechanicId || s.mechanicId === targetMechanicId) && s.stockQty > 0
               );
-              const displayList = filtered.length > 0 ? filtered : mechanicConsumableStocks.filter(s => s.stockQty > 0);
               return displayList.map((stock) => {
                 const consumable = consumables.find((c) => c.id === stock.consumableId);
                 return (
@@ -537,6 +544,49 @@ export const MobileAsDetail: React.FC<MobileAsDetailProps> = ({ ticketId, onBack
           onChange={setAfterImages}
           maxImages={2}
         />
+      </div>
+
+      {/* 💰 유상/무상 수리 비용 청구 구분 */}
+      <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 flex flex-col gap-3 shadow-lg">
+        <label className="text-xs font-bold text-slate-300">수리 비용 청구 구분</label>
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            onClick={() => setBillableType('FREE')}
+            className={`py-2.5 rounded-xl font-bold text-xs transition-all ${
+              billableType === 'FREE'
+                ? 'bg-emerald-600 text-white shadow'
+                : 'bg-slate-800 text-slate-400 border border-slate-700'
+            }`}
+          >
+            무상 수리 (임대보증)
+          </button>
+          <button
+            type="button"
+            onClick={() => setBillableType('BILLABLE')}
+            className={`py-2.5 rounded-xl font-bold text-xs transition-all ${
+              billableType === 'BILLABLE'
+                ? 'bg-amber-600 text-white shadow'
+                : 'bg-slate-800 text-slate-400 border border-slate-700'
+            }`}
+          >
+            유상 수리 (사용자과실)
+          </button>
+        </div>
+
+        {billableType === 'BILLABLE' && (
+          <div className="flex flex-col gap-1 pt-1">
+            <label className="text-[11px] font-bold text-slate-400">유상 수리 청구 금액 (원)</label>
+            <input
+              type="number"
+              min="0"
+              value={billableAmount || ''}
+              onChange={(e) => setBillableAmount(Math.max(0, parseInt(e.target.value) || 0))}
+              placeholder="청구 금액 입력 (예: 150000)"
+              className="w-full bg-slate-950 border border-amber-600/50 rounded-xl p-2.5 text-xs text-amber-400 font-mono font-bold"
+            />
+          </div>
+        )}
       </div>
 
       {/* 고객 서명 섹션 */}

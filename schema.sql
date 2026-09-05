@@ -25,6 +25,11 @@ DROP TABLE IF EXISTS bank_transactions CASCADE;
 DROP TABLE IF EXISTS bank_account_initial_balances CASCADE;
 DROP TABLE IF EXISTS cash_flow_snapshots CASCADE;
 DROP TABLE IF EXISTS prepaid_transactions CASCADE;
+DROP TABLE IF EXISTS legal_notice_templates CASCADE;
+DROP TABLE IF EXISTS legal_notice_logs CASCADE;
+DROP TABLE IF EXISTS external_leases CASCADE;
+DROP TABLE IF EXISTS bank_initial_balances CASCADE;
+DROP TABLE IF EXISTS asset_inout_logs CASCADE;
 DROP TABLE IF EXISTS delinquency_action_logs CASCADE;
 DROP TABLE IF EXISTS depreciation_logs CASCADE;
 DROP TABLE IF EXISTS outbound_inspections CASCADE;
@@ -96,6 +101,8 @@ CREATE TABLE users (
     "managerId"           TEXT REFERENCES users(id) ON DELETE SET NULL, -- 직속 상급자
     role                  TEXT CHECK (role IN ('ADMIN', 'MANAGER', 'USER', 'MECHANIC')) NOT NULL DEFAULT 'USER',
     status                TEXT CHECK (status IN ('ACTIVE', 'LEAVE_OF_ABSENCE', 'RETIRED')) NOT NULL DEFAULT 'ACTIVE',
+    department            TEXT, -- 부서명 (레거시/표시용)
+    "baseSalary"          DOUBLE PRECISION NOT NULL DEFAULT 0, -- 기본급 (급여 정산 권한자 전용)
     phone                 TEXT,
     email                 TEXT,
     address               TEXT,
@@ -130,6 +137,9 @@ CREATE TABLE annual_leave_quotas (
     "totalDays"           DOUBLE PRECISION NOT NULL DEFAULT 15,
     "usedDays"            DOUBLE PRECISION NOT NULL DEFAULT 0,
     "remainingDays"       DOUBLE PRECISION NOT NULL DEFAULT 15,
+    "periodStart"         TEXT, -- YYYY-MM-DD (갱신 주기 시작)
+    "periodEnd"           TEXT, -- YYYY-MM-DD (갱신 주기 종료)
+    "grantedDays"         DOUBLE PRECISION NOT NULL DEFAULT 15, -- 부여 연차 일수
     memo                  TEXT,
     "createdAt"           TEXT NOT NULL,
     "updatedAt"           TEXT NOT NULL,
@@ -161,6 +171,9 @@ CREATE TABLE overtime_records (
     "startTime"           TEXT NOT NULL,
     "endTime"             TEXT NOT NULL,
     "hoursWorked"         DOUBLE PRECISION NOT NULL,
+    "startDateTime"       TEXT, -- YYYY-MM-DD HH:mm (시작 일시)
+    hours                 DOUBLE PRECISION NOT NULL DEFAULT 0, -- 연장근로 시간
+    "workDetail"          TEXT, -- 연장근무 내용
     reason                TEXT NOT NULL,
     status                TEXT CHECK (status IN ('PENDING', 'APPROVED', 'REJECTED')) NOT NULL DEFAULT 'PENDING',
     "approverId"          TEXT REFERENCES users(id) ON DELETE SET NULL,
@@ -172,6 +185,9 @@ CREATE TABLE overtime_records (
 CREATE TABLE payroll_closings (
     id                    TEXT PRIMARY KEY,
     "payrollYm"           TEXT NOT NULL, -- YYYY-MM
+    month                 TEXT, -- YYYY-MM 별칭
+    "approvedAt"          TEXT,
+    "approvedBy"          TEXT,
     "userId"              TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     "baseSalary"          DOUBLE PRECISION NOT NULL DEFAULT 0,
     "overtimePay"         DOUBLE PRECISION NOT NULL DEFAULT 0,
@@ -226,6 +242,9 @@ CREATE TABLE customers (
     "repContact"          TEXT,
     "repEmail"            TEXT,
     address               TEXT,
+    "bizType"             TEXT, -- 업태 (예: 건설업, 도소매업)
+    "bizItem"             TEXT, -- 종목 (예: 고소작업대임대, 가설재)
+    "transactionStatus"   TEXT CHECK ("transactionStatus" IN ('ALLOWED', 'BLOCKED')) NOT NULL DEFAULT 'ALLOWED', -- ALLOWED: 정상거래, BLOCKED: 신규계약/출고제한
     "defaultBillingDay"   INTEGER DEFAULT 30,
     "defaultStatementClosingDay" INTEGER DEFAULT 25,
     "paymentDueDay"       INTEGER,
@@ -250,6 +269,9 @@ CREATE TABLE customer_contacts (
     position              TEXT,
     contact               TEXT,
     email                 TEXT,
+    "isPrimary"           BOOLEAN NOT NULL DEFAULT FALSE,
+    "isActive"            BOOLEAN NOT NULL DEFAULT TRUE,
+    memo                  TEXT,
     "createdAt"           TEXT NOT NULL,
     "updatedAt"           TEXT NOT NULL
 );
@@ -266,6 +288,7 @@ CREATE TABLE customer_sites (
     "paidOptions"         TEXT, -- 현장별 유상옵션
     "protection"          TEXT, -- 현장별 보양작업
     "checkedSpecs"        JSONB, -- 현장별 21대 표준 스펙 체크
+    "isActive"            BOOLEAN NOT NULL DEFAULT TRUE,
     "createdAt"           TEXT NOT NULL,
     "updatedAt"           TEXT NOT NULL
 );
@@ -336,6 +359,19 @@ CREATE TABLE assets (
     "actualRentReturnDate" TEXT,
     "monthlyRentFee"      DOUBLE PRECISION DEFAULT 0,
     "dailyRentFee"        DOUBLE PRECISION DEFAULT 0,
+    "maintenanceScore"    INTEGER NOT NULL DEFAULT 0, -- 정비점수 (0~10)
+    "billingDay"          INTEGER, -- 청구 마감일
+    "monthlyRentalFee"    DOUBLE PRECISION, -- 약정 월 대여료
+    "dailyRentalFee"      DOUBLE PRECISION, -- 약정 일 대여료
+    renter                TEXT, -- 임차처 (타사 전대 시)
+    "disposalDate"        TEXT, -- 매각일자
+    "disposalPrice"       DOUBLE PRECISION, -- 매각금액
+    buyer                 TEXT, -- 매각처
+    memo1                 TEXT, -- 상세 비고 1
+    memo2                 TEXT, -- 상세 비고 2
+    "safetyInspectionUrl" TEXT, -- 안전검사증 URL
+    "preDeliveryChecklistUrl" TEXT, -- 출고전점검표 URL
+    "fullDefectSummary"   TEXT, -- 전수 결함 요약
 
     -- ⑤ 현재 가동 현장 및 계약 속성 (실시간 라이프사이클)
     "currentCustomerId"   TEXT REFERENCES customers(id) ON DELETE SET NULL,
@@ -368,7 +404,32 @@ CREATE TABLE consumables (
     unit                  TEXT NOT NULL,
     "unitPrice"           DOUBLE PRECISION NOT NULL DEFAULT 0,
     "stockQty"            DOUBLE PRECISION NOT NULL DEFAULT 0,
+    supplier              TEXT, -- 구입처/공급업체
     "vendorId"            TEXT REFERENCES vendors(id) ON DELETE SET NULL,
+    "createdAt"           TEXT NOT NULL,
+    "updatedAt"           TEXT NOT NULL
+);
+
+-- 2-8-1. 소모품 구매 요청 및 입고 관리 (consumable_purchases)
+CREATE TABLE consumable_purchases (
+    id                    TEXT PRIMARY KEY,
+    "consumableId"        TEXT REFERENCES consumables(id) ON DELETE SET NULL,
+    "modelName"           TEXT NOT NULL,
+    "requestedQty"        INTEGER NOT NULL DEFAULT 1,
+    "unitPrice"           DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "sellerName"          TEXT NOT NULL,
+    status                TEXT CHECK (status IN ('REQUESTED', 'ACCEPTED', 'COMPLETED', 'CANCELLED')) NOT NULL DEFAULT 'REQUESTED',
+    "requesterId"         TEXT NOT NULL,
+    "requesterName"       TEXT NOT NULL,
+    "accepterId"          TEXT,
+    "accepterName"        TEXT,
+    "inbounderName"       TEXT,
+    "receivedQty"         INTEGER NOT NULL DEFAULT 0,
+    "statementFileUrl"    TEXT,
+    "requestDate"         TEXT NOT NULL,
+    "acceptedDate"        TEXT,
+    "completedDate"       TEXT,
+    "actualReturnDate"    TEXT,
     "createdAt"           TEXT NOT NULL,
     "updatedAt"           TEXT NOT NULL
 );
@@ -428,6 +489,9 @@ CREATE TABLE contracts (
     "startDate"           TEXT NOT NULL,
     "endDate"             TEXT NOT NULL,
     "billingDay"          INTEGER NOT NULL DEFAULT 30,
+    "statementClosingDay" INTEGER, -- 거래명세서 마감일
+    "customerName"        TEXT,
+    "salespersonName"     TEXT,
     "paymentDueDay"       INTEGER,
     "lateInterestRate"    DOUBLE PRECISION NOT NULL DEFAULT 0,
     status                TEXT CHECK (status IN ('ACTIVE', 'EXTENDED', 'SHORTENED', 'SUCCEEDED', 'COMPLETED')) NOT NULL DEFAULT 'ACTIVE',
@@ -457,9 +521,32 @@ CREATE TABLE contract_assets (
     "startDate"           TEXT NOT NULL,
     "endDate"             TEXT NOT NULL,
     status                TEXT DEFAULT 'ASSIGNED',
+    "contractStart"       TEXT,
+    "contractEnd"         TEXT,
+    "currentCustomerId"   TEXT,
+    "currentSiteId"       TEXT,
     "actualReturnDate"    TEXT,
     "createdAt"           TEXT NOT NULL,
     "updatedAt"           TEXT NOT NULL
+);
+
+-- 3-2-1. 전대/외부 임차 장비 계약 대장 (external_leases)
+CREATE TABLE external_leases (
+    id                    TEXT PRIMARY KEY,
+    "vendorId"            TEXT NOT NULL REFERENCES vendors(id) ON DELETE RESTRICT,
+    "contractId"          TEXT NOT NULL REFERENCES contracts(id) ON DELETE CASCADE,
+    "contractAssetId"     TEXT REFERENCES contract_assets(id) ON DELETE SET NULL,
+    "assetDescription"    TEXT NOT NULL,
+    "monthlyRentFee"      DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "dailyRentFee"        DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "leaseStartDate"      TEXT NOT NULL,
+    "leaseEndDate"        TEXT,
+    status                TEXT CHECK (status IN ('ACTIVE', 'RETURNED')) NOT NULL DEFAULT 'ACTIVE',
+    "statementFileUrl"    TEXT,
+    memo                  TEXT,
+    "createdAt"           TEXT NOT NULL,
+    "updatedAt"           TEXT NOT NULL,
+    contract_id           TEXT
 );
 
 -- 3-3. 계약 변경 이력 및 타임라인 (contract_history)
@@ -515,6 +602,18 @@ CREATE TABLE deliveries (
     "deliveryCost"        DOUBLE PRECISION NOT NULL DEFAULT 0,
     "finalCost"           DOUBLE PRECISION DEFAULT 0,
     "deliveryCostConfirmed" DOUBLE PRECISION DEFAULT 0,
+    "costAdjustmentReason" TEXT,
+    "reconciliationStatus" TEXT CHECK ("reconciliationStatus" IN ('PENDING', 'MATCHED', 'MISMATCH', 'RECONCILED', 'PAYMENT_REQUESTED', 'PAID')) NOT NULL DEFAULT 'PENDING',
+    "reconciledAt"        TEXT,
+    "paymentRequestedAt"  TEXT,
+    "paymentCompletedAt"  TEXT,
+    "statementFileUrl"    TEXT,
+    "billableToCustomer"  BOOLEAN NOT NULL DEFAULT FALSE,
+    "billableCustomerId"  TEXT,
+    "vehicleRequirements" TEXT,
+    "cargoItems"          TEXT,
+    vehicles              TEXT,
+    "scheduledDate"       TEXT,
     "purchaseBillId"      TEXT,
     "isCostSettled"       BOOLEAN DEFAULT FALSE,
 
@@ -536,8 +635,10 @@ CREATE TABLE outbound_inspections (
     "assetId"             TEXT REFERENCES assets(id) ON DELETE SET NULL,
     status                TEXT CHECK (status IN ('PENDING', 'IN_PROGRESS', 'COMPLETED', 'REJECTED')) NOT NULL DEFAULT 'PENDING',
     "specsJson"           TEXT,
+    "deliveryId"          TEXT REFERENCES deliveries(id) ON DELETE SET NULL,
     "inspectorId"         TEXT REFERENCES users(id) ON DELETE SET NULL,
     "inspectedAt"         TEXT,
+    "approvedAt"          TEXT,
     note                  TEXT,
     "createdAt"           TEXT NOT NULL,
     "updatedAt"           TEXT NOT NULL
@@ -557,24 +658,31 @@ CREATE TABLE inbound_defect_details (
 );
 
 -- 3-7. 자산 입출고/정비 이력 (asset_in_out_logs)
-CREATE TABLE asset_in_out_logs (
+CREATE TABLE asset_inout_logs (
     id                    TEXT PRIMARY KEY,
     "assetId"             TEXT NOT NULL REFERENCES assets(id) ON DELETE CASCADE,
     "assetNo"             TEXT NOT NULL,
     "modelName"           TEXT NOT NULL,
-    type                  TEXT CHECK (type IN ('OUTBOUND', 'INBOUND', 'REPAIR')) NOT NULL,
+    type                  TEXT NOT NULL, -- ACQUISITION, OUTBOUND, INBOUND, INBOUND_CANCEL, REPAIR, DISPOSAL, EXCHANGE_OUT, EXCHANGE_IN
+    "inboundNo"           TEXT,
     "customerId"          TEXT REFERENCES customers(id) ON DELETE SET NULL,
     "customerName"        TEXT,
     "siteId"              TEXT REFERENCES customer_sites(id) ON DELETE SET NULL,
     "siteName"            TEXT,
     "deliveryId"          TEXT REFERENCES deliveries(id) ON DELETE SET NULL,
     "repairId"            TEXT,
-    "maintenanceScore"    INTEGER,
+    "maintenanceScore"    INTEGER DEFAULT 0,
+    "defectsJson"         TEXT,
     "eventDate"           TEXT NOT NULL,
     memo                  TEXT,
+    note                  TEXT,
+    date                  TEXT,
     "createdAt"           TEXT NOT NULL,
-    "updatedAt"           TEXT NOT NULL
+    "updatedAt"           TEXT
 );
+
+-- 하위 호환성 뷰
+CREATE OR REPLACE VIEW asset_in_out_logs AS SELECT * FROM asset_inout_logs;
 
 
 -- ==============================================================================
@@ -600,16 +708,20 @@ CREATE TABLE repairs (
     "modelName"           TEXT,
     "contractId"          TEXT REFERENCES contracts(id) ON DELETE SET NULL,
     "targetContractStatus" TEXT,
+    "targetAssetStatus"   TEXT,
     "customerId"          TEXT REFERENCES customers(id) ON DELETE SET NULL,
     "customerName"        TEXT,
     "siteId"              TEXT REFERENCES customer_sites(id) ON DELETE SET NULL,
     "siteName"            TEXT,
+    "siteAddress"         TEXT,
     "locationDetail"      TEXT,
 
     -- ③ 접수자 & 고장 내용
     "reporterName"        TEXT,
     "reporterContact"     TEXT,
     "issueCategory"       TEXT,
+    "inspectionItemCode"  TEXT,
+    "degradationScore"    INTEGER NOT NULL DEFAULT 0,
     "issueDescription"    TEXT,
     details               TEXT,
     "errorCode"           TEXT,
@@ -637,7 +749,10 @@ CREATE TABLE repairs (
     "actionTaken"         TEXT,
     "partsUsed"           JSONB DEFAULT '[]'::jsonb,
     "collectedParts"      JSONB DEFAULT '[]'::jsonb,
+    consumables           JSONB DEFAULT '[]'::jsonb,
     "timelineLogs"        JSONB DEFAULT '[]'::jsonb,
+    "timelineEvents"      JSONB DEFAULT '[]'::jsonb,
+    "resolvedSiteAddress" TEXT,
 
     -- ⑦ 유상 청구 및 원가
     "billableType"        TEXT DEFAULT 'FREE',
@@ -710,6 +825,7 @@ CREATE TABLE consumable_logs (
     type                  TEXT CHECK (type IN ('INBOUND', 'OUTBOUND', 'ADJUST', 'TRANSFER_TO_VEHICLE', 'RETURN_TO_HQ')) NOT NULL,
     quantity              DOUBLE PRECISION NOT NULL,
     "unitPrice"           DOUBLE PRECISION NOT NULL DEFAULT 0,
+    supplier              TEXT,
     "vendorId"            TEXT REFERENCES vendors(id) ON DELETE SET NULL,
     "userId"              TEXT REFERENCES users(id) ON DELETE SET NULL,
     "mechanicId"          TEXT REFERENCES users(id) ON DELETE SET NULL,
@@ -773,6 +889,8 @@ CREATE TABLE billings (
     "totalAmount"         DOUBLE PRECISION NOT NULL DEFAULT 0,
     "paidAmount"          DOUBLE PRECISION NOT NULL DEFAULT 0,
     status                TEXT CHECK (status IN ('UNPAID', 'PARTIAL', 'PAID', 'REQUESTED', 'REJECTED')) NOT NULL DEFAULT 'UNPAID',
+    "rejectReason"        TEXT,
+    details               JSONB,
     "createdAt"           TEXT NOT NULL,
     "updatedAt"           TEXT NOT NULL
 );
@@ -848,15 +966,21 @@ CREATE TABLE payments (
 -- 5-6. 은행 입출금 거래 내역 (bank_transactions)
 CREATE TABLE bank_transactions (
     id                    TEXT PRIMARY KEY,
+    "bankName"            TEXT,
+    "accountNumber"       TEXT,
     "transactionDate"     TEXT NOT NULL,
-    "isDeposit"           BOOLEAN NOT NULL DEFAULT TRUE,
+    summary               TEXT,
+    counterparty          TEXT,
     "senderName"          TEXT NOT NULL,
     "senderAccount"       TEXT,
     "depositAmount"       DOUBLE PRECISION NOT NULL DEFAULT 0,
     "withdrawAmount"      DOUBLE PRECISION NOT NULL DEFAULT 0,
+    balance               DOUBLE PRECISION,
+    "branchName"          TEXT,
     "customerId"          TEXT REFERENCES customers(id) ON DELETE SET NULL,
     "matchedBillingId"    TEXT REFERENCES billings(id) ON DELETE SET NULL,
     "matchingType"        TEXT CHECK ("matchingType" IN ('AUTO', 'MANUAL')),
+    "isDeposit"           BOOLEAN NOT NULL DEFAULT TRUE,
     memo                  TEXT,
     "createdAt"           TEXT NOT NULL,
     "updatedAt"           TEXT NOT NULL
@@ -881,15 +1005,18 @@ CREATE TABLE bank_matching_rules (
 );
 
 -- 5-9. 통장 기초 잔액 (bank_account_initial_balances)
-CREATE TABLE bank_account_initial_balances (
+CREATE TABLE bank_initial_balances (
     id                    TEXT PRIMARY KEY,
     "bankName"            TEXT NOT NULL,
-    "accountNumber"       TEXT NOT NULL UNIQUE,
+    "accountNumber"       TEXT,
     "initialBalance"      DOUBLE PRECISION NOT NULL DEFAULT 0,
-    "asOfDate"            TEXT NOT NULL,
-    "createdAt"           TEXT NOT NULL,
+    "asOfDate"            TEXT,
+    "createdAt"           TEXT,
     "updatedAt"           TEXT NOT NULL
 );
+
+-- 하위 호환성 뷰
+CREATE OR REPLACE VIEW bank_account_initial_balances AS SELECT * FROM bank_initial_balances;
 
 -- 5-10. 월말 매입 정산 마스터 (purchase_settlements)
 CREATE TABLE purchase_settlements (
@@ -907,6 +1034,7 @@ CREATE TABLE purchase_settlements (
     "bankTransactionId"   TEXT REFERENCES bank_transactions(id) ON DELETE SET NULL,
     "confirmedAt"         TEXT,
     "confirmedBy"         TEXT,
+    "itemCount"           INTEGER NOT NULL DEFAULT 0,
     memo                  TEXT,
     "createdAt"           TEXT NOT NULL,
     "updatedAt"           TEXT NOT NULL
@@ -957,12 +1085,16 @@ CREATE TABLE cash_flow_snapshots (
 CREATE TABLE prepaid_transactions (
     id                    TEXT PRIMARY KEY,
     "customerId"          TEXT NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
-    "transactionDate"     TEXT NOT NULL,
-    type                  TEXT CHECK (type IN ('DEPOSIT', 'DEDUCTION', 'REFUND')) NOT NULL,
+    "transactionDate"     TEXT,
+    type                  TEXT CHECK (type IN ('DEPOSIT', 'DEDUCTION', 'REFUND', 'CHARGE', 'USE_FOR_BILLING')) NOT NULL,
     amount                DOUBLE PRECISION NOT NULL DEFAULT 0,
     "balanceAfter"        DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "billingId"           TEXT REFERENCES billings(id) ON DELETE SET NULL,
+    "paymentId"           TEXT REFERENCES payments(id) ON DELETE SET NULL,
+    "bankTransactionId"   TEXT REFERENCES bank_transactions(id) ON DELETE SET NULL,
     "relatedBillingId"    TEXT REFERENCES billings(id) ON DELETE SET NULL,
     description           TEXT,
+    memo                  TEXT,
     "createdAt"           TEXT NOT NULL
 );
 
@@ -970,15 +1102,58 @@ CREATE TABLE prepaid_transactions (
 CREATE TABLE delinquency_action_logs (
     id                    TEXT PRIMARY KEY,
     "customerId"          TEXT NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
-    "actionDate"          TEXT NOT NULL,
-    "actionType"          TEXT CHECK ("actionType" IN ('CALL', 'SMS', 'VISIT', 'LEGAL_NOTICE', 'DEVICE_LOCK')) NOT NULL,
+    "actionDate"          TEXT,
+    "actionType"          TEXT CHECK ("actionType" IN ('CALL', 'SMS', 'VISIT', 'LEGAL_NOTICE', 'DEVICE_LOCK', 'NOTICE_SENT', 'LEGAL', 'DIRECTIVE')) NOT NULL,
+    "actionDetails"       TEXT,
+    "proofFileName"       TEXT,
+    "recordedBy"          TEXT,
+    "mandateType"         TEXT NOT NULL DEFAULT 'CEO_AUTO_MANDATE',
+    "promiseDate"         TEXT,
+    "promiseAmount"       DOUBLE PRECISION,
+    "promiseStatus"       TEXT DEFAULT 'PENDING',
+    "promiseContactPerson" TEXT,
+    "directiveTargetUserId" TEXT,
+    "directiveDueDate"    TEXT,
     "actorId"             TEXT REFERENCES users(id) ON DELETE SET NULL,
     "contactPerson"       TEXT,
     "contactPhone"        TEXT,
-    content               TEXT NOT NULL,
+    content               TEXT,
     "promisedDate"        TEXT,
     "promisedAmount"      DOUBLE PRECISION,
     "createdAt"           TEXT NOT NULL
+);
+
+-- 5-16. 법적 최고/내용증명 발송 이력 (legal_notice_logs)
+CREATE TABLE legal_notice_logs (
+    id                    TEXT PRIMARY KEY,
+    "customerId"          TEXT NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+    "customerName"        TEXT NOT NULL,
+    representative        TEXT NOT NULL,
+    "bizRegNo"            TEXT,
+    address               TEXT NOT NULL,
+    "overdueAmount"       DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "overdueDays"         INTEGER NOT NULL DEFAULT 0,
+    "noticeTitle"         TEXT NOT NULL,
+    "noticeContent"       TEXT NOT NULL,
+    "deadlineDays"        INTEGER NOT NULL DEFAULT 14,
+    "sentDate"            TEXT NOT NULL,
+    "sentByUserId"        TEXT NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+    "sentByName"          TEXT NOT NULL,
+    "postalTrackingNo"    TEXT,
+    status                TEXT DEFAULT 'SENT',
+    "createdAt"           TEXT NOT NULL,
+    "updatedAt"           TEXT
+);
+
+-- 5-17. 내용증명 법적 서식 템플릿 (legal_notice_templates)
+CREATE TABLE legal_notice_templates (
+    id                    TEXT PRIMARY KEY,
+    title                 TEXT NOT NULL,
+    content               TEXT NOT NULL,
+    "deadlineDays"        INTEGER NOT NULL DEFAULT 14,
+    "isDefault"           BOOLEAN DEFAULT FALSE,
+    "createdAt"           TEXT,
+    "updatedAt"           TEXT NOT NULL
 );
 
 -- 5-16. 월별 감가상각 마감 이력 (depreciation_logs)
@@ -1118,7 +1293,13 @@ CREATE TABLE google_configs (
     "bankbookCopyUrl"     TEXT,
     "transactionStatementTemplateUrl" TEXT,
     "defaultRootFolderId" TEXT,
-    "r2AccountId"         TEXT,
+    "currentInsuranceStartDate" TEXT,
+    "currentInsuranceEndDate"   TEXT,
+    "nextInsuranceCertUrl"     TEXT,
+    "nextInsuranceStartDate"   TEXT,
+    "nextInsuranceEndDate"     TEXT,
+    "mirrorRecursive"          BOOLEAN NOT NULL DEFAULT TRUE,
+    "r2AccountId"              TEXT,
     "r2BucketName"        TEXT,
     "r2AccessKeyId"       TEXT,
     "r2SecretAccessKey"   TEXT,
@@ -1127,6 +1308,88 @@ CREATE TABLE google_configs (
     "updatedAt"           TEXT NOT NULL
 );
 
+
+-- ==============================================================================
+-- 7. 법인 차량 및 차량운행일지/주유기록 관리 (corporate_vehicles, vehicle_operation_logs, vehicle_fuel_logs)
+-- ==============================================================================
+
+-- 7-1. 법인 차량 마스터 (corporate_vehicles)
+CREATE TABLE corporate_vehicles (
+    id                    TEXT PRIMARY KEY,
+    "vehicleNo"           TEXT NOT NULL UNIQUE,
+    "modelName"           TEXT NOT NULL,
+    "vehicleType"         TEXT DEFAULT '승합차', -- 승용차, 화물/탑차, 승합차, 전기차
+    "ownershipType"       TEXT CHECK ("ownershipType" IN ('OWNED', 'LEASE', 'RENTAL')) DEFAULT 'OWNED',
+    "fuelType"            TEXT CHECK ("fuelType" IN ('DIESEL', 'GASOLINE', 'LPG', 'HYBRID', 'ELECTRIC')) DEFAULT 'DIESEL',
+    "assignedDepartment"  TEXT DEFAULT '관리부',
+    "primaryDriverId"     TEXT REFERENCES users(id) ON DELETE SET NULL,
+    "primaryDriverName"   TEXT,
+    "initialMileage"      INTEGER NOT NULL DEFAULT 0,
+    "currentMileage"      INTEGER NOT NULL DEFAULT 0,
+    "insuranceExpiryDate" TEXT,
+    "inspectionExpiryDate" TEXT,
+    "isActive"            BOOLEAN NOT NULL DEFAULT TRUE,
+    memo                  TEXT,
+    "createdAt"           TEXT NOT NULL,
+    "updatedAt"           TEXT NOT NULL
+);
+
+-- 7-2. 차량운행일지 (vehicle_operation_logs - 국세청 업무용승용차 운행기록부 법정서식 연동)
+CREATE TABLE vehicle_operation_logs (
+    id                    TEXT PRIMARY KEY,
+    "vehicleId"           TEXT NOT NULL REFERENCES corporate_vehicles(id) ON DELETE CASCADE,
+    "vehicleNo"           TEXT NOT NULL,
+    "driverId"            TEXT NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+    "driverName"          TEXT NOT NULL,
+    "driverDept"          TEXT,
+    "operationDate"       TEXT NOT NULL, -- YYYY-MM-DD
+    "purposeType"         TEXT CHECK ("purposeType" IN ('COMMUTE', 'BUSINESS_GENERAL', 'CLIENT_MEETING', 'SITE_AS', 'LOGISTICS_DELIVERY', 'OTHER')) NOT NULL DEFAULT 'BUSINESS_GENERAL',
+    "purposeDetail"       TEXT,
+    "departureLocation"   TEXT NOT NULL,
+    "arrivalLocation"     TEXT NOT NULL,
+    "departureMileage"    INTEGER NOT NULL,
+    "arrivalMileage"      INTEGER NOT NULL,
+    "driveDistance"       INTEGER NOT NULL, -- arrivalMileage - departureMileage
+    "businessDistance"    INTEGER NOT NULL, -- 업무용 사용거리
+    "commuteDistance"     INTEGER NOT NULL DEFAULT 0, -- 출퇴근거리
+    "dashboardPhotoStart" TEXT, -- 출발 시 계기판 사진 URL / Base64
+    "dashboardPhotoEnd"   TEXT, -- 도착 시 계기판 사진 URL / Base64
+    memo                  TEXT,
+    status                TEXT CHECK (status IN ('SUBMITTED', 'CONFIRMED', 'REJECTED')) NOT NULL DEFAULT 'SUBMITTED',
+    "confirmedBy"         TEXT,
+    "confirmedAt"         TEXT,
+    "createdAt"           TEXT NOT NULL,
+    "updatedAt"           TEXT NOT NULL
+);
+
+-- 7-3. 차량 주유 및 충전 영수증 기록부 (vehicle_fuel_logs)
+CREATE TABLE vehicle_fuel_logs (
+    id                    TEXT PRIMARY KEY,
+    "vehicleId"           TEXT NOT NULL REFERENCES corporate_vehicles(id) ON DELETE CASCADE,
+    "vehicleNo"           TEXT NOT NULL,
+    "driverId"            TEXT NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+    "driverName"          TEXT NOT NULL,
+    "fuelDate"            TEXT NOT NULL, -- YYYY-MM-DD HH:mm
+    "fuelType"            TEXT NOT NULL, -- DIESEL, GASOLINE, LPG, ELECTRIC
+    "fuelVolume"          DOUBLE PRECISION NOT NULL, -- 주유량 (리터 L)
+    "fuelAmount"          DOUBLE PRECISION NOT NULL, -- 주유금액 (원 ₩)
+    "fuelUnitPrice"       DOUBLE PRECISION, -- 리터당 단가
+    "currentMileage"      INTEGER NOT NULL, -- 주유 시점 계기판 주행거리 (km)
+    "dashboardPhotoUrl"   TEXT, -- 주유 시 계기판 사진
+    "receiptPhotoUrl"     TEXT NOT NULL, -- 주유 영수증 사진
+    "gasStationName"      TEXT, -- 주유소 상호
+    "paymentMethod"       TEXT DEFAULT 'CORPORATE_CARD', -- CORPORATE_CARD, PERSONAL_EXPENSE
+    "cardLast4"           TEXT,
+    "fuelEfficiency"      DOUBLE PRECISION, -- 직전 대비 계산된 연비 (km/L)
+    memo                  TEXT,
+    "createdAt"           TEXT NOT NULL,
+    "updatedAt"           TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_vlog_vehicle_date ON vehicle_operation_logs("vehicleId", "operationDate");
+CREATE INDEX IF NOT EXISTS idx_vlog_driver ON vehicle_operation_logs("driverId");
+CREATE INDEX IF NOT EXISTS idx_vfuel_vehicle_date ON vehicle_fuel_logs("vehicleId", "fuelDate");
+CREATE INDEX IF NOT EXISTS idx_vfuel_driver ON vehicle_fuel_logs("driverId");
 
 -- ==============================================================================
 -- 🔒 전 테이블 Row Level Security (RLS) 및 권한 일괄 활성화

@@ -4,7 +4,7 @@ import { useApp } from '../../context/AppContext';
 import { db, Todo, Customer, DelinquencyActionLog, ConsumablePurchaseRequest, PurchaseSettlement } from '../../services/db';
 import { 
   Crown, TrendingUp, AlertTriangle, ShieldCheck, CreditCard, 
-  Clock, CheckCircle2, ChevronRight, Ban, Send, ArrowRight, Users
+  Clock, CheckCircle2, ChevronRight, Ban, Send, ArrowRight, Users, Car
 } from 'lucide-react';
 import { MobileTabType } from '../MobileBottomNav';
 
@@ -85,11 +85,23 @@ export const MobileExecutiveHome: React.FC<MobileExecutiveHomeProps> = ({ onNavi
   // 수금 지시 하달 핸들러 (Todo + DelinquencyActionLog 동시 불변 기록)
   const handleDirective = async (custName: string, customerId?: string) => {
     try {
+      // 담당 영업사원 탐색 (계약 우선 매핑)
+      let targetSalesUserId = 'admin';
+      if (customerId) {
+        const custContracts = contracts.filter(c => c.customerId === customerId);
+        const activeContract = custContracts.find(c => c.status === 'ACTIVE') || custContracts[0];
+        if (activeContract?.salespersonId) {
+          targetSalesUserId = activeContract.salespersonId;
+        }
+      }
+
+      const dueDate = new Date(Date.now() + 3 * 86400000).toISOString().split('T')[0];
+
       db.insertRow<Todo>('todos', {
-        userId: currentUser?.id || 'admin',
+        userId: targetSalesUserId,
         type: 'GENERAL',
         title: `[경영진 지시] ${custName} 수금 독촉 방문/유선 상담`,
-        content: '경영진 모바일 긴급 지시 하달: 수금 독촉 및 유선 상담 진행 요망',
+        content: `경영진 모바일 긴급 지시 하달: 수금 독촉 및 유선 상담 진행 요망\n완료기한: ${dueDate}`,
         isCompleted: false,
         relatedEntityId: customerId,
         createdAt: new Date().toISOString(),
@@ -98,9 +110,11 @@ export const MobileExecutiveHome: React.FC<MobileExecutiveHomeProps> = ({ onNavi
         db.insertRow<DelinquencyActionLog>('delinquencyActionLogs', {
           customerId: customerId,
           actionType: 'DIRECTIVE',
-          actionDetails: '경영진 모바일 홈 긴급 수금지시 하달: 전담 영업팀 수금 독촉 및 유선 상담 요망',
+          actionDetails: `경영진 모바일 홈 긴급 수금지시 하달: 전담 영업팀 수금 독촉 및 유선 상담 요망 (처리기한: ${dueDate})`,
           recordedBy: currentUser?.name || '대표이사',
           mandateType: 'CEO_AUTO_MANDATE',
+          directiveTargetUserId: targetSalesUserId,
+          directiveDueDate: dueDate,
           promiseContactPerson: '전담 영업팀',
           createdAt: new Date().toISOString(),
         });
@@ -459,6 +473,28 @@ export const MobileExecutiveHome: React.FC<MobileExecutiveHomeProps> = ({ onNavi
             ))}
           </div>
         )}
+      </div>
+
+      {/* ── 6. 법인차량 운행일지 & 주유영수증 촬영 ── */}
+      <div
+        onClick={() => onNavigate('vehicle_log')}
+        className="p-4 rounded-2xl bg-gradient-to-r from-amber-950/30 to-slate-900 border border-amber-500/40 flex items-center justify-between active:scale-98 transition-all cursor-pointer shadow-md"
+      >
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-amber-400 flex-shrink-0">
+            <Car className="w-5 h-5" />
+          </div>
+          <div>
+            <div className="text-sm font-bold text-white flex items-center gap-1.5">
+              <span>차량운행일지 / 주유영수증</span>
+              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-bold">
+                전사 공용
+              </span>
+            </div>
+            <div className="text-xs text-slate-400 mt-0.5">계기판 & 주유영수증 촬영 ➔ 국세청 서식 자동 연동</div>
+          </div>
+        </div>
+        <ArrowRight className="w-5 h-5 text-amber-400" />
       </div>
     </div>
   );

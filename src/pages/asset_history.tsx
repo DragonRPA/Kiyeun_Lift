@@ -13,6 +13,13 @@ export const AssetHistory: React.FC = () => {
     inspectionChecklistItems, registerInboundAsset, cancelInboundAsset, fullRefreshFromServer, googleConfigs, showErrorModal
   } = useApp();
 
+  // 토스트 알림 상태 (헌장 5.2: 브라우저 alert/confirm 전면 퇴출)
+  const [toastMessage, setToastMessage] = useState<{ type: 'success' | 'error' | 'warning'; text: string } | null>(null);
+  const showToast = (text: string, type: 'success' | 'error' | 'warning' = 'success') => {
+    setToastMessage({ type, text });
+    setTimeout(() => setToastMessage(null), 3500);
+  };
+
   // 1. 탭 상태: 'INBOUND_REGISTER' | 'INBOUND' | 'OUTBOUND' | 'REPAIR'
   const [activeTab, setActiveTab] = useState<'INBOUND_REGISTER' | 'INBOUND' | 'OUTBOUND' | 'REPAIR'>('INBOUND_REGISTER');
 
@@ -45,6 +52,8 @@ export const AssetHistory: React.FC = () => {
   const selectedChecklistObjects = inspectionChecklistItems.filter(item => selectedChecklistIds.includes(item.id));
   const calculatedInboundScore = selectedChecklistObjects.reduce((sum, item) => sum + item.score, 0);
   const selectedChecklistSummary = selectedChecklistObjects.map(item => `${item.name}(+${item.score}점)`).join(', ');
+  // 💡 [입고 취소 롤백] 전용 모달 상태 (window.prompt 퇴출)
+  const [cancelModal, setCancelModal] = useState<{ isOpen: boolean; log: any; reason: string } | null>(null);
 
   // 💡 모바일 카메라 촬영 앱 전환 후 복귀 시 자동 복원 (SessionStorage Auto Recovery)
   useEffect(() => {
@@ -71,7 +80,7 @@ export const AssetHistory: React.FC = () => {
       }
     } catch (err: any) {
       const msg = err?.message || '사진 처리 중 오류가 발생했습니다.';
-      alert(msg);
+      showErrorModal(msg);
     }
   };
 
@@ -167,7 +176,7 @@ export const AssetHistory: React.FC = () => {
   const handleSubmitInbound = async (e?: React.FormEvent | React.MouseEvent) => {
     if (e) e.preventDefault();
     if (!inboundTargetAsset) {
-      alert('입고 처리할 대상 자산의 정확한 관리번호를 입력해 주세요.');
+      showErrorModal('입고 처리할 대상 자산의 정확한 관리번호를 입력해 주세요.');
       return;
     }
 
@@ -210,12 +219,12 @@ export const AssetHistory: React.FC = () => {
 
           const resJson = await res.json();
           if (resJson.success) {
-            uploadedPhotoUrls[item.id] = resJson.publicUrl || `https://pub-drcf-bucket.r2.dev/${key}`; // Replace with your actual public URL pattern if available, or assume successful path
+            uploadedPhotoUrls[item.id] = resJson.publicUrl || `https://pub-drcf-bucket.r2.dev/${key}`;
           } else {
-            showErrorModal(`사진 업로드 실패 (${item.name}): ${resJson.error}`, '입고검수 첨부 오류');
+            showErrorModal(`사진 업로드 실패 (${item.name}): ${resJson.error}`);
           }
         } catch (uploadErr: any) {
-          showErrorModal(`사진 네트워크 업로드 실패 (${item.name}): ${uploadErr.message || uploadErr}`, '입고검수 첨부 오류');
+          showErrorModal(`사진 네트워크 업로드 실패 (${item.name}): ${uploadErr.message || uploadErr}`);
         }
       }
 
@@ -230,12 +239,13 @@ export const AssetHistory: React.FC = () => {
       await registerInboundAsset({
         assetId: inboundTargetAsset.id,
         returnDate: inboundDate,
-        maintenanceScore: calculatedInboundScore,
+        maintenanceScore: Math.max(0, calculatedInboundScore),
         defects: defectPayloads,
+        photos: Object.values(uploadedPhotoUrls).filter(Boolean),
         memo: combinedMemo
       });
 
-      alert(`✅ [입고 등록 완결]\n\n자산번호: [${inboundTargetAsset.assetNo}] (${inboundTargetAsset.modelName})\n입고 일자: ${inboundDate}\n정비 필요 점수: ${calculatedInboundScore}점\n상태 전환: ${calculatedInboundScore === 0 ? '임대가능 (AVAILABLE)' : '입고반납/검수대기 (RENTED_RETURNED)'}\n\n계약 반납 마감, 입고 고유번호 및 자산 정비수리 이력이 정상 연동 등록되었습니다.`);
+      showToast(`[입고 등록 완결] 자산 [${inboundTargetAsset.assetNo}] 입고 등록 및 자산 상태 갱신이 완료되었습니다.`);
       
       // 폼 초기화 및 임시 저장 세션 소멸
       setSelectedInboundAssetId('');
@@ -251,22 +261,31 @@ export const AssetHistory: React.FC = () => {
       } catch (e) {}
       setActiveTab('INBOUND');
     } catch (err: any) {
-      alert(`⚠️ 입고 등록 중 오류 발생: ${err?.message || err}`);
+      showErrorModal(`⚠️ 입고 등록 중 오류 발생: ${err?.message || err}`);
     } finally {
       setIsSubmittingInbound(false);
     }
   };
 
   // 💡 [입고 취소 롤백] 휴먼에러 입고 취소 처리
-  const handleCancelInbound = async (log: any) => {
-    const reason = prompt(`[휴먼에러 복원 - 입고 취소 롤백]\n\n자산번호 [${log.assetNo}] 입고 건을 취소하고 자산 상태를 대여중(RENTED)으로 복원하시겠습니까?\n취소 사유를 작성해주세요:`, '사용자 입력 오타로 인한 입고 취소 롤백');
-    if (reason === null) return; // 취소 누름
+  const handleCancelInbound = (log: any) => {
+    setCancelModal({
+      isOpen: true,
+      log,
+      reason: '사용자 입력 오타로 인한 입고 취소 롤백'
+    });
+  };
+
+  const handleConfirmCancelInbound = async () => {
+    if (!cancelModal) return;
+    const { log, reason } = cancelModal;
+    setCancelModal(null);
 
     try {
-      await cancelInboundAsset(log.id, reason);
-      alert(`✅ [입고 취소 롤백 성공]\n\n자산 [${log.assetNo}]의 상태 및 계약 매핑이 [대여중(RENTED)]으로 안전하게 원복 되었습니다.\n\n※Audit Trail: 입고 취소(INBOUND_CANCEL) 이력이 기록되어 무누락 추적성이 보장됩니다.`);
+      await cancelInboundAsset(log.id, reason || '사용자 입력 오타로 인한 입고 취소 롤백');
+      showToast(`[입고 취소 롤백 성공] 자산 [${log.assetNo}] 상태가 [대여중(RENTED)]으로 안전하게 원복 되었습니다.`);
     } catch (err: any) {
-      alert(`⚠️ 입고 취소 롤백 실패: ${err?.message || err}`);
+      showErrorModal(`⚠️ 입고 취소 롤백 실패: ${err?.message || err}`);
     }
   };
 
@@ -1042,6 +1061,61 @@ export const AssetHistory: React.FC = () => {
                 )}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {toastMessage && (
+        <div style={{
+          position: 'fixed',
+          bottom: '24px',
+          right: '24px',
+          padding: '12px 20px',
+          borderRadius: '8px',
+          backgroundColor: toastMessage.type === 'error' ? '#ef4444' : toastMessage.type === 'warning' ? '#f59e0b' : '#10b981',
+          color: '#fff',
+          fontWeight: 700,
+          fontSize: '13px',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
+          zIndex: 10000,
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px'
+        }}>
+          {toastMessage.text}
+        </div>
+      )}
+
+      {/* 입고 취소 롤백 모달 (Charter 5.2 window.prompt 퇴출) */}
+      {cancelModal && cancelModal.isOpen && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 11000
+        }}>
+          <div style={{ backgroundColor: 'var(--bg-card)', borderRadius: '10px', padding: '20px', maxWidth: '440px', width: '90%', border: '1px solid var(--border-color)', boxShadow: '0 8px 24px rgba(0,0,0,0.3)' }}>
+            <h4 style={{ margin: '0 0 10px 0', fontSize: '15px', color: '#ef4444' }}>입고 취소 롤백</h4>
+            <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '12px' }}>
+              자산번호 [<strong>{cancelModal.log.assetNo}</strong>] 입고 건을 취소하고 자산 상태를 대여중(RENTED)으로 복원하시겠습니까?
+            </p>
+            <div style={{ marginBottom: '16px' }}>
+              <label style={{ fontSize: '11.5px', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>취소 사유</label>
+              <input
+                type="text"
+                style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-body)', color: 'var(--text-primary)', fontSize: '12.5px' }}
+                value={cancelModal.reason}
+                onChange={e => setCancelModal({ ...cancelModal, reason: e.target.value })}
+              />
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+              <button className="btn-secondary" onClick={() => setCancelModal(null)}>닫기</button>
+              <button
+                className="btn-primary"
+                style={{ backgroundColor: '#ef4444', borderColor: '#ef4444' }}
+                onClick={handleConfirmCancelInbound}
+              >
+                입고 취소 롤백 실행
+              </button>
+            </div>
           </div>
         </div>
       )}

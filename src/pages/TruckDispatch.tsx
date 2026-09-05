@@ -14,6 +14,7 @@ import { Delivery, TransportCompany, TransportDriver, db, DeliveryStatus, Asset 
 import { DestinationWeatherModal } from '../components/DestinationWeatherModal';
 import { matchHangul } from '../utils/hangulSearch';
 import { buildDispatchSmsText, launchDispatchSms } from '../utils/nativeLauncher';
+import { broadcastWorkNotification } from '../utils/workNotificationService';
 
 const VEHICLE_TYPE_OPTIONS = ['1.4T', '2.5T', '3.5T', '5T', '5T장축', '8.5T', '11T', '노배드'];
 
@@ -360,7 +361,7 @@ export const TruckDispatch: React.FC = () => {
 
   // 수동 배차 모달 state
   const [showManualModal, setShowManualModal] = useState(false);
-  const [manualCategory, setManualCategory] = useState<'출고' | '입고' | '반납' | '정비' | '이동'>('출고');
+  const [manualCategory, setManualCategory] = useState<'출고' | '입고' | '반납' | '정비' | '이동' | '교환'>('출고');
   const [manualCustomerId, setManualCustomerId] = useState('');
   const [manualContractId, setManualContractId] = useState('');
   const [manualOrigin, setManualOrigin] = useState('당사 보관소');
@@ -1061,6 +1062,8 @@ export const TruckDispatch: React.FC = () => {
         reconciliationStatus: 'RECONCILED',
         memo: [pair.systemDelivery.memo, `[차액승인: ₩${pair.excelCost.toLocaleString()} (${pair.surchargeReason || '할증인정'})]`].filter(Boolean).join(' | ')
       } as any);
+      await db.awaitPendingWrites();
+      refreshAllData();
 
       setReconPairs(prev => prev.map(p => {
         if (p.pairId === pairId) {
@@ -1097,6 +1100,8 @@ export const TruckDispatch: React.FC = () => {
           } as any);
         }
       }
+      await db.awaitPendingWrites();
+      refreshAllData();
 
       setReconPairs(prev => prev.map(p => {
         if (p.matchStatus === 'MISMATCH' && p.systemDelivery) {
@@ -1182,6 +1187,7 @@ export const TruckDispatch: React.FC = () => {
         return p;
       }));
 
+      await db.awaitPendingWrites();
       await refreshAllData();
       setReconNotificationMsg(`✅ 신규 배차(${newDelivId})가 생성되고 대사 완료되었습니다.`);
     } catch (e: any) {
@@ -1221,6 +1227,9 @@ export const TruckDispatch: React.FC = () => {
           } as any);
         }
       }
+
+      await db.awaitPendingWrites();
+      refreshAllData();
 
       setReconPairs(prev => prev.map(p => {
         if (p.isReconciled && p.systemDelivery && !p.isExcluded) {
@@ -1499,7 +1508,7 @@ export const TruckDispatch: React.FC = () => {
       setUnloadingCustomTime('');
     }
 
-    setClosingMemo(d.closingMemo || d.memo || '');
+    setClosingMemo(d.closingMemo || '');
     setScheduledDate(d.scheduledDate || todayStr);
     setOriginAddress(d.originAddress || '당사 보관소');
 
@@ -1534,21 +1543,27 @@ export const TruckDispatch: React.FC = () => {
   };
 
   const handleVehicleFieldChange = (index: number, field: keyof AssignedVehicleRow, value: any) => {
-    const updated = [...assignedVehicles];
-    updated[index] = { ...updated[index], [field]: value };
-
-    // 기사 선택 시 연락처, 차량번호, 차종(톤수) 및 운송사 자동 매핑
-    if (field === 'driverName' && value) {
-      const driverMatch = transportDrivers.find(d => d.driverName.trim() === value.trim());
-      if (driverMatch) {
-        if (driverMatch.driverContact) updated[index].driverContact = driverMatch.driverContact;
-        if (driverMatch.vehicleNo) updated[index].vehicleNo = driverMatch.vehicleNo;
-        if (driverMatch.vehicleType) updated[index].vehicleType = driverMatch.vehicleType;
-        const comp = transportCompanies.find(c => c.id === driverMatch.companyId);
-        if (comp) updated[index].transportCompany = comp.name;
+    setAssignedVehicles(prev => {
+      const updated = [...prev];
+      let sanitizedValue = value;
+      if (field === 'expectedCost' || field === 'finalCost' || field === 'deliveryCost') {
+        sanitizedValue = Math.max(0, Number(value) || 0);
       }
-    }
-    setAssignedVehicles(updated);
+      updated[index] = { ...updated[index], [field]: sanitizedValue };
+
+      // 기사 선택 시 연락처, 차량번호, 차종(톤수) 및 운송사 자동 매핑
+      if (field === 'driverName' && value) {
+        const driverMatch = transportDrivers.find(d => d.driverName.trim() === value.trim());
+        if (driverMatch) {
+          if (driverMatch.driverContact) updated[index].driverContact = driverMatch.driverContact;
+          if (driverMatch.vehicleNo) updated[index].vehicleNo = driverMatch.vehicleNo;
+          if (driverMatch.vehicleType) updated[index].vehicleType = driverMatch.vehicleType;
+          const comp = transportCompanies.find(c => c.id === driverMatch.companyId);
+          if (comp) updated[index].transportCompany = comp.name;
+        }
+      }
+      return updated;
+    });
   };
 
   const handleAddVehicleRow = () => {
@@ -1628,6 +1643,15 @@ export const TruckDispatch: React.FC = () => {
       return;
     }
 
+    // 🚨 출고 제한(BLOCKED) 거래처 출고 배차 원천 차단
+    const targetContract = selectedDelivery.contractId ? contracts.find(c => c.id === selectedDelivery.contractId) : null;
+    const targetCustomer = targetContract ? customers.find(c => c.id === targetContract.customerId) : null;
+    const isOutboundOrExchange = selectedDelivery.type === 'OUTBOUND' || selectedDelivery.dispatchCategory === '출고' || selectedDelivery.dispatchCategory === '교환';
+    if (isOutboundOrExchange && targetCustomer?.transactionStatus === 'BLOCKED') {
+      showErrorModal(`[출고제한] 거래처 [${targetCustomer.name}]은(는) 연체 관리 또는 경영진 지시로 인해 신규 출고가 차단된 상태입니다. 배차 기사를 배정할 수 없습니다.`, '출고 차단');
+      return;
+    }
+
     // ⚠️ 출고 의뢰가 반려된 상태인지 검사 및 예방적 경고 알림!
     const inspStatus = getOutboundInspectionStatus(selectedDelivery.contractId);
     if (inspStatus === 'REJECTED') {
@@ -1663,12 +1687,24 @@ export const TruckDispatch: React.FC = () => {
         deliveryCost: totalFinalCost || totalExpectedCost,
         vehicles: JSON.stringify(assignedVehicles),
         closingMemo: closingMemo,
-        memo: closingMemo,
+        memo: selectedDelivery.memo || closingMemo,
         updatedAt: new Date().toISOString()
       };
 
       db.updateRow<Delivery>('deliveries', selectedDelivery.id, payload);
       await db.awaitPendingWrites();
+
+      const curContract = selectedDelivery.contractId ? contracts.find(c => c.id === selectedDelivery.contractId) : null;
+      const curCust = curContract ? customers.find(c => c.id === curContract.customerId)?.name : '';
+      const curSite = curContract ? sites.find(s => s.id === curContract.siteId)?.name : '';
+      broadcastWorkNotification({
+        type: 'DISPATCH',
+        title: '배차 완료 안내',
+        body: `${curCust || '현장'} (${curSite || '배차'}) ${mainVeh.driverName || '기사'} (${mainVeh.vehicleType || '차량'}) 배정 완료`,
+        url: '/admin/dispatch',
+        targetDepts: ['SALES', 'YARD', 'ADMIN', 'EXECUTIVE']
+      }).catch(console.warn);
+
       refreshAllData();
       showToast('배차 기사 배정 완료 (상태: 배차 완료)');
       setSelectedDelivery(null);
@@ -1727,13 +1763,21 @@ export const TruckDispatch: React.FC = () => {
       return;
     }
 
+    if (manualCategory === '출고' || manualCategory === '교환') {
+      const targetCust = customers.find(c => c.id === manualCustomerId || (manualContractId && contracts.find(ct => ct.id === manualContractId)?.customerId === c.id));
+      if (targetCust?.transactionStatus === 'BLOCKED') {
+        showErrorModal(`[출고제한] 거래처 [${targetCust.name}]은(는) 신규 장비 출고가 차단된 상태입니다. 신규 출고 배차를 생성할 수 없습니다.`, '출고 차단');
+        return;
+      }
+    }
+
     try {
       const finalLoadingSlot = manualLoadingTimeSlot === '희망시간' ? manualLoadingCustomTime : manualLoadingTimeSlot;
       const finalUnloadingSlot = manualUnloadingTimeSlot === '희망시간' ? manualUnloadingCustomTime : manualUnloadingTimeSlot;
       const nowIso = new Date().toISOString();
 
       db.insertRow<Delivery>('deliveries', {
-        type: manualCategory === '출고' ? 'OUTBOUND' : manualCategory === '반납' ? 'RETURN' : 'INBOUND',
+        type: manualCategory === '출고' ? 'OUTBOUND' : manualCategory === '교환' ? 'EXCHANGE' : manualCategory === '반납' ? 'RETURN' : 'INBOUND',
         status: 'PENDING',
         dispatchCategory: manualCategory,
         contractId: manualContractId || undefined,
@@ -2254,8 +2298,13 @@ export const TruckDispatch: React.FC = () => {
                           </div>
                         </div>
 
-                        <div style={{ fontSize: '14px', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '4px' }}>
-                          🏢 {customer?.name || '고객사 미지정'}
+                        <div style={{ fontSize: '14px', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <span>🏢 {customer?.name || '고객사 미지정'}</span>
+                          {customer?.transactionStatus === 'BLOCKED' && (
+                            <span style={{ fontSize: '10.5px', fontWeight: 800, padding: '1px 5px', borderRadius: '4px', backgroundColor: '#ef4444', color: '#fff', flexShrink: 0 }}>
+                              출고제한
+                            </span>
+                          )}
                         </div>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                           <div style={{ fontSize: '12.5px', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
@@ -2423,6 +2472,20 @@ export const TruckDispatch: React.FC = () => {
 
                     return (
                       <div>
+                        {(() => {
+                          const curContract = getContract(selectedDelivery.contractId);
+                          const curCustomer = curContract ? getCustomer(curContract.customerId) : null;
+                          const isOutOrEx = selectedDelivery.type === 'OUTBOUND' || selectedDelivery.dispatchCategory === '출고' || selectedDelivery.dispatchCategory === '교환';
+                          if (isOutOrEx && curCustomer?.transactionStatus === 'BLOCKED') {
+                            return (
+                              <div style={{ padding: '10px 14px', borderRadius: '8px', backgroundColor: 'rgba(239,68,68,0.1)', border: '1px solid #ef4444', color: '#b91c1c', fontWeight: 800, fontSize: '13px', marginBottom: '14px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <AlertTriangle size={18} color="#ef4444" />
+                                <span>[출고제한 거래처] 거래처 [{curCustomer.name}]은(는) 연체 관리로 인해 신규 장비 출고가 차단되었습니다. 배차를 확정할 수 없습니다.</span>
+                              </div>
+                            );
+                          }
+                          return null;
+                        })()}
 
                         {/* 배차 세부 설정 폼 (3컬럼: 배차 구분 | 상차일자 & 시간 | 하차일자 & 시간) */}
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.25fr 1.25fr', gap: '14px', marginBottom: '16px' }}>
@@ -2436,6 +2499,7 @@ export const TruckDispatch: React.FC = () => {
                             >
                               <option value="출고">출고</option>
                               <option value="입고">입고</option>
+                              <option value="교환">교환</option>
                               <option value="반납">반납</option>
                               <option value="정비">정비</option>
                               <option value="이동">이동</option>
@@ -2596,9 +2660,10 @@ export const TruckDispatch: React.FC = () => {
                           </div>
 
                           {/* 컬럼 헤더 (사장님 지시: 예상 운송비 필수, 실제 운송비 선택적 입력 2열로 분리) */}
-                          <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1.1fr 0.8fr 1.1fr 1fr 1fr 30px', gap: '6px', padding: '6px 10px', backgroundColor: 'var(--bg-body)', borderRadius: '6px', fontSize: '11px', fontWeight: 800, color: 'var(--primary)', marginBottom: '6px', border: '1px solid var(--border-color)' }}>
+                          <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1.1fr 0.9fr 0.8fr 1.1fr 1fr 1fr 30px', gap: '6px', padding: '6px 10px', backgroundColor: 'var(--bg-body)', borderRadius: '6px', fontSize: '11px', fontWeight: 800, color: 'var(--primary)', marginBottom: '6px', border: '1px solid var(--border-color)' }}>
                             <div>🏢 운송사 거래처</div>
                             <div>👤 운송 기사명</div>
+                            <div>🔢 차량번호</div>
                             <div>🚚 차종</div>
                             <div>📞 기사 연락처</div>
                             <div>💰 예상 운송비 (필수)</div>
@@ -2614,7 +2679,7 @@ export const TruckDispatch: React.FC = () => {
                                 : transportDrivers;
 
                               return (
-                                <div key={veh.id || idx} style={{ padding: '8px 10px', borderRadius: '8px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-body)', display: 'grid', gridTemplateColumns: '1.2fr 1.1fr 0.8fr 1.1fr 1fr 1fr 30px', gap: '6px', alignItems: 'center' }}>
+                                <div key={veh.id || idx} style={{ padding: '8px 10px', borderRadius: '8px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-body)', display: 'grid', gridTemplateColumns: '1.2fr 1.1fr 0.9fr 0.8fr 1.1fr 1fr 1fr 30px', gap: '6px', alignItems: 'center' }}>
                                   
                                   {/* 1. 운송사 셀렉트 */}
                                   <select
@@ -2634,8 +2699,7 @@ export const TruckDispatch: React.FC = () => {
                                     value={veh.driverName}
                                     disabled={isFormDisabled}
                                     onChange={e => {
-                                      const selectedName = e.target.value;
-                                      handleVehicleFieldChange(idx, 'driverName', selectedName);
+                                      handleVehicleFieldChange(idx, 'driverName', e.target.value);
                                     }}
                                     style={{ padding: '6px 6px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: isFormDisabled ? 'var(--bg-card)' : 'var(--bg-card)', color: 'var(--text-primary)', fontSize: '11.5px', outline: 'none', opacity: isFormDisabled ? 0.75 : 1, cursor: isFormDisabled ? 'not-allowed' : 'default' }}
                                   >
@@ -2646,6 +2710,16 @@ export const TruckDispatch: React.FC = () => {
                                       </option>
                                     ))}
                                   </select>
+
+                                  {/* 2.5 차량번호 */}
+                                  <input
+                                    type="text"
+                                    placeholder="차량번호"
+                                    value={veh.vehicleNo || ''}
+                                    disabled={isFormDisabled}
+                                    onChange={e => handleVehicleFieldChange(idx, 'vehicleNo', e.target.value)}
+                                    style={{ padding: '6px 6px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: isFormDisabled ? 'var(--bg-card)' : 'var(--bg-card)', color: 'var(--text-primary)', fontSize: '11.5px', outline: 'none', opacity: isFormDisabled ? 0.75 : 1, cursor: isFormDisabled ? 'not-allowed' : 'default' }}
+                                  />
 
                                   {/* 3. 차종 셀렉트 */}
                                   <select
@@ -2728,6 +2802,50 @@ export const TruckDispatch: React.FC = () => {
                     <div style={{ fontSize: '12.5px', color: 'var(--text-primary)', whiteSpace: 'pre-wrap', lineHeight: '1.6', fontFamily: 'Consolas, Monaco, monospace', backgroundColor: 'var(--bg-card)', padding: '10px 12px', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
                       {selectedDelivery.rawText || selectedDelivery.memo || '요청된 자연어 원문이 없습니다.'}
                     </div>
+                  </div>
+
+                  {/* ⚖️ 우하단 터미널 액션 바 (Z-패턴 4단계 최종 완결, 헌장 3.5) */}
+                  <div style={{
+                    display: 'flex',
+                    justifyContent: 'flex-end',
+                    alignItems: 'center',
+                    gap: '10px',
+                    padding: '14px 18px',
+                    backgroundColor: 'var(--bg-body)',
+                    border: '1px solid var(--border-color)',
+                    borderRadius: '8px',
+                    marginBottom: '16px'
+                  }}>
+                    {canSave && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => handleCancelDeliveryStatus(selectedDelivery.id)}
+                          style={{ padding: '7px 12px', borderRadius: '6px', backgroundColor: 'rgba(239,68,68,0.1)', color: '#dc2626', border: '1px solid rgba(239,68,68,0.3)', fontSize: '12px', fontWeight: 700, cursor: 'pointer' }}
+                        >
+                          🚫 배차 취소
+                        </button>
+
+                        {getNormalizedDeliveryStatus(selectedDelivery) === 'DISPATCHED' && (
+                          <button
+                            type="button"
+                            onClick={() => handleCompleteDeliveryStatus(selectedDelivery.id)}
+                            style={{ padding: '7px 14px', backgroundColor: '#16a34a', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: 800, fontSize: '12.5px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '5px' }}
+                          >
+                            <CheckCircle size={14} /> [🟢 운송 완료 마감]
+                          </button>
+                        )}
+
+                        <button
+                          type="button"
+                          onClick={handleSaveDispatch}
+                          className="btn-primary"
+                          style={{ padding: '7px 16px', fontWeight: 800, fontSize: '12.5px', borderRadius: '6px', display: 'inline-flex', alignItems: 'center', gap: '5px' }}
+                        >
+                          <ShieldCheck size={15} /> [🔵 배차 기사 배정 완료]
+                        </button>
+                      </>
+                    )}
                   </div>
                 </div>
               )}
@@ -3496,6 +3614,7 @@ export const TruckDispatch: React.FC = () => {
               <select value={manualCategory} onChange={e => setManualCategory(e.target.value as any)} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-body)', color: 'var(--text-primary)' }}>
                 <option value="출고">출고</option>
                 <option value="입고">입고</option>
+                <option value="교환">교환</option>
                 <option value="반납">반납</option>
                 <option value="정비">정비</option>
                 <option value="이동">이동</option>

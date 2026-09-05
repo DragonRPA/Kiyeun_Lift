@@ -179,11 +179,16 @@ export const SmartReturn: React.FC = () => {
     }
   };
 
-  const handleSalesSubmit = (e: React.FormEvent) => {
+  const handleSalesSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!canSave) return;
     if (!selectedContractId) {
       showToast('회수할 대상 계약을 목록에서 선택해 주세요.', 'error');
+      return;
+    }
+    const targetContract = contracts.find(c => c.id === selectedContractId);
+    if (targetContract && targetContract.startDate && returnDate < targetContract.startDate) {
+      showToast(`회수 예정일(${returnDate})은 계약 시작일(${targetContract.startDate})보다 이전일 수 없습니다.`, 'error');
       return;
     }
     if (selectedAssetIds.length === 0) {
@@ -195,24 +200,28 @@ export const SmartReturn: React.FC = () => {
       return;
     }
 
-    saveSmartReturn({
-      contractId: selectedContractId,
-      returnDate,
-      assetIds: selectedAssetIds,
-      loadingTime,
-      contactName,
-      contactPhone,
-      note
-    });
+    try {
+      await saveSmartReturn({
+        contractId: selectedContractId,
+        returnDate,
+        assetIds: selectedAssetIds,
+        loadingTime,
+        contactName,
+        contactPhone,
+        note
+      });
 
-    showToast('회수 의뢰 등록이 완료되었습니다. 배차 대기열에 회수(INBOUND) 건이 추가되었습니다.');
-    setSelectedContractId('');
-    setSelectedAssetIds([]);
-    setReturnDate(getTodayString());
-    setLoadingTime('오전');
-    setContactName('');
-    setContactPhone('');
-    setNote('');
+      showToast('회수 의뢰 등록이 완료되었습니다. 배차 대기열에 회수(INBOUND) 건이 추가되었습니다.');
+      setSelectedContractId('');
+      setSelectedAssetIds([]);
+      setReturnDate(getTodayString());
+      setLoadingTime('오전');
+      setContactName('');
+      setContactPhone('');
+      setNote('');
+    } catch (err: any) {
+      showToast(err?.message || '회수의뢰 저장 중 오류가 발생했습니다.', 'error');
+    }
   };
 
   // 🖨️ 브라우저 고품질 인쇄 메소드
@@ -346,7 +355,7 @@ export const SmartReturn: React.FC = () => {
     }
   };
 
-  const handleMaintSubmit = (e: React.FormEvent) => {
+  const handleMaintSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!canSave) return;
     if (!selectedVendorId) {
@@ -371,21 +380,25 @@ export const SmartReturn: React.FC = () => {
       }
     });
 
-    saveSmartReturn({
-      returnDate: maintReturnDate,
-      assetIds: targetAssetIds,
-      loadingTime: maintLoadingTime,
-      repairId: selectedRepairIds.join(','),
-      vendorId: selectedVendorId,
-      note: maintNote
-    });
+    try {
+      await saveSmartReturn({
+        returnDate: maintReturnDate,
+        assetIds: targetAssetIds,
+        loadingTime: maintLoadingTime,
+        repairId: selectedRepairIds.join(','),
+        vendorId: selectedVendorId,
+        note: maintNote
+      });
 
-    showToast('외주 정비 완료 자산 회수의뢰 등록이 완료되었습니다.');
-    setSelectedVendorId('');
-    setSelectedRepairIds([]);
-    setMaintReturnDate('');
-    setMaintLoadingTime('');
-    setMaintNote('');
+      showToast('외주 정비 완료 자산 회수의뢰 등록이 완료되었습니다.');
+      setSelectedVendorId('');
+      setSelectedRepairIds([]);
+      setMaintReturnDate('');
+      setMaintLoadingTime('');
+      setMaintNote('');
+    } catch (err: any) {
+      showToast(err?.message || '외주정비 회수의뢰 저장 중 오류가 발생했습니다.', 'error');
+    }
   };
 
   return (
@@ -847,7 +860,7 @@ export const SmartReturn: React.FC = () => {
 
         </div>
 
-        {/* 3단계: 실시간 프리뷰 및 출력 (A4 서식) */}
+        {/* 3단계: 서식 출력 및 미리보기 (A4 서식) */}
         {(() => {
           const selectedContract = contracts.find(c => c.id === selectedContractId);
           const selectedCustomer = customers.find(c => c.id === selectedContract?.customerId);
@@ -860,7 +873,7 @@ export const SmartReturn: React.FC = () => {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
                 <h4 style={{ margin: 0, fontWeight: '800', display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <FileText size={18} className="text-primary" />
-                  실시간 프리뷰 및 출력
+                  서식 출력 및 미리보기
                 </h4>
 
                 {/* 로컬 프린터 연동 및 인쇄 액션 바 */}

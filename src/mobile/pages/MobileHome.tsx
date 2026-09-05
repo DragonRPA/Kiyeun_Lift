@@ -3,7 +3,7 @@ import React from 'react';
 import { useApp } from '../../context/AppContext';
 import { 
   Wrench, Truck, CheckSquare, Search, Send, Building2, 
-  ArrowRight, AlertTriangle, Clock, Plus, Boxes, ArrowDownToLine, Users
+  ArrowRight, AlertTriangle, Clock, Plus, Boxes, ArrowDownToLine, Users, Car
 } from 'lucide-react';
 import { MobileTabType } from '../MobileBottomNav';
 import { MobileDeptMode } from '../MobileHeader';
@@ -125,6 +125,28 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
           <ArrowRight className="w-5 h-5 text-indigo-400" />
         </div>
 
+        {/* [법인차량] 차량운행일지 / 주유영수증 촬영 카드 */}
+        <div
+          onClick={() => onNavigate('vehicle_log')}
+          className="p-4 rounded-2xl bg-gradient-to-r from-amber-950/30 to-slate-900 border border-amber-500/40 flex items-center justify-between active:scale-98 transition-all cursor-pointer shadow-md"
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-amber-400 flex-shrink-0">
+              <Car className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="text-sm font-bold text-white flex items-center gap-1.5">
+                <span>차량운행일지 / 주유영수증</span>
+                <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-bold">
+                  전사 공용
+                </span>
+              </div>
+              <div className="text-xs text-slate-400 mt-0.5">계기판 & 주유영수증 촬영 ➔ 국세청 서식 자동 연동</div>
+            </div>
+          </div>
+          <ArrowRight className="w-5 h-5 text-amber-400" />
+        </div>
+
         {/* [핵심 4] 내 계약 & 투입현장 조회 배너 */}
         <div
           onClick={() => onNavigate('my_contracts')}
@@ -242,6 +264,28 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
             </div>
           </div>
           <ArrowRight className="w-5 h-5 text-slate-500" />
+        </div>
+
+        {/* [법인차량] 차량운행일지 / 주유영수증 촬영 카드 */}
+        <div
+          onClick={() => onNavigate('vehicle_log')}
+          className="p-4 rounded-2xl bg-gradient-to-r from-amber-950/30 to-slate-900 border border-amber-500/40 flex items-center justify-between active:scale-98 transition-all cursor-pointer shadow-md"
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-amber-400 flex-shrink-0">
+              <Car className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="text-sm font-bold text-white flex items-center gap-1.5">
+                <span>차량운행일지 / 주유영수증</span>
+                <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-bold">
+                  전사 공용
+                </span>
+              </div>
+              <div className="text-xs text-slate-400 mt-0.5">계기판 & 주유영수증 촬영 ➔ 국세청 서식 자동 연동</div>
+            </div>
+          </div>
+          <ArrowRight className="w-5 h-5 text-amber-400" />
         </div>
       </div>
     );
@@ -367,6 +411,28 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
           </div>
         </div>
         <ArrowRight className="w-5 h-5 text-slate-500" />
+      </div>
+
+      {/* [법인차량] 차량운행일지 / 주유영수증 촬영 카드 */}
+      <div
+        onClick={() => onNavigate('vehicle_log')}
+        className="p-4 rounded-2xl bg-gradient-to-r from-amber-950/30 to-slate-900 border border-amber-500/40 flex items-center justify-between active:scale-98 transition-all cursor-pointer shadow-md"
+      >
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-amber-400 flex-shrink-0">
+            <Car className="w-5 h-5" />
+          </div>
+          <div>
+            <div className="text-sm font-bold text-white flex items-center gap-1.5">
+              <span>차량운행일지 / 주유영수증</span>
+              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-bold">
+                전사 공용
+              </span>
+            </div>
+            <div className="text-xs text-slate-400 mt-0.5">계기판 & 주유영수증 촬영 ➔ 국세청 서식 자동 연동</div>
+          </div>
+        </div>
+        <ArrowRight className="w-5 h-5 text-amber-400" />
       </div>
     </div>
   );

@@ -6,6 +6,7 @@ import {
   XCircle, Clock, MapPin, ChevronRight, X, PhoneCall, Calendar, Wrench
 } from 'lucide-react';
 import { matchHangul } from '../../utils/hangulSearch';
+import { getAssetStatusLabel } from '../../config/asset_status_config';
 
 // 고소작업대 표준 6대 높이 규격 프리셋
 interface SpecPreset {
@@ -306,9 +307,11 @@ export const MobileAssetSearch: React.FC<MobileAssetSearchProps> = ({ deptMode, 
                         ? 'bg-rose-500/20 text-rose-300 border-rose-500/30'
                         : a.status === 'ASSIGNED'
                         ? 'bg-amber-500/20 text-amber-300 border-amber-500/30'
+                        : a.status === 'RENTED_RETURNED' || a.status === 'SOLD'
+                        ? 'bg-slate-500/20 text-slate-400 border-slate-500/30'
                         : 'bg-blue-500/20 text-blue-300 border-blue-500/30'
                     }`}>
-                      {a.status === 'AVAILABLE' ? '임대가능' : a.status === 'REPAIRING' ? '정비중' : a.status === 'ASSIGNED' ? '배차대기' : '대여중'}
+                      {getAssetStatusLabel(a.status)}
                     </span>
                   </div>
                 );

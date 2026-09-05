@@ -16,7 +16,8 @@ import {
   VoiceOrderDraft, 
   EquipmentOrderItem 
 } from '../../services/voiceOrderDraftService';
-import { db, ContractHistory, Delivery } from '../../services/db';
+import { db, ContractHistory, Delivery, ContractAsset } from '../../services/db';
+import { broadcastWorkNotification } from '../../utils/workNotificationService';
 
 interface MobileDispatchOrderCreateProps {
   onBack: () => void;
@@ -195,7 +196,6 @@ export const MobileDispatchOrderCreate: React.FC<MobileDispatchOrderCreateProps>
 
   // 임시저장 초기화 핸들러
   const handleResetDraft = () => {
-    if (!window.confirm('작성 중인 임시저장 내용을 모두 초기화하시겠습니까?')) return;
     clearVoiceOrderDraft();
     setSelectedCustomerId('');
     setSelectedSiteId('');
@@ -563,6 +563,12 @@ export const MobileDispatchOrderCreate: React.FC<MobileDispatchOrderCreateProps>
       return;
     }
 
+    const todayStr = new Date().toISOString().split('T')[0];
+    if (deliveryDate && deliveryDate < todayStr) {
+      showToast('배차 희망일은 오늘 이후 날짜를 선택해주세요.', 'error');
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       // 🔄 CASE 1: 회수의뢰 (RETURN)
@@ -619,6 +625,31 @@ export const MobileDispatchOrderCreate: React.FC<MobileDispatchOrderCreateProps>
           createdAt: new Date().toISOString()
         });
 
+        // 1-1. 기존 ContractAsset 종료 처리 (헌장 1.2)
+        const targetOldCA = contractAssets.find(ca => ca.contractId === targetContractId && ca.assetId === oldAssetId);
+        if (targetOldCA) {
+          db.updateRow<ContractAsset>('contractAssets', targetOldCA.id, {
+            endDate: deliveryDate,
+            status: 'RETURNED',
+            actualReturnDate: deliveryDate,
+            updatedAt: new Date().toISOString()
+          });
+        }
+
+        // 1-2. 출고 부서를 위한 대차 출고 슬롯(ContractAsset) 자동 생성 (헌장 2.2 단가 100% 자동 상속)
+        const targetContract = contracts.find(c => c.id === targetContractId);
+        db.insertRow<ContractAsset>('contractAssets', {
+          contractId: targetContractId,
+          assetId: undefined,
+          expectedModel: targetModelName,
+          monthlyRentalFee: targetOldCA?.monthlyRentalFee || 0,
+          dailyRentalFee: targetOldCA?.dailyRentalFee || 0,
+          startDate: deliveryDate,
+          endDate: targetContract?.endDate || targetOldCA?.endDate || '미정',
+          status: 'ACTIVE',
+          createdAt: new Date().toISOString()
+        });
+
         // 2. 단일 대차 요구에 대해 'EXCHANGE' (교환 왕복 배차) 1건만 발행 (헌장 2.3)
         const contactInfoMemo = siteContactName || siteContactPhone
           ? `[고객담당자: ${siteContactName || '-'} (${siteContactPhone || '-'})] `
@@ -654,6 +685,15 @@ export const MobileDispatchOrderCreate: React.FC<MobileDispatchOrderCreateProps>
         await db.awaitPendingWrites();
         refreshAllData();
 
+        // 📢 대차교체 의뢰 등록 알림 브로드캐스트
+        broadcastWorkNotification({
+          type: 'EXCHANGE',
+          title: '대차 교체 의뢰 등록',
+          body: `${selectedCust.name} (${finalSiteName}) 회수:${oldAssetObj?.assetNo || '기존'} ➔ 투입:${targetModelName}`,
+          url: '/admin/dispatch',
+          targetDepts: ['DISPATCH', 'YARD', 'ADMIN', 'EXECUTIVE']
+        }).catch(console.warn);
+
         clearVoiceOrderDraft();
         setCreatedResult({
           isReturn: false,
@@ -666,8 +706,8 @@ export const MobileDispatchOrderCreate: React.FC<MobileDispatchOrderCreateProps>
       }
 
       // 🚀 CASE 2: 출고의뢰 (DISPATCH)
-      const totalEquipCount = orders.reduce((sum, o) => sum + o.count, 0);
-      if (totalEquipCount === 0) {
+      const totalEquipCount = orders.reduce((sum, o) => sum + Math.max(0, Math.floor(o.count || 0)), 0);
+      if (totalEquipCount <= 0) {
         showToast('출고 장비를 1대 이상 추가해주세요.', 'error');
         setIsSubmitting(false);
         return;
@@ -693,8 +733,9 @@ export const MobileDispatchOrderCreate: React.FC<MobileDispatchOrderCreateProps>
         const standardRent = SPEC_DEFAULT_MONTHLY_RENT[o.ft] || 400000;
         const assignedMonthly = recentCa?.monthlyRentalFee || standardRent;
         const assignedDaily = Math.round(assignedMonthly / 30);
+        const safeCount = Math.max(1, Math.floor(o.count || 1));
 
-        for (let i = 0; i < o.count; i++) {
+        for (let i = 0; i < safeCount; i++) {
           equipmentsList.push({
             modelName: o.modelName || o.ft,
             spec: o.ft,
@@ -715,10 +756,12 @@ export const MobileDispatchOrderCreate: React.FC<MobileDispatchOrderCreateProps>
         loadingTime: `${deliveryDate} ${deliveryTime}`,
         unloadingTime: `${deliveryDate} ${deliveryTime}`,
         equipments: equipmentsList,
+        closingDay: String(selectedCust.defaultBillingDay || 30),
+        paymentDay: String(selectedCust.paymentDueDay || 25),
         note: `[모바일 외근 출고의뢰] ${memo}`.trim(),
         rawText: `모바일 출고요청: ${selectedCust.name} / ${finalSiteName} (${totalEquipCount}대)`,
-        paidOptions: {},
-        protection: {},
+        paidOptions: '',
+        protection: '',
         checkedSpecs: {},
         isSetAsCustomerDefault: false,
         applyToAllSites: false

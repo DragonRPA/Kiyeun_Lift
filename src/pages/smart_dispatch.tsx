@@ -255,12 +255,14 @@ export const SmartDispatch: React.FC = () => {
         nextTaxBillEmail = matchedCustomer.repEmail;
         inherited.push('계산서 메일');
       }
-      if (!nextClosing && matchedCustomer.defaultBillingDay) {
-        nextClosing = (matchedCustomer.defaultBillingDay === 30 || matchedCustomer.defaultBillingDay === 31) ? '말일' : `${matchedCustomer.defaultBillingDay}일`;
+      if (!nextClosing) {
+        const d = matchedCustomer.defaultBillingDay || 30;
+        nextClosing = (d === 30 || d === 31) ? '말일' : `${d}일`;
         inherited.push('마감일');
       }
-      if (!nextPayment && matchedCustomer.paymentDueDay) {
-        nextPayment = `익월 ${matchedCustomer.paymentDueDay}일`;
+      if (!nextPayment) {
+        const p = matchedCustomer.paymentDueDay || 25;
+        nextPayment = `익월 ${p}일`;
         inherited.push('결제일');
       }
       if (!nextPaidOptions && matchedCustomer.defaultPaidOptions) {
@@ -1711,11 +1713,11 @@ ${activeSpecs.map((s, idx) => `  ${idx + 1}. [적용] ${s.label}`).join('\n') ||
 
       </div>
 
-      {/* 3단계: 실시간 프리뷰 영역 */}
+      {/* 3단계: 서식 출력 및 미리보기 */}
       <div className="card" style={{ marginTop: '10px' }}>
         <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', minHeight: '62px' }}>
           <h3 className="card-title" style={{ display: 'flex', alignItems: 'center', gap: '6px', margin: 0 }}>
-            <FileText size={16} className="text-success" /> 3단계: 실시간 프리뷰 및 출력
+            <FileText size={16} className="text-success" /> 3단계: 서식 출력 및 미리보기
           </h3>
         </div>
 
@@ -1968,7 +1970,7 @@ ${activeSpecs.map((s, idx) => `  ${idx + 1}. [적용] ${s.label}`).join('\n') ||
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
               <h3 style={{ fontSize: '16px', fontWeight: '800', margin: 0, display: 'flex', alignItems: 'center', gap: '8px', color: '#38bdf8' }}>
                 <RefreshCw size={18} className={isProcessCompleted ? '' : 'animate-spin'} style={{ color: isProcessCompleted ? '#10b981' : '#38bdf8' }} />
-                {isProcessCompleted ? '스마트 출고 요청 생성 완료' : '스마트 출고 프로세스 실시간 릴레이'}
+                {isProcessCompleted ? '출고 요청 등록 완료' : '출고 프로세스 진행'}
               </h3>
               <span style={{ fontSize: '13px', fontWeight: '700', color: isProcessCompleted ? '#10b981' : '#38bdf8', padding: '2px 10px', borderRadius: '12px', backgroundColor: isProcessCompleted ? 'rgba(16,185,129,0.15)' : 'rgba(56,189,248,0.15)' }}>
                 {progressPercent}%

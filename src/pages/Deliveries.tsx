@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { Truck, Check, DollarSign, Calendar, Navigation, AlertTriangle, CheckCircle, ShieldAlert, Download, Search, Camera, Upload, Sun, MapPin } from 'lucide-react';
-import { Delivery } from '../services/db';
+import { Delivery, db } from '../services/db';
 import { exportToExcel } from '../services/excel';
 import { DestinationWeatherModal } from '../components/DestinationWeatherModal';
 
@@ -55,8 +55,15 @@ const compressImage = (file: File): Promise<File> => {
 
 export const Deliveries: React.FC = () => {
   const {
-    deliveries, contracts, customers, assets, contractAssets, sites, dispatchDelivery, settleDeliveryCost, completeDelivery, completeInboundDelivery, hasPermission
+    deliveries, contracts, customers, assets, contractAssets, sites, dispatchDelivery, settleDeliveryCost, completeDelivery, completeInboundDelivery, hasPermission, showErrorModal
   } = useApp();
+
+  // 토스트 알림 상태 (헌장 5.2: 브라우저 alert/confirm 전면 퇴출)
+  const [toastMessage, setToastMessage] = useState<{ type: 'success' | 'error' | 'warning'; text: string } | null>(null);
+  const showToast = (text: string, type: 'success' | 'error' | 'warning' = 'success') => {
+    setToastMessage({ type, text });
+    setTimeout(() => setToastMessage(null), 3500);
+  };
 
   const canSave = hasPermission('delivery', 'save');
 
@@ -155,13 +162,13 @@ export const Deliveries: React.FC = () => {
 
   const filteredDeliveries = deliveries.filter(d => {
     let displayName = getCustNameFromContract(d.contractId).toLowerCase();
-    if (displayName === '-' && d.memo.includes('[외주정비회수]')) {
-      const match = d.memo.match(/외주업체:\s*(.*?)\s*\|/);
+    if (displayName === '-' && (d.memo || '').includes('[외주정비회수]')) {
+      const match = (d.memo || '').match(/외주업체:\s*(.*?)\s*\|/);
       displayName = match ? `${match[1]} (외주회수)`.toLowerCase() : '외주정비 공장';
     }
 
     const matchesSearch = 
-      d.memo.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (d.memo || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
       displayName.includes(searchTerm.toLowerCase()) ||
       (d.contractId && getContractNo(d.contractId).toLowerCase().includes(searchTerm.toLowerCase()));
 
@@ -172,7 +179,7 @@ export const Deliveries: React.FC = () => {
     if (settleFilter === 'UNSETTLED') {
       matchesSettle = !d.isCostSettled;
     } else if (settleFilter === 'SETTLED') {
-      matchesSettle = d.isCostSettled;
+      matchesSettle = !!d.isCostSettled;
     }
 
     const deliveryDate = d.scheduledDate || (d.createdAt ? d.createdAt.split('T')[0] : '');
@@ -188,8 +195,8 @@ export const Deliveries: React.FC = () => {
   const handleExportExcel = () => {
     const excelData = filteredDeliveries.map((d, idx) => {
       let displayName = getCustNameFromContract(d.contractId);
-      if (displayName === '-' && d.memo.includes('[외주정비회수]')) {
-        const match = d.memo.match(/외주업체:\s*(.*?)\s*\|/);
+      if (displayName === '-' && (d.memo || '').includes('[외주정비회수]')) {
+        const match = (d.memo || '').match(/외주업체:\s*(.*?)\s*\|/);
         displayName = match ? `${match[1]} (외주회수)` : '외주정비 공장';
       }
 
@@ -271,7 +278,7 @@ export const Deliveries: React.FC = () => {
     setShowDispatchModal(true);
   };
 
-  const handleDispatchSubmit = (e: React.FormEvent) => {
+  const handleDispatchSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!canSave || !targetDeliveryId) return;
 
@@ -288,19 +295,23 @@ export const Deliveries: React.FC = () => {
       }
     ];
 
-    dispatchDelivery(targetDeliveryId, {
-      scheduledDate,
-      transportCompany: '일반운송사',
-      vehicleType,
-      vehicleNo: '미상',
-      driverName,
-      driverContact,
-      deliveryCost,
-      vehiclesJson: JSON.stringify(singleVehicle)
-    });
-
-    alert('운송 차량 배차가 승인 및 확정되었습니다.');
-    setShowDispatchModal(false);
+    try {
+      await dispatchDelivery(targetDeliveryId, {
+        scheduledDate,
+        transportCompany: '일반운송사',
+        vehicleType,
+        vehicleNo: '미상',
+        driverName,
+        driverContact,
+        deliveryCost: Math.max(0, deliveryCost),
+        vehiclesJson: JSON.stringify(singleVehicle)
+      });
+      await db.awaitPendingWrites();
+      showToast('운송 차량 배차가 승인 및 확정되었습니다.');
+      setShowDispatchModal(false);
+    } catch (err: any) {
+      showErrorModal(err?.message || '배차 저장 중 오류가 발생했습니다.');
+    }
   };
 
   // 운송료 정산 모달 열기
@@ -344,22 +355,27 @@ export const Deliveries: React.FC = () => {
   };
 
   const handleSettleVehicleCostChange = (id: string, val: number) => {
-    setSettleVehicles(prev => prev.map(v => v.id === id ? { ...v, deliveryCostConfirmed: val } : v));
+    setSettleVehicles(prev => prev.map(v => v.id === id ? { ...v, deliveryCostConfirmed: Math.max(0, val) } : v));
   };
 
-  const handleSettleSubmit = (e: React.FormEvent) => {
+  const handleSettleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!canSave || !settleDeliveryId) return;
 
-    // 모든 차량 확정운송료 합산
-    const totalConfirmedCost = settleVehicles.reduce((sum, v) => sum + Number(v.deliveryCostConfirmed || 0), 0);
-    const vehiclesJson = JSON.stringify(settleVehicles);
+    try {
+      // 모든 차량 확정운송료 합산
+      const totalConfirmedCost = settleVehicles.reduce((sum, v) => sum + Number(v.deliveryCostConfirmed || 0), 0);
+      const vehiclesJson = JSON.stringify(settleVehicles);
 
-    settleDeliveryCost(settleDeliveryId, totalConfirmedCost, vehiclesJson);
+      await settleDeliveryCost(settleDeliveryId, totalConfirmedCost, vehiclesJson);
+      await db.awaitPendingWrites();
 
-    alert('차량별 운송비 정산 마감이 정상 처리되었습니다.');
-    setShowSettleModal(false);
-    setSettleDeliveryId('');
+      showToast('차량별 운송비 정산 마감이 정상 처리되었습니다.');
+      setShowSettleModal(false);
+      setSettleDeliveryId('');
+    } catch (err: any) {
+      showErrorModal(err?.message || '운송비 정산 중 오류가 발생했습니다.');
+    }
   };
 
   const handleOpenInboundReview = (d: Delivery) => {
@@ -386,20 +402,33 @@ export const Deliveries: React.FC = () => {
     setShowInboundModal(true);
   };
 
-  const handleInboundSubmit = (e: React.FormEvent) => {
+  const handleInboundSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!canSave || !inboundDeliveryId) return;
 
-    completeInboundDelivery(inboundDeliveryId, actualReturnDate, reviews);
-    alert('반납 장비의 검수 및 입고등록 처리가 성공적으로 완료되었습니다.');
-    setShowInboundModal(false);
-    setInboundDeliveryId('');
+    try {
+      await completeInboundDelivery(inboundDeliveryId, actualReturnDate, reviews);
+      await db.awaitPendingWrites();
+      showToast('반납 장비의 검수 및 입고등록 처리가 성공적으로 완료되었습니다.');
+      setShowInboundModal(false);
+      setInboundDeliveryId('');
+    } catch (err: any) {
+      showErrorModal(err?.message || '입고 검수 처리 중 오류가 발생했습니다.');
+    }
   };
 
   const handleReviewChange = (assetId: string, field: 'status' | 'maintenanceScore' | 'memo' | 'faultImageUrl', value: any) => {
+    let finalValue = value;
+    if (field === 'maintenanceScore') {
+      finalValue = Math.max(0, Math.min(10, parseInt(value) || 0));
+    }
     setReviews(prev => prev.map(item => {
       if (item.assetId === assetId) {
-        return { ...item, [field]: value };
+        const updated = { ...item, [field]: finalValue };
+        if (field === 'status' && finalValue === 'AVAILABLE') {
+          updated.maintenanceScore = 0;
+        }
+        return updated;
       }
       return item;
     }));
@@ -463,6 +492,7 @@ export const Deliveries: React.FC = () => {
               <option value="ALL">전체</option>
               <option value="OUTBOUND">출고 (OUTBOUND)</option>
               <option value="INBOUND">회수 (INBOUND)</option>
+              <option value="EXCHANGE">교환 (EXCHANGE)</option>
             </select>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
@@ -642,8 +672,8 @@ export const Deliveries: React.FC = () => {
               [...filteredDeliveries].reverse().map((d, idx) => {
                 // 외주정비회수 및 일반회수 가독성 바인딩
                 let displayName = getCustNameFromContract(d.contractId);
-                if (displayName === '-' && d.memo.includes('[외주정비회수]')) {
-                  const match = d.memo.match(/외주업체:\s*(.*?)\s*\|/);
+                if (displayName === '-' && (d.memo || '').includes('[외주정비회수]')) {
+                  const match = (d.memo || '').match(/외주업체:\s*(.*?)\s*\|/);
                   displayName = match ? `${match[1]} (외주회수)` : '외주정비 공장';
                 }
 
@@ -668,12 +698,13 @@ export const Deliveries: React.FC = () => {
                         {canSave && d.status === 'DISPATCHED' && (
                           <button
                             className="btn-success"
-                            onClick={() => {
-                              if (d.type === 'INBOUND') {
+                            onClick={async () => {
+                              if (d.type === 'INBOUND' || d.type === 'EXCHANGE' || d.dispatchCategory === '입고' || d.dispatchCategory === '반납' || d.dispatchCategory === '교환') {
                                 handleOpenInboundReview(d);
                               } else {
-                                completeDelivery(d.id);
-                                alert('배차 완료 처리가 승인되었습니다.');
+                                await completeDelivery(d.id);
+                                await db.awaitPendingWrites();
+                                showToast('배차 완료 처리가 승인되었습니다.');
                               }
                             }}
                             style={{ padding: '4px 8px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '2px' }}
@@ -705,7 +736,7 @@ export const Deliveries: React.FC = () => {
                     <td style={{ fontSize: '12.5px', whiteSpace: 'nowrap' }}>
                       {d.contractId ? getContractNo(d.contractId) : (
                         <span style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>
-                          일반이동 ({d.memo.substring(0, 15)}...)
+                          일반이동 ({(d.memo || '').substring(0, 15)}...)
                         </span>
                       )}
                     </td>
@@ -744,7 +775,7 @@ export const Deliveries: React.FC = () => {
                     <td style={{ fontSize: '13px', whiteSpace: 'nowrap' }}>
                       {d.driverName ? `${d.driverName}` : '-'}
                     </td>
-                    <td style={{ whiteSpace: 'nowrap' }}>{d.deliveryCost.toLocaleString()}원</td>
+                    <td style={{ whiteSpace: 'nowrap' }}>{(d.deliveryCost || 0).toLocaleString()}원</td>
                     <td style={{ fontWeight: 'bold', whiteSpace: 'nowrap', color: d.deliveryCostConfirmed ? 'var(--primary)' : 'var(--text-muted)' }}>
                       {d.deliveryCostConfirmed ? `${d.deliveryCostConfirmed.toLocaleString()}원` : '미확정'}
                     </td>
@@ -842,8 +873,8 @@ export const Deliveries: React.FC = () => {
                 <label>지불 배차 운임료 (원) *</label>
                 <input
                   type="number"
-                  value={deliveryCost || ''}
-                  onChange={e => setDeliveryCost(parseInt(e.target.value) || 0)}
+                  value={deliveryCost ?? ''}
+                  onChange={e => setDeliveryCost(Math.max(0, parseInt(e.target.value) || 0))}
                   placeholder="배차 비용"
                   required
                 />
@@ -893,12 +924,12 @@ export const Deliveries: React.FC = () => {
                           <div style={{ color: 'var(--text-secondary)', fontSize: '11px' }}>{v.vehicleNo}</div>
                         </td>
                         <td style={{ padding: '8px', textAlign: 'right', borderBottom: '1px solid var(--border-color)' }}>
-                          {v.deliveryCost.toLocaleString()}원
+                          {(v.deliveryCost || 0).toLocaleString()}원
                         </td>
                         <td style={{ padding: '8px', borderBottom: '1px solid var(--border-color)' }}>
                           <input
                             type="number"
-                            value={v.deliveryCostConfirmed || ''}
+                            value={v.deliveryCostConfirmed !== undefined ? v.deliveryCostConfirmed : ''}
                             onChange={e => handleSettleVehicleCostChange(v.id, parseInt(e.target.value) || 0)}
                             style={{ padding: '4px 8px', width: '120px', textAlign: 'right' }}
                             required
@@ -913,7 +944,7 @@ export const Deliveries: React.FC = () => {
               {/* 총액 비교 요약 */}
               <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px', backgroundColor: 'var(--bg-app)', borderRadius: '6px', fontSize: '13.5px' }}>
                 <div>
-                  임시운송비 합계: <strong>{settleVehicles.reduce((sum, v) => sum + v.deliveryCost, 0).toLocaleString()}원</strong>
+                  임시운송비 합계: <strong>{settleVehicles.reduce((sum, v) => sum + (v.deliveryCost || 0), 0).toLocaleString()}원</strong>
                 </div>
                 <div style={{ color: 'var(--primary)', fontWeight: 'bold' }}>
                   확정운송비 합계: {settleVehicles.reduce((sum, v) => sum + Number(v.deliveryCostConfirmed || 0), 0).toLocaleString()}원
@@ -981,15 +1012,15 @@ export const Deliveries: React.FC = () => {
 
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '10px' }}>
                           <div>
-                            <label style={{ fontSize: '12px', marginBottom: '4px' }}>정비 부담 점수 (1~10)</label>
+                            <label style={{ fontSize: '12px', marginBottom: '4px' }}>정비 부담 점수 (0~10)</label>
                             <input
                               type="number"
-                              min="1"
+                              min="0"
                               max="10"
-                              value={rev.maintenanceScore || ''}
+                              value={rev.maintenanceScore !== undefined ? rev.maintenanceScore : ''}
                               onChange={e => handleReviewChange(rev.assetId, 'maintenanceScore', parseInt(e.target.value) || 0)}
                               style={{ padding: '6px', fontSize: '12px' }}
-                              placeholder="난이도 1~10"
+                              placeholder="점수 0~10"
                             />
                           </div>
                           <div>
@@ -1062,6 +1093,27 @@ export const Deliveries: React.FC = () => {
         siteName={destWeatherParams.siteName}
         rawAddress={destWeatherParams.rawAddress}
       />
+
+      {toastMessage && (
+        <div style={{
+          position: 'fixed',
+          bottom: '24px',
+          right: '24px',
+          padding: '12px 20px',
+          borderRadius: '8px',
+          backgroundColor: toastMessage.type === 'error' ? '#ef4444' : toastMessage.type === 'warning' ? '#f59e0b' : '#10b981',
+          color: '#fff',
+          fontWeight: 700,
+          fontSize: '13px',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
+          zIndex: 10000,
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px'
+        }}>
+          {toastMessage.text}
+        </div>
+      )}
 
     </div>
   );

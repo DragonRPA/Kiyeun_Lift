@@ -1,6 +1,5 @@
-// src/mobile/MobileBottomNav.tsx
 import React from 'react';
-import { Home, Wrench, Truck, CheckSquare, Search, Send, Building2, PlusCircle, Boxes, ArrowDownToLine, Layers, Users, AlertTriangle } from 'lucide-react';
+import { Home, Wrench, Truck, CheckSquare, Search, Send, Building2, PlusCircle, Boxes, ArrowDownToLine, Layers, Users, AlertTriangle, Car } from 'lucide-react';
 import { MobileDeptMode } from './MobileHeader';
 
 export type MobileTabType = 
@@ -16,7 +15,8 @@ export type MobileTabType =
   | 'inbound_register'
   | 'sublease'
   | 'customers'
-  | 'delinquency';
+  | 'delinquency'
+  | 'vehicle_log';
 
 interface MobileBottomNavProps {
   deptMode: MobileDeptMode;
@@ -80,11 +80,12 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
       { id: 'assets', label: '자산가동', icon: Search, badge: 0 },
     ];
   } else {
-    // 📊 관리부 모바일 4대 전용 탭 (출고관리, 채권/계약, 출고요청 전면 제거)
+    // 📊 관리부 모바일 5대 전용 탭 (출고관리, 채권/계약, 출고요청 전면 제거)
     navItems = [
       { id: 'home', label: '관리홈', icon: Home, badge: 0 },
       { id: 'sublease', label: '전대관리', icon: Layers, badge: subleaseLeakCount },
       { id: 'dispatch', label: '배차상차', icon: Truck, badge: pendingDispatchCount },
+      { id: 'vehicle_log', label: '차량일지', icon: Car, badge: 0 },
       { id: 'assets', label: '자산목록', icon: Search, badge: 0 },
     ];
   }

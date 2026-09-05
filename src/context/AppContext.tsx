@@ -1,8 +1,9 @@
-// @ts-nocheck
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
-import { db, supabase, User, MenuPermission, createMenuPermission, Customer, CustomerContact, CustomerSite, Product, Asset, Consumable, ConsumableLog, ConsumablePurchaseRequest, MechanicConsumableStock, Contract, ContractAsset, ContractHistory, Delivery, Billing, BillingDetail, Receivable, Payment, PaymentDepositLink, Repair, RepairConsumable, Todo, BankTransaction, BankMatchingRule, BankAccountInitialBalance, AssetInOutLog, GoogleConfig, Vendor, CashFlowSnapshot, OutboundInspection, TransportCompany, TransportDriver, DepreciationLog, PurchaseSettlement, PurchaseSettlementItem, SettlementPaymentLog, ExternalLease, PurchaseSettlementType, PurchaseSettlementStatus, findCustomerByNormalizedName, AnnualLeaveQuota, LeaveUsage, OvertimeRecord, PayrollClosing, InspectionChecklistItem, InboundDefectDetail, PrepaidTransaction, DelinquencyActionLog, LegalNoticeLog, LegalNoticeTemplate, calculateAssetDepreciation, FieldAsTicket, FieldAsPartUsed, FieldAsCollectedPart } from '../services/db';
+import { db, supabase, User, MenuPermission, createMenuPermission, Customer, CustomerContact, CustomerSite, Product, Asset, Consumable, ConsumableLog, ConsumablePurchaseRequest, MechanicConsumableStock, Contract, ContractAsset, ContractHistory, Delivery, Billing, BillingDetail, Receivable, Payment, PaymentDepositLink, Repair, RepairConsumable, Todo, BankTransaction, BankMatchingRule, BankAccountInitialBalance, AssetInOutLog, GoogleConfig, Vendor, CashFlowSnapshot, OutboundInspection, TransportCompany, TransportDriver, DepreciationLog, PurchaseSettlement, PurchaseSettlementItem, SettlementPaymentLog, ExternalLease, PurchaseSettlementType, PurchaseSettlementStatus, findCustomerByNormalizedName, AnnualLeaveQuota, LeaveUsage, OvertimeRecord, PayrollClosing, InspectionChecklistItem, InboundDefectDetail, PrepaidTransaction, DelinquencyActionLog, LegalNoticeLog, LegalNoticeTemplate, calculateAssetDepreciation, FieldAsTicket, FieldAsPartUsed, FieldAsCollectedPart, CorporateVehicle, VehicleOperationLog, VehicleFuelLog, RepairPartUsed, RepairCollectedPart } from '../services/db';
 import { ErrorModal } from '../components/ErrorModal';
 import { getAllSystemMenuIds } from '../config/menu_config';
+import { broadcastWorkNotification } from '../utils/workNotificationService';
+import { resolveSiteDetailedAddress } from '../utils/nativeLauncher';
 
 export interface SmartDispatchData {
   customerName: string;
@@ -100,6 +101,10 @@ interface AppContextType {
   leaveUsages: LeaveUsage[];
   overtimeRecords: OvertimeRecord[];
   payrollClosings: PayrollClosing[];
+
+  corporateVehicles: CorporateVehicle[];
+  vehicleOperationLogs: VehicleOperationLog[];
+  vehicleFuelLogs: VehicleFuelLog[];
 
   // Mutators
   saveBankInitialBalance: (bankName: string, initialBalance: number, accountNumber?: string) => Promise<void>;
@@ -201,10 +206,10 @@ interface AppContextType {
   
   // Contract Mutators
   createContract: (contractData: Omit<Contract, 'id' | 'createdAt' | 'updatedAt' | 'contractNo'>, assetsList: { assetId?: string; expectedModel?: string; monthlyRentalFee: number; dailyRentalFee: number }[]) => Promise<void>;
-  extendContract: (contractId: string, newEndDate: string, description: string) => void;
-  shortenContract: (contractId: string, newEndDate: string, description: string) => void;
-  succeedContract: (contractId: string, successorCustomerId: string, successorContactId: string, successorSiteId: string, successionDate: string, description: string) => void;
-  exchangeAsset: (contractId: string, oldAssetId: string, newAssetId: string, exchangeDate: string) => void;
+  extendContract: (contractId: string, newEndDate: string, description: string) => Promise<void> | void;
+  shortenContract: (contractId: string, newEndDate: string, description: string) => Promise<void> | void;
+  succeedContract: (contractId: string, successorCustomerId: string, successorContactId: string, successorSiteId: string, successionDate: string, description: string) => Promise<void> | void;
+  exchangeAsset: (contractId: string, oldAssetId: string, newAssetId: string, exchangeDate: string) => Promise<void> | void;
   
   // 장비 할당 및 출고전 교체 / 할당 취소
   assignAssetToContract: (contractAssetId: string, assetId: string) => Promise<void>;
@@ -224,8 +229,8 @@ interface AppContextType {
   generateDueBillings: (targetDate?: string, targetYm?: string) => Promise<{ successCount: number; skippedContracts: { contractId: string; customerId: string; reason: string }[] }>;
   generateBillingForSingleContract: (contractId: string, billingYm: string, billingDate: string) => Promise<string | null>;
   regenerateBilling: (billingId: string, customDetails?: Omit<BillingDetail, 'id' | 'billingId' | 'createdAt'>[], options?: { billingYm?: string; billingDate?: string; memo?: string }) => Promise<string>;
-  approveBilling: (billingId: string) => void; // UNPAID → REQUESTED (거래명세서 발송)
-  cancelBilling: (billingId: string, refund?: boolean) => void; // 환불=true, 비환불=false(기본)
+  approveBilling: (billingId: string) => Promise<void>; // UNPAID → REQUESTED (거래명세서 발송)
+  cancelBilling: (billingId: string, refund?: boolean) => Promise<void>; // 환불=true, 비환불=false(기본)
   addReceivable: (data: Omit<Receivable, 'id' | 'createdAt' | 'updatedAt'>) => string;
   generateStandaloneBillingForReceivable: (receivableId: string, reason: string) => Promise<string>;
   linkReceivableToBilling: (billingId: string, receivableId: string, amount: number, displayName?: string) => Promise<void>;
@@ -235,21 +240,21 @@ interface AppContextType {
     method: string;
     memo: string;
     depositLinks?: { bankTransactionId: string; usedAmount: number }[]; // 통장입금 연동 (N건)
-  }) => void;
+  }) => Promise<void> | void;
   cancelPayment: (paymentId: string) => Promise<void>;  // 수납 취소 + PDL 연쇄 삭제 + Billing 롤백 + 선수금 환원
   cancelAllPaymentsForBilling: (billingId: string) => Promise<void>; // 청구서 전체 수납 일괄 취소 및 롤백
   saveBankDeposit: (data: Omit<BankTransaction, 'id' | 'createdAt' | 'withdrawAmount'>) => void;  // 통장입금 등록/수정
   deleteBankDeposit: (txId: string) => void;  // 통장입금 삭제 (연결 수납 없을 때만)
   uploadBankTransactions: (txs: Omit<BankTransaction, 'id' | 'createdAt'>[]) => void;
-  matchTransactionManual: (txId: string, billingId: string, learnRule: boolean) => void;
-  unmatchTransaction: (txId: string) => void;
+  matchTransactionManual: (txId: string, billingId: string, learnRule: boolean) => Promise<void> | void;
+  unmatchTransaction: (txId: string) => Promise<void> | void;
   saveMatchingRule: (senderName: string, customerId: string) => void;
   deleteMatchingRule: (ruleId: string) => void;
   
   // Deliveries
   dispatchDelivery: (deliveryId: string, dispatchData: { scheduledDate: string; transportCompany: string; vehicleType: string; vehicleNo: string; driverName: string; driverContact: string; deliveryCost: number; vehiclesJson?: string }) => void;
   settleDeliveryCost: (deliveryId: string, deliveryCostConfirmed: number, vehiclesJson?: string) => void;
-  completeDelivery: (deliveryId: string) => void;
+  completeDelivery: (deliveryId: string) => Promise<void>;
   completeInboundDelivery: (deliveryId: string, actualReturnDate: string, reviews: { assetId: string; status: 'AVAILABLE' | 'REPAIRING'; maintenanceScore: number; memo: string; faultImageUrl?: string }[]) => void;
   
   // Repairs
@@ -286,8 +291,18 @@ interface AppContextType {
   saveLegalNoticeLog: (log: Omit<LegalNoticeLog, 'id' | 'createdAt'>) => Promise<LegalNoticeLog>;
   saveLegalNoticeTemplate: (tpl: Omit<LegalNoticeTemplate, 'id' | 'updatedAt'> & { id?: string }) => Promise<void>;
 
-  saveDelinquencyAction: (action: Omit<DelinquencyActionLog, LegalNoticeLog, LegalNoticeTemplate, 'id' | 'createdAt'>) => Promise<void>;
+  saveDelinquencyAction: (action: Omit<DelinquencyActionLog, 'id' | 'createdAt'>) => Promise<void>;
   updateDelinquencyActionPromise: (actionId: string, status: 'PENDING' | 'KEPT' | 'BROKEN') => Promise<void>;
+
+  // Corporate Fleet & Vehicle Operation/Fuel Logs
+  registerCorporateVehicle: (vehicle: Omit<CorporateVehicle, 'id' | 'createdAt' | 'updatedAt'>) => Promise<CorporateVehicle>;
+  updateCorporateVehicle: (id: string, updates: Partial<CorporateVehicle>) => Promise<void>;
+  deleteCorporateVehicle: (id: string) => Promise<void>;
+  registerVehicleOperationLog: (log: Omit<VehicleOperationLog, 'id' | 'createdAt' | 'updatedAt'>) => Promise<VehicleOperationLog>;
+  updateVehicleOperationLog: (id: string, updates: Partial<VehicleOperationLog>) => Promise<void>;
+  deleteVehicleOperationLog: (id: string) => Promise<void>;
+  registerVehicleFuelLog: (fuelLog: Omit<VehicleFuelLog, 'id' | 'createdAt' | 'updatedAt'>) => Promise<VehicleFuelLog>;
+  deleteVehicleFuelLog: (id: string) => Promise<void>;
 
   // Navigation states (cross-page routing)
   activeTab: string;
@@ -347,6 +362,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [delinquencyActionLogs, setDelinquencyActionLogs] = useState<DelinquencyActionLog[]>([]);
   const [legalNoticeLogs, setLegalNoticeLogs] = useState<LegalNoticeLog[]>([]);
   const [legalNoticeTemplates, setLegalNoticeTemplates] = useState<LegalNoticeTemplate[]>([]);
+  const [corporateVehicles, setCorporateVehicles] = useState<CorporateVehicle[]>([]);
+  const [vehicleOperationLogs, setVehicleOperationLogs] = useState<VehicleOperationLog[]>([]);
+  const [vehicleFuelLogs, setVehicleFuelLogs] = useState<VehicleFuelLog[]>([]);
 
 
   // Navigation / Routing states
@@ -432,7 +450,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setDelinquencyActionLogs([...db.delinquencyActionLogs]);
     setLegalNoticeLogs([...db.legalNoticeLogs]);
     setLegalNoticeTemplates([...db.legalNoticeTemplates]);
-
+    setCorporateVehicles([...db.corporateVehicles]);
+    setVehicleOperationLogs([...db.vehicleOperationLogs]);
+    setVehicleFuelLogs([...db.vehicleFuelLogs]);
   };
 
   // 전체 테이블 Supabase pull 후 state 동기화 (초기 로딩 전용)
@@ -463,7 +483,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     'acquisition_disposal': ['assets', 'products', 'vendors'],
     'rent_asset':           ['assets', 'vendors'],
     'consumable':           ['consumables', 'consumableLogs', 'consumablePurchases', 'vendors'],
-    'repair':               ['repairs', 'repairConsumables', 'assets', 'consumables', 'vendors'],
     'smart_dispatch':       ['deliveries', 'contracts', 'assets', 'transportCompanies', 'transportDrivers'],
     'smart_return':         ['deliveries', 'contracts', 'assets', 'transportCompanies', 'transportDrivers'],
     'asset_inout_history':  ['assetInOutLogs', 'assets', 'customers'],
@@ -480,6 +499,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     'google_config':        ['googleConfigs'],
     'depreciation_execution': ['depreciationLogs', 'assets'],
     'leave_ot':             ['users', 'annualLeaveQuotas', 'leaveUsages', 'overtimeRecords'],
+    'vehicle_log':          ['corporateVehicles', 'vehicleOperationLogs', 'vehicleFuelLogs', 'users'],
     'initial_db_upload':    ['contracts', 'contractAssets', 'customers', 'assets', 'sites', 'billings', 'billingDetails'],
   };
 
@@ -1001,8 +1021,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     
     // 🛡️ [1. 방어 가드 - Validation Guard]
     // 현장 상세 주소와 현장담당자 연락처가 입력값과 기존 DB 모두에 전혀 없는 경우 강력 방어
-    const existingSite = customer ? db.sites.find(s => s.customerId === customer.id && (s.name.replace(/\s/g, '') === data.siteName.replace(/\s/g, '') || s.name.includes(data.siteName) || data.siteName.includes(s.name))) : null;
-    const existingContact = customer ? db.contacts.find(ct => ct.customerId === customer.id && (data.siteContactName ? ct.name.replace(/\s/g, '') === data.siteContactName.replace(/\s/g, '') : true)) : null;
+    const currentCust = customer;
+    const existingSite = currentCust ? db.sites.find(s => s.customerId === currentCust.id && (s.name.replace(/\s/g, '') === data.siteName.replace(/\s/g, '') || s.name.includes(data.siteName) || data.siteName.includes(s.name))) : null;
+    const existingContact = currentCust ? db.contacts.find(ct => ct.customerId === currentCust.id && (data.siteContactName ? ct.name.replace(/\s/g, '') === data.siteContactName.replace(/\s/g, '') : true)) : null;
 
     const effectiveAddress = data.siteAddress?.trim() || (existingSite?.address && existingSite.address !== '미상' ? existingSite.address : '');
     const effectivePhone = data.siteContactPhone?.trim() || (existingSite?.contact && existingSite.contact !== '미상' ? existingSite.contact : '') || (existingContact?.contact && existingContact.contact !== '미상' ? existingContact.contact : '');
@@ -1029,6 +1050,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!data.taxBillEmail?.trim() && customer?.repEmail && customer.repEmail !== '미상') {
       data.taxBillEmail = customer.repEmail;
     }
+
+    // 🛡️ [장비 수량 검증 가드]
+    if (!data.equipments || data.equipments.length === 0) {
+      return { success: false, errorMessage: '⚠️ 출고 대상 장비 규격 및 수량이 누락되었습니다.' };
+    }
+    const sanitizedEquipments = data.equipments.map(eq => ({
+      ...eq,
+      qty: Math.max(1, Math.floor(Number(eq.qty) || 1))
+    }));
+    const totalEqQty = sanitizedEquipments.reduce((sum, e) => sum + e.qty, 0);
+    if (totalEqQty <= 0) {
+      return { success: false, errorMessage: '⚠️ 출고 수량은 최소 1대 이상이어야 합니다.' };
+    }
+    data.equipments = sanitizedEquipments;
 
     const missingFields = [];
     if (!customer) missingFields.push(`고객사: ${data.customerName}`);
@@ -1226,17 +1261,30 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     await notify(`📄 [3/5 계약 생성] 스마트 임대차 계약서 작성 중 (${nextContractNo})...`, 55);
 
+    const rawData = data as any;
+    const parseDayNumber = (val: any, fallback: number): number => {
+      if (val === undefined || val === null || val === '') return fallback;
+      const str = String(val).trim();
+      if (str.includes('말일') || str.includes('월말')) return 30;
+      const matched = str.match(/\d+/);
+      if (matched) {
+        const n = parseInt(matched[0], 10);
+        return Math.min(31, Math.max(1, n));
+      }
+      return fallback;
+    };
+    const contractBillingDay = parseDayNumber(rawData.closingDay, finalCustomer.defaultBillingDay || 30);
+    const contractPaymentDueDay = parseDayNumber(rawData.paymentDay, finalCustomer.paymentDueDay || 25);
+
     const contract = db.insertRow<Contract>('contracts', {
       contractNo: nextContractNo,
       customerId: finalCustomer.id,
       siteId: finalSite.id,
       startDate: new Date().toISOString().split('T')[0],
       endDate: '', 
-      billingDay: 30,
+      billingDay: contractBillingDay,
       lateInterestRate: 0,
-      paymentDueDay: 30,
-
-      
+      paymentDueDay: contractPaymentDueDay,
       salespersonId: validSalespersonId,
       status: 'ACTIVE',
       createdAt: new Date().toISOString(),
@@ -1328,6 +1376,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     await notify('🎉 [완료] 출고의뢰 생성을 성공적으로 완료하였습니다!', 100, 300);
 
     refreshAllData();
+
+    // 📢 발생즉시 1회 푸시알림 브로드캐스트 (출고의뢰)
+    const totalEqCount = (data.equipments || []).reduce((acc: number, eq: any) => acc + (Number(eq.qty) || 1), 0);
+    broadcastWorkNotification({
+      type: 'OUTBOUND',
+      title: '출고 의뢰 접수',
+      body: `${data.customerName || '고객사'} (${data.siteName || '현장'}) ${totalEqCount}대 출고 의뢰`,
+      url: '/admin/dispatch',
+      targetDepts: ['DISPATCH', 'YARD', 'ADMIN', 'EXECUTIVE']
+    }).catch(console.warn);
+
     return { success: true, contractId: contract.id, contractNo: contract.contractNo };
   };
 
@@ -1437,6 +1496,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       await db.awaitPendingWrites();
       refreshAllData();
+
+      // 📢 발생즉시 1회 푸시알림 브로드캐스트 (회수의뢰)
+      const retContract = data.contractId ? db.contracts.find(ct => ct.id === data.contractId) : null;
+      const retCust = retContract ? db.customers.find(c => c.id === retContract.customerId)?.name : '';
+      const retSite = retContract ? db.sites.find(s => s.id === retContract.siteId)?.name : '';
+      const retCount = data.assetIds?.length || 1;
+      broadcastWorkNotification({
+        type: 'RETURN',
+        title: '장비 회수 의뢰 접수',
+        body: `${retCust || '고객사'} (${retSite || '현장'}) ${retCount}대 회수 의뢰`,
+        url: '/admin/dispatch',
+        targetDepts: ['DISPATCH', 'YARD', 'ADMIN', 'EXECUTIVE']
+      }).catch(console.warn);
+
       return { success: true };
     } catch (err: any) {
       console.error('saveSmartReturn error:', err);
@@ -1600,6 +1673,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const registerRentedAsset = async (assetData: Partial<Asset>) => {
     let result;
+    const sanitizedMonthlyFee = Math.max(0, Number(assetData.monthlyRentFee) || 0);
+    const sanitizedDailyFee = assetData.dailyRentFee ? Math.max(0, Number(assetData.dailyRentFee)) : Math.floor(sanitizedMonthlyFee / 30);
+
     const existing = db.assets.find(a => a.assetNo === assetData.assetNo || (assetData.id && a.id === assetData.id));
     if (existing) {
       result = db.updateRow<Asset>('assets', existing.id, {
@@ -1607,6 +1683,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         vendorAssetNo: assetData.vendorAssetNo || existing.vendorAssetNo || '',
         ownerType: 'RENTED',
         status: 'AVAILABLE',
+        monthlyRentFee: sanitizedMonthlyFee,
+        dailyRentFee: sanitizedDailyFee,
         actualRentReturnDate: '', // 과거 실제 반납일 초기화 (재임차 활성화)
         updatedAt: new Date().toISOString()
       });
@@ -1622,8 +1700,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         renter: assetData.renter || '',
         rentStart: assetData.rentStart || '',
         rentEnd: assetData.rentEnd || '',
-        monthlyRentFee: assetData.monthlyRentFee || 0,
-        dailyRentFee: assetData.dailyRentFee || Math.floor((assetData.monthlyRentFee || 0) / 30),
+        monthlyRentFee: sanitizedMonthlyFee,
+        dailyRentFee: sanitizedDailyFee,
         acquisitionPrice: 0,
         depreciationMonths: 0,
         residualValueRate: 0,
@@ -1638,15 +1716,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       });
     }
     // 헌장 1.2 무누락 감사 로그: 원사 임차 반입
-    db.insertRow<AssetInOutLog>('assetInOutLogs', {
-      assetId: result.id,
-      assetNo: result.assetNo,
-      modelName: result.modelName,
-      type: 'INBOUND',
-      eventDate: result.rentStart || new Date().toISOString().split('T')[0],
-      memo: `[원사 임차 반입] 공급원사: ${result.renter || '원사'} (원사번호: ${result.vendorAssetNo || '-'})`,
-      createdAt: new Date().toISOString()
-    });
+    if (result) {
+      db.insertRow<AssetInOutLog>('assetInOutLogs', {
+        assetId: result.id,
+        assetNo: result.assetNo,
+        modelName: result.modelName,
+        type: 'INBOUND',
+        eventDate: result.rentStart || new Date().toISOString().split('T')[0],
+        memo: `[원사 임차 반입] 공급원사: ${result.renter || '원사'} (원사번호: ${result.vendorAssetNo || '-'})`,
+        createdAt: new Date().toISOString()
+      });
+    }
 
     try {
       await db.awaitPendingWrites();
@@ -1662,6 +1742,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const returnRentedAsset = async (assetId: string, returnDate: string): Promise<void> => {
     const target = db.assets.find(a => a.id === assetId);
     if (!target) return;
+
+    if (target.status === 'RENTED') {
+      showErrorModal(`⚠️ 해당 자산(${target.assetNo})은 현재 고객사 현장에 투입 중(대여중)입니다.\n고객사 회수(입고)를 먼저 진행한 후 원사 반납이 가능합니다.`);
+      throw new Error(`대여중인 자산은 원사 반납이 불가합니다.`);
+    }
+    if (target.rentStart && returnDate < target.rentStart) {
+      showErrorModal(`⚠️ 원사 반납일(${returnDate})은 임차 시작일(${target.rentStart}) 이전일 수 없습니다.`);
+      throw new Error(`원사 반납일이 임차 시작일 이전입니다.`);
+    }
 
     try {
       db.updateRow<Asset>('assets', assetId, {
@@ -1729,21 +1818,36 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const purchaseConsumable = async (data: { modelName: string; qty: number; unit: string; unitPrice: number; supplier: string }) => {
+    if (!data.modelName?.trim()) {
+      showErrorModal('소모품 품명을 입력해주세요.');
+      return;
+    }
+    if (data.qty <= 0) {
+      showErrorModal('입고 수량은 1개 이상이어야 합니다.');
+      return;
+    }
+    if (data.unitPrice < 0) {
+      showErrorModal('단가는 0원 이상이어야 합니다.');
+      return;
+    }
+    const cleanQty = Math.max(1, Math.floor(data.qty));
+    const cleanPrice = Math.max(0, Number(data.unitPrice) || 0);
+
     let consumable = db.consumables.find(c => c.modelName.replace(/\s/g, '') === data.modelName.replace(/\s/g, ''));
     
     if (consumable) {
       db.updateRow<Consumable>('consumables', consumable.id, {
-        stockQty: consumable.stockQty + data.qty,
-        unitPrice: data.unitPrice,
+        stockQty: consumable.stockQty + cleanQty,
+        unitPrice: cleanPrice,
         supplier: data.supplier,
         updatedAt: new Date().toISOString()
       });
     } else {
       consumable = db.insertRow<Consumable>('consumables', {
-        modelName: data.modelName,
-        stockQty: data.qty,
+        modelName: data.modelName.trim(),
+        stockQty: cleanQty,
         unit: data.unit || '개',
-        unitPrice: data.unitPrice,
+        unitPrice: cleanPrice,
         supplier: data.supplier,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
@@ -1753,8 +1857,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     db.insertRow<ConsumableLog>('consumableLogs', {
       consumableId: consumable.id,
       type: 'INBOUND',
-      quantity: data.qty,
-      unitPrice: data.unitPrice,
+      quantity: cleanQty,
+      unitPrice: cleanPrice,
       supplier: data.supplier,
       userId: getValidUserId(currentUser?.id),
       actionDate: new Date().toISOString().split('T')[0],
@@ -1767,44 +1871,64 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const useConsumable = async (data: { consumableId: string; quantity: number; targetAssetId: string; description: string }) => {
-    const consumable = db.consumables.find(c => c.id === data.consumableId);
-    if (!consumable || consumable.stockQty < data.quantity) return;
+    try {
+      if (data.quantity <= 0) {
+        showErrorModal('소모 수량은 1개 이상이어야 합니다.');
+        throw new Error('소모 수량은 1개 이상이어야 합니다.');
+      }
+      const cleanQty = Math.max(1, Math.floor(data.quantity));
+      const consumable = db.consumables.find(c => c.id === data.consumableId);
+      if (!consumable || consumable.stockQty < cleanQty) {
+        const msg = `소모품 재고가 부족합니다. (현재고: ${consumable?.stockQty || 0}개 / 요청: ${cleanQty}개)`;
+        showErrorModal(`⚠️ ${msg}`);
+        throw new Error(msg);
+      }
 
-    db.updateRow<Consumable>('consumables', consumable.id, {
-      stockQty: consumable.stockQty - data.quantity,
-      updatedAt: new Date().toISOString()
-    });
-
-    db.insertRow<ConsumableLog>('consumableLogs', {
-      consumableId: consumable.id,
-      type: 'OUTBOUND',
-      quantity: data.quantity,
-      unitPrice: consumable.unitPrice,
-      targetAssetId: data.targetAssetId,
-      userId: getValidUserId(currentUser?.id),
-      actionDate: new Date().toISOString().split('T')[0],
-      description: data.description,
-      createdAt: new Date().toISOString()
-    });
-
-    const asset = db.assets.find(a => a.id === data.targetAssetId);
-    if (asset) {
-      const cost = consumable.unitPrice * data.quantity;
-      db.updateRow<Asset>('assets', asset.id, {
-        cumRepairCost: (asset.cumRepairCost || 0) + cost,
+      db.updateRow<Consumable>('consumables', consumable.id, {
+        stockQty: consumable.stockQty - cleanQty,
         updatedAt: new Date().toISOString()
       });
-    }
 
-    refreshAllData();
+      db.insertRow<ConsumableLog>('consumableLogs', {
+        consumableId: consumable.id,
+        type: 'OUTBOUND',
+        quantity: cleanQty,
+        unitPrice: consumable.unitPrice,
+        targetAssetId: data.targetAssetId,
+        userId: getValidUserId(currentUser?.id),
+        actionDate: new Date().toISOString().split('T')[0],
+        description: data.description,
+        createdAt: new Date().toISOString()
+      });
+
+      const asset = db.assets.find(a => a.id === data.targetAssetId);
+      if (asset) {
+        const cost = consumable.unitPrice * cleanQty;
+        db.updateRow<Asset>('assets', asset.id, {
+          cumRepairCost: (asset.cumRepairCost || 0) + cost,
+          updatedAt: new Date().toISOString()
+        });
+      }
+
+      await db.awaitPendingWrites();
+      refreshAllData();
+    } catch (err: any) {
+      showErrorModal(`⚠️ 소모품 사용 처리 실패:\n${err?.message || err}`);
+      throw err;
+    }
   };
 
   const transferConsumableToMechanic = async (mechanicId: string, consumableId: string, quantity: number, memo?: string): Promise<void> => {
     try {
+      if (quantity <= 0) {
+        showErrorModal('불출 수량은 1개 이상이어야 합니다.');
+        throw new Error('불출 수량은 1개 이상이어야 합니다.');
+      }
       const consumable = db.consumables.find(c => c.id === consumableId);
       if (!consumable || consumable.stockQty < quantity) {
-        showErrorModal(`⚠️ 본사 재고가 부족합니다. (본사 현재고: ${consumable?.stockQty || 0}개)`);
-        return;
+        const msg = `본사 재고가 부족합니다. (본사 현재고: ${consumable?.stockQty || 0}개)`;
+        showErrorModal(`⚠️ ${msg}`);
+        throw new Error(msg);
       }
 
       const mechanic = db.users.find(u => u.id === mechanicId);
@@ -1859,10 +1983,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const returnConsumableToHq = async (mechanicId: string, consumableId: string, quantity: number, memo?: string): Promise<void> => {
     try {
+      if (quantity <= 0) {
+        showErrorModal('반납 수량은 1개 이상이어야 합니다.');
+        throw new Error('반납 수량은 1개 이상이어야 합니다.');
+      }
       const existingStock = db.mechanicConsumableStocks.find(s => s.mechanicId === mechanicId && s.consumableId === consumableId);
       if (!existingStock || existingStock.stockQty < quantity) {
-        showErrorModal(`⚠️ 차량 보유 재고가 부족합니다. (차량 현재고: ${existingStock?.stockQty || 0}개)`);
-        return;
+        const msg = `차량 보유 재고가 부족합니다. (차량 현재고: ${existingStock?.stockQty || 0}개)`;
+        showErrorModal(`⚠️ ${msg}`);
+        throw new Error(msg);
       }
 
       const consumable = db.consumables.find(c => c.id === consumableId);
@@ -2023,7 +2152,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         billableType: data.billableType || 'FREE',
         billableAmount: data.billableAmount || 0,
         billableToCustomer: data.billableType === 'BILLABLE',
-        beforeImage: data.beforeImage || '',
+        faultImageUrl: data.faultImageUrl || (data.evidenceImages && data.evidenceImages[0]) || '',
+        evidenceImages: data.evidenceImages || (data.faultImageUrl ? [data.faultImageUrl] : []),
+        beforeImage: data.beforeImage || data.faultImageUrl || (data.evidenceImages && data.evidenceImages[0]) || '',
         afterImage: data.afterImage || '',
         customerSignature: data.customerSignature || '',
         customerConfirmName: data.customerConfirmName || '',
@@ -2039,6 +2170,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       await db.awaitPendingWrites();
       refreshAllData();
+
+      // 📢 발생즉시 1회 푸시알림 브로드캐스트 (현장 AS 접수)
+      broadcastWorkNotification({
+        type: 'AS',
+        title: '현장 AS 접수 등록',
+        body: `${newTicket.customerName || '고객사'} (${newTicket.siteName || '현장'}) ${newTicket.modelName || '장비'} AS 접수 (${newTicket.issueCategory || '기타'})`,
+        url: '/mobile?tab=as',
+        targetDepts: ['AS', 'DISPATCH', 'ADMIN', 'EXECUTIVE']
+      }).catch(console.warn);
+
       return newTicket;
     } catch (err: any) {
       showErrorModal(`⚠️ AS 접수 생성 실패:\n${err?.message || err}`);
@@ -2144,6 +2285,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       // 1. 소모품 차량 재고 유효성 검사 및 차감
       if (data.partsUsed && data.partsUsed.length > 0) {
         for (const part of data.partsUsed) {
+          if (!part.quantity || part.quantity <= 0) {
+            throw new Error(`사용 부품("${part.modelName}")의 수량은 1개 이상이어야 합니다.`);
+          }
           const vehicleStock = db.mechanicConsumableStocks.find(
             s => s.mechanicId === data.mechanicId && s.consumableId === part.consumableId
           );
@@ -2246,6 +2390,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
 
       // 3. 현재 티켓 완료/종결 업데이트
+      const sanitizedBillableAmount = Math.max(0, Number(data.billableAmount) || 0);
       db.updateRow<Repair>('repairs', ticketId, {
         status: finalStatus,
         mechanicId: data.mechanicId,
@@ -2256,7 +2401,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         partsUsed: data.partsUsed || [],
         collectedParts: data.collectedParts || [],
         billableType: data.billableType,
-        billableAmount: data.billableAmount,
+        billableAmount: sanitizedBillableAmount,
         billableToCustomer: data.billableType === 'BILLABLE',
         beforeImage: data.beforeImage || ticket.beforeImage,
         afterImage: data.afterImage || ticket.afterImage,
@@ -2325,6 +2470,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       await db.awaitPendingWrites();
       refreshAllData();
+
+      // 📢 대차 제안 시 배차/출고팀에 대차교체 알림 브로드캐스트
+      if (data.exchangeSuggested) {
+        broadcastWorkNotification({
+          type: 'EXCHANGE',
+          title: '대차 교체 의뢰 등록',
+          body: `${ticket.customerName || '고객사'} (${ticket.siteName || '현장'}) ${ticket.assetNo || '장비'} 현장수리불능 대차요청`,
+          url: '/admin/dispatch',
+          targetDepts: ['DISPATCH', 'YARD', 'ADMIN', 'EXECUTIVE']
+        }).catch(console.warn);
+      }
     } catch (err: any) {
       showErrorModal(err?.message || String(err));
       throw err;
@@ -2490,8 +2646,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         let matchedAsset = db.assets.find(a => a.assetNo && asset && a.assetNo.trim().toUpperCase() === asset.trim().toUpperCase());
         let assetId = matchedAsset?.id || '';
 
-        if ((!finalAssetNo || finalAssetNo === '현장확인' || finalAssetNo === '전체장비') && matchedContract) {
-          const contractAssetsForContract = db.contractAssets.filter(ca => ca.contractId === matchedContract.id && ca.status !== 'RETURNED');
+        const currentContract = matchedContract;
+        if ((!finalAssetNo || finalAssetNo === '현장확인' || finalAssetNo === '전체장비') && currentContract) {
+          const contractAssetsForContract = db.contractAssets.filter(ca => ca.contractId === currentContract.id && ca.status !== 'RETURNED');
           if (contractAssetsForContract.length === 1 && contractAssetsForContract[0].assetId) {
             const singleAsset = db.assets.find(a => a.id === contractAssetsForContract[0].assetId);
             if (singleAsset) {
@@ -2501,7 +2658,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             }
           }
         } else if (matchedAsset && !matchedContract) {
-          const activeCa = db.contractAssets.find(ca => ca.assetId === matchedAsset.id && ca.status !== 'RETURNED');
+          const currentAsset = matchedAsset;
+          const activeCa = db.contractAssets.find(ca => ca.assetId === currentAsset.id && ca.status !== 'RETURNED');
           if (activeCa) {
             matchedContract = db.contracts.find(c => c.id === activeCa.contractId);
           }
@@ -2736,6 +2894,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const contract = db.insertRow<Contract>('contracts', {
       ...contractData,
       contractNo,
+      billingDay: contractData.billingDay || customer?.defaultBillingDay || 30,
+      paymentDueDay: contractData.paymentDueDay || customer?.paymentDueDay || 25,
       salespersonId: contractData.salespersonId || currentUser?.id,
       status: 'ACTIVE',
       createdAt: new Date().toISOString(),
@@ -2763,7 +2923,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       if (item.assetId) {
         db.updateRow<Asset>('assets', item.assetId, {
-          status: 'RENTED',
+          // 💡 헌장 1.3 준수: 계약 체결 시점에는 RENTED(대여중)로 변경하지 않고 ASSIGNED(출고대기) 유지, 출고 검수 승인 마감 시점에 RENTED로 전이됨!
+          status: 'ASSIGNED',
           currentCustomerId: contractData.customerId,
           currentSiteId: contractData.siteId,
           contractStart: contractData.startDate,
@@ -2803,12 +2964,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       updatedAt: new Date().toISOString()
     });
 
+    await db.awaitPendingWrites();
     refreshAllData();
   };
 
-  const extendContract = (contractId: string, newEndDate: string, description: string) => {
+  const extendContract = async (contractId: string, newEndDate: string, description: string) => {
     const contract = db.contracts.find(c => c.id === contractId);
-    if (!contract) return;
+    if (!contract) {
+      showErrorModal('계약 정보를 찾을 수 없습니다.');
+      return;
+    }
+    if (!newEndDate) {
+      showErrorModal('연장 종료일을 입력하십시오.');
+      return;
+    }
+    if (contract.startDate && newEndDate < contract.startDate) {
+      showErrorModal(`연장 종료일(${newEndDate})은 계약 시작일(${contract.startDate}) 이후여야 합니다.`);
+      return;
+    }
 
     const prevEnd = contract.endDate;
 
@@ -2839,12 +3012,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       createdAt: new Date().toISOString()
     });
 
+    await db.awaitPendingWrites();
     refreshAllData();
   };
 
-  const shortenContract = (contractId: string, newEndDate: string, description: string) => {
+  const shortenContract = async (contractId: string, newEndDate: string, description: string) => {
     const contract = db.contracts.find(c => c.id === contractId);
-    if (!contract) return;
+    if (!contract) {
+      showErrorModal('계약 정보를 찾을 수 없습니다.');
+      return;
+    }
+    if (!newEndDate) {
+      showErrorModal('단축 종료일을 입력하십시오.');
+      return;
+    }
+    if (contract.startDate && newEndDate < contract.startDate) {
+      showErrorModal(`단축 종료일(${newEndDate})은 계약 시작일(${contract.startDate}) 이후여야 합니다.`);
+      return;
+    }
 
     const prevEnd = contract.endDate;
 
@@ -2888,12 +3073,34 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       updatedAt: new Date().toISOString()
     });
 
+    await db.awaitPendingWrites();
     refreshAllData();
   };
 
-  const succeedContract = (contractId: string, successorCustomerId: string, successorContactId: string, successorSiteId: string, successionDate: string, description: string) => {
+  const succeedContract = async (contractId: string, successorCustomerId: string, successorContactId: string, successorSiteId: string, successionDate: string, description: string) => {
     const oldContract = db.contracts.find(c => c.id === contractId);
-    if (!oldContract) return;
+    if (!oldContract) {
+      showErrorModal('승계 대상 계약을 찾을 수 없습니다.');
+      return;
+    }
+    if (!successionDate) {
+      showErrorModal('승계일자를 입력하십시오.');
+      return;
+    }
+    if (oldContract.startDate && successionDate < oldContract.startDate) {
+      showErrorModal(`승계일자(${successionDate})는 기존 계약 시작일(${oldContract.startDate}) 이후여야 합니다.`);
+      return;
+    }
+    if (oldContract.endDate && oldContract.endDate !== '미정' && successionDate > oldContract.endDate) {
+      showErrorModal(`승계일자(${successionDate})는 기존 계약 만료일(${oldContract.endDate}) 이전이어야 합니다.`);
+      return;
+    }
+
+    const successorCust = db.customers.find(c => c.id === successorCustomerId);
+    if (successorCust?.transactionStatus === 'BLOCKED') {
+      showErrorModal(`인수 고객사(${successorCust.name})는 거래제한(출고차단) 상태이므로 계약을 승계할 수 없습니다.`);
+      return;
+    }
 
     const oldEndDate = oldContract.endDate;
     
@@ -2932,6 +3139,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       startDate: nextDay,
       endDate: oldEndDate,
       billingDay: oldContract.billingDay,
+      statementClosingDay: oldContract.statementClosingDay,
+      paymentDueDay: oldContract.paymentDueDay,
+      lateInterestRate: oldContract.lateInterestRate || 0,
       salespersonId: oldContract.salespersonId,
       status: 'ACTIVE',
       predecessorContractId: oldContract.id,
@@ -2978,6 +3188,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       createdAt: new Date().toISOString()
     });
 
+    await db.awaitPendingWrites();
     refreshAllData();
   };
 
@@ -3371,24 +3582,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         });
       }
 
-      // 5. 자산 입출고/수리 타임라인 로깅
+      // 5. 자산 입출고/수리 타임라인 로깅 (대체 장비는 향후 출고 검수 승인 시 OUTBOUND 이력이 생성됨)
       db.insertRow<AssetInOutLog>('assetInOutLogs', {
         assetId: oldAssetId,
         assetNo: oldAssetOrig.assetNo,
         modelName: oldAssetOrig.modelName,
         type: 'REPAIR',
         eventDate: today,
-        memo: `[출고불가 수리전환] 대체장비(${newAssetOrig.assetNo}) 교체출고 | 사유: ${reason}`,
-        createdAt: nowIso
-      });
-
-      db.insertRow<AssetInOutLog>('assetInOutLogs', {
-        assetId: newAssetId,
-        assetNo: newAssetOrig.assetNo,
-        modelName: newAssetOrig.modelName,
-        type: 'OUTBOUND',
-        eventDate: today,
-        memo: `[대체장비 출고할당] 기존장비(${oldAssetOrig.assetNo}) 교체대체 | 사유: ${reason}`,
+        memo: `[출고불가 수리전환] 대체장비(${newAssetOrig.assetNo}) 교체배정 | 사유: ${reason}`,
         createdAt: nowIso
       });
 
@@ -3412,75 +3613,90 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  const exchangeAsset = (contractId: string, oldAssetId: string, newAssetId: string, exchangeDate: string) => {
-    const contract = db.contracts.find(c => c.id === contractId);
-    if (!contract) return;
+  const exchangeAsset = async (contractId: string, oldAssetId: string, newAssetId: string, exchangeDate: string) => {
+    try {
+      const contract = db.contracts.find(c => c.id === contractId);
+      if (!contract) {
+        showErrorModal('대차 교체 대상 계약 정보를 찾을 수 없습니다.');
+        return;
+      }
 
-    const caList = db.contractAssets.filter(ca => ca.contractId === contractId && ca.assetId === oldAssetId);
-    const ca = caList.find(c => !c.endDate || new Date(c.endDate) >= new Date(exchangeDate));
-    if (!ca) return;
+      const caList = db.contractAssets.filter(ca => ca.contractId === contractId && ca.assetId === oldAssetId);
+      const ca = caList.find(c => !c.endDate || new Date(c.endDate) >= new Date(exchangeDate));
+      if (!ca) {
+        showErrorModal('대차 대상 계약 자산 슬롯을 찾을 수 없습니다.');
+        return;
+      }
 
-    const originalEndDate = ca.endDate;
-    db.updateRow<ContractAsset>('contractAssets', ca.id, { endDate: exchangeDate });
+      const originalEndDate = ca.endDate;
+      db.updateRow<ContractAsset>('contractAssets', ca.id, { endDate: exchangeDate });
 
-    const oldAsset = db.assets.find(a => a.id === oldAssetId);
-    if (oldAsset) {
-      db.updateRow<Asset>('assets', oldAssetId, {
-        status: 'REPAIRING',
-        currentCustomerId: undefined,
-        currentSiteId: undefined,
-        contractStart: undefined,
-        contractEnd: undefined,
+      const oldAsset = db.assets.find(a => a.id === oldAssetId);
+      if (oldAsset) {
+        db.updateRow<Asset>('assets', oldAssetId, {
+          status: 'REPAIRING',
+          currentCustomerId: undefined,
+          currentSiteId: undefined,
+          contractStart: undefined,
+          contractEnd: undefined,
+          updatedAt: new Date().toISOString()
+        });
+      }
+
+      const nextDay = new Date(new Date(exchangeDate).getTime() + 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+      const newAsset = db.assets.find(a => a.id === newAssetId);
+      if (newAsset) {
+        db.insertRow<ContractAsset>('contractAssets', {
+          contractId: contractId,
+          assetId: newAssetId,
+          monthlyRentalFee: ca.monthlyRentalFee,
+          dailyRentalFee: ca.dailyRentalFee,
+          startDate: nextDay,
+          endDate: originalEndDate || contract.endDate,
+          createdAt: new Date().toISOString()
+        });
+
+        // 헌장 1.3 준수: 배차 단계에서는 ASSIGNED(배정/출고대기) 상태 부여, 출고 검수 승인 마감 시 RENTED 전환
+        db.updateRow<Asset>('assets', newAssetId, {
+          status: 'ASSIGNED',
+          currentCustomerId: contract.customerId,
+          currentSiteId: contract.siteId,
+          contractStart: nextDay,
+          contractEnd: originalEndDate || contract.endDate,
+          monthlyRentalFee: ca.monthlyRentalFee,
+          dailyRentalFee: ca.dailyRentalFee,
+          updatedAt: new Date().toISOString()
+        });
+      }
+
+      // 헌장 2.3 준수: 단일 EXCHANGE 배차 의뢰 1건 발행
+      db.insertRow<Delivery>('deliveries', {
+        contractId: contractId,
+        type: 'EXCHANGE',
+        status: 'REQUESTED',
+        requestDate: exchangeDate,
+        deliveryCost: 0,
+        isCostSettled: false,
+        memo: `장비 교체 의뢰 (구: ${oldAsset?.assetNo || '미상'} -> 신: ${newAsset?.assetNo || '미상'})`,
+        createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       });
-    }
 
-    const nextDay = new Date(new Date(exchangeDate).getTime() + 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-    const newAsset = db.assets.find(a => a.id === newAssetId);
-    if (newAsset) {
-      db.insertRow<ContractAsset>('contractAssets', {
-        contractId: contractId,
-        assetId: newAssetId,
-        monthlyRentalFee: ca.monthlyRentalFee,
-        dailyRentalFee: ca.dailyRentalFee,
-        startDate: nextDay,
-        endDate: originalEndDate || contract.endDate,
+      // 헌장 4.2 준수: changeType 'EXCHANGE' 명시
+      db.insertRow<ContractHistory>('contractHistory', {
+        contractId,
+        changeType: 'EXCHANGE',
+        changeDate: exchangeDate,
+        description: `장비 교체 완료 (구: ${oldAsset?.assetNo || '미상'} -> 신: ${newAsset?.assetNo || '미상'})`,
         createdAt: new Date().toISOString()
       });
 
-      db.updateRow<Asset>('assets', newAssetId, {
-        status: 'RENTED',
-        currentCustomerId: contract.customerId,
-        currentSiteId: contract.siteId,
-        contractStart: nextDay,
-        contractEnd: originalEndDate || contract.endDate,
-        monthlyRentalFee: ca.monthlyRentalFee,
-        dailyRentalFee: ca.dailyRentalFee,
-        updatedAt: new Date().toISOString()
-      });
+      await db.awaitPendingWrites();
+      refreshAllData();
+    } catch (err: any) {
+      showErrorModal(`⚠️ 대차 교체 처리 중 DB 동기화 오류:\n${err?.message || err}`);
+      throw err;
     }
-
-    db.insertRow<Delivery>('deliveries', {
-      contractId: contractId,
-      type: 'EXCHANGE',
-      status: 'REQUESTED',
-      requestDate: exchangeDate,
-      deliveryCost: 0,
-      isCostSettled: false,
-      memo: `장비 교체 의뢰 (구: ${oldAsset?.assetNo || '미상'} -> 신: ${newAsset?.assetNo || '미상'})`,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    });
-
-    db.insertRow<ContractHistory>('contractHistory', {
-      contractId,
-      changeType: 'SHORTEN',
-      changeDate: exchangeDate,
-      description: `장비 교체 완료 (구: ${oldAsset?.assetNo || '미상'} -> 신: ${newAsset?.assetNo || '미상'})`,
-      createdAt: new Date().toISOString()
-    });
-
-    refreshAllData();
   };
 
   const generateBillingsForMonth = async (billingYm: string, billingDate: string) => {
@@ -3525,7 +3741,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   // 거래명세서 발송: UNPAID → REQUESTED (F-2 원칙)
-  const approveBilling = (billingId: string) => {
+  const approveBilling = async (billingId: string) => {
     const billing = db.billings.find(b => b.id === billingId);
     if (!billing) return;
     if (billing.status === 'UNPAID') {
@@ -3545,13 +3761,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         });
       }
     }
+    await db.awaitPendingWrites();
     refreshAllData();
   };
 
   // 청구 취소 (J-1, J-2 원칙)
   // refund=true: 수납 취소 + 입금잔액 소멸 (환불 케이스)
   // refund=false: 청구만 취소, 수납·입금잔액 잔류 (비환불 케이스 → 새 청구에 연결)
-  const cancelBilling = (billingId: string, refund: boolean = false) => {
+  const cancelBilling = async (billingId: string, refund: boolean = false) => {
     const billing = db.billings.find(b => b.id === billingId);
     if (!billing) return;
 
@@ -3626,6 +3843,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       syncContractBillingMilestones(billing.contractId);
     }
 
+    await db.awaitPendingWrites();
     refreshAllData();
   };
 
@@ -3760,8 +3978,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (existingBilling) return;
 
       // 고객/계약의 청구 기준일(billingDay) 또는 거래명세서 마감일(statementClosingDay)
-      const rawBillingDay = c.billingDay || 31;
-      const rawStatementDay = c.statementClosingDay || rawBillingDay;
+      const rawBillingDay = c.billingDay || cust.defaultBillingDay || 31;
+      const rawStatementDay = c.statementClosingDay || cust.defaultStatementClosingDay || rawBillingDay;
       const effectiveBillingDay = Math.min(rawBillingDay, lastDayOfMonth);
       const effectiveStatementDay = Math.min(rawStatementDay, lastDayOfMonth);
       const triggerDay = Math.min(effectiveBillingDay, effectiveStatementDay);
@@ -3916,7 +4134,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       throw new Error(`[중복 경고] 계약 ${c.contractNo}의 ${billingYm} 청구서가 이미 존재합니다.\n상태: ${existingActive.status} / ID: ${existingActive.id}`);
     }
 
-    const billingDay = c.billingDay || 25;
+    const cust = db.customers.find(cu => cu.id === c.customerId);
+    const billingDay = c.billingDay || cust?.defaultBillingDay || 25;
     const cAssets = db.contractAssets.filter(ca => ca.contractId === c.id);
     let detailsList: Omit<BillingDetail, 'id' | 'billingId' | 'createdAt'>[] = [];
     let totalAmount = 0;
@@ -3981,7 +4200,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // → 담당자가 외상미수금 화면에서 수동으로 청구에 포함
 
     // 3. 선수금(예치금) 차감 반영 (I-1 원칙: 청구 발생 시 자동 차감)
-    const cust = db.customers.find(cu => cu.id === c.customerId);
     let finalBillingAmount = totalAmount;
     if (cust && (cust.prepaidBalance || 0) > 0 && totalAmount > 0) {
       const prepaid = cust.prepaidBalance || 0;
@@ -4183,7 +4401,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   // v2: 복수 입금건 연동 수납 처리
-  const receivePayment = (billingId: string, data: {
+  const receivePayment = async (billingId: string, data: {
     paymentDate: string;
     amount: number;
     method: string;
@@ -4191,7 +4409,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     depositLinks?: { bankTransactionId: string; usedAmount: number }[];
   }) => {
     const billing = db.billings.find(b => b.id === billingId);
-    if (!billing) return;
+    if (!billing) {
+      showErrorModal('청구서를 찾을 수 없습니다.');
+      return;
+    }
+    if (!data.amount || data.amount <= 0) {
+      showErrorModal('수납 금액은 1원 이상이어야 합니다.');
+      return;
+    }
 
     // Payment 1건 생성
     const newPayment = db.insertRow<Payment>('payments', {
@@ -4245,6 +4470,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       });
     }
 
+    await db.awaitPendingWrites();
     refreshAllData();
   };
 
@@ -4379,6 +4605,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         createdAt: new Date().toISOString()
       });
 
+      // 💡 [무결성] PaymentDepositLink 동시 기록
+      db.insertRow<PaymentDepositLink>('paymentDepositLinks', {
+        paymentId: payId,
+        bankTransactionId: txId,
+        usedAmount: paymentAmount,
+        createdAt: new Date().toISOString()
+      });
+
       // 청구서 납부금액 및 상태 업데이트 (VAT 포함 총액 기준)
       const nextPaid = billing.paidAmount + paymentAmount;
       const nextStatus: Billing['status'] = nextPaid >= bGrand ? 'PAID' : 'PARTIAL';
@@ -4474,7 +4708,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     refreshAllData();
   };
 
-  const matchTransactionManual = (txId: string, billingId: string, learnRule: boolean) => {
+  const matchTransactionManual = async (txId: string, billingId: string, learnRule: boolean) => {
     const tx = db.bankTransactions.find(t => t.id === txId);
     const billing = db.billings.find(b => b.id === billingId);
     if (!tx || !billing) return;
@@ -4491,29 +4725,61 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         });
       }
     }
+    await db.awaitPendingWrites();
     refreshAllData();
   };
 
-  const unmatchTransaction = (txId: string) => {
+  const unmatchTransaction = async (txId: string) => {
     const tx = db.bankTransactions.find(t => t.id === txId);
-    if (!tx || !tx.matchedBillingId) return;
+    if (!tx) return;
 
-    // 해당 거래 ID 패턴으로 등록되었던 모든 수납 전표 검색
+    // 1. paymentDepositLinks 기반 롤백 (신규 체계)
+    const linkedLinks = db.paymentDepositLinks.filter(l => l.bankTransactionId === txId);
+    linkedLinks.forEach(link => {
+      const pay = db.payments.find(p => p.id === link.paymentId);
+      if (pay) {
+        if (pay.billingId) {
+          const billing = db.billings.find(b => b.id === pay.billingId);
+          if (billing) {
+            const bSup = billing.totalAmount || 0;
+            const bGrand = bSup + Math.round(bSup * 0.1);
+            const nextPaid = Math.max(0, (billing.paidAmount || 0) - link.usedAmount);
+            const nextStatus: Billing['status'] = nextPaid === 0 ? 'UNPAID' : (nextPaid >= bGrand ? 'PAID' : 'PARTIAL');
+            db.updateRow<Billing>('billings', billing.id, {
+              paidAmount: nextPaid,
+              status: nextStatus,
+              updatedAt: new Date().toISOString()
+            });
+          }
+        }
+        if (pay.id.startsWith(`pay-matching-${txId}`)) {
+          db.deleteRow('payments', pay.id);
+        } else {
+          const newAmount = Math.max(0, pay.amount - link.usedAmount);
+          if (newAmount === 0) {
+            db.deleteRow('payments', pay.id);
+          } else {
+            db.updateRow<Payment>('payments', pay.id, { amount: newAmount, updatedAt: new Date().toISOString() });
+          }
+        }
+      }
+      db.deleteRow('paymentDepositLinks', link.id);
+    });
+
+    // 2. 레거시 ID 패턴(`pay-matching-${txId}`)으로 잔존하는 수납 전표 검색 및 롤백
     const matchPrefix = `pay-matching-${txId}`;
     const associatedPayments = db.payments.filter(p => p.id.startsWith(matchPrefix));
 
-    // 대표 청구서를 찾아 customerId 획득
-    const repBilling = db.billings.find(b => b.id === tx.matchedBillingId);
+    const repBilling = tx.matchedBillingId ? db.billings.find(b => b.id === tx.matchedBillingId) : null;
     const customerId = repBilling?.customerId;
 
     associatedPayments.forEach(pay => {
       if (pay.billingId) {
-        // 청구서 수납 잔액 롤백
         const billing = db.billings.find(b => b.id === pay.billingId);
         if (billing) {
           const bSup = billing.totalAmount || 0;
           const bGrand = bSup + Math.round(bSup * 0.1);
-          const nextPaid = Math.max(0, billing.paidAmount - pay.amount);
+          const nextPaid = Math.max(0, (billing.paidAmount || 0) - pay.amount);
           const nextStatus: Billing['status'] = nextPaid === 0 ? 'UNPAID' : (nextPaid >= bGrand ? 'PAID' : 'PARTIAL');
           db.updateRow<Billing>('billings', billing.id, {
             paidAmount: nextPaid,
@@ -4522,7 +4788,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           });
         }
       } else if (customerId) {
-        // 선수금 적립 롤백
         const customer = db.customers.find(c => c.id === customerId);
         if (customer) {
           db.updateRow<Customer>('customers', customerId, {
@@ -4531,17 +4796,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           } as any);
         }
       }
-
       db.deleteRow('payments', pay.id);
     });
 
-    // 거래 정보 복구
+    // 3. 거래 정보 복구
     db.updateRow<BankTransaction>('bankTransactions', txId, {
       matchedBillingId: '',
       matchingType: undefined,
       updatedAt: new Date().toISOString()
     } as any);
 
+    await db.awaitPendingWrites();
     refreshAllData();
   };
 
@@ -4684,6 +4949,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       updatedAt: new Date().toISOString()
     });
     refreshAllData();
+
+    // 📢 배차 완료 시 관련 부서(영업/출고/관리/경영)에 실시간 알림 브로드캐스트
+    const dObj = db.deliveries.find(d => d.id === deliveryId);
+    const dContract = dObj?.contractId ? db.contracts.find(c => c.id === dObj.contractId) : null;
+    const dCust = dContract ? db.customers.find(c => c.id === dContract.customerId)?.name : '';
+    const dSite = dContract ? db.sites.find(s => s.id === dContract.siteId)?.name : '';
+    broadcastWorkNotification({
+      type: 'DISPATCH',
+      title: '배차 완료 안내',
+      body: `${dCust || '현장'} (${dSite || '배차'}) ${dispatchData.driverName || '기사'} (${dispatchData.vehicleType || '화물'}) 배차 완료`,
+      url: '/admin/dispatch',
+      targetDepts: ['SALES', 'YARD', 'ADMIN', 'EXECUTIVE']
+    }).catch(console.warn);
   };
 
   const settleDeliveryCost = (deliveryId: string, deliveryCostConfirmed: number, vehiclesJson?: string) => {
@@ -4696,7 +4974,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     refreshAllData();
   };
 
-  const completeDelivery = (deliveryId: string) => {
+  const completeDelivery = async (deliveryId: string) => {
     const delivery = db.deliveries.find(d => d.id === deliveryId);
     if (!delivery) return;
 
@@ -4761,31 +5039,37 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           updatedAt: new Date().toISOString()
         });
 
-        // OUTBOUND 로그 추가
+        // OUTBOUND 로그 추가 (중복 방지 가드)
         const cAssets = db.contractAssets.filter(ca => ca.contractId === delivery.contractId);
         cAssets.forEach(ca => {
           if (ca.assetId) {
             const asset = db.assets.find(a => a.id === ca.assetId);
             if (asset) {
-              db.insertRow<AssetInOutLog>('assetInOutLogs', {
-                assetId: asset.id,
-                assetNo: asset.assetNo,
-                modelName: asset.modelName,
-                type: 'OUTBOUND',
-                eventDate: delivery.scheduledDate || new Date().toISOString().split('T')[0],
-                customerId: contract.customerId,
-                customerName: customer?.name || '',
-                siteId: contract.siteId,
-                siteName: site?.name || '',
-                deliveryId: deliveryId,
-                createdAt: new Date().toISOString()
-              });
+              const alreadyLogged = db.assetInOutLogs.some(
+                l => l.assetId === asset.id && l.type === 'OUTBOUND' && l.deliveryId === deliveryId
+              );
+              if (!alreadyLogged) {
+                db.insertRow<AssetInOutLog>('assetInOutLogs', {
+                  assetId: asset.id,
+                  assetNo: asset.assetNo,
+                  modelName: asset.modelName,
+                  type: 'OUTBOUND',
+                  eventDate: delivery.scheduledDate || new Date().toISOString().split('T')[0],
+                  customerId: contract.customerId,
+                  customerName: customer?.name || '',
+                  siteId: contract.siteId,
+                  siteName: site?.name || '',
+                  deliveryId: deliveryId,
+                  createdAt: new Date().toISOString()
+                });
+              }
             }
           }
         });
       }
     }
 
+    await db.awaitPendingWrites();
     refreshAllData();
   };
 
@@ -4853,20 +5137,47 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
 
     if (delivery.contractId) {
-      db.updateRow<Contract>('contracts', delivery.contractId, {
-        status: 'COMPLETED',
-        updatedAt: new Date().toISOString()
-      });
-
-      // 💡 [GAP-024] 계약의 모든 ContractAsset 슬롯 일괄 RETURNED 확정
+      const isExchange = delivery.type === 'EXCHANGE' || delivery.dispatchCategory === '교환';
+      const reviewedAssetIds = reviews.map(r => r.assetId);
       const cAssets = db.contractAssets.filter(ca => ca.contractId === delivery.contractId);
-      cAssets.forEach(ca => {
-        db.updateRow<ContractAsset>('contractAssets', ca.id, {
-          status: 'RETURNED',
-          actualReturnDate: ca.actualReturnDate || actualReturnDate,
-          updatedAt: new Date().toISOString()
+
+      if (isExchange) {
+        // 교환(EXCHANGE) 배차: 계약은 계속 진행(ACTIVE)되므로 완료시키지 않음
+        // 회수 검수된 장비 슬롯만 RETURNED 처리 (대차로 투입된 장비는 계속 RENTED 유지)
+        cAssets.forEach(ca => {
+          if (ca.assetId && reviewedAssetIds.includes(ca.assetId)) {
+            db.updateRow<ContractAsset>('contractAssets', ca.id, {
+              status: 'RETURNED',
+              actualReturnDate: ca.actualReturnDate || actualReturnDate,
+              updatedAt: new Date().toISOString()
+            });
+          }
         });
-      });
+      } else {
+        // 일반 입고/반납 배차: 검수된 자산 슬롯 RETURNED 처리
+        cAssets.forEach(ca => {
+          if (reviewedAssetIds.length === 0 || (ca.assetId && reviewedAssetIds.includes(ca.assetId))) {
+            db.updateRow<ContractAsset>('contractAssets', ca.id, {
+              status: 'RETURNED',
+              actualReturnDate: ca.actualReturnDate || actualReturnDate,
+              updatedAt: new Date().toISOString()
+            });
+          }
+        });
+
+        // 계약에 남은 대여/체결 자산 슬롯이 있는지 확인
+        const remainingActiveAssets = cAssets.filter(ca => 
+          !(ca.assetId && reviewedAssetIds.includes(ca.assetId)) && ca.status !== 'RETURNED'
+        );
+
+        // 모든 장비가 회수 완료되었을 때만 계약을 COMPLETED로 종료
+        if (remainingActiveAssets.length === 0) {
+          db.updateRow<Contract>('contracts', delivery.contractId, {
+            status: 'COMPLETED',
+            updatedAt: new Date().toISOString()
+          });
+        }
+      }
     }
 
     await db.awaitPendingWrites();
@@ -5079,7 +5390,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         assetId: repairData.assetId || '',
         assetNo: targetAsset?.assetNo || repairData.assetNo || '현장확인',
         modelName: targetAsset?.modelName || repairData.modelName || '고소작업대',
-        mechanicId: currentUser?.id || '',
+        mechanicId: repairData.mechanicId || currentUser?.id || '',
         maintenanceType,
         repairType: repairData.repairType || (maintenanceType === 'EXTERNAL' ? 'EXTERNAL' : 'INTERNAL'),
         requestDate: repairData.requestDate || new Date().toISOString().split('T')[0],
@@ -5088,10 +5399,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         status: repairStatus,
         unresolvedReason: repairData.unresolvedReason,
         nextAction: repairData.nextAction,
+        targetAssetStatus: repairData.targetAssetStatus,
+        vendorId: repairData.vendorId,
         details: repairData.details || '',
         totalCost: totalRepairCost,
-        billableToCustomer: repairData.billableToCustomer || false,
+        billableType: repairData.billableType || (repairData.billableToCustomer ? 'BILLABLE' : 'FREE'),
+        billableAmount: repairData.billableAmount || 0,
+        billableToCustomer: repairData.billableType === 'BILLABLE' || repairData.billableToCustomer || false,
+        inspectionItemCode: repairData.inspectionItemCode,
+        degradationScore: repairData.degradationScore || 0,
+        beforeImage: repairData.beforeImage || '',
+        afterImage: repairData.afterImage || '',
         evidenceImages: repairData.evidenceImages || [],
+        workLocation: repairData.workLocation || 'YARD',
+        stockSource: repairData.stockSource || 'CENTRAL_HQ',
         customerName: resolvedCustomerName,
         siteName: resolvedSiteName,
         createdAt: new Date().toISOString(),
@@ -5601,7 +5922,60 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       consumableCount++;
     }
 
-    // ③ 임차자산 임차료 집계 — 임차 관리 메뉴(RentAssets)에서 대사를 완료하고 확정한 내역만 수집
+    // ③ 임차자산(ownerType === 'RENTED') 임차료 집계 및 자동 정산 생성
+    const rentedAssetsOfMonth = db.assets.filter(a => {
+      if (a.ownerType !== 'RENTED' || !a.monthlyRentFee || a.monthlyRentFee <= 0) return false;
+      const vId = a.vendorId;
+      if (!vId) return false;
+      const start = a.rentStart ? a.rentStart.slice(0, 7) : '';
+      const end = a.actualRentReturnDate ? a.actualRentReturnDate.slice(0, 7) : (a.rentEnd ? a.rentEnd.slice(0, 7) : '9999-12');
+      return (!start || start <= ym) && ym <= end;
+    });
+
+    const rentedByVendor: Record<string, Asset[]> = {};
+    rentedAssetsOfMonth.forEach(a => {
+      const vId = a.vendorId!;
+      if (!rentedByVendor[vId]) rentedByVendor[vId] = [];
+      rentedByVendor[vId].push(a);
+    });
+
+    for (const [vendorId, aList] of Object.entries(rentedByVendor)) {
+      const existing = db.purchaseSettlements.find(p => p.vendorId === vendorId && p.settlementYm === ym && p.settlementType === 'EQUIPMENT_LEASE');
+      if (existing) continue;
+
+      const vendor = db.vendors.find(v => v.id === vendorId);
+      const vendorName = vendor?.name || aList[0]?.renter || '장비 임차원사';
+      const totalAmount = aList.reduce((sum, a) => sum + (a.monthlyRentFee || 0), 0);
+      const settlementId = db.generateNextId('purchaseSettlements', db.purchaseSettlements);
+
+      db.insertRow<PurchaseSettlement>('purchaseSettlements', {
+        id: settlementId,
+        settlementYm: ym,
+        vendorId,
+        vendorName,
+        settlementType: 'EQUIPMENT_LEASE',
+        totalAmount,
+        paidAmount: 0,
+        status: 'PENDING',
+        itemCount: aList.length,
+        createdAt: nowIso,
+        updatedAt: nowIso
+      });
+
+      aList.forEach(a => {
+        db.insertRow<PurchaseSettlementItem>('purchaseSettlementItems', {
+          settlementId,
+          sourceType: 'DELIVERY',
+          sourceId: a.id,
+          itemDescription: `장비임차: ${a.assetNo} (${a.modelName})`,
+          quantity: 1,
+          unitPrice: a.monthlyRentFee || 0,
+          amount: a.monthlyRentFee || 0,
+          createdAt: nowIso
+        });
+      });
+    }
+
     const leaseSettlementsOfMonth = db.purchaseSettlements.filter(p => 
       p.settlementYm === ym && 
       (p.settlementType === 'EQUIPMENT_LEASE')
@@ -5652,8 +6026,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           sourceId: r.id,
           itemDescription: `외주 정비 [${asset?.assetNo || '자산'}] ${r.details.slice(0, 30)}`,
           quantity: 1,
-          unitPrice: r.totalCost,
-          amount: r.totalCost,
+          unitPrice: r.totalCost || 0,
+          amount: r.totalCost || 0,
           evidenceFileUrl: r.estimateFileUrl || r.faultImageUrl,
           createdAt: nowIso
         });
@@ -5921,6 +6295,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const applyPrepaidBalanceForBilling = async (billingId: string, amount: number, memo?: string): Promise<void> => {
     try {
+      if (!amount || amount <= 0) {
+        throw new Error('상계할 금액은 1원 이상이어야 합니다.');
+      }
       const billing = db.billings.find(b => b.id === billingId);
       if (!billing) throw new Error('청구서를 찾을 수 없습니다.');
       const customer = db.customers.find(c => c.id === billing.customerId);
@@ -5987,6 +6364,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const refundPrepaidBalance = async (customerId: string, amount: number, memo?: string): Promise<void> => {
     try {
+      if (!amount || amount <= 0) {
+        throw new Error('환불할 금액은 1원 이상이어야 합니다.');
+      }
       const customer = db.customers.find(c => c.id === customerId);
       if (!customer) throw new Error('고객사를 찾을 수 없습니다.');
       const currentBal = customer.prepaidBalance || 0;
@@ -6017,7 +6397,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   // ── 연체 조치 및 입금 약속 관리 ──
-  const saveDelinquencyAction = async (action: Omit<DelinquencyActionLog, LegalNoticeLog, LegalNoticeTemplate, 'id' | 'createdAt'>): Promise<void> => {
+  const saveDelinquencyAction = async (action: Omit<DelinquencyActionLog, 'id' | 'createdAt'>): Promise<void> => {
     try {
       db.insertRow<DelinquencyActionLog>('delinquencyActionLogs', {
         ...action,
@@ -6050,14 +6430,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       createdAt: new Date().toISOString()
     }) as LegalNoticeLog;
 
+    await db.awaitPendingWrites();
     refreshAllData();
-    if (db.isSupabaseConnected() && db.pendingWrites.length > 0) {
-      try {
-        await db.pendingWrites[db.pendingWrites.length - 1];
-      } catch (err) {
-        console.error('Supabase write error:', err);
-      }
-    }
     return newLog;
   };
 
@@ -6085,6 +6459,120 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
+  // ============================================================
+  // 법인 차량 및 차량운행일지/주유 영수증 Mutators (Corporate Fleet & Logs)
+  // ============================================================
+
+  const registerCorporateVehicle = async (vehicleData: Omit<CorporateVehicle, 'id' | 'createdAt' | 'updatedAt'>): Promise<CorporateVehicle> => {
+    const now = new Date().toISOString();
+    const newVehicle = db.insertRow<CorporateVehicle>('corporateVehicles', {
+      ...vehicleData,
+      createdAt: now,
+      updatedAt: now
+    }) as CorporateVehicle;
+    await db.awaitPendingWrites();
+    refreshAllData();
+    return newVehicle;
+  };
+
+  const updateCorporateVehicle = async (id: string, updates: Partial<CorporateVehicle>): Promise<void> => {
+    db.updateRow<CorporateVehicle>('corporateVehicles', id, {
+      ...updates,
+      updatedAt: new Date().toISOString()
+    });
+    await db.awaitPendingWrites();
+    refreshAllData();
+  };
+
+  const deleteCorporateVehicle = async (id: string): Promise<void> => {
+    db.deleteRow('corporateVehicles', id);
+    await db.awaitPendingWrites();
+    refreshAllData();
+  };
+
+  const registerVehicleOperationLog = async (logData: Omit<VehicleOperationLog, 'id' | 'createdAt' | 'updatedAt'>): Promise<VehicleOperationLog> => {
+    const now = new Date().toISOString();
+    const driveDistance = Math.max(0, (logData.arrivalMileage || 0) - (logData.departureMileage || 0));
+    const newLog = db.insertRow<VehicleOperationLog>('vehicleOperationLogs', {
+      ...logData,
+      driveDistance: logData.driveDistance !== undefined ? logData.driveDistance : driveDistance,
+      createdAt: now,
+      updatedAt: now
+    }) as VehicleOperationLog;
+
+    // 차량의 현재 누적 주행거리 자동 업데이트 (도착 거리가 더 큰 경우)
+    const veh = db.corporateVehicles.find(v => v.id === logData.vehicleId);
+    if (veh && logData.arrivalMileage > veh.currentMileage) {
+      db.updateRow<CorporateVehicle>('corporateVehicles', veh.id, {
+        currentMileage: logData.arrivalMileage,
+        updatedAt: now
+      });
+    }
+
+    await db.awaitPendingWrites();
+    refreshAllData();
+    return newLog;
+  };
+
+  const updateVehicleOperationLog = async (id: string, updates: Partial<VehicleOperationLog>): Promise<void> => {
+    db.updateRow<VehicleOperationLog>('vehicleOperationLogs', id, {
+      ...updates,
+      updatedAt: new Date().toISOString()
+    });
+    await db.awaitPendingWrites();
+    refreshAllData();
+  };
+
+  const deleteVehicleOperationLog = async (id: string): Promise<void> => {
+    db.deleteRow('vehicleOperationLogs', id);
+    await db.awaitPendingWrites();
+    refreshAllData();
+  };
+
+  const registerVehicleFuelLog = async (fuelData: Omit<VehicleFuelLog, 'id' | 'createdAt' | 'updatedAt'>): Promise<VehicleFuelLog> => {
+    const now = new Date().toISOString();
+    const fuelUnitPrice = fuelData.fuelUnitPrice || (fuelData.fuelVolume > 0 ? Math.round(fuelData.fuelAmount / fuelData.fuelVolume) : 0);
+    
+    // 직전 주유 대비 연비 자동 계산 (동일 차량의 직전 주유 기록 검색)
+    const pastFuelLogs = db.vehicleFuelLogs
+      .filter(f => f.vehicleId === fuelData.vehicleId && f.currentMileage < fuelData.currentMileage)
+      .sort((a, b) => b.currentMileage - a.currentMileage);
+    let calculatedEfficiency: number | undefined = undefined;
+    if (pastFuelLogs.length > 0 && fuelData.fuelVolume > 0) {
+      const distanceDelta = fuelData.currentMileage - pastFuelLogs[0].currentMileage;
+      if (distanceDelta > 0) {
+        calculatedEfficiency = Number((distanceDelta / fuelData.fuelVolume).toFixed(2));
+      }
+    }
+
+    const newFuelLog = db.insertRow<VehicleFuelLog>('vehicleFuelLogs', {
+      ...fuelData,
+      fuelUnitPrice,
+      fuelEfficiency: fuelData.fuelEfficiency || calculatedEfficiency,
+      createdAt: now,
+      updatedAt: now
+    }) as VehicleFuelLog;
+
+    // 차량의 현재 누적 주행거리 자동 업데이트
+    const veh = db.corporateVehicles.find(v => v.id === fuelData.vehicleId);
+    if (veh && fuelData.currentMileage > veh.currentMileage) {
+      db.updateRow<CorporateVehicle>('corporateVehicles', veh.id, {
+        currentMileage: fuelData.currentMileage,
+        updatedAt: now
+      });
+    }
+
+    await db.awaitPendingWrites();
+    refreshAllData();
+    return newFuelLog;
+  };
+
+  const deleteVehicleFuelLog = async (id: string): Promise<void> => {
+    db.deleteRow('vehicleFuelLogs', id);
+    await db.awaitPendingWrites();
+    refreshAllData();
+  };
+
   return (
     <AppContext.Provider value={{ receivables: db.receivables as any[], refreshReceivables: () => {}, 
       currentUser, theme, toggleTheme, login, logout, hasPermission, showErrorModal,
@@ -6092,6 +6580,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       bankTransactions, bankMatchingRules, bankInitialBalances, assetInOutLogs, vendors, googleConfigs, cashFlowSnapshots, outboundInspections, depreciationLogs,
       purchaseSettlements, purchaseSettlementItems, settlementPaymentLogs: db.settlementPaymentLogs, externalLeases, inspectionChecklistItems,
       annualLeaveQuotas, leaveUsages, overtimeRecords, payrollClosings, prepaidTransactions, delinquencyActionLogs, legalNoticeLogs, legalNoticeTemplates, saveLegalNoticeLog, saveLegalNoticeTemplate,
+      corporateVehicles, vehicleOperationLogs, vehicleFuelLogs, registerCorporateVehicle, updateCorporateVehicle, deleteCorporateVehicle, registerVehicleOperationLog, updateVehicleOperationLog, deleteVehicleOperationLog, registerVehicleFuelLog, deleteVehicleFuelLog,
       refreshAllData, fullRefreshFromServer, executeMonthlyDepreciation, loadTablesForMenu, updatePermissions, saveUser, saveCustomer, saveContact, saveSite, saveProduct, saveAsset, updateGoogleConfig,
       saveCashFlowSnapshot, deleteCashFlowSnapshot, saveVendor, deleteVendor, saveBankInitialBalance, saveInspectionChecklistItem, deleteInspectionChecklistItem,
       updateAnnualLeaveQuota, addLeaveUsage, deleteLeaveUsage, addOvertimeRecord, deleteOvertimeRecord, setPayrollClosingStatus,

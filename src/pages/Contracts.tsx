@@ -5,7 +5,7 @@ import {
   Plus, Calendar, Search, Download, Edit3, Repeat, Clock, Wrench, ChevronLeft,
   Building2, ArrowLeftRight, Receipt, FolderOpen, AlertCircle, ExternalLink, Copy, AlertTriangle
 } from 'lucide-react';
-import { Contract, db, Customer, CustomerContact, CustomerSite, ContractAsset, ContractHistory, Delivery, normalizeEndDate } from '../services/db';
+import { Contract, db, Customer, CustomerContact, CustomerSite, ContractAsset, ContractHistory, Delivery, Asset, normalizeEndDate } from '../services/db';
 import { exportToExcel } from '../services/excel';
 import { ContractDocumentBundleModal } from '../components/ContractDocumentBundleModal';
 import { FileText, CheckCircle2 } from 'lucide-react';
@@ -67,8 +67,8 @@ export const Contracts: React.FC = () => {
     if (!custSelect || custSelect === 'NEW') return null;
     const custBillings = billings.filter(b => b.customerId === custSelect && b.status !== 'PAID' && (b.totalAmount - b.paidAmount) > 0);
     const overdueSum = custBillings.reduce((s, b) => s + (b.totalAmount - b.paidAmount), 0);
-    if (overdueSum <= 0) return null;
     const mc = customers.find(c => c.id === custSelect);
+    if (overdueSum <= 0 && mc?.transactionStatus !== 'BLOCKED') return null;
     return { overdueSum, count: custBillings.length, isBlocked: mc?.transactionStatus === 'BLOCKED' };
   }, [custSelect, customers, billings]);
   const [contactSelect, setContactSelect] = useState('');
@@ -79,6 +79,7 @@ export const Contracts: React.FC = () => {
   const [endDate, setEndDate] = useState(new Date(new Date().getTime() + 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]);
   const [billingDay, setBillingDay] = useState(30);
   const [statementClosingDay, setStatementClosingDay] = useState(25);
+  const [paymentDueDay, setPaymentDueDay] = useState(25);
 
   // 신규 수동입력 세부 폼 상태
   const [newCustName, setNewCustName] = useState('');
@@ -99,9 +100,9 @@ export const Contracts: React.FC = () => {
   const [newSiteContactPhone, setNewSiteContactPhone] = useState('');
   const [newSiteContactEmail, setNewSiteContactEmail] = useState('');
   
-  // 등록 중 자산 바스켓
+  // 등록 중 자산 바스켓 (헌장 2.1: 영업 담당자는 모델 규격 의뢰가 기본 표준)
   const [basket, setBasket] = useState<{ assetId?: string; expectedModel?: string; monthlyRentalFee: number; dailyRentalFee: number }[]>([]);
-  const [basketAssetMethod, setBasketAssetMethod] = useState<'ASSET' | 'MODEL'>('ASSET');
+  const [basketAssetMethod, setBasketAssetMethod] = useState<'ASSET' | 'MODEL'>('MODEL');
   const [selectedAssetToAdd, setSelectedAssetToAdd] = useState('');
   const [selectedModelToAdd, setSelectedModelToAdd] = useState('');
   const [customMonthly, setCustomMonthly] = useState(400000);
@@ -344,6 +345,19 @@ export const Contracts: React.FC = () => {
     e.preventDefault();
     if (!activeContract) return;
 
+    const activeCust = customers.find(cu => cu.id === activeContract.customerId);
+    const isShortened = activeContract.endDate && activeContract.endDate !== '미정' && modNewEndDate < activeContract.endDate;
+
+    if (!isShortened && activeCust?.transactionStatus === 'BLOCKED') {
+      showToast(`[출고제한] 거래처 [${activeCust.name}]은(는) 거래 차단 상태이므로 계약 기간 연장이 불가합니다.`, 'error');
+      return;
+    }
+
+    if (!modIsOpen && modNewEndDate < activeContract.startDate) {
+      showToast(`종료일(${modNewEndDate})은 계약 시작일(${activeContract.startDate}) 이후여야 합니다.`, 'error');
+      return;
+    }
+
     try {
       const targetEndDate = modIsOpen ? '미정' : modNewEndDate;
       const prevEnd = activeContract.endDate;
@@ -353,11 +367,25 @@ export const Contracts: React.FC = () => {
         updatedAt: new Date().toISOString()
       });
 
+      const cAssets = contractAssets.filter(ca => ca.contractId === activeContract.id && ca.status !== 'RETURNED');
+      cAssets.forEach(ca => {
+        db.updateRow<ContractAsset>('contractAssets', ca.id, {
+          endDate: targetEndDate,
+          updatedAt: new Date().toISOString()
+        });
+        if (ca.assetId) {
+          db.updateRow<Asset>('assets', ca.assetId, {
+            contractEnd: targetEndDate,
+            updatedAt: new Date().toISOString()
+          });
+        }
+      });
+
       db.insertRow<ContractHistory>('contractHistory', {
         contractId: activeContract.id,
-        changeType: 'EXTEND',
+        changeType: isShortened ? 'SHORTEN' : 'EXTEND',
         changeDate: todayStr,
-        description: `계약 기간 변경: ${prevEnd || '미정'} ➔ ${targetEndDate} (사유: ${modDesc || '기간 조정'})`,
+        description: `계약 기간 ${isShortened ? '단축' : '연장'}: ${prevEnd || '미정'} ➔ ${targetEndDate} (사유: ${modDesc || '기간 조정'})`,
         createdAt: new Date().toISOString()
       });
 
@@ -387,8 +415,13 @@ export const Contracts: React.FC = () => {
       return;
     }
 
+    if (succDate < activeContract.startDate) {
+      showToast(`승계일자(${succDate})는 계약 시작일(${activeContract.startDate}) 이후여야 합니다.`, 'error');
+      return;
+    }
+
     try {
-      succeedContract(activeContract.id, succCustId, succContactId, succSiteId, succDate, succDesc);
+      await succeedContract(activeContract.id, succCustId, succContactId, succSiteId, succDate, succDesc);
       showToast('계약 승계가 완료되었습니다.');
       setShowTransferModal(false);
     } catch (err: any) {
@@ -426,6 +459,17 @@ export const Contracts: React.FC = () => {
       return;
     }
 
+    if (activeContract) {
+      if (activeContract.startDate && exchangeDate < activeContract.startDate) {
+        showToast(`대차일자(${exchangeDate})는 계약 시작일(${activeContract.startDate}) 이후여야 합니다.`, 'error');
+        return;
+      }
+      if (activeContract.endDate && activeContract.endDate !== '미정' && exchangeDate > activeContract.endDate) {
+        showToast(`대차일자(${exchangeDate})는 계약 종료일(${activeContract.endDate}) 이전이어야 합니다.`, 'error');
+        return;
+      }
+    }
+
     try {
       const oldAssetObj = assets.find(a => a.id === exchangeOldAssetId);
       const targetModelName = exchangeIdentifyType === 'KNOWN' 
@@ -440,7 +484,9 @@ export const Contracts: React.FC = () => {
       // 💡 [ERR-001] 기존 자산 ContractAsset 종료 처리 (endDate 고정, status=RETURNED, actualReturnDate)
       const targetOldContractAsset = contractAssets.find(ca => 
         ca.contractId === selectedContractId && 
-        (exchangeOldAssetId ? ca.assetId === exchangeOldAssetId : ca.id === exchangeContractAssetId)
+        (isKnown 
+          ? (ca.assetId === exchangeOldAssetId) 
+          : (ca.id === exchangeContractAssetId || ca.expectedModel === exchangeContractAssetId || assets.find(a => a.id === ca.assetId)?.modelName === exchangeContractAssetId))
       );
 
       if (targetOldContractAsset) {
@@ -462,6 +508,7 @@ export const Contracts: React.FC = () => {
       });
 
       // 2. 후속 업무 흐름 연계: 단일 대차 요구에 대해 'EXCHANGE' (교환 왕복 배차) 1건만 발행
+      const targetSite = sites.find(s => s.id === activeContract?.siteId);
       db.insertRow<Delivery>('deliveries', {
         contractId: selectedContractId,
         type: 'EXCHANGE',
@@ -471,7 +518,9 @@ export const Contracts: React.FC = () => {
         scheduledDate: exchangeDate,
         loadingTimeSlot: exchangeTimeSlot,
         unloadingTimeSlot: exchangeTimeSlot,
-        memo: `[대차/교환 왕복 배차] 희망시간: ${exchangeTimeSlot} | 회수대상: ${isKnown ? `${oldAssetObj?.assetNo}(${targetModelName})` : `${targetModelName}(미식별)`} ➔ 대차출고요구: ${targetModelName} | 사유: ${exchangeReason}`,
+        originAddress: '본사 주기장',
+        destinationAddress: targetSite?.address || '',
+        memo: `[대차/교환 왕복 배차] 현장: ${targetSite?.name || '현장'} | 희망시간: ${exchangeTimeSlot} | 회수대상: ${isKnown ? `${oldAssetObj?.assetNo}(${targetModelName})` : `${targetModelName}(미식별)`} ➔ 대차출고요구: ${targetModelName} | 사유: ${exchangeReason}`,
         vehicleType: '5톤 렉카',
         driverName: '',
         deliveryCost: 0,
@@ -537,6 +586,7 @@ export const Contracts: React.FC = () => {
         '계약 시작일': c.startDate,
         '계약 만료일': c.endDate || '미정',
         '청구 마감일': `매월 ${c.billingDay}일`,
+        '납기일': c.paymentDueDay ? `익월 ${c.paymentDueDay}일` : '익월 25일 (기본)',
         '월 임대료 합계(원)': totalMonthlyRent,
 
         // ⑤ 승계 및 이력 연계
@@ -652,6 +702,7 @@ export const Contracts: React.FC = () => {
       endDate: isEndDateOpen ? '미정' : endDate,
       billingDay: Number(billingDay),
       statementClosingDay: Number(statementClosingDay),
+      paymentDueDay: Number(paymentDueDay) || 25,
       lateInterestRate: 0,
       status: 'ACTIVE'
     }, basket);
@@ -1040,7 +1091,16 @@ export const Contracts: React.FC = () => {
                             </button>
                           </td>
                           <td style={{ whiteSpace: 'nowrap' }}><strong style={{ color: 'var(--primary)' }}>{c.contractNo}</strong></td>
-                          <td style={{ whiteSpace: 'nowrap' }}><strong>{getCustName(c.customerId)}</strong></td>
+                          <td style={{ whiteSpace: 'nowrap' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                              <strong>{getCustName(c.customerId)}</strong>
+                              {customers.find(cu => cu.id === c.customerId)?.transactionStatus === 'BLOCKED' && (
+                                <span style={{ fontSize: '10px', fontWeight: 800, padding: '1px 5px', borderRadius: '4px', backgroundColor: '#ef4444', color: '#fff', flexShrink: 0 }}>
+                                  출고제한
+                                </span>
+                              )}
+                            </div>
+                          </td>
                           <td style={{ whiteSpace: 'nowrap' }}>{getSiteName(c.siteId)}</td>
                           <td style={{ whiteSpace: 'nowrap' }}>
                             {hasZeroFee ? (
@@ -1200,11 +1260,21 @@ export const Contracts: React.FC = () => {
               </h3>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', fontSize: '13px' }}>
-                <div><label style={{ color: 'var(--text-muted)', fontSize: '11px', display: 'block' }}>고객사명</label><strong>{getCustName(activeContract.customerId)}</strong></div>
+                <div>
+                  <label style={{ color: 'var(--text-muted)', fontSize: '11px', display: 'block' }}>고객사명</label>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <strong>{getCustName(activeContract.customerId)}</strong>
+                    {customers.find(cu => cu.id === activeContract.customerId)?.transactionStatus === 'BLOCKED' && (
+                      <span style={{ fontSize: '10px', fontWeight: 800, padding: '1px 5px', borderRadius: '4px', backgroundColor: '#ef4444', color: '#fff', flexShrink: 0 }}>
+                        출고제한
+                      </span>
+                    )}
+                  </div>
+                </div>
                 <div><label style={{ color: 'var(--text-muted)', fontSize: '11px', display: 'block' }}>현장명</label><strong>{getSiteName(activeContract.siteId)}</strong></div>
                 
                 <div><label style={{ color: 'var(--text-muted)', fontSize: '11px', display: 'block' }}>영업담당</label><span>{users.find(u => u.id === activeContract.salespersonId)?.name || '-'}</span></div>
-                <div><label style={{ color: 'var(--text-muted)', fontSize: '11px', display: 'block' }}>청구 / 명세서 마감일</label>매월 {activeContract.billingDay}일 / {activeContract.statementClosingDay || '-'}일</div>
+                <div><label style={{ color: 'var(--text-muted)', fontSize: '11px', display: 'block' }}>청구 / 마감 / 납기일</label>매월 {activeContract.billingDay}일 / {activeContract.statementClosingDay || '-'}일 (납기: 익월 {activeContract.paymentDueDay || 25}일)</div>
                 
                 <div><label style={{ color: 'var(--text-muted)', fontSize: '11px', display: 'block' }}>계약 시작일</label><span>{activeContract.startDate}</span></div>
                 <div>
@@ -1951,6 +2021,7 @@ export const Contracts: React.FC = () => {
                     if (sel) {
                       setBillingDay(sel.defaultBillingDay || 30);
                       setStatementClosingDay(sel.defaultStatementClosingDay || 25);
+                      setPaymentDueDay(sel.paymentDueDay || 25);
                     }
                   }
                 }}
@@ -1958,7 +2029,9 @@ export const Contracts: React.FC = () => {
                 style={{ width: '100%', padding: '8px' }}
               >
                 {customers.map(c => (
-                  <option key={c.id} value={c.id}>{c.name} ({c.bizRegNo})</option>
+                  <option key={c.id} value={c.id}>
+                    {c.transactionStatus === 'BLOCKED' ? `🚫 [거래제한] ${c.name}` : c.name} ({c.bizRegNo})
+                  </option>
                 ))}
                 <option value="NEW">+ [신규 고객사 직접 등록]</option>
               </select>
@@ -1990,41 +2063,62 @@ export const Contracts: React.FC = () => {
               )}
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-              <div><label>청구 마감일 (일) *</label><input type="number" min={1} max={31} value={billingDay} onChange={e => setBillingDay(Number(e.target.value))} required style={{ width: '100%', padding: '8px' }} /></div>
-              <div><label>명세서 마감일 (일)</label><input type="number" min={1} max={31} value={statementClosingDay} onChange={e => setStatementClosingDay(Number(e.target.value))} style={{ width: '100%', padding: '8px' }} /></div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <label style={{ fontSize: '12px', fontWeight: 600 }}>청구 마감일 (일) *</label>
+                <input type="number" min={1} max={31} value={billingDay} onChange={e => setBillingDay(Number(e.target.value))} required style={{ width: '100%', padding: '8px' }} />
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <label style={{ fontSize: '12px', fontWeight: 600 }}>명세서 마감일 (일)</label>
+                <input type="number" min={1} max={31} value={statementClosingDay} onChange={e => setStatementClosingDay(Number(e.target.value))} style={{ width: '100%', padding: '8px' }} />
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <label style={{ fontSize: '12px', fontWeight: 600 }}>약정 결제일 (일)</label>
+                <input type="number" min={1} max={31} value={paymentDueDay} onChange={e => setPaymentDueDay(Number(e.target.value))} style={{ width: '100%', padding: '8px' }} />
+              </div>
             </div>
           </div>
 
           {/* 자산 바스켓 */}
           <div style={{ padding: '14px', backgroundColor: 'var(--bg-app)', borderRadius: '6px', border: '1px solid var(--border-color)', marginBottom: '16px' }}>
             <h4 style={{ fontWeight: 600, marginBottom: '10px' }}>체결 자산 선택</h4>
-            <div style={{ display: 'flex', gap: '10px', alignItems: 'center', marginBottom: '10px', flexWrap: 'wrap' }}>
-              <select value={basketAssetMethod} onChange={e => setBasketAssetMethod(e.target.value as any)} style={{ padding: '7px' }}>
-                <option value="ASSET">자산 관리번호 선택</option>
-                <option value="MODEL">제품 모델명 선택</option>
-              </select>
+            <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-end', marginBottom: '10px', flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <label style={{ fontSize: '12px', fontWeight: 600 }}>선택 방식</label>
+                <select value={basketAssetMethod} onChange={e => setBasketAssetMethod(e.target.value as any)} style={{ padding: '7px' }}>
+                  <option value="MODEL">제품 모델명 선택 (권장)</option>
+                  <option value="ASSET">자산 관리번호 선택</option>
+                </select>
+              </div>
 
               {basketAssetMethod === 'ASSET' ? (
-                <select value={selectedAssetToAdd} onChange={e => setSelectedAssetToAdd(e.target.value)} style={{ padding: '7px', minWidth: '180px' }}>
-                  <option value="">-- 임대가능 자산 선택 --</option>
-                  {availableAssets.map(a => (
-                    <option key={a.id} value={a.id}>{a.assetNo} ({a.modelName})</option>
-                  ))}
-                </select>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label style={{ fontSize: '12px', fontWeight: 600 }}>자산 관리번호</label>
+                  <select value={selectedAssetToAdd} onChange={e => setSelectedAssetToAdd(e.target.value)} style={{ padding: '7px', minWidth: '180px' }}>
+                    <option value="">-- 임대가능 자산 선택 --</option>
+                    {availableAssets.map(a => (
+                      <option key={a.id} value={a.id}>{a.assetNo} ({a.modelName})</option>
+                    ))}
+                  </select>
+                </div>
               ) : (
-                <select value={selectedModelToAdd} onChange={e => setSelectedModelToAdd(e.target.value)} style={{ padding: '7px', minWidth: '180px' }}>
-                  <option value="">-- 제품 모델 선택 --</option>
-                  {products.map(p => (
-                    <option key={p.id} value={p.modelName}>{p.modelName} ({p.feet}피트)</option>
-                  ))}
-                </select>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label style={{ fontSize: '12px', fontWeight: 600 }}>제품 모델</label>
+                  <select value={selectedModelToAdd} onChange={e => setSelectedModelToAdd(e.target.value)} style={{ padding: '7px', minWidth: '180px' }}>
+                    <option value="">-- 제품 모델 선택 --</option>
+                    {products.map(p => (
+                      <option key={p.id} value={p.modelName}>{p.modelName} ({p.feet}피트)</option>
+                    ))}
+                  </select>
+                </div>
               )}
 
-              <span>월 렌탈료:</span>
-              <input type="number" value={customMonthly} onChange={e => setCustomMonthly(Number(e.target.value))} style={{ width: '100px', padding: '6px' }} />
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <label style={{ fontSize: '12px', fontWeight: 600 }}>월 렌탈료</label>
+                <input type="number" value={customMonthly} onChange={e => setCustomMonthly(Number(e.target.value))} style={{ width: '120px', padding: '6px' }} />
+              </div>
               
-              <button type="button" className="btn-primary" onClick={handleAddToBasket} style={{ padding: '6px 12px' }}>+ 추가</button>
+              <button type="button" className="btn-primary" onClick={handleAddToBasket} style={{ padding: '7px 14px', height: '36px' }}>+ 추가</button>
             </div>
 
             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>

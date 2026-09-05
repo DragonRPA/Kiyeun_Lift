@@ -5,7 +5,7 @@ import {
   LayoutDashboard, Users, UserCheck, Package, Layers, PlusCircle,
   Truck, Wrench, Shield, ShoppingBag, CreditCard, LogOut, Sun, Moon, Menu, X, Zap, Settings, Database as DatabaseIcon,
   TrendingUp, Clock, AlertTriangle, Building2, ChevronDown, ChevronRight, Briefcase, Box, FolderKanban, ShieldAlert, Terminal, ArrowLeftRight, CheckSquare,
-  Smartphone, Monitor, Radio
+  Smartphone, Monitor, Radio, Car
 } from 'lucide-react';
 
 import { WeatherWidget } from './components/WeatherWidget';
@@ -38,6 +38,7 @@ import { OrganizationSettings } from './pages/OrganizationSettings';
 import { Vendors } from './pages/Vendors';
 import { GoogleConfig } from './pages/GoogleConfig';
 import { LeaveOtPage } from './pages/LeaveOtPage';
+import { VehicleOperationLogPage } from './pages/VehicleOperationLogPage';
 import { PayrollPage } from './pages/PayrollPage';
 import { CorporateCardPage } from './pages/CorporateCardPage';
 import { CashFlowPage } from './pages/CashFlowPage';
@@ -51,6 +52,7 @@ import { MirrorSyncProgressToast } from './components/MirrorSyncProgressToast';
 import { MobileApp } from './mobile/MobileApp';
 import { MobileWalkieTalkieModal } from './mobile/components/MobileWalkieTalkieModal';
 import { walkieService } from './services/walkieTalkieService';
+import { initWorkNotificationListener } from './utils/workNotificationService';
 import { ErrorBoundary } from './components/ErrorBoundary';
 
 export interface SubMenuItem {
@@ -145,6 +147,7 @@ const App: React.FC = () => {
         deptName: currentUser.department || '경영지원'
       });
       setIsWalkieOn(walkieService.getIsPowerOn());
+      initWorkNotificationListener(currentUser);
     }
 
     const handleFirstGesture = () => {
@@ -264,6 +267,7 @@ const App: React.FC = () => {
       icon: <FolderKanban size={17} />,
       items: [
         { id: 'leave_ot', name: '연차/OT 관리', icon: <Clock size={16} />, component: <LeaveOtPage /> },
+        { id: 'vehicle_log', name: '차량운행일지', icon: <Car size={16} />, component: <VehicleOperationLogPage /> },
         { id: 'purchase_settlement', name: '월말 매입 정산', icon: <CreditCard size={16} />, component: <PurchaseSettlementPage /> },
         { id: 'vendors', name: '매입처 (공급자 / 외주처) 관리', icon: <Building2 size={16} />, component: <Vendors /> },
         { id: 'bank_matching', name: '은행 입출금 대장', icon: <TrendingUp size={16} />, component: <BankMatching /> },

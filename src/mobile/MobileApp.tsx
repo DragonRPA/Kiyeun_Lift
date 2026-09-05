@@ -19,10 +19,12 @@ import { MobileInboundRegister } from './pages/MobileInboundRegister';
 import { MobileSubleaseManage } from './pages/MobileSubleaseManage';
 import { MobileCustomerManage } from './pages/MobileCustomerManage';
 import { MobileDelinquencyManage } from './pages/MobileDelinquencyManage';
+import { MobileVehicleLog } from './pages/MobileVehicleLog';
 import { PwaInstallBanner } from './components/PwaInstallBanner';
 import { MobileWalkieTalkieModal } from './components/MobileWalkieTalkieModal';
 import { MobileGemsAgentModal } from './components/MobileGemsAgentModal';
 import { walkieService } from '../services/walkieTalkieService';
+import { initWorkNotificationListener } from '../utils/workNotificationService';
 import { ErrorBoundary } from '../components/ErrorBoundary';
 import './mobile.css';
 
@@ -127,6 +129,7 @@ export const MobileApp: React.FC<MobileAppProps> = ({ onSwitchToPc }) => {
         role: currentUser.role,
         deptName: currentUser.department || '기연리프트'
       });
+      initWorkNotificationListener(currentUser);
     }
 
     // 모바일 브라우저 오디오 자동재생 언락 (첫 화면 터치 시 영구 언락)
@@ -203,6 +206,7 @@ export const MobileApp: React.FC<MobileAppProps> = ({ onSwitchToPc }) => {
           setIsWalkieModalOpen(true);
         }}
         onOpenGems={() => setIsGemsModalOpen(true)}
+        onOpenVehicleLog={() => handleTabChange('vehicle_log')}
       />
 
       {/* 홈 화면 PWA 설치 안내 배너 */}
@@ -292,6 +296,8 @@ export const MobileApp: React.FC<MobileAppProps> = ({ onSwitchToPc }) => {
             onSuccess={() => handleTabChange('inspection')}
             onBack={() => handleTabChange('home')}
           />
+        ) : activeTab === 'vehicle_log' ? (
+          <MobileVehicleLog onBack={() => handleTabChange('home')} />
         ) : activeTab === 'vehicle_stock' ? (
           <MobileVehicleStock />
         ) : (

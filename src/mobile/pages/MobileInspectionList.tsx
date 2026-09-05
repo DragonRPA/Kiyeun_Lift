@@ -68,6 +68,7 @@ export const MobileInspectionList: React.FC = () => {
 
       db.updateRow<OutboundInspection>('outboundInspections', activeInspection.id, {
         status: 'COMPLETED',
+        deliveryId: activeInspection.deliveryId,
         inspectorId: inspectorName,
         inspectedAt: nowIso,
         specsJson: JSON.stringify(inspectionPayload),
@@ -92,6 +93,7 @@ export const MobileInspectionList: React.FC = () => {
           assetId: activeInspection.assetId,
           assetNo: targetAsset?.assetNo || '',
           modelName: targetAsset?.modelName || '',
+          deliveryId: activeInspection.deliveryId,
           type: 'OUTBOUND',
           eventDate: nowIso.split('T')[0],
           customerId: contract?.customerId,

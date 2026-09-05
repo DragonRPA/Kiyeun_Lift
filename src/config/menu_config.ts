@@ -74,6 +74,7 @@ export const SYSTEM_MENU_CONFIG: MenuGroupConfig[] = [
     name: '경영관리',
     items: [
       { id: 'leave_ot', name: '연차/OT 관리' },
+      { id: 'vehicle_log', name: '차량운행일지' },
       { id: 'purchase_settlement', name: '월말 매입 정산' },
       { id: 'vendors', name: '매입처 (공급자/외주처) 관리' },
       { id: 'bank_matching', name: '은행 입출금 대장' },

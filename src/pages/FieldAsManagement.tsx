@@ -5,7 +5,7 @@ import {
   Wrench, Plus, CheckCircle2, Clock, Calendar, AlertTriangle, Search, Download, 
   User, Building2, MapPin, Phone, Tag, Camera, Check, RefreshCw, X, ArrowRight,
   Truck, ShieldAlert, FileText, ChevronRight, Layers, MessageSquare, ExternalLink, ArrowDownLeft,
-  PhoneCall, Navigation, Smartphone, Monitor, Minus
+  PhoneCall, Navigation, Smartphone, Monitor, Minus, Copy
 } from 'lucide-react';
 import { db, FieldAsTicket, FieldAsPartUsed, FieldAsCollectedPart } from '../services/db';
 import { exportToExcel } from '../services/excel';
@@ -108,6 +108,31 @@ export const FieldAsManagement: React.FC = () => {
   const [newPriority, setNewPriority] = useState<'NORMAL' | 'URGENT'>('NORMAL');
   const [newVisitDate, setNewVisitDate] = useState(new Date().toISOString().split('T')[0]);
   const [newAssignedMechanicId, setNewAssignedMechanicId] = useState(currentUser?.role === 'MECHANIC' ? currentUser.id : '');
+
+  // 💡 장비번호 기준 계약/현장/고객/상세주소 원터치 100% 자동 추적
+  const handleAutoLookupByAssetNo = (inputAssetNo: string) => {
+    const trimmed = inputAssetNo.trim().toUpperCase();
+    if (!trimmed) return;
+    const asset = (db.assets || []).find(a => a.assetNo?.toUpperCase() === trimmed);
+    if (!asset) {
+      showToast(`장비번호 ${trimmed}에 해당하는 등록 자산을 찾을 수 없습니다.`, 'warning');
+      return;
+    }
+    const activeCa = (db.contractAssets || []).find(ca => ca.assetId === asset.id && ca.status !== 'RETURNED');
+    if (!activeCa) {
+      showToast(`장비 ${trimmed}은 현재 대여 중인 활성 계약이 없습니다.`, 'warning');
+      return;
+    }
+    const contract = (db.contracts || []).find(c => c.id === activeCa.contractId);
+    if (!contract) return;
+    const cust = (db.customers || []).find(c => c.id === contract.customerId);
+    const site = contract.siteId ? (db.customerSites || []).find(s => s.id === contract.siteId) : undefined;
+    if (cust?.name) setNewCustomerName(cust.name);
+    if (site?.name) setNewSiteName(site.name);
+    const resolvedAddr = site?.address || cust?.address || '';
+    if (resolvedAddr) setNewSiteAddress(resolvedAddr);
+    showToast(`장비 ${trimmed} 계약(현장: ${site?.name || '확인됨'}) 정보가 자동완성되었습니다.`);
+  };
 
   // ─── [현장 조치 패널 상태 (스튜디오 우측)] ───
   const [actionAssignMechanicId, setActionAssignMechanicId] = useState(currentUser?.role === 'MECHANIC' ? currentUser.id : '');
@@ -566,6 +591,20 @@ showToast('밴드 과거 AS 빅데이터 탑재를 시작합니다.');
       // ② 고객사 및 현장
       '업체명(고객사)': t.customerName || '-',
       '현장명': t.siteName || '-',
+      '현장상세주소': t.siteAddress || resolveSiteDetailedAddress({
+        siteAddress: t.siteAddress,
+        siteId: t.siteId,
+        siteName: t.siteName,
+        contractId: t.contractId,
+        assetNo: t.assetNo,
+        assetId: t.assetId,
+        customerName: t.customerName,
+        locationDetail: t.locationDetail,
+        customerSites: db.customerSites,
+        contracts: db.contracts,
+        contractAssets: db.contractAssets,
+        customers: db.customers
+      }) || '-',
       '장비위치': t.locationDetail || '-',
       '접수자 연락처': t.reporterContact || '-',
 
@@ -590,6 +629,8 @@ showToast('밴드 과거 AS 빅데이터 탑재를 시작합니다.');
       '사용소모품': (t.partsUsed || []).map(p => `${p.modelName} ${p.quantity}개`).join(', ') || '없음',
       '유무상구분': t.billableType === 'BILLABLE' ? '유상' : '무상',
       '청구금액(원)': t.billableAmount ? `${t.billableAmount.toLocaleString()}원` : '0원',
+      '점검항목코드': t.inspectionItemCode || '-',
+      '노후도점수': t.degradationScore ? `${t.degradationScore}점` : '0점',
 
       // ⑦ 비고
       '비고': t.memo || '-'
@@ -1343,10 +1384,36 @@ showToast('밴드 과거 AS 빅데이터 탑재를 시작합니다.');
                       </div>
 
                       {/* 업체명 및 위치 */}
-                      <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                         <span>🏢 {t.customerName}</span>
                         {t.locationDetail && <span>📍 {t.locationDetail}</span>}
                       </div>
+
+                      {/* 현장 도로명 상세주소 */}
+                      {(() => {
+                        const cardResolvedAddress = t.siteAddress || resolveSiteDetailedAddress({
+                          siteAddress: t.siteAddress,
+                          siteId: t.siteId,
+                          siteName: t.siteName,
+                          contractId: t.contractId,
+                          assetNo: t.assetNo,
+                          assetId: t.assetId,
+                          customerName: t.customerName,
+                          locationDetail: t.locationDetail,
+                          customerSites: db.customerSites,
+                          contracts: db.contracts,
+                          contractAssets: db.contractAssets,
+                          customers: db.customers
+                        });
+                        return (
+                          <div style={{ fontSize: '11.5px', color: '#0284c7', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '4px', overflow: 'hidden' }}>
+                            <MapPin size={12} color="#0284c7" style={{ flexShrink: 0 }} />
+                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={cardResolvedAddress}>
+                              {cardResolvedAddress || '현장 주소 미등록'}
+                            </span>
+                          </div>
+                        );
+                      })()}
 
                       {/* 고장 내용 요약 */}
                       <p style={{ margin: '0 0 8px 0', fontSize: '12px', color: 'var(--text-main)', lineHeight: '1.4', backgroundColor: 'var(--bg-app)', border: '1px solid var(--border-color)', padding: '6px 8px', borderRadius: '4px' }}>
@@ -1676,10 +1743,10 @@ showToast('밴드 과거 AS 빅데이터 탑재를 시작합니다.');
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
                     <label style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '6px' }}>
                       <Truck size={16} color="#2563eb" />
-                      사용 소모품 등록 (담당 기사 차량 재고에서 자동 차감)
+                      사용 소모품 등록
                     </label>
                     <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-                      차량 재고 잔여량 실시간 확인
+                      차량 재고 잔여량 확인
                     </span>
                   </div>
 
@@ -1943,7 +2010,358 @@ showToast('밴드 과거 AS 빅데이터 탑재를 시작합니다.');
       )}
 
       {/* ──────────────────────────────────────────────────────────────────────────
-          탭 2: AS 처리 대장 (유형 B: 고밀도 검색 그리드 대사 대장)
+          탭: AS 월간 캘린더 (일자별 기사 배정 및 방문 스케줄)
+      ────────────────────────────────────────────────────────────────────────── */}
+      {mainTab === 'CALENDAR' && (() => {
+        const daysInMonth = new Date(calYear, calMonth, 0).getDate();
+        const firstDayOfWeek = new Date(calYear, calMonth - 1, 1).getDay();
+        const daysArray = Array.from({ length: daysInMonth }, (_, i) => i + 1);
+
+        const handlePrevMonth = () => {
+          if (calMonth === 1) {
+            setCalYear(y => y - 1);
+            setCalMonth(12);
+          } else {
+            setCalMonth(m => m - 1);
+          }
+        };
+
+        const handleNextMonth = () => {
+          if (calMonth === 12) {
+            setCalYear(y => y + 1);
+            setCalMonth(1);
+          } else {
+            setCalMonth(m => m + 1);
+          }
+        };
+
+        const selectedDateTickets = fieldAsTickets.filter(t => {
+          const tDate = t.visitDate || t.requestDate;
+          return tDate === selectedCalDate;
+        });
+
+        return (
+          <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '16px', height: 'calc(100vh - 170px)' }}>
+            {/* 좌측: 월간 달력 그리드 */}
+            <div className="card" style={{ padding: '16px', display: 'flex', flexDirection: 'column', height: '100%', boxSizing: 'border-box' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+                <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 800, color: 'var(--text-primary)' }}>
+                  📅 {calYear}년 {calMonth}월 AS 방문 일정
+                </h3>
+                <div style={{ display: 'flex', gap: '6px' }}>
+                  <button type="button" className="btn-secondary" onClick={handlePrevMonth} style={{ padding: '4px 10px', fontSize: '12px' }}>◀ 이전달</button>
+                  <button type="button" className="btn-secondary" onClick={() => { const now = new Date(); setCalYear(now.getFullYear()); setCalMonth(now.getMonth() + 1); setSelectedCalDate(now.toISOString().split('T')[0]); }} style={{ padding: '4px 10px', fontSize: '12px' }}>오늘</button>
+                  <button type="button" className="btn-secondary" onClick={handleNextMonth} style={{ padding: '4px 10px', fontSize: '12px' }}>다음달 ▶</button>
+                </div>
+              </div>
+
+              {/* 요일 헤더 */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px', textAlign: 'center', fontWeight: 700, fontSize: '12px', color: 'var(--text-secondary)', paddingBottom: '6px', borderBottom: '1px solid var(--border-color)' }}>
+                <div style={{ color: '#ef4444' }}>일</div>
+                <div>월</div>
+                <div>화</div>
+                <div>수</div>
+                <div>목</div>
+                <div>금</div>
+                <div style={{ color: '#3b82f6' }}>토</div>
+              </div>
+
+              {/* 날짜 그리드 */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px', flex: 1, marginTop: '6px', overflowY: 'auto' }}>
+                {Array.from({ length: firstDayOfWeek }).map((_, idx) => (
+                  <div key={`empty-${idx}`} style={{ backgroundColor: 'transparent' }} />
+                ))}
+                {daysArray.map(day => {
+                  const dateStr = `${calYear}-${String(calMonth).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                  const dayTickets = fieldAsTickets.filter(t => (t.visitDate || t.requestDate) === dateStr);
+                  const isSelected = selectedCalDate === dateStr;
+                  const isToday = dateStr === new Date().toISOString().split('T')[0];
+
+                  return (
+                    <div
+                      key={day}
+                      onClick={() => setSelectedCalDate(dateStr)}
+                      style={{
+                        padding: '6px',
+                        borderRadius: '6px',
+                        border: isSelected ? '2px solid var(--primary)' : '1px solid var(--border-color)',
+                        backgroundColor: isToday ? 'rgba(59, 130, 246, 0.06)' : 'var(--bg-card)',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        minHeight: '75px',
+                        boxSizing: 'border-box'
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                        <span style={{ fontSize: '12px', fontWeight: isToday || isSelected ? 800 : 500, color: isToday ? 'var(--primary)' : 'var(--text-primary)' }}>
+                          {day}
+                        </span>
+                        {dayTickets.length > 0 && (
+                          <span style={{ fontSize: '10px', padding: '1px 5px', borderRadius: '8px', backgroundColor: 'rgba(59, 130, 246, 0.15)', color: 'var(--primary)', fontWeight: 700 }}>
+                            {dayTickets.length}건
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', overflow: 'hidden' }}>
+                        {dayTickets.slice(0, 3).map(t => (
+                          <div
+                            key={t.id}
+                            style={{
+                              fontSize: '10px',
+                              padding: '1px 3px',
+                              borderRadius: '3px',
+                              backgroundColor: t.status === 'COMPLETED' ? '#dcfce7' : '#fef3c7',
+                              color: t.status === 'COMPLETED' ? '#166534' : '#92400e',
+                              whiteSpace: 'nowrap',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis'
+                            }}
+                          >
+                            {t.siteName || t.assetNo || 'AS건'}
+                          </div>
+                        ))}
+                        {dayTickets.length > 3 && (
+                          <span style={{ fontSize: '9px', color: 'var(--text-muted)' }}>+{dayTickets.length - 3}건 더보기</span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* 우측: 선택 일자 상세 티켓 리스트 */}
+            <div className="card" style={{ padding: '16px', display: 'flex', flexDirection: 'column', height: '100%', boxSizing: 'border-box' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', paddingBottom: '8px', borderBottom: '1px solid var(--border-color)' }}>
+                <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 800 }}>
+                  📋 {selectedCalDate} 방문 건 ({selectedDateTickets.length}건)
+                </h4>
+              </div>
+
+              <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {selectedDateTickets.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '40px 10px', color: 'var(--text-muted)', fontSize: '13px' }}>
+                    해당 일자에 배정된 AS 방문 일정이 없습니다.
+                  </div>
+                ) : (
+                  selectedDateTickets.map(t => {
+                    const mechUser = users.find(u => u.id === t.assignedMechanicId);
+                    return (
+                      <div
+                        key={t.id}
+                        style={{
+                          padding: '10px 12px',
+                          borderRadius: '8px',
+                          border: '1px solid var(--border-color)',
+                          backgroundColor: 'var(--bg-app)',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '4px'
+                        }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <strong style={{ fontSize: '12.5px', color: 'var(--text-primary)' }}>{t.siteName || '현장미상'}</strong>
+                          <span style={{
+                            padding: '1px 6px',
+                            borderRadius: '4px',
+                            fontSize: '10.5px',
+                            fontWeight: 700,
+                            backgroundColor: t.status === 'COMPLETED' ? '#dcfce7' : '#fef3c7',
+                            color: t.status === 'COMPLETED' ? '#166534' : '#92400e'
+                          }}>
+                            {t.status}
+                          </span>
+                        </div>
+                        <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)' }}>
+                          자산: <strong>{t.assetNo || '-'}</strong> | 기사: <strong>{mechUser?.name || '미배정'}</strong>
+                        </div>
+                        <div style={{ fontSize: '11.5px', color: 'var(--text-muted)' }}>
+                          증상: {t.issueDescription || t.issueCategory}
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '4px' }}>
+                          <button
+                            type="button"
+                            className="btn-primary"
+                            onClick={() => {
+                              setStudioSelectedTicketId(t.id);
+                              setMainTab('STUDIO');
+                            }}
+                            style={{ padding: '2px 8px', fontSize: '11px' }}
+                          >
+                            스튜디오에서 조치 ➔
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ──────────────────────────────────────────────────────────────────────────
+          탭: AS 성과 및 원인 분석 (통계 & 드릴다운)
+      ────────────────────────────────────────────────────────────────────────── */}
+      {mainTab === 'ANALYTICS' && (() => {
+        const filtered = fieldAsTickets.filter(t => {
+          const d = t.visitDate || t.requestDate;
+          if (!d) return false;
+          if (analyticsStartDate && d < analyticsStartDate) return false;
+          if (analyticsEndDate && d > analyticsEndDate) return false;
+          return true;
+        });
+
+        const totalCount = filtered.length;
+        const completedCount = filtered.filter(t => t.status === 'COMPLETED').length;
+        const completeRate = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
+        const billableTickets = filtered.filter(t => t.billableType === 'BILLABLE');
+        const billableTotal = billableTickets.reduce((sum, t) => sum + (t.billableAmount || 0), 0);
+
+        // 고장 유형별 집계
+        const categoryMap: Record<string, number> = {};
+        filtered.forEach(t => {
+          const cat = t.issueCategory || '기타';
+          categoryMap[cat] = (categoryMap[cat] || 0) + 1;
+        });
+        const sortedCategories = Object.entries(categoryMap).sort((a, b) => b[1] - a[1]);
+
+        // 기사별 처리 건수 집계
+        const mechanicMap: Record<string, { total: number; completed: number }> = {};
+        filtered.forEach(t => {
+          const mId = t.assignedMechanicId || 'UNASSIGNED';
+          if (!mechanicMap[mId]) mechanicMap[mId] = { total: 0, completed: 0 };
+          mechanicMap[mId].total += 1;
+          if (t.status === 'COMPLETED') mechanicMap[mId].completed += 1;
+        });
+
+        return (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', height: 'calc(100vh - 170px)', overflowY: 'auto' }}>
+            {/* 기간 제어 바 */}
+            <div className="card" style={{ padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)' }}>📊 분석 조회 기간:</span>
+                <input
+                  type="date"
+                  value={analyticsStartDate}
+                  onChange={e => setAnalyticsStartDate(e.target.value)}
+                  style={{ padding: '5px 8px', borderRadius: '4px', border: '1px solid var(--border-color)', fontSize: '12.5px' }}
+                />
+                <span>~</span>
+                <input
+                  type="date"
+                  value={analyticsEndDate}
+                  onChange={e => setAnalyticsEndDate(e.target.value)}
+                  style={{ padding: '5px 8px', borderRadius: '4px', border: '1px solid var(--border-color)', fontSize: '12.5px' }}
+                />
+              </div>
+              <div style={{ display: 'flex', gap: '6px' }}>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => {
+                    const now = new Date();
+                    const s = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+                    const lastD = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+                    const e = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(lastD).padStart(2, '0')}`;
+                    setAnalyticsStartDate(s);
+                    setAnalyticsEndDate(e);
+                  }}
+                  style={{ padding: '4px 10px', fontSize: '12px' }}
+                >
+                  이번달
+                </button>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => {
+                    const now = new Date();
+                    const s = `${now.getFullYear()}-01-01`;
+                    const e = `${now.getFullYear()}-12-31`;
+                    setAnalyticsStartDate(s);
+                    setAnalyticsEndDate(e);
+                  }}
+                  style={{ padding: '4px 10px', fontSize: '12px' }}
+                >
+                  올해 누적
+                </button>
+              </div>
+            </div>
+
+            {/* KPI 요약 카드 4종 */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px' }}>
+              <div className="card" style={{ padding: '16px' }}>
+                <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '4px' }}>총 AS 접수 건수</div>
+                <div style={{ fontSize: '22px', fontWeight: 800, color: 'var(--text-primary)' }}>{totalCount.toLocaleString()}건</div>
+              </div>
+              <div className="card" style={{ padding: '16px' }}>
+                <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '4px' }}>조치 완료율</div>
+                <div style={{ fontSize: '22px', fontWeight: 800, color: '#16a34a' }}>{completeRate}% ({completedCount}건)</div>
+              </div>
+              <div className="card" style={{ padding: '16px' }}>
+                <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '4px' }}>유상 AS 청구 건수</div>
+                <div style={{ fontSize: '22px', fontWeight: 800, color: '#ea580c' }}>{billableTickets.length}건</div>
+              </div>
+              <div className="card" style={{ padding: '16px' }}>
+                <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '4px' }}>유상 AS 청구 총액</div>
+                <div style={{ fontSize: '22px', fontWeight: 800, color: '#2563eb' }}>₩{billableTotal.toLocaleString()}원</div>
+              </div>
+            </div>
+
+            {/* 고장 원인 분석 및 기사별 실적 2열 그리드 */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+              <div className="card" style={{ padding: '16px' }}>
+                <h4 style={{ margin: '0 0 12px 0', fontSize: '14px', fontWeight: 800 }}>📌 고장 분류별 발생 비중</h4>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {sortedCategories.length === 0 ? (
+                    <div style={{ color: 'var(--text-muted)', fontSize: '12px' }}>데이터가 없습니다.</div>
+                  ) : (
+                    sortedCategories.map(([cat, count]) => {
+                      const pct = totalCount > 0 ? Math.round((count / totalCount) * 100) : 0;
+                      return (
+                        <div key={cat} style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px' }}>
+                            <span>{cat}</span>
+                            <span style={{ fontWeight: 700 }}>{count}건 ({pct}%)</span>
+                          </div>
+                          <div style={{ width: '100%', height: '6px', backgroundColor: 'var(--border-color)', borderRadius: '3px', overflow: 'hidden' }}>
+                            <div style={{ width: `${pct}%`, height: '100%', backgroundColor: 'var(--primary)' }} />
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+
+              <div className="card" style={{ padding: '16px' }}>
+                <h4 style={{ margin: '0 0 12px 0', fontSize: '14px', fontWeight: 800 }}>🔧 기사별 조치 및 완료 실적</h4>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {Object.entries(mechanicMap).map(([mId, data]) => {
+                    const u = users.find(user => user.id === mId);
+                    const name = u ? u.name : (mId === 'UNASSIGNED' ? '미배정' : mId);
+                    const rate = data.total > 0 ? Math.round((data.completed / data.total) * 100) : 0;
+                    return (
+                      <div key={mId} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 10px', borderRadius: '6px', backgroundColor: 'var(--bg-app)', fontSize: '12px' }}>
+                        <span><strong>{name}</strong></span>
+                        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                          <span>배정: {data.total}건</span>
+                          <span style={{ color: '#16a34a', fontWeight: 700 }}>완료: {data.completed}건 ({rate}%)</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ──────────────────────────────────────────────────────────────────────────
+          탭 4: AS 처리 대장 (유형 B: 고밀도 검색 그리드 대사 대장)
       ────────────────────────────────────────────────────────────────────────── */}
       {mainTab === 'LEDGER' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', height: 'calc(100vh - 170px)' }}>
@@ -2041,6 +2459,7 @@ showToast('밴드 과거 AS 빅데이터 탑재를 시작합니다.');
                   <th style={{ padding: '10px 12px', textAlign: 'left', color: 'var(--text-secondary)' }}>접수번호</th>
                   <th style={{ padding: '10px 12px', textAlign: 'left', color: 'var(--text-secondary)' }}>접수일</th>
                   <th style={{ padding: '10px 12px', textAlign: 'left', color: 'var(--text-secondary)' }}>현장명</th>
+                  <th style={{ padding: '10px 12px', textAlign: 'left', color: 'var(--text-secondary)' }}>현장 상세주소 (도로명)</th>
                   <th style={{ padding: '10px 12px', textAlign: 'left', color: 'var(--text-secondary)' }}>업체명</th>
                   <th style={{ padding: '10px 12px', textAlign: 'left', color: 'var(--text-secondary)' }}>관리번호</th>
                   <th style={{ padding: '10px 12px', textAlign: 'left', color: 'var(--text-secondary)' }}>위치</th>
@@ -2050,6 +2469,8 @@ showToast('밴드 과거 AS 빅데이터 탑재를 시작합니다.');
                   <th style={{ padding: '10px 12px', textAlign: 'left', color: 'var(--text-secondary)' }}>담당기사</th>
                   <th style={{ padding: '10px 12px', textAlign: 'left', color: 'var(--text-secondary)' }}>조치내용</th>
                   <th style={{ padding: '10px 12px', textAlign: 'left', color: 'var(--text-secondary)' }}>사용소모품</th>
+                  <th style={{ padding: '10px 12px', textAlign: 'center', color: 'var(--text-secondary)' }}>점검코드</th>
+                  <th style={{ padding: '10px 12px', textAlign: 'center', color: 'var(--text-secondary)' }}>노후도</th>
                   <th style={{ padding: '10px 12px', textAlign: 'center', color: 'var(--text-secondary)' }}>유/무상</th>
                   <th style={{ padding: '10px 12px', textAlign: 'right', color: 'var(--text-secondary)' }}>청구액</th>
                 </tr>
@@ -2083,7 +2504,80 @@ showToast('밴드 과거 AS 빅데이터 탑재를 시작합니다.');
                     </td>
                     <td style={{ padding: '6px 12px', fontWeight: 600, color: 'var(--text-main)' }}>{t.ticketNo}</td>
                     <td style={{ padding: '6px 12px', color: 'var(--text-muted)' }}>{t.requestDate}</td>
-                    <td style={{ padding: '6px 12px', fontWeight: 600, color: 'var(--text-main)' }}>{t.siteName}</td>
+                    <td style={{ padding: '6px 12px', fontWeight: 600, color: 'var(--text-main)', whiteSpace: 'nowrap' }}>{t.siteName}</td>
+                    <td style={{ padding: '6px 12px', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
+                      {(() => {
+                        const resolvedAddr = t.siteAddress || resolveSiteDetailedAddress({
+                          siteAddress: t.siteAddress,
+                          siteId: t.siteId,
+                          siteName: t.siteName,
+                          contractId: t.contractId,
+                          assetNo: t.assetNo,
+                          assetId: t.assetId,
+                          customerName: t.customerName,
+                          locationDetail: t.locationDetail,
+                          customerSites: db.customerSites,
+                          contracts: db.contracts,
+                          contractAssets: db.contractAssets,
+                          customers: db.customers
+                        });
+                        return (
+                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                            <span title={resolvedAddr} style={{ maxWidth: '260px', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                              {resolvedAddr || '-'}
+                            </span>
+                            {resolvedAddr && (
+                              <div style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    navigator.clipboard.writeText(resolvedAddr);
+                                    showToast('도로명 주소가 클립보드에 복사되었습니다.');
+                                  }}
+                                  title="주소 복사"
+                                  style={{
+                                    padding: '2px 5px',
+                                    borderRadius: '4px',
+                                    border: '1px solid var(--border-color)',
+                                    backgroundColor: 'var(--bg-card)',
+                                    cursor: 'pointer',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '2px',
+                                    fontSize: '11px',
+                                    color: '#0284c7'
+                                  }}
+                                >
+                                  <Copy size={11} />
+                                  복사
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => launchNavigation(resolvedAddr, 'TMAP')}
+                                  title="TMap 길안내"
+                                  style={{
+                                    padding: '2px 5px',
+                                    borderRadius: '4px',
+                                    border: '1px solid rgba(239, 68, 68, 0.3)',
+                                    backgroundColor: 'rgba(239, 68, 68, 0.08)',
+                                    cursor: 'pointer',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '2px',
+                                    fontSize: '11px',
+                                    color: '#dc2626',
+                                    fontWeight: 600
+                                  }}
+                                >
+                                  <Navigation size={11} />
+                                  TMap
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
+                    </td>
                     <td style={{ padding: '6px 12px', color: 'var(--text-secondary)' }}>{t.customerName}</td>
                     <td style={{ padding: '6px 12px', fontWeight: 700, color: '#2563eb' }}>{t.assetNo}</td>
                     <td style={{ padding: '6px 12px', color: 'var(--text-muted)' }}>{t.locationDetail || '-'}</td>
@@ -2112,6 +2606,12 @@ showToast('밴드 과거 AS 빅데이터 탑재를 시작합니다.');
                     <td style={{ padding: '6px 12px', color: 'var(--text-secondary)' }}>
                       {(t.partsUsed || []).map(p => `${p.modelName} ${p.quantity}개`).join(', ') || '-'}
                     </td>
+                    <td style={{ padding: '6px 12px', textAlign: 'center', fontSize: '11px', color: 'var(--text-muted)' }}>
+                      {t.inspectionItemCode || '-'}
+                    </td>
+                    <td style={{ padding: '6px 12px', textAlign: 'center', fontSize: '11px', color: t.degradationScore ? '#d97706' : 'var(--text-muted)', fontWeight: t.degradationScore ? 700 : 400 }}>
+                      {t.degradationScore ? `${t.degradationScore}점` : '-'}
+                    </td>
                     <td style={{ padding: '6px 12px', textAlign: 'center', color: t.billableType === 'BILLABLE' ? '#ea580c' : '#64748b', fontWeight: t.billableType === 'BILLABLE' ? 700 : 400 }}>
                       {t.billableType === 'BILLABLE' ? '유상' : '무상'}
                     </td>
@@ -2123,6 +2623,42 @@ showToast('밴드 과거 AS 빅데이터 탑재를 시작합니다.');
               </tbody>
             </table>
           </div>
+
+          {/* ⚖️ Gutenberg Z-패턴 4단계 최하단 유상 AS 대사 검증 요약 바 (헌장 3.5) */}
+          {(() => {
+            const totalTickets = ledgerFilteredTickets.length;
+            const completedCount = ledgerFilteredTickets.filter(t => t.status === 'COMPLETED').length;
+            const billableTickets = ledgerFilteredTickets.filter(t => t.billableType === 'BILLABLE');
+            const totalBillableAmount = billableTickets.reduce((sum, t) => sum + (t.billableAmount || 0), 0);
+            const freeCount = totalTickets - billableTickets.length;
+
+            return (
+              <div style={{
+                padding: '10px 16px',
+                backgroundColor: 'var(--bg-app)',
+                border: '1px solid var(--border-color)',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                flexWrap: 'wrap',
+                gap: '8px',
+                fontSize: '12px',
+                borderRadius: '6px',
+                flexShrink: 0
+              }}>
+                <div style={{ display: 'flex', gap: '14px', alignItems: 'center' }}>
+                  <span>📋 조회 건수: <strong>{totalTickets}</strong>건 (완료 {completedCount}건)</span>
+                  <span style={{ color: 'var(--text-muted)' }}>|</span>
+                  <span style={{ color: '#16a34a' }}>🟢 무상 AS: <strong>{freeCount}</strong>건</span>
+                  <span style={{ color: 'var(--text-muted)' }}>|</span>
+                  <span style={{ color: '#ea580c' }}>💰 유상 AS: <strong>{billableTickets.length}</strong>건 (총 <strong>₩{totalBillableAmount.toLocaleString()}</strong>원)</span>
+                </div>
+                <div style={{ fontWeight: 700, color: 'var(--primary)' }}>
+                  ⚖️ 대사 합계 검증 완료: ₩{totalBillableAmount.toLocaleString()}원
+                </div>
+              </div>
+            );
+          })()}
         </div>
       )}
 
@@ -2304,7 +2840,7 @@ showToast('밴드 과거 AS 빅데이터 탑재를 시작합니다.');
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                 <label style={{ fontSize: '14px', fontWeight: 800, color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <Truck size={16} color="#2563eb" />
-                  1. 사용 부품 선택 (차량 재고 실시간 차감)
+                  1. 사용 부품 선택
                 </label>
                 <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
                   미사용 시 0개 유지
@@ -2648,9 +3184,43 @@ showToast('밴드 과거 AS 빅데이터 탑재를 시작합니다.');
 
               {/* 도로명 상세 주소 */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
-                  현장 도로명 주소 (T맵 연동)
-                </label>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
+                    현장 도로명 주소 (T맵 연동)
+                  </label>
+                  {newSiteName.trim() && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const s = (db.customerSites || []).find(cs => cs.name.includes(newSiteName.trim()) || newSiteName.trim().includes(cs.name));
+                        if (s?.address?.trim()) {
+                          setNewSiteAddress(s.address.trim());
+                          showToast('현장 마스터 등록 주소를 반영했습니다.');
+                        } else {
+                          const cust = (db.customers || []).find(c => c.name.includes(newCustomerName.trim()) || newCustomerName.trim().includes(c.name));
+                          if (cust?.address?.trim()) {
+                            setNewSiteAddress(cust.address.trim());
+                            showToast('고객사 기본 주소를 반영했습니다.');
+                          } else {
+                            showToast('해당 현장/고객사의 등록 주소를 찾을 수 없습니다.', 'warning');
+                          }
+                        }
+                      }}
+                      style={{
+                        fontSize: '11px',
+                        color: '#0284c7',
+                        backgroundColor: 'rgba(2, 132, 199, 0.08)',
+                        border: '1px solid rgba(2, 132, 199, 0.25)',
+                        borderRadius: '4px',
+                        padding: '1px 6px',
+                        cursor: 'pointer',
+                        fontWeight: 600
+                      }}
+                    >
+                      📍 마스터 주소 자동적용
+                    </button>
+                  )}
+                </div>
                 <input
                   type="text"
                   value={newSiteAddress}
@@ -2662,11 +3232,36 @@ showToast('밴드 과거 AS 빅데이터 탑재를 시작합니다.');
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)' }}>관리번호 (장비번호)</label>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)' }}>관리번호 (장비번호)</label>
+                    {newAssetNo.trim() && (
+                      <button
+                        type="button"
+                        onClick={() => handleAutoLookupByAssetNo(newAssetNo)}
+                        style={{
+                          fontSize: '11px',
+                          color: '#2563eb',
+                          backgroundColor: 'rgba(37, 99, 235, 0.08)',
+                          border: '1px solid rgba(37, 99, 235, 0.25)',
+                          borderRadius: '4px',
+                          padding: '1px 6px',
+                          cursor: 'pointer',
+                          fontWeight: 600
+                        }}
+                      >
+                        🔍 계약/현장/주소 자동완성
+                      </button>
+                    )}
+                  </div>
                   <input
                     type="text"
                     value={newAssetNo}
                     onChange={(e) => setNewAssetNo(e.target.value)}
+                    onBlur={(e) => {
+                      if (e.target.value.trim() && !newSiteName.trim()) {
+                        handleAutoLookupByAssetNo(e.target.value);
+                      }
+                    }}
                     placeholder="예: G10032, 전체장비"
                     style={{ padding: '8px 10px', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '13px' }}
                   />

@@ -46,6 +46,7 @@ export const MobileAsCreate: React.FC<MobileAsCreateProps> = ({
   const [issueCategory, setIssueCategory] = useState('상하강불량');
   const [issueDescription, setIssueDescription] = useState('');
   const [priority, setPriority] = useState<'NORMAL' | 'URGENT'>('NORMAL');
+  const [visitDate, setVisitDate] = useState(new Date().toISOString().split('T')[0]);
   const [images, setImages] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -278,11 +279,12 @@ export const MobileAsCreate: React.FC<MobileAsCreateProps> = ({
         issueCategory,
         issueDescription,
         priority,
+        visitDate,
+        scheduleDate: visitDate,
         faultImageUrl: images[0] || '',
         evidenceImages: images,
       });
 
-      alert('AS 접수가 등록되었습니다.');
       onCreated(ticket.id);
     } catch (err: any) {
       showErrorModal('접수 등록 실패: ' + (err.message || ''));
@@ -614,6 +616,23 @@ export const MobileAsCreate: React.FC<MobileAsCreateProps> = ({
               }}
             />
           </div>
+        </div>
+
+        {/* 방문 예정일 */}
+        <div className="flex flex-col gap-1.5">
+          <label className="text-xs font-bold text-slate-300 whitespace-nowrap flex-shrink-0">방문 예정일</label>
+          <input
+            type="date"
+            value={visitDate}
+            onChange={(e) => setVisitDate(e.target.value)}
+            className="w-full rounded-xl p-3 text-sm placeholder-slate-500 focus:outline-none"
+            style={{
+              backgroundColor: '#090d16',
+              color: '#f8fafc',
+              border: '1px solid #334155',
+              colorScheme: 'dark'
+            }}
+          />
         </div>
 
         {/* 고장 현장 사진 첨부 */}

@@ -423,8 +423,8 @@ export const DelinquencyPage: React.FC = () => {
         mandateType: 'CEO_AUTO_MANDATE'
       });
 
-      refreshAllData();
       await db.awaitPendingWrites();
+      refreshAllData();
 
       showToast(`[${noticeTargetDel.customerName}] 내용증명 발송 이력이 저장되고 고객관리 및 연체대장에 반영되었습니다.`);
       setShowNoticeModal(false);
@@ -462,8 +462,8 @@ export const DelinquencyPage: React.FC = () => {
         db.updateRow<Todo>('todos', t.id, { isCompleted: true });
       });
 
-      refreshAllData();
       await db.awaitPendingWrites();
+      refreshAllData();
 
       showToast(`상담 및 조치사항이 등록되었습니다.${hasPromise ? ' (수납 약속일정 등록)' : ''}`);
 
@@ -516,8 +516,8 @@ export const DelinquencyPage: React.FC = () => {
         createdAt: new Date().toISOString()
       });
 
-      refreshAllData();
       await db.awaitPendingWrites();
+      refreshAllData();
 
       showToast(`[${directiveTargetDel.customerName}] 담당 영업사원(${directiveTargetDel.responsibleEmployeeName})에게 지시가 하달되었습니다.`);
       setShowDirectiveModal(false);
@@ -543,8 +543,21 @@ export const DelinquencyPage: React.FC = () => {
         ...customer,
         transactionStatus: nextStatus
       });
-      refreshAllData();
+
+      // delinquencyActionLogs 영구 불변 감사 기록 (헌장 1.2)
+      db.insertRow<DelinquencyActionLog>('delinquencyActionLogs', {
+        customerId: customer.id,
+        actionType: nextStatus === 'BLOCKED' ? 'LEGAL' : 'CALL',
+        actionDetails: nextStatus === 'BLOCKED'
+          ? '[경영진 직권 처분] 신규 장비 출고 및 배차 전면 금지(BLOCKED) 조치 발효'
+          : '[경영진 직권 처분] 대금 변제/확약 확인에 따른 출고금지 해제 (정상거래 환원)',
+        recordedBy: currentUser?.name || '경영진',
+        mandateType: 'CEO_AUTO_MANDATE',
+        createdAt: new Date().toISOString()
+      });
+
       await db.awaitPendingWrites();
+      refreshAllData();
       showToast(`거래처 상태가 [${nextStatus === 'BLOCKED' ? '거래 불가(BLOCKED)' : '정상 거래(ALLOWED)'}]로 변경되었습니다.`);
     } catch (err: any) {
       showErrorModal(`상태 변경 중 오류:\n${err?.message || err}`);
@@ -555,8 +568,8 @@ export const DelinquencyPage: React.FC = () => {
   const handleUpdatePromiseStatus = async (actionId: string, status: 'KEPT' | 'BROKEN') => {
     try {
       await updateDelinquencyActionPromise(actionId, status);
-      refreshAllData();
       await db.awaitPendingWrites();
+      refreshAllData();
       if (status === 'BROKEN') {
         showToast('입금 약속 위반(BROKEN)으로 처리되었습니다.', 'error');
       } else {
@@ -800,6 +813,11 @@ export const DelinquencyPage: React.FC = () => {
                         </td>
                         <td style={{ padding: '6px 8px', fontWeight: 'bold', whiteSpace: 'nowrap' }}>
                           {del.customerName}
+                          {del.transactionStatus === 'BLOCKED' && (
+                            <span style={{ marginLeft: '6px', padding: '1px 5px', fontSize: '10px', backgroundColor: '#fee2e2', color: '#b91c1c', borderRadius: '3px', fontWeight: 800 }}>
+                              출고제한
+                            </span>
+                          )}
                           <span style={{ fontSize: '10px', color: 'var(--text-muted)', display: 'block' }}>
                             {del.paymentDueConditionText} (도과 {del.overdueInvoicesCount}건)
                           </span>
@@ -882,8 +900,13 @@ export const DelinquencyPage: React.FC = () => {
             {/* 고객사 헤더 */}
             <div style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
               <div>
-                <h3 style={{ fontSize: '15px', fontWeight: '800', margin: '0 0 2px 0' }}>
+                <h3 style={{ fontSize: '15px', fontWeight: '800', margin: '0 0 2px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
                   {selectedDelinquency.customerName}
+                  {selectedDelinquency.transactionStatus === 'BLOCKED' && (
+                    <span style={{ padding: '1px 6px', fontSize: '11px', backgroundColor: '#fee2e2', color: '#b91c1c', borderRadius: '4px', fontWeight: 800 }}>
+                      출고제한
+                    </span>
+                  )}
                 </h3>
                 <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)', display: 'flex', gap: '8px', alignItems: 'center' }}>
                   <span>담당: <strong>{selectedDelinquency.responsibleEmployeeName}</strong></span>

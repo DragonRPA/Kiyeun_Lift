@@ -322,16 +322,23 @@ export const Consumables: React.FC = () => {
       showToast('정비사와 소모품 품목, 불출 수량을 선택해 주세요.', 'error');
       return;
     }
+    const targetItem = consumables.find(c => c.id === transferConsumableId);
+    if (!targetItem) return;
+    const clampedQty = Math.max(1, transferQty);
+    if (clampedQty > targetItem.stockQty) {
+      showErrorModal(`불출 요청 수량(${clampedQty}개)이 본사 가용 재고(${targetItem.stockQty}개)를 초과할 수 없습니다.`);
+      return;
+    }
 
     try {
-      await transferConsumableToMechanic(transferMechanicId, transferConsumableId, transferQty, transferMemo);
+      await transferConsumableToMechanic(transferMechanicId, transferConsumableId, clampedQty, transferMemo);
       await db.awaitPendingWrites();
       showToast('본사 창고에서 정비사 차량으로 소모품 불출 이동이 완료되었습니다.');
       setShowTransferModal(false);
       setTransferQty(1);
       setTransferMemo('');
     } catch (err: any) {
-      // showErrorModal handled in context
+      showErrorModal(err?.message || '소모품 불출 이동 중 오류가 발생했습니다.');
     }
   };
 
@@ -342,16 +349,24 @@ export const Consumables: React.FC = () => {
       showToast('정비사와 반납 소모품 품목, 반납 수량을 선택해 주세요.', 'error');
       return;
     }
+    const currentVehicleStock = (mechanicConsumableStocks || []).find(
+      ms => ms.mechanicId === returnMechanicId && ms.consumableId === returnConsumableId
+    )?.stockQty || 0;
+    const clampedQty = Math.max(1, returnQty);
+    if (clampedQty > currentVehicleStock) {
+      showErrorModal(`반납 요청 수량(${clampedQty}개)이 정비사 차량 보유 재고(${currentVehicleStock}개)를 초과할 수 없습니다.`);
+      return;
+    }
 
     try {
-      await returnConsumableToHq(returnMechanicId, returnConsumableId, returnQty, returnMemo);
+      await returnConsumableToHq(returnMechanicId, returnConsumableId, clampedQty, returnMemo);
       await db.awaitPendingWrites();
       showToast('정비사 차량에서 본사 창고로 소모품 반납이 완료되었습니다.');
       setShowReturnModal(false);
       setReturnQty(1);
       setReturnMemo('');
     } catch (err: any) {
-      // showErrorModal handled in context
+      showErrorModal(err?.message || '소모품 반납 중 오류가 발생했습니다.');
     }
   };
 
@@ -1170,7 +1185,15 @@ export const Consumables: React.FC = () => {
 
               <div>
                 <label style={{ fontSize: '11.5px', fontWeight: '600', display: 'block', marginBottom: '4px' }}>불출 수량 *</label>
-                <input type="number" value={transferQty} onChange={e => setTransferQty(parseInt(e.target.value) || 1)} min={1} required style={{ width: '100%', padding: '6px' }} />
+                <input
+                  type="number"
+                  value={transferQty}
+                  onChange={e => setTransferQty(Math.max(1, parseInt(e.target.value) || 1))}
+                  min={1}
+                  max={consumables.find(c => c.id === transferConsumableId)?.stockQty || 9999}
+                  required
+                  style={{ width: '100%', padding: '6px' }}
+                />
               </div>
 
               <div>
@@ -1239,10 +1262,24 @@ export const Consumables: React.FC = () => {
                 </select>
               </div>
 
-              <div>
-                <label style={{ fontSize: '11.5px', fontWeight: '600', display: 'block', marginBottom: '4px' }}>반납 수량 *</label>
-                <input type="number" value={returnQty} onChange={e => setReturnQty(parseInt(e.target.value) || 1)} min={1} required style={{ width: '100%', padding: '6px' }} />
-              </div>
+              {(() => {
+                const targetStock = (mechanicConsumableStocks || []).find(ms => ms.mechanicId === returnMechanicId && ms.consumableId === returnConsumableId);
+                const maxStock = targetStock ? targetStock.stockQty : 1;
+                return (
+                  <div>
+                    <label style={{ fontSize: '11.5px', fontWeight: '600', display: 'block', marginBottom: '4px' }}>반납 수량 (보유: {maxStock}개) *</label>
+                    <input
+                      type="number"
+                      value={returnQty}
+                      onChange={e => setReturnQty(Math.min(maxStock, Math.max(1, parseInt(e.target.value) || 1)))}
+                      min={1}
+                      max={maxStock}
+                      required
+                      style={{ width: '100%', padding: '6px' }}
+                    />
+                  </div>
+                );
+              })()}
 
               <div>
                 <label style={{ fontSize: '11.5px', fontWeight: '600', display: 'block', marginBottom: '4px' }}>비고 / 메모</label>

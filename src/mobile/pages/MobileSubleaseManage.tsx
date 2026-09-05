@@ -139,13 +139,14 @@ export const MobileSubleaseManage: React.FC<MobileSubleaseManageProps> = ({
         return;
       }
 
+      const sanitizedDeployMonthlyRent = Math.max(0, Number(deployMonthlyRent) || 0);
       db.insertRow<ContractAsset>('contractAssets', {
         contractId,
         assetId: targetAssetForDeploy.id,
         startDate: deployStartDate,
         endDate: new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0],
-        monthlyRentalFee: deployMonthlyRent,
-        dailyRentalFee: Math.round(deployMonthlyRent / 30),
+        monthlyRentalFee: sanitizedDeployMonthlyRent,
+        dailyRentalFee: Math.round(sanitizedDeployMonthlyRent / 30),
         status: 'RENTED',
         createdAt: new Date().toISOString(),
       });
@@ -304,6 +305,7 @@ export const MobileSubleaseManage: React.FC<MobileSubleaseManageProps> = ({
 
     setIsRegistering(true);
     try {
+      const sanitizedMonthlyFee = Math.max(0, Number(newMonthlyRentFee) || 0);
       await registerRentedAsset({
         assetNo: cleanAssetNo,
         vendorAssetNo: newVendorAssetNo.trim().toUpperCase() || cleanAssetNo,
@@ -311,8 +313,8 @@ export const MobileSubleaseManage: React.FC<MobileSubleaseManageProps> = ({
         renter: finalRenter,
         modelName: newModelName.trim(),
         rentStart: newRentStart,
-        monthlyRentFee: newMonthlyRentFee,
-        dailyRentFee: Math.floor(newMonthlyRentFee / 30),
+        monthlyRentFee: sanitizedMonthlyFee,
+        dailyRentFee: Math.floor(sanitizedMonthlyFee / 30),
       });
 
       showToast(`[${cleanAssetNo}] 원사 장비가 등록되었습니다. (임대가능 가용재고 편입)`);
@@ -330,6 +332,10 @@ export const MobileSubleaseManage: React.FC<MobileSubleaseManageProps> = ({
 
   // [액션 2] 원사 반납 마감 바텀시트 오픈
   const handleOpenReturnModal = (asset: Asset) => {
+    if (asset.status === 'RENTED' || (asset as any).isDeployedToCustomer) {
+      showErrorModal(`자산 [${asset.assetNo}]은 현재 고객사 현장에 대여중(RENTED)입니다. 현장 회수 입고 전에는 원사 반납이 불가합니다.`, '반납 차단');
+      return;
+    }
     setTargetAssetForReturn(asset);
     setActualReturnDate(new Date().toISOString().split('T')[0]);
     setIsReturnSheetOpen(true);
@@ -338,6 +344,10 @@ export const MobileSubleaseManage: React.FC<MobileSubleaseManageProps> = ({
   // [액션 3] 원사 반납 마감 확정 실행
   const handleConfirmReturn = async () => {
     if (!targetAssetForReturn) return;
+    if (targetAssetForReturn.status === 'RENTED') {
+      showErrorModal(`자산 [${targetAssetForReturn.assetNo}]은 현재 고객사에 대여중입니다. 회수 입고 전에는 원사 반납이 불가합니다.`, '반납 차단');
+      return;
+    }
     if (!actualReturnDate) {
       showErrorModal('실제 반납 일자를 입력하십시오.', '입력 오류');
       return;
@@ -706,16 +716,20 @@ export const MobileSubleaseManage: React.FC<MobileSubleaseManageProps> = ({
                     </button>
                   </div>
                 ) : asset.isDeployedToCustomer ? (
-                  <>
+                  <div className="w-full flex items-center justify-between p-2 rounded-xl bg-slate-950/60 border border-slate-800">
+                    <span className="text-xs font-bold text-amber-400 flex items-center gap-1">
+                      <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
+                      <span>현장 대여중 (회수 필요)</span>
+                    </span>
                     <button
                       type="button"
-                      onClick={() => handleOpenReturnModal(asset)}
-                      className="flex-1 py-2.5 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs flex items-center justify-center gap-1.5 active:scale-98 transition-all whitespace-nowrap flex-shrink-0"
+                      disabled
+                      title="대여중인 자산은 회수 전 원사 반납이 불가합니다"
+                      className="py-1.5 px-3 rounded-lg bg-slate-800 text-slate-500 font-bold text-xs cursor-not-allowed opacity-60 whitespace-nowrap"
                     >
-                      <Check className="w-3.5 h-3.5 text-emerald-400" />
-                      <span>원사 반납 마감</span>
+                      원사 반납 불가
                     </button>
-                  </>
+                  </div>
                 ) : (
                   <div className="w-full py-1.5 text-center text-xs text-slate-500 font-medium">
                     원사 최종 반납 처리 완료 (정산 마감됨)

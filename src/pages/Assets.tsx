@@ -155,7 +155,7 @@ export const Assets: React.FC = () => {
     const rentedCount = assets.filter(a => a.ownerType === 'RENTED').length;
     
     // 실가동: 현장 대여중(RENTED) + 출고대기(ASSIGNED)
-    const rentedOpCount = assets.filter(a => a.status === 'RENTED' || (!a.actualRentReturnDate && a.currentCustomerId)).length;
+    const rentedOpCount = assets.filter(a => a.status === 'RENTED').length;
     const assignedCount = assets.filter(a => a.status === 'ASSIGNED').length;
     const availableCount = assets.filter(a => a.status === 'AVAILABLE' && !a.actualRentReturnDate).length;
     const repairingCount = assets.filter(a => a.status === 'REPAIRING').length;

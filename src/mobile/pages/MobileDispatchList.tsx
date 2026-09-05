@@ -8,10 +8,20 @@ import {
 } from 'lucide-react';
 import { parseDispatchDriverCallTranscript } from '../../services/voiceOrderDraftService';
 import { buildDispatchSmsText, launchDispatchSms } from '../../utils/nativeLauncher';
+import { broadcastWorkNotification } from '../../utils/workNotificationService';
 
 export const MobileDispatchList: React.FC = () => {
-  const { deliveries, contracts, customers, sites, users, refreshAllData, showErrorModal } = useApp();
-  const [filter, setFilter] = useState<'PENDING' | 'DISPATCHED' | 'DELIVERED'>('PENDING');
+  const { 
+    deliveries, contracts, customers, sites, users, 
+    refreshAllData, showErrorModal, completeDelivery, completeInboundDelivery 
+  } = useApp();
+  const [filter, setFilter] = useState<'PENDING' | 'DISPATCHED' | 'DELIVERED' | 'CANCELLED'>('PENDING');
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const showToast = (msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(null), 2500);
+  };
 
   // 기사 배정 모달 상태
   const [showAssignModal, setShowAssignModal] = useState(false);
@@ -37,6 +47,7 @@ export const MobileDispatchList: React.FC = () => {
     if (filter === 'PENDING') return d.status === 'PENDING' || d.status === 'REQUESTED';
     if (filter === 'DISPATCHED') return d.status === 'DISPATCHED';
     if (filter === 'DELIVERED') return d.status === 'DELIVERED' || d.status === 'COMPLETED';
+    if (filter === 'CANCELLED') return d.status === 'CANCELLED';
     return true;
   });
 
@@ -176,16 +187,30 @@ export const MobileDispatchList: React.FC = () => {
       return;
     }
 
+    const targetDel = deliveries.find(d => d.id === targetDeliveryId);
+    const curMemo = targetDel?.memo || '';
+    const newMemo = assignMemo ? (curMemo ? `${curMemo} | [기사배정] ${assignMemo}` : `[기사배정] ${assignMemo}`) : curMemo;
+    const resolvedTransportCompany = targetDel?.transportCompany || '자차(직영)';
+
     const updatedFields: Partial<Delivery> = {
       vehicleNo,
       driverName,
       driverContact,
       vehicleType,
-      transportCompany: vehicleType,
-      finalCost: finalCost > 0 ? finalCost : undefined,
-      deliveryCost: finalCost > 0 ? finalCost : undefined,
+      transportCompany: resolvedTransportCompany,
+      finalCost: Math.max(0, Number(finalCost) || 0),
+      deliveryCost: Math.max(0, Number(finalCost) || 0),
       status: 'DISPATCHED',
-      memo: assignMemo ? `[기사배정] ${assignMemo}` : undefined,
+      memo: newMemo,
+      vehicles: JSON.stringify([{
+        id: 'v-' + Date.now(),
+        transportCompany: resolvedTransportCompany,
+        vehicleNo,
+        driverName,
+        driverContact,
+        vehicleType,
+        deliveryCost: Math.max(0, Number(finalCost) || 0)
+      }]),
       updatedAt: new Date().toISOString(),
     };
 
@@ -196,10 +221,23 @@ export const MobileDispatchList: React.FC = () => {
       refreshAllData();
 
       const currentDelivery = deliveries.find(d => d.id === targetDeliveryId);
+
+      // 📢 배차 완료 실시간 알림 브로드캐스트
+      const curContract = currentDelivery?.contractId ? contracts.find(c => c.id === currentDelivery.contractId) : null;
+      const curCust = curContract ? customers.find(c => c.id === curContract.customerId)?.name : '';
+      const curSite = curContract ? sites.find(s => s.id === curContract.siteId)?.name : '';
+      broadcastWorkNotification({
+        type: 'DISPATCH',
+        title: '배차 완료 안내',
+        body: `${curCust || '현장'} (${curSite || '배차'}) ${driverName || '기사'} (${vehicleType}) 배정 완료`,
+        url: '/admin/dispatch',
+        targetDepts: ['SALES', 'YARD', 'ADMIN', 'EXECUTIVE']
+      }).catch(console.warn);
+
       if (andSendSms && driverContact && currentDelivery) {
         handleSendDriverSms(currentDelivery, updatedFields);
       } else {
-        alert('기사 배정이 완료되어 운송중(DISPATCHED)으로 전환되었습니다.');
+        showToast('기사 배정이 완료되어 운송중으로 전환되었습니다.');
       }
       setShowAssignModal(false);
     } catch (err: any) {
@@ -209,13 +247,45 @@ export const MobileDispatchList: React.FC = () => {
 
   const handleUpdateStatus = async (deliveryId: string, nextStatus: any) => {
     try {
-      db.updateRow<Delivery>('deliveries', deliveryId, {
-        status: nextStatus,
-        updatedAt: new Date().toISOString(),
-      });
-      await db.awaitPendingWrites();
-      refreshAllData();
-      alert('배차 상태가 업데이트되었습니다.');
+      const d = deliveries.find(x => x.id === deliveryId);
+      if (nextStatus === 'DELIVERED') {
+        if (d?.type === 'OUTBOUND') {
+          await completeDelivery(deliveryId);
+        } else if (d?.type === 'INBOUND' || d?.type === 'EXCHANGE') {
+          const returnDate = new Date().toISOString().split('T')[0];
+          let targetAssetIds: string[] = [];
+          try {
+            const cargos = d.cargoItems ? JSON.parse(d.cargoItems) : [];
+            targetAssetIds = cargos.map((c: any) => c.assetId).filter(Boolean);
+          } catch {}
+          if (targetAssetIds.length === 0 && d.contractId) {
+            const cas = db.contractAssets.filter(ca => ca.contractId === d.contractId && ca.status !== 'RETURNED');
+            targetAssetIds = cas.map(ca => ca.assetId).filter(Boolean) as string[];
+          }
+          const reviews = targetAssetIds.map(aId => ({
+            assetId: aId,
+            status: 'AVAILABLE' as const,
+            maintenanceScore: 10,
+            memo: `[모바일 배차목록 운송완료 마감] ${d.dispatchCategory || '회수'} 운송 완료`,
+          }));
+          await completeInboundDelivery(deliveryId, returnDate, reviews);
+        } else {
+          db.updateRow<Delivery>('deliveries', deliveryId, {
+            status: nextStatus,
+            updatedAt: new Date().toISOString(),
+          });
+          await db.awaitPendingWrites();
+          refreshAllData();
+        }
+      } else {
+        db.updateRow<Delivery>('deliveries', deliveryId, {
+          status: nextStatus,
+          updatedAt: new Date().toISOString(),
+        });
+        await db.awaitPendingWrites();
+        refreshAllData();
+      }
+      showToast('배차 상태가 업데이트되었습니다.');
     } catch (err: any) {
       showErrorModal('상태 업데이트 실패: ' + (err.message || ''));
     }
@@ -239,6 +309,12 @@ export const MobileDispatchList: React.FC = () => {
         </button>
       </div>
 
+      {toastMessage && (
+        <div className="bg-emerald-600 text-white text-xs font-bold py-2 px-3 rounded-xl text-center shadow-lg animate-in fade-in">
+          {toastMessage}
+        </div>
+      )}
+
       {/* 상태 필터 */}
       <div className="flex items-center gap-1 bg-slate-900/80 p-1 rounded-xl border border-slate-800">
         <button
@@ -259,7 +335,7 @@ export const MobileDispatchList: React.FC = () => {
               : 'text-slate-400 hover:text-white'
           }`}
         >
-          운송중 (진행)
+          운송중
         </button>
         <button
           onClick={() => setFilter('DELIVERED')}
@@ -270,6 +346,16 @@ export const MobileDispatchList: React.FC = () => {
           }`}
         >
           운송 완료
+        </button>
+        <button
+          onClick={() => setFilter('CANCELLED')}
+          className={`flex-1 py-2 px-1 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
+            filter === 'CANCELLED'
+              ? 'bg-blue-600 text-white shadow-md'
+              : 'text-slate-400 hover:text-white'
+          }`}
+        >
+          취소
         </button>
       </div>
 

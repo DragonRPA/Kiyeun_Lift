@@ -3,7 +3,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   Radio, Volume2, VolumeX, Mic, MicOff, Play, Square,
   X, Clock, Layers, MessageSquare, ListFilter, ArrowLeft, Bell, BellOff,
-  FileText, ChevronRight, Plus, UserPlus, Users, Search, Check
+  FileText, ChevronRight, Plus, UserPlus, Users, Search, Check,
+  Trash2, LogOut
 } from 'lucide-react';
 import { 
   walkieService, WalkieTalkieChannel, WalkieReceiveMode, WalkieMessage, soundEngine, TalkingStatus, WalkieSttEngine,
@@ -705,33 +706,98 @@ export const MobileWalkieTalkieModal: React.FC<MobileWalkieTalkieModalProps> = (
             )}
           </div>
 
-          {/* 사원 초대 버튼 */}
-          <button
-            type="button"
-            onClick={() => {
-              setInviteMemberIds([]);
-              setInviteSearchQuery('');
-              setIsInviteModalOpen(true);
-            }}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '3px',
-              padding: '2px 7px',
-              borderRadius: '5px',
-              border: '1px solid #334155',
-              backgroundColor: '#1e293b',
-              color: '#38bdf8',
-              fontSize: '10.5px',
-              fontWeight: '700',
-              cursor: 'pointer',
-              flexShrink: 0,
-              whiteSpace: 'nowrap'
-            }}
-          >
-            <UserPlus size={11} />
-            <span>초대</span>
-          </button>
+          {/* 사원 초대 및 채널 삭제/나가기 버튼군 */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}>
+            {/* 사원 초대 버튼 */}
+            <button
+              type="button"
+              onClick={() => {
+                setInviteMemberIds([]);
+                setInviteSearchQuery('');
+                setIsInviteModalOpen(true);
+              }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '3px',
+                padding: '2px 7px',
+                borderRadius: '5px',
+                border: '1px solid #334155',
+                backgroundColor: '#1e293b',
+                color: '#38bdf8',
+                fontSize: '10.5px',
+                fontWeight: '700',
+                cursor: 'pointer',
+                flexShrink: 0,
+                whiteSpace: 'nowrap'
+              }}
+              title="사원 초대"
+            >
+              <UserPlus size={11} />
+              <span>초대</span>
+            </button>
+
+            {/* 비기본 채널: 개설자면 [채널 삭제], 초대멤버면 [채널 나가기] */}
+            {!currentChInfo.isDefault && (
+              currentChInfo.createdById === currentUser?.id ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (window.confirm(`"${currentChInfo.name}" 채널을 삭제하시겠습니까?\n모든 사원의 목록에서 완전히 삭제됩니다.`)) {
+                      walkieService.deleteChannel(currentChInfo.id, currentUser?.id || '');
+                    }
+                  }}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '3px',
+                    padding: '2px 7px',
+                    borderRadius: '5px',
+                    border: '1px solid rgba(239, 68, 68, 0.4)',
+                    backgroundColor: 'rgba(239, 68, 68, 0.15)',
+                    color: '#f87171',
+                    fontSize: '10.5px',
+                    fontWeight: '700',
+                    cursor: 'pointer',
+                    flexShrink: 0,
+                    whiteSpace: 'nowrap'
+                  }}
+                  title="채널 삭제"
+                >
+                  <Trash2 size={11} />
+                  <span>삭제</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (window.confirm(`"${currentChInfo.name}" 채널에서 나가시겠습니까?`)) {
+                      walkieService.leaveChannel(currentChInfo.id, currentUser?.id || '');
+                    }
+                  }}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '3px',
+                    padding: '2px 7px',
+                    borderRadius: '5px',
+                    border: '1px solid rgba(245, 158, 11, 0.4)',
+                    backgroundColor: 'rgba(245, 158, 11, 0.15)',
+                    color: '#fbbf24',
+                    fontSize: '10.5px',
+                    fontWeight: '700',
+                    cursor: 'pointer',
+                    flexShrink: 0,
+                    whiteSpace: 'nowrap'
+                  }}
+                  title="채널 나가기"
+                >
+                  <LogOut size={11} />
+                  <span>나가기</span>
+                </button>
+              )
+            )}
+          </div>
         </div>
 
         {/* ── [뷰 1] 실시간 무전 (PTT 화면) ── */}

@@ -17,6 +17,7 @@ export const MobileMyContracts: React.FC<MobileMyContractsProps> = ({ onOpenCrea
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<'ACTIVE' | 'ALL'>('ACTIVE');
   const [selectedContract, setSelectedContract] = useState<any | null>(null);
+  const [isCopied, setIsCopied] = useState(false);
 
   // 더블터치 감지용 Ref
   const lastTapRef = useRef<{ time: number; id: string }>({ time: 0, id: '' });
@@ -266,8 +267,15 @@ export const MobileMyContracts: React.FC<MobileMyContractsProps> = ({ onOpenCrea
                     <Building2 className="w-4 h-4" />
                   </div>
                   <div className="min-w-0">
-                    <div className="text-[11px] font-bold text-blue-400 truncate">
-                      {selectedContract.customerName}
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <div className="text-[11px] font-bold text-blue-400 truncate">
+                        {selectedContract.customerName}
+                      </div>
+                      {customers.find(cu => cu.id === selectedContract.customerId)?.transactionStatus === 'BLOCKED' && (
+                        <span className="px-1.5 py-0.2 text-[9px] font-bold bg-rose-500/20 text-rose-400 border border-rose-500/30 rounded flex-shrink-0">
+                          출고제한
+                        </span>
+                      )}
                     </div>
                     <h3 className="text-sm font-black text-white truncate">
                       {selectedContract.siteName}
@@ -312,7 +320,23 @@ export const MobileMyContracts: React.FC<MobileMyContractsProps> = ({ onOpenCrea
                     </div>
                     <div>
                       <div className="text-[10px] text-slate-500">청구 마감일</div>
-                      <div className="font-bold text-slate-200">매월 {selectedContract.billingDay || 25}일</div>
+                      <div className="font-bold text-slate-200">매월 {selectedContract.billingDay || 30}일</div>
+                    </div>
+                    <div>
+                      <div className="text-[10px] text-slate-500">약정 결제일</div>
+                      <div className="font-bold text-slate-200">매월 {selectedContract.paymentDueDay || 25}일</div>
+                    </div>
+                    <div>
+                      <div className="text-[10px] text-slate-500">월 렌탈료 (단가합)</div>
+                      <div className="font-mono font-bold text-emerald-400">
+                        ₩{((selectedContract.items || []).reduce((s: number, it: any) => s + (it.monthlyRentalFee || 0), 0) || selectedContract.monthlyRentalFee || 0).toLocaleString()}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-[10px] text-slate-500">일 렌탈료 (단가합)</div>
+                      <div className="font-mono font-bold text-slate-300">
+                        ₩{((selectedContract.items || []).reduce((s: number, it: any) => s + (it.dailyRentalFee || 0), 0) || selectedContract.dailyRentalFee || 0).toLocaleString()}
+                      </div>
                     </div>
                     <div>
                       <div className="text-[10px] text-slate-500">만료 상태</div>
@@ -353,12 +377,15 @@ export const MobileMyContracts: React.FC<MobileMyContractsProps> = ({ onOpenCrea
                         type="button"
                         onClick={async () => {
                           const ok = await copyToClipboard(selectedContract.siteAddress);
-                          if (ok) alert('현장 주소가 클립보드에 복사되었습니다.');
+                          if (ok) {
+                            setIsCopied(true);
+                            setTimeout(() => setIsCopied(false), 2000);
+                          }
                         }}
                         className="flex items-center justify-center gap-1 py-2 px-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 font-bold text-[11px] active:scale-95 transition-all"
                       >
                         <Copy className="w-3 h-3" />
-                        <span>주소복사</span>
+                        <span>{isCopied ? '복사완료' : '주소복사'}</span>
                       </button>
                     </div>
                   )}

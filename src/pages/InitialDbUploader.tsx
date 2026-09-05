@@ -302,6 +302,7 @@ export const InitialDbUploader: React.FC = () => {
   // ── 밴드 AS 이력 텍스트/JSON 파서 및 적재 로직 ──
   const extractFieldsFromBandRaw = (raw: string, date: string, author: string) => {
     let site = '';
+    let address = '';
     let contractor = '';
     let assetNo = '';
     let location = '';
@@ -312,6 +313,8 @@ export const InitialDbUploader: React.FC = () => {
     for (const l of lines) {
       if (l.includes('현장') || l.includes('현 장')) {
         site = l.replace(/^[^:]*[:：]\s*/, '').trim();
+      } else if (l.includes('주소') || l.includes('상세주소') || l.includes('도로명')) {
+        address = l.replace(/^[^:]*[:：]\s*/, '').trim();
       } else if (l.includes('업체') || l.includes('업 체')) {
         contractor = l.replace(/^[^:]*[:：]\s*/, '').trim();
       } else if (l.includes('장비') || l.includes('호기') || l.includes('관리번호') || l.includes('장 비')) {
@@ -367,6 +370,7 @@ export const InitialDbUploader: React.FC = () => {
 
     return {
       site: site || '미지정현장',
+      address: address || '',
       contractor: contractor || '협력업체',
       asset_no: assetNo,
       location,
@@ -1117,6 +1121,7 @@ export const InitialDbUploader: React.FC = () => {
                                 <td style={{ padding: '6px 10px' }}>
                                   <div style={{ fontWeight: 600, color: 'var(--text-main)' }}>{r.matchedCustomerName || r.customer}</div>
                                   <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{r.matchedSiteName || r.site}</div>
+                                  <div style={{ fontSize: '10.5px', color: '#0284c7' }}>📍 {r.matchedSiteAddress || r.address || '주소 미등록'}</div>
                                 </td>
                                 <td style={{ padding: '6px 10px' }}>
                                   <span style={{ fontWeight: 700, color: r.matchedAssetId ? '#2563eb' : '#475569' }}>

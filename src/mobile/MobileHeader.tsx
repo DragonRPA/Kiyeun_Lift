@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { LogOut, Wrench, Crown, Radio, RotateCw, Sparkles, Monitor } from 'lucide-react';
+import { LogOut, Wrench, Crown, Radio, RotateCw, Sparkles, Monitor, Car } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { WeatherWidget } from '../components/WeatherWidget';
 
@@ -12,6 +12,7 @@ interface MobileHeaderProps {
   isWalkieOn?: boolean;
   onOpenWalkieTalkie?: () => void;
   onOpenGems?: () => void;
+  onOpenVehicleLog?: () => void;
 }
 
 export const MobileHeader: React.FC<MobileHeaderProps> = ({ 
@@ -20,7 +21,8 @@ export const MobileHeader: React.FC<MobileHeaderProps> = ({
   onChangeDeptMode,
   isWalkieOn = false,
   onOpenWalkieTalkie,
-  onOpenGems
+  onOpenGems,
+  onOpenVehicleLog
 }) => {
   const { currentUser, logout } = useApp();
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -180,6 +182,32 @@ export const MobileHeader: React.FC<MobileHeaderProps> = ({
               <Sparkles size={12} color="#38bdf8" />
               <span>AI비서</span>
             </button>
+
+            {/* 🚗 전사 공용 차량운행일지/주유일지 버튼 */}
+            {onOpenVehicleLog && (
+              <button
+                type="button"
+                onClick={onOpenVehicleLog}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '3px',
+                  fontSize: '11px',
+                  fontWeight: '800',
+                  padding: '5px 7px',
+                  borderRadius: '8px',
+                  backgroundColor: 'rgba(245, 158, 11, 0.2)',
+                  border: '1px solid #f59e0b',
+                  color: '#fbbf24',
+                  cursor: 'pointer',
+                  flexShrink: 0
+                }}
+                title="차량운행일지"
+              >
+                <Car size={12} color="#fbbf24" />
+                <span>차량일지</span>
+              </button>
+            )}
 
             {/* 로그아웃 버튼 */}
             <button

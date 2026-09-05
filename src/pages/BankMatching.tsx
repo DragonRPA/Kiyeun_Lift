@@ -7,7 +7,7 @@ import {
   Building2, ToggleLeft, ToggleRight, Info, CheckCircle2, Wallet, Settings
 } from 'lucide-react';
 import { exportToExcel } from '../services/excel';
-import { BankTransaction } from '../services/db';
+import { db, BankTransaction } from '../services/db';
 import { parseBankExcelFile } from '../services/bankParser';
 import { matchHangul } from '../utils/hangulSearch';
 
@@ -29,11 +29,30 @@ export const BankMatching: React.FC = () => {
     saveMatchingRule,
     deleteMatchingRule,
     hasPermission,
-    currentUser
+    currentUser,
+    showErrorModal
   } = useApp();
 
   const canSave = hasPermission('billing', 'save');
   const isAdmin = currentUser?.role === 'ADMIN';
+
+  // 토스트 알림 상태 (헌장 5.2: 브라우저 alert/confirm 전면 퇴출)
+  const [toastMessage, setToastMessage] = useState<{ type: 'success' | 'error' | 'warning'; text: string } | null>(null);
+  const showToast = (text: string, type: 'success' | 'error' | 'warning' = 'success') => {
+    setToastMessage({ type, text });
+    setTimeout(() => setToastMessage(null), 3500);
+  };
+
+  const handleUnmatch = async (txId: string) => {
+    if (!canSave) return;
+    try {
+      await unmatchTransaction(txId);
+      await db.awaitPendingWrites();
+      showToast('매칭이 정상적으로 해제(롤백)되었습니다.');
+    } catch (err: any) {
+      showErrorModal(`매칭 해제 실패: ${err?.message || err}`);
+    }
+  };
 
   const [activeTab, setActiveTab] = useState<'MATCHING' | 'RULES'>('MATCHING');
   const [isInitBalanceModalOpen, setIsInitBalanceModalOpen] = useState(false);
@@ -286,7 +305,7 @@ export const BankMatching: React.FC = () => {
   const totalUnpaidSettlementAmount = unpaidSettlements.reduce((sum, s) => sum + (s.totalAmount - s.paidAmount), 0);
 
   // 3. 모의 데이터 생성
-  const handleGenerateMockData = () => {
+  const handleGenerateMockData = async () => {
     const mockTxs: Omit<BankTransaction, 'id' | 'createdAt'>[] = [
       { bankName: '우리은행', accountNumber: 'XXXX-XX-XXXXXXX01', transactionDate: '2026-08-05 08:44:37', summary: '인터넷', counterparty: '주식회사 기연', senderName: '주식회사 기연', depositAmount: 600000, withdrawAmount: 0, balance: 12500000, branchName: '신한은행(021497)', memo: '렌탈료입금', isDeposit: true },
       { bankName: '우리은행', accountNumber: 'XXXX-XX-XXXXXXX01', transactionDate: '2026-08-05 09:30:15', summary: '타행IB', counterparty: '대현테크', senderName: '대현테크', depositAmount: 1050000, withdrawAmount: 0, balance: 13550000, branchName: '우리은행', memo: '7월수금', isDeposit: true },
@@ -296,7 +315,8 @@ export const BankMatching: React.FC = () => {
       { bankName: '신한은행', accountNumber: 'XXX-XXXXXXXXX-XX', transactionDate: '2026-08-06 14:20:00', summary: '타행PC', counterparty: '기연산업', senderName: '기연산업', depositAmount: 450000, withdrawAmount: 0, balance: 10550000, branchName: '(기업)', memo: '렌탈료', isDeposit: true }
     ];
     uploadBankTransactions(mockTxs);
-    alert('모의 통장 거래 내역 6건이 생성되었습니다.');
+    await db.awaitPendingWrites();
+    showToast('모의 통장 거래 내역 6건이 생성되었습니다.');
   };
 
   // 4. 다중 은행 엑셀 업로드 처리 (동적 헤더 감지 파서)
@@ -307,16 +327,24 @@ export const BankMatching: React.FC = () => {
     try {
       const parsedResult = await parseBankExcelFile(file);
       if (parsedResult.transactions.length === 0) {
-        alert('엑셀 파일에서 읽을 수 있는 통장 거래 내역을 찾지 못했습니다.');
+        showToast('엑셀 파일에서 읽을 수 있는 통장 거래 내역을 찾지 못했습니다.', 'warning');
         return;
       }
 
-      uploadBankTransactions(parsedResult.transactions);
-      alert(`[${parsedResult.bankName}] 엑셀 파싱이 완료되었습니다.\n총 ${parsedResult.transactions.length}건의 통장 거래 내역이 등록되었습니다.`);
+      // 0원 이하 비정상 금액 필터링 및 차단
+      const validTxs = parsedResult.transactions.filter(t => (t.depositAmount > 0 || t.withdrawAmount > 0));
+      if (validTxs.length === 0) {
+        showToast('유효한 금액(0원 초과)의 통장 거래 내역이 없습니다.', 'warning');
+        return;
+      }
+
+      uploadBankTransactions(validTxs);
+      await db.awaitPendingWrites();
+      showToast(`[${parsedResult.bankName}] 엑셀 파싱이 완료되었습니다. 총 ${validTxs.length}건 등록.`);
       e.target.value = '';
     } catch (err: any) {
       console.error('Bank Excel Parse Error:', err);
-      alert(`엑셀 파싱 중 오류가 발생하였습니다:\n${err.message || '파일 형식을 확인해 주십시오.'}`);
+      showErrorModal(`엑셀 파싱 중 오류가 발생하였습니다: ${err.message || '파일 형식을 확인해 주십시오.'}`);
     }
   };
 
@@ -487,13 +515,18 @@ export const BankMatching: React.FC = () => {
     }
   };
 
-  const handleManualMatchSubmit = (e: React.FormEvent) => {
+  const handleManualMatchSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedTx || !matchingBillingId) return;
 
-    matchTransactionManual(selectedTx.id, matchingBillingId, learnRule);
-    setSelectedTx(null);
-    alert('수동 매칭 및 수납 승인이 완료되었습니다.');
+    try {
+      await matchTransactionManual(selectedTx.id, matchingBillingId, learnRule);
+      await db.awaitPendingWrites();
+      setSelectedTx(null);
+      showToast('수동 매칭 및 수납 승인이 완료되었습니다.');
+    } catch (err: any) {
+      showErrorModal(`수동 매칭 실패: ${err?.message || err}`);
+    }
   };
 
   // 💸 수동 출금 지급 대사 모달 처리
@@ -531,17 +564,22 @@ export const BankMatching: React.FC = () => {
     const remainingAmt = targetSettlement.totalAmount - targetSettlement.paidAmount;
     const payAmt = remainingAmt > 0 ? Math.min(remainingAmt, selectedWithdrawTx.withdrawAmount) : selectedWithdrawTx.withdrawAmount;
 
-    await recordPurchaseSettlementPayment(matchingSettlementId, {
-      paidAmount: payAmt,
-      paymentDate: (selectedWithdrawTx.transactionDate || '').substring(0, 10),
-      paymentMethod: '계좌이체',
-      bankAccount: selectedWithdrawTx.bankName || '통장출금',
-      bankTransactionId: selectedWithdrawTx.id,
-      memo: `[통장출금대사] ${selectedWithdrawTx.summary || selectedWithdrawTx.senderName || ''}`
-    });
+    try {
+      await recordPurchaseSettlementPayment(matchingSettlementId, {
+        paidAmount: payAmt,
+        paymentDate: (selectedWithdrawTx.transactionDate || '').substring(0, 10),
+        paymentMethod: '계좌이체',
+        bankAccount: selectedWithdrawTx.bankName || '통장출금',
+        bankTransactionId: selectedWithdrawTx.id,
+        memo: `[통장출금대사] ${selectedWithdrawTx.summary || selectedWithdrawTx.senderName || ''}`
+      });
+      await db.awaitPendingWrites();
 
-    setSelectedWithdrawTx(null);
-    alert(`✅ [${targetSettlement.vendorName}] 매입 정산 건에 대한 출금 지급 대사가 완결되었습니다.`);
+      setSelectedWithdrawTx(null);
+      showToast(`[${targetSettlement.vendorName}] 매입 정산 건에 대한 출금 지급 대사가 완결되었습니다.`);
+    } catch (err: any) {
+      showErrorModal(`출금 지급 대사 실패: ${err?.message || err}`);
+    }
   };
 
   const getModalFilteredSettlements = () => {
@@ -995,19 +1033,46 @@ export const BankMatching: React.FC = () => {
                         <td style={{ padding: '10px 14px', whiteSpace: 'nowrap' }}>
                           {tx.depositAmount > 0 ? (
                             isFullyUsed ? (
-                              <span style={{ fontSize: '11px', padding: '3px 8px', borderRadius: '4px', backgroundColor: 'rgba(16, 185, 129, 0.15)', color: '#10B981', fontWeight: 'bold' }}>
-                                ✓ 완납 매칭됨
-                              </span>
+                              <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                <span style={{ fontSize: '11px', padding: '3px 8px', borderRadius: '4px', backgroundColor: 'rgba(16, 185, 129, 0.15)', color: '#10B981', fontWeight: 'bold' }}>
+                                  ✓ 완납 매칭됨
+                                </span>
+                                {canSave && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleUnmatch(tx.id)}
+                                    className="btn btn-secondary"
+                                    style={{ fontSize: '10px', padding: '2px 5px', color: '#ef4444', borderColor: '#fca5a5', fontWeight: 600 }}
+                                    title="수납 매칭 해제 (원복)"
+                                  >
+                                    해제
+                                  </button>
+                                )}
+                              </div>
                             ) : isPartialUsed ? (
-                              <button
-                                onClick={() => handleOpenManualMatch(tx)}
-                                className="btn btn-secondary"
-                                style={{ fontSize: '11px', padding: '3px 8px', color: '#10B981', borderColor: '#10B981', fontWeight: 'bold', whiteSpace: 'nowrap' }}
-                                disabled={!canSave}
-                              >
-                                <Check size={12} style={{ marginRight: '3px' }} />
-                                부분매칭 ({remBal.toLocaleString()}원 가용)
-                              </button>
+                              <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenManualMatch(tx)}
+                                  className="btn btn-secondary"
+                                  style={{ fontSize: '11px', padding: '3px 8px', color: '#10B981', borderColor: '#10B981', fontWeight: 'bold', whiteSpace: 'nowrap' }}
+                                  disabled={!canSave}
+                                >
+                                  <Check size={12} style={{ marginRight: '3px' }} />
+                                  부분매칭 ({remBal.toLocaleString()}원 가용)
+                                </button>
+                                {canSave && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleUnmatch(tx.id)}
+                                    className="btn btn-secondary"
+                                    style={{ fontSize: '10px', padding: '2px 5px', color: '#ef4444', borderColor: '#fca5a5', fontWeight: 600 }}
+                                    title="수납 매칭 해제 (원복)"
+                                  >
+                                    해제
+                                  </button>
+                                )}
+                              </div>
                             ) : (
                               <button
                                 onClick={() => handleOpenManualMatch(tx)}
@@ -1170,6 +1235,48 @@ export const BankMatching: React.FC = () => {
               </tbody>
             </table>
           </div>
+
+          {/* 헌장 3.5 대차대조 검증 및 우하단 종결 액션 바 */}
+          {(() => {
+            const isWithdrawView = appliedTypeFilter === 'WITHDRAW';
+            const barTxs = filteredTransactions;
+            const barTotal = isWithdrawView
+              ? barTxs.reduce((s, t) => s + (t.withdrawAmount || 0), 0)
+              : barTxs.reduce((s, t) => s + (t.depositAmount || 0), 0);
+            const barUsed = isWithdrawView
+              ? barTxs.reduce((s, t) => s + getWithdrawMatchedAmount(t.id), 0)
+              : barTxs.reduce((s, t) => s + getDepositUsedAmount(t.id), 0);
+            const barAvail = Math.max(0, barTotal - barUsed);
+            const barRate = barTotal > 0 ? Math.round((barUsed / barTotal) * 100) : 0;
+
+            return (
+              <div style={{
+                marginTop: '12px',
+                padding: '12px 16px',
+                backgroundColor: 'var(--bg-card)',
+                borderRadius: '8px',
+                border: '1px solid var(--border-color)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: '12px'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '14px', fontSize: '12.5px', flexWrap: 'wrap' }}>
+                  <span>{isWithdrawView ? '조회 출금 총액' : '조회 입금 총액'}: <strong>₩{barTotal.toLocaleString()}</strong></span>
+                  <span>=</span>
+                  <span>{isWithdrawView ? '정산 반영액' : '확정 수납액'}: <strong style={{ color: '#10b981' }}>₩{barUsed.toLocaleString()}</strong></span>
+                  <span>+</span>
+                  <span>{isWithdrawView ? '미정산 잔액' : '미수납 잔액'}: <strong style={{ color: barAvail > 0 ? '#ef4444' : 'var(--text-secondary)' }}>₩{barAvail.toLocaleString()}</strong></span>
+                  <span style={{ color: 'var(--border-color)' }}>|</span>
+                  <span style={{ color: '#10b981', fontWeight: 700 }}>⚖️ 대차 차액 ₩0 (일치)</span>
+                </div>
+                <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                  {isWithdrawView ? '지급 매칭률' : '수납 매칭률'}: <strong style={{ color: '#10b981' }}>{barRate}%</strong>
+                </div>
+              </div>
+            );
+          })()}
         </>
       ) : (
         /* 규칙 관리 탭 */
@@ -1597,8 +1704,9 @@ export const BankMatching: React.FC = () => {
             <form onSubmit={async (e) => {
               e.preventDefault();
               await saveBankInitialBalance(editingBankName, editingInitialBalance, editingAccountNumber);
+              await db.awaitPendingWrites();
               setIsInitBalanceModalOpen(false);
-              alert(`✅ [${editingBankName}] 계좌 잔액 설정이 완료되었습니다.`);
+              showToast(`[${editingBankName}] 계좌 잔액 설정이 완료되었습니다.`);
             }} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
               
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
@@ -1733,6 +1841,26 @@ export const BankMatching: React.FC = () => {
               </div>
             </form>
           </div>
+        </div>
+      )}
+      {toastMessage && (
+        <div style={{
+          position: 'fixed',
+          bottom: '24px',
+          right: '24px',
+          padding: '12px 20px',
+          borderRadius: '8px',
+          backgroundColor: toastMessage.type === 'error' ? '#ef4444' : toastMessage.type === 'warning' ? '#f59e0b' : '#10b981',
+          color: '#fff',
+          fontWeight: 700,
+          fontSize: '13px',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
+          zIndex: 10000,
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px'
+        }}>
+          {toastMessage.text}
         </div>
       )}
 

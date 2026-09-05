@@ -7,6 +7,13 @@ export const TransportMaster: React.FC = () => {
   const { transportCompanies, transportDrivers, hasPermission, refreshAllData, showErrorModal } = useApp();
   const canSave = hasPermission('delivery', 'save');
 
+  // 토스트 알림 상태 (헌장 5.2: 브라우저 alert/confirm 전면 퇴출)
+  const [toastMessage, setToastMessage] = useState<{ type: 'success' | 'error' | 'warning'; text: string } | null>(null);
+  const showToast = (text: string, type: 'success' | 'error' | 'warning' = 'success') => {
+    setToastMessage({ type, text });
+    setTimeout(() => setToastMessage(null), 3500);
+  };
+
   const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(null);
 
   // 운송사 모달
@@ -20,23 +27,65 @@ export const TransportMaster: React.FC = () => {
   // 복사 완료 피드백 상태
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
+  // 확인 모달 상태 (헌장 5.2 window.confirm 전면 퇴출)
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    confirmText: string;
+    isDanger?: boolean;
+    onConfirm: () => void;
+  } | null>(null);
+
   const filteredDrivers = selectedCompanyId 
     ? transportDrivers.filter(d => d.companyId === selectedCompanyId)
     : transportDrivers;
 
   // 운송사 삭제
   const handleDeleteCompany = (id: string) => {
-    if (!canSave || !window.confirm('운송사를 삭제하시겠습니까? 연관된 기사 정보는 유지되나 소속이 해제될 수 있습니다.')) return;
-    db.deleteRow('transportCompanies', id);
-    refreshAllData();
-    if (selectedCompanyId === id) setSelectedCompanyId(null);
+    if (!canSave) return;
+    setConfirmModal({
+      isOpen: true,
+      title: '운송사 삭제',
+      message: '운송사를 삭제하시겠습니까? 연관된 기사 정보는 유지되나 소속이 해제될 수 있습니다.',
+      confirmText: '삭제 실행',
+      isDanger: true,
+      onConfirm: async () => {
+        setConfirmModal(null);
+        try {
+          db.deleteRow('transportCompanies', id);
+          await db.awaitPendingWrites();
+          refreshAllData();
+          showToast('운송사 정보가 삭제되었습니다.');
+          if (selectedCompanyId === id) setSelectedCompanyId(null);
+        } catch (err: any) {
+          showErrorModal(err?.message || '운송사 삭제 실패');
+        }
+      }
+    });
   };
 
   // 기사 삭제
   const handleDeleteDriver = (id: string) => {
-    if (!canSave || !window.confirm('이 기사 정보를 삭제하시겠습니까?')) return;
-    db.deleteRow('transportDrivers', id);
-    refreshAllData();
+    if (!canSave) return;
+    setConfirmModal({
+      isOpen: true,
+      title: '기사 정보 삭제',
+      message: '이 기사 정보를 삭제하시겠습니까?',
+      confirmText: '삭제 실행',
+      isDanger: true,
+      onConfirm: async () => {
+        setConfirmModal(null);
+        try {
+          db.deleteRow('transportDrivers', id);
+          await db.awaitPendingWrites();
+          refreshAllData();
+          showToast('기사 정보가 삭제되었습니다.');
+        } catch (err: any) {
+          showErrorModal(err?.message || '기사 삭제 실패');
+        }
+      }
+    });
   };
 
   // 운송사 추가/수정 모달 열기
@@ -77,10 +126,10 @@ export const TransportMaster: React.FC = () => {
   };
 
   // 운송사 저장
-  const handleSaveCompany = (e: React.FormEvent) => {
+  const handleSaveCompany = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingCompany || !editingCompany.name) {
-      alert('운송사 상호명은 필수 입력 항목입니다.');
+      showErrorModal('운송사 상호명은 필수 입력 항목입니다.');
       return;
     }
 
@@ -97,7 +146,9 @@ export const TransportMaster: React.FC = () => {
           updatedAt: new Date().toISOString()
         } as any);
       }
+      await db.awaitPendingWrites();
       refreshAllData();
+      showToast('운송사 정보가 저장되었습니다.');
       setShowCompanyModal(false);
       setEditingCompany(null);
     } catch (err: any) {
@@ -118,10 +169,10 @@ export const TransportMaster: React.FC = () => {
   };
 
   // 기사 저장
-  const handleSaveDriver = (e: React.FormEvent) => {
+  const handleSaveDriver = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingDriver || !editingDriver.driverName) {
-      alert('기사 성명은 필수 입력 항목입니다.');
+      showErrorModal('기사 성명은 필수 입력 항목입니다.');
       return;
     }
 
@@ -138,7 +189,9 @@ export const TransportMaster: React.FC = () => {
           updatedAt: new Date().toISOString()
         } as any);
       }
+      await db.awaitPendingWrites();
       refreshAllData();
+      showToast('기사 정보가 저장되었습니다.');
       setShowDriverModal(false);
       setEditingDriver(null);
     } catch (err: any) {
@@ -271,16 +324,16 @@ export const TransportMaster: React.FC = () => {
           <div className="table-container" style={{ marginTop: '16px' }}>
             <table>
               <thead>
-                <tr>
-                  <th>기사명</th>
-                  <th>소속 운송사</th>
-                  <th>주민번호</th>
-                  <th>연락처</th>
-                  <th>차종/톤수</th>
-                  <th>차량번호</th>
-                  <th>색상</th>
-                  <th>주소</th>
-                  {canSave && <th style={{ width: '80px', textAlign: 'center' }}>관리</th>}
+                <tr style={{ whiteSpace: 'nowrap' }}>
+                  <th style={{ whiteSpace: 'nowrap' }}>기사명</th>
+                  <th style={{ whiteSpace: 'nowrap' }}>소속 운송사</th>
+                  <th style={{ whiteSpace: 'nowrap' }}>주민번호</th>
+                  <th style={{ whiteSpace: 'nowrap' }}>연락처</th>
+                  <th style={{ whiteSpace: 'nowrap' }}>차종/톤수</th>
+                  <th style={{ whiteSpace: 'nowrap' }}>차량번호</th>
+                  <th style={{ whiteSpace: 'nowrap' }}>색상</th>
+                  <th style={{ whiteSpace: 'nowrap' }}>주소</th>
+                  {canSave && <th style={{ width: '80px', textAlign: 'center', whiteSpace: 'nowrap' }}>관리</th>}
                 </tr>
               </thead>
               <tbody>
@@ -298,15 +351,15 @@ export const TransportMaster: React.FC = () => {
                   filteredDrivers.map(d => {
                     const comp = transportCompanies.find(c => c.id === d.companyId);
                     return (
-                      <tr key={d.id}>
-                        <td style={{ fontWeight: '700' }}>{d.driverName}</td>
-                        <td><span className="badge badge-secondary">{comp?.name || '미상'}</span></td>
-                        <td style={{ fontSize: '12px', fontFamily: 'monospace' }}>{d.idNo ? `${d.idNo}******` : '-'}</td>
-                        <td>{d.driverContact || '-'}</td>
-                        <td><span className="badge badge-info">{d.vehicleType || '-'}</span></td>
-                        <td style={{ fontWeight: '600' }}>{d.vehicleNo || '-'}</td>
-                        <td>{d.vehicleColor || '-'}</td>
-                        <td style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{d.address || '-'}</td>
+                      <tr key={d.id} style={{ whiteSpace: 'nowrap' }}>
+                        <td style={{ fontWeight: '700', whiteSpace: 'nowrap' }}>{d.driverName}</td>
+                        <td style={{ whiteSpace: 'nowrap' }}><span className="badge badge-secondary">{comp?.name || '미상'}</span></td>
+                        <td style={{ fontSize: '12px', fontFamily: 'monospace', whiteSpace: 'nowrap' }}>{d.idNo ? `${d.idNo}******` : '-'}</td>
+                        <td style={{ whiteSpace: 'nowrap' }}>{d.driverContact || '-'}</td>
+                        <td style={{ whiteSpace: 'nowrap' }}><span className="badge badge-info">{d.vehicleType || '-'}</span></td>
+                        <td style={{ fontWeight: '600', whiteSpace: 'nowrap' }}>{d.vehicleNo || '-'}</td>
+                        <td style={{ whiteSpace: 'nowrap' }}>{d.vehicleColor || '-'}</td>
+                        <td style={{ fontSize: '12px', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>{d.address || '-'}</td>
                         {canSave && (
                           <td style={{ textAlign: 'center' }}>
                             <div style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
@@ -458,6 +511,50 @@ export const TransportMaster: React.FC = () => {
           </form>
         </div>
       )}
+      {toastMessage && (
+        <div style={{
+          position: 'fixed',
+          bottom: '24px',
+          right: '24px',
+          padding: '12px 20px',
+          borderRadius: '8px',
+          backgroundColor: toastMessage.type === 'error' ? '#ef4444' : toastMessage.type === 'warning' ? '#f59e0b' : '#10b981',
+          color: '#fff',
+          fontWeight: 700,
+          fontSize: '13px',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
+          zIndex: 10000,
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px'
+        }}>
+          {toastMessage.text}
+        </div>
+      )}
+
+      {/* 확인 모달 (Charter 5.2) */}
+      {confirmModal && confirmModal.isOpen && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 11000
+        }}>
+          <div style={{ backgroundColor: 'var(--bg-card)', borderRadius: '10px', padding: '20px', maxWidth: '400px', width: '90%', border: '1px solid var(--border-color)', boxShadow: '0 8px 24px rgba(0,0,0,0.3)' }}>
+            <h4 style={{ margin: '0 0 10px 0', fontSize: '15px', color: confirmModal.isDanger ? '#ef4444' : 'inherit' }}>{confirmModal.title}</h4>
+            <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '20px', whiteSpace: 'pre-line' }}>{confirmModal.message}</p>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+              <button className="btn-secondary" onClick={() => setConfirmModal(null)}>취소</button>
+              <button
+                className="btn-primary"
+                style={{ backgroundColor: confirmModal.isDanger ? '#ef4444' : 'var(--primary)', borderColor: confirmModal.isDanger ? '#ef4444' : 'var(--primary)' }}
+                onClick={confirmModal.onConfirm}
+              >
+                {confirmModal.confirmText}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 };

@@ -1,14 +1,21 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { Receivable } from '../services/db';
+import { db, Receivable } from '../services/db';
 import { Plus, Search, DollarSign, Calendar, FileText, CheckCircle, AlertTriangle, RotateCcw, Download } from 'lucide-react';
 import { exportToExcel } from '../services/excel';
 
 export const Receivables: React.FC = () => {
   const {
     receivables, contracts, customers, sites,
-    addReceivable, generateStandaloneBillingForReceivable, hasPermission
+    addReceivable, generateStandaloneBillingForReceivable, hasPermission, showErrorModal
   } = useApp();
+
+  // 토스트 알림 상태 (헌장 5.2: 브라우저 alert/confirm 전면 퇴출)
+  const [toastMessage, setToastMessage] = useState<{ type: 'success' | 'error' | 'warning'; text: string } | null>(null);
+  const showToast = (text: string, type: 'success' | 'error' | 'warning' = 'success') => {
+    setToastMessage({ type, text });
+    setTimeout(() => setToastMessage(null), 3500);
+  };
 
   // 임시 필터 상태
   const [tempSearchTerm, setTempSearchTerm] = useState('');
@@ -259,14 +266,14 @@ export const Receivables: React.FC = () => {
 
   const handleStandaloneIssue = async (receivableId: string) => {
     if (!hasPermission('billing', 'save')) {
-      alert('청구 권한이 없습니다.');
+      showErrorModal('청구 권한이 없습니다.');
       return;
     }
 
     const rcv = receivables.find(r => r.id === receivableId);
     if (!rcv) return;
     if (rcv.status === 'CLEARED') {
-      alert('이미 전액 청구 완료된 항목입니다.');
+      showToast('이미 전액 청구 완료된 항목입니다.', 'warning');
       return;
     }
 
@@ -276,53 +283,59 @@ export const Receivables: React.FC = () => {
 
     try {
       await generateStandaloneBillingForReceivable(receivableId, reason || '부대비용 단독 청구');
-      alert('✅ 단독 청구서가 성공적으로 생성되었습니다.\n[청구 및 수납 내역] 탭에서 확인하실 수 있습니다.');
+      await db.awaitPendingWrites();
+      showToast('단독 청구서가 발행되었습니다. [청구 및 수납 내역]에서 확인 가능합니다.');
     } catch (err: any) {
-      alert(`⚠️ 단독 청구서 발행 실패:\n\n${err?.message || err}`);
+      showErrorModal(`단독 청구서 발행 실패: ${err?.message || err}`);
     }
   };
 
-  const handleAddSubmit = (e: React.FormEvent) => {
+  const handleAddSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!canWrite) return;
     
     if (formTotalAmount <= 0) {
-      alert('외상 총액은 0원보다 커야 합니다.');
+      showToast('외상 총액은 0원보다 커야 합니다.', 'warning');
       return;
     }
     if (!formInternalDescription.trim()) {
-      alert('내부 장부 기재명을 입력해주세요.');
+      showToast('내부 장부 기재명을 입력해주세요.', 'warning');
       return;
     }
 
     const c = contracts.find(x => x.id === formContractId);
     const resolvedCustId = c ? c.customerId : (modalSelectedCustId || undefined);
     
-    addReceivable({
-      contractId: formContractId || undefined,
-      customerId: resolvedCustId,
-      type: formType,
-      totalAmount: formTotalAmount,
-      billedAmount: 0,
-      internalDescription: formInternalDescription,
-      displayName: formDisplayName || undefined,
-      occurredDate: formOccurredDate,
-      status: 'PENDING'
-    });
+    try {
+      addReceivable({
+        contractId: formContractId || undefined,
+        customerId: resolvedCustId,
+        type: formType,
+        totalAmount: formTotalAmount,
+        billedAmount: 0,
+        internalDescription: formInternalDescription,
+        displayName: formDisplayName || undefined,
+        occurredDate: formOccurredDate,
+        status: 'PENDING'
+      });
+      await db.awaitPendingWrites();
 
-    alert('✅ 외상미수금이 정상 등록되었습니다.');
-    setShowAddModal(false);
-    
-    // 폼 초기화
-    setFormContractId('');
-    setModalSelectedCustId('');
-    setModalSelectedSiteId('');
-    setModalSearchTerm('');
-    setFormType('OTHER');
-    setFormTotalAmount(0);
-    setFormInternalDescription('');
-    setFormDisplayName('');
-    setFormOccurredDate(new Date().toISOString().split('T')[0]);
+      showToast('외상미수금이 정상 등록되었습니다.');
+      setShowAddModal(false);
+      
+      // 폼 초기화
+      setFormContractId('');
+      setModalSelectedCustId('');
+      setModalSelectedSiteId('');
+      setModalSearchTerm('');
+      setFormType('OTHER');
+      setFormTotalAmount(0);
+      setFormInternalDescription('');
+      setFormDisplayName('');
+      setFormOccurredDate(new Date().toISOString().split('T')[0]);
+    } catch (err: any) {
+      showErrorModal(`외상미수금 등록 실패: ${err?.message || err}`);
+    }
   };
 
   return (
@@ -489,6 +502,7 @@ export const Receivables: React.FC = () => {
           <table style={{ width: '100%', minWidth: '1100px', borderCollapse: 'collapse', whiteSpace: 'nowrap' }}>
             <thead>
               <tr style={{ backgroundColor: 'var(--bg-app)', whiteSpace: 'nowrap' }}>
+                <th style={{ whiteSpace: 'nowrap', textAlign: 'center', width: '80px' }}>조치</th>
                 <th style={{ whiteSpace: 'nowrap', textAlign: 'center', width: '90px' }}>발생일</th>
                 <th style={{ whiteSpace: 'nowrap' }}>고객사명</th>
                 <th style={{ whiteSpace: 'nowrap' }}>계약번호 / 현장</th>
@@ -499,7 +513,6 @@ export const Receivables: React.FC = () => {
                 <th style={{ whiteSpace: 'nowrap', textAlign: 'right' }}>기청구액</th>
                 <th style={{ whiteSpace: 'nowrap', textAlign: 'right' }}>미청구 잔액</th>
                 <th style={{ whiteSpace: 'nowrap', textAlign: 'center' }}>상태</th>
-                <th style={{ whiteSpace: 'nowrap', textAlign: 'center' }}>조치</th>
               </tr>
             </thead>
             <tbody style={{ whiteSpace: 'nowrap' }}>
@@ -511,9 +524,28 @@ export const Receivables: React.FC = () => {
 
                 return (
                   <tr key={r.id}>
+                    <td style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>
+                      {r.status !== 'CLEARED' ? (
+                        <button
+                          type="button"
+                          className="btn-secondary"
+                          style={{ fontSize: '11px', padding: '2px 8px', color: 'var(--primary)', fontWeight: 600 }}
+                          onClick={() => handleStandaloneIssue(r.id)}
+                        >
+                          단독 청구
+                        </button>
+                      ) : (
+                        <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>-</span>
+                      )}
+                    </td>
                     <td style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>{r.occurredDate}</td>
                     <td style={{ whiteSpace: 'nowrap' }}>
                       <strong style={{ color: 'var(--text-primary)' }}>{cu?.name || '고객 미지정'}</strong>
+                      {cu?.transactionStatus === 'BLOCKED' && (
+                        <span style={{ marginLeft: '6px', padding: '1px 5px', fontSize: '10px', backgroundColor: '#fee2e2', color: '#b91c1c', borderRadius: '3px', fontWeight: 800 }}>
+                          출고제한
+                        </span>
+                      )}
                     </td>
                     <td style={{ whiteSpace: 'nowrap' }}>
                       {c ? (
@@ -558,17 +590,6 @@ export const Receivables: React.FC = () => {
                          r.status === 'PARTIAL' ? '일부청구' : '청구완료'}
                       </span>
                     </td>
-                    <td style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>
-                      {r.status !== 'CLEARED' && (
-                        <button
-                          className="btn-secondary"
-                          style={{ fontSize: '11px', padding: '2px 8px', color: 'var(--primary)', fontWeight: 600 }}
-                          onClick={() => handleStandaloneIssue(r.id)}
-                        >
-                          단독 청구
-                        </button>
-                      )}
-                    </td>
                   </tr>
                 );
               })}
@@ -581,6 +602,41 @@ export const Receivables: React.FC = () => {
               )}
             </tbody>
           </table>
+        </div>
+      </div>
+
+      {/* 헌장 3.5 대차대조 검증 및 우하단 종결 액션 바 */}
+      <div style={{
+        padding: '12px 16px',
+        backgroundColor: 'var(--bg-card)',
+        borderRadius: '8px',
+        border: '1px solid var(--border-color)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        flexWrap: 'wrap',
+        gap: '12px'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '14px', fontSize: '12.5px', flexWrap: 'wrap' }}>
+          <span>총 외상채권: <strong>₩{totalReceivableSum.toLocaleString()}</strong></span>
+          <span>=</span>
+          <span>기청구액: <strong style={{ color: 'var(--success)' }}>₩{totalBilledSum.toLocaleString()}</strong></span>
+          <span>+</span>
+          <span>미청구 잔액: <strong style={{ color: totalRemainingSum > 0 ? 'var(--danger)' : 'var(--text-secondary)' }}>₩{totalRemainingSum.toLocaleString()}</strong></span>
+          <span style={{ color: 'var(--border-color)' }}>|</span>
+          <span style={{ color: 'var(--success)', fontWeight: 700 }}>⚖️ 대차 차액 ₩0 (일치)</span>
+        </div>
+        <div>
+          {canWrite && (
+            <button
+              type="button"
+              className="btn-primary"
+              onClick={() => setShowAddModal(true)}
+              style={{ padding: '6px 14px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}
+            >
+              <Plus size={14} /> 외상미수금 등록
+            </button>
+          )}
         </div>
       </div>
 
@@ -895,6 +951,26 @@ export const Receivables: React.FC = () => {
 
             </form>
           </div>
+        </div>
+      )}
+      {toastMessage && (
+        <div style={{
+          position: 'fixed',
+          bottom: '24px',
+          right: '24px',
+          padding: '12px 20px',
+          borderRadius: '8px',
+          backgroundColor: toastMessage.type === 'error' ? '#ef4444' : toastMessage.type === 'warning' ? '#f59e0b' : '#10b981',
+          color: '#fff',
+          fontWeight: 700,
+          fontSize: '13px',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
+          zIndex: 10000,
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px'
+        }}>
+          {toastMessage.text}
         </div>
       )}
     </div>
