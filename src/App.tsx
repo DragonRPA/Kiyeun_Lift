@@ -5,7 +5,7 @@ import {
   LayoutDashboard, Users, UserCheck, Package, Layers, PlusCircle,
   Truck, Wrench, Shield, ShoppingBag, CreditCard, LogOut, Sun, Moon, Menu, X, Zap, Settings, Database as DatabaseIcon,
   TrendingUp, Clock, AlertTriangle, Building2, ChevronDown, ChevronRight, Briefcase, Box, FolderKanban, ShieldAlert, Terminal, ArrowLeftRight, CheckSquare,
-  Smartphone, Monitor, Radio, Car
+  Smartphone, Monitor, Car
 } from 'lucide-react';
 
 import { WeatherWidget } from './components/WeatherWidget';
@@ -50,8 +50,6 @@ import { InitialDbUploader } from './pages/InitialDbUploader';
 import { AgentHeaderBadge } from './components/AgentHeaderBadge';
 import { MirrorSyncProgressToast } from './components/MirrorSyncProgressToast';
 import { MobileApp } from './mobile/MobileApp';
-import { MobileWalkieTalkieModal } from './mobile/components/MobileWalkieTalkieModal';
-import { walkieService } from './services/walkieTalkieService';
 import { initWorkNotificationListener } from './utils/workNotificationService';
 import { ErrorBoundary } from './components/ErrorBoundary';
 
@@ -134,34 +132,11 @@ const App: React.FC = () => {
     }
   }, []);
 
-  // PC 데스크톱 무전기 모달 상태
-  const [isWalkieModalOpen, setIsWalkieModalOpen] = useState(false);
-  const [isWalkieOn, setIsWalkieOn] = useState(() => walkieService.getIsPowerOn());
-
+  // 실시간 업무 알림 리스너 연동
   useEffect(() => {
     if (currentUser) {
-      walkieService.subscribe({
-        id: currentUser.id || 'pc-user',
-        name: currentUser.name || '관리자',
-        role: currentUser.role || 'ADMIN',
-        deptName: currentUser.department || '경영지원'
-      });
-      setIsWalkieOn(walkieService.getIsPowerOn());
       initWorkNotificationListener(currentUser);
     }
-
-    const handleFirstGesture = () => {
-      walkieService.unlockAudio();
-      window.removeEventListener('pointerdown', handleFirstGesture);
-      window.removeEventListener('click', handleFirstGesture);
-    };
-    window.addEventListener('pointerdown', handleFirstGesture, { passive: true });
-    window.addEventListener('click', handleFirstGesture, { passive: true });
-
-    return () => {
-      window.removeEventListener('pointerdown', handleFirstGesture);
-      window.removeEventListener('click', handleFirstGesture);
-    };
   }, [currentUser]);
 
   // 메뉴(activeTab) 전환 시 스크롤 최상단 리셋 + 해당 메뉴 관련 테이블만 Supabase pull (최신 데이터 보장)
@@ -575,41 +550,6 @@ const App: React.FC = () => {
           {/* 🤖 로컬 사이드카 에이전트 실시간 상태 미니 배지 */}
           <AgentHeaderBadge currentUser={currentUser} />
 
-          {/* 📻 현장 무전기 (PTT & STT 대화록) 버튼 */}
-          <button
-            onClick={() => {
-              walkieService.unlockAudio();
-              setIsWalkieModalOpen(true);
-            }}
-            style={{
-              padding: '6px 14px',
-              borderRadius: '20px',
-              backgroundColor: isWalkieOn ? 'rgba(16, 185, 129, 0.15)' : 'var(--bg-app)',
-              color: isWalkieOn ? '#10b981' : 'var(--text-primary)',
-              border: isWalkieOn ? '1px solid #10b981' : '1px solid var(--border-color)',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              fontSize: '12.5px',
-              fontWeight: '700',
-              cursor: 'pointer',
-              whiteSpace: 'nowrap',
-              transition: 'all 0.15s ease'
-            }}
-            title="실시간 현장 무전기 및 당일 대화록 열기"
-          >
-            <Radio size={15} color={isWalkieOn ? '#10b981' : '#94a3b8'} />
-            <span>{isWalkieOn ? '무전ON' : '무전기'}</span>
-            {isWalkieOn && (
-              <span style={{
-                width: '6px',
-                height: '6px',
-                borderRadius: '50%',
-                backgroundColor: '#10b981',
-                boxShadow: '0 0 8px #10b981'
-              }} />
-            )}
-          </button>
 
           {/* 모바일 현장 전용 뷰 전환 버튼 */}
           <button
@@ -915,17 +855,6 @@ const App: React.FC = () => {
 
       {/* 🚀 구글 드라이브 실시간 미러링 진행상황 플로팅 토스트 */}
       <MirrorSyncProgressToast />
-
-      {/* 📻 PC 데스크톱 무전기 (PTT & STT 대화록) 모달 */}
-      <ErrorBoundary fallbackTitle="무전기 오류 복구" isModal onClose={() => setIsWalkieModalOpen(false)}>
-        <MobileWalkieTalkieModal
-          isOpen={isWalkieModalOpen}
-          onClose={() => {
-            setIsWalkieModalOpen(false);
-            setIsWalkieOn(walkieService.getIsPowerOn());
-          }}
-        />
-      </ErrorBoundary>
 
     </div>
   );

@@ -106,12 +106,34 @@ export const AssetAcquisitionDisposal: React.FC = () => {
   const [singleMemo, setSingleMemo] = useState<string>('');
   const [isSubmittingAcq, setIsSubmittingAcq] = useState<boolean>(false);
 
+  // 💡 구입처 (공급사 / 중고 딜러 / 거래처) 인스펙터 선택 상태 (자산매각 매수처 UI와 1:1 표준화)
+  const [supplierMode, setSupplierMode] = useState<'SELECT' | 'DIRECT'>('SELECT');
+  const [isSupplierSearchModalOpen, setIsSupplierSearchModalOpen] = useState<boolean>(false);
+  const [supplierSearchQuery, setSupplierSearchQuery] = useState<string>('');
+  interface SelectedSupplierInfo {
+    name: string;
+    bizRegNo?: string;
+    representative?: string;
+    address?: string;
+    contact?: string;
+    email?: string;
+    vendorId?: string;
+    sourceType?: 'VENDOR' | 'CUSTOMER';
+  }
+  const [selectedSupplierData, setSelectedSupplierData] = useState<SelectedSupplierInfo | null>(null);
+  const [newSupplierName, setNewSupplierName] = useState<string>('');
+  const [newSupplierBizNo, setNewSupplierBizNo] = useState<string>('');
+  const [newSupplierRepresentative, setNewSupplierRepresentative] = useState<string>('');
+  const [newSupplierContact, setNewSupplierContact] = useState<string>('');
+  const [newSupplierAddress, setNewSupplierAddress] = useState<string>('');
+
   // 멀티 입고 슬롯 (동일 모델 N대 일괄 입력)
   interface AcqSlotItem {
     id: string;
     assetNo: string;
     modelName: string;
     serialNo: string;
+    manufactureYear: string; // 💡 슬롯별 개별 제조년도 (새장비/중고 혼합 입고 지원)
     price: number;
   }
   const [multiSlots, setMultiSlots] = useState<AcqSlotItem[]>([]);
@@ -122,10 +144,23 @@ export const AssetAcquisitionDisposal: React.FC = () => {
     setMultiSlots(prev => prev.map(s => ({ ...s, modelName: newModel })));
   };
 
+  // 💡 모델 초기 동기화 보장: products 로드 시 singleModelName이 비어있거나 불일치 시 첫 번째 모델로 즉시 동기화
+  useEffect(() => {
+    if (products.length > 0 && (!singleModelName || !products.some(p => p.modelName === singleModelName))) {
+      handleModelChange(products[0].modelName);
+    }
+  }, [products]);
+
   // 취득가 변경 핸들러: 메인 취득가 변경 시 슬롯들의 기본 취득가도 동일하게 자동 동기화
   const handleAcqPriceChange = (newPrice: number) => {
     setSingleAcqPrice(newPrice);
     setMultiSlots(prev => prev.map(s => ({ ...s, price: newPrice })));
+  };
+
+  // 제조년도 변경 핸들러: 메인 제조년도 변경 시 슬롯들의 기본 제조년도 동기화
+  const handleManufactureYearChange = (newYear: string) => {
+    setSingleManufactureYear(newYear);
+    setMultiSlots(prev => prev.map(s => (!s.manufactureYear || s.manufactureYear === singleManufactureYear) ? { ...s, manufactureYear: newYear } : s));
   };
 
   // 모델 선택 시 제품 마스터 제원 자동 상속
@@ -197,7 +232,7 @@ export const AssetAcquisitionDisposal: React.FC = () => {
     return getNextRecommendedAssetNo('KL-');
   };
 
-  // 슬롯 추가 핸들러 (동일 모델·취득가 자동 상속 및 다음 관리번호 순차 자동 채번)
+  // 슬롯 추가 핸들러 (동일 모델·취득가·제조년도 자동 상속 및 다음 관리번호 순차 자동 채번)
   const handleAddSlot = () => {
     const baseNo = multiSlots.length > 0 ? multiSlots[multiSlots.length - 1].assetNo : singleAssetNo;
     const nextNo = getNextSequentialAssetNo(baseNo, 1);
@@ -209,6 +244,7 @@ export const AssetAcquisitionDisposal: React.FC = () => {
         assetNo: nextNo,
         modelName: singleModelName, // 💡 메인 모델과 동일
         serialNo: '',
+        manufactureYear: singleManufactureYear || '', // 💡 제조년도 상속
         price: singleAcqPrice // 💡 메인 취득가와 동일
       }
     ]);
@@ -218,7 +254,7 @@ export const AssetAcquisitionDisposal: React.FC = () => {
     setMultiSlots(prev => prev.filter(s => s.id !== slotId));
   };
 
-  const handleUpdateSlot = (slotId: string, field: 'assetNo' | 'serialNo' | 'price' | 'modelName', value: any) => {
+  const handleUpdateSlot = (slotId: string, field: 'assetNo' | 'serialNo' | 'manufactureYear' | 'price' | 'modelName', value: any) => {
     setMultiSlots(prev => prev.map(s => s.id === slotId ? { ...s, [field]: value } : s));
   };
 
@@ -317,6 +353,13 @@ export const AssetAcquisitionDisposal: React.FC = () => {
 
     setIsSubmittingAcq(true);
     try {
+      const finalSupplier = supplierMode === 'SELECT'
+        ? (selectedSupplierData?.name || singleSupplier.trim())
+        : (newSupplierName.trim() || singleSupplier.trim());
+      const finalVendorId = supplierMode === 'SELECT'
+        ? (selectedSupplierData?.vendorId || singleVendorId || undefined)
+        : undefined;
+
       const mainPayload: Partial<Asset> = {
         modelName: singleModelName,
         assetNo: singleAssetNo.trim(),
@@ -327,8 +370,8 @@ export const AssetAcquisitionDisposal: React.FC = () => {
         acquisitionPrice: Number(singleAcqPrice) || 0,
         depreciationMonths: Number(singleDepMonths) || 96,
         residualValueRate: Number(singleResidualRate) || 10,
-        supplier: singleSupplier.trim(),
-        vendorId: singleVendorId || undefined,
+        supplier: finalSupplier,
+        vendorId: finalVendorId,
         monthlyRentalFee: Number(singleMonthlyRentalFee) || 0,
         dailyRentalFee: Number(singleDailyRentalFee) || 0,
         safetyInspectionUrl: singleSafetyInspectionUrl.trim() || undefined,
@@ -347,6 +390,7 @@ export const AssetAcquisitionDisposal: React.FC = () => {
             modelName: singleModelName, // 💡 동일 모델 보장
             assetNo: slot.assetNo.trim(),
             serialNo: slot.serialNo.trim(),
+            manufactureYear: slot.manufactureYear?.trim() || singleManufactureYear.trim(), // 💡 개별 슬롯 제조년도 반영
             acquisitionPrice: Number(slot.price) || Number(singleAcqPrice) || 0
           });
         }
@@ -360,6 +404,11 @@ export const AssetAcquisitionDisposal: React.FC = () => {
       setSingleSerialNo('');
       setSingleMemo('');
       setSingleSafetyInspectionUrl('');
+      setNewSupplierName('');
+      setNewSupplierBizNo('');
+      setNewSupplierRepresentative('');
+      setNewSupplierContact('');
+      setNewSupplierAddress('');
     } catch (err: any) {
       showErrorModal(`자산 취득 저장 중 오류:\n\n${err?.message || err}`);
     } finally {
@@ -753,6 +802,71 @@ export const AssetAcquisitionDisposal: React.FC = () => {
     showToast('바구니의 모든 자산 매각단가가 현재 장부가치로 일괄 설정되었습니다.');
   };
 
+  // 구입처 (제조공급사 + 거래처 딜러) 통합 검색 필터링
+  const filteredSuppliersForSearch = useMemo(() => {
+    const q = supplierSearchQuery.trim().toLowerCase();
+    const results: SelectedSupplierInfo[] = [];
+
+    // 1. 등록 제조/공급사 (vendors)
+    vendors.forEach(v => {
+      if (
+        !q ||
+        (v.name && v.name.toLowerCase().includes(q)) ||
+        (v.bizRegNo && v.bizRegNo.includes(q)) ||
+        (v.representative && v.representative.toLowerCase().includes(q)) ||
+        (v.contact && v.contact.includes(q))
+      ) {
+        results.push({
+          name: v.name,
+          bizRegNo: v.bizRegNo,
+          representative: v.representative,
+          address: v.address,
+          contact: v.contact,
+          vendorId: v.id,
+          sourceType: 'VENDOR'
+        });
+      }
+    });
+
+    // 2. 고객사 및 중고 딜러 (customers)
+    customers.forEach(c => {
+      if (
+        !q ||
+        (c.name && c.name.toLowerCase().includes(q)) ||
+        (c.bizRegNo && c.bizRegNo.includes(q)) ||
+        (c.representative && c.representative.toLowerCase().includes(q)) ||
+        (c.repContact && c.repContact.includes(q))
+      ) {
+        if (!results.some(r => r.name.toLowerCase() === c.name.toLowerCase())) {
+          results.push({
+            name: c.name,
+            bizRegNo: c.bizRegNo,
+            representative: c.representative,
+            address: c.address,
+            contact: c.repContact,
+            email: c.repEmail,
+            sourceType: 'CUSTOMER'
+          });
+        }
+      }
+    });
+
+    return results.slice(0, 50);
+  }, [vendors, customers, supplierSearchQuery]);
+
+  // 검색 모달에서 구입처 선택 핸들러
+  const handleSelectSupplier = (supp: SelectedSupplierInfo) => {
+    setSelectedSupplierData(supp);
+    setSingleSupplier(supp.name);
+    if (supp.vendorId) {
+      setSingleVendorId(supp.vendorId);
+    } else {
+      setSingleVendorId('');
+    }
+    setIsSupplierSearchModalOpen(false);
+    showToast(`구입처로 [${supp.name}]이(가) 확정되었습니다.`);
+  };
+
   // 고객사/딜러 검색 결과 필터링
   const filteredCustomersForSearch = useMemo(() => {
     if (!buyerSearchQuery.trim()) return customers.slice(0, 30);
@@ -1109,7 +1223,7 @@ export const AssetAcquisitionDisposal: React.FC = () => {
                     <input
                       type="text"
                       value={singleManufactureYear}
-                      onChange={e => setSingleManufactureYear(e.target.value)}
+                      onChange={e => handleManufactureYearChange(e.target.value)}
                       placeholder="2024"
                       style={{ padding: '8px 10px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-app)', color: 'var(--text-primary)', fontSize: '12.5px' }}
                     />
@@ -1162,46 +1276,154 @@ export const AssetAcquisitionDisposal: React.FC = () => {
                   </div>
                 </div>
 
-                {/* 8. 구입처 / 공급사 */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <label style={{ fontSize: '11.5px', fontWeight: 700, color: 'var(--text-secondary)' }}>구입처 (공급처)</label>
-                  <input
-                    type="text"
-                    value={singleSupplier}
-                    onChange={e => setSingleSupplier(e.target.value)}
-                    placeholder="예: 한국시노붐, 제이엘지"
-                    list="suppliers_list"
-                    style={{ padding: '8px 10px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-app)', color: 'var(--text-primary)', fontSize: '12.5px' }}
-                  />
-                  <datalist id="suppliers_list">
-                    {vendors.map(v => (
-                      <option key={v.id} value={v.name} />
-                    ))}
-                  </datalist>
-                </div>
-              </div>
+                {/* 8. 구입처 (공급처 / 중고 딜러 / 거래처) 인스펙터 선택 (매각 매수처 UI와 1:1 표준화) */}
+                <div style={{ gridColumn: 'span 4', display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '6px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <label style={{ fontSize: '11.5px', fontWeight: 700, color: 'var(--text-secondary)' }}>
+                      구입처 (공급사 / 중고 딜러 / 거래처)
+                    </label>
+                    <div style={{ display: 'flex', gap: '8px', fontSize: '11px' }}>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}>
+                        <input
+                          type="radio"
+                          name="supplierMode"
+                          checked={supplierMode === 'SELECT'}
+                          onChange={() => setSupplierMode('SELECT')}
+                        />
+                        등록 공급처/딜러 검색
+                      </label>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}>
+                        <input
+                          type="radio"
+                          name="supplierMode"
+                          checked={supplierMode === 'DIRECT'}
+                          onChange={() => setSupplierMode('DIRECT')}
+                        />
+                        신규 구입처 직접 입력
+                      </label>
+                    </div>
+                  </div>
 
-              {/* 실시간 감가상각 시뮬레이션 카드 */}
-              <div style={{
-                backgroundColor: 'var(--bg-app)',
-                padding: '12px 16px',
-                borderRadius: '8px',
-                border: '1px solid var(--border-color)',
-                display: 'grid',
-                gridTemplateColumns: 'repeat(3, 1fr)',
-                gap: '12px'
-              }}>
-                <div>
-                  <span style={{ fontSize: '11px', color: 'var(--text-secondary)', display: 'block' }}>월 예상 감가상각비</span>
-                  <strong style={{ fontSize: '13px', color: 'var(--primary)' }}>₩{depreciationSimulation.monthlyDep.toLocaleString()}원 / 월</strong>
-                </div>
-                <div>
-                  <span style={{ fontSize: '11px', color: 'var(--text-secondary)', display: 'block' }}>1년 후 예상 장부가치</span>
-                  <strong style={{ fontSize: '13px', color: 'var(--text-primary)' }}>₩{depreciationSimulation.oneYearBook.toLocaleString()}원</strong>
-                </div>
-                <div>
-                  <span style={{ fontSize: '11px', color: 'var(--text-secondary)', display: 'block' }}>만료 후 잔존가치 ({singleResidualRate}%)</span>
-                  <strong style={{ fontSize: '13px', color: 'var(--success)' }}>₩{depreciationSimulation.residualVal.toLocaleString()}원</strong>
+                  {supplierMode === 'SELECT' ? (
+                    <div>
+                      {selectedSupplierData ? (
+                        <div style={{
+                          padding: '10px 12px',
+                          backgroundColor: 'var(--bg-app)',
+                          borderRadius: '6px',
+                          border: '1px solid var(--border-color)',
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center'
+                        }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <strong style={{ fontSize: '13px', color: 'var(--primary)' }}>{selectedSupplierData.name}</strong>
+                              <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                                대표: {selectedSupplierData.representative || '-'} | 사업자: {selectedSupplierData.bizRegNo || '미등록'}
+                              </span>
+                              <span style={{
+                                fontSize: '10px',
+                                padding: '1px 6px',
+                                borderRadius: '4px',
+                                backgroundColor: selectedSupplierData.sourceType === 'VENDOR' ? 'rgba(59, 130, 246, 0.1)' : 'rgba(16, 185, 129, 0.1)',
+                                color: selectedSupplierData.sourceType === 'VENDOR' ? 'var(--primary)' : 'var(--success)',
+                                fontWeight: 700
+                              }}>
+                                {selectedSupplierData.sourceType === 'VENDOR' ? '제조/공급사' : '거래처/딜러'}
+                              </span>
+                            </div>
+                            <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
+                              주소: {selectedSupplierData.address || '-'} | 연락처: {selectedSupplierData.contact || '-'}
+                            </div>
+                          </div>
+
+                          <button
+                            type="button"
+                            className="btn-secondary"
+                            onClick={() => setIsSupplierSearchModalOpen(true)}
+                            style={{ padding: '4px 10px', fontSize: '11.5px', whiteSpace: 'nowrap' }}
+                          >
+                            구입처 변경
+                          </button>
+                        </div>
+                      ) : (
+                        <div
+                          onClick={() => setIsSupplierSearchModalOpen(true)}
+                          style={{
+                            padding: '14px',
+                            backgroundColor: 'var(--bg-app)',
+                            borderRadius: '6px',
+                            border: '1px dashed var(--border-color)',
+                            display: 'flex',
+                            justifyContent: 'center',
+                            alignItems: 'center',
+                            gap: '8px',
+                            cursor: 'pointer',
+                            color: 'var(--primary)',
+                            fontWeight: 600,
+                            fontSize: '12.5px'
+                          }}
+                        >
+                          <Search size={15} />
+                          구입처 (제조공급사 / 중고 딜러 / 거래처) 실시간 검색 및 확정
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px', backgroundColor: 'var(--bg-app)', padding: '10px', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        <label style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>구입처 상호명 (필수)</label>
+                        <input
+                          type="text"
+                          placeholder="예: 한국시노붐, 제일중기"
+                          value={newSupplierName}
+                          onChange={e => setNewSupplierName(e.target.value)}
+                          style={{ padding: '6px 8px', borderRadius: '4px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)', fontSize: '12px' }}
+                        />
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        <label style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>사업자등록번호</label>
+                        <input
+                          type="text"
+                          placeholder="예: 123-45-67890"
+                          value={newSupplierBizNo}
+                          onChange={e => setNewSupplierBizNo(e.target.value)}
+                          style={{ padding: '6px 8px', borderRadius: '4px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)', fontSize: '12px' }}
+                        />
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        <label style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>대표자 성명</label>
+                        <input
+                          type="text"
+                          placeholder="예: 홍길동"
+                          value={newSupplierRepresentative}
+                          onChange={e => setNewSupplierRepresentative(e.target.value)}
+                          style={{ padding: '6px 8px', borderRadius: '4px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)', fontSize: '12px' }}
+                        />
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        <label style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>대표 연락처</label>
+                        <input
+                          type="text"
+                          placeholder="예: 010-1234-5678"
+                          value={newSupplierContact}
+                          onChange={e => setNewSupplierContact(e.target.value)}
+                          style={{ padding: '6px 8px', borderRadius: '4px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)', fontSize: '12px' }}
+                        />
+                      </div>
+                      <div style={{ gridColumn: 'span 4', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        <label style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>사업장 주소</label>
+                        <input
+                          type="text"
+                          placeholder="사업장 소재지 주소"
+                          value={newSupplierAddress}
+                          onChange={e => setNewSupplierAddress(e.target.value)}
+                          style={{ padding: '6px 8px', borderRadius: '4px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)', fontSize: '12px' }}
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -1264,7 +1486,7 @@ export const AssetAcquisitionDisposal: React.FC = () => {
                     {/* 슬롯 테이블 헤더 */}
                     <div style={{
                       display: 'grid',
-                      gridTemplateColumns: '40px 180px 140px 1fr 140px 40px',
+                      gridTemplateColumns: '40px 170px 130px 1fr 110px 130px 36px',
                       gap: '8px',
                       padding: '6px 10px',
                       backgroundColor: 'var(--bg-app)',
@@ -1278,6 +1500,7 @@ export const AssetAcquisitionDisposal: React.FC = () => {
                       <span>채번 관리번호</span>
                       <span>등록 모델</span>
                       <span>제조번호 (Serial No)</span>
+                      <span>제조년도</span>
                       <span>취득원가 (원)</span>
                       <span style={{ textAlign: 'center' }}>삭제</span>
                     </div>
@@ -1288,7 +1511,7 @@ export const AssetAcquisitionDisposal: React.FC = () => {
                         key={slot.id}
                         style={{
                           display: 'grid',
-                          gridTemplateColumns: '40px 180px 140px 1fr 140px 40px',
+                          gridTemplateColumns: '40px 170px 130px 1fr 110px 130px 36px',
                           gap: '8px',
                           alignItems: 'center',
                           backgroundColor: 'var(--bg-app)',
@@ -1355,7 +1578,23 @@ export const AssetAcquisitionDisposal: React.FC = () => {
                           }}
                         />
 
-                        {/* 5. 취득원가 (메인 취득가 동일 상속) */}
+                        {/* 5. 제조년도 (슬롯별 개별 연식) */}
+                        <input
+                          type="text"
+                          placeholder={singleManufactureYear || '2024'}
+                          value={slot.manufactureYear}
+                          onChange={e => handleUpdateSlot(slot.id, 'manufactureYear', e.target.value)}
+                          style={{
+                            padding: '5px 8px',
+                            fontSize: '12px',
+                            borderRadius: '4px',
+                            border: '1px solid var(--border-color)',
+                            backgroundColor: 'var(--bg-card)',
+                            color: 'var(--text-primary)'
+                          }}
+                        />
+
+                        {/* 6. 취득원가 (메인 취득가 동일 상속) */}
                         <input
                           type="number"
                           placeholder="취득가"
@@ -1546,6 +1785,159 @@ export const AssetAcquisitionDisposal: React.FC = () => {
         </div>
       )}
 
+
+      {/* ───────────────────────────────────────────────────────────── */}
+      {/* 🔍 구입처 (공급사 / 중고 장비 딜러 / 거래처) 실시간 검색 모달 */}
+      {/* ───────────────────────────────────────────────────────────── */}
+      {isSupplierSearchModalOpen && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.55)',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 10000,
+          padding: '20px'
+        }}>
+          <div className="card" style={{
+            width: '100%',
+            maxWidth: '750px',
+            maxHeight: '85vh',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '14px',
+            padding: '20px',
+            backgroundColor: 'var(--bg-card)',
+            borderRadius: '10px',
+            boxShadow: '0 10px 30px rgba(0,0,0,0.3)',
+            border: '1px solid var(--border-color)',
+            overflow: 'hidden'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-color)', paddingBottom: '10px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Search size={18} color="var(--primary)" />
+                <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 700 }}>구입처 (공급사 / 중고 딜러 / 거래처) 검색</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsSupplierSearchModalOpen(false)}
+                style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '4px' }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* 검색창 */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: 'var(--bg-app)', padding: '8px 12px', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
+              <Search size={15} color="var(--text-muted)" />
+              <input
+                type="text"
+                placeholder="상호명, 사업자등록번호, 대표자명, 연락처 검색"
+                value={supplierSearchQuery}
+                onChange={e => setSupplierSearchQuery(e.target.value)}
+                autoFocus
+                style={{ flex: 1, border: 'none', backgroundColor: 'transparent', outline: 'none', fontSize: '13px', color: 'var(--text-primary)' }}
+              />
+              {supplierSearchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSupplierSearchQuery('')}
+                  style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+
+            {/* 결과 목록 테이블 */}
+            <div className="table-container" style={{ flex: 1, overflowY: 'auto', maxHeight: '420px', border: '1px solid var(--border-color)', borderRadius: '6px' }}>
+              <table>
+                <thead>
+                  <tr style={{ backgroundColor: 'var(--bg-app)' }}>
+                    <th style={{ whiteSpace: 'nowrap' }}>구분</th>
+                    <th style={{ whiteSpace: 'nowrap' }}>상호명</th>
+                    <th style={{ whiteSpace: 'nowrap' }}>사업자번호</th>
+                    <th style={{ whiteSpace: 'nowrap' }}>대표자</th>
+                    <th style={{ whiteSpace: 'nowrap' }}>사업장 주소</th>
+                    <th style={{ whiteSpace: 'nowrap' }}>연락처</th>
+                    <th style={{ whiteSpace: 'nowrap', textAlign: 'center' }}>선택</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredSuppliersForSearch.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} style={{ textAlign: 'center', padding: '30px', color: 'var(--text-muted)' }}>
+                        검색 조건에 일치하는 공급처 또는 딜러가 없습니다.
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredSuppliersForSearch.map((s, idx) => (
+                      <tr
+                        key={`${s.name}_${idx}`}
+                        style={{ cursor: 'pointer' }}
+                        onClick={() => handleSelectSupplier(s)}
+                      >
+                        <td style={{ whiteSpace: 'nowrap' }}>
+                          <span style={{
+                            fontSize: '10px',
+                            padding: '2px 6px',
+                            borderRadius: '4px',
+                            backgroundColor: s.sourceType === 'VENDOR' ? 'rgba(59, 130, 246, 0.1)' : 'rgba(16, 185, 129, 0.1)',
+                            color: s.sourceType === 'VENDOR' ? 'var(--primary)' : 'var(--success)',
+                            fontWeight: 700
+                          }}>
+                            {s.sourceType === 'VENDOR' ? '제조사' : '거래처/딜러'}
+                          </span>
+                        </td>
+                        <td style={{ whiteSpace: 'nowrap', fontWeight: 700, color: 'var(--primary)' }}>
+                          {s.name}
+                        </td>
+                        <td style={{ whiteSpace: 'nowrap' }}>{s.bizRegNo || '-'}</td>
+                        <td style={{ whiteSpace: 'nowrap' }}>{s.representative || '-'}</td>
+                        <td style={{ fontSize: '11.5px', maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {s.address || '-'}
+                        </td>
+                        <td style={{ whiteSpace: 'nowrap' }}>{s.contact || '-'}</td>
+                        <td style={{ whiteSpace: 'nowrap', textAlign: 'center' }}>
+                          <button
+                            type="button"
+                            className="btn-primary"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleSelectSupplier(s);
+                            }}
+                            style={{ padding: '3px 10px', fontSize: '11px', fontWeight: 700 }}
+                          >
+                            선택
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '4px', borderTop: '1px solid var(--border-color)' }}>
+              <span style={{ fontSize: '11.5px', color: 'var(--text-muted)' }}>
+                총 {filteredSuppliersForSearch.length}건 검색됨 (제조사 및 거래처/중고딜러)
+              </span>
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => setIsSupplierSearchModalOpen(false)}
+                style={{ padding: '6px 14px', fontSize: '12px' }}
+              >
+                닫기
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ───────────────────────────────────────────────────────────── */}
       {/* 🔍 매수처 (고객사 / 중고 장비 딜러) 실시간 검색 모달 */}
@@ -2261,9 +2653,9 @@ export const AssetAcquisitionDisposal: React.FC = () => {
                     </div>
                   ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap' }}>
                         <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>계약금 비율:</span>
-                        {[10, 20, 30].map(r => (
+                        {[10, 20, 30, 40, 50, 60, 70, 80, 90].map(r => (
                           <button
                             key={r}
                             type="button"
@@ -2275,6 +2667,7 @@ export const AssetAcquisitionDisposal: React.FC = () => {
                               backgroundColor: installmentDownRate === r ? 'var(--primary)' : 'var(--bg-card)',
                               color: installmentDownRate === r ? '#fff' : 'var(--text-secondary)',
                               fontSize: '11px',
+                              fontWeight: installmentDownRate === r ? 700 : 500,
                               cursor: 'pointer'
                             }}
                           >
