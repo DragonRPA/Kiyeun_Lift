@@ -336,9 +336,17 @@ interface AppContextType {
   // Depreciation Execution Mutators
   cancelMonthlyDepreciation: (depreciationYm: string) => Promise<void>;
 
-  // Repair to Billing Linkage
+  // Repair to Billing Linkage & Waiver
   linkRepairToBilling: (repairId: string, billingId: string) => Promise<void>;
   unlinkRepairFromBilling: (repairId: string) => Promise<void>;
+  waiveRepairBilling: (repairId: string, waivedAmount: number, waivedReason: string, waivedBy: string) => Promise<void>;
+  cancelRepairWaiver: (repairId: string) => Promise<void>;
+
+  // Delivery to Billing Linkage & Waiver
+  linkDeliveryToBilling: (deliveryId: string, billingId: string) => Promise<void>;
+  unlinkDeliveryFromBilling: (deliveryId: string) => Promise<void>;
+  waiveDeliveryBilling: (deliveryId: string, waivedAmount: number, waivedReason: string, waivedBy: string) => Promise<void>;
+  cancelDeliveryWaiver: (deliveryId: string) => Promise<void>;
 
   // Prepaid Balance Management
   prepaidTransactions: PrepaidTransaction[];
@@ -7559,6 +7567,123 @@ ${payload.memo ? `\n[특이사항 / 메모]\n${payload.memo}\n` : ''}
     }
   };
 
+  // ── 고객 과실 수리비 영업 청구 면제 처리 ──
+  const waiveRepairBilling = async (repairId: string, waivedAmount: number, waivedReason: string, waivedBy: string): Promise<void> => {
+    try {
+      const now = new Date().toISOString();
+      db.updateRow<Repair>('repairs', repairId, {
+        isWaived: true,
+        waivedAmount,
+        waivedReason,
+        waivedBy,
+        waivedAt: now,
+        updatedAt: now
+      });
+
+      // 🟢 유상 수리비 청구 ToDo 자동 상계 (영업 면제 완료)
+      await clearHandoverTasks({
+        entityType: 'REPAIR',
+        entityId: repairId,
+        category: 'BILLABLE_REPAIR_BILLING',
+        completedByUserId: currentUser?.id,
+        completedByName: currentUser?.name,
+        completionAction: `WAIVED_BY_SALES_${waivedBy}`
+      });
+
+      await db.awaitPendingWrites();
+      refreshAllData();
+    } catch (err: any) {
+      showErrorModal(`⚠️ 수리비 영업 면제 처리 실패:\n${err?.message || err}`);
+      throw err;
+    }
+  };
+
+  const cancelRepairWaiver = async (repairId: string): Promise<void> => {
+    try {
+      const now = new Date().toISOString();
+      db.updateRow<Repair>('repairs', repairId, {
+        isWaived: false,
+        waivedAmount: 0,
+        waivedReason: undefined,
+        waivedBy: undefined,
+        waivedAt: undefined,
+        updatedAt: now
+      });
+      await db.awaitPendingWrites();
+      refreshAllData();
+    } catch (err: any) {
+      showErrorModal(`⚠️ 수리비 영업 면제 취소 실패:\n${err?.message || err}`);
+      throw err;
+    }
+  };
+
+  // ── 고객 부담 운송료 청구서 연동 및 영업 면제 ──
+  const linkDeliveryToBilling = async (deliveryId: string, billingId: string): Promise<void> => {
+    try {
+      db.updateRow<Delivery>('deliveries', deliveryId, {
+        billingId,
+        updatedAt: new Date().toISOString()
+      });
+      await db.awaitPendingWrites();
+      refreshAllData();
+    } catch (err: any) {
+      showErrorModal(`⚠️ 운송료 청구 연동 실패:\n${err?.message || err}`);
+      throw err;
+    }
+  };
+
+  const unlinkDeliveryFromBilling = async (deliveryId: string): Promise<void> => {
+    try {
+      db.updateRow<Delivery>('deliveries', deliveryId, {
+        billingId: undefined,
+        updatedAt: new Date().toISOString()
+      });
+      await db.awaitPendingWrites();
+      refreshAllData();
+    } catch (err: any) {
+      showErrorModal(`⚠️ 운송료 청구 연동 해제 실패:\n${err?.message || err}`);
+      throw err;
+    }
+  };
+
+  const waiveDeliveryBilling = async (deliveryId: string, waivedAmount: number, waivedReason: string, waivedBy: string): Promise<void> => {
+    try {
+      const now = new Date().toISOString();
+      db.updateRow<Delivery>('deliveries', deliveryId, {
+        isWaived: true,
+        waivedAmount,
+        waivedReason,
+        waivedBy,
+        waivedAt: now,
+        updatedAt: now
+      });
+      await db.awaitPendingWrites();
+      refreshAllData();
+    } catch (err: any) {
+      showErrorModal(`⚠️ 운송료 영업 면제 처리 실패:\n${err?.message || err}`);
+      throw err;
+    }
+  };
+
+  const cancelDeliveryWaiver = async (deliveryId: string): Promise<void> => {
+    try {
+      const now = new Date().toISOString();
+      db.updateRow<Delivery>('deliveries', deliveryId, {
+        isWaived: false,
+        waivedAmount: 0,
+        waivedReason: undefined,
+        waivedBy: undefined,
+        waivedAt: undefined,
+        updatedAt: now
+      });
+      await db.awaitPendingWrites();
+      refreshAllData();
+    } catch (err: any) {
+      showErrorModal(`⚠️ 운송료 영업 면제 취소 실패:\n${err?.message || err}`);
+      throw err;
+    }
+  };
+
   // ── 선수금 (예치금) 관리 ──
   const chargePrepaidBalance = async (customerId: string, amount: number, memo?: string): Promise<void> => {
     try {
@@ -7905,6 +8030,7 @@ ${payload.memo ? `\n[특이사항 / 메모]\n${payload.memo}\n` : ''}
       saveTransportDataOnFly,
       generateMonthlyPurchaseSettlements, confirmPurchaseSettlement, recordPurchaseSettlementPayment, savePurchaseSettlement, convertReconciledDeliveriesToSettlement,
       cancelMonthlyDepreciation, linkRepairToBilling, unlinkRepairFromBilling,
+      waiveRepairBilling, cancelRepairWaiver, linkDeliveryToBilling, unlinkDeliveryFromBilling, waiveDeliveryBilling, cancelDeliveryWaiver,
       chargePrepaidBalance, applyPrepaidBalanceForBilling, refundPrepaidBalance,
       saveDelinquencyAction, updateDelinquencyActionPromise,
       activeTab,

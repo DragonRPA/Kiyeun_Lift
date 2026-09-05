@@ -16,7 +16,9 @@ export const Billings: React.FC = () => {
     generateBillingsForMonth, getDueContractsForBilling, generateDueBillings, regenerateBilling, generateBillingForSingleContract,
     receivePayment, cancelPayment, cancelAllPaymentsForBilling, hasPermission, currentUser, approveBilling, cancelBilling,
     refreshAllData, showErrorModal, bankTransactions, paymentDepositLinks, payments,
-    repairs, linkRepairToBilling, applyPrepaidBalanceForBilling,
+    repairs, linkRepairToBilling, unlinkRepairFromBilling, waiveRepairBilling, cancelRepairWaiver,
+    deliveries, linkDeliveryToBilling, unlinkDeliveryFromBilling, waiveDeliveryBilling, cancelDeliveryWaiver,
+    applyPrepaidBalanceForBilling,
     receivables, linkReceivableToBilling
   } = useApp();
 
@@ -31,7 +33,7 @@ export const Billings: React.FC = () => {
     setTimeout(() => setToastMessage(null), 3500);
   };
 
-  const [activeTab, setActiveTab] = useState<'LIST' | 'GENERATE' | 'WIZARD' | 'INVOICE'>('LIST');
+  const [activeTab, setActiveTab] = useState<'LIST' | 'GENERATE' | 'WIZARD' | 'INVOICE' | 'WAIVER'>('LIST');
 
   // --- 청구 조회 필터 상태 ---
   const initialYm = new Date().toISOString().slice(0, 7);
@@ -128,6 +130,72 @@ export const Billings: React.FC = () => {
   const [cardAmount, setCardAmount] = useState(0); // 카드 결제금액
   // 마법사 연동 수리비 ID 목록
   const [selectedRepairIdsForWizard, setSelectedRepairIdsForWizard] = useState<string[]>([]);
+  // 마법사 연동 운송료 ID 목록
+  const [selectedDeliveryIdsForWizard, setSelectedDeliveryIdsForWizard] = useState<string[]>([]);
+
+  // --- 청구 면제 대장 (WAIVER 탭) 상태 ---
+  const [waiverStartMonth, setWaiverStartMonth] = useState(() => {
+    const d = new Date();
+    d.setMonth(d.getMonth() - 2);
+    return d.toISOString().slice(0, 7);
+  });
+  const [waiverEndMonth, setWaiverEndMonth] = useState(initialYm);
+  const [waiverCategoryFilter, setWaiverCategoryFilter] = useState<'ALL' | 'FIELD_AS' | 'INBOUND_REPAIR' | 'DELIVERY'>('ALL');
+  const [waiverSearchKeyword, setWaiverSearchKeyword] = useState('');
+
+  // --- 영업 청구 면제 모달 상태 ---
+  interface WaiverModalData {
+    type: 'REPAIR' | 'DELIVERY';
+    id: string;
+    title: string;
+    originalCost: number;
+    customerName?: string;
+    contractNo?: string;
+    assetNo?: string;
+    modelName?: string;
+    date?: string;
+  }
+  const [waiverModalTarget, setWaiverModalTarget] = useState<WaiverModalData | null>(null);
+  const [waiverInputAmount, setWaiverInputAmount] = useState<number>(0);
+  const [waiverInputCategory, setWaiverInputCategory] = useState<string>('단골 고객 우대');
+  const [waiverInputCustomReason, setWaiverInputCustomReason] = useState<string>('');
+  const [isWaiverSubmitting, setIsWaiverSubmitting] = useState<boolean>(false);
+
+  const handleOpenWaiverModal = (target: WaiverModalData) => {
+    setWaiverModalTarget(target);
+    setWaiverInputAmount(target.originalCost);
+    setWaiverInputCategory('단골 고객 우대');
+    setWaiverInputCustomReason('');
+  };
+
+  const handleConfirmWaiverModal = async () => {
+    if (!waiverModalTarget) return;
+    if (waiverInputAmount < 0) {
+      showToast('면제 금액은 0원 이상이어야 합니다.', 'error');
+      return;
+    }
+    const finalReason = waiverInputCategory === '기타'
+      ? (waiverInputCustomReason.trim() || '기타 영업 사유')
+      : (waiverInputCustomReason.trim() ? `[${waiverInputCategory}] ${waiverInputCustomReason.trim()}` : `[${waiverInputCategory}]`);
+
+    const waverName = currentUser?.name || '영업담당';
+
+    try {
+      setIsWaiverSubmitting(true);
+      if (waiverModalTarget.type === 'REPAIR') {
+        await waiveRepairBilling(waiverModalTarget.id, waiverInputAmount, finalReason, waverName);
+        showToast(`수리비 ₩${waiverInputAmount.toLocaleString()}원 영업 청구 면제 처리되었습니다.`);
+      } else if (waiverModalTarget.type === 'DELIVERY') {
+        await waiveDeliveryBilling(waiverModalTarget.id, waiverInputAmount, finalReason, waverName);
+        showToast(`운송료 ₩${waiverInputAmount.toLocaleString()}원 영업 청구 면제 처리되었습니다.`);
+      }
+      setWaiverModalTarget(null);
+    } catch (err: any) {
+      showToast(`면제 처리 실패: ${err?.message || err}`, 'error');
+    } finally {
+      setIsWaiverSubmitting(false);
+    }
+  };
   // 통합 검색 필터 (고객명/입금자명/계좌번호/비고)
   const [depSearchQuery, setDepSearchQuery] = useState(''); // 통합 검색어
 
@@ -1317,6 +1385,8 @@ ${items.map((item, idx) => {
   const handleSelectContractForWizard = (c: any) => {
     setSelectedContractIdForWizard(c.id);
     setExtraCharges([]);
+    setSelectedRepairIdsForWizard([]);
+    setSelectedDeliveryIdsForWizard([]);
     setWizardBillingYm(getCurrentYm());
     setWizardBillingDate(getTodayStr());
     
@@ -1571,6 +1641,11 @@ ${items.map((item, idx) => {
         await linkRepairToBilling(rId, billing.id);
       }
 
+      // 3-1) 연동된 운송료가 있다면 billingId 바인딩
+      for (const dId of selectedDeliveryIdsForWizard) {
+        await linkDeliveryToBilling(dId, billing.id);
+      }
+
       // 4) 외상미수금 정식 바인딩 (linkReceivableToBilling이 billingDetails 생성 및 totalAmount 누적을 단일 전담)
       for (const r of selectedReceivablesForWizard) {
         const ec = extraCharges.find(c => c.id === `EXTRA-RCV-${r.receivableId}`);
@@ -1595,6 +1670,7 @@ ${items.map((item, idx) => {
       setSelectedContractIdForWizard(null);
       setExtraCharges([]);
       setSelectedRepairIdsForWizard([]);
+      setSelectedDeliveryIdsForWizard([]);
       setSelectedReceivablesForWizard([]);
       showToast(`[${getCustName(selectedContractForWizard.customerId)}] 청구귀속월(${targetYm}) 총 ${overallTotal.toLocaleString()}원 청구 생성이 저장되었습니다.`);
     } catch (err: any) {
@@ -1624,6 +1700,13 @@ ${items.map((item, idx) => {
           style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
         >
           <Layers size={14} /> 청구서통합
+        </button>
+        <button
+          className={activeTab === 'WAIVER' ? 'btn-primary' : 'btn-secondary'}
+          onClick={() => setActiveTab('WAIVER')}
+          style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+        >
+          <AlertTriangle size={14} /> 청구 면제 대장
         </button>
       </div>
 
@@ -2974,6 +3057,7 @@ ${items.map((item, idx) => {
                     const unbilledRepairs = repairs.filter(r => 
                       r.billableToCustomer && 
                       !r.billingId && 
+                      !r.isWaived &&
                       contractAssetIds.includes(r.assetId) &&
                       !selectedRepairIdsForWizard.includes(r.id)
                     );
@@ -2993,11 +3077,11 @@ ${items.map((item, idx) => {
                                 const newRepairIds = unbilledRepairs.map(r => r.id);
                                 const newCharges = unbilledRepairs.map(rep => {
                                   const ast = assets.find(a => a.id === rep.assetId);
-                                  const cost = rep.totalCost || 0;
+                                  const cost = rep.totalCost || rep.billableAmount || 0;
                                   return {
                                     id: `EXTRA-REP-${rep.id}`,
                                     category: 'REPAIR',
-                                    customName: `[고객부담 수리비] ${ast?.assetNo} ${rep.details || ''}`,
+                                    customName: `[고객부담 수리비] ${ast?.assetNo || ''} ${rep.details || ''}`,
                                     quantity: 1,
                                     unitPrice: cost
                                   };
@@ -3013,29 +3097,145 @@ ${items.map((item, idx) => {
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                           {unbilledRepairs.map(rep => {
                             const ast = assets.find(a => a.id === rep.assetId);
-                            const cost = rep.totalCost || 0;
+                            const cost = rep.totalCost || rep.billableAmount || 0;
                             return (
                               <div key={rep.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '12px', backgroundColor: 'var(--bg-card)', padding: '6px 10px', borderRadius: '6px' }}>
                                 <div>
                                   <strong>{ast?.modelName || '장비'} ({ast?.assetNo})</strong> — {rep.details || '현장 수리'} ({cost.toLocaleString()}원)
                                 </div>
-                                <button
-                                  type="button"
-                                  className="btn-secondary"
-                                  onClick={() => {
-                                    setSelectedRepairIdsForWizard([...selectedRepairIdsForWizard, rep.id]);
-                                    setExtraCharges([...extraCharges, {
-                                      id: `EXTRA-REP-${rep.id}`,
-                                      category: 'REPAIR',
-                                      customName: `[고객부담 수리비] ${ast?.assetNo} ${rep.details || ''}`,
-                                      quantity: 1,
-                                      unitPrice: cost
-                                    }]);
-                                  }}
-                                  style={{ fontSize: '11.5px', padding: '3px 8px', color: 'var(--primary)', fontWeight: 'bold' }}
-                                >
-                                  + 청구 항목에 추가
-                                </button>
+                                <div style={{ display: 'flex', gap: '6px' }}>
+                                  <button
+                                    type="button"
+                                    className="btn-secondary"
+                                    onClick={() => {
+                                      setSelectedRepairIdsForWizard([...selectedRepairIdsForWizard, rep.id]);
+                                      setExtraCharges([...extraCharges, {
+                                        id: `EXTRA-REP-${rep.id}`,
+                                        category: 'REPAIR',
+                                        customName: `[고객부담 수리비] ${ast?.assetNo || ''} ${rep.details || ''}`,
+                                        quantity: 1,
+                                        unitPrice: cost
+                                      }]);
+                                    }}
+                                    style={{ fontSize: '11.5px', padding: '3px 8px', color: 'var(--primary)', fontWeight: 'bold' }}
+                                  >
+                                    + 청구 추가
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="btn-secondary"
+                                    onClick={() => {
+                                      handleOpenWaiverModal({
+                                        type: 'REPAIR',
+                                        id: rep.id,
+                                        title: `[고객부담 수리비] ${ast?.assetNo || ''} ${rep.details || '현장 수리'}`,
+                                        originalCost: cost,
+                                        customerName: selectedContractForWizard ? getCustName(selectedContractForWizard.customerId) : undefined,
+                                        contractNo: selectedContractForWizard?.contractNo,
+                                        assetNo: ast?.assetNo,
+                                        modelName: ast?.modelName,
+                                        date: rep.requestDate || rep.repairDate
+                                      });
+                                    }}
+                                    style={{ fontSize: '11.5px', padding: '3px 8px', color: '#dc2626', borderColor: '#fca5a5', fontWeight: 'bold' }}
+                                  >
+                                    🚫 영업 면제
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  {/* 💡 미청구 고객부담 운송료 자동 추천 패널 */}
+                  {(() => {
+                    const unbilledDeliveries = deliveries.filter(d =>
+                      d.billableToCustomer &&
+                      !d.billingId &&
+                      !d.isWaived &&
+                      (d.contractId === selectedContractForWizard?.id || (d.billableCustomerId && d.billableCustomerId === selectedContractForWizard?.customerId)) &&
+                      !selectedDeliveryIdsForWizard.includes(d.id)
+                    );
+
+                    if (unbilledDeliveries.length === 0) return null;
+
+                    return (
+                      <div style={{ padding: '12px', borderRadius: '8px', backgroundColor: 'rgba(249,115,22,0.06)', border: '1px solid rgba(249,115,22,0.25)', marginBottom: '14px' }}>
+                        <div style={{ fontWeight: 'bold', fontSize: '12.5px', color: '#ea580c', marginBottom: '6px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>⚠️ 고객 부담 미청구 운송료 {unbilledDeliveries.length}건 발견</span>
+                          {unbilledDeliveries.length > 1 && (
+                            <button
+                              type="button"
+                              className="btn btn-sm btn-primary"
+                              style={{ fontSize: '11px', padding: '2px 8px', backgroundColor: '#ea580c', borderColor: '#ea580c' }}
+                              onClick={() => {
+                                const newDelIds = unbilledDeliveries.map(d => d.id);
+                                const newCharges = unbilledDeliveries.map(d => {
+                                  const cost = d.billableAmount || d.finalCost || d.deliveryCostConfirmed || d.deliveryCost || 0;
+                                  return {
+                                    id: `EXTRA-DEL-${d.id}`,
+                                    category: 'TRANSPORT',
+                                    customName: `[고객부담 운송료] ${d.dispatchCategory || d.type} (${d.originAddress || '주기장'} ➔ ${d.destinationAddress || '현장'})`,
+                                    quantity: 1,
+                                    unitPrice: cost
+                                  };
+                                });
+                                setSelectedDeliveryIdsForWizard([...selectedDeliveryIdsForWizard, ...newDelIds]);
+                                setExtraCharges([...extraCharges, ...newCharges]);
+                              }}
+                            >
+                              전체 일괄 추가
+                            </button>
+                          )}
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                          {unbilledDeliveries.map(d => {
+                            const cost = d.billableAmount || d.finalCost || d.deliveryCostConfirmed || d.deliveryCost || 0;
+                            return (
+                              <div key={d.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '12px', backgroundColor: 'var(--bg-card)', padding: '6px 10px', borderRadius: '6px' }}>
+                                <div>
+                                  <strong>[운송 {d.dispatchCategory || d.type}]</strong> {d.originAddress || '주기장'} ➔ {d.destinationAddress || '현장'} ({cost.toLocaleString()}원)
+                                </div>
+                                <div style={{ display: 'flex', gap: '6px' }}>
+                                  <button
+                                    type="button"
+                                    className="btn-secondary"
+                                    onClick={() => {
+                                      setSelectedDeliveryIdsForWizard([...selectedDeliveryIdsForWizard, d.id]);
+                                      setExtraCharges([...extraCharges, {
+                                        id: `EXTRA-DEL-${d.id}`,
+                                        category: 'TRANSPORT',
+                                        customName: `[고객부담 운송료] ${d.dispatchCategory || d.type} (${d.originAddress || '주기장'} ➔ ${d.destinationAddress || '현장'})`,
+                                        quantity: 1,
+                                        unitPrice: cost
+                                      }]);
+                                    }}
+                                    style={{ fontSize: '11.5px', padding: '3px 8px', color: 'var(--primary)', fontWeight: 'bold' }}
+                                  >
+                                    + 청구 추가
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="btn-secondary"
+                                    onClick={() => {
+                                      handleOpenWaiverModal({
+                                        type: 'DELIVERY',
+                                        id: d.id,
+                                        title: `[고객부담 운송료] ${d.dispatchCategory || d.type} (${d.originAddress || '주기장'} ➔ ${d.destinationAddress || '현장'})`,
+                                        originalCost: cost,
+                                        customerName: selectedContractForWizard ? getCustName(selectedContractForWizard.customerId) : undefined,
+                                        contractNo: selectedContractForWizard?.contractNo,
+                                        date: d.unloadingDate || d.loadingDate || d.requestDate
+                                      });
+                                    }}
+                                    style={{ fontSize: '11.5px', padding: '3px 8px', color: '#dc2626', borderColor: '#fca5a5', fontWeight: 'bold' }}
+                                  >
+                                    🚫 영업 면제
+                                  </button>
+                                </div>
                               </div>
                             );
                           })}
@@ -3240,6 +3440,9 @@ ${items.map((item, idx) => {
                               } else if (ec.id.startsWith('EXTRA-RCV-')) {
                                 const rcvId = ec.id.replace('EXTRA-RCV-', '');
                                 setSelectedReceivablesForWizard(selectedReceivablesForWizard.filter(r => r.receivableId !== rcvId));
+                              } else if (ec.id.startsWith('EXTRA-DEL-')) {
+                                const dId = ec.id.replace('EXTRA-DEL-', '');
+                                setSelectedDeliveryIdsForWizard(selectedDeliveryIdsForWizard.filter(id => id !== dId));
                               }
                             }}
                             style={{
@@ -3296,6 +3499,455 @@ ${items.map((item, idx) => {
           </div>
         </div>
       )}
+
+      {/* 4. 청구 면제 대장 (WAIVER) 탭 */}
+      {activeTab === 'WAIVER' && (() => {
+        // 1) 면제된 모든 수리/정비 및 운송 건 수집
+        const waivedRepairsList = repairs.filter(r => r.isWaived);
+        const waivedDeliveriesList = deliveries.filter(d => d.isWaived);
+
+        // 2) 통합 구조로 표준화
+        const allWaivedItems: {
+          id: string;
+          itemType: 'FIELD_AS' | 'INBOUND_REPAIR' | 'DELIVERY';
+          typeLabel: string;
+          badgeColor: string;
+          badgeBg: string;
+          waivedAt: string;
+          requestDate: string;
+          contractNo: string;
+          customerName: string;
+          siteName: string;
+          assetInfo: string;
+          originalCost: number;
+          waivedAmount: number;
+          waivedReason: string;
+          waivedBy: string;
+          memo?: string;
+        }[] = [
+          ...waivedRepairsList.map(r => {
+            const isFieldAs = r.workCategory === 'FIELD_AS' || r.source === 'SALES_REQUEST' || r.source === 'BAND_IMPORT';
+            const ast = assets.find(a => a.id === r.assetId);
+            const cntr = contracts.find(c => c.id === r.contractId);
+            const cust = customers.find(c => c.id === r.customerId || c.id === cntr?.customerId);
+            const st = sites.find(s => s.id === r.siteId || s.id === cntr?.siteId);
+            const orig = r.totalCost || r.billableAmount || r.waivedAmount || 0;
+
+            return {
+              id: r.id,
+              itemType: isFieldAs ? ('FIELD_AS' as const) : ('INBOUND_REPAIR' as const),
+              typeLabel: isFieldAs ? '현장 AS' : '입고 정비',
+              badgeColor: isFieldAs ? '#1d4ed8' : '#6d28d9',
+              badgeBg: isFieldAs ? 'rgba(59, 130, 246, 0.1)' : 'rgba(147, 51, 234, 0.1)',
+              waivedAt: r.waivedAt || r.updatedAt || '',
+              requestDate: r.requestDate || r.repairDate || '',
+              contractNo: cntr?.contractNo || '-',
+              customerName: cust?.name || r.customerName || '-',
+              siteName: st?.name || r.siteName || (cntr?.siteId ? getSiteName(cntr.siteId) : '-'),
+              assetInfo: ast ? `${ast.assetNo} (${ast.modelName})` : (r.assetNo || '-'),
+              originalCost: orig,
+              waivedAmount: r.waivedAmount || orig,
+              waivedReason: r.waivedReason || '영업 사유 면제',
+              waivedBy: r.waivedBy || '영업담당',
+              memo: r.details || r.memo
+            };
+          }),
+          ...waivedDeliveriesList.map(d => {
+            const cntr = contracts.find(c => c.id === d.contractId);
+            const cust = customers.find(c => c.id === d.billableCustomerId || c.id === cntr?.customerId);
+            const st = sites.find(s => s.id === cntr?.siteId);
+            const orig = d.billableAmount || d.finalCost || d.deliveryCostConfirmed || d.deliveryCost || d.waivedAmount || 0;
+
+            return {
+              id: d.id,
+              itemType: 'DELIVERY' as const,
+              typeLabel: `운송 (${d.dispatchCategory || d.type})`,
+              badgeColor: '#c2410c',
+              badgeBg: 'rgba(234, 88, 12, 0.1)',
+              waivedAt: d.waivedAt || d.updatedAt || '',
+              requestDate: d.unloadingDate || d.loadingDate || d.requestDate || '',
+              contractNo: cntr?.contractNo || '-',
+              customerName: cust?.name || '-',
+              siteName: st?.name || (cntr?.siteId ? getSiteName(cntr.siteId) : '-'),
+              assetInfo: `${d.originAddress || '주기장'} ➔ ${d.destinationAddress || '현장'}`,
+              originalCost: orig,
+              waivedAmount: d.waivedAmount || orig,
+              waivedReason: d.waivedReason || '영업 사유 면제',
+              waivedBy: d.waivedBy || '영업담당',
+              memo: d.memo || d.costAdjustmentReason
+            };
+          })
+        ];
+
+        // 3) 필터 적용 (기간, 구분, 검색어)
+        const filteredWaived = allWaivedItems.filter(item => {
+          const itemYm = (item.waivedAt || item.requestDate).slice(0, 7);
+          if (waiverStartMonth && itemYm < waiverStartMonth) return false;
+          if (waiverEndMonth && itemYm > waiverEndMonth) return false;
+
+          if (waiverCategoryFilter !== 'ALL') {
+            if (waiverCategoryFilter === 'FIELD_AS' && item.itemType !== 'FIELD_AS') return false;
+            if (waiverCategoryFilter === 'INBOUND_REPAIR' && item.itemType !== 'INBOUND_REPAIR') return false;
+            if (waiverCategoryFilter === 'DELIVERY' && item.itemType !== 'DELIVERY') return false;
+          }
+
+          if (waiverSearchKeyword.trim()) {
+            const q = waiverSearchKeyword.trim().toLowerCase();
+            const match =
+              matchHangul(item.customerName, q) ||
+              item.contractNo.toLowerCase().includes(q) ||
+              matchHangul(item.siteName, q) ||
+              matchHangul(item.waivedBy, q) ||
+              matchHangul(item.waivedReason, q) ||
+              item.assetInfo.toLowerCase().includes(q);
+            if (!match) return false;
+          }
+
+          return true;
+        });
+
+        // 최신순 정렬
+        filteredWaived.sort((a, b) => (b.waivedAt || b.requestDate).localeCompare(a.waivedAt || a.requestDate));
+
+        // 4) KPI 집계
+        const totalWaivedCount = filteredWaived.length;
+        const totalWaivedAmount = filteredWaived.reduce((sum, it) => sum + it.waivedAmount, 0);
+
+        const fieldAsWaived = filteredWaived.filter(it => it.itemType === 'FIELD_AS');
+        const fieldAsAmount = fieldAsWaived.reduce((sum, it) => sum + it.waivedAmount, 0);
+
+        const inboundWaived = filteredWaived.filter(it => it.itemType === 'INBOUND_REPAIR');
+        const inboundAmount = inboundWaived.reduce((sum, it) => sum + it.waivedAmount, 0);
+
+        const deliveryWaived = filteredWaived.filter(it => it.itemType === 'DELIVERY');
+        const deliveryAmount = deliveryWaived.reduce((sum, it) => sum + it.waivedAmount, 0);
+
+        // 사유별 집계
+        const reasonMap: Record<string, { count: number; amount: number }> = {};
+        filteredWaived.forEach(it => {
+          const rawReason = it.waivedReason || '기타';
+          const rKey = rawReason.startsWith('[') ? (rawReason.split(']')[0].replace('[', '').trim()) : rawReason;
+          if (!reasonMap[rKey]) reasonMap[rKey] = { count: 0, amount: 0 };
+          reasonMap[rKey].count++;
+          reasonMap[rKey].amount += it.waivedAmount;
+        });
+        const topReasons = Object.entries(reasonMap).sort((a, b) => b[1].amount - a[1].amount);
+
+        // 영업담당자별 집계
+        const salespersonMap: Record<string, { count: number; amount: number }> = {};
+        filteredWaived.forEach(it => {
+          const spKey = it.waivedBy || '미지정';
+          if (!salespersonMap[spKey]) salespersonMap[spKey] = { count: 0, amount: 0 };
+          salespersonMap[spKey].count++;
+          salespersonMap[spKey].amount += it.waivedAmount;
+        });
+        const topSalespeople = Object.entries(salespersonMap).sort((a, b) => b[1].amount - a[1].amount);
+
+        // 대차대조식 검증 계산
+        const billedRepairsAmount = repairs
+          .filter(r => r.billableToCustomer && r.billingId && !r.isWaived)
+          .reduce((sum, r) => sum + (r.totalCost || r.billableAmount || 0), 0);
+        const billedDeliveriesAmount = deliveries
+          .filter(d => d.billableToCustomer && d.billingId && !d.isWaived)
+          .reduce((sum, d) => sum + (d.billableAmount || d.finalCost || d.deliveryCostConfirmed || d.deliveryCost || 0), 0);
+        const totalBilledBillableCosts = billedRepairsAmount + billedDeliveriesAmount;
+        const grandTotalDiscoveredCosts = totalBilledBillableCosts + totalWaivedAmount;
+
+        // 엑셀 내보내기 핸들러
+        const handleExportWaiverExcel = () => {
+          const excelRows = filteredWaived.map((it, idx) => ({
+            'No': idx + 1,
+            '면제일자': it.waivedAt ? it.waivedAt.slice(0, 10) : '-',
+            '구분': it.typeLabel,
+            '고객사': it.customerName,
+            '계약번호': it.contractNo,
+            '현장명': it.siteName,
+            '장비/경로': it.assetInfo,
+            '원발생비용(원)': it.originalCost,
+            '면제금액(원)': it.waivedAmount,
+            '면제사유': it.waivedReason,
+            '면제처리자': it.waivedBy,
+            '발생일자': it.requestDate,
+            '비고': it.memo || ''
+          }));
+          exportToExcel(excelRows, `청구면제대장_${waiverStartMonth}_${waiverEndMonth}`);
+        };
+
+        // 면제 취소 핸들러
+        const handleCancelWaiverClick = async (item: typeof allWaivedItems[0]) => {
+          if (!window.confirm(`[${item.typeLabel}] ${item.customerName} 건의 영업 면제를 취소하고 미청구 상태로 복원하시겠습니까?\n\n- 면제금액: ₩${item.waivedAmount.toLocaleString()}원\n- 면제사유: ${item.waivedReason}`)) {
+            return;
+          }
+          try {
+            if (item.itemType === 'DELIVERY') {
+              await cancelDeliveryWaiver(item.id);
+            } else {
+              await cancelRepairWaiver(item.id);
+            }
+            showToast(`[${item.customerName}] ${item.typeLabel} 면제가 취소되어 미청구 대장으로 복원되었습니다.`);
+          } catch (err: any) {
+            showToast(`면제 취소 실패: ${err?.message || err}`, 'error');
+          }
+        };
+
+        return (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            {/* ① 상단 필터 & 액션 바 (헌장 3.5 Z-패턴 1, 2단계) */}
+            <div className="card" style={{ margin: 0, padding: '14px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: '12px' }}>
+              <div style={{ display: 'flex', gap: '16px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
+                {/* 기간 필터 (헌장 3.4 세로 스택) */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flexShrink: 0 }}>
+                  <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
+                    면제 연월 범위
+                  </label>
+                  <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                    <input
+                      type="month"
+                      value={waiverStartMonth}
+                      onChange={e => setWaiverStartMonth(e.target.value)}
+                      style={{ padding: '6px 10px', fontSize: '12.5px', borderRadius: '5px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)' }}
+                    />
+                    <span style={{ color: 'var(--text-muted)' }}>~</span>
+                    <input
+                      type="month"
+                      value={waiverEndMonth}
+                      onChange={e => setWaiverEndMonth(e.target.value)}
+                      style={{ padding: '6px 10px', fontSize: '12.5px', borderRadius: '5px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)' }}
+                    />
+                  </div>
+                </div>
+
+                {/* 구분 필터 */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flexShrink: 0 }}>
+                  <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
+                    항목 구분
+                  </label>
+                  <select
+                    value={waiverCategoryFilter}
+                    onChange={e => setWaiverCategoryFilter(e.target.value as any)}
+                    style={{ padding: '6px 10px', fontSize: '12.5px', borderRadius: '5px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)' }}
+                  >
+                    <option value="ALL">전체 구분 ({allWaivedItems.length}건)</option>
+                    <option value="FIELD_AS">현장 AS</option>
+                    <option value="INBOUND_REPAIR">입고 정비</option>
+                    <option value="DELIVERY">화물 운송료</option>
+                  </select>
+                </div>
+
+                {/* 통합 검색어 */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', minWidth: '220px', flexShrink: 0 }}>
+                  <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
+                    검색 (고객사 / 계약 / 담당자 / 사유)
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="검색어 입력..."
+                    value={waiverSearchKeyword}
+                    onChange={e => setWaiverSearchKeyword(e.target.value)}
+                    style={{ padding: '6px 10px', fontSize: '12.5px', borderRadius: '5px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)' }}
+                  />
+                </div>
+              </div>
+
+              {/* 우상단 엑셀 내보내기 (헌장 3.1 명사 표준) */}
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={handleExportWaiverExcel}
+                  style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', padding: '6px 12px', fontWeight: 700 }}
+                >
+                  <Download size={14} /> 엑셀 내보내기
+                </button>
+              </div>
+            </div>
+
+            {/* ② KPI 요약 카드 그리드 */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px' }}>
+              <div className="card" style={{ margin: 0, padding: '14px', borderLeft: '4px solid #dc2626' }}>
+                <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)', fontWeight: 700, marginBottom: '4px' }}>총 영업 면제 손실액</div>
+                <div style={{ fontSize: '20px', fontWeight: 800, color: '#dc2626' }}>
+                  ₩{totalWaivedAmount.toLocaleString()}원
+                </div>
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>
+                  총 {totalWaivedCount}건 면제 승인
+                </div>
+              </div>
+
+              <div className="card" style={{ margin: 0, padding: '14px', borderLeft: '4px solid #2563eb' }}>
+                <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)', fontWeight: 700, marginBottom: '4px' }}>현장 AS 비용 면제</div>
+                <div style={{ fontSize: '18px', fontWeight: 800, color: '#2563eb' }}>
+                  ₩{fieldAsAmount.toLocaleString()}원
+                </div>
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>
+                  {fieldAsWaived.length}건 (고객 과실 현장 출동)
+                </div>
+              </div>
+
+              <div className="card" style={{ margin: 0, padding: '14px', borderLeft: '4px solid #7c3aed' }}>
+                <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)', fontWeight: 700, marginBottom: '4px' }}>반납 입고 정비비 면제</div>
+                <div style={{ fontSize: '18px', fontWeight: 800, color: '#7c3aed' }}>
+                  ₩{inboundAmount.toLocaleString()}원
+                </div>
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>
+                  {inboundWaived.length}건 (입고 검수 결함 파손)
+                </div>
+              </div>
+
+              <div className="card" style={{ margin: 0, padding: '14px', borderLeft: '4px solid #ea580c' }}>
+                <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)', fontWeight: 700, marginBottom: '4px' }}>고객부담 운송료 면제</div>
+                <div style={{ fontSize: '18px', fontWeight: 800, color: '#ea580c' }}>
+                  ₩{deliveryAmount.toLocaleString()}원
+                </div>
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>
+                  {deliveryWaived.length}건 (배차 및 추가 운송비)
+                </div>
+              </div>
+            </div>
+
+            {/* 사유 분석 및 영업사원별 현황 칩 바 */}
+            {(topReasons.length > 0 || topSalespeople.length > 0) && (
+              <div className="card" style={{ margin: 0, padding: '10px 14px', backgroundColor: 'var(--bg-app)', display: 'flex', gap: '20px', alignItems: 'center', flexWrap: 'wrap', fontSize: '12px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                  <span style={{ fontWeight: 800, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>📊 사유별 비중:</span>
+                  {topReasons.slice(0, 4).map(([rs, data]) => (
+                    <span key={rs} style={{ backgroundColor: 'var(--bg-card)', padding: '2px 8px', borderRadius: '4px', border: '1px solid var(--border-color)', whiteSpace: 'nowrap' }}>
+                      <strong>{rs}</strong>: {data.count}건 (₩{data.amount.toLocaleString()})
+                    </span>
+                  ))}
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                  <span style={{ fontWeight: 800, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>👤 담당자별 면제:</span>
+                  {topSalespeople.slice(0, 4).map(([sp, data]) => (
+                    <span key={sp} style={{ backgroundColor: 'var(--bg-card)', padding: '2px 8px', borderRadius: '4px', border: '1px solid var(--border-color)', whiteSpace: 'nowrap' }}>
+                      <strong>{sp}</strong>: ₩{data.amount.toLocaleString()} ({data.count}건)
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* ③ 본문 고밀도 슬림 그리드 (헌장 3.6 유형 B, 행 높이 38~40px) */}
+            <div className="card" style={{ margin: 0, padding: 0, overflow: 'hidden' }}>
+              <div style={{ maxHeight: 'calc(100vh - 430px)', minHeight: '350px', overflowY: 'auto', overflowX: 'auto' }}>
+                <table className="table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12.5px' }}>
+                  <thead>
+                    <tr style={{ backgroundColor: 'var(--bg-app)', borderBottom: '1px solid var(--border-color)', height: '38px', position: 'sticky', top: 0, zIndex: 10 }}>
+                      <th style={{ width: '80px', textAlign: 'center', padding: '6px 8px', whiteSpace: 'nowrap', position: 'sticky', left: 0, backgroundColor: 'var(--bg-app)', zIndex: 11 }}>관리</th>
+                      <th style={{ width: '95px', textAlign: 'center', padding: '6px 10px', whiteSpace: 'nowrap' }}>면제일자</th>
+                      <th style={{ width: '90px', textAlign: 'center', padding: '6px 10px', whiteSpace: 'nowrap' }}>구분</th>
+                      <th style={{ width: '150px', textAlign: 'left', padding: '6px 10px', whiteSpace: 'nowrap' }}>고객사</th>
+                      <th style={{ width: '120px', textAlign: 'center', padding: '6px 10px', whiteSpace: 'nowrap' }}>계약번호</th>
+                      <th style={{ width: '140px', textAlign: 'left', padding: '6px 10px', whiteSpace: 'nowrap' }}>현장명</th>
+                      <th style={{ minWidth: '180px', textAlign: 'left', padding: '6px 10px', whiteSpace: 'nowrap' }}>대상 장비 / 운송 경로</th>
+                      <th style={{ width: '110px', textAlign: 'right', padding: '6px 10px', whiteSpace: 'nowrap' }}>원 발생비용</th>
+                      <th style={{ width: '120px', textAlign: 'right', padding: '6px 10px', whiteSpace: 'nowrap', color: '#dc2626' }}>면제 금액</th>
+                      <th style={{ minWidth: '160px', textAlign: 'left', padding: '6px 10px', whiteSpace: 'nowrap' }}>면제 사유</th>
+                      <th style={{ width: '90px', textAlign: 'center', padding: '6px 10px', whiteSpace: 'nowrap' }}>처리자</th>
+                      <th style={{ width: '95px', textAlign: 'center', padding: '6px 10px', whiteSpace: 'nowrap' }}>원발생일</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredWaived.length === 0 ? (
+                      <tr>
+                        <td colSpan={12} style={{ textAlign: 'center', padding: '60px 0', color: 'var(--text-muted)' }}>
+                          조회 조건에 부합하는 영업 청구 면제 내역이 없습니다.
+                        </td>
+                      </tr>
+                    ) : (
+                      filteredWaived.map(it => (
+                        <tr key={it.id} style={{ height: '38px', borderBottom: '1px solid var(--border-color)', transition: 'background-color 0.15s' }}>
+                          <td style={{ textAlign: 'center', padding: '4px 8px', whiteSpace: 'nowrap', position: 'sticky', left: 0, backgroundColor: 'var(--bg-card)', zIndex: 5 }}>
+                            <button
+                              type="button"
+                              className="btn-secondary"
+                              onClick={() => handleCancelWaiverClick(it)}
+                              style={{ fontSize: '11px', padding: '2px 8px', color: '#d97706', borderColor: '#fcd34d', fontWeight: 700 }}
+                              title="면제를 취소하고 미청구 정산 대장으로 복원합니다."
+                            >
+                              면제 취소
+                            </button>
+                          </td>
+                          <td style={{ textAlign: 'center', padding: '4px 10px', whiteSpace: 'nowrap', color: 'var(--text-secondary)' }}>
+                            {it.waivedAt ? it.waivedAt.slice(0, 10) : '-'}
+                          </td>
+                          <td style={{ textAlign: 'center', padding: '4px 10px', whiteSpace: 'nowrap' }}>
+                            <span style={{ fontSize: '11px', padding: '2px 6px', borderRadius: '4px', fontWeight: 700, color: it.badgeColor, backgroundColor: it.badgeBg, border: `1px solid ${it.badgeColor}33` }}>
+                              {it.typeLabel}
+                            </span>
+                          </td>
+                          <td style={{ textAlign: 'left', padding: '4px 10px', whiteSpace: 'nowrap', fontWeight: 700 }}>
+                            {it.customerName}
+                          </td>
+                          <td style={{ textAlign: 'center', padding: '4px 10px', whiteSpace: 'nowrap', color: 'var(--text-secondary)' }}>
+                            {it.contractNo}
+                          </td>
+                          <td style={{ textAlign: 'left', padding: '4px 10px', whiteSpace: 'nowrap', color: 'var(--text-secondary)' }}>
+                            {it.siteName}
+                          </td>
+                          <td style={{ textAlign: 'left', padding: '4px 10px', whiteSpace: 'nowrap' }}>
+                            {it.assetInfo}
+                          </td>
+                          <td style={{ textAlign: 'right', padding: '4px 10px', whiteSpace: 'nowrap', color: 'var(--text-muted)' }}>
+                            {it.originalCost.toLocaleString()}원
+                          </td>
+                          <td style={{ textAlign: 'right', padding: '4px 10px', whiteSpace: 'nowrap', fontWeight: 800, color: '#dc2626' }}>
+                            ₩{it.waivedAmount.toLocaleString()}원
+                          </td>
+                          <td style={{ textAlign: 'left', padding: '4px 10px', whiteSpace: 'nowrap', fontWeight: 600 }}>
+                            {it.waivedReason}
+                          </td>
+                          <td style={{ textAlign: 'center', padding: '4px 10px', whiteSpace: 'nowrap' }}>
+                            {it.waivedBy}
+                          </td>
+                          <td style={{ textAlign: 'center', padding: '4px 10px', whiteSpace: 'nowrap', color: 'var(--text-muted)' }}>
+                            {it.requestDate ? it.requestDate.slice(0, 10) : '-'}
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* ④ 우하단 Gutenberg Z-패턴 대차대조식 검증 바 (헌장 3.5 Z-패턴 4단계) */}
+            <div className="card" style={{ margin: 0, padding: '12px 18px', backgroundColor: 'var(--bg-app)', border: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '13px', flexWrap: 'wrap' }}>
+                <span style={{ fontWeight: 800, color: 'var(--text-primary)' }}>
+                  📄 총 유료비용 발생: <span style={{ color: 'var(--text-primary)' }}>₩{grandTotalDiscoveredCosts.toLocaleString()}원</span>
+                </span>
+                <span style={{ color: 'var(--text-muted)' }}>=</span>
+                <span style={{ color: '#16a34a', fontWeight: 700 }}>
+                  🟢 정상 청구액: ₩{totalBilledBillableCosts.toLocaleString()}원
+                </span>
+                <span style={{ color: 'var(--text-muted)' }}>+</span>
+                <span style={{ color: '#dc2626', fontWeight: 700 }}>
+                  🚫 영업 면제액: ₩{totalWaivedAmount.toLocaleString()}원
+                </span>
+                <span style={{ color: 'var(--text-muted)' }}>|</span>
+                <span style={{ color: '#2563eb', fontWeight: 800, backgroundColor: 'rgba(37, 99, 235, 0.08)', padding: '2px 8px', borderRadius: '4px' }}>
+                  ⚖️ 대차 차액 ₩0 (정합)
+                </span>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                  대장 {filteredWaived.length}건 표시
+                </span>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={handleExportWaiverExcel}
+                  style={{ fontSize: '12px', padding: '4px 10px', fontWeight: 700 }}
+                >
+                  대장 다운로드
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* 수납 입력 모달 */}
       {showPayModal && (() => {
@@ -3982,6 +4634,179 @@ ${items.map((item, idx) => {
           </div>
         );
       })()}
+
+      {/* 🌟 유료 비용 영업 청구 면제 승인 모달 */}
+      {waiverModalTarget && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.55)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1100,
+          padding: '20px'
+        }}>
+          <div className="card" style={{
+            width: '100%',
+            maxWidth: '520px',
+            margin: 0,
+            padding: '24px',
+            backgroundColor: 'var(--bg-card)',
+            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.3)',
+            borderRadius: '12px'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px', borderBottom: '1px solid var(--border-color)', paddingBottom: '12px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ fontSize: '18px' }}>🚫</span>
+                <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 800, color: '#dc2626' }}>
+                  유료 비용 영업 청구 면제 승인
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setWaiverModalTarget(null)}
+                style={{ background: 'transparent', border: 'none', fontSize: '18px', cursor: 'pointer', color: 'var(--text-muted)' }}
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* 대상 항목 요약 카드 */}
+            <div style={{ backgroundColor: 'var(--bg-app)', padding: '14px', borderRadius: '8px', border: '1px solid var(--border-color)', marginBottom: '16px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12.5px' }}>
+                <span style={{ color: 'var(--text-secondary)' }}>면제 대상 구분:</span>
+                <strong style={{ color: waiverModalTarget.type === 'REPAIR' ? '#2563eb' : '#ea580c' }}>
+                  {waiverModalTarget.type === 'REPAIR' ? '정비 / 현장 AS' : '화물 운송료'}
+                </strong>
+              </div>
+              {waiverModalTarget.customerName && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12.5px' }}>
+                  <span style={{ color: 'var(--text-secondary)' }}>고객사명:</span>
+                  <strong>{waiverModalTarget.customerName}</strong>
+                </div>
+              )}
+              {waiverModalTarget.contractNo && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12.5px' }}>
+                  <span style={{ color: 'var(--text-secondary)' }}>계약번호:</span>
+                  <span>{waiverModalTarget.contractNo}</span>
+                </div>
+              )}
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12.5px' }}>
+                <span style={{ color: 'var(--text-secondary)' }}>항목 상세:</span>
+                <span style={{ fontWeight: 600 }}>{waiverModalTarget.title}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', borderTop: '1px dashed var(--border-color)', paddingTop: '6px', marginTop: '4px' }}>
+                <span style={{ color: 'var(--text-secondary)' }}>원 발생 비용 (청구 대상액):</span>
+                <strong style={{ color: 'var(--text-primary)' }}>₩{waiverModalTarget.originalCost.toLocaleString()}원</strong>
+              </div>
+            </div>
+
+            {/* 면제 정보 입력 폼 (헌장 3.4 세로 스택) */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', marginBottom: '20px' }}>
+              {/* 면제 금액 */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <label style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)' }}>
+                  면제 금액 (원)
+                </label>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <input
+                    type="number"
+                    value={waiverInputAmount}
+                    onChange={e => setWaiverInputAmount(Math.max(0, parseInt(e.target.value) || 0))}
+                    style={{ flex: 1, padding: '8px 12px', fontSize: '14px', fontWeight: 800, border: '1px solid var(--border-color)', borderRadius: '6px', textAlign: 'right', color: '#dc2626' }}
+                  />
+                  <span style={{ fontSize: '13px', fontWeight: 600 }}>원</span>
+                  {waiverInputAmount !== waiverModalTarget.originalCost && (
+                    <button
+                      type="button"
+                      className="btn-secondary"
+                      onClick={() => setWaiverInputAmount(waiverModalTarget.originalCost)}
+                      style={{ fontSize: '11px', padding: '6px 10px', whiteSpace: 'nowrap' }}
+                    >
+                      전액 복원
+                    </button>
+                  )}
+                </div>
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                  * 전액 면제 또는 고객 협의에 따른 일부 감면 금액을 입력하십시오.
+                </div>
+              </div>
+
+              {/* 면제 사유 카테고리 */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <label style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)' }}>
+                  면제 사유 구분
+                </label>
+                <select
+                  value={waiverInputCategory}
+                  onChange={e => setWaiverInputCategory(e.target.value)}
+                  style={{ padding: '8px 10px', fontSize: '13px', border: '1px solid var(--border-color)', borderRadius: '6px', backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)' }}
+                >
+                  <option value="단골 고객 우대">단골 고객 우대</option>
+                  <option value="영업 관계 유지 협의">영업 관계 유지 협의</option>
+                  <option value="장비 초기 클레임 보상">장비 초기 클레임 보상</option>
+                  <option value="경미 파손 자체 흡수">경미 파손 자체 흡수</option>
+                  <option value="신규 계약 유치 프로모션">신규 계약 유치 프로모션</option>
+                  <option value="현장 사정 참작 감면">현장 사정 참작 감면</option>
+                  <option value="기타">기타 (직접 입력)</option>
+                </select>
+              </div>
+
+              {/* 세부 사유 메모 */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <label style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)' }}>
+                  상세 사유 및 비고
+                </label>
+                <input
+                  type="text"
+                  placeholder="예: 발주사 현장소장 요청 합의, 차월 계약 연장 조건 등..."
+                  value={waiverInputCustomReason}
+                  onChange={e => setWaiverInputCustomReason(e.target.value)}
+                  style={{ padding: '8px 10px', fontSize: '13px', border: '1px solid var(--border-color)', borderRadius: '6px', backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)' }}
+                />
+              </div>
+
+              {/* 면제 처리자 */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <label style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)' }}>
+                  면제 처리 승인자
+                </label>
+                <input
+                  type="text"
+                  disabled
+                  value={`${currentUser?.name || '영업담당'} (${currentUser?.department || '영업부'})`}
+                  style={{ padding: '7px 10px', fontSize: '12px', border: '1px solid var(--border-color)', borderRadius: '6px', backgroundColor: 'var(--bg-app)', color: 'var(--text-secondary)' }}
+                />
+              </div>
+            </div>
+
+            {/* 하단 버튼 바 (헌장 3.5 Z-패턴 4단계) */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', borderTop: '1px solid var(--border-color)', paddingTop: '14px' }}>
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => setWaiverModalTarget(null)}
+                disabled={isWaiverSubmitting}
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                className="btn-primary"
+                onClick={handleConfirmWaiverModal}
+                disabled={isWaiverSubmitting || waiverInputAmount <= 0}
+                style={{ backgroundColor: '#dc2626', borderColor: '#dc2626', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '6px' }}
+              >
+                {isWaiverSubmitting ? '면제 처리 중...' : `🚫 ₩${waiverInputAmount.toLocaleString()}원 영업 면제 확정`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

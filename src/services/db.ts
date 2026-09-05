@@ -737,6 +737,13 @@ export interface Delivery {
   statementFileUrl?: string; // 거래명세서 증빙 파일 URL
   billableToCustomer?: boolean; // 고객 청구 여부
   billableCustomerId?: string; // 청구 대상 고객사 ID
+  billableAmount?: number; // 고객 청구 금액
+  billingId?: string; // 연결된 매출 청구서 ID
+  isWaived?: boolean; // 영업 면제 여부
+  waivedAmount?: number; // 면제 금액
+  waivedBy?: string; // 면제 처리자
+  waivedReason?: string; // 면제 사유
+  waivedAt?: string; // 면제 일시
   assignedVehicles?: any[]; // 배정 차량 목록 배열
   vehicleRequirements?: string; // 차량 종류별 대수 지정 JSON: [{ vehicleType: string, count: number }]
   cargoItems?: string; // 운반 장비 명세 JSON: [{ modelName: string, count: number }]
@@ -901,6 +908,11 @@ export interface Repair {
   billingId?: string;
   purchaseBillId?: string;
   isCustomerFault?: boolean;
+  isWaived?: boolean; // 영업 면제 여부
+  waivedAmount?: number; // 면제 금액
+  waivedBy?: string; // 면제 처리자
+  waivedReason?: string; // 면제 사유
+  waivedAt?: string; // 면제 일시
   
   // 9. 증빙 및 연계
   faultImageUrl?: string;

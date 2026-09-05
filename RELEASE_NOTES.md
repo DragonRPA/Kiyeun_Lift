@@ -1,3 +1,36 @@
+## [v1.6.0.Build.197] - 2026-09-05 19:55
+
+### 🚫 유료비용(현장AS·입고결함정비·운송료) 영업 청구 면제 투명화 시스템 구축 및 청구 면제 대장 탭 신설 (비징벌적거버넌스·WaiverModal·원자적ToDo상계·Gutenberg대차대조·고밀도슬림그리드)
+- **도메인 사명 및 시스템 핵심 가치 (헌장 1.1, 1.2, 2.1, 3.1, 3.2, 3.4, 3.5, 3.6, 4.1, 5.2, 5.3)**:
+  - **암묵적 비용 흡수(Hidden Cost)의 완전 투명화 및 상황 인지(Situational Awareness) 확립 (헌장 1.1, 1.2)**:
+    - 고객 과실 현장 AS, 반납 입고 결함 수리비, 추가 운송료 등 실제 실비가 발생했으나 영업사원이 고객 관계 유지를 위해 임의 감면/면제하여 회사의 순손실로 흡수되던 구조적 병목 해소.
+    - 인사고과 감점이나 처벌 목적을 배제하고, "얼마의 비용이, 어떤 사유로, 누구의 승인 하에 면제되었는지" 100% 투명하게 영구 DB에 보존하여 경영진과 부서장이 한눈에 파악할 수 있도록 설계.
+  - **데이터 모델 및 물리 스키마 확장 (`db.ts`, `schema.sql`)**:
+    - `Repair` 및 `Delivery` 인터페이스에 면제 5대 감사 필드(`isWaived`, `waivedAmount`, `waivedBy`, `waivedReason`, `waivedAt`) 추가.
+    - `deliveries` 테이블에 `billingId`, `billableAmount` 연동 필드 신설 및 `schema.sql` DDL 정합성 동기화 완료.
+  - **비즈니스 로직 및 원자적 ToDo 상계 파이프라인 구축 (`AppContext.tsx`)**:
+    - `waiveRepairBilling`, `cancelRepairWaiver`: 수리비 영업 면제 시 `isWaived: true` 기록 및 대기 중인 유상 수리 청구 ToDo(`BILLABLE_REPAIR_BILLING`)를 `WAIVED_BY_SALES_XXX`로 원자적 자동 상계.
+    - `linkDeliveryToBilling`, `unlinkDeliveryFromBilling`, `waiveDeliveryBilling`, `cancelDeliveryWaiver`: 고객부담 운송료의 청구서 바인딩 및 영업 면제/취소 파이프라인 신설.
+  - **미청구 정산 마법사 내 유료비용 추천 및 영업 면제 원클릭 연동 (`Billings.tsx`)**:
+    - 미청구 고객부담 정비/수리비 패널: `!r.isWaived` 필터링 및 각 행에 `[+ 청구 추가]`와 `[🚫 영업 면제]` 2대 액션 제공.
+    - 미청구 고객부담 운송료 추천 패널 신설: `d.billableToCustomer && !d.billingId && !d.isWaived` 건 자동 발굴, 일괄 추가 및 개별 `[+ 청구 추가]` / `[🚫 영업 면제]` 지원.
+    - `WaiverModal` 모달 탑재: 면제 대상(구분, 고객, 계약, 장비/경로, 원 발생액), 면제 금액(전액/부분 감면), 6대 면제 사유 카테고리(단골 우대, 관계 유지 등) 및 상세 메모, 처리자 입력.
+  - **전사 표준 헌장 UI/UX 청구 면제 대장 탭 신설 (`Billings.tsx` - WAIVER 탭)**:
+    - 헌장 3.1: 건조한 명사 단일 표준 (`청구 면제 대장`, `면제일자`, `구분`, `고객사`, `계약번호`, `원 발생비용`, `면제 금액`, `면제 사유`, `처리자`, `면제 취소`, `엑셀 내보내기`).
+    - 헌장 3.2: 셀 줄바꿈 방지(`white-space: nowrap`), 첫 컬럼 `[면제 취소]` Col 0 Sticky 고정.
+    - 헌장 3.4: 레이블-입력 필드 상하 세로 스택 (`flex-direction: column`, `gap: 4px`).
+    - 헌장 3.5: Gutenberg Z-패턴 4단계 동선 (Scope ➔ Pipeline ➔ Inspection ➔ Terminal Action).
+    - 헌장 3.6: 유형 B 고밀도 슬림 그리드 (행 높이 38px, 화면 영역 80% 작업대 확보).
+    - 4대 KPI 요약 카드: 총 영업 면제 손실액, 현장 AS 면제액, 입고 정비 면제액, 운송료 면제액.
+    - 사유별 비중 칩 & 영업사원별 면제액 칩 실시간 표출.
+    - 최하단 Gutenberg 대차대조 검증 바:
+      `📄 총 유료비용 발생: ₩A = 🟢 정상 청구액: ₩B + 🚫 영업 면제액: ₩C | ⚖️ 대차 차액 ₩0 (정합)`.
+  - **통합 운영 매뉴얼 및 Skelton 지식베이스 편찬 (`docs/e_Bro_Manual.md`, Skelton `계획`)**:
+    - `docs/e_Bro_Manual.md` [M-04] 매출 청구 관리 장에 미청구 마법사 면제 처리 및 청구 면제 대장 모니터링 가이드 반영.
+    - `000.skelton/계획/2026-09_유료비용_영업청구면제_투명화_거버넌스설계.md` 작성 및 원격 push 완료 (`3a65f9e`).
+  - **빌드 무결성 검증**:
+    - `cmd.exe /c "npm run build"` (`tsc -b && vite build`) 0 Error 무결점 통과 (`✓ built in 897ms`).
+
 ## [v1.6.0.Build.196] - 2026-09-05 19:25
 
 ### ⚡ 은행입출금대장 통장 수납 대사 WTT 20회 관통 스트레스 테스트 완결, 6대 결함 보완 및 e-Bro 전사 통합 운영 매뉴얼 편찬 완결 (VAT일치버그수정·타겟충당신설·500원수수료감액·일괄자동수납·공식입금표발행·고밀도그리드·20/20 ALL PASS)
