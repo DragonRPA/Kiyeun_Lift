@@ -229,7 +229,13 @@ export const MobileAssetSearch: React.FC = () => {
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             placeholder="특정 장비번호(K10001) 또는 모델명 검색..."
-            className="w-full bg-slate-900 border border-slate-700/80 rounded-2xl py-2.5 pl-10 pr-4 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
+            className="w-full rounded-2xl py-2.5 pl-10 pr-4 text-xs placeholder-slate-500 focus:outline-none"
+            style={{
+              backgroundColor: '#090d16',
+              color: '#f8fafc',
+              border: '1px solid #334155',
+              colorScheme: 'dark'
+            }}
           />
           {searchTerm && (
             <button
@@ -308,61 +314,50 @@ export const MobileAssetSearch: React.FC = () => {
               ? 'border-amber-500/40 bg-gradient-to-br from-amber-950/40 to-slate-900'
               : 'border-slate-800 bg-slate-900/60 opacity-80';
 
-            const badgeBg = isAbundant
-              ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
-              : isWarning
-              ? 'bg-amber-500/20 text-amber-300 border-amber-500/30'
-              : 'bg-rose-500/20 text-rose-300 border-rose-500/30';
-
-            const badgeText = isAbundant ? '여유' : isWarning ? '임박' : '품절';
-
             return (
               <div
                 key={stat.id}
                 onClick={() => setSelectedSpec(stat)}
                 className={`p-3.5 rounded-2xl border ${themeBorder} flex flex-col justify-between gap-3 shadow-lg active:scale-97 transition-all cursor-pointer`}
               >
-                {/* 카드 상단: 규격 및 상태 배지 */}
+                {/* 카드 상단: 규격 */}
                 <div className="flex items-start justify-between">
                   <div>
-                    <div className="text-lg font-black text-white tracking-tight flex items-baseline gap-1">
+                    <div className="text-lg font-black text-white tracking-tight flex items-baseline gap-1 whitespace-nowrap">
                       <span>{stat.ft}</span>
                       <span className="text-[10px] font-normal text-slate-400">({stat.subModels})</span>
                     </div>
-                    <div className="text-[10px] text-slate-400 font-medium">
+                    <div className="text-[10px] text-slate-400 font-medium whitespace-nowrap">
                       {stat.workHeight}
                     </div>
                   </div>
-                  <span className={`px-2 py-0.5 rounded-lg text-[10.5px] font-black border ${badgeBg}`}>
-                    {badgeText}
-                  </span>
                 </div>
 
                 {/* 카드 중앙: 가용 대수 강조 (대형 폰트) */}
                 <div className="flex items-baseline justify-between pt-1">
-                  <div className="flex items-baseline gap-1.5">
+                  <div className="flex items-baseline gap-1.5 whitespace-nowrap">
                     <span className={`text-2xl font-black ${
                       isAbundant ? 'text-emerald-400' : isWarning ? 'text-amber-400' : 'text-slate-500'
                     }`}>
                       {stat.availableCount}
                     </span>
-                    <span className="text-xs text-slate-300 font-bold">대 가용</span>
+                    <span className="text-xs text-slate-300 font-bold whitespace-nowrap">대 가용</span>
                   </div>
 
                   {/* 입고/반납 예정 표시 */}
                   {stat.returnDueCount > 0 ? (
-                    <span className="text-[10.5px] font-bold text-sky-400 bg-sky-950/80 px-1.5 py-0.5 rounded-md border border-sky-800/80">
+                    <span className="text-[10.5px] font-bold text-sky-400 bg-sky-950/80 px-1.5 py-0.5 rounded-md border border-sky-800/80 whitespace-nowrap">
                       반납+{stat.returnDueCount}
                     </span>
                   ) : (
-                    <span className="text-[10px] text-slate-500">대여 {stat.rentedCount}대</span>
+                    <span className="text-[10px] text-slate-500 whitespace-nowrap">대여 {stat.rentedCount}대</span>
                   )}
                 </div>
 
                 {/* 카드 하단: 보유 및 대여 현황 요약 */}
-                <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-[11px]">
-                  <span className="text-slate-400">총 보유</span>
-                  <span className="font-bold text-slate-200">{stat.matchedAssets.length}대</span>
+                <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-[11px] whitespace-nowrap">
+                  <span className="text-slate-400 whitespace-nowrap">총 보유</span>
+                  <span className="font-bold text-slate-200 whitespace-nowrap">{stat.matchedAssets.length}대</span>
                 </div>
               </div>
             );

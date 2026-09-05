@@ -145,6 +145,19 @@ const App: React.FC = () => {
       });
       setIsWalkieOn(walkieService.getIsPowerOn());
     }
+
+    const handleFirstGesture = () => {
+      walkieService.unlockAudio();
+      window.removeEventListener('pointerdown', handleFirstGesture);
+      window.removeEventListener('click', handleFirstGesture);
+    };
+    window.addEventListener('pointerdown', handleFirstGesture, { passive: true });
+    window.addEventListener('click', handleFirstGesture, { passive: true });
+
+    return () => {
+      window.removeEventListener('pointerdown', handleFirstGesture);
+      window.removeEventListener('click', handleFirstGesture);
+    };
   }, [currentUser]);
 
   // 메뉴(activeTab) 전환 시 스크롤 최상단 리셋 + 해당 메뉴 관련 테이블만 Supabase pull (최신 데이터 보장)

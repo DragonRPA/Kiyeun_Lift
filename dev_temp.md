@@ -1,5 +1,200 @@
 # 개발 지시 및 개편 완료 내역 (dev_temp.md)
 
+## 🛠️ [모바일 AS접수 다크모드 색상 결함 해결 & 스마트폰 앨범 사진 첨부 기능 복원] (Build.145)
+
+### 1. 개발 배경 및 사장님 지시사항
+- **사용자 요구사항**:
+  > "AS접수 에서도, 흰바탕에 흰색 글자라 안보여, AS 접수때는 고객이 요청하고 영업사원은 전달하는 입장이기 때문에, 사진 촬영보다는 사진 첨부를 더 많이 사용할것인데, 사진 첨부 기능이 안돼. (예를들면 핸드폰 내 사진 위치를 탐색해서 지정해주는 기능)"
+- **도메인 핵심 가치 및 R&R 준수 (헌장 1.1, 1.2, 2.1, 3.1, 3.2, 3.4)**:
+  - 1. **모바일 AS 접수 폼 White-on-White 은폐 결함 원천 박멸**: 모바일 브라우저 User-Agent 기본 스타일에 의한 흰색 배경 렌더링 결함을 전사 인라인 다크 스타일(`backgroundColor: '#090d16'`, `color: '#f8fafc'`, `border: 1px solid #334155'`, `colorScheme: 'dark'`)로 완벽 차단.
+  - 2. **영업 실무 현실에 맞춘 사진 첨부(갤러리/파일 탐색) vs 현장 카메라 촬영 이원화**: 영업사원은 고객에게 카카오톡/문자메시지로 전달받은 고장 사진을 등록하는 경우가 대부분이므로, 기존에 `capture="environment"`로 인해 카메라 앱만 강제 구동되던 결함을 전면 개편. 스마트폰 내부 앨범/갤러리 및 다운로드 파일 탐색기를 직접 열 수 있는 `[사진 첨부 (앨범/파일)]` 버튼을 최우선 제공하고, 현장 직접 촬영용 `[카메라 촬영]` 버튼을 병렬 배치.
+
+### 2. 주요 구현 및 조치 내역
+1. **사진 업로더 이원화 아키텍처 구축 (`src/mobile/components/CameraUploader.tsx`)**:
+   - `galleryInputRef`: `<input type="file" accept="image/*" multiple />` (capture 속성 미적용) ➔ 스마트폰 갤러리/앨범 및 파일 탐색기 연동 지원 (카카오톡 저장 사진 다중 선택 가능).
+   - `cameraInputRef`: `<input type="file" accept="image/*" capture="environment" />` ➔ 현장 직접 촬영 카메라 구동 지원.
+   - UI 액션 버튼 2분할 배치:
+     - `[사진 첨부 (앨범/파일)]` (파란색 강조 테마): 스마트폰 저장 사진 선택.
+     - `[카메라 촬영]` (슬레이트 테마): 현장 직접 촬영.
+   - 압축 엔진 연동: 선택된 사진들은 `compressImageFile`을 통해 모바일 데이터 절약 및 최적화 후 자동 리사이징 업로드.
+2. **AS 접수 폼 전 인풋 다크 스타일링 및 가시성 확보 (`src/mobile/pages/MobileAsCreate.tsx`)**:
+   - `assetNo` (장비번호 인풋)
+   - `customerName` (고객사명 인풋)
+   - `siteName` (현장명 인풋)
+   - `locationDetail` (상세 위치 인풋)
+   - `siteAddress` (도로명 주소 인풋)
+   - `issueDescription` (고장 상세 내용 텍스트에어리어)
+   - `reporterName` (접수자 성함 인풋)
+   - `reporterContact` (연락처 인풋)
+   - `pastedTranscript` (통화 녹음 텍스트 붙여넣기 모달 텍스트에어리어)
+   - 전 폼 필드에 `backgroundColor: '#090d16'`, `color: '#f8fafc'`, `colorScheme: 'dark'` 인라인 스타일 적용으로 흰색 배경/흰 글씨 은폐 현상 완벽 박멸.
+3. **전사 표준 헌장 준수 (헌장 3.1, 3.2, 3.4)**:
+   - 모든 폼 레이블에 `whitespace-nowrap flex-shrink-0` 적용으로 줄바꿈 방지.
+   - 레이블 상하 세로 스택(`flex flex-col gap-1.5`) 유지.
+   - "고장 현장 사진 첨부 / 촬영" 등 건조한 명사형 레이블 표준화.
+
+---
+
+## 🏷️ [모바일 가용재고 조회 감성 수식어(여유/임박/품절) 뱃지 전면 제거 & 줄바꿈 방지] (Build.144)
+
+### 1. 개발 배경 및 사장님 지시사항
+- **사용자 요구사항**:
+  > "가용재고 조회에서, 표시한 텍스트는 제거해(여유/임박/품절)"
+- **도메인 핵심 가치 및 헌장 준수 (헌장 3.1, 3.2)**:
+  - 1. **무수식어 건조한 명사·동사 표준 (헌장 3.1)**: "여유", "임박", "품절" 등 주관적이고 불필요한 형용사 뱃지를 전면 배제하고, 정확한 수치(가용 대수, 총 보유 대수)만을 객관적으로 전달하여 화면의 정보 밀도와 전문성 극대화.
+  - 2. **텍스트 줄바꿈 방지 표준 (헌장 3.2)**: 가용 대수 레이블("대 가용"), 반납 예정("반납+N"), 대여 현황("대여 N대")에 `white-space: nowrap`을 적용하여 좁은 모바일 화면에서도 텍스트가 쪼개지거나 줄바꿈되는 결함 원천 차단.
+
+### 2. 주요 구현 및 조치 내역 (`src/mobile/pages/MobileAssetSearch.tsx`)
+1. **규격별 가용 현황 카드 상단 상태 뱃지 제거**:
+   - 기존 `isAbundant ? '여유' : isWarning ? '임박' : '품절'` 뱃지 태그 및 관련 변수(`badgeText`, `badgeBg`) 전면 삭제.
+   - 피트 규격명(`stat.ft`)과 서브모델, 작업높이 정보만을 간결하고 넓게 배치.
+2. **줄바꿈 방지 및 폰트 레이아웃 정돈**:
+   - `대 가용`, `반납+N`, `대여 N대`, `총 보유 N대` 컨테이너에 `whitespace-nowrap` 강제 적용.
+   - 화면 해상도에 구애받지 않고 가로 1줄로 안정적 렌더링 보장.
+3. **상단 검색창 다크모드 인라인 스타일 보강**:
+   - 검색창 인풋에 `backgroundColor: '#090d16'`, `color: '#f8fafc'`, `colorScheme: 'dark'` 인라인 스타일 적용하여 안드로이드 네이티브 흰색 배경 결함 방지.
+
+---
+
+## 📱 [모바일 출고요청 다크모드 색상 결함 해결 & 규격별 실시간 가용 재고 모델 표출] (Build.143)
+
+### 1. 개발 배경 및 사장님 지시사항
+- **사용자 요구사항**:
+  > "핸드폰ㅇ 출고요청 메뉴에서 UI 색깔 문제가 있어. 흰바탕에 흰색 글자색이라 안보여. 피트 카드를 터치하면, 해당 스펙의 재고가 남아있는 모델이 표시되면 좋겠어."
+- **도메인 핵심 가치 및 R&R 준수 (헌장 1.1, 1.2, 2.1, 3.1, 3.2, 3.4)**:
+  - 1. **모바일 입력폼 White-on-White 은폐 결함 원천 박멸**: 모바일 브라우저(안드로이드 크롬, 삼성 인터넷 등)에서 날짜/시간 피커 및 텍스트 인풋이 브라우저 기본 User-Agent 스타일로 인해 흰색 배경으로 강제 렌더링되면서 흰색 글자와 겹쳐 투명화되는 결함을 전사 CSS(`mobile.css`) 및 컴포넌트 인라인 스타일로 3중 방어.
+  - 2. **피트(규격) 카드 터치 시 주기장 실시간 가용 재고 모델 즉시 표출**: 외근 영업사원이 특정 규격(19ft, 26ft, 32ft 등)을 터치하면 주기장에 즉시 출고 가능한 실제 장비 모델명과 잔여 재고 대수(`GS-1930 (4대)`, `GS-1930 E-DRIVE (3대)`, `GTJZ0608ME (3대)`, `ES1330L (2대)` 등)를 1화면에서 직관적으로 확인하고 원터치로 의뢰할 수 있도록 혁신.
+
+### 2. 주요 구현 및 조치 내역
+1. **모바일 폼 입력창 다크 테마 및 고대비 완비 (`src/mobile/mobile.css`, `MobileDispatchOrderCreate.tsx`)**:
+   - `src/mobile/mobile.css`:
+     - `.mobile-app-root`에 `color-scheme: dark !important` 전역 선언.
+     - `.mobile-app-root input, textarea, select`에 `background-color: #0f172a !important`, `color: #f8fafc !important`, `border: 1px solid #334155 !important`, `color-scheme: dark !important` 강제 적용.
+     - 날짜/시간 피커(`input[type="date"]`, `input[type="time"]`)에 `-webkit-appearance: none`, `background-color: #090d16 !important`로 안드로이드 네이티브 컨트롤의 흰색 바탕 강제 렌더링 원천 차단.
+   - `src/mobile/pages/MobileDispatchOrderCreate.tsx`:
+     - `customerSearchText`, `selectedCustomerId`, `siteSearchText`, `selectedSiteId`, `newSiteName`, `siteAddress`, `siteContactName`, `siteContactPhone`, `deliveryDate`, `deliveryTime`, `memo` 등 11개 전 폼 컨트롤에 다크모드 인라인 스타일(`backgroundColor: '#090d16'`, `color: '#f8fafc'`, `colorScheme: 'dark'`)을 3중 안전망으로 직접 주입.
+2. **규격(ft) 피트 카드 터치 시 실시간 가용 재고 모델 표출 시스템 구축 (`MobileDispatchOrderCreate.tsx`)**:
+   - **도메인 모델 ➔ 규격(ft) 추정 엔진 (`inferFeetFromModel`)**:
+     - 고소작업대 모델명 패턴(1930/1330/1432/3215/0608 ➔ 19ft, 2646/2632/0812/0808/3219 ➔ 26ft, 3246/1012/1008 ➔ 32ft, 4047/4046/4069/1212 ➔ 40ft, 4655/1412/1414 ➔ 46ft, 1612/1614/5390 ➔ 53ft) 정밀 매핑.
+   - **실시간 가용 재고 집계 (`availableInventory`)**:
+     - `assets` 중 `status === 'AVAILABLE'`(임대 가능) 자산들을 각 피트 및 실제 모델명별로 그룹핑 집계.
+     - 각 피트 탭에 총 가용 대수 뱃지 노출 (`19ft 14대`, `26ft 7대`, `32ft 5대`, `40ft 0대`, `46ft 3대`, `53ft 0대`).
+   - **가용 모델 인터랙티브 서브패널**:
+     - 사용자가 특정 피트(예: 19ft)를 터치하면 해당 피트가 녹색 테두리로 활성화(`activeFt`)되며, 하단에 `[+ GS-1930 (4대 재고)]`, `[+ GS-1930 E-DRIVE (3대 재고)]`, `[+ GTJZ0608ME (3대 재고)]` 등 출고 가능 모델 칩이 실시간으로 노출.
+     - 가용 모델 칩을 터치하면 해당 모델 1대가 즉시 출고 의뢰 장비 목록에 담김 (이미 담겨 있으면 수량 +1 증가).
+     - 가용 재고가 0대인 규격(예: 40ft)을 터치하면 "주기장에 즉시 출고 가능한 장비가 없습니다" 안내와 함께 `[+ 40ft 규격 의뢰 추가 (타사 임차/배차 협의)]` 버튼을 제공하여 영업-출고 R&R(헌장 2.1)에 맞춰 전대/임차 출고를 의뢰할 수 있도록 완비.
+   - **의뢰 장비 목록 UI 고도화**:
+     - 담긴 장비 목록에서 피트(`19ft`)와 지정된 실모델명(`GS-1930`)이 선명한 뱃지로 노출되며, `[-]` / `[+]` 수량 조절 및 `[삭제]` 기능 완비.
+
+---
+
+## 🏢 [내계약&투입현장 더블터치 상세모달 연동] 영업부 내현장 카드 더블터치/원터치 현장 상세 모달 및 T맵/카카오내비/통화/AS접수 직결 (Build.142)
+
+### 1. 개발 배경 및 사장님 지시사항
+- **사용자 요구사항**:
+  > "영업부, 내현장 메뉴에서, 카드를 두번터치 하면 현장 상세 모달이 열리면 좋겠어."
+- **도메인 핵심 가치 및 R&R 준수 (헌장 1.1, 1.2, 3.1, 3.2)**:
+  - 현장 및 외근 영업사원이 스마트폰에서 '내현장' 목록의 카드를 더블터치(더블클릭)하면 팝업 모달이 즉각 열려 해당 현장의 360도 상세 정보(계약 정보, 도로명 주소, T맵/카카오내비 길안내, 현장소장 통화, 투입 장비 목록, 개별 AS 접수)를 1화면에서 원터치로 완결.
+
+### 2. 주요 구현 및 조치 내역 (`src/mobile/pages/MobileMyContracts.tsx`)
+1. **스마트폰 더블터치(Double-Tap) & 데스크톱 더블클릭 감지 엔진**:
+   - `lastTapRef`를 통해 모바일 화면 350ms 이내 연속 터치 시 `selectedContract`를 활성화하여 현장 상세 모달을 즉시 팝업.
+   - PC 마우스 더블클릭(`onDoubleClick`) 및 카드 우측 상단 `[>]` 원터치 버튼을 병행 지원하여 조작 접근성 100% 보장.
+   - 통화 버튼 클릭 시 `e.stopPropagation()` 처리로 불필요한 모달 오동작 방지.
+2. **현장 상세 모달(Site Detail Modal) 풀스펙 구축**:
+   - **계약 기본 정보**: 계약번호, 계약상태(가동중 등), 계약기간, 청구 마감일, 만료 상태(D-Day).
+   - **현장 위치 & 길안내**: 도로명 상세 주소 표출, `[📍 T맵]`, `[🚗 카카오내비]` 네이티브 딥링크 직결 및 `[📋 주소복사]` 클립보드 원터치 연동.
+   - **현장 담당자 & 통화**: 현장소장명, 연락처, 원터치 `[📞 통화]` 직결.
+   - **투입 장비 상세 목록**: 투입된 각 장비(자산번호, 모델명, 상태) 카드 및 장비별 `[🔧 AS접수]` 버튼 연동 (`onOpenCreateAsForAsset`).
+   - **현장 특이사항**: 유상옵션 및 보양작업 정보 노출.
+
+---
+
+## 📻 [동적채널아키텍처 & 멤버십격리 & 스마트스크롤 & Groq단일화] 무전기 전사공통 채널 영구 폐지, 새 채널 개설·사원 초대 모달 및 과거 대화 탐색 스마트 스크롤 완비 (Build.141)
+
+### 1. 개발 배경 및 사장님 지시사항
+- **사용자 요구사항**:
+  > "무전기 모드 채널 구성에 대해서 생각해보자. 전사공통 채널은 필요 없을것 같고, 새채널 열기와, 채널에 사람 초대 기능이 있으면 좋겠어. 내가 속하지 않은 채널에는 접근할 수 없으면 좋겠어. 클라우드플레어 STT 기능은 제거해줘. 대화가 누적되어 길어지면 위로 올려서 지난 메세지를 확인할 수 있게 스크롤이 제공되어야 해."
+- **도메인 핵심 가치 및 R&R 준수 (헌장 1.1, 1.2, 2.1, 3.1, 3.2, 3.4)**:
+  - 1. **전사공통('ALL') 채널 폐지**: 업무 영역이 다른 임직원 간의 무분별한 혼선을 방지하고, 직무·현장별 목적 지향 채널 중심 소통 확립.
+  - 2. **동적 채널 개설 & 사원 초대**: 특정 현장/TF/작업팀 단위로 임직원이 직접 새 채널을 개설하고 동료를 초대할 수 있는 유연한 채널 라이프사이클 구축.
+  - 3. **멤버십 기반 완벽 접근 제어 (보안 및 패킷 격리)**:
+    - 내가 속하지 않은 채널은 상단 탭 목록에서 아예 숨겨지며,
+    - Supabase Realtime 토픽(`walkie_ch_${ch.id}`)도 내가 멤버인 채널만 구독하여 네트워크 패킷 레벨에서 비참여자에게 대화가 유출되지 않도록 원천 격리.
+  - 4. **Cloudflare STT 완전 퇴출 및 Groq Whisper 단일화**:
+    - 불필요해진 Cloudflare Workers AI 엔드포인트(`api/cf-stt.ts`) 및 UI 토글을 완전 제거하고, 0.3초 초고속 Groq LPU Whisper 단일 엔진으로 간소화.
+  - 5. **스마트 대화 스크롤 및 과거 대화 탐색 복원**:
+    - 과거 대화를 읽기 위해 위로 스크롤했을 때 백그라운드 이벤트나 새 메시지로 인해 화면이 바닥으로 강제 튕기는 결함을 해결하고, 바닥 감지 임계값 기반 조건부 스크롤 및 `[↓ 최신 메시지]` 플로팅 원터치 버튼 탑재.
+
+### 2. 주요 구현 및 조치 내역
+1. **동적 채널 모델 및 동기화 서비스 (`walkieTalkieService.ts`)**:
+   - `WalkieChannel` 인터페이스 정의: `id`, `name`, `code`, `desc`, `createdById`, `createdByName`, `memberIds`, `createdAt`, `isDefault`.
+   - `DEFAULT_WALKIE_CHANNELS`: 기존 'ALL' 영구 삭제, `DISPATCH`(출고배차 CH-01), `AS`(현장AS CH-02), `SALES`(영업 CH-03) 3대 기본 채널 재편.
+   - `getChannels(userId)`: 내가 개설자이거나 `memberIds`에 포함된 채널만 반환 (비멤버 원천 차단).
+   - `createChannel(name, desc, memberIds, creator)`: 새 채널 발급 및 `walkie_meta` Realtime 토픽으로 전사 동기화.
+   - `inviteMembers(channelId, newMemberIds)`: 기존 채널에 사원 추가 및 실시간 채널 메타 브로드캐스트.
+   - `subscribe(user)`: 사용자가 속한 채널 토픽만 구독하도록 패킷 필터링 강화.
+2. **Cloudflare STT 제거 (`api/cf-stt.ts` 삭제, `walkieTalkieService.ts`)**:
+   - `api/cf-stt.ts` 완전 삭제 (`git rm`).
+   - `runCloudflareStt()` 제거, `runStt()`를 `runGroqStt()` 단독 직결.
+3. **모바일 무전기 UI 개편 (`MobileWalkieTalkieModal.tsx`)**:
+   - **가로 스크롤 채널 탭 바 & `[+ 새 채널]` 퀵 버튼**:
+     - `accessibleChannels` 기반 가로 스크롤 렌더링.
+     - 우측 끝에 `[+ 새 채널]` 점선 버튼 배치.
+   - **채널 서브헤더 & `[+ 초대]` 버튼**:
+     - 채널 코드, 채널명, 인원수(`👥 N명` / 전사 기본채널은 `전사 N명`), 설명 노출.
+     - 우측에 `[+ 초대]` 버튼 배치.
+   - **새 채널 개설 모달 다이얼로그**:
+     - 상하 수직 스택(헌장 3.4) 채널명, 설명 입력창 및 사원 다중 체크박스 리스트(검색, 전체선택).
+   - **사원 초대 모달 다이얼로그**:
+     - 현재 참여 인원 표시, 미참여 사원 검색 및 멀티 체크박스 초대 실행.
+   - **스마트 대화 스크롤 복원**:
+     - `handleFeedScroll`로 바닥 상태(`isAtBottom`) 정밀 추적.
+     - 사용자가 위로 스크롤하여 이전 메시지를 읽고 있을 때는 새 메시지나 STT 이벤트가 발생해도 강제 스크롤 차단.
+     - `!isAtBottom` 상태일 때 `[↓ 최신 메시지]` 플로팅 버튼 노출.
+     - 기존 `.slice(0, 80)` 제한을 해제하여 당일 전체 누적 대화 탐색 가능.
+     - 모바일 터치 스크롤 CSS 보강 (`WebkitOverflowScrolling: 'touch'`, `touchAction: 'pan-y'`, `overscrollBehaviorY: 'contain'`).
+   - **Cloudflare 토글 삭제 & Groq STT 단일 뱃지**:
+     - `handleToggleSttEngine` 삭제, `[⚡ Groq STT]` 단일 드라이 뱃지 적용.
+
+---
+
+## ⚡ [무전기 발언자 소속/부서 생략 및 수신자 실시간 음성 자동 재생 파이프라인 전면 복원] (Build.140)
+
+### 1. 개발 배경 및 사장님 지시사항
+- **사용자 요구사항**:
+  > "무전기 대화 표시에서, 타자의 메세지 표시에 사람 이름만 간략히 표시되도록 하고(속/부서 생략), 타자가 대화 했을 때, 왜 소리가 안들리지? 설정은 음성 으로 되어있어"
+- **도메인 핵심 가치 및 문제 본질 (헌장 1.1, 1.2, 3.1)**:
+  - 1. 모바일 화면의 가로 폭이 제한적인 상황에서 "기술팀 홍길동" 식의 긴 부서 표기는 가독성을 저해하고 본문 텍스트 공간을 압박하므로, 화자 표시를 오직 이름("홍길동" / "나")으로 간결화하여 정보 밀도 극대화 (헌장 3.1 무수식어 건조 표준).
+  - 2. 수신 모드가 'VOICE'임에도 상대방 발언 시 실시간 수신 차임벨과 음성이 재생되지 않는 원인을 정밀 추적하여 완전 복원.
+
+### 2. 음성 미재생 원인 심층 진단
+1. **원인 ①: 채널 매칭 조건 누락 (`walkieTalkieService.ts`)**:
+   - 기존 조건식 `if (this.isPowerOn && (this.currentChannel === msg.channel || msg.channel === 'ALL'))` 에서, 수신자가 기본 채널인 `'ALL'`에 위치해 있을 때 상대방이 특정 채널(`AS`, `DISPATCH`, `SALES`)에서 무전을 보내면 매칭 실패 판정(`'ALL' === 'AS'` 거짓)으로 음성 재생 큐(`enqueuePlayback`)에 진입하지 못하고 침묵 처리됨 (히스토리에는 기록되나 음성 재생 누락).
+2. **원인 ②: 모바일 브라우저 Autoplay Policy와 일회용 `new Audio()` 인스턴스 제한**:
+   - 실시간 수신 이벤트는 웹소켓 백그라운드 콜백이므로 사용자 제스처(User Activation)가 없음. 매 수신마다 `new Audio()`를 생성하여 `.play()`를 호출할 경우 모바일 크롬에서 `NotAllowedError`로 조용히 자동재생이 차단됨.
+   - 앱 진입 및 화면 터치 시 브라우저 권한을 영구 획득한 단일 `persistentAudio` 인스턴스 재사용 및 Web Audio API(`decodeAudioData`) 2단계 자동 폴백 구조 부재.
+3. **원인 ③: 모바일 진입 시 선제적 오디오 언락 타이밍 결손**:
+   - React의 `useEffect` 내 언락 호출은 DOM 마운트 후 비동기로 실행되어 모바일 브라우저가 사용자 터치 제스처로 인정하지 않음.
+
+### 3. 주요 구현 및 조치 내역
+1. **발언자 소속/부서 전면 생략 및 이름 단일 표기 (`MobileWalkieTalkieModal.tsx`)**:
+   - 발언 상태 바: `[{talkingStatus?.senderDept} {talkingStatus?.senderName}]` ➔ `[{talkingStatus?.senderName}]`
+   - PTT 카드 피드: `{isMine ? '나' : `${msg.senderDept} ${msg.senderName}`}` ➔ `{isMine ? '나' : msg.senderName}`
+   - LOGS 대화 내역: `{isMine ? '나' : `${msg.senderDept} ${msg.senderName}`}` ➔ `{isMine ? '나' : msg.senderName}`
+2. **채널 매칭 논리 완전화 (`walkieTalkieService.ts`, `MobileWalkieTalkieModal.tsx`)**:
+   - `this.currentChannel === 'ALL' || msg.channel === 'ALL' || this.currentChannel === msg.channel` 로 개편하여, 수신자가 `'ALL'` 채널에 있을 때도 모든 채널의 음성을 무누락 수신 및 재생하도록 교정.
+   - `isSomeoneElseTalking` 발언 인디케이터 조건식도 동일하게 동기화.
+3. **듀얼 티어(HTML5 Audio + Web Audio API) 100% 무적 재생 엔진 (`walkieTalkieService.ts`)**:
+   - **1티어**: `soundEngine.getPersistentAudio()` 재사용을 통해 사전 언락된 오디오 객체로 즉시 재생.
+   - **2티어**: 모바일 Autoplay 정책 등에 의해 HTML5 Audio 거절 시, `AudioContext.decodeAudioData(arrayBuffer)`와 `BufferSource`를 통한 Web Audio API 하드웨어 직결 무제한 백그라운드 재생으로 자동 폴백.
+   - 재생 전 `AudioContext`의 `suspended` 상태 자동 resume 대기로 차임벨 및 첫 음절 잘림 방지.
+4. **전역 첫 터치/클릭 오디오 언락 안전망 (`MobileApp.tsx`, `App.tsx`, `MobileWalkieTalkieModal.tsx`)**:
+   - 모바일/PC 앱 진입 후 화면 어디든 첫 터치/클릭 발생 시 동기 이벤트 리스너에서 `walkieService.unlockAudio()`를 즉각 실행하여 브라우저 오디오 권한을 완벽히 선제 확보.
+   - 무전기 모달 열기 버튼 및 모달 배경 터치 시에도 인라인 언락 동기 연동.
+
+---
+
 ## ⚡ [Groq STT 한국어 강제 고정 & Large-v3 전환] 영어 번역 이탈 원천 차단 및 한글 프롬프트 주입 (Build.139)
 
 ### 1. 개발 배경 및 사장님 지시사항

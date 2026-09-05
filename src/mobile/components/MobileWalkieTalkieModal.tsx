@@ -3,10 +3,11 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   Radio, Volume2, VolumeX, Mic, MicOff, Play, Square,
   X, Clock, Layers, MessageSquare, ListFilter, ArrowLeft, Bell, BellOff,
-  FileText, ChevronRight
+  FileText, ChevronRight, Plus, UserPlus, Users, Search, Check
 } from 'lucide-react';
 import { 
-  walkieService, WalkieTalkieChannel, WalkieReceiveMode, WalkieMessage, soundEngine, TalkingStatus, WalkieSttEngine 
+  walkieService, WalkieTalkieChannel, WalkieReceiveMode, WalkieMessage, soundEngine, TalkingStatus, WalkieSttEngine,
+  WalkieChannel, DEFAULT_WALKIE_CHANNELS
 } from '../../services/walkieTalkieService';
 import { useApp } from '../../context/AppContext';
 import { 
@@ -23,19 +24,14 @@ interface MobileWalkieTalkieModalProps {
   onNavigateToDispatchOrder?: () => void;
 }
 
-const CHANNELS: { id: WalkieTalkieChannel; name: string; code: string; desc: string }[] = [
-  { id: 'ALL', name: '전사공용', code: 'CH-01', desc: '전사 긴급 공지 및 공통 통신망' },
-  { id: 'DISPATCH', name: '출고배차', code: 'CH-02', desc: '주기장 상차 및 배차 기사 통신망' },
-  { id: 'AS', name: '현장AS', code: 'CH-03', desc: '외근 출동 및 긴급 정비 통신망' },
-  { id: 'SALES', name: '영업', code: 'CH-04', desc: '외근 영업 재고 및 출고 소통망' },
-];
-
 export const MobileWalkieTalkieModal: React.FC<MobileWalkieTalkieModalProps> = ({
   isOpen,
   onClose,
   onNavigateToDispatchOrder
 }) => {
-  const { currentUser, customers, sites } = useApp();
+  const { currentUser, customers, sites, users } = useApp();
+  const activeUsers = (users || []).filter(u => u.status !== 'RETIRED');
+
   const [isMonologueOrderMode, setIsMonologueOrderMode] = useState<boolean>(false);
   const [currentOrderDraft, setCurrentOrderDraft] = useState<VoiceOrderDraft | null>(() => loadVoiceOrderDraft());
 
@@ -47,9 +43,25 @@ export const MobileWalkieTalkieModal: React.FC<MobileWalkieTalkieModalProps> = (
   const [playingMessageId, setPlayingMessageId] = useState<string | null>(null);
   const [recordDuration, setRecordDuration] = useState<number>(0);
 
+  // 📡 동적 채널 목록 및 채널 모달 상태
+  const [channels, setChannels] = useState<WalkieChannel[]>(() => walkieService.getChannels(currentUser?.id));
+  const [isCreateChannelOpen, setIsCreateChannelOpen] = useState<boolean>(false);
+  const [newChannelName, setNewChannelName] = useState<string>('');
+  const [newChannelDesc, setNewChannelDesc] = useState<string>('');
+  const [selectedMemberIds, setSelectedMemberIds] = useState<string[]>([]);
+  const [channelSearchQuery, setChannelSearchQuery] = useState<string>('');
+
+  const [isInviteModalOpen, setIsInviteModalOpen] = useState<boolean>(false);
+  const [inviteMemberIds, setInviteMemberIds] = useState<string[]>([]);
+  const [inviteSearchQuery, setInviteSearchQuery] = useState<string>('');
+
+  // 📜 스마트 바닥 스크롤 감지 및 제어
+  const [isAtBottom, setIsAtBottom] = useState<boolean>(true);
+  const isAtBottomRef = useRef<boolean>(true);
+
   // 🛠️ 디버그 로그 표시 토글 (기본값: OFF — 필요 시 켤 수 있음)
   const [showDebugLogs, setShowDebugLogs] = useState<boolean>(() => localStorage.getItem('walkie_show_debug') === 'true');
-  // 🎙️ STT 엔진 선택 ('GEMINI' | 'BROWSER')
+  // 🎙️ STT 엔진 상태 ('GROQ' | 'BROWSER')
   const [sttEngine, setSttEngine] = useState<WalkieSttEngine>(() => walkieService.getSttEngine());
 
   // 🌟 순차 재생 큐 대기 건수
@@ -68,11 +80,11 @@ export const MobileWalkieTalkieModal: React.FC<MobileWalkieTalkieModalProps> = (
   const stopRequestedRef = useRef<boolean>(false);
   const durationTimerRef = useRef<any>(null);
 
-  // 📜 최신 대화 하단 자동 스크롤용 Refs
+  // 📜 대화 스크롤용 Refs
   const logContainerRef = useRef<HTMLDivElement | null>(null);
   const pttFeedContainerRef = useRef<HTMLDivElement | null>(null);
 
-  // 초기화 및 실시간 메시지 / 발언 상태 / 큐 리스너 등록
+  // 초기화 및 실시간 메시지 / 발언 상태 / 큐 / 채널 리스너 등록
   useEffect(() => {
     if (!currentUser) return;
 
@@ -82,6 +94,8 @@ export const MobileWalkieTalkieModal: React.FC<MobileWalkieTalkieModalProps> = (
       role: currentUser.role,
       deptName: currentUser.department || '기연리프트'
     });
+
+    setChannels(walkieService.getChannels(currentUser.id));
 
     const unMsg = walkieService.onMessage(() => {
       setHistory([...walkieService.getHistory()]);
@@ -113,6 +127,10 @@ export const MobileWalkieTalkieModal: React.FC<MobileWalkieTalkieModalProps> = (
       setSttEngine(eng);
     });
 
+    const unChannels = walkieService.onChannelsChange(() => {
+      setChannels(walkieService.getChannels(currentUser.id));
+    });
+
     return () => {
       unMsg();
       unHist();
@@ -121,10 +139,11 @@ export const MobileWalkieTalkieModal: React.FC<MobileWalkieTalkieModalProps> = (
       unRecMode();
       unLiveStt();
       unEngine();
+      unChannels();
     };
   }, [currentUser]);
 
-  // 디버그 토글 & STT 엔진 토글 핸들러
+  // 디버그 토글 핸들러
   const handleToggleDebug = () => {
     setShowDebugLogs(prev => {
       const next = !prev;
@@ -133,46 +152,75 @@ export const MobileWalkieTalkieModal: React.FC<MobileWalkieTalkieModalProps> = (
     });
   };
 
-  const handleToggleSttEngine = () => {
-    const next: WalkieSttEngine = sttEngine === 'GROQ' ? 'CLOUDFLARE' : 'GROQ';
-    walkieService.setSttEngine(next);
-    setSttEngine(next);
-  };
-
-  // 🛠️ 디버그 메시지 필터링 (showDebugLogs가 false이면 디버그 로그 숨김)
-  const displayHistory = history.filter(m => showDebugLogs || !m.isDebug);
+  // 🛠️ 현재 채널 메시지 및 디버그 메시지 필터링
+  const currentChMessages = history.filter(m => {
+    if (m.isDebug) return showDebugLogs;
+    return m.channel === currentChannel;
+  });
 
   // 모달 오픈 시 오디오 컨텍스트 언락 & 닫힐 때 오디오 정지
   useEffect(() => {
     if (isOpen) {
       walkieService.unlockAudio();
       setHistory([...walkieService.getHistory()]);
+      if (currentUser) {
+        setChannels(walkieService.getChannels(currentUser.id));
+      }
     } else {
       walkieService.stopAudio();
       setPlayingMessageId(null);
     }
-  }, [isOpen]);
+  }, [isOpen, currentUser]);
 
-  // 최신 대화(하단) 자동 스크롤
-  useEffect(() => {
-    if (activeTab === 'LOGS' && logContainerRef.current) {
-      setTimeout(() => {
-        if (logContainerRef.current) {
-          logContainerRef.current.scrollTop = logContainerRef.current.scrollHeight;
-        }
-      }, 50);
+  // 스마트 스크롤: 스크롤 위치 감지
+  const handleFeedScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const el = e.currentTarget;
+    const threshold = 60;
+    const atBottom = (el.scrollHeight - el.scrollTop - el.clientHeight) <= threshold;
+    isAtBottomRef.current = atBottom;
+    if (atBottom !== isAtBottom) {
+      setIsAtBottom(atBottom);
     }
-  }, [history, activeTab]);
+  };
 
-  useEffect(() => {
+  const scrollToBottom = (behavior: ScrollBehavior = 'smooth') => {
     if (activeTab === 'PTT' && pttFeedContainerRef.current) {
-      setTimeout(() => {
-        if (pttFeedContainerRef.current) {
-          pttFeedContainerRef.current.scrollTop = pttFeedContainerRef.current.scrollHeight;
-        }
-      }, 50);
+      pttFeedContainerRef.current.scrollTo({
+        top: pttFeedContainerRef.current.scrollHeight,
+        behavior
+      });
+      isAtBottomRef.current = true;
+      setIsAtBottom(true);
     }
-  }, [history, activeTab]);
+    if (activeTab === 'LOGS' && logContainerRef.current) {
+      logContainerRef.current.scrollTo({
+        top: logContainerRef.current.scrollHeight,
+        behavior
+      });
+    }
+  };
+
+  // 채널 변경 또는 탭 변경 시 바닥으로 리셋
+  useEffect(() => {
+    isAtBottomRef.current = true;
+    setIsAtBottom(true);
+    const timer = setTimeout(() => {
+      scrollToBottom('auto');
+    }, 60);
+    return () => clearTimeout(timer);
+  }, [currentChannel, activeTab]);
+
+  // 새 메시지 유입 시: 사용자가 이미 바닥에 있거나 본인이 발언한 메시지일 때만 자동 바닥 스크롤!
+  useEffect(() => {
+    const latestMsg = history[0];
+    const isMine = latestMsg && currentUser && latestMsg.senderId === currentUser.id;
+    if (isAtBottomRef.current || isMine) {
+      const timer = setTimeout(() => {
+        scrollToBottom('smooth');
+      }, 50);
+      return () => clearTimeout(timer);
+    }
+  }, [history]);
 
   // 전역 pointerup 안전망 (화면 밖 릴리즈 대응)
   useEffect(() => {
@@ -320,6 +368,7 @@ export const MobileWalkieTalkieModal: React.FC<MobileWalkieTalkieModalProps> = (
 
   // 다시듣기 재생 (토글 정지 및 빈 오디오/오류 검증 피드백)
   const handlePlayAudio = async (msg: WalkieMessage) => {
+    walkieService.unlockAudio();
     if (playingMessageId === msg.id) {
       walkieService.stopAudio();
       setPlayingMessageId(null);
@@ -340,7 +389,8 @@ export const MobileWalkieTalkieModal: React.FC<MobileWalkieTalkieModalProps> = (
     }
   };
 
-  const currentChInfo = CHANNELS.find(c => c.id === currentChannel) || CHANNELS[0];
+  const accessibleChannels = channels;
+  const currentChInfo = accessibleChannels.find(c => c.id === currentChannel) || accessibleChannels[0] || DEFAULT_WALKIE_CHANNELS[0];
   const todayStr = walkieService.getTodayDateStr();
 
   // 다른 동료가 현재 채널에서 말하고 있는지 여부
@@ -348,11 +398,22 @@ export const MobileWalkieTalkieModal: React.FC<MobileWalkieTalkieModalProps> = (
     talkingStatus && 
     talkingStatus.isTalking && 
     talkingStatus.senderId !== currentUser?.id && 
-    (talkingStatus.channel === currentChannel || talkingStatus.channel === 'ALL')
+    (talkingStatus.channel === currentChannel)
   );
+
+  // 현재 채널이 접근 가능 목록에 없으면 첫 번째 유효 채널로 자동 전환
+  useEffect(() => {
+    if (accessibleChannels.length > 0 && !accessibleChannels.some(c => c.id === currentChannel)) {
+      const fallback = accessibleChannels[0].id;
+      setCurrentChannel(fallback);
+      walkieService.setChannel(fallback);
+    }
+  }, [accessibleChannels, currentChannel]);
 
   return (
     <div 
+      onTouchStart={() => walkieService.unlockAudio()}
+      onClick={() => walkieService.unlockAudio()}
       style={{
         position: 'fixed',
         inset: 0,
@@ -379,7 +440,8 @@ export const MobileWalkieTalkieModal: React.FC<MobileWalkieTalkieModalProps> = (
           boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.7)',
           display: 'flex',
           flexDirection: 'column',
-          overflow: 'hidden'
+          overflow: 'hidden',
+          position: 'relative'
         }}
       >
         {/* 1. 상단 무전기 슬림 헤더 (공간 최소화) */}
@@ -492,17 +554,19 @@ export const MobileWalkieTalkieModal: React.FC<MobileWalkieTalkieModalProps> = (
           </div>
         </div>
 
-        {/* 2. 채널 선택 바 (가로 1줄 컴팩트 4분할 바) */}
+        {/* 2. 채널 선택 바 (가로 스크롤 탭 + 새 채널 버튼) */}
         <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(4, 1fr)',
-          gap: '4px',
-          padding: '5px 8px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '5px',
+          padding: '6px 8px',
           backgroundColor: '#0f172a',
           borderBottom: '1px solid #1e293b',
-          flexShrink: 0
+          overflowX: 'auto',
+          flexShrink: 0,
+          scrollbarWidth: 'none'
         }}>
-          {CHANNELS.map(ch => {
+          {accessibleChannels.map(ch => {
             const isSelected = currentChannel === ch.id;
             return (
               <button
@@ -510,26 +574,126 @@ export const MobileWalkieTalkieModal: React.FC<MobileWalkieTalkieModalProps> = (
                 type="button"
                 onClick={() => handleSelectChannel(ch.id)}
                 style={{
-                  padding: '5px 2px',
-                  borderRadius: '6px',
-                  border: isSelected ? '1px solid #38bdf8' : '1px solid #1e293b',
+                  padding: '5px 10px',
+                  borderRadius: '7px',
+                  border: isSelected ? '1.5px solid #38bdf8' : '1px solid #1e293b',
                   backgroundColor: isSelected ? '#0369a1' : '#1e293b',
                   color: isSelected ? '#ffffff' : '#94a3b8',
                   cursor: 'pointer',
                   display: 'flex',
                   alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '3px',
-                  fontSize: '11px',
+                  gap: '4px',
+                  fontSize: '11.5px',
                   fontWeight: isSelected ? '900' : '700',
+                  flexShrink: 0,
+                  whiteSpace: 'nowrap',
                   transition: 'all 0.15s ease'
                 }}
               >
-                <span style={{ fontSize: '9px', opacity: 0.75 }}>{ch.code}</span>
+                <span style={{ fontSize: '9.5px', opacity: 0.8 }}>{ch.code}</span>
                 <span>{ch.name}</span>
               </button>
             );
           })}
+
+          {/* 새 채널 개설 버튼 */}
+          <button
+            type="button"
+            onClick={() => {
+              setNewChannelName('');
+              setNewChannelDesc('');
+              setSelectedMemberIds([]);
+              setChannelSearchQuery('');
+              setIsCreateChannelOpen(true);
+            }}
+            style={{
+              padding: '5px 10px',
+              borderRadius: '7px',
+              border: '1px dashed #38bdf8',
+              backgroundColor: 'rgba(56, 189, 248, 0.12)',
+              color: '#38bdf8',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+              fontSize: '11.5px',
+              fontWeight: '800',
+              flexShrink: 0,
+              whiteSpace: 'nowrap'
+            }}
+            title="새 채널 개설"
+          >
+            <Plus size={12} />
+            <span>새 채널</span>
+          </button>
+        </div>
+
+        {/* 2-1. 채널 서브헤더 (채널 정보 & 초대 버튼) */}
+        <div style={{
+          padding: '4px 10px',
+          backgroundColor: '#090d16',
+          borderBottom: '1px solid #1e293b',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '6px',
+          flexShrink: 0
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0, overflow: 'hidden' }}>
+            <span style={{
+              fontSize: '9.5px',
+              fontWeight: '800',
+              padding: '1px 5px',
+              borderRadius: '4px',
+              backgroundColor: '#1e293b',
+              color: '#38bdf8',
+              flexShrink: 0
+            }}>
+              {currentChInfo.code}
+            </span>
+            <span style={{ fontSize: '11.5px', fontWeight: '800', color: '#f8fafc', whiteSpace: 'nowrap' }}>
+              {currentChInfo.name}
+            </span>
+            <span style={{ fontSize: '10.5px', color: '#64748b', display: 'flex', alignItems: 'center', gap: '2px', flexShrink: 0 }}>
+              <Users size={11} />
+              {currentChInfo.isDefault && (!currentChInfo.memberIds || currentChInfo.memberIds.length === 0)
+                ? `전사 (${activeUsers.length}명)`
+                : `${currentChInfo.memberIds?.length || 0}명`}
+            </span>
+            {currentChInfo.desc && (
+              <span style={{ fontSize: '10.5px', color: '#94a3b8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                • {currentChInfo.desc}
+              </span>
+            )}
+          </div>
+
+          {/* 사원 초대 버튼 */}
+          <button
+            type="button"
+            onClick={() => {
+              setInviteMemberIds([]);
+              setInviteSearchQuery('');
+              setIsInviteModalOpen(true);
+            }}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '3px',
+              padding: '2px 7px',
+              borderRadius: '5px',
+              border: '1px solid #334155',
+              backgroundColor: '#1e293b',
+              color: '#38bdf8',
+              fontSize: '10.5px',
+              fontWeight: '700',
+              cursor: 'pointer',
+              flexShrink: 0,
+              whiteSpace: 'nowrap'
+            }}
+          >
+            <UserPlus size={11} />
+            <span>초대</span>
+          </button>
         </div>
 
         {/* ── [뷰 1] 실시간 무전 (PTT 화면) ── */}
@@ -566,7 +730,7 @@ export const MobileWalkieTalkieModal: React.FC<MobileWalkieTalkieModalProps> = (
                 flexShrink: 0
               }}>
                 <span style={{ width: '7px', height: '7px', borderRadius: '9999px', backgroundColor: '#ef4444', boxShadow: '0 0 8px #ef4444' }} />
-                <span>🔴 [{talkingStatus?.senderDept} {talkingStatus?.senderName}] 발언 중...</span>
+                <span>🔴 [{talkingStatus?.senderName}] 발언 중...</span>
               </div>
             ) : isMonologueOrderMode ? (
               <div style={{
@@ -613,34 +777,32 @@ export const MobileWalkieTalkieModal: React.FC<MobileWalkieTalkieModalProps> = (
               display: 'flex',
               flexDirection: 'column',
               padding: '6px 10px',
-              overflow: 'hidden'
+              overflow: 'hidden',
+              position: 'relative'
             }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px', flexShrink: 0, gap: '4px' }}>
                 <span style={{ fontSize: '11px', fontWeight: '800', color: '#cbd5e1', display: 'flex', alignItems: 'center', gap: '4px', whiteSpace: 'nowrap' }}>
                   <MessageSquare size={11} color="#38bdf8" />
-                  <span>대화 피드 ({displayHistory.length}건)</span>
+                  <span>대화 피드 ({currentChMessages.length}건)</span>
                 </span>
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '3.5px', flexWrap: 'nowrap' }}>
-                  {/* 🎙️ 100% 무료 Groq LPU / Cloudflare AI Whisper STT 뱃지 */}
-                  <button
-                    type="button"
-                    onClick={handleToggleSttEngine}
+                  {/* ⚡ Groq STT 단일 뱃지 */}
+                  <span
                     style={{
-                      backgroundColor: sttEngine === 'GROQ' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(249, 115, 22, 0.15)',
-                      border: sttEngine === 'GROQ' ? '1px solid #10b981' : '1px solid #f97316',
-                      color: sttEngine === 'GROQ' ? '#34d399' : '#fb923c',
+                      backgroundColor: 'rgba(16, 185, 129, 0.15)',
+                      border: '1px solid #10b981',
+                      color: '#34d399',
                       padding: '2px 5.5px',
                       borderRadius: '5px',
                       fontSize: '9.5px',
                       fontWeight: '800',
-                      whiteSpace: 'nowrap',
-                      cursor: 'pointer'
+                      whiteSpace: 'nowrap'
                     }}
-                    title={sttEngine === 'GROQ' ? 'Groq LPU Whisper (0.3초) - 클릭 시 Cloudflare 전환' : 'Cloudflare Workers AI Whisper - 클릭 시 Groq 전환'}
+                    title="Groq LPU Whisper (0.3초)"
                   >
-                    {sttEngine === 'GROQ' ? '⚡ Groq STT' : '☁️ Cloudflare STT'}
-                  </button>
+                    ⚡ Groq STT
+                  </span>
 
                   {/* 🐞 디버그 로그 ON/OFF 토글 버튼 */}
                   <button
@@ -682,13 +844,14 @@ export const MobileWalkieTalkieModal: React.FC<MobileWalkieTalkieModalProps> = (
                 </div>
               </div>
 
-              {displayHistory.length === 0 ? (
+              {currentChMessages.length === 0 ? (
                 <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', color: '#64748b' }}>
                   오늘 무전 내역이 없습니다. (하단 버튼을 터치하여 말씀하세요)
                 </div>
               ) : (
                 <div 
                   ref={pttFeedContainerRef}
+                  onScroll={handleFeedScroll}
                   style={{ 
                     flex: 1,
                     minHeight: 0,
@@ -696,11 +859,14 @@ export const MobileWalkieTalkieModal: React.FC<MobileWalkieTalkieModalProps> = (
                     flexDirection: 'column', 
                     gap: '4px',
                     overflowY: 'auto',
-                    paddingRight: '2px'
+                    paddingRight: '2px',
+                    WebkitOverflowScrolling: 'touch',
+                    touchAction: 'pan-y',
+                    overscrollBehaviorY: 'contain'
                   }}
                 >
-                  {/* Latest messages at bottom (reverse order, max 80 items) */}
-                  {displayHistory.slice(0, 80).reverse().map(msg => {
+                  {/* Latest messages at bottom (reverse order, no limit) */}
+                  {currentChMessages.slice().reverse().map(msg => {
                     // ── [DEBUG] Console-style debug log entry ──
                     if (msg.isDebug) {
                       const ts = new Date(msg.createdAt).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -770,7 +936,7 @@ export const MobileWalkieTalkieModal: React.FC<MobileWalkieTalkieModalProps> = (
                             {msg.channel}
                           </span>
                           <span style={{ fontSize: '10px', fontWeight: '700', color: isMine ? '#93c5fd' : '#cbd5e1', marginRight: '4px' }}>
-                            {isMine ? '나' : `${msg.senderDept} ${msg.senderName}`}
+                            {isMine ? '나' : msg.senderName}
                           </span>
                           <span style={{ fontSize: '9px', color: '#64748b', marginRight: '5px' }}>
                             {timeStr}
@@ -817,6 +983,36 @@ export const MobileWalkieTalkieModal: React.FC<MobileWalkieTalkieModalProps> = (
                     );
                   })}
                 </div>
+              )}
+
+              {/* 스크롤이 위로 올라가 있을 때 플로팅 최신 메시지 이동 버튼 */}
+              {!isAtBottom && currentChMessages.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => scrollToBottom('smooth')}
+                  style={{
+                    position: 'absolute',
+                    bottom: '10px',
+                    left: '50%',
+                    transform: 'translateX(-50%)',
+                    backgroundColor: '#0284c7',
+                    color: '#ffffff',
+                    border: '1px solid #38bdf8',
+                    borderRadius: '9999px',
+                    padding: '4px 12px',
+                    fontSize: '11px',
+                    fontWeight: '800',
+                    boxShadow: '0 4px 14px rgba(0, 0, 0, 0.6)',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    zIndex: 20,
+                    whiteSpace: 'nowrap'
+                  }}
+                >
+                  <span>↓ 최신 메시지</span>
+                </button>
               )}
             </div>
 
@@ -973,7 +1169,7 @@ export const MobileWalkieTalkieModal: React.FC<MobileWalkieTalkieModalProps> = (
               </button>
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <span style={{ fontSize: '11px', color: '#94a3b8', whiteSpace: 'nowrap' }}>
-                  당일 • {displayHistory.length}건
+                  {currentChInfo.name} • {currentChMessages.length}건
                 </span>
 
                 {/* 🐞 디버그 로그 ON/OFF 토글 버튼 */}
@@ -1033,7 +1229,7 @@ export const MobileWalkieTalkieModal: React.FC<MobileWalkieTalkieModalProps> = (
                 gap: '10px'
               }}
             >
-              {displayHistory.length === 0 ? (
+              {currentChMessages.length === 0 ? (
                 <div style={{
                   padding: '40px 16px',
                   textAlign: 'center',
@@ -1042,13 +1238,13 @@ export const MobileWalkieTalkieModal: React.FC<MobileWalkieTalkieModalProps> = (
                   lineHeight: 1.6
                 }}>
                   <MessageSquare size={28} color="#334155" style={{ margin: '0 auto 8px' }} />
-                  <div>오늘 주고받은 무전 대화가 없습니다.</div>
+                  <div>이 채널의 무전 대화 기록이 없습니다.</div>
                   <div style={{ fontSize: '11px', color: '#475569', marginTop: '4px' }}>
                     무전으로 말한 내용은 음성과 함께 실시간 텍스트로 자동 기록됩니다.
                   </div>
                 </div>
               ) : (
-                [...displayHistory].reverse().map(msg => {
+                [...currentChMessages].reverse().map(msg => {
                   // ── [DEBUG] Console-style debug log entry ──
                   if (msg.isDebug) {
                     const ts = new Date(msg.createdAt).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -1118,7 +1314,7 @@ export const MobileWalkieTalkieModal: React.FC<MobileWalkieTalkieModalProps> = (
                           {msg.channel}
                         </span>
                         <span style={{ fontSize: '10.5px', fontWeight: '700', color: isMine ? '#93c5fd' : '#cbd5e1', marginRight: '4px' }}>
-                          {isMine ? '나' : `${msg.senderDept} ${msg.senderName}`}
+                          {isMine ? '나' : msg.senderName}
                         </span>
                         <span style={{ fontSize: '9.5px', color: '#64748b', marginRight: '6px' }}>
                           {timeStr}
@@ -1164,6 +1360,524 @@ export const MobileWalkieTalkieModal: React.FC<MobileWalkieTalkieModalProps> = (
                     </div>
                   );
                 })
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ── [모달 1] 새 채널 개설 다이얼로그 ── */}
+        {isCreateChannelOpen && (
+          <div style={{
+            position: 'absolute',
+            inset: 0,
+            zIndex: 60,
+            backgroundColor: '#0f172a',
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden'
+          }}>
+            {/* 모달 헤더 */}
+            <div style={{
+              padding: '10px 14px',
+              backgroundColor: '#1e293b',
+              borderBottom: '1px solid #334155',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexShrink: 0
+            }}>
+              <span style={{ fontSize: '13px', fontWeight: '900', color: '#f8fafc' }}>
+                새 채널 개설
+              </span>
+              <button
+                type="button"
+                onClick={() => setIsCreateChannelOpen(false)}
+                style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: '2px' }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* 모달 본문 (수직 스택 폼) */}
+            <div style={{
+              flex: 1,
+              minHeight: 0,
+              overflowY: 'auto',
+              padding: '12px 14px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '12px'
+            }}>
+              {/* 채널명 */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <label style={{ fontSize: '11px', fontWeight: '800', color: '#cbd5e1', whiteSpace: 'nowrap' }}>
+                  채널명 *
+                </label>
+                <input
+                  type="text"
+                  value={newChannelName}
+                  onChange={e => setNewChannelName(e.target.value)}
+                  placeholder="예: 하남현장 출동팀, 주기장 보수팀"
+                  style={{
+                    padding: '8px 10px',
+                    backgroundColor: '#090d16',
+                    border: '1px solid #334155',
+                    borderRadius: '6px',
+                    color: '#f8fafc',
+                    fontSize: '12px',
+                    outline: 'none'
+                  }}
+                />
+              </div>
+
+              {/* 채널 설명 */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <label style={{ fontSize: '11px', fontWeight: '800', color: '#cbd5e1', whiteSpace: 'nowrap' }}>
+                  채널 설명 (선택)
+                </label>
+                <input
+                  type="text"
+                  value={newChannelDesc}
+                  onChange={e => setNewChannelDesc(e.target.value)}
+                  placeholder="채널 용도 또는 작업 내용"
+                  style={{
+                    padding: '8px 10px',
+                    backgroundColor: '#090d16',
+                    border: '1px solid #334155',
+                    borderRadius: '6px',
+                    color: '#f8fafc',
+                    fontSize: '12px',
+                    outline: 'none'
+                  }}
+                />
+              </div>
+
+              {/* 참여 사원 선택 */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', flex: 1, minHeight: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <label style={{ fontSize: '11px', fontWeight: '800', color: '#cbd5e1', whiteSpace: 'nowrap' }}>
+                    참여 사원 선택 ({selectedMemberIds.length}명 선택됨)
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const selectable = activeUsers.filter(u => u.id !== currentUser?.id).map(u => u.id);
+                      if (selectedMemberIds.length === selectable.length) {
+                        setSelectedMemberIds([]);
+                      } else {
+                        setSelectedMemberIds(selectable);
+                      }
+                    }}
+                    style={{
+                      background: 'transparent',
+                      border: 'none',
+                      color: '#38bdf8',
+                      fontSize: '10.5px',
+                      fontWeight: '700',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    {selectedMemberIds.length === activeUsers.filter(u => u.id !== currentUser?.id).length ? '전체 해제' : '전체 선택'}
+                  </button>
+                </div>
+
+                {/* 사원 검색 입력창 */}
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '6px 10px',
+                  backgroundColor: '#090d16',
+                  border: '1px solid #334155',
+                  borderRadius: '6px'
+                }}>
+                  <Search size={13} color="#64748b" />
+                  <input
+                    type="text"
+                    value={channelSearchQuery}
+                    onChange={e => setChannelSearchQuery(e.target.value)}
+                    placeholder="사원명 또는 부서 검색"
+                    style={{
+                      background: 'transparent',
+                      border: 'none',
+                      color: '#f8fafc',
+                      fontSize: '11.5px',
+                      outline: 'none',
+                      width: '100%'
+                    }}
+                  />
+                </div>
+
+                {/* 사원 체크리스트 */}
+                <div style={{
+                  maxHeight: '190px',
+                  overflowY: 'auto',
+                  border: '1px solid #1e293b',
+                  borderRadius: '6px',
+                  backgroundColor: '#090d16',
+                  padding: '4px'
+                }}>
+                  {activeUsers
+                    .filter(u => u.id !== currentUser?.id)
+                    .filter(u => !channelSearchQuery || u.name.includes(channelSearchQuery) || (u.department && u.department.includes(channelSearchQuery)))
+                    .map(u => {
+                      const isChecked = selectedMemberIds.includes(u.id);
+                      return (
+                        <div
+                          key={u.id}
+                          onClick={() => {
+                            if (isChecked) {
+                              setSelectedMemberIds(prev => prev.filter(id => id !== u.id));
+                            } else {
+                              setSelectedMemberIds(prev => [...prev, u.id]);
+                            }
+                          }}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            padding: '7px 8px',
+                            borderRadius: '5px',
+                            cursor: 'pointer',
+                            backgroundColor: isChecked ? 'rgba(3, 105, 161, 0.25)' : 'transparent',
+                            borderBottom: '1px solid #1e293b'
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <span style={{ fontSize: '11.5px', fontWeight: '700', color: isChecked ? '#38bdf8' : '#e2e8f0' }}>
+                              {u.name}
+                            </span>
+                            <span style={{ fontSize: '10px', color: '#64748b' }}>
+                              {u.department || u.role || ''}
+                            </span>
+                          </div>
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            readOnly
+                            style={{ accentColor: '#0284c7', cursor: 'pointer' }}
+                          />
+                        </div>
+                      );
+                    })}
+                </div>
+              </div>
+            </div>
+
+            {/* 모달 푸터 버튼 */}
+            <div style={{
+              padding: '10px 14px',
+              backgroundColor: '#1e293b',
+              borderTop: '1px solid #334155',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'flex-end',
+              gap: '8px',
+              flexShrink: 0
+            }}>
+              <button
+                type="button"
+                onClick={() => setIsCreateChannelOpen(false)}
+                style={{
+                  padding: '7px 14px',
+                  borderRadius: '6px',
+                  border: '1px solid #475569',
+                  backgroundColor: '#0f172a',
+                  color: '#cbd5e1',
+                  fontSize: '11.5px',
+                  fontWeight: '700',
+                  cursor: 'pointer'
+                }}
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                disabled={!newChannelName.trim()}
+                onClick={() => {
+                  if (!currentUser || !newChannelName.trim()) return;
+                  const created = walkieService.createChannel(
+                    newChannelName.trim(),
+                    newChannelDesc.trim(),
+                    selectedMemberIds,
+                    { id: currentUser.id, name: currentUser.name }
+                  );
+                  setChannels(walkieService.getChannels(currentUser.id));
+                  setCurrentChannel(created.id);
+                  walkieService.setChannel(created.id);
+                  setIsCreateChannelOpen(false);
+                  setNewChannelName('');
+                  setNewChannelDesc('');
+                  setSelectedMemberIds([]);
+                }}
+                style={{
+                  padding: '7px 16px',
+                  borderRadius: '6px',
+                  border: 'none',
+                  backgroundColor: newChannelName.trim() ? '#0284c7' : '#334155',
+                  color: '#ffffff',
+                  fontSize: '11.5px',
+                  fontWeight: '800',
+                  cursor: newChannelName.trim() ? 'pointer' : 'not-allowed'
+                }}
+              >
+                개설
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ── [모달 2] 사원 초대 다이얼로그 ── */}
+        {isInviteModalOpen && (
+          <div style={{
+            position: 'absolute',
+            inset: 0,
+            zIndex: 60,
+            backgroundColor: '#0f172a',
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden'
+          }}>
+            {/* 모달 헤더 */}
+            <div style={{
+              padding: '10px 14px',
+              backgroundColor: '#1e293b',
+              borderBottom: '1px solid #334155',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexShrink: 0
+            }}>
+              <div>
+                <span style={{ fontSize: '13px', fontWeight: '900', color: '#f8fafc' }}>
+                  사원 초대
+                </span>
+                <span style={{ fontSize: '11px', color: '#38bdf8', marginLeft: '6px' }}>
+                  [{currentChInfo.name}]
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsInviteModalOpen(false)}
+                style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: '2px' }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* 모달 본문 */}
+            <div style={{
+              flex: 1,
+              minHeight: 0,
+              overflowY: 'auto',
+              padding: '12px 14px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '10px'
+            }}>
+              {/* 현재 참여 인원 현황 */}
+              <div style={{
+                padding: '6px 10px',
+                borderRadius: '6px',
+                backgroundColor: '#1e293b',
+                fontSize: '11px',
+                color: '#cbd5e1',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between'
+              }}>
+                <span>현재 참여 인원</span>
+                <span style={{ fontWeight: '800', color: '#38bdf8' }}>
+                  {currentChInfo.isDefault && (!currentChInfo.memberIds || currentChInfo.memberIds.length === 0)
+                    ? `전사 (${activeUsers.length}명)`
+                    : `${currentChInfo.memberIds?.length || 0}명`}
+                </span>
+              </div>
+
+              {currentChInfo.isDefault && (!currentChInfo.memberIds || currentChInfo.memberIds.length === 0) ? (
+                <div style={{ padding: '24px 12px', textAlign: 'center', color: '#94a3b8', fontSize: '12px', lineHeight: 1.6 }}>
+                  <Users size={28} color="#38bdf8" style={{ margin: '0 auto 10px', display: 'block' }} />
+                  <div style={{ color: '#f8fafc', fontWeight: '800', marginBottom: '4px' }}>전사 자동 참여 채널</div>
+                  <div>기본 채널은 회사의 모든 임직원이 자동으로 소통에 참여하고 있습니다.</div>
+                  <div style={{ fontSize: '11px', color: '#64748b', marginTop: '6px' }}>
+                    특정 인원만 참여하는 채널이 필요하신 경우 상단의 <b>[+ 새 채널]</b>을 통해 개설해 주세요.
+                  </div>
+                </div>
+              ) : (
+                <>
+                  {/* 사원 검색 & 전체 선택 */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <label style={{ fontSize: '11px', fontWeight: '800', color: '#cbd5e1', whiteSpace: 'nowrap' }}>
+                      초대할 사원 선택 ({inviteMemberIds.length}명 선택됨)
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const selectable = activeUsers
+                          .filter(u => !(currentChInfo.memberIds || []).includes(u.id))
+                          .map(u => u.id);
+                        if (inviteMemberIds.length === selectable.length) {
+                          setInviteMemberIds([]);
+                        } else {
+                          setInviteMemberIds(selectable);
+                        }
+                      }}
+                      style={{
+                        background: 'transparent',
+                        border: 'none',
+                        color: '#38bdf8',
+                        fontSize: '10.5px',
+                        fontWeight: '700',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {inviteMemberIds.length === activeUsers.filter(u => !(currentChInfo.memberIds || []).includes(u.id)).length && inviteMemberIds.length > 0
+                        ? '전체 해제'
+                        : '전체 선택'}
+                    </button>
+                  </div>
+
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '6px 10px',
+                    backgroundColor: '#090d16',
+                    border: '1px solid #334155',
+                    borderRadius: '6px'
+                  }}>
+                    <Search size={13} color="#64748b" />
+                    <input
+                      type="text"
+                      value={inviteSearchQuery}
+                      onChange={e => setInviteSearchQuery(e.target.value)}
+                      placeholder="초대할 사원명 검색"
+                      style={{
+                        background: 'transparent',
+                        border: 'none',
+                        color: '#f8fafc',
+                        fontSize: '11.5px',
+                        outline: 'none',
+                        width: '100%'
+                      }}
+                    />
+                  </div>
+
+                  {/* 초대 대상 사원 리스트 */}
+                  <div style={{
+                    flex: 1,
+                    minHeight: 0,
+                    overflowY: 'auto',
+                    border: '1px solid #1e293b',
+                    borderRadius: '6px',
+                    backgroundColor: '#090d16',
+                    padding: '4px'
+                  }}>
+                    {activeUsers
+                      .filter(u => !(currentChInfo.memberIds || []).includes(u.id))
+                      .filter(u => !inviteSearchQuery || u.name.includes(inviteSearchQuery) || (u.department && u.department.includes(inviteSearchQuery)))
+                      .map(u => {
+                        const isChecked = inviteMemberIds.includes(u.id);
+                        return (
+                          <div
+                            key={u.id}
+                            onClick={() => {
+                              if (isChecked) {
+                                setInviteMemberIds(prev => prev.filter(id => id !== u.id));
+                              } else {
+                                setInviteMemberIds(prev => [...prev, u.id]);
+                              }
+                            }}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              padding: '7px 8px',
+                              borderRadius: '5px',
+                              cursor: 'pointer',
+                              backgroundColor: isChecked ? 'rgba(3, 105, 161, 0.25)' : 'transparent',
+                              borderBottom: '1px solid #1e293b'
+                            }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <span style={{ fontSize: '11.5px', fontWeight: '700', color: isChecked ? '#38bdf8' : '#e2e8f0' }}>
+                                {u.name}
+                              </span>
+                              <span style={{ fontSize: '10px', color: '#64748b' }}>
+                                {u.department || u.role || ''}
+                              </span>
+                            </div>
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              readOnly
+                              style={{ accentColor: '#0284c7', cursor: 'pointer' }}
+                            />
+                          </div>
+                        );
+                      })}
+
+                    {activeUsers.filter(u => !(currentChInfo.memberIds || []).includes(u.id)).length === 0 && (
+                      <div style={{ padding: '20px 10px', textAlign: 'center', color: '#64748b', fontSize: '11.5px' }}>
+                        모든 임직원이 이미 이 채널에 참여 중입니다.
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* 모달 푸터 버튼 */}
+            <div style={{
+              padding: '10px 14px',
+              backgroundColor: '#1e293b',
+              borderTop: '1px solid #334155',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'flex-end',
+              gap: '8px',
+              flexShrink: 0
+            }}>
+              <button
+                type="button"
+                onClick={() => setIsInviteModalOpen(false)}
+                style={{
+                  padding: '7px 14px',
+                  borderRadius: '6px',
+                  border: '1px solid #475569',
+                  backgroundColor: '#0f172a',
+                  color: '#cbd5e1',
+                  fontSize: '11.5px',
+                  fontWeight: '700',
+                  cursor: 'pointer'
+                }}
+              >
+                닫기
+              </button>
+              {!(currentChInfo.isDefault && (!currentChInfo.memberIds || currentChInfo.memberIds.length === 0)) && (
+                <button
+                  type="button"
+                  disabled={inviteMemberIds.length === 0}
+                  onClick={() => {
+                    if (inviteMemberIds.length === 0) return;
+                    walkieService.inviteMembers(currentChannel, inviteMemberIds);
+                    setChannels(walkieService.getChannels(currentUser?.id));
+                    setIsInviteModalOpen(false);
+                    setInviteMemberIds([]);
+                  }}
+                  style={{
+                    padding: '7px 16px',
+                    borderRadius: '6px',
+                    border: 'none',
+                    backgroundColor: inviteMemberIds.length > 0 ? '#0284c7' : '#334155',
+                    color: '#ffffff',
+                    fontSize: '11.5px',
+                    fontWeight: '800',
+                    cursor: inviteMemberIds.length > 0 ? 'pointer' : 'not-allowed'
+                  }}
+                >
+                  초대 ({inviteMemberIds.length}명)
+                </button>
               )}
             </div>
           </div>

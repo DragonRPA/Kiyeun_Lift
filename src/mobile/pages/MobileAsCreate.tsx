@@ -368,7 +368,13 @@ export const MobileAsCreate: React.FC<MobileAsCreateProps> = ({ onBack, onCreate
             value={assetNo}
             onChange={(e) => handleAssetNoChange(e.target.value)}
             placeholder="예: 102, G19-01, 1001"
-            className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-sm text-white font-mono uppercase focus:outline-none focus:border-blue-500"
+            className="w-full rounded-xl p-3 text-sm font-mono uppercase placeholder-slate-500 focus:outline-none"
+            style={{
+              backgroundColor: '#090d16',
+              color: '#f8fafc',
+              border: '1px solid #334155',
+              colorScheme: 'dark'
+            }}
           />
         </div>
 
@@ -383,7 +389,13 @@ export const MobileAsCreate: React.FC<MobileAsCreateProps> = ({ onBack, onCreate
             value={customerName}
             onChange={(e) => handleCustomerNameChange(e.target.value)}
             placeholder="고객사 상호명 입력"
-            className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-sm text-white focus:outline-none focus:border-blue-500"
+            className="w-full rounded-xl p-3 text-sm placeholder-slate-500 focus:outline-none"
+            style={{
+              backgroundColor: '#090d16',
+              color: '#f8fafc',
+              border: '1px solid #334155',
+              colorScheme: 'dark'
+            }}
           />
         </div>
 
@@ -425,7 +437,13 @@ export const MobileAsCreate: React.FC<MobileAsCreateProps> = ({ onBack, onCreate
               value={siteName}
               onChange={(e) => handleSiteNameChange(e.target.value)}
               placeholder="현장 이름"
-              className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-sm text-white focus:outline-none focus:border-blue-500"
+              className="w-full rounded-xl p-3 text-sm placeholder-slate-500 focus:outline-none"
+              style={{
+                backgroundColor: '#090d16',
+                color: '#f8fafc',
+                border: '1px solid #334155',
+                colorScheme: 'dark'
+              }}
             />
           </div>
           <div className="flex flex-col gap-1.5">
@@ -435,7 +453,13 @@ export const MobileAsCreate: React.FC<MobileAsCreateProps> = ({ onBack, onCreate
               value={locationDetail}
               onChange={(e) => setLocationDetail(e.target.value)}
               placeholder="예: 지하 1층, 하역장"
-              className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-sm text-white focus:outline-none focus:border-blue-500"
+              className="w-full rounded-xl p-3 text-sm placeholder-slate-500 focus:outline-none"
+              style={{
+                backgroundColor: '#090d16',
+                color: '#f8fafc',
+                border: '1px solid #334155',
+                colorScheme: 'dark'
+              }}
             />
           </div>
         </div>
@@ -462,7 +486,13 @@ export const MobileAsCreate: React.FC<MobileAsCreateProps> = ({ onBack, onCreate
               value={siteAddress}
               onChange={(e) => setSiteAddress(e.target.value)}
               placeholder="도로명 주소 입력 (고객 정보 자동 연동)"
-              className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-sm text-white focus:outline-none focus:border-blue-500 pr-9"
+              className="w-full rounded-xl p-3 text-sm placeholder-slate-500 focus:outline-none pr-9"
+              style={{
+                backgroundColor: '#090d16',
+                color: '#f8fafc',
+                border: '1px solid #334155',
+                colorScheme: 'dark'
+              }}
             />
             {siteAddress && (
               <div className="absolute right-3 top-1/2 -translate-y-1/2 text-sky-400 pointer-events-none">
@@ -511,36 +541,54 @@ export const MobileAsCreate: React.FC<MobileAsCreateProps> = ({ onBack, onCreate
 
         {/* 고장 상세 증상 */}
         <div className="flex flex-col gap-1.5">
-          <label className="text-xs font-bold text-slate-300">고장 상세 내용</label>
+          <label className="text-xs font-bold text-slate-300 whitespace-nowrap flex-shrink-0">고장 상세 내용</label>
           <textarea
             rows={3}
             value={issueDescription}
             onChange={(e) => setIssueDescription(e.target.value)}
             placeholder="고장 호소 내용 입력"
-            className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-sm text-white focus:outline-none focus:border-blue-500"
+            className="w-full rounded-xl p-3 text-sm placeholder-slate-500 focus:outline-none"
+            style={{
+              backgroundColor: '#090d16',
+              color: '#f8fafc',
+              border: '1px solid #334155',
+              colorScheme: 'dark'
+            }}
           />
         </div>
 
         {/* 접수자 성함 및 연락처 */}
         <div className="grid grid-cols-2 gap-2">
           <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-bold text-slate-300">접수자 성함</label>
+            <label className="text-xs font-bold text-slate-300 whitespace-nowrap flex-shrink-0">접수자 성함</label>
             <input
               type="text"
               value={reporterName}
               onChange={(e) => setReporterName(e.target.value)}
               placeholder="예: 김반장, 이소장"
-              className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-sm text-white"
+              className="w-full rounded-xl p-3 text-sm placeholder-slate-500 focus:outline-none"
+              style={{
+                backgroundColor: '#090d16',
+                color: '#f8fafc',
+                border: '1px solid #334155',
+                colorScheme: 'dark'
+              }}
             />
           </div>
           <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-bold text-slate-300">연락처</label>
+            <label className="text-xs font-bold text-slate-300 whitespace-nowrap flex-shrink-0">연락처</label>
             <input
               type="tel"
               value={reporterContact}
               onChange={(e) => setReporterContact(e.target.value)}
               placeholder="010-0000-0000"
-              className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-sm text-white"
+              className="w-full rounded-xl p-3 text-sm placeholder-slate-500 focus:outline-none"
+              style={{
+                backgroundColor: '#090d16',
+                color: '#f8fafc',
+                border: '1px solid #334155',
+                colorScheme: 'dark'
+              }}
             />
           </div>
         </div>
@@ -548,7 +596,7 @@ export const MobileAsCreate: React.FC<MobileAsCreateProps> = ({ onBack, onCreate
         {/* 고장 현장 사진 첨부 */}
         <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800">
           <CameraUploader
-            label="고장 현장 사진 촬영"
+            label="고장 현장 사진 첨부 / 촬영"
             images={images}
             onChange={setImages}
             maxImages={4}
@@ -587,8 +635,14 @@ export const MobileAsCreate: React.FC<MobileAsCreateProps> = ({ onBack, onCreate
               rows={5}
               value={pastedTranscript}
               onChange={(e) => setPastedTranscript(e.target.value)}
-              placeholder="갤럭시 통화 요약 텍스트 또는 통화 내용을 붙여넣으세요...\n예: 102호기 상승이 안되고 삐소리 남, 내일 오전 김반장 010-1234-5678 판교 현장 급해요"
-              className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 font-sans leading-relaxed"
+              placeholder="통화 내용을 붙여넣으세요...\n예: 102호기 상승이 안되고 삐소리 남, 내일 오전 김반장 010-1234-5678 판교 현장 급해요"
+              className="w-full rounded-xl p-3 text-xs placeholder-slate-500 focus:outline-none font-sans leading-relaxed"
+              style={{
+                backgroundColor: '#090d16',
+                color: '#f8fafc',
+                border: '1px solid #334155',
+                colorScheme: 'dark'
+              }}
             />
 
             {/* 테스트용 예시 버튼 */}

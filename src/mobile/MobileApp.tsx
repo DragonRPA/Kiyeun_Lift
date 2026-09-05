@@ -52,7 +52,7 @@ export const MobileApp: React.FC<MobileAppProps> = ({ onSwitchToPc }) => {
   // ✨ 기연 렌탈 GEMS AI 비서 모달 상태
   const [isGemsModalOpen, setIsGemsModalOpen] = useState(false);
 
-  // 무전기 서비스 자동 구독 (백그라운드 수신 대기)
+  // 무전기 서비스 자동 구독 (백그라운드 수신 대기) 및 모바일 오디오 락 해제
   useEffect(() => {
     if (currentUser) {
       walkieService.subscribe({
@@ -63,12 +63,25 @@ export const MobileApp: React.FC<MobileAppProps> = ({ onSwitchToPc }) => {
       });
     }
 
+    // 모바일 브라우저 오디오 자동재생 언락 (첫 화면 터치 시 영구 언락)
+    const handleFirstGesture = () => {
+      walkieService.unlockAudio();
+      window.removeEventListener('touchstart', handleFirstGesture);
+      window.removeEventListener('click', handleFirstGesture);
+    };
+    window.addEventListener('touchstart', handleFirstGesture, { passive: true });
+    window.addEventListener('click', handleFirstGesture, { passive: true });
+
     // 전원 변경 체크 인터벌
     const interval = setInterval(() => {
       setIsWalkieOn(walkieService.getIsPowerOn());
     }, 1000);
 
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('touchstart', handleFirstGesture);
+      window.removeEventListener('click', handleFirstGesture);
+    };
   }, [currentUser]);
 
   // 부서 모드 변경 핸들러
@@ -118,7 +131,10 @@ export const MobileApp: React.FC<MobileAppProps> = ({ onSwitchToPc }) => {
         deptMode={deptMode}
         onChangeDeptMode={handleDeptModeChange}
         isWalkieOn={isWalkieOn}
-        onOpenWalkieTalkie={() => setIsWalkieModalOpen(true)}
+        onOpenWalkieTalkie={() => {
+          walkieService.unlockAudio();
+          setIsWalkieModalOpen(true);
+        }}
         onOpenGems={() => setIsGemsModalOpen(true)}
       />
 

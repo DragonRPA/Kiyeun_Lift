@@ -6,6 +6,7 @@
   min-height: 100dvh;
   background-color: #020617;
   color: #f8fafc;
+  color-scheme: dark;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans KR", sans-serif;
   -webkit-font-smoothing: antialiased;
   padding-bottom: 85px;
@@ -513,20 +514,35 @@
 .mobile-app-root select {
   font-family: inherit;
   font-size: 13.5px;
-  background-color: #0f172a;
-  border: 1px solid #334155;
-  color: #ffffff;
+  background-color: #0f172a !important;
+  border: 1px solid #334155 !important;
+  color: #f8fafc !important;
   border-radius: 12px;
   padding: 10px 14px;
   outline: none;
   width: 100%;
   box-sizing: border-box;
+  color-scheme: dark !important;
+}
+
+.mobile-app-root input[type="date"],
+.mobile-app-root input[type="time"],
+.mobile-app-root input[type="datetime-local"] {
+  background-color: #090d16 !important;
+  color: #f8fafc !important;
+  color-scheme: dark !important;
+}
+
+.mobile-app-root input::placeholder,
+.mobile-app-root textarea::placeholder {
+  color: #64748b !important;
+  opacity: 1 !important;
 }
 
 .mobile-app-root input:focus,
 .mobile-app-root textarea:focus,
 .mobile-app-root select:focus {
-  border-color: #3b82f6;
+  border-color: #3b82f6 !important;
   box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
 }
 

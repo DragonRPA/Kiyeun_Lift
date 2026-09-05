@@ -24,13 +24,24 @@ interface MobileDispatchOrderCreateProps {
 }
 
 const SPEC_OPTIONS = [
-  { ft: '19ft', defaultModel: '1930' },
-  { ft: '26ft', defaultModel: '2632' },
-  { ft: '32ft', defaultModel: '3246' },
-  { ft: '40ft', defaultModel: '4047' },
-  { ft: '46ft', defaultModel: '1412' },
-  { ft: '53ft', defaultModel: '1612' },
+  { ft: '19ft', defaultModel: 'GS-1930' },
+  { ft: '26ft', defaultModel: 'GTJZ0812E' },
+  { ft: '32ft', defaultModel: 'GTJZ1012E' },
+  { ft: '40ft', defaultModel: 'GS-4047' },
+  { ft: '46ft', defaultModel: 'GS-4655' },
+  { ft: '53ft', defaultModel: 'S1614AC+' },
 ];
+
+const inferFeetFromModel = (modelName: string): string => {
+  const s = String(modelName || '').toUpperCase();
+  if (s.includes('1930') || s.includes('1330') || s.includes('1432') || s.includes('3215') || s.includes('0608') || s.includes('1230') || s.includes('19')) return '19ft';
+  if (s.includes('2646') || s.includes('2632') || s.includes('0812') || s.includes('0808') || s.includes('3219') || s.includes('26')) return '26ft';
+  if (s.includes('3246') || s.includes('1012') || s.includes('1008') || s.includes('32')) return '32ft';
+  if (s.includes('4047') || s.includes('4046') || s.includes('4069') || s.includes('1212') || s.includes('40')) return '40ft';
+  if (s.includes('4655') || s.includes('1412') || s.includes('1414') || s.includes('46')) return '46ft';
+  if (s.includes('1612') || s.includes('1614') || s.includes('5390') || s.includes('53')) return '53ft';
+  return '19ft';
+};
 
 export const MobileDispatchOrderCreate: React.FC<MobileDispatchOrderCreateProps> = ({ onBack, onSuccess, onOpenGems }) => {
   const { 
@@ -59,9 +70,12 @@ export const MobileDispatchOrderCreate: React.FC<MobileDispatchOrderCreateProps>
   const [deliveryDate, setDeliveryDate] = useState(tomorrow);
   const [deliveryTime, setDeliveryTime] = useState('08:00');
 
+  // 활성화된(선택된) 피트 규격 (기본값 19ft)
+  const [activeFt, setActiveFt] = useState<string>('19ft');
+
   // 출고 요구 장비 목록 (최초 19ft 1대 기본)
   const [orders, setOrders] = useState<EquipmentOrderItem[]>([
-    { ft: '19ft', modelName: '1930', count: 1 }
+    { ft: '19ft', modelName: 'GS-1930', count: 1 }
   ]);
 
   // 회수 대상 선택 자산 목록
@@ -170,7 +184,8 @@ export const MobileDispatchOrderCreate: React.FC<MobileDispatchOrderCreateProps>
     setSiteContactPhone('');
     setDeliveryDate(tomorrow);
     setDeliveryTime('08:00');
-    setOrders([{ ft: '19ft', modelName: '1930', count: 1 }]);
+    setOrders([{ ft: '19ft', modelName: 'GS-1930', count: 1 }]);
+    setActiveFt('19ft');
     setSelectedReturnAssetIds([]);
     setMemo('');
     setSnippetsHistory([]);
@@ -384,6 +399,67 @@ export const MobileDispatchOrderCreate: React.FC<MobileDispatchOrderCreateProps>
     }
   };
 
+  // 임대 가능(AVAILABLE) 자산 규격별 / 모델별 실시간 잔여 재고 집계
+  const availableInventory = useMemo(() => {
+    const stats: Record<string, { total: number; models: { modelName: string; count: number }[] }> = {
+      '19ft': { total: 0, models: [] },
+      '26ft': { total: 0, models: [] },
+      '32ft': { total: 0, models: [] },
+      '40ft': { total: 0, models: [] },
+      '46ft': { total: 0, models: [] },
+      '53ft': { total: 0, models: [] },
+    };
+
+    const modelCountMap: Record<string, { ft: string; count: number }> = {};
+
+    assets
+      .filter(a => a.status === 'AVAILABLE')
+      .forEach(a => {
+        const model = a.modelName?.trim() || '미지정';
+        const ft = inferFeetFromModel(model);
+        if (!modelCountMap[model]) {
+          modelCountMap[model] = { ft, count: 0 };
+        }
+        modelCountMap[model].count += 1;
+      });
+
+    Object.entries(modelCountMap).forEach(([modelName, { ft, count }]) => {
+      if (stats[ft]) {
+        stats[ft].total += count;
+        stats[ft].models.push({ modelName, count });
+      }
+    });
+
+    Object.values(stats).forEach(specStat => {
+      specStat.models.sort((a, b) => b.count - a.count);
+    });
+
+    return stats;
+  }, [assets]);
+
+  // 규격 피트 카드 터치 시: 활성 피트 전환 (해당 스펙의 가용 재고 모델 표시)
+  const handleSelectFt = (ft: string) => {
+    setActiveFt(ft);
+  };
+
+  // 가용 재고 모델 칩 터치 시: 출고 의뢰 장비에 추가 또는 수량 증가
+  const handleAddModelOrder = (ft: string, modelName: string) => {
+    setOrders(prev => {
+      const existsIdx = prev.findIndex(o => o.ft === ft && o.modelName === modelName);
+      if (existsIdx >= 0) {
+        const next = [...prev];
+        next[existsIdx].count += 1;
+        return next;
+      }
+      // 초기 기본 19ft GS-1930(또는 1930) 1대만 있고 사용자가 다른 모델을 처음 선택할 때 교체
+      if (prev.length === 1 && prev[0].count === 1 && (prev[0].modelName === '1930' || prev[0].modelName === 'GS-1930') && prev[0].ft === ft) {
+        return [{ ft, modelName, count: 1 }];
+      }
+      return [...prev, { ft, modelName, count: 1 }];
+    });
+    showToast(`${modelName} 1대가 출고 장비에 추가되었습니다.`);
+  };
+
   // 규격 수량 변경
   const handleCountChange = (index: number, delta: number) => {
     setOrders(prev => {
@@ -394,17 +470,20 @@ export const MobileDispatchOrderCreate: React.FC<MobileDispatchOrderCreateProps>
     });
   };
 
-  // 규격 추가
+  // 규격 추가 (기본 모델 또는 가용 재고 최다 모델 추가)
   const handleAddSpec = (spec: typeof SPEC_OPTIONS[0]) => {
+    setActiveFt(spec.ft);
+    const topModel = availableInventory[spec.ft]?.models[0]?.modelName || spec.defaultModel;
     setOrders(prev => {
-      const existsIdx = prev.findIndex(o => o.ft === spec.ft);
+      const existsIdx = prev.findIndex(o => o.ft === spec.ft && o.modelName === topModel);
       if (existsIdx >= 0) {
         const next = [...prev];
         next[existsIdx].count += 1;
         return next;
       }
-      return [...prev, { ft: spec.ft, modelName: spec.defaultModel, count: 1 }];
+      return [...prev, { ft: spec.ft, modelName: topModel, count: 1 }];
     });
+    showToast(`${spec.ft} (${topModel}) 1대가 추가되었습니다.`);
   };
 
   // 규격 삭제
@@ -776,12 +855,24 @@ export const MobileDispatchOrderCreate: React.FC<MobileDispatchOrderCreateProps>
               value={customerSearchText}
               onChange={(e) => setCustomerSearchText(e.target.value)}
               placeholder="🔍 고객사명 / 초성 검색 (예: ㅅㅅ, ㅇㅈㅇ)"
-              className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2 text-xs text-white placeholder-slate-500 mb-0.5"
+              className="w-full rounded-xl p-2 text-xs placeholder-slate-500 mb-0.5"
+              style={{
+                backgroundColor: '#090d16',
+                color: '#f8fafc',
+                border: '1px solid #334155',
+                colorScheme: 'dark'
+              }}
             />
             <select
               value={selectedCustomerId}
               onChange={(e) => handleCustomerChange(e.target.value)}
-              className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-xs text-white"
+              className="w-full rounded-xl p-2.5 text-xs"
+              style={{
+                backgroundColor: '#090d16',
+                color: '#f8fafc',
+                border: '1px solid #334155',
+                colorScheme: 'dark'
+              }}
               required
             >
               <option value="">
@@ -815,13 +906,25 @@ export const MobileDispatchOrderCreate: React.FC<MobileDispatchOrderCreateProps>
                   value={siteSearchText}
                   onChange={(e) => setSiteSearchText(e.target.value)}
                   placeholder="🔍 현장명 초성 검색 (예: ㅍㅌ)"
-                  className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2 text-xs text-white placeholder-slate-500 mb-0.5"
+                  className="w-full rounded-xl p-2 text-xs placeholder-slate-500 mb-0.5"
+                  style={{
+                    backgroundColor: '#090d16',
+                    color: '#f8fafc',
+                    border: '1px solid #334155',
+                    colorScheme: 'dark'
+                  }}
                 />
               )}
               <select
                 value={selectedSiteId}
                 onChange={(e) => handleSiteChange(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-xs text-white"
+                className="w-full rounded-xl p-2.5 text-xs"
+                style={{
+                  backgroundColor: '#090d16',
+                  color: '#f8fafc',
+                  border: '1px solid #334155',
+                  colorScheme: 'dark'
+                }}
                 required
               >
                 <option value="">현장을 선택하세요</option>
@@ -841,7 +944,13 @@ export const MobileDispatchOrderCreate: React.FC<MobileDispatchOrderCreateProps>
                 value={newSiteName}
                 onChange={(e) => setNewSiteName(e.target.value)}
                 placeholder="예: 판교 제2테크노밸리 오피스 신축"
-                className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-xs text-white"
+                className="w-full rounded-xl p-2.5 text-xs placeholder-slate-500"
+                style={{
+                  backgroundColor: '#090d16',
+                  color: '#f8fafc',
+                  border: '1px solid #334155',
+                  colorScheme: 'dark'
+                }}
                 required
               />
             </div>
@@ -858,7 +967,13 @@ export const MobileDispatchOrderCreate: React.FC<MobileDispatchOrderCreateProps>
                   value={siteAddress}
                   onChange={(e) => setSiteAddress(e.target.value)}
                   placeholder="예: 경기 성남시 수정구 창업로 42"
-                  className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-xs text-white"
+                  className="w-full rounded-xl p-2.5 text-xs placeholder-slate-500"
+                  style={{
+                    backgroundColor: '#090d16',
+                    color: '#f8fafc',
+                    border: '1px solid #334155',
+                    colorScheme: 'dark'
+                  }}
                   required
                 />
               </div>
@@ -871,7 +986,13 @@ export const MobileDispatchOrderCreate: React.FC<MobileDispatchOrderCreateProps>
                     value={siteContactName}
                     onChange={(e) => setSiteContactName(e.target.value)}
                     placeholder="소장/반장명"
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-xs text-white"
+                    className="w-full rounded-xl p-2.5 text-xs placeholder-slate-500"
+                    style={{
+                      backgroundColor: '#090d16',
+                      color: '#f8fafc',
+                      border: '1px solid #334155',
+                      colorScheme: 'dark'
+                    }}
                   />
                 </div>
                 <div className="flex flex-col gap-1">
@@ -881,7 +1002,13 @@ export const MobileDispatchOrderCreate: React.FC<MobileDispatchOrderCreateProps>
                     value={siteContactPhone}
                     onChange={(e) => setSiteContactPhone(e.target.value)}
                     placeholder="010-0000-0000"
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-xs text-white"
+                    className="w-full rounded-xl p-2.5 text-xs placeholder-slate-500"
+                    style={{
+                      backgroundColor: '#090d16',
+                      color: '#f8fafc',
+                      border: '1px solid #334155',
+                      colorScheme: 'dark'
+                    }}
                     required
                   />
                 </div>
@@ -893,12 +1020,17 @@ export const MobileDispatchOrderCreate: React.FC<MobileDispatchOrderCreateProps>
         {/* 2. 장비 규격 및 수량 (출고 모드일 때) */}
         {dispatchMode === 'DISPATCH' && (
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex flex-col gap-3 w-full min-w-0 max-w-full overflow-hidden">
-            <span className="text-xs font-bold text-emerald-400 flex items-center gap-1.5">
-              <CheckCircle2 className="w-3.5 h-3.5" />
-              출고 요청 장비 규격 (영업 R&R: 규격 의뢰)
-            </span>
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-emerald-400 flex items-center gap-1.5">
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                출고 요청 장비 규격 (영업 R&R: 규격 의뢰)
+              </span>
+              <span className="text-[11px] text-slate-400 font-mono">
+                총 {orders.reduce((sum, o) => sum + o.count, 0)}대 의뢰
+              </span>
+            </div>
 
-            {/* 규격 퀵 추가 버튼들 - 가로 슬라이드 스크롤 */}
+            {/* 규격 퀵 선택 탭 - 가로 슬라이드 스크롤 */}
             <div 
               className="w-full min-w-0 max-w-full overflow-x-auto pb-1.5 flex items-center gap-2 scrollbar-none"
               style={{
@@ -908,27 +1040,121 @@ export const MobileDispatchOrderCreate: React.FC<MobileDispatchOrderCreateProps>
                 touchAction: 'pan-x'
               }}
             >
-              {SPEC_OPTIONS.map(spec => (
-                <button
-                  key={spec.ft}
-                  type="button"
-                  onClick={() => handleAddSpec(spec)}
-                  className="flex-shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-800 border border-slate-700 text-xs font-bold text-slate-200 hover:border-emerald-500 hover:text-white whitespace-nowrap active:scale-95 transition-all shadow-sm"
-                  style={{ scrollSnapAlign: 'start' }}
-                >
-                  <Plus className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                  <span>{spec.ft}</span>
-                </button>
-              ))}
+              {SPEC_OPTIONS.map(spec => {
+                const isSelected = activeFt === spec.ft;
+                const availCount = availableInventory[spec.ft]?.total || 0;
+                return (
+                  <button
+                    key={spec.ft}
+                    type="button"
+                    onClick={() => handleSelectFt(spec.ft)}
+                    className={`flex-shrink-0 flex items-center gap-2 px-3.5 py-2.5 rounded-xl border text-xs font-bold whitespace-nowrap active:scale-95 transition-all shadow-sm ${
+                      isSelected
+                        ? 'bg-emerald-950/60 border-emerald-500 text-white shadow-emerald-950/40 ring-1 ring-emerald-500/40'
+                        : 'bg-slate-800 border-slate-700 text-slate-300 hover:border-slate-600 hover:text-white'
+                    }`}
+                    style={{ scrollSnapAlign: 'start' }}
+                  >
+                    <span>{spec.ft}</span>
+                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold ${
+                      availCount > 0
+                        ? isSelected
+                          ? 'bg-emerald-600 text-white'
+                          : 'bg-emerald-950 border border-emerald-700/50 text-emerald-400'
+                        : 'bg-slate-900 text-slate-500 border border-slate-700'
+                    }`}>
+                      {availCount}대
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* 터치한 피트 규격의 가용 재고 모델 목록 패널 */}
+            <div className="bg-slate-950 border border-slate-800/90 rounded-xl p-3 flex flex-col gap-2.5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs font-bold text-white font-mono">{activeFt}</span>
+                  <span className="text-xs text-slate-300 font-bold">재고 보유 모델</span>
+                  <span className={`text-[11px] font-bold font-mono px-1.5 py-0.5 rounded ${
+                    (availableInventory[activeFt]?.total || 0) > 0
+                      ? 'bg-emerald-950 border border-emerald-700/50 text-emerald-400'
+                      : 'bg-slate-900 text-slate-500'
+                  }`}>
+                    가용 {availableInventory[activeFt]?.total || 0}대
+                  </span>
+                </div>
+                <span className="text-[10px] text-slate-400">모델 터치 시 의뢰 추가</span>
+              </div>
+
+              {availableInventory[activeFt]?.models && availableInventory[activeFt].models.length > 0 ? (
+                <div className="flex flex-wrap gap-2 pt-0.5">
+                  {availableInventory[activeFt].models.map(m => {
+                    const orderedCount = orders.find(o => o.ft === activeFt && o.modelName === m.modelName)?.count || 0;
+                    return (
+                      <button
+                        key={m.modelName}
+                        type="button"
+                        onClick={() => handleAddModelOrder(activeFt, m.modelName)}
+                        className={`flex-shrink-0 flex items-center gap-2 px-3 py-2 rounded-xl border text-xs font-bold active:scale-95 transition-all shadow-sm ${
+                          orderedCount > 0
+                            ? 'bg-emerald-950/80 border-emerald-500 text-emerald-100 ring-1 ring-emerald-500/40'
+                            : 'bg-slate-900 border-slate-700/80 text-slate-200 hover:border-emerald-500 hover:text-white'
+                        }`}
+                      >
+                        <Plus className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                        <span className="font-mono text-white font-bold">{m.modelName}</span>
+                        <span className="px-1.5 py-0.5 rounded bg-emerald-950/90 border border-emerald-700/60 text-[10px] text-emerald-300 font-mono font-bold">
+                          {m.count}대 재고
+                        </span>
+                        {orderedCount > 0 && (
+                          <span className="px-1.5 py-0.5 rounded bg-blue-900/80 text-blue-200 text-[10px] font-mono font-black">
+                            {orderedCount}대 선택됨
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="flex flex-col gap-2 p-3 bg-slate-900/60 rounded-xl border border-slate-800">
+                  <p className="text-xs text-slate-400">
+                    주기장에 즉시 출고 가능한 {activeFt} 자산이 없습니다.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => handleAddSpec(SPEC_OPTIONS.find(s => s.ft === activeFt) || { ft: activeFt, defaultModel: '동급' })}
+                    className="self-start px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-750 border border-slate-700 text-xs font-bold text-slate-200 flex items-center gap-1.5 active:scale-95"
+                  >
+                    <Plus className="w-3.5 h-3.5 text-sky-400" />
+                    <span>{activeFt} 규격 의뢰 추가 (타사 임차/배차 협의)</span>
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* 선택된 규격 목록 헤더 */}
+            <div className="flex items-center justify-between pt-1">
+              <span className="text-xs font-bold text-slate-300">출고 의뢰 장비 목록</span>
+              <span className="text-[11px] text-slate-400">
+                {orders.length}개 모델 ({orders.reduce((sum, o) => sum + o.count, 0)}대)
+              </span>
             </div>
 
             {/* 선택된 규격 목록 */}
-            <div className="flex flex-col gap-2 mt-1">
+            <div className="flex flex-col gap-2">
               {orders.map((item, idx) => (
                 <div key={idx} className="p-3 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-between">
-                  <div>
-                    <span className="text-sm font-black text-white">{item.ft}</span>
-                    <span className="text-[11px] text-slate-400 ml-2">동급 모델 ({item.modelName})</span>
+                  <div className="flex flex-col gap-0.5">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-black text-white">{item.ft}</span>
+                      <span className="text-xs font-bold text-emerald-300 font-mono bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-600/30">
+                        {item.modelName}
+                      </span>
+                    </div>
+                    <span className="text-[10px] text-slate-400">
+                      의뢰 수량 {item.count}대
+                    </span>
                   </div>
 
                   <div className="flex items-center gap-3">
@@ -956,7 +1182,7 @@ export const MobileDispatchOrderCreate: React.FC<MobileDispatchOrderCreateProps>
                       <button
                         type="button"
                         onClick={() => handleRemoveOrder(idx)}
-                        className="text-xs text-rose-400 hover:text-rose-300 p-1"
+                        className="text-xs text-rose-400 hover:text-rose-300 p-1 font-bold active:scale-95"
                       >
                         삭제
                       </button>
@@ -1033,7 +1259,13 @@ export const MobileDispatchOrderCreate: React.FC<MobileDispatchOrderCreateProps>
                 type="date"
                 value={deliveryDate}
                 onChange={(e) => setDeliveryDate(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-xs text-white"
+                className="w-full rounded-xl p-2.5 text-xs text-white"
+                style={{
+                  backgroundColor: '#090d16',
+                  color: '#f8fafc',
+                  border: '1px solid #334155',
+                  colorScheme: 'dark'
+                }}
                 required
               />
             </div>
@@ -1043,7 +1275,13 @@ export const MobileDispatchOrderCreate: React.FC<MobileDispatchOrderCreateProps>
                 type="time"
                 value={deliveryTime}
                 onChange={(e) => setDeliveryTime(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-xs text-white"
+                className="w-full rounded-xl p-2.5 text-xs text-white"
+                style={{
+                  backgroundColor: '#090d16',
+                  color: '#f8fafc',
+                  border: '1px solid #334155',
+                  colorScheme: 'dark'
+                }}
                 required
               />
             </div>
@@ -1058,7 +1296,13 @@ export const MobileDispatchOrderCreate: React.FC<MobileDispatchOrderCreateProps>
             value={memo}
             onChange={(e) => setMemo(e.target.value)}
             placeholder={dispatchMode === 'RETURN' ? '회수 위치, 하역장 위치 등 메모...' : '현장 출입 조건, 진입로 주의점, 특이 요청사항 등...'}
-            className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
+            className="w-full rounded-xl p-3 text-xs text-white placeholder-slate-500 focus:outline-none"
+            style={{
+              backgroundColor: '#090d16',
+              color: '#f8fafc',
+              border: '1px solid #334155',
+              colorScheme: 'dark'
+            }}
           />
         </div>
 
