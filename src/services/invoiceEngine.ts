@@ -95,6 +95,8 @@ export async function generateInvoices(opts: GenerateInvoicesOptions): Promise<{
 
     // 납기일: 그룹 내 최초 billing의 dueDate 기준 (있으면)
     const dueDate = groupBillings.find(b => (b as any).dueDate)?.['dueDate'] ?? null;
+    const vatAmount = Math.floor(totalAmount * 0.1);
+    const grandTotal = totalAmount + vatAmount;
 
     const invoice: BillingInvoice = {
       id: generateInvoiceId(billingYm, seq++),
@@ -102,8 +104,8 @@ export async function generateInvoices(opts: GenerateInvoicesOptions): Promise<{
       billingYm,
       siteId: siteId ?? undefined,
       totalAmount,
-      vatAmount: 0,
-      grandTotal: totalAmount,
+      vatAmount,
+      grandTotal,
       status,
       dueDate: dueDate ?? undefined,
       memo: '',
@@ -235,23 +237,180 @@ export async function applyPaymentToInvoice(
 export async function cancelInvoice(invoiceId: string): Promise<{ success: boolean; message: string }> {
   const nowIso = new Date().toISOString();
 
+  // 🔒 [감사관 가드] 수납(Payment) 존재 여부 확인 (수납 완료/부분수납 인보이스는 직접 취소 불가)
+  if (supabase) {
+    const { data: inv } = await supabase
+      .from('billing_invoices')
+      .select('paidAmount, status')
+      .eq('id', invoiceId)
+      .single();
+    if (inv && (inv.paidAmount || 0) > 0) {
+      return {
+        success: false,
+        message: `수납(₩${(inv.paidAmount || 0).toLocaleString()}원)이 발생한 청구서통합은 직접 취소할 수 없습니다. 은행 입출금 대장에서 통장 매칭을 먼저 해제해 주세요.`
+      };
+    }
+  } else {
+    const inv = db.billingInvoices?.find((i: any) => i.id === invoiceId);
+    if (inv && (inv.paidAmount || 0) > 0) {
+      return {
+        success: false,
+        message: `수납(₩${(inv.paidAmount || 0).toLocaleString()}원)이 발생한 청구서통합은 직접 취소할 수 없습니다. 은행 입출금 대장에서 통장 매칭을 먼저 해제해 주세요.`
+      };
+    }
+  }
+
   // billings.invoiceId null 복원
-  const { error: resetErr } = await supabase
-    .from('billings')
-    .update({ invoiceId: null, updatedAt: nowIso })
-    .eq('invoiceId', invoiceId);
+  if (supabase) {
+    const { error: resetErr } = await supabase
+      .from('billings')
+      .update({ invoiceId: null, updatedAt: nowIso })
+      .eq('invoiceId', invoiceId);
 
-  if (resetErr) return { success: false, message: `billing 초기화 실패: ${resetErr.message}` };
+    if (resetErr) return { success: false, message: `청구 초기화 실패: ${resetErr.message}` };
 
-  // 청구서통합 CANCELLED 처리
-  const { error: cancelErr } = await supabase
-    .from('billing_invoices')
-    .update({ status: 'CANCELLED', updatedAt: nowIso })
-    .eq('id', invoiceId);
+    // 청구서통합 CANCELLED 처리
+    const { error: cancelErr } = await supabase
+      .from('billing_invoices')
+      .update({ status: 'CANCELLED', updatedAt: nowIso })
+      .eq('id', invoiceId);
 
-  if (cancelErr) return { success: false, message: `청구서통합 취소 실패: ${cancelErr.message}` };
+    if (cancelErr) return { success: false, message: `청구서통합 취소 실패: ${cancelErr.message}` };
+  } else {
+    const billings = db.billings || [];
+    billings.forEach((b: any) => {
+      if (b.invoiceId === invoiceId) {
+        b.invoiceId = null;
+        b.updatedAt = nowIso;
+      }
+    });
+    const inv = db.billingInvoices?.find((i: any) => i.id === invoiceId);
+    if (inv) {
+      inv.status = 'CANCELLED';
+      inv.updatedAt = nowIso;
+    }
+  }
 
-  return { success: true, message: `청구서통합 ${invoiceId} 취소 완료` };
+  return { success: true, message: `청구서통합 ${invoiceId} 취소 및 개별 청구 복원 완료` };
+}
+
+// ──────────────────────────────────────────────
+// 4-1. 실무자 선택적 청구서 묶기 (렌탈료 + 수리비 + 운반비 등 복합 통합)
+// ──────────────────────────────────────────────
+export interface ConsolidateSelectedOptions {
+  billingIds: string[];
+  customerId: string;
+  billingYm: string;
+  siteId?: string | null;
+  memo?: string;
+  dueDate?: string;
+}
+
+export async function consolidateSelectedBillings(opts: ConsolidateSelectedOptions): Promise<{
+  success: boolean;
+  message: string;
+  invoice?: BillingInvoice;
+}> {
+  const { billingIds, customerId, billingYm, siteId, memo, dueDate } = opts;
+  if (!billingIds || billingIds.length === 0) {
+    return { success: false, message: '통합할 청구서가 선택되지 않았습니다.' };
+  }
+  const nowIso = new Date().toISOString();
+
+  // 대상 billings 조회
+  let selectedBillings: Billing[] = [];
+  if (supabase) {
+    const { data, error } = await supabase
+      .from('billings')
+      .select('*')
+      .in('id', billingIds);
+    if (error) return { success: false, message: `청구 데이터 조회 실패: ${error.message}` };
+    selectedBillings = data || [];
+  } else {
+    selectedBillings = (db.billings || []).filter((b: any) => billingIds.includes(b.id));
+  }
+
+  if (selectedBillings.length === 0) {
+    return { success: false, message: '선택된 청구 데이터를 찾을 수 없습니다.' };
+  }
+
+  // 합계금액 계산
+  const totalAmount = selectedBillings.reduce((sum, b) => sum + (b.totalAmount || 0), 0);
+  const paidAmount = selectedBillings.reduce((sum, b) => sum + (b.paidAmount || 0), 0);
+  const vatAmount = Math.floor(totalAmount * 0.1);
+  const grandTotal = totalAmount + vatAmount;
+
+  // 상태 판단
+  let status: BillingInvoice['status'] = 'DRAFT';
+  if (totalAmount > 0 && paidAmount >= totalAmount) status = 'PAID';
+  else if (paidAmount > 0) status = 'PARTIAL';
+  else status = 'ISSUED';
+
+  // 시퀀스 번호 결정
+  let seq = 1;
+  if (supabase) {
+    const { data: existingInvs } = await supabase
+      .from('billing_invoices')
+      .select('id')
+      .like('id', `INV-${billingYm.replace('-', '')}-%`)
+      .order('id', { ascending: false })
+      .limit(1);
+    if (existingInvs && existingInvs.length > 0) {
+      const lastId = existingInvs[0].id;
+      const parts = lastId.split('-');
+      seq = (parseInt(parts[parts.length - 1], 10) || 0) + 1;
+    }
+  } else {
+    const invs = (db.billingInvoices || []).filter((i: any) => i.id?.startsWith(`INV-${billingYm.replace('-', '')}-`));
+    seq = invs.length + 1;
+  }
+
+  const invoiceId = generateInvoiceId(billingYm, seq);
+  const resolvedDueDate = dueDate || selectedBillings[0]?.dueDate || null;
+
+  const invoice: BillingInvoice = {
+    id: invoiceId,
+    customerId,
+    billingYm,
+    siteId: siteId ?? undefined,
+    totalAmount,
+    vatAmount,
+    grandTotal,
+    status,
+    dueDate: resolvedDueDate ?? undefined,
+    issuedAt: nowIso,
+    memo: memo || `${selectedBillings.length}건 복합 통합 청구`,
+    createdAt: nowIso,
+    updatedAt: nowIso,
+  };
+
+  if (supabase) {
+    // 1. billing_invoices insert
+    const { error: invErr } = await supabase.from('billing_invoices').upsert([invoice], { onConflict: 'id' });
+    if (invErr) return { success: false, message: `통합 청구서 생성 실패: ${invErr.message}` };
+
+    // 2. billings.invoiceId 업데이트
+    const { error: updateErr } = await supabase
+      .from('billings')
+      .update({ invoiceId, updatedAt: nowIso })
+      .in('id', billingIds);
+    if (updateErr) return { success: false, message: `청구서 매핑 실패: ${updateErr.message}` };
+  } else {
+    if (!db.billingInvoices) db.billingInvoices = [];
+    db.billingInvoices.push(invoice);
+    (db.billings || []).forEach((b: any) => {
+      if (billingIds.includes(b.id)) {
+        b.invoiceId = invoiceId;
+        b.updatedAt = nowIso;
+      }
+    });
+  }
+
+  return {
+    success: true,
+    message: `통합 청구서(${invoiceId}) 발행 완료: 청구 ${selectedBillings.length}건 묶음 (총 ₩${grandTotal.toLocaleString()}원)`,
+    invoice
+  };
 }
 
 // ──────────────────────────────────────────────

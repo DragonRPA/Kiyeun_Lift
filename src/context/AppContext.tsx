@@ -4,6 +4,24 @@ import { ErrorModal } from '../components/ErrorModal';
 import { getAllSystemMenuIds } from '../config/menu_config';
 import { broadcastWorkNotification } from '../utils/workNotificationService';
 import { resolveSiteDetailedAddress } from '../utils/nativeLauncher';
+import { emailService } from '../services/email';
+
+export interface AssetSaleItem {
+  assetId: string;
+  salePrice: number;
+}
+
+export interface AssetSalePayload {
+  customerId?: string;
+  buyerName: string;
+  salespersonId?: string;
+  disposalDate: string;
+  items: AssetSaleItem[];
+  memo?: string;
+  recipientEmail?: string;
+  ccEmail?: string;
+  sendEmail?: boolean;
+}
 
 export interface SmartDispatchData {
   customerName: string;
@@ -135,9 +153,10 @@ interface AppContextType {
   
   // Asset Mutators
   changeAssetStatus: (assetId: string, status: Asset['status'], extraData?: Partial<Asset>) => Promise<void>;
-  acquireAsset: (assetData: Partial<Asset>) => void;
+  acquireAsset: (assetData: Partial<Asset>) => Promise<Asset>;
   batchAcquireAssets: (assetsData: Partial<Asset>[]) => Promise<Asset[]>;
-  disposeAsset: (assetId: string, disposalData: { disposalDate: string; disposalPrice: number; buyer: string; billingYm?: string }) => void;
+  disposeAsset: (assetId: string, disposalData: { disposalDate: string; disposalPrice: number; buyer: string; billingYm?: string }) => Promise<any>;
+  executeAssetSale: (payload: AssetSalePayload) => Promise<{ success: boolean; contractId: string; billingId: string; contractNo: string }>;
   registerRentedAsset: (assetData: Partial<Asset>) => Promise<any>;
   returnRentedAsset: (assetId: string, returnDate: string) => Promise<void>;
   createVendorClaimReceivable: (data: {
@@ -1523,7 +1542,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     refreshAllData();
   };
 
-  const acquireAsset = (assetData: Partial<Asset>) => {
+  const acquireAsset = async (assetData: Partial<Asset>): Promise<Asset> => {
     const residualRate = assetData.residualValueRate ?? 10;
     const price = assetData.acquisitionPrice ?? 0;
     const bookVal = price;
@@ -1566,7 +1585,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       createdAt: new Date().toISOString()
     });
 
+    await db.awaitPendingWrites(); // 💡 헌장 5.2 동기 쓰기 대기
     refreshAllData();
+    return newAsset;
   };
 
   const batchAcquireAssets = async (assetsData: Partial<Asset>[]): Promise<Asset[]> => {
@@ -1615,60 +1636,248 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       createdList.push(newAsset);
     }
+    await db.awaitPendingWrites(); // 💡 헌장 5.2 동기 쓰기 대기
     refreshAllData();
     return createdList;
   };
 
-  const disposeAsset = (assetId: string, disposalData: { disposalDate: string; disposalPrice: number; buyer: string }) => {
-    const asset = db.assets.find(a => a.id === assetId);
-    if (!asset) return;
-
-    db.updateRow<Asset>('assets', assetId, {
-      status: 'SOLD',
-      disposalDate: disposalData.disposalDate,
-      disposalPrice: disposalData.disposalPrice,
-      buyer: disposalData.buyer,
-      updatedAt: new Date().toISOString()
+  // 자산 매각 계약번호 전용 채번기 (SALE-YYYYMMDD-NNN)
+  const generateNextSaleContractNo = (): string => {
+    const todayYmd = new Date().toISOString().split('T')[0].replace(/-/g, '');
+    let maxSeq = 0;
+    db.contracts.forEach(c => {
+      if (c?.contractType === 'SALE' && c.contractNo?.startsWith(`SALE-${todayYmd}-`)) {
+        const parts = c.contractNo.split('-');
+        const seq = parseInt(parts[2], 10);
+        if (!isNaN(seq) && seq > maxSeq) maxSeq = seq;
+      }
     });
+    return `SALE-${todayYmd}-${String(maxSeq + 1).padStart(3, '0')}`;
+  };
 
-    const billingYm = disposalData.disposalDate.substring(0, 7);
-    
-    let customer = db.customers.find(c => c.name === disposalData.buyer);
-    if (!customer) {
-      customer = db.insertRow<Customer>('customers', {
-        name: disposalData.buyer,
-        bizRegNo: '',
-        isClosed: false,
-        address: '',
-        representative: '',
-        repContact: '',
-        repEmail: '',
+  // 💡 자산 매각 계약 체결 & 청구서 발행 & 이메일 발송 5단계 논스톱 완결 파이프라인
+  const executeAssetSale = async (payload: AssetSalePayload): Promise<{ success: boolean; contractId: string; billingId: string; contractNo: string }> => {
+    try {
+      if (!payload.items || payload.items.length === 0) {
+        throw new Error('매각 대상 자산이 1대 이상 선택되어야 합니다.');
+      }
+      if (!payload.disposalDate) {
+        throw new Error('매각 일자가 지정되지 않았습니다.');
+      }
+
+      // 1. 매수처 고객사 확인 또는 신규 등록
+      let customer: Customer | undefined;
+      if (payload.customerId) {
+        customer = db.customers.find(c => c.id === payload.customerId);
+      }
+      if (!customer && payload.buyerName) {
+        customer = db.customers.find(c => c.name.trim().toLowerCase() === payload.buyerName.trim().toLowerCase());
+      }
+      if (!customer) {
+        customer = db.insertRow<Customer>('customers', {
+          name: payload.buyerName || '자산매수처(미상)',
+          bizRegNo: '',
+          isClosed: false,
+          address: '',
+          representative: '',
+          repContact: '',
+          repEmail: payload.recipientEmail || '',
+          transactionStatus: 'ALLOWED',
+          createdAt: new Date().toISOString()
+        });
+      }
+
+      // 2. 매각 계약번호 및 기본 청구월 책정
+      const contractNo = generateNextSaleContractNo();
+      const billingYm = payload.disposalDate.slice(0, 7);
+      const dayNum = parseInt(payload.disposalDate.slice(8, 10), 10) || 30;
+
+      // 3. 헌장 2.1 & 2.2: 매각 계약(Sale Contract) 생성
+      const contract = db.insertRow<Contract>('contracts', {
+        contractNo,
+        contractType: 'SALE',
+        customerId: customer.id,
+        salespersonId: payload.salespersonId || '',
+        startDate: payload.disposalDate,
+        endDate: payload.disposalDate,
+        billingDay: dayNum,
+        paymentDueDay: 25,
+        lateInterestRate: 0,
+        status: 'ACTIVE',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      });
+
+      let totalSalePrice = 0;
+      const soldAssetSummaries: { assetNo: string; modelName: string; salePrice: number; bookValue: number; gainLoss: number }[] = [];
+
+      // 4. 각 자산별 체결 자산 슬롯 바인딩 및 마스터 SOLD 전이
+      for (const item of payload.items) {
+        const asset = db.assets.find(a => a.id === item.assetId);
+        if (!asset) continue;
+
+        const salePrice = Math.max(0, Number(item.salePrice) || 0);
+        totalSalePrice += salePrice;
+
+        const dep = calculateAssetDepreciation(asset, new Date(payload.disposalDate));
+        const bookVal = dep.bookValue;
+        const gainLoss = salePrice - bookVal;
+
+        soldAssetSummaries.push({
+          assetNo: asset.assetNo,
+          modelName: asset.modelName,
+          salePrice,
+          bookValue: bookVal,
+          gainLoss
+        });
+
+        // 4-1. 체결 자산 슬롯 추가
+        const ca = db.insertRow<ContractAsset>('contractAssets', {
+          contractId: contract.id,
+          assetId: asset.id,
+          expectedModel: asset.modelName,
+          status: 'SOLD',
+          monthlyRentalFee: 0,
+          dailyRentalFee: 0,
+          salePrice,
+          startDate: payload.disposalDate,
+          endDate: payload.disposalDate,
+          createdAt: new Date().toISOString()
+        });
+
+        // 4-2. 자산 마스터 SOLD 전이 및 처분 스냅샷 반영
+        db.updateRow<Asset>('assets', asset.id, {
+          status: 'SOLD',
+          disposalDate: payload.disposalDate,
+          disposalPrice: salePrice,
+          buyer: customer.name,
+          currentCustomerId: customer.id,
+          monthlyRentalFee: 0,
+          dailyRentalFee: 0,
+          updatedAt: new Date().toISOString()
+        });
+
+        // 4-3. 헌장 1.2 무누락 DB 저장: 자산 입출고 이력(DISPOSAL) 영구 기록
+        db.insertRow<AssetInOutLog>('assetInOutLogs', {
+          assetId: asset.id,
+          assetNo: asset.assetNo,
+          modelName: asset.modelName,
+          type: 'DISPOSAL',
+          customerId: customer.id,
+          customerName: customer.name,
+          eventDate: payload.disposalDate,
+          memo: `자산 매각 처분 계약 체결 (계약: ${contract.contractNo}, 매각단가: ₩${salePrice.toLocaleString()}, 처분손익: ₩${gainLoss.toLocaleString()})`,
+          createdAt: new Date().toISOString()
+        });
+      }
+
+      // 5. 1회성 매각 청구서(billings) 및 상세(billingDetails) 발행 (과세 10% 분리)
+      const billing = db.insertRow<Billing>('billings', {
+        billingType: 'ASSET_SALE',
+        customerId: customer.id,
+        contractId: contract.id,
+        billingYm,
+        billingDate: payload.disposalDate,
+        totalAmount: totalSalePrice, // 공급가액
+        paidAmount: 0,
+        status: 'REQUESTED',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      });
+
+      for (const summary of soldAssetSummaries) {
+        db.insertRow<BillingDetail>('billingDetails', {
+          billingId: billing.id,
+          itemName: `[자산매각] ${summary.modelName} (관리번호: ${summary.assetNo})`,
+          quantity: 1,
+          unitPrice: summary.salePrice,
+          amount: summary.salePrice,
+          internalDescription: `운영 자산 매각 대금 청구 (계약: ${contract.contractNo})`,
+          displayName: `${summary.modelName} 매각대금`,
+          createdAt: new Date().toISOString()
+        });
+      }
+
+      // 6. 계약 이력(contractHistory) 기록
+      db.insertRow<ContractHistory>('contractHistory', {
+        contractId: contract.id,
+        changeType: 'ASSET_SOLD',
+        changeDate: payload.disposalDate,
+        description: `운영 자산 ${soldAssetSummaries.length}대 매각 처분 계약 체결 (매각총액: ₩${totalSalePrice.toLocaleString()})`,
         createdAt: new Date().toISOString()
       });
+
+      // 7. 헌장 5.2 동기 쓰기 대기
+      await db.awaitPendingWrites();
+
+      // 8. 이메일 발송 연동 (요청된 경우)
+      if (payload.sendEmail && payload.recipientEmail) {
+        try {
+          const vat = Math.round(totalSalePrice * 0.1);
+          const grand = totalSalePrice + vat;
+          const subject = `[기연리프트] 자산 매각 계약서 및 청구서 안내 (${customer.name} 귀하)`;
+          const body = `
+안녕하세요, ${customer.name} 담당자님.
+(주)기연리프트입니다.
+
+귀사와 체결된 고소작업대 자산 매각 계약 건에 대한 계약서 및 매각 대금 청구 내역을 안내해 드립니다.
+
+[계약 및 청구 요약]
+- 계약번호: ${contract.contractNo}
+- 계약유형: 자산 매각 계약
+- 양도일자: ${payload.disposalDate}
+- 매각 수량: 총 ${soldAssetSummaries.length}대
+- 공급가액: ₩${totalSalePrice.toLocaleString()}원
+- 부가세 (10%): ₩${vat.toLocaleString()}원
+- 청구 총합계금액: ₩${grand.toLocaleString()}원
+- 입금 계좌: [기연리프트] 기업은행 144-082875-01-017
+
+[매각 장비 상세 내역]
+${soldAssetSummaries.map((s, idx) => `${idx + 1}. 관리번호: ${s.assetNo} / 모델명: ${s.modelName} / 매각단가: ₩${s.salePrice.toLocaleString()}원`).join('\n')}
+
+${payload.memo ? `\n[특이사항 / 메모]\n${payload.memo}\n` : ''}
+
+감사합니다.
+(주)기연리프트 배상
+          `.trim();
+
+          await emailService.sendEmail(
+            payload.recipientEmail,
+            subject,
+            body,
+            [],
+            payload.ccEmail
+          );
+
+          db.insertRow<ContractHistory>('contractHistory', {
+            contractId: contract.id,
+            changeType: 'DOCUMENT_SENT',
+            changeDate: payload.disposalDate,
+            description: `자산 매각 계약서 및 청구 내역 이메일 발송 완료 (수신: ${payload.recipientEmail})`,
+            createdAt: new Date().toISOString()
+          });
+          await db.awaitPendingWrites();
+        } catch (mailErr: any) {
+          console.warn('[executeAssetSale] 이메일 발송 실패 (계약 및 청구는 정상 보존됨):', mailErr);
+        }
+      }
+
+      refreshAllData();
+      return { success: true, contractId: contract.id, billingId: billing.id, contractNo: contract.contractNo };
+    } catch (err: any) {
+      console.error('[executeAssetSale] Error:', err);
+      showErrorModal(`⚠️ 자산 매각 계약 처리 중 오류가 발생했습니다:\n\n${err?.message || err}`, '자산 매각 실패');
+      throw err;
     }
+  };
 
-    const billing = db.insertRow<Billing>('billings', {
-      customerId: customer.id,
-      billingYm,
-      billingDate: disposalData.disposalDate,
-      totalAmount: disposalData.disposalPrice,
-      paidAmount: 0,
-      status: 'REQUESTED',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
+  // 구버전 호환용 래퍼
+  const disposeAsset = async (assetId: string, disposalData: { disposalDate: string; disposalPrice: number; buyer: string; billingYm?: string }) => {
+    return executeAssetSale({
+      buyerName: disposalData.buyer,
+      disposalDate: disposalData.disposalDate,
+      items: [{ assetId, salePrice: disposalData.disposalPrice }]
     });
-
-    db.insertRow<BillingDetail>('billingDetails', {
-      billingId: billing.id,
-      itemName: `자산 매각대금 청구 (관리번호: ${asset.assetNo}, 모델: ${asset.modelName})`,
-      quantity: 1,
-      unitPrice: disposalData.disposalPrice,
-      amount: disposalData.disposalPrice,
-      description: `장비 매각 처리에 따른 청구서 발행.`,
-      createdAt: new Date().toISOString()
-    });
-
-    refreshAllData();
   };
 
   const registerRentedAsset = async (assetData: Partial<Asset>) => {
@@ -3705,8 +3914,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const startOfMonth = new Date(year, month - 1, 1);
       const endOfMonth = new Date(year, month, 0);
 
-      // 해당 월에 활성 상태인 계약 전체 탐색 (계약 단위 독립 생성 - E-1 원칙)
+      // 해당 월에 활성 상태인 계약 전체 탐색 (계약 단위 독립 생성 - E-1 원칙, 매각 계약 원천 배제)
       const activeContracts = db.contracts.filter(c => {
+        if ((c.contractType || 'RENTAL') !== 'RENTAL') return false; // 🚫 자산 매각 계약(SALE) 원천 배제
         if (c.status === 'COMPLETED') return false;
         const contractStart = new Date(c.startDate);
         const contractEnd = c.endDate ? new Date(c.endDate) : null;
@@ -3954,8 +4164,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const endOfMonth = new Date(year, month, 0);
     const lastDayOfMonth = endOfMonth.getDate();
 
-    // 1. 유효 계약 탐색: 완료되지 않은 살아있는 계약
+    // 1. 유효 계약 탐색: 완료되지 않은 살아있는 렌탈 계약 (매각 계약 원천 배제)
     const liveContracts = db.contracts.filter(c => {
+      if ((c.contractType || 'RENTAL') !== 'RENTAL') return false; // 🚫 자산 매각 계약(SALE) 원천 배제
       if (c.status === 'COMPLETED') return false;
       const cStart = new Date(c.startDate);
       if (cStart > endOfMonth) return false;
@@ -4125,6 +4336,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const generateBillingForSingleContract = async (contractId: string, billingYm: string, billingDate: string): Promise<string | null> => {
     const c = db.contracts.find(x => x.id === contractId);
     if (!c) return null;
+
+    if ((c.contractType || 'RENTAL') !== 'RENTAL') {
+      throw new Error(`[계약 유형 오류] 계약 ${c.contractNo}는 자산 매각 계약(SALE)입니다. 월 정기 렌탈료 청구 대상이 아닙니다.`);
+    }
 
     // 중복 발행 감지 (J-3): 동일 계약 + 동일 귀속월 활성 청구 존재 시 throw
     const existingActive = db.billings.find(
@@ -6584,7 +6799,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       refreshAllData, fullRefreshFromServer, executeMonthlyDepreciation, loadTablesForMenu, updatePermissions, saveUser, saveCustomer, saveContact, saveSite, saveProduct, saveAsset, updateGoogleConfig,
       saveCashFlowSnapshot, deleteCashFlowSnapshot, saveVendor, deleteVendor, saveBankInitialBalance, saveInspectionChecklistItem, deleteInspectionChecklistItem,
       updateAnnualLeaveQuota, addLeaveUsage, deleteLeaveUsage, addOvertimeRecord, deleteOvertimeRecord, setPayrollClosingStatus,
-      acquireAsset, batchAcquireAssets, disposeAsset, registerRentedAsset, returnRentedAsset, createVendorClaimReceivable, changeAssetStatus, registerInboundAsset, cancelInboundAsset,
+      acquireAsset, batchAcquireAssets, disposeAsset, executeAssetSale, registerRentedAsset, returnRentedAsset, createVendorClaimReceivable, changeAssetStatus, registerInboundAsset, cancelInboundAsset,
       purchaseConsumable, useConsumable, transferConsumableToMechanic, returnConsumableToHq,
       requestConsumablePurchase, acceptConsumablePurchase, completeConsumablePurchase, inboundConsumablePurchase, clearEvidenceFileUrls, updateEvidenceFileUrls,
       createContract, extendContract, shortenContract, succeedContract, exchangeAsset,

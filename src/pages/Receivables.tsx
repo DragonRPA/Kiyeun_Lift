@@ -17,21 +17,25 @@ export const Receivables: React.FC = () => {
     setTimeout(() => setToastMessage(null), 3500);
   };
 
+  // 날짜 기본값: 당해 연도 1월 1일 ~ 오늘
+  const defaultStartDate = `${new Date().getFullYear()}-01-01`;
+  const defaultEndDate = new Date().toISOString().split('T')[0];
+
   // 임시 필터 상태
   const [tempSearchTerm, setTempSearchTerm] = useState('');
   const [tempFilterType, setTempFilterType] = useState<string>('ALL');
   const [tempFilterStatus, setTempFilterStatus] = useState<string>('PENDING_PARTIAL'); // 미청구+일부청구
   const [tempCustomerId, setTempCustomerId] = useState<string>('ALL');
-  const [tempStartDate, setTempStartDate] = useState<string>('');
-  const [tempEndDate, setTempEndDate] = useState<string>('');
+  const [tempStartDate, setTempStartDate] = useState<string>(defaultStartDate);
+  const [tempEndDate, setTempEndDate] = useState<string>(defaultEndDate);
 
   // 적용된 필터 상태
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState<string>('ALL');
   const [filterStatus, setFilterStatus] = useState<string>('PENDING_PARTIAL');
   const [customerId, setCustomerId] = useState<string>('ALL');
-  const [startDate, setStartDate] = useState<string>('');
-  const [endDate, setEndDate] = useState<string>('');
+  const [startDate, setStartDate] = useState<string>(defaultStartDate);
+  const [endDate, setEndDate] = useState<string>(defaultEndDate);
 
   const [showAddModal, setShowAddModal] = useState(false);
   const [modalSearchTerm, setModalSearchTerm] = useState('');
@@ -158,20 +162,46 @@ export const Receivables: React.FC = () => {
     setEndDate(tempEndDate);
   };
 
+  // 빠른 기간 선택 헬퍼
+  const setQuickPeriod = (type: 'MONTH' | '3MONTH' | 'YEAR' | 'ALL') => {
+    const today = new Date();
+    const todayStr = today.toISOString().split('T')[0];
+    let s = '';
+    let e = todayStr;
+
+    if (type === 'MONTH') {
+      const ym = todayStr.slice(0, 7);
+      s = `${ym}-01`;
+    } else if (type === '3MONTH') {
+      const d = new Date(today.getFullYear(), today.getMonth() - 2, 1);
+      s = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
+    } else if (type === 'YEAR') {
+      s = `${today.getFullYear()}-01-01`;
+    } else if (type === 'ALL') {
+      s = '';
+      e = '';
+    }
+
+    setTempStartDate(s);
+    setTempEndDate(e);
+    setStartDate(s);
+    setEndDate(e);
+  };
+
   const handleResetFilter = () => {
     setTempSearchTerm('');
     setTempFilterType('ALL');
     setTempFilterStatus('PENDING_PARTIAL');
     setTempCustomerId('ALL');
-    setTempStartDate('');
-    setTempEndDate('');
+    setTempStartDate(defaultStartDate);
+    setTempEndDate(defaultEndDate);
 
     setSearchTerm('');
     setFilterType('ALL');
     setFilterStatus('PENDING_PARTIAL');
     setCustomerId('ALL');
-    setStartDate('');
-    setEndDate('');
+    setStartDate(defaultStartDate);
+    setEndDate(defaultEndDate);
   };
 
   const filtered = receivables.filter(r => {
@@ -339,167 +369,203 @@ export const Receivables: React.FC = () => {
   };
 
   return (
-    <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+    <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
       
-      {/* 상단 타이틀 & 등록 버튼 */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
-        <div>
-          <h2 style={{ margin: 0, fontSize: '20px', fontWeight: 800 }}>외상미수금 대장</h2>
-          <p style={{ margin: '4px 0 0', fontSize: '13px', color: 'var(--text-muted)' }}>
-            렌탈료 외 부대비용 (운송료, 수리비, 청소비 등) 분할 청산 관리
-          </p>
+      {/* ── 1. 상단 헤더 & 슬림 인라인 요약 바 (거대 카드 4개 대체 및 중복 제거) ── */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+          <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 800, whiteSpace: 'nowrap' }}>외상미수금 대장</h2>
+          
+          {/* 슬림 인라인 요약 뱃지 (높이 100px 절약 & 중복 해소) */}
+          <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap', fontSize: '11.5px' }}>
+            <span style={{
+              padding: '3px 8px', borderRadius: '4px', backgroundColor: 'var(--bg-card)',
+              border: '1px solid var(--border-color)', fontWeight: 600, color: 'var(--text-main)'
+            }}>
+              조회 <strong>{filtered.length}</strong>건
+            </span>
+            <span style={{
+              padding: '3px 8px', borderRadius: '4px', backgroundColor: 'var(--bg-card)',
+              border: '1px solid var(--border-color)', color: 'var(--text-primary)'
+            }}>
+              외상총액 <strong>₩{totalReceivableSum.toLocaleString()}</strong>
+            </span>
+            <span style={{
+              padding: '3px 8px', borderRadius: '4px', backgroundColor: 'rgba(16, 185, 129, 0.1)',
+              border: '1px solid rgba(16, 185, 129, 0.3)', color: '#059669', fontWeight: 600
+            }}>
+              기청구 <strong>₩{totalBilledSum.toLocaleString()}</strong>
+            </span>
+            <span style={{
+              padding: '3px 8px', borderRadius: '4px',
+              backgroundColor: totalRemainingSum > 0 ? 'rgba(239, 68, 68, 0.1)' : 'var(--bg-card)',
+              border: `1px solid ${totalRemainingSum > 0 ? 'rgba(239, 68, 68, 0.3)' : 'var(--border-color)'}`,
+              color: totalRemainingSum > 0 ? '#dc2626' : 'var(--text-muted)', fontWeight: 700
+            }}>
+              미청구 <strong>₩{totalRemainingSum.toLocaleString()}</strong>
+            </span>
+          </div>
         </div>
-        <div style={{ display: 'flex', gap: '8px' }}>
-          <button className="btn-secondary" onClick={handleExportExcel} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <Download size={15} /> 엑셀 다운로드
+
+        {/* 우측 파이프라인 버튼군 */}
+        <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+          <button className="btn-secondary" onClick={handleExportExcel} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', padding: '6px 12px' }}>
+            <Download size={14} /> 엑셀 다운로드
           </button>
           {canWrite && (
-            <button className="btn-primary" onClick={() => setShowAddModal(true)} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <Plus size={16} /> 신규 외상 등록
+            <button className="btn-primary" onClick={() => setShowAddModal(true)} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', padding: '6px 14px' }}>
+              <Plus size={14} /> 신규 외상 등록
             </button>
           )}
         </div>
       </div>
 
-      {/* 요약 현황 카드 */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '14px' }}>
-        <div className="card" style={{ padding: '14px 18px', margin: 0 }}>
-          <div style={{ fontSize: '11.5px', color: 'var(--text-muted)', fontWeight: 600 }}>조회 건수</div>
-          <div style={{ fontSize: '18px', fontWeight: 800, marginTop: '4px' }}>{filtered.length}건</div>
-        </div>
-        <div className="card" style={{ padding: '14px 18px', margin: 0 }}>
-          <div style={{ fontSize: '11.5px', color: 'var(--text-muted)', fontWeight: 600 }}>외상 총액</div>
-          <div style={{ fontSize: '18px', fontWeight: 800, marginTop: '4px', color: 'var(--text-primary)' }}>₩{totalReceivableSum.toLocaleString()}</div>
-        </div>
-        <div className="card" style={{ padding: '14px 18px', margin: 0 }}>
-          <div style={{ fontSize: '11.5px', color: 'var(--text-muted)', fontWeight: 600 }}>기청구액</div>
-          <div style={{ fontSize: '18px', fontWeight: 800, marginTop: '4px', color: 'var(--success)' }}>₩{totalBilledSum.toLocaleString()}</div>
-        </div>
-        <div className="card" style={{ padding: '14px 18px', margin: 0 }}>
-          <div style={{ fontSize: '11.5px', color: 'var(--text-muted)', fontWeight: 600 }}>미청구 잔액</div>
-          <div style={{ fontSize: '18px', fontWeight: 800, marginTop: '4px', color: totalRemainingSum > 0 ? 'var(--danger)' : 'var(--text-primary)' }}>
-            ₩{totalRemainingSum.toLocaleString()}
-          </div>
-        </div>
-      </div>
-
-      {/* 조회 필터 패널 (카테고리 III 레이블 상하 스택 표준) */}
-      <div className="card" style={{ margin: 0, padding: '16px' }}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+      {/* ── 2. 슬림 컴팩트 필터 패널 (상하 세로 스택 표준 & 빠른 기간 칩) ── */}
+      <div className="card" style={{ margin: 0, padding: '10px 14px' }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', alignItems: 'flex-end' }}>
           
           {/* 통합 검색창 */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-            <label style={{ fontSize: '11.5px', fontWeight: 700, color: 'var(--text-muted)' }}>통합 검색</label>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+            <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>통합 검색</label>
             <div style={{ position: 'relative' }}>
-              <Search size={15} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+              <Search size={13} style={{ position: 'absolute', left: '8px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
               <input
                 type="text"
-                placeholder="계약번호, 고객사명, 현장명, 내부 기재명..."
+                placeholder="계약/고객/현장/기재명..."
                 value={tempSearchTerm}
                 onChange={e => setTempSearchTerm(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter') handleApplyFilter(); }}
-                style={{ width: '100%', padding: '7px 10px 7px 32px', fontSize: '12.5px' }}
+                style={{ width: '160px', padding: '5px 8px 5px 26px', fontSize: '12px', borderRadius: '4px' }}
               />
             </div>
           </div>
 
-          {/* 세부 필터 그리드 (상하 세로 스택 & 기간 추가) */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '10px', alignItems: 'flex-end' }}>
-            
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              <label style={{ fontSize: '11.5px', fontWeight: 700, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>고객사</label>
-              <select
-                value={tempCustomerId}
-                onChange={e => setTempCustomerId(e.target.value)}
-                style={{ padding: '6px 8px', fontSize: '12px', width: '100%' }}
-              >
-                <option value="ALL">전체 고객사</option>
-                {customers.map(cu => (
-                  <option key={cu.id} value={cu.id}>{cu.name}</option>
-                ))}
-              </select>
-            </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              <label style={{ fontSize: '11.5px', fontWeight: 700, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>비용 유형</label>
-              <select
-                value={tempFilterType}
-                onChange={e => setTempFilterType(e.target.value)}
-                style={{ padding: '6px 8px', fontSize: '12px', width: '100%' }}
-              >
-                <option value="ALL">전체 유형</option>
-                <option value="TRANSPORT">운송료</option>
-                <option value="REPAIR">수리비</option>
-                <option value="CLEANING">청소비</option>
-                <option value="VENDOR_CLAIM">타사구상금</option>
-                <option value="OTHER">기타</option>
-              </select>
-            </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              <label style={{ fontSize: '11.5px', fontWeight: 700, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>청구 상태</label>
-              <select
-                value={tempFilterStatus}
-                onChange={e => setTempFilterStatus(e.target.value)}
-                style={{ padding: '6px 8px', fontSize: '12px', width: '100%' }}
-              >
-                <option value="PENDING_PARTIAL">미청구 잔액 있음</option>
-                <option value="ALL">전체 상태</option>
-                <option value="PENDING">미청구</option>
-                <option value="PARTIAL">일부청구</option>
-                <option value="CLEARED">청구완료 (전액)</option>
-              </select>
-            </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              <label style={{ fontSize: '11.5px', fontWeight: 700, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>발생 시작일 (이후)</label>
-              <input
-                type="date"
-                value={tempStartDate}
-                onChange={e => setTempStartDate(e.target.value)}
-                style={{ padding: '5px 8px', fontSize: '12px', width: '100%' }}
-              />
-            </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              <label style={{ fontSize: '11.5px', fontWeight: 700, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>발생 종료일 (이전)</label>
-              <input
-                type="date"
-                value={tempEndDate}
-                onChange={e => setTempEndDate(e.target.value)}
-                style={{ padding: '5px 8px', fontSize: '12px', width: '100%' }}
-              />
-            </div>
-
-            {/* 조회 & 초기화 액션 버튼 */}
-            <div style={{ display: 'flex', gap: '6px' }}>
-              <button
-                type="button"
-                className="btn-primary"
-                onClick={handleApplyFilter}
-                style={{ padding: '6px 14px', fontSize: '12px', flex: 1, whiteSpace: 'nowrap' }}
-              >
-                조회
-              </button>
-              <button
-                type="button"
-                className="btn-secondary"
-                onClick={handleResetFilter}
-                style={{ padding: '6px 10px', fontSize: '12px', whiteSpace: 'nowrap' }}
-                title="필터 초기화"
-              >
-                <RotateCcw size={13} />
-              </button>
-            </div>
-
+          {/* 고객사 */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+            <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>고객사</label>
+            <select
+              value={tempCustomerId}
+              onChange={e => setTempCustomerId(e.target.value)}
+              style={{ padding: '5px 8px', fontSize: '12px', width: '140px', borderRadius: '4px' }}
+            >
+              <option value="ALL">전체 고객사</option>
+              {customers.map(cu => (
+                <option key={cu.id} value={cu.id}>{cu.name}</option>
+              ))}
+            </select>
           </div>
+
+          {/* 비용 유형 */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+            <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>비용 유형</label>
+            <select
+              value={tempFilterType}
+              onChange={e => setTempFilterType(e.target.value)}
+              style={{ padding: '5px 8px', fontSize: '12px', width: '105px', borderRadius: '4px' }}
+            >
+              <option value="ALL">전체 유형</option>
+              <option value="TRANSPORT">운송료</option>
+              <option value="REPAIR">수리비</option>
+              <option value="CLEANING">청소비</option>
+              <option value="VENDOR_CLAIM">타사구상금</option>
+              <option value="OTHER">기타</option>
+            </select>
+          </div>
+
+          {/* 청구 상태 */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+            <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>청구 상태</label>
+            <select
+              value={tempFilterStatus}
+              onChange={e => setTempFilterStatus(e.target.value)}
+              style={{ padding: '5px 8px', fontSize: '12px', width: '130px', borderRadius: '4px' }}
+            >
+              <option value="PENDING_PARTIAL">미청구 잔액 있음</option>
+              <option value="ALL">전체 상태</option>
+              <option value="PENDING">미청구</option>
+              <option value="PARTIAL">일부청구</option>
+              <option value="CLEARED">청구완료 (전액)</option>
+            </select>
+          </div>
+
+          {/* 발생 시작일 (기본값 탑재) */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+            <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>발생 시작일</label>
+            <input
+              type="date"
+              value={tempStartDate}
+              onChange={e => setTempStartDate(e.target.value)}
+              style={{ padding: '4px 6px', fontSize: '12px', width: '125px', borderRadius: '4px' }}
+            />
+          </div>
+
+          <span style={{ paddingBottom: '6px', color: 'var(--text-muted)' }}>~</span>
+
+          {/* 발생 종료일 (기본값 탑재) */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+            <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>발생 종료일</label>
+            <input
+              type="date"
+              value={tempEndDate}
+              onChange={e => setTempEndDate(e.target.value)}
+              style={{ padding: '4px 6px', fontSize: '12px', width: '125px', borderRadius: '4px' }}
+            />
+          </div>
+
+          {/* 빠른 기간 선택 칩 */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+            <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>빠른 기간</label>
+            <div style={{ display: 'flex', gap: '3px' }}>
+              {[
+                { label: '당월', type: 'MONTH' as const },
+                { label: '3개월', type: '3MONTH' as const },
+                { label: '올해', type: 'YEAR' as const },
+                { label: '전체', type: 'ALL' as const },
+              ].map(chip => (
+                <button
+                  key={chip.label}
+                  type="button"
+                  onClick={() => setQuickPeriod(chip.type)}
+                  style={{
+                    padding: '4px 7px', fontSize: '11px', borderRadius: '4px',
+                    border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-app)',
+                    color: 'var(--text-main)', cursor: 'pointer', whiteSpace: 'nowrap', fontWeight: 500
+                  }}
+                >
+                  {chip.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* 조회 & 초기화 액션 버튼 */}
+          <div style={{ display: 'flex', gap: '4px', marginLeft: 'auto' }}>
+            <button
+              type="button"
+              className="btn-primary"
+              onClick={handleApplyFilter}
+              style={{ padding: '5px 14px', fontSize: '12px', whiteSpace: 'nowrap', fontWeight: 700 }}
+            >
+              조회
+            </button>
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={handleResetFilter}
+              style={{ padding: '5px 8px', fontSize: '12px', whiteSpace: 'nowrap' }}
+              title="필터 초기화"
+            >
+              <RotateCcw size={13} />
+            </button>
+          </div>
+
         </div>
       </div>
 
-      {/* 데이터 테이블 카드 */}
-      <div className="card" style={{ padding: 0, margin: 0, overflowX: 'auto' }}>
-        <div className="table-container" style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', minWidth: '1100px', borderCollapse: 'collapse', whiteSpace: 'nowrap' }}>
+      {/* ── 3. 데이터 테이블 카드 (세로 80% 작업대 극대화: 헌장 3.6 유형 B) ── */}
+      <div className="card" style={{ padding: 0, margin: 0, overflow: 'hidden', flex: 1 }}>
+        <div className="table-container" style={{ overflowX: 'auto', maxHeight: 'calc(100vh - 250px)', overflowY: 'auto' }}>
+          <table style={{ width: '100%', minWidth: '1100px', borderCollapse: 'collapse', whiteSpace: 'nowrap', fontSize: '12px' }}>
             <thead>
               <tr style={{ backgroundColor: 'var(--bg-app)', whiteSpace: 'nowrap' }}>
                 <th style={{ whiteSpace: 'nowrap', textAlign: 'center', width: '80px' }}>조치</th>

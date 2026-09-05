@@ -354,11 +354,12 @@ export function calculateAssetDepreciation(asset: Asset, asOfDate: Date = new Da
   const monthlyDepn = depreciableAmount / asset.depreciationMonths;
 
   // 기준 상각 종료일 결정 (매각된 자산은 매각일자 시점 고정, 아니면 현재/지정일)
+  // IFRS 완전 정합: 매각 자산은 매각일 이후 추가 상각이 중단되지만, 과거 시점 결산 조회 시(asOfDate < disposalDate)에는 asOfDate 시점 기준으로 정상 상각되어야 함!
   let targetDate = asOfDate;
   if (asset.status === 'SOLD' && asset.disposalDate) {
     const parsedDisposal = new Date(asset.disposalDate);
     if (!isNaN(parsedDisposal.getTime())) {
-      targetDate = parsedDisposal;
+      targetDate = parsedDisposal < asOfDate ? parsedDisposal : asOfDate;
     }
   }
 
@@ -463,19 +464,23 @@ export interface ContractAsset {
   contractId: string;
   assetId?: string;
   expectedModel?: string;
-  status?: 'RENTED' | 'RETURNED' | 'ASSIGNED' | string;
+  status?: 'RENTED' | 'RETURNED' | 'ASSIGNED' | 'SOLD' | string;
   actualReturnDate?: string;
   monthlyRentalFee: number;
   dailyRentalFee: number;
+  salePrice?: number; // 💡 자산 매각 계약 시 매각 공급가액
   startDate: string;
   endDate: string;
   createdAt: string;
   updatedAt?: string;
 }
 
+export type ContractType = 'RENTAL' | 'SALE';
+
 export interface Contract {
   id: string;
   contractNo: string;
+  contractType?: ContractType; // 💡 신규 추가: 'RENTAL' (기본값) | 'SALE' (자산 매각 계약)
   customerId: string;
   contactId?: string;
   siteId?: string;
@@ -509,7 +514,7 @@ export interface ContractHistory {
   id: string;
   contractId: string;
   changeType: 'REGISTER' | 'EXTEND' | 'SHORTEN' | 'SUCCEED' | 'TERMINATE' | 'EXCHANGE' | 'FEE_CHANGE' | 'AS_SERVICE'
-           | 'BILLING_CREATED' | 'BILLING_SENT' | 'BILLING_CANCELLED' | 'BILLING_REGENERATED' | 'PAYMENT_RECEIVED' | 'PAYMENT_CANCELLED' | 'DOCUMENT_SENT';
+           | 'BILLING_CREATED' | 'BILLING_SENT' | 'BILLING_CANCELLED' | 'BILLING_REGENERATED' | 'PAYMENT_RECEIVED' | 'PAYMENT_CANCELLED' | 'DOCUMENT_SENT' | 'ASSET_SOLD';
   changeDate: string;
   prevEndDate?: string;
   newEndDate?: string;
@@ -554,8 +559,11 @@ export interface BillingInvoice {
   billings?: Billing[];
 }
 
+export type BillingType = 'RENTAL' | 'REPAIR' | 'TRANSPORT' | 'ASSET_SALE';
+
 export interface Billing {
   id: string;
+  billingType?: BillingType; // 💡 신규 추가: 'RENTAL' (기본값) | 'REPAIR' | 'TRANSPORT' | 'ASSET_SALE' (자산매각)
   customerId: string;
   contractId?: string; // 연결된 계약 ID (개별 계약 정산용)
   invoiceId?: string;  // FK → billing_invoices (통합 인보이스 묶음, null=단독 청구)

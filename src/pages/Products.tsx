@@ -906,43 +906,6 @@ export const Products: React.FC = () => {
               </div>
 
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                {!isEditing && (
-                  <button
-                    type="button"
-                    className="btn-secondary"
-                    onClick={() => setShowSpecPreviewModal(true)}
-                    style={{ padding: '3px 8px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px' }}
-                  >
-                    <FileText size={12} /> 제원표 그래픽
-                  </button>
-                )}
-                {canSave && !isEditing && (
-                  <button
-                    className="btn-primary"
-                    onClick={handleStartEdit}
-                    style={{ padding: '3px 8px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px' }}
-                  >
-                    <Edit2 size={12} /> 수정
-                  </button>
-                )}
-                {isEditing && (
-                  <>
-                    <button
-                      className="btn-success"
-                      onClick={handleSaveEdit}
-                      style={{ padding: '3px 10px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px' }}
-                    >
-                      <Save size={12} /> 저장
-                    </button>
-                    <button
-                      className="btn-secondary"
-                      onClick={handleCancelEdit}
-                      style={{ padding: '3px 8px', fontSize: '11px' }}
-                    >
-                      취소
-                    </button>
-                  </>
-                )}
                 <button
                   onClick={() => { if (!isEditing) setSelectedProduct(null); }}
                   style={{ border: 'none', backgroundColor: 'transparent', cursor: 'pointer', color: 'var(--text-muted)' }}
@@ -1077,7 +1040,53 @@ export const Products: React.FC = () => {
 
               {/* 3. 기본 물리 제원 및 규격 */}
               <div style={{ padding: '10px 12px', backgroundColor: 'var(--bg-app)', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
-                <div style={{ fontWeight: 600, color: 'var(--text-main)', marginBottom: '8px' }}>3. 상세 물리 제원 규격</div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                  <div style={{ fontWeight: 600, color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    3. 상세 물리 제원 규격
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    {!isEditing && (
+                      <button
+                        type="button"
+                        className="btn-secondary"
+                        onClick={() => setShowSpecPreviewModal(true)}
+                        style={{ padding: '3px 8px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px' }}
+                      >
+                        <FileText size={12} /> 제원표 그래픽
+                      </button>
+                    )}
+                    {canSave && !isEditing && (
+                      <button
+                        type="button"
+                        className="btn-primary"
+                        onClick={handleStartEdit}
+                        style={{ padding: '3px 8px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px' }}
+                      >
+                        <Edit2 size={12} /> 수정
+                      </button>
+                    )}
+                    {isEditing && (
+                      <>
+                        <button
+                          type="button"
+                          className="btn-success"
+                          onClick={handleSaveEdit}
+                          style={{ padding: '3px 10px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px' }}
+                        >
+                          <Save size={12} /> 저장
+                        </button>
+                        <button
+                          type="button"
+                          className="btn-secondary"
+                          onClick={handleCancelEdit}
+                          style={{ padding: '3px 8px', fontSize: '11px' }}
+                        >
+                          취소
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
                 {isEditing ? (
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
                     <div><label style={labelStyle}>모델명 *</label><input style={inputStyle} value={editForm.modelName || ''} onChange={ef('modelName')} /></div>

@@ -9,7 +9,7 @@ export const Assets: React.FC = () => {
   const { 
     assets, customers, sites, contracts, contractAssets, hasPermission, 
     saveAsset, showErrorModal, loadTablesForMenu, assetInOutLogs, repairs, 
-    vendors, setActiveTab: setGlobalActiveTab 
+    vendors, products, setActiveTab: setGlobalActiveTab 
   } = useApp();
 
   const canEdit = hasPermission('asset', 'save');
@@ -41,13 +41,34 @@ export const Assets: React.FC = () => {
   const [editForm, setEditForm] = useState<Partial<Asset>>({});
   const [showHistoryToggle, setShowHistoryToggle] = useState(false);
 
-  // 헬퍼: 원사 상호명 결합 (vendorId 외래키 우선)
+  // 헬퍼: 외부 임차(전대) 자산 소유 원사명 (외부임차자산 전용)
   const getAssetRenterName = (a: Asset): string => {
+    if (a.ownerType !== 'RENTED') return '-'; // 당사자산은 소유원사가 존재하지 않음
+    if (a.renter) return a.renter;
     if (a.vendorId) {
       const v = vendors.find(item => item.id === a.vendorId);
       if (v?.name) return v.name;
     }
-    return a.renter || a.supplier || '-';
+    return '-';
+  };
+
+  // 헬퍼: 당사자산 구입처(공급처) 명칭 (당사자산 전용)
+  const getAssetSupplierName = (a: Asset): string => {
+    if (a.ownerType !== 'OWNED') return '-'; // 외부임차자산은 구입처가 없음
+    if (a.supplier) return a.supplier;
+    if (a.vendorId) {
+      const v = vendors.find(item => item.id === a.vendorId);
+      if (v?.name) return v.name;
+    }
+    return '-';
+  };
+
+  // 헬퍼: 모델별 규격(피트) 조회
+  const getAssetFeet = (a: Asset): string => {
+    const prod = products.find(p => p.modelName === a.modelName);
+    if (prod?.feet) return `${prod.feet} ft`;
+    const m = a.modelName.match(/(\d{2})/);
+    return m ? `${m[1]} ft` : '-';
   };
 
   const getCustomerName = (id?: string) => {
@@ -190,6 +211,7 @@ export const Assets: React.FC = () => {
   const filtered = useMemo(() => {
     return assets.filter(a => {
       const renterName = getAssetRenterName(a);
+      const supplierName = getAssetSupplierName(a);
       const isReturned = Boolean(a.actualRentReturnDate) || a.status === 'RENTED_RETURNED';
       
       const matchesSearch =
@@ -198,7 +220,8 @@ export const Assets: React.FC = () => {
         a.modelName.toLowerCase().includes(searchTerm.toLowerCase()) ||
         (a.serialNo && a.serialNo.toLowerCase().includes(searchTerm.toLowerCase())) ||
         (a.manufacturer && a.manufacturer.toLowerCase().includes(searchTerm.toLowerCase())) ||
-        renterName.toLowerCase().includes(searchTerm.toLowerCase());
+        renterName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        supplierName.toLowerCase().includes(searchTerm.toLowerCase());
 
       const matchesStatus = statusFilter === 'ALL' ? true :
                             statusFilter === 'RENTED_RETURNED' ? isReturned :
@@ -275,33 +298,33 @@ export const Assets: React.FC = () => {
     const data = filtered.map((a, idx) => {
       const ci = getAssetContractInfo(a.id);
       const isReturned = Boolean(a.actualRentReturnDate) || a.status === 'RENTED_RETURNED';
+      const netProfit = (a.cumRentalFee || 0) - (a.cumRepairCost || 0);
+      const depn = calculateAssetDepreciation(a);
       return {
         'No': idx + 1,
         '관리번호': a.assetNo || '-',
-        '원사(타사) 관리번호': a.vendorAssetNo || '-',
-        '제조번호(S/N)': a.serialNo || '-',
         '모델명': a.modelName || '-',
+        '규격(피트)': getAssetFeet(a),
         '제조사': a.manufacturer || '-',
-        '제조년도': a.manufactureYear || '-',
+        '제조번호(S/N)': a.serialNo || '-',
+        '연식': a.manufactureYear || '-',
         '소유구분': a.ownerType === 'OWNED' ? '당사자산' : '외부임차',
         '상태': isReturned ? '임차처 반납완료' : getAssetStatusLabel(a.status),
-        '소유원사(임차처)': getAssetRenterName(a),
-        '임차개시일': a.rentStart ? a.rentStart.slice(0, 10) : '-',
-        '임차만료일': a.rentEnd ? a.rentEnd.slice(0, 10) : '-',
-        '실제반납일': a.actualRentReturnDate ? a.actualRentReturnDate.slice(0, 10) : '-',
-        '월임차료(원)': a.monthlyRentFee || 0,
         '현재 고객사': getCustomerName(a.currentCustomerId),
         '현재 현장': getSiteName(a.currentSiteId),
         '계약번호': ci ? ci.contractNo : '-',
         '계약기간': a.contractStart ? `${a.contractStart.slice(0, 10)} ~ ${a.contractEnd?.slice(0, 10) || ''}` : '-',
         '청구마감일': a.billingDay ? `${a.billingDay}일` : '-',
-        '월대여료(원)': a.monthlyRentalFee || 0,
-        '취득일자': a.acquisitionDate ? a.acquisitionDate.slice(0, 10) : '-',
-        '취득금액(원)': a.acquisitionPrice || 0,
-        '구입처': a.supplier || '-',
-        '장부가치(원)': a.bookValue ?? (a.acquisitionPrice || 0),
+        '월 렌탈료(원)': a.monthlyRentalFee || 0,
+        '소유원사(임차처)': getAssetRenterName(a),
+        '구입/공급처': getAssetSupplierName(a),
+        '취득일자': a.acquisitionDate ? a.acquisitionDate.slice(0, 10) : (a.rentStart ? a.rentStart.slice(0, 10) : '-'),
+        '취득원가(원)': a.acquisitionPrice || 0,
+        '감가상각누계액(원)': a.ownerType === 'OWNED' ? depn.accumDepreciation : 0,
+        '장부가치(원)': a.ownerType === 'OWNED' ? depn.bookValue : 0,
         '누적렌탈수익(원)': a.cumRentalFee || 0,
         '누적수리비(원)': a.cumRepairCost || 0,
+        '기여순익(원)': netProfit,
         '정비점수': a.maintenanceScore || 0,
         '비고': a.memo || a.memo1 || '-'
       };
@@ -311,7 +334,16 @@ export const Assets: React.FC = () => {
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, gap: '8px', position: 'relative' }}>
+    <div style={{
+      display: 'flex',
+      flexDirection: 'column',
+      height: 'calc(100dvh - 85px)',
+      maxHeight: 'calc(100dvh - 85px)',
+      minHeight: 0,
+      overflow: 'hidden',
+      gap: '8px',
+      position: 'relative'
+    }}>
       
       {/* 알림 토스트 */}
       {toastMessage && (
@@ -532,45 +564,94 @@ export const Assets: React.FC = () => {
         overflow: 'hidden',
         display: 'flex',
         flexDirection: 'column',
-        minHeight: 0
+        minHeight: 0,
+        boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
       }}>
-        <div style={{ flex: 1, overflow: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '11.5px' }}>
+        <div
+          className="table-wrapper"
+          style={{
+            flex: 1,
+            minHeight: 0,
+            overflowX: 'scroll',
+            overflowY: 'auto',
+            position: 'relative'
+          }}
+        >
+          <table style={{ minWidth: '2400px', width: 'max-content', borderCollapse: 'collapse', textAlign: 'left', fontSize: '11.5px' }}>
             <thead style={{ position: 'sticky', top: 0, zIndex: 10 }}>
               <tr style={{ backgroundColor: 'var(--bg-app)', borderBottom: '1px solid var(--border-color)', color: 'var(--text-secondary)', fontWeight: 600 }}>
-                <th style={{ padding: '7px 8px', width: '50px', textAlign: 'center', whiteSpace: 'nowrap' }}>상세</th>
-                <th onClick={() => handleSort('assetNo')} style={{ padding: '7px 8px', cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}>
+                {/* 1. 상세 (고정) */}
+                <th style={{ padding: '7px 8px', width: '50px', textAlign: 'center', whiteSpace: 'nowrap', position: 'sticky', left: 0, zIndex: 12, backgroundColor: 'var(--bg-app)' }}>상세</th>
+                {/* 2. 관리번호 (고정) */}
+                <th onClick={() => handleSort('assetNo')} style={{ padding: '7px 8px', width: '90px', cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap', position: 'sticky', left: '50px', zIndex: 12, backgroundColor: 'var(--bg-app)' }}>
                   관리번호{renderSortArrow('assetNo')}
                 </th>
-                <th onClick={() => handleSort('modelName')} style={{ padding: '7px 8px', cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}>
+                {/* 3. 모델명 */}
+                <th onClick={() => handleSort('modelName')} style={{ padding: '7px 8px', width: '100px', cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}>
                   모델명{renderSortArrow('modelName')}
                 </th>
-                <th onClick={() => handleSort('manufacturer')} style={{ padding: '7px 8px', cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}>
+                {/* 4. 규격/피트 */}
+                <th style={{ padding: '7px 8px', width: '75px', textAlign: 'center', whiteSpace: 'nowrap' }}>규격(피트)</th>
+                {/* 5. 제조사 */}
+                <th onClick={() => handleSort('manufacturer')} style={{ padding: '7px 8px', width: '90px', cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}>
                   제조사{renderSortArrow('manufacturer')}
                 </th>
-                <th style={{ padding: '7px 8px', whiteSpace: 'nowrap' }}>제조번호(S/N)</th>
-                <th style={{ padding: '7px 8px', textAlign: 'center', whiteSpace: 'nowrap' }}>연식</th>
-                <th onClick={() => handleSort('ownerType')} style={{ padding: '7px 8px', cursor: 'pointer', userSelect: 'none', textAlign: 'center', whiteSpace: 'nowrap' }}>
+                {/* 6. 제조번호(S/N) */}
+                <th style={{ padding: '7px 8px', width: '100px', whiteSpace: 'nowrap' }}>제조번호(S/N)</th>
+                {/* 7. 연식 */}
+                <th style={{ padding: '7px 8px', width: '70px', textAlign: 'center', whiteSpace: 'nowrap' }}>연식</th>
+                {/* 8. 소유구분 */}
+                <th onClick={() => handleSort('ownerType')} style={{ padding: '7px 8px', width: '70px', cursor: 'pointer', userSelect: 'none', textAlign: 'center', whiteSpace: 'nowrap' }}>
                   소유{renderSortArrow('ownerType')}
                 </th>
-                <th onClick={() => handleSort('status')} style={{ padding: '7px 8px', cursor: 'pointer', userSelect: 'none', textAlign: 'center', whiteSpace: 'nowrap' }}>
+                {/* 9. 상태 */}
+                <th onClick={() => handleSort('status')} style={{ padding: '7px 8px', width: '85px', cursor: 'pointer', userSelect: 'none', textAlign: 'center', whiteSpace: 'nowrap' }}>
                   상태{renderSortArrow('status')}
                 </th>
-                <th onClick={() => handleSort('currentCustomerId')} style={{ padding: '7px 8px', cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}>
-                  현재 고객사 / 현장{renderSortArrow('currentCustomerId')}
+                {/* 10. 현재 고객사 */}
+                <th onClick={() => handleSort('currentCustomerId')} style={{ padding: '7px 8px', width: '140px', cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}>
+                  현재 고객사{renderSortArrow('currentCustomerId')}
                 </th>
-                <th style={{ padding: '7px 8px', textAlign: 'center', whiteSpace: 'nowrap' }}>계약번호</th>
-                <th style={{ padding: '7px 8px', textAlign: 'right', whiteSpace: 'nowrap' }}>월 렌탈료</th>
-                <th style={{ padding: '7px 8px', whiteSpace: 'nowrap' }}>소유 원사 (임차처)</th>
-                <th style={{ padding: '7px 8px', textAlign: 'right', whiteSpace: 'nowrap' }}>장부가치 / 취득원가</th>
-                <th style={{ padding: '7px 8px', textAlign: 'right', whiteSpace: 'nowrap' }}>기여 순익(수익-수리)</th>
-                <th style={{ padding: '7px 8px', textAlign: 'center', whiteSpace: 'nowrap' }}>정비점수</th>
+                {/* 11. 사용 현장 */}
+                <th style={{ padding: '7px 8px', width: '150px', whiteSpace: 'nowrap' }}>사용 현장</th>
+                {/* 12. 계약번호 */}
+                <th style={{ padding: '7px 8px', width: '105px', textAlign: 'center', whiteSpace: 'nowrap' }}>계약번호</th>
+                {/* 13. 계약기간 */}
+                <th style={{ padding: '7px 8px', width: '160px', textAlign: 'center', whiteSpace: 'nowrap' }}>계약기간</th>
+                {/* 14. 청구일 */}
+                <th style={{ padding: '7px 8px', width: '65px', textAlign: 'center', whiteSpace: 'nowrap' }}>청구일</th>
+                {/* 15. 월 렌탈료 */}
+                <th style={{ padding: '7px 8px', width: '95px', textAlign: 'right', whiteSpace: 'nowrap' }}>월 렌탈료</th>
+                {/* 16. 소유 원사 (임차처) */}
+                <th style={{ padding: '7px 8px', width: '120px', whiteSpace: 'nowrap' }}>소유 원사 (임차처)</th>
+                {/* 17. 구입/공급처 */}
+                <th style={{ padding: '7px 8px', width: '120px', whiteSpace: 'nowrap' }}>구입/공급처</th>
+                {/* 18. 취득/개시일 */}
+                <th onClick={() => handleSort('acquisitionDate')} style={{ padding: '7px 8px', width: '90px', cursor: 'pointer', userSelect: 'none', textAlign: 'center', whiteSpace: 'nowrap' }}>
+                  취득/개시일{renderSortArrow('acquisitionDate')}
+                </th>
+                {/* 19. 취득원가 */}
+                <th style={{ padding: '7px 8px', width: '105px', textAlign: 'right', whiteSpace: 'nowrap' }}>취득원가</th>
+                {/* 20. 감가누계액 */}
+                <th style={{ padding: '7px 8px', width: '105px', textAlign: 'right', whiteSpace: 'nowrap' }}>감가누계액</th>
+                {/* 21. 장부가치 */}
+                <th style={{ padding: '7px 8px', width: '105px', textAlign: 'right', whiteSpace: 'nowrap' }}>장부가치</th>
+                {/* 22. 누적 렌탈수익 */}
+                <th style={{ padding: '7px 8px', width: '105px', textAlign: 'right', whiteSpace: 'nowrap' }}>누적 렌탈수익</th>
+                {/* 23. 누적 수리비 */}
+                <th style={{ padding: '7px 8px', width: '95px', textAlign: 'right', whiteSpace: 'nowrap' }}>누적 수리비</th>
+                {/* 24. 기여 순익 */}
+                <th style={{ padding: '7px 8px', width: '105px', textAlign: 'right', whiteSpace: 'nowrap' }}>기여 순익</th>
+                {/* 25. 정비점수 */}
+                <th style={{ padding: '7px 8px', width: '70px', textAlign: 'center', whiteSpace: 'nowrap' }}>정비점수</th>
+                {/* 26. 비고 */}
+                <th style={{ padding: '7px 8px', width: '140px', whiteSpace: 'nowrap' }}>비고</th>
               </tr>
             </thead>
             <tbody>
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={15} style={{ padding: '36px 0', textAlign: 'center', color: 'var(--text-muted)' }}>
+                  <td colSpan={26} style={{ padding: '36px 0', textAlign: 'center', color: 'var(--text-muted)' }}>
                     조회 조건에 해당하는 자산이 없습니다.
                   </td>
                 </tr>
@@ -579,9 +660,11 @@ export const Assets: React.FC = () => {
                   const ci = getAssetContractInfo(a.id);
                   const isReturned = Boolean(a.actualRentReturnDate) || a.status === 'RENTED_RETURNED';
                   const renterName = getAssetRenterName(a);
+                  const supplierName = getAssetSupplierName(a);
                   const custName = getCustomerName(a.currentCustomerId);
                   const siteName = getSiteName(a.currentSiteId);
                   const netProfit = (a.cumRentalFee || 0) - (a.cumRepairCost || 0);
+                  const depn = calculateAssetDepreciation(a);
 
                   return (
                     <tr
@@ -595,8 +678,8 @@ export const Assets: React.FC = () => {
                       }}
                       className="hover-row"
                     >
-                      {/* 상세 버튼 */}
-                      <td style={{ padding: '6px 8px', textAlign: 'center', whiteSpace: 'nowrap' }}>
+                      {/* 1. 상세 버튼 (고정) */}
+                      <td style={{ padding: '6px 8px', textAlign: 'center', whiteSpace: 'nowrap', position: 'sticky', left: 0, zIndex: 2, backgroundColor: 'var(--bg-card)' }}>
                         <button
                           onClick={(e) => { e.stopPropagation(); handleSelectAsset(a); }}
                           style={{
@@ -614,8 +697,8 @@ export const Assets: React.FC = () => {
                         </button>
                       </td>
 
-                      {/* 관리번호 */}
-                      <td style={{ padding: '6px 8px', fontWeight: 700, color: 'var(--text-main)', whiteSpace: 'nowrap' }}>
+                      {/* 2. 관리번호 (고정) */}
+                      <td style={{ padding: '6px 8px', fontWeight: 700, color: 'var(--text-main)', whiteSpace: 'nowrap', position: 'sticky', left: '50px', zIndex: 2, backgroundColor: 'var(--bg-card)' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                           <span>{a.assetNo}</span>
                           {a.ownerType === 'RENTED' && (
@@ -624,28 +707,33 @@ export const Assets: React.FC = () => {
                         </div>
                       </td>
 
-                      {/* 모델명 */}
-                      <td style={{ padding: '6px 8px', color: 'var(--text-main)', whiteSpace: 'nowrap' }}>{a.modelName}</td>
+                      {/* 3. 모델명 */}
+                      <td style={{ padding: '6px 8px', color: 'var(--text-main)', fontWeight: 600, whiteSpace: 'nowrap' }}>{a.modelName}</td>
 
-                      {/* 제조사 */}
+                      {/* 4. 규격(피트) */}
+                      <td style={{ padding: '6px 8px', textAlign: 'center', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
+                        <span className="badge badge-secondary" style={{ fontSize: '10px' }}>{getAssetFeet(a)}</span>
+                      </td>
+
+                      {/* 5. 제조사 */}
                       <td style={{ padding: '6px 8px', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>{a.manufacturer || '-'}</td>
 
-                      {/* 시리얼번호 */}
+                      {/* 6. 시리얼번호 */}
                       <td style={{ padding: '6px 8px', fontFamily: 'monospace', fontSize: '11px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
                         {a.serialNo || '-'}
                       </td>
 
-                      {/* 연식 */}
+                      {/* 7. 연식 */}
                       <td style={{ padding: '6px 8px', textAlign: 'center', whiteSpace: 'nowrap' }}>{a.manufactureYear || '-'}</td>
 
-                      {/* 소유구분 */}
+                      {/* 8. 소유구분 */}
                       <td style={{ padding: '6px 8px', textAlign: 'center', whiteSpace: 'nowrap' }}>
                         <span className={`badge ${a.ownerType === 'OWNED' ? 'badge-success' : 'badge-info'}`} style={{ fontSize: '10px', padding: '1px 5px' }}>
                           {a.ownerType === 'OWNED' ? '당사' : '임차'}
                         </span>
                       </td>
 
-                      {/* FSM 운용 상태 */}
+                      {/* 9. FSM 운용 상태 */}
                       <td style={{ padding: '6px 8px', textAlign: 'center', whiteSpace: 'nowrap' }}>
                         {isReturned ? (
                           <span className="badge badge-secondary" style={{ fontSize: '10px', padding: '1px 5px' }}>임차처 반납완료</span>
@@ -658,50 +746,101 @@ export const Assets: React.FC = () => {
                         )}
                       </td>
 
-                      {/* 현재 고객사 / 현장 */}
+                      {/* 10. 현재 고객사 */}
                       <td style={{ padding: '6px 8px', whiteSpace: 'nowrap' }}>
                         {custName !== '-' ? (
-                          <div>
-                            <strong style={{ color: 'var(--text-main)' }}>{custName}</strong>
-                            {siteName !== '-' && <span style={{ fontSize: '10.5px', color: 'var(--text-muted)' }}> ({siteName})</span>}
-                          </div>
+                          <strong style={{ color: 'var(--text-main)' }}>{custName}</strong>
                         ) : (
                           <span style={{ color: 'var(--text-muted)' }}>-</span>
                         )}
                       </td>
 
-                      {/* 계약번호 */}
+                      {/* 11. 사용 현장 */}
+                      <td style={{ padding: '6px 8px', whiteSpace: 'nowrap', color: 'var(--text-secondary)' }}>
+                        {siteName !== '-' ? siteName : <span style={{ color: 'var(--text-muted)' }}>-</span>}
+                      </td>
+
+                      {/* 12. 계약번호 */}
                       <td style={{ padding: '6px 8px', textAlign: 'center', fontFamily: 'monospace', fontSize: '11px', whiteSpace: 'nowrap' }}>
                         {ci ? <span style={{ color: 'var(--primary)', fontWeight: 600 }}>{ci.contractNo}</span> : <span style={{ color: 'var(--text-muted)' }}>-</span>}
                       </td>
 
-                      {/* 월 렌탈료 */}
+                      {/* 13. 계약기간 */}
+                      <td style={{ padding: '6px 8px', textAlign: 'center', fontSize: '11px', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
+                        {a.contractStart ? `${a.contractStart.slice(0, 10)} ~ ${a.contractEnd?.slice(0, 10) || ''}` : '-'}
+                      </td>
+
+                      {/* 14. 청구일 */}
+                      <td style={{ padding: '6px 8px', textAlign: 'center', fontSize: '11px', whiteSpace: 'nowrap' }}>
+                        {a.billingDay ? `${a.billingDay}일` : '-'}
+                      </td>
+
+                      {/* 15. 월 렌탈료 */}
                       <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 600, color: 'var(--text-main)', whiteSpace: 'nowrap' }}>
                         {a.monthlyRentalFee ? `₩${a.monthlyRentalFee.toLocaleString()}` : '-'}
                       </td>
 
-                      {/* 소유 원사 (임차처) */}
+                      {/* 16. 소유 원사 (임차처) - 임차자산 전용 */}
                       <td style={{ padding: '6px 8px', fontWeight: 600, color: 'var(--text-main)', whiteSpace: 'nowrap' }}>
-                        {renterName}
+                        {renterName !== '-' ? renterName : <span style={{ color: 'var(--text-muted)' }}>-</span>}
                       </td>
 
-                      {/* 장부가치 / 취득원가 */}
+                      {/* 17. 구입/공급처 - 당사자산 전용 */}
+                      <td style={{ padding: '6px 8px', fontWeight: 600, color: 'var(--text-main)', whiteSpace: 'nowrap' }}>
+                        {supplierName !== '-' ? supplierName : <span style={{ color: 'var(--text-muted)' }}>-</span>}
+                      </td>
+
+                      {/* 18. 취득/개시일자 */}
+                      <td style={{ padding: '6px 8px', textAlign: 'center', fontSize: '11px', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
+                        {a.acquisitionDate ? a.acquisitionDate.slice(0, 10) : (a.rentStart ? a.rentStart.slice(0, 10) : '-')}
+                      </td>
+
+                      {/* 19. 취득원가 */}
                       <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 600, color: 'var(--text-main)', whiteSpace: 'nowrap' }}>
                         {a.ownerType === 'OWNED'
-                          ? `₩${(a.bookValue ?? a.acquisitionPrice ?? 0).toLocaleString()}`
+                          ? `₩${(a.acquisitionPrice || 0).toLocaleString()}`
                           : <span style={{ color: 'var(--text-muted)' }}>(임차자산)</span>}
                       </td>
 
-                      {/* 기여 순익 */}
+                      {/* 20. 감가누계액 */}
+                      <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                        {a.ownerType === 'OWNED'
+                          ? <span style={{ color: 'var(--danger)' }}>₩{depn.accumDepreciation.toLocaleString()}</span>
+                          : <span style={{ color: 'var(--text-muted)' }}>-</span>}
+                      </td>
+
+                      {/* 21. 장부가치 */}
+                      <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                        {a.ownerType === 'OWNED'
+                          ? <span style={{ color: 'var(--success)' }}>₩{depn.bookValue.toLocaleString()}</span>
+                          : <span style={{ color: 'var(--text-muted)' }}>-</span>}
+                      </td>
+
+                      {/* 22. 누적 렌탈수익 */}
+                      <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 600, color: 'var(--text-main)', whiteSpace: 'nowrap' }}>
+                        ₩{(a.cumRentalFee || 0).toLocaleString()}
+                      </td>
+
+                      {/* 23. 누적 수리비 */}
+                      <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 600, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
+                        ₩{(a.cumRepairCost || 0).toLocaleString()}
+                      </td>
+
+                      {/* 24. 기여 순익 */}
                       <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 700, whiteSpace: 'nowrap', color: netProfit >= 0 ? 'var(--success)' : 'var(--danger)' }}>
                         {netProfit >= 0 ? `+₩${netProfit.toLocaleString()}` : `-₩${Math.abs(netProfit).toLocaleString()}`}
                       </td>
 
-                      {/* 정비점수 */}
+                      {/* 25. 정비점수 */}
                       <td style={{ padding: '6px 8px', textAlign: 'center', whiteSpace: 'nowrap' }}>
                         <span className={`badge ${(a.maintenanceScore || 0) === 0 ? 'badge-success' : 'badge-warning'}`} style={{ fontSize: '10px' }}>
                           {a.maintenanceScore || 0}점
                         </span>
+                      </td>
+
+                      {/* 26. 비고 */}
+                      <td style={{ padding: '6px 8px', maxWidth: '140px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text-muted)' }} title={a.memo || a.memo1 || ''}>
+                        {a.memo || a.memo1 || '-'}
                       </td>
                     </tr>
                   );
@@ -716,6 +855,7 @@ export const Assets: React.FC = () => {
           padding: '8px 14px',
           backgroundColor: 'var(--bg-app)',
           borderTop: '1px solid var(--border-color)',
+          boxShadow: '0 -2px 6px rgba(0,0,0,0.08)',
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
@@ -723,7 +863,8 @@ export const Assets: React.FC = () => {
           gap: '8px',
           fontSize: '11.5px',
           borderRadius: '0 0 6px 6px',
-          flexShrink: 0
+          flexShrink: 0,
+          zIndex: 15
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
             <span>전사 등록자산: <strong style={{ color: 'var(--primary)' }}>{kpiStats.totalCount}대</strong> (당사 {kpiStats.ownedCount}대 + 임차 {kpiStats.rentedCount}대)</span>
@@ -749,6 +890,7 @@ export const Assets: React.FC = () => {
       {selectedAsset && (() => {
         const isReturned = Boolean(selectedAsset.actualRentReturnDate) || selectedAsset.status === 'RENTED_RETURNED';
         const renterName = getAssetRenterName(selectedAsset);
+        const supplierName = getAssetSupplierName(selectedAsset);
         const depn = calculateAssetDepreciation(isEditing ? { ...selectedAsset, ...editForm } as Asset : selectedAsset);
         const netProfit = (selectedAsset.cumRentalFee || 0) - (selectedAsset.cumRepairCost || 0);
 
@@ -908,7 +1050,7 @@ export const Assets: React.FC = () => {
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '11.5px' }}>
                       <div><span style={{ color: 'var(--text-secondary)' }}>취득일자:</span> {selectedAsset.acquisitionDate || '-'}</div>
                       <div><span style={{ color: 'var(--text-secondary)' }}>취득원가:</span> <strong>₩{(selectedAsset.acquisitionPrice || 0).toLocaleString()}</strong></div>
-                      <div><span style={{ color: 'var(--text-secondary)' }}>구입처:</span> {selectedAsset.supplier || '-'}</div>
+                      <div><span style={{ color: 'var(--text-secondary)' }}>구입처:</span> <strong>{supplierName}</strong></div>
                       <div><span style={{ color: 'var(--text-secondary)' }}>내용연수:</span> {selectedAsset.depreciationMonths ? `${selectedAsset.depreciationMonths}개월 (경과: ${depn.elapsedMonths}개월)` : '-'}</div>
                       <div><span style={{ color: 'var(--text-secondary)' }}>감가누계액:</span> <strong style={{ color: 'var(--danger)' }}>₩{depn.accumDepreciation.toLocaleString()}</strong></div>
                       <div><span style={{ color: 'var(--text-secondary)' }}>미상각 장부가:</span> <strong style={{ color: 'var(--success)' }}>₩{depn.bookValue.toLocaleString()}</strong></div>

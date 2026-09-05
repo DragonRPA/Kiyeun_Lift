@@ -283,7 +283,7 @@ export const BankMatching: React.FC = () => {
   const unmatchedDepositCount = deposits.length - matchedDepositCount;
   const depositMatchRate = totalDepositAmountSum > 0 ? Math.round((totalDepositUsedAmountSum / totalDepositAmountSum) * 100) : 0;
 
-  const unpaidBillings = billings.filter(b => b.status === 'UNPAID' || b.status === 'PARTIAL');
+  const unpaidBillings = billings.filter(b => b.status === 'UNPAID' || b.status === 'PARTIAL' || b.status === 'REQUESTED');
   const totalUnpaidBillingAmount = unpaidBillings.reduce((sum, b) => {
     const grand = (b.totalAmount || 0) + Math.round((b.totalAmount || 0) * 0.1);
     const isPaid = b.status === 'PAID';

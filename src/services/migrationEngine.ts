@@ -1176,6 +1176,9 @@ export function parseInitialExcelWorkbook(
     // 엑셀 Col[8]에 '종료'로 명시된 경우에만 COMPLETED 처리.
     const isCompleted = contractStatusStr === '종료';
 
+    // Col[3] = 최초개시일 (실제 계약 시작일). Col[4] = 개시일은 당월 기산일
+    const firstStartDate = sanitizeExcelDate(getCol(r, mainHeaderMap, ['최초개시일', '최초출고일'], 3)) || sanitizeExcelDate(r[3]) || rowStartDate;
+
     // ── 계약 그룹핑: 동일 (고객사 + 현장 + 시작일 + 종료일) = 1개 계약 ──
     // 재영전기처럼 같은 현장·기간에 여러 자산이 있을 경우 하나의 계약으로 묶음
     const contractGroupKey = `${customer.id}_${site.id}_${rowStartDate}_${rowEndDate}`;
@@ -1189,6 +1192,9 @@ export function parseInitialExcelWorkbook(
       contractNo = existingContract.contractNo;
       // 계약 헤더의 월 합계를 추가 자산 단가만큼 누적
       existingContract._totalMonthlyFee = (existingContract._totalMonthlyFee || 0) + rowMonthlyFee;
+      if (firstStartDate && (!existingContract._firstStartDate || firstStartDate < existingContract._firstStartDate)) {
+        existingContract._firstStartDate = firstStartDate;
+      }
     } else {
       // 신규 계약 생성
       contractId = `CONT-260801-${String(contractSeq++).padStart(4, '0')}`;
@@ -1213,6 +1219,7 @@ export function parseInitialExcelWorkbook(
         lastBilledYm: '2026-08',
         billingCount: 1,
         _totalMonthlyFee: rowMonthlyFee,  // 내부 집계용 (DB 저장 X)
+        _firstStartDate: firstStartDate,   // 소급 청구 생성용 최초개시일 (DB 저장 전 제거)
         createdAt: nowIso,
         updatedAt: nowIso
       };
@@ -1240,6 +1247,7 @@ export function parseInitialExcelWorkbook(
       dailyRentalFee: rowDailyFee,
       startDate: rowStartDate,
       endDate: rowEndDate,
+      firstStartDate: firstStartDate,
       createdAt: nowIso,
       updatedAt: nowIso
     });
@@ -1285,83 +1293,10 @@ export function parseInitialExcelWorkbook(
     // 외상미수금은 향후 실제 배차(고객청구 확정) 또는 정비(고객과실 확정) 이벤트에 의해서만 생성됨.
     // ────────────────────────────────────────────────────────────────────
 
-    // ── 과거 소급 청구서 선택적 생성 (histBillingRange 지정 시에만 실행) ──
-    // Col[3] = 최초개시일 (실제 계약 시작일). Col[4] = 개시일은 당월 기산일이므로 사용 금지.
-    const firstStartDate = sanitizeExcelDate(r[3]) || rowStartDate;
-    const startYmd = firstStartDate;
-    // histBillingRange가 없으면 소급 청구서 생성 안 함 (담당자가 UI에서 기간을 지정해야만 생성)
-    if (histBillingRange && startYmd && startYmd < '2026-08-01') {
-      const rangeStart = histBillingRange.start;   // 'YYYY-MM' 형식
-      const rangeEnd   = histBillingRange.end;     // 'YYYY-MM' 형식
-      const startParts = startYmd.split('-');
-      // 소급 시작월: max(계약 최초개시월, 지정 시작월)
-      const contractStartYm = `${startParts[0]}-${startParts[1]}`;
-      const loopStartYm = contractStartYm >= rangeStart ? contractStartYm : rangeStart;
-      const loopStartParts = loopStartYm.split('-');
-      let curYear = parseInt(loopStartParts[0], 10);
-      let curMonth = parseInt(loopStartParts[1], 10);
-
-      const [rangeEndY, rangeEndM] = rangeEnd.split('-').map(Number);
-
-      while (curYear < rangeEndY || (curYear === rangeEndY && curMonth <= rangeEndM)) {
-        const ymStr = `${curYear}-${String(curMonth).padStart(2, '0')}`;
-        const lastDayOfCurMonth = new Date(curYear, curMonth, 0).getDate();
-        const billDateStr = `${ymStr}-${String(Math.min(customer.billingDay || 30, lastDayOfCurMonth)).padStart(2, '0')}`;
-
-        // A-02 fix: 실제 해당 월의 일수로 계산 (30일 고정 제거)
-        let daysInPeriod = lastDayOfCurMonth;
-        const origStartParts = firstStartDate.split('-');
-        if (curYear === parseInt(origStartParts[0], 10) && curMonth === parseInt(origStartParts[1], 10)) {
-          // 계약 최초개시월: 개시일부터 말일까지의 일수
-          const startDay = parseInt(origStartParts[2], 10);
-          daysInPeriod = Math.max(1, lastDayOfCurMonth - startDay + 1);
-        }
-
-        const isFullMonth = daysInPeriod === lastDayOfCurMonth;
-        const histBillAmount = isFullMonth ? rowMonthlyFee : Math.round(rowDailyFee * daysInPeriod);
-
-        if (matchedAsset) {
-          // 기수 원칙: 과거 소급 청구서 발행 금액(histBillAmount)만 누적 — 실발행된 청구의 기수 성과
-          matchedAsset.cumRentalFee = (matchedAsset.cumRentalFee || 0) + histBillAmount;
-        }
-
-        const histBillId = `BILL-HIST-${String(billSeq++).padStart(6, '0')}`;
-        const histDueDate = calcDueDate(billDateStr, customer.paymentDueDay ?? 30, customer.paymentTermDays ?? null);
-        billings.push({
-          id: histBillId,
-          customerId: customer.id,
-          contractId: contractId,
-          billingYm: ymStr,
-          billingDate: billDateStr,
-          totalAmount: histBillAmount,
-          paidAmount: histBillAmount,
-          status: 'PAID',
-          createdAt: nowIso,
-          updatedAt: nowIso
-        });
-
-        billingDetails.push({
-          id: `BD-${String(bdSeq++).padStart(7, '0')}`,
-          billingId: histBillId,
-          contractAssetId: caId,
-          assetId: matchedAsset?.id,
-          itemName: `${targetModel} (${ownAssetNo || leaseAssetNo || '가상'}) 렌탈료`,
-          quantity: daysInPeriod,
-          unitPrice: rowDailyFee,
-          amount: histBillAmount,
-          description: `${ymStr} 정기 렌탈료 (${daysInPeriod}일 가동)`,
-          displayName: `${targetModel} 렌탈료`,
-          createdAt: nowIso,
-          updatedAt: nowIso
-        });
-
-        curMonth++;
-        if (curMonth > 12) {
-          curMonth = 1;
-          curYear++;
-        }
-      }
-    }
+    // ── 과거 소급 청구서 선택적 생성 (histBillingRange) ─────────────────
+    // ※ 과거 소급 청구서는 ERP 정규화 표준(1계약 1청구, 체결 자산 N대 품목 묶음)을 위해
+    //    개별 행 루프에서 생성하지 않고, 전체 행 파싱 완료 후 정규화된 contracts 목록을 기반으로 일괄 생성함.
+    // ────────────────────────────────────────────────────────────────────
 
     // ── 2026-08 당월 청구서 집계 ──
     const rowBillingTotal = sanitizeNumber(r[25]);
@@ -1520,6 +1455,136 @@ export function parseInitialExcelWorkbook(
     });
   });
 
+  // ── 4. 과거 소급 청구서 정규화 일괄 생성 (histBillingRange 지정 시에만 실행) ──
+  // ERP 표준 원칙:
+  // 1) 1계약 1월 = 단 1건의 Billing 생성 (체결 자산 N대의 렌탈료 합산)
+  // 2) 각 자산은 BillingDetail로 N개 1:1 품목 매핑
+  // 3) 각 계약의 contractHistories에 changeType: 'BILLING_CREATED' 이력 무누락 생성
+  if (histBillingRange) {
+    const rangeStart = histBillingRange.start;   // 'YYYY-MM'
+    const rangeEnd   = histBillingRange.end;     // 'YYYY-MM'
+    const [rangeEndY, rangeEndM] = rangeEnd.split('-').map(Number);
+
+    const contractAssetsByContract = new Map<string, any[]>();
+    contractAssets.forEach(ca => {
+      const list = contractAssetsByContract.get(ca.contractId) || [];
+      list.push(ca);
+      contractAssetsByContract.set(ca.contractId, list);
+    });
+
+    for (const contract of contracts) {
+      // 최초개시일(Col[3]) 또는 계약시작일
+      const startYmd = contract._firstStartDate || contract.startDate;
+      if (!startYmd || startYmd >= '2026-08-01') continue;
+
+      const startParts = startYmd.split('-');
+      const contractStartYm = `${startParts[0]}-${startParts[1]}`;
+      if (contractStartYm > rangeEnd) continue;
+      if (contract.endDate && contract.endDate < `${rangeStart}-01`) continue;
+
+      const customer = customerMap.get(contract.customerId) || {};
+      const caList = contractAssetsByContract.get(contract.id) || [];
+      if (caList.length === 0) continue;
+
+      const loopStartYm = contractStartYm >= rangeStart ? contractStartYm : rangeStart;
+      const [loopStartY, loopStartM] = loopStartYm.split('-').map(Number);
+
+      let curYear = loopStartY;
+      let curMonth = loopStartM;
+
+      while (curYear < rangeEndY || (curYear === rangeEndY && curMonth <= rangeEndM)) {
+        const ymStr = `${curYear}-${String(curMonth).padStart(2, '0')}`;
+        const lastDayOfCurMonth = new Date(curYear, curMonth, 0).getDate();
+        const billingDay = customer.billingDay || customer.defaultBillingDay || 30;
+        const billDateStr = `${ymStr}-${String(Math.min(billingDay, lastDayOfCurMonth)).padStart(2, '0')}`;
+
+        let contractBillTotal = 0;
+        const tempDetails: any[] = [];
+
+        for (const ca of caList) {
+          const caStartYmd = ca.firstStartDate || ca.startDate || startYmd;
+          const caStartParts = caStartYmd.split('-');
+          const caStartYm = `${caStartParts[0]}-${caStartParts[1]}`;
+          if (caStartYm > ymStr) continue;
+          if (ca.endDate && ca.endDate < `${ymStr}-01`) continue;
+
+          let daysInPeriod = lastDayOfCurMonth;
+          if (curYear === parseInt(caStartParts[0], 10) && curMonth === parseInt(caStartParts[1], 10)) {
+            const startDay = parseInt(caStartParts[2], 10);
+            daysInPeriod = Math.max(1, lastDayOfCurMonth - startDay + 1);
+          }
+
+          const isFullMonth = daysInPeriod === lastDayOfCurMonth;
+          const mFee = ca.monthlyRentalFee || 0;
+          const dFee = ca.dailyRentalFee || (mFee > 0 ? Math.round(mFee / 30) : 0);
+          const itemAmount = isFullMonth ? mFee : Math.round(dFee * daysInPeriod);
+          if (itemAmount <= 0) continue;
+
+          contractBillTotal += itemAmount;
+
+          const matchedAsset = ca.assetId ? assetMap.get(ca.assetId) : null;
+          if (matchedAsset) {
+            matchedAsset.cumRentalFee = (matchedAsset.cumRentalFee || 0) + itemAmount;
+          }
+
+          tempDetails.push({
+            id: `BD-${String(bdSeq++).padStart(7, '0')}`,
+            contractAssetId: ca.id,
+            assetId: ca.assetId || null,
+            itemName: `${ca.expectedModel || '임대장비'} (${matchedAsset?.assetNo || '가상'}) 렌탈료`,
+            quantity: daysInPeriod,
+            unitPrice: isFullMonth ? Math.round(itemAmount / daysInPeriod) : dFee,
+            amount: itemAmount,
+            description: `${ymStr} 정기 렌탈료 (${daysInPeriod}일 가동)`,
+            internalDescription: `소급 청구 (계약: ${contract.contractNo || contract.id})`,
+            displayName: `${ca.expectedModel || '임대장비'} 렌탈료`,
+            createdAt: nowIso,
+            updatedAt: nowIso
+          });
+        }
+
+        if (contractBillTotal > 0) {
+          const histBillId = `BILL-HIST-${contract.id.replace(/[^a-zA-Z0-9]/g, '')}-${ymStr.replace('-', '')}`;
+
+          billings.push({
+            id: histBillId,
+            customerId: contract.customerId,
+            contractId: contract.id,
+            billingYm: ymStr,
+            billingDate: billDateStr,
+            totalAmount: contractBillTotal,
+            paidAmount: contractBillTotal,
+            status: 'PAID',
+            createdAt: nowIso,
+            updatedAt: nowIso
+          });
+
+          tempDetails.forEach(d => {
+            d.billingId = histBillId;
+            billingDetails.push(d);
+          });
+
+          // 🌟 계약 이력(contractHistories)에 정규 소급 청구 생성 이력 1:1 무누락 적재
+          contractHistories.push({
+            id: `CH-HIST-${contract.id.replace(/[^a-zA-Z0-9]/g, '')}-${ymStr.replace('-', '')}`,
+            contractId: contract.id,
+            changeType: 'BILLING_CREATED',
+            changeDate: billDateStr,
+            description: `[소급 청구] ${ymStr} 정기 렌탈료 청구서 발행 (${tempDetails.length}대, ₩${contractBillTotal.toLocaleString()}원)`,
+            createdAt: nowIso,
+            updatedAt: nowIso
+          });
+        }
+
+        curMonth++;
+        if (curMonth > 12) {
+          curMonth = 1;
+          curYear++;
+        }
+      }
+    }
+  }
+
   const parsedProducts = Array.from(productMap.values());
   const parsedVendors = Array.from(vendorMap.values());
   const parsedCustomers = Array.from(customerMap.values());
@@ -1569,10 +1634,10 @@ export function parseInitialExcelWorkbook(
   });
   // ── 자산 정보 확정 완료 ──────────────────────────────────────────
 
-  // ── 계약 헤더 내부 집계 필드 정리 (DB INSERT 전 제거) ──────────
-  // _totalMonthlyFee는 그룹핑 중 집계용으로 사용된 임시 필드.
-  // TABLE_COLUMNS 화이트리스트가 걸러주지만, 명시적으로 제거.
-  contracts.forEach(c => { delete c._totalMonthlyFee; });
+  contracts.forEach(c => {
+    delete c._totalMonthlyFee;
+    delete c._firstStartDate;
+  });
   // ────────────────────────────────────────────────────────────────
 
   const parsedAssets = Array.from(assetMap.values());
@@ -2252,7 +2317,7 @@ export async function generateAndIngestHistoricalBillingsDirect(
   customers: any[],
   range: { start: string; end: string },
   onProgress?: (step: number, total: number, message: string) => void
-): Promise<{ success: boolean; message: string; billingsCount: number; detailsCount: number; totalAmount: number }> {
+): Promise<{ success: boolean; message: string; billingsCount: number; detailsCount: number; historiesCount: number; totalAmount: number }> {
   const nowIso = new Date().toISOString();
   const customerMap = new Map<string, any>();
   customers.forEach(c => customerMap.set(c.id, c));
@@ -2266,13 +2331,26 @@ export async function generateAndIngestHistoricalBillingsDirect(
 
   const billings: any[] = [];
   const billingDetails: any[] = [];
+  const contractHistories: any[] = [];
   let bdSeq = 1;
   let totalSum = 0;
 
   const [rangeEndY, rangeEndM] = range.end.split('-').map(Number);
 
   for (const contract of contracts) {
-    const startYmd = contract.startDate;
+    if ((contract.contractType || 'RENTAL') === 'SALE') continue; // 🚫 자산 매각 계약 소급 렌탈 청구 제외
+    const caList = contractAssetsByContract.get(contract.id) || [];
+    if (caList.length === 0) continue;
+
+    // 계약 시작일 또는 자산별 최초개시일 중 가장 이른 일자 탐색
+    let earliestStart = contract._firstStartDate || contract.startDate;
+    for (const ca of caList) {
+      const caDate = ca.firstStartDate || ca.startDate;
+      if (caDate && (!earliestStart || caDate < earliestStart)) {
+        earliestStart = caDate;
+      }
+    }
+    const startYmd = earliestStart;
     if (!startYmd) continue;
 
     const startParts = startYmd.split('-');
@@ -2281,8 +2359,6 @@ export async function generateAndIngestHistoricalBillingsDirect(
     if (contract.endDate && contract.endDate < `${range.start}-01`) continue;
 
     const cust = customerMap.get(contract.customerId) || {};
-    const caList = contractAssetsByContract.get(contract.id) || [];
-    if (caList.length === 0) continue;
 
     const loopStartYm = contractStartYm >= range.start ? contractStartYm : range.start;
     const [loopStartY, loopStartM] = loopStartYm.split('-').map(Number);
@@ -2296,19 +2372,24 @@ export async function generateAndIngestHistoricalBillingsDirect(
       const billingDay = cust.billingDay || cust.defaultBillingDay || 30;
       const billDateStr = `${ymStr}-${String(Math.min(billingDay, lastDayOfCurMonth)).padStart(2, '0')}`;
 
-      let daysInPeriod = lastDayOfCurMonth;
-      if (curYear === parseInt(startParts[0], 10) && curMonth === parseInt(startParts[1], 10)) {
-        const startDay = parseInt(startParts[2], 10);
-        daysInPeriod = Math.max(1, lastDayOfCurMonth - startDay + 1);
-      }
-
-      const isFullMonth = daysInPeriod === lastDayOfCurMonth;
-
       // 계약 내 자산별 청구 상세 계산
       let contractBillTotal = 0;
       const tempDetails: any[] = [];
 
       for (const ca of caList) {
+        const caDate = ca.firstStartDate || ca.startDate || startYmd;
+        const caStartParts = caDate.split('-');
+        const caStartYm = `${caStartParts[0]}-${caStartParts[1]}`;
+        if (caStartYm > ymStr) continue;
+        if (ca.endDate && ca.endDate < `${ymStr}-01`) continue;
+
+        let daysInPeriod = lastDayOfCurMonth;
+        if (curYear === parseInt(caStartParts[0], 10) && curMonth === parseInt(caStartParts[1], 10)) {
+          const startDay = parseInt(caStartParts[2], 10);
+          daysInPeriod = Math.max(1, lastDayOfCurMonth - startDay + 1);
+        }
+
+        const isFullMonth = daysInPeriod === lastDayOfCurMonth;
         const mFee = ca.monthlyRentalFee || 0;
         const dFee = ca.dailyRentalFee || (mFee > 0 ? Math.round(mFee / 30) : 0);
         const itemAmount = isFullMonth ? mFee : Math.round(dFee * daysInPeriod);
@@ -2321,9 +2402,9 @@ export async function generateAndIngestHistoricalBillingsDirect(
           assetId: ca.assetId || null,
           itemName: `${ca.expectedModel || '임대장비'} 렌탈료`,
           quantity: daysInPeriod,
-          unitPrice: Math.round(itemAmount / daysInPeriod),
+          unitPrice: isFullMonth ? Math.round(itemAmount / daysInPeriod) : dFee,
           amount: itemAmount,
-          description: `${ymStr} 렌탈료 (${daysInPeriod}일)`,
+          description: `${ymStr} 정기 렌탈료 (${daysInPeriod}일 가동)`,
           internalDescription: `소급 청구 (계약: ${contract.contractNo || contract.id})`,
           displayName: `${ca.expectedModel || '임대장비'} 렌탈료`,
           createdAt: nowIso,
@@ -2352,6 +2433,17 @@ export async function generateAndIngestHistoricalBillingsDirect(
           d.billingId = histBillId;
           billingDetails.push(d);
         });
+
+        // 🌟 계약 이력(contractHistories)에 소급 청구 생성 이력 1:1 무누락 생성
+        contractHistories.push({
+          id: `CH-HIST-${contract.id.replace(/[^a-zA-Z0-9]/g, '')}-${ymStr.replace('-', '')}`,
+          contractId: contract.id,
+          changeType: 'BILLING_CREATED',
+          changeDate: billDateStr,
+          description: `[소급 청구] ${ymStr} 정기 렌탈료 청구서 발행 (${tempDetails.length}대, ₩${contractBillTotal.toLocaleString()}원)`,
+          createdAt: nowIso,
+          updatedAt: nowIso
+        });
       }
 
       curMonth++;
@@ -2362,14 +2454,47 @@ export async function generateAndIngestHistoricalBillingsDirect(
     }
   }
 
-  onProgress?.(1, 3, `소급 청구서 ${billings.length}건 및 상세 ${billingDetails.length}건 적재 준비 중...`);
+  onProgress?.(1, 4, '기존 소급 청구서 및 관련 이력 정돈 중...');
 
   try {
+    // 🧹 [클린업 단계] 기존 파편화 소급 청구서, 상세, 계약이력 완전 삭제
+    if (supabase) {
+      const { data: oldHistBills } = await supabase.from('billings').select('id').like('id', 'BILL-HIST-%');
+      if (oldHistBills && oldHistBills.length > 0) {
+        const oldBillIds = oldHistBills.map(b => b.id);
+        for (let i = 0; i < oldBillIds.length; i += 100) {
+          const chunk = oldBillIds.slice(i, i + 100);
+          await supabase.from('billing_details').delete().in('billing_id', chunk);
+        }
+        for (let i = 0; i < oldBillIds.length; i += 100) {
+          const chunk = oldBillIds.slice(i, i + 100);
+          await supabase.from('billings').delete().in('id', chunk);
+        }
+      }
+      await supabase.from('contract_history').delete().like('id', 'CH-HIST-%');
+      await supabase.from('contract_history').delete().eq('change_type', 'BILLING_CREATED');
+    } else {
+      const dbAny = db as any;
+      if (dbAny.billings) {
+        const oldBillIds = new Set(dbAny.billings.filter((b: any) => b.id?.startsWith('BILL-HIST-')).map((b: any) => b.id));
+        dbAny.billings = dbAny.billings.filter((b: any) => !b.id?.startsWith('BILL-HIST-'));
+        if (dbAny.billingDetails) {
+          dbAny.billingDetails = dbAny.billingDetails.filter((bd: any) => !oldBillIds.has(bd.billingId) && !bd.id?.startsWith('BD-HIST-'));
+        }
+      }
+      if (dbAny.contractHistory) {
+        dbAny.contractHistory = dbAny.contractHistory.filter((ch: any) => !ch.id?.startsWith('CH-HIST-') && ch.changeType !== 'BILLING_CREATED');
+      }
+    }
+
     if (billings.length > 0) {
-      await batchUpsertChunked('billings', billings, 100, msg => onProgress?.(2, 3, msg));
+      await batchUpsertChunked('billings', billings, 100, msg => onProgress?.(2, 4, msg));
     }
     if (billingDetails.length > 0) {
-      await batchUpsertChunked('billing_details', billingDetails, 100, msg => onProgress?.(3, 3, msg));
+      await batchUpsertChunked('billing_details', billingDetails, 100, msg => onProgress?.(3, 4, msg));
+    }
+    if (contractHistories.length > 0) {
+      await batchUpsertChunked('contract_history', contractHistories, 100, msg => onProgress?.(4, 4, msg));
     }
   } catch (e: any) {
     return {
@@ -2377,15 +2502,17 @@ export async function generateAndIngestHistoricalBillingsDirect(
       message: `소급 청구서 적재 실패: ${e.message}`,
       billingsCount: 0,
       detailsCount: 0,
+      historiesCount: 0,
       totalAmount: 0
     };
   }
 
   return {
     success: true,
-    message: `지정 기간(${range.start} ~ ${range.end}) 소급 청구서 ${billings.length.toLocaleString()}건(₩${totalSum.toLocaleString()}) 및 상세 ${billingDetails.length.toLocaleString()}건 생성 완료`,
+    message: `지정 기간(${range.start} ~ ${range.end}) 소급 청구서 ${billings.length.toLocaleString()}건(₩${totalSum.toLocaleString()}원), 청구상세 ${billingDetails.length.toLocaleString()}건, 계약이력 ${contractHistories.length.toLocaleString()}건 정규화 적재 완료`,
     billingsCount: billings.length,
     detailsCount: billingDetails.length,
+    historiesCount: contractHistories.length,
     totalAmount: totalSum
   };
 }

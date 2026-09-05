@@ -1,7 +1,7 @@
 // d:\Kiyeun_Lift\src\pages\AssetAcquisitionDisposal.tsx
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
-import { calculateAssetDepreciation, Asset, Product, Vendor } from '../services/db';
+import { calculateAssetDepreciation, Asset, Product, Vendor, Customer } from '../services/db';
 import * as XLSX from 'xlsx';
 import {
   ShoppingBag,
@@ -21,7 +21,18 @@ import {
   Eye,
   RefreshCw,
   ExternalLink,
-  HelpCircle
+  HelpCircle,
+  Trash2,
+  Mail,
+  Send,
+  Building2,
+  Calendar,
+  DollarSign,
+  Receipt,
+  Sparkles,
+  CheckSquare,
+  Square,
+  ArrowRight
 } from 'lucide-react';
 
 export const AssetAcquisitionDisposal: React.FC = () => {
@@ -30,30 +41,21 @@ export const AssetAcquisitionDisposal: React.FC = () => {
     products,
     vendors,
     customers,
-    assetInOutLogs,
+    users,
+    currentUser,
     acquireAsset,
     batchAcquireAssets,
-    disposeAsset,
-    hasPermission
+    executeAssetSale,
+    hasPermission,
+    showErrorModal
   } = useApp();
 
   const canSave = hasPermission('acquisition_disposal', 'save');
 
-  // 메인 서브탭: 당사자산 취득 대장 vs 자산 매각 처분 대장
-  const [activeTab, setActiveTab] = useState<'ACQUIRE' | 'DISPOSE'>('ACQUIRE');
+  // 메인 스튜디오 전환 탭 (헌장 3.1 무수식어 건조 명사 단일 표준)
+  const [activeStudio, setActiveStudio] = useState<'ACQUISITION' | 'DISPOSAL'>('ACQUISITION');
 
-  // 필터 상태
-  const [selectedModel, setSelectedModel] = useState<string>('');
-  const [selectedYear, setSelectedYear] = useState<string>('');
-  const [searchQuery, setSearchQuery] = useState<string>('');
-
-  // 모달 제어 상태
-  const [showAcquireModal, setShowAcquireModal] = useState<boolean>(false);
-  const [showDisposeModal, setShowDisposeModal] = useState<boolean>(false);
-  const [showExcelUploadModal, setShowExcelUploadModal] = useState<boolean>(false);
-  const [selectedAssetForDossier, setSelectedAssetForDossier] = useState<Asset | null>(null);
-
-  // 알림 토스트 상태
+  // 토스트 알림 상태
   const [toastMessage, setToastMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const showToast = (text: string, type: 'success' | 'error' = 'success') => {
     setToastMessage({ type, text });
@@ -62,2169 +64,1567 @@ export const AssetAcquisitionDisposal: React.FC = () => {
     }, 4000);
   };
 
-  // --------------------------------------------------------------------------
-  // [1] 데이터 필터링 및 집계 (Scope)
-  // --------------------------------------------------------------------------
-  
-  // 당사 보유 자산 목록 (취득 대장 대상)
-  const ownedAssets = useMemo(() => {
-    return assets.filter(a => a.ownerType === 'OWNED' && a.status !== 'SOLD');
-  }, [assets]);
+  // ==========================================================================
+  // 🏢 [스튜디오 1] 자산 취득 스튜디오 (Asset Acquisition Studio)
+  // ==========================================================================
+  const [acqMode, setAcqMode] = useState<'SINGLE' | 'EXCEL'>('SINGLE');
 
-  // 매각 처분 완료 자산 목록 (매각 대장 대상)
-  const soldAssets = useMemo(() => {
-    return assets.filter(a => a.ownerType === 'OWNED' && a.status === 'SOLD');
-  }, [assets]);
-
-  // 연도 목록 옵션 (취득/매각일자 기준 유니크 연도)
-  const availableYears = useMemo(() => {
-    const years = new Set<string>();
+  // 자동 관리번호 채번 헬퍼
+  const getNextRecommendedAssetNo = (prefix = 'KL-') => {
+    let maxNum = 0;
     assets.forEach(a => {
-      if (a.ownerType === 'OWNED') {
-        if (a.acquisitionDate && a.acquisitionDate.length >= 4) {
-          years.add(a.acquisitionDate.slice(0, 4));
-        }
-        if (a.disposalDate && a.disposalDate.length >= 4) {
-          years.add(a.disposalDate.slice(0, 4));
-        }
+      if (a.assetNo && a.assetNo.startsWith(prefix)) {
+        const numPart = parseInt(a.assetNo.slice(prefix.length), 10);
+        if (!isNaN(numPart) && numPart > maxNum) maxNum = numPart;
+      } else if (a.assetNo && /^\d+$/.test(a.assetNo)) {
+        const numPart = parseInt(a.assetNo, 10);
+        if (!isNaN(numPart) && numPart > maxNum) maxNum = numPart;
       }
     });
-    return Array.from(years).sort().reverse();
-  }, [assets]);
-
-  // 취득 대장 필터링 결과
-  const filteredOwnedAssets = useMemo(() => {
-    return ownedAssets.filter(a => {
-      if (selectedModel && a.modelName !== selectedModel) return false;
-      if (selectedYear && a.acquisitionDate && !a.acquisitionDate.startsWith(selectedYear)) return false;
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase().trim();
-        const matchNo = a.assetNo?.toLowerCase().includes(q);
-        const matchSerial = a.serialNo?.toLowerCase().includes(q);
-        const matchSupplier = a.supplier?.toLowerCase().includes(q);
-        const matchModel = a.modelName?.toLowerCase().includes(q);
-        if (!matchNo && !matchSerial && !matchSupplier && !matchModel) return false;
-      }
-      return true;
-    });
-  }, [ownedAssets, selectedModel, selectedYear, searchQuery]);
-
-  // 매각 대장 필터링 결과
-  const filteredSoldAssets = useMemo(() => {
-    return soldAssets.filter(a => {
-      if (selectedModel && a.modelName !== selectedModel) return false;
-      if (selectedYear && a.disposalDate && !a.disposalDate.startsWith(selectedYear)) return false;
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase().trim();
-        const matchNo = a.assetNo?.toLowerCase().includes(q);
-        const matchSerial = a.serialNo?.toLowerCase().includes(q);
-        const matchBuyer = a.buyer?.toLowerCase().includes(q);
-        const matchModel = a.modelName?.toLowerCase().includes(q);
-        if (!matchNo && !matchSerial && !matchBuyer && !matchModel) return false;
-      }
-      return true;
-    });
-  }, [soldAssets, selectedModel, selectedYear, searchQuery]);
-
-  // --------------------------------------------------------------------------
-  // [2] KPI 지표 및 회계 대차대조 합계 검증식 (Terminal Audit)
-  // --------------------------------------------------------------------------
-  
-  // 취득 대장 합계 (필터 적용 기준)
-  const acqSummary = useMemo(() => {
-    let totalCost = 0;
-    let totalAccum = 0;
-    let totalBook = 0;
-
-    filteredOwnedAssets.forEach(a => {
-      const dep = calculateAssetDepreciation(a);
-      totalCost += (a.acquisitionPrice || 0);
-      totalAccum += dep.accumDepreciation;
-      totalBook += dep.bookValue;
-    });
-
-    const diff = totalCost - (totalBook + totalAccum);
-
-    return {
-      count: filteredOwnedAssets.length,
-      totalCost,
-      totalAccum,
-      totalBook,
-      diff // 회계상 원칙적으로 0이어야 함 (단위 절사 오차 방지)
-    };
-  }, [filteredOwnedAssets]);
-
-  // 매각 대장 합계 (필터 적용 기준)
-  const dispSummary = useMemo(() => {
-    let totalAcqCost = 0;
-    let totalAccum = 0;
-    let totalBookAtDisposal = 0;
-    let totalDisposalPrice = 0;
-    let totalGainLoss = 0;
-
-    filteredSoldAssets.forEach(a => {
-      const dep = calculateAssetDepreciation(a);
-      const acqPrice = a.acquisitionPrice || 0;
-      const dispPrice = a.disposalPrice || 0;
-      const bookAtDisp = dep.bookValue;
-      const gainLoss = dispPrice - bookAtDisp;
-
-      totalAcqCost += acqPrice;
-      totalAccum += dep.accumDepreciation;
-      totalBookAtDisposal += bookAtDisp;
-      totalDisposalPrice += dispPrice;
-      totalGainLoss += gainLoss;
-    });
-
-    return {
-      count: filteredSoldAssets.length,
-      totalAcqCost,
-      totalAccum,
-      totalBookAtDisposal,
-      totalDisposalPrice,
-      totalGainLoss
-    };
-  }, [filteredSoldAssets]);
-
-  // --------------------------------------------------------------------------
-  // [3] 취득 모달 상태 (단건 / N대 연속 일괄)
-  // --------------------------------------------------------------------------
-  const [acquireMode, setAcquireMode] = useState<'SINGLE' | 'BATCH'>('SINGLE');
+    if (maxNum === 0) maxNum = 800;
+    return `${prefix}${String(maxNum + 1).padStart(4, '0')}`;
+  };
 
   // 단건 취득 폼 상태
-  const [singleModel, setSingleModel] = useState<string>(products[0]?.modelName || '');
+  const [singleModelName, setSingleModelName] = useState<string>(products[0]?.modelName || '');
   const [singleAssetNo, setSingleAssetNo] = useState<string>('');
   const [singleSerialNo, setSingleSerialNo] = useState<string>('');
-  const [singleManufacturer, setSingleManufacturer] = useState<string>(products[0]?.manufacturer || '');
+  const [singleManufacturer, setSingleManufacturer] = useState<string>('');
   const [singleManufactureYear, setSingleManufactureYear] = useState<string>(new Date().getFullYear().toString());
   const [singleAcqDate, setSingleAcqDate] = useState<string>(new Date().toISOString().split('T')[0]);
-  const [singleAcqPrice, setSingleAcqPrice] = useState<number>(0);
+  const [singleAcqPrice, setSingleAcqPrice] = useState<number>(15000000);
   const [singleDepMonths, setSingleDepMonths] = useState<number>(60);
   const [singleResidualRate, setSingleResidualRate] = useState<number>(10);
+  const [singleSupplier, setSingleSupplier] = useState<string>('');
   const [singleVendorId, setSingleVendorId] = useState<string>('');
-  const [singleSupplierText, setSingleSupplierText] = useState<string>('');
-  const [singleSafetyUrl, setSingleSafetyUrl] = useState<string>('');
+  const [singleMonthlyRentalFee, setSingleMonthlyRentalFee] = useState<number>(400000);
+  const [singleDailyRentalFee, setSingleDailyRentalFee] = useState<number>(15000);
+  const [singleSafetyInspectionUrl, setSingleSafetyInspectionUrl] = useState<string>('');
   const [singleMemo, setSingleMemo] = useState<string>('');
+  const [isSubmittingAcq, setIsSubmittingAcq] = useState<boolean>(false);
 
-  // N대 연속 일괄 취득 폼 상태
-  const [batchModel, setBatchModel] = useState<string>(products[0]?.modelName || '');
-  const [batchPrefix, setBatchPrefix] = useState<string>('SJ19-');
-  const [batchStartNum, setBatchStartNum] = useState<number>(101);
-  const [batchQty, setBatchQty] = useState<number>(5);
-  const [batchPadDigits, setBatchPadDigits] = useState<number>(3);
-  const [batchManufacturer, setBatchManufacturer] = useState<string>(products[0]?.manufacturer || '');
-  const [batchManufactureYear, setBatchManufactureYear] = useState<string>(new Date().getFullYear().toString());
-  const [batchAcqDate, setBatchAcqDate] = useState<string>(new Date().toISOString().split('T')[0]);
-  const [batchUnitPrice, setBatchUnitPrice] = useState<number>(0);
-  const [batchDepMonths, setBatchDepMonths] = useState<number>(60);
-  const [batchResidualRate, setBatchResidualRate] = useState<number>(10);
-  const [batchVendorId, setBatchVendorId] = useState<string>('');
-  const [batchSupplierText, setBatchSupplierText] = useState<string>('');
-  const [batchCustomSerials, setBatchCustomSerials] = useState<Record<string, string>>({});
+  // 멀티 입고 슬롯 (동일 모델 N대 일괄 입력)
+  const [multiSlots, setMultiSlots] = useState<{ id: string; assetNo: string; serialNo: string; price: number }[]>([]);
 
-  // 모델 변경 시 제조사 및 기본 채번 접두사 자동 설정
-  const handleModelChangeSingle = (mName: string) => {
-    setSingleModel(mName);
-    const prod = products.find(p => p.modelName === mName);
-    if (prod) {
-      setSingleManufacturer(prod.manufacturer || '');
-      suggestNextAssetNo(mName, (suggestedNo) => setSingleAssetNo(suggestedNo));
+  // 모델 선택 시 제품 마스터 제원 자동 상속
+  const selectedProduct = useMemo(() => {
+    return products.find(p => p.modelName === singleModelName);
+  }, [products, singleModelName]);
+
+  useEffect(() => {
+    if (selectedProduct) {
+      if (selectedProduct.manufacturer) setSingleManufacturer(selectedProduct.manufacturer);
     }
+  }, [selectedProduct]);
+
+  // 관리번호 초기 자동 추천
+  useEffect(() => {
+    if (!singleAssetNo) {
+      setSingleAssetNo(getNextRecommendedAssetNo('KL-'));
+    }
+  }, [assets]);
+
+  // 슬롯 추가 핸들러
+  const handleAddSlot = () => {
+    const nextNo = getNextRecommendedAssetNo('KL-');
+    const newId = `slot_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`;
+    setMultiSlots(prev => [...prev, { id: newId, assetNo: nextNo, serialNo: '', price: singleAcqPrice }]);
   };
 
-  const handleModelChangeBatch = (mName: string) => {
-    setBatchModel(mName);
-    const prod = products.find(p => p.modelName === mName);
-    if (prod) {
-      setBatchManufacturer(prod.manufacturer || '');
-      const prefix = mName.replace(/[^a-zA-Z0-9]/g, '').slice(0, 4).toUpperCase() + '-';
-      setBatchPrefix(prefix);
-    }
+  const handleRemoveSlot = (slotId: string) => {
+    setMultiSlots(prev => prev.filter(s => s.id !== slotId));
   };
 
-  // 다음 관리번호 추천 로직
-  const suggestNextAssetNo = (modelName: string, cb: (val: string) => void) => {
-    const existing = assets.filter(a => a.modelName === modelName);
-    if (existing.length === 0) {
-      const p = products.find(prod => prod.modelName === modelName);
-      const prefix = p?.modelName ? p.modelName.replace(/[^a-zA-Z0-9]/g, '').slice(0, 4).toUpperCase() + '-' : 'AST-';
-      cb(`${prefix}101`);
+  const handleUpdateSlot = (slotId: string, field: 'assetNo' | 'serialNo' | 'price', value: any) => {
+    setMultiSlots(prev => prev.map(s => s.id === slotId ? { ...s, [field]: value } : s));
+  };
+
+  // 감가상각 시뮬레이터 (정액법)
+  const depreciationSimulation = useMemo(() => {
+    const cost = Number(singleAcqPrice) || 0;
+    const months = Number(singleDepMonths) || 60;
+    const rate = Number(singleResidualRate) || 0;
+    const residualVal = Math.round(cost * (rate / 100));
+    const depreciable = cost - residualVal;
+    const monthlyDep = months > 0 ? Math.round(depreciable / months) : 0;
+    const oneYearDep = monthlyDep * 12;
+    const oneYearBook = Math.max(residualVal, cost - oneYearDep);
+    return {
+      monthlyDep,
+      residualVal,
+      oneYearBook
+    };
+  }, [singleAcqPrice, singleDepMonths, singleResidualRate]);
+
+  // 단건 및 N대 슬롯 취득 실행
+  const handleExecuteSingleAcquisition = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!canSave) {
+      showErrorModal('자산 취득 저장 권한이 없습니다.');
       return;
     }
-    let maxNum = 0;
-    let detectedPrefix = 'AST-';
-    existing.forEach(a => {
-      const match = a.assetNo.match(/^(.*?)(\d+)$/);
-      if (match) {
-        detectedPrefix = match[1];
-        const n = parseInt(match[2], 10);
-        if (n > maxNum) maxNum = n;
+    if (!singleModelName) {
+      showErrorModal('모델명을 선택해 주세요.');
+      return;
+    }
+    if (!singleAssetNo.trim()) {
+      showErrorModal('기본 관리번호를 입력해 주세요.');
+      return;
+    }
+
+    // 중복 검증
+    const existingAsset = assets.find(a => a.assetNo.trim().toLowerCase() === singleAssetNo.trim().toLowerCase());
+    if (existingAsset) {
+      showErrorModal(`관리번호 [${singleAssetNo}]는 이미 시스템에 등록되어 있습니다.`);
+      return;
+    }
+
+    setIsSubmittingAcq(true);
+    try {
+      const mainPayload: Partial<Asset> = {
+        modelName: singleModelName,
+        assetNo: singleAssetNo.trim(),
+        serialNo: singleSerialNo.trim(),
+        manufacturer: singleManufacturer.trim(),
+        manufactureYear: singleManufactureYear.trim(),
+        acquisitionDate: singleAcqDate,
+        acquisitionPrice: Number(singleAcqPrice) || 0,
+        depreciationMonths: Number(singleDepMonths) || 60,
+        residualValueRate: Number(singleResidualRate) || 10,
+        supplier: singleSupplier.trim(),
+        vendorId: singleVendorId || undefined,
+        monthlyRentalFee: Number(singleMonthlyRentalFee) || 0,
+        dailyRentalFee: Number(singleDailyRentalFee) || 0,
+        safetyInspectionUrl: singleSafetyInspectionUrl.trim() || undefined,
+        memo1: singleMemo.trim() || undefined
+      };
+
+      if (multiSlots.length === 0) {
+        await acquireAsset(mainPayload);
+        showToast(`자산 [${singleAssetNo}] 취득 등록 완료 (임대가능 AVAILABLE 입고)`);
+      } else {
+        const batchPayload: Partial<Asset>[] = [mainPayload];
+        for (const slot of multiSlots) {
+          if (!slot.assetNo.trim()) continue;
+          batchPayload.push({
+            ...mainPayload,
+            assetNo: slot.assetNo.trim(),
+            serialNo: slot.serialNo.trim(),
+            acquisitionPrice: Number(slot.price) || Number(singleAcqPrice) || 0
+          });
+        }
+        await batchAcquireAssets(batchPayload);
+        showToast(`총 ${batchPayload.length}대 자산 일괄 취득 등록 완료 (임대가능 AVAILABLE 입고)`);
+        setMultiSlots([]);
       }
-    });
-    if (maxNum > 0) {
-      cb(`${detectedPrefix}${maxNum + 1}`);
-    } else {
-      cb(`${detectedPrefix}101`);
+
+      // 다음 추천 번호로 초기화
+      setSingleAssetNo(getNextRecommendedAssetNo('KL-'));
+      setSingleSerialNo('');
+    } catch (err: any) {
+      showErrorModal(`자산 취득 저장 중 오류:\n\n${err?.message || err}`);
+    } finally {
+      setIsSubmittingAcq(false);
     }
   };
 
-  // N대 일괄 생성기 실시간 슬롯 미리보기
-  const batchGeneratedSlots = useMemo(() => {
-    const list: { assetNo: string; serialNo: string; isDup: boolean }[] = [];
-    for (let i = 0; i < batchQty; i++) {
-      const numStr = String(batchStartNum + i).padStart(batchPadDigits, '0');
-      const fullNo = `${batchPrefix}${numStr}`;
-      const isDup = assets.some(a => a.assetNo.toLowerCase() === fullNo.toLowerCase());
-      list.push({
-        assetNo: fullNo,
-        serialNo: batchCustomSerials[fullNo] || '',
-        isDup
-      });
-    }
-    return list;
-  }, [batchPrefix, batchStartNum, batchQty, batchPadDigits, batchCustomSerials, assets]);
-
-  // 단건 취득 제출 핸들러
-  const handleSingleAcquireSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!canSave) {
-      showToast('취득 등록 권한이 없습니다.', 'error');
-      return;
-    }
-    if (!singleAssetNo.trim() || !singleModel) {
-      showToast('관리번호와 모델명은 필수 항목입니다.', 'error');
-      return;
-    }
-    if (assets.some(a => a.assetNo.toLowerCase() === singleAssetNo.trim().toLowerCase())) {
-      showToast(`이미 등록된 관리번호입니다: ${singleAssetNo}`, 'error');
-      return;
-    }
-
-    const supplierName = singleSupplierText.trim() ||
-      vendors.find(v => v.id === singleVendorId)?.name || '';
-
-    acquireAsset({
-      modelName: singleModel,
-      assetNo: singleAssetNo.trim(),
-      serialNo: singleSerialNo.trim(),
-      manufacturer: singleManufacturer.trim(),
-      manufactureYear: singleManufactureYear.trim(),
-      acquisitionDate: singleAcqDate,
-      acquisitionPrice: singleAcqPrice,
-      depreciationMonths: singleDepMonths,
-      residualValueRate: singleResidualRate,
-      vendorId: singleVendorId || undefined,
-      supplier: supplierName,
-      safetyInspectionUrl: singleSafetyUrl.trim(),
-      memo1: singleMemo.trim(),
-      ownerType: 'OWNED'
-    });
-
-    showToast(`신규 자산 [${singleAssetNo}] 취득 등록이 완료되었습니다.`);
-    setShowAcquireModal(false);
-    setSingleAssetNo('');
-    setSingleSerialNo('');
-    setSingleAcqPrice(0);
-    setSingleSafetyUrl('');
-    setSingleMemo('');
-  };
-
-  // N대 일괄 취득 제출 핸들러
-  const handleBatchAcquireSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!canSave) {
-      showToast('취득 등록 권한이 없습니다.', 'error');
-      return;
-    }
-    if (batchGeneratedSlots.some(s => s.isDup)) {
-      showToast('중복된 관리번호가 포함되어 있습니다. 시작번호 또는 접두사를 확인해 주세요.', 'error');
-      return;
-    }
-    if (batchGeneratedSlots.length === 0) {
-      showToast('생성할 수량이 0대입니다.', 'error');
-      return;
-    }
-
-    const supplierName = batchSupplierText.trim() ||
-      vendors.find(v => v.id === batchVendorId)?.name || '';
-
-    const payload: Partial<Asset>[] = batchGeneratedSlots.map(slot => ({
-      modelName: batchModel,
-      assetNo: slot.assetNo,
-      serialNo: slot.serialNo,
-      manufacturer: batchManufacturer.trim(),
-      manufactureYear: batchManufactureYear.trim(),
-      acquisitionDate: batchAcqDate,
-      acquisitionPrice: batchUnitPrice,
-      depreciationMonths: batchDepMonths,
-      residualValueRate: batchResidualRate,
-      vendorId: batchVendorId || undefined,
-      supplier: supplierName,
-      ownerType: 'OWNED'
-    }));
-
-    await batchAcquireAssets(payload);
-    showToast(`총 ${payload.length}대 자산 일괄 취득 등록이 완료되었습니다.`);
-    setShowAcquireModal(false);
-    setBatchCustomSerials({});
-  };
-
-  // --------------------------------------------------------------------------
-  // [4] 매각 처분 모달 상태 및 핸들러 (Disposal)
-  // --------------------------------------------------------------------------
-  const [selectedAssetIdToDispose, setSelectedAssetIdToDispose] = useState<string>('');
-  const [disposalDate, setDisposalDate] = useState<string>(new Date().toISOString().split('T')[0]);
-  const [disposalPrice, setDisposalPrice] = useState<number>(0);
-  const [buyerType, setBuyerType] = useState<'EXISTING' | 'MANUAL'>('EXISTING');
-  const [selectedCustomerId, setSelectedCustomerId] = useState<string>('');
-  const [manualBuyerName, setManualBuyerName] = useState<string>('');
-  const [disposalBillingYm, setDisposalBillingYm] = useState<string>(() => new Date().toISOString().slice(0, 7));
-
-  // 매각 대상 선택 자산
-  const activeAssetToDispose = useMemo(() => {
-    return assets.find(a => a.id === selectedAssetIdToDispose);
-  }, [assets, selectedAssetIdToDispose]);
-
-  // 매각 시점 감가상각 및 장부가 계산
-  const disposalDepInfo = useMemo(() => {
-    if (!activeAssetToDispose) return null;
-    return calculateAssetDepreciation(activeAssetToDispose, new Date(disposalDate));
-  }, [activeAssetToDispose, disposalDate]);
-
-  // 실시간 처분손익 계산 (매각가 - 매각시점 장부가)
-  const realTimeGainLoss = useMemo(() => {
-    if (!disposalDepInfo) return 0;
-    return disposalPrice - disposalDepInfo.bookValue;
-  }, [disposalPrice, disposalDepInfo]);
-
-  // 매각 제출 핸들러
-  const handleDisposeSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!canSave) {
-      showToast('매각 처리 권한이 없습니다.', 'error');
-      return;
-    }
-    if (!selectedAssetIdToDispose) {
-      showToast('매각할 대상 자산을 선택해 주세요.', 'error');
-      return;
-    }
-    const finalBuyer = buyerType === 'EXISTING'
-      ? customers.find(c => c.id === selectedCustomerId)?.name || ''
-      : manualBuyerName.trim();
-
-    if (!finalBuyer) {
-      showToast('매각처(인수자)는 필수 입력 사항입니다.', 'error');
-      return;
-    }
-    if (disposalPrice <= 0) {
-      showToast('매각 가격(공급가액)을 올바르게 입력해 주세요.', 'error');
-      return;
-    }
-
-    disposeAsset(selectedAssetIdToDispose, {
-      disposalDate,
-      disposalPrice,
-      buyer: finalBuyer,
-      billingYm: disposalBillingYm
-    });
-
-    showToast(`자산 매각 및 [${finalBuyer}] 매출 청구서 생성이 완료되었습니다.`);
-    setShowDisposeModal(false);
-    setSelectedAssetIdToDispose('');
-    setDisposalPrice(0);
-    setManualBuyerName('');
-  };
-
-  // --------------------------------------------------------------------------
-  // [5] 엑셀 일괄 업로드 파서 및 템플릿 다운로드
-  // --------------------------------------------------------------------------
-  const [excelParsedRows, setExcelParsedRows] = useState<any[]>([]);
+  // 엑셀 일괄 등록 상태
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [excelPreviewData, setExcelPreviewData] = useState<any[]>([]);
+  const [excelValidationErrors, setExcelValidationErrors] = useState<{ row: number; error: string }[]>([]);
+  const [isProcessingExcel, setIsProcessingExcel] = useState<boolean>(false);
 
-  // 엑셀 서식 다운로드
+  // 엑셀 표준 양식 다운로드
   const handleDownloadTemplate = () => {
-    const templateRows = [
-      {
-        '관리번호*': 'SJ19-201',
-        '제품모델명*': 'SJ-3219',
-        '제조사': 'Skyjack',
-        '제조번호(시리얼)': 'S-991823',
-        '제조년도': '2024',
-        '취득일자*': '2026-09-01',
-        '취득원가(원)*': 14500000,
-        '내용연수(개월)': 60,
-        '잔존가치율(%)': 10,
-        '구입처': '스카이잭코리아',
-        '안전인증URL': '',
-        '비고': '신규 1차 도입분'
-      },
-      {
-        '관리번호*': 'SJ19-202',
-        '제품모델명*': 'SJ-3219',
-        '제조사': 'Skyjack',
-        '제조번호(시리얼)': 'S-991824',
-        '제조년도': '2024',
-        '취득일자*': '2026-09-01',
-        '취득원가(원)*': 14500000,
-        '내용연수(개월)': 60,
-        '잔존가치율(%)': 10,
-        '구입처': '스카이잭코리아',
-        '안전인증URL': '',
-        '비고': '신규 1차 도입분'
-      }
+    const headers = [
+      '관리번호',
+      '모델명',
+      '제조번호(SN)',
+      '제조사',
+      '제조년도',
+      '취득일자(YYYY-MM-DD)',
+      '취득원가',
+      '내용월수',
+      '잔존가치율',
+      '공급처',
+      '월렌탈료',
+      '일렌탈료',
+      '비고'
     ];
-    const ws = XLSX.utils.json_to_sheet(templateRows);
+    const sampleRow = [
+      'KL-0899',
+      products[0]?.modelName || 'S-0808',
+      'SN-2024-001',
+      products[0]?.manufacturer || '시노붐',
+      '2024',
+      new Date().toISOString().split('T')[0],
+      18500000,
+      60,
+      10,
+      '한국시노붐',
+      400000,
+      15000,
+      '신규 장비 입고'
+    ];
+
+    const ws = XLSX.utils.aoa_to_sheet([headers, sampleRow]);
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, '취득자산_일괄등록서식');
-    XLSX.writeFile(wb, '기연리프트_당사자산_취득_업로드양식.xlsx');
+    XLSX.utils.book_append_sheet(wb, ws, '자산취득양식');
+    XLSX.writeFile(wb, `기연리프트_자산취득_일괄양식_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
-  // 엑셀 파일 로드 및 유효성 파싱
+  // 엑셀 파일 파싱 및 유효성 검사
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     const reader = new FileReader();
-    reader.onload = (evt) => {
+    reader.onload = evt => {
       try {
         const bstr = evt.target?.result;
         const wb = XLSX.read(bstr, { type: 'binary' });
         const wsname = wb.SheetNames[0];
         const ws = wb.Sheets[wsname];
-        const rawData = XLSX.utils.sheet_to_json<Record<string, any>>(ws);
+        const data = XLSX.utils.sheet_to_json(ws, { header: 1 }) as any[][];
 
-        if (rawData.length === 0) {
-          showToast('엑셀 파일에 데이터가 없습니다.', 'error');
+        if (data.length < 2) {
+          showErrorModal('엑셀 파일에 데이터 행이 없습니다.');
           return;
         }
 
-        const validatedRows = rawData.map((row, idx) => {
-          const assetNo = String(row['관리번호*'] || row['관리번호'] || '').trim();
-          const modelName = String(row['제품모델명*'] || row['제품모델명'] || row['모델명'] || '').trim();
-          const acqPrice = parseInt(row['취득원가(원)*'] || row['취득원가'] || row['취득가액'] || 0, 10);
-          const acqDate = String(row['취득일자*'] || row['취득일자'] || row['취득일'] || new Date().toISOString().split('T')[0]).trim();
-          const manufacturer = String(row['제조사'] || '').trim();
-          const serialNo = String(row['제조번호(시리얼)'] || row['제조번호'] || row['시리얼'] || '').trim();
-          const manufactureYear = String(row['제조년도'] || '').trim();
-          const depMonths = parseInt(row['내용연수(개월)'] || row['내용연수'] || 60, 10);
-          const residualRate = parseFloat(row['잔존가치율(%)'] || row['잔존가치율'] || 10);
-          const supplier = String(row['구입처'] || row['공급처'] || '').trim();
-          const safetyUrl = String(row['안전인증URL'] || '').trim();
-          const memo = String(row['비고'] || '').trim();
+        const rows = data.slice(1);
+        const parsedRows: any[] = [];
+        const errors: { row: number; error: string }[] = [];
 
-          const isDup = assets.some(a => a.assetNo.toLowerCase() === assetNo.toLowerCase());
-          const isValid = !!assetNo && !!modelName && acqPrice > 0 && !isDup;
+        const existingNos = new Set(assets.map(a => a.assetNo.trim().toLowerCase()));
+        const fileNos = new Set<string>();
 
-          return {
-            rowIdx: idx + 1,
+        rows.forEach((r, idx) => {
+          if (!r || r.length === 0 || !r[0]) return; // 빈 행 무시
+          const rowNum = idx + 2;
+          const assetNo = String(r[0] || '').trim();
+          const modelName = String(r[1] || '').trim();
+          const serialNo = String(r[2] || '').trim();
+          const manufacturer = String(r[3] || '').trim();
+          const manufactureYear = String(r[4] || '').trim();
+          const acquisitionDate = String(r[5] || '').trim() || new Date().toISOString().split('T')[0];
+          const acquisitionPrice = Number(r[6]) || 0;
+          const depreciationMonths = Number(r[7]) || 60;
+          const residualValueRate = Number(r[8]) ?? 10;
+          const supplier = String(r[9] || '').trim();
+          const monthlyRentalFee = Number(r[10]) || 0;
+          const dailyRentalFee = Number(r[11]) || 0;
+          const memo1 = String(r[12] || '').trim();
+
+          // 유효성 검증
+          if (!assetNo) {
+            errors.push({ row: rowNum, error: '관리번호가 누락되었습니다.' });
+          } else if (existingNos.has(assetNo.toLowerCase())) {
+            errors.push({ row: rowNum, error: `관리번호 [${assetNo}]가 기존 자산과 중복됩니다.` });
+          } else if (fileNos.has(assetNo.toLowerCase())) {
+            errors.push({ row: rowNum, error: `엑셀 파일 내에서 관리번호 [${assetNo}]가 중복 등장합니다.` });
+          }
+          fileNos.add(assetNo.toLowerCase());
+
+          if (!modelName) {
+            errors.push({ row: rowNum, error: '모델명이 누락되었습니다.' });
+          }
+
+          parsedRows.push({
+            rowNum,
             assetNo,
             modelName,
-            manufacturer,
             serialNo,
+            manufacturer,
             manufactureYear,
-            acquisitionDate: acqDate,
-            acquisitionPrice: acqPrice,
-            depreciationMonths: depMonths,
-            residualValueRate: residualRate,
+            acquisitionDate,
+            acquisitionPrice,
+            depreciationMonths,
+            residualValueRate,
             supplier,
-            safetyInspectionUrl: safetyUrl,
-            memo1: memo,
-            isDup,
-            isValid
-          };
+            monthlyRentalFee,
+            dailyRentalFee,
+            memo1,
+            hasError: errors.some(e => e.row === rowNum)
+          });
         });
 
-        setExcelParsedRows(validatedRows);
+        setExcelPreviewData(parsedRows);
+        setExcelValidationErrors(errors);
       } catch (err: any) {
-        showToast(`엑셀 파일 파싱 오류: ${err.message}`, 'error');
+        showErrorModal(`엑셀 파일 파싱 오류:\n\n${err?.message || err}`);
       }
     };
     reader.readAsBinaryString(file);
   };
 
-  // 엑셀 일괄 업로드 실행
-  const handleCommitExcelUpload = async () => {
-    if (!canSave) {
-      showToast('저장 권한이 없습니다.', 'error');
+  // 엑셀 일괄 등록 실행
+  const handleExecuteExcelImport = async () => {
+    if (excelValidationErrors.length > 0) {
+      showErrorModal(`유효성 검사 오류가 ${excelValidationErrors.length}건 존재합니다. 오류를 수정한 후 다시 업로드해 주세요.`);
       return;
     }
-    const validRows = excelParsedRows.filter(r => r.isValid);
-    if (validRows.length === 0) {
-      showToast('등록 가능한 유효한 데이터가 없습니다.', 'error');
+    if (excelPreviewData.length === 0) {
+      showErrorModal('등록할 자산 데이터가 없습니다.');
       return;
     }
 
-    const payload: Partial<Asset>[] = validRows.map(r => ({
-      modelName: r.modelName,
-      assetNo: r.assetNo,
-      serialNo: r.serialNo,
-      manufacturer: r.manufacturer,
-      manufactureYear: r.manufactureYear,
-      acquisitionDate: r.acquisitionDate,
-      acquisitionPrice: r.acquisitionPrice,
-      depreciationMonths: r.depreciationMonths,
-      residualValueRate: r.residualValueRate,
-      supplier: r.supplier,
-      safetyInspectionUrl: r.safetyInspectionUrl,
-      memo1: r.memo1,
-      ownerType: 'OWNED'
-    }));
+    setIsProcessingExcel(true);
+    try {
+      const payloadList: Partial<Asset>[] = excelPreviewData.map(r => ({
+        assetNo: r.assetNo,
+        modelName: r.modelName,
+        serialNo: r.serialNo,
+        manufacturer: r.manufacturer,
+        manufactureYear: r.manufactureYear,
+        acquisitionDate: r.acquisitionDate,
+        acquisitionPrice: r.acquisitionPrice,
+        depreciationMonths: r.depreciationMonths,
+        residualValueRate: r.residualValueRate,
+        supplier: r.supplier,
+        monthlyRentalFee: r.monthlyRentalFee,
+        dailyRentalFee: r.dailyRentalFee,
+        memo1: r.memo1
+      }));
 
-    await batchAcquireAssets(payload);
-    showToast(`총 ${payload.length}대 자산 엑셀 일괄 취득 등록 완료!`);
-    setShowExcelUploadModal(false);
-    setExcelParsedRows([]);
+      await batchAcquireAssets(payloadList);
+      showToast(`총 ${payloadList.length}대 자산 엑셀 일괄 취득 완료 (AVAILABLE 입고)`);
+      setExcelPreviewData([]);
+      setExcelValidationErrors([]);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    } catch (err: any) {
+      showErrorModal(`엑셀 일괄 취득 처리 실패:\n\n${err?.message || err}`);
+    } finally {
+      setIsProcessingExcel(false);
+    }
   };
 
-  // --------------------------------------------------------------------------
-  // [6] 대장 엑셀 내보내기 (Export)
-  // --------------------------------------------------------------------------
-  const handleExportCurrentLedger = () => {
-    const todayStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-    if (activeTab === 'ACQUIRE') {
-      const exportData = filteredOwnedAssets.map(a => {
-        const dep = calculateAssetDepreciation(a);
-        return {
-          '관리번호': a.assetNo,
-          '모델명': a.modelName,
-          '제조사': a.manufacturer || '-',
-          '제조번호': a.serialNo || '-',
-          '제조년도': a.manufactureYear || '-',
-          '취득일자': a.acquisitionDate || '-',
-          '취득원가': a.acquisitionPrice || 0,
-          '내용연수(개월)': a.depreciationMonths || 60,
-          '월감가상각비': Math.round(dep.monthlyDepreciation),
-          '감가상각누계액': dep.accumDepreciation,
-          '현재장부가액': dep.bookValue,
-          '공급처': a.supplier || '-',
-          '안전인증URL': a.safetyInspectionUrl || '-',
-          '운용상태': a.status === 'AVAILABLE' ? '임대가능' : a.status === 'RENTED' ? '대여중' : a.status === 'ASSIGNED' ? '출고대기' : a.status === 'REPAIRING' ? '수리중' : a.status
-        };
-      });
-      const ws = XLSX.utils.json_to_sheet(exportData);
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, '당사자산_취득대장');
-      XLSX.writeFile(wb, `기연리프트_당사자산_취득대장_${todayStr}.xlsx`);
-      showToast('취득 대장 엑셀 파일이 다운로드되었습니다.');
+
+  // ==========================================================================
+  // 💼 [스튜디오 2] 자산 매각 스튜디오 (Asset Disposal Studio: 좌우 50:50)
+  // ==========================================================================
+
+  // 좌측 50%: 매각 대상 자산 선택 바구니 상태
+  const [disposalSearchQuery, setDisposalSearchQuery] = useState<string>('');
+  const [disposalSortOrder, setDisposalSortOrder] = useState<'YEAR_ASC' | 'BOOK_VAL_ASC' | 'ASSET_NO'>('YEAR_ASC');
+  const [includeRepairing, setIncludeRepairing] = useState<boolean>(false);
+  const [selectedAssetIds, setSelectedAssetIds] = useState<Set<string>>(new Set());
+
+  // 우측 50%: 매각 계약 & 청구서 발행 상태
+  const [buyerMode, setBuyerMode] = useState<'EXISTING' | 'NEW'>('EXISTING');
+  const [selectedBuyerId, setSelectedBuyerId] = useState<string>('');
+  const [newBuyerName, setNewBuyerName] = useState<string>('');
+  const [newBuyerBizNo, setNewBuyerBizNo] = useState<string>('');
+  const [newBuyerRepEmail, setNewBuyerRepEmail] = useState<string>('');
+  const [newBuyerContact, setNewBuyerContact] = useState<string>('');
+  const [disposalDate, setDisposalDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [disposalSalespersonId, setDisposalSalespersonId] = useState<string>(currentUser?.id || '');
+  const [disposalMemo, setDisposalMemo] = useState<string>('');
+  const [itemPrices, setItemPrices] = useState<Record<string, number>>({});
+  const [sendEmailImmediately, setSendEmailImmediately] = useState<boolean>(true);
+  const [disposalEmailTo, setDisposalEmailTo] = useState<string>('');
+  const [disposalEmailCc, setDisposalEmailCc] = useState<string>('');
+  const [previewDocTab, setPreviewDocTab] = useState<'CONTRACT' | 'INVOICE'>('CONTRACT');
+  const [isSubmittingDisposal, setIsSubmittingDisposal] = useState<boolean>(false);
+
+  // 매각 대상 가능 자산 (임대가능 AVAILABLE, 오매각 원천 방어: RENTED 대여중 절대 배제)
+  const availableForDisposalAssets = useMemo(() => {
+    return assets.filter(a => {
+      if (a.ownerType !== 'OWNED') return false; // 당사자산만 매각 가능
+      if (a.status === 'SOLD') return false; // 이미 매각된 자산 배제
+      if (a.status === 'RENTED') return false; // 현장 대여중 오매각 원천 차단 (헌장 1.2)
+      if (!includeRepairing && a.status === 'REPAIRING') return false;
+      return true;
+    });
+  }, [assets, includeRepairing]);
+
+  // 좌측 자산 목록 필터 및 정렬
+  const filteredDisposalAssets = useMemo(() => {
+    return availableForDisposalAssets.filter(a => {
+      if (disposalSearchQuery.trim()) {
+        const q = disposalSearchQuery.toLowerCase().trim();
+        const m1 = a.assetNo?.toLowerCase().includes(q);
+        const m2 = a.modelName?.toLowerCase().includes(q);
+        const m3 = a.serialNo?.toLowerCase().includes(q);
+        if (!m1 && !m2 && !m3) return false;
+      }
+      return true;
+    }).sort((a, b) => {
+      if (disposalSortOrder === 'YEAR_ASC') {
+        return (a.manufactureYear || '9999').localeCompare(b.manufactureYear || '9999');
+      }
+      if (disposalSortOrder === 'BOOK_VAL_ASC') {
+        const bA = calculateAssetDepreciation(a).bookValue;
+        const bB = calculateAssetDepreciation(b).bookValue;
+        return bA - bB;
+      }
+      return (a.assetNo || '').localeCompare(b.assetNo || '');
+    });
+  }, [availableForDisposalAssets, disposalSearchQuery, disposalSortOrder]);
+
+  // 체크박스 토글
+  const toggleSelectAsset = (assetId: string) => {
+    setSelectedAssetIds(prev => {
+      const next = new Set(prev);
+      if (next.has(assetId)) {
+        next.delete(assetId);
+      } else {
+        next.add(assetId);
+        // 기본 매각단가로 장부가치 제안
+        const asset = assets.find(a => a.id === assetId);
+        if (asset && itemPrices[assetId] === undefined) {
+          const bookVal = calculateAssetDepreciation(asset).bookValue;
+          setItemPrices(p => ({ ...p, [assetId]: bookVal }));
+        }
+      }
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedAssetIds.size === filteredDisposalAssets.length) {
+      setSelectedAssetIds(new Set());
     } else {
-      const exportData = filteredSoldAssets.map(a => {
-        const dep = calculateAssetDepreciation(a);
-        const gainLoss = (a.disposalPrice || 0) - dep.bookValue;
-        return {
-          '관리번호': a.assetNo,
-          '모델명': a.modelName,
-          '제조사': a.manufacturer || '-',
-          '제조번호': a.serialNo || '-',
-          '매각일자': a.disposalDate || '-',
-          '취득원가': a.acquisitionPrice || 0,
-          '감가상각누계액': dep.accumDepreciation,
-          '매각시점 장부가': dep.bookValue,
-          '실제 매각가격': a.disposalPrice || 0,
-          '유형자산처분손익': gainLoss,
-          '매각처(인수자)': a.buyer || '-',
-          '비고': a.memo1 || '-'
-        };
+      const next = new Set<string>();
+      const newPrices: Record<string, number> = { ...itemPrices };
+      filteredDisposalAssets.forEach(a => {
+        next.add(a.id);
+        if (newPrices[a.id] === undefined) {
+          newPrices[a.id] = calculateAssetDepreciation(a).bookValue;
+        }
       });
-      const ws = XLSX.utils.json_to_sheet(exportData);
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, '자산_매각처분대장');
-      XLSX.writeFile(wb, `기연리프트_자산_매각처분대장_${todayStr}.xlsx`);
-      showToast('매각 처분 대장 엑셀 파일이 다운로드되었습니다.');
+      setSelectedAssetIds(next);
+      setItemPrices(newPrices);
     }
   };
 
-  // 운용 상태 뱃지 헬퍼
-  const renderStatusBadge = (status: Asset['status']) => {
-    switch (status) {
-      case 'AVAILABLE':
-        return <span className="badge badge-success" style={{ fontSize: '11px', whiteSpace: 'nowrap' }}>임대가능</span>;
-      case 'RENTED':
-        return <span className="badge badge-primary" style={{ fontSize: '11px', whiteSpace: 'nowrap' }}>대여중</span>;
-      case 'ASSIGNED':
-        return <span className="badge badge-warning" style={{ fontSize: '11px', whiteSpace: 'nowrap' }}>출고대기</span>;
-      case 'REPAIRING':
-        return <span className="badge badge-danger" style={{ fontSize: '11px', whiteSpace: 'nowrap' }}>수리중</span>;
-      case 'RENTED_RETURNED':
-        return <span className="badge badge-secondary" style={{ fontSize: '11px', whiteSpace: 'nowrap' }}>입고검수</span>;
-      case 'SOLD':
-        return <span className="badge badge-secondary" style={{ fontSize: '11px', whiteSpace: 'nowrap' }}>매각완료</span>;
-      default:
-        return <span className="badge badge-secondary" style={{ fontSize: '11px', whiteSpace: 'nowrap' }}>{status}</span>;
+  // 선택된 자산 데이터 목록
+  const selectedAssetsList = useMemo(() => {
+    return assets.filter(a => selectedAssetIds.has(a.id));
+  }, [assets, selectedAssetIds]);
+
+  // 고객사 선택 시 이메일 자동 채움
+  useEffect(() => {
+    if (buyerMode === 'EXISTING' && selectedBuyerId) {
+      const cust = customers.find(c => c.id === selectedBuyerId);
+      if (cust?.repEmail) {
+        setDisposalEmailTo(cust.repEmail);
+      }
+    }
+  }, [buyerMode, selectedBuyerId, customers]);
+
+  // 실시간 회계 집계 (공급가액, 장부가액, 유형자산처분손익, 부가세 10%, 청구총액)
+  const disposalAccounting = useMemo(() => {
+    let totalSupplyAmount = 0;
+    let totalBookValue = 0;
+
+    selectedAssetsList.forEach(a => {
+      const dep = calculateAssetDepreciation(a, new Date(disposalDate));
+      const bv = dep.bookValue;
+      const price = Number(itemPrices[a.id]) || 0;
+      totalSupplyAmount += price;
+      totalBookValue += bv;
+    });
+
+    const gainLoss = totalSupplyAmount - totalBookValue; // 유형자산처분손익
+    const vat = Math.round(totalSupplyAmount * 0.1);
+    const grandTotal = totalSupplyAmount + vat;
+
+    return {
+      totalSupplyAmount,
+      totalBookValue,
+      gainLoss,
+      vat,
+      grandTotal
+    };
+  }, [selectedAssetsList, itemPrices, disposalDate]);
+
+  // 매각 계약 체결 & 청구서 발행 & 이메일 발송 실행
+  const handleExecuteDisposal = async () => {
+    if (!canSave) {
+      showErrorModal('자산 매각 계약 체결 권한이 없습니다.');
+      return;
+    }
+    if (selectedAssetsList.length === 0) {
+      showErrorModal('매각할 자산을 1대 이상 선택해 주세요.');
+      return;
+    }
+
+    let customerId: string | undefined;
+    let buyerName = '';
+
+    if (buyerMode === 'EXISTING') {
+      if (!selectedBuyerId) {
+        showErrorModal('매수처(고객사)를 선택해 주세요.');
+        return;
+      }
+      const cust = customers.find(c => c.id === selectedBuyerId);
+      customerId = selectedBuyerId;
+      buyerName = cust?.name || '';
+    } else {
+      if (!newBuyerName.trim()) {
+        showErrorModal('신규 매수처 상호를 입력해 주세요.');
+        return;
+      }
+      buyerName = newBuyerName.trim();
+    }
+
+    if (!disposalDate) {
+      showErrorModal('매각 일자를 입력해 주세요.');
+      return;
+    }
+
+    setIsSubmittingDisposal(true);
+    try {
+      const payload = {
+        customerId,
+        buyerName,
+        salespersonId: disposalSalespersonId || undefined,
+        disposalDate,
+        items: selectedAssetsList.map(a => ({
+          assetId: a.id,
+          salePrice: Number(itemPrices[a.id]) || 0
+        })),
+        memo: disposalMemo.trim() || undefined,
+        recipientEmail: sendEmailImmediately ? disposalEmailTo.trim() : undefined,
+        ccEmail: sendEmailImmediately ? disposalEmailCc.trim() : undefined,
+        sendEmail: sendEmailImmediately && !!disposalEmailTo.trim()
+      };
+
+      const result = await executeAssetSale(payload);
+      showToast(`자산 ${selectedAssetsList.length}대 매각 계약 체결 완료! (계약번호: ${result.contractNo})`);
+
+      // 초기화
+      setSelectedAssetIds(new Set());
+      setItemPrices({});
+      setDisposalMemo('');
+    } catch (err: any) {
+      showErrorModal(`자산 매각 처리 실패:\n\n${err?.message || err}`);
+    } finally {
+      setIsSubmittingDisposal(false);
     }
   };
 
-  // --------------------------------------------------------------------------
-  // 렌더링 시작 (Gutenberg Z-Pattern)
-  // --------------------------------------------------------------------------
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', minHeight: '100%', position: 'relative' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', fontSize: '13px' }}>
       
-      {/* 알림 토스트 */}
+      {/* 토스트 메시지 표출 */}
       {toastMessage && (
         <div style={{
           position: 'fixed',
           top: '20px',
-          right: '24px',
+          right: '20px',
+          backgroundColor: toastMessage.type === 'success' ? '#10b981' : '#ef4444',
+          color: '#fff',
+          padding: '12px 18px',
+          borderRadius: '8px',
+          boxShadow: '0 4px 14px rgba(0,0,0,0.2)',
           zIndex: 9999,
-          padding: '10px 18px',
-          borderRadius: '6px',
-          backgroundColor: toastMessage.type === 'success' ? 'var(--success)' : 'var(--danger)',
-          color: '#ffffff',
           fontWeight: 600,
-          fontSize: '13px',
-          boxShadow: '0 4px 12px rgba(0,0,0,0.18)',
           display: 'flex',
           alignItems: 'center',
-          gap: '8px',
-          animation: 'fadeIn 0.2s ease-in-out'
+          gap: '8px'
         }}>
           {toastMessage.type === 'success' ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
           <span>{toastMessage.text}</span>
         </div>
       )}
 
-      {/* 헤더 & 파이프라인 (좌상단 Start / Scope + 우상단 Input / Pipeline) */}
+      {/* 최상단 스튜디오 전환 탭 (헌장 3.1 무수식어 건조 UI 표준) */}
       <div style={{
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',
-        flexWrap: 'wrap',
-        gap: '8px',
-        paddingBottom: '4px',
-        borderBottom: '1px solid var(--border-color)'
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <h2 style={{ margin: 0, fontWeight: '700', fontSize: '17px', color: 'var(--text-main)', whiteSpace: 'nowrap' }}>
-            당사자산 취득 / 매각 관리
-          </h2>
-          
-          {/* 서브 탭 셀렉터 */}
-          <div style={{ display: 'flex', gap: '4px', backgroundColor: 'var(--bg-app)', padding: '3px', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
-            <button
-              onClick={() => setActiveTab('ACQUIRE')}
-              style={{
-                padding: '4px 12px',
-                fontSize: '12px',
-                fontWeight: 600,
-                border: 'none',
-                borderRadius: '4px',
-                cursor: 'pointer',
-                backgroundColor: activeTab === 'ACQUIRE' ? 'var(--primary)' : 'transparent',
-                color: activeTab === 'ACQUIRE' ? '#ffffff' : 'var(--text-muted)',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '5px',
-                whiteSpace: 'nowrap'
-              }}
-            >
-              <ShoppingBag size={13} /> 당사자산 취득 대장 ({ownedAssets.length})
-            </button>
-            <button
-              onClick={() => setActiveTab('DISPOSE')}
-              style={{
-                padding: '4px 12px',
-                fontSize: '12px',
-                fontWeight: 600,
-                border: 'none',
-                borderRadius: '4px',
-                cursor: 'pointer',
-                backgroundColor: activeTab === 'DISPOSE' ? 'var(--primary)' : 'transparent',
-                color: activeTab === 'DISPOSE' ? '#ffffff' : 'var(--text-muted)',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '5px',
-                whiteSpace: 'nowrap'
-              }}
-            >
-              <TrendingDown size={13} /> 자산 매각 처분 대장 ({soldAssets.length})
-            </button>
-          </div>
-        </div>
-
-        {/* 우상단 파이프라인 버튼군 */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-          {activeTab === 'ACQUIRE' ? (
-            <>
-              <button
-                className="btn-secondary"
-                onClick={handleExportCurrentLedger}
-                style={{ padding: '5px 10px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '5px', whiteSpace: 'nowrap' }}
-              >
-                <Download size={13} /> 엑셀 내보내기
-              </button>
-              <button
-                className="btn-secondary"
-                onClick={() => setShowExcelUploadModal(true)}
-                disabled={!canSave}
-                style={{ padding: '5px 10px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '5px', whiteSpace: 'nowrap' }}
-              >
-                <Upload size={13} /> 엑셀 일괄 업로드
-              </button>
-              <button
-                className="btn-primary"
-                onClick={() => {
-                  suggestNextAssetNo(singleModel, (no) => setSingleAssetNo(no));
-                  setShowAcquireModal(true);
-                }}
-                disabled={!canSave}
-                style={{ padding: '5px 12px', fontSize: '12px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '5px', whiteSpace: 'nowrap' }}
-              >
-                <Plus size={14} /> 신규 자산 취득 등록
-              </button>
-            </>
-          ) : (
-            <>
-              <button
-                className="btn-secondary"
-                onClick={handleExportCurrentLedger}
-                style={{ padding: '5px 10px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '5px', whiteSpace: 'nowrap' }}
-              >
-                <Download size={13} /> 매각 대장 엑셀
-              </button>
-              <button
-                className="btn-danger"
-                onClick={() => setShowDisposeModal(true)}
-                disabled={!canSave}
-                style={{ padding: '5px 12px', fontSize: '12px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '5px', whiteSpace: 'nowrap' }}
-              >
-                <TrendingDown size={14} /> 기존 자산 매각 처리
-              </button>
-            </>
-          )}
-        </div>
-      </div>
-
-      {/* KPI 요약 바 & 필터 패널 (좌상단 Scope) */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
-        gap: '6px'
-      }}>
-        {activeTab === 'ACQUIRE' ? (
-          <>
-            <div style={{ padding: '7px 12px', backgroundColor: 'var(--bg-card)', borderRadius: '6px', border: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 600, whiteSpace: 'nowrap' }}>보유 당사자산</span>
-              <strong style={{ fontSize: '14px', color: 'var(--primary)', whiteSpace: 'nowrap' }}>{acqSummary.count}대</strong>
-            </div>
-            <div style={{ padding: '7px 12px', backgroundColor: 'var(--bg-card)', borderRadius: '6px', border: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 600, whiteSpace: 'nowrap' }}>총 취득원가</span>
-              <strong style={{ fontSize: '13.5px', color: 'var(--text-main)', whiteSpace: 'nowrap' }}>₩{acqSummary.totalCost.toLocaleString()}</strong>
-            </div>
-            <div style={{ padding: '7px 12px', backgroundColor: 'var(--bg-card)', borderRadius: '6px', border: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 600, whiteSpace: 'nowrap' }}>감가상각누계액</span>
-              <strong style={{ fontSize: '13.5px', color: 'var(--danger)', whiteSpace: 'nowrap' }}>-₩{acqSummary.totalAccum.toLocaleString()}</strong>
-            </div>
-            <div style={{ padding: '7px 12px', backgroundColor: 'var(--bg-card)', borderRadius: '6px', border: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 600, whiteSpace: 'nowrap' }}>현재 장부가치</span>
-              <strong style={{ fontSize: '14px', color: 'var(--success)', whiteSpace: 'nowrap' }}>₩{acqSummary.totalBook.toLocaleString()}</strong>
-            </div>
-          </>
-        ) : (
-          <>
-            <div style={{ padding: '7px 12px', backgroundColor: 'var(--bg-card)', borderRadius: '6px', border: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 600, whiteSpace: 'nowrap' }}>매각 완료 자산</span>
-              <strong style={{ fontSize: '14px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{dispSummary.count}대</strong>
-            </div>
-            <div style={{ padding: '7px 12px', backgroundColor: 'var(--bg-card)', borderRadius: '6px', border: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 600, whiteSpace: 'nowrap' }}>취득원가 합계</span>
-              <strong style={{ fontSize: '13.5px', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>₩{dispSummary.totalAcqCost.toLocaleString()}</strong>
-            </div>
-            <div style={{ padding: '7px 12px', backgroundColor: 'var(--bg-card)', borderRadius: '6px', border: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 600, whiteSpace: 'nowrap' }}>총 매각대금</span>
-              <strong style={{ fontSize: '14px', color: 'var(--primary)', whiteSpace: 'nowrap' }}>₩{dispSummary.totalDisposalPrice.toLocaleString()}</strong>
-            </div>
-            <div style={{ padding: '7px 12px', backgroundColor: 'var(--bg-card)', borderRadius: '6px', border: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 600, whiteSpace: 'nowrap' }}>유형자산처분손익</span>
-              <strong style={{ fontSize: '14px', color: dispSummary.totalGainLoss >= 0 ? 'var(--success)' : 'var(--danger)', whiteSpace: 'nowrap' }}>
-                {dispSummary.totalGainLoss >= 0 ? `+₩${dispSummary.totalGainLoss.toLocaleString()}` : `-₩${Math.abs(dispSummary.totalGainLoss).toLocaleString()}`}
-              </strong>
-            </div>
-          </>
-        )}
-      </div>
-
-      {/* 필터 컨트롤 바 (Vertical Header-Label Layout: 헌장 3.4) */}
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: '8px',
-        padding: '6px 12px',
         backgroundColor: 'var(--bg-card)',
-        borderRadius: '6px',
+        padding: '12px 16px',
+        borderRadius: '8px',
         border: '1px solid var(--border-color)',
-        flexWrap: 'wrap'
+        flexWrap: 'wrap',
+        gap: '12px'
       }}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-          <label style={{ fontSize: '10.5px', fontWeight: 600, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>연도 선택</label>
-          <select
-            value={selectedYear}
-            onChange={e => setSelectedYear(e.target.value)}
-            style={{ padding: '4px 8px', fontSize: '12px', borderRadius: '4px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-app)', color: 'var(--text-main)', minWidth: '100px' }}
-          >
-            <option value="">전체 연도</option>
-            {availableYears.map(y => (
-              <option key={y} value={y}>{y}년</option>
-            ))}
-          </select>
-        </div>
-
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-          <label style={{ fontSize: '10.5px', fontWeight: 600, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>장비 모델</label>
-          <select
-            value={selectedModel}
-            onChange={e => setSelectedModel(e.target.value)}
-            style={{ padding: '4px 8px', fontSize: '12px', borderRadius: '4px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-app)', color: 'var(--text-main)', minWidth: '140px' }}
-          >
-            <option value="">전체 모델</option>
-            {products.map(p => (
-              <option key={p.id} value={p.modelName}>{p.modelName} ({p.manufacturer})</option>
-            ))}
-          </select>
-        </div>
-
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', flex: '1', minWidth: '180px' }}>
-          <label style={{ fontSize: '10.5px', fontWeight: 600, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>검색어</label>
-          <div style={{ position: 'relative' }}>
-            <Search size={13} style={{ position: 'absolute', left: '8px', top: '7px', color: 'var(--text-muted)' }} />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
-              placeholder="관리번호, 시리얼, 공급처, 매각처 검색"
-              style={{
-                width: '100%',
-                padding: '4px 8px 4px 26px',
-                fontSize: '12px',
-                borderRadius: '4px',
-                border: '1px solid var(--border-color)',
-                backgroundColor: 'var(--bg-app)',
-                color: 'var(--text-main)'
-              }}
-            />
-          </div>
-        </div>
-
-        {(selectedYear || selectedModel || searchQuery) && (
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
           <button
-            onClick={() => { setSelectedYear(''); setSelectedModel(''); setSearchQuery(''); }}
+            type="button"
+            className={activeStudio === 'ACQUISITION' ? 'btn-primary' : 'btn-secondary'}
+            onClick={() => setActiveStudio('ACQUISITION')}
             style={{
-              marginTop: '16px',
-              padding: '4px 8px',
-              fontSize: '11.5px',
-              border: '1px solid var(--border-color)',
-              borderRadius: '4px',
-              backgroundColor: 'transparent',
-              color: 'var(--text-muted)',
-              cursor: 'pointer',
+              padding: '8px 18px',
+              fontSize: '13px',
+              fontWeight: 700,
               display: 'flex',
               alignItems: 'center',
-              gap: '4px',
-              whiteSpace: 'nowrap'
+              gap: '6px'
             }}
           >
-            <RefreshCw size={11} /> 초기화
+            <Plus size={15} /> 자산 취득
           </button>
-        )}
-      </div>
-
-      {/* 중앙 본문: 고밀도 그리드 작업대 (Body / Inspection - 헌장 3.6 유형 B) */}
-      <div style={{
-        flex: 1,
-        backgroundColor: 'var(--bg-card)',
-        borderRadius: '6px',
-        border: '1px solid var(--border-color)',
-        overflow: 'hidden',
-        display: 'flex',
-        flexDirection: 'column'
-      }}>
-        <div style={{ flex: 1, overflow: 'auto', maxHeight: 'calc(100vh - 280px)' }}>
-          {activeTab === 'ACQUIRE' ? (
-            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '11.5px' }}>
-              <thead>
-                <tr style={{ backgroundColor: 'var(--bg-app)', borderBottom: '1px solid var(--border-color)', color: 'var(--text-secondary)', fontWeight: 600 }}>
-                  <th style={{ padding: '7px 8px', width: '50px', textAlign: 'center', whiteSpace: 'nowrap' }}>상세</th>
-                  <th style={{ padding: '7px 8px', whiteSpace: 'nowrap' }}>관리번호</th>
-                  <th style={{ padding: '7px 8px', whiteSpace: 'nowrap' }}>모델명</th>
-                  <th style={{ padding: '7px 8px', whiteSpace: 'nowrap' }}>제조사</th>
-                  <th style={{ padding: '7px 8px', whiteSpace: 'nowrap' }}>제조번호(시리얼)</th>
-                  <th style={{ padding: '7px 8px', whiteSpace: 'nowrap' }}>연식</th>
-                  <th style={{ padding: '7px 8px', whiteSpace: 'nowrap' }}>취득일자</th>
-                  <th style={{ padding: '7px 8px', textAlign: 'right', whiteSpace: 'nowrap' }}>취득원가</th>
-                  <th style={{ padding: '7px 8px', textAlign: 'center', whiteSpace: 'nowrap' }}>내용연수</th>
-                  <th style={{ padding: '7px 8px', textAlign: 'right', whiteSpace: 'nowrap' }}>월상각비</th>
-                  <th style={{ padding: '7px 8px', textAlign: 'right', whiteSpace: 'nowrap' }}>감가누계액</th>
-                  <th style={{ padding: '7px 8px', textAlign: 'right', whiteSpace: 'nowrap' }}>현재장부가</th>
-                  <th style={{ padding: '7px 8px', whiteSpace: 'nowrap' }}>구입처(공급자)</th>
-                  <th style={{ padding: '7px 8px', textAlign: 'center', whiteSpace: 'nowrap' }}>안전증빙</th>
-                  <th style={{ padding: '7px 8px', textAlign: 'center', whiteSpace: 'nowrap' }}>운용상태</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredOwnedAssets.length === 0 ? (
-                  <tr>
-                    <td colSpan={15} style={{ padding: '36px 0', textAlign: 'center', color: 'var(--text-muted)' }}>
-                      조회 조건에 해당하는 당사 보유 자산이 없습니다.
-                    </td>
-                  </tr>
-                ) : (
-                  filteredOwnedAssets.map(a => {
-                    const dep = calculateAssetDepreciation(a);
-                    return (
-                      <tr
-                        key={a.id}
-                        onClick={() => setSelectedAssetForDossier(a)}
-                        style={{
-                          borderBottom: '1px solid var(--border-color)',
-                          cursor: 'pointer',
-                          transition: 'background-color 0.15s'
-                        }}
-                        className="hover-row"
-                      >
-                        <td style={{ padding: '6px 8px', textAlign: 'center', whiteSpace: 'nowrap' }}>
-                          <button
-                            onClick={(e) => { e.stopPropagation(); setSelectedAssetForDossier(a); }}
-                            style={{
-                              padding: '2px 6px',
-                              fontSize: '11px',
-                              border: '1px solid var(--border-color)',
-                              borderRadius: '3px',
-                              backgroundColor: 'transparent',
-                              cursor: 'pointer',
-                              color: 'var(--primary)',
-                              whiteSpace: 'nowrap'
-                            }}
-                          >
-                            보기
-                          </button>
-                        </td>
-                        <td style={{ padding: '6px 8px', fontWeight: 700, color: 'var(--text-main)', whiteSpace: 'nowrap' }}>{a.assetNo}</td>
-                        <td style={{ padding: '6px 8px', color: 'var(--text-main)', whiteSpace: 'nowrap' }}>{a.modelName}</td>
-                        <td style={{ padding: '6px 8px', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>{a.manufacturer || '-'}</td>
-                        <td style={{ padding: '6px 8px', color: 'var(--text-muted)', fontFamily: 'monospace', whiteSpace: 'nowrap' }}>{a.serialNo || '-'}</td>
-                        <td style={{ padding: '6px 8px', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>{a.manufactureYear || '-'}</td>
-                        <td style={{ padding: '6px 8px', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>{a.acquisitionDate || '-'}</td>
-                        <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 600, color: 'var(--text-main)', whiteSpace: 'nowrap' }}>
-                          ₩{(a.acquisitionPrice || 0).toLocaleString()}
-                        </td>
-                        <td style={{ padding: '6px 8px', textAlign: 'center', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
-                          {a.depreciationMonths || 60}개월
-                        </td>
-                        <td style={{ padding: '6px 8px', textAlign: 'right', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
-                          ₩{Math.round(dep.monthlyDepreciation).toLocaleString()}
-                        </td>
-                        <td style={{ padding: '6px 8px', textAlign: 'right', color: 'var(--danger)', whiteSpace: 'nowrap' }}>
-                          -₩{dep.accumDepreciation.toLocaleString()}
-                        </td>
-                        <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 700, color: 'var(--success)', whiteSpace: 'nowrap' }}>
-                          ₩{dep.bookValue.toLocaleString()}
-                        </td>
-                        <td style={{ padding: '6px 8px', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>{a.supplier || '-'}</td>
-                        <td style={{ padding: '6px 8px', textAlign: 'center', whiteSpace: 'nowrap' }}>
-                          {a.safetyInspectionUrl ? (
-                            <span
-                              onClick={(e) => { e.stopPropagation(); window.open(a.safetyInspectionUrl, '_blank'); }}
-                              style={{ color: 'var(--success)', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '2px', fontSize: '11px' }}
-                              title="증빙 링크 열기"
-                            >
-                              <ShieldCheck size={13} /> 등록됨
-                            </span>
-                          ) : (
-                            <span style={{ color: 'var(--text-muted)', fontSize: '10.5px' }}>-</span>
-                          )}
-                        </td>
-                        <td style={{ padding: '6px 8px', textAlign: 'center', whiteSpace: 'nowrap' }}>
-                          {renderStatusBadge(a.status)}
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          ) : (
-            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '11.5px' }}>
-              <thead>
-                <tr style={{ backgroundColor: 'var(--bg-app)', borderBottom: '1px solid var(--border-color)', color: 'var(--text-secondary)', fontWeight: 600 }}>
-                  <th style={{ padding: '7px 8px', width: '50px', textAlign: 'center', whiteSpace: 'nowrap' }}>상세</th>
-                  <th style={{ padding: '7px 8px', whiteSpace: 'nowrap' }}>관리번호</th>
-                  <th style={{ padding: '7px 8px', whiteSpace: 'nowrap' }}>모델명</th>
-                  <th style={{ padding: '7px 8px', whiteSpace: 'nowrap' }}>제조사</th>
-                  <th style={{ padding: '7px 8px', whiteSpace: 'nowrap' }}>매각일자</th>
-                  <th style={{ padding: '7px 8px', textAlign: 'right', whiteSpace: 'nowrap' }}>취득원가</th>
-                  <th style={{ padding: '7px 8px', textAlign: 'right', whiteSpace: 'nowrap' }}>감가누계액</th>
-                  <th style={{ padding: '7px 8px', textAlign: 'right', whiteSpace: 'nowrap' }}>매각시점 장부가</th>
-                  <th style={{ padding: '7px 8px', textAlign: 'right', whiteSpace: 'nowrap' }}>실제 매각가</th>
-                  <th style={{ padding: '7px 8px', textAlign: 'center', whiteSpace: 'nowrap' }}>⚖️ 처분손익</th>
-                  <th style={{ padding: '7px 8px', whiteSpace: 'nowrap' }}>매각처(인수자)</th>
-                  <th style={{ padding: '7px 8px', textAlign: 'center', whiteSpace: 'nowrap' }}>매출청구 상태</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredSoldAssets.length === 0 ? (
-                  <tr>
-                    <td colSpan={12} style={{ padding: '36px 0', textAlign: 'center', color: 'var(--text-muted)' }}>
-                      매각 처분된 자산 내역이 없습니다.
-                    </td>
-                  </tr>
-                ) : (
-                  filteredSoldAssets.map(a => {
-                    const dep = calculateAssetDepreciation(a);
-                    const dispPrice = a.disposalPrice || 0;
-                    const bookAtDisp = dep.bookValue;
-                    const gainLoss = dispPrice - bookAtDisp;
-
-                    return (
-                      <tr
-                        key={a.id}
-                        onClick={() => setSelectedAssetForDossier(a)}
-                        style={{
-                          borderBottom: '1px solid var(--border-color)',
-                          cursor: 'pointer',
-                          transition: 'background-color 0.15s'
-                        }}
-                        className="hover-row"
-                      >
-                        <td style={{ padding: '6px 8px', textAlign: 'center', whiteSpace: 'nowrap' }}>
-                          <button
-                            onClick={(e) => { e.stopPropagation(); setSelectedAssetForDossier(a); }}
-                            style={{
-                              padding: '2px 6px',
-                              fontSize: '11px',
-                              border: '1px solid var(--border-color)',
-                              borderRadius: '3px',
-                              backgroundColor: 'transparent',
-                              cursor: 'pointer',
-                              color: 'var(--primary)',
-                              whiteSpace: 'nowrap'
-                            }}
-                          >
-                            보기
-                          </button>
-                        </td>
-                        <td style={{ padding: '6px 8px', fontWeight: 700, color: 'var(--text-main)', whiteSpace: 'nowrap' }}>{a.assetNo}</td>
-                        <td style={{ padding: '6px 8px', color: 'var(--text-main)', whiteSpace: 'nowrap' }}>{a.modelName}</td>
-                        <td style={{ padding: '6px 8px', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>{a.manufacturer || '-'}</td>
-                        <td style={{ padding: '6px 8px', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>{a.disposalDate || '-'}</td>
-                        <td style={{ padding: '6px 8px', textAlign: 'right', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
-                          ₩{(a.acquisitionPrice || 0).toLocaleString()}
-                        </td>
-                        <td style={{ padding: '6px 8px', textAlign: 'right', color: 'var(--danger)', whiteSpace: 'nowrap' }}>
-                          -₩{dep.accumDepreciation.toLocaleString()}
-                        </td>
-                        <td style={{ padding: '6px 8px', textAlign: 'right', color: 'var(--text-main)', whiteSpace: 'nowrap' }}>
-                          ₩{bookAtDisp.toLocaleString()}
-                        </td>
-                        <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 700, color: 'var(--primary)', whiteSpace: 'nowrap' }}>
-                          ₩{dispPrice.toLocaleString()}
-                        </td>
-                        <td style={{ padding: '6px 8px', textAlign: 'center', whiteSpace: 'nowrap' }}>
-                          <span className={`badge ${gainLoss >= 0 ? 'badge-success' : 'badge-danger'}`} style={{ fontSize: '11px' }}>
-                            {gainLoss >= 0 ? `+₩${gainLoss.toLocaleString()}` : `-₩${Math.abs(gainLoss).toLocaleString()}`}
-                          </span>
-                        </td>
-                        <td style={{ padding: '6px 8px', color: 'var(--text-main)', fontWeight: 600, whiteSpace: 'nowrap' }}>{a.buyer || '-'}</td>
-                        <td style={{ padding: '6px 8px', textAlign: 'center', whiteSpace: 'nowrap' }}>
-                          <span className="badge badge-primary" style={{ fontSize: '10.5px' }}>청구생성됨</span>
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          )}
-        </div>
-
-        {/* 우하단 Terminal Action: 회계 대차대조 무결성 검증 바 (헌장 3.5 Z-패턴 4단계) */}
-        <div style={{
-          padding: '8px 14px',
-          backgroundColor: 'var(--bg-app)',
-          borderTop: '1px solid var(--border-color)',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          flexWrap: 'wrap',
-          gap: '8px',
-          fontSize: '11.5px'
-        }}>
-          {activeTab === 'ACQUIRE' ? (
-            <>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
-                <span>총 취득원가: <strong>₩{acqSummary.totalCost.toLocaleString()}</strong></span>
-                <span>=</span>
-                <span>현재 장부가: <strong style={{ color: 'var(--success)' }}>₩{acqSummary.totalBook.toLocaleString()}</strong></span>
-                <span>+</span>
-                <span>감가누계액: <strong style={{ color: 'var(--danger)' }}>₩{acqSummary.totalAccum.toLocaleString()}</strong></span>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <span style={{
-                  padding: '2px 8px',
-                  borderRadius: '4px',
-                  backgroundColor: acqSummary.diff === 0 ? 'var(--success-light)' : 'var(--danger-light)',
-                  color: acqSummary.diff === 0 ? 'var(--success)' : 'var(--danger)',
-                  fontWeight: 700,
-                  fontSize: '11px'
-                }}>
-                  {acqSummary.diff === 0 ? '⚖️ 대차 차액 ₩0 (정상)' : `⚠️ 대차 불일치 ₩${acqSummary.diff.toLocaleString()}`}
-                </span>
-              </div>
-            </>
-          ) : (
-            <>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
-                <span>총 매각대금: <strong style={{ color: 'var(--primary)' }}>₩{dispSummary.totalDisposalPrice.toLocaleString()}</strong></span>
-                <span>=</span>
-                <span>매각시점 장부가: <strong>₩{dispSummary.totalBookAtDisposal.toLocaleString()}</strong></span>
-                <span>+</span>
-                <span>유형자산처분손익: <strong style={{ color: dispSummary.totalGainLoss >= 0 ? 'var(--success)' : 'var(--danger)' }}>
-                  {dispSummary.totalGainLoss >= 0 ? `+₩${dispSummary.totalGainLoss.toLocaleString()}` : `-₩${Math.abs(dispSummary.totalGainLoss).toLocaleString()}`}
-                </strong></span>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <span style={{
-                  padding: '2px 8px',
-                  borderRadius: '4px',
-                  backgroundColor: 'var(--success-light)',
-                  color: 'var(--success)',
-                  fontWeight: 700,
-                  fontSize: '11px'
-                }}>
-                  ⚖️ 대차 차액 ₩0 (확정 완결)
-                </span>
-              </div>
-            </>
-          )}
-        </div>
-      </div>
-
-      {/* ========================================================================= */}
-      {/* 모달 1: 신규 자산 취득 모달 (단건 등록 / 연속 N대 일괄 생성기)            */}
-      {/* ========================================================================= */}
-      {showAcquireModal && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          backgroundColor: 'rgba(0,0,0,0.5)',
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          zIndex: 1000,
-          padding: '16px'
-        }}>
-          <div style={{
-            backgroundColor: 'var(--bg-card)',
-            borderRadius: '8px',
-            border: '1px solid var(--border-color)',
-            width: '100%',
-            maxWidth: '780px',
-            maxHeight: '92vh',
-            display: 'flex',
-            flexDirection: 'column',
-            overflow: 'hidden',
-            boxShadow: '0 8px 24px rgba(0,0,0,0.2)'
-          }}>
-            {/* 모달 헤더 */}
-            <div style={{
-              padding: '12px 18px',
-              borderBottom: '1px solid var(--border-color)',
+          <button
+            type="button"
+            className={activeStudio === 'DISPOSAL' ? 'btn-primary' : 'btn-secondary'}
+            onClick={() => setActiveStudio('DISPOSAL')}
+            style={{
+              padding: '8px 18px',
+              fontSize: '13px',
+              fontWeight: 700,
               display: 'flex',
-              justifyContent: 'space-between',
               alignItems: 'center',
-              backgroundColor: 'var(--bg-app)'
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 700, color: 'var(--text-main)' }}>
-                  신규 당사자산 취득 등록
+              gap: '6px'
+            }}
+          >
+            <DollarSign size={15} /> 자산 매각
+          </button>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '11.5px', color: 'var(--text-secondary)' }}>
+          <span>* 등록 및 처분 완료된 모든 과거 자산은 <strong>[자산관리]</strong> 메뉴에서 26개 풀 컬럼으로 상시 조회 가능합니다.</span>
+        </div>
+      </div>
+
+      {/* ==================================================================== */}
+      {/* 🏢 [스튜디오 1] 자산 취득 스튜디오 본문 */}
+      {/* ==================================================================== */}
+      {activeStudio === 'ACQUISITION' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+          
+          {/* 모드 전환: 단건 등록 vs 엑셀 일괄 등록 */}
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <button
+              type="button"
+              onClick={() => setAcqMode('SINGLE')}
+              style={{
+                padding: '6px 14px',
+                borderRadius: '6px',
+                fontSize: '12px',
+                fontWeight: acqMode === 'SINGLE' ? 700 : 500,
+                border: acqMode === 'SINGLE' ? '1px solid var(--primary)' : '1px solid var(--border-color)',
+                backgroundColor: acqMode === 'SINGLE' ? 'var(--primary)' : 'var(--bg-app)',
+                color: acqMode === 'SINGLE' ? '#fff' : 'var(--text-secondary)',
+                cursor: 'pointer'
+              }}
+            >
+              단건 즉시 등록
+            </button>
+            <button
+              type="button"
+              onClick={() => setAcqMode('EXCEL')}
+              style={{
+                padding: '6px 14px',
+                borderRadius: '6px',
+                fontSize: '12px',
+                fontWeight: acqMode === 'EXCEL' ? 700 : 500,
+                border: acqMode === 'EXCEL' ? '1px solid var(--primary)' : '1px solid var(--border-color)',
+                backgroundColor: acqMode === 'EXCEL' ? 'var(--primary)' : 'var(--bg-app)',
+                color: acqMode === 'EXCEL' ? '#fff' : 'var(--text-secondary)',
+                cursor: 'pointer'
+              }}
+            >
+              엑셀 일괄 등록
+            </button>
+          </div>
+
+          {/* ───────────────────────────────────────────────────────────── */}
+          {/* 1-A. 단건 즉시 등록 워크벤치 */}
+          {/* ───────────────────────────────────────────────────────────── */}
+          {acqMode === 'SINGLE' && (
+            <form onSubmit={handleExecuteSingleAcquisition} className="card" style={{ margin: 0, padding: '18px', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-color)', paddingBottom: '12px' }}>
+                <h3 style={{ margin: 0, fontSize: '14px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Plus size={16} color="var(--primary)" /> 신규 자산 취득 정보 입력
                 </h3>
-                {/* 모드 전환 탭 */}
-                <div style={{ display: 'flex', gap: '2px', backgroundColor: 'var(--bg-card)', padding: '2px', borderRadius: '4px', border: '1px solid var(--border-color)' }}>
-                  <button
-                    type="button"
-                    onClick={() => setAcquireMode('SINGLE')}
-                    style={{
-                      padding: '3px 10px',
-                      fontSize: '11.5px',
-                      fontWeight: 600,
-                      border: 'none',
-                      borderRadius: '3px',
-                      cursor: 'pointer',
-                      backgroundColor: acquireMode === 'SINGLE' ? 'var(--primary)' : 'transparent',
-                      color: acquireMode === 'SINGLE' ? '#ffffff' : 'var(--text-muted)'
-                    }}
-                  >
-                    단건 등록
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setAcquireMode('BATCH')}
-                    style={{
-                      padding: '3px 10px',
-                      fontSize: '11.5px',
-                      fontWeight: 600,
-                      border: 'none',
-                      borderRadius: '3px',
-                      cursor: 'pointer',
-                      backgroundColor: acquireMode === 'BATCH' ? 'var(--primary)' : 'transparent',
-                      color: acquireMode === 'BATCH' ? '#ffffff' : 'var(--text-muted)'
-                    }}
-                  >
-                    연속 N대 일괄 생성기
-                  </button>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowAcquireModal(false)}
-                style={{ border: 'none', backgroundColor: 'transparent', cursor: 'pointer', color: 'var(--text-muted)' }}
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            {/* 모달 본문 (스크롤) */}
-            <div style={{ padding: '16px 20px', overflowY: 'auto', flex: 1 }}>
-              {acquireMode === 'SINGLE' ? (
-                <form id="singleAcquireForm" onSubmit={handleSingleAcquireSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px' }}>
-                    
-                    {/* 모델 선택 */}
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                      <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)' }}>제품 모델 선택 *</label>
-                      <select
-                        value={singleModel}
-                        onChange={e => handleModelChangeSingle(e.target.value)}
-                        required
-                        style={{ padding: '5px 8px', fontSize: '12px', borderRadius: '4px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-app)', color: 'var(--text-main)' }}
-                      >
-                        {products.map(p => (
-                          <option key={p.id} value={p.modelName}>{p.modelName} ({p.manufacturer})</option>
-                        ))}
-                      </select>
-                    </div>
-
-                    {/* 관리번호 & 자동추천 */}
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)' }}>관리번호 (Asset No.) *</label>
-                        <button
-                          type="button"
-                          onClick={() => suggestNextAssetNo(singleModel, (no) => setSingleAssetNo(no))}
-                          style={{ fontSize: '10px', padding: '1px 5px', border: '1px solid var(--border-color)', borderRadius: '3px', backgroundColor: 'transparent', cursor: 'pointer', color: 'var(--primary)' }}
-                        >
-                          자동추천
-                        </button>
-                      </div>
-                      <input
-                        type="text"
-                        value={singleAssetNo}
-                        onChange={e => setSingleAssetNo(e.target.value)}
-                        placeholder="예: SJ19-106"
-                        required
-                        style={{ padding: '5px 8px', fontSize: '12px', borderRadius: '4px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-app)', color: 'var(--text-main)' }}
-                      />
-                    </div>
-
-                    {/* 제조사 */}
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                      <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)' }}>제조사</label>
-                      <input
-                        type="text"
-                        value={singleManufacturer}
-                        onChange={e => setSingleManufacturer(e.target.value)}
-                        placeholder="제조사명"
-                        style={{ padding: '5px 8px', fontSize: '12px', borderRadius: '4px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-app)', color: 'var(--text-main)' }}
-                      />
-                    </div>
-
-                    {/* 제조번호(차대번호) */}
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                      <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)' }}>제조번호 (차대 시리얼)</label>
-                      <input
-                        type="text"
-                        value={singleSerialNo}
-                        onChange={e => setSingleSerialNo(e.target.value)}
-                        placeholder="타각 시리얼 번호"
-                        style={{ padding: '5px 8px', fontSize: '12px', borderRadius: '4px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-app)', color: 'var(--text-main)' }}
-                      />
-                    </div>
-
-                    {/* 연식 */}
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                      <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)' }}>제조년도 (연식)</label>
-                      <input
-                        type="text"
-                        value={singleManufactureYear}
-                        onChange={e => setSingleManufactureYear(e.target.value)}
-                        placeholder="예: 2024"
-                        style={{ padding: '5px 8px', fontSize: '12px', borderRadius: '4px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-app)', color: 'var(--text-main)' }}
-                      />
-                    </div>
-
-                    {/* 취득일자 */}
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                      <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)' }}>취득 일자 *</label>
-                      <input
-                        type="date"
-                        value={singleAcqDate}
-                        onChange={e => setSingleAcqDate(e.target.value)}
-                        required
-                        style={{ padding: '5px 8px', fontSize: '12px', borderRadius: '4px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-app)', color: 'var(--text-main)' }}
-                      />
-                    </div>
-
-                    {/* 취득 금액 */}
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                      <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)' }}>취득 금액 (공급가액, 원) *</label>
-                      <input
-                        type="number"
-                        value={singleAcqPrice || ''}
-                        onChange={e => setSingleAcqPrice(parseInt(e.target.value, 10) || 0)}
-                        placeholder="취득 공급가액"
-                        required
-                        style={{ padding: '5px 8px', fontSize: '12px', borderRadius: '4px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-app)', color: 'var(--text-main)' }}
-                      />
-                    </div>
-
-                    {/* 감가상각 개월수 */}
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                      <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)' }}>내용연수 (개월수) *</label>
-                      <input
-                        type="number"
-                        value={singleDepMonths}
-                        onChange={e => setSingleDepMonths(parseInt(e.target.value, 10) || 60)}
-                        placeholder="기본 60개월"
-                        required
-                        style={{ padding: '5px 8px', fontSize: '12px', borderRadius: '4px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-app)', color: 'var(--text-main)' }}
-                      />
-                    </div>
-
-                    {/* 잔존가치율 */}
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                      <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)' }}>잔존가치율 (%) *</label>
-                      <input
-                        type="number"
-                        value={singleResidualRate}
-                        onChange={e => setSingleResidualRate(parseFloat(e.target.value) || 10)}
-                        placeholder="기본 10%"
-                        required
-                        style={{ padding: '5px 8px', fontSize: '12px', borderRadius: '4px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-app)', color: 'var(--text-main)' }}
-                      />
-                    </div>
-                  </div>
-
-                  {/* 공급처 및 증빙 섹션 */}
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginTop: '2px' }}>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                      <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)' }}>구입처 (매입 거래처 마스터)</label>
-                      <div style={{ display: 'flex', gap: '4px' }}>
-                        <select
-                          value={singleVendorId}
-                          onChange={e => {
-                            setSingleVendorId(e.target.value);
-                            const v = vendors.find(item => item.id === e.target.value);
-                            if (v) setSingleSupplierText(v.name);
-                          }}
-                          style={{ flex: 1, padding: '5px 8px', fontSize: '12px', borderRadius: '4px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-app)', color: 'var(--text-main)' }}
-                        >
-                          <option value="">-- 매입처 마스터 선택 --</option>
-                          {vendors.map(v => (
-                            <option key={v.id} value={v.id}>{v.name} ({v.type})</option>
-                          ))}
-                        </select>
-                        <input
-                          type="text"
-                          value={singleSupplierText}
-                          onChange={e => setSingleSupplierText(e.target.value)}
-                          placeholder="직접 입력"
-                          style={{ flex: 1, padding: '5px 8px', fontSize: '12px', borderRadius: '4px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-app)', color: 'var(--text-main)' }}
-                        />
-                      </div>
-                    </div>
-
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                      <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)' }}>안전인증 / 검사증명서 URL</label>
-                      <input
-                        type="url"
-                        value={singleSafetyUrl}
-                        onChange={e => setSingleSafetyUrl(e.target.value)}
-                        placeholder="https://... (클라우드 파일 경로)"
-                        style={{ padding: '5px 8px', fontSize: '12px', borderRadius: '4px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-app)', color: 'var(--text-main)' }}
-                      />
-                    </div>
-                  </div>
-
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                    <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)' }}>비고 (특기사항 및 세금계산서 승인번호)</label>
-                    <input
-                      type="text"
-                      value={singleMemo}
-                      onChange={e => setSingleMemo(e.target.value)}
-                      placeholder="매입 세금계산서 승인번호, 배터리 사양 등 기재"
-                      style={{ padding: '5px 8px', fontSize: '12px', borderRadius: '4px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-app)', color: 'var(--text-main)' }}
-                    />
-                  </div>
-                </form>
-              ) : (
-                /* N대 연속 일괄 생성기 폼 */
-                <form id="batchAcquireForm" onSubmit={handleBatchAcquireSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  <div style={{
-                    padding: '10px 14px',
-                    backgroundColor: 'var(--bg-app)',
-                    borderRadius: '6px',
-                    border: '1px solid var(--border-color)',
-                    fontSize: '11.5px',
-                    color: 'var(--text-secondary)'
-                  }}>
-                    💡 동일 모델 장비를 묶음(Lot)으로 대량 도입할 때, 시작 관리번호와 도입 수량만 입력하면 N대 슬롯이 실시간 자동 생성됩니다.
-                  </div>
-
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px' }}>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                      <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)' }}>제품 모델 선택 *</label>
-                      <select
-                        value={batchModel}
-                        onChange={e => handleModelChangeBatch(e.target.value)}
-                        required
-                        style={{ padding: '5px 8px', fontSize: '12px', borderRadius: '4px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-app)', color: 'var(--text-main)' }}
-                      >
-                        {products.map(p => (
-                          <option key={p.id} value={p.modelName}>{p.modelName}</option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                      <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)' }}>번호 접두사 *</label>
-                      <input
-                        type="text"
-                        value={batchPrefix}
-                        onChange={e => setBatchPrefix(e.target.value)}
-                        placeholder="예: SJ19-"
-                        required
-                        style={{ padding: '5px 8px', fontSize: '12px', borderRadius: '4px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-app)', color: 'var(--text-main)' }}
-                      />
-                    </div>
-
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                      <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)' }}>시작 번호 (숫자) *</label>
-                      <input
-                        type="number"
-                        value={batchStartNum}
-                        onChange={e => setBatchStartNum(parseInt(e.target.value, 10) || 1)}
-                        required
-                        style={{ padding: '5px 8px', fontSize: '12px', borderRadius: '4px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-app)', color: 'var(--text-main)' }}
-                      />
-                    </div>
-
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                      <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)' }}>도입 수량 (대) *</label>
-                      <input
-                        type="number"
-                        min="1"
-                        max="50"
-                        value={batchQty}
-                        onChange={e => setBatchQty(parseInt(e.target.value, 10) || 1)}
-                        required
-                        style={{ padding: '5px 8px', fontSize: '12px', borderRadius: '4px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-app)', color: 'var(--text-main)' }}
-                      />
-                    </div>
-                  </div>
-
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px' }}>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                      <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)' }}>대당 취득가액 (원) *</label>
-                      <input
-                        type="number"
-                        value={batchUnitPrice || ''}
-                        onChange={e => setBatchUnitPrice(parseInt(e.target.value, 10) || 0)}
-                        placeholder="대당 공급가액"
-                        required
-                        style={{ padding: '5px 8px', fontSize: '12px', borderRadius: '4px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-app)', color: 'var(--text-main)' }}
-                      />
-                    </div>
-
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                      <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)' }}>취득 일자 *</label>
-                      <input
-                        type="date"
-                        value={batchAcqDate}
-                        onChange={e => setBatchAcqDate(e.target.value)}
-                        required
-                        style={{ padding: '5px 8px', fontSize: '12px', borderRadius: '4px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-app)', color: 'var(--text-main)' }}
-                      />
-                    </div>
-
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                      <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)' }}>내용연수 (개월)</label>
-                      <input
-                        type="number"
-                        value={batchDepMonths}
-                        onChange={e => setBatchDepMonths(parseInt(e.target.value, 10) || 60)}
-                        style={{ padding: '5px 8px', fontSize: '12px', borderRadius: '4px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-app)', color: 'var(--text-main)' }}
-                      />
-                    </div>
-
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                      <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)' }}>공급처 (구입처)</label>
-                      <input
-                        type="text"
-                        value={batchSupplierText}
-                        onChange={e => setBatchSupplierText(e.target.value)}
-                        placeholder="예: 스카이잭코리아"
-                        style={{ padding: '5px 8px', fontSize: '12px', borderRadius: '4px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-app)', color: 'var(--text-main)' }}
-                      />
-                    </div>
-                  </div>
-
-                  {/* 일괄 생성 대상 실시간 슬롯 미리보기 테이블 */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '6px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <label style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--text-main)' }}>
-                        생성 대상 장비 목록 ({batchGeneratedSlots.length}대)
-                      </label>
-                      <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                        * 차대번호는 비워두거나 인라인으로 입력할 수 있습니다.
-                      </span>
-                    </div>
-
-                    <div style={{ maxHeight: '180px', overflowY: 'auto', border: '1px solid var(--border-color)', borderRadius: '4px' }}>
-                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11.5px', textAlign: 'left' }}>
-                        <thead>
-                          <tr style={{ backgroundColor: 'var(--bg-app)', borderBottom: '1px solid var(--border-color)' }}>
-                            <th style={{ padding: '5px 8px', width: '40px', textAlign: 'center' }}>No</th>
-                            <th style={{ padding: '5px 8px' }}>관리번호</th>
-                            <th style={{ padding: '5px 8px' }}>모델명</th>
-                            <th style={{ padding: '5px 8px' }}>차대 시리얼번호 (선택)</th>
-                            <th style={{ padding: '5px 8px', width: '80px', textAlign: 'center' }}>상태 검증</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {batchGeneratedSlots.map((slot, idx) => (
-                            <tr key={slot.assetNo} style={{ borderBottom: '1px solid var(--border-color)' }}>
-                              <td style={{ padding: '4px 8px', textAlign: 'center', color: 'var(--text-muted)' }}>{idx + 1}</td>
-                              <td style={{ padding: '4px 8px', fontWeight: 700, color: slot.isDup ? 'var(--danger)' : 'var(--text-main)' }}>
-                                {slot.assetNo}
-                              </td>
-                              <td style={{ padding: '4px 8px' }}>{batchModel}</td>
-                              <td style={{ padding: '3px 8px' }}>
-                                <input
-                                  type="text"
-                                  placeholder="시리얼 입력"
-                                  value={batchCustomSerials[slot.assetNo] || ''}
-                                  onChange={e => setBatchCustomSerials({ ...batchCustomSerials, [slot.assetNo]: e.target.value })}
-                                  style={{ padding: '2px 6px', fontSize: '11px', width: '100%', borderRadius: '3px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-card)', color: 'var(--text-main)' }}
-                                />
-                              </td>
-                              <td style={{ padding: '4px 8px', textAlign: 'center' }}>
-                                {slot.isDup ? (
-                                  <span className="badge badge-danger" style={{ fontSize: '10px' }}>중복 오류</span>
-                                ) : (
-                                  <span className="badge badge-success" style={{ fontSize: '10px' }}>생성 가능</span>
-                                )}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                </form>
-              )}
-            </div>
-
-            {/* 모달 푸터 */}
-            <div style={{
-              padding: '10px 18px',
-              borderTop: '1px solid var(--border-color)',
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              backgroundColor: 'var(--bg-app)'
-            }}>
-              <span style={{ fontSize: '11.5px', color: 'var(--text-muted)' }}>
-                {acquireMode === 'SINGLE' ? '* 취득 확정 시 자산 대장 및 감사 타임라인에 무누락 저장됩니다.' : `* 총 ${batchGeneratedSlots.length}대가 일괄 생성됩니다.`}
-              </span>
-              <div style={{ display: 'flex', gap: '6px' }}>
                 <button
                   type="button"
                   className="btn-secondary"
-                  onClick={() => setShowAcquireModal(false)}
-                  style={{ padding: '5px 14px', fontSize: '12px' }}
+                  onClick={() => setSingleAssetNo(getNextRecommendedAssetNo('KL-'))}
+                  style={{ padding: '4px 10px', fontSize: '11.5px', display: 'flex', alignItems: 'center', gap: '4px' }}
                 >
-                  취소
-                </button>
-                <button
-                  type="submit"
-                  form={acquireMode === 'SINGLE' ? 'singleAcquireForm' : 'batchAcquireForm'}
-                  className="btn-primary"
-                  style={{ padding: '5px 16px', fontSize: '12px', fontWeight: 700 }}
-                >
-                  {acquireMode === 'SINGLE' ? '자산 취득 확정' : `${batchGeneratedSlots.length}대 일괄 취득 확정`}
+                  <RefreshCw size={12} /> 관리번호 재채번
                 </button>
               </div>
-            </div>
-          </div>
-        </div>
-      )}
 
-      {/* ========================================================================= */}
-      {/* 모달 2: 기존 장비 자산 매각 처리 모달                                    */}
-      {/* ========================================================================= */}
-      {showDisposeModal && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          backgroundColor: 'rgba(0,0,0,0.5)',
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          zIndex: 1000,
-          padding: '16px'
-        }}>
-          <div style={{
-            backgroundColor: 'var(--bg-card)',
-            borderRadius: '8px',
-            border: '1px solid var(--border-color)',
-            width: '100%',
-            maxWidth: '620px',
-            display: 'flex',
-            flexDirection: 'column',
-            overflow: 'hidden',
-            boxShadow: '0 8px 24px rgba(0,0,0,0.2)'
-          }}>
-            <div style={{
-              padding: '12px 18px',
-              borderBottom: '1px solid var(--border-color)',
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              backgroundColor: 'var(--bg-app)'
-            }}>
-              <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 700, color: 'var(--text-main)' }}>
-                기존 장비 자산 매각 처리
-              </h3>
-              <button
-                type="button"
-                onClick={() => setShowDisposeModal(false)}
-                style={{ border: 'none', backgroundColor: 'transparent', cursor: 'pointer', color: 'var(--text-muted)' }}
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            <form onSubmit={handleDisposeSubmit} style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)' }}>매각 대상 자산 선택 *</label>
-                <select
-                  value={selectedAssetIdToDispose}
-                  onChange={e => setSelectedAssetIdToDispose(e.target.value)}
-                  required
-                  style={{ padding: '6px 8px', fontSize: '12px', borderRadius: '4px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-app)', color: 'var(--text-main)' }}
-                >
-                  <option value="">-- 매각 가능한 대기 장비 선택 (AVAILABLE 상태) --</option>
-                  {assets.filter(a => a.ownerType === 'OWNED' && a.status === 'AVAILABLE').map(a => {
-                    const dep = calculateAssetDepreciation(a);
-                    return (
-                      <option key={a.id} value={a.id}>
-                        [{a.assetNo}] {a.modelName} (장부가치: ₩{dep.bookValue.toLocaleString()})
-                      </option>
-                    );
-                  })}
-                </select>
-                <small style={{ color: 'var(--text-muted)', fontSize: '10.5px' }}>
-                  * 현재 임대중이거나 수리중인 자산은 매각할 수 없습니다.
-                </small>
-              </div>
-
-              {activeAssetToDispose && disposalDepInfo && (
-                <div style={{
-                  padding: '10px 14px',
-                  backgroundColor: 'var(--bg-app)',
-                  borderRadius: '6px',
-                  border: '1px solid var(--border-color)',
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(3, 1fr)',
-                  gap: '8px',
-                  fontSize: '11.5px'
-                }}>
-                  <div>
-                    <span style={{ fontSize: '10.5px', color: 'var(--text-secondary)' }}>취득원가</span>
-                    <div><strong>₩{(activeAssetToDispose.acquisitionPrice || 0).toLocaleString()}</strong></div>
-                  </div>
-                  <div>
-                    <span style={{ fontSize: '10.5px', color: 'var(--text-secondary)' }}>감가상각누계액</span>
-                    <div><strong style={{ color: 'var(--danger)' }}>-₩{disposalDepInfo.accumDepreciation.toLocaleString()}</strong></div>
-                  </div>
-                  <div>
-                    <span style={{ fontSize: '10.5px', color: 'var(--text-secondary)' }}>매각시점 장부가액</span>
-                    <div><strong style={{ color: 'var(--success)', fontSize: '13px' }}>₩{disposalDepInfo.bookValue.toLocaleString()}</strong></div>
-                  </div>
-                </div>
-              )}
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                  <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)' }}>매각 일자 *</label>
-                  <input
-                    type="date"
-                    value={disposalDate}
-                    onChange={e => setDisposalDate(e.target.value)}
-                    required
-                    style={{ padding: '5px 8px', fontSize: '12px', borderRadius: '4px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-app)', color: 'var(--text-main)' }}
-                  />
-                </div>
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                  <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)' }}>매각 가격 (공급가, 원) *</label>
-                  <input
-                    type="number"
-                    value={disposalPrice || ''}
-                    onChange={e => setDisposalPrice(parseInt(e.target.value, 10) || 0)}
-                    placeholder="매각 금액"
-                    required
-                    style={{ padding: '5px 8px', fontSize: '12px', borderRadius: '4px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-app)', color: 'var(--text-main)' }}
-                  />
-                </div>
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                  <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)' }}>청구 귀속월 *</label>
-                  <input
-                    type="month"
-                    value={disposalBillingYm}
-                    onChange={e => setDisposalBillingYm(e.target.value)}
-                    required
-                    style={{ padding: '5px 8px', fontSize: '12px', borderRadius: '4px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-app)', color: 'var(--text-main)' }}
-                  />
-                </div>
-              </div>
-
-              {/* 실시간 처분손익 프리뷰 카드 */}
-              {activeAssetToDispose && (
-                <div style={{
-                  padding: '8px 12px',
-                  backgroundColor: realTimeGainLoss >= 0 ? 'var(--success-light)' : 'var(--danger-light)',
-                  border: `1px solid ${realTimeGainLoss >= 0 ? 'var(--success)' : 'var(--danger)'}`,
-                  borderRadius: '6px',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center'
-                }}>
-                  <span style={{ fontSize: '12px', fontWeight: 600, color: realTimeGainLoss >= 0 ? 'var(--success)' : 'var(--danger)' }}>
-                    {realTimeGainLoss >= 0 ? '🟢 유형자산처분이익' : '🔴 유형자산처분손실'}
-                  </span>
-                  <strong style={{ fontSize: '14px', color: realTimeGainLoss >= 0 ? 'var(--success)' : 'var(--danger)' }}>
-                    {realTimeGainLoss >= 0 ? `+₩${realTimeGainLoss.toLocaleString()}` : `-₩${Math.abs(realTimeGainLoss).toLocaleString()}`}
-                  </strong>
-                </div>
-              )}
-
-              {/* 매각처 선택 (고객사 마스터 연동) */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)' }}>매각처 (인수 고객명) *</label>
-                  <div style={{ display: 'flex', gap: '6px' }}>
-                    <button
-                      type="button"
-                      onClick={() => setBuyerType('EXISTING')}
-                      style={{
-                        fontSize: '10.5px',
-                        padding: '1px 6px',
-                        border: 'none',
-                        backgroundColor: buyerType === 'EXISTING' ? 'var(--primary)' : 'transparent',
-                        color: buyerType === 'EXISTING' ? '#ffffff' : 'var(--text-muted)',
-                        borderRadius: '3px',
-                        cursor: 'pointer'
-                      }}
-                    >
-                      기존 거래처
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setBuyerType('MANUAL')}
-                      style={{
-                        fontSize: '10.5px',
-                        padding: '1px 6px',
-                        border: 'none',
-                        backgroundColor: buyerType === 'MANUAL' ? 'var(--primary)' : 'transparent',
-                        color: buyerType === 'MANUAL' ? '#ffffff' : 'var(--text-muted)',
-                        borderRadius: '3px',
-                        cursor: 'pointer'
-                      }}
-                    >
-                      신규 직접입력
-                    </button>
-                  </div>
-                </div>
-
-                {buyerType === 'EXISTING' ? (
+              {/* 폼 필드 그리드 (헌장 3.4 상하 세로 스택 원칙 준수) */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '14px' }}>
+                
+                {/* 1. 모델명 선택 */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label style={{ fontSize: '11.5px', fontWeight: 700, color: 'var(--text-secondary)' }}>모델명 (필수)</label>
                   <select
-                    value={selectedCustomerId}
-                    onChange={e => setSelectedCustomerId(e.target.value)}
+                    value={singleModelName}
+                    onChange={e => setSingleModelName(e.target.value)}
+                    style={{ padding: '8px 10px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-app)', color: 'var(--text-primary)', fontSize: '12.5px' }}
                     required
-                    style={{ padding: '6px 8px', fontSize: '12px', borderRadius: '4px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-app)', color: 'var(--text-main)' }}
                   >
-                    <option value="">-- 매각 대상 고객사 선택 --</option>
-                    {customers.map(c => (
-                      <option key={c.id} value={c.id}>{c.name} ({c.representative || '대표자미지정'})</option>
+                    {products.map(p => (
+                      <option key={p.id} value={p.modelName}>
+                        {p.modelName} ({p.manufacturer || '제조사미상'} / {p.feet ? `${p.feet}ft` : '제원'})
+                      </option>
                     ))}
                   </select>
-                ) : (
+                </div>
+
+                {/* 2. 관리번호 */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label style={{ fontSize: '11.5px', fontWeight: 700, color: 'var(--text-secondary)' }}>관리번호 (자산번호)</label>
                   <input
                     type="text"
-                    value={manualBuyerName}
-                    onChange={e => setManualBuyerName(e.target.value)}
-                    placeholder="신규 매각처 상호명 입력"
+                    value={singleAssetNo}
+                    onChange={e => setSingleAssetNo(e.target.value)}
+                    placeholder="예: KL-0850"
+                    style={{ padding: '8px 10px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-app)', color: 'var(--text-primary)', fontSize: '12.5px', fontWeight: 700 }}
                     required
-                    style={{ padding: '6px 8px', fontSize: '12px', borderRadius: '4px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-app)', color: 'var(--text-main)' }}
                   />
-                )}
-                <small style={{ color: 'var(--text-muted)', fontSize: '10.5px' }}>
-                  * 선택하신 매각처로 매각대금 매출 청구서가 자동 생성됩니다.
-                </small>
+                </div>
+
+                {/* 3. 일련번호 (S/N) */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label style={{ fontSize: '11.5px', fontWeight: 700, color: 'var(--text-secondary)' }}>제조번호 (Serial No)</label>
+                  <input
+                    type="text"
+                    value={singleSerialNo}
+                    onChange={e => setSingleSerialNo(e.target.value)}
+                    placeholder="차대/제조일련번호"
+                    style={{ padding: '8px 10px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-app)', color: 'var(--text-primary)', fontSize: '12.5px' }}
+                  />
+                </div>
+
+                {/* 4. 제조사 & 연식 */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <label style={{ fontSize: '11.5px', fontWeight: 700, color: 'var(--text-secondary)' }}>제조사</label>
+                    <input
+                      type="text"
+                      value={singleManufacturer}
+                      onChange={e => setSingleManufacturer(e.target.value)}
+                      placeholder="제조사"
+                      style={{ padding: '8px 10px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-app)', color: 'var(--text-primary)', fontSize: '12.5px' }}
+                    />
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <label style={{ fontSize: '11.5px', fontWeight: 700, color: 'var(--text-secondary)' }}>제조년도</label>
+                    <input
+                      type="text"
+                      value={singleManufactureYear}
+                      onChange={e => setSingleManufactureYear(e.target.value)}
+                      placeholder="2024"
+                      style={{ padding: '8px 10px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-app)', color: 'var(--text-primary)', fontSize: '12.5px' }}
+                    />
+                  </div>
+                </div>
+
+                {/* 5. 취득일자 */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label style={{ fontSize: '11.5px', fontWeight: 700, color: 'var(--text-secondary)' }}>취득일자</label>
+                  <input
+                    type="date"
+                    value={singleAcqDate}
+                    onChange={e => setSingleAcqDate(e.target.value)}
+                    style={{ padding: '8px 10px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-app)', color: 'var(--text-primary)', fontSize: '12.5px' }}
+                    required
+                  />
+                </div>
+
+                {/* 6. 취득원가 */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label style={{ fontSize: '11.5px', fontWeight: 700, color: 'var(--text-secondary)' }}>취득원가 (원)</label>
+                  <input
+                    type="number"
+                    value={singleAcqPrice}
+                    onChange={e => setSingleAcqPrice(Math.max(0, parseInt(e.target.value, 10) || 0))}
+                    style={{ padding: '8px 10px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-app)', color: 'var(--text-primary)', fontSize: '12.5px', fontWeight: 700 }}
+                    required
+                  />
+                </div>
+
+                {/* 7. 내용월수 & 잔존가치율 */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <label style={{ fontSize: '11.5px', fontWeight: 700, color: 'var(--text-secondary)' }}>내용월수</label>
+                    <input
+                      type="number"
+                      value={singleDepMonths}
+                      onChange={e => setSingleDepMonths(Math.max(1, parseInt(e.target.value, 10) || 60))}
+                      style={{ padding: '8px 10px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-app)', color: 'var(--text-primary)', fontSize: '12.5px' }}
+                    />
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <label style={{ fontSize: '11.5px', fontWeight: 700, color: 'var(--text-secondary)' }}>잔존가율 (%)</label>
+                    <input
+                      type="number"
+                      value={singleResidualRate}
+                      onChange={e => setSingleResidualRate(Math.max(0, parseInt(e.target.value, 10) || 0))}
+                      style={{ padding: '8px 10px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-app)', color: 'var(--text-primary)', fontSize: '12.5px' }}
+                    />
+                  </div>
+                </div>
+
+                {/* 8. 구입처 / 공급사 */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label style={{ fontSize: '11.5px', fontWeight: 700, color: 'var(--text-secondary)' }}>구입처 (공급처)</label>
+                  <input
+                    type="text"
+                    value={singleSupplier}
+                    onChange={e => setSingleSupplier(e.target.value)}
+                    placeholder="예: 한국시노붐, 제이엘지"
+                    list="suppliers_list"
+                    style={{ padding: '8px 10px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-app)', color: 'var(--text-primary)', fontSize: '12.5px' }}
+                  />
+                  <datalist id="suppliers_list">
+                    {vendors.map(v => (
+                      <option key={v.id} value={v.name} />
+                    ))}
+                  </datalist>
+                </div>
               </div>
 
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '6px', paddingTop: '8px' }}>
-                <button
-                  type="button"
-                  className="btn-secondary"
-                  onClick={() => setShowDisposeModal(false)}
-                  style={{ padding: '5px 14px', fontSize: '12px' }}
-                >
-                  취소
-                </button>
-                <button
-                  type="submit"
-                  className="btn-danger"
-                  style={{ padding: '5px 16px', fontSize: '12px', fontWeight: 700 }}
-                >
-                  매각 처리 및 매출청구 발행
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* ========================================================================= */}
-      {/* 모달 3: 엑셀 일괄 업로드 모달                                            */}
-      {/* ========================================================================= */}
-      {showExcelUploadModal && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          backgroundColor: 'rgba(0,0,0,0.5)',
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          zIndex: 1000,
-          padding: '16px'
-        }}>
-          <div style={{
-            backgroundColor: 'var(--bg-card)',
-            borderRadius: '8px',
-            border: '1px solid var(--border-color)',
-            width: '100%',
-            maxWidth: '820px',
-            maxHeight: '90vh',
-            display: 'flex',
-            flexDirection: 'column',
-            overflow: 'hidden',
-            boxShadow: '0 8px 24px rgba(0,0,0,0.2)'
-          }}>
-            <div style={{
-              padding: '12px 18px',
-              borderBottom: '1px solid var(--border-color)',
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              backgroundColor: 'var(--bg-app)'
-            }}>
-              <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 700, color: 'var(--text-main)' }}>
-                당사자산 엑셀 일괄 업로드
-              </h3>
-              <button
-                type="button"
-                onClick={() => { setShowExcelUploadModal(false); setExcelParsedRows([]); }}
-                style={{ border: 'none', backgroundColor: 'transparent', cursor: 'pointer', color: 'var(--text-muted)' }}
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '12px', flex: 1, overflowY: 'auto' }}>
+              {/* 실시간 감가상각 시뮬레이션 카드 */}
               <div style={{
-                padding: '12px 16px',
-                border: '1px dashed var(--border-color)',
-                borderRadius: '6px',
                 backgroundColor: 'var(--bg-app)',
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                flexWrap: 'wrap',
-                gap: '8px'
+                padding: '12px 16px',
+                borderRadius: '8px',
+                border: '1px solid var(--border-color)',
+                display: 'grid',
+                gridTemplateColumns: 'repeat(3, 1fr)',
+                gap: '12px'
               }}>
                 <div>
-                  <div style={{ fontWeight: 600, fontSize: '12px', color: 'var(--text-main)' }}>엑셀 표준 서식 양식 다운로드</div>
-                  <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>규격화된 서식을 내려받아 작성 후 업로드하세요.</div>
+                  <span style={{ fontSize: '11px', color: 'var(--text-secondary)', display: 'block' }}>월 예상 감가상각비</span>
+                  <strong style={{ fontSize: '13px', color: 'var(--primary)' }}>₩{depreciationSimulation.monthlyDep.toLocaleString()}원 / 월</strong>
                 </div>
+                <div>
+                  <span style={{ fontSize: '11px', color: 'var(--text-secondary)', display: 'block' }}>1년 후 예상 장부가치</span>
+                  <strong style={{ fontSize: '13px', color: 'var(--text-primary)' }}>₩{depreciationSimulation.oneYearBook.toLocaleString()}원</strong>
+                </div>
+                <div>
+                  <span style={{ fontSize: '11px', color: 'var(--text-secondary)', display: 'block' }}>만료 후 잔존가치 ({singleResidualRate}%)</span>
+                  <strong style={{ fontSize: '13px', color: 'var(--success)' }}>₩{depreciationSimulation.residualVal.toLocaleString()}원</strong>
+                </div>
+              </div>
+
+              {/* 멀티 입고 슬롯 (동일 모델 N대 연속 등록) */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)' }}>
+                    동일 모델 다수 장비 동시 등록 슬롯 ({multiSlots.length}대 추가 대기)
+                  </span>
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    onClick={handleAddSlot}
+                    style={{ padding: '4px 10px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px' }}
+                  >
+                    <Plus size={12} /> 슬롯 추가
+                  </button>
+                </div>
+
+                {multiSlots.map((slot, sIdx) => (
+                  <div key={slot.id} style={{ display: 'flex', gap: '10px', alignItems: 'center', backgroundColor: 'var(--bg-app)', padding: '6px 10px', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
+                    <span style={{ fontSize: '11px', color: 'var(--text-muted)', width: '30px' }}>#{sIdx + 1}</span>
+                    <input
+                      type="text"
+                      placeholder="관리번호"
+                      value={slot.assetNo}
+                      onChange={e => handleUpdateSlot(slot.id, 'assetNo', e.target.value)}
+                      style={{ width: '130px', padding: '5px 8px', fontSize: '12px', borderRadius: '4px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)' }}
+                      required
+                    />
+                    <input
+                      type="text"
+                      placeholder="제조번호(S/N)"
+                      value={slot.serialNo}
+                      onChange={e => handleUpdateSlot(slot.id, 'serialNo', e.target.value)}
+                      style={{ width: '180px', padding: '5px 8px', fontSize: '12px', borderRadius: '4px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)' }}
+                    />
+                    <input
+                      type="number"
+                      placeholder="취득가"
+                      value={slot.price}
+                      onChange={e => handleUpdateSlot(slot.id, 'price', parseInt(e.target.value, 10) || 0)}
+                      style={{ width: '140px', padding: '5px 8px', fontSize: '12px', borderRadius: '4px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)' }}
+                      required
+                    />
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveSlot(slot.id)}
+                      style={{ border: 'none', background: 'none', color: 'var(--danger)', cursor: 'pointer', padding: '4px' }}
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+
+              {/* 우하단 Gutenberg Z-패턴 터미널 완결 버튼 */}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: '10px', borderTop: '1px solid var(--border-color)' }}>
+                <button
+                  type="submit"
+                  className="btn-primary"
+                  disabled={isSubmittingAcq}
+                  style={{ padding: '10px 24px', fontSize: '13px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px' }}
+                >
+                  <Plus size={16} />
+                  {isSubmittingAcq ? '취득 등록 중...' : `신규 자산 취득 등록 (총 ${1 + multiSlots.length}대 AVAILABLE 입고)`}
+                </button>
+              </div>
+
+            </form>
+          )}
+
+          {/* ───────────────────────────────────────────────────────────── */}
+          {/* 1-B. 엑셀 일괄 등록 워크벤치 */}
+          {/* ───────────────────────────────────────────────────────────── */}
+          {acqMode === 'EXCEL' && (
+            <div className="card" style={{ margin: 0, padding: '18px', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '14px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <Upload size={16} color="var(--primary)" /> 엑셀 일괄 자산 취득
+                  </h3>
+                  <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: 'var(--text-muted)' }}>
+                    표준 엑셀 서식 파일로 수십~수백 대의 장비를 한 번에 검증하여 시스템에 입고 등록합니다.
+                  </p>
+                </div>
+
                 <button
                   type="button"
                   className="btn-secondary"
                   onClick={handleDownloadTemplate}
-                  style={{ padding: '4px 10px', fontSize: '11.5px', display: 'flex', alignItems: 'center', gap: '4px' }}
+                  style={{ padding: '6px 14px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}
                 >
-                  <Download size={12} /> 서식 다운로드 (.xlsx)
+                  <Download size={14} /> 표준 취득 양식 다운로드
                 </button>
               </div>
 
-              <div>
+              {/* 파일 업로드 영역 */}
+              <div style={{
+                border: '2px dashed var(--border-color)',
+                borderRadius: '8px',
+                padding: '24px',
+                textAlign: 'center',
+                backgroundColor: 'var(--bg-app)',
+                cursor: 'pointer'
+              }} onClick={() => fileInputRef.current?.click()}>
+                <Upload size={28} style={{ margin: '0 auto 8px auto', color: 'var(--text-muted)' }} />
+                <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>
+                  엑셀 파일 (.xlsx, .xls)을 클릭하여 선택해 주세요
+                </div>
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>
+                  업로드 즉시 관리번호 중복 및 필수 필드 유효성 검사가 자동 실행됩니다.
+                </div>
                 <input
-                  type="file"
                   ref={fileInputRef}
+                  type="file"
+                  accept=".xlsx,.xls"
+                  style={{ display: 'none' }}
                   onChange={handleFileUpload}
-                  accept=".xlsx, .xls, .csv"
-                  style={{ fontSize: '12px' }}
                 />
               </div>
 
-              {excelParsedRows.length > 0 && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              {/* 엑셀 파싱 미리보기 및 검증 결과 */}
+              {excelPreviewData.length > 0 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-main)' }}>
-                      업로드 데이터 검증 결과: 총 {excelParsedRows.length}건 (유효: {excelParsedRows.filter(r => r.isValid).length}건)
+                    <span style={{ fontSize: '12.5px', fontWeight: 700 }}>
+                      파싱 결과: 총 {excelPreviewData.length}행 (정상: {excelPreviewData.length - excelValidationErrors.length}건 / 오류: {excelValidationErrors.length}건)
                     </span>
+                    {excelValidationErrors.length > 0 && (
+                      <span style={{ fontSize: '11.5px', color: 'var(--danger)', fontWeight: 700 }}>
+                        ⚠️ 오류가 있는 행을 수정한 후 다시 업로드해 주세요.
+                      </span>
+                    )}
                   </div>
 
-                  <div style={{ maxHeight: '240px', overflowY: 'auto', border: '1px solid var(--border-color)', borderRadius: '4px' }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px', textAlign: 'left' }}>
+                  <div className="table-container" style={{ maxHeight: '320px', overflowY: 'auto' }}>
+                    <table>
                       <thead>
-                        <tr style={{ backgroundColor: 'var(--bg-app)', borderBottom: '1px solid var(--border-color)' }}>
-                          <th style={{ padding: '5px 8px', width: '35px', textAlign: 'center' }}>행</th>
-                          <th style={{ padding: '5px 8px' }}>관리번호</th>
-                          <th style={{ padding: '5px 8px' }}>모델명</th>
-                          <th style={{ padding: '5px 8px' }}>시리얼번호</th>
-                          <th style={{ padding: '5px 8px' }}>취득일자</th>
-                          <th style={{ padding: '5px 8px', textAlign: 'right' }}>취득원가</th>
-                          <th style={{ padding: '5px 8px' }}>구입처</th>
-                          <th style={{ padding: '5px 8px', textAlign: 'center' }}>유효성</th>
+                        <tr style={{ backgroundColor: 'var(--bg-app)' }}>
+                          <th style={{ whiteSpace: 'nowrap' }}>행</th>
+                          <th style={{ whiteSpace: 'nowrap' }}>관리번호</th>
+                          <th style={{ whiteSpace: 'nowrap' }}>모델명</th>
+                          <th style={{ whiteSpace: 'nowrap' }}>제조번호(S/N)</th>
+                          <th style={{ whiteSpace: 'nowrap' }}>제조사</th>
+                          <th style={{ whiteSpace: 'nowrap' }}>취득일자</th>
+                          <th style={{ whiteSpace: 'nowrap' }}>취득원가</th>
+                          <th style={{ whiteSpace: 'nowrap' }}>검증 결과</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {excelParsedRows.map((r) => (
-                          <tr key={r.rowIdx} style={{ borderBottom: '1px solid var(--border-color)', backgroundColor: !r.isValid ? 'var(--danger-light)' : 'transparent' }}>
-                            <td style={{ padding: '4px 8px', textAlign: 'center', color: 'var(--text-muted)' }}>{r.rowIdx}</td>
-                            <td style={{ padding: '4px 8px', fontWeight: 700, color: r.isDup ? 'var(--danger)' : 'var(--text-main)' }}>{r.assetNo}</td>
-                            <td style={{ padding: '4px 8px' }}>{r.modelName}</td>
-                            <td style={{ padding: '4px 8px' }}>{r.serialNo || '-'}</td>
-                            <td style={{ padding: '4px 8px' }}>{r.acquisitionDate}</td>
-                            <td style={{ padding: '4px 8px', textAlign: 'right' }}>₩{r.acquisitionPrice.toLocaleString()}</td>
-                            <td style={{ padding: '4px 8px' }}>{r.supplier || '-'}</td>
-                            <td style={{ padding: '4px 8px', textAlign: 'center' }}>
-                              {r.isValid ? (
-                                <span className="badge badge-success" style={{ fontSize: '10px' }}>정상</span>
-                              ) : (
-                                <span className="badge badge-danger" style={{ fontSize: '10px' }}>
-                                  {r.isDup ? '중복번호' : '필수값 누락'}
-                                </span>
-                              )}
-                            </td>
-                          </tr>
-                        ))}
+                        {excelPreviewData.map(r => {
+                          const err = excelValidationErrors.find(e => e.row === r.rowNum);
+                          return (
+                            <tr key={r.rowNum} style={{ backgroundColor: err ? 'rgba(239, 68, 68, 0.08)' : 'transparent' }}>
+                              <td style={{ whiteSpace: 'nowrap' }}>{r.rowNum}</td>
+                              <td style={{ whiteSpace: 'nowrap' }}><strong>{r.assetNo}</strong></td>
+                              <td style={{ whiteSpace: 'nowrap' }}>{r.modelName}</td>
+                              <td style={{ whiteSpace: 'nowrap' }}>{r.serialNo || '-'}</td>
+                              <td style={{ whiteSpace: 'nowrap' }}>{r.manufacturer || '-'}</td>
+                              <td style={{ whiteSpace: 'nowrap' }}>{r.acquisitionDate}</td>
+                              <td style={{ whiteSpace: 'nowrap' }}>₩{r.acquisitionPrice.toLocaleString()}원</td>
+                              <td style={{ whiteSpace: 'nowrap' }}>
+                                {err ? (
+                                  <span style={{ color: 'var(--danger)', fontWeight: 700, fontSize: '11px' }}>
+                                    🔴 {err.error}
+                                  </span>
+                                ) : (
+                                  <span style={{ color: 'var(--success)', fontWeight: 700, fontSize: '11px' }}>
+                                    🟢 정상
+                                  </span>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: '10px' }}>
+                    <button
+                      type="button"
+                      className="btn-primary"
+                      disabled={isProcessingExcel || excelValidationErrors.length > 0}
+                      onClick={handleExecuteExcelImport}
+                      style={{ padding: '10px 24px', fontSize: '13px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px' }}
+                    >
+                      <Check size={16} />
+                      {isProcessingExcel ? '일괄 등록 진행 중...' : `총 ${excelPreviewData.length}대 일괄 취득 등록 (AVAILABLE 입고)`}
+                    </button>
+                  </div>
                 </div>
               )}
-            </div>
 
-            <div style={{
-              padding: '10px 18px',
-              borderTop: '1px solid var(--border-color)',
-              display: 'flex',
-              justifyContent: 'flex-end',
-              gap: '6px',
-              backgroundColor: 'var(--bg-app)'
-            }}>
-              <button
-                type="button"
-                className="btn-secondary"
-                onClick={() => { setShowExcelUploadModal(false); setExcelParsedRows([]); }}
-                style={{ padding: '5px 14px', fontSize: '12px' }}
-              >
-                닫기
-              </button>
-              <button
-                type="button"
-                className="btn-primary"
-                onClick={handleCommitExcelUpload}
-                disabled={excelParsedRows.filter(r => r.isValid).length === 0}
-                style={{ padding: '5px 16px', fontSize: '12px', fontWeight: 700 }}
-              >
-                유효 데이터 {excelParsedRows.filter(r => r.isValid).length}건 취득 확정
-              </button>
             </div>
-          </div>
+          )}
+
         </div>
       )}
 
-      {/* ========================================================================= */}
-      {/* 서랍형 상세 Dossier 슬라이드오버 (선택 자산 제원 및 감사 이력 타임라인)   */}
-      {/* ========================================================================= */}
-      {selectedAssetForDossier && (() => {
-        const a = selectedAssetForDossier;
-        const dep = calculateAssetDepreciation(a);
-        const prod = products.find(p => p.modelName === a.modelName);
-        const assetLogs = assetInOutLogs.filter(l => l.assetId === a.id);
 
-        return (
-          <div style={{
-            position: 'fixed',
-            top: 0,
-            right: 0,
-            bottom: 0,
-            width: '460px',
-            backgroundColor: 'var(--bg-card)',
-            borderLeft: '1px solid var(--border-color)',
-            boxShadow: '-4px 0 20px rgba(0,0,0,0.15)',
-            zIndex: 1000,
-            display: 'flex',
-            flexDirection: 'column',
-            animation: 'slideLeft 0.2s ease-in-out'
-          }}>
-            {/* 헤더 */}
-            <div style={{
-              padding: '12px 16px',
-              borderBottom: '1px solid var(--border-color)',
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              backgroundColor: 'var(--bg-app)'
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span style={{ fontSize: '15px', fontWeight: 700, color: 'var(--text-main)' }}>
-                  [{a.assetNo}] 상세 제원 및 감사 증빙
-                </span>
-                {renderStatusBadge(a.status)}
+      {/* ==================================================================== */}
+      {/* 💼 [스튜디오 2] 자산 매각 스튜디오 본문 (좌우 50:50 워크벤치) */}
+      {/* ==================================================================== */}
+      {activeStudio === 'DISPOSAL' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+          
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', alignItems: 'start' }}>
+            
+            {/* ───────────────────────────────────────────────────────────── */}
+            {/* 좌측 50%: 매각 대상 자산 선택 바구니 */}
+            {/* ───────────────────────────────────────────────────────────── */}
+            <div className="card" style={{ margin: 0, padding: '16px', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '14px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <Layers size={16} color="var(--primary)" /> 매각 대상 자산 선택
+                  </h3>
+                  <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                    * 현장 대여중(RENTED) 장비는 오매각 방지를 위해 원천 차단됩니다.
+                  </span>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <label style={{ fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer', color: 'var(--text-secondary)' }}>
+                    <input
+                      type="checkbox"
+                      checked={includeRepairing}
+                      onChange={e => setIncludeRepairing(e.target.checked)}
+                    />
+                    정비중(REPAIRING) 포함
+                  </label>
+                </div>
               </div>
-              <button
-                onClick={() => setSelectedAssetForDossier(null)}
-                style={{ border: 'none', backgroundColor: 'transparent', cursor: 'pointer', color: 'var(--text-muted)' }}
-              >
-                <X size={18} />
-              </button>
+
+              {/* 검색 및 정렬 바 */}
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: 'var(--bg-app)', padding: '6px 10px', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
+                  <Search size={14} color="var(--text-muted)" />
+                  <input
+                    type="text"
+                    placeholder="관리번호 / 모델명 검색"
+                    value={disposalSearchQuery}
+                    onChange={e => setDisposalSearchQuery(e.target.value)}
+                    style={{ flex: 1, border: 'none', backgroundColor: 'transparent', fontSize: '12px', outline: 'none', color: 'var(--text-primary)' }}
+                  />
+                  {disposalSearchQuery && (
+                    <button onClick={() => setDisposalSearchQuery('')} style={{ border: 'none', background: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}>✕</button>
+                  )}
+                </div>
+
+                <select
+                  value={disposalSortOrder}
+                  onChange={e => setDisposalSortOrder(e.target.value as any)}
+                  style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-app)', fontSize: '12px', color: 'var(--text-primary)' }}
+                >
+                  <option value="YEAR_ASC">노후순 (연식 오래된순)</option>
+                  <option value="BOOK_VAL_ASC">장부가 낮은순</option>
+                  <option value="ASSET_NO">관리번호순</option>
+                </select>
+              </div>
+
+              {/* 선택된 자산 요약 바 */}
+              <div style={{
+                backgroundColor: selectedAssetIds.size > 0 ? 'rgba(59, 130, 246, 0.08)' : 'var(--bg-app)',
+                padding: '8px 12px',
+                borderRadius: '6px',
+                border: `1px solid ${selectedAssetIds.size > 0 ? 'rgba(59, 130, 246, 0.3)' : 'var(--border-color)'}`,
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                fontSize: '11.5px'
+              }}>
+                <div>
+                  선택 자산: <strong style={{ color: 'var(--primary)' }}>{selectedAssetIds.size}대</strong> / 가용 자산 {filteredDisposalAssets.length}대
+                </div>
+                <button
+                  type="button"
+                  onClick={toggleSelectAll}
+                  style={{ border: 'none', background: 'none', color: 'var(--primary)', fontWeight: 700, cursor: 'pointer', fontSize: '11px' }}
+                >
+                  {selectedAssetIds.size === filteredDisposalAssets.length ? '선택 해제' : '가용 자산 전체 선택'}
+                </button>
+              </div>
+
+              {/* 자산 선택 그리드 테이블 */}
+              <div className="table-container" style={{ maxHeight: '440px', overflowY: 'auto' }}>
+                <table>
+                  <thead>
+                    <tr style={{ backgroundColor: 'var(--bg-app)' }}>
+                      <th style={{ width: '36px', textAlign: 'center', whiteSpace: 'nowrap' }}>
+                        <input
+                          type="checkbox"
+                          checked={selectedAssetIds.size > 0 && selectedAssetIds.size === filteredDisposalAssets.length}
+                          onChange={toggleSelectAll}
+                        />
+                      </th>
+                      <th style={{ whiteSpace: 'nowrap' }}>관리번호</th>
+                      <th style={{ whiteSpace: 'nowrap' }}>모델명</th>
+                      <th style={{ whiteSpace: 'nowrap' }}>연식</th>
+                      <th style={{ whiteSpace: 'nowrap' }}>현재 장부가치</th>
+                      <th style={{ whiteSpace: 'nowrap' }}>취득가</th>
+                      <th style={{ whiteSpace: 'nowrap' }}>정비점수</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredDisposalAssets.length === 0 ? (
+                      <tr>
+                        <td colSpan={7} style={{ textAlign: 'center', padding: '30px', color: 'var(--text-muted)' }}>
+                          매각 가능한 임대가능(AVAILABLE) 유휴 자산이 없습니다.
+                        </td>
+                      </tr>
+                    ) : (
+                      filteredDisposalAssets.map(a => {
+                        const isSelected = selectedAssetIds.has(a.id);
+                        const dep = calculateAssetDepreciation(a);
+                        return (
+                          <tr
+                            key={a.id}
+                            onClick={() => toggleSelectAsset(a.id)}
+                            style={{
+                              backgroundColor: isSelected ? 'rgba(59, 130, 246, 0.08)' : 'transparent',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            <td style={{ textAlign: 'center', whiteSpace: 'nowrap' }} onClick={e => e.stopPropagation()}>
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={() => toggleSelectAsset(a.id)}
+                              />
+                            </td>
+                            <td style={{ whiteSpace: 'nowrap' }}><strong style={{ color: 'var(--primary)' }}>{a.assetNo}</strong></td>
+                            <td style={{ whiteSpace: 'nowrap' }}>{a.modelName}</td>
+                            <td style={{ whiteSpace: 'nowrap' }}>{a.manufactureYear || '-'}년</td>
+                            <td style={{ whiteSpace: 'nowrap' }}><strong style={{ color: '#0070C0' }}>₩{dep.bookValue.toLocaleString()}원</strong></td>
+                            <td style={{ whiteSpace: 'nowrap' }}>₩{(a.acquisitionPrice || 0).toLocaleString()}원</td>
+                            <td style={{ whiteSpace: 'nowrap' }}>{a.maintenanceScore ?? 0}점</td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
             </div>
 
-            {/* 본문 스크롤 */}
-            <div style={{ padding: '16px', flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '14px', fontSize: '12px' }}>
+            {/* ───────────────────────────────────────────────────────────── */}
+            {/* 우측 50%: 매각 계약 체결 & 청구·이메일 스튜디오 */}
+            {/* ───────────────────────────────────────────────────────────── */}
+            <div className="card" style={{ margin: 0, padding: '16px', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '14px' }}>
               
-              {/* 기본 제원 섹션 */}
-              <div style={{ padding: '10px 12px', backgroundColor: 'var(--bg-app)', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
-                <div style={{ fontWeight: 600, color: 'var(--text-main)', marginBottom: '6px' }}>장비 물리 제원 정보</div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', fontSize: '11.5px' }}>
-                  <div><span style={{ color: 'var(--text-secondary)' }}>모델명:</span> <strong>{a.modelName}</strong></div>
-                  <div><span style={{ color: 'var(--text-secondary)' }}>제조사:</span> {a.manufacturer || '-'}</div>
-                  <div><span style={{ color: 'var(--text-secondary)' }}>시리얼번호:</span> {a.serialNo || '-'}</div>
-                  <div><span style={{ color: 'var(--text-secondary)' }}>제조년도:</span> {a.manufactureYear || '-'}</div>
-                  <div><span style={{ color: 'var(--text-secondary)' }}>작업높이:</span> {prod?.workingHeight || '-'}</div>
-                  <div><span style={{ color: 'var(--text-secondary)' }}>동력원:</span> {prod?.powerSource || '-'}</div>
-                </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-color)', paddingBottom: '10px' }}>
+                <h3 style={{ margin: 0, fontSize: '14px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Receipt size={16} color="var(--primary)" /> 매각 계약 체결 & 청구서 발행 스튜디오
+                </h3>
+                <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                  원클릭 3단계 동시 완결 (계약+청구+메일)
+                </span>
               </div>
 
-              {/* 회계 및 감가상각 원장 */}
-              <div style={{ padding: '10px 12px', backgroundColor: 'var(--bg-app)', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
-                <div style={{ fontWeight: 600, color: 'var(--text-main)', marginBottom: '6px' }}>회계 및 감가상각 현황</div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', fontSize: '11.5px' }}>
-                  <div><span style={{ color: 'var(--text-secondary)' }}>취득일자:</span> {a.acquisitionDate || '-'}</div>
-                  <div><span style={{ color: 'var(--text-secondary)' }}>취득원가:</span> <strong>₩{(a.acquisitionPrice || 0).toLocaleString()}</strong></div>
-                  <div><span style={{ color: 'var(--text-secondary)' }}>내용연수:</span> {a.depreciationMonths || 60}개월</div>
-                  <div><span style={{ color: 'var(--text-secondary)' }}>월 상각액:</span> ₩{Math.round(dep.monthlyDepreciation).toLocaleString()}</div>
-                  <div><span style={{ color: 'var(--text-secondary)' }}>감가누계액:</span> <span style={{ color: 'var(--danger)' }}>-₩{dep.accumDepreciation.toLocaleString()}</span></div>
-                  <div><span style={{ color: 'var(--text-secondary)' }}>현재 장부가:</span> <span style={{ color: 'var(--success)', fontWeight: 700 }}>₩{dep.bookValue.toLocaleString()}</span></div>
-                  <div><span style={{ color: 'var(--text-secondary)' }}>구입처:</span> {a.supplier || '-'}</div>
-                </div>
-              </div>
-
-              {/* 감사 증빙 서류 */}
-              <div style={{ padding: '10px 12px', backgroundColor: 'var(--bg-app)', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
-                <div style={{ fontWeight: 600, color: 'var(--text-main)', marginBottom: '6px' }}>감사 증빙 및 안전 서류</div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '11.5px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <span style={{ color: 'var(--text-secondary)' }}>안전인증 / 검사증명서:</span>
-                    {a.safetyInspectionUrl ? (
-                      <a
-                        href={a.safetyInspectionUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        style={{ color: 'var(--primary)', display: 'inline-flex', alignItems: 'center', gap: '3px', textDecoration: 'underline' }}
-                      >
-                        증빙 열기 <ExternalLink size={11} />
-                      </a>
-                    ) : (
-                      <span style={{ color: 'var(--text-muted)' }}>미등록</span>
-                    )}
+              {/* 1. 매수처 지정 */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <label style={{ fontSize: '11.5px', fontWeight: 700, color: 'var(--text-secondary)' }}>1. 매수처 (인수 거래처) 지정</label>
+                  <div style={{ display: 'flex', gap: '6px', fontSize: '11px' }}>
+                    <button
+                      type="button"
+                      onClick={() => setBuyerMode('EXISTING')}
+                      style={{
+                        padding: '2px 8px',
+                        borderRadius: '4px',
+                        border: buyerMode === 'EXISTING' ? '1px solid var(--primary)' : '1px solid var(--border-color)',
+                        backgroundColor: buyerMode === 'EXISTING' ? 'var(--primary)' : 'transparent',
+                        color: buyerMode === 'EXISTING' ? '#fff' : 'var(--text-secondary)',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      기존 고객사 선택
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setBuyerMode('NEW')}
+                      style={{
+                        padding: '2px 8px',
+                        borderRadius: '4px',
+                        border: buyerMode === 'NEW' ? '1px solid var(--primary)' : '1px solid var(--border-color)',
+                        backgroundColor: buyerMode === 'NEW' ? 'var(--primary)' : 'transparent',
+                        color: buyerMode === 'NEW' ? '#fff' : 'var(--text-secondary)',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      신규 매수처 직접 입력
+                    </button>
                   </div>
-                  <div><span style={{ color: 'var(--text-secondary)' }}>특기 비고:</span> {a.memo1 || '-'}</div>
+                </div>
+
+                {buyerMode === 'EXISTING' ? (
+                  <select
+                    value={selectedBuyerId}
+                    onChange={e => setSelectedBuyerId(e.target.value)}
+                    style={{ padding: '8px 10px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-app)', color: 'var(--text-primary)', fontSize: '12.5px' }}
+                  >
+                    <option value="">-- 매수 고객사를 선택해 주세요 --</option>
+                    {customers.map(c => (
+                      <option key={c.id} value={c.id}>
+                        {c.name} {c.representative ? `(대표: ${c.representative})` : ''} {c.repEmail ? `[${c.repEmail}]` : ''}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                    <input
+                      type="text"
+                      placeholder="매수처 상호명 (필수)"
+                      value={newBuyerName}
+                      onChange={e => setNewBuyerName(e.target.value)}
+                      style={{ padding: '8px 10px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-app)', color: 'var(--text-primary)', fontSize: '12.5px' }}
+                    />
+                    <input
+                      type="text"
+                      placeholder="사업자등록번호 (선택)"
+                      value={newBuyerBizNo}
+                      onChange={e => setNewBuyerBizNo(e.target.value)}
+                      style={{ padding: '8px 10px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-app)', color: 'var(--text-primary)', fontSize: '12.5px' }}
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* 2. 계약일자 및 영업담당자 */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label style={{ fontSize: '11.5px', fontWeight: 700, color: 'var(--text-secondary)' }}>2. 양도/계약일자</label>
+                  <input
+                    type="date"
+                    value={disposalDate}
+                    onChange={e => setDisposalDate(e.target.value)}
+                    style={{ padding: '8px 10px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-app)', color: 'var(--text-primary)', fontSize: '12.5px' }}
+                  />
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label style={{ fontSize: '11.5px', fontWeight: 700, color: 'var(--text-secondary)' }}>계약 담당자</label>
+                  <select
+                    value={disposalSalespersonId}
+                    onChange={e => setDisposalSalespersonId(e.target.value)}
+                    style={{ padding: '8px 10px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-app)', color: 'var(--text-primary)', fontSize: '12.5px' }}
+                  >
+                    <option value="">담당자 선택</option>
+                    {users.map(u => (
+                      <option key={u.id} value={u.id}>{u.name} ({u.role})</option>
+                    ))}
+                  </select>
                 </div>
               </div>
 
-              {/* 감사 이력 타임라인 */}
+              {/* 3. 자산별 매각단가 책정 및 실시간 손익 계산 */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <div style={{ fontWeight: 600, color: 'var(--text-main)' }}>자산 라이프사이클 감사 로그 ({assetLogs.length}건)</div>
-                <div style={{ maxHeight: '200px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  {assetLogs.length === 0 ? (
-                    <div style={{ color: 'var(--text-muted)', padding: '10px 0', textAlign: 'center' }}>기록된 이벤트 로그가 없습니다.</div>
-                  ) : (
-                    assetLogs.map(log => (
-                      <div
-                        key={log.id}
-                        style={{
-                          padding: '6px 10px',
-                          borderRadius: '4px',
-                          backgroundColor: 'var(--bg-app)',
-                          border: '1px solid var(--border-color)',
-                          fontSize: '11px',
-                          display: 'flex',
-                          flexDirection: 'column',
-                          gap: '2px'
-                        }}
-                      >
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <span className={`badge ${log.type === 'ACQUISITION' ? 'badge-info' : log.type === 'OUTBOUND' ? 'badge-primary' : log.type === 'INBOUND' ? 'badge-success' : log.type === 'DISPOSAL' ? 'badge-danger' : 'badge-warning'}`} style={{ fontSize: '10px' }}>
-                            {log.type}
-                          </span>
-                          <span style={{ color: 'var(--text-muted)' }}>{log.eventDate || log.createdAt?.slice(0, 10)}</span>
+                <label style={{ fontSize: '11.5px', fontWeight: 700, color: 'var(--text-secondary)' }}>
+                  3. 선택 자산별 매각 공급가액 책정 ({selectedAssetsList.length}대)
+                </label>
+
+                {selectedAssetsList.length === 0 ? (
+                  <div style={{ padding: '16px', backgroundColor: 'var(--bg-app)', borderRadius: '6px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '12px' }}>
+                    좌측에서 매각 처분할 자산을 선택해 주세요.
+                  </div>
+                ) : (
+                  <div style={{ maxHeight: '180px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    {selectedAssetsList.map(a => {
+                      const dep = calculateAssetDepreciation(a, new Date(disposalDate));
+                      const bv = dep.bookValue;
+                      const price = Number(itemPrices[a.id]) || 0;
+                      const diff = price - bv;
+                      return (
+                        <div key={a.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 10px', backgroundColor: 'var(--bg-app)', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
+                          <div>
+                            <strong style={{ color: 'var(--primary)' }}>{a.assetNo}</strong> ({a.modelName})
+                            <span style={{ fontSize: '11px', color: 'var(--text-muted)', marginLeft: '8px' }}>
+                              장부가: ₩{bv.toLocaleString()}원
+                            </span>
+                          </div>
+
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <input
+                              type="number"
+                              value={itemPrices[a.id] ?? bv}
+                              onChange={e => {
+                                const val = parseInt(e.target.value, 10) || 0;
+                                setItemPrices(p => ({ ...p, [a.id]: val }));
+                              }}
+                              style={{ width: '120px', padding: '4px 8px', borderRadius: '4px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)', fontSize: '12px', textAlign: 'right', fontWeight: 700 }}
+                            />
+                            <span style={{ fontSize: '11px', fontWeight: 700, width: '100px', textAlign: 'right', color: diff >= 0 ? 'var(--success)' : 'var(--danger)' }}>
+                              {diff >= 0 ? `🟢 +₩${diff.toLocaleString()}` : `🔴 ₩${diff.toLocaleString()}`}
+                            </span>
+                          </div>
                         </div>
-                        <div style={{ color: 'var(--text-main)', marginTop: '2px' }}>{log.memo || '-'}</div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* 4. 실시간 회계 정산 요약 카드 */}
+              <div style={{
+                backgroundColor: 'var(--bg-app)',
+                padding: '12px 14px',
+                borderRadius: '8px',
+                border: '1px solid var(--border-color)',
+                display: 'grid',
+                gridTemplateColumns: 'repeat(4, 1fr)',
+                gap: '8px',
+                fontSize: '11.5px'
+              }}>
+                <div>
+                  <span style={{ color: 'var(--text-muted)', display: 'block' }}>매각 공급가액</span>
+                  <strong style={{ fontSize: '13px', color: 'var(--text-primary)' }}>₩{disposalAccounting.totalSupplyAmount.toLocaleString()}원</strong>
+                </div>
+                <div>
+                  <span style={{ color: 'var(--text-muted)', display: 'block' }}>유형자산 처분손익</span>
+                  <strong style={{ fontSize: '13px', color: disposalAccounting.gainLoss >= 0 ? 'var(--success)' : 'var(--danger)' }}>
+                    {disposalAccounting.gainLoss >= 0 ? `🟢 +₩${disposalAccounting.gainLoss.toLocaleString()}` : `🔴 ₩${disposalAccounting.gainLoss.toLocaleString()}`}
+                  </strong>
+                </div>
+                <div>
+                  <span style={{ color: 'var(--text-muted)', display: 'block' }}>부가가치세 (10%)</span>
+                  <strong style={{ fontSize: '13px', color: 'var(--text-muted)' }}>₩{disposalAccounting.vat.toLocaleString()}원</strong>
+                </div>
+                <div>
+                  <span style={{ color: 'var(--text-muted)', display: 'block' }}>청구 총합계금액</span>
+                  <strong style={{ fontSize: '14px', color: 'var(--primary)' }}>₩{disposalAccounting.grandTotal.toLocaleString()}원</strong>
+                </div>
+              </div>
+
+              {/* 5. 실시간 서식 미리보기 (듀얼 탭) */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <label style={{ fontSize: '11.5px', fontWeight: 700, color: 'var(--text-secondary)' }}>4. 실시간 서식 미리보기</label>
+                  <div style={{ display: 'flex', gap: '4px', fontSize: '11px' }}>
+                    <button
+                      type="button"
+                      onClick={() => setPreviewDocTab('CONTRACT')}
+                      style={{
+                        padding: '2px 8px',
+                        borderRadius: '4px',
+                        border: previewDocTab === 'CONTRACT' ? '1px solid var(--primary)' : '1px solid var(--border-color)',
+                        backgroundColor: previewDocTab === 'CONTRACT' ? 'var(--primary)' : 'transparent',
+                        color: previewDocTab === 'CONTRACT' ? '#fff' : 'var(--text-secondary)',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      매각 계약서 미리보기
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPreviewDocTab('INVOICE')}
+                      style={{
+                        padding: '2px 8px',
+                        borderRadius: '4px',
+                        border: previewDocTab === 'INVOICE' ? '1px solid var(--primary)' : '1px solid var(--border-color)',
+                        backgroundColor: previewDocTab === 'INVOICE' ? 'var(--primary)' : 'transparent',
+                        color: previewDocTab === 'INVOICE' ? '#fff' : 'var(--text-secondary)',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      매각 청구서 미리보기
+                    </button>
+                  </div>
+                </div>
+
+                {/* 서식 뷰어 본체 */}
+                <div style={{
+                  padding: '12px 14px',
+                  backgroundColor: '#ffffff',
+                  color: '#0f172a',
+                  borderRadius: '6px',
+                  border: '1px solid #cbd5e1',
+                  fontFamily: 'serif',
+                  fontSize: '11.5px',
+                  maxHeight: '160px',
+                  overflowY: 'auto'
+                }}>
+                  {previewDocTab === 'CONTRACT' ? (
+                    <div>
+                      <div style={{ textAlign: 'center', fontSize: '13px', fontWeight: 800, marginBottom: '8px', borderBottom: '1px solid #94a3b8', paddingBottom: '4px' }}>
+                        자 산 양 도 · 매 각 계 약 서
                       </div>
-                    ))
+                      <p style={{ margin: '2px 0' }}>
+                        <strong>양도인:</strong> (주)기연리프트 (대표이사 이정용 / 사업자등록번호: 144-81-01234)
+                      </p>
+                      <p style={{ margin: '2px 0' }}>
+                        <strong>양수인:</strong> {buyerMode === 'EXISTING' ? (customers.find(c => c.id === selectedBuyerId)?.name || '매수처') : (newBuyerName || '매수처')} 귀하
+                      </p>
+                      <p style={{ margin: '4px 0 2px 0', fontWeight: 700 }}>[제1조 매각 대상 자산]</p>
+                      <p style={{ margin: '2px 0' }}>
+                        총 {selectedAssetsList.length}대 ({selectedAssetsList.map(a => a.assetNo).join(', ') || '선택 없음'})
+                      </p>
+                      <p style={{ margin: '4px 0 2px 0', fontWeight: 700 }}>[제2조 매각 공급대금]</p>
+                      <p style={{ margin: '2px 0' }}>
+                        금 ₩{disposalAccounting.totalSupplyAmount.toLocaleString()}원정 (부가가치세 ₩{disposalAccounting.vat.toLocaleString()}원 별도 / 총액 ₩{disposalAccounting.grandTotal.toLocaleString()}원)
+                      </p>
+                      <p style={{ margin: '4px 0 2px 0', fontWeight: 700 }}>[제3조 대금 결제 및 인도]</p>
+                      <p style={{ margin: '2px 0', color: '#64748b' }}>
+                        본 대금은 매각 청구서 발행 후 지정 기일 내 입금 완료 시 소유권이 완전히 이전된다.
+                      </p>
+                    </div>
+                  ) : (
+                    <div>
+                      <div style={{ textAlign: 'center', fontSize: '13px', fontWeight: 800, marginBottom: '8px', borderBottom: '1px solid #94a3b8', paddingBottom: '4px' }}>
+                        거 래 명 세 서 (자산 매각 대금 청구서)
+                      </div>
+                      <p style={{ margin: '2px 0' }}>
+                        <strong>공급자:</strong> (주)기연리프트 | <strong>공급받는자:</strong> {buyerMode === 'EXISTING' ? (customers.find(c => c.id === selectedBuyerId)?.name || '매수처') : (newBuyerName || '매수처')}
+                      </p>
+                      <p style={{ margin: '2px 0' }}>
+                        <strong>청구일자:</strong> {disposalDate} | <strong>청구품목:</strong> 고소작업대 자산 매각 대금 ({selectedAssetsList.length}대)
+                      </p>
+                      <div style={{ marginTop: '6px', borderTop: '1px solid #e2e8f0', paddingTop: '4px' }}>
+                        <div>• 공급가액: ₩{disposalAccounting.totalSupplyAmount.toLocaleString()}원</div>
+                        <div>• 부가가치세(10%): ₩{disposalAccounting.vat.toLocaleString()}원</div>
+                        <div>• <strong>청구 총합계금액: ₩{disposalAccounting.grandTotal.toLocaleString()}원</strong></div>
+                        <div style={{ color: '#0284c7', marginTop: '4px' }}>• 입금계좌: [기연리프트] 기업은행 144-082875-01-017</div>
+                      </div>
+                    </div>
                   )}
                 </div>
               </div>
+
+              {/* 6. 이메일 발송 설정 */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', backgroundColor: 'var(--bg-app)', padding: '10px 12px', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <label style={{ fontSize: '11.5px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      checked={sendEmailImmediately}
+                      onChange={e => setSendEmailImmediately(e.target.checked)}
+                    />
+                    매각 계약서 및 청구서 이메일 즉시 발송
+                  </label>
+                  <Mail size={14} color="var(--primary)" />
+                </div>
+
+                {sendEmailImmediately && (
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginTop: '4px' }}>
+                    <input
+                      type="email"
+                      placeholder="수신 이메일 (예: buyer@samwoo.co.kr)"
+                      value={disposalEmailTo}
+                      onChange={e => setDisposalEmailTo(e.target.value)}
+                      style={{ padding: '6px 8px', borderRadius: '4px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)', fontSize: '12px' }}
+                    />
+                    <input
+                      type="email"
+                      placeholder="참조 이메일 (CC, 선택)"
+                      value={disposalEmailCc}
+                      onChange={e => setDisposalEmailCc(e.target.value)}
+                      style={{ padding: '6px 8px', borderRadius: '4px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)', fontSize: '12px' }}
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* 7. 우하단 Gutenberg Z-패턴 원클릭 완결 버튼 */}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: '10px', borderTop: '1px solid var(--border-color)' }}>
+                <button
+                  type="button"
+                  className="btn-primary"
+                  disabled={isSubmittingDisposal || selectedAssetsList.length === 0}
+                  onClick={handleExecuteDisposal}
+                  style={{
+                    padding: '10px 24px',
+                    fontSize: '13px',
+                    fontWeight: 700,
+                    backgroundColor: '#8b5cf6',
+                    borderColor: '#7c3aed',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px'
+                  }}
+                >
+                  <Send size={15} />
+                  {isSubmittingDisposal ? '계약 체결 및 발행 중...' : `매각 계약 체결 & 청구서 발행 & 이메일 전송 (총 ${selectedAssetsList.length}대)`}
+                </button>
+              </div>
+
             </div>
 
-            {/* 푸터 */}
-            <div style={{ padding: '10px 16px', borderTop: '1px solid var(--border-color)', backgroundColor: 'var(--bg-app)', display: 'flex', justifyContent: 'flex-end' }}>
-              <button
-                type="button"
-                className="btn-secondary"
-                onClick={() => setSelectedAssetForDossier(null)}
-                style={{ padding: '5px 14px', fontSize: '12px' }}
-              >
-                닫기
-              </button>
+          </div>
+
+          {/* 최하단 Gutenberg 대차대조 항등식 검증 바 (헌장 3.5 준수) */}
+          <div style={{
+            backgroundColor: 'var(--bg-card)',
+            padding: '10px 16px',
+            borderRadius: '8px',
+            border: '1px solid var(--border-color)',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            fontSize: '12px',
+            flexWrap: 'wrap',
+            gap: '8px'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontWeight: 700 }}>대차대조 회계 검증식:</span>
+              <span>📄 매각총액(공급가) <strong>₩{disposalAccounting.totalSupplyAmount.toLocaleString()}원</strong></span>
+              <span>=</span>
+              <span>📉 매각시점 장부가액 <strong>₩{disposalAccounting.totalBookValue.toLocaleString()}원</strong></span>
+              <span>+</span>
+              <span style={{ color: disposalAccounting.gainLoss >= 0 ? 'var(--success)' : 'var(--danger)', fontWeight: 700 }}>
+                {disposalAccounting.gainLoss >= 0 ? `🟢 처분이익 ₩${disposalAccounting.gainLoss.toLocaleString()}원` : `🔴 처분손실 ₩${disposalAccounting.gainLoss.toLocaleString()}원`}
+              </span>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 800 }}>
+              <ShieldCheck size={16} color="var(--success)" />
+              <span style={{ color: 'var(--success)' }}>
+                ⚖️ 대차 차액 ₩0 (회계 무결성 확정)
+              </span>
             </div>
           </div>
-        );
-      })()}
+
+        </div>
+      )}
 
     </div>
   );

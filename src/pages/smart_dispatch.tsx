@@ -351,7 +351,7 @@ export const SmartDispatch: React.FC = () => {
       // 4. 최근 계약(Contracts)의 영업담당자 상속
       if (!nextSalespersonName) {
         const lastContract = contracts
-          .filter(c => c.customerId === matchedCustomer.id)
+          .filter(c => c.customerId === matchedCustomer.id && (c.contractType || 'RENTAL') === 'RENTAL')
           .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''))[0];
         if (lastContract?.salespersonId) {
           const salesUser = users.find(u => u.id === lastContract.salespersonId);

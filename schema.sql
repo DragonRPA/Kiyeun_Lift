@@ -482,6 +482,7 @@ CREATE TABLE transport_drivers (
 CREATE TABLE contracts (
     id                    TEXT PRIMARY KEY,
     "contractNo"          TEXT NOT NULL UNIQUE,
+    "contractType"        TEXT CHECK ("contractType" IN ('RENTAL', 'SALE')) NOT NULL DEFAULT 'RENTAL',
     "customerId"          TEXT NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
     "salespersonId"       TEXT REFERENCES users(id) ON DELETE SET NULL,
     "contactId"           TEXT REFERENCES customer_contacts(id) ON DELETE SET NULL,
@@ -518,6 +519,7 @@ CREATE TABLE contract_assets (
     "expectedModel"       TEXT,
     "monthlyRentalFee"    DOUBLE PRECISION NOT NULL DEFAULT 0,
     "dailyRentalFee"      DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "salePrice"           DOUBLE PRECISION DEFAULT 0,
     "startDate"           TEXT NOT NULL,
     "endDate"             TEXT NOT NULL,
     status                TEXT DEFAULT 'ASSIGNED',
@@ -553,7 +555,7 @@ CREATE TABLE external_leases (
 CREATE TABLE contract_history (
     id                    TEXT PRIMARY KEY,
     "contractId"          TEXT NOT NULL REFERENCES contracts(id) ON DELETE CASCADE,
-    "changeType"          TEXT CHECK ("changeType" IN ('REGISTER', 'EXTEND', 'SHORTEN', 'SUCCEED', 'TERMINATE', 'EXCHANGE', 'FEE_CHANGE', 'AS_SERVICE')) NOT NULL,
+    "changeType"          TEXT CHECK ("changeType" IN ('REGISTER', 'EXTEND', 'SHORTEN', 'SUCCEED', 'TERMINATE', 'EXCHANGE', 'FEE_CHANGE', 'AS_SERVICE', 'BILLING_CREATED', 'BILLING_SENT', 'BILLING_CANCELLED', 'BILLING_REGENERATED', 'PAYMENT_RECEIVED', 'PAYMENT_CANCELLED', 'DOCUMENT_SENT', 'ASSET_SOLD')) NOT NULL,
     "prevEndDate"         TEXT,
     "newEndDate"          TEXT,
     description           TEXT,
@@ -881,6 +883,7 @@ CREATE TABLE inspection_checklist_items (
 -- 5-1. 매출 청구 마스터 (billings) - 고객 대상
 CREATE TABLE billings (
     id                    TEXT PRIMARY KEY,
+    "billingType"         TEXT CHECK ("billingType" IN ('RENTAL', 'REPAIR', 'TRANSPORT', 'ASSET_SALE')) NOT NULL DEFAULT 'RENTAL',
     "billingYm"           TEXT NOT NULL, -- YYYY-MM
     "customerId"          TEXT NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
     "contractId"          TEXT REFERENCES contracts(id) ON DELETE SET NULL,
