@@ -498,7 +498,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     'billing':              ['billings', 'billingDetails', 'payments', 'paymentDepositLinks', 'bankTransactions', 'contracts', 'customers'],
     'customer':             ['customers', 'contacts', 'sites'],
     'product':              ['products'],
-    'asset':                ['assets', 'products', 'vendors', 'contracts'],
+    'asset':                ['assets', 'products', 'vendors'],
     'acquisition_disposal': ['assets', 'products', 'vendors'],
     'rent_asset':           ['assets', 'vendors'],
     'consumable':           ['consumables', 'consumableLogs', 'consumablePurchases', 'vendors'],

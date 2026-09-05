@@ -2310,14 +2310,30 @@ export async function ingestDispatchData(
 
 /**
  * 💡 과거 소급 청구서 독립 선택 생성 및 적재 (기능 테스트 및 선택적 실행용)
+ * 🌟 [전사 표준 헌장 4.1 준수] 소급 청구 생성 시 자산별 누적렌탈료(cumRentalFee) 1원도 오차 없이 정밀 가산 및 기존 소급액 롤백
  */
 export async function generateAndIngestHistoricalBillingsDirect(
   contracts: any[],
   contractAssets: any[],
   customers: any[],
-  range: { start: string; end: string },
-  onProgress?: (step: number, total: number, message: string) => void
-): Promise<{ success: boolean; message: string; billingsCount: number; detailsCount: number; historiesCount: number; totalAmount: number }> {
+  arg4: any, // assets or range
+  arg5?: any, // range or onProgress
+  arg6?: any  // onProgress
+): Promise<{ success: boolean; message: string; billingsCount: number; detailsCount: number; historiesCount: number; totalAmount: number; assetsUpdatedCount?: number }> {
+  let assets: any[] = [];
+  let range: { start: string; end: string };
+  let onProgress: ((step: number, total: number, message: string) => void) | undefined;
+
+  if (Array.isArray(arg4)) {
+    assets = arg4;
+    range = arg5;
+    onProgress = arg6;
+  } else {
+    range = arg4;
+    onProgress = arg5;
+    assets = (db as any).assets || [];
+  }
+
   const nowIso = new Date().toISOString();
   const customerMap = new Map<string, any>();
   customers.forEach(c => customerMap.set(c.id, c));
@@ -2332,6 +2348,7 @@ export async function generateAndIngestHistoricalBillingsDirect(
   const billings: any[] = [];
   const billingDetails: any[] = [];
   const contractHistories: any[] = [];
+  const newAssetAdditions = new Map<string, number>(); // 🌟 자산별 신규 소급 렌탈료 집계 맵 (헌장 4.1)
   let bdSeq = 1;
   let totalSum = 0;
 
@@ -2396,6 +2413,12 @@ export async function generateAndIngestHistoricalBillingsDirect(
         if (itemAmount <= 0) continue;
 
         contractBillTotal += itemAmount;
+
+        // 🌟 자산별 소급 렌탈료 누적 합산 (헌장 4.1)
+        if (ca.assetId) {
+          newAssetAdditions.set(ca.assetId, (newAssetAdditions.get(ca.assetId) || 0) + itemAmount);
+        }
+
         tempDetails.push({
           id: `BD-HIST-${contract.id.replace(/[^a-zA-Z0-9]/g, '')}-${ymStr.replace('-', '')}-${String(bdSeq++).padStart(4, '0')}`,
           contractAssetId: ca.id,
@@ -2454,16 +2477,27 @@ export async function generateAndIngestHistoricalBillingsDirect(
     }
   }
 
-  onProgress?.(1, 4, '기존 소급 청구서 및 관련 이력 정돈 중...');
+  onProgress?.(1, 5, '기존 소급 청구서 및 관련 이력 정돈 중...');
+
+  const oldAssetDeductions = new Map<string, number>();
 
   try {
-    // 🧹 [클린업 단계] 기존 파편화 소급 청구서, 상세, 계약이력 완전 삭제
+    // 🧹 [클린업 단계] 기존 파편화 소급 청구서, 상세, 계약이력 완전 삭제 및 기존 자산 기여액 수집 (롤백용)
     if (supabase) {
+      // 기존 소급 청구서에 연결된 품목 금액 집계 (자산 cumRentalFee 차감 롤백용)
       const { data: oldHistBills } = await supabase.from('billings').select('id').like('id', 'BILL-HIST-%');
       if (oldHistBills && oldHistBills.length > 0) {
         const oldBillIds = oldHistBills.map(b => b.id);
         for (let i = 0; i < oldBillIds.length; i += 100) {
           const chunk = oldBillIds.slice(i, i + 100);
+          const { data: oldDetails } = await supabase.from('billing_details').select('asset_id, amount').in('billing_id', chunk);
+          if (oldDetails) {
+            oldDetails.forEach((d: any) => {
+              if (d.asset_id && d.amount) {
+                oldAssetDeductions.set(d.asset_id, (oldAssetDeductions.get(d.asset_id) || 0) + Number(d.amount));
+              }
+            });
+          }
           await supabase.from('billing_details').delete().in('billing_id', chunk);
         }
         for (let i = 0; i < oldBillIds.length; i += 100) {
@@ -2477,10 +2511,15 @@ export async function generateAndIngestHistoricalBillingsDirect(
       const dbAny = db as any;
       if (dbAny.billings) {
         const oldBillIds = new Set(dbAny.billings.filter((b: any) => b.id?.startsWith('BILL-HIST-')).map((b: any) => b.id));
-        dbAny.billings = dbAny.billings.filter((b: any) => !b.id?.startsWith('BILL-HIST-'));
         if (dbAny.billingDetails) {
+          dbAny.billingDetails.forEach((bd: any) => {
+            if (oldBillIds.has(bd.billingId) && bd.assetId && bd.amount) {
+              oldAssetDeductions.set(bd.assetId, (oldAssetDeductions.get(bd.assetId) || 0) + Number(bd.amount));
+            }
+          });
           dbAny.billingDetails = dbAny.billingDetails.filter((bd: any) => !oldBillIds.has(bd.billingId) && !bd.id?.startsWith('BD-HIST-'));
         }
+        dbAny.billings = dbAny.billings.filter((b: any) => !b.id?.startsWith('BILL-HIST-'));
       }
       if (dbAny.contractHistory) {
         dbAny.contractHistory = dbAny.contractHistory.filter((ch: any) => !ch.id?.startsWith('CH-HIST-') && ch.changeType !== 'BILLING_CREATED');
@@ -2488,14 +2527,64 @@ export async function generateAndIngestHistoricalBillingsDirect(
     }
 
     if (billings.length > 0) {
-      await batchUpsertChunked('billings', billings, 100, msg => onProgress?.(2, 4, msg));
+      await batchUpsertChunked('billings', billings, 100, msg => onProgress?.(2, 5, msg));
     }
     if (billingDetails.length > 0) {
-      await batchUpsertChunked('billing_details', billingDetails, 100, msg => onProgress?.(3, 4, msg));
+      await batchUpsertChunked('billing_details', billingDetails, 100, msg => onProgress?.(3, 5, msg));
     }
     if (contractHistories.length > 0) {
-      await batchUpsertChunked('contract_history', contractHistories, 100, msg => onProgress?.(4, 4, msg));
+      await batchUpsertChunked('contract_history', contractHistories, 100, msg => onProgress?.(4, 5, msg));
     }
+
+    // 🌟 [5단계: 자산 원장(assets.cumRentalFee) 재정산 및 영구 보존 (헌장 4.1)]
+    let updatedAssetCount = 0;
+    if (assets && assets.length > 0) {
+      onProgress?.(5, 5, '자산별 누적렌탈료(cumRentalFee) 정밀 재집계 및 동기화 중...');
+      const assetMap = new Map<string, any>();
+      assets.forEach(a => assetMap.set(a.id, { ...a }));
+
+      // 1) 기존 소급 청구액 차감 롤백
+      oldAssetDeductions.forEach((deductAmount, assetId) => {
+        const ast = assetMap.get(assetId);
+        if (ast) {
+          ast.cumRentalFee = Math.max(0, (ast.cumRentalFee || 0) - deductAmount);
+        }
+      });
+
+      // 2) 신규 소급 청구액 가산
+      newAssetAdditions.forEach((addAmount, assetId) => {
+        const ast = assetMap.get(assetId);
+        if (ast) {
+          ast.cumRentalFee = (ast.cumRentalFee || 0) + addAmount;
+        }
+      });
+
+      // 변경점이 있는 자산 추출
+      const changedAssets = Array.from(assetMap.values()).filter(a => {
+        const original = assets.find(orig => orig.id === a.id);
+        return original && original.cumRentalFee !== a.cumRentalFee;
+      });
+
+      if (changedAssets.length > 0) {
+        // Supabase 배치 upsert
+        await batchUpsertChunked('assets', changedAssets, 100, msg => onProgress?.(5, 5, msg));
+        // 로컬 DB 동기화
+        changedAssets.forEach(ca => {
+          db.updateRow('assets', ca.id, { cumRentalFee: ca.cumRentalFee });
+        });
+        updatedAssetCount = changedAssets.length;
+      }
+    }
+
+    return {
+      success: true,
+      message: `지정 기간(${range.start} ~ ${range.end}) 소급 청구서 ${billings.length.toLocaleString()}건(₩${totalSum.toLocaleString()}원), 청구상세 ${billingDetails.length.toLocaleString()}건, 계약이력 ${contractHistories.length.toLocaleString()}건 적재 및 자산 ${updatedAssetCount}대 누적렌탈료(cumRentalFee) 정밀 집계 완료`,
+      billingsCount: billings.length,
+      detailsCount: billingDetails.length,
+      historiesCount: contractHistories.length,
+      totalAmount: totalSum,
+      assetsUpdatedCount: updatedAssetCount
+    };
   } catch (e: any) {
     return {
       success: false,
@@ -2506,15 +2595,6 @@ export async function generateAndIngestHistoricalBillingsDirect(
       totalAmount: 0
     };
   }
-
-  return {
-    success: true,
-    message: `지정 기간(${range.start} ~ ${range.end}) 소급 청구서 ${billings.length.toLocaleString()}건(₩${totalSum.toLocaleString()}원), 청구상세 ${billingDetails.length.toLocaleString()}건, 계약이력 ${contractHistories.length.toLocaleString()}건 정규화 적재 완료`,
-    billingsCount: billings.length,
-    detailsCount: billingDetails.length,
-    historiesCount: contractHistories.length,
-    totalAmount: totalSum
-  };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

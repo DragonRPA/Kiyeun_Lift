@@ -25,8 +25,11 @@ import {
   PlusCircle,
   Check,
   Building2,
-  MapPin
+  MapPin,
+  Sparkles,
+  Loader2
 } from 'lucide-react';
+import { analyzeOdometerPhoto, analyzeFuelReceiptPhoto } from '../../services/visionOcrService';
 
 interface MobileVehicleLogProps {
   onBack?: () => void;
@@ -117,6 +120,103 @@ export const MobileVehicleLog: React.FC<MobileVehicleLogProps> = ({ onBack }) =>
   const [startDashboardPhotos, setStartDashboardPhotos] = useState<string[]>([]);
   const [endDashboardPhotos, setEndDashboardPhotos] = useState<string[]>([]);
   const [isSubmittingOp, setIsSubmittingOp] = useState<boolean>(false);
+
+  // ─────────────────────────────────────────────────────────────
+  // Vision AI 자동 인식 상태 관리
+  // ─────────────────────────────────────────────────────────────
+  const [isAnalyzingFuelReceipt, setIsAnalyzingFuelReceipt] = useState(false);
+  const [isAnalyzingFuelOdo, setIsAnalyzingFuelOdo] = useState(false);
+  const [isAnalyzingStartOdo, setIsAnalyzingStartOdo] = useState(false);
+  const [isAnalyzingEndOdo, setIsAnalyzingEndOdo] = useState(false);
+
+  const [fuelOdoAiBadge, setFuelOdoAiBadge] = useState<string | null>(null);
+  const [fuelReceiptAiBadge, setFuelReceiptAiBadge] = useState<string | null>(null);
+  const [startOdoAiBadge, setStartOdoAiBadge] = useState<string | null>(null);
+  const [endOdoAiBadge, setEndOdoAiBadge] = useState<string | null>(null);
+
+  // 1-1. 주유 시 계기판 사진 업로드 시 AI 자동인식
+  const handleFuelDashboardPhotosChange = async (photos: string[]) => {
+    setDashboardPhotos(photos);
+    if (photos.length > 0 && photos[0] && !isAnalyzingFuelOdo) {
+      setIsAnalyzingFuelOdo(true);
+      const selectedVeh = corporateVehicles.find(v => v.id === fuelVehicleId);
+      const res = await analyzeOdometerPhoto(photos[0], {
+        vehicleNo: selectedVeh?.vehicleNo,
+        modelName: selectedVeh?.modelName,
+        currentMileage: selectedVeh?.currentMileage
+      });
+      setIsAnalyzingFuelOdo(false);
+      if (res.success && res.mileage) {
+        setFuelMileageStr(String(res.mileage));
+        setFuelOdoAiBadge(`⚡ AI 계기판 인식: ${res.mileage.toLocaleString()} km`);
+        setTimeout(() => setFuelOdoAiBadge(null), 6000);
+      }
+    }
+  };
+
+  // 1-2. 주유 영수증 사진 업로드 시 AI 자동인식
+  const handleReceiptPhotosChange = async (photos: string[]) => {
+    setReceiptPhotos(photos);
+    if (photos.length > 0 && photos[0] && !isAnalyzingFuelReceipt) {
+      setIsAnalyzingFuelReceipt(true);
+      const selectedVeh = corporateVehicles.find(v => v.id === fuelVehicleId);
+      const res = await analyzeFuelReceiptPhoto(photos[0], {
+        vehicleNo: selectedVeh?.vehicleNo,
+        fuelType
+      });
+      setIsAnalyzingFuelReceipt(false);
+      if (res.success) {
+        if (res.fuelAmount) setFuelAmountStr(String(res.fuelAmount));
+        if (res.fuelVolume) setFuelVolumeStr(String(res.fuelVolume));
+        if (res.gasStationName) setGasStationName(res.gasStationName);
+        if (res.fuelType) setFuelType(res.fuelType);
+        if (res.paymentMethod) setPaymentMethod(res.paymentMethod);
+        if (res.fuelDate) setFuelDate(res.fuelDate);
+        setFuelReceiptAiBadge(`⚡ AI 영수증 인식 완료 (${res.gasStationName || '주유소'}, ₩${res.fuelAmount?.toLocaleString() || ''})`);
+        setTimeout(() => setFuelReceiptAiBadge(null), 6000);
+      }
+    }
+  };
+
+  // 2-1. 운행일지 출발 계기판 사진 업로드 시 AI 자동인식
+  const handleStartDashboardPhotosChange = async (photos: string[]) => {
+    setStartDashboardPhotos(photos);
+    if (photos.length > 0 && photos[0] && !isAnalyzingStartOdo) {
+      setIsAnalyzingStartOdo(true);
+      const selectedVeh = corporateVehicles.find(v => v.id === opVehicleId);
+      const res = await analyzeOdometerPhoto(photos[0], {
+        vehicleNo: selectedVeh?.vehicleNo,
+        modelName: selectedVeh?.modelName,
+        currentMileage: selectedVeh?.currentMileage
+      });
+      setIsAnalyzingStartOdo(false);
+      if (res.success && res.mileage) {
+        setStartMileageStr(String(res.mileage));
+        setStartOdoAiBadge(`⚡ AI 출발 계기판 인식: ${res.mileage.toLocaleString()} km`);
+        setTimeout(() => setStartOdoAiBadge(null), 6000);
+      }
+    }
+  };
+
+  // 2-2. 운행일지 도착 계기판 사진 업로드 시 AI 자동인식
+  const handleEndDashboardPhotosChange = async (photos: string[]) => {
+    setEndDashboardPhotos(photos);
+    if (photos.length > 0 && photos[0] && !isAnalyzingEndOdo) {
+      setIsAnalyzingEndOdo(true);
+      const selectedVeh = corporateVehicles.find(v => v.id === opVehicleId);
+      const res = await analyzeOdometerPhoto(photos[0], {
+        vehicleNo: selectedVeh?.vehicleNo,
+        modelName: selectedVeh?.modelName,
+        currentMileage: Number(startMileageStr) || selectedVeh?.currentMileage
+      });
+      setIsAnalyzingEndOdo(false);
+      if (res.success && res.mileage) {
+        setEndMileageStr(String(res.mileage));
+        setEndOdoAiBadge(`⚡ AI 도착 계기판 인식: ${res.mileage.toLocaleString()} km`);
+        setTimeout(() => setEndOdoAiBadge(null), 6000);
+      }
+    }
+  };
 
   // 운행일지 차량 변경 시 출발거리 자동 입력
   useEffect(() => {
@@ -427,7 +527,19 @@ export const MobileVehicleLog: React.FC<MobileVehicleLogProps> = ({ onBack }) =>
           <div className="flex flex-col gap-1">
             <label className="text-xs font-bold text-slate-300 flex items-center justify-between">
               <span>계기판 주행거리 (km) *</span>
-              <span className="text-[11px] text-amber-400 font-normal">현재 계기판 숫자 기입</span>
+              {isAnalyzingFuelOdo ? (
+                <span className="text-[11px] text-amber-400 flex items-center gap-1">
+                  <Loader2 size={12} className="animate-spin" />
+                  <span>AI 계기판 판독 중...</span>
+                </span>
+              ) : fuelOdoAiBadge ? (
+                <span className="text-[11px] text-emerald-400 font-bold flex items-center gap-1">
+                  <Sparkles size={12} />
+                  <span>{fuelOdoAiBadge}</span>
+                </span>
+              ) : (
+                <span className="text-[11px] text-amber-400 font-normal">현재 계기판 숫자 기입</span>
+              )}
             </label>
             <input
               type="number"
@@ -441,9 +553,9 @@ export const MobileVehicleLog: React.FC<MobileVehicleLogProps> = ({ onBack }) =>
 
           {/* 계기판 사진 촬영 (카메라/갤러리) */}
           <CameraUploader
-            label="계기판 사진 (주유 시점)"
+            label="계기판 사진 (주유 시점 - 촬영 시 자동 판독)"
             images={dashboardPhotos}
-            onChange={setDashboardPhotos}
+            onChange={handleFuelDashboardPhotosChange}
             maxImages={1}
           />
 
@@ -475,14 +587,26 @@ export const MobileVehicleLog: React.FC<MobileVehicleLogProps> = ({ onBack }) =>
           </div>
 
           {/* 주유 영수증 사진 촬영 (필수) */}
-          <div className="p-3 bg-slate-950/60 rounded-xl border border-amber-500/30">
+          <div className="p-3 bg-slate-950/60 rounded-xl border border-amber-500/30 flex flex-col gap-2">
             <CameraUploader
-              label="주유 영수증 사진 (국세청 필수 증빙)"
+              label="주유 영수증 사진 (국세청 필수 증빙 - 촬영 시 7대 항목 자동 채움)"
               images={receiptPhotos}
-              onChange={setReceiptPhotos}
+              onChange={handleReceiptPhotosChange}
               maxImages={1}
               required
             />
+            {isAnalyzingFuelReceipt && (
+              <div className="p-2 bg-amber-500/10 border border-amber-500/20 rounded-lg flex items-center gap-2 text-xs text-amber-300 animate-pulse">
+                <Loader2 size={14} className="animate-spin" />
+                <span>AI가 주유 영수증 7대 항목(상호, 금액, 유종 등)을 자동 판독하고 있습니다...</span>
+              </div>
+            )}
+            {fuelReceiptAiBadge && (
+              <div className="p-2 bg-emerald-500/10 border border-emerald-500/30 rounded-lg flex items-center gap-2 text-xs text-emerald-300 font-bold">
+                <Sparkles size={14} />
+                <span>{fuelReceiptAiBadge}</span>
+              </div>
+            )}
           </div>
 
           {/* 주유소 상호 & 결제방식 */}
@@ -625,7 +749,20 @@ export const MobileVehicleLog: React.FC<MobileVehicleLogProps> = ({ onBack }) =>
           {/* 출발 계기판 & 도착 계기판 (km) */}
           <div className="grid grid-cols-2 gap-2.5">
             <div className="flex flex-col gap-1">
-              <label className="text-xs font-bold text-slate-300">출발 시 계기판(km) *</label>
+              <label className="text-xs font-bold text-slate-300 flex items-center justify-between">
+                <span>출발 시 계기판(km) *</span>
+                {isAnalyzingStartOdo ? (
+                  <span className="text-[10px] text-blue-400 flex items-center gap-1">
+                    <Loader2 size={11} className="animate-spin" />
+                    <span>판독 중...</span>
+                  </span>
+                ) : startOdoAiBadge ? (
+                  <span className="text-[10px] text-emerald-400 font-bold flex items-center gap-1">
+                    <Sparkles size={11} />
+                    <span>AI완료</span>
+                  </span>
+                ) : null}
+              </label>
               <input
                 type="number"
                 placeholder="예: 28350"
@@ -636,7 +773,20 @@ export const MobileVehicleLog: React.FC<MobileVehicleLogProps> = ({ onBack }) =>
               />
             </div>
             <div className="flex flex-col gap-1">
-              <label className="text-xs font-bold text-slate-300">도착 시 계기판(km) *</label>
+              <label className="text-xs font-bold text-slate-300 flex items-center justify-between">
+                <span>도착 시 계기판(km) *</span>
+                {isAnalyzingEndOdo ? (
+                  <span className="text-[10px] text-blue-400 flex items-center gap-1">
+                    <Loader2 size={11} className="animate-spin" />
+                    <span>판독 중...</span>
+                  </span>
+                ) : endOdoAiBadge ? (
+                  <span className="text-[10px] text-emerald-400 font-bold flex items-center gap-1">
+                    <Sparkles size={11} />
+                    <span>AI완료</span>
+                  </span>
+                ) : null}
+              </label>
               <input
                 type="number"
                 placeholder="예: 28450"
@@ -656,20 +806,34 @@ export const MobileVehicleLog: React.FC<MobileVehicleLogProps> = ({ onBack }) =>
             </span>
           </div>
 
-          {/* 출발 & 도착 계기판 사진 촬영 (선택) */}
-          <div className="grid grid-cols-2 gap-2.5">
-            <CameraUploader
-              label="출발 계기판 사진"
-              images={startDashboardPhotos}
-              onChange={setStartDashboardPhotos}
-              maxImages={1}
-            />
-            <CameraUploader
-              label="도착 계기판 사진"
-              images={endDashboardPhotos}
-              onChange={setEndDashboardPhotos}
-              maxImages={1}
-            />
+          {/* 출발 & 도착 계기판 사진 촬영 (선택 - 촬영 시 자동 판독) */}
+          <div className="flex flex-col gap-2">
+            <div className="grid grid-cols-2 gap-2.5">
+              <CameraUploader
+                label="출발 계기판 (촬영 시 자동판독)"
+                images={startDashboardPhotos}
+                onChange={handleStartDashboardPhotosChange}
+                maxImages={1}
+              />
+              <CameraUploader
+                label="도착 계기판 (촬영 시 자동판독)"
+                images={endDashboardPhotos}
+                onChange={handleEndDashboardPhotosChange}
+                maxImages={1}
+              />
+            </div>
+            {(isAnalyzingStartOdo || isAnalyzingEndOdo) && (
+              <div className="p-2 bg-blue-500/10 border border-blue-500/20 rounded-lg flex items-center gap-2 text-xs text-blue-300 animate-pulse">
+                <Loader2 size={14} className="animate-spin" />
+                <span>{isAnalyzingStartOdo ? '출발 계기판 ODO 주행거리를 분석하고 있습니다...' : '도착 계기판 ODO 주행거리를 분석하고 있습니다...'}</span>
+              </div>
+            )}
+            {(startOdoAiBadge || endOdoAiBadge) && (
+              <div className="p-2 bg-emerald-500/10 border border-emerald-500/30 rounded-lg flex items-center gap-2 text-xs text-emerald-300 font-bold">
+                <Sparkles size={14} />
+                <span>{startOdoAiBadge || endOdoAiBadge}</span>
+              </div>
+            )}
           </div>
 
           {/* 메모 */}

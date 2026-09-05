@@ -41,59 +41,73 @@ export const Assets: React.FC = () => {
   const [editForm, setEditForm] = useState<Partial<Asset>>({});
   const [showHistoryToggle, setShowHistoryToggle] = useState(false);
 
-  // 헬퍼: 외부 임차(전대) 자산 소유 원사명 (외부임차자산 전용)
+  // ── 🌟 [초고속 O(1) 룩업 인덱싱 해시맵: 헌장 1.1] ──
+  const customerMap = useMemo(() => new Map((customers || []).map(c => [c.id, c.name])), [customers]);
+  const siteMap = useMemo(() => new Map((sites || []).map(s => [s.id, s.name])), [sites]);
+  const vendorMap = useMemo(() => new Map((vendors || []).map(v => [v.id, v.name])), [vendors]);
+  const productFeetMap = useMemo(() => {
+    const map = new Map<string, string>();
+    (products || []).forEach(p => {
+      if (p.modelName) map.set(p.modelName, p.feet ? `${p.feet} ft` : '');
+    });
+    return map;
+  }, [products]);
+
+  // 계약번호 O(1) 사전 인덱싱 (기존 380만 번 반복 순회 제거)
+  const contractMap = useMemo(() => {
+    const map = new Map<string, { contractNo: string; contractId: string }>();
+    if (!contractAssets || !contracts) return map;
+    const contractsById = new Map<string, any>((contracts || []).map(c => [c.id, c]));
+    for (const ca of contractAssets) {
+      if (!ca.assetId) continue;
+      const c = contractsById.get(ca.contractId);
+      if (c) {
+        if (c.status === 'ACTIVE' || !map.has(ca.assetId)) {
+          map.set(ca.assetId, { contractNo: c.contractNo, contractId: c.id });
+        }
+      }
+    }
+    return map;
+  }, [contractAssets, contracts]);
+
+  // 헬퍼: 외부 임차(전대) 자산 소유 원사명 (O(1) 즉각 조회)
   const getAssetRenterName = (a: Asset): string => {
-    if (a.ownerType !== 'RENTED') return '-'; // 당사자산은 소유원사가 존재하지 않음
+    if (a.ownerType !== 'RENTED') return '-';
     if (a.renter) return a.renter;
-    if (a.vendorId) {
-      const v = vendors.find(item => item.id === a.vendorId);
-      if (v?.name) return v.name;
-    }
+    if (a.vendorId) return vendorMap.get(a.vendorId) || '-';
     return '-';
   };
 
-  // 헬퍼: 당사자산 구입처(공급처) 명칭 (당사자산 전용)
+  // 헬퍼: 당사자산 구입처(공급처) 명칭 (O(1) 즉각 조회)
   const getAssetSupplierName = (a: Asset): string => {
-    if (a.ownerType !== 'OWNED') return '-'; // 외부임차자산은 구입처가 없음
+    if (a.ownerType !== 'OWNED') return '-';
     if (a.supplier) return a.supplier;
-    if (a.vendorId) {
-      const v = vendors.find(item => item.id === a.vendorId);
-      if (v?.name) return v.name;
-    }
+    if (a.vendorId) return vendorMap.get(a.vendorId) || '-';
     return '-';
   };
 
-  // 헬퍼: 모델별 규격(피트) 조회
+  // 헬퍼: 모델별 규격(피트) 조회 (O(1) 즉각 조회)
   const getAssetFeet = (a: Asset): string => {
-    const prod = products.find(p => p.modelName === a.modelName);
-    if (prod?.feet) return `${prod.feet} ft`;
+    const feet = productFeetMap.get(a.modelName);
+    if (feet) return feet;
     const m = a.modelName.match(/(\d{2})/);
     return m ? `${m[1]} ft` : '-';
   };
 
   const getCustomerName = (id?: string) => {
     if (!id) return '-';
-    return customers.find(c => c.id === id)?.name || '-';
+    return customerMap.get(id) || '-';
   };
 
   const getSiteName = (id?: string) => {
     if (!id) return '-';
-    return sites.find(s => s.id === id)?.name || '-';
+    return siteMap.get(id) || '-';
   };
 
-  // 활성 계약 정보 역방향 룩업
+  // 활성 계약 정보 O(1) 룩업
   const getAssetContractInfo = (assetId?: string): { contractNo: string; contractId: string } | null => {
-    if (!assetId || !contractAssets || !contracts) return null;
-    const linkedCAs = contractAssets.filter(ca => ca.assetId === assetId);
-    if (linkedCAs.length === 0) return null;
-    for (const ca of linkedCAs) {
-      const contract = contracts.find(c => c.id === ca.contractId && c.status === 'ACTIVE');
-      if (contract) return { contractNo: contract.contractNo, contractId: contract.id };
-    }
-    const latestCA = linkedCAs[linkedCAs.length - 1];
-    const contract = contracts.find(c => c.id === latestCA.contractId);
-    if (contract) return { contractNo: contract.contractNo, contractId: contract.id };
-    return null;
+    if (!assetId) return null;
+    return contractMap.get(assetId) || null;
   };
 
   // 고유 제조사 목록
@@ -187,8 +201,8 @@ export const Assets: React.FC = () => {
 
     const totalBookValue = assets.reduce((sum, a) => {
       if (a.ownerType === 'OWNED') {
-        const depn = calculateAssetDepreciation(a);
-        return sum + (depn.bookValue || a.bookValue || a.acquisitionPrice || 0);
+        const bv = a.bookValue ?? Math.max(0, (a.acquisitionPrice || 0) - (a.accumDepreciation || 0));
+        return sum + (bv > 0 ? bv : 0);
       }
       return sum;
     }, 0);
@@ -207,8 +221,12 @@ export const Assets: React.FC = () => {
     };
   }, [assets]);
 
+  // 🌟 [초고속 렌더링 청크 윈도우: 헌장 1.1] 초기 50건 우선 렌더링으로 10만 개 DOM 프리징 원천 방어
+  const [visibleCount, setVisibleCount] = useState(50);
+
   // 실시간 반응형 필터링 및 정렬
   const filtered = useMemo(() => {
+    setVisibleCount(50); // 필터 변경 시 50건으로 리셋
     return assets.filter(a => {
       const renterName = getAssetRenterName(a);
       const supplierName = getAssetSupplierName(a);
@@ -242,6 +260,20 @@ export const Assets: React.FC = () => {
       return sortDirection === 'asc' ? cmp : -cmp;
     });
   }, [assets, searchTerm, statusFilter, ownerFilter, manufacturerFilter, customerFilter, sortField, sortDirection]);
+
+  // 현재 뷰포트에 렌더링할 청크 데이터 (초기 50건 -> 스크롤 시 자동 확장)
+  const visibleAssets = useMemo(() => {
+    return filtered.slice(0, visibleCount);
+  }, [filtered, visibleCount]);
+
+  const handleTableScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const target = e.currentTarget;
+    if (target.scrollTop + target.clientHeight >= target.scrollHeight - 200) {
+      if (visibleCount < filtered.length) {
+        setVisibleCount(prev => Math.min(prev + 50, filtered.length));
+      }
+    }
+  };
 
   const handleSort = (field: AssetSortField) => {
     if (sortField === field) {
@@ -299,7 +331,8 @@ export const Assets: React.FC = () => {
       const ci = getAssetContractInfo(a.id);
       const isReturned = Boolean(a.actualRentReturnDate) || a.status === 'RENTED_RETURNED';
       const netProfit = (a.cumRentalFee || 0) - (a.cumRepairCost || 0);
-      const depn = calculateAssetDepreciation(a);
+      const accumDepn = a.ownerType === 'OWNED' ? (a.accumDepreciation || 0) : 0;
+      const bookVal = a.ownerType === 'OWNED' ? (a.bookValue ?? Math.max(0, (a.acquisitionPrice || 0) - accumDepn)) : 0;
       return {
         'No': idx + 1,
         '관리번호': a.assetNo || '-',
@@ -320,8 +353,8 @@ export const Assets: React.FC = () => {
         '구입/공급처': getAssetSupplierName(a),
         '취득일자': a.acquisitionDate ? a.acquisitionDate.slice(0, 10) : (a.rentStart ? a.rentStart.slice(0, 10) : '-'),
         '취득원가(원)': a.acquisitionPrice || 0,
-        '감가상각누계액(원)': a.ownerType === 'OWNED' ? depn.accumDepreciation : 0,
-        '장부가치(원)': a.ownerType === 'OWNED' ? depn.bookValue : 0,
+        '감가상각누계액(원)': accumDepn,
+        '장부가치(원)': bookVal,
         '누적렌탈수익(원)': a.cumRentalFee || 0,
         '누적수리비(원)': a.cumRepairCost || 0,
         '기여순익(원)': netProfit,
@@ -569,6 +602,7 @@ export const Assets: React.FC = () => {
       }}>
         <div
           className="table-wrapper"
+          onScroll={handleTableScroll}
           style={{
             flex: 1,
             minHeight: 0,
@@ -656,7 +690,7 @@ export const Assets: React.FC = () => {
                   </td>
                 </tr>
               ) : (
-                filtered.map(a => {
+                visibleAssets.map(a => {
                   const ci = getAssetContractInfo(a.id);
                   const isReturned = Boolean(a.actualRentReturnDate) || a.status === 'RENTED_RETURNED';
                   const renterName = getAssetRenterName(a);
@@ -664,7 +698,8 @@ export const Assets: React.FC = () => {
                   const custName = getCustomerName(a.currentCustomerId);
                   const siteName = getSiteName(a.currentSiteId);
                   const netProfit = (a.cumRentalFee || 0) - (a.cumRepairCost || 0);
-                  const depn = calculateAssetDepreciation(a);
+                  const accumDepn = a.ownerType === 'OWNED' ? (a.accumDepreciation || 0) : 0;
+                  const bookVal = a.ownerType === 'OWNED' ? (a.bookValue ?? Math.max(0, (a.acquisitionPrice || 0) - accumDepn)) : 0;
 
                   return (
                     <tr
@@ -805,14 +840,14 @@ export const Assets: React.FC = () => {
                       {/* 20. 감가누계액 */}
                       <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 600, whiteSpace: 'nowrap' }}>
                         {a.ownerType === 'OWNED'
-                          ? <span style={{ color: 'var(--danger)' }}>₩{depn.accumDepreciation.toLocaleString()}</span>
+                          ? <span style={{ color: 'var(--danger)' }}>₩{accumDepn.toLocaleString()}</span>
                           : <span style={{ color: 'var(--text-muted)' }}>-</span>}
                       </td>
 
                       {/* 21. 장부가치 */}
                       <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 600, whiteSpace: 'nowrap' }}>
                         {a.ownerType === 'OWNED'
-                          ? <span style={{ color: 'var(--success)' }}>₩{depn.bookValue.toLocaleString()}</span>
+                          ? <span style={{ color: 'var(--success)' }}>₩{bookVal.toLocaleString()}</span>
                           : <span style={{ color: 'var(--text-muted)' }}>-</span>}
                       </td>
 
@@ -845,6 +880,33 @@ export const Assets: React.FC = () => {
                     </tr>
                   );
                 })
+              )}
+
+              {/* 🌟 [청크 로딩 안내 & 전체 확장 행: 헌장 1.1] */}
+              {visibleCount < filtered.length && (
+                <tr style={{ backgroundColor: 'var(--bg-app)', borderTop: '2px dashed var(--border-color)' }}>
+                  <td colSpan={26} style={{ padding: '10px 16px', textAlign: 'center' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px' }}>
+                      <span style={{ fontSize: '11.5px', color: 'var(--text-muted)' }}>
+                        현재 <strong>{visibleAssets.length}</strong>대 표시 중 (전체 {filtered.length}대 중 잔여 {filtered.length - visibleAssets.length}대)
+                      </span>
+                      <button
+                        onClick={() => setVisibleCount(prev => Math.min(prev + 100, filtered.length))}
+                        className="btn-secondary"
+                        style={{ padding: '3px 10px', fontSize: '11px', cursor: 'pointer' }}
+                      >
+                        +100대 더 보기
+                      </button>
+                      <button
+                        onClick={() => setVisibleCount(filtered.length)}
+                        className="btn-primary"
+                        style={{ padding: '3px 12px', fontSize: '11px', cursor: 'pointer', fontWeight: 600 }}
+                      >
+                        전체 {filtered.length}대 한 번에 펼치기
+                      </button>
+                    </div>
+                  </td>
+                </tr>
               )}
             </tbody>
           </table>

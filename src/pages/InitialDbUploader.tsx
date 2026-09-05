@@ -279,6 +279,7 @@ export const InitialDbUploader: React.FC = () => {
         contracts,
         contractAssets || [],
         customers || [],
+        assets || [],
         { start: histBillingStart, end: histBillingEnd },
         (_step, _total, msg) => {
           setHistBillingProgressMsg(msg);

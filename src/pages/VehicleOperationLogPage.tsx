@@ -40,12 +40,12 @@ import * as XLSX from 'xlsx';
 type PageTab = 'OPERATION_LOG' | 'FUEL_LOG' | 'FLEET_MASTER';
 
 const PURPOSE_MAP: Record<OperationPurposeType, { label: string; bg: string; text: string }> = {
-  BUSINESS_GENERAL:   { label: '일반업무', bg: '#e0f2fe', text: '#0369a1' },
-  SITE_AS:            { label: '현장AS',   bg: '#fef3c7', text: '#b45309' },
-  CLIENT_MEETING:     { label: '고객미팅', bg: '#dcfce7', text: '#15803d' },
-  COMMUTE:            { label: '출퇴근',   bg: '#f3e8ff', text: '#7e22ce' },
-  LOGISTICS_DELIVERY: { label: '탁송배차', bg: '#ffedd5', text: '#c2410c' },
-  OTHER:              { label: '기타',     bg: '#f1f5f9', text: '#475569' }
+  BUSINESS_GENERAL:   { label: '일반업무', bg: 'rgba(2, 132, 199, 0.15)', text: '#0284c7' },
+  SITE_AS:            { label: '현장AS',   bg: 'rgba(234, 88, 12, 0.15)', text: '#ea580c' },
+  CLIENT_MEETING:     { label: '고객미팅', bg: 'rgba(16, 185, 129, 0.15)', text: '#10b981' },
+  COMMUTE:            { label: '출퇴근',   bg: 'rgba(168, 85, 247, 0.15)', text: '#a855f7' },
+  LOGISTICS_DELIVERY: { label: '탁송배차', bg: 'rgba(249, 115, 22, 0.15)', text: '#f97316' },
+  OTHER:              { label: '기타',     bg: 'rgba(148, 163, 184, 0.15)', text: 'var(--text-secondary)' }
 };
 
 export const VehicleOperationLogPage: React.FC = () => {
@@ -361,45 +361,57 @@ export const VehicleOperationLogPage: React.FC = () => {
   };
 
   return (
-    <div style={{ padding: '20px', maxWidth: '1600px', margin: '0 auto', color: '#1e293b' }}>
-      {/* ── 1. 페이지 헤더 ── */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <div style={{ padding: '8px', backgroundColor: '#0284c7', borderRadius: '8px', color: '#fff', display: 'flex' }}>
-              <Car size={22} />
-            </div>
-            <div>
-              <h1 style={{ fontSize: '20px', fontWeight: '800', margin: 0, color: '#0f172a' }}>
-                법인 차량운행일지 총괄 관리
-              </h1>
-              <p style={{ fontSize: '12px', color: '#64748b', margin: '2px 0 0 0' }}>
-                관리부 전사 법인 차량 운행기록, 주유 영수증 감사 대사 및 국세청 법정 운행기록부(별지 제29호의2 서식) 서식 관리
-              </p>
-            </div>
+    <div style={{
+      display: 'flex',
+      flexDirection: 'column',
+      height: 'calc(100dvh - 85px)',
+      maxHeight: 'calc(100dvh - 85px)',
+      minHeight: 0,
+      overflow: 'hidden',
+      gap: '8px',
+      width: '100%',
+      color: 'var(--text-main)',
+      boxSizing: 'border-box'
+    }}>
+      {/* ── 1. 페이지 헤더 (헌장 3.1 무수식어 건조 명사 UI) ── */}
+      <div style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingBottom: '4px',
+        borderBottom: '1px solid var(--border-color)',
+        flexShrink: 0
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div style={{ padding: '6px', backgroundColor: 'var(--primary)', borderRadius: '6px', color: '#fff', display: 'flex' }}>
+            <Car size={18} />
           </div>
+          <h2 style={{ fontSize: '17px', fontWeight: '700', margin: 0, color: 'var(--text-main)', whiteSpace: 'nowrap' }}>
+            법인 차량운행일지
+          </h2>
         </div>
 
         {/* 상단 퀵 액션 버튼군 */}
-        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
           {activeTab === 'OPERATION_LOG' && (
             <button
               onClick={handleExportNtsExcel}
               style={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: '6px',
-                backgroundColor: '#059669',
+                gap: '5px',
+                backgroundColor: 'var(--success)',
                 color: '#fff',
                 border: 'none',
-                padding: '8px 14px',
-                borderRadius: '6px',
-                fontSize: '13px',
-                fontWeight: '700',
-                cursor: 'pointer'
+                padding: '6px 12px',
+                borderRadius: '5px',
+                fontSize: '12px',
+                fontWeight: '600',
+                cursor: 'pointer',
+                whiteSpace: 'nowrap'
               }}
             >
-              <Download size={15} />
+              <Download size={13} />
               <span>국세청 법정 서식 엑셀 다운로드</span>
             </button>
           )}
@@ -410,18 +422,19 @@ export const VehicleOperationLogPage: React.FC = () => {
               style={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: '6px',
-                backgroundColor: '#2563eb',
+                gap: '5px',
+                backgroundColor: 'var(--primary)',
                 color: '#fff',
                 border: 'none',
-                padding: '8px 14px',
-                borderRadius: '6px',
-                fontSize: '13px',
-                fontWeight: '700',
-                cursor: 'pointer'
+                padding: '6px 12px',
+                borderRadius: '5px',
+                fontSize: '12px',
+                fontWeight: '600',
+                cursor: 'pointer',
+                whiteSpace: 'nowrap'
               }}
             >
-              <Download size={15} />
+              <Download size={13} />
               <span>주유 영수증 대장 엑셀 다운로드</span>
             </button>
           )}
@@ -451,18 +464,19 @@ export const VehicleOperationLogPage: React.FC = () => {
               style={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: '6px',
-                backgroundColor: '#0284c7',
+                gap: '5px',
+                backgroundColor: 'var(--primary)',
                 color: '#fff',
                 border: 'none',
-                padding: '8px 14px',
-                borderRadius: '6px',
-                fontSize: '13px',
-                fontWeight: '700',
-                cursor: 'pointer'
+                padding: '6px 12px',
+                borderRadius: '5px',
+                fontSize: '12px',
+                fontWeight: '600',
+                cursor: 'pointer',
+                whiteSpace: 'nowrap'
               }}
             >
-              <Plus size={15} />
+              <Plus size={13} />
               <span>법인 차량 신규 등록</span>
             </button>
           )}
@@ -470,19 +484,19 @@ export const VehicleOperationLogPage: React.FC = () => {
       </div>
 
       {/* ── 2. 메인 3대 탭 바 ── */}
-      <div style={{ display: 'flex', borderBottom: '2px solid #e2e8f0', marginBottom: '16px', gap: '8px' }}>
+      <div style={{ display: 'flex', borderBottom: '1px solid var(--border-color)', gap: '4px', flexShrink: 0 }}>
         <button
           onClick={() => setActiveTab('OPERATION_LOG')}
           style={{
             display: 'flex',
             alignItems: 'center',
             gap: '8px',
-            padding: '10px 18px',
-            fontSize: '14px',
+            padding: '8px 16px',
+            fontSize: '13px',
             fontWeight: activeTab === 'OPERATION_LOG' ? '800' : '600',
-            color: activeTab === 'OPERATION_LOG' ? '#0284c7' : '#64748b',
-            borderBottom: activeTab === 'OPERATION_LOG' ? '3px solid #0284c7' : '3px solid transparent',
-            marginBottom: '-2px',
+            color: activeTab === 'OPERATION_LOG' ? 'var(--primary)' : 'var(--text-secondary)',
+            borderBottom: activeTab === 'OPERATION_LOG' ? '3px solid var(--primary)' : '3px solid transparent',
+            marginBottom: '-1px',
             backgroundColor: 'transparent',
             borderTop: 'none',
             borderLeft: 'none',
@@ -490,9 +504,9 @@ export const VehicleOperationLogPage: React.FC = () => {
             cursor: 'pointer'
           }}
         >
-          <FileText size={16} />
+          <FileText size={15} />
           <span>운행일지 대장</span>
-          <span style={{ fontSize: '11px', backgroundColor: '#e0f2fe', color: '#0369a1', padding: '2px 6px', borderRadius: '10px', fontWeight: '700' }}>
+          <span style={{ fontSize: '11px', backgroundColor: 'rgba(2,132,199,0.15)', color: 'var(--primary)', padding: '1px 6px', borderRadius: '10px', fontWeight: '700' }}>
             {vehicleOperationLogs.length}
           </span>
         </button>
@@ -503,12 +517,12 @@ export const VehicleOperationLogPage: React.FC = () => {
             display: 'flex',
             alignItems: 'center',
             gap: '8px',
-            padding: '10px 18px',
-            fontSize: '14px',
+            padding: '8px 16px',
+            fontSize: '13px',
             fontWeight: activeTab === 'FUEL_LOG' ? '800' : '600',
-            color: activeTab === 'FUEL_LOG' ? '#0284c7' : '#64748b',
-            borderBottom: activeTab === 'FUEL_LOG' ? '3px solid #0284c7' : '3px solid transparent',
-            marginBottom: '-2px',
+            color: activeTab === 'FUEL_LOG' ? 'var(--primary)' : 'var(--text-secondary)',
+            borderBottom: activeTab === 'FUEL_LOG' ? '3px solid var(--primary)' : '3px solid transparent',
+            marginBottom: '-1px',
             backgroundColor: 'transparent',
             borderTop: 'none',
             borderLeft: 'none',
@@ -516,9 +530,9 @@ export const VehicleOperationLogPage: React.FC = () => {
             cursor: 'pointer'
           }}
         >
-          <Fuel size={16} />
+          <Fuel size={15} />
           <span>주유 영수증 대장</span>
-          <span style={{ fontSize: '11px', backgroundColor: '#fef3c7', color: '#b45309', padding: '2px 6px', borderRadius: '10px', fontWeight: '700' }}>
+          <span style={{ fontSize: '11px', backgroundColor: 'rgba(234,88,12,0.15)', color: '#ea580c', padding: '1px 6px', borderRadius: '10px', fontWeight: '700' }}>
             {vehicleFuelLogs.length}
           </span>
         </button>
@@ -529,12 +543,12 @@ export const VehicleOperationLogPage: React.FC = () => {
             display: 'flex',
             alignItems: 'center',
             gap: '8px',
-            padding: '10px 18px',
-            fontSize: '14px',
+            padding: '8px 16px',
+            fontSize: '13px',
             fontWeight: activeTab === 'FLEET_MASTER' ? '800' : '600',
-            color: activeTab === 'FLEET_MASTER' ? '#0284c7' : '#64748b',
-            borderBottom: activeTab === 'FLEET_MASTER' ? '3px solid #0284c7' : '3px solid transparent',
-            marginBottom: '-2px',
+            color: activeTab === 'FLEET_MASTER' ? 'var(--primary)' : 'var(--text-secondary)',
+            borderBottom: activeTab === 'FLEET_MASTER' ? '3px solid var(--primary)' : '3px solid transparent',
+            marginBottom: '-1px',
             backgroundColor: 'transparent',
             borderTop: 'none',
             borderLeft: 'none',
@@ -542,9 +556,9 @@ export const VehicleOperationLogPage: React.FC = () => {
             cursor: 'pointer'
           }}
         >
-          <Car size={16} />
+          <Car size={15} />
           <span>법인 차량 관리</span>
-          <span style={{ fontSize: '11px', backgroundColor: '#f1f5f9', color: '#475569', padding: '2px 6px', borderRadius: '10px', fontWeight: '700' }}>
+          <span style={{ fontSize: '11px', backgroundColor: 'var(--border-color)', color: 'var(--text-main)', padding: '1px 6px', borderRadius: '10px', fontWeight: '700' }}>
             {corporateVehicles.length}
           </span>
         </button>
@@ -557,45 +571,47 @@ export const VehicleOperationLogPage: React.FC = () => {
             display: 'flex',
             alignItems: 'center',
             gap: '12px',
-            backgroundColor: '#f8fafc',
-            border: '1px solid #e2e8f0',
+            backgroundColor: 'var(--bg-card)',
+            border: '1px solid var(--border-color)',
             borderRadius: '8px',
-            padding: '10px 14px',
-            marginBottom: '14px',
+            padding: '8px 12px',
+            flexShrink: 0,
             flexWrap: 'wrap'
           }}
         >
           {/* 정산 연월 (YYYY-MM) */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-            <label style={{ fontSize: '11px', fontWeight: '700', color: '#64748b', whiteSpace: 'nowrap' }}>조회 연월</label>
+            <label style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>조회 연월</label>
             <input
               type="month"
               value={selectedYm}
               onChange={e => setSelectedYm(e.target.value)}
               style={{
-                height: '34px',
+                height: '32px',
                 padding: '0 8px',
-                border: '1px solid #cbd5e1',
+                border: '1px solid var(--border-color)',
                 borderRadius: '6px',
-                fontSize: '13px',
-                backgroundColor: '#fff'
+                fontSize: '12px',
+                backgroundColor: 'var(--bg-app)',
+                color: 'var(--text-main)'
               }}
             />
           </div>
 
           {/* 차량 선택 */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-            <label style={{ fontSize: '11px', fontWeight: '700', color: '#64748b', whiteSpace: 'nowrap' }}>차량 선택</label>
+            <label style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>차량 선택</label>
             <select
               value={selectedVehicleId}
               onChange={e => setSelectedVehicleId(e.target.value)}
               style={{
-                height: '34px',
+                height: '32px',
                 padding: '0 8px',
-                border: '1px solid #cbd5e1',
+                border: '1px solid var(--border-color)',
                 borderRadius: '6px',
-                fontSize: '13px',
-                backgroundColor: '#fff',
+                fontSize: '12px',
+                backgroundColor: 'var(--bg-app)',
+                color: 'var(--text-main)',
                 minWidth: '160px'
               }}
             >
@@ -611,17 +627,18 @@ export const VehicleOperationLogPage: React.FC = () => {
           {/* 운행일지 상태 필터 */}
           {activeTab === 'OPERATION_LOG' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              <label style={{ fontSize: '11px', fontWeight: '700', color: '#64748b', whiteSpace: 'nowrap' }}>검증 상태</label>
+              <label style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>검증 상태</label>
               <select
                 value={statusFilter}
                 onChange={e => setStatusFilter(e.target.value)}
                 style={{
-                  height: '34px',
+                  height: '32px',
                   padding: '0 8px',
-                  border: '1px solid #cbd5e1',
+                  border: '1px solid var(--border-color)',
                   borderRadius: '6px',
-                  fontSize: '13px',
-                  backgroundColor: '#fff'
+                  fontSize: '12px',
+                  backgroundColor: 'var(--bg-app)',
+                  color: 'var(--text-main)'
                 }}
               >
                 <option value="ALL">전체 상태</option>
@@ -633,23 +650,24 @@ export const VehicleOperationLogPage: React.FC = () => {
 
           {/* 검색어 (운행자 / 차량번호 / 행선지) */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flex: 1, minWidth: '180px' }}>
-            <label style={{ fontSize: '11px', fontWeight: '700', color: '#64748b', whiteSpace: 'nowrap' }}>검색</label>
+            <label style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>검색</label>
             <div style={{ position: 'relative' }}>
-              <Search size={14} style={{ position: 'absolute', left: '10px', top: '10px', color: '#94a3b8' }} />
+              <Search size={14} style={{ position: 'absolute', left: '10px', top: '9px', color: 'var(--text-muted, #94a3b8)' }} />
               <input
                 type="text"
                 placeholder="운행자, 차량번호, 목적지, 주유소 검색"
                 value={driverSearch}
                 onChange={e => setDriverSearch(e.target.value)}
                 style={{
-                  height: '34px',
+                  height: '32px',
                   padding: '0 10px 0 30px',
-                  border: '1px solid #cbd5e1',
+                  border: '1px solid var(--border-color)',
                   borderRadius: '6px',
-                  fontSize: '13px',
+                  fontSize: '12px',
                   width: '100%',
                   boxSizing: 'border-box',
-                  backgroundColor: '#fff'
+                  backgroundColor: 'var(--bg-app)',
+                  color: 'var(--text-main)'
                 }}
               />
             </div>
@@ -665,14 +683,14 @@ export const VehicleOperationLogPage: React.FC = () => {
                 setDriverSearch('');
               }}
               style={{
-                height: '34px',
+                height: '32px',
                 padding: '0 12px',
-                backgroundColor: '#fff',
-                border: '1px solid #cbd5e1',
+                backgroundColor: 'var(--bg-app)',
+                border: '1px solid var(--border-color)',
                 borderRadius: '6px',
                 fontSize: '12px',
                 fontWeight: '600',
-                color: '#64748b',
+                color: 'var(--text-secondary)',
                 cursor: 'pointer'
               }}
             >
@@ -685,10 +703,10 @@ export const VehicleOperationLogPage: React.FC = () => {
       {/* ── 4-1. 탭 1: 운행일지 대장 ── */}
       {activeTab === 'OPERATION_LOG' && (
         <>
-          <div style={{ overflowX: 'auto', border: '1px solid #cbd5e1', borderRadius: '8px', backgroundColor: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+          <div style={{ flex: 1, minHeight: 0, overflow: 'auto', border: '1px solid var(--border-color)', borderRadius: '8px', backgroundColor: 'var(--bg-card)' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', textAlign: 'left', whiteSpace: 'nowrap' }}>
-              <thead>
-                <tr style={{ backgroundColor: '#f1f5f9', borderBottom: '1px solid #cbd5e1', color: '#334155', height: '38px' }}>
+              <thead style={{ position: 'sticky', top: 0, zIndex: 1 }}>
+                <tr style={{ backgroundColor: 'var(--bg-card)', borderBottom: '1px solid var(--border-color)', color: 'var(--text-secondary)', height: '36px' }}>
                   <th style={{ padding: '8px 10px', textAlign: 'center', width: '40px' }}>No</th>
                   <th style={{ padding: '8px 10px' }}>운행일자</th>
                   <th style={{ padding: '8px 10px' }}>차량번호</th>
@@ -707,7 +725,7 @@ export const VehicleOperationLogPage: React.FC = () => {
               <tbody>
                 {filteredOperationLogs.length === 0 ? (
                   <tr>
-                    <td colSpan={13} style={{ padding: '40px', textAlign: 'center', color: '#94a3b8' }}>
+                    <td colSpan={13} style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted, #94a3b8)' }}>
                       조회 조건에 해당하는 운행일지 내역이 없습니다.
                     </td>
                   </tr>
@@ -718,17 +736,17 @@ export const VehicleOperationLogPage: React.FC = () => {
                       <tr
                         key={log.id}
                         style={{
-                          borderBottom: '1px solid #e2e8f0',
-                          height: '40px',
-                          backgroundColor: idx % 2 === 1 ? '#fafafa' : '#fff'
+                          borderBottom: '1px solid var(--border-color)',
+                          height: '38px',
+                          backgroundColor: idx % 2 === 1 ? 'rgba(0,0,0,0.02)' : 'transparent'
                         }}
                       >
-                        <td style={{ padding: '6px 10px', textAlign: 'center', color: '#64748b' }}>{idx + 1}</td>
-                        <td style={{ padding: '6px 10px', fontWeight: '700', color: '#0f172a' }}>{log.operationDate}</td>
-                        <td style={{ padding: '6px 10px', fontWeight: '700', color: '#0284c7' }}>{log.vehicleNo}</td>
+                        <td style={{ padding: '6px 10px', textAlign: 'center', color: 'var(--text-secondary)' }}>{idx + 1}</td>
+                        <td style={{ padding: '6px 10px', fontWeight: '700', color: 'var(--text-main)' }}>{log.operationDate}</td>
+                        <td style={{ padding: '6px 10px', fontWeight: '700', color: 'var(--primary)' }}>{log.vehicleNo}</td>
                         <td style={{ padding: '6px 10px' }}>
-                          <span style={{ fontWeight: '700', color: '#334155' }}>{log.driverName}</span>
-                          <span style={{ color: '#64748b', fontSize: '11px', marginLeft: '4px' }}>({log.driverDept || '관리부'})</span>
+                          <span style={{ fontWeight: '700', color: 'var(--text-main)' }}>{log.driverName}</span>
+                          <span style={{ color: 'var(--text-secondary)', fontSize: '11px', marginLeft: '4px' }}>({log.driverDept || '관리부'})</span>
                         </td>
                         <td style={{ padding: '6px 10px' }}>
                           <span
@@ -744,26 +762,26 @@ export const VehicleOperationLogPage: React.FC = () => {
                             {purposeInfo.label}
                           </span>
                           {log.purposeDetail && (
-                            <span style={{ marginLeft: '6px', color: '#475569', fontSize: '11px' }}>
+                            <span style={{ marginLeft: '6px', color: 'var(--text-secondary)', fontSize: '11px' }}>
                               {log.purposeDetail}
                             </span>
                           )}
                         </td>
                         <td style={{ padding: '6px 10px' }}>
-                          <span style={{ color: '#475569' }}>{log.departureLocation}</span>
-                          <span style={{ margin: '0 4px', color: '#94a3b8' }}>➔</span>
-                          <span style={{ fontWeight: '600', color: '#0f172a' }}>{log.arrivalLocation}</span>
+                          <span style={{ color: 'var(--text-secondary)' }}>{log.departureLocation}</span>
+                          <span style={{ margin: '0 4px', color: 'var(--text-muted, #94a3b8)' }}>➔</span>
+                          <span style={{ fontWeight: '600', color: 'var(--text-main)' }}>{log.arrivalLocation}</span>
                         </td>
-                        <td style={{ padding: '6px 10px', textAlign: 'right', color: '#64748b' }}>
+                        <td style={{ padding: '6px 10px', textAlign: 'right', color: 'var(--text-secondary)' }}>
                           {log.departureMileage.toLocaleString()}
                         </td>
-                        <td style={{ padding: '6px 10px', textAlign: 'right', color: '#64748b' }}>
+                        <td style={{ padding: '6px 10px', textAlign: 'right', color: 'var(--text-secondary)' }}>
                           {log.arrivalMileage.toLocaleString()}
                         </td>
-                        <td style={{ padding: '6px 10px', textAlign: 'right', fontWeight: '800', color: '#0284c7' }}>
+                        <td style={{ padding: '6px 10px', textAlign: 'right', fontWeight: '800', color: 'var(--primary)' }}>
                           {log.driveDistance.toLocaleString()} km
                         </td>
-                        <td style={{ padding: '6px 10px', textAlign: 'right', color: '#059669', fontWeight: '700' }}>
+                        <td style={{ padding: '6px 10px', textAlign: 'right', color: '#10b981', fontWeight: '700' }}>
                           {log.businessDistance.toLocaleString()} km
                         </td>
                         <td style={{ padding: '6px 10px', textAlign: 'center' }}>
@@ -774,20 +792,21 @@ export const VehicleOperationLogPage: React.FC = () => {
                                 style={{
                                   padding: '2px 6px',
                                   fontSize: '11px',
-                                  backgroundColor: '#f1f5f9',
-                                  border: '1px solid #cbd5e1',
+                                  backgroundColor: 'var(--bg-app)',
+                                  border: '1px solid var(--border-color)',
                                   borderRadius: '4px',
                                   cursor: 'pointer',
                                   display: 'flex',
                                   alignItems: 'center',
-                                  gap: '2px'
+                                  gap: '2px',
+                                  color: 'var(--text-main)'
                                 }}
                               >
                                 <Eye size={12} />
                                 <span>출발</span>
                               </button>
                             ) : (
-                              <span style={{ color: '#cbd5e1', fontSize: '11px' }}>-</span>
+                              <span style={{ color: 'var(--text-muted, #94a3b8)', fontSize: '11px' }}>-</span>
                             )}
                             {log.dashboardPhotoEnd ? (
                               <button
@@ -795,20 +814,21 @@ export const VehicleOperationLogPage: React.FC = () => {
                                 style={{
                                   padding: '2px 6px',
                                   fontSize: '11px',
-                                  backgroundColor: '#f1f5f9',
-                                  border: '1px solid #cbd5e1',
+                                  backgroundColor: 'var(--bg-app)',
+                                  border: '1px solid var(--border-color)',
                                   borderRadius: '4px',
                                   cursor: 'pointer',
                                   display: 'flex',
                                   alignItems: 'center',
-                                  gap: '2px'
+                                  gap: '2px',
+                                  color: 'var(--text-main)'
                                 }}
                               >
                                 <Eye size={12} />
                                 <span>도착</span>
                               </button>
                             ) : (
-                              <span style={{ color: '#cbd5e1', fontSize: '11px' }}>-</span>
+                              <span style={{ color: 'var(--text-muted, #94a3b8)', fontSize: '11px' }}>-</span>
                             )}
                           </div>
                         </td>
@@ -816,8 +836,8 @@ export const VehicleOperationLogPage: React.FC = () => {
                           <span
                             onClick={() => handleToggleLogStatus(log)}
                             style={{
-                              backgroundColor: log.status === 'CONFIRMED' ? '#dcfce7' : '#fef3c7',
-                              color: log.status === 'CONFIRMED' ? '#15803d' : '#b45309',
+                              backgroundColor: log.status === 'CONFIRMED' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(234, 179, 8, 0.15)',
+                              color: log.status === 'CONFIRMED' ? '#10b981' : '#eab308',
                               padding: '3px 8px',
                               borderRadius: '12px',
                               fontSize: '11px',
@@ -865,28 +885,29 @@ export const VehicleOperationLogPage: React.FC = () => {
           {/* 하단 Gutenberg Z-패턴 대차대조 바 (헌장 3.5) */}
           <div
             style={{
-              marginTop: '12px',
-              backgroundColor: '#0f172a',
-              color: '#f8fafc',
+              marginTop: 'auto',
+              backgroundColor: 'var(--bg-card)',
+              color: 'var(--text-main)',
+              border: '1px solid var(--border-color)',
               borderRadius: '8px',
-              padding: '12px 18px',
+              padding: '10px 16px',
               display: 'flex',
               justifyContent: 'space-between',
               alignItems: 'center',
-              fontSize: '13px',
+              fontSize: '12px',
               fontWeight: '700',
-              boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)'
+              flexShrink: 0
             }}
           >
             <div style={{ display: 'flex', gap: '20px', alignItems: 'center' }}>
-              <span>🚗 운행건수: <strong style={{ color: '#38bdf8' }}>{operationMetrics.totalCount}</strong>건</span>
-              <span>🛣️ 총 주행거리: <strong style={{ color: '#38bdf8' }}>{operationMetrics.totalDistance.toLocaleString()}</strong> km</span>
-              <span>🏢 업무용: <strong style={{ color: '#34d399' }}>{operationMetrics.businessDistance.toLocaleString()}</strong> km</span>
-              <span>🏠 출퇴근: <strong style={{ color: '#c084fc' }}>{operationMetrics.commuteDistance.toLocaleString()}</strong> km</span>
+              <span>🚗 운행건수: <strong style={{ color: 'var(--primary)' }}>{operationMetrics.totalCount}</strong>건</span>
+              <span>🛣️ 총 주행거리: <strong style={{ color: 'var(--primary)' }}>{operationMetrics.totalDistance.toLocaleString()}</strong> km</span>
+              <span>🏢 업무용: <strong style={{ color: '#10b981' }}>{operationMetrics.businessDistance.toLocaleString()}</strong> km</span>
+              <span>🏠 출퇴근: <strong style={{ color: '#a855f7' }}>{operationMetrics.commuteDistance.toLocaleString()}</strong> km</span>
             </div>
             <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
-              <span>📊 업무사용비율: <strong style={{ color: '#facc15' }}>{operationMetrics.businessRatio}%</strong></span>
-              <span style={{ backgroundColor: '#1e293b', padding: '4px 10px', borderRadius: '6px', color: '#38bdf8', fontSize: '12px' }}>
+              <span>📊 업무사용비율: <strong style={{ color: '#eab308' }}>{operationMetrics.businessRatio}%</strong></span>
+              <span style={{ backgroundColor: 'var(--bg-app)', border: '1px solid var(--border-color)', padding: '4px 10px', borderRadius: '6px', color: 'var(--primary)', fontSize: '11px' }}>
                 ⚖️ 대차대조 무결성 일치
               </span>
             </div>
@@ -897,10 +918,10 @@ export const VehicleOperationLogPage: React.FC = () => {
       {/* ── 4-2. 탭 2: 주유 영수증 대장 ── */}
       {activeTab === 'FUEL_LOG' && (
         <>
-          <div style={{ overflowX: 'auto', border: '1px solid #cbd5e1', borderRadius: '8px', backgroundColor: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+          <div style={{ flex: 1, minHeight: 0, overflow: 'auto', border: '1px solid var(--border-color)', borderRadius: '8px', backgroundColor: 'var(--bg-card)' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', textAlign: 'left', whiteSpace: 'nowrap' }}>
-              <thead>
-                <tr style={{ backgroundColor: '#f1f5f9', borderBottom: '1px solid #cbd5e1', color: '#334155', height: '38px' }}>
+              <thead style={{ position: 'sticky', top: 0, zIndex: 1 }}>
+                <tr style={{ backgroundColor: 'var(--bg-card)', borderBottom: '1px solid var(--border-color)', color: 'var(--text-secondary)', height: '36px' }}>
                   <th style={{ padding: '8px 10px', textAlign: 'center', width: '40px' }}>No</th>
                   <th style={{ padding: '8px 10px' }}>주유일시</th>
                   <th style={{ padding: '8px 10px' }}>차량번호</th>
@@ -920,7 +941,7 @@ export const VehicleOperationLogPage: React.FC = () => {
               <tbody>
                 {filteredFuelLogs.length === 0 ? (
                   <tr>
-                    <td colSpan={14} style={{ padding: '40px', textAlign: 'center', color: '#94a3b8' }}>
+                    <td colSpan={14} style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted, #94a3b8)' }}>
                       조회 조건에 해당하는 주유 영수증 내역이 없습니다.
                     </td>
                   </tr>
@@ -931,20 +952,20 @@ export const VehicleOperationLogPage: React.FC = () => {
                       <tr
                         key={fuel.id}
                         style={{
-                          borderBottom: '1px solid #e2e8f0',
-                          height: '40px',
-                          backgroundColor: idx % 2 === 1 ? '#fafafa' : '#fff'
+                          borderBottom: '1px solid var(--border-color)',
+                          height: '38px',
+                          backgroundColor: idx % 2 === 1 ? 'rgba(0,0,0,0.02)' : 'transparent'
                         }}
                       >
-                        <td style={{ padding: '6px 10px', textAlign: 'center', color: '#64748b' }}>{idx + 1}</td>
-                        <td style={{ padding: '6px 10px', fontWeight: '700', color: '#0f172a' }}>{fuel.fuelDate}</td>
-                        <td style={{ padding: '6px 10px', fontWeight: '700', color: '#0284c7' }}>{fuel.vehicleNo}</td>
-                        <td style={{ padding: '6px 10px', fontWeight: '600' }}>{fuel.driverName}</td>
+                        <td style={{ padding: '6px 10px', textAlign: 'center', color: 'var(--text-secondary)' }}>{idx + 1}</td>
+                        <td style={{ padding: '6px 10px', fontWeight: '700', color: 'var(--text-main)' }}>{fuel.fuelDate}</td>
+                        <td style={{ padding: '6px 10px', fontWeight: '700', color: 'var(--primary)' }}>{fuel.vehicleNo}</td>
+                        <td style={{ padding: '6px 10px', fontWeight: '600', color: 'var(--text-main)' }}>{fuel.driverName}</td>
                         <td style={{ padding: '6px 10px' }}>
                           <span
                             style={{
-                              backgroundColor: fuel.fuelType === '경유' ? '#fef3c7' : fuel.fuelType === '휘발유' ? '#fee2e2' : '#e0f2fe',
-                              color: fuel.fuelType === '경유' ? '#b45309' : fuel.fuelType === '휘발유' ? '#b91c1c' : '#0369a1',
+                              backgroundColor: fuel.fuelType === '경유' ? 'rgba(234,88,12,0.15)' : fuel.fuelType === '휘발유' ? 'rgba(239,68,68,0.15)' : 'rgba(2,132,199,0.15)',
+                              color: fuel.fuelType === '경유' ? '#ea580c' : fuel.fuelType === '휘발유' ? '#ef4444' : 'var(--primary)',
                               padding: '2px 6px',
                               borderRadius: '4px',
                               fontSize: '11px',
@@ -954,16 +975,16 @@ export const VehicleOperationLogPage: React.FC = () => {
                             {fuel.fuelType}
                           </span>
                         </td>
-                        <td style={{ padding: '6px 10px', textAlign: 'right', fontWeight: '700', color: '#334155' }}>
+                        <td style={{ padding: '6px 10px', textAlign: 'right', fontWeight: '700', color: 'var(--text-main)' }}>
                           {fuel.fuelVolume.toFixed(1)} L
                         </td>
-                        <td style={{ padding: '6px 10px', textAlign: 'right', fontWeight: '800', color: '#059669' }}>
+                        <td style={{ padding: '6px 10px', textAlign: 'right', fontWeight: '800', color: '#10b981' }}>
                           ₩{fuel.fuelAmount.toLocaleString()}
                         </td>
-                        <td style={{ padding: '6px 10px', textAlign: 'right', color: '#64748b' }}>
+                        <td style={{ padding: '6px 10px', textAlign: 'right', color: 'var(--text-secondary)' }}>
                           ₩{unitPrice.toLocaleString()}
                         </td>
-                        <td style={{ padding: '6px 10px', textAlign: 'right', color: '#475569' }}>
+                        <td style={{ padding: '6px 10px', textAlign: 'right', color: 'var(--text-secondary)' }}>
                           {fuel.currentMileage.toLocaleString()} km
                         </td>
                         <td style={{ padding: '6px 10px', textAlign: 'center' }}>
@@ -973,11 +994,11 @@ export const VehicleOperationLogPage: React.FC = () => {
                               style={{
                                 padding: '2px 8px',
                                 fontSize: '11px',
-                                backgroundColor: '#f1f5f9',
-                                border: '1px solid #cbd5e1',
+                                backgroundColor: 'var(--bg-app)',
+                                border: '1px solid var(--border-color)',
                                 borderRadius: '4px',
                                 cursor: 'pointer',
-                                color: '#0284c7',
+                                color: 'var(--primary)',
                                 fontWeight: '700',
                                 display: 'inline-flex',
                                 alignItems: 'center',
@@ -988,7 +1009,7 @@ export const VehicleOperationLogPage: React.FC = () => {
                               <span>계기판</span>
                             </button>
                           ) : (
-                            <span style={{ color: '#cbd5e1', fontSize: '11px' }}>미등록</span>
+                            <span style={{ color: 'var(--text-muted, #94a3b8)', fontSize: '11px' }}>미등록</span>
                           )}
                         </td>
                         <td style={{ padding: '6px 10px', textAlign: 'center' }}>
@@ -998,11 +1019,11 @@ export const VehicleOperationLogPage: React.FC = () => {
                               style={{
                                 padding: '2px 8px',
                                 fontSize: '11px',
-                                backgroundColor: '#ecfdf5',
-                                border: '1px solid #a7f3d0',
+                                backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                                border: '1px solid rgba(16, 185, 129, 0.3)',
                                 borderRadius: '4px',
                                 cursor: 'pointer',
-                                color: '#059669',
+                                color: '#10b981',
                                 fontWeight: '700',
                                 display: 'inline-flex',
                                 alignItems: 'center',
@@ -1016,10 +1037,10 @@ export const VehicleOperationLogPage: React.FC = () => {
                             <span style={{ color: '#ef4444', fontSize: '11px', fontWeight: '700' }}>영수증누락</span>
                           )}
                         </td>
-                        <td style={{ padding: '6px 10px', color: '#475569' }}>
+                        <td style={{ padding: '6px 10px', color: 'var(--text-secondary)' }}>
                           {fuel.gasStationName || '-'}
                         </td>
-                        <td style={{ padding: '6px 10px', color: '#64748b', fontSize: '11px' }}>
+                        <td style={{ padding: '6px 10px', color: 'var(--text-secondary)', fontSize: '11px' }}>
                           {fuel.paymentMethod === 'CORPORATE_CARD' ? '법인카드' : '개인경비'}
                           {fuel.cardLast4 ? ` (${fuel.cardLast4})` : ''}
                         </td>
@@ -1055,27 +1076,28 @@ export const VehicleOperationLogPage: React.FC = () => {
           {/* 하단 Gutenberg Z-패턴 대차대조 바 (헌장 3.5) */}
           <div
             style={{
-              marginTop: '12px',
-              backgroundColor: '#0f172a',
-              color: '#f8fafc',
+              marginTop: 'auto',
+              backgroundColor: 'var(--bg-card)',
+              color: 'var(--text-main)',
+              border: '1px solid var(--border-color)',
               borderRadius: '8px',
-              padding: '12px 18px',
+              padding: '10px 16px',
               display: 'flex',
               justifyContent: 'space-between',
               alignItems: 'center',
-              fontSize: '13px',
+              fontSize: '12px',
               fontWeight: '700',
-              boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)'
+              flexShrink: 0
             }}
           >
             <div style={{ display: 'flex', gap: '20px', alignItems: 'center' }}>
-              <span>⛽ 주유건수: <strong style={{ color: '#38bdf8' }}>{fuelMetrics.totalCount}</strong>건</span>
-              <span>🛢️ 총 주유용량: <strong style={{ color: '#38bdf8' }}>{fuelMetrics.totalVolume.toFixed(1)}</strong> L</span>
-              <span>💰 총 주유금액: <strong style={{ color: '#34d399' }}>₩{fuelMetrics.totalAmount.toLocaleString()}</strong></span>
+              <span>⛽ 주유건수: <strong style={{ color: 'var(--primary)' }}>{fuelMetrics.totalCount}</strong>건</span>
+              <span>🛢️ 총 주유용량: <strong style={{ color: 'var(--primary)' }}>{fuelMetrics.totalVolume.toFixed(1)}</strong> L</span>
+              <span>💰 총 주유금액: <strong style={{ color: '#10b981' }}>₩{fuelMetrics.totalAmount.toLocaleString()}</strong></span>
             </div>
             <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
-              <span>🧾 영수증 증빙율: <strong style={{ color: '#facc15' }}>{fuelMetrics.proofRatio}% ({fuelMetrics.receiptProofCount}/{fuelMetrics.totalCount})</strong></span>
-              <span style={{ backgroundColor: '#1e293b', padding: '4px 10px', borderRadius: '6px', color: '#34d399', fontSize: '12px' }}>
+              <span>🧾 영수증 증빙율: <strong style={{ color: '#eab308' }}>{fuelMetrics.proofRatio}% ({fuelMetrics.receiptProofCount}/{fuelMetrics.totalCount})</strong></span>
+              <span style={{ backgroundColor: 'var(--bg-app)', border: '1px solid var(--border-color)', padding: '4px 10px', borderRadius: '6px', color: '#10b981', fontSize: '11px' }}>
                 🟢 세무 적격 증빙 확인
               </span>
             </div>
@@ -1087,37 +1109,37 @@ export const VehicleOperationLogPage: React.FC = () => {
       {activeTab === 'FLEET_MASTER' && (
         <>
           {/* 차량 마스터 KPI 요약 카드 */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '14px', marginBottom: '16px' }}>
-            <div style={{ backgroundColor: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '16px', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
-              <div style={{ fontSize: '12px', fontWeight: '700', color: '#64748b', marginBottom: '6px' }}>전사 등록 차량</div>
-              <div style={{ fontSize: '24px', fontWeight: '800', color: '#0f172a' }}>{corporateVehicles.length} <span style={{ fontSize: '14px', fontWeight: '500' }}>대</span></div>
-              <div style={{ fontSize: '11px', color: '#059669', marginTop: '4px' }}>가용 {corporateVehicles.filter(v => v.isActive).length}대 / 휴차 {corporateVehicles.filter(v => !v.isActive).length}대</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px', flexShrink: 0 }}>
+            <div style={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '12px 14px' }}>
+              <div style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-secondary)', marginBottom: '4px' }}>전사 등록 차량</div>
+              <div style={{ fontSize: '20px', fontWeight: '800', color: 'var(--text-main)' }}>{corporateVehicles.length} <span style={{ fontSize: '13px', fontWeight: '500' }}>대</span></div>
+              <div style={{ fontSize: '11px', color: '#10b981', marginTop: '3px' }}>가용 {corporateVehicles.filter(v => v.isActive).length}대 / 휴차 {corporateVehicles.filter(v => !v.isActive).length}대</div>
             </div>
 
-            <div style={{ backgroundColor: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '16px', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
-              <div style={{ fontSize: '12px', fontWeight: '700', color: '#64748b', marginBottom: '6px' }}>당월 전사 총 주행거리</div>
-              <div style={{ fontSize: '24px', fontWeight: '800', color: '#0284c7' }}>{operationMetrics.totalDistance.toLocaleString()} <span style={{ fontSize: '14px', fontWeight: '500' }}>km</span></div>
-              <div style={{ fontSize: '11px', color: '#64748b', marginTop: '4px' }}>업무사용비율 {operationMetrics.businessRatio}%</div>
+            <div style={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '12px 14px' }}>
+              <div style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-secondary)', marginBottom: '4px' }}>당월 전사 총 주행거리</div>
+              <div style={{ fontSize: '20px', fontWeight: '800', color: 'var(--primary)' }}>{operationMetrics.totalDistance.toLocaleString()} <span style={{ fontSize: '13px', fontWeight: '500' }}>km</span></div>
+              <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '3px' }}>업무사용비율 {operationMetrics.businessRatio}%</div>
             </div>
 
-            <div style={{ backgroundColor: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '16px', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
-              <div style={{ fontSize: '12px', fontWeight: '700', color: '#64748b', marginBottom: '6px' }}>당월 총 주유비 지출</div>
-              <div style={{ fontSize: '24px', fontWeight: '800', color: '#059669' }}>₩{fuelMetrics.totalAmount.toLocaleString()}</div>
-              <div style={{ fontSize: '11px', color: '#64748b', marginTop: '4px' }}>총 주유량 {fuelMetrics.totalVolume.toFixed(1)} L</div>
+            <div style={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '12px 14px' }}>
+              <div style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-secondary)', marginBottom: '4px' }}>당월 총 주유비 지출</div>
+              <div style={{ fontSize: '20px', fontWeight: '800', color: '#10b981' }}>₩{fuelMetrics.totalAmount.toLocaleString()}</div>
+              <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '3px' }}>총 주유량 {fuelMetrics.totalVolume.toFixed(1)} L</div>
             </div>
 
-            <div style={{ backgroundColor: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '16px', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
-              <div style={{ fontSize: '12px', fontWeight: '700', color: '#64748b', marginBottom: '6px' }}>법정 증빙 영수증 첨부율</div>
-              <div style={{ fontSize: '24px', fontWeight: '800', color: '#b45309' }}>{fuelMetrics.proofRatio} <span style={{ fontSize: '14px', fontWeight: '500' }}>%</span></div>
-              <div style={{ fontSize: '11px', color: '#059669', marginTop: '4px' }}>국세청 감사 대비 100% 보존</div>
+            <div style={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '12px 14px' }}>
+              <div style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-secondary)', marginBottom: '4px' }}>법정 증빙 영수증 첨부율</div>
+              <div style={{ fontSize: '20px', fontWeight: '800', color: '#eab308' }}>{fuelMetrics.proofRatio} <span style={{ fontSize: '13px', fontWeight: '500' }}>%</span></div>
+              <div style={{ fontSize: '11px', color: '#10b981', marginTop: '3px' }}>국세청 감사 대비 100% 보존</div>
             </div>
           </div>
 
           {/* 차량 마스터 테이블 */}
-          <div style={{ overflowX: 'auto', border: '1px solid #cbd5e1', borderRadius: '8px', backgroundColor: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+          <div style={{ flex: 1, minHeight: 0, overflow: 'auto', border: '1px solid var(--border-color)', borderRadius: '8px', backgroundColor: 'var(--bg-card)' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', textAlign: 'left', whiteSpace: 'nowrap' }}>
-              <thead>
-                <tr style={{ backgroundColor: '#f1f5f9', borderBottom: '1px solid #cbd5e1', color: '#334155', height: '38px' }}>
+              <thead style={{ position: 'sticky', top: 0, zIndex: 1 }}>
+                <tr style={{ backgroundColor: 'var(--bg-card)', borderBottom: '1px solid var(--border-color)', color: 'var(--text-secondary)', height: '36px' }}>
                   <th style={{ padding: '8px 10px', textAlign: 'center', width: '40px' }}>No</th>
                   <th style={{ padding: '8px 10px' }}>차량번호</th>
                   <th style={{ padding: '8px 10px' }}>차종 / 모델명</th>
@@ -1136,7 +1158,7 @@ export const VehicleOperationLogPage: React.FC = () => {
               <tbody>
                 {corporateVehicles.length === 0 ? (
                   <tr>
-                    <td colSpan={13} style={{ padding: '40px', textAlign: 'center', color: '#94a3b8' }}>
+                    <td colSpan={13} style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted, #94a3b8)' }}>
                       등록된 법인 차량이 없습니다. [법인 차량 신규 등록] 버튼을 눌러 등록하십시오.
                     </td>
                   </tr>
@@ -1145,34 +1167,34 @@ export const VehicleOperationLogPage: React.FC = () => {
                     <tr
                       key={veh.id}
                       style={{
-                        borderBottom: '1px solid #e2e8f0',
-                        height: '42px',
-                        backgroundColor: idx % 2 === 1 ? '#fafafa' : '#fff'
+                        borderBottom: '1px solid var(--border-color)',
+                        height: '38px',
+                        backgroundColor: idx % 2 === 1 ? 'rgba(0,0,0,0.02)' : 'transparent'
                       }}
                     >
-                      <td style={{ padding: '6px 10px', textAlign: 'center', color: '#64748b' }}>{idx + 1}</td>
-                      <td style={{ padding: '6px 10px', fontWeight: '800', color: '#0284c7' }}>{veh.vehicleNo}</td>
-                      <td style={{ padding: '6px 10px', fontWeight: '700', color: '#0f172a' }}>{veh.modelName}</td>
-                      <td style={{ padding: '6px 10px', color: '#475569' }}>{veh.vehicleType}</td>
+                      <td style={{ padding: '6px 10px', textAlign: 'center', color: 'var(--text-secondary)' }}>{idx + 1}</td>
+                      <td style={{ padding: '6px 10px', fontWeight: '800', color: 'var(--primary)' }}>{veh.vehicleNo}</td>
+                      <td style={{ padding: '6px 10px', fontWeight: '700', color: 'var(--text-main)' }}>{veh.modelName}</td>
+                      <td style={{ padding: '6px 10px', color: 'var(--text-secondary)' }}>{veh.vehicleType}</td>
                       <td style={{ padding: '6px 10px' }}>
-                        <span style={{ fontSize: '11px', color: '#64748b' }}>
+                        <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
                           {veh.ownershipType === 'OWNED' ? '자사소유' : veh.ownershipType === 'LEASE' ? '리스' : '임차'}
                         </span>
                       </td>
                       <td style={{ padding: '6px 10px' }}>
-                        <span style={{ padding: '2px 6px', borderRadius: '4px', fontSize: '11px', fontWeight: '700', backgroundColor: '#f1f5f9', color: '#334155' }}>
+                        <span style={{ padding: '2px 6px', borderRadius: '4px', fontSize: '11px', fontWeight: '700', backgroundColor: 'var(--bg-app)', color: 'var(--text-main)', border: '1px solid var(--border-color)' }}>
                           {veh.fuelType}
                         </span>
                       </td>
-                      <td style={{ padding: '6px 10px', fontWeight: '600', color: '#334155' }}>{veh.assignedDepartment}</td>
-                      <td style={{ padding: '6px 10px', color: '#0f172a' }}>{veh.primaryDriverName || '-'}</td>
-                      <td style={{ padding: '6px 10px', textAlign: 'right', color: '#64748b' }}>
+                      <td style={{ padding: '6px 10px', fontWeight: '600', color: 'var(--text-main)' }}>{veh.assignedDepartment}</td>
+                      <td style={{ padding: '6px 10px', color: 'var(--text-main)' }}>{veh.primaryDriverName || '-'}</td>
+                      <td style={{ padding: '6px 10px', textAlign: 'right', color: 'var(--text-secondary)' }}>
                         {veh.initialMileage.toLocaleString()}
                       </td>
-                      <td style={{ padding: '6px 10px', textAlign: 'right', fontWeight: '800', color: '#0284c7' }}>
+                      <td style={{ padding: '6px 10px', textAlign: 'right', fontWeight: '800', color: 'var(--primary)' }}>
                         {veh.currentMileage.toLocaleString()} km
                       </td>
-                      <td style={{ padding: '6px 10px', color: '#64748b' }}>
+                      <td style={{ padding: '6px 10px', color: 'var(--text-secondary)' }}>
                         {veh.insuranceExpiryDate || '-'}
                       </td>
                       <td style={{ padding: '6px 10px', textAlign: 'center' }}>
@@ -1182,8 +1204,8 @@ export const VehicleOperationLogPage: React.FC = () => {
                             borderRadius: '12px',
                             fontSize: '11px',
                             fontWeight: '700',
-                            backgroundColor: veh.isActive ? '#dcfce7' : '#fee2e2',
-                            color: veh.isActive ? '#15803d' : '#b91c1c'
+                            backgroundColor: veh.isActive ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+                            color: veh.isActive ? '#10b981' : '#ef4444'
                           }}
                         >
                           {veh.isActive ? '운행가능' : '휴차'}
@@ -1213,9 +1235,9 @@ export const VehicleOperationLogPage: React.FC = () => {
                               setVehicleModalOpen(true);
                             }}
                             style={{
-                              border: '1px solid #cbd5e1',
-                              backgroundColor: '#fff',
-                              color: '#334155',
+                              border: '1px solid var(--border-color)',
+                              backgroundColor: 'var(--bg-app)',
+                              color: 'var(--text-main)',
                               borderRadius: '4px',
                               padding: '3px 6px',
                               cursor: 'pointer',
@@ -1237,8 +1259,8 @@ export const VehicleOperationLogPage: React.FC = () => {
                               message: `차량 [${veh.vehicleNo} - ${veh.modelName}] 정보를 삭제하시겠습니까?`
                             })}
                             style={{
-                              border: '1px solid #fecaca',
-                              backgroundColor: '#fff',
+                              border: '1px solid rgba(239,68,68,0.4)',
+                              backgroundColor: 'var(--bg-app)',
                               color: '#ef4444',
                               borderRadius: '4px',
                               padding: '3px 6px',
@@ -1283,7 +1305,8 @@ export const VehicleOperationLogPage: React.FC = () => {
         >
           <div
             style={{
-              backgroundColor: '#fff',
+              backgroundColor: 'var(--bg-card)',
+              border: '1px solid var(--border-color)',
               borderRadius: '12px',
               maxWidth: '850px',
               width: '100%',
@@ -1295,18 +1318,18 @@ export const VehicleOperationLogPage: React.FC = () => {
             }}
             onClick={e => e.stopPropagation()}
           >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 20px', borderBottom: '1px solid #e2e8f0', backgroundColor: '#f8fafc' }}>
-              <h3 style={{ margin: 0, fontSize: '15px', fontWeight: '800', color: '#0f172a' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 20px', borderBottom: '1px solid var(--border-color)', backgroundColor: 'var(--bg-card)' }}>
+              <h3 style={{ margin: 0, fontSize: '15px', fontWeight: '800', color: 'var(--text-main)' }}>
                 {photoModal.title}
               </h3>
               <button
                 onClick={() => setPhotoModal(null)}
-                style={{ border: 'none', backgroundColor: 'transparent', cursor: 'pointer', color: '#64748b' }}
+                style={{ border: 'none', backgroundColor: 'transparent', cursor: 'pointer', color: 'var(--text-secondary)' }}
               >
                 <X size={20} />
               </button>
             </div>
-            <div style={{ padding: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#0f172a', overflow: 'auto', flex: 1 }}>
+            <div style={{ padding: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#000', overflow: 'auto', flex: 1 }}>
               {photoModal.url ? (
                 <img
                   src={photoModal.url}
@@ -1314,15 +1337,15 @@ export const VehicleOperationLogPage: React.FC = () => {
                   style={{ maxWidth: '100%', maxHeight: '70vh', objectFit: 'contain', borderRadius: '4px' }}
                 />
               ) : (
-                <div style={{ color: '#94a3b8', padding: '60px' }}>등록된 사진 이미지가 없습니다.</div>
+                <div style={{ color: 'var(--text-muted, #94a3b8)', padding: '60px' }}>등록된 사진 이미지가 없습니다.</div>
               )}
             </div>
-            <div style={{ padding: '12px 20px', borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'flex-end', backgroundColor: '#f8fafc' }}>
+            <div style={{ padding: '12px 20px', borderTop: '1px solid var(--border-color)', display: 'flex', justifyContent: 'flex-end', backgroundColor: 'var(--bg-card)' }}>
               <button
                 onClick={() => setPhotoModal(null)}
                 style={{
                   padding: '8px 16px',
-                  backgroundColor: '#0284c7',
+                  backgroundColor: 'var(--primary)',
                   color: '#fff',
                   border: 'none',
                   borderRadius: '6px',
@@ -1357,7 +1380,8 @@ export const VehicleOperationLogPage: React.FC = () => {
         >
           <div
             style={{
-              backgroundColor: '#fff',
+              backgroundColor: 'var(--bg-card)',
+              border: '1px solid var(--border-color)',
               borderRadius: '12px',
               maxWidth: '650px',
               width: '100%',
@@ -1368,13 +1392,13 @@ export const VehicleOperationLogPage: React.FC = () => {
               boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.2)'
             }}
           >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 24px', borderBottom: '1px solid #e2e8f0', backgroundColor: '#f8fafc' }}>
-              <h3 style={{ margin: 0, fontSize: '16px', fontWeight: '800', color: '#0f172a' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 24px', borderBottom: '1px solid var(--border-color)', backgroundColor: 'var(--bg-card)' }}>
+              <h3 style={{ margin: 0, fontSize: '16px', fontWeight: '800', color: 'var(--text-main)' }}>
                 {editingVehicle ? '법인 차량 정보 수정' : '법인 차량 신규 등록'}
               </h3>
               <button
                 onClick={() => setVehicleModalOpen(false)}
-                style={{ border: 'none', backgroundColor: 'transparent', cursor: 'pointer', color: '#64748b' }}
+                style={{ border: 'none', backgroundColor: 'transparent', cursor: 'pointer', color: 'var(--text-secondary)' }}
               >
                 <X size={20} />
               </button>
@@ -1384,25 +1408,25 @@ export const VehicleOperationLogPage: React.FC = () => {
               {/* 차량번호 & 차종/모델명 */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <label style={{ fontSize: '12px', fontWeight: '700', color: '#334155' }}>차량번호 *</label>
+                  <label style={{ fontSize: '12px', fontWeight: '700', color: 'var(--text-main)' }}>차량번호 *</label>
                   <input
                     type="text"
                     placeholder="예: 82가 1024"
                     value={vehicleForm.vehicleNo}
                     onChange={e => setVehicleForm({ ...vehicleForm, vehicleNo: e.target.value })}
                     required
-                    style={{ height: '36px', padding: '0 10px', border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '13px' }}
+                    style={{ height: '36px', padding: '0 10px', border: '1px solid var(--border-color)', borderRadius: '6px', fontSize: '13px', backgroundColor: 'var(--bg-app)', color: 'var(--text-main)' }}
                   />
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <label style={{ fontSize: '12px', fontWeight: '700', color: '#334155' }}>차종 / 모델명 *</label>
+                  <label style={{ fontSize: '12px', fontWeight: '700', color: 'var(--text-main)' }}>차종 / 모델명 *</label>
                   <input
                     type="text"
                     placeholder="예: 스타리아 카고 5인승"
                     value={vehicleForm.modelName}
                     onChange={e => setVehicleForm({ ...vehicleForm, modelName: e.target.value })}
                     required
-                    style={{ height: '36px', padding: '0 10px', border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '13px' }}
+                    style={{ height: '36px', padding: '0 10px', border: '1px solid var(--border-color)', borderRadius: '6px', fontSize: '13px', backgroundColor: 'var(--bg-app)', color: 'var(--text-main)' }}
                   />
                 </div>
               </div>
@@ -1410,11 +1434,11 @@ export const VehicleOperationLogPage: React.FC = () => {
               {/* 차량구분 & 소유구분 & 기본유종 */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '14px' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <label style={{ fontSize: '12px', fontWeight: '700', color: '#334155' }}>차량구분</label>
+                  <label style={{ fontSize: '12px', fontWeight: '700', color: 'var(--text-main)' }}>차량구분</label>
                   <select
                     value={vehicleForm.vehicleType}
                     onChange={e => setVehicleForm({ ...vehicleForm, vehicleType: e.target.value as CorporateVehicleType })}
-                    style={{ height: '36px', padding: '0 10px', border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '13px' }}
+                    style={{ height: '36px', padding: '0 10px', border: '1px solid var(--border-color)', borderRadius: '6px', fontSize: '13px', backgroundColor: 'var(--bg-app)', color: 'var(--text-main)' }}
                   >
                     <option value="승합차">승합차</option>
                     <option value="화물/탑차">화물/탑차</option>
@@ -1424,11 +1448,11 @@ export const VehicleOperationLogPage: React.FC = () => {
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <label style={{ fontSize: '12px', fontWeight: '700', color: '#334155' }}>소유구분</label>
+                  <label style={{ fontSize: '12px', fontWeight: '700', color: 'var(--text-main)' }}>소유구분</label>
                   <select
                     value={vehicleForm.ownershipType}
                     onChange={e => setVehicleForm({ ...vehicleForm, ownershipType: e.target.value as CorporateVehicleOwnership })}
-                    style={{ height: '36px', padding: '0 10px', border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '13px' }}
+                    style={{ height: '36px', padding: '0 10px', border: '1px solid var(--border-color)', borderRadius: '6px', fontSize: '13px', backgroundColor: 'var(--bg-app)', color: 'var(--text-main)' }}
                   >
                     <option value="OWNED">자사 소유</option>
                     <option value="LEASE">리스</option>
@@ -1437,11 +1461,11 @@ export const VehicleOperationLogPage: React.FC = () => {
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <label style={{ fontSize: '12px', fontWeight: '700', color: '#334155' }}>기본유종</label>
+                  <label style={{ fontSize: '12px', fontWeight: '700', color: 'var(--text-main)' }}>기본유종</label>
                   <select
                     value={vehicleForm.fuelType}
                     onChange={e => setVehicleForm({ ...vehicleForm, fuelType: e.target.value as CorporateVehicleFuelType })}
-                    style={{ height: '36px', padding: '0 10px', border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '13px' }}
+                    style={{ height: '36px', padding: '0 10px', border: '1px solid var(--border-color)', borderRadius: '6px', fontSize: '13px', backgroundColor: 'var(--bg-app)', color: 'var(--text-main)' }}
                   >
                     <option value="DIESEL">경유 (DIESEL)</option>
                     <option value="GASOLINE">휘발유 (GASOLINE)</option>
@@ -1455,11 +1479,11 @@ export const VehicleOperationLogPage: React.FC = () => {
               {/* 배정부서 & 주 운행자 */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <label style={{ fontSize: '12px', fontWeight: '700', color: '#334155' }}>배정부서</label>
+                  <label style={{ fontSize: '12px', fontWeight: '700', color: 'var(--text-main)' }}>배정부서</label>
                   <select
                     value={vehicleForm.assignedDepartment}
                     onChange={e => setVehicleForm({ ...vehicleForm, assignedDepartment: e.target.value })}
-                    style={{ height: '36px', padding: '0 10px', border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '13px' }}
+                    style={{ height: '36px', padding: '0 10px', border: '1px solid var(--border-color)', borderRadius: '6px', fontSize: '13px', backgroundColor: 'var(--bg-app)', color: 'var(--text-main)' }}
                   >
                     <option value="관리부">관리부</option>
                     <option value="경영지원부">경영지원부</option>
@@ -1470,7 +1494,7 @@ export const VehicleOperationLogPage: React.FC = () => {
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <label style={{ fontSize: '12px', fontWeight: '700', color: '#334155' }}>주 운행자</label>
+                  <label style={{ fontSize: '12px', fontWeight: '700', color: 'var(--text-main)' }}>주 운행자</label>
                   <select
                     value={vehicleForm.primaryDriverId}
                     onChange={e => {
@@ -1481,7 +1505,7 @@ export const VehicleOperationLogPage: React.FC = () => {
                         primaryDriverName: selectedUser ? selectedUser.name : ''
                       });
                     }}
-                    style={{ height: '36px', padding: '0 10px', border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '13px' }}
+                    style={{ height: '36px', padding: '0 10px', border: '1px solid var(--border-color)', borderRadius: '6px', fontSize: '13px', backgroundColor: 'var(--bg-app)', color: 'var(--text-main)' }}
                   >
                     <option value="">미지정 (공용 차량)</option>
                     {users.map(u => (
@@ -1496,22 +1520,22 @@ export const VehicleOperationLogPage: React.FC = () => {
               {/* 최초 주행거리 & 현재 누적 주행거리 */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <label style={{ fontSize: '12px', fontWeight: '700', color: '#334155' }}>최초 등록 주행거리 (km)</label>
+                  <label style={{ fontSize: '12px', fontWeight: '700', color: 'var(--text-main)' }}>최초 등록 주행거리 (km)</label>
                   <input
                     type="number"
                     value={vehicleForm.initialMileage}
                     onChange={e => setVehicleForm({ ...vehicleForm, initialMileage: Number(e.target.value) })}
-                    style={{ height: '36px', padding: '0 10px', border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '13px' }}
+                    style={{ height: '36px', padding: '0 10px', border: '1px solid var(--border-color)', borderRadius: '6px', fontSize: '13px', backgroundColor: 'var(--bg-app)', color: 'var(--text-main)' }}
                   />
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <label style={{ fontSize: '12px', fontWeight: '700', color: '#334155' }}>현재 누적 주행거리 (km)</label>
+                  <label style={{ fontSize: '12px', fontWeight: '700', color: 'var(--text-main)' }}>현재 누적 주행거리 (km)</label>
                   <input
                     type="number"
                     value={vehicleForm.currentMileage}
                     onChange={e => setVehicleForm({ ...vehicleForm, currentMileage: Number(e.target.value) })}
-                    style={{ height: '36px', padding: '0 10px', border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '13px' }}
+                    style={{ height: '36px', padding: '0 10px', border: '1px solid var(--border-color)', borderRadius: '6px', fontSize: '13px', backgroundColor: 'var(--bg-app)', color: 'var(--text-main)' }}
                   />
                 </div>
               </div>
@@ -1519,22 +1543,22 @@ export const VehicleOperationLogPage: React.FC = () => {
               {/* 보험만료일 & 정기검사만료일 */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <label style={{ fontSize: '12px', fontWeight: '700', color: '#334155' }}>보험 만료일</label>
+                  <label style={{ fontSize: '12px', fontWeight: '700', color: 'var(--text-main)' }}>보험 만료일</label>
                   <input
                     type="date"
                     value={vehicleForm.insuranceExpiryDate}
                     onChange={e => setVehicleForm({ ...vehicleForm, insuranceExpiryDate: e.target.value })}
-                    style={{ height: '36px', padding: '0 10px', border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '13px' }}
+                    style={{ height: '36px', padding: '0 10px', border: '1px solid var(--border-color)', borderRadius: '6px', fontSize: '13px', backgroundColor: 'var(--bg-app)', color: 'var(--text-main)' }}
                   />
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <label style={{ fontSize: '12px', fontWeight: '700', color: '#334155' }}>정기 검사 만료일</label>
+                  <label style={{ fontSize: '12px', fontWeight: '700', color: 'var(--text-main)' }}>정기 검사 만료일</label>
                   <input
                     type="date"
                     value={vehicleForm.inspectionExpiryDate}
                     onChange={e => setVehicleForm({ ...vehicleForm, inspectionExpiryDate: e.target.value })}
-                    style={{ height: '36px', padding: '0 10px', border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '13px' }}
+                    style={{ height: '36px', padding: '0 10px', border: '1px solid var(--border-color)', borderRadius: '6px', fontSize: '13px', backgroundColor: 'var(--bg-app)', color: 'var(--text-main)' }}
                   />
                 </div>
               </div>
@@ -1548,20 +1572,20 @@ export const VehicleOperationLogPage: React.FC = () => {
                   onChange={e => setVehicleForm({ ...vehicleForm, isActive: e.target.checked })}
                   style={{ width: '16px', height: '16px', cursor: 'pointer' }}
                 />
-                <label htmlFor="vehIsActive" style={{ fontSize: '13px', fontWeight: '700', color: '#334155', cursor: 'pointer' }}>
+                <label htmlFor="vehIsActive" style={{ fontSize: '13px', fontWeight: '700', color: 'var(--text-main)', cursor: 'pointer' }}>
                   운행 가능 (체크 해제 시 휴차 처리)
                 </label>
               </div>
 
               {/* 비고 */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <label style={{ fontSize: '12px', fontWeight: '700', color: '#334155' }}>비고 / 특이사항</label>
+                <label style={{ fontSize: '12px', fontWeight: '700', color: 'var(--text-main)' }}>비고 / 특이사항</label>
                 <textarea
                   rows={2}
                   placeholder="차량 용도, 주차 위치, 관리 메모 등"
                   value={vehicleForm.memo}
                   onChange={e => setVehicleForm({ ...vehicleForm, memo: e.target.value })}
-                  style={{ padding: '8px 10px', border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '13px' }}
+                  style={{ padding: '8px 10px', border: '1px solid var(--border-color)', borderRadius: '6px', fontSize: '13px', backgroundColor: 'var(--bg-app)', color: 'var(--text-main)' }}
                 />
               </div>
 
@@ -1572,12 +1596,12 @@ export const VehicleOperationLogPage: React.FC = () => {
                   onClick={() => setVehicleModalOpen(false)}
                   style={{
                     padding: '8px 16px',
-                    backgroundColor: '#fff',
-                    border: '1px solid #cbd5e1',
+                    backgroundColor: 'var(--bg-app)',
+                    border: '1px solid var(--border-color)',
                     borderRadius: '6px',
                     fontSize: '13px',
                     fontWeight: '600',
-                    color: '#64748b',
+                    color: 'var(--text-secondary)',
                     cursor: 'pointer'
                   }}
                 >
@@ -1587,7 +1611,7 @@ export const VehicleOperationLogPage: React.FC = () => {
                   type="submit"
                   style={{
                     padding: '8px 18px',
-                    backgroundColor: '#0284c7',
+                    backgroundColor: 'var(--primary)',
                     border: 'none',
                     borderRadius: '6px',
                     fontSize: '13px',
@@ -1623,7 +1647,8 @@ export const VehicleOperationLogPage: React.FC = () => {
         >
           <div
             style={{
-              backgroundColor: '#fff',
+              backgroundColor: 'var(--bg-card)',
+              border: '1px solid var(--border-color)',
               borderRadius: '10px',
               maxWidth: '420px',
               width: '100%',
@@ -1632,14 +1657,14 @@ export const VehicleOperationLogPage: React.FC = () => {
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
-              <div style={{ padding: '8px', backgroundColor: '#fee2e2', color: '#ef4444', borderRadius: '8px' }}>
+              <div style={{ padding: '8px', backgroundColor: 'rgba(239, 68, 68, 0.15)', color: '#ef4444', borderRadius: '8px' }}>
                 <AlertTriangle size={20} />
               </div>
-              <h3 style={{ margin: 0, fontSize: '16px', fontWeight: '800', color: '#0f172a' }}>
+              <h3 style={{ margin: 0, fontSize: '16px', fontWeight: '800', color: 'var(--text-main)' }}>
                 {deleteConfirm.title}
               </h3>
             </div>
-            <p style={{ fontSize: '13px', color: '#475569', lineHeight: '1.5', margin: '0 0 16px 0' }}>
+            <p style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: '1.5', margin: '0 0 16px 0' }}>
               {deleteConfirm.message}
             </p>
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
@@ -1647,12 +1672,12 @@ export const VehicleOperationLogPage: React.FC = () => {
                 onClick={() => setDeleteConfirm(null)}
                 style={{
                   padding: '8px 14px',
-                  backgroundColor: '#fff',
-                  border: '1px solid #cbd5e1',
+                  backgroundColor: 'var(--bg-app)',
+                  border: '1px solid var(--border-color)',
                   borderRadius: '6px',
                   fontSize: '13px',
                   fontWeight: '600',
-                  color: '#64748b',
+                  color: 'var(--text-secondary)',
                   cursor: 'pointer'
                 }}
               >
