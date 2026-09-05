@@ -288,7 +288,13 @@ export const MobileAdminHome: React.FC<MobileAdminHomeProps> = ({ onNavigate }) 
                   </div>
                   <button
                     type="button"
-                    onClick={() => triggerToast(`[${c.name}] 계약서/청구명세서 발송 큐에 등록되었습니다.`)}
+                    onClick={() => {
+                      if (c.repEmail) {
+                        triggerToast(`[${c.name}] (${c.repEmail}) 청구명세서 발송 큐에 등록되었습니다.`);
+                      } else {
+                        triggerToast(`[${c.name}] 담당자 이메일이 미등록되어 있습니다. 고객관리에서 이메일을 등록하십시오.`);
+                      }
+                    }}
                     className="px-2.5 py-1.5 rounded-lg bg-blue-600/80 hover:bg-blue-600 text-white font-bold text-xs active:scale-95"
                   >
                     명세서발송
@@ -315,7 +321,7 @@ export const MobileAdminHome: React.FC<MobileAdminHomeProps> = ({ onNavigate }) 
             <div key={b.id} className="p-3 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-between text-xs">
               <div>
                 <div className="font-bold text-white">{b.customerName}</div>
-                <div className="text-[11px] text-slate-400 mt-0.5">청구월: {b.billingYm || '2026-08'}</div>
+                <div className="text-[11px] text-slate-400 mt-0.5">청구월: {b.billingYm || b.billingDate?.slice(0, 7) || '당월'}</div>
               </div>
               <div className="text-right">
                 <div className="font-bold text-rose-400">₩{b.unpaidAmount.toLocaleString()}원</div>

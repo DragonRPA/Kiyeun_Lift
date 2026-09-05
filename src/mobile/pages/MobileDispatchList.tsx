@@ -414,14 +414,7 @@ export const MobileDispatchList: React.FC = () => {
                     placeholder="기사 통화 내용 붙여넣기...\n예: 경기88바1234 이기사 010-1234-5678 5톤 축차 12만원 판교 현장"
                     className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-xs text-white focus:outline-none focus:border-blue-500"
                   />
-                  <div className="flex items-center justify-between gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setPastedTranscript('경기88바1234 이기사 010-1234-5678 5톤 축차 12만원')}
-                      className="text-[10px] text-slate-400 hover:text-white underline"
-                    >
-                      테스트 예시 1
-                    </button>
+                  <div className="flex items-center justify-end gap-2">
                     <button
                       type="button"
                       onClick={() => {

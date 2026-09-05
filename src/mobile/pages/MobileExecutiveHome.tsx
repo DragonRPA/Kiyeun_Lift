@@ -1,7 +1,7 @@
 // src/mobile/pages/MobileExecutiveHome.tsx
 import React, { useMemo, useState } from 'react';
 import { useApp } from '../../context/AppContext';
-import { db, Todo, Customer, DelinquencyActionLog } from '../../services/db';
+import { db, Todo, Customer, DelinquencyActionLog, ConsumablePurchaseRequest, PurchaseSettlement } from '../../services/db';
 import { 
   Crown, TrendingUp, AlertTriangle, ShieldCheck, CreditCard, 
   Clock, CheckCircle2, ChevronRight, Ban, Send, ArrowRight, Users
@@ -16,7 +16,8 @@ interface MobileExecutiveHomeProps {
 export const MobileExecutiveHome: React.FC<MobileExecutiveHomeProps> = ({ onNavigate }) => {
   const { 
     assets, contracts, billings, bankTransactions, bankInitialBalances, customers, 
-    currentUser, saveCustomer, refreshAllData 
+    currentUser, saveCustomer, refreshAllData,
+    consumablePurchases, purchaseSettlements, payrollClosings, setPayrollClosingStatus, showErrorModal
   } = useApp();
 
   const [toast, setToast] = useState<string | null>(null);
@@ -134,6 +135,101 @@ export const MobileExecutiveHome: React.FC<MobileExecutiveHomeProps> = ({ onNavi
     }
   };
 
+  // 5. 실데이터 기반 경영진 결재 대기 큐 집계 (소모품/정비부품 구매요청, 월말 매입정산, 급여마감)
+  const pendingApprovals = useMemo(() => {
+    const list: Array<{
+      id: string;
+      category: 'CONSUMABLE' | 'SETTLEMENT' | 'PAYROLL';
+      categoryLabel: string;
+      title: string;
+      subText: string;
+      amount?: number;
+      createdAt?: string;
+      rawItem: any;
+    }> = [];
+
+    // 1) 소모품 및 정비 부품 구매 결재 요청
+    (consumablePurchases || [])
+      .filter(p => p.status === 'REQUESTED')
+      .forEach(p => {
+        list.push({
+          id: p.id,
+          category: 'CONSUMABLE',
+          categoryLabel: '부품구매',
+          title: `[${p.sellerName || '공급처'}] ${p.modelName} ${p.requestedQty}개`,
+          subText: `단가 ₩${(p.unitPrice || 0).toLocaleString()}원 • 신청: ${p.requesterName || '정비팀'}`,
+          amount: (p.unitPrice || 0) * (p.requestedQty || 1),
+          createdAt: p.requestDate || p.createdAt,
+          rawItem: p,
+        });
+      });
+
+    // 2) 월말 매입 정산 승인 요청
+    (purchaseSettlements || [])
+      .filter(s => s.status === 'PENDING')
+      .forEach(s => {
+        list.push({
+          id: s.id,
+          category: 'SETTLEMENT',
+          categoryLabel: '매입정산',
+          title: `[${s.vendorName || '매입처'}] ${s.settlementYm || ''} 정산 승인`,
+          subText: `청구총액 ₩${(s.totalAmount || 0).toLocaleString()}원 • ${s.settlementType || '매입'}`,
+          amount: s.totalAmount || 0,
+          createdAt: s.createdAt,
+          rawItem: s,
+        });
+      });
+
+    // 3) 월별 급여 마감 승인 요청
+    (payrollClosings || [])
+      .filter(pc => pc.status === 'DRAFT')
+      .forEach(pc => {
+        list.push({
+          id: pc.month,
+          category: 'PAYROLL',
+          categoryLabel: '급여마감',
+          title: `${pc.month} 정기 급여 마감 승인`,
+          subText: `상태: 임시 저장(DRAFT) • 경영진 최종 승인 필요`,
+          createdAt: pc.createdAt,
+          rawItem: pc,
+        });
+      });
+
+    return list;
+  }, [consumablePurchases, purchaseSettlements, payrollClosings]);
+
+  // 실데이터 결재 승인 핸들러 (헌장 5.2 준수)
+  const handleApproveItem = async (item: typeof pendingApprovals[0]) => {
+    try {
+      const nowIso = new Date().toISOString();
+      const approverName = currentUser?.name || '대표이사';
+
+      if (item.category === 'CONSUMABLE') {
+        db.updateRow<ConsumablePurchaseRequest>('consumablePurchaseRequests', item.id, {
+          status: 'ACCEPTED',
+          acceptedDate: nowIso,
+          accepterId: currentUser?.id,
+          accepterName: approverName,
+          updatedAt: nowIso,
+        });
+      } else if (item.category === 'SETTLEMENT') {
+        db.updateRow<PurchaseSettlement>('purchaseSettlements', item.id, {
+          status: 'CONFIRMED',
+          confirmedAt: nowIso,
+          updatedAt: nowIso,
+        });
+      } else if (item.category === 'PAYROLL') {
+        await setPayrollClosingStatus(item.id, 'APPROVED', approverName);
+      }
+
+      await db.awaitPendingWrites();
+      refreshAllData();
+      triggerToast(`[${item.categoryLabel}] ${item.title} 건이 정식 승인되었습니다.`);
+    } catch (err: any) {
+      showErrorModal(`승인 처리 실패: ${err?.message || err}`);
+    }
+  };
+
   return (
     <div className="flex flex-col gap-4 pb-24 p-4 font-sans text-slate-100">
       {/* 토스트 */}
@@ -244,51 +340,42 @@ export const MobileExecutiveHome: React.FC<MobileExecutiveHomeProps> = ({ onNavi
         </button>
       </div>
 
-      {/* ── 4. 긴급 결재 대기 큐 ── */}
+      {/* ── 4. 실데이터 기반 경영진 최종 결재 대기 큐 ── */}
       <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex flex-col gap-3 shadow-lg">
         <div className="flex items-center justify-between">
           <h3 className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
             <ShieldCheck className="w-4 h-4 text-amber-400" />
             <span>경영진 최종 승인 대기</span>
           </h3>
-          <span className="text-[11px] font-bold text-amber-400">결재 2건</span>
+          <span className="text-[11px] font-bold text-amber-400">결재 {pendingApprovals.length}건</span>
         </div>
 
-        <div className="flex flex-col gap-2">
-          <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-between text-xs">
-            <div>
-              <div className="font-bold text-white flex items-center gap-1.5">
-                <span className="text-amber-400 font-mono">[단가특약]</span>
-                <span>(주)서희건설 오산 현장</span>
-              </div>
-              <div className="text-[11px] text-slate-400 mt-0.5">SJ-3219 4대 장기 특별할인 승인요청</div>
-            </div>
-            <button
-              type="button"
-              onClick={() => triggerToast('특약 승인이 완료되었습니다.')}
-              className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs active:scale-95"
-            >
-              승인
-            </button>
+        {pendingApprovals.length === 0 ? (
+          <div className="p-4 text-center text-xs text-slate-500 bg-slate-950 rounded-xl">
+            현재 경영진 최종 결재 대기 건이 없습니다.
           </div>
-
-          <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-between text-xs">
-            <div>
-              <div className="font-bold text-white flex items-center gap-1.5">
-                <span className="text-amber-400 font-mono">[지출결의]</span>
-                <span>고압세척기 정비부품 구매</span>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {pendingApprovals.map((item) => (
+              <div key={item.id} className="p-3 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-between text-xs">
+                <div className="min-w-0 pr-2">
+                  <div className="font-bold text-white flex items-center gap-1.5 truncate">
+                    <span className="text-amber-400 font-mono flex-shrink-0">[{item.categoryLabel}]</span>
+                    <span className="truncate">{item.title}</span>
+                  </div>
+                  <div className="text-[11px] text-slate-400 mt-0.5 truncate">{item.subText}</div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleApproveItem(item)}
+                  className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs flex-shrink-0 active:scale-95 transition-transform shadow-sm"
+                >
+                  승인
+                </button>
               </div>
-              <div className="text-[11px] text-slate-400 mt-0.5">₩3,850,000원 외상 결제 승인의 건</div>
-            </div>
-            <button
-              type="button"
-              onClick={() => triggerToast('지출결의 승인이 완료되었습니다.')}
-              className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs active:scale-95"
-            >
-              승인
-            </button>
+            ))}
           </div>
-        </div>
+        )}
       </div>
 
       {/* ── 5. 고위험 상습연체 거래처 & 원클릭 영업지시/출고금지 ── */}
