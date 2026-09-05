@@ -5,7 +5,7 @@ import {
   LayoutDashboard, Users, UserCheck, Package, Layers, PlusCircle,
   Truck, Wrench, Shield, ShoppingBag, CreditCard, LogOut, Sun, Moon, Menu, X, Zap, Settings, Database as DatabaseIcon,
   TrendingUp, Clock, AlertTriangle, Building2, ChevronDown, ChevronRight, Briefcase, Box, FolderKanban, ShieldAlert, Terminal, ArrowLeftRight, CheckSquare,
-  Smartphone, Monitor, Car
+  Smartphone, Monitor, Car, FileText
 } from 'lucide-react';
 
 import { WeatherWidget } from './components/WeatherWidget';
@@ -46,6 +46,7 @@ import { DelinquencyPage } from './pages/DelinquencyPage';
 import { OutboundInspections } from './pages/outbound_inspections';
 import { DepreciationExecution } from './pages/depreciation_execution';
 import { PurchaseSettlementPage } from './pages/PurchaseSettlementPage';
+import { RegularReportsPage } from './pages/RegularReportsPage';
 import { InitialDbUploader } from './pages/InitialDbUploader';
 import { AgentHeaderBadge } from './components/AgentHeaderBadge';
 import { MirrorSyncProgressToast } from './components/MirrorSyncProgressToast';
@@ -250,6 +251,7 @@ const App: React.FC = () => {
         { id: 'cash_flow', name: '자금 흐름 분석', icon: <TrendingUp size={16} />, component: <CashFlowPage /> },
         { id: 'delinquency', name: '미수 채권 연체 관리', icon: <AlertTriangle size={16} />, component: <DelinquencyPage /> },
         { id: 'depreciation_execution', name: '감가상각 마감 실행', icon: <TrendingUp size={16} />, component: <DepreciationExecution /> },
+        { id: 'regular_reports', name: '정기보고서 생성', icon: <FileText size={16} />, component: <RegularReportsPage /> },
       ]
     },
     {

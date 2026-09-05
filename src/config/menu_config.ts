@@ -81,7 +81,8 @@ export const SYSTEM_MENU_CONFIG: MenuGroupConfig[] = [
       { id: 'corporate_card', name: '법인카드 매입정산' },
       { id: 'cash_flow', name: '자금 흐름 분석' },
       { id: 'delinquency', name: '미수 채권 연체 관리' },
-      { id: 'depreciation_execution', name: '감가상각 마감 실행' }
+      { id: 'depreciation_execution', name: '감가상각 마감 실행' },
+      { id: 'regular_reports', name: '정기보고서 생성' }
     ]
   },
   {
