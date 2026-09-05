@@ -477,10 +477,31 @@ export interface ContractAsset {
 
 export type ContractType = 'RENTAL' | 'SALE';
 
+/** 자산 매각 계약 전용 실무 5대 조건 인터페이스 */
+export interface SaleContractTerms {
+  paymentType: 'LUMP_SUM' | 'INSTALLMENT'; // 일시불 | 분할 지급 (계약금+잔금)
+  lumpSumDueTerm?: string; // 일시불 완납 기한 ('IMMEDIATE' | 'DELIVERY' | '7_DAYS' | '14_DAYS' | 'MONTH_10')
+  installmentDownRate?: number; // 계약금 비율 (예: 20%)
+  installmentDownAmount?: number; // 계약금 금액 (원)
+  installmentDownDate?: string; // 계약금 납기일 (YYYY-MM-DD)
+  installmentBalanceAmount?: number; // 잔금 금액 (원)
+  installmentBalanceDueDate?: string; // 잔금 납기일 (YYYY-MM-DD)
+  bankAccount?: string; // 입금 지정 계좌
+
+  deliveryDate?: string; // 장비 인도 예정일 (YYYY-MM-DD)
+  deliveryLocationType?: 'YARD' | 'BUYER_SITE'; // 당사 주기장 상차도(FOB) | 매수처 도착도
+  deliverySiteAddress?: string; // 도착도 시 상세 주소
+  freightBearer?: 'BUYER' | 'SELLER'; // 운송비 부담 주체: 매수자 부담(기본) | 당사(기연) 부담
+
+  useStandardAsIsClause?: boolean; // 현상태 인수(As-Is) 및 하자담보책임 면책 특약 동의 여부
+  specialNotes?: string; // 추가 특약 사항 전문
+}
+
 export interface Contract {
   id: string;
   contractNo: string;
   contractType?: ContractType; // 💡 신규 추가: 'RENTAL' (기본값) | 'SALE' (자산 매각 계약)
+  saleTerms?: SaleContractTerms; // 💡 자산 매각 계약 전용 상세 조건
   customerId: string;
   contactId?: string;
   siteId?: string;

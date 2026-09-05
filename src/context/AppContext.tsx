@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
-import { db, supabase, User, MenuPermission, createMenuPermission, Customer, CustomerContact, CustomerSite, Product, Asset, Consumable, ConsumableLog, ConsumablePurchaseRequest, MechanicConsumableStock, Contract, ContractAsset, ContractHistory, Delivery, Billing, BillingDetail, Receivable, Payment, PaymentDepositLink, Repair, RepairConsumable, Todo, BankTransaction, BankMatchingRule, BankAccountInitialBalance, AssetInOutLog, GoogleConfig, Vendor, CashFlowSnapshot, OutboundInspection, TransportCompany, TransportDriver, DepreciationLog, PurchaseSettlement, PurchaseSettlementItem, SettlementPaymentLog, ExternalLease, PurchaseSettlementType, PurchaseSettlementStatus, findCustomerByNormalizedName, AnnualLeaveQuota, LeaveUsage, OvertimeRecord, PayrollClosing, InspectionChecklistItem, InboundDefectDetail, PrepaidTransaction, DelinquencyActionLog, LegalNoticeLog, LegalNoticeTemplate, calculateAssetDepreciation, FieldAsTicket, FieldAsPartUsed, FieldAsCollectedPart, CorporateVehicle, VehicleOperationLog, VehicleFuelLog, RepairPartUsed, RepairCollectedPart } from '../services/db';
+import { db, supabase, User, MenuPermission, createMenuPermission, Customer, CustomerContact, CustomerSite, Product, Asset, Consumable, ConsumableLog, ConsumablePurchaseRequest, MechanicConsumableStock, Contract, ContractAsset, ContractHistory, Delivery, Billing, BillingDetail, Receivable, Payment, PaymentDepositLink, Repair, RepairConsumable, Todo, BankTransaction, BankMatchingRule, BankAccountInitialBalance, AssetInOutLog, GoogleConfig, Vendor, CashFlowSnapshot, OutboundInspection, TransportCompany, TransportDriver, DepreciationLog, PurchaseSettlement, PurchaseSettlementItem, SettlementPaymentLog, ExternalLease, PurchaseSettlementType, PurchaseSettlementStatus, findCustomerByNormalizedName, AnnualLeaveQuota, LeaveUsage, OvertimeRecord, PayrollClosing, InspectionChecklistItem, InboundDefectDetail, PrepaidTransaction, DelinquencyActionLog, LegalNoticeLog, LegalNoticeTemplate, calculateAssetDepreciation, FieldAsTicket, FieldAsPartUsed, FieldAsCollectedPart, CorporateVehicle, VehicleOperationLog, VehicleFuelLog, RepairPartUsed, RepairCollectedPart, SaleContractTerms } from '../services/db';
 import { ErrorModal } from '../components/ErrorModal';
 import { getAllSystemMenuIds } from '../config/menu_config';
 import { broadcastWorkNotification } from '../utils/workNotificationService';
@@ -14,9 +14,14 @@ export interface AssetSaleItem {
 export interface AssetSalePayload {
   customerId?: string;
   buyerName: string;
+  buyerBizRegNo?: string;
+  buyerRepresentative?: string;
+  buyerAddress?: string;
+  buyerContact?: string;
   salespersonId?: string;
   disposalDate: string;
   items: AssetSaleItem[];
+  saleTerms?: SaleContractTerms;
   memo?: string;
   recipientEmail?: string;
   ccEmail?: string;
@@ -1559,7 +1564,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       dailyRentalFee: assetData.dailyRentalFee || 0,
       acquisitionDate: assetData.acquisitionDate || new Date().toISOString().split('T')[0],
       acquisitionPrice: price,
-      depreciationMonths: assetData.depreciationMonths || 60,
+      depreciationMonths: assetData.depreciationMonths || 96,
       residualValueRate: residualRate,
       accumDepreciation: 0,
       bookValue: bookVal,
@@ -1609,7 +1614,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         dailyRentalFee: assetData.dailyRentalFee || 0,
         acquisitionDate: assetData.acquisitionDate || new Date().toISOString().split('T')[0],
         acquisitionPrice: price,
-        depreciationMonths: assetData.depreciationMonths || 60,
+        depreciationMonths: assetData.depreciationMonths || 96,
         residualValueRate: residualRate,
         accumDepreciation: 0,
         bookValue: bookVal,
@@ -1676,11 +1681,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (!customer) {
         customer = db.insertRow<Customer>('customers', {
           name: payload.buyerName || '자산매수처(미상)',
-          bizRegNo: '',
+          bizRegNo: payload.buyerBizRegNo || '',
           isClosed: false,
-          address: '',
-          representative: '',
-          repContact: '',
+          address: payload.buyerAddress || '',
+          representative: payload.buyerRepresentative || '',
+          repContact: payload.buyerContact || '',
           repEmail: payload.recipientEmail || '',
           transactionStatus: 'ALLOWED',
           createdAt: new Date().toISOString()
@@ -1692,10 +1697,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const billingYm = payload.disposalDate.slice(0, 7);
       const dayNum = parseInt(payload.disposalDate.slice(8, 10), 10) || 30;
 
-      // 3. 헌장 2.1 & 2.2: 매각 계약(Sale Contract) 생성
+      // 3. 헌장 2.1 & 2.2: 매각 계약(Sale Contract) 생성 (5대 계약 조건 포함)
       const contract = db.insertRow<Contract>('contracts', {
         contractNo,
         contractType: 'SALE',
+        saleTerms: payload.saleTerms,
         customerId: customer.id,
         salespersonId: payload.salespersonId || '',
         startDate: payload.disposalDate,
@@ -1771,14 +1777,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         });
       }
 
-      // 5. 1회성 매각 청구서(billings) 및 상세(billingDetails) 발행 (과세 10% 분리)
+      // 5. 1회성 매각 청구서(billings) 및 상세(billingDetails) 발행 (과세 10% 분리, 총액 100% 일치)
+      const vat = Math.round(totalSalePrice * 0.1);
+      const grandTotal = totalSalePrice + vat;
+
       const billing = db.insertRow<Billing>('billings', {
         billingType: 'ASSET_SALE',
         customerId: customer.id,
         contractId: contract.id,
         billingYm,
         billingDate: payload.disposalDate,
-        totalAmount: totalSalePrice, // 공급가액
+        totalAmount: grandTotal, // 💡 공급가 + 부가세 10% 총액 일치 (BankMatching 1원 오차 방지)
         paidAmount: 0,
         status: 'REQUESTED',
         createdAt: new Date().toISOString(),
@@ -1816,6 +1825,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           const vat = Math.round(totalSalePrice * 0.1);
           const grand = totalSalePrice + vat;
           const subject = `[기연리프트] 자산 매각 계약서 및 청구서 안내 (${customer.name} 귀하)`;
+          const paymentTermsText = payload.saleTerms?.paymentType === 'INSTALLMENT'
+            ? `분할 지급 (계약금: ₩${(payload.saleTerms.installmentDownAmount || 0).toLocaleString()}원 / 잔금: ₩${(payload.saleTerms.installmentBalanceAmount || 0).toLocaleString()}원, 잔금납기: ${payload.saleTerms.installmentBalanceDueDate || '-'})`
+            : `일시불 완납 (${payload.saleTerms?.lumpSumDueTerm === 'DELIVERY' ? '장비 인도일 완납' : payload.saleTerms?.lumpSumDueTerm === '7_DAYS' ? '계약일로부터 7일 이내' : payload.saleTerms?.lumpSumDueTerm === '14_DAYS' ? '계약일로부터 14일 이내' : payload.saleTerms?.lumpSumDueTerm === 'MONTH_10' ? '익월 10일 완납' : '계약 체결 즉시 완납'})`;
+
+          const deliveryTermsText = `${payload.saleTerms?.deliveryLocationType === 'BUYER_SITE' ? '매수처 지정지 하차도' : '당사 주기장 상차도(FOB)'} (${payload.saleTerms?.freightBearer === 'SELLER' ? '당사 운송부담' : '매수자 운송부담'}) / 인도예정일: ${payload.saleTerms?.deliveryDate || payload.disposalDate}`;
+
           const body = `
 안녕하세요, ${customer.name} 담당자님.
 (주)기연리프트입니다.
@@ -1830,8 +1845,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 - 공급가액: ₩${totalSalePrice.toLocaleString()}원
 - 부가세 (10%): ₩${vat.toLocaleString()}원
 - 청구 총합계금액: ₩${grand.toLocaleString()}원
-- 입금 계좌: [기연리프트] 기업은행 144-082875-01-017
-
+- 입금 계좌: ${payload.saleTerms?.bankAccount ? payload.saleTerms.bankAccount : '[기연리프트] 기업은행 144-082875-01-017'}
+- 결제 조건: ${paymentTermsText}
+- 인도 조건: ${deliveryTermsText}
+${payload.saleTerms?.useStandardAsIsClause ? '- 특약: 현상태 인수(As-Is) 및 소유권 유보(대금 완납 시 이전)\n' : ''}
 [매각 장비 상세 내역]
 ${soldAssetSummaries.map((s, idx) => `${idx + 1}. 관리번호: ${s.assetNo} / 모델명: ${s.modelName} / 매각단가: ₩${s.salePrice.toLocaleString()}원`).join('\n')}
 
