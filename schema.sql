@@ -229,6 +229,9 @@ CREATE TABLE vendors (
     "bankAccount"         TEXT,
     "isActive"            BOOLEAN NOT NULL DEFAULT TRUE,
     memo                  TEXT,
+    "firstTradeDate"       TEXT, -- 최초 거래개시일 (YYYY-MM-DD)
+    "lastTradeDate"        TEXT, -- 최근 거래일 (YYYY-MM-DD)
+    "totalPurchaseAmount"  BIGINT DEFAULT 0, -- 누적 거래액 (원, 매입거래 누계액)
     "createdAt"           TEXT NOT NULL,
     "updatedAt"           TEXT NOT NULL
 );
@@ -1188,13 +1191,30 @@ CREATE TABLE depreciation_logs (
 CREATE TABLE todos (
     id                    TEXT PRIMARY KEY,
     "userId"              TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    type                  TEXT CHECK (type IN ('MISSING_INFO', 'GENERAL', 'URGENT', 'APPROVAL')) NOT NULL DEFAULT 'GENERAL',
+    "assignedUserId"      TEXT REFERENCES users(id) ON DELETE SET NULL,
+    "targetDept"          TEXT,
+    "targetRole"          TEXT,
+    "taskCategory"        TEXT NOT NULL DEFAULT 'GENERAL',
+    type                  TEXT NOT NULL DEFAULT 'GENERAL',
     title                 TEXT NOT NULL,
     content               TEXT NOT NULL,
+    priority              TEXT NOT NULL DEFAULT 'NORMAL',
+    "dueDate"             TEXT,
+    "actionUrl"           TEXT NOT NULL DEFAULT '/',
+    "entityType"          TEXT,
+    "entityId"            TEXT,
+    "targetType"          TEXT,
     "isCompleted"         BOOLEAN NOT NULL DEFAULT FALSE,
     "relatedEntityId"     TEXT,
+    "senderId"            TEXT REFERENCES users(id) ON DELETE SET NULL,
+    "senderName"          TEXT,
+    "resolutionNote"      TEXT,
     "createdAt"           TEXT NOT NULL,
-    "updatedAt"           TEXT NOT NULL
+    "updatedAt"           TEXT NOT NULL,
+    "completedAt"         TEXT,
+    "completedByUserId"   TEXT REFERENCES users(id) ON DELETE SET NULL,
+    "completedByName"     TEXT,
+    "completionAction"    TEXT
 );
 
 -- 6-2. 사내 공지사항 (announcements & reads)

@@ -3,6 +3,7 @@ import { db, supabase, User, MenuPermission, createMenuPermission, Customer, Cus
 import { ErrorModal } from '../components/ErrorModal';
 import { getAllSystemMenuIds } from '../config/menu_config';
 import { broadcastWorkNotification } from '../utils/workNotificationService';
+import { issueHandoverTask, clearHandoverTasks, findActiveTasksForUser } from '../utils/taskHandoverPipeline';
 import { resolveSiteDetailedAddress } from '../utils/nativeLauncher';
 import { emailService } from '../services/email';
 
@@ -108,6 +109,7 @@ interface AppContextType {
   bankTransactions: BankTransaction[];
   bankMatchingRules: BankMatchingRule[];
   bankInitialBalances: BankAccountInitialBalance[];
+  saveBankInitialBalance: (bankName: string, initialBalance: number, accountNumber?: string) => Promise<void>;
   assetInOutLogs: AssetInOutLog[];
   vendors: Vendor[];
   googleConfigs: GoogleConfig[];
@@ -131,12 +133,11 @@ interface AppContextType {
   vehicleFuelLogs: VehicleFuelLog[];
 
   // Mutators
-  saveBankInitialBalance: (bankName: string, initialBalance: number, accountNumber?: string) => Promise<void>;
-  updateAnnualLeaveQuota: (userId: string, periodStart: string, periodEnd: string, grantedDays: number, memo?: string) => void;
-  addLeaveUsage: (usage: Omit<LeaveUsage, 'id' | 'createdAt'>) => void;
-  deleteLeaveUsage: (id: string) => void;
-  addOvertimeRecord: (record: Omit<OvertimeRecord, 'id' | 'createdAt'>) => void;
-  deleteOvertimeRecord: (id: string) => void;
+  updateAnnualLeaveQuota: (userId: string, periodStart: string, periodEnd: string, grantedDays: number, memo?: string) => Promise<void>;
+  addLeaveUsage: (usage: Omit<LeaveUsage, 'id' | 'createdAt'>) => Promise<void>;
+  deleteLeaveUsage: (id: string) => Promise<void>;
+  addOvertimeRecord: (record: Omit<OvertimeRecord, 'id' | 'createdAt'>) => Promise<void>;
+  deleteOvertimeRecord: (id: string) => Promise<void>;
   setPayrollClosingStatus: (month: string, status: 'DRAFT' | 'APPROVED', approvedBy?: string) => Promise<void>;
   refreshAllData: () => void;
   fullRefreshFromServer: () => Promise<void>;
@@ -154,6 +155,7 @@ interface AppContextType {
   deleteCashFlowSnapshot: (snapId: string) => void;
   saveVendor: (vendor: Vendor) => Promise<void>;
   deleteVendor: (id: string) => void;
+  recalculateAllVendorMetrics: () => Promise<{ updatedCount: number; totalAmount: number }>;
   saveInspectionChecklistItem: (item: Omit<InspectionChecklistItem, 'id' | 'createdAt'> & { id?: string }) => Promise<void>;
   deleteInspectionChecklistItem: (id: string) => Promise<void>;
   saveEquipmentManual: (item: Omit<EquipmentManual, 'id' | 'createdAt'> & { id?: string }) => Promise<void>;
@@ -258,8 +260,20 @@ interface AppContextType {
   saveSmartDispatch: (data: SmartDispatchData, autoRegister: boolean, onProgress?: (log: string, percent: number) => void) => Promise<{ success: boolean; requiresConfirm?: boolean; missingFields?: string[]; errorMessage?: string; contractId?: string; contractNo?: string }>;
   saveSmartReturn: (data: SmartReturnData) => Promise<any>;
   
-  // Todos
+  // Todos & Executive Directives
   completeTodo: (todoId: string) => void;
+  issueExecutiveDirective: (params: {
+    targetType: 'USER' | 'DEPT';
+    targetUserId?: string;
+    targetDept?: string;
+    title: string;
+    content: string;
+    priority?: 'URGENT' | 'HIGH' | 'NORMAL';
+    dueDate?: string;
+    actionUrl?: string;
+  }) => Promise<Todo>;
+  resolveExecutiveDirective: (todoId: string, resolutionNote: string) => Promise<void>;
+  cancelExecutiveDirective: (todoId: string) => Promise<void>;
   
   // Billings
   generateBillingsForMonth: (billingYm: string, billingDate: string) => Promise<void>;
@@ -284,7 +298,17 @@ interface AppContextType {
   saveBankDeposit: (data: Omit<BankTransaction, 'id' | 'createdAt' | 'withdrawAmount'>) => void;  // 통장입금 등록/수정
   deleteBankDeposit: (txId: string) => void;  // 통장입금 삭제 (연결 수납 없을 때만)
   uploadBankTransactions: (txs: Omit<BankTransaction, 'id' | 'createdAt'>[]) => void;
-  matchTransactionManual: (txId: string, billingId: string, learnRule: boolean) => Promise<void> | void;
+  matchTransactionManual: (
+    txId: string,
+    billingId: string,
+    learnRule: boolean,
+    options?: {
+      matchingMode?: 'PINPOINT' | 'CASCADE' | 'MULTI';
+      allocations?: { billingId: string; amount: number; feeAdjustment?: number }[];
+      feeAdjustment?: number;
+    }
+  ) => Promise<void> | void;
+  batchAutoMatchTransactions: () => Promise<number>;
   unmatchTransaction: (txId: string) => Promise<void> | void;
   saveMatchingRule: (senderName: string, customerId: string) => void;
   deleteMatchingRule: (ruleId: string) => void;
@@ -1458,7 +1482,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const unloadingDateStr = extractDate(data.unloadingTime) || contract.startDate;
     const unloadingTimeSlotStr = (data.unloadingTime && data.unloadingTime.includes(':')) ? data.unloadingTime.split(' ')[1] : '오전';
 
-    db.insertRow<Delivery>('deliveries', {
+    const createdDelivery = db.insertRow<Delivery>('deliveries', {
       contractId: contract.id,
       type: 'OUTBOUND',
       dispatchCategory: '출고',
@@ -1520,15 +1544,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     refreshAllData();
 
-    // 📢 발생즉시 1회 푸시알림 브로드캐스트 (출고의뢰)
+    // 🚀 [단일 업무 인계 파이프라인] 배차팀에 물리 ToDo 영구 적재 + 실시간 브로드캐스트
     const totalEqCount = (data.equipments || []).reduce((acc: number, eq: any) => acc + (Number(eq.qty) || 1), 0);
-    broadcastWorkNotification({
-      type: 'OUTBOUND',
-      title: '출고 의뢰 접수',
-      body: `${data.customerName || '고객사'} (${data.siteName || '현장'}) ${totalEqCount}대 출고 의뢰`,
-      url: '/admin/dispatch',
-      targetDepts: ['DISPATCH', 'YARD', 'ADMIN', 'EXECUTIVE']
-    }).catch(console.warn);
+    await issueHandoverTask({
+      category: 'DISPATCH_REQUEST',
+      title: `[출고 배차 의뢰] ${data.customerName || '고객사'} (${totalEqCount}대)`,
+      content: `${data.customerName || '고객사'} (${data.siteName || '현장'}) ${totalEqCount}대 출고 배차 요청 (상차: ${data.loadingTime || '미정'}, 하차: ${data.unloadingTime || '미정'})`,
+      targetDept: 'DISPATCH',
+      priority: 'HIGH',
+      actionUrl: `/admin/dispatch?contractId=${contract.id}`,
+      entityType: 'DELIVERY',
+      entityId: createdDelivery.id,
+      senderId: currentUser?.id,
+      senderName: currentUser?.name
+    });
 
     return { success: true, contractId: contract.id, contractNo: contract.contractNo };
   };
@@ -1580,7 +1609,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         });
         const cargoItems = JSON.stringify(Object.entries(modelCountsMap).map(([modelName, count]) => ({ modelName, count })));
 
-        db.insertRow<Delivery>('deliveries', {
+        const createdReturnDelivery = db.insertRow<Delivery>('deliveries', {
           contractId: data.contractId,
           assetIds: data.assetIds.join(','),
           type: 'INBOUND',
@@ -1609,9 +1638,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString()
         });
+
+        // 🚀 [단일 업무 인계 파이프라인] 배차팀에 회수 배차 ToDo 영구 적재
+        const retCount = data.assetIds?.length || 1;
+        await issueHandoverTask({
+          category: 'DISPATCH_REQUEST',
+          title: `[회수 배차 의뢰] ${cust?.name || '고객사'} (${retCount}대)`,
+          content: `${cust?.name || '고객사'} (${site?.name || '현장'}) ${retCount}대 회수 배차 요청 (요청일: ${data.returnDate})`,
+          targetDept: 'DISPATCH',
+          priority: 'HIGH',
+          actionUrl: '/admin/dispatch',
+          entityType: 'DELIVERY',
+          entityId: createdReturnDelivery.id,
+          senderId: currentUser?.id,
+          senderName: currentUser?.name
+        });
       } else {
         // Case 4: 외주정비 회수
-        db.insertRow<Delivery>('deliveries', {
+        const createdRepairReturnDelivery = db.insertRow<Delivery>('deliveries', {
           assetIds: data.assetIds.join(','),
           type: 'INBOUND',
           dispatchCategory: '입고',
@@ -1635,23 +1679,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString()
         });
+
+        await issueHandoverTask({
+          category: 'DISPATCH_REQUEST',
+          title: `[외주정비 회수 배차] 장비 ${data.assetIds.length}대`,
+          content: `외주정비업체 회수 배차 요청 (정비건: ${data.repairId || '-'}, 외주: ${data.vendorId || '-'})`,
+          targetDept: 'DISPATCH',
+          priority: 'NORMAL',
+          actionUrl: '/admin/dispatch',
+          entityType: 'DELIVERY',
+          entityId: createdRepairReturnDelivery.id,
+          senderId: currentUser?.id,
+          senderName: currentUser?.name
+        });
       }
 
       await db.awaitPendingWrites();
       refreshAllData();
-
-      // 📢 발생즉시 1회 푸시알림 브로드캐스트 (회수의뢰)
-      const retContract = data.contractId ? db.contracts.find(ct => ct.id === data.contractId) : null;
-      const retCust = retContract ? db.customers.find(c => c.id === retContract.customerId)?.name : '';
-      const retSite = retContract ? db.sites.find(s => s.id === retContract.siteId)?.name : '';
-      const retCount = data.assetIds?.length || 1;
-      broadcastWorkNotification({
-        type: 'RETURN',
-        title: '장비 회수 의뢰 접수',
-        body: `${retCust || '고객사'} (${retSite || '현장'}) ${retCount}대 회수 의뢰`,
-        url: '/admin/dispatch',
-        targetDepts: ['DISPATCH', 'YARD', 'ADMIN', 'EXECUTIVE']
-      }).catch(console.warn);
 
       return { success: true };
     } catch (err: any) {
@@ -1662,8 +1706,119 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const completeTodo = (todoId: string) => {
-    db.updateRow<Todo>('todos', todoId, { isCompleted: true });
+    const nowIso = new Date().toISOString();
+    db.updateRow<Todo>('todos', todoId, { 
+      isCompleted: true,
+      completedAt: nowIso,
+      completedByUserId: currentUser?.id,
+      completedByName: currentUser?.name,
+      completionAction: 'MANUAL_COMPLETED',
+      updatedAt: nowIso
+    });
     refreshAllData();
+  };
+
+  const issueExecutiveDirective = async (params: {
+    targetType: 'USER' | 'DEPT';
+    targetUserId?: string;
+    targetDept?: string;
+    title: string;
+    content: string;
+    priority?: 'URGENT' | 'HIGH' | 'NORMAL';
+    dueDate?: string;
+    actionUrl?: string;
+  }): Promise<Todo> => {
+    const userRole = (currentUser?.role || '').toUpperCase();
+    const userDept = (currentUser?.department || '').toUpperCase();
+    const isAuthorized = userRole === 'ADMIN' || userRole === 'EXECUTIVE' || userRole === 'MANAGER' || userDept.includes('경영') || userDept.includes('대표');
+    if (!isAuthorized) {
+      throw new Error('경영진 업무지시 발행 권한이 없습니다. (관리자/경영진 전용)');
+    }
+
+    const newTodo = await issueHandoverTask({
+      category: 'EXECUTIVE_DIRECTIVE',
+      title: params.title,
+      content: params.content,
+      priority: params.priority || 'URGENT',
+      targetType: params.targetType,
+      targetDept: params.targetType === 'DEPT' ? params.targetDept : undefined,
+      assignedUserId: params.targetType === 'USER' ? params.targetUserId : undefined,
+      dueDate: params.dueDate,
+      actionUrl: params.actionUrl || '/',
+      entityType: 'DIRECTIVE',
+      entityId: `DIR-${Date.now()}`,
+      senderId: currentUser?.id,
+      senderName: currentUser?.name || '경영진'
+    });
+
+    await db.awaitPendingWrites();
+    refreshAllData();
+    return newTodo;
+  };
+
+  const resolveExecutiveDirective = async (todoId: string, resolutionNote: string) => {
+    const targetTodo = db.todos.find(t => t.id === todoId);
+    if (!targetTodo) return;
+
+    const nowIso = new Date().toISOString();
+    db.updateRow<Todo>('todos', todoId, {
+      isCompleted: true,
+      completedAt: nowIso,
+      completedByUserId: currentUser?.id,
+      completedByName: currentUser?.name,
+      completionAction: 'DIRECTIVE_RESOLVED',
+      resolutionNote: resolutionNote,
+      updatedAt: nowIso
+    });
+
+    await db.awaitPendingWrites();
+    refreshAllData();
+  };
+
+  const cancelExecutiveDirective = async (todoId: string) => {
+    const targetTodo = db.todos.find(t => t.id === todoId);
+    if (!targetTodo) return;
+
+    const nowIso = new Date().toISOString();
+    db.updateRow<Todo>('todos', todoId, {
+      isCompleted: true,
+      completedAt: nowIso,
+      completedByUserId: currentUser?.id,
+      completedByName: currentUser?.name,
+      completionAction: 'DIRECTIVE_CANCELLED',
+      updatedAt: nowIso
+    });
+
+    await db.awaitPendingWrites();
+    refreshAllData();
+  };
+
+  // 💡 매입처 거래액 및 거래개시일 자동 트리거 갱신 헬퍼
+  const triggerVendorPurchaseMetric = (vendorIdOrName: string, purchaseAmount: number, tradeDate?: string) => {
+    if (!vendorIdOrName || !purchaseAmount) return;
+    const targetVendor = db.vendors.find(v => 
+      v.id === vendorIdOrName || 
+      v.name === vendorIdOrName || 
+      (v.name && (v.name.includes(vendorIdOrName) || vendorIdOrName.includes(v.name)))
+    );
+    if (!targetVendor) return;
+
+    const currentTotal = targetVendor.totalPurchaseAmount || 0;
+    const newTotal = currentTotal + purchaseAmount;
+    const actualDate = tradeDate || new Date().toISOString().split('T')[0];
+    const newFirstDate = !targetVendor.firstTradeDate || actualDate < targetVendor.firstTradeDate 
+      ? actualDate 
+      : targetVendor.firstTradeDate;
+    const newLastDate = !targetVendor.lastTradeDate || actualDate > targetVendor.lastTradeDate 
+      ? actualDate 
+      : targetVendor.lastTradeDate;
+
+    db.updateRow<Vendor>('vendors', targetVendor.id, {
+      totalPurchaseAmount: newTotal,
+      firstTradeDate: newFirstDate,
+      lastTradeDate: newLastDate,
+      updatedAt: new Date().toISOString()
+    } as any);
   };
 
   const acquireAsset = async (assetData: Partial<Asset>): Promise<Asset> => {
@@ -1708,6 +1863,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       memo: `신규 당사자산 취득 등록 (취득가: ${(price || 0).toLocaleString()}원 / 공급처: ${newAsset.supplier || '-'})`,
       createdAt: new Date().toISOString()
     });
+
+    // 💡 매입처 누적거래액 및 거래개시일 자동 트리거 갱신
+    triggerVendorPurchaseMetric(newAsset.vendorId || newAsset.supplier || '', price, newAsset.acquisitionDate);
 
     await db.awaitPendingWrites(); // 💡 헌장 5.2 동기 쓰기 대기
     refreshAllData();
@@ -1757,6 +1915,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         memo: `신규 당사자산 취득 등록 [일괄] (취득가: ${(price || 0).toLocaleString()}원 / 공급처: ${newAsset.supplier || '-'})`,
         createdAt: new Date().toISOString()
       });
+
+      // 💡 매입처 누적거래액 및 거래개시일 자동 트리거 갱신
+      triggerVendorPurchaseMetric(newAsset.vendorId || newAsset.supplier || '', price, newAsset.acquisitionDate);
 
       createdList.push(newAsset);
     }
@@ -1933,6 +2094,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         changeDate: payload.disposalDate,
         description: `운영 자산 ${soldAssetSummaries.length}대 매각 처분 계약 체결 (매각총액: ₩${totalSalePrice.toLocaleString()})`,
         createdAt: new Date().toISOString()
+      });
+
+      // 🚀 [단일 업무 인계 파이프라인] 주기장에 매각 장비 실물 인도 검수 ToDo 발행
+      await issueHandoverTask({
+        category: 'ASSET_DISPOSAL_HANDOVER',
+        title: `[매각 장비 인도 검수] ${customer.name} (${soldAssetSummaries.length}대)`,
+        content: `매각 처분 계약 체결 완료 (계약: ${contract.contractNo}, 총액: ₩${grandTotal.toLocaleString()}). 주기장 실물 인도 및 상차 검수를 진행하세요.`,
+        targetDept: 'YARD',
+        priority: 'HIGH',
+        actionUrl: '/admin/asset_acquisition_disposal',
+        entityType: 'CONTRACT',
+        entityId: contract.id,
+        senderId: currentUser?.id,
+        senderName: currentUser?.name
       });
 
       // 7. 헌장 5.2 동기 쓰기 대기
@@ -2905,14 +3080,19 @@ ${payload.memo ? `\n[특이사항 / 메모]\n${payload.memo}\n` : ''}
       await db.awaitPendingWrites();
       refreshAllData();
 
-      // 📢 발생즉시 1회 푸시알림 브로드캐스트 (현장 AS 접수)
-      broadcastWorkNotification({
-        type: 'AS',
-        title: '현장 AS 접수 등록',
-        body: `${newTicket.customerName || '고객사'} (${newTicket.siteName || '현장'}) ${newTicket.modelName || '장비'} AS 접수 (${newTicket.issueCategory || '기타'})`,
-        url: '/mobile?tab=as',
-        targetDepts: ['AS', 'DISPATCH', 'ADMIN', 'EXECUTIVE']
-      }).catch(console.warn);
+      // 🚀 [단일 업무 인계 파이프라인] 정비팀에 물리 ToDo 영구 적재 + 실시간 브로드캐스트
+      await issueHandoverTask({
+        category: 'AS_DISPATCH_REPAIR',
+        title: `[긴급 AS 출동] ${newTicket.customerName || '현장'} (${newTicket.modelName || '장비'})`,
+        content: `증상: ${newTicket.issueCategory || '기타'} - ${newTicket.issueDescription || 'AS 요청'} (현장: ${newTicket.siteName || '-'})`,
+        targetDept: 'AS',
+        priority: 'URGENT',
+        actionUrl: '/mobile?tab=as',
+        entityType: 'REPAIR',
+        entityId: newTicket.id,
+        senderId: currentUser?.id,
+        senderName: currentUser?.name
+      });
 
       return newTicket;
     } catch (err: any) {
@@ -3152,6 +3332,32 @@ ${payload.memo ? `\n[특이사항 / 메모]\n${payload.memo}\n` : ''}
         updatedAt: new Date().toISOString()
       });
 
+      // 🟢 선행 AS 출동 ToDo 원자적 자동 상계
+      await clearHandoverTasks({
+        entityType: 'REPAIR',
+        entityId: ticketId,
+        category: 'AS_DISPATCH_REPAIR',
+        completedByUserId: currentUser?.id,
+        completedByName: currentUser?.name,
+        completionAction: `AS_${finalStatus}`
+      });
+
+      // 🚀 고객 과실 유상 수리 시 청구팀에 바인딩 ToDo 발행 (매출 누락 방지)
+      if (sanitizedBillableAmount > 0) {
+        await issueHandoverTask({
+          category: 'BILLABLE_REPAIR_BILLING',
+          title: `[유상AS 청구 반영] ${ticket.customerName || '고객사'} (₩${sanitizedBillableAmount.toLocaleString()}원)`,
+          content: `고객 과실 유상 수리비 ₩${sanitizedBillableAmount.toLocaleString()}원 청구서 바인딩 요망 (${ticket.siteName || '현장'}, ${data.actionTaken || '수리'})`,
+          targetDept: 'ACCOUNTING',
+          priority: 'HIGH',
+          actionUrl: '/admin/billing',
+          entityType: 'REPAIR',
+          entityId: ticketId,
+          senderId: currentUser?.id,
+          senderName: currentUser?.name
+        });
+      }
+
       // 🌟 [헌장 2.3 준수] 현장 수리 불능 대차 제안 시 단일 'EXCHANGE' 왕복 배차 의뢰 1건 자동 발행
       if (data.exchangeSuggested) {
         const deliveryId = db.generateNextId('deliveries', db.deliveries);
@@ -3170,6 +3376,20 @@ ${payload.memo ? `\n[특이사항 / 메모]\n${payload.memo}\n` : ''}
           memo: `[현장AS 대차 요청] 회수대상 자산: ${ticket.assetNo || '현장고장장비'} / 현장: ${ticket.siteName || ''} (${ticket.customerName || ''}) / 사유: ${data.actionTaken || '현장 수리불능 대차'}`,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString()
+        });
+
+        // 🚀 대차 배차 지시 ToDo 발행
+        await issueHandoverTask({
+          category: 'DISPATCH_REQUEST',
+          title: `[대차 교환 배차] ${ticket.customerName || '고객사'} (${ticket.assetNo || '장비'})`,
+          content: `현장 수리불능 대차 요청. 신규 장비 출고 및 고장 장비 회수 왕복 1건 배차 처리. (현장: ${ticket.siteName || '-'})`,
+          targetDept: 'DISPATCH',
+          priority: 'URGENT',
+          actionUrl: '/admin/dispatch',
+          entityType: 'DELIVERY',
+          entityId: deliveryId,
+          senderId: currentUser?.id,
+          senderName: currentUser?.name
         });
       }
 
@@ -3488,7 +3708,7 @@ ${payload.memo ? `\n[특이사항 / 메모]\n${payload.memo}\n` : ''}
 
   const requestConsumablePurchase = async (data: { consumableId?: string; modelName: string; qty: number; unitPrice: number; requestDate: string; sellerName: string }) => {
     const validUserId = getValidUserId(currentUser?.id);
-    db.insertRow<ConsumablePurchaseRequest>('consumablePurchases', {
+    const newReq = db.insertRow<ConsumablePurchaseRequest>('consumablePurchases', {
       consumableId: data.consumableId || undefined,
       modelName: data.modelName,
       requestedQty: data.qty,
@@ -3502,6 +3722,21 @@ ${payload.memo ? `\n[특이사항 / 메모]\n${payload.memo}\n` : ''}
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     });
+
+    // 🚀 [단일 업무 인계 파이프라인] 관리자/부서장에게 구매 결재 ToDo 발행
+    await issueHandoverTask({
+      category: 'CONSUMABLE_PURCHASE_APPROVAL',
+      title: `[소모품 구매 승인] ${data.modelName} (${data.qty}EA)`,
+      content: `구매 요청: ${data.modelName} ${data.qty}개 (단가: ₩${data.unitPrice.toLocaleString()}원, 공급처: ${data.sellerName})`,
+      targetRole: 'MANAGER',
+      priority: data.unitPrice * data.qty >= 1000000 ? 'HIGH' : 'NORMAL',
+      actionUrl: '/admin/consumable',
+      entityType: 'CONSUMABLE',
+      entityId: newReq.id,
+      senderId: currentUser?.id,
+      senderName: currentUser?.name
+    });
+
     await db.awaitPendingWrites();
     refreshAllData();
   };
@@ -3515,6 +3750,17 @@ ${payload.memo ? `\n[특이사항 / 메모]\n${payload.memo}\n` : ''}
       accepterName: currentUser?.name || '시스템',
       updatedAt: new Date().toISOString()
     });
+
+    // 🟢 구매 결재 ToDo 자동 상계
+    await clearHandoverTasks({
+      entityType: 'CONSUMABLE',
+      entityId: id,
+      category: 'CONSUMABLE_PURCHASE_APPROVAL',
+      completedByUserId: currentUser?.id,
+      completedByName: currentUser?.name,
+      completionAction: 'PURCHASE_ACCEPTED'
+    });
+
     await db.awaitPendingWrites();
     refreshAllData();
   };
@@ -5336,39 +5582,77 @@ ${payload.memo ? `\n[특이사항 / 메모]\n${payload.memo}\n` : ''}
   };
 
 
-  const executeMatch = (txId: string, billingId: string, matchingType: 'AUTO' | 'MANUAL') => {
+  const executeMatch = (
+    txId: string,
+    billingId: string,
+    matchingType: 'AUTO' | 'MANUAL',
+    options?: {
+      matchingMode?: 'PINPOINT' | 'CASCADE' | 'MULTI';
+      allocations?: { billingId: string; amount: number; feeAdjustment?: number }[];
+      feeAdjustment?: number;
+    }
+  ) => {
     const tx = db.bankTransactions.find(t => t.id === txId);
     const firstBilling = db.billings.find(b => b.id === billingId);
     if (!tx || !firstBilling) return;
 
     const customerId = firstBilling.customerId;
+    const mode = options?.matchingMode || 'CASCADE';
     let remainingDeposit = tx.depositAmount;
-
-    // 해당 고객사의 미납/일부납 상태 청구서를 오래된 순서(billingYm)로 조회
-    const activeBillings = db.billings
-      .filter(b => b.customerId === customerId && (b.status === 'UNPAID' || b.status === 'PARTIAL'))
-      .sort((a, b) => a.billingYm.localeCompare(b.billingYm));
-
-    // 혹시라도 정렬 목록에 타겟 청구서가 포함되지 않았을 경우 추가 예외 조치
-    if (!activeBillings.some(x => x.id === billingId)) {
-      activeBillings.unshift(firstBilling);
-    }
-
     const matchedBillingIds: string[] = [];
 
-    // 1. 청구서에 금액 순차 Cascade 배분
-    for (const billing of activeBillings) {
-      if (remainingDeposit <= 0) break;
+    if (mode === 'MULTI' && options?.allocations && options.allocations.length > 0) {
+      // 🌟 [MULTI 모드]: 사용자가 지정한 청구서별 금액 및 감액 직접 적용
+      for (const alloc of options.allocations) {
+        if (remainingDeposit <= 0 && (!alloc.amount || alloc.amount <= 0)) continue;
+        const billing = db.billings.find(b => b.id === alloc.billingId);
+        if (!billing) continue;
 
+        const bSup = billing.totalAmount || 0;
+        const bGrand = bSup + Math.round(bSup * 0.1);
+        const feeAdj = alloc.feeAdjustment || 0;
+        const paymentAmount = Math.min(alloc.amount, remainingDeposit);
+        remainingDeposit = Math.max(0, remainingDeposit - paymentAmount);
+
+        const payId = `pay-matching-${txId}-${billing.id}`;
+        db.insertRow<Payment>('payments', {
+          id: payId,
+          billingId: billing.id,
+          paymentDate: tx.transactionDate.split(' ')[0],
+          amount: paymentAmount,
+          method: 'BANK_TRANSFER',
+          memo: `사용자 분할 대조 수납 (${tx.senderName})${feeAdj > 0 ? ` (수수료 감액 ₩${feeAdj.toLocaleString()})` : ''}`,
+          feeAdjustment: feeAdj > 0 ? feeAdj : undefined,
+          createdAt: new Date().toISOString()
+        });
+
+        db.insertRow<PaymentDepositLink>('paymentDepositLinks', {
+          paymentId: payId,
+          bankTransactionId: txId,
+          usedAmount: paymentAmount,
+          createdAt: new Date().toISOString()
+        });
+
+        const nextPaid = (billing.paidAmount || 0) + paymentAmount + feeAdj;
+        const nextStatus: Billing['status'] = nextPaid >= bGrand ? 'PAID' : 'PARTIAL';
+        db.updateRow<Billing>('billings', billing.id, {
+          paidAmount: nextPaid,
+          status: nextStatus,
+          updatedAt: new Date().toISOString()
+        });
+        matchedBillingIds.push(billing.id);
+      }
+    } else if (mode === 'PINPOINT') {
+      // 🌟 [PINPOINT 모드]: 선택한 단일 청구서에만 전액 충당
+      const billing = firstBilling;
       const bSup = billing.totalAmount || 0;
       const bGrand = bSup + Math.round(bSup * 0.1);
-      const unpaidAmount = Math.max(0, bGrand - (billing.paidAmount || 0));
-      if (unpaidAmount <= 0) continue;
+      const feeAdj = options?.feeAdjustment || 0;
+      const unpaidAmount = Math.max(0, bGrand - (billing.paidAmount || 0) - feeAdj);
 
       const paymentAmount = Math.min(unpaidAmount, remainingDeposit);
       remainingDeposit -= paymentAmount;
 
-      // 수납 분할 전표 등록
       const payId = `pay-matching-${txId}-${billing.id}`;
       db.insertRow<Payment>('payments', {
         id: payId,
@@ -5376,11 +5660,11 @@ ${payload.memo ? `\n[특이사항 / 메모]\n${payload.memo}\n` : ''}
         paymentDate: tx.transactionDate.split(' ')[0],
         amount: paymentAmount,
         method: 'BANK_TRANSFER',
-        memo: `${matchingType === 'AUTO' ? '자동' : '수동'} 분할 대조 수납 (${tx.senderName})`,
+        memo: `단독 지정 대조 수납 (${tx.senderName})${feeAdj > 0 ? ` (수수료 감액 ₩${feeAdj.toLocaleString()})` : ''}`,
+        feeAdjustment: feeAdj > 0 ? feeAdj : undefined,
         createdAt: new Date().toISOString()
       });
 
-      // 💡 [무결성] PaymentDepositLink 동시 기록
       db.insertRow<PaymentDepositLink>('paymentDepositLinks', {
         paymentId: payId,
         bankTransactionId: txId,
@@ -5388,16 +5672,73 @@ ${payload.memo ? `\n[특이사항 / 메모]\n${payload.memo}\n` : ''}
         createdAt: new Date().toISOString()
       });
 
-      // 청구서 납부금액 및 상태 업데이트 (VAT 포함 총액 기준)
-      const nextPaid = billing.paidAmount + paymentAmount;
+      const nextPaid = (billing.paidAmount || 0) + paymentAmount + feeAdj;
       const nextStatus: Billing['status'] = nextPaid >= bGrand ? 'PAID' : 'PARTIAL';
       db.updateRow<Billing>('billings', billing.id, {
         paidAmount: nextPaid,
         status: nextStatus,
         updatedAt: new Date().toISOString()
       });
-
       matchedBillingIds.push(billing.id);
+    } else {
+      // 🌟 [CASCADE 모드]: 과거 미수부터 순차 충당 (수수료 감액 옵션 포함)
+      const activeBillings = db.billings
+        .filter(b => b.customerId === customerId && (b.status === 'UNPAID' || b.status === 'PARTIAL'))
+        .sort((a, b) => a.billingYm.localeCompare(b.billingYm));
+
+      if (!activeBillings.some(x => x.id === billingId)) {
+        activeBillings.unshift(firstBilling);
+      }
+
+      let feeAdjRemaining = options?.feeAdjustment || 0;
+
+      for (const billing of activeBillings) {
+        if (remainingDeposit <= 0 && feeAdjRemaining <= 0) break;
+
+        const bSup = billing.totalAmount || 0;
+        const bGrand = bSup + Math.round(bSup * 0.1);
+        let unpaidAmount = Math.max(0, bGrand - (billing.paidAmount || 0));
+        if (unpaidAmount <= 0) continue;
+
+        let feeAdjForThis = 0;
+        if (feeAdjRemaining > 0) {
+          feeAdjForThis = Math.min(feeAdjRemaining, unpaidAmount);
+          feeAdjRemaining -= feeAdjForThis;
+          unpaidAmount -= feeAdjForThis;
+        }
+
+        const paymentAmount = Math.min(unpaidAmount, remainingDeposit);
+        remainingDeposit -= paymentAmount;
+
+        const payId = `pay-matching-${txId}-${billing.id}`;
+        db.insertRow<Payment>('payments', {
+          id: payId,
+          billingId: billing.id,
+          paymentDate: tx.transactionDate.split(' ')[0],
+          amount: paymentAmount,
+          method: 'BANK_TRANSFER',
+          memo: `${matchingType === 'AUTO' ? '자동' : '수동'} 순차 대조 수납 (${tx.senderName})${feeAdjForThis > 0 ? ` (수수료 감액 ₩${feeAdjForThis.toLocaleString()})` : ''}`,
+          feeAdjustment: feeAdjForThis > 0 ? feeAdjForThis : undefined,
+          createdAt: new Date().toISOString()
+        });
+
+        db.insertRow<PaymentDepositLink>('paymentDepositLinks', {
+          paymentId: payId,
+          bankTransactionId: txId,
+          usedAmount: paymentAmount,
+          createdAt: new Date().toISOString()
+        });
+
+        const nextPaid = (billing.paidAmount || 0) + paymentAmount + feeAdjForThis;
+        const nextStatus: Billing['status'] = nextPaid >= bGrand ? 'PAID' : 'PARTIAL';
+        db.updateRow<Billing>('billings', billing.id, {
+          paidAmount: nextPaid,
+          status: nextStatus,
+          updatedAt: new Date().toISOString()
+        });
+
+        matchedBillingIds.push(billing.id);
+      }
     }
 
     // 2. 남은 초과금 선수금 적립
@@ -5432,6 +5773,11 @@ ${payload.memo ? `\n[특이사항 / 메모]\n${payload.memo}\n` : ''}
   };
 
   const tryAutoMatchForTransaction = (tx: BankTransaction) => {
+    const getBillingGrand = (b: Billing) => {
+      const sup = b.totalAmount || 0;
+      return sup + Math.round(sup * 0.1);
+    };
+
     const rule = db.bankMatchingRules.find(r => r.senderName === tx.senderName);
     if (rule) {
       const activeBillings = db.billings.filter(b => 
@@ -5439,11 +5785,11 @@ ${payload.memo ? `\n[특이사항 / 메모]\n${payload.memo}\n` : ''}
         (b.status === 'UNPAID' || b.status === 'PARTIAL')
       );
       if (activeBillings.length > 0) {
-        let target = activeBillings.find(b => (b.totalAmount - b.paidAmount) === tx.depositAmount);
+        let target = activeBillings.find(b => (getBillingGrand(b) - (b.paidAmount || 0)) === tx.depositAmount);
         if (!target) {
           target = activeBillings.sort((a, b) => a.billingYm.localeCompare(b.billingYm))[0];
         }
-        executeMatch(tx.id, target.id, 'AUTO');
+        executeMatch(tx.id, target.id, 'AUTO', { matchingMode: 'CASCADE' });
         return;
       }
     }
@@ -5457,11 +5803,11 @@ ${payload.memo ? `\n[특이사항 / 메모]\n${payload.memo}\n` : ''}
         (b.status === 'UNPAID' || b.status === 'PARTIAL')
       );
       if (activeBillings.length > 0) {
-        let target = activeBillings.find(b => (b.totalAmount - b.paidAmount) === tx.depositAmount);
+        let target = activeBillings.find(b => (getBillingGrand(b) - (b.paidAmount || 0)) === tx.depositAmount);
         if (!target) {
           target = activeBillings.sort((a, b) => a.billingYm.localeCompare(b.billingYm))[0];
         }
-        executeMatch(tx.id, target.id, 'AUTO');
+        executeMatch(tx.id, target.id, 'AUTO', { matchingMode: 'CASCADE' });
         return;
       }
     }
@@ -5483,12 +5829,39 @@ ${payload.memo ? `\n[특이사항 / 메모]\n${payload.memo}\n` : ''}
     refreshAllData();
   };
 
-  const matchTransactionManual = async (txId: string, billingId: string, learnRule: boolean) => {
+  const batchAutoMatchTransactions = async () => {
+    const unallocatedTxs = db.bankTransactions.filter(t => 
+      (t.depositAmount || 0) > 0 && !t.matchedBillingId
+    );
+    let matchedCount = 0;
+    for (const tx of unallocatedTxs) {
+      const prevMatched = tx.matchedBillingId;
+      tryAutoMatchForTransaction(tx);
+      const updatedTx = db.bankTransactions.find(t => t.id === tx.id);
+      if (updatedTx?.matchedBillingId && updatedTx.matchedBillingId !== prevMatched) {
+        matchedCount++;
+      }
+    }
+    await db.awaitPendingWrites();
+    refreshAllData();
+    return matchedCount;
+  };
+
+  const matchTransactionManual = async (
+    txId: string,
+    billingId: string,
+    learnRule: boolean,
+    options?: {
+      matchingMode?: 'PINPOINT' | 'CASCADE' | 'MULTI';
+      allocations?: { billingId: string; amount: number; feeAdjustment?: number }[];
+      feeAdjustment?: number;
+    }
+  ) => {
     const tx = db.bankTransactions.find(t => t.id === txId);
     const billing = db.billings.find(b => b.id === billingId);
     if (!tx || !billing) return;
 
-    executeMatch(txId, billingId, 'MANUAL');
+    executeMatch(txId, billingId, 'MANUAL', options);
 
     if (learnRule) {
       const exists = db.bankMatchingRules.some(r => r.senderName === tx.senderName);
@@ -5629,7 +6002,7 @@ ${payload.memo ? `\n[특이사항 / 메모]\n${payload.memo}\n` : ''}
     refreshAllData();
   };
 
-  const updateAnnualLeaveQuota = (userId: string, periodStart: string, periodEnd: string, grantedDays: number, memo?: string) => {
+  const updateAnnualLeaveQuota = async (userId: string, periodStart: string, periodEnd: string, grantedDays: number, memo?: string) => {
     const existing = db.annualLeaveQuotas.find(q => q.userId === userId && q.periodStart === periodStart);
     if (existing) {
       db.updateRow<AnnualLeaveQuota>('annualLeaveQuotas', existing.id, {
@@ -5647,32 +6020,78 @@ ${payload.memo ? `\n[특이사항 / 메모]\n${payload.memo}\n` : ''}
         createdAt: new Date().toISOString()
       } as any);
     }
+    await db.awaitPendingWrites();
     refreshAllData();
   };
 
-  const addLeaveUsage = (usage: Omit<LeaveUsage, 'id' | 'createdAt'>) => {
-    db.insertRow<LeaveUsage>('leaveUsages', {
+  const addLeaveUsage = async (usage: Omit<LeaveUsage, 'id' | 'createdAt'>) => {
+    const newLeave = db.insertRow<LeaveUsage>('leaveUsages', {
       ...usage,
       createdAt: new Date().toISOString()
     } as any);
+
+    // 🚀 [단일 업무 인계 파이프라인] 부서장에게 휴가 승인 ToDo 발행
+    const applicant = db.users.find(u => u.id === usage.userId);
+    await issueHandoverTask({
+      category: 'LEAVE_OT_APPROVAL',
+      title: `[휴가 승인 요망] ${applicant?.name || '임직원'} (${usage.leaveType || '연차'})`,
+      content: `${applicant?.name || '임직원'} 휴가 신청 (${usage.startDate} ~ ${usage.endDate}, ${usage.usedDays}일). 사유: ${usage.reason || '-'}`,
+      targetRole: 'MANAGER',
+      priority: 'NORMAL',
+      actionUrl: '/admin/leave_ot',
+      entityType: 'LEAVE',
+      entityId: newLeave.id,
+      senderId: currentUser?.id,
+      senderName: currentUser?.name
+    });
+
+    await db.awaitPendingWrites();
     refreshAllData();
   };
 
-  const deleteLeaveUsage = (id: string) => {
+  const deleteLeaveUsage = async (id: string) => {
     db.deleteRow('leaveUsages', id);
+    await clearHandoverTasks({
+      entityType: 'LEAVE',
+      entityId: id,
+      completionAction: 'LEAVE_DELETED'
+    });
+    await db.awaitPendingWrites();
     refreshAllData();
   };
 
-  const addOvertimeRecord = (record: Omit<OvertimeRecord, 'id' | 'createdAt'>) => {
-    db.insertRow<OvertimeRecord>('overtimeRecords', {
+  const addOvertimeRecord = async (record: Omit<OvertimeRecord, 'id' | 'createdAt'>) => {
+    const newOt = db.insertRow<OvertimeRecord>('overtimeRecords', {
       ...record,
       createdAt: new Date().toISOString()
     } as any);
+
+    const applicant = db.users.find(u => u.id === record.userId);
+    await issueHandoverTask({
+      category: 'LEAVE_OT_APPROVAL',
+      title: `[초과근무 승인 요망] ${applicant?.name || '임직원'} (${record.hours}시간)`,
+      content: `${applicant?.name || '임직원'} 연장/야간 근무 신청 (${record.startDateTime?.substring(0, 10)}, ${record.hours}시간). 사유: ${record.workDetail || '-'}`,
+      targetRole: 'MANAGER',
+      priority: 'NORMAL',
+      actionUrl: '/admin/leave_ot',
+      entityType: 'LEAVE',
+      entityId: newOt.id,
+      senderId: currentUser?.id,
+      senderName: currentUser?.name
+    });
+
+    await db.awaitPendingWrites();
     refreshAllData();
   };
 
-  const deleteOvertimeRecord = (id: string) => {
+  const deleteOvertimeRecord = async (id: string) => {
     db.deleteRow('overtimeRecords', id);
+    await clearHandoverTasks({
+      entityType: 'LEAVE',
+      entityId: id,
+      completionAction: 'OT_DELETED'
+    });
+    await db.awaitPendingWrites();
     refreshAllData();
   };
 
@@ -6053,6 +6472,33 @@ ${payload.memo ? `\n[특이사항 / 메모]\n${payload.memo}\n` : ''}
         degradationScore: score,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
+      });
+
+      // 🚀 [단일 업무 인계 파이프라인] 주기장 정비팀에 입고 정비 ToDo 영구 적재
+      await issueHandoverTask({
+        category: 'INBOUND_REPAIR_DEFECT',
+        title: `[입고 장비 정비] ${asset.assetNo} (${asset.modelName})`,
+        content: `입고 결함 발견 (+${score}점): ${fullDefectSummary || '정비 요망'}`,
+        targetDept: 'YARD',
+        priority: score >= 5 ? 'HIGH' : 'NORMAL',
+        actionUrl: '/repairs',
+        entityType: 'REPAIR',
+        entityId: repairId,
+        senderId: currentUser?.id,
+        senderName: currentUser?.name
+      });
+    }
+
+    // 🟢 회수 배차 및 관련 선행 ToDo 자동 상계
+    await clearHandoverTasks({
+      entityId: asset.id,
+      completionAction: 'INBOUND_REGISTERED'
+    });
+    if (contract?.id) {
+      await clearHandoverTasks({
+        entityId: contract.id,
+        category: 'DISPATCH_REQUEST',
+        completionAction: 'INBOUND_REGISTERED'
       });
     }
 
@@ -6473,6 +6919,53 @@ ${payload.memo ? `\n[특이사항 / 메모]\n${payload.memo}\n` : ''}
     refreshAllData();
   };
 
+  // 💡 전사 매입처 거래개시일 및 매입누적거래액 일괄 재집계/동기화 헬퍼 (헌장 4.1, 5.2)
+  const recalculateAllVendorMetrics = async (): Promise<{ updatedCount: number; totalAmount: number }> => {
+    let updatedCount = 0;
+    let grandTotal = 0;
+    const allVendors = [...db.vendors];
+    const allAssets = db.assets.filter(a => a.ownerType === 'OWNED');
+    const allSettlements = db.purchaseSettlements;
+
+    for (const v of allVendors) {
+      const matchedAssets = allAssets.filter(a => 
+        (a.vendorId && a.vendorId === v.id) || 
+        (a.supplier && (a.supplier === v.name || a.supplier.includes(v.name) || v.name.includes(a.supplier)))
+      );
+      const assetTotal = matchedAssets.reduce((sum, a) => sum + (a.acquisitionPrice || 0), 0);
+      
+      const matchedSettlements = allSettlements.filter(s => 
+        (s.vendorId && s.vendorId === v.id) || 
+        (s.vendorName && (s.vendorName === v.name || s.vendorName.includes(v.name) || v.name.includes(s.vendorName)))
+      );
+      const settlementTotal = matchedSettlements.reduce((sum, s) => sum + (s.totalAmount || 0), 0);
+      const totalAmount = assetTotal + settlementTotal;
+      grandTotal += totalAmount;
+
+      const tradeDates: string[] = [];
+      if (v.firstTradeDate) tradeDates.push(v.firstTradeDate);
+      matchedAssets.forEach(a => { if (a.acquisitionDate) tradeDates.push(a.acquisitionDate); });
+      matchedSettlements.forEach(s => {
+        if (s.paymentDate) tradeDates.push(s.paymentDate);
+        else if (s.settlementYm) tradeDates.push(`${s.settlementYm}-01`);
+      });
+      tradeDates.sort();
+      const firstTradeDate = tradeDates.length > 0 ? tradeDates[0] : v.firstTradeDate;
+      const lastTradeDate = tradeDates.length > 0 ? tradeDates[tradeDates.length - 1] : v.lastTradeDate;
+
+      db.updateRow<Vendor>('vendors', v.id, {
+        totalPurchaseAmount: totalAmount,
+        firstTradeDate: firstTradeDate || undefined,
+        lastTradeDate: lastTradeDate || undefined,
+        updatedAt: new Date().toISOString()
+      } as any);
+      updatedCount++;
+    }
+    await db.awaitPendingWrites();
+    refreshAllData();
+    return { updatedCount, totalAmount: grandTotal };
+  };
+
   // 월 1회 당사자산 감가상각 결산 마감 실행 (월말 의도적 실행)
   const executeMonthlyDepreciation = async (depreciationYm: string, note?: string) => {
     const existing = db.depreciationLogs.find(l => l.depreciationYm === depreciationYm);
@@ -6835,11 +7328,19 @@ ${payload.memo ? `\n[특이사항 / 메모]\n${payload.memo}\n` : ''}
   };
 
   const confirmPurchaseSettlement = async (id: string): Promise<void> => {
+    const settlement = db.purchaseSettlements.find(p => p.id === id);
     db.updateRow<PurchaseSettlement>('purchaseSettlements', id, {
       status: 'CONFIRMED',
       confirmedAt: new Date().toISOString(),
       confirmedBy: currentUser?.name || '시스템'
     });
+    if (settlement) {
+      triggerVendorPurchaseMetric(
+        settlement.vendorId || settlement.vendorName || '',
+        settlement.totalAmount || 0,
+        settlement.paymentDate || (settlement.settlementYm ? `${settlement.settlementYm}-01` : undefined)
+      );
+    }
     await db.awaitPendingWrites();
     refreshAllData();
   };
@@ -7027,6 +7528,17 @@ ${payload.memo ? `\n[특이사항 / 메모]\n${payload.memo}\n` : ''}
         billingId,
         updatedAt: new Date().toISOString()
       });
+
+      // 🟢 유상 수리비 청구 ToDo 자동 상계
+      await clearHandoverTasks({
+        entityType: 'REPAIR',
+        entityId: repairId,
+        category: 'BILLABLE_REPAIR_BILLING',
+        completedByUserId: currentUser?.id,
+        completedByName: currentUser?.name,
+        completionAction: `LINKED_TO_BILLING_${billingId}`
+      });
+
       await db.awaitPendingWrites();
       refreshAllData();
     } catch (err: any) {
@@ -7367,7 +7879,7 @@ ${payload.memo ? `\n[특이사항 / 메모]\n${payload.memo}\n` : ''}
       annualLeaveQuotas, leaveUsages, overtimeRecords, payrollClosings, prepaidTransactions, delinquencyActionLogs, legalNoticeLogs, legalNoticeTemplates, saveLegalNoticeLog, saveLegalNoticeTemplate,
       corporateVehicles, vehicleOperationLogs, vehicleFuelLogs, registerCorporateVehicle, updateCorporateVehicle, deleteCorporateVehicle, registerVehicleOperationLog, updateVehicleOperationLog, deleteVehicleOperationLog, registerVehicleFuelLog, deleteVehicleFuelLog,
       refreshAllData, fullRefreshFromServer, executeMonthlyDepreciation, loadTablesForMenu, updatePermissions, saveUser, saveCustomer, saveContact, saveSite, saveProduct, saveAsset, updateGoogleConfig,
-      saveCashFlowSnapshot, deleteCashFlowSnapshot, saveVendor, deleteVendor, saveBankInitialBalance, saveInspectionChecklistItem, deleteInspectionChecklistItem,
+      saveCashFlowSnapshot, deleteCashFlowSnapshot, saveVendor, deleteVendor, recalculateAllVendorMetrics, saveBankInitialBalance, saveInspectionChecklistItem, deleteInspectionChecklistItem,
       updateAnnualLeaveQuota, addLeaveUsage, deleteLeaveUsage, addOvertimeRecord, deleteOvertimeRecord, setPayrollClosingStatus,
       acquireAsset, batchAcquireAssets, disposeAsset, executeAssetSale, registerRentedAsset, returnRentedAsset, createVendorClaimReceivable, changeAssetStatus, registerInboundAsset, cancelInboundAsset,
       purchaseConsumable, useConsumable, transferConsumableToMechanic, returnConsumableToHq, transferConsumableBetweenMechanics,
@@ -7376,10 +7888,10 @@ ${payload.memo ? `\n[특이사항 / 메모]\n${payload.memo}\n` : ''}
       createContract, extendContract, shortenContract, succeedContract, exchangeAsset,
       assignAssetToContract, batchAssignAssetsToContract, unassignAssetFromContract, batchUnassignAssetsFromContract, exchangeOutboundAsset,
       saveSmartDispatch, saveSmartReturn,
-      completeTodo,
+      completeTodo, issueExecutiveDirective, resolveExecutiveDirective, cancelExecutiveDirective,
       generateBillingsForMonth, getDueContractsForBilling, generateDueBillings, generateBillingForSingleContract, regenerateBilling, approveBilling, cancelBilling, receivePayment, cancelPayment, cancelAllPaymentsForBilling, saveBankDeposit, deleteBankDeposit,
       addReceivable, generateStandaloneBillingForReceivable, linkReceivableToBilling,
-      uploadBankTransactions, matchTransactionManual, unmatchTransaction, saveMatchingRule, deleteMatchingRule,
+      uploadBankTransactions, matchTransactionManual, batchAutoMatchTransactions, unmatchTransaction, saveMatchingRule, deleteMatchingRule,
       dispatchDelivery, settleDeliveryCost, completeDelivery, completeInboundDelivery,
       registerRepair, updateRepairStatus,
       // 현장 AS 관리 (단일 물리 테이블 repairs 뷰 제공)

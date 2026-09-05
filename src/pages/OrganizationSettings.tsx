@@ -102,12 +102,33 @@ const enforceManagerPolicies = (usersList: UserNode[], deptList: Department[]) =
   // Handoff Modal State
   const [showHandoffModal, setShowHandoffModal] = useState<UserNode | null>(null);
 
+  // 부서 삭제 확인 모달 상태 (헌장 5.2: 브라우저 confirm 퇴출)
+  const [deptToDelete, setDeptToDelete] = useState<Department | null>(null);
+
+  // 토스트 알림 상태 (헌장 5.2: 브라우저 alert 퇴출)
+  const [toastMessage, setToastMessage] = useState<{ type: 'success' | 'error' | 'warning'; text: string } | null>(null);
+  const showToast = (text: string, type: 'success' | 'error' | 'warning' = 'success') => {
+    setToastMessage({ type, text });
+    setTimeout(() => setToastMessage(null), 3500);
+  };
+
   // Hidden File Input Ref for photo upload
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Data load status
   const [isLoaded, setIsLoaded] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
+
+  // 전사 조직 및 구성원 현황 대차대조 집계 (헌장 3.5 & 5.5)
+  const totalUsersCount = users.length;
+  const activeUsersCount = users.filter(u => u.status === 'ACTIVE').length;
+  const leaveUsersCount = users.filter(u => u.status === 'LEAVE_OF_ABSENCE').length;
+  const retiredUsersCount = users.filter(u => u.status === 'RETIRED').length;
+  const assignedUsersCount = users.filter(u => u.departmentId !== null).length;
+  const unassignedUsersCount = users.filter(u => u.departmentId === null).length;
+  const totalDeptsCount = departments.length;
+  const userStatusSum = activeUsersCount + leaveUsersCount + retiredUsersCount;
+  const userBalanceDiff = Math.abs(totalUsersCount - userStatusSum);
 
   // --- Persistence Load ---
   useEffect(() => {
@@ -171,7 +192,7 @@ const enforceManagerPolicies = (usersList: UserNode[], deptList: Department[]) =
         await refreshAllData();
       }
       
-      alert('조직도 및 구성원 마스터 데이터가 데이터베이스에 성공적으로 저장되었습니다.');
+      showToast('조직도 및 구성원 마스터 데이터가 데이터베이스에 성공적으로 저장되었습니다.');
     } catch (err: any) {
       console.error('Organization batch save error:', err);
       showErrorModal(`⚠️ 조직도 및 구성원 저장 중 DB 동기화 오류가 발생했습니다:\n${err.message || err.details || JSON.stringify(err)}`, '조직도 DB 저장 오류');
@@ -197,19 +218,32 @@ const enforceManagerPolicies = (usersList: UserNode[], deptList: Department[]) =
   const handleDeleteDept = (e: React.MouseEvent, deptId: string) => {
     e.stopPropagation();
     if (!canEdit) return;
+    const targetDept = departments.find(d => d.id === deptId);
+    if (!targetDept) return;
+
     const hasChildren = departments.some(d => d.parentDepartmentId === deptId);
     const hasUsers = users.some(u => u.departmentId === deptId);
     if (hasChildren || hasUsers) {
-      alert('소속된 하위 부서나 직원이 존재하여 부서를 삭제할 수 없습니다.');
+      showErrorModal(
+        `소속된 하위 부서나 직원이 존재하여 부서 [${targetDept.name || targetDept.id}]을(를) 삭제할 수 없습니다.\n` +
+        `소속 직원을 먼저 인사이동하거나 하위 부서를 먼저 정리해 주십시오.`,
+        '부서 삭제 불가'
+      );
       return;
     }
-    if (confirm('이 부서를 정말 삭제하시겠습니까?')) {
-      setDepartments(prev => prev.filter(d => d.id !== deptId));
-      if (selectedDeptId === deptId) {
-        setSelectedDeptId(null);
-        setActiveTab('UNASSIGNED');
-      }
+    setDeptToDelete(targetDept);
+  };
+
+  const confirmDeleteDept = () => {
+    if (!deptToDelete) return;
+    const deptId = deptToDelete.id;
+    setDepartments(prev => prev.filter(d => d.id !== deptId));
+    if (selectedDeptId === deptId) {
+      setSelectedDeptId(null);
+      setActiveTab('UNASSIGNED');
     }
+    showToast(`부서 [${deptToDelete.name || deptToDelete.id}]이(가) 정상 삭제되었습니다.`);
+    setDeptToDelete(null);
   };
 
   const handleAddUser = () => {
@@ -302,47 +336,61 @@ const enforceManagerPolicies = (usersList: UserNode[], deptList: Department[]) =
   };
 
   // --- Profile Handlers ---
-  const handleStatusChange = (userId: string, newStatus: UserNode['status']) => {
+  const handleStatusChange = async (userId: string, newStatus: UserNode['status']) => {
     const targetUser = users.find(u => u.id === userId);
     if (targetUser && (targetUser.loginId === 'admin' || targetUser.id === 'u-1' || targetUser.id === 'sys-admin')) {
-      alert('최고관리자(시스템관리자/admin) 계정은 재직 상태를 변경(퇴사/휴직 처리)할 수 없습니다.');
+      showErrorModal('최고관리자(시스템관리자/admin) 계정은 재직 상태를 변경(퇴사/휴직 처리)할 수 없습니다.', '상태 변경 불가');
       return;
     }
     
     if (newStatus === 'RETIRED') {
       if (targetUser) setShowHandoffModal(targetUser);
     } else {
-      // 리렌더링을 유발하기 위해 setUsers 호출 및 selectedProfile 동기화
+      const updatedUser = targetUser ? { ...targetUser, status: newStatus } : null;
+      if (updatedUser) {
+        saveUser(updatedUser);
+        await db.awaitPendingWrites();
+      }
       setUsers(prev => prev.map(u => u.id === userId ? { ...u, status: newStatus } : u));
       if (selectedProfile && selectedProfile.id === userId) {
         setSelectedProfile({ ...selectedProfile, status: newStatus });
       }
+      showToast(`재직 상태가 [${newStatus === 'ACTIVE' ? '재직' : newStatus === 'LEAVE_OF_ABSENCE' ? '휴직' : '퇴사'}] (으)로 변경되었습니다.`);
     }
   };
 
-  const confirmRetirement = () => {
+  const confirmRetirement = async () => {
     if (showHandoffModal) {
       if (showHandoffModal.loginId === 'admin' || showHandoffModal.id === 'u-1' || showHandoffModal.id === 'sys-admin') {
-        alert('최고관리자 계정은 퇴사 처리가 불가능합니다.');
+        showErrorModal('최고관리자 계정은 퇴사 처리가 불가능합니다.', '퇴사 처리 불가');
         setShowHandoffModal(null);
         return;
       }
-      setUsers(prev => prev.map(u => u.id === showHandoffModal.id ? { ...u, status: 'RETIRED' } : u));
+      const retiredUser: UserNode = { ...showHandoffModal, status: 'RETIRED' };
+      saveUser(retiredUser);
+      await db.awaitPendingWrites();
+
+      setUsers(prev => prev.map(u => u.id === showHandoffModal.id ? retiredUser : u));
       if (selectedProfile?.id === showHandoffModal.id) {
         setSelectedProfile(prev => prev ? { ...prev, status: 'RETIRED' } : null);
       }
+      showToast(`${showHandoffModal.name} 직원의 퇴사 및 업무 이관 처리가 완료되었습니다.`);
       setShowHandoffModal(null);
     }
   };
 
-  const applyProfileChanges = () => {
+  const applyProfileChanges = async () => {
     if (selectedProfile) {
+      if (!selectedProfile.name || !selectedProfile.name.trim()) {
+        showErrorModal('임직원 성명을 입력해 주십시오.', '필수값 누락');
+        return;
+      }
       if ((selectedProfile.id === 'sys-admin' || selectedProfile.id === 'u-1' || selectedProfile.loginId === 'admin') && selectedProfile.role !== 'ADMIN') {
-        alert('시스템 최고관리자의 시스템 역할은 변경할 수 없습니다.');
+        showErrorModal('시스템 최고관리자의 시스템 역할은 변경할 수 없습니다.', '역할 변경 불가');
         return;
       }
       if (selectedProfile.role === 'ADMIN' && !isSuperAdmin) {
-        alert('ADMIN 시스템 역할은 최고관리자(admin) 계정만 부여할 수 있습니다.');
+        showErrorModal('ADMIN 시스템 역할은 최고관리자(admin) 계정만 부여할 수 있습니다.', '권한 부여 제한');
         return;
       }
       let updated = users.map(u => u.id === selectedProfile.id ? selectedProfile : u);
@@ -352,10 +400,11 @@ const enforceManagerPolicies = (usersList: UserNode[], deptList: Department[]) =
       updated.forEach(u => {
         saveUser(u);
       });
+      await db.awaitPendingWrites();
       
       setUsers(updated);
       setSelectedProfile(null);
-      alert('임직원 프로필 및 시스템 역할(role) 설정이 성공적으로 저장되었습니다.');
+      showToast('임직원 프로필 및 시스템 역할(role) 설정이 성공적으로 저장되었습니다.');
     }
   };
 
@@ -513,21 +562,9 @@ const enforceManagerPolicies = (usersList: UserNode[], deptList: Department[]) =
           </p>
         </div>
         
-        {/* Global Save & Reset Buttons */}
+        {/* Global Save Button */}
         {canEdit && (
           <div style={{ display: 'flex', gap: '8px' }}>
-            <button 
-              className="btn-secondary" 
-              onClick={() => {
-                if(confirm('경고: 모든 로컬 테스트 데이터를 영구적으로 삭제하고 초기화하시겠습니까?')) {
-                  localStorage.clear();
-                  window.location.reload();
-                }
-              }} 
-              style={{ display: 'none', padding: '10px 16px', color: 'var(--danger)', borderColor: 'var(--danger)' }}
-            >
-              ♻️ 전체 데이터 초기화
-            </button>
             <button 
               className={`btn-primary ${isDirty ? 'pulse-animation' : ''}`} 
               onClick={handleSaveAll} 
@@ -834,6 +871,108 @@ const enforceManagerPolicies = (usersList: UserNode[], deptList: Department[]) =
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* 부서 삭제 확인 모달 (헌장 5.2: 브라우저 confirm 전면 퇴출) */}
+      {deptToDelete && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100
+        }}>
+          <div className="card" style={{ width: '420px', padding: '24px' }}>
+            <div style={{ display: 'flex', gap: '12px', color: 'var(--danger)', marginBottom: '16px' }}>
+              <AlertCircle size={28} />
+              <h3 style={{ fontSize: '18px', fontWeight: '700', marginTop: '2px' }}>부서 삭제 확인</h3>
+            </div>
+            
+            <p style={{ fontSize: '14px', color: 'var(--text-main)', lineHeight: '1.5' }}>
+              부서 <strong>[{deptToDelete.name || deptToDelete.id}]</strong>을(를) 정말 삭제하시겠습니까?<br/>
+              현재 소속된 직원 및 하위 부서가 없으므로 안전하게 삭제됩니다.
+            </p>
+
+            <div style={{ marginTop: '24px', display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
+              <button className="btn-secondary" onClick={() => setDeptToDelete(null)}>취소</button>
+              <button className="btn-primary" style={{ backgroundColor: 'var(--danger)' }} onClick={confirmDeleteDept}>
+                부서 삭제 실행
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ⚖️ 헌장 3.5 Gutenberg Z-패턴 4단계 조직/인사 대차대조 검증 바 */}
+      <div style={{
+        marginTop: '16px',
+        backgroundColor: 'var(--bg-surface)',
+        border: '1px solid var(--border-color)',
+        borderRadius: '8px',
+        padding: '12px 18px',
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        flexWrap: 'wrap',
+        gap: '12px',
+        boxShadow: '0 -2px 10px rgba(0,0,0,0.03)',
+        flexShrink: 0
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', whiteSpace: 'nowrap' }}>
+          <span style={{ fontSize: '13px', fontWeight: 'bold', color: 'var(--text-main)' }}>
+            조직 및 인사 대차대조 검증:
+          </span>
+          <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+            총 임직원 <strong style={{ color: 'var(--text-main)' }}>{totalUsersCount}명</strong>
+          </span>
+          <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>=</span>
+          <span style={{ fontSize: '12px', color: '#10b981' }}>
+            재직 <strong>{activeUsersCount}명</strong>
+          </span>
+          <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>+</span>
+          <span style={{ fontSize: '12px', color: '#f59e0b' }}>
+            휴직 <strong>{leaveUsersCount}명</strong>
+          </span>
+          <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>+</span>
+          <span style={{ fontSize: '12px', color: '#ef4444' }}>
+            퇴사 <strong>{retiredUsersCount}명</strong>
+          </span>
+          <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>|</span>
+          <span style={{ fontSize: '12px', color: 'var(--primary)' }}>
+            부서 {totalDeptsCount}개 (배정 {assignedUsersCount}명 / 미배정 {unassignedUsersCount}명)
+          </span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', whiteSpace: 'nowrap' }}>
+          <span style={{
+            fontSize: '11px',
+            padding: '3px 10px',
+            borderRadius: '6px',
+            fontWeight: 'bold',
+            backgroundColor: userBalanceDiff === 0 ? 'rgba(16, 185, 129, 0.12)' : 'rgba(239, 68, 68, 0.12)',
+            color: userBalanceDiff === 0 ? '#10b981' : '#ef4444'
+          }}>
+            대차 차액 {userBalanceDiff}명 {userBalanceDiff === 0 ? '(정합)' : '(불일치)'}
+          </span>
+        </div>
+      </div>
+
+      {/* 토스트 알림 팝업 (헌장 5.2) */}
+      {toastMessage && (
+        <div style={{
+          position: 'fixed',
+          bottom: '24px',
+          right: '24px',
+          padding: '12px 20px',
+          borderRadius: '8px',
+          backgroundColor: toastMessage.type === 'error' ? '#ef4444' : toastMessage.type === 'warning' ? '#f59e0b' : '#10b981',
+          color: '#fff',
+          fontWeight: 700,
+          fontSize: '13px',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
+          zIndex: 10000,
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px'
+        }}>
+          {toastMessage.text}
         </div>
       )}
 

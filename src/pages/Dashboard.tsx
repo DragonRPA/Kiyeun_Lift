@@ -1,7 +1,7 @@
 // d:\Kiyeun_Lift\src\pages\Dashboard.tsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
-import { Activity, ShieldAlert, Users, Layers, ShieldCheck, Wrench, Truck, CreditCard, ShoppingBag, CheckCircle, Bell, AlertTriangle, ArrowRight, Cloud, AlertCircle, Download, FileText, Bot, Shield } from 'lucide-react';
+import { Activity, ShieldAlert, Users, Layers, ShieldCheck, Wrench, Truck, CreditCard, ShoppingBag, CheckCircle, Bell, AlertTriangle, ArrowRight, Cloud, AlertCircle, Download, FileText, Bot, Shield, CheckSquare } from 'lucide-react';
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
 import { PDFDocument } from 'pdf-lib';
@@ -12,6 +12,9 @@ import {
 } from '../services/excelTemplateEngine';
 import { getDriveReadToken, extractDriveFolderId, listFilesInDriveFolder } from '../services/googleDriveBackup';
 import { EXPECTED_AGENT_VERSION, AGENT_DOWNLOAD_URL, AGENT_CERT_URL, AGENT_INSTALL_BAT_URL, AGENT_KILL_BAT_URL } from '../services/agentService';
+import { findActiveTasksForUser } from '../utils/taskHandoverPipeline';
+import { ExecutiveDirectiveModal } from '../components/ExecutiveDirectiveModal';
+import { Todo } from '../services/db';
 
 export const Dashboard: React.FC = () => {
   const { 
@@ -30,9 +33,20 @@ export const Dashboard: React.FC = () => {
     todos, 
     googleConfigs, 
     completeTodo, 
+    resolveExecutiveDirective,
     setActiveTab, 
     setNavigationPayload 
   } = useApp();
+
+  // 경영진 업무지시 하달 모달 및 조치 보고 상태
+  const [showDirectiveModal, setShowDirectiveModal] = useState(false);
+  const [reportingDirectiveTodo, setReportingDirectiveTodo] = useState<Todo | null>(null);
+  const [directiveReportNote, setDirectiveReportNote] = useState<string>('');
+  const [isSubmittingReport, setIsSubmittingReport] = useState(false);
+
+  const userRole = (currentUser?.role || '').toUpperCase();
+  const userDept = (currentUser?.department || '').toUpperCase();
+  const isExecUser = userRole === 'ADMIN' || userRole === 'EXECUTIVE' || userRole === 'MANAGER' || userDept.includes('경영') || userDept.includes('대표');
 
   // 사용자 메뉴 권한 기반 카드 노출 판단 플래그 (메뉴 저장/조회 권한 보유 여부)
   const canSaveDelivery = hasPermission('delivery', 'save') || hasPermission('delivery', 'view');
@@ -296,7 +310,8 @@ export const Dashboard: React.FC = () => {
     }
   };
 
-  const myTodos = todos.filter(t => t.userId === currentUser?.id && !t.isCompleted);
+  const activeTasks = useMemo(() => findActiveTasksForUser(todos, currentUser), [todos, currentUser]);
+  const myTodos = activeTasks;
 
   const totalAssets = assets.length;
   const rentedAssets = assets.filter(a => a.status === 'RENTED').length;
@@ -435,6 +450,24 @@ export const Dashboard: React.FC = () => {
             <Download size={15} />
             {isMergingDoc ? '서류 팩 생성 중...' : '계약 서류 14p 통합 팩'}
           </button>
+
+          {/* ⚡ 경영진 업무지시 하달 버튼 (경영진/관리자 전용) */}
+          {isExecUser && (
+            <button
+              type="button"
+              onClick={() => setShowDirectiveModal(true)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: '8px', padding: '9px 16px',
+                fontSize: '13px', fontWeight: '800', whiteSpace: 'nowrap',
+                background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
+                border: 'none', borderRadius: '8px', color: '#fff', cursor: 'pointer',
+                boxShadow: '0 4px 12px rgba(239, 68, 68, 0.25)'
+              }}
+            >
+              <ShieldAlert size={15} />
+              경영진 업무지시 하달
+            </button>
+          )}
 
           {role === 'ADMIN' && (
             <button 
@@ -667,26 +700,138 @@ export const Dashboard: React.FC = () => {
               </div>
             )}
 
-            {/* 7. 고객 정보 미비 보완 카드 */}
+            {/* 7. 직무 맞춤형 실시간 당면 과제 ToDo 피드 (헌장 3.3 ToDo 피드 대시보드 정책) */}
             {showTodoFeed && (
               <div style={{
                 backgroundColor: 'var(--bg-card)', borderRadius: '12px', padding: '20px 24px',
-                borderLeft: '5px solid #f59e0b', border: '1px solid var(--border-color)', borderLeftWidth: '5px'
+                borderLeft: '5px solid #6366f1', border: '1px solid var(--border-color)', borderLeftWidth: '5px'
               }}>
-                <div style={{ display: 'flex', justifyItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-                  <span style={{ fontSize: '12px', fontWeight: '800', color: '#f59e0b', backgroundColor: 'rgba(245,158,11,0.1)', padding: '2px 8px', borderRadius: '4px' }}>[정보 미비]</span>
-                  <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>보완 {myTodos.length}건</span>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
+                  <span style={{ fontSize: '12px', fontWeight: '800', color: '#6366f1', backgroundColor: 'rgba(99,102,241,0.1)', padding: '3px 9px', borderRadius: '4px' }}>
+                    [직무 맞춤 당면 과제]
+                  </span>
+                  <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                    총 <strong>{activeTasks.length}건</strong> 대기 중
+                  </span>
                 </div>
-                <h4 style={{ margin: '0 0 10px 0', fontSize: '16px', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <AlertCircle size={18} color="#f59e0b" /> 신규 고객사 및 현장 세부 정보 보완 요망
+                <h4 style={{ margin: '0 0 12px 0', fontSize: '16px', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Bell size={18} color="#6366f1" /> 실시간 인계 업무 목록
                 </h4>
-                <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: '0 0 14px 0', lineHeight: '1.5' }}>
-                  최근 신설되었으나 연락처, 현장 상세 주소, 정산 조건 등 필수 인적 사항 정보가 누락되어 정산에 위험이 되는 고객이 있습니다. 
-                  신속히 거래처 정보를 보완해 주세요.
-                </p>
-                <button className="btn-primary" onClick={() => setActiveTab('customer')} style={{ backgroundColor: '#f59e0b', border: 'none', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  고객 및 현장 마스터 정보 보완 <ArrowRight size={12} />
-                </button>
+                
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '14px' }}>
+                  {activeTasks.slice(0, 8).map(task => {
+                    const isDirective = task.taskCategory === 'EXECUTIVE_DIRECTIVE';
+                    const priorityColor = task.priority === 'URGENT' ? '#ef4444' : task.priority === 'HIGH' ? '#f59e0b' : '#3b82f6';
+                    
+                    return (
+                      <div key={task.id} style={{
+                        backgroundColor: isDirective ? 'rgba(239, 68, 68, 0.03)' : 'var(--bg-secondary)',
+                        padding: '14px 16px', borderRadius: '8px',
+                        border: isDirective ? '1.5px solid rgba(239, 68, 68, 0.35)' : '1px solid var(--border-color)',
+                        display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap'
+                      }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '5px', flex: 1, minWidth: '260px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                            {isDirective ? (
+                              <span style={{
+                                fontSize: '11px', fontWeight: '900', padding: '2px 8px', borderRadius: '4px',
+                                backgroundColor: '#ef4444', color: '#fff', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '3px'
+                              }}>
+                                ⚡ 경영진 특별지시
+                              </span>
+                            ) : (
+                              <span style={{
+                                fontSize: '11px', fontWeight: '800', padding: '2px 6px', borderRadius: '4px',
+                                backgroundColor: `${priorityColor}15`, color: priorityColor, border: `1px solid ${priorityColor}33`, whiteSpace: 'nowrap'
+                              }}>
+                                {task.priority || 'NORMAL'}
+                              </span>
+                            )}
+
+                            {task.dueDate && (
+                              <span style={{
+                                fontSize: '11px', fontWeight: '700', padding: '2px 6px', borderRadius: '4px',
+                                backgroundColor: 'rgba(245,158,11,0.12)', color: '#d97706', border: '1px solid rgba(245,158,11,0.25)', whiteSpace: 'nowrap'
+                              }}>
+                                📅 마감: {task.dueDate}
+                              </span>
+                            )}
+
+                            <span style={{ fontWeight: '800', fontSize: '14px', color: 'var(--text-main)' }}>
+                              {task.title}
+                            </span>
+                          </div>
+
+                          {task.content && (
+                            <p style={{ margin: 0, fontSize: '12.5px', color: 'var(--text-secondary)', lineHeight: '1.45', whiteSpace: 'pre-line' }}>
+                              {task.content}
+                            </p>
+                          )}
+
+                          <div style={{ fontSize: '11.5px', color: 'var(--text-muted)', display: 'flex', gap: '12px', marginTop: '2px', flexWrap: 'wrap' }}>
+                            <span>발행자: <strong>{task.senderName || '경영진'}</strong></span>
+                            {task.targetDept && <span>대상부서: {task.targetDept}</span>}
+                            <span>발행일시: {task.createdAt ? task.createdAt.substring(0, 16).replace('T', ' ') : '-'}</span>
+                          </div>
+                        </div>
+
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+                          {task.actionUrl && task.actionUrl !== '/' && (
+                            <button
+                              className="btn-primary"
+                              onClick={() => {
+                                const tabMap: Record<string, string> = {
+                                  '/admin/dispatch': 'delivery',
+                                  '/admin/outbound_inspections': 'outbound_inspection',
+                                  '/admin/contract': 'contract',
+                                  '/admin/repairs': 'repair',
+                                  '/admin/billings': 'billing',
+                                  '/admin/consumables': 'consumable',
+                                  '/admin/organization': 'organization',
+                                  '/admin/asset_acquisition_disposal': 'asset_acquisition_disposal',
+                                  '/admin/delinquency': 'delinquency',
+                                  '/admin/cash_flow': 'cash_flow'
+                                };
+                                const target = tabMap[task.actionUrl || ''] || 'dashboard';
+                                setActiveTab(target);
+                              }}
+                              style={{ fontSize: '12px', padding: '6px 12px', display: 'flex', alignItems: 'center', gap: '4px' }}
+                            >
+                              처리 이동 <ArrowRight size={12} />
+                            </button>
+                          )}
+
+                          {isDirective ? (
+                            <button
+                              onClick={() => {
+                                setReportingDirectiveTodo(task);
+                                setDirectiveReportNote('');
+                              }}
+                              style={{
+                                fontSize: '12px', padding: '6px 12px', borderRadius: '6px', border: 'none',
+                                backgroundColor: '#10b981', color: '#fff', fontWeight: '800', cursor: 'pointer',
+                                display: 'flex', alignItems: 'center', gap: '4px', boxShadow: '0 2px 6px rgba(16,185,129,0.25)'
+                              }}
+                            >
+                              <CheckSquare size={13} /> 조치 결과 보고 & 완료
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => completeTodo(task.id)}
+                              style={{
+                                fontSize: '12px', padding: '6px 10px', borderRadius: '6px', border: '1px solid var(--border-color)',
+                                backgroundColor: 'transparent', color: 'var(--text-muted)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px'
+                              }}
+                              title="수동 완료 처리"
+                            >
+                              <CheckSquare size={12} /> 완료
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             )}
 
@@ -848,6 +993,113 @@ export const Dashboard: React.FC = () => {
               >
                 확인 완료
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ⚡ 경영진 업무지시 하달 모달 */}
+      <ExecutiveDirectiveModal
+        isOpen={showDirectiveModal}
+        onClose={() => setShowDirectiveModal(false)}
+      />
+
+      {/* 📝 경영진 업무지시 조치 결과 보고 및 완료 모달 */}
+      {reportingDirectiveTodo && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.6)', backdropFilter: 'blur(3px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          zIndex: 9999, padding: '20px'
+        }}>
+          <div style={{
+            backgroundColor: 'var(--bg-card, #ffffff)', borderRadius: '14px',
+            width: '100%', maxWidth: '540px',
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.35)',
+            border: '1px solid var(--border-color)',
+            display: 'flex', flexDirection: 'column', overflow: 'hidden'
+          }}>
+            <div style={{
+              padding: '16px 20px', borderBottom: '1px solid var(--border-color)',
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              backgroundColor: 'var(--bg-secondary)'
+            }}>
+              <h3 style={{ margin: 0, fontSize: '16px', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <CheckSquare size={18} color="#10b981" />
+                경영진 특별지시 조치 결과 보고
+              </h3>
+              <button
+                onClick={() => setReportingDirectiveTodo(null)}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <div style={{ backgroundColor: 'var(--bg-secondary)', padding: '12px 14px', borderRadius: '8px' }}>
+                <div style={{ fontSize: '11px', color: '#ef4444', fontWeight: '800', marginBottom: '4px' }}>
+                  지시명: {reportingDirectiveTodo.title}
+                </div>
+                <div style={{ fontSize: '12.5px', color: 'var(--text-secondary)' }}>
+                  {reportingDirectiveTodo.content}
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <label style={{ fontSize: '13px', fontWeight: '700', color: 'var(--text-main)' }}>
+                  조치 및 처리 결과 보고 메모 (필수)
+                </label>
+                <textarea
+                  rows={4}
+                  value={directiveReportNote}
+                  onChange={e => setDirectiveReportNote(e.target.value)}
+                  placeholder="지시받은 업무에 대해 실제 조치한 내용, 현장 상황, 완료 결과 등을 상세히 기록해 주십시오."
+                  style={{
+                    padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--border-color)',
+                    backgroundColor: 'var(--bg-card)', fontSize: '13px', color: 'var(--text-main)',
+                    lineHeight: '1.5', resize: 'vertical'
+                  }}
+                  required
+                />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '6px' }}>
+                <button
+                  type="button"
+                  onClick={() => setReportingDirectiveTodo(null)}
+                  style={{
+                    padding: '8px 16px', borderRadius: '8px', border: '1px solid var(--border-color)',
+                    backgroundColor: 'transparent', color: 'var(--text-secondary)', fontSize: '13px', cursor: 'pointer'
+                  }}
+                >
+                  닫기
+                </button>
+                <button
+                  type="button"
+                  disabled={isSubmittingReport || !directiveReportNote.trim()}
+                  onClick={async () => {
+                    try {
+                      setIsSubmittingReport(true);
+                      await resolveExecutiveDirective(reportingDirectiveTodo.id, directiveReportNote.trim());
+                      setReportingDirectiveTodo(null);
+                      setDirectiveReportNote('');
+                    } catch (err: any) {
+                      alert(`조치 보고 실패: ${err?.message || err}`);
+                    } finally {
+                      setIsSubmittingReport(false);
+                    }
+                  }}
+                  style={{
+                    padding: '8px 20px', borderRadius: '8px', border: 'none',
+                    backgroundColor: '#10b981', color: '#fff', fontSize: '13px', fontWeight: '800',
+                    cursor: (isSubmittingReport || !directiveReportNote.trim()) ? 'not-allowed' : 'pointer',
+                    boxShadow: '0 4px 10px rgba(16,185,129,0.3)'
+                  }}
+                >
+                  {isSubmittingReport ? '보고 중...' : '조치 완료 보고 제출'}
+                </button>
+              </div>
             </div>
           </div>
         </div>

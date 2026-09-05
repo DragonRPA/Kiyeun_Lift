@@ -15,6 +15,7 @@ import { DestinationWeatherModal } from '../components/DestinationWeatherModal';
 import { matchHangul } from '../utils/hangulSearch';
 import { buildDispatchSmsText, launchDispatchSms } from '../utils/nativeLauncher';
 import { broadcastWorkNotification } from '../utils/workNotificationService';
+import { issueHandoverTask, clearHandoverTasks } from '../utils/taskHandoverPipeline';
 
 const VEHICLE_TYPE_OPTIONS = ['1.4T', '2.5T', '3.5T', '5T', '5T장축', '8.5T', '11T', '노배드'];
 
@@ -67,6 +68,7 @@ export const getEffectiveDeliveryCost = (d?: Delivery | null): number => {
 
 export const TruckDispatch: React.FC = () => {
   const { 
+    currentUser,
     deliveries, contracts, customers, products, sites, users,
     contractAssets, assets,
     transportCompanies, transportDrivers, outboundInspections, hasPermission, 
@@ -1694,9 +1696,35 @@ export const TruckDispatch: React.FC = () => {
       db.updateRow<Delivery>('deliveries', selectedDelivery.id, payload);
       await db.awaitPendingWrites();
 
+      // [업무 인계 파이프라인] 선행 배차 의뢰 ToDo 자동 상계
+      await clearHandoverTasks({
+        entityId: selectedDelivery.id,
+        category: 'DISPATCH_REQUEST',
+        completedByUserId: currentUser?.id,
+        completedByName: currentUser?.name,
+        completionAction: 'DISPATCH_ASSIGNED'
+      });
+
       const curContract = selectedDelivery.contractId ? contracts.find(c => c.id === selectedDelivery.contractId) : null;
       const curCust = curContract ? customers.find(c => c.id === curContract.customerId)?.name : '';
       const curSite = curContract ? sites.find(s => s.id === curContract.siteId)?.name : '';
+
+      // [업무 인계 파이프라인] 출고 건인 경우 주기장 PDI 검수 ToDo 후속 발행
+      if (selectedDelivery.type === 'OUTBOUND') {
+        await issueHandoverTask({
+          category: 'OUTBOUND_PDI_INSPECTION',
+          title: `[출고 PDI 검수 요망] ${curCust || '고객사'} (${mainVeh.driverName || '기사'} 배정)`,
+          content: `차량 배정 완료 (${mainVeh.driverName || '기사'}, ${mainVeh.vehicleNo || '차량번호'}). 상차 전 PDI 기능검수를 완료해 주십시오.`,
+          targetDept: 'YARD',
+          priority: 'HIGH',
+          actionUrl: '/admin/outbound_inspections',
+          entityType: 'DELIVERY',
+          entityId: selectedDelivery.id,
+          senderId: currentUser?.id,
+          senderName: currentUser?.name
+        });
+      }
+
       broadcastWorkNotification({
         type: 'DISPATCH',
         title: '배차 완료 안내',
@@ -1731,6 +1759,31 @@ export const TruckDispatch: React.FC = () => {
         updatedAt: new Date().toISOString()
       });
       await db.awaitPendingWrites();
+
+      // [업무 인계 파이프라인] 운송 관련 ToDo 상계
+      await clearHandoverTasks({
+        entityId: deliveryId,
+        completionAction: 'DELIVERED',
+        completedByUserId: currentUser?.id,
+        completedByName: currentUser?.name
+      });
+
+      // [업무 인계 파이프라인] 영업담당자에게 현장 도착 완료 ToDo 발행
+      const targetContract = targetDelivery?.contractId ? contracts.find(c => c.id === targetDelivery.contractId) : null;
+      await issueHandoverTask({
+        category: 'SITE_ARRIVAL_CONFIRM',
+        title: `[현장 도착 완료] ${targetDelivery?.destinationAddress || '현장'} 하차 안착`,
+        content: `장비가 현장에 도착하여 하차가 완료되었습니다. 고객 인수증 수령 및 가동 개시를 확인하십시오.`,
+        targetDept: 'SALES',
+        assignedUserId: targetContract?.salespersonId,
+        priority: 'HIGH',
+        actionUrl: '/admin/contract',
+        entityType: 'DELIVERY',
+        entityId: deliveryId,
+        senderId: currentUser?.id,
+        senderName: currentUser?.name
+      });
+
       refreshAllData();
       showToast('운송이 완료 마감되었습니다. (운송 완료)');
       setSelectedDelivery(null);
@@ -1749,6 +1802,15 @@ export const TruckDispatch: React.FC = () => {
         updatedAt: new Date().toISOString()
       });
       await db.awaitPendingWrites();
+
+      // [업무 인계 파이프라인] 배차 취소 시 관련 ToDo 자동 상계
+      await clearHandoverTasks({
+        entityId: deliveryId,
+        completionAction: 'CANCELLED',
+        completedByUserId: currentUser?.id,
+        completedByName: currentUser?.name
+      });
+
       refreshAllData();
       showToast('배차가 취소되었습니다. (배차 취소)');
       setSelectedDelivery(null);

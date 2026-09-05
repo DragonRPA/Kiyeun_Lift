@@ -4,12 +4,41 @@ import {
   Search, Check, X, Download, Upload, Trash2, 
   RefreshCw, TrendingUp, AlertCircle, FileSpreadsheet,
   Link as LinkIcon, Plus, DollarSign, Calendar, Layers,
-  Building2, ToggleLeft, ToggleRight, Info, CheckCircle2, Wallet, Settings
+  Building2, ToggleLeft, ToggleRight, Info, CheckCircle2, Wallet, Settings,
+  Printer, Zap
 } from 'lucide-react';
 import { exportToExcel } from '../services/excel';
 import { db, BankTransaction } from '../services/db';
 import { parseBankExcelFile } from '../services/bankParser';
 import { matchHangul } from '../utils/hangulSearch';
+
+// 한글 금액 변환 헬퍼 (공식 입금표용)
+function numberToKorean(num: number): string {
+  if (!num || num === 0) return '영';
+  const units = ['', '만', '억', '조'];
+  const smallUnits = ['', '일', '이', '삼', '사', '오', '육', '칠', '팔', '구'];
+  let result = '';
+  let unitIdx = 0;
+  let n = Math.floor(num);
+  while (n > 0) {
+    const chunk = n % 10000;
+    if (chunk > 0) {
+      let chunkStr = '';
+      const c1000 = Math.floor(chunk / 1000);
+      const c100 = Math.floor((chunk % 1000) / 100);
+      const c10 = Math.floor((chunk % 100) / 10);
+      const c1 = chunk % 10;
+      if (c1000 > 0) chunkStr += (c1000 === 1 ? '' : smallUnits[c1000]) + '천';
+      if (c100 > 0) chunkStr += (c100 === 1 ? '' : smallUnits[c100]) + '백';
+      if (c10 > 0) chunkStr += (c10 === 1 ? '' : smallUnits[c10]) + '십';
+      if (c1 > 0) chunkStr += smallUnits[c1];
+      result = chunkStr + units[unitIdx] + ' ' + result;
+    }
+    n = Math.floor(n / 10000);
+    unitIdx++;
+  }
+  return result.trim();
+}
 
 export const BankMatching: React.FC = () => {
   const {
@@ -25,6 +54,7 @@ export const BankMatching: React.FC = () => {
     recordPurchaseSettlementPayment,
     uploadBankTransactions,
     matchTransactionManual,
+    batchAutoMatchTransactions,
     unmatchTransaction,
     saveMatchingRule,
     deleteMatchingRule,
@@ -109,6 +139,14 @@ export const BankMatching: React.FC = () => {
   const [matchingBillingId, setMatchingBillingId] = useState('');
   const [learnRule, setLearnRule] = useState(true);
   const [billingSearchTerm, setBillingSearchTerm] = useState('');
+
+  // 🌟 고도화 수납 모드, 감액 상계, 다중 배분, 입금표 상태
+  const [matchingMode, setMatchingMode] = useState<'PINPOINT' | 'CASCADE' | 'MULTI'>('PINPOINT');
+  const [feeAdjustment, setFeeAdjustment] = useState<number>(0);
+  const [selectedMultiBillingIds, setSelectedMultiBillingIds] = useState<string[]>([]);
+  const [multiAllocations, setMultiAllocations] = useState<{ [billingId: string]: number }>({});
+  const [receiptTx, setReceiptTx] = useState<BankTransaction | null>(null);
+  const [isBatchMatchingProcessing, setIsBatchMatchingProcessing] = useState(false);
 
   // 💸 수동 출금 지급 대사 모달 상태
   const [selectedWithdrawTx, setSelectedWithdrawTx] = useState<BankTransaction | null>(null);
@@ -485,11 +523,53 @@ export const BankMatching: React.FC = () => {
     return true;
   }).sort((a, b) => b.transactionDate.localeCompare(a.transactionDate));
 
+  // 실시간 자동 매칭 가능 건수 집계
+  const autoMatchableCount = useMemo(() => {
+    const unallocated = bankTransactions.filter(t => (t.depositAmount || 0) > 0 && !t.matchedBillingId);
+    let count = 0;
+    unallocated.forEach(tx => {
+      const rule = bankMatchingRules.find(r => r.senderName === tx.senderName);
+      if (rule) {
+        const hasUnpaid = billings.some(b => b.customerId === rule.customerId && (b.status === 'UNPAID' || b.status === 'PARTIAL'));
+        if (hasUnpaid) count++;
+        return;
+      }
+      const cust = customers.find(c => tx.senderName.includes(c.name) || c.name.includes(tx.senderName));
+      if (cust) {
+        const hasUnpaid = billings.some(b => b.customerId === cust.id && (b.status === 'UNPAID' || b.status === 'PARTIAL'));
+        if (hasUnpaid) count++;
+      }
+    });
+    return count;
+  }, [bankTransactions, bankMatchingRules, billings, customers]);
+
+  // ⚡ 일괄 자동 수납 핸들러
+  const handleBatchAutoMatch = async () => {
+    if (!canSave) return;
+    setIsBatchMatchingProcessing(true);
+    try {
+      const matchedCount = await batchAutoMatchTransactions();
+      if (matchedCount > 0) {
+        showToast(`${matchedCount}건의 입금 내역이 자동으로 완납 매칭되었습니다.`, 'success');
+      } else {
+        showToast('자동 일치(상호/금액 일치)하는 미대사 입금 건이 없습니다.', 'warning');
+      }
+    } catch (err: any) {
+      showErrorModal(`일괄 자동 매칭 실패: ${err?.message || err}`);
+    } finally {
+      setIsBatchMatchingProcessing(false);
+    }
+  };
+
   // 7. 수동 매칭 모달 활성화
   const handleOpenManualMatch = (tx: BankTransaction) => {
     setSelectedTx(tx);
     setLearnRule(true);
     setBillingSearchTerm('');
+    setMatchingMode('PINPOINT');
+    setFeeAdjustment(0);
+    setSelectedMultiBillingIds([]);
+    setMultiAllocations({});
     
     const senderKey = tx.counterparty || tx.senderName;
     const matchedCustomer = customers.find(c => 
@@ -501,8 +581,13 @@ export const BankMatching: React.FC = () => {
       return b.customerId === matchedCustomer.id;
     });
 
+    const getGrand = (b: any) => {
+      const sup = b.totalAmount || 0;
+      return sup + Math.round(sup * 0.1);
+    };
+
     if (candidateBillings.length > 0) {
-      const exactAmountBilling = candidateBillings.find(b => (b.totalAmount - b.paidAmount) === tx.depositAmount);
+      const exactAmountBilling = candidateBillings.find(b => (getGrand(b) - (b.paidAmount || 0)) === tx.depositAmount);
       if (exactAmountBilling) {
         setMatchingBillingId(exactAmountBilling.id);
       } else {
@@ -517,12 +602,30 @@ export const BankMatching: React.FC = () => {
 
   const handleManualMatchSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedTx || !matchingBillingId) return;
+    if (!selectedTx) return;
+    if (matchingMode !== 'MULTI' && !matchingBillingId) return;
+    if (matchingMode === 'MULTI' && selectedMultiBillingIds.length === 0) return;
 
     try {
-      await matchTransactionManual(selectedTx.id, matchingBillingId, learnRule);
+      const targetBilling = matchingBillingId || selectedMultiBillingIds[0];
+      const options = {
+        matchingMode,
+        feeAdjustment: feeAdjustment > 0 ? feeAdjustment : undefined,
+        allocations: matchingMode === 'MULTI'
+          ? selectedMultiBillingIds.map(id => ({
+              billingId: id,
+              amount: multiAllocations[id] || 0,
+              feeAdjustment: 0
+            }))
+          : undefined
+      };
+
+      await matchTransactionManual(selectedTx.id, targetBilling, learnRule, options);
       await db.awaitPendingWrites();
       setSelectedTx(null);
+      setFeeAdjustment(0);
+      setSelectedMultiBillingIds([]);
+      setMultiAllocations({});
       showToast('수동 매칭 및 수납 승인이 완료되었습니다.');
     } catch (err: any) {
       showErrorModal(`수동 매칭 실패: ${err?.message || err}`);
@@ -635,8 +738,12 @@ export const BankMatching: React.FC = () => {
       if (matchA && !matchB) return -1;
       if (!matchA && matchB) return 1;
 
-      const amtA = (a.totalAmount - a.paidAmount) === selectedTx.depositAmount;
-      const amtB = (b.totalAmount - b.paidAmount) === selectedTx.depositAmount;
+      const getGrand = (item: any) => {
+        const sup = item.totalAmount || 0;
+        return sup + Math.round(sup * 0.1);
+      };
+      const amtA = (getGrand(a) - (a.paidAmount || 0)) === selectedTx.depositAmount;
+      const amtB = (getGrand(b) - (b.paidAmount || 0)) === selectedTx.depositAmount;
       if (amtA && !amtB) return -1;
       if (!amtA && amtB) return 1;
 
@@ -657,6 +764,28 @@ export const BankMatching: React.FC = () => {
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          {canSave && (
+            <button
+              onClick={handleBatchAutoMatch}
+              disabled={isBatchMatchingProcessing || autoMatchableCount === 0}
+              className="btn btn-primary"
+              style={{
+                fontSize: '12px',
+                padding: '4px 12px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '5px',
+                backgroundColor: autoMatchableCount > 0 ? '#10B981' : undefined,
+                borderColor: autoMatchableCount > 0 ? '#059669' : undefined,
+                whiteSpace: 'nowrap',
+                fontWeight: 'bold'
+              }}
+              title={autoMatchableCount > 0 ? '상호 또는 금액이 일치하는 미대사 입금 건을 즉시 일괄 수납 처리합니다' : '자동 매칭 가능한 미대사 건이 없습니다'}
+            >
+              <Zap size={13} />
+              일괄 자동 수납 {autoMatchableCount > 0 ? `(${autoMatchableCount}건)` : ''} ➔
+            </button>
+          )}
           <button
             onClick={() => setActiveTab('MATCHING')}
             className={`btn ${activeTab === 'MATCHING' ? 'btn-primary' : 'btn-secondary'}`}
@@ -982,22 +1111,22 @@ export const BankMatching: React.FC = () => {
             </div>
           </div>
 
-          {/* 데이터 테이블 */}
+          {/* 데이터 테이블 (헌장 3.6: 유형 B 고밀도 슬림 그리드, 38~42px 행, Col 0 Sticky 고정) */}
           <div style={{ backgroundColor: 'var(--bg-surface)', borderRadius: '8px', border: '1px solid var(--border-color)', overflowX: 'auto' }}>
-            <table style={{ width: '100%', minWidth: '1100px', borderCollapse: 'collapse', fontSize: '13px', textAlign: 'left' }}>
+            <table style={{ width: '100%', minWidth: '1100px', borderCollapse: 'collapse', fontSize: '12.5px', textAlign: 'left' }}>
               <thead>
                 <tr style={{ backgroundColor: 'var(--bg-main)', borderBottom: '1px solid var(--border-color)', color: 'var(--text-muted)' }}>
-                  <th style={{ padding: '12px 14px', whiteSpace: 'nowrap', width: '130px' }}>수납/지급 대사</th>
-                  <th style={{ padding: '12px 14px', whiteSpace: 'nowrap' }}>은행명</th>
-                  <th style={{ padding: '12px 14px', whiteSpace: 'nowrap' }}>거래일시</th>
-                  <th style={{ padding: '12px 14px', whiteSpace: 'nowrap' }}>적요</th>
-                  <th style={{ padding: '12px 14px', whiteSpace: 'nowrap' }}>기재내용 (상호/거래처)</th>
-                  <th style={{ padding: '12px 14px', whiteSpace: 'nowrap', textAlign: 'right' }}>입금액 대비 수납결과</th>
-                  <th style={{ padding: '12px 14px', whiteSpace: 'nowrap', textAlign: 'right' }}>출금액 대비 정산결과</th>
-                  <th style={{ padding: '12px 14px', whiteSpace: 'nowrap', textAlign: 'right' }}>거래후 잔액</th>
-                  <th style={{ padding: '12px 14px', whiteSpace: 'nowrap' }}>취급/거래점</th>
-                  <th style={{ padding: '12px 14px', whiteSpace: 'nowrap' }}>매칭 정보 (청구/정산)</th>
-                  <th style={{ padding: '12px 14px', whiteSpace: 'nowrap' }}>메모</th>
+                  <th style={{ padding: '8px 10px', whiteSpace: 'nowrap', width: '150px', position: 'sticky', left: 0, zIndex: 2, backgroundColor: 'var(--bg-main)' }}>수납/지급 대사</th>
+                  <th style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>은행명</th>
+                  <th style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>거래일시</th>
+                  <th style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>적요</th>
+                  <th style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>기재내용 (상호/거래처)</th>
+                  <th style={{ padding: '8px 10px', whiteSpace: 'nowrap', textAlign: 'right' }}>입금액 대비 수납결과</th>
+                  <th style={{ padding: '8px 10px', whiteSpace: 'nowrap', textAlign: 'right' }}>출금액 대비 정산결과</th>
+                  <th style={{ padding: '8px 10px', whiteSpace: 'nowrap', textAlign: 'right' }}>거래후 잔액</th>
+                  <th style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>취급/거래점</th>
+                  <th style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>매칭 정보 (청구/정산)</th>
+                  <th style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>메모</th>
                 </tr>
               </thead>
               <tbody>
@@ -1027,16 +1156,34 @@ export const BankMatching: React.FC = () => {
                         key={tx.id}
                         style={{ 
                           borderBottom: '1px solid var(--border-color)',
-                          backgroundColor: isMatched ? 'rgba(16, 185, 129, 0.02)' : 'transparent'
+                          backgroundColor: isMatched ? 'rgba(16, 185, 129, 0.02)' : 'transparent',
+                          height: '38px'
                         }}
                       >
-                        <td style={{ padding: '10px 14px', whiteSpace: 'nowrap' }}>
+                        <td style={{
+                          padding: '6px 10px',
+                          whiteSpace: 'nowrap',
+                          position: 'sticky',
+                          left: 0,
+                          zIndex: 1,
+                          backgroundColor: isMatched ? '#f0fdf4' : 'var(--bg-surface)'
+                        }}>
                           {tx.depositAmount > 0 ? (
                             isFullyUsed ? (
                               <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                                <span style={{ fontSize: '11px', padding: '3px 8px', borderRadius: '4px', backgroundColor: 'rgba(16, 185, 129, 0.15)', color: '#10B981', fontWeight: 'bold' }}>
-                                  ✓ 완납 매칭됨
+                                <span style={{ fontSize: '11px', padding: '2px 7px', borderRadius: '4px', backgroundColor: 'rgba(16, 185, 129, 0.15)', color: '#10B981', fontWeight: 'bold' }}>
+                                  ✓ 완납 매칭
                                 </span>
+                                <button
+                                  type="button"
+                                  onClick={() => setReceiptTx(tx)}
+                                  className="btn btn-secondary"
+                                  style={{ fontSize: '10px', padding: '2px 5px', color: 'var(--primary)', borderColor: 'var(--primary)', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '2px' }}
+                                  title="공식 입금표(영수증) 인쇄"
+                                >
+                                  <Printer size={10} />
+                                  입금표
+                                </button>
                                 {canSave && (
                                   <button
                                     type="button"
@@ -1055,11 +1202,21 @@ export const BankMatching: React.FC = () => {
                                   type="button"
                                   onClick={() => handleOpenManualMatch(tx)}
                                   className="btn btn-secondary"
-                                  style={{ fontSize: '11px', padding: '3px 8px', color: '#10B981', borderColor: '#10B981', fontWeight: 'bold', whiteSpace: 'nowrap' }}
+                                  style={{ fontSize: '10.5px', padding: '2px 7px', color: '#10B981', borderColor: '#10B981', fontWeight: 'bold', whiteSpace: 'nowrap' }}
                                   disabled={!canSave}
                                 >
-                                  <Check size={12} style={{ marginRight: '3px' }} />
-                                  부분매칭 ({remBal.toLocaleString()}원 가용)
+                                  <Check size={11} style={{ marginRight: '2px' }} />
+                                  부분 ({remBal.toLocaleString()}원 가용)
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setReceiptTx(tx)}
+                                  className="btn btn-secondary"
+                                  style={{ fontSize: '10px', padding: '2px 5px', color: 'var(--primary)', borderColor: 'var(--primary)', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '2px' }}
+                                  title="공식 입금표(영수증) 인쇄"
+                                >
+                                  <Printer size={10} />
+                                  입금표
                                 </button>
                                 {canSave && (
                                   <button
@@ -1077,26 +1234,26 @@ export const BankMatching: React.FC = () => {
                               <button
                                 onClick={() => handleOpenManualMatch(tx)}
                                 className="btn btn-primary"
-                                style={{ fontSize: '11px', padding: '4px 10px', whiteSpace: 'nowrap' }}
+                                style={{ fontSize: '11px', padding: '3px 8px', whiteSpace: 'nowrap' }}
                                 disabled={!canSave}
                               >
-                                <Check size={12} style={{ marginRight: '3px' }} />
+                                <Check size={11} style={{ marginRight: '2px' }} />
                                 수납/매칭 ➔
                               </button>
                             )
                           ) : tx.withdrawAmount > 0 ? (
                             isMatchedWithdraw ? (
-                              <span style={{ fontSize: '11px', padding: '3px 8px', borderRadius: '4px', backgroundColor: 'rgba(16, 185, 129, 0.15)', color: '#10B981', fontWeight: 'bold' }}>
+                              <span style={{ fontSize: '11px', padding: '2px 7px', borderRadius: '4px', backgroundColor: 'rgba(16, 185, 129, 0.15)', color: '#10B981', fontWeight: 'bold' }}>
                                 ✓ 지급대사됨
                               </span>
                             ) : (
                               <button
                                 onClick={() => handleOpenWithdrawMatchModal(tx)}
                                 className="btn btn-secondary"
-                                style={{ fontSize: '11px', padding: '4px 10px', color: '#10B981', borderColor: '#10B981', fontWeight: 'bold', whiteSpace: 'nowrap' }}
+                                style={{ fontSize: '11px', padding: '3px 8px', color: '#10B981', borderColor: '#10B981', fontWeight: 'bold', whiteSpace: 'nowrap' }}
                                 disabled={!canSave}
                               >
-                                <DollarSign size={12} style={{ marginRight: '3px' }} />
+                                <DollarSign size={11} style={{ marginRight: '2px' }} />
                                 지급/대사 ➔
                               </button>
                             )
@@ -1251,11 +1408,15 @@ export const BankMatching: React.FC = () => {
 
             return (
               <div style={{
+                position: 'sticky',
+                bottom: '10px',
+                zIndex: 10,
                 marginTop: '12px',
-                padding: '12px 16px',
+                padding: '10px 16px',
                 backgroundColor: 'var(--bg-card)',
                 borderRadius: '8px',
-                border: '1px solid var(--border-color)',
+                border: '1.5px solid var(--border-color)',
+                boxShadow: '0 8px 24px rgba(0, 0, 0, 0.15)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
@@ -1364,7 +1525,7 @@ export const BankMatching: React.FC = () => {
         </div>
       )}
 
-      {/* 수동 수납 대사 모달 */}
+      {/* 🌟 고도화 수동 수납 대사 모달 (단독충당/순차소진/다중배분 + 송금수수료 자동감액) */}
       {selectedTx && (
         <div style={{
           position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
@@ -1373,8 +1534,8 @@ export const BankMatching: React.FC = () => {
         }}>
           <div style={{
             backgroundColor: 'var(--bg-card)', borderRadius: '12px',
-            width: '90%', maxWidth: '650px', maxHeight: '90vh', overflowY: 'auto',
-            padding: '24px', display: 'flex', flexDirection: 'column', gap: '18px',
+            width: '90%', maxWidth: '700px', maxHeight: '90vh', overflowY: 'auto',
+            padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px',
             border: '1px solid var(--border-color)',
             boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)'
           }}>
@@ -1390,7 +1551,7 @@ export const BankMatching: React.FC = () => {
             </div>
 
             {/* 입금 정보 카드 */}
-            <div style={{ backgroundColor: 'var(--bg-app)', padding: '14px', borderRadius: '8px', border: '1px solid var(--border-color)', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', fontSize: '13px' }}>
+            <div style={{ backgroundColor: 'var(--bg-app)', padding: '12px 16px', borderRadius: '8px', border: '1px solid var(--border-color)', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '12.5px' }}>
               <div>
                 <span style={{ color: 'var(--text-muted)' }}>거래 은행: </span>
                 <span style={{ fontWeight: 'bold', color: 'var(--primary)' }}>{selectedTx.bankName || '우리은행'}</span>
@@ -1409,7 +1570,55 @@ export const BankMatching: React.FC = () => {
               </div>
             </div>
 
-            <form onSubmit={handleManualMatchSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            {/* 수납 모드 3단 선택 탭 (헌장 1.1: 최대 편익) */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <label style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                수납 충당 방식 선택:
+              </label>
+              <div style={{ display: 'flex', gap: '6px' }}>
+                <button
+                  type="button"
+                  onClick={() => setMatchingMode('PINPOINT')}
+                  style={{
+                    flex: 1, padding: '6px 8px', borderRadius: '6px', fontSize: '11.5px', fontWeight: matchingMode === 'PINPOINT' ? 'bold' : 'normal',
+                    border: matchingMode === 'PINPOINT' ? '1.5px solid var(--primary)' : '1px solid var(--border-color)',
+                    backgroundColor: matchingMode === 'PINPOINT' ? 'rgba(99, 102, 241, 0.15)' : 'var(--bg-app)',
+                    color: matchingMode === 'PINPOINT' ? 'var(--primary)' : 'var(--text-main)',
+                    cursor: 'pointer', whiteSpace: 'nowrap'
+                  }}
+                >
+                  🎯 선택 청구서 단독 충당 (권장)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMatchingMode('CASCADE')}
+                  style={{
+                    flex: 1, padding: '6px 8px', borderRadius: '6px', fontSize: '11.5px', fontWeight: matchingMode === 'CASCADE' ? 'bold' : 'normal',
+                    border: matchingMode === 'CASCADE' ? '1.5px solid var(--primary)' : '1px solid var(--border-color)',
+                    backgroundColor: matchingMode === 'CASCADE' ? 'rgba(99, 102, 241, 0.15)' : 'var(--bg-app)',
+                    color: matchingMode === 'CASCADE' ? 'var(--primary)' : 'var(--text-main)',
+                    cursor: 'pointer', whiteSpace: 'nowrap'
+                  }}
+                >
+                  ⏳ 과거 미수부터 순차 소진
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMatchingMode('MULTI')}
+                  style={{
+                    flex: 1, padding: '6px 8px', borderRadius: '6px', fontSize: '11.5px', fontWeight: matchingMode === 'MULTI' ? 'bold' : 'normal',
+                    border: matchingMode === 'MULTI' ? '1.5px solid var(--primary)' : '1px solid var(--border-color)',
+                    backgroundColor: matchingMode === 'MULTI' ? 'rgba(99, 102, 241, 0.15)' : 'var(--bg-app)',
+                    color: matchingMode === 'MULTI' ? 'var(--primary)' : 'var(--text-main)',
+                    cursor: 'pointer', whiteSpace: 'nowrap'
+                  }}
+                >
+                  📋 다중 청구서 직접 배분
+                </button>
+              </div>
+            </div>
+
+            <form onSubmit={handleManualMatchSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
               
               {/* 청구 내역 검색 필터 */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
@@ -1422,7 +1631,7 @@ export const BankMatching: React.FC = () => {
                   value={billingSearchTerm}
                   onChange={(e) => setBillingSearchTerm(e.target.value)}
                   className="form-control"
-                  style={{ fontSize: '13px' }}
+                  style={{ fontSize: '12.5px' }}
                 />
               </div>
 
@@ -1432,7 +1641,7 @@ export const BankMatching: React.FC = () => {
                   매칭 대상 미수 청구건 선택:
                 </label>
 
-                <div style={{ maxHeight: '220px', overflowY: 'auto', border: '1px solid var(--border-color)', borderRadius: '6px', padding: '8px', display: 'flex', flexDirection: 'column', gap: '6px', backgroundColor: 'var(--bg-app)' }}>
+                <div style={{ maxHeight: '240px', overflowY: 'auto', border: '1px solid var(--border-color)', borderRadius: '6px', padding: '8px', display: 'flex', flexDirection: 'column', gap: '6px', backgroundColor: 'var(--bg-app)' }}>
                   {getModalFilteredBillings().length === 0 ? (
                     <div style={{ padding: '16px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '12px' }}>
                       매칭 가능한 미수 청구 내역이 없습니다.
@@ -1440,52 +1649,83 @@ export const BankMatching: React.FC = () => {
                   ) : (
                     getModalFilteredBillings().map((b) => {
                       const custName = getCustName(b.customerId);
-                      const unpaidAmt = b.totalAmount - b.paidAmount;
+                      const bSup = b.totalAmount || 0;
+                      const bVat = Math.round(bSup * 0.1);
+                      const bGrand = bSup + bVat;
+                      const unpaidAmt = Math.max(0, bGrand - (b.paidAmount || 0));
                       const senderKey = selectedTx.counterparty || selectedTx.senderName;
                       const isSmartMatch = senderKey.includes(custName) || custName.includes(senderKey);
                       const isExactAmount = unpaidAmt === selectedTx.depositAmount;
+
+                      const isSelected = matchingMode === 'MULTI'
+                        ? selectedMultiBillingIds.includes(b.id)
+                        : matchingBillingId === b.id;
 
                       return (
                         <label
                           key={b.id}
                           style={{
                             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                            padding: '10px 12px', borderRadius: '6px', cursor: 'pointer',
-                            backgroundColor: matchingBillingId === b.id ? 'rgba(99, 102, 241, 0.2)' : 'var(--bg-card)',
-                            border: matchingBillingId === b.id ? '1px solid var(--primary)' : '1px solid var(--border-color)'
+                            padding: '8px 12px', borderRadius: '6px', cursor: 'pointer',
+                            backgroundColor: isSelected ? 'rgba(99, 102, 241, 0.15)' : 'var(--bg-card)',
+                            border: isSelected ? '1.5px solid var(--primary)' : '1px solid var(--border-color)'
                           }}
                         >
                           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                            <input
-                              type="radio"
-                              name="matchingBilling"
-                              value={b.id}
-                              checked={matchingBillingId === b.id}
-                              onChange={() => setMatchingBillingId(b.id)}
-                            />
+                            {matchingMode === 'MULTI' ? (
+                              <input
+                                type="checkbox"
+                                value={b.id}
+                                checked={selectedMultiBillingIds.includes(b.id)}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setSelectedMultiBillingIds(prev => [...prev, b.id]);
+                                    setMultiAllocations(prev => ({ ...prev, [b.id]: unpaidAmt }));
+                                  } else {
+                                    setSelectedMultiBillingIds(prev => prev.filter(id => id !== b.id));
+                                    setMultiAllocations(prev => {
+                                      const next = { ...prev };
+                                      delete next[b.id];
+                                      return next;
+                                    });
+                                  }
+                                }}
+                              />
+                            ) : (
+                              <input
+                                type="radio"
+                                name="matchingBilling"
+                                value={b.id}
+                                checked={matchingBillingId === b.id}
+                                onChange={() => {
+                                  setMatchingBillingId(b.id);
+                                  setFeeAdjustment(0);
+                                }}
+                              />
+                            )}
                             <div>
                               <div style={{ fontWeight: 'bold', fontSize: '13px', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '6px' }}>
                                 {custName} ({b.billingYm} 청구)
                                 {isSmartMatch && (
-                                  <span style={{ fontSize: '10px', padding: '2px 6px', borderRadius: '4px', backgroundColor: 'rgba(16, 185, 129, 0.2)', color: 'var(--success)' }}>
+                                  <span style={{ fontSize: '10px', padding: '1px 5px', borderRadius: '4px', backgroundColor: 'rgba(16, 185, 129, 0.2)', color: 'var(--success)', fontWeight: 'bold' }}>
                                     상호 일치
                                   </span>
                                 )}
                                 {isExactAmount && (
-                                  <span style={{ fontSize: '10px', padding: '2px 6px', borderRadius: '4px', backgroundColor: 'rgba(59, 130, 246, 0.2)', color: 'var(--primary)' }}>
+                                  <span style={{ fontSize: '10px', padding: '1px 5px', borderRadius: '4px', backgroundColor: 'rgba(59, 130, 246, 0.2)', color: 'var(--primary)', fontWeight: 'bold' }}>
                                     금액 일치
                                   </span>
                                 )}
                               </div>
                               <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
-                                총 청구액: {b.totalAmount.toLocaleString()}원 | 기존 기수납: {b.paidAmount.toLocaleString()}원
+                                공급가: ₩{bSup.toLocaleString()} | 부가세: ₩{bVat.toLocaleString()} | <strong>청구총액: ₩{bGrand.toLocaleString()}</strong> (기수납: ₩{(b.paidAmount || 0).toLocaleString()})
                               </div>
                             </div>
                           </div>
 
                           <div style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
                             <div style={{ fontSize: '13px', fontWeight: 'bold', color: 'var(--danger)' }}>
-                              미수 잔액: {unpaidAmt.toLocaleString()}원
+                              미수잔액: ₩{unpaidAmt.toLocaleString()}
                             </div>
                           </div>
                         </label>
@@ -1494,6 +1734,39 @@ export const BankMatching: React.FC = () => {
                   )}
                 </div>
               </div>
+
+              {/* 🌟 송금 수수료 500원~1,000원 자동 감액 원클릭 제안 바 */}
+              {(() => {
+                const targetB = billings.find(b => b.id === matchingBillingId);
+                if (!targetB) return null;
+                const bSup = targetB.totalAmount || 0;
+                const bGrand = bSup + Math.round(bSup * 0.1);
+                const unpaid = Math.max(0, bGrand - (targetB.paidAmount || 0));
+                const diff = unpaid - selectedTx.depositAmount;
+
+                if (diff > 0 && diff <= 1000) {
+                  return (
+                    <div style={{
+                      padding: '10px 14px', borderRadius: '6px',
+                      backgroundColor: 'rgba(245, 158, 11, 0.12)', border: '1px solid #f59e0b',
+                      display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px'
+                    }}>
+                      <div style={{ fontSize: '12px', color: '#b45309' }}>
+                        💡 <strong>타행 이체 수수료 차액(₩{diff.toLocaleString()}) 감지</strong>: 입금액이 청구 잔액보다 ₩{diff.toLocaleString()}원 부족합니다.
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setFeeAdjustment(feeAdjustment > 0 ? 0 : diff)}
+                        className={`btn ${feeAdjustment > 0 ? 'btn-primary' : 'btn-secondary'}`}
+                        style={{ fontSize: '11px', padding: '3px 8px', whiteSpace: 'nowrap', fontWeight: 'bold' }}
+                      >
+                        {feeAdjustment > 0 ? `✓ 수수료 ₩${diff.toLocaleString()} 감액 적용됨` : `차액 ₩${diff.toLocaleString()} 자동 감액 (완납 처리)`}
+                      </button>
+                    </div>
+                  );
+                }
+                return null;
+              })()}
 
               {/* 규칙 저장 체크박스 */}
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: 'var(--bg-app)', padding: '10px', borderRadius: '6px' }}>
@@ -1508,7 +1781,7 @@ export const BankMatching: React.FC = () => {
                 </label>
               </div>
 
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '10px' }}>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '6px' }}>
                 <button
                   type="button"
                   className="btn btn-secondary"
@@ -1519,12 +1792,135 @@ export const BankMatching: React.FC = () => {
                 <button
                   type="submit"
                   className="btn btn-primary"
-                  disabled={!matchingBillingId}
+                  disabled={matchingMode !== 'MULTI' ? !matchingBillingId : selectedMultiBillingIds.length === 0}
                 >
                   수납 승인 완료
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* 🌟 공식 입금표 / 수납 확인서 인쇄 모달 */}
+      {receiptTx && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.75)', backdropFilter: 'blur(6px)', display: 'flex',
+          justifyContent: 'center', alignItems: 'center', zIndex: 1100
+        }}>
+          <div style={{
+            backgroundColor: '#ffffff', color: '#111827', borderRadius: '8px',
+            width: '90%', maxWidth: '680px', maxHeight: '92vh', overflowY: 'auto',
+            padding: '32px', display: 'flex', flexDirection: 'column', gap: '20px',
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
+            border: '1px solid #e5e7eb'
+          }}>
+            {/* 입금표 상단 헤더 */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '2px solid #111827', paddingBottom: '12px' }}>
+              <div>
+                <h2 style={{ fontSize: '24px', fontWeight: '900', letterSpacing: '4px', margin: 0, color: '#111827' }}>
+                  입 금 표 (영수증)
+                </h2>
+                <div style={{ fontSize: '11px', color: '#6b7280', marginTop: '4px' }}>
+                  RECEIPT OF PAYMENT • 공급받는자 보관용
+                </div>
+              </div>
+              <button onClick={() => setReceiptTx(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af' }}>
+                <X size={22} />
+              </button>
+            </div>
+
+            {/* 기본 거래 정보 테이블 */}
+            <div style={{ border: '1px solid #111827', borderRadius: '4px', overflow: 'hidden' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr 120px 1fr', borderBottom: '1px solid #e5e7eb', fontSize: '12.5px' }}>
+                <div style={{ backgroundColor: '#f3f4f6', padding: '8px 10px', fontWeight: 'bold', borderRight: '1px solid #e5e7eb' }}>발행 번호</div>
+                <div style={{ padding: '8px 10px', borderRight: '1px solid #e5e7eb' }}>RCP-{receiptTx.id.replace(/[^0-9a-zA-Z]/g, '').substring(0, 10).toUpperCase()}</div>
+                <div style={{ backgroundColor: '#f3f4f6', padding: '8px 10px', fontWeight: 'bold', borderRight: '1px solid #e5e7eb' }}>영수 일자</div>
+                <div style={{ padding: '8px 10px' }}>{receiptTx.transactionDate.split(' ')[0]}</div>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr 120px 1fr', fontSize: '12.5px' }}>
+                <div style={{ backgroundColor: '#f3f4f6', padding: '8px 10px', fontWeight: 'bold', borderRight: '1px solid #e5e7eb' }}>입금 고객사</div>
+                <div style={{ padding: '8px 10px', fontWeight: 'bold', borderRight: '1px solid #e5e7eb', color: '#1d4ed8' }}>
+                  {receiptTx.counterparty || receiptTx.senderName} 貴下
+                </div>
+                <div style={{ backgroundColor: '#f3f4f6', padding: '8px 10px', fontWeight: 'bold', borderRight: '1px solid #e5e7eb' }}>수납 구분</div>
+                <div style={{ padding: '8px 10px' }}>계좌이체 (통장입금)</div>
+              </div>
+            </div>
+
+            {/* 영수 금액 박스 */}
+            <div style={{
+              backgroundColor: '#f8fafc', border: '2px solid #2563eb', borderRadius: '6px',
+              padding: '16px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center'
+            }}>
+              <div>
+                <div style={{ fontSize: '11px', color: '#64748b', fontWeight: '600' }}>영수 총액 (금액 한글 표기)</div>
+                <div style={{ fontSize: '17px', fontWeight: '900', color: '#1e3a8a', marginTop: '2px' }}>
+                  금 {numberToKorean(receiptTx.depositAmount)} 원정
+                </div>
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <div style={{ fontSize: '11px', color: '#64748b', fontWeight: '600' }}>원화 표기 (VAT 포함)</div>
+                <div style={{ fontSize: '20px', fontWeight: '900', color: '#16a34a' }}>
+                  ₩{receiptTx.depositAmount.toLocaleString()}
+                </div>
+              </div>
+            </div>
+
+            {/* 공급자 사업자 정보 및 직인 날인 */}
+            <div style={{
+              border: '1px solid #d1d5db', borderRadius: '6px', padding: '14px',
+              display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '12px', position: 'relative'
+            }}>
+              <div style={{ fontSize: '12px', lineHeight: '1.7', color: '#374151' }}>
+                <div><strong>공급자 상호:</strong> 주식회사 기연 (Kiyuen Co., Ltd.)</div>
+                <div><strong>사업자등록번호:</strong> 123-45-67890 | <strong>대표이사:</strong> 이기연</div>
+                <div><strong>사업장 소재지:</strong> 경기도 시흥시 범안로 123번길 45 (주기장)</div>
+                <div><strong>업태 / 종목:</strong> 건설기계대여 / 고소작업대 임대 및 정비</div>
+                <div><strong>입금 계좌:</strong> {receiptTx.bankName || '우리은행'} {receiptTx.accountNumber || '1002-***-******'}</div>
+              </div>
+
+              {/* 직인 날인 인장 마크 */}
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+                <div style={{
+                  width: '84px', height: '84px', borderRadius: '50%', border: '2.5px solid #dc2626',
+                  color: '#dc2626', display: 'flex', flexDirection: 'column', alignItems: 'center',
+                  justifyContent: 'center', fontWeight: '900', fontSize: '11px', transform: 'rotate(-8deg)',
+                  boxShadow: 'inset 0 0 4px rgba(220, 38, 38, 0.2)'
+                }}>
+                  <span>주식회사</span>
+                  <span style={{ fontSize: '13px', letterSpacing: '1px' }}>기 연</span>
+                  <span style={{ fontSize: '9px' }}>[ 직 인 ]</span>
+                </div>
+                <span style={{ fontSize: '10px', color: '#9ca3af', marginTop: '4px' }}>법인 인장 날인</span>
+              </div>
+            </div>
+
+            <div style={{ fontSize: '11.5px', color: '#6b7280', textAlign: 'center', lineHeight: '1.5' }}>
+              위 금액을 고소작업대 렌탈료 및 관련 대금으로 정히 영수하였음을 증명합니다.
+            </div>
+
+            {/* 인쇄 및 닫기 버튼 */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', borderTop: '1px solid #e5e7eb', paddingTop: '14px' }}>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => setReceiptTx(null)}
+                style={{ padding: '6px 14px', fontSize: '12px' }}
+              >
+                닫기
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => window.print()}
+                style={{ padding: '6px 16px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '5px', backgroundColor: '#1d4ed8' }}
+              >
+                <Printer size={14} />
+                입금표 인쇄 (Print)
+              </button>
+            </div>
           </div>
         </div>
       )}

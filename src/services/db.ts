@@ -684,6 +684,7 @@ export interface Payment {
   amount: number;
   method: string; // 'BANK_TRANSFER' | 'CARD' | 'CASH'
   memo: string;
+  feeAdjustment?: number; // 송금수수료 등 차액 자동 감액 상계액 (500원/1,000원 등)
   createdAt: string;
   updatedAt?: string;
 }
@@ -775,6 +776,9 @@ export interface Vendor {
   bankAccount?: string;
   isActive?: boolean;
   memo?: string;
+  firstTradeDate?: string;       // 최초 거래개시일 (YYYY-MM-DD)
+  lastTradeDate?: string;        // 최근 거래일 (YYYY-MM-DD)
+  totalPurchaseAmount?: number;  // 누적 거래액 (원, 매입거래 누계액)
   createdAt: string;
   updatedAt?: string;
 }
@@ -971,15 +975,55 @@ export interface EquipmentManual {
   updatedAt?: string;
 }
 
+export type TaskCategory = 
+  | 'DISPATCH_REQUEST'            // 출고/회수/대차 배차 지시
+  | 'OUTBOUND_PDI_INSPECTION'     // 출고 전 PDI 기능 및 안전옵션 검수
+  | 'OUTBOUND_SHIPMENT_START'     // PDI 합격 장비 상차 및 화물 출발
+  | 'SITE_ARRIVAL_CONFIRM'        // 현장 도착 하차 및 가동 개시 확인
+  | 'AS_DISPATCH_REPAIR'          // 현장 AS 긴급 출동 및 조치
+  | 'BILLABLE_REPAIR_BILLING'     // 유상 수리비 매출 청구서 바인딩
+  | 'INBOUND_INSPECTION'          // 회수 장비 입고 검수
+  | 'INBOUND_REPAIR_DEFECT'       // 입고 결함 장비 주기장 정비
+  | 'CLAIM_DAMAGE_BILLING'        // 고객 과실 파손 구상권 청구
+  | 'EXCHANGE_CHAIN_INSPECTION'   // 대차 입출고 1:1 검수 체인
+  | 'BILLING_APPROVAL_SEND'       // 월말 렌탈 청구서 승인 및 계산서 발행
+  | 'DELINQUENCY_COLLECTION'      // 연체 채권 독촉 및 수납 확약
+  | 'PURCHASE_SETTLEMENT_AUDIT'   // 매입 정산서 대사 및 지급 승인
+  | 'ASSET_DISPOSAL_HANDOVER'     // 매각 장비 실물 인도 및 잔금 수납
+  | 'CONSUMABLE_RESTOCK'          // 안전재고 미달 소모품 긴급 발주
+  | 'CONSUMABLE_PURCHASE_APPROVAL'// 소모품 구매 신청 결재 승인
+  | 'LEAVE_OT_APPROVAL'           // 연차 및 초과근무 부서장 결재
+  | 'MISSING_INFO'                // 고객/현장 정보 미비 보완
+  | 'EXECUTIVE_DIRECTIVE'         // 경영진 특별 업무 지시
+  | 'GENERAL';                    // 일반 경영진 업무 지시
+
 export interface Todo {
   id: string;
   userId: string;
-  type: 'MISSING_INFO' | 'GENERAL';
+  assignedUserId?: string;
+  targetType?: 'USER' | 'DEPT';   // 개인 지정 vs 부서 지정
+  targetDept?: string;
+  targetRole?: string;
+  taskCategory?: TaskCategory;
+  type: 'MISSING_INFO' | 'GENERAL' | 'URGENT' | 'APPROVAL' | string;
   title: string;
   content: string;
+  priority?: 'URGENT' | 'HIGH' | 'NORMAL' | 'LOW';
+  dueDate?: string;
+  actionUrl?: string;
+  entityType?: string;
+  entityId?: string;
   isCompleted: boolean;
-  relatedEntityId?: string; // 고객사 ID 등
+  relatedEntityId?: string; // 고객사 ID 등 (레거시 호환)
+  senderId?: string;
+  senderName?: string;
+  resolutionNote?: string;  // 수행자의 조치 결과 보고 메모
   createdAt: string;
+  updatedAt?: string;
+  completedAt?: string;
+  completedByUserId?: string;
+  completedByName?: string;
+  completionAction?: string;
 }
 
 export interface PrepaidTransaction {

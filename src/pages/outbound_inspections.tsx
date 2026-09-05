@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
 import { ToggleSwitch } from '../components/ToggleSwitch';
 import { OutboundInspection, OutboundInspectionStatus, Asset, Contract, Customer, CustomerSite, AssetInOutLog, Repair, ContractAsset, db } from '../services/db';
+import { issueHandoverTask, clearHandoverTasks } from '../utils/taskHandoverPipeline';
 import {
   CheckSquare,
   AlertTriangle,
@@ -432,6 +433,52 @@ export const OutboundInspections: React.FC = () => {
         }
       });
 
+      // 🟢 [단일 업무 인계 파이프라인] 출고 PDI 검수 ToDo 자동 상계
+      for (const item of selectedGroup.items) {
+        await clearHandoverTasks({
+          entityId: item.id,
+          category: 'OUTBOUND_PDI_INSPECTION',
+          completedByUserId: currentUser?.id,
+          completedByName: inspectorName,
+          completionAction: 'PDI_APPROVED'
+        });
+        if (item.assetId) {
+          await clearHandoverTasks({
+            entityId: item.assetId,
+            category: 'OUTBOUND_PDI_INSPECTION',
+            completedByUserId: currentUser?.id,
+            completedByName: inspectorName,
+            completionAction: 'PDI_APPROVED'
+          });
+        }
+      }
+      if (selectedGroup.deliveryId) {
+        await clearHandoverTasks({
+          entityId: selectedGroup.deliveryId,
+          category: 'OUTBOUND_PDI_INSPECTION',
+          completedByUserId: currentUser?.id,
+          completedByName: inspectorName,
+          completionAction: 'PDI_APPROVED'
+        });
+      }
+
+      // 🚀 [단일 업무 인계 파이프라인] 화물 기사/영업에 장비 상차 출발 ToDo 발행
+      const matchedContract = contracts.find(c => c.id === selectedGroup.contractId);
+      await issueHandoverTask({
+        category: 'OUTBOUND_SHIPMENT_START',
+        title: `[장비 상차 출발] ${selectedGroup.customerName} (${selectedGroup.items.length}대 PDI 완료)`,
+        content: `출고 PDI 검수 완료 승인 (자산 대여중 전환). 차량 상차 및 현장 배송을 시작하세요. (현장: ${selectedGroup.siteName || '-'})`,
+        targetDept: 'DISPATCH',
+        targetRole: 'LOGISTICS',
+        assignedUserId: matchedContract?.salespersonId,
+        priority: 'HIGH',
+        actionUrl: '/admin/dispatch',
+        entityType: 'DELIVERY',
+        entityId: selectedGroup.deliveryId || selectedGroup.contractId || 'OUTBOUND',
+        senderId: currentUser?.id,
+        senderName: inspectorName
+      });
+
       await db.awaitPendingWrites();
       refreshAllData();
       showToast(`[${selectedGroup.customerName}] 출고 검수가 최종 승인 마감되었습니다. (자산상태 RENTED 전환)`);
@@ -538,6 +585,55 @@ export const OutboundInspections: React.FC = () => {
           });
         }
       });
+
+      // 🟢 [단일 업무 인계 파이프라인] 출고 PDI 검수 ToDo 상계
+      for (const item of selectedGroup.items) {
+        await clearHandoverTasks({
+          entityId: item.id,
+          category: 'OUTBOUND_PDI_INSPECTION',
+          completedByUserId: currentUser?.id,
+          completedByName: inspectorName,
+          completionAction: 'PDI_REJECTED'
+        });
+        if (item.assetId) {
+          await clearHandoverTasks({
+            entityId: item.assetId,
+            category: 'OUTBOUND_PDI_INSPECTION',
+            completedByUserId: currentUser?.id,
+            completedByName: inspectorName,
+            completionAction: 'PDI_REJECTED'
+          });
+        }
+      }
+
+      // 🚀 결함 수리 전환 시 주기장 정비 ToDo 및 배차 대체배정 ToDo 발행
+      if (rejectToRepairing) {
+        await issueHandoverTask({
+          category: 'INBOUND_REPAIR_DEFECT',
+          title: `[출고반려 긴급정비] ${selectedGroup.customerName} 장비 점검`,
+          content: `출고 PDI 검수 반려 사유: ${rejectReason.trim()} (정비대장 티켓 확인 및 조치 요망)`,
+          targetDept: 'YARD',
+          priority: 'URGENT',
+          actionUrl: '/repairs',
+          entityType: 'REPAIR',
+          entityId: selectedGroup.items[0]?.assetId || 'REPAIR',
+          senderId: currentUser?.id,
+          senderName: inspectorName
+        });
+
+        await issueHandoverTask({
+          category: 'DISPATCH_REQUEST',
+          title: `[출고반려 대체 배차] ${selectedGroup.customerName}`,
+          content: `장비 검수 반려에 따라 동급 가용 장비로 대체 배정 필요. 사유: ${rejectReason.trim()}`,
+          targetDept: 'DISPATCH',
+          priority: 'HIGH',
+          actionUrl: '/admin/dispatch',
+          entityType: 'DELIVERY',
+          entityId: selectedGroup.deliveryId || selectedGroup.contractId || 'DISPATCH',
+          senderId: currentUser?.id,
+          senderName: inspectorName
+        });
+      }
 
       await db.awaitPendingWrites();
       refreshAllData();

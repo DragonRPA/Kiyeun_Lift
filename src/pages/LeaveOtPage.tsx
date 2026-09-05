@@ -16,12 +16,20 @@ export const LeaveOtPage: React.FC = () => {
     overtimeRecords,
     currentUser,
     hasPermission,
+    showErrorModal,
     updateAnnualLeaveQuota,
     addLeaveUsage,
     deleteLeaveUsage,
     addOvertimeRecord,
     deleteOvertimeRecord
   } = useApp();
+
+  // 토스트 알림 상태 (헌장 5.2: 브라우저 alert/confirm 전면 퇴출)
+  const [toastMessage, setToastMessage] = useState<{ type: 'success' | 'error' | 'warning'; text: string } | null>(null);
+  const showToast = (text: string, type: 'success' | 'error' | 'warning' = 'success') => {
+    setToastMessage({ type, text });
+    setTimeout(() => setToastMessage(null), 3500);
+  };
 
   const canSave = hasPermission('leave_ot', 'save');
   const isAdmin = currentUser?.role === 'ADMIN' || currentUser?.role === 'MANAGER';
@@ -94,7 +102,8 @@ export const LeaveOtPage: React.FC = () => {
     const userUsages = leaveUsages.filter(l => 
       l.userId === u.id && 
       l.startDate >= period.start && 
-      l.startDate <= period.end
+      l.startDate <= period.end &&
+      l.status !== 'REJECTED'
     );
 
     const usedDays = userUsages.reduce((sum, l) => sum + (l.usedDays || 0), 0);
@@ -109,6 +118,13 @@ export const LeaveOtPage: React.FC = () => {
     };
   };
 
+  // 전사 연차 대차대조 집계 (헌장 3.5 & 5.5)
+  const totalCompanyGranted = users.reduce((sum, u) => sum + getUserLeaveSummary(u).grantedDays, 0);
+  const totalCompanyUsed = users.reduce((sum, u) => sum + getUserLeaveSummary(u).usedDays, 0);
+  const totalCompanyRemaining = users.reduce((sum, u) => sum + getUserLeaveSummary(u).remainingDays, 0);
+  const leaveBalanceDiff = Math.abs(totalCompanyGranted - (totalCompanyUsed + totalCompanyRemaining));
+  const totalCompanyOtHours = overtimeRecords.reduce((sum, r) => sum + (r.hours || 0), 0);
+
   // 3. 연차 1년 부여 갯수 갱신 모달 오픈
   const handleOpenQuotaModal = (u: UserType) => {
     setSelectedUserForQuota(u);
@@ -121,11 +137,16 @@ export const LeaveOtPage: React.FC = () => {
     setQuotaMemoInput(existingQuota?.memo || '');
   };
 
-  const handleSaveQuotaSubmit = (e: React.FormEvent) => {
+  const handleSaveQuotaSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedUserForQuota) return;
 
-    updateAnnualLeaveQuota(
+    if (grantedDaysInput < 0) {
+      showErrorModal('부여 연차 일수는 0일 이상이어야 합니다.');
+      return;
+    }
+
+    await updateAnnualLeaveQuota(
       selectedUserForQuota.id,
       quotaPeriodStart,
       quotaPeriodEnd,
@@ -133,52 +154,105 @@ export const LeaveOtPage: React.FC = () => {
       quotaMemoInput
     );
 
+    const targetName = selectedUserForQuota.name;
     setSelectedUserForQuota(null);
-    alert(`${selectedUserForQuota.name} 님의 이번 1년 부여 연차 일수가 ${grantedDaysInput}일로 업데이트되었습니다.`);
+    showToast(`${targetName} 님의 1년 부여 연차 일수가 ${grantedDaysInput}일로 갱신되었습니다.`);
   };
 
-  // 4. 연차/반차 사용 등록
-  const handleLeaveUsageSubmit = (e: React.FormEvent) => {
+  // 4. 연차/반차 사용 등록 (다일 연차 일수 자동계산 & 잔여 연차 가드 & 중복 일자 방어)
+  const handleLeaveUsageSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!leaveUserId || !leaveReason) {
-      alert('신청 대상 임직원과 사유를 입력해 주십시오.');
+    if (!leaveUserId || !leaveReason.trim()) {
+      showErrorModal('신청 대상 임직원과 연차/반차 사유를 입력해 주십시오.');
       return;
     }
 
-    const usedDays = leaveType === 'ANNUAL' ? 1.0 : 0.5;
+    const targetUser = users.find(u => u.id === leaveUserId);
+    if (!targetUser) {
+      showErrorModal('선택된 임직원 정보를 찾을 수 없습니다.');
+      return;
+    }
 
-    addLeaveUsage({
+    // 날짜 유효성 검사
+    if (leaveType === 'ANNUAL' && leaveEndDate < leaveStartDate) {
+      showErrorModal('연차 종료일은 시작일보다 빠를 수 없습니다.');
+      return;
+    }
+
+    // 연차 일수 계산
+    let usedDays = 0.5;
+    if (leaveType === 'ANNUAL') {
+      const start = new Date(leaveStartDate);
+      const end = new Date(leaveEndDate);
+      const diffTime = end.getTime() - start.getTime();
+      const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24)) + 1;
+      usedDays = Math.max(1.0, diffDays);
+    }
+
+    // 잔여 연차 한도 초과 가드
+    const summary = getUserLeaveSummary(targetUser);
+    if (usedDays > summary.remainingDays) {
+      showErrorModal(`잔여 연차(${summary.remainingDays}일)를 초과하여 신청할 수 없습니다. (신청 요구: ${usedDays}일)`);
+      return;
+    }
+
+    // 중복 기간 연차 신청 방어 가드
+    const actualEndDate = leaveType === 'ANNUAL' ? leaveEndDate : leaveStartDate;
+    const hasOverlap = leaveUsages.some(l => 
+      l.userId === leaveUserId && 
+      l.status !== 'REJECTED' &&
+      ((leaveStartDate >= l.startDate && leaveStartDate <= l.endDate) ||
+       (actualEndDate >= l.startDate && actualEndDate <= l.endDate) ||
+       (leaveStartDate <= l.startDate && actualEndDate >= l.endDate))
+    );
+
+    if (hasOverlap) {
+      showErrorModal('해당 기간에 이미 등록/승인된 연차 또는 반차 내역이 존재합니다. 중복 신청할 수 없습니다.');
+      return;
+    }
+
+    await addLeaveUsage({
       userId: leaveUserId,
       leaveType,
       usedDays,
       startDate: leaveStartDate,
-      endDate: leaveType === 'ANNUAL' ? leaveEndDate : leaveStartDate,
-      reason: leaveReason,
+      endDate: actualEndDate,
+      reason: leaveReason.trim(),
       status: 'APPROVED'
     });
 
     setLeaveReason('');
-    alert(`연차/반차 소진 내역(${usedDays}일 차감)이 등록되었습니다.`);
+    showToast(`연차/반차 소진 내역(${usedDays}일 차감)이 정상 등록되었습니다.`);
   };
 
-  // 5. OT 연장근무 등록
-  const handleOvertimeSubmit = (e: React.FormEvent) => {
+  // 5. OT 연장근무 등록 (시간 범위 및 필수값 정밀 가드)
+  const handleOvertimeSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!otUserId || !otWorkDetail || otHours <= 0) {
-      alert('신청 대상 임직원, OT 시간, 근무 상세 내용을 기입해 주십시오.');
+    if (!otUserId || !otWorkDetail.trim()) {
+      showErrorModal('신청 대상 임직원과 OT 근무 상세 내용을 기입해 주십시오.');
       return;
     }
 
-    addOvertimeRecord({
+    if (otHours <= 0) {
+      showErrorModal('OT 연장근무 시간은 0시간보다 커야 합니다.');
+      return;
+    }
+
+    if (otHours > 24) {
+      showErrorModal('1일 최대 연장근무 시간은 24시간을 초과할 수 없습니다.');
+      return;
+    }
+
+    await addOvertimeRecord({
       userId: otUserId,
       startDateTime: otStartDateTime,
       hours: otHours,
-      workDetail: otWorkDetail,
+      workDetail: otWorkDetail.trim(),
       status: 'APPROVED'
     });
 
     setOtWorkDetail('');
-    alert(`OT 연장근무(${otHours}시간) 내역이 등록되었습니다.`);
+    showToast(`OT 연장근무(${otHours}시간) 내역이 정상 등록되었습니다.`);
   };
 
   // 6. 엑셀 다운로드 헬퍼
@@ -738,6 +812,82 @@ export const LeaveOtPage: React.FC = () => {
         </div>
       )}
 
+      {/* ⚖️ 헌장 3.5 Gutenberg Z-패턴 4단계 대차대조 검증 바 */}
+      <div style={{
+        marginTop: '16px',
+        backgroundColor: 'var(--bg-surface)',
+        border: '1px solid var(--border-color)',
+        borderRadius: '8px',
+        padding: '12px 18px',
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        flexWrap: 'wrap',
+        gap: '12px',
+        boxShadow: '0 -2px 10px rgba(0,0,0,0.03)',
+        flexShrink: 0
+      }}>
+        {activeTab !== 'OT' ? (
+          <>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', whiteSpace: 'nowrap' }}>
+              <span style={{ fontSize: '13px', fontWeight: 'bold', color: 'var(--text-main)' }}>
+                연차 대차대조 검증:
+              </span>
+              <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                총부여 <strong style={{ color: 'var(--text-main)' }}>{totalCompanyGranted.toFixed(1)}일</strong>
+              </span>
+              <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>=</span>
+              <span style={{ fontSize: '12px', color: 'var(--primary)' }}>
+                소진합계 <strong>{totalCompanyUsed.toFixed(1)}일</strong>
+              </span>
+              <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>+</span>
+              <span style={{ fontSize: '12px', color: '#10b981' }}>
+                잔여합계 <strong>{totalCompanyRemaining.toFixed(1)}일</strong>
+              </span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', whiteSpace: 'nowrap' }}>
+              <span style={{
+                fontSize: '11px',
+                padding: '3px 10px',
+                borderRadius: '6px',
+                fontWeight: 'bold',
+                backgroundColor: leaveBalanceDiff === 0 ? 'rgba(16, 185, 129, 0.12)' : 'rgba(239, 68, 68, 0.12)',
+                color: leaveBalanceDiff === 0 ? '#10b981' : '#ef4444'
+              }}>
+                대차 차액 {leaveBalanceDiff.toFixed(1)}일 {leaveBalanceDiff === 0 ? '(정합)' : '(불일치)'}
+              </span>
+            </div>
+          </>
+        ) : (
+          <>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', whiteSpace: 'nowrap' }}>
+              <span style={{ fontSize: '13px', fontWeight: 'bold', color: 'var(--text-main)' }}>
+                초과근무 집계:
+              </span>
+              <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                총 등록건수 <strong style={{ color: 'var(--text-main)' }}>{overtimeRecords.length}건</strong>
+              </span>
+              <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>|</span>
+              <span style={{ fontSize: '12px', color: 'var(--primary)' }}>
+                총 초과근무 시간 <strong>{totalCompanyOtHours.toFixed(1)}시간</strong>
+              </span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', whiteSpace: 'nowrap' }}>
+              <span style={{
+                fontSize: '11px',
+                padding: '3px 10px',
+                borderRadius: '6px',
+                fontWeight: 'bold',
+                backgroundColor: 'rgba(59, 130, 246, 0.12)',
+                color: 'var(--primary)'
+              }}>
+                급여 대장 연동 대기
+              </span>
+            </div>
+          </>
+        )}
+      </div>
+
       {/* 1년 부여 연차 갯수 갱신 모달 팝업 */}
       {selectedUserForQuota && (
         <div style={{
@@ -813,6 +963,27 @@ export const LeaveOtPage: React.FC = () => {
         </div>
       )}
 
+      {/* 토스트 알림 팝업 (헌장 5.2) */}
+      {toastMessage && (
+        <div style={{
+          position: 'fixed',
+          bottom: '24px',
+          right: '24px',
+          padding: '12px 20px',
+          borderRadius: '8px',
+          backgroundColor: toastMessage.type === 'error' ? '#ef4444' : toastMessage.type === 'warning' ? '#f59e0b' : '#10b981',
+          color: '#fff',
+          fontWeight: 700,
+          fontSize: '13px',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
+          zIndex: 10000,
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px'
+        }}>
+          {toastMessage.text}
+        </div>
+      )}
     </div>
   );
 };
