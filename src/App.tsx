@@ -1,11 +1,11 @@
 // d:\Kiyeun_Lift\src\App.tsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useApp } from './context/AppContext';
 import {
   LayoutDashboard, Users, UserCheck, Package, Layers, PlusCircle,
   Truck, Wrench, Shield, ShoppingBag, CreditCard, LogOut, Sun, Moon, Menu, X, Zap, Settings, Database as DatabaseIcon,
   TrendingUp, Clock, AlertTriangle, Building2, ChevronDown, ChevronRight, Briefcase, Box, FolderKanban, ShieldAlert, Terminal, ArrowLeftRight, CheckSquare,
-  Smartphone, Monitor, Car, FileText
+  Smartphone, Monitor, Car, FileText, Search
 } from 'lucide-react';
 
 import { WeatherWidget } from './components/WeatherWidget';
@@ -83,6 +83,13 @@ const App: React.FC = () => {
 
   // 모바일 메뉴 사이드바 토글 상태
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  // ─── 메뉴 검색 네비게이터 상태 ───
+  const [menuSearchOpen, setMenuSearchOpen] = useState(false);
+  const [menuSearchQuery, setMenuSearchQuery] = useState('');
+  const [menuSearchHighlight, setMenuSearchHighlight] = useState(0);
+  const menuSearchInputRef = useRef<HTMLInputElement>(null);
+  const menuSearchBoxRef = useRef<HTMLDivElement>(null);
 
   // 모바일 전용 뷰 모드 (PWA / Field App)
   const [isMobileView, setIsMobileView] = useState<boolean>(() => {
@@ -277,6 +284,88 @@ const App: React.FC = () => {
   ];
 
   // 상위 그룹 아코디언 접힘/펼침 상태
+
+  // ─── 메뉴 검색 네비게이터 — 필터링 결과 계산 ───
+  const menuSearchResults = useCallback(() => {
+    const q = menuSearchQuery.trim().toLowerCase();
+    if (!q) return [];
+    const results: { groupName: string; id: string; name: string }[] = [];
+    menuGroups.forEach(grp => {
+      grp.items.forEach(item => {
+        if (item.name.toLowerCase().includes(q) || grp.name.toLowerCase().includes(q)) {
+          results.push({ groupName: grp.name, id: item.id, name: item.name });
+        }
+      });
+    });
+    return results;
+  }, [menuSearchQuery, menuGroups]);
+
+  const searchResults = menuSearchResults();
+
+  // 전역 키보드 단축키: '/' 또는 Ctrl+K → 검색창 오픈
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ctrl+K 또는 Cmd+K
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault();
+        setMenuSearchOpen(true);
+        setMenuSearchQuery('');
+        setMenuSearchHighlight(0);
+        setTimeout(() => menuSearchInputRef.current?.focus(), 50);
+        return;
+      }
+      // Esc — 닫기
+      if (e.key === 'Escape' && menuSearchOpen) {
+        setMenuSearchOpen(false);
+        setMenuSearchQuery('');
+        return;
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [menuSearchOpen]);
+
+  // 검색창 외부 클릭 시 닫기
+  useEffect(() => {
+    if (!menuSearchOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (menuSearchBoxRef.current && !menuSearchBoxRef.current.contains(e.target as Node)) {
+        setMenuSearchOpen(false);
+        setMenuSearchQuery('');
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [menuSearchOpen]);
+
+  // 검색창 오픈 시 자동 포커스
+  useEffect(() => {
+    if (menuSearchOpen) {
+      setTimeout(() => menuSearchInputRef.current?.focus(), 50);
+    }
+  }, [menuSearchOpen]);
+
+  const handleMenuSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setMenuSearchHighlight(h => Math.min(h + 1, searchResults.length - 1));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setMenuSearchHighlight(h => Math.max(h - 1, 0));
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      const target = searchResults[menuSearchHighlight];
+      if (target) {
+        setActiveTab(target.id);
+        setMenuSearchOpen(false);
+        setMenuSearchQuery('');
+      }
+    } else if (e.key === 'Escape') {
+      setMenuSearchOpen(false);
+      setMenuSearchQuery('');
+    }
+  };
+
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({
     grp_sales: true,
     grp_product_asset: true,
@@ -544,6 +633,136 @@ const App: React.FC = () => {
 
           {/* 헤더 좌측 실시간 현장 날씨 정보 위젯 */}
           <WeatherWidget />
+        </div>
+
+        {/* ─── 헤더 중앙: 메뉴 검색 네비게이터 ─── */}
+        <div
+          ref={menuSearchBoxRef}
+          style={{ position: 'relative', flex: '0 1 380px', minWidth: 0 }}
+        >
+          {/* 검색 트리거 버튼 (닫힌 상태) */}
+          {!menuSearchOpen && (
+            <button
+              onClick={() => { setMenuSearchOpen(true); setMenuSearchQuery(''); setMenuSearchHighlight(0); }}
+              style={{
+                width: '100%',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '7px 14px',
+                borderRadius: '8px',
+                border: '1px solid var(--border-color)',
+                backgroundColor: 'var(--bg-app)',
+                color: 'var(--text-muted)',
+                fontSize: '13px',
+                cursor: 'pointer',
+                transition: 'border-color 0.15s',
+              }}
+              title="메뉴 검색 (Ctrl+K)"
+            >
+              <Search size={14} style={{ flexShrink: 0 }} />
+              <span style={{ flex: 1, textAlign: 'left', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                메뉴 검색
+              </span>
+              <span style={{
+                fontSize: '11px',
+                padding: '2px 6px',
+                borderRadius: '4px',
+                backgroundColor: 'var(--bg-card)',
+                border: '1px solid var(--border-color)',
+                color: 'var(--text-muted)',
+                flexShrink: 0,
+                fontFamily: 'monospace',
+              }}>
+                Ctrl+K
+              </span>
+            </button>
+          )}
+
+          {/* 검색 입력창 (열린 상태) */}
+          {menuSearchOpen && (
+            <div style={{ position: 'relative' }}>
+              <Search size={14} style={{
+                position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)',
+                color: 'var(--text-muted)', pointerEvents: 'none', flexShrink: 0,
+              }} />
+              <input
+                ref={menuSearchInputRef}
+                value={menuSearchQuery}
+                onChange={e => { setMenuSearchQuery(e.target.value); setMenuSearchHighlight(0); }}
+                onKeyDown={handleMenuSearchKeyDown}
+                placeholder="메뉴명 입력..."
+                style={{
+                  width: '100%',
+                  padding: '7px 14px 7px 34px',
+                  borderRadius: '8px',
+                  border: '1.5px solid var(--primary)',
+                  backgroundColor: 'var(--bg-app)',
+                  color: 'var(--text-primary)',
+                  fontSize: '13px',
+                  outline: 'none',
+                  boxSizing: 'border-box',
+                }}
+              />
+            </div>
+          )}
+
+          {/* 드롭다운 검색 결과 목록 */}
+          {menuSearchOpen && (
+            <div style={{
+              position: 'absolute',
+              top: 'calc(100% + 4px)',
+              left: 0,
+              right: 0,
+              backgroundColor: 'var(--bg-card)',
+              border: '1px solid var(--border-color)',
+              borderRadius: '10px',
+              boxShadow: '0 8px 24px rgba(0,0,0,0.18)',
+              zIndex: 200,
+              overflow: 'hidden',
+              maxHeight: '320px',
+              overflowY: 'auto',
+            }}>
+              {searchResults.length === 0 ? (
+                <div style={{ padding: '16px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '13px' }}>
+                  {menuSearchQuery.trim() ? '일치하는 메뉴 없음' : '메뉴명을 입력하세요'}
+                </div>
+              ) : (
+                searchResults.map((item, idx) => (
+                  <div
+                    key={item.id}
+                    onMouseDown={() => {
+                      setActiveTab(item.id);
+                      setMenuSearchOpen(false);
+                      setMenuSearchQuery('');
+                    }}
+                    onMouseEnter={() => setMenuSearchHighlight(idx)}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '10px',
+                      padding: '9px 14px',
+                      cursor: 'pointer',
+                      backgroundColor: idx === menuSearchHighlight ? 'var(--primary)' : 'transparent',
+                      color: idx === menuSearchHighlight ? '#fff' : 'var(--text-primary)',
+                      borderBottom: idx < searchResults.length - 1 ? '1px solid var(--border-color)' : 'none',
+                      transition: 'background-color 0.1s',
+                    }}
+                  >
+                    <Search size={12} style={{ flexShrink: 0, opacity: 0.6 }} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: '13px', fontWeight: '600', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {item.name}
+                      </div>
+                      <div style={{ fontSize: '11px', opacity: 0.65, whiteSpace: 'nowrap' }}>
+                        {item.groupName}
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          )}
         </div>
 
         {/* 사용자 정보 및 화면 모드 (밝은화면모드 / 어두운화면모드 / 모바일전환) */}
