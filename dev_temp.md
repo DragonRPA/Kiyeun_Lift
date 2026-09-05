@@ -1,5 +1,27 @@
 # 개발 요구사항 임시 기록 (dev_temp.md)
 
+## [완료] 정기보고서 본질 목적(Executive Monthly Dossier) 전면 재구성 & 멀티미디어 MRO 기술지식 허브 탑재 (Build.199)
+- **요구사항**:
+  1. "충분히 시간을 갖고 처리해줘도 될듯. 검색의 결과는 다양할 수 있을것 같아. PDF 등의 문서일수도 있고, 웹 문서이거나 또는 유튜브 동영상 일수도 있겠네. 회사가 유튜브 채널을 열고 동영상을 촬영해서 업로드 한다던지"
+  2. "정기보고서 생성 메뉴는 완전히 기대수준 이하야. 기능의 본질목적을 이해하고 철저히 재구성해줘"
+- **조치 내역**:
+  1. **정기보고서 본질 목적(Executive Monthly Dossier) 전면 재구축 (`src/pages/RegularReportsPage.tsx`)**:
+     - 화이트-온-화이트(White-on-White) 시각적 파탄 박멸: 시스템 CSS 변수(`var(--bg-app)`, `var(--bg-card)`, `var(--text-main)`) 기반 100% 테마 호환.
+     - 가짜 부서장 5명 결재 소꿉놀이 영구 퇴출 및 단일 마스터 브리핑 도시에 확립.
+     - 6대 핵심 섹션: 경영 종합 손익 KPI & 3대 건전성 인디케이터, 렌탈 플릿 가동률 & 30일 이상 유휴 장비 경고, 영업 실적 및 TOP 5 거래처, 물류 효율(EXCHANGE 절감) & 스펙 오발주 손실 배차, 채권 에이징 & 영업 면제(Waiver) 투명성, 경영진 종합 진단 및 차월 중점 지시사항 메모.
+  2. **실데이터 100% 무결성 집계 엔진 (`src/services/monthlyReportEngine.ts`)**:
+     - 가짜 더미 숫자 완전 퇴출, `assets`, `contracts`, `deliveries`, `repairs`, `billings`, `customers` 실제 DB 레코드 연산.
+  3. **A4 공식 브라우저 인쇄 & 3페이지 고해상도 벡터 PDF 빌더 (`src/services/monthlyReportPdfBuilder.ts`)**:
+     - `window.print()` 인쇄 전용 CSS 및 `pdf-lib` 3페이지 고해상도 A4 벡터 PDF 발행.
+  4. **멀티미디어(유튜브·웹문서·PDF) MRO 기술지식 허브 & 비동기 AI 색인 (`inspection_checklist_manage.tsx`, `MobileManualViewer.tsx`, `manualAiEngine.ts`, `api/manual-ai-indexer.ts`, `db.ts`, `schema.sql`)**:
+     - 유튜브 URL 자동 파싱 및 무트래픽 고화질 썸네일, 인앱 반응형 무버퍼링 플레이어, 비동기 AI 메타데이터(에러코드/고장증상/부품/요약) 인덱싱.
+  5. **스켈톤 및 매뉴얼 동기화**:
+     - `000.skelton/발상/2026-09_MRO_멀티미디어_기술지식_허브_유튜브_웹문서_확장_구상.md`
+     - `000.skelton/후회/2026-09_정기보고서_본질왜곡_및_형식주의_탈피_반성.md`
+     - `docs/e_Bro_Manual.md` `[M-30A] 정기보고서 생성` 전면 동기화.
+  6. **빌드 무결성 검증**:
+     - `cmd.exe /c "npm run build"` 0 Error 무결점 통과.
+
 ## [완료] 경영관리 > 정기보고서 생성 시스템 구축 및 부서별 월간 마감 PDF 보고서 벡터 빌더 탑재 (Build.198)
 - **요구사항**:
   1. "1개월의 업무가 마감되었을때, 부서별 1일~말일 보고서(PDF) 및 결산보고서에 다루어 져야 할 내용들은 어떤것들이 있고, 업무 설계는 어떻게 되어야 할까? 분기/ 반기/ 연간 보고서 생성의 확장성도 고려하고 설계에 반영. 결산된 보고서를 AI 에게 주고 경영분석 코멘트까지 추가하는 설계도 수용."

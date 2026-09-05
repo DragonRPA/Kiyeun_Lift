@@ -1450,12 +1450,24 @@ CREATE TABLE IF NOT EXISTS equipment_manuals (
     "uploadedBy"          TEXT NOT NULL,
     memo                  TEXT,
     "inspectionItemCodes" JSONB DEFAULT '[]'::jsonb,
+    media_type            TEXT DEFAULT 'PDF' CHECK (media_type IN ('PDF', 'YOUTUBE', 'WEB_LINK')),
+    "externalUrl"         TEXT,
+    "youtubeVideoId"      TEXT,
+    "durationMinutes"     INTEGER,
+    "aiProcessed"         BOOLEAN DEFAULT FALSE,
+    "aiProcessedAt"       TEXT,
+    keywords              JSONB DEFAULT '[]'::jsonb,
+    "errorCodes"          JSONB DEFAULT '[]'::jsonb,
+    "majorParts"          JSONB DEFAULT '[]'::jsonb,
+    symptoms              JSONB DEFAULT '[]'::jsonb,
+    "aiSummary"           TEXT,
     "createdAt"           TEXT NOT NULL,
     "updatedAt"           TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_manuals_model ON equipment_manuals("modelName");
 CREATE INDEX IF NOT EXISTS idx_manuals_category ON equipment_manuals(category);
+CREATE INDEX IF NOT EXISTS idx_manuals_keywords ON equipment_manuals USING gin (keywords);
 
 -- ==============================================================================
 -- 🔒 전 테이블 Row Level Security (RLS) 및 권한 일괄 활성화

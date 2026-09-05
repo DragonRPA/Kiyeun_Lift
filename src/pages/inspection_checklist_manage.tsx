@@ -21,9 +21,31 @@ import {
   Filter,
   CheckCircle2,
   UploadCloud,
-  FileDown
+  FileDown,
+  Sparkles,
+  Tag,
+  Cpu,
+  AlertTriangle,
+  Video,
+  Globe,
+  Play,
+  ExternalLink
 } from 'lucide-react';
-import { InspectionChecklistItem, EquipmentManual, db } from '../services/db';
+import { InspectionChecklistItem, EquipmentManual, extractYoutubeVideoId, db } from '../services/db';
+import { extractManualMetadataWithAI } from '../services/manualAiEngine';
+
+const Youtube: React.FC<{ size?: number; className?: string; style?: React.CSSProperties }> = ({ size = 16, className, style }) => (
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="currentColor"
+    className={className}
+    style={style}
+  >
+    <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z" />
+  </svg>
+);
 
 type TabType = 'MASTER' | 'ANALYTICS' | 'MANUALS';
 
@@ -492,10 +514,24 @@ export const InspectionChecklistManage: React.FC = () => {
   const [manualSearchTerm, setManualSearchTerm] = useState('');
   const [selectedManualModel, setSelectedManualModel] = useState<string>('전체');
   const [selectedManualCategory, setSelectedManualCategory] = useState<string>('전체');
+  const [selectedManualMediaType, setSelectedManualMediaType] = useState<'전체' | 'PDF' | 'YOUTUBE' | 'WEB_LINK'>('전체');
   const [isManualModalOpen, setIsManualModalOpen] = useState(false);
   const [previewManual, setPreviewManual] = useState<EquipmentManual | null>(null);
 
-  // 매뉴얼 등록 폼 상태
+  // AI 메타데이터 처리 및 편집 상태
+  const [isIndexingAI, setIsIndexingAI] = useState(false);
+  const [indexingProgress, setIndexingProgress] = useState<{ current: number; total: number; title: string } | null>(null);
+  const [editingMetadataManual, setEditingMetadataManual] = useState<EquipmentManual | null>(null);
+  const [editKeywordsInput, setEditKeywordsInput] = useState('');
+  const [editErrorCodesInput, setEditErrorCodesInput] = useState('');
+  const [editMajorPartsInput, setEditMajorPartsInput] = useState('');
+  const [editSymptomsInput, setEditSymptomsInput] = useState('');
+  const [editAiSummaryInput, setEditAiSummaryInput] = useState('');
+
+  // 매뉴얼 등록 폼 상태 (멀티미디어 확장: PDF / 유튜브 / 웹문서)
+  const [manualFormMediaType, setManualFormMediaType] = useState<'PDF' | 'YOUTUBE' | 'WEB_LINK'>('PDF');
+  const [manualFormExternalUrl, setManualFormExternalUrl] = useState('');
+  const [manualFormDurationMinutes, setManualFormDurationMinutes] = useState<number | ''>('');
   const [manualFormModel, setManualFormModel] = useState('SJ-3219');
   const [manualFormManufacturer, setManualFormManufacturer] = useState('Skyjack');
   const [manualFormCategory, setManualFormCategory] = useState<EquipmentManual['category']>('PARTS_BOOK');
@@ -522,23 +558,37 @@ export const InspectionChecklistManage: React.FC = () => {
     return Array.from(models).sort();
   }, [equipmentManuals, products]);
 
-  // 매뉴얼 필터링
+  // 매뉴얼 다차원 AI 메타데이터 필터링
   const filteredManuals = useMemo(() => {
     return (equipmentManuals || []).filter(m => {
       const matchModel = selectedManualModel === '전체' || m.modelName === selectedManualModel;
       const matchCat = selectedManualCategory === '전체' || m.category === selectedManualCategory;
-      if (!matchModel || !matchCat) return false;
+      const matchMedia =
+        selectedManualMediaType === '전체' ||
+        (selectedManualMediaType === 'PDF' && (!m.mediaType || m.mediaType === 'PDF')) ||
+        m.mediaType === selectedManualMediaType;
+
+      if (!matchModel || !matchCat || !matchMedia) return false;
       if (!manualSearchTerm.trim()) return true;
       const term = manualSearchTerm.toLowerCase();
-      return (
+
+      const matchBasic =
         m.title.toLowerCase().includes(term) ||
         m.modelName.toLowerCase().includes(term) ||
         m.manufacturer.toLowerCase().includes(term) ||
         (m.memo && m.memo.toLowerCase().includes(term)) ||
-        (m.version && m.version.toLowerCase().includes(term))
-      );
+        (m.version && m.version.toLowerCase().includes(term));
+      if (matchBasic) return true;
+
+      const matchKeywords = (m.keywords || []).some(kw => kw.toLowerCase().includes(term));
+      const matchErrors = (m.errorCodes || []).some(ec => ec.toLowerCase().includes(term) || term.includes(ec.toLowerCase()));
+      const matchParts = (m.majorParts || []).some(p => p.toLowerCase().includes(term));
+      const matchSymptoms = (m.symptoms || []).some(s => s.toLowerCase().includes(term));
+      const matchSummary = m.aiSummary ? m.aiSummary.toLowerCase().includes(term) : false;
+
+      return matchKeywords || matchErrors || matchParts || matchSymptoms || matchSummary;
     });
-  }, [equipmentManuals, selectedManualModel, selectedManualCategory, manualSearchTerm]);
+  }, [equipmentManuals, selectedManualModel, selectedManualCategory, selectedManualMediaType, manualSearchTerm]);
 
   // 매뉴얼 통계
   const manualSummary = useMemo(() => {
@@ -547,9 +597,110 @@ export const InspectionChecklistManage: React.FC = () => {
     const errorCodeCount = (equipmentManuals || []).filter(m => m.category === 'ERROR_CODE').length;
     const wiringCount = (equipmentManuals || []).filter(m => m.category === 'WIRING_DIAGRAM').length;
     const operatorCount = (equipmentManuals || []).filter(m => m.category === 'OPERATOR_MANUAL').length;
+    const pdfCount = (equipmentManuals || []).filter(m => !m.mediaType || m.mediaType === 'PDF').length;
+    const youtubeCount = (equipmentManuals || []).filter(m => m.mediaType === 'YOUTUBE').length;
+    const webLinkCount = (equipmentManuals || []).filter(m => m.mediaType === 'WEB_LINK').length;
+    const aiIndexedCount = (equipmentManuals || []).filter(m => m.aiProcessed).length;
+    const aiPendingCount = (equipmentManuals || []).filter(m => !m.aiProcessed).length;
 
-    return { total, partsBookCount, errorCodeCount, wiringCount, operatorCount };
+    return { total, partsBookCount, errorCodeCount, wiringCount, operatorCount, pdfCount, youtubeCount, webLinkCount, aiIndexedCount, aiPendingCount };
   }, [equipmentManuals]);
+
+  // 단건 AI 색인 실행
+  const handleSingleManualAI = async (manual: EquipmentManual) => {
+    showToast(`[${manual.title}] AI 메타데이터 자동 추출 중...`);
+    try {
+      const aiRes = await extractManualMetadataWithAI(manual);
+      const nowStr = new Date().toISOString().replace('T', ' ').slice(0, 19);
+      await saveEquipmentManual({
+        ...manual,
+        aiProcessed: true,
+        aiProcessedAt: nowStr,
+        keywords: aiRes.keywords,
+        errorCodes: aiRes.errorCodes,
+        majorParts: aiRes.majorParts,
+        symptoms: aiRes.symptoms,
+        aiSummary: aiRes.aiSummary
+      });
+      await db.awaitPendingWrites();
+      showToast(`[${manual.title}] AI 메타데이터 색인 완료!`);
+    } catch (err: any) {
+      showToast(`AI 색인 실패: ${err?.message || err}`, 'error');
+    }
+  };
+
+  // 미처리 전체 일괄 AI 색인 실행
+  const handleBatchIndexAI = async () => {
+    const unindexed = (equipmentManuals || []).filter(m => !m.aiProcessed);
+    if (unindexed.length === 0) {
+      showToast('모든 매뉴얼에 AI 메타데이터가 이미 색인되어 있습니다.');
+      return;
+    }
+
+    setIsIndexingAI(true);
+    try {
+      for (let i = 0; i < unindexed.length; i++) {
+        const target = unindexed[i];
+        setIndexingProgress({ current: i + 1, total: unindexed.length, title: target.title });
+        const aiRes = await extractManualMetadataWithAI(target);
+        const nowStr = new Date().toISOString().replace('T', ' ').slice(0, 19);
+        await saveEquipmentManual({
+          ...target,
+          aiProcessed: true,
+          aiProcessedAt: nowStr,
+          keywords: aiRes.keywords,
+          errorCodes: aiRes.errorCodes,
+          majorParts: aiRes.majorParts,
+          symptoms: aiRes.symptoms,
+          aiSummary: aiRes.aiSummary
+        });
+      }
+      await db.awaitPendingWrites();
+      showToast(`${unindexed.length}건의 매뉴얼에 AI 메타데이터 색인이 완료되었습니다.`);
+    } catch (err: any) {
+      showToast(`일괄 AI 색인 실패: ${err?.message || err}`, 'error');
+    } finally {
+      setIsIndexingAI(false);
+      setIndexingProgress(null);
+    }
+  };
+
+  // 메타데이터 편집 모달 열기
+  const handleOpenMetadataModal = (manual: EquipmentManual) => {
+    setEditingMetadataManual(manual);
+    setEditKeywordsInput((manual.keywords || []).join(', '));
+    setEditErrorCodesInput((manual.errorCodes || []).join(', '));
+    setEditMajorPartsInput((manual.majorParts || []).join(', '));
+    setEditSymptomsInput((manual.symptoms || []).join(', '));
+    setEditAiSummaryInput(manual.aiSummary || '');
+  };
+
+  // 메타데이터 편집 저장
+  const handleSaveMetadataModal = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingMetadataManual) return;
+
+    try {
+      const parseList = (str: string) => str.split(',').map(s => s.trim()).filter(Boolean);
+      const nowStr = new Date().toISOString().replace('T', ' ').slice(0, 19);
+
+      await saveEquipmentManual({
+        ...editingMetadataManual,
+        aiProcessed: true,
+        aiProcessedAt: editingMetadataManual.aiProcessedAt || nowStr,
+        keywords: parseList(editKeywordsInput),
+        errorCodes: parseList(editErrorCodesInput),
+        majorParts: parseList(editMajorPartsInput),
+        symptoms: parseList(editSymptomsInput),
+        aiSummary: editAiSummaryInput.trim()
+      });
+      await db.awaitPendingWrites();
+      showToast(`[${editingMetadataManual.title}] 메타데이터가 저장되었습니다.`);
+      setEditingMetadataManual(null);
+    } catch (err: any) {
+      showToast(`저장 실패: ${err?.message || err}`, 'error');
+    }
+  };
 
   // 파일 선택 핸들러
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -574,6 +725,9 @@ export const InspectionChecklistManage: React.FC = () => {
   };
 
   const handleOpenAddManualModal = () => {
+    setManualFormMediaType('PDF');
+    setManualFormExternalUrl('');
+    setManualFormDurationMinutes('');
     setManualFormModel(modelOptions[0] || 'SJ-3219');
     setManualFormManufacturer('Skyjack');
     setManualFormCategory('PARTS_BOOK');
@@ -591,33 +745,73 @@ export const InspectionChecklistManage: React.FC = () => {
   const handleManualSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!manualFormTitle.trim()) {
-      showToast('매뉴얼 명칭을 입력해 주세요.', 'error');
+      showToast('매뉴얼 명칭(제목)을 입력해 주세요.', 'error');
       return;
     }
-    if (!manualFormFileUrl) {
+
+    if (manualFormMediaType === 'PDF' && !manualFormFileUrl) {
       showToast('매뉴얼 문서(PDF 등) 파일을 선택해 주세요.', 'error');
       return;
     }
 
+    if (manualFormMediaType === 'YOUTUBE' && !manualFormExternalUrl.trim()) {
+      showToast('유튜브 동영상 링크(URL)를 입력해 주세요.', 'error');
+      return;
+    }
+
+    if (manualFormMediaType === 'WEB_LINK' && !manualFormExternalUrl.trim()) {
+      showToast('웹 기술문서 링크(URL)를 입력해 주세요.', 'error');
+      return;
+    }
+
     try {
+      let targetFileUrl = manualFormFileUrl;
+      let targetFileName = manualFormFileName;
+      let targetFileSize = manualFormFileSize;
+      let targetFileSizeLabel = manualFormFileSizeLabel;
+      let youtubeId: string | undefined = undefined;
+
+      if (manualFormMediaType === 'YOUTUBE') {
+        const cleanUrl = manualFormExternalUrl.trim();
+        youtubeId = extractYoutubeVideoId(cleanUrl) || undefined;
+        targetFileUrl = cleanUrl;
+        targetFileName = targetFileName || `${manualFormTitle.trim()}.mp4`;
+        targetFileSize = 0;
+        targetFileSizeLabel = manualFormDurationMinutes
+          ? `${String(manualFormDurationMinutes).padStart(2, '0')}:00`
+          : '유튜브 영상';
+      } else if (manualFormMediaType === 'WEB_LINK') {
+        const cleanUrl = manualFormExternalUrl.trim();
+        targetFileUrl = cleanUrl;
+        targetFileName = targetFileName || `${manualFormTitle.trim()}.html`;
+        targetFileSize = 0;
+        targetFileSizeLabel = '웹 링크';
+      } else {
+        targetFileName = targetFileName || `${manualFormTitle.trim()}.pdf`;
+        targetFileSize = targetFileSize || 1024 * 1024;
+      }
+
       await saveEquipmentManual({
         modelName: manualFormModel,
         manufacturer: manualFormManufacturer,
         targetSpecFt: Number(manualFormTargetSpecFt) || undefined,
         category: manualFormCategory,
+        mediaType: manualFormMediaType,
+        externalUrl: manualFormMediaType !== 'PDF' ? manualFormExternalUrl.trim() : undefined,
+        youtubeVideoId: youtubeId,
+        durationMinutes: manualFormDurationMinutes ? Number(manualFormDurationMinutes) : undefined,
         title: manualFormTitle.trim(),
-        fileUrl: manualFormFileUrl,
-        fileName: manualFormFileName || `${manualFormTitle}.pdf`,
-        fileSize: manualFormFileSize || 1024 * 1024,
-        fileSizeLabel: manualFormFileSizeLabel,
+        fileUrl: targetFileUrl,
+        fileName: targetFileName,
+        fileSize: targetFileSize,
+        fileSizeLabel: targetFileSizeLabel,
         version: manualFormVersion.trim() || 'Rev. 1.0',
         uploadDate: getTodayStr(),
         uploadedBy: '정비자산팀',
         memo: manualFormMemo.trim()
       });
       await db.awaitPendingWrites();
-
-      showToast(`[${manualFormTitle}] 매뉴얼 라이브러리 등록 완료`);
+      showToast('장비 기술 자료가 성공적으로 등록되었습니다.');
       setIsManualModalOpen(false);
     } catch (err: any) {
       showToast(`등록 실패: ${err?.message || err}`, 'error');
@@ -1366,10 +1560,10 @@ export const InspectionChecklistManage: React.FC = () => {
       {activeTab === 'MANUALS' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
           {/* 상단 통계 바 */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '10px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '8px' }}>
             <div
               style={{
-                padding: '10px 14px',
+                padding: '10px 12px',
                 backgroundColor: 'var(--bg-card)',
                 borderRadius: '6px',
                 border: '1px solid var(--border-color)',
@@ -1378,12 +1572,12 @@ export const InspectionChecklistManage: React.FC = () => {
                 alignItems: 'center'
               }}
             >
-              <span style={{ fontSize: '11.5px', color: 'var(--text-secondary)', fontWeight: 600 }}>등록 매뉴얼 총수</span>
+              <span style={{ fontSize: '11.5px', color: 'var(--text-secondary)', fontWeight: 600 }}>전체 지식자료</span>
               <strong style={{ fontSize: '15px', color: 'var(--primary)' }}>{manualSummary.total}건</strong>
             </div>
             <div
               style={{
-                padding: '10px 14px',
+                padding: '10px 12px',
                 backgroundColor: 'var(--bg-card)',
                 borderRadius: '6px',
                 border: '1px solid var(--border-color)',
@@ -1392,12 +1586,46 @@ export const InspectionChecklistManage: React.FC = () => {
                 alignItems: 'center'
               }}
             >
-              <span style={{ fontSize: '11.5px', color: 'var(--text-secondary)', fontWeight: 600 }}>부품 파츠북</span>
-              <strong style={{ fontSize: '15px', color: '#2563eb' }}>{manualSummary.partsBookCount}건</strong>
+              <span style={{ fontSize: '11.5px', color: '#475569', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <FileText size={12} /> PDF 문서
+              </span>
+              <strong style={{ fontSize: '15px', color: '#334155' }}>{manualSummary.pdfCount}건</strong>
             </div>
             <div
               style={{
-                padding: '10px 14px',
+                padding: '10px 12px',
+                backgroundColor: 'var(--bg-card)',
+                borderRadius: '6px',
+                border: '1px solid #fecaca',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center'
+              }}
+            >
+              <span style={{ fontSize: '11.5px', color: '#dc2626', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <Youtube size={13} /> 유튜브 영상
+              </span>
+              <strong style={{ fontSize: '15px', color: '#dc2626' }}>{manualSummary.youtubeCount}건</strong>
+            </div>
+            <div
+              style={{
+                padding: '10px 12px',
+                backgroundColor: 'var(--bg-card)',
+                borderRadius: '6px',
+                border: '1px solid #c7d2fe',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center'
+              }}
+            >
+              <span style={{ fontSize: '11.5px', color: '#4338ca', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <Globe size={12} /> 웹 기술문서
+              </span>
+              <strong style={{ fontSize: '15px', color: '#4338ca' }}>{manualSummary.webLinkCount}건</strong>
+            </div>
+            <div
+              style={{
+                padding: '10px 12px',
                 backgroundColor: 'var(--bg-card)',
                 borderRadius: '6px',
                 border: '1px solid var(--border-color)',
@@ -1406,36 +1634,40 @@ export const InspectionChecklistManage: React.FC = () => {
                 alignItems: 'center'
               }}
             >
-              <span style={{ fontSize: '11.5px', color: 'var(--text-secondary)', fontWeight: 600 }}>에러코드 진단표</span>
+              <span style={{ fontSize: '11.5px', color: 'var(--text-secondary)', fontWeight: 600 }}>에러코드 진단</span>
               <strong style={{ fontSize: '15px', color: '#dc2626' }}>{manualSummary.errorCodeCount}건</strong>
             </div>
             <div
               style={{
-                padding: '10px 14px',
+                padding: '10px 12px',
                 backgroundColor: 'var(--bg-card)',
                 borderRadius: '6px',
-                border: '1px solid var(--border-color)',
+                border: '1px solid #bbf7d0',
                 display: 'flex',
                 justifyContent: 'space-between',
                 alignItems: 'center'
               }}
             >
-              <span style={{ fontSize: '11.5px', color: 'var(--text-secondary)', fontWeight: 600 }}>전기/유압 회로도</span>
-              <strong style={{ fontSize: '15px', color: '#d97706' }}>{manualSummary.wiringCount}건</strong>
+              <span style={{ fontSize: '11.5px', color: '#15803d', fontWeight: 600 }}>AI 색인완료</span>
+              <strong style={{ fontSize: '15px', color: '#16a34a' }}>{manualSummary.aiIndexedCount}건</strong>
             </div>
             <div
               style={{
-                padding: '10px 14px',
+                padding: '10px 12px',
                 backgroundColor: 'var(--bg-card)',
                 borderRadius: '6px',
-                border: '1px solid var(--border-color)',
+                border: manualSummary.aiPendingCount > 0 ? '1px solid #fed7aa' : '1px solid var(--border-color)',
                 display: 'flex',
                 justifyContent: 'space-between',
                 alignItems: 'center'
               }}
             >
-              <span style={{ fontSize: '11.5px', color: 'var(--text-secondary)', fontWeight: 600 }}>취급 운전 설명서</span>
-              <strong style={{ fontSize: '15px', color: '#16a34a' }}>{manualSummary.operatorCount}건</strong>
+              <span style={{ fontSize: '11.5px', color: manualSummary.aiPendingCount > 0 ? '#c2410c' : 'var(--text-secondary)', fontWeight: 600 }}>
+                AI 분석대기
+              </span>
+              <strong style={{ fontSize: '15px', color: manualSummary.aiPendingCount > 0 ? '#ea580c' : 'var(--text-muted)' }}>
+                {manualSummary.aiPendingCount}건
+              </strong>
             </div>
           </div>
 
@@ -1453,10 +1685,10 @@ export const InspectionChecklistManage: React.FC = () => {
           >
             {/* 좌상단: Scope */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-              <div style={{ position: 'relative', width: '240px' }}>
+              <div style={{ position: 'relative', width: '270px' }}>
                 <input
                   type="text"
-                  placeholder="매뉴얼명, 모델, 제조사 검색..."
+                  placeholder="매뉴얼명, 모델, 에러코드(02, 18), 부품, 증상..."
                   value={manualSearchTerm}
                   onChange={e => setManualSearchTerm(e.target.value)}
                   style={{ width: '100%', padding: '7px 10px 7px 32px', fontSize: '12.5px' }}
@@ -1486,7 +1718,39 @@ export const InspectionChecklistManage: React.FC = () => {
                 </select>
               </div>
 
-              {/* 문서 유형 칩 필터 */}
+              {/* 미디어 유형 칩 필터 */}
+              <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                <span style={{ fontSize: '11.5px', color: 'var(--text-secondary)', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                  자료 형태:
+                </span>
+                {[
+                  { key: '전체', label: '전체' },
+                  { key: 'PDF', label: '📄 PDF' },
+                  { key: 'YOUTUBE', label: '🎬 유튜브' },
+                  { key: 'WEB_LINK', label: '🌐 웹문서' }
+                ].map(item => (
+                  <button
+                    key={item.key}
+                    type="button"
+                    onClick={() => setSelectedManualMediaType(item.key as any)}
+                    style={{
+                      padding: '4px 8px',
+                      borderRadius: '4px',
+                      border: '1px solid var(--border-color)',
+                      fontSize: '11.5px',
+                      cursor: 'pointer',
+                      backgroundColor: selectedManualMediaType === item.key ? 'var(--primary)' : 'var(--bg-main)',
+                      color: selectedManualMediaType === item.key ? '#ffffff' : 'var(--text-secondary)',
+                      fontWeight: selectedManualMediaType === item.key ? 700 : 500,
+                      whiteSpace: 'nowrap'
+                    }}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* 문서 분류 칩 필터 */}
               <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
                 {[
                   { key: '전체', label: '전체' },
@@ -1500,12 +1764,12 @@ export const InspectionChecklistManage: React.FC = () => {
                     type="button"
                     onClick={() => setSelectedManualCategory(item.key)}
                     style={{
-                      padding: '4px 9px',
+                      padding: '4px 8px',
                       borderRadius: '4px',
                       border: '1px solid var(--border-color)',
                       fontSize: '11.5px',
                       cursor: 'pointer',
-                      backgroundColor: selectedManualCategory === item.key ? 'var(--primary)' : 'var(--bg-main)',
+                      backgroundColor: selectedManualCategory === item.key ? '#334155' : 'var(--bg-main)',
                       color: selectedManualCategory === item.key ? '#ffffff' : 'var(--text-secondary)',
                       fontWeight: selectedManualCategory === item.key ? 700 : 500,
                       whiteSpace: 'nowrap'
@@ -1518,26 +1782,86 @@ export const InspectionChecklistManage: React.FC = () => {
             </div>
 
             {/* 우상단: Pipeline 액션 */}
-            <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              {/* 일괄 AI 색인 버튼 */}
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={handleBatchIndexAI}
+                disabled={isIndexingAI || manualSummary.aiPendingCount === 0}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                  padding: '6px 12px',
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  color: manualSummary.aiPendingCount > 0 ? '#c2410c' : 'var(--text-muted)',
+                  borderColor: manualSummary.aiPendingCount > 0 ? '#fed7aa' : 'var(--border-color)',
+                  backgroundColor: manualSummary.aiPendingCount > 0 ? '#fff7ed' : 'var(--bg-main)',
+                  cursor: (isIndexingAI || manualSummary.aiPendingCount === 0) ? 'default' : 'pointer'
+                }}
+                title={manualSummary.aiPendingCount === 0 ? '모든 매뉴얼 색인 완결됨' : '미처리 매뉴얼 일괄 AI 메타데이터 색인'}
+              >
+                <Sparkles size={14} style={{ color: manualSummary.aiPendingCount > 0 ? '#ea580c' : 'var(--text-muted)' }} />
+                {isIndexingAI ? 'AI 색인 진행 중...' : `일괄 AI 색인 (미처리 ${manualSummary.aiPendingCount}건)`}
+              </button>
+
               <button
                 type="button"
                 className="btn-primary"
                 onClick={handleOpenAddManualModal}
                 style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '6px 14px', fontSize: '12px', fontWeight: 600 }}
               >
-                <UploadCloud size={15} /> 신규 장비 매뉴얼 등록
+                <UploadCloud size={15} /> 신규 기술자료 등록
               </button>
             </div>
+
+            {/* 일괄 진행 프로그레스 바 */}
+            {isIndexingAI && indexingProgress && (
+              <div
+                style={{
+                  width: '100%',
+                  marginTop: '4px',
+                  padding: '8px 12px',
+                  backgroundColor: '#eff6ff',
+                  borderRadius: '4px',
+                  border: '1px solid #bfdbfe',
+                  fontSize: '11.5px',
+                  color: '#1e40af'
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                  <span>
+                    ⚡ AI 메타데이터 자동 추출 중: <strong>{indexingProgress.title}</strong>
+                  </span>
+                  <strong>
+                    {indexingProgress.current} / {indexingProgress.total}건 (
+                    {Math.round((indexingProgress.current / indexingProgress.total) * 100)}%)
+                  </strong>
+                </div>
+                <div style={{ height: '5px', backgroundColor: '#dbeafe', borderRadius: '3px', overflow: 'hidden' }}>
+                  <div
+                    style={{
+                      height: '100%',
+                      backgroundColor: 'var(--primary)',
+                      width: `${(indexingProgress.current / indexingProgress.total) * 100}%`,
+                      transition: 'width 0.3s'
+                    }}
+                  />
+                </div>
+              </div>
+            )}
           </div>
 
           {/* 카드 그리드 워크벤치 (유형 A/Card Dossier) */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '14px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: '14px' }}>
             {filteredManuals.length === 0 ? (
               <div
                 className="card"
                 style={{ gridColumn: '1 / -1', padding: '48px 0', textAlign: 'center', color: 'var(--text-muted)' }}
               >
-                등록된 장비 매뉴얼 문서가 없습니다. [신규 장비 매뉴얼 등록] 버튼으로 PDF를 업로드해 주세요.
+                조건에 맞는 장비 기술 자료가 없습니다. [신규 기술자료 등록] 버튼으로 PDF, 유튜브 정비영상 또는 웹 문서를 등록해 주세요.
               </div>
             ) : (
               filteredManuals.map(manual => (
@@ -1545,11 +1869,11 @@ export const InspectionChecklistManage: React.FC = () => {
                   key={manual.id}
                   className="card"
                   style={{
-                    padding: '16px',
+                    padding: '14px',
                     display: 'flex',
                     flexDirection: 'column',
                     justifyContent: 'space-between',
-                    gap: '12px',
+                    gap: '10px',
                     border: '1px solid var(--border-color)',
                     transition: 'box-shadow 0.2s',
                     backgroundColor: 'var(--bg-card)'
@@ -1558,13 +1882,67 @@ export const InspectionChecklistManage: React.FC = () => {
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                     {/* 상단 배지 헤더 */}
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-                        <span className={`badge ${getCategoryBadgeClass(manual.category)}`} style={{ fontSize: '11px' }}>
+                      <div style={{ display: 'flex', gap: '5px', alignItems: 'center', flexWrap: 'wrap' }}>
+                        {/* 미디어 유형 배지 */}
+                        {manual.mediaType === 'YOUTUBE' ? (
+                          <span
+                            style={{
+                              fontSize: '10.5px',
+                              fontWeight: 700,
+                              padding: '2px 6px',
+                              borderRadius: '4px',
+                              backgroundColor: '#fee2e2',
+                              color: '#dc2626',
+                              border: '1px solid #fecaca',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '3px'
+                            }}
+                          >
+                            <Youtube size={12} /> 유튜브 영상
+                          </span>
+                        ) : manual.mediaType === 'WEB_LINK' ? (
+                          <span
+                            style={{
+                              fontSize: '10.5px',
+                              fontWeight: 700,
+                              padding: '2px 6px',
+                              borderRadius: '4px',
+                              backgroundColor: '#e0e7ff',
+                              color: '#4338ca',
+                              border: '1px solid #c7d2fe',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '3px'
+                            }}
+                          >
+                            <Globe size={11} /> 웹 문서
+                          </span>
+                        ) : (
+                          <span
+                            style={{
+                              fontSize: '10.5px',
+                              fontWeight: 700,
+                              padding: '2px 6px',
+                              borderRadius: '4px',
+                              backgroundColor: '#f1f5f9',
+                              color: '#475569',
+                              border: '1px solid #e2e8f0',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '3px'
+                            }}
+                          >
+                            <FileText size={11} /> PDF 문서
+                          </span>
+                        )}
+
+                        <span className={`badge ${getCategoryBadgeClass(manual.category)}`} style={{ fontSize: '10.5px' }}>
                           {getCategoryLabel(manual.category)}
                         </span>
                         <span
                           style={{
-                            fontSize: '11px',
+                            fontSize: '10.5px',
                             fontWeight: 700,
                             padding: '2px 6px',
                             borderRadius: '4px',
@@ -1574,15 +1952,115 @@ export const InspectionChecklistManage: React.FC = () => {
                         >
                           {manual.modelName}
                         </span>
+
+                        {manual.aiProcessed ? (
+                          <span
+                            style={{
+                              fontSize: '10px',
+                              fontWeight: 700,
+                              padding: '2px 5px',
+                              borderRadius: '4px',
+                              backgroundColor: '#dcfce7',
+                              color: '#15803d',
+                              border: '1px solid #bbf7d0',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '3px'
+                            }}
+                          >
+                            <Sparkles size={10} /> AI 색인됨
+                          </span>
+                        ) : (
+                          <span
+                            style={{
+                              fontSize: '10px',
+                              fontWeight: 600,
+                              padding: '2px 5px',
+                              borderRadius: '4px',
+                              backgroundColor: '#fef3c7',
+                              color: '#b45309',
+                              border: '1px solid #fde68a'
+                            }}
+                          >
+                            AI 대기
+                          </span>
+                        )}
                       </div>
                       <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{manual.version}</span>
                     </div>
+
+                    {/* 유튜브 영상일 경우 썸네일 미리보기 */}
+                    {manual.mediaType === 'YOUTUBE' && manual.youtubeVideoId && (
+                      <div
+                        style={{
+                          position: 'relative',
+                          width: '100%',
+                          height: '140px',
+                          borderRadius: '6px',
+                          overflow: 'hidden',
+                          cursor: 'pointer',
+                          backgroundColor: '#000000',
+                          marginTop: '2px'
+                        }}
+                        onClick={() => setPreviewManual(manual)}
+                        title="클릭하여 유튜브 영상 즉시 재생"
+                      >
+                        <img
+                          src={`https://img.youtube.com/vi/${manual.youtubeVideoId}/hqdefault.jpg`}
+                          alt={manual.title}
+                          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                        />
+                        <div
+                          style={{
+                            position: 'absolute',
+                            inset: 0,
+                            backgroundColor: 'rgba(0,0,0,0.3)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center'
+                          }}
+                        >
+                          <div
+                            style={{
+                              width: '38px',
+                              height: '38px',
+                              borderRadius: '50%',
+                              backgroundColor: '#dc2626',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              color: '#ffffff',
+                              boxShadow: '0 2px 8px rgba(0,0,0,0.5)'
+                            }}
+                          >
+                            <Play size={17} fill="#ffffff" style={{ marginLeft: '2px' }} />
+                          </div>
+                        </div>
+                        {manual.fileSizeLabel && (
+                          <span
+                            style={{
+                              position: 'absolute',
+                              bottom: '6px',
+                              right: '6px',
+                              padding: '2px 6px',
+                              backgroundColor: 'rgba(0,0,0,0.8)',
+                              color: '#ffffff',
+                              fontSize: '10px',
+                              borderRadius: '3px',
+                              fontWeight: 700
+                            }}
+                          >
+                            {manual.fileSizeLabel}
+                          </span>
+                        )}
+                      </div>
+                    )}
 
                     {/* 매뉴얼 명칭 */}
                     <h4
                       style={{
                         margin: 0,
-                        fontSize: '14px',
+                        fontSize: '13.5px',
                         fontWeight: 700,
                         color: 'var(--text-main)',
                         display: 'flex',
@@ -1590,7 +2068,13 @@ export const InspectionChecklistManage: React.FC = () => {
                         gap: '6px'
                       }}
                     >
-                      <FileText size={16} style={{ color: 'var(--primary)', flexShrink: 0 }} />
+                      {manual.mediaType === 'YOUTUBE' ? (
+                        <Youtube size={16} style={{ color: '#dc2626', flexShrink: 0 }} />
+                      ) : manual.mediaType === 'WEB_LINK' ? (
+                        <Globe size={16} style={{ color: '#4338ca', flexShrink: 0 }} />
+                      ) : (
+                        <FileText size={16} style={{ color: 'var(--primary)', flexShrink: 0 }} />
+                      )}
                       <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {manual.title}
                       </span>
@@ -1600,11 +2084,31 @@ export const InspectionChecklistManage: React.FC = () => {
                     <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)', display: 'flex', gap: '10px' }}>
                       <span>제조사: <strong>{manual.manufacturer}</strong></span>
                       {manual.targetSpecFt && <span>규격: <strong>{manual.targetSpecFt}ft</strong></span>}
-                      <span>크기: <strong>{manual.fileSizeLabel || '0 MB'}</strong></span>
+                      <span>크기/분량: <strong>{manual.fileSizeLabel || '0 MB'}</strong></span>
                     </div>
 
+                    {/* AI 요약 콜아웃 (있을 경우) */}
+                    {manual.aiSummary && (
+                      <div
+                        style={{
+                          backgroundColor: '#f8fafc',
+                          borderLeft: '3px solid var(--primary)',
+                          padding: '6px 10px',
+                          borderRadius: '0 4px 4px 0',
+                          fontSize: '11.5px',
+                          color: 'var(--text-main)',
+                          lineHeight: '1.45'
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '10.5px', color: 'var(--primary)', fontWeight: 700, marginBottom: '2px' }}>
+                          <Sparkles size={11} /> AI 수록 요약
+                        </div>
+                        {manual.aiSummary}
+                      </div>
+                    )}
+
                     {/* 설명/메모 */}
-                    {manual.memo && (
+                    {manual.memo && !manual.aiSummary && (
                       <p
                         style={{
                           margin: 0,
@@ -1619,6 +2123,83 @@ export const InspectionChecklistManage: React.FC = () => {
                         {manual.memo}
                       </p>
                     )}
+
+                    {/* 에러코드 & 고장증상 & 부품 태그 칩 그리드 */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '2px' }}>
+                      {/* 에러코드 태그 */}
+                      {manual.errorCodes && manual.errorCodes.length > 0 && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap' }}>
+                          <span style={{ fontSize: '10px', color: '#b91c1c', fontWeight: 700 }}>코드:</span>
+                          {manual.errorCodes.map((ec, idx) => (
+                            <span
+                              key={idx}
+                              style={{
+                                fontSize: '10px',
+                                padding: '1px 5px',
+                                borderRadius: '3px',
+                                backgroundColor: '#fee2e2',
+                                color: '#991b1b',
+                                border: '1px solid #fecaca',
+                                fontWeight: 600
+                              }}
+                            >
+                              🚨 {ec}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* 고장증상 태그 */}
+                      {manual.symptoms && manual.symptoms.length > 0 && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap' }}>
+                          <span style={{ fontSize: '10px', color: '#c2410c', fontWeight: 700 }}>증상:</span>
+                          {manual.symptoms.map((sym, idx) => (
+                            <span
+                              key={idx}
+                              style={{
+                                fontSize: '10px',
+                                padding: '1px 5px',
+                                borderRadius: '3px',
+                                backgroundColor: '#ffedd5',
+                                color: '#9a3412',
+                                border: '1px solid #fed7aa',
+                                fontWeight: 500
+                              }}
+                            >
+                              ⚠️ {sym}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* 주요부품 태그 */}
+                      {manual.majorParts && manual.majorParts.length > 0 && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap' }}>
+                          <span style={{ fontSize: '10px', color: '#1d4ed8', fontWeight: 700 }}>부품:</span>
+                          {manual.majorParts.slice(0, 3).map((part, idx) => (
+                            <span
+                              key={idx}
+                              style={{
+                                fontSize: '10px',
+                                padding: '1px 5px',
+                                borderRadius: '3px',
+                                backgroundColor: '#dbeafe',
+                                color: '#1e40af',
+                                border: '1px solid #bfdbfe',
+                                fontWeight: 500
+                              }}
+                            >
+                              🔧 {part}
+                            </span>
+                          ))}
+                          {manual.majorParts.length > 3 && (
+                            <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
+                              +{manual.majorParts.length - 3}
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   {/* 하단 액션 버튼군 */}
@@ -1635,38 +2216,133 @@ export const InspectionChecklistManage: React.FC = () => {
                       등록일: {manual.uploadDate}
                     </span>
 
-                    <div style={{ display: 'flex', gap: '6px' }}>
+                    <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                      {manual.mediaType === 'YOUTUBE' ? (
+                        <>
+                          <button
+                            type="button"
+                            className="btn-primary"
+                            onClick={() => setPreviewManual(manual)}
+                            style={{
+                              padding: '4px 9px',
+                              fontSize: '11px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '3px',
+                              backgroundColor: '#dc2626',
+                              borderColor: '#dc2626'
+                            }}
+                          >
+                            <Play size={12} fill="#ffffff" /> 영상재생
+                          </button>
+                          <a
+                            href={manual.externalUrl || manual.fileUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="btn-secondary"
+                            style={{
+                              padding: '4px 8px',
+                              fontSize: '11px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '3px',
+                              textDecoration: 'none'
+                            }}
+                            title="YouTube 원본 링크 새창 열기"
+                          >
+                            <ExternalLink size={12} /> YouTube
+                          </a>
+                        </>
+                      ) : manual.mediaType === 'WEB_LINK' ? (
+                        <>
+                          <button
+                            type="button"
+                            className="btn-primary"
+                            onClick={() => setPreviewManual(manual)}
+                            style={{ padding: '4px 9px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '3px' }}
+                          >
+                            <Eye size={12} /> 열람
+                          </button>
+                          <a
+                            href={manual.externalUrl || manual.fileUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="btn-secondary"
+                            style={{
+                              padding: '4px 8px',
+                              fontSize: '11px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '3px',
+                              textDecoration: 'none'
+                            }}
+                            title="외부 웹 문서 새창 열기"
+                          >
+                            <ExternalLink size={12} /> 웹열기
+                          </a>
+                        </>
+                      ) : (
+                        <>
+                          <button
+                            type="button"
+                            className="btn-primary"
+                            onClick={() => setPreviewManual(manual)}
+                            style={{ padding: '4px 9px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '3px' }}
+                          >
+                            <Eye size={12} /> 열람
+                          </button>
+                          <a
+                            href={manual.fileUrl}
+                            download={manual.fileName}
+                            className="btn-secondary"
+                            style={{
+                              padding: '4px 8px',
+                              fontSize: '11px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '3px',
+                              textDecoration: 'none'
+                            }}
+                          >
+                            <Download size={12} /> 다운로드
+                          </a>
+                        </>
+                      )}
+
                       <button
                         type="button"
-                        className="btn-primary"
-                        onClick={() => setPreviewManual(manual)}
-                        style={{ padding: '4px 10px', fontSize: '11.5px', display: 'flex', alignItems: 'center', gap: '4px' }}
-                      >
-                        <Eye size={13} /> 열람
-                      </button>
-                      <a
-                        href={manual.fileUrl}
-                        download={manual.fileName}
                         className="btn-secondary"
+                        onClick={() => handleSingleManualAI(manual)}
                         style={{
-                          padding: '4px 10px',
-                          fontSize: '11.5px',
+                          padding: '4px 8px',
+                          fontSize: '11px',
                           display: 'flex',
                           alignItems: 'center',
-                          gap: '4px',
-                          textDecoration: 'none'
+                          gap: '3px',
+                          color: '#d97706',
+                          borderColor: '#fed7aa'
                         }}
+                        title="AI 메타데이터 단건 재색인"
                       >
-                        <Download size={13} /> 다운로드
-                      </a>
+                        <Sparkles size={12} /> AI 색인
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-secondary"
+                        onClick={() => handleOpenMetadataModal(manual)}
+                        style={{ padding: '4px 8px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '3px' }}
+                        title="메타데이터 태그 수동 편집"
+                      >
+                        <Tag size={12} /> 태그
+                      </button>
                       <button
                         type="button"
                         className="btn-secondary"
                         onClick={() => handleDeleteManual(manual)}
-                        style={{ padding: '4px 8px', fontSize: '11.5px', color: 'var(--danger)' }}
+                        style={{ padding: '4px 7px', fontSize: '11px', color: 'var(--danger)' }}
                         title="매뉴얼 삭제"
                       >
-                        <Trash2 size={13} />
+                        <Trash2 size={12} />
                       </button>
                     </div>
                   </div>
@@ -1899,7 +2575,7 @@ export const InspectionChecklistManage: React.FC = () => {
       )}
 
       {/* ═════════════════════════════════════════════════════════════ */}
-      {/* ─── [모달 2] 신규 장비 매뉴얼 등록 모달 (상하 스택 헌장 3.4) ─── */}
+      {/* ─── [모달 2] 신규 장비 매뉴얼 등록 모달 (멀티미디어 확장: PDF / 유튜브 / 웹문서) ─── */}
       {/* ═════════════════════════════════════════════════════════════ */}
       {isManualModalOpen && (
         <div
@@ -1918,7 +2594,7 @@ export const InspectionChecklistManage: React.FC = () => {
             className="card"
             style={{
               width: '100%',
-              maxWidth: '540px',
+              maxWidth: '560px',
               maxHeight: '90vh',
               overflowY: 'auto',
               padding: '24px',
@@ -1938,7 +2614,7 @@ export const InspectionChecklistManage: React.FC = () => {
               }}
             >
               <h3 style={{ margin: 0, fontWeight: '700', fontSize: '16px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <UploadCloud className="text-primary" size={18} /> 신규 장비 매뉴얼 등록
+                <UploadCloud className="text-primary" size={18} /> 신규 기술자료 등록
               </h3>
               <button
                 type="button"
@@ -1950,6 +2626,37 @@ export const InspectionChecklistManage: React.FC = () => {
             </div>
 
             <form onSubmit={handleManualSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              {/* 자료 형태 선택 세그먼트 (헌장 3.4) */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <label style={{ fontSize: '12px', fontWeight: 'bold' }}>자료 형태 (미디어 포맷) *</label>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px' }}>
+                  {[
+                    { type: 'PDF', label: '📄 PDF / 파일' },
+                    { type: 'YOUTUBE', label: '🎬 유튜브 영상' },
+                    { type: 'WEB_LINK', label: '🌐 웹 기술문서' }
+                  ].map(m => (
+                    <button
+                      key={m.type}
+                      type="button"
+                      onClick={() => setManualFormMediaType(m.type as any)}
+                      style={{
+                        padding: '8px 10px',
+                        borderRadius: '6px',
+                        border: manualFormMediaType === m.type ? '2px solid var(--primary)' : '1px solid var(--border-color)',
+                        backgroundColor: manualFormMediaType === m.type ? '#eff6ff' : 'var(--bg-main)',
+                        color: manualFormMediaType === m.type ? '#1d4ed8' : 'var(--text-secondary)',
+                        fontWeight: manualFormMediaType === m.type ? 700 : 500,
+                        fontSize: '12px',
+                        cursor: 'pointer',
+                        textAlign: 'center'
+                      }}
+                    >
+                      {m.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                 {/* 장비 모델 */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
@@ -1983,6 +2690,7 @@ export const InspectionChecklistManage: React.FC = () => {
                     <option value="Genie">Genie (지니)</option>
                     <option value="Dingli">Dingli (딩리)</option>
                     <option value="JLG">JLG</option>
+                    <option value="Delta-Q">Delta-Q (델타큐)</option>
                     <option value="기타">기타 제조사</option>
                   </select>
                 </div>
@@ -1991,25 +2699,25 @@ export const InspectionChecklistManage: React.FC = () => {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                 {/* 문서 분류 */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <label style={{ fontSize: '12px', fontWeight: 'bold' }}>문서 분류 *</label>
+                  <label style={{ fontSize: '12px', fontWeight: 'bold' }}>내용 분류 *</label>
                   <select
                     value={manualFormCategory}
                     onChange={e => setManualFormCategory(e.target.value as EquipmentManual['category'])}
                     style={{ padding: '7px', fontSize: '12.5px' }}
                   >
-                    <option value="PARTS_BOOK">부품 파츠북 (Parts Book)</option>
-                    <option value="ERROR_CODE">에러코드 진단표 (Error Codes)</option>
-                    <option value="WIRING_DIAGRAM">전기/유압 회로도 (Schematics)</option>
-                    <option value="OPERATOR_MANUAL">취급 운전 설명서 (Manual)</option>
+                    <option value="ERROR_CODE">에러코드 진단 및 수리영상/표</option>
+                    <option value="PARTS_BOOK">부품 파츠북 및 교체 실무</option>
+                    <option value="WIRING_DIAGRAM">전기/유압 회로도 및 점검</option>
+                    <option value="OPERATOR_MANUAL">취급 운전 및 조작 설명서</option>
                   </select>
                 </div>
 
                 {/* 개정 버전 */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <label style={{ fontSize: '12px', fontWeight: 'bold' }}>개정 버전</label>
+                  <label style={{ fontSize: '12px', fontWeight: 'bold' }}>자료 버전 / 비고</label>
                   <input
                     type="text"
-                    placeholder="예: Rev. 2024-C"
+                    placeholder="예: Rev. 2024-C 또는 실무촬영본"
                     value={manualFormVersion}
                     onChange={e => setManualFormVersion(e.target.value)}
                     style={{ padding: '7px', fontSize: '12.5px' }}
@@ -2019,10 +2727,16 @@ export const InspectionChecklistManage: React.FC = () => {
 
               {/* 매뉴얼 명칭 */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <label style={{ fontSize: '12px', fontWeight: 'bold' }}>매뉴얼 명칭 (제목) *</label>
+                <label style={{ fontSize: '12px', fontWeight: 'bold' }}>자료 명칭 (제목) *</label>
                 <input
                   type="text"
-                  placeholder="예: Skyjack SJIII 3219 부품 매뉴얼 (Rev. 2024)"
+                  placeholder={
+                    manualFormMediaType === 'YOUTUBE'
+                      ? '예: [사내정비] SJ-3219 상승 솔레노이드 밸브 분해정비 및 에어빼기 실무'
+                      : manualFormMediaType === 'WEB_LINK'
+                      ? '예: [웹매뉴얼] Delta-Q 충전기 배터리 프로파일 온라인 세팅 가이드'
+                      : '예: Skyjack SJIII 3219 부품 매뉴얼 (Rev. 2024)'
+                  }
                   value={manualFormTitle}
                   onChange={e => setManualFormTitle(e.target.value)}
                   required
@@ -2030,46 +2744,125 @@ export const InspectionChecklistManage: React.FC = () => {
                 />
               </div>
 
-              {/* 파일 업로드 */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <label style={{ fontSize: '12px', fontWeight: 'bold' }}>매뉴얼 문서 파일 (PDF 등) *</label>
-                <div
-                  style={{
-                    border: '2px dashed var(--border-color)',
-                    borderRadius: '8px',
-                    padding: '16px',
-                    textAlign: 'center',
-                    cursor: 'pointer',
-                    backgroundColor: 'var(--bg-main)'
-                  }}
-                  onClick={() => fileInputRef.current?.click()}
-                >
-                  <input
-                    type="file"
-                    ref={fileInputRef}
-                    accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg"
-                    onChange={handleFileChange}
-                    style={{ display: 'none' }}
-                  />
-                  <UploadCloud size={28} style={{ color: 'var(--primary)', marginBottom: '6px' }} />
-                  {manualFormFileName ? (
-                    <div style={{ fontSize: '12.5px', fontWeight: 600, color: 'var(--primary)' }}>
-                      선택된 파일: {manualFormFileName} ({manualFormFileSizeLabel})
-                    </div>
-                  ) : (
-                    <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-                      클릭하여 PDF 문서 또는 매뉴얼 파일 선택
-                    </div>
-                  )}
+              {/* 미디어 유형별 입력 영역 */}
+              {manualFormMediaType === 'PDF' ? (
+                /* PDF 파일 업로드 */
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label style={{ fontSize: '12px', fontWeight: 'bold' }}>매뉴얼 문서 파일 (PDF 등) *</label>
+                  <div
+                    style={{
+                      border: '2px dashed var(--border-color)',
+                      borderRadius: '8px',
+                      padding: '16px',
+                      textAlign: 'center',
+                      cursor: 'pointer',
+                      backgroundColor: 'var(--bg-main)'
+                    }}
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    <input
+                      type="file"
+                      ref={fileInputRef}
+                      accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg"
+                      onChange={handleFileChange}
+                      style={{ display: 'none' }}
+                    />
+                    <UploadCloud size={28} style={{ color: 'var(--primary)', marginBottom: '6px' }} />
+                    {manualFormFileName ? (
+                      <div style={{ fontSize: '12.5px', fontWeight: 600, color: 'var(--primary)' }}>
+                        선택된 파일: {manualFormFileName} ({manualFormFileSizeLabel})
+                      </div>
+                    ) : (
+                      <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                        클릭하여 PDF 문서 또는 매뉴얼 파일 선택
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
+              ) : manualFormMediaType === 'YOUTUBE' ? (
+                /* 유튜브 동영상 등록 */
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <label style={{ fontSize: '12px', fontWeight: 'bold' }}>
+                      유튜브 동영상 링크 (YouTube URL) *
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="https://www.youtube.com/watch?v=... 또는 https://youtu.be/..."
+                      value={manualFormExternalUrl}
+                      onChange={e => setManualFormExternalUrl(e.target.value)}
+                      required
+                      style={{ padding: '8px', fontSize: '12.5px' }}
+                    />
+                  </div>
+
+                  {/* 유튜브 비디오 ID 자동 감지 및 실시간 썸네일 미리보기 */}
+                  {(() => {
+                    const videoId = extractYoutubeVideoId(manualFormExternalUrl);
+                    if (videoId) {
+                      return (
+                        <div
+                          style={{
+                            display: 'flex',
+                            gap: '12px',
+                            padding: '10px',
+                            backgroundColor: '#eff6ff',
+                            borderRadius: '6px',
+                            border: '1px solid #bfdbfe',
+                            alignItems: 'center'
+                          }}
+                        >
+                          <img
+                            src={`https://img.youtube.com/vi/${videoId}/hqdefault.jpg`}
+                            alt="YouTube Thumbnail"
+                            style={{ width: '100px', height: '56px', objectFit: 'cover', borderRadius: '4px' }}
+                          />
+                          <div style={{ fontSize: '11.5px', color: '#1e40af' }}>
+                            <div style={{ fontWeight: 700 }}>🟢 유튜브 영상 ID 감지 완료</div>
+                            <div>고유 ID: <strong>{videoId}</strong></div>
+                            <div style={{ fontSize: '11px', color: '#3b82f6' }}>앱 내에서 직접 임베드 재생됩니다.</div>
+                          </div>
+                        </div>
+                      );
+                    }
+                    return null;
+                  })()}
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <label style={{ fontSize: '12px', fontWeight: 'bold' }}>영상 러닝타임 (분 단위, 선택)</label>
+                    <input
+                      type="number"
+                      placeholder="예: 8 (8분)"
+                      value={manualFormDurationMinutes}
+                      onChange={e => setManualFormDurationMinutes(e.target.value ? Number(e.target.value) : '')}
+                      style={{ padding: '7px', fontSize: '12.5px' }}
+                    />
+                  </div>
+                </div>
+              ) : (
+                /* 웹 기술문서 링크 등록 */
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label style={{ fontSize: '12px', fontWeight: 'bold' }}>웹페이지 링크 URL (Web Link) *</label>
+                  <input
+                    type="text"
+                    placeholder="https://support.example.com/manuals/..."
+                    value={manualFormExternalUrl}
+                    onChange={e => setManualFormExternalUrl(e.target.value)}
+                    required
+                    style={{ padding: '8px', fontSize: '12.5px' }}
+                  />
+                  <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                    제조사 기술지원 웹사이트 또는 온라인 매뉴얼 웹 주소를 입력하세요.
+                  </span>
+                </div>
+              )}
 
               {/* 비고 및 요약 설명 */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                 <label style={{ fontSize: '12px', fontWeight: 'bold' }}>비고 및 요약 설명</label>
                 <textarea
                   rows={2}
-                  placeholder="문서 주요 내용, 특이사항, 정비 참고 사항..."
+                  placeholder="자료 주요 내용, 특이사항, 현장 정비/조치 시 참고 사항..."
                   value={manualFormMemo}
                   onChange={e => setManualFormMemo(e.target.value)}
                   style={{ padding: '7px', fontSize: '12px' }}
@@ -2090,7 +2883,7 @@ export const InspectionChecklistManage: React.FC = () => {
                   className="btn-primary"
                   style={{ flex: 1, padding: '8px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px' }}
                 >
-                  <Save size={14} /> 매뉴얼 등록 완료
+                  <Save size={14} /> 자료 등록 완료
                 </button>
               </div>
             </form>
@@ -2139,30 +2932,105 @@ export const InspectionChecklistManage: React.FC = () => {
                 backgroundColor: 'var(--bg-main)'
               }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span className={`badge ${getCategoryBadgeClass(previewManual.category)}`}>
-                  {getCategoryLabel(previewManual.category)}
-                </span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                {previewManual.mediaType === 'YOUTUBE' ? (
+                  <span
+                    style={{
+                      fontSize: '11px',
+                      fontWeight: 700,
+                      padding: '2px 7px',
+                      borderRadius: '4px',
+                      backgroundColor: '#fee2e2',
+                      color: '#dc2626',
+                      border: '1px solid #fecaca',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px'
+                    }}
+                  >
+                    <Youtube size={13} /> 유튜브 영상
+                  </span>
+                ) : previewManual.mediaType === 'WEB_LINK' ? (
+                  <span
+                    style={{
+                      fontSize: '11px',
+                      fontWeight: 700,
+                      padding: '2px 7px',
+                      borderRadius: '4px',
+                      backgroundColor: '#e0e7ff',
+                      color: '#4338ca',
+                      border: '1px solid #c7d2fe',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px'
+                    }}
+                  >
+                    <Globe size={12} /> 웹 기술문서
+                  </span>
+                ) : (
+                  <span className={`badge ${getCategoryBadgeClass(previewManual.category)}`}>
+                    {getCategoryLabel(previewManual.category)}
+                  </span>
+                )}
                 <strong style={{ fontSize: '14px' }}>{previewManual.title}</strong>
                 <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>({previewManual.modelName})</span>
               </div>
 
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <a
-                  href={previewManual.fileUrl}
-                  download={previewManual.fileName}
-                  className="btn-secondary"
-                  style={{
-                    padding: '4px 10px',
-                    fontSize: '12px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '4px',
-                    textDecoration: 'none'
-                  }}
-                >
-                  <Download size={13} /> 다운로드
-                </a>
+                {previewManual.mediaType === 'YOUTUBE' ? (
+                  <a
+                    href={previewManual.externalUrl || previewManual.fileUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="btn-secondary"
+                    style={{
+                      padding: '4px 10px',
+                      fontSize: '12px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      textDecoration: 'none',
+                      color: '#dc2626'
+                    }}
+                  >
+                    <ExternalLink size={13} /> YouTube 원본 열기
+                  </a>
+                ) : previewManual.mediaType === 'WEB_LINK' ? (
+                  <a
+                    href={previewManual.externalUrl || previewManual.fileUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="btn-secondary"
+                    style={{
+                      padding: '4px 10px',
+                      fontSize: '12px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      textDecoration: 'none',
+                      color: '#4338ca'
+                    }}
+                  >
+                    <ExternalLink size={13} /> 새창에서 열기
+                  </a>
+                ) : (
+                  <a
+                    href={previewManual.fileUrl}
+                    download={previewManual.fileName}
+                    className="btn-secondary"
+                    style={{
+                      padding: '4px 10px',
+                      fontSize: '12px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      textDecoration: 'none'
+                    }}
+                  >
+                    <Download size={13} /> 다운로드
+                  </a>
+                )}
+
                 <button
                   type="button"
                   onClick={() => setPreviewManual(null)}
@@ -2173,15 +3041,56 @@ export const InspectionChecklistManage: React.FC = () => {
               </div>
             </div>
 
-            {/* 뷰어 본문 */}
-            <div style={{ flex: 1, backgroundColor: '#333333', overflow: 'hidden', position: 'relative' }}>
-              {previewManual.fileUrl.startsWith('data:application/pdf') || previewManual.fileName.endsWith('.pdf') ? (
+            {/* 뷰어 본문 (멀티미디어 분기) */}
+            <div style={{ flex: 1, backgroundColor: '#000000', overflow: 'hidden', position: 'relative' }}>
+              {previewManual.mediaType === 'YOUTUBE' && previewManual.youtubeVideoId ? (
+                /* 유튜브 반응형 임베드 플레이어 */
+                <iframe
+                  src={`https://www.youtube.com/embed/${previewManual.youtubeVideoId}?autoplay=1&rel=0`}
+                  title={previewManual.title}
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                  allowFullScreen
+                  style={{ width: '100%', height: '100%', border: 'none' }}
+                />
+              ) : previewManual.mediaType === 'WEB_LINK' ? (
+                /* 웹 기술문서 인라인 또는 링크 안내 */
+                <div
+                  style={{
+                    width: '100%',
+                    height: '100%',
+                    backgroundColor: 'var(--bg-main)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '14px',
+                    padding: '24px'
+                  }}
+                >
+                  <Globe size={48} style={{ color: '#4338ca' }} />
+                  <div style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text-main)' }}>{previewManual.title}</div>
+                  <p style={{ maxWidth: '480px', textAlign: 'center', fontSize: '12.5px', color: 'var(--text-secondary)', lineHeight: '1.5' }}>
+                    {previewManual.memo || '보안 정책상 외부 웹사이트는 새 창에서 가장 쾌적하게 확인하실 수 있습니다.'}
+                  </p>
+                  <a
+                    href={previewManual.externalUrl || previewManual.fileUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="btn-primary"
+                    style={{ padding: '8px 18px', fontSize: '13px', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '6px' }}
+                  >
+                    <ExternalLink size={15} /> 새 창에서 공식 웹 기술문서 열기
+                  </a>
+                </div>
+              ) : previewManual.fileUrl.startsWith('data:application/pdf') || previewManual.fileName.endsWith('.pdf') ? (
+                /* PDF 인앱 뷰어 */
                 <iframe
                   src={previewManual.fileUrl}
                   title={previewManual.title}
-                  style={{ width: '100%', height: '100%', border: 'none' }}
+                  style={{ width: '100%', height: '100%', border: 'none', backgroundColor: '#333333' }}
                 />
               ) : (
+                /* 기타 파일 다운로드 안내 */
                 <div
                   style={{
                     width: '100%',
@@ -2302,6 +3211,179 @@ export const InspectionChecklistManage: React.FC = () => {
       )}
 
       {/* ═════════════════════════════════════════════════════════════ */}
+      {/* ─── [모달 5] AI 메타데이터 색인 태그 편집 모달 (헌장 3.4) ─── */}
+      {/* ═════════════════════════════════════════════════════════════ */}
+      {editingMetadataManual && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(0,0,0,0.6)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1150,
+            padding: '20px'
+          }}
+        >
+          <div
+            className="card"
+            style={{
+              width: '90%',
+              maxWidth: '560px',
+              backgroundColor: 'var(--bg-card)',
+              padding: '20px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '14px',
+              maxHeight: '90vh',
+              overflowY: 'auto'
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-color)', paddingBottom: '10px' }}>
+              <div>
+                <h3 style={{ fontSize: '15px', fontWeight: 800, margin: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Tag size={16} style={{ color: 'var(--primary)' }} />
+                  AI 메타데이터 색인 태그 편집
+                </h3>
+                <p style={{ margin: '3px 0 0 0', fontSize: '11.5px', color: 'var(--text-secondary)' }}>
+                  [{editingMetadataManual.modelName}] {editingMetadataManual.title}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingMetadataManual(null)}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveMetadataModal} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              {/* 상하 스택 1: AI 수록 요약 */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <label style={{ fontSize: '11.5px', fontWeight: 700, color: 'var(--text-main)' }}>
+                  AI 수록 요약 (트러블슈팅/정비 포인트)
+                </label>
+                <textarea
+                  rows={3}
+                  value={editAiSummaryInput}
+                  onChange={e => setEditAiSummaryInput(e.target.value)}
+                  placeholder="AI가 요약한 핵심 트러블슈팅 또는 매뉴얼 주요 점검 내용..."
+                  style={{ width: '100%', padding: '8px', fontSize: '12px', lineHeight: '1.45', borderRadius: '4px', border: '1px solid var(--border-color)' }}
+                />
+              </div>
+
+              {/* 상하 스택 2: 에러코드 */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <label style={{ fontSize: '11.5px', fontWeight: 700, color: 'var(--text-main)' }}>
+                  진단 에러코드 (콤마로 구분)
+                </label>
+                <input
+                  type="text"
+                  value={editErrorCodesInput}
+                  onChange={e => setEditErrorCodesInput(e.target.value)}
+                  placeholder="예: 02, 18, LL, OL, 99"
+                  style={{ width: '100%', padding: '7px 10px', fontSize: '12px', borderRadius: '4px', border: '1px solid var(--border-color)' }}
+                />
+              </div>
+
+              {/* 상하 스택 3: 고장증상 */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <label style={{ fontSize: '11.5px', fontWeight: 700, color: 'var(--text-main)' }}>
+                  주요 고장증상 (콤마로 구분)
+                </label>
+                <input
+                  type="text"
+                  value={editSymptomsInput}
+                  onChange={e => setEditSymptomsInput(e.target.value)}
+                  placeholder="예: 상승 불가, 주행 모터 과열, 비상하강 작동불량"
+                  style={{ width: '100%', padding: '7px 10px', fontSize: '12px', borderRadius: '4px', border: '1px solid var(--border-color)' }}
+                />
+              </div>
+
+              {/* 상하 스택 4: 주요 부품 및 품번 */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <label style={{ fontSize: '11.5px', fontWeight: 700, color: 'var(--text-main)' }}>
+                  주요 부품 / 품번 (콤마로 구분)
+                </label>
+                <input
+                  type="text"
+                  value={editMajorPartsInput}
+                  onChange={e => setEditMajorPartsInput(e.target.value)}
+                  placeholder="예: 솔레노이드 밸브 103138, 조이스틱 159108, 릴리프 밸브"
+                  style={{ width: '100%', padding: '7px 10px', fontSize: '12px', borderRadius: '4px', border: '1px solid var(--border-color)' }}
+                />
+              </div>
+
+              {/* 상하 스택 5: 검색 키워드 */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <label style={{ fontSize: '11.5px', fontWeight: 700, color: 'var(--text-main)' }}>
+                  추천 검색 키워드 (콤마로 구분)
+                </label>
+                <input
+                  type="text"
+                  value={editKeywordsInput}
+                  onChange={e => setEditKeywordsInput(e.target.value)}
+                  placeholder="예: 스카이잭, 유압회로, 릴리프, 상승밸브"
+                  style={{ width: '100%', padding: '7px 10px', fontSize: '12px', borderRadius: '4px', border: '1px solid var(--border-color)' }}
+                />
+              </div>
+
+              {/* 모달 푸터 버튼군 */}
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  borderTop: '1px solid var(--border-color)',
+                  paddingTop: '12px',
+                  marginTop: '6px'
+                }}
+              >
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={async () => {
+                    if (!editingMetadataManual) return;
+                    showToast('AI 분석 다시 실행 중...');
+                    const res = await extractManualMetadataWithAI(editingMetadataManual);
+                    setEditAiSummaryInput(res.aiSummary);
+                    setEditErrorCodesInput(res.errorCodes.join(', '));
+                    setEditSymptomsInput(res.symptoms.join(', '));
+                    setEditMajorPartsInput(res.majorParts.join(', '));
+                    setEditKeywordsInput(res.keywords.join(', '));
+                    showToast('AI 메타데이터가 입력창에 다시 채워졌습니다.');
+                  }}
+                  style={{ padding: '6px 12px', fontSize: '11.5px', display: 'flex', alignItems: 'center', gap: '4px', color: '#ea580c' }}
+                >
+                  <Sparkles size={13} /> AI 자동 다시채우기
+                </button>
+
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    onClick={() => setEditingMetadataManual(null)}
+                    style={{ padding: '6px 14px', fontSize: '12px' }}
+                  >
+                    취소
+                  </button>
+                  <button
+                    type="submit"
+                    className="btn-primary"
+                    style={{ padding: '6px 16px', fontSize: '12px' }}
+                  >
+                    메타데이터 저장
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ═════════════════════════════════════════════════════════════ */}
       {/* ─── [우하단 Gutenberg Z-패턴 4단계 최하단 대차대조식 바 (헌장 3.5)] ─── */}
       {/* ═════════════════════════════════════════════════════════════ */}
       <div
@@ -2352,6 +3434,12 @@ export const InspectionChecklistManage: React.FC = () => {
         {activeTab === 'MANUALS' && (
           <div style={{ display: 'flex', alignItems: 'center', gap: '14px', overflowX: 'auto', whiteSpace: 'nowrap' }}>
             <span>📚 <strong>매뉴얼 총계:</strong> {manualSummary.total}건</span>
+            <span style={{ color: 'var(--border-color)' }}>|</span>
+            <span style={{ color: '#16a34a' }}>🟢 <strong>AI 색인완료:</strong> {manualSummary.aiIndexedCount}건</span>
+            <span style={{ color: 'var(--border-color)' }}>|</span>
+            <span style={{ color: manualSummary.aiPendingCount > 0 ? '#ea580c' : 'var(--text-muted)' }}>
+              🟡 <strong>AI 분석대기:</strong> {manualSummary.aiPendingCount}건
+            </span>
             <span style={{ color: 'var(--border-color)' }}>|</span>
             <span>파츠북 {manualSummary.partsBookCount}건</span>
             <span style={{ color: 'var(--border-color)' }}>|</span>

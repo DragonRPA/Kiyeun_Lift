@@ -974,17 +974,39 @@ export interface EquipmentManual {
   targetSpecFt?: number;        // 규격 피트수 (19, 26, 32, 40 등)
   category: 'PARTS_BOOK' | 'ERROR_CODE' | 'WIRING_DIAGRAM' | 'OPERATOR_MANUAL'; // 파츠북 | 에러코드 | 회로도 | 취급설명서
   title: string;                // 매뉴얼 명칭 (예: 'Skyjack SJIII 3219 부품 매뉴얼')
-  fileUrl: string;              // 파일 URL 또는 base64 데이터
-  fileName: string;             // 파일명 (예: 'SJ3219_parts_manual_rev2.pdf')
-  fileSize: number;             // 바이트 단위 용량
-  fileSizeLabel?: string;       // 표시용 크기 (예: '14.2 MB')
+  fileUrl: string;              // 파일 URL 또는 base64 데이터 (또는 링크 대상)
+  fileName: string;             // 파일명 또는 링크 제목 (예: 'SJ3219_parts_manual_rev2.pdf')
+  fileSize: number;             // 바이트 단위 용량 (영상/링크 시 0)
+  fileSizeLabel?: string;       // 표시용 크기 (예: '14.2 MB' 또는 '08:24')
   version: string;              // 개정 버전 (예: 'Rev. 2024-C')
   uploadDate: string;           // 등록일자 (YYYY-MM-DD)
   uploadedBy: string;           // 등록자
   memo?: string;                // 비고 및 가이드 요약
   inspectionItemCodes?: string[];// 연계 정비점검항목 코드 (선택)
+  // 미디어 및 링크 포맷 확장 (멀티미디어 MRO 지식 허브)
+  mediaType?: 'PDF' | 'YOUTUBE' | 'WEB_LINK'; // 자료 유형 (기본값: 'PDF')
+  externalUrl?: string;         // 유튜브 전체 링크 또는 외부 웹문서 URL
+  youtubeVideoId?: string;      // 유튜브 11자리 비디오 고유 ID (예: 'dQw4w9WgXcQ')
+  durationMinutes?: number;     // 동영상 러닝타임 (분 단위)
+  // AI 메타데이터 자동 추출 및 다차원 색인 속성
+  aiProcessed?: boolean;        // AI 분석 및 색인 완료 여부
+  aiProcessedAt?: string;       // AI 분석 일시
+  keywords?: string[];          // 검색 키워드 태그 (예: ['상승불가', '솔레노이드', '비상하강', '유압블록'])
+  errorCodes?: string[];        // 문서 수록 에러코드 목록 (예: ['02', '18', 'LL', 'OL'])
+  majorParts?: string[];        // 주요 부품명/품번 (예: ['솔레노이드 밸브 24V', 'TC350 충전기', '조이스틱'])
+  symptoms?: string[];          // 해결 가능한 고장 증상 목록 (예: ['승강 시 전압강하', '주행 불가', '경보음 지속'])
+  aiSummary?: string;           // AI 핵심 수록 내용 2~3줄 요약
   createdAt: string;
   updatedAt?: string;
+}
+
+/** 유튜브 URL에서 11자리 고유 비디오 ID를 정규식으로 추출하는 순수 헬퍼 함수 */
+export function extractYoutubeVideoId(url: string): string | null {
+  if (!url || typeof url !== 'string') return null;
+  const cleanUrl = url.trim();
+  const regExp = /(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/;
+  const match = cleanUrl.match(regExp);
+  return match && match[1] ? match[1] : null;
 }
 
 export type TaskCategory = 
@@ -3046,6 +3068,13 @@ export const SEED_EQUIPMENT_MANUALS: EquipmentManual[] = [
     uploadDate: '2026-08-15',
     uploadedBy: '관리자',
     memo: 'SJ-3219 및 SJ-3226 공용 유압 실린더 및 휠모터 분해도 수록',
+    aiProcessed: true,
+    aiProcessedAt: '2026-08-15 09:30:00',
+    keywords: ['유압실린더', '휠모터', '카울', '가위암', '부품품번', '소모품', '솔레노이드밸브'],
+    errorCodes: [],
+    majorParts: ['유압 상승 실린더 (Part# 119561)', '전륜 유압 모터 (Part# 107321)', '조이스틱 컨트롤러 (Part# 156879)', '솔레노이드 밸브 코일 24V'],
+    symptoms: ['유압 실린더 누유', '조향 불가', '바퀴 구동력 저하', '카울 파손'],
+    aiSummary: 'Skyjack SJ-3219/3226 모델의 샤시, 시저 암, 플랫폼, 유압/전기 부품 전체 전개도 및 정품 파츠 품번 수록.',
     createdAt: '2026-08-15T09:00:00.000Z'
   },
   {
@@ -3063,6 +3092,13 @@ export const SEED_EQUIPMENT_MANUALS: EquipmentManual[] = [
     uploadDate: '2026-08-20',
     uploadedBy: '김정비',
     memo: 'Flash 02~18 플래시 횟수별 고장 원인 및 현장 조치 트리',
+    aiProcessed: true,
+    aiProcessedAt: '2026-08-20 10:45:00',
+    keywords: ['에러코드', '플래시코드', '02번', '18번', '상승불가', '틸트경보', '컨트롤러이상', '과하중'],
+    errorCodes: ['02', '03', '04', '18', 'LL', 'OL'],
+    majorParts: ['경사각 틸트 센서', '압력 트랜스듀서', '메인 배터리 케이블', 'ECM 제어모듈'],
+    symptoms: ['02번 에러 깜빡임', '상승 불가', '18번 경사각 경보 지속', '주행 컷오프', '부저 울림'],
+    aiSummary: 'Skyjack 컨트롤러 LED 점멸 횟수별 트러블슈팅 가이드. 02(시스템 배선 불량), 18(틸트 경사 센서 감지) 현장 즉시 조치 절차 안내.',
     createdAt: '2026-08-20T10:30:00.000Z'
   },
   {
@@ -3080,6 +3116,13 @@ export const SEED_EQUIPMENT_MANUALS: EquipmentManual[] = [
     uploadDate: '2026-08-22',
     uploadedBy: '최정비',
     memo: '조이스틱 컨트롤러 ECM 배선도 및 비상정지 릴레이 맵 포함',
+    aiProcessed: true,
+    aiProcessedAt: '2026-08-22 14:30:00',
+    keywords: ['전기회로도', '유압회로도', 'ECM배선', '비상정지릴레이', '솔레노이드', '퓨즈', '조이스틱'],
+    errorCodes: ['E01', 'E02', 'CH'],
+    majorParts: ['비상정지 릴레이 24V', '메인 250A 퓨즈', '조이스틱 케이블 하네스', '비상 하강 솔레노이드'],
+    symptoms: ['전원 불통', '비상정지 해제 후 미작동', '조이스틱 통신 단절', '상승 솔레노이드 미작동'],
+    aiSummary: 'Genie GS-1930/2032 기종의 전원 공급 라인, 릴레이 보드, 조이스틱 통신선 및 유압 매니폴드 밸브 계통 회로도.',
     createdAt: '2026-08-22T14:15:00.000Z'
   },
   {
@@ -3097,6 +3140,13 @@ export const SEED_EQUIPMENT_MANUALS: EquipmentManual[] = [
     uploadDate: '2026-08-25',
     uploadedBy: '관리자',
     memo: '출고 전 작업자 안전 수칙 및 비상 하강 레버 작동 요령',
+    aiProcessed: true,
+    aiProcessedAt: '2026-08-25 11:20:00',
+    keywords: ['조작방법', '안전수칙', '비상하강', '적재하중', '충전요령', 'PDI점검'],
+    errorCodes: [],
+    majorParts: ['비상 하강 수동 레버', '플랫폼 확장 잠금 핀', '풋스위치'],
+    symptoms: ['비상 하강 레버 미작동', '확장 플랫폼 걸림', '키 스위치 불량'],
+    aiSummary: '운전자 기본 조작법, 허용 하중(227kg), 상/하부 컨트롤 박스 전환, 정전 시 수동 비상하강 레버 당김 절차 설명.',
     createdAt: '2026-08-25T11:00:00.000Z'
   },
   {
@@ -3113,7 +3163,93 @@ export const SEED_EQUIPMENT_MANUALS: EquipmentManual[] = [
     uploadDate: '2026-08-28',
     uploadedBy: '김정비',
     memo: '적색 LED 점멸 횟수별(1~6회) 배터리 저전압 및 충전기 불량 진단',
+    aiProcessed: true,
+    aiProcessedAt: '2026-08-28 16:15:00',
+    keywords: ['충전기', '배터리방전', '적색LED', '점멸코드', '저전압', '과열', '충전불가', 'DeltaQ'],
+    errorCodes: ['F1', 'F2', 'F3', 'F4', 'F5', 'F6', 'RED-FLASH-1', 'RED-FLASH-2'],
+    majorParts: ['Delta-Q IC650 충전기', '온도 센서 프로브', '24V 배터리 뱅크', 'AC 전원 플러그'],
+    symptoms: ['충전기 빨간불 깜빡임', '충전 시작 안 됨', '배터리 완충 불가', '충전기 과열 경보'],
+    aiSummary: '고소작업대 탑재형 Delta-Q IC650 충전기의 적색 LED 1~6회 점멸 고장 진단. F1(배터리 저전압 16V 미만), F2(과열) 복구 절차 수록.',
     createdAt: '2026-08-28T16:00:00.000Z'
+  },
+  {
+    id: 'MAN-0000006',
+    modelName: 'SJ-3219',
+    manufacturer: 'Skyjack',
+    category: 'ERROR_CODE',
+    mediaType: 'YOUTUBE',
+    title: '[사내 정비영상] Skyjack SJ-3219 상승 솔레노이드 밸브 분해정비 및 에어빼기 실무',
+    fileName: 'Skyjack_SJ3219_Solenoid_Repair.mp4',
+    fileUrl: 'https://www.youtube.com/watch?v=f02mOEt11gM',
+    externalUrl: 'https://www.youtube.com/watch?v=f02mOEt11gM',
+    youtubeVideoId: 'f02mOEt11gM',
+    durationMinutes: 8,
+    fileSize: 0,
+    fileSizeLabel: '08:24',
+    version: 'v1.0 (사내영상)',
+    uploadDate: '2026-09-01',
+    uploadedBy: '정비팀장',
+    memo: '현장에서 상승 모터만 돌고 리프트가 안 올라갈 때 24V 솔레노이드 밸브 스풀 분해 세척 및 유압 에어빼기 실무 촬영본',
+    aiProcessed: true,
+    aiProcessedAt: '2026-09-01 10:00:00',
+    keywords: ['정비영상', '유튜브', '상승불가', '솔레노이드', '스풀세척', '에어빼기', '스카이잭', '02번에러'],
+    errorCodes: ['02'],
+    majorParts: ['상승 솔레노이드 밸브 24V (Part# 103138)', '유압 밸브 블록', '오링 키트', '릴리프 밸브'],
+    symptoms: ['상승 불가', '모터 공회전 소음', '유압 압력 미형성', '상승 도중 멈춤'],
+    aiSummary: 'Skyjack SJ-3219의 상승 불량 시 밸브 블록 내 24V 솔레노이드 코일 통전 검사, 스풀 이물질 세척, 오링 교체 및 유압 라인 에어빼기 전과정 실무 영상.',
+    createdAt: '2026-09-01T10:00:00.000Z'
+  },
+  {
+    id: 'MAN-0000007',
+    modelName: 'GS-1930',
+    manufacturer: 'Genie',
+    category: 'ERROR_CODE',
+    mediaType: 'YOUTUBE',
+    title: '[사내 정비영상] Genie GS-1930 에러 18번 틸트 경사 센서 영점 보정(Level Calibration)',
+    fileName: 'Genie_GS1930_Tilt_Calibration.mp4',
+    fileUrl: 'https://www.youtube.com/watch?v=3JZ_D3ELwOQ',
+    externalUrl: 'https://www.youtube.com/watch?v=3JZ_D3ELwOQ',
+    youtubeVideoId: '3JZ_D3ELwOQ',
+    durationMinutes: 5,
+    fileSize: 0,
+    fileSizeLabel: '05:12',
+    version: 'v1.0 (사내영상)',
+    uploadDate: '2026-09-02',
+    uploadedBy: '김정비',
+    memo: '수평 바닥에서 18번 경보 울리며 상승 차단될 때 조이스틱 키 조합을 통한 수평 센서 0점 리셋 영상',
+    aiProcessed: true,
+    aiProcessedAt: '2026-09-02 11:30:00',
+    keywords: ['정비영상', '유튜브', '틸트센서', '에러18', '지니', '영점보정', '캘리브레이션', '수평센서'],
+    errorCodes: ['18'],
+    majorParts: ['지니 듀얼 액시스 틸트 센서 (Genie Part# 105334)', '조이스틱 컨트롤러'],
+    symptoms: ['18번 에러코드 점멸', '경사지 경보 지속', '상승 컷오프', '부저 울림'],
+    aiSummary: 'Genie GS-1930 조이스틱 키 조작을 통한 캘리브레이션 모드 진입 및 틸트 센서(수평각도) 0점 세팅 실무 가이드 영상.',
+    createdAt: '2026-09-02T11:30:00.000Z'
+  },
+  {
+    id: 'MAN-0000008',
+    modelName: '공통',
+    manufacturer: 'Delta-Q',
+    category: 'OPERATOR_MANUAL',
+    mediaType: 'WEB_LINK',
+    title: '[웹 매뉴얼] Delta-Q 충전기 배터리 충전 프로파일(알고리즘) 온라인 세팅 포털',
+    fileName: 'DeltaQ_Online_Profile_Portal.html',
+    fileUrl: 'https://support.delta-q.com/hc/en-us/articles/battery-charging-profiles',
+    externalUrl: 'https://support.delta-q.com/hc/en-us/articles/battery-charging-profiles',
+    fileSize: 0,
+    fileSizeLabel: '웹 링크',
+    version: 'Online Docs',
+    uploadDate: '2026-09-03',
+    uploadedBy: '관리자',
+    memo: '딥사이클 납산/AGM 배터리 교체 시 충전기 내부 알고리즘 넘버 탭 전환 온라인 공식 매뉴얼',
+    aiProcessed: true,
+    aiProcessedAt: '2026-09-03 14:00:00',
+    keywords: ['웹문서', '온라인포털', '델타큐', '충전알고리즘', '배터리프로파일', 'AGM세팅', '트로잔배터리'],
+    errorCodes: [],
+    majorParts: ['Delta-Q 충전기', '트로잔 T-105', '로케트 L-105'],
+    symptoms: ['배터리 수명 조기단축', '충전 전압 부족', '충전 완료 불 안 들어옴'],
+    aiSummary: 'Delta-Q 충전기 후면 탭 스위치 조작을 통한 배터리 브랜드별(트로잔, 로케트, US 등) 최적 충전 프로파일(알고리즘 #1, #11, #73 등) 매뉴얼.',
+    createdAt: '2026-09-03T14:00:00.000Z'
   }
 ];
 
