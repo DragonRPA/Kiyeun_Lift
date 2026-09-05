@@ -63,7 +63,12 @@ interface DailyForecast {
   popMax: number;
 }
 
-export const WeatherWidget: React.FC = () => {
+export interface WeatherWidgetProps {
+  compact?: boolean;
+  style?: React.CSSProperties;
+}
+
+export const WeatherWidget: React.FC<WeatherWidgetProps> = ({ compact = false, style: customStyle }) => {
   const [selectedRegion, setSelectedRegion] = useState<WeatherRegion>(() => {
     const savedId = localStorage.getItem('weather_region_id');
     if (savedId) {
@@ -160,31 +165,34 @@ export const WeatherWidget: React.FC = () => {
         style={{
           display: 'flex',
           alignItems: 'center',
-          gap: '6px',
-          padding: '5px 10px',
-          borderRadius: '20px',
-          backgroundColor: 'var(--bg-app)',
-          border: '1px solid var(--border-color)',
+          gap: compact ? '4px' : '6px',
+          padding: compact ? '3.5px 8px' : '5px 10px',
+          borderRadius: compact ? '10px' : '20px',
+          backgroundColor: compact ? '#1e293b' : 'var(--bg-app)',
+          border: compact ? '1px solid #334155' : '1px solid var(--border-color)',
           cursor: 'pointer',
-          fontSize: '12.5px',
+          fontSize: compact ? '11px' : '12.5px',
           fontWeight: 600,
-          color: 'var(--text-primary)',
+          color: compact ? '#f8fafc' : 'var(--text-primary)',
           transition: 'all 0.15s ease',
-          userSelect: 'none'
+          userSelect: 'none',
+          flexShrink: 0,
+          whiteSpace: 'nowrap',
+          ...customStyle
         }}
         onMouseEnter={e => (e.currentTarget.style.borderColor = 'var(--primary)')}
-        onMouseLeave={e => (e.currentTarget.style.borderColor = 'var(--border-color)')}
+        onMouseLeave={e => (e.currentTarget.style.borderColor = compact ? '#334155' : 'var(--border-color)')}
       >
         {loading ? (
-          <span style={{ fontSize: '11.5px', color: 'var(--text-muted)' }}>🌤️ 날씨 조회 중...</span>
+          <span style={{ fontSize: compact ? '10.5px' : '11.5px', color: 'var(--text-muted)' }}>🌤️ 날씨 조회중</span>
         ) : error || !current || !weatherMeta ? (
-          <span style={{ fontSize: '11.5px', color: 'var(--text-muted)' }}>🌤️ 날씨 (서울)</span>
+          <span style={{ fontSize: compact ? '10.5px' : '11.5px', color: 'var(--text-muted)' }}>🌤️ 날씨 ({selectedRegion.name})</span>
         ) : (
           <>
-            <span style={{ display: 'flex', alignItems: 'center' }}>{weatherMeta.icon}</span>
-            <span style={{ color: 'var(--text-muted)', fontSize: '11.5px' }}>{selectedRegion.name}</span>
-            <span style={{ fontWeight: 700 }}>{current.temp}°C</span>
-            <span style={{ color: weatherMeta.color, fontSize: '11.5px' }}>{weatherMeta.text}</span>
+            <span style={{ display: 'flex', alignItems: 'center', transform: compact ? 'scale(0.85)' : 'none' }}>{weatherMeta.icon}</span>
+            <span style={{ color: compact ? '#94a3b8' : 'var(--text-muted)', fontSize: compact ? '10.5px' : '11.5px' }}>{selectedRegion.name}</span>
+            <span style={{ fontWeight: 700, fontFamily: 'monospace' }}>{current.temp}°C</span>
+            {!compact && <span style={{ color: weatherMeta.color, fontSize: '11.5px' }}>{weatherMeta.text}</span>}
           </>
         )}
       </div>
@@ -193,11 +201,12 @@ export const WeatherWidget: React.FC = () => {
       {showModal && (
         <div style={{
           position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-          backgroundColor: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100
+          backgroundColor: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 99999,
+          padding: '12px'
         }}>
           <div className="card" style={{
-            width: '100%', maxWidth: '520px', backgroundColor: 'var(--bg-card)', padding: '22px', borderRadius: '14px',
-            maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.3)'
+            width: '100%', maxWidth: '520px', backgroundColor: 'var(--bg-card)', padding: '20px', borderRadius: '14px',
+            maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 20px 35px -5px rgba(0,0,0,0.5)'
           }}>
             {/* 모달 헤더 */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>

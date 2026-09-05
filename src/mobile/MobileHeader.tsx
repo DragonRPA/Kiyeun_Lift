@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { LogOut, Wrench, Crown, Radio, RotateCw, Sparkles } from 'lucide-react';
+import { LogOut, Wrench, Crown, Radio, RotateCw, Sparkles, Monitor } from 'lucide-react';
 import { useApp } from '../context/AppContext';
+import { WeatherWidget } from '../components/WeatherWidget';
 
 export type MobileDeptMode = 'SALES' | 'AS' | 'OUTBOUND' | 'EXECUTIVE' | 'ADMIN';
 
@@ -65,178 +66,209 @@ export const MobileHeader: React.FC<MobileHeaderProps> = ({
           backgroundColor: 'rgba(15, 23, 42, 0.95)',
           backdropFilter: 'blur(12px)',
           borderBottom: '1px solid #1e293b',
-          padding: 'max(10px, env(safe-area-inset-top, 10px)) 12px 10px',
+          padding: 'max(8px, env(safe-area-inset-top, 8px)) 12px 8px',
           display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
+          flexDirection: 'column',
+          gap: '6px',
           boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.2)',
           width: '100%',
           maxWidth: '100vw',
           overflowX: 'hidden'
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0, flex: 1, marginRight: '6px' }}>
-          <div style={{
-            width: '32px',
-            height: '32px',
-            borderRadius: '10px',
-            backgroundColor: deptMode === 'EXECUTIVE' ? '#7c3aed' : '#2563eb',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            boxShadow: '0 4px 10px rgba(37, 99, 235, 0.35)',
-            flexShrink: 0
-          }}>
-            {deptMode === 'EXECUTIVE' ? (
-              <Crown size={17} color="#ffffff" />
-            ) : (
-              <Wrench size={16} color="#ffffff" />
-            )}
+        {/* ── 1행: 좌상단 날씨 위젯 & 우상단 퀵 액션 버튼군 ── */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', gap: '6px' }}>
+          {/* 🌤️ 좌상단 실시간 현장 날씨 위젯 */}
+          <div style={{ flexShrink: 0 }}>
+            <WeatherWidget compact />
           </div>
-          <div style={{ minWidth: 0, overflow: 'hidden' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '5px', whiteSpace: 'nowrap' }}>
-              <span style={{ fontSize: '14px', fontWeight: '800', color: '#ffffff', letterSpacing: '-0.02em' }}>기연리프트</span>
-              <span style={{
-                fontSize: '9px',
-                fontWeight: '700',
-                padding: '1px 5px',
-                borderRadius: '9999px',
-                backgroundColor: 'rgba(59, 130, 246, 0.2)',
-                color: '#60a5fa',
-                border: '1px solid rgba(59, 130, 246, 0.3)',
+
+          {/* 우상단 퀵 액션 버튼군 */}
+          <div 
+            style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: '4px', 
+              flexShrink: 0
+            }}
+          >
+            {/* 🔄 화면 새로고침 버튼 (헌장 3.1 무수식어 건조한 명사) */}
+            <button
+              type="button"
+              onClick={handleRefresh}
+              disabled={isRefreshing}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '3px',
+                fontSize: '11px',
+                fontWeight: '600',
+                padding: '5px 7px',
+                borderRadius: '8px',
+                backgroundColor: '#1e293b',
+                border: '1px solid #334155',
+                color: '#38bdf8',
+                cursor: 'pointer',
                 flexShrink: 0
-              }}>
-                FIELD
-              </span>
-            </div>
-            <div style={{ fontSize: '10px', color: '#94a3b8', marginTop: '1px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-              {currentUser?.name || '담당자'} ({currentUser?.role === 'ADMIN' ? '최고관리자' : currentUser?.role === 'MECHANIC' ? '정비기사' : '임직원'})
-            </div>
+              }}
+              title="새로고침"
+            >
+              <RotateCw 
+                size={12} 
+                style={{
+                  transition: 'transform 0.4s ease',
+                  transform: isRefreshing ? 'rotate(360deg)' : 'none'
+                }} 
+                color="#38bdf8" 
+              />
+              <span>새로고침</span>
+            </button>
+
+            {/* 📻 현장 무전기 (PTT) 버튼 */}
+            <button
+              type="button"
+              onClick={onOpenWalkieTalkie}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '3px',
+                fontSize: '11px',
+                fontWeight: '700',
+                padding: '5px 7px',
+                borderRadius: '8px',
+                backgroundColor: isWalkieOn ? 'rgba(16, 185, 129, 0.2)' : '#1e293b',
+                border: isWalkieOn ? '1px solid #10b981' : '1px solid #334155',
+                color: isWalkieOn ? '#34d399' : '#cbd5e1',
+                cursor: 'pointer',
+                flexShrink: 0
+              }}
+              title="무전기"
+            >
+              <Radio size={12} color={isWalkieOn ? '#34d399' : '#94a3b8'} />
+              <span>{isWalkieOn ? '무전ON' : '무전'}</span>
+              {isWalkieOn && (
+                <span style={{
+                  width: '5px',
+                  height: '5px',
+                  borderRadius: '9999px',
+                  backgroundColor: '#10b981',
+                  boxShadow: '0 0 5px #10b981'
+                }} />
+              )}
+            </button>
+
+            {/* ✨ 기연 렌탈 GEMS AI 음성비서 버튼 */}
+            <button
+              type="button"
+              onClick={onOpenGems}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '3px',
+                fontSize: '11px',
+                fontWeight: '800',
+                padding: '5px 7px',
+                borderRadius: '8px',
+                backgroundColor: 'rgba(2, 132, 199, 0.25)',
+                border: '1px solid #38bdf8',
+                color: '#38bdf8',
+                cursor: 'pointer',
+                flexShrink: 0
+              }}
+              title="GEMS AI 음성 비서"
+            >
+              <Sparkles size={12} color="#38bdf8" />
+              <span>AI비서</span>
+            </button>
+
+            {/* 로그아웃 버튼 */}
+            <button
+              onClick={logout}
+              style={{
+                padding: '6px',
+                borderRadius: '8px',
+                backgroundColor: '#1e293b',
+                border: '1px solid #334155',
+                color: '#94a3b8',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0
+              }}
+              title="로그아웃"
+            >
+              <LogOut size={13} />
+            </button>
           </div>
         </div>
 
-        <div 
-          style={{ 
-            display: 'flex', 
-            alignItems: 'center', 
-            gap: '4px', 
-            flexShrink: 1,
-            minWidth: 0,
-            overflowX: 'auto',
-            scrollbarWidth: 'none',
-            msOverflowStyle: 'none',
-            WebkitOverflowScrolling: 'touch',
-            touchAction: 'pan-x'
-          }}
-          className="scrollbar-none"
-        >
-          {/* 🔄 화면 새로고침 버튼 (헌장 3.1 무수식어 건조한 명사) */}
-          <button
-            type="button"
-            onClick={handleRefresh}
-            disabled={isRefreshing}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '4px',
-              fontSize: '11px',
-              fontWeight: '600',
-              padding: '6px 8px',
-              borderRadius: '10px',
-              backgroundColor: '#1e293b',
-              border: '1px solid #334155',
-              color: '#38bdf8',
-              cursor: 'pointer',
-              flexShrink: 0
-            }}
-            title="새로고침"
-          >
-            <RotateCw 
-              size={13} 
-              style={{
-                transition: 'transform 0.4s ease',
-                transform: isRefreshing ? 'rotate(360deg)' : 'none'
-              }} 
-              color="#38bdf8" 
-            />
-            <span>새로고침</span>
-          </button>
-
-          {/* 📻 현장 무전기 (PTT) 버튼 */}
-          <button
-            type="button"
-            onClick={onOpenWalkieTalkie}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '4px',
-              fontSize: '11px',
-              fontWeight: '700',
-              padding: '6px 8px',
-              borderRadius: '10px',
-              backgroundColor: isWalkieOn ? 'rgba(16, 185, 129, 0.2)' : '#1e293b',
-              border: isWalkieOn ? '1px solid #10b981' : '1px solid #334155',
-              color: isWalkieOn ? '#34d399' : '#cbd5e1',
-              cursor: 'pointer',
-              flexShrink: 0
-            }}
-            title="무전기"
-          >
-            <Radio size={13} color={isWalkieOn ? '#34d399' : '#94a3b8'} />
-            <span>{isWalkieOn ? '무전ON' : '무전'}</span>
-            {isWalkieOn && (
-              <span style={{
-                width: '5px',
-                height: '5px',
-                borderRadius: '9999px',
-                backgroundColor: '#10b981',
-                boxShadow: '0 0 5px #10b981'
-              }} />
-            )}
-          </button>
-
-          {/* ✨ 기연 렌탈 GEMS AI 음성비서 버튼 */}
-          <button
-            type="button"
-            onClick={onOpenGems}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '4px',
-              fontSize: '11px',
-              fontWeight: '800',
-              padding: '6px 8px',
-              borderRadius: '10px',
-              backgroundColor: 'rgba(2, 132, 199, 0.25)',
-              border: '1px solid #38bdf8',
-              color: '#38bdf8',
-              cursor: 'pointer',
-              flexShrink: 0
-            }}
-            title="GEMS AI 음성 비서"
-          >
-            <Sparkles size={13} color="#38bdf8" />
-            <span>AI비서</span>
-          </button>
-
-          <button
-            onClick={logout}
-            style={{
-              padding: '7px',
-              borderRadius: '10px',
-              backgroundColor: '#1e293b',
-              border: '1px solid #334155',
-              color: '#94a3b8',
-              cursor: 'pointer',
+        {/* ── 2행: 기연리프트 로고 & 사용자 정보 & PC전환 ── */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+            <div style={{
+              width: '28px',
+              height: '28px',
+              borderRadius: '8px',
+              backgroundColor: deptMode === 'EXECUTIVE' ? '#7c3aed' : '#2563eb',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
+              boxShadow: '0 3px 8px rgba(37, 99, 235, 0.3)',
               flexShrink: 0
-            }}
-            title="로그아웃"
-          >
-            <LogOut size={15} />
-          </button>
+            }}>
+              {deptMode === 'EXECUTIVE' ? (
+                <Crown size={15} color="#ffffff" />
+              ) : (
+                <Wrench size={14} color="#ffffff" />
+              )}
+            </div>
+            <div style={{ minWidth: 0, overflow: 'hidden' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '5px', whiteSpace: 'nowrap' }}>
+                <span style={{ fontSize: '13px', fontWeight: '800', color: '#ffffff', letterSpacing: '-0.02em' }}>기연리프트</span>
+                <span style={{
+                  fontSize: '9px',
+                  fontWeight: '700',
+                  padding: '1px 5px',
+                  borderRadius: '9999px',
+                  backgroundColor: 'rgba(59, 130, 246, 0.2)',
+                  color: '#60a5fa',
+                  border: '1px solid rgba(59, 130, 246, 0.3)',
+                  flexShrink: 0
+                }}>
+                  FIELD
+                </span>
+              </div>
+              <div style={{ fontSize: '10px', color: '#94a3b8', marginTop: '0.5px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {currentUser?.name || '담당자'} ({currentUser?.role === 'ADMIN' ? '최고관리자' : currentUser?.role === 'MECHANIC' ? '정비기사' : '임직원'})
+              </div>
+            </div>
+          </div>
+
+          {_onSwitchToPc && (
+            <button
+              type="button"
+              onClick={_onSwitchToPc}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+                fontSize: '11px',
+                fontWeight: '600',
+                padding: '4px 8px',
+                borderRadius: '8px',
+                backgroundColor: '#1e293b',
+                border: '1px solid #334155',
+                color: '#94a3b8',
+                cursor: 'pointer',
+                flexShrink: 0
+              }}
+              title="PC 화면으로 전환"
+            >
+              <Monitor size={12} />
+              <span>PC모드</span>
+            </button>
+          )}
         </div>
       </header>
 
