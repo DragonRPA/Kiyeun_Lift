@@ -4,13 +4,13 @@ import { useApp } from '../../context/AppContext';
 import { db, Delivery } from '../../services/db';
 import { 
   Truck, Phone, CheckCircle2, Mic, MicOff, FileText, 
-  Sparkles, X, Check, UserCheck, AlertCircle, MessageSquare, Send 
+  Sparkles, X, Check, UserCheck, AlertCircle, MessageSquare, Send, User 
 } from 'lucide-react';
 import { parseDispatchDriverCallTranscript } from '../../services/voiceOrderDraftService';
 import { buildDispatchSmsText, launchDispatchSms } from '../../utils/nativeLauncher';
 
 export const MobileDispatchList: React.FC = () => {
-  const { deliveries, contracts, customers, sites, refreshAllData, showErrorModal } = useApp();
+  const { deliveries, contracts, customers, sites, users, refreshAllData, showErrorModal } = useApp();
   const [filter, setFilter] = useState<'PENDING' | 'DISPATCHED' | 'DELIVERED'>('PENDING');
 
   // 기사 배정 모달 상태
@@ -273,11 +273,30 @@ export const MobileDispatchList: React.FC = () => {
         </button>
       </div>
 
+      {/* 📋 영업 의뢰 배차 대기 ToDo 헤더 배너 */}
+      {filter === 'PENDING' && (
+        <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-bold flex items-center justify-between">
+          <div className="flex items-center gap-1.5">
+            <AlertCircle className="w-4 h-4 text-amber-400 flex-shrink-0" />
+            <span>영업 의뢰 배차 대기 할일 (ToDo): {pendingDeliveries.length}건</span>
+          </div>
+          <span className="text-[11px] font-normal text-amber-200/70">기사 배정 시 자동 완결</span>
+        </div>
+      )}
+
       {/* 배차 목록 피드 */}
       <div className="flex flex-col gap-3">
         {filteredDeliveries.length === 0 ? (
-          <div className="p-12 text-center text-slate-500 text-sm bg-slate-900/50 rounded-2xl border border-slate-800">
-            해당 상태의 배차 건이 없습니다.
+          <div className="p-10 text-center text-slate-400 text-xs bg-slate-900/50 rounded-2xl border border-slate-800 flex flex-col items-center justify-center gap-2">
+            <CheckCircle2 className="w-7 h-7 text-emerald-500" />
+            <span className="font-bold text-slate-300">
+              {filter === 'PENDING' 
+                ? '현재 대기 중인 배차 의뢰가 모두 완료되었습니다. (할일 0건)' 
+                : '해당 상태의 배차 건이 없습니다.'}
+            </span>
+            {filter === 'PENDING' && (
+              <span className="text-[11px] text-slate-500">영업사원의 출고/회수/교환 요청 등록 시 자동 인입됩니다.</span>
+            )}
           </div>
         ) : (
           filteredDeliveries.map((delivery) => (
@@ -293,6 +312,26 @@ export const MobileDispatchList: React.FC = () => {
                   {delivery.loadingDate || delivery.requestDate}
                 </span>
               </div>
+
+              {/* 영업 의뢰자 & 계약 정보 (영업-배차 연계) */}
+              {(() => {
+                const contract = contracts.find(c => c.id === delivery.contractId);
+                const salesperson = users.find(u => u.id === contract?.salespersonId)?.name;
+                if (!salesperson && !contract?.contractNo) return null;
+                return (
+                  <div className="flex items-center justify-between text-xs px-1 text-slate-400">
+                    <span className="flex items-center gap-1">
+                      <User className="w-3.5 h-3.5 text-blue-400" />
+                      의뢰: <strong className="text-white">{salesperson || '영업부'}</strong>
+                    </span>
+                    {contract?.contractNo && (
+                      <span className="text-[11px] text-slate-500 font-mono">
+                        계약: {contract.contractNo}
+                      </span>
+                    )}
+                  </div>
+                );
+              })()}
 
               {/* 상하차지 경로 */}
               <div className="flex flex-col gap-2 p-3 rounded-xl bg-slate-950 border border-slate-800/80">
