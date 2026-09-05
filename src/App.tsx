@@ -51,6 +51,7 @@ import { MirrorSyncProgressToast } from './components/MirrorSyncProgressToast';
 import { MobileApp } from './mobile/MobileApp';
 import { MobileWalkieTalkieModal } from './mobile/components/MobileWalkieTalkieModal';
 import { walkieService } from './services/walkieTalkieService';
+import { ErrorBoundary } from './components/ErrorBoundary';
 
 export interface SubMenuItem {
   id: string;
@@ -912,13 +913,15 @@ const App: React.FC = () => {
       <MirrorSyncProgressToast />
 
       {/* 📻 PC 데스크톱 무전기 (PTT & STT 대화록) 모달 */}
-      <MobileWalkieTalkieModal
-        isOpen={isWalkieModalOpen}
-        onClose={() => {
-          setIsWalkieModalOpen(false);
-          setIsWalkieOn(walkieService.getIsPowerOn());
-        }}
-      />
+      <ErrorBoundary fallbackTitle="무전기 오류 복구" isModal onClose={() => setIsWalkieModalOpen(false)}>
+        <MobileWalkieTalkieModal
+          isOpen={isWalkieModalOpen}
+          onClose={() => {
+            setIsWalkieModalOpen(false);
+            setIsWalkieOn(walkieService.getIsPowerOn());
+          }}
+        />
+      </ErrorBoundary>
 
     </div>
   );

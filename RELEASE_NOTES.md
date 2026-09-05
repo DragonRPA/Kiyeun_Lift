@@ -1,3 +1,21 @@
+## [v1.3.0.Build.158] - 2026-09-05 12:05
+
+### 🛡️ 모바일 무전기 React Hook 불일치 백화현상(WSOD) 해소 및 전사 ErrorBoundary 복원 아키텍처 정립
+- **모바일 무전기 React Hook 규칙 위반(Invariant #310) 원천 해소 (`MobileWalkieTalkieModal.tsx`)**:
+  - 모바일 상단 헤더의 [무전] 버튼 터치 시 화면이 순백색으로 변하고 먹통이 되던 백화현상(White Screen of Death) 해결.
+  - 컴포넌트 246행에 위치하던 조건부 조기 종료(`if (!isOpen) return null;`)를 제거하고, 405행 `useEffect` 내부에서 `if (!isOpen) return;` 방어 가드를 적용한 뒤 모든 Hook 선언 완료 후(JSX 직전 412행)로 `return null` 이동.
+  - `isOpen` 상태(`false` vs `true`)와 상관없이 컴포넌트 내 39개 모든 Hook이 항상 동일한 순서로 호출되도록 보장하여 React 렌더링 충돌 영구 제거.
+  - `fallbackCh` 도입으로 `currentChInfo`가 항상 안전한 채널 객체를 반환하도록 방어.
+  - 시간 포맷팅 예외를 차단하는 `formatSafeTime` 헬퍼 함수 적용 및 `localStorage` try-catch 방어막 구축.
+- **전사 표준 `ErrorBoundary` 컴포넌트 구축 (`ErrorBoundary.tsx`)**:
+  - 자식 컴포넌트에서 예외가 발생하더라도 전체 페이지가 언마운트되는 화이트아웃을 원천 차단하는 React ErrorBoundary 클래스 컴포넌트 신규 구현.
+  - 오류 발생 시 "화면 일시 오류 복구" 안내 카드 표출 및 `[화면 새로고침]`, `[무전기 캐시 초기화 및 재접속]` 원클릭 복구 버튼 제공.
+- **루트 및 모달 단위 ErrorBoundary 격리 적용 (`main.tsx`, `MobileApp.tsx`, `App.tsx`)**:
+  - 최상위 루트 `<App />`을 에러 바운더리로 감싸 전역 런타임 크래시 방어.
+  - 모바일 및 데스크톱 `<MobileWalkieTalkieModal>`, `<MobileGemsAgentModal>`을 컴포넌트 단위 에러 바운더리로 격리하여 모달 내 예외가 본체 화면에 영향을 주지 않도록 격리.
+- **0 Type Error 빌드 무결성 검증 완료**:
+  - `tsc -b && vite build` 0 Error 통과 및 Vite SSR 가상 렌더링 라이프사이클(`isOpen: false` ➔ `isOpen: true` ➔ `isOpen: false`) 무결성 검증 완료.
+
 ## [v1.3.0.Build.157] - 2026-09-05 11:35
 
 ### 🌤️ 모바일 모드 좌상단 실시간 현장 날씨 위젯 탑재 및 헤더 2행 레이아웃 개편

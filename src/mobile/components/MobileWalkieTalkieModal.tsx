@@ -60,7 +60,13 @@ export const MobileWalkieTalkieModal: React.FC<MobileWalkieTalkieModalProps> = (
   const isAtBottomRef = useRef<boolean>(true);
 
   // 🛠️ 디버그 로그 표시 토글 (기본값: OFF — 필요 시 켤 수 있음)
-  const [showDebugLogs, setShowDebugLogs] = useState<boolean>(() => localStorage.getItem('walkie_show_debug') === 'true');
+  const [showDebugLogs, setShowDebugLogs] = useState<boolean>(() => {
+    try {
+      return typeof window !== 'undefined' && window.localStorage && localStorage.getItem('walkie_show_debug') === 'true';
+    } catch {
+      return false;
+    }
+  });
   // 🎙️ STT 엔진 상태 ('GROQ' | 'BROWSER')
   const [sttEngine, setSttEngine] = useState<WalkieSttEngine>(() => walkieService.getSttEngine());
 
@@ -147,7 +153,11 @@ export const MobileWalkieTalkieModal: React.FC<MobileWalkieTalkieModalProps> = (
   const handleToggleDebug = () => {
     setShowDebugLogs(prev => {
       const next = !prev;
-      localStorage.setItem('walkie_show_debug', String(next));
+      try {
+        if (typeof window !== 'undefined' && window.localStorage) {
+          localStorage.setItem('walkie_show_debug', String(next));
+        }
+      } catch {}
       return next;
     });
   };
@@ -242,8 +252,6 @@ export const MobileWalkieTalkieModal: React.FC<MobileWalkieTalkieModalProps> = (
       if (durationTimerRef.current) clearInterval(durationTimerRef.current);
     };
   }, []);
-
-  if (!isOpen) return null;
 
   // 전원 토글
   const handleTogglePower = () => {
@@ -389,8 +397,34 @@ export const MobileWalkieTalkieModal: React.FC<MobileWalkieTalkieModalProps> = (
     }
   };
 
-  const accessibleChannels = channels;
-  const currentChInfo = accessibleChannels.find(c => c.id === currentChannel) || accessibleChannels[0] || DEFAULT_WALKIE_CHANNELS[0];
+  const formatSafeTime = (dateStr?: string, includeSeconds = false) => {
+    if (!dateStr) return '';
+    try {
+      const d = new Date(dateStr);
+      if (isNaN(d.getTime())) return '';
+      return d.toLocaleTimeString('ko-KR', {
+        hour: '2-digit',
+        minute: '2-digit',
+        ...(includeSeconds ? { second: '2-digit' } : {})
+      });
+    } catch {
+      return '';
+    }
+  };
+
+  const accessibleChannels = channels || [];
+  const fallbackCh: WalkieChannel = DEFAULT_WALKIE_CHANNELS[0] || {
+    id: 'DISPATCH',
+    name: '출고배차',
+    code: 'CH-01',
+    desc: '주기장 상차 및 배차 기사 통신망',
+    createdById: 'system',
+    createdByName: '시스템',
+    memberIds: [],
+    createdAt: '2026-01-01T00:00:00Z',
+    isDefault: true
+  };
+  const currentChInfo = (accessibleChannels && accessibleChannels.find(c => c.id === currentChannel)) || (accessibleChannels && accessibleChannels[0]) || fallbackCh;
   const todayStr = walkieService.getTodayDateStr();
 
   // 다른 동료가 현재 채널에서 말하고 있는지 여부
@@ -401,14 +435,18 @@ export const MobileWalkieTalkieModal: React.FC<MobileWalkieTalkieModalProps> = (
     (talkingStatus.channel === currentChannel)
   );
 
-  // 현재 채널이 접근 가능 목록에 없으면 첫 번째 유효 채널로 자동 전환
+  // 현재 채널이 접근 가능 목록에 없으면 첫 번째 유효 채널로 자동 전환 (모든 Hook은 조건부 return 이전에 항상 동일한 순서로 호출)
   useEffect(() => {
+    if (!isOpen) return;
     if (accessibleChannels.length > 0 && !accessibleChannels.some(c => c.id === currentChannel)) {
       const fallback = accessibleChannels[0].id;
       setCurrentChannel(fallback);
       walkieService.setChannel(fallback);
     }
-  }, [accessibleChannels, currentChannel]);
+  }, [isOpen, accessibleChannels, currentChannel]);
+
+  // ── Hook 규칙 준수: 모든 Hook 등록 후 최종적으로 isOpen 검사하여 언마운트 ──
+  if (!isOpen) return null;
 
   return (
     <div 
@@ -869,7 +907,7 @@ export const MobileWalkieTalkieModal: React.FC<MobileWalkieTalkieModalProps> = (
                   {currentChMessages.slice().reverse().map(msg => {
                     // ── [DEBUG] Console-style debug log entry ──
                     if (msg.isDebug) {
-                      const ts = new Date(msg.createdAt).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                      const ts = formatSafeTime(msg.createdAt, true);
                       const isErr = msg.textTranscript?.includes('ERROR') || msg.textTranscript?.includes('FAIL') || msg.textTranscript?.includes('EXCEPTION');
                       const isWarn = msg.textTranscript?.includes('WARNING') || msg.textTranscript?.includes('skipped');
                       const isOk = msg.textTranscript?.includes('OK') || msg.textTranscript?.includes('done') || msg.textTranscript?.includes('ready') || msg.textTranscript?.includes('sent') || msg.textTranscript?.includes('granted') || msg.textTranscript?.includes('started');
@@ -897,7 +935,7 @@ export const MobileWalkieTalkieModal: React.FC<MobileWalkieTalkieModalProps> = (
 
                     const isPlaying = playingMessageId === msg.id;
                     const isMine = msg.senderId === currentUser?.id;
-                    const timeStr = new Date(msg.createdAt).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
+                    const timeStr = formatSafeTime(msg.createdAt, false);
                     return (
 
                       <div
@@ -1247,7 +1285,7 @@ export const MobileWalkieTalkieModal: React.FC<MobileWalkieTalkieModalProps> = (
                 [...currentChMessages].reverse().map(msg => {
                   // ── [DEBUG] Console-style debug log entry ──
                   if (msg.isDebug) {
-                    const ts = new Date(msg.createdAt).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                    const ts = formatSafeTime(msg.createdAt, true);
                     const isErr = msg.textTranscript?.includes('ERROR') || msg.textTranscript?.includes('FAIL') || msg.textTranscript?.includes('EXCEPTION');
                     const isWarn = msg.textTranscript?.includes('WARNING') || msg.textTranscript?.includes('skipped');
                     const isOk = msg.textTranscript?.includes('OK') || msg.textTranscript?.includes('done') || msg.textTranscript?.includes('ready') || msg.textTranscript?.includes('sent') || msg.textTranscript?.includes('granted') || msg.textTranscript?.includes('started');
@@ -1275,7 +1313,7 @@ export const MobileWalkieTalkieModal: React.FC<MobileWalkieTalkieModalProps> = (
 
                   const isPlaying = playingMessageId === msg.id;
                   const isMine = msg.senderId === currentUser?.id;
-                  const timeStr = new Date(msg.createdAt).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
+                  const timeStr = formatSafeTime(msg.createdAt, false);
 
                   return (
                     <div

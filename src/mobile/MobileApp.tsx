@@ -23,6 +23,7 @@ import { PwaInstallBanner } from './components/PwaInstallBanner';
 import { MobileWalkieTalkieModal } from './components/MobileWalkieTalkieModal';
 import { MobileGemsAgentModal } from './components/MobileGemsAgentModal';
 import { walkieService } from '../services/walkieTalkieService';
+import { ErrorBoundary } from '../components/ErrorBoundary';
 import './mobile.css';
 
 interface MobileAppProps {
@@ -319,20 +320,24 @@ export const MobileApp: React.FC<MobileAppProps> = ({ onSwitchToPc }) => {
       )}
 
       {/* 📻 현장 무전기 (PTT) 모달 */}
-      <MobileWalkieTalkieModal
-        isOpen={isWalkieModalOpen}
-        onClose={() => setIsWalkieModalOpen(false)}
-        onNavigateToDispatchOrder={() => {
-          setIsWalkieModalOpen(false);
-          handleTabChange('sales_order');
-        }}
-      />
+      <ErrorBoundary fallbackTitle="무전기 오류 복구" isModal onClose={() => setIsWalkieModalOpen(false)}>
+        <MobileWalkieTalkieModal
+          isOpen={isWalkieModalOpen}
+          onClose={() => setIsWalkieModalOpen(false)}
+          onNavigateToDispatchOrder={() => {
+            setIsWalkieModalOpen(false);
+            handleTabChange('sales_order');
+          }}
+        />
+      </ErrorBoundary>
 
       {/* ✨ 기연 렌탈 GEMS AI 비서 모달 */}
-      <MobileGemsAgentModal
-        isOpen={isGemsModalOpen}
-        onClose={() => setIsGemsModalOpen(false)}
-      />
+      <ErrorBoundary fallbackTitle="AI 비서 오류 복구" isModal onClose={() => setIsGemsModalOpen(false)}>
+        <MobileGemsAgentModal
+          isOpen={isGemsModalOpen}
+          onClose={() => setIsGemsModalOpen(false)}
+        />
+      </ErrorBoundary>
     </div>
   );
 };

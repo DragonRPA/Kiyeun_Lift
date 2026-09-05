@@ -1,6 +1,21 @@
 # 개발 요구사항 임시 기록 (dev_temp.md)
 
-## [완료] 모바일 모드 좌상단 실시간 날씨 위젯 탑재 (Build.157)
+## [완료] 모바일 무전기 React Hook 불일치 백화현상(WSOD) 해소 및 ErrorBoundary 아키텍처 정립 (Build.158)
+- **요구사항**:
+  "핸드폰에서 무전기 켰더니 화면이 하얗게 변하고 아무것도 안보임"
+- **조치 내역**:
+  1. `src/mobile/components/MobileWalkieTalkieModal.tsx`:
+     - 246행 조기 리턴(`if (!isOpen) return null;`) 제거 및 모든 Hook 선언 완료 후(JSX 직전 412행)로 이동.
+     - 405행 채널 동적 전환 `useEffect` 내부에 `if (!isOpen) return;` 방어 가드 추가.
+     - `isOpen` 여부와 무관하게 컴포넌트 내 39개 Hook이 항상 동일한 순서로 렌더링되도록 보장하여 React Invariant #310 크래시 원천 해소.
+     - `formatSafeTime` 헬퍼 함수 도입 및 `localStorage` try-catch 방어막 적용.
+     - `fallbackCh` 도입으로 `currentChInfo` undefined 참조 크래시 방지.
+  2. `src/components/ErrorBoundary.tsx`:
+     - 전사 표준 에러 바운더리 컴포넌트 신규 구축 ("화면 일시 오류 복구" 뷰, `[화면 새로고침]`, `[무전기 캐시 초기화 및 재접속]`).
+  3. `src/main.tsx`, `src/mobile/MobileApp.tsx`, `src/App.tsx`:
+     - 루트 `<App />` 및 `<MobileWalkieTalkieModal>`, `<MobileGemsAgentModal>` 에러 바운더리 래핑 적용.
+  4. `npm run build` 0 Type Error 무결성 통과 및 SSR 가상 렌더링 라이프사이클 검증 완료.
+
 - **요구사항**:
   "핸드폰모드 좌상단에 날씨위젯 추가"
 - **조치 내역**:
