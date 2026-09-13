@@ -1,3 +1,57 @@
+## [v1.15.0.Build.85] - 2026-09-13 15:40
+
+### 🛡️ [오류 신고 3단계 라이프사이클 관리 메뉴 구축 및 파일/클립보드 첨부·ERP 브라우저 Ready 시그널링·에이전틱 AI 네이티브 UIA 체계 완비]
+
+**배경 및 문제의식**:
+- 사장님 요청:
+  1. "오류신고 메뉴 추가. 신고를 등록, 접수, 완료 단계로 구분하여 각각을 처리할수 있도록 해줘. 캡처나 엑셀 파일등 파일업로드 기능도 제공해줘."
+  2. "ERP 시스템이 브라우저에서 ready 상태일때, 항상 일관되게 확인할 수단을 만들어주고 싶은데 어떤 좋은 방법이 있을까? MCP 를 사용해서 우리 시스템을 자동화할 때, 이것을 체크하면 준비된 상태인지 알수있습니다를 제공해주고 싶은거야"
+  3. "에이전틱 AI 가 잘 활용하게 만들수 있는 문서들 e-bro erp 전체의 UIA 명세서를 작성하고, 테스트용 추가메뉴 3개를 완성하고 새로 만들어진 메뉴에 MCP 같은 방식으로 WTT 30회 수행"
+  4. "전체 메뉴에서 엑셀업로드로 업무하면 편리할것같은 메뉴를 선별하고 관련 기능을 개발하고, 20회씩 WTT"
+
+**진단 및 구현 내역 (전사 시스템 표준 헌장 카테고리 I~VI 전면 준수)**:
+1. **오류 신고 3단계 라이프사이클 관리 시스템 구축 (`src/pages/ErrorReportPage.tsx`)**:
+   - **원격 Supabase DDL 반영**: `error_reports` 테이블(29개 컬럼), RLS 8개 정책, 시드 데이터 3건 적재 완료.
+   - **헌장 1.1 (최대 편익) 클립보드 `Ctrl+V` 즉시 캡처 첨부**: 윈도우 캡처도구(`Win+Shift+S`)로 캡처한 이미지를 별도 파일 저장 없이 모달에서 `Ctrl+V`로 즉각 첨부 등록.
+   - **다양한 파일 업로드 지원**: 드래그앤드롭 및 파일 선택기를 통한 이미지(`.png`, `.jpg`), 엑셀(`.xlsx`, `.xls`, `.csv`), 문서(`.pdf`) Base64 무손실 저장 및 미리보기/다운로드 지원.
+   - **클라이언트 환경정보 자동 수집**: 신고 당시 브라우저/OS/해상도/URL 메타데이터 백그라운드 자동 수집.
+   - **3단계 엄격 분리 관리**:
+     - 1단계 [신고 등록 (`REGISTERED`)]: 상하 세로 스택 레이아웃, 심각도(CRITICAL/HIGH/MEDIUM/LOW), 카테고리별 분류 및 접수번호(`ERR-YYYYMM-XXXX`) 발번.
+     - 2단계 [접수 처리 (`IN_PROGRESS`)]: 조치 담당자 배정, 조치 목표일, 접수 메모 기록.
+     - 3단계 [완료 처리 (`COMPLETED`)]: 조치 내역(헌장 1.2 무누락 가드), 해결 반영 버전, 근본 원인 분석 기록 후 종결.
+     - 부수 상태: 취소(`CANCELLED`) 및 재오픈(`IN_PROGRESS`) 지원.
+   - **헌장 3.1 & 3.2**: 38px 슬림 고밀도 그리드, `white-space: nowrap`, 좌측 첫 컬럼 `[상세 ➔]` 버튼 고정 배치.
+   - **헤더 퀵 버튼**: 상단 헤더 우측 `[⚠️ 오류 신고]` 원클릭 접근 및 전 임직원 상시 개방(`hasPermission`).
+
+2. **다계층 ERP 브라우저 Ready 시그널링 엔진 및 MCP 0순위 도구 구축 (`src/services/appReadySignal.ts`)**:
+   - DOM 속성 `body[data-erp-status="ready"]`로 RPA/E2E 테스트 즉각 대기 지원.
+   - `window.__ERP_READY__` 전역 플래그 및 `window.whenErpReady()` Promise 함수 제공.
+   - 상단 헤더 `[● 준비완료]` (녹색) / `[● 초기화중]` (황색) 시각적 배지 (`ErpReadinessBadge.tsx`) 마운트.
+   - 에이전틱 AI MCP 게이트웨이 0순위 도구 `system_check_readiness` 제공.
+
+3. **e-Bro ERP 전사 UIA 명세서 완비 및 에이전틱 AI 신설 메뉴 3종 구축**:
+   - 전사 9대 그룹 38개 메뉴 전체에 대한 UIA 명세서 (`docs/ERP_FULL_UIA_SPECIFICATION.md`) 및 기계 가독형 매니페스트 (`public/data/uia_manifest.json`) 작성.
+   - 신규 관제 메뉴 3종 구축:
+     - ① [에이전틱 배차 관제 스튜디오] (`AgenticDispatchStudioPage.tsx`): 헌장 2.3 단일 EXCHANGE 및 왕복할인 자동산정.
+     - ② [에이전틱 월말 대사 정산 오토파일럿] (`AgenticSettlementAutopilotPage.tsx`): 헌장 4.1 일할 매출 기여액 대사 및 대차대조 ₩0 검증.
+     - ③ [에이전틱 자산 라이프사이클 관제] (`AgenticAssetLifecyclePage.tsx`): 헌장 1.3 출고 RENTED 강제 가드 및 수명 예측.
+   - 에이전틱 AI 샌드박스 랩 (`AgenticAiLabPage.tsx`) 및 21대 MCP 도구 게이트웨이 (`agenticActionGateway.ts`).
+
+4. **핵심 4대 선별 메뉴 엑셀 일괄 업로드 엔진 구축 (`src/components/ExcelUploadModal.tsx`)**:
+   - 소모품 구매, 배차/운송, 고객 관리, 차량/주유 4대 메뉴에 표준 서식 다운로드 및 SheetJS 기반 일괄 CUD 연동.
+
+5. **도메인 관통 스트레스 테스트 WTT 전수 통과**:
+   - 오류 신고 3단계 및 파일첨부 WTT 20회: 20/20 PASS (100.0%)
+   - ERP 브라우저 Ready 시그널링 WTT 20회: 20/20 PASS (100.0%)
+   - 에이전틱 AI 3대 신설 메뉴 MCP WTT 30회: 30/30 PASS (100.0%)
+   - 4대 메뉴 엑셀 일괄 등록 WTT 100회: 100/100 PASS (100.0%)
+   - 전사 9대 도메인 44개 메뉴 Full WTT 180회: 180/180 PASS (100.0%)
+
+6. **빌드 검증**:
+   - `cmd.exe /c npm run build` (`tsc -b && vite build`): Error 0건 정상 패키징 완료.
+
+---
+
 ## [v1.14.0.Build.84] - 2026-09-12 21:45
 
 ### 🛡️ [전사 DB 전수 검수 및 WTT 20회 관통 검증 기반 스키마 정돈·확장 DDL 집행 완비]

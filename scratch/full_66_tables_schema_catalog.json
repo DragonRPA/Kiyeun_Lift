@@ -1,0 +1,7532 @@
+{
+  "annual_leave_quotas": [
+    {
+      "table_name": "annual_leave_quotas",
+      "column_name": "id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "annual_leave_quotas",
+      "column_name": "userId",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "annual_leave_quotas",
+      "column_name": "year",
+      "data_type": "integer",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "annual_leave_quotas",
+      "column_name": "baseDays",
+      "data_type": "double precision",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "annual_leave_quotas",
+      "column_name": "bonusDays",
+      "data_type": "double precision",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "annual_leave_quotas",
+      "column_name": "totalDays",
+      "data_type": "double precision",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "annual_leave_quotas",
+      "column_name": "usedDays",
+      "data_type": "double precision",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "annual_leave_quotas",
+      "column_name": "remainingDays",
+      "data_type": "double precision",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "annual_leave_quotas",
+      "column_name": "memo",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "annual_leave_quotas",
+      "column_name": "createdAt",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "annual_leave_quotas",
+      "column_name": "updatedAt",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "annual_leave_quotas",
+      "column_name": "tenant_id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "annual_leave_quotas",
+      "column_name": "periodStart",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "annual_leave_quotas",
+      "column_name": "periodEnd",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "annual_leave_quotas",
+      "column_name": "grantedDays",
+      "data_type": "double precision",
+      "is_nullable": "YES"
+    }
+  ],
+  "asset_inout_logs": [
+    {
+      "table_name": "asset_inout_logs",
+      "column_name": "id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "asset_inout_logs",
+      "column_name": "assetId",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "asset_inout_logs",
+      "column_name": "assetNo",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "asset_inout_logs",
+      "column_name": "modelName",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "asset_inout_logs",
+      "column_name": "type",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "asset_inout_logs",
+      "column_name": "customerId",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "asset_inout_logs",
+      "column_name": "customerName",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "asset_inout_logs",
+      "column_name": "siteId",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "asset_inout_logs",
+      "column_name": "siteName",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "asset_inout_logs",
+      "column_name": "deliveryId",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "asset_inout_logs",
+      "column_name": "repairId",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "asset_inout_logs",
+      "column_name": "maintenanceScore",
+      "data_type": "integer",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "asset_inout_logs",
+      "column_name": "memo",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "asset_inout_logs",
+      "column_name": "eventDate",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "asset_inout_logs",
+      "column_name": "createdAt",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "asset_inout_logs",
+      "column_name": "updatedAt",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "asset_inout_logs",
+      "column_name": "inboundNo",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "asset_inout_logs",
+      "column_name": "defectsJson",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "asset_inout_logs",
+      "column_name": "tenant_id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "asset_inout_logs",
+      "column_name": "note",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "asset_inout_logs",
+      "column_name": "date",
+      "data_type": "text",
+      "is_nullable": "YES"
+    }
+  ],
+  "assets": [
+    {
+      "table_name": "assets",
+      "column_name": "id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "assets",
+      "column_name": "assetNo",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "assets",
+      "column_name": "vendorAssetNo",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "assets",
+      "column_name": "serialNo",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "assets",
+      "column_name": "modelName",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "assets",
+      "column_name": "manufacturer",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "assets",
+      "column_name": "manufactureYear",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "assets",
+      "column_name": "ownerType",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "assets",
+      "column_name": "vendorId",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "assets",
+      "column_name": "supplier",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "assets",
+      "column_name": "rentStart",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "assets",
+      "column_name": "rentEnd",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "assets",
+      "column_name": "actualRentReturnDate",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "assets",
+      "column_name": "monthlyRentFee",
+      "data_type": "double precision",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "assets",
+      "column_name": "dailyRentFee",
+      "data_type": "double precision",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "assets",
+      "column_name": "currentCustomerId",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "assets",
+      "column_name": "currentSiteId",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "assets",
+      "column_name": "contractStart",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "assets",
+      "column_name": "contractEnd",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "assets",
+      "column_name": "acquisitionDate",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "assets",
+      "column_name": "acquisitionPrice",
+      "data_type": "double precision",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "assets",
+      "column_name": "depreciationMonths",
+      "data_type": "integer",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "assets",
+      "column_name": "residualValueRate",
+      "data_type": "double precision",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "assets",
+      "column_name": "accumDepreciation",
+      "data_type": "double precision",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "assets",
+      "column_name": "bookValue",
+      "data_type": "double precision",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "assets",
+      "column_name": "cumRentalFee",
+      "data_type": "double precision",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "assets",
+      "column_name": "cumRepairCost",
+      "data_type": "double precision",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "assets",
+      "column_name": "status",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "assets",
+      "column_name": "memo",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "assets",
+      "column_name": "note",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "assets",
+      "column_name": "createdAt",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "assets",
+      "column_name": "updatedAt",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "assets",
+      "column_name": "tenant_id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "assets",
+      "column_name": "maintenanceScore",
+      "data_type": "integer",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "assets",
+      "column_name": "billingDay",
+      "data_type": "integer",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "assets",
+      "column_name": "monthlyRentalFee",
+      "data_type": "double precision",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "assets",
+      "column_name": "dailyRentalFee",
+      "data_type": "double precision",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "assets",
+      "column_name": "renter",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "assets",
+      "column_name": "disposalDate",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "assets",
+      "column_name": "disposalPrice",
+      "data_type": "double precision",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "assets",
+      "column_name": "buyer",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "assets",
+      "column_name": "memo1",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "assets",
+      "column_name": "memo2",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "assets",
+      "column_name": "safetyInspectionUrl",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "assets",
+      "column_name": "preDeliveryChecklistUrl",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "assets",
+      "column_name": "fullDefectSummary",
+      "data_type": "text",
+      "is_nullable": "YES"
+    }
+  ],
+  "bank_initial_balances": [
+    {
+      "table_name": "bank_initial_balances",
+      "column_name": "id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "bank_initial_balances",
+      "column_name": "bankName",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "bank_initial_balances",
+      "column_name": "accountNumber",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "bank_initial_balances",
+      "column_name": "initialBalance",
+      "data_type": "double precision",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "bank_initial_balances",
+      "column_name": "asOfDate",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "bank_initial_balances",
+      "column_name": "createdAt",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "bank_initial_balances",
+      "column_name": "updatedAt",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "bank_initial_balances",
+      "column_name": "tenant_id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    }
+  ],
+  "bank_matching_rules": [
+    {
+      "table_name": "bank_matching_rules",
+      "column_name": "id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "bank_matching_rules",
+      "column_name": "senderName",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "bank_matching_rules",
+      "column_name": "customerId",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "bank_matching_rules",
+      "column_name": "createdAt",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "bank_matching_rules",
+      "column_name": "updatedAt",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "bank_matching_rules",
+      "column_name": "tenant_id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    }
+  ],
+  "bank_transactions": [
+    {
+      "table_name": "bank_transactions",
+      "column_name": "id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "bank_transactions",
+      "column_name": "senderName",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "bank_transactions",
+      "column_name": "depositAmount",
+      "data_type": "double precision",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "bank_transactions",
+      "column_name": "withdrawAmount",
+      "data_type": "double precision",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "bank_transactions",
+      "column_name": "memo",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "bank_transactions",
+      "column_name": "matchedBillingId",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "bank_transactions",
+      "column_name": "matchingType",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "bank_transactions",
+      "column_name": "transactionDate",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "bank_transactions",
+      "column_name": "createdAt",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "bank_transactions",
+      "column_name": "updatedAt",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "bank_transactions",
+      "column_name": "senderAccount",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "bank_transactions",
+      "column_name": "customerId",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "bank_transactions",
+      "column_name": "isDeposit",
+      "data_type": "boolean",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "bank_transactions",
+      "column_name": "tenant_id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "bank_transactions",
+      "column_name": "bankName",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "bank_transactions",
+      "column_name": "accountNumber",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "bank_transactions",
+      "column_name": "summary",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "bank_transactions",
+      "column_name": "counterparty",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "bank_transactions",
+      "column_name": "balance",
+      "data_type": "double precision",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "bank_transactions",
+      "column_name": "branchName",
+      "data_type": "text",
+      "is_nullable": "YES"
+    }
+  ],
+  "billing_details": [
+    {
+      "table_name": "billing_details",
+      "column_name": "id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "billing_details",
+      "column_name": "billingId",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "billing_details",
+      "column_name": "contractAssetId",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "billing_details",
+      "column_name": "assetId",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "billing_details",
+      "column_name": "itemName",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "billing_details",
+      "column_name": "quantity",
+      "data_type": "double precision",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "billing_details",
+      "column_name": "unitPrice",
+      "data_type": "double precision",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "billing_details",
+      "column_name": "amount",
+      "data_type": "double precision",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "billing_details",
+      "column_name": "description",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "billing_details",
+      "column_name": "createdAt",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "billing_details",
+      "column_name": "updatedAt",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "billing_details",
+      "column_name": "receivableId",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "billing_details",
+      "column_name": "internalDescription",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "billing_details",
+      "column_name": "displayName",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "billing_details",
+      "column_name": "tenant_id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    }
+  ],
+  "billing_invoices": [
+    {
+      "table_name": "billing_invoices",
+      "column_name": "id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "billing_invoices",
+      "column_name": "status",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "billing_invoices",
+      "column_name": "memo",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "billing_invoices",
+      "column_name": "customId",
+      "data_type": "character varying",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "billing_invoices",
+      "column_name": "customerId",
+      "data_type": "character varying",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "billing_invoices",
+      "column_name": "billingYm",
+      "data_type": "character varying",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "billing_invoices",
+      "column_name": "siteId",
+      "data_type": "character varying",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "billing_invoices",
+      "column_name": "totalAmount",
+      "data_type": "numeric",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "billing_invoices",
+      "column_name": "vatAmount",
+      "data_type": "numeric",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "billing_invoices",
+      "column_name": "grandTotal",
+      "data_type": "numeric",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "billing_invoices",
+      "column_name": "dueDate",
+      "data_type": "date",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "billing_invoices",
+      "column_name": "issuedAt",
+      "data_type": "timestamp with time zone",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "billing_invoices",
+      "column_name": "createdAt",
+      "data_type": "timestamp with time zone",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "billing_invoices",
+      "column_name": "updatedAt",
+      "data_type": "timestamp with time zone",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "billing_invoices",
+      "column_name": "tenant_id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    }
+  ],
+  "billings": [
+    {
+      "table_name": "billings",
+      "column_name": "id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "billings",
+      "column_name": "customerId",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "billings",
+      "column_name": "billingYm",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "billings",
+      "column_name": "totalAmount",
+      "data_type": "double precision",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "billings",
+      "column_name": "paidAmount",
+      "data_type": "double precision",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "billings",
+      "column_name": "status",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "billings",
+      "column_name": "billingDate",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "billings",
+      "column_name": "createdAt",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "billings",
+      "column_name": "updatedAt",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "billings",
+      "column_name": "contractId",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "billings",
+      "column_name": "invoiceId",
+      "data_type": "character varying",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "billings",
+      "column_name": "tenant_id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "billings",
+      "column_name": "billingType",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "billings",
+      "column_name": "rejectReason",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "billings",
+      "column_name": "details",
+      "data_type": "jsonb",
+      "is_nullable": "YES"
+    }
+  ],
+  "call_pipeline_logs": [
+    {
+      "table_name": "call_pipeline_logs",
+      "column_name": "id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "call_pipeline_logs",
+      "column_name": "call_upload_id",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "call_pipeline_logs",
+      "column_name": "draft_id",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "call_pipeline_logs",
+      "column_name": "event_type",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "call_pipeline_logs",
+      "column_name": "level",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "call_pipeline_logs",
+      "column_name": "message",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "call_pipeline_logs",
+      "column_name": "payload",
+      "data_type": "jsonb",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "call_pipeline_logs",
+      "column_name": "created_at",
+      "data_type": "timestamp with time zone",
+      "is_nullable": "YES"
+    }
+  ],
+  "call_uploads": [
+    {
+      "table_name": "call_uploads",
+      "column_name": "id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "call_uploads",
+      "column_name": "uploader_id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "call_uploads",
+      "column_name": "uploader_phone",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "call_uploads",
+      "column_name": "caller_phone",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "call_uploads",
+      "column_name": "call_direction",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "call_uploads",
+      "column_name": "call_ended_at",
+      "data_type": "timestamp with time zone",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "call_uploads",
+      "column_name": "duration_seconds",
+      "data_type": "integer",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "call_uploads",
+      "column_name": "storage_path",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "call_uploads",
+      "column_name": "file_name",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "call_uploads",
+      "column_name": "call_context",
+      "data_type": "ARRAY",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "call_uploads",
+      "column_name": "summary_text",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "call_uploads",
+      "column_name": "status",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "call_uploads",
+      "column_name": "retry_count",
+      "data_type": "integer",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "call_uploads",
+      "column_name": "error_message",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "call_uploads",
+      "column_name": "draft_id",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "call_uploads",
+      "column_name": "customer_id",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "call_uploads",
+      "column_name": "created_at",
+      "data_type": "timestamp with time zone",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "call_uploads",
+      "column_name": "processed_at",
+      "data_type": "timestamp with time zone",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "call_uploads",
+      "column_name": "auto_delete_at",
+      "data_type": "timestamp with time zone",
+      "is_nullable": "YES"
+    }
+  ],
+  "cash_flow_snapshots": [
+    {
+      "table_name": "cash_flow_snapshots",
+      "column_name": "id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "cash_flow_snapshots",
+      "column_name": "snapshotDate",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "cash_flow_snapshots",
+      "column_name": "startingBalance",
+      "data_type": "bigint",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "cash_flow_snapshots",
+      "column_name": "projectedInflow",
+      "data_type": "bigint",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "cash_flow_snapshots",
+      "column_name": "projectedOpex",
+      "data_type": "bigint",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "cash_flow_snapshots",
+      "column_name": "projectedCapex",
+      "data_type": "bigint",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "cash_flow_snapshots",
+      "column_name": "projectedFinalBalance",
+      "data_type": "bigint",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "cash_flow_snapshots",
+      "column_name": "notes",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "cash_flow_snapshots",
+      "column_name": "createdAt",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "cash_flow_snapshots",
+      "column_name": "updatedAt",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "cash_flow_snapshots",
+      "column_name": "tenant_id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    }
+  ],
+  "collected_parts": [
+    {
+      "table_name": "collected_parts",
+      "column_name": "id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "collected_parts",
+      "column_name": "partNo",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "collected_parts",
+      "column_name": "consumableId",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "collected_parts",
+      "column_name": "modelName",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "collected_parts",
+      "column_name": "mechanicId",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "collected_parts",
+      "column_name": "mechanicName",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "collected_parts",
+      "column_name": "quantity",
+      "data_type": "double precision",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "collected_parts",
+      "column_name": "disposition",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "collected_parts",
+      "column_name": "status",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "collected_parts",
+      "column_name": "receivedDate",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "collected_parts",
+      "column_name": "actionDate",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "collected_parts",
+      "column_name": "actionMemo",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "collected_parts",
+      "column_name": "memo",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "collected_parts",
+      "column_name": "createdAt",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "collected_parts",
+      "column_name": "tenant_id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    }
+  ],
+  "consumable_logs": [
+    {
+      "table_name": "consumable_logs",
+      "column_name": "id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "consumable_logs",
+      "column_name": "consumableId",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "consumable_logs",
+      "column_name": "type",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "consumable_logs",
+      "column_name": "quantity",
+      "data_type": "double precision",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "consumable_logs",
+      "column_name": "unitPrice",
+      "data_type": "double precision",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "consumable_logs",
+      "column_name": "vendorId",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "consumable_logs",
+      "column_name": "userId",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "consumable_logs",
+      "column_name": "targetAssetId",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "consumable_logs",
+      "column_name": "purchaseItemId",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "consumable_logs",
+      "column_name": "evidenceFileUrl",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "consumable_logs",
+      "column_name": "description",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "consumable_logs",
+      "column_name": "actionDate",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "consumable_logs",
+      "column_name": "createdAt",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "consumable_logs",
+      "column_name": "updatedAt",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "consumable_logs",
+      "column_name": "supplier",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "consumable_logs",
+      "column_name": "mechanicId",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "consumable_logs",
+      "column_name": "fromLocation",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "consumable_logs",
+      "column_name": "toLocation",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "consumable_logs",
+      "column_name": "tenant_id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    }
+  ],
+  "consumable_purchases": [
+    {
+      "table_name": "consumable_purchases",
+      "column_name": "id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "consumable_purchases",
+      "column_name": "consumableId",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "consumable_purchases",
+      "column_name": "modelName",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "consumable_purchases",
+      "column_name": "requestedQty",
+      "data_type": "double precision",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "consumable_purchases",
+      "column_name": "unitPrice",
+      "data_type": "double precision",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "consumable_purchases",
+      "column_name": "sellerName",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "consumable_purchases",
+      "column_name": "status",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "consumable_purchases",
+      "column_name": "requesterId",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "consumable_purchases",
+      "column_name": "requesterName",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "consumable_purchases",
+      "column_name": "accepterId",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "consumable_purchases",
+      "column_name": "accepterName",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "consumable_purchases",
+      "column_name": "inbounderName",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "consumable_purchases",
+      "column_name": "receivedQty",
+      "data_type": "double precision",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "consumable_purchases",
+      "column_name": "statementFileUrl",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "consumable_purchases",
+      "column_name": "requestDate",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "consumable_purchases",
+      "column_name": "acceptedDate",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "consumable_purchases",
+      "column_name": "completedDate",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "consumable_purchases",
+      "column_name": "createdAt",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "consumable_purchases",
+      "column_name": "updatedAt",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "consumable_purchases",
+      "column_name": "actualReturnDate",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "consumable_purchases",
+      "column_name": "completerName",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "consumable_purchases",
+      "column_name": "settlementId",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "consumable_purchases",
+      "column_name": "tenant_id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    }
+  ],
+  "consumables": [
+    {
+      "table_name": "consumables",
+      "column_name": "id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "consumables",
+      "column_name": "modelName",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "consumables",
+      "column_name": "stockQty",
+      "data_type": "double precision",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "consumables",
+      "column_name": "unit",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "consumables",
+      "column_name": "unitPrice",
+      "data_type": "double precision",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "consumables",
+      "column_name": "vendorId",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "consumables",
+      "column_name": "createdAt",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "consumables",
+      "column_name": "updatedAt",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "consumables",
+      "column_name": "spec",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "consumables",
+      "column_name": "safetyStock",
+      "data_type": "double precision",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "consumables",
+      "column_name": "tenant_id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "consumables",
+      "column_name": "supplier",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "consumables",
+      "column_name": "category",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "consumables",
+      "column_name": "note",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "consumables",
+      "column_name": "repairingQty",
+      "data_type": "double precision",
+      "is_nullable": "YES"
+    }
+  ],
+  "contract_assets": [
+    {
+      "table_name": "contract_assets",
+      "column_name": "id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "contract_assets",
+      "column_name": "contractId",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "contract_assets",
+      "column_name": "assetId",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "contract_assets",
+      "column_name": "expectedModel",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "contract_assets",
+      "column_name": "monthlyRentalFee",
+      "data_type": "double precision",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "contract_assets",
+      "column_name": "dailyRentalFee",
+      "data_type": "double precision",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "contract_assets",
+      "column_name": "startDate",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "contract_assets",
+      "column_name": "endDate",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "contract_assets",
+      "column_name": "createdAt",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "contract_assets",
+      "column_name": "updatedAt",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "contract_assets",
+      "column_name": "status",
+      "data_type": "character varying",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "contract_assets",
+      "column_name": "actualReturnDate",
+      "data_type": "date",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "contract_assets",
+      "column_name": "tenant_id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "contract_assets",
+      "column_name": "salePrice",
+      "data_type": "double precision",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "contract_assets",
+      "column_name": "contractStart",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "contract_assets",
+      "column_name": "contractEnd",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "contract_assets",
+      "column_name": "currentCustomerId",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "contract_assets",
+      "column_name": "currentSiteId",
+      "data_type": "text",
+      "is_nullable": "YES"
+    }
+  ],
+  "contract_history": [
+    {
+      "table_name": "contract_history",
+      "column_name": "id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "contract_history",
+      "column_name": "contractId",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "contract_history",
+      "column_name": "changeType",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "contract_history",
+      "column_name": "changeDate",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "contract_history",
+      "column_name": "description",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "contract_history",
+      "column_name": "createdAt",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "contract_history",
+      "column_name": "updatedAt",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "contract_history",
+      "column_name": "prevEndDate",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "contract_history",
+      "column_name": "newEndDate",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "contract_history",
+      "column_name": "tenant_id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    }
+  ],
+  "contracts": [
+    {
+      "table_name": "contracts",
+      "column_name": "id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "contracts",
+      "column_name": "contractNo",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "contracts",
+      "column_name": "customerId",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "contracts",
+      "column_name": "salespersonId",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "contracts",
+      "column_name": "contactId",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "contracts",
+      "column_name": "siteId",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "contracts",
+      "column_name": "billingDay",
+      "data_type": "integer",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "contracts",
+      "column_name": "status",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "contracts",
+      "column_name": "driveFolderId",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "contracts",
+      "column_name": "startDate",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "contracts",
+      "column_name": "endDate",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "contracts",
+      "column_name": "createdAt",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "contracts",
+      "column_name": "updatedAt",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "contracts",
+      "column_name": "successorContractId",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "contracts",
+      "column_name": "predecessorContractId",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "contracts",
+      "column_name": "predecessorContractNo",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "contracts",
+      "column_name": "predecessorCustomerId",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "contracts",
+      "column_name": "predecessorCustomerName",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "contracts",
+      "column_name": "lateInterestRate",
+      "data_type": "double precision",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "contracts",
+      "column_name": "paymentDueDay",
+      "data_type": "integer",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "contracts",
+      "column_name": "lastBillingDate",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "contracts",
+      "column_name": "lastBilledPeriodStart",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "contracts",
+      "column_name": "lastBilledPeriodEnd",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "contracts",
+      "column_name": "lastBilledYm",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "contracts",
+      "column_name": "billingCount",
+      "data_type": "integer",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "contracts",
+      "column_name": "tenant_id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "contracts",
+      "column_name": "contractType",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "contracts",
+      "column_name": "statementClosingDay",
+      "data_type": "integer",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "contracts",
+      "column_name": "customerName",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "contracts",
+      "column_name": "salespersonName",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "contracts",
+      "column_name": "saleTerms",
+      "data_type": "jsonb",
+      "is_nullable": "YES"
+    }
+  ],
+  "corporate_vehicles": [
+    {
+      "table_name": "corporate_vehicles",
+      "column_name": "id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "corporate_vehicles",
+      "column_name": "vehicleNo",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "corporate_vehicles",
+      "column_name": "modelName",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "corporate_vehicles",
+      "column_name": "vehicleType",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "corporate_vehicles",
+      "column_name": "ownershipType",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "corporate_vehicles",
+      "column_name": "fuelType",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "corporate_vehicles",
+      "column_name": "assignedDepartment",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "corporate_vehicles",
+      "column_name": "primaryDriverId",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "corporate_vehicles",
+      "column_name": "primaryDriverName",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "corporate_vehicles",
+      "column_name": "initialMileage",
+      "data_type": "integer",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "corporate_vehicles",
+      "column_name": "currentMileage",
+      "data_type": "integer",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "corporate_vehicles",
+      "column_name": "insuranceExpiryDate",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "corporate_vehicles",
+      "column_name": "inspectionExpiryDate",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "corporate_vehicles",
+      "column_name": "isActive",
+      "data_type": "boolean",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "corporate_vehicles",
+      "column_name": "memo",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "corporate_vehicles",
+      "column_name": "createdAt",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "corporate_vehicles",
+      "column_name": "updatedAt",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "corporate_vehicles",
+      "column_name": "tenant_id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    }
+  ],
+  "custom_roles": [
+    {
+      "table_name": "custom_roles",
+      "column_name": "id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "custom_roles",
+      "column_name": "name",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "custom_roles",
+      "column_name": "description",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "custom_roles",
+      "column_name": "isSystem",
+      "data_type": "boolean",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "custom_roles",
+      "column_name": "createdAt",
+      "data_type": "timestamp with time zone",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "custom_roles",
+      "column_name": "updatedAt",
+      "data_type": "timestamp with time zone",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "custom_roles",
+      "column_name": "tenant_id",
+      "data_type": "text",
+      "is_nullable": "YES"
+    }
+  ],
+  "customer_contacts": [
+    {
+      "table_name": "customer_contacts",
+      "column_name": "id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "customer_contacts",
+      "column_name": "customerId",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "customer_contacts",
+      "column_name": "name",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "customer_contacts",
+      "column_name": "position",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "customer_contacts",
+      "column_name": "contact",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "customer_contacts",
+      "column_name": "email",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "customer_contacts",
+      "column_name": "createdAt",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "customer_contacts",
+      "column_name": "updatedAt",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "customer_contacts",
+      "column_name": "isPrimary",
+      "data_type": "boolean",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "customer_contacts",
+      "column_name": "tenant_id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "customer_contacts",
+      "column_name": "isActive",
+      "data_type": "boolean",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "customer_contacts",
+      "column_name": "memo",
+      "data_type": "text",
+      "is_nullable": "YES"
+    }
+  ],
+  "customer_sites": [
+    {
+      "table_name": "customer_sites",
+      "column_name": "id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "customer_sites",
+      "column_name": "customerId",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "customer_sites",
+      "column_name": "name",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "customer_sites",
+      "column_name": "address",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "customer_sites",
+      "column_name": "contactName",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "customer_sites",
+      "column_name": "contact",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "customer_sites",
+      "column_name": "email",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "customer_sites",
+      "column_name": "createdAt",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "customer_sites",
+      "column_name": "updatedAt",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "customer_sites",
+      "column_name": "paidOptions",
+      "data_type": "jsonb",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "customer_sites",
+      "column_name": "protection",
+      "data_type": "character varying",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "customer_sites",
+      "column_name": "checkedSpecs",
+      "data_type": "jsonb",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "customer_sites",
+      "column_name": "tenant_id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "customer_sites",
+      "column_name": "isActive",
+      "data_type": "boolean",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "customer_sites",
+      "column_name": "billingDay",
+      "data_type": "integer",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "customer_sites",
+      "column_name": "statementClosingDay",
+      "data_type": "integer",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "customer_sites",
+      "column_name": "paymentDueDay",
+      "data_type": "integer",
+      "is_nullable": "YES"
+    }
+  ],
+  "customers": [
+    {
+      "table_name": "customers",
+      "column_name": "id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "customers",
+      "column_name": "name",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "customers",
+      "column_name": "bizRegNo",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "customers",
+      "column_name": "isClosed",
+      "data_type": "boolean",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "customers",
+      "column_name": "address",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "customers",
+      "column_name": "representative",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "customers",
+      "column_name": "repContact",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "customers",
+      "column_name": "repEmail",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "customers",
+      "column_name": "driveFolderId",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "customers",
+      "column_name": "prepaidBalance",
+      "data_type": "double precision",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "customers",
+      "column_name": "createdAt",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "customers",
+      "column_name": "updatedAt",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "customers",
+      "column_name": "defaultBillingDay",
+      "data_type": "integer",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "customers",
+      "column_name": "defaultStatementClosingDay",
+      "data_type": "integer",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "customers",
+      "column_name": "bankAccounts",
+      "data_type": "jsonb",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "customers",
+      "column_name": "paymentDueDay",
+      "data_type": "integer",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "customers",
+      "column_name": "paymentTermDays",
+      "data_type": "integer",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "customers",
+      "column_name": "defaultPaidOptions",
+      "data_type": "jsonb",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "customers",
+      "column_name": "defaultProtection",
+      "data_type": "character varying",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "customers",
+      "column_name": "defaultCheckedSpecs",
+      "data_type": "jsonb",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "customers",
+      "column_name": "specialNotes",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "customers",
+      "column_name": "transactionStatus",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "customers",
+      "column_name": "bizType",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "customers",
+      "column_name": "bizItem",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "customers",
+      "column_name": "openingDate",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "customers",
+      "column_name": "taxOffice",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "customers",
+      "column_name": "headOfficeAddress",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "customers",
+      "column_name": "businessCertFileUrl",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "customers",
+      "column_name": "passbookFileUrl",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "customers",
+      "column_name": "passbookFileName",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "customers",
+      "column_name": "taxType",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "customers",
+      "column_name": "taxTypeCd",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "customers",
+      "column_name": "businessStatus",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "customers",
+      "column_name": "closedDate",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "customers",
+      "column_name": "lastStatusCheckDate",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "customers",
+      "column_name": "tenant_id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    }
+  ],
+  "delinquency_action_logs": [
+    {
+      "table_name": "delinquency_action_logs",
+      "column_name": "id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "delinquency_action_logs",
+      "column_name": "customerId",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "delinquency_action_logs",
+      "column_name": "actionDate",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "delinquency_action_logs",
+      "column_name": "actionType",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "delinquency_action_logs",
+      "column_name": "actorId",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "delinquency_action_logs",
+      "column_name": "contactPerson",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "delinquency_action_logs",
+      "column_name": "contactPhone",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "delinquency_action_logs",
+      "column_name": "content",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "delinquency_action_logs",
+      "column_name": "promisedDate",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "delinquency_action_logs",
+      "column_name": "promisedAmount",
+      "data_type": "double precision",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "delinquency_action_logs",
+      "column_name": "createdAt",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "delinquency_action_logs",
+      "column_name": "tenant_id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "delinquency_action_logs",
+      "column_name": "actionDetails",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "delinquency_action_logs",
+      "column_name": "proofFileName",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "delinquency_action_logs",
+      "column_name": "recordedBy",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "delinquency_action_logs",
+      "column_name": "mandateType",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "delinquency_action_logs",
+      "column_name": "promiseDate",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "delinquency_action_logs",
+      "column_name": "promiseAmount",
+      "data_type": "double precision",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "delinquency_action_logs",
+      "column_name": "promiseStatus",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "delinquency_action_logs",
+      "column_name": "promiseContactPerson",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "delinquency_action_logs",
+      "column_name": "directiveTargetUserId",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "delinquency_action_logs",
+      "column_name": "directiveDueDate",
+      "data_type": "text",
+      "is_nullable": "YES"
+    }
+  ],
+  "deliveries": [
+    {
+      "table_name": "deliveries",
+      "column_name": "id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "deliveries",
+      "column_name": "contractId",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "deliveries",
+      "column_name": "assetIds",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "deliveries",
+      "column_name": "type",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "deliveries",
+      "column_name": "dispatchCategory",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "deliveries",
+      "column_name": "transportVendorId",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "deliveries",
+      "column_name": "transportCompany",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "deliveries",
+      "column_name": "driverName",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "deliveries",
+      "column_name": "driverContact",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "deliveries",
+      "column_name": "vehicleNo",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "deliveries",
+      "column_name": "vehicleType",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "deliveries",
+      "column_name": "assignedVehicles",
+      "data_type": "jsonb",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "deliveries",
+      "column_name": "pickupType",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "deliveries",
+      "column_name": "pickupVendorName",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "deliveries",
+      "column_name": "originAddress",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "deliveries",
+      "column_name": "loadingDate",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "deliveries",
+      "column_name": "loadingTimeSlot",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "deliveries",
+      "column_name": "loadingTime",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "deliveries",
+      "column_name": "dropoffType",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "deliveries",
+      "column_name": "viaDropoffName",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "deliveries",
+      "column_name": "viaDropoffAddress",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "deliveries",
+      "column_name": "destinationAddress",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "deliveries",
+      "column_name": "unloadingDate",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "deliveries",
+      "column_name": "unloadingTimeSlot",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "deliveries",
+      "column_name": "unloadingTime",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "deliveries",
+      "column_name": "expectedCost",
+      "data_type": "double precision",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "deliveries",
+      "column_name": "deliveryCost",
+      "data_type": "double precision",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "deliveries",
+      "column_name": "finalCost",
+      "data_type": "double precision",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "deliveries",
+      "column_name": "deliveryCostConfirmed",
+      "data_type": "double precision",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "deliveries",
+      "column_name": "purchaseBillId",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "deliveries",
+      "column_name": "isCostSettled",
+      "data_type": "boolean",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "deliveries",
+      "column_name": "status",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "deliveries",
+      "column_name": "requestDate",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "deliveries",
+      "column_name": "rawText",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "deliveries",
+      "column_name": "memo",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "deliveries",
+      "column_name": "closingMemo",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "deliveries",
+      "column_name": "createdAt",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "deliveries",
+      "column_name": "updatedAt",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "deliveries",
+      "column_name": "reconciliationStatus",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "deliveries",
+      "column_name": "confirmedCost",
+      "data_type": "double precision",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "deliveries",
+      "column_name": "scheduledDate",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "deliveries",
+      "column_name": "paymentRequestedAt",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "deliveries",
+      "column_name": "paymentCompletedAt",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "deliveries",
+      "column_name": "reconciledAt",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "deliveries",
+      "column_name": "statementFileUrl",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "deliveries",
+      "column_name": "billableToCustomer",
+      "data_type": "boolean",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "deliveries",
+      "column_name": "tenant_id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "deliveries",
+      "column_name": "costAdjustmentReason",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "deliveries",
+      "column_name": "billableCustomerId",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "deliveries",
+      "column_name": "billableAmount",
+      "data_type": "double precision",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "deliveries",
+      "column_name": "billingId",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "deliveries",
+      "column_name": "isWaived",
+      "data_type": "boolean",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "deliveries",
+      "column_name": "waivedAmount",
+      "data_type": "double precision",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "deliveries",
+      "column_name": "waivedBy",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "deliveries",
+      "column_name": "waivedReason",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "deliveries",
+      "column_name": "waivedAt",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "deliveries",
+      "column_name": "vehicleRequirements",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "deliveries",
+      "column_name": "cargoItems",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "deliveries",
+      "column_name": "vehicles",
+      "data_type": "text",
+      "is_nullable": "YES"
+    }
+  ],
+  "departments": [
+    {
+      "table_name": "departments",
+      "column_name": "id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "departments",
+      "column_name": "name",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "departments",
+      "column_name": "parentDepartmentId",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "departments",
+      "column_name": "managerId",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "departments",
+      "column_name": "createdAt",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "departments",
+      "column_name": "updatedAt",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "departments",
+      "column_name": "tenant_id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    }
+  ],
+  "depreciation_logs": [
+    {
+      "table_name": "depreciation_logs",
+      "column_name": "id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "depreciation_logs",
+      "column_name": "depreciationYm",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "depreciation_logs",
+      "column_name": "executedAt",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "depreciation_logs",
+      "column_name": "executedBy",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "depreciation_logs",
+      "column_name": "targetAssetCount",
+      "data_type": "integer",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "depreciation_logs",
+      "column_name": "totalDepreciationAmount",
+      "data_type": "numeric",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "depreciation_logs",
+      "column_name": "note",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "depreciation_logs",
+      "column_name": "createdAt",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "depreciation_logs",
+      "column_name": "updatedAt",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "depreciation_logs",
+      "column_name": "tenant_id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    }
+  ],
+  "draft_dispatch_orders": [
+    {
+      "table_name": "draft_dispatch_orders",
+      "column_name": "id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "draft_dispatch_orders",
+      "column_name": "owner_id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "draft_dispatch_orders",
+      "column_name": "source_call_ids",
+      "data_type": "ARRAY",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "draft_dispatch_orders",
+      "column_name": "context",
+      "data_type": "ARRAY",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "draft_dispatch_orders",
+      "column_name": "customer_name",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "draft_dispatch_orders",
+      "column_name": "customer_name_conf",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "draft_dispatch_orders",
+      "column_name": "customer_name_src",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "draft_dispatch_orders",
+      "column_name": "customer_id",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "draft_dispatch_orders",
+      "column_name": "site_name",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "draft_dispatch_orders",
+      "column_name": "site_name_conf",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "draft_dispatch_orders",
+      "column_name": "site_id",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "draft_dispatch_orders",
+      "column_name": "equipment_json",
+      "data_type": "jsonb",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "draft_dispatch_orders",
+      "column_name": "loading_date",
+      "data_type": "date",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "draft_dispatch_orders",
+      "column_name": "loading_date_conf",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "draft_dispatch_orders",
+      "column_name": "loading_time",
+      "data_type": "time without time zone",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "draft_dispatch_orders",
+      "column_name": "loading_time_conf",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "draft_dispatch_orders",
+      "column_name": "contact_person",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "draft_dispatch_orders",
+      "column_name": "contact_person_conf",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "draft_dispatch_orders",
+      "column_name": "contact_phone",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "draft_dispatch_orders",
+      "column_name": "note",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "draft_dispatch_orders",
+      "column_name": "is_new_customer",
+      "data_type": "boolean",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "draft_dispatch_orders",
+      "column_name": "customer_registered",
+      "data_type": "boolean",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "draft_dispatch_orders",
+      "column_name": "status",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "draft_dispatch_orders",
+      "column_name": "urgency",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "draft_dispatch_orders",
+      "column_name": "merged_from",
+      "data_type": "ARRAY",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "draft_dispatch_orders",
+      "column_name": "created_at",
+      "data_type": "timestamp with time zone",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "draft_dispatch_orders",
+      "column_name": "submitted_at",
+      "data_type": "timestamp with time zone",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "draft_dispatch_orders",
+      "column_name": "submitted_by_id",
+      "data_type": "text",
+      "is_nullable": "YES"
+    }
+  ],
+  "equipment_manuals": [
+    {
+      "table_name": "equipment_manuals",
+      "column_name": "id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "equipment_manuals",
+      "column_name": "modelName",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "equipment_manuals",
+      "column_name": "manufacturer",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "equipment_manuals",
+      "column_name": "targetSpecFt",
+      "data_type": "integer",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "equipment_manuals",
+      "column_name": "category",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "equipment_manuals",
+      "column_name": "title",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "equipment_manuals",
+      "column_name": "fileUrl",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "equipment_manuals",
+      "column_name": "fileName",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "equipment_manuals",
+      "column_name": "fileSize",
+      "data_type": "bigint",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "equipment_manuals",
+      "column_name": "fileSizeLabel",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "equipment_manuals",
+      "column_name": "version",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "equipment_manuals",
+      "column_name": "uploadDate",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "equipment_manuals",
+      "column_name": "uploadedBy",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "equipment_manuals",
+      "column_name": "memo",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "equipment_manuals",
+      "column_name": "inspectionItemCodes",
+      "data_type": "jsonb",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "equipment_manuals",
+      "column_name": "media_type",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "equipment_manuals",
+      "column_name": "externalUrl",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "equipment_manuals",
+      "column_name": "youtubeVideoId",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "equipment_manuals",
+      "column_name": "durationMinutes",
+      "data_type": "integer",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "equipment_manuals",
+      "column_name": "aiProcessed",
+      "data_type": "boolean",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "equipment_manuals",
+      "column_name": "aiProcessedAt",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "equipment_manuals",
+      "column_name": "keywords",
+      "data_type": "jsonb",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "equipment_manuals",
+      "column_name": "errorCodes",
+      "data_type": "jsonb",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "equipment_manuals",
+      "column_name": "majorParts",
+      "data_type": "jsonb",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "equipment_manuals",
+      "column_name": "symptoms",
+      "data_type": "jsonb",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "equipment_manuals",
+      "column_name": "aiSummary",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "equipment_manuals",
+      "column_name": "createdAt",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "equipment_manuals",
+      "column_name": "updatedAt",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "equipment_manuals",
+      "column_name": "tenant_id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    }
+  ],
+  "external_leases": [
+    {
+      "table_name": "external_leases",
+      "column_name": "id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "external_leases",
+      "column_name": "vendorId",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "external_leases",
+      "column_name": "contractId",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "external_leases",
+      "column_name": "contractAssetId",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "external_leases",
+      "column_name": "assetDescription",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "external_leases",
+      "column_name": "monthlyRentFee",
+      "data_type": "numeric",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "external_leases",
+      "column_name": "dailyRentFee",
+      "data_type": "numeric",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "external_leases",
+      "column_name": "leaseStartDate",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "external_leases",
+      "column_name": "leaseEndDate",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "external_leases",
+      "column_name": "status",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "external_leases",
+      "column_name": "statementFileUrl",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "external_leases",
+      "column_name": "memo",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "external_leases",
+      "column_name": "createdAt",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "external_leases",
+      "column_name": "updatedAt",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "external_leases",
+      "column_name": "contract_id",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "external_leases",
+      "column_name": "tenant_id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    }
+  ],
+  "google_configs": [
+    {
+      "table_name": "google_configs",
+      "column_name": "id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "google_configs",
+      "column_name": "googleEmail",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "google_configs",
+      "column_name": "googlePassword",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "google_configs",
+      "column_name": "gmailAppPassword",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "google_configs",
+      "column_name": "contractFolder",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "google_configs",
+      "column_name": "consumableFolder",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "google_configs",
+      "column_name": "deliveryFolder",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "google_configs",
+      "column_name": "maintenanceFolder",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "google_configs",
+      "column_name": "isDevMode",
+      "data_type": "boolean",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "google_configs",
+      "column_name": "quotationTemplateUrl",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "google_configs",
+      "column_name": "contractTemplateUrl",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "google_configs",
+      "column_name": "safetyInspectionTemplateUrl",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "google_configs",
+      "column_name": "preDeliveryChecklistTemplateUrl",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "google_configs",
+      "column_name": "bizRegCertUrl",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "google_configs",
+      "column_name": "bankbookCopyUrl",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "google_configs",
+      "column_name": "updatedAt",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "google_configs",
+      "column_name": "createdAt",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "google_configs",
+      "column_name": "defaultRootFolderId",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "google_configs",
+      "column_name": "transactionStatementTemplateUrl",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "google_configs",
+      "column_name": "appsScriptUrl",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "google_configs",
+      "column_name": "oauthClientId",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "google_configs",
+      "column_name": "r2AccountId",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "google_configs",
+      "column_name": "r2BucketName",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "google_configs",
+      "column_name": "r2AccessKeyId",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "google_configs",
+      "column_name": "r2SecretAccessKey",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "google_configs",
+      "column_name": "r2PublicDomain",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "google_configs",
+      "column_name": "currentInsuranceStartDate",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "google_configs",
+      "column_name": "currentInsuranceEndDate",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "google_configs",
+      "column_name": "nextInsuranceCertUrl",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "google_configs",
+      "column_name": "nextInsuranceStartDate",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "google_configs",
+      "column_name": "nextInsuranceEndDate",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "google_configs",
+      "column_name": "mirrorRecursive",
+      "data_type": "boolean",
+      "is_nullable": "YES"
+    }
+  ],
+  "inspection_checklist_items": [
+    {
+      "table_name": "inspection_checklist_items",
+      "column_name": "id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "inspection_checklist_items",
+      "column_name": "category",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "inspection_checklist_items",
+      "column_name": "code",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "inspection_checklist_items",
+      "column_name": "name",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "inspection_checklist_items",
+      "column_name": "score",
+      "data_type": "integer",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "inspection_checklist_items",
+      "column_name": "description",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "inspection_checklist_items",
+      "column_name": "createdAt",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "inspection_checklist_items",
+      "column_name": "updatedAt",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "inspection_checklist_items",
+      "column_name": "actionGuide",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "inspection_checklist_items",
+      "column_name": "standardManHours",
+      "data_type": "double precision",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "inspection_checklist_items",
+      "column_name": "recommendedConsumableIds",
+      "data_type": "ARRAY",
+      "is_nullable": "YES"
+    }
+  ],
+  "leave_usages": [
+    {
+      "table_name": "leave_usages",
+      "column_name": "id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "leave_usages",
+      "column_name": "userId",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "leave_usages",
+      "column_name": "leaveType",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "leave_usages",
+      "column_name": "startDate",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "leave_usages",
+      "column_name": "endDate",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "leave_usages",
+      "column_name": "usedDays",
+      "data_type": "double precision",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "leave_usages",
+      "column_name": "reason",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "leave_usages",
+      "column_name": "status",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "leave_usages",
+      "column_name": "approverId",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "leave_usages",
+      "column_name": "approvedAt",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "leave_usages",
+      "column_name": "createdAt",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "leave_usages",
+      "column_name": "updatedAt",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "leave_usages",
+      "column_name": "tenant_id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    }
+  ],
+  "legal_notice_logs": [
+    {
+      "table_name": "legal_notice_logs",
+      "column_name": "id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "legal_notice_logs",
+      "column_name": "customerId",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "legal_notice_logs",
+      "column_name": "customerName",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "legal_notice_logs",
+      "column_name": "representative",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "legal_notice_logs",
+      "column_name": "bizRegNo",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "legal_notice_logs",
+      "column_name": "address",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "legal_notice_logs",
+      "column_name": "overdueAmount",
+      "data_type": "double precision",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "legal_notice_logs",
+      "column_name": "overdueDays",
+      "data_type": "integer",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "legal_notice_logs",
+      "column_name": "noticeTitle",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "legal_notice_logs",
+      "column_name": "noticeContent",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "legal_notice_logs",
+      "column_name": "deadlineDays",
+      "data_type": "integer",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "legal_notice_logs",
+      "column_name": "sentDate",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "legal_notice_logs",
+      "column_name": "sentByUserId",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "legal_notice_logs",
+      "column_name": "sentByName",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "legal_notice_logs",
+      "column_name": "postalTrackingNo",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "legal_notice_logs",
+      "column_name": "status",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "legal_notice_logs",
+      "column_name": "createdAt",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "legal_notice_logs",
+      "column_name": "updatedAt",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "legal_notice_logs",
+      "column_name": "tenant_id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    }
+  ],
+  "legal_notice_templates": [
+    {
+      "table_name": "legal_notice_templates",
+      "column_name": "id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "legal_notice_templates",
+      "column_name": "title",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "legal_notice_templates",
+      "column_name": "content",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "legal_notice_templates",
+      "column_name": "deadlineDays",
+      "data_type": "integer",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "legal_notice_templates",
+      "column_name": "isDefault",
+      "data_type": "boolean",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "legal_notice_templates",
+      "column_name": "createdAt",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "legal_notice_templates",
+      "column_name": "updatedAt",
+      "data_type": "text",
+      "is_nullable": "NO"
+    }
+  ],
+  "mechanic_consumable_stocks": [
+    {
+      "table_name": "mechanic_consumable_stocks",
+      "column_name": "id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "mechanic_consumable_stocks",
+      "column_name": "mechanicId",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "mechanic_consumable_stocks",
+      "column_name": "consumableId",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "mechanic_consumable_stocks",
+      "column_name": "stockQty",
+      "data_type": "double precision",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "mechanic_consumable_stocks",
+      "column_name": "updatedAt",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "mechanic_consumable_stocks",
+      "column_name": "createdAt",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "mechanic_consumable_stocks",
+      "column_name": "tenant_id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    }
+  ],
+  "outbound_inspections": [
+    {
+      "table_name": "outbound_inspections",
+      "column_name": "id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "outbound_inspections",
+      "column_name": "contractId",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "outbound_inspections",
+      "column_name": "contractAssetId",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "outbound_inspections",
+      "column_name": "assetId",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "outbound_inspections",
+      "column_name": "status",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "outbound_inspections",
+      "column_name": "specsJson",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "outbound_inspections",
+      "column_name": "inspectorId",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "outbound_inspections",
+      "column_name": "inspectedAt",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "outbound_inspections",
+      "column_name": "note",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "outbound_inspections",
+      "column_name": "createdAt",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "outbound_inspections",
+      "column_name": "updatedAt",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "outbound_inspections",
+      "column_name": "tenant_id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "outbound_inspections",
+      "column_name": "deliveryId",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "outbound_inspections",
+      "column_name": "approvedAt",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "outbound_inspections",
+      "column_name": "rejectReason",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "outbound_inspections",
+      "column_name": "repairId",
+      "data_type": "text",
+      "is_nullable": "YES"
+    }
+  ],
+  "overtime_records": [
+    {
+      "table_name": "overtime_records",
+      "column_name": "id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "overtime_records",
+      "column_name": "userId",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "overtime_records",
+      "column_name": "workDate",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "overtime_records",
+      "column_name": "overtimeType",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "overtime_records",
+      "column_name": "startTime",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "overtime_records",
+      "column_name": "endTime",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "overtime_records",
+      "column_name": "hoursWorked",
+      "data_type": "double precision",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "overtime_records",
+      "column_name": "reason",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "overtime_records",
+      "column_name": "status",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "overtime_records",
+      "column_name": "approverId",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "overtime_records",
+      "column_name": "createdAt",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "overtime_records",
+      "column_name": "updatedAt",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "overtime_records",
+      "column_name": "startDateTime",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "overtime_records",
+      "column_name": "hours",
+      "data_type": "double precision",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "overtime_records",
+      "column_name": "workDetail",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "overtime_records",
+      "column_name": "mealYn",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "overtime_records",
+      "column_name": "hasMeal",
+      "data_type": "boolean",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "overtime_records",
+      "column_name": "tenant_id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    }
+  ],
+  "payment_deposit_links": [
+    {
+      "table_name": "payment_deposit_links",
+      "column_name": "id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "payment_deposit_links",
+      "column_name": "paymentId",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "payment_deposit_links",
+      "column_name": "bankTransactionId",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "payment_deposit_links",
+      "column_name": "usedAmount",
+      "data_type": "double precision",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "payment_deposit_links",
+      "column_name": "createdAt",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "payment_deposit_links",
+      "column_name": "tenant_id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    }
+  ],
+  "payments": [
+    {
+      "table_name": "payments",
+      "column_name": "id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "payments",
+      "column_name": "billingId",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "payments",
+      "column_name": "amount",
+      "data_type": "double precision",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "payments",
+      "column_name": "method",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "payments",
+      "column_name": "memo",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "payments",
+      "column_name": "paymentDate",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "payments",
+      "column_name": "createdAt",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "payments",
+      "column_name": "updatedAt",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "payments",
+      "column_name": "tenant_id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "payments",
+      "column_name": "feeAdjustment",
+      "data_type": "double precision",
+      "is_nullable": "YES"
+    }
+  ],
+  "payroll_closings": [
+    {
+      "table_name": "payroll_closings",
+      "column_name": "id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "payroll_closings",
+      "column_name": "payrollYm",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "payroll_closings",
+      "column_name": "userId",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "payroll_closings",
+      "column_name": "baseSalary",
+      "data_type": "double precision",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "payroll_closings",
+      "column_name": "overtimePay",
+      "data_type": "double precision",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "payroll_closings",
+      "column_name": "bonusPay",
+      "data_type": "double precision",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "payroll_closings",
+      "column_name": "otherAllowance",
+      "data_type": "double precision",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "payroll_closings",
+      "column_name": "totalGross",
+      "data_type": "double precision",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "payroll_closings",
+      "column_name": "incomeTax",
+      "data_type": "double precision",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "payroll_closings",
+      "column_name": "residentTax",
+      "data_type": "double precision",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "payroll_closings",
+      "column_name": "nationalPension",
+      "data_type": "double precision",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "payroll_closings",
+      "column_name": "healthInsurance",
+      "data_type": "double precision",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "payroll_closings",
+      "column_name": "careInsurance",
+      "data_type": "double precision",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "payroll_closings",
+      "column_name": "employmentInsurance",
+      "data_type": "double precision",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "payroll_closings",
+      "column_name": "totalDeductions",
+      "data_type": "double precision",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "payroll_closings",
+      "column_name": "netSalary",
+      "data_type": "double precision",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "payroll_closings",
+      "column_name": "status",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "payroll_closings",
+      "column_name": "paymentDate",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "payroll_closings",
+      "column_name": "createdAt",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "payroll_closings",
+      "column_name": "updatedAt",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "payroll_closings",
+      "column_name": "tenant_id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "payroll_closings",
+      "column_name": "month",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "payroll_closings",
+      "column_name": "approvedAt",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "payroll_closings",
+      "column_name": "approvedBy",
+      "data_type": "text",
+      "is_nullable": "YES"
+    }
+  ],
+  "permissions": [
+    {
+      "table_name": "permissions",
+      "column_name": "id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "permissions",
+      "column_name": "role",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "permissions",
+      "column_name": "menuId",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "permissions",
+      "column_name": "canView",
+      "data_type": "boolean",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "permissions",
+      "column_name": "canSave",
+      "data_type": "boolean",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "permissions",
+      "column_name": "createdAt",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "permissions",
+      "column_name": "updatedAt",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "permissions",
+      "column_name": "userId",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "permissions",
+      "column_name": "tenant_id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    }
+  ],
+  "prepaid_transactions": [
+    {
+      "table_name": "prepaid_transactions",
+      "column_name": "id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "prepaid_transactions",
+      "column_name": "customerId",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "prepaid_transactions",
+      "column_name": "transactionDate",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "prepaid_transactions",
+      "column_name": "type",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "prepaid_transactions",
+      "column_name": "amount",
+      "data_type": "double precision",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "prepaid_transactions",
+      "column_name": "balanceAfter",
+      "data_type": "double precision",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "prepaid_transactions",
+      "column_name": "relatedBillingId",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "prepaid_transactions",
+      "column_name": "description",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "prepaid_transactions",
+      "column_name": "createdAt",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "prepaid_transactions",
+      "column_name": "tenant_id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "prepaid_transactions",
+      "column_name": "billingId",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "prepaid_transactions",
+      "column_name": "paymentId",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "prepaid_transactions",
+      "column_name": "bankTransactionId",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "prepaid_transactions",
+      "column_name": "memo",
+      "data_type": "text",
+      "is_nullable": "YES"
+    }
+  ],
+  "print_queue": [
+    {
+      "table_name": "print_queue",
+      "column_name": "id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "print_queue",
+      "column_name": "stationId",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "print_queue",
+      "column_name": "stationName",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "print_queue",
+      "column_name": "docType",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "print_queue",
+      "column_name": "docNo",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "print_queue",
+      "column_name": "title",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "print_queue",
+      "column_name": "documentHtml",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "print_queue",
+      "column_name": "status",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "print_queue",
+      "column_name": "errorMessage",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "print_queue",
+      "column_name": "requestedById",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "print_queue",
+      "column_name": "requestedByName",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "print_queue",
+      "column_name": "requestedAt",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "print_queue",
+      "column_name": "printedAt",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "print_queue",
+      "column_name": "retryCount",
+      "data_type": "integer",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "print_queue",
+      "column_name": "createdAt",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "print_queue",
+      "column_name": "updatedAt",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "print_queue",
+      "column_name": "tenant_id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "print_queue",
+      "column_name": "localPrinterName",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "print_queue",
+      "column_name": "lastError",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "print_queue",
+      "column_name": "attempts",
+      "data_type": "integer",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "print_queue",
+      "column_name": "completedAt",
+      "data_type": "text",
+      "is_nullable": "YES"
+    }
+  ],
+  "print_stations": [
+    {
+      "table_name": "print_stations",
+      "column_name": "id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "print_stations",
+      "column_name": "stationName",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "print_stations",
+      "column_name": "machineName",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "print_stations",
+      "column_name": "localPrinterName",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "print_stations",
+      "column_name": "docTypeDefault",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "print_stations",
+      "column_name": "description",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "print_stations",
+      "column_name": "status",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "print_stations",
+      "column_name": "lastHeartbeat",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "print_stations",
+      "column_name": "createdAt",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "print_stations",
+      "column_name": "updatedAt",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "print_stations",
+      "column_name": "tenant_id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    }
+  ],
+  "privacy_access_logs": [
+    {
+      "table_name": "privacy_access_logs",
+      "column_name": "id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "privacy_access_logs",
+      "column_name": "userId",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "privacy_access_logs",
+      "column_name": "userName",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "privacy_access_logs",
+      "column_name": "ipAddress",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "privacy_access_logs",
+      "column_name": "actionType",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "privacy_access_logs",
+      "column_name": "targetMenu",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "privacy_access_logs",
+      "column_name": "targetSubjectId",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "privacy_access_logs",
+      "column_name": "targetSubjectName",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "privacy_access_logs",
+      "column_name": "actionDetail",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "privacy_access_logs",
+      "column_name": "isMasked",
+      "data_type": "boolean",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "privacy_access_logs",
+      "column_name": "createdAt",
+      "data_type": "timestamp with time zone",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "privacy_access_logs",
+      "column_name": "tenant_id",
+      "data_type": "text",
+      "is_nullable": "YES"
+    }
+  ],
+  "products": [
+    {
+      "table_name": "products",
+      "column_name": "id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "products",
+      "column_name": "modelName",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "products",
+      "column_name": "feet",
+      "data_type": "double precision",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "products",
+      "column_name": "spec",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "products",
+      "column_name": "manufacturer",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "products",
+      "column_name": "safetyCertUrl",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "products",
+      "column_name": "specSheetUrl",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "products",
+      "column_name": "emergencyGuideUrl",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "products",
+      "column_name": "isActive",
+      "data_type": "boolean",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "products",
+      "column_name": "createdAt",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "products",
+      "column_name": "updatedAt",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "products",
+      "column_name": "powerSource",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "products",
+      "column_name": "workingHeight",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "products",
+      "column_name": "platformHeight",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "products",
+      "column_name": "weight",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "products",
+      "column_name": "capacityPreExt",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "products",
+      "column_name": "machineDimensions",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "products",
+      "column_name": "platformDimensions",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "products",
+      "column_name": "gradeability",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "products",
+      "column_name": "speed",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "products",
+      "column_name": "asContact",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "products",
+      "column_name": "capacityPostExtMain",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "products",
+      "column_name": "capacityPostExtDeck",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "products",
+      "column_name": "maxWindSpeed",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "products",
+      "column_name": "maxHeightCapacity",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "products",
+      "column_name": "safetyCertDate",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "products",
+      "column_name": "tenant_id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    }
+  ],
+  "purchase_settlement_items": [
+    {
+      "table_name": "purchase_settlement_items",
+      "column_name": "id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "purchase_settlement_items",
+      "column_name": "settlementId",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "purchase_settlement_items",
+      "column_name": "sourceType",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "purchase_settlement_items",
+      "column_name": "sourceId",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "purchase_settlement_items",
+      "column_name": "itemDescription",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "purchase_settlement_items",
+      "column_name": "quantity",
+      "data_type": "numeric",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "purchase_settlement_items",
+      "column_name": "unitPrice",
+      "data_type": "numeric",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "purchase_settlement_items",
+      "column_name": "amount",
+      "data_type": "numeric",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "purchase_settlement_items",
+      "column_name": "evidenceFileUrl",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "purchase_settlement_items",
+      "column_name": "createdAt",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "purchase_settlement_items",
+      "column_name": "tenant_id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    }
+  ],
+  "purchase_settlements": [
+    {
+      "table_name": "purchase_settlements",
+      "column_name": "id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "purchase_settlements",
+      "column_name": "settlementYm",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "purchase_settlements",
+      "column_name": "settlementType",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "purchase_settlements",
+      "column_name": "vendorId",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "purchase_settlements",
+      "column_name": "vendorName",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "purchase_settlements",
+      "column_name": "totalAmount",
+      "data_type": "numeric",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "purchase_settlements",
+      "column_name": "paidAmount",
+      "data_type": "numeric",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "purchase_settlements",
+      "column_name": "status",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "purchase_settlements",
+      "column_name": "paymentDate",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "purchase_settlements",
+      "column_name": "paymentMethod",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "purchase_settlements",
+      "column_name": "bankAccount",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "purchase_settlements",
+      "column_name": "confirmedAt",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "purchase_settlements",
+      "column_name": "confirmedBy",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "purchase_settlements",
+      "column_name": "memo",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "purchase_settlements",
+      "column_name": "createdAt",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "purchase_settlements",
+      "column_name": "updatedAt",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "purchase_settlements",
+      "column_name": "bankTransactionId",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "purchase_settlements",
+      "column_name": "itemCount",
+      "data_type": "integer",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "purchase_settlements",
+      "column_name": "tenant_id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    }
+  ],
+  "receivables": [
+    {
+      "table_name": "receivables",
+      "column_name": "id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "receivables",
+      "column_name": "contractId",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "receivables",
+      "column_name": "customerId",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "receivables",
+      "column_name": "vendorName",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "receivables",
+      "column_name": "assetNo",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "receivables",
+      "column_name": "type",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "receivables",
+      "column_name": "occurredDate",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "receivables",
+      "column_name": "internalDescription",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "receivables",
+      "column_name": "displayName",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "receivables",
+      "column_name": "totalAmount",
+      "data_type": "double precision",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "receivables",
+      "column_name": "billedAmount",
+      "data_type": "double precision",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "receivables",
+      "column_name": "status",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "receivables",
+      "column_name": "repairId",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "receivables",
+      "column_name": "createdAt",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "receivables",
+      "column_name": "updatedAt",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "receivables",
+      "column_name": "tenant_id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    }
+  ],
+  "repair_consumables": [
+    {
+      "table_name": "repair_consumables",
+      "column_name": "id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "repair_consumables",
+      "column_name": "repairId",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "repair_consumables",
+      "column_name": "consumableId",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "repair_consumables",
+      "column_name": "quantity",
+      "data_type": "double precision",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "repair_consumables",
+      "column_name": "unitPrice",
+      "data_type": "double precision",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "repair_consumables",
+      "column_name": "cost",
+      "data_type": "double precision",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "repair_consumables",
+      "column_name": "createdAt",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "repair_consumables",
+      "column_name": "updatedAt",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "repair_consumables",
+      "column_name": "tenant_id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    }
+  ],
+  "repairs": [
+    {
+      "table_name": "repairs",
+      "column_name": "id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "repairs",
+      "column_name": "ticketNo",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "repairs",
+      "column_name": "workCategory",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "repairs",
+      "column_name": "workLocation",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "repairs",
+      "column_name": "stockSource",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "repairs",
+      "column_name": "source",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "repairs",
+      "column_name": "repairType",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "repairs",
+      "column_name": "maintenanceType",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "repairs",
+      "column_name": "priority",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "repairs",
+      "column_name": "assetId",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "repairs",
+      "column_name": "assetNo",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "repairs",
+      "column_name": "modelName",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "repairs",
+      "column_name": "contractId",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "repairs",
+      "column_name": "targetContractStatus",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "repairs",
+      "column_name": "customerId",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "repairs",
+      "column_name": "customerName",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "repairs",
+      "column_name": "siteId",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "repairs",
+      "column_name": "siteName",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "repairs",
+      "column_name": "locationDetail",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "repairs",
+      "column_name": "reporterName",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "repairs",
+      "column_name": "reporterContact",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "repairs",
+      "column_name": "issueCategory",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "repairs",
+      "column_name": "issueDescription",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "repairs",
+      "column_name": "details",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "repairs",
+      "column_name": "errorCode",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "repairs",
+      "column_name": "mechanicId",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "repairs",
+      "column_name": "assignedMechanicId",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "repairs",
+      "column_name": "mechanicName",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "repairs",
+      "column_name": "vendorId",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "repairs",
+      "column_name": "preferredNavApp",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "repairs",
+      "column_name": "requestDate",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "repairs",
+      "column_name": "scheduleDate",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "repairs",
+      "column_name": "visitDate",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "repairs",
+      "column_name": "repairDate",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "repairs",
+      "column_name": "completedDate",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "repairs",
+      "column_name": "outboundDate",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "repairs",
+      "column_name": "status",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "repairs",
+      "column_name": "resolutionType",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "repairs",
+      "column_name": "unresolvedReason",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "repairs",
+      "column_name": "nextAction",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "repairs",
+      "column_name": "actionTaken",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "repairs",
+      "column_name": "partsUsed",
+      "data_type": "jsonb",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "repairs",
+      "column_name": "collectedParts",
+      "data_type": "jsonb",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "repairs",
+      "column_name": "timelineLogs",
+      "data_type": "jsonb",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "repairs",
+      "column_name": "billableType",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "repairs",
+      "column_name": "billableAmount",
+      "data_type": "double precision",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "repairs",
+      "column_name": "billableToCustomer",
+      "data_type": "boolean",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "repairs",
+      "column_name": "totalCost",
+      "data_type": "double precision",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "repairs",
+      "column_name": "costTotal",
+      "data_type": "double precision",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "repairs",
+      "column_name": "billingAmount",
+      "data_type": "double precision",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "repairs",
+      "column_name": "laborHours",
+      "data_type": "double precision",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "repairs",
+      "column_name": "isCustomerFault",
+      "data_type": "boolean",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "repairs",
+      "column_name": "faultImageUrl",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "repairs",
+      "column_name": "evidenceImages",
+      "data_type": "ARRAY",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "repairs",
+      "column_name": "beforeImage",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "repairs",
+      "column_name": "afterImage",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "repairs",
+      "column_name": "estimateFileUrl",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "repairs",
+      "column_name": "customerSignature",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "repairs",
+      "column_name": "customerConfirmName",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "repairs",
+      "column_name": "parentRepairId",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "repairs",
+      "column_name": "parentTicketId",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "repairs",
+      "column_name": "revisitRepairId",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "repairs",
+      "column_name": "revisitTicketId",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "repairs",
+      "column_name": "revisitDate",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "repairs",
+      "column_name": "revisitReason",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "repairs",
+      "column_name": "exchangeSuggested",
+      "data_type": "boolean",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "repairs",
+      "column_name": "inboundNo",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "repairs",
+      "column_name": "defectsJson",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "repairs",
+      "column_name": "billingId",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "repairs",
+      "column_name": "purchaseBillId",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "repairs",
+      "column_name": "memo",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "repairs",
+      "column_name": "createdAt",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "repairs",
+      "column_name": "updatedAt",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "repairs",
+      "column_name": "inspectionItemId",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "repairs",
+      "column_name": "inspectionItemCode",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "repairs",
+      "column_name": "degradationScore",
+      "data_type": "integer",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "repairs",
+      "column_name": "tenant_id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "repairs",
+      "column_name": "targetAssetStatus",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "repairs",
+      "column_name": "siteAddress",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "repairs",
+      "column_name": "consumables",
+      "data_type": "jsonb",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "repairs",
+      "column_name": "timelineEvents",
+      "data_type": "jsonb",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "repairs",
+      "column_name": "resolvedSiteAddress",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "repairs",
+      "column_name": "isWaived",
+      "data_type": "boolean",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "repairs",
+      "column_name": "waivedAmount",
+      "data_type": "double precision",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "repairs",
+      "column_name": "waivedBy",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "repairs",
+      "column_name": "waivedReason",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "repairs",
+      "column_name": "waivedAt",
+      "data_type": "text",
+      "is_nullable": "YES"
+    }
+  ],
+  "role_permissions": [
+    {
+      "table_name": "role_permissions",
+      "column_name": "id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "role_permissions",
+      "column_name": "roleId",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "role_permissions",
+      "column_name": "menuId",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "role_permissions",
+      "column_name": "canView",
+      "data_type": "boolean",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "role_permissions",
+      "column_name": "canSave",
+      "data_type": "boolean",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "role_permissions",
+      "column_name": "createdAt",
+      "data_type": "timestamp with time zone",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "role_permissions",
+      "column_name": "updatedAt",
+      "data_type": "timestamp with time zone",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "role_permissions",
+      "column_name": "tenant_id",
+      "data_type": "text",
+      "is_nullable": "YES"
+    }
+  ],
+  "settlement_payment_logs": [
+    {
+      "table_name": "settlement_payment_logs",
+      "column_name": "id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "settlement_payment_logs",
+      "column_name": "settlementId",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "settlement_payment_logs",
+      "column_name": "bankTransactionId",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "settlement_payment_logs",
+      "column_name": "paidAmount",
+      "data_type": "double precision",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "settlement_payment_logs",
+      "column_name": "paymentDate",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "settlement_payment_logs",
+      "column_name": "paymentMethod",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "settlement_payment_logs",
+      "column_name": "bankAccount",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "settlement_payment_logs",
+      "column_name": "memo",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "settlement_payment_logs",
+      "column_name": "createdAt",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "settlement_payment_logs",
+      "column_name": "tenant_id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    }
+  ],
+  "standard_options": [
+    {
+      "table_name": "standard_options",
+      "column_name": "id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "standard_options",
+      "column_name": "category",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "standard_options",
+      "column_name": "name",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "standard_options",
+      "column_name": "defaultPrice",
+      "data_type": "double precision",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "standard_options",
+      "column_name": "unit",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "standard_options",
+      "column_name": "description",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "standard_options",
+      "column_name": "isActive",
+      "data_type": "boolean",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "standard_options",
+      "column_name": "sortOrder",
+      "data_type": "integer",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "standard_options",
+      "column_name": "createdAt",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "standard_options",
+      "column_name": "updatedAt",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "standard_options",
+      "column_name": "tenant_id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    }
+  ],
+  "stocktaking_audit_items": [
+    {
+      "table_name": "stocktaking_audit_items",
+      "column_name": "id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "stocktaking_audit_items",
+      "column_name": "auditId",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "stocktaking_audit_items",
+      "column_name": "consumableId",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "stocktaking_audit_items",
+      "column_name": "modelName",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "stocktaking_audit_items",
+      "column_name": "unit",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "stocktaking_audit_items",
+      "column_name": "unitPrice",
+      "data_type": "double precision",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "stocktaking_audit_items",
+      "column_name": "systemQty",
+      "data_type": "double precision",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "stocktaking_audit_items",
+      "column_name": "actualQty",
+      "data_type": "double precision",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "stocktaking_audit_items",
+      "column_name": "diffQty",
+      "data_type": "double precision",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "stocktaking_audit_items",
+      "column_name": "diffAmount",
+      "data_type": "double precision",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "stocktaking_audit_items",
+      "column_name": "diffReason",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "stocktaking_audit_items",
+      "column_name": "note",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "stocktaking_audit_items",
+      "column_name": "createdAt",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "stocktaking_audit_items",
+      "column_name": "tenant_id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    }
+  ],
+  "stocktaking_audits": [
+    {
+      "table_name": "stocktaking_audits",
+      "column_name": "id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "stocktaking_audits",
+      "column_name": "auditNo",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "stocktaking_audits",
+      "column_name": "targetType",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "stocktaking_audits",
+      "column_name": "mechanicId",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "stocktaking_audits",
+      "column_name": "mechanicName",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "stocktaking_audits",
+      "column_name": "vehicleNo",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "stocktaking_audits",
+      "column_name": "auditDate",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "stocktaking_audits",
+      "column_name": "auditorId",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "stocktaking_audits",
+      "column_name": "auditorName",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "stocktaking_audits",
+      "column_name": "status",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "stocktaking_audits",
+      "column_name": "totalSystemQty",
+      "data_type": "double precision",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "stocktaking_audits",
+      "column_name": "totalActualQty",
+      "data_type": "double precision",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "stocktaking_audits",
+      "column_name": "totalDiffQty",
+      "data_type": "double precision",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "stocktaking_audits",
+      "column_name": "totalSystemAmount",
+      "data_type": "double precision",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "stocktaking_audits",
+      "column_name": "totalActualAmount",
+      "data_type": "double precision",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "stocktaking_audits",
+      "column_name": "totalDiffAmount",
+      "data_type": "double precision",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "stocktaking_audits",
+      "column_name": "memo",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "stocktaking_audits",
+      "column_name": "confirmedAt",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "stocktaking_audits",
+      "column_name": "confirmedBy",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "stocktaking_audits",
+      "column_name": "createdAt",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "stocktaking_audits",
+      "column_name": "updatedAt",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "stocktaking_audits",
+      "column_name": "tenant_id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    }
+  ],
+  "tenants": [
+    {
+      "table_name": "tenants",
+      "column_name": "id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "tenants",
+      "column_name": "tenantCode",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "tenants",
+      "column_name": "systemName",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "tenants",
+      "column_name": "displayName",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "tenants",
+      "column_name": "corporateName",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "tenants",
+      "column_name": "tradeName",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "tenants",
+      "column_name": "businessNumber",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "tenants",
+      "column_name": "corporateRegistrationNumber",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "tenants",
+      "column_name": "representativeName",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "tenants",
+      "column_name": "openingDate",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "tenants",
+      "column_name": "businessAddress",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "tenants",
+      "column_name": "headOfficeAddress",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "tenants",
+      "column_name": "businessCategory",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "tenants",
+      "column_name": "businessItem",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "tenants",
+      "column_name": "businessTypes",
+      "data_type": "jsonb",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "tenants",
+      "column_name": "isUnitTaxation",
+      "data_type": "boolean",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "tenants",
+      "column_name": "taxEmail",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "tenants",
+      "column_name": "taxOffice",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "tenants",
+      "column_name": "certificateIssueDate",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "tenants",
+      "column_name": "tel",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "tenants",
+      "column_name": "fax",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "tenants",
+      "column_name": "salesPhone",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "tenants",
+      "column_name": "email",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "tenants",
+      "column_name": "websiteUrl",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "tenants",
+      "column_name": "workplaces",
+      "data_type": "jsonb",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "tenants",
+      "column_name": "yards",
+      "data_type": "jsonb",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "tenants",
+      "column_name": "mainYardAddress",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "tenants",
+      "column_name": "stampBase64",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "tenants",
+      "column_name": "createdAt",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "tenants",
+      "column_name": "updatedAt",
+      "data_type": "text",
+      "is_nullable": "NO"
+    }
+  ],
+  "todos": [
+    {
+      "table_name": "todos",
+      "column_name": "id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "todos",
+      "column_name": "userId",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "todos",
+      "column_name": "type",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "todos",
+      "column_name": "title",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "todos",
+      "column_name": "content",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "todos",
+      "column_name": "isCompleted",
+      "data_type": "boolean",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "todos",
+      "column_name": "relatedEntityId",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "todos",
+      "column_name": "createdAt",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "todos",
+      "column_name": "updatedAt",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "todos",
+      "column_name": "tenant_id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "todos",
+      "column_name": "assignedUserId",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "todos",
+      "column_name": "targetDept",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "todos",
+      "column_name": "targetRole",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "todos",
+      "column_name": "taskCategory",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "todos",
+      "column_name": "priority",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "todos",
+      "column_name": "dueDate",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "todos",
+      "column_name": "actionUrl",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "todos",
+      "column_name": "entityType",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "todos",
+      "column_name": "entityId",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "todos",
+      "column_name": "targetType",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "todos",
+      "column_name": "senderId",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "todos",
+      "column_name": "senderName",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "todos",
+      "column_name": "resolutionNote",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "todos",
+      "column_name": "completedAt",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "todos",
+      "column_name": "completedByUserId",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "todos",
+      "column_name": "completedByName",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "todos",
+      "column_name": "completionAction",
+      "data_type": "text",
+      "is_nullable": "YES"
+    }
+  ],
+  "transport_companies": [
+    {
+      "table_name": "transport_companies",
+      "column_name": "id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "transport_companies",
+      "column_name": "name",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "transport_companies",
+      "column_name": "businessNo",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "transport_companies",
+      "column_name": "contact",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "transport_companies",
+      "column_name": "memo",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "transport_companies",
+      "column_name": "createdAt",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "transport_companies",
+      "column_name": "updatedAt",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "transport_companies",
+      "column_name": "bankName",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "transport_companies",
+      "column_name": "bankAccount",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "transport_companies",
+      "column_name": "bankHolder",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "transport_companies",
+      "column_name": "tenant_id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    }
+  ],
+  "transport_drivers": [
+    {
+      "table_name": "transport_drivers",
+      "column_name": "id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "transport_drivers",
+      "column_name": "companyId",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "transport_drivers",
+      "column_name": "driverName",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "transport_drivers",
+      "column_name": "driverContact",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "transport_drivers",
+      "column_name": "vehicleNo",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "transport_drivers",
+      "column_name": "vehicleType",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "transport_drivers",
+      "column_name": "createdAt",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "transport_drivers",
+      "column_name": "updatedAt",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "transport_drivers",
+      "column_name": "idNo",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "transport_drivers",
+      "column_name": "address",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "transport_drivers",
+      "column_name": "vehicleColor",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "transport_drivers",
+      "column_name": "tenant_id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "transport_drivers",
+      "column_name": "birthDate",
+      "data_type": "text",
+      "is_nullable": "YES"
+    }
+  ],
+  "users": [
+    {
+      "table_name": "users",
+      "column_name": "id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "users",
+      "column_name": "loginId",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "users",
+      "column_name": "passwordHash",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "users",
+      "column_name": "name",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "users",
+      "column_name": "departmentId",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "users",
+      "column_name": "position",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "users",
+      "column_name": "managerId",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "users",
+      "column_name": "status",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "users",
+      "column_name": "role",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "users",
+      "column_name": "joinDate",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "users",
+      "column_name": "retireDate",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "users",
+      "column_name": "birthDate",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "users",
+      "column_name": "address",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "users",
+      "column_name": "phone",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "users",
+      "column_name": "email",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "users",
+      "column_name": "profileImageUrl",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "users",
+      "column_name": "createdAt",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "users",
+      "column_name": "updatedAt",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "users",
+      "column_name": "baseSalary",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "users",
+      "column_name": "department",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "users",
+      "column_name": "tenant_id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "users",
+      "column_name": "customRoleId",
+      "data_type": "text",
+      "is_nullable": "YES"
+    }
+  ],
+  "vehicle_fuel_logs": [
+    {
+      "table_name": "vehicle_fuel_logs",
+      "column_name": "id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "vehicle_fuel_logs",
+      "column_name": "vehicleId",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "vehicle_fuel_logs",
+      "column_name": "vehicleNo",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "vehicle_fuel_logs",
+      "column_name": "driverId",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "vehicle_fuel_logs",
+      "column_name": "driverName",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "vehicle_fuel_logs",
+      "column_name": "fuelDate",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "vehicle_fuel_logs",
+      "column_name": "fuelType",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "vehicle_fuel_logs",
+      "column_name": "fuelVolume",
+      "data_type": "double precision",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "vehicle_fuel_logs",
+      "column_name": "fuelAmount",
+      "data_type": "double precision",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "vehicle_fuel_logs",
+      "column_name": "fuelUnitPrice",
+      "data_type": "double precision",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "vehicle_fuel_logs",
+      "column_name": "currentMileage",
+      "data_type": "integer",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "vehicle_fuel_logs",
+      "column_name": "dashboardPhotoUrl",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "vehicle_fuel_logs",
+      "column_name": "receiptPhotoUrl",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "vehicle_fuel_logs",
+      "column_name": "gasStationName",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "vehicle_fuel_logs",
+      "column_name": "paymentMethod",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "vehicle_fuel_logs",
+      "column_name": "cardLast4",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "vehicle_fuel_logs",
+      "column_name": "fuelEfficiency",
+      "data_type": "double precision",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "vehicle_fuel_logs",
+      "column_name": "memo",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "vehicle_fuel_logs",
+      "column_name": "createdAt",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "vehicle_fuel_logs",
+      "column_name": "updatedAt",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "vehicle_fuel_logs",
+      "column_name": "tenant_id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    }
+  ],
+  "vehicle_operation_logs": [
+    {
+      "table_name": "vehicle_operation_logs",
+      "column_name": "id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "vehicle_operation_logs",
+      "column_name": "vehicleId",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "vehicle_operation_logs",
+      "column_name": "vehicleNo",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "vehicle_operation_logs",
+      "column_name": "driverId",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "vehicle_operation_logs",
+      "column_name": "driverName",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "vehicle_operation_logs",
+      "column_name": "driverDept",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "vehicle_operation_logs",
+      "column_name": "operationDate",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "vehicle_operation_logs",
+      "column_name": "purposeType",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "vehicle_operation_logs",
+      "column_name": "purposeDetail",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "vehicle_operation_logs",
+      "column_name": "departureLocation",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "vehicle_operation_logs",
+      "column_name": "arrivalLocation",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "vehicle_operation_logs",
+      "column_name": "departureMileage",
+      "data_type": "integer",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "vehicle_operation_logs",
+      "column_name": "arrivalMileage",
+      "data_type": "integer",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "vehicle_operation_logs",
+      "column_name": "driveDistance",
+      "data_type": "integer",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "vehicle_operation_logs",
+      "column_name": "businessDistance",
+      "data_type": "integer",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "vehicle_operation_logs",
+      "column_name": "commuteDistance",
+      "data_type": "integer",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "vehicle_operation_logs",
+      "column_name": "dashboardPhotoStart",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "vehicle_operation_logs",
+      "column_name": "dashboardPhotoEnd",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "vehicle_operation_logs",
+      "column_name": "memo",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "vehicle_operation_logs",
+      "column_name": "status",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "vehicle_operation_logs",
+      "column_name": "confirmedBy",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "vehicle_operation_logs",
+      "column_name": "confirmedAt",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "vehicle_operation_logs",
+      "column_name": "createdAt",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "vehicle_operation_logs",
+      "column_name": "updatedAt",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "vehicle_operation_logs",
+      "column_name": "tenant_id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    }
+  ],
+  "vendors": [
+    {
+      "table_name": "vendors",
+      "column_name": "id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "vendors",
+      "column_name": "name",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "vendors",
+      "column_name": "type",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "vendors",
+      "column_name": "bizRegNo",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "vendors",
+      "column_name": "contactName",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "vendors",
+      "column_name": "contact",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "vendors",
+      "column_name": "bankAccount",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "vendors",
+      "column_name": "memo",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "vendors",
+      "column_name": "createdAt",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "vendors",
+      "column_name": "updatedAt",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "table_name": "vendors",
+      "column_name": "types",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "vendors",
+      "column_name": "representative",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "vendors",
+      "column_name": "email",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "vendors",
+      "column_name": "address",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "vendors",
+      "column_name": "isActive",
+      "data_type": "boolean",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "vendors",
+      "column_name": "bankName",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "vendors",
+      "column_name": "accountNumber",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "vendors",
+      "column_name": "accountHolder",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "vendors",
+      "column_name": "passbookFileUrl",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "vendors",
+      "column_name": "passbookFileName",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "vendors",
+      "column_name": "businessCertFileUrl",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "vendors",
+      "column_name": "firstTradeDate",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "vendors",
+      "column_name": "lastTradeDate",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "vendors",
+      "column_name": "totalPurchaseAmount",
+      "data_type": "bigint",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "vendors",
+      "column_name": "taxType",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "vendors",
+      "column_name": "businessStatus",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "vendors",
+      "column_name": "closedDate",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "vendors",
+      "column_name": "lastStatusCheckDate",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "table_name": "vendors",
+      "column_name": "tenant_id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    }
+  ]
+}

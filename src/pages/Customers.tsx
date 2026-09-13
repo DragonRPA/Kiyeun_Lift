@@ -6,7 +6,7 @@ import {
   CreditCard, ShieldCheck, Zap, Sparkles, CheckCircle2, AlertCircle, 
   X, Edit2, Trash2, RefreshCw, Layers, Check, Building2, Circle,
   Sliders, Tag, Settings, CheckSquare, Square, ChevronDown, ChevronUp, FileText, FolderOpen,
-  ShieldAlert
+  ShieldAlert, FileSpreadsheet
 } from 'lucide-react';
 import { db, Customer, CustomerContact, CustomerSite, CustomerBankAccount, StandardOption, logPrivacyAccess } from '../services/db';
 import { exportToExcel } from '../services/excel';
@@ -16,6 +16,7 @@ import { ChosungFilterBar } from '../components/ChosungFilterBar';
 import { BusinessLicenseModal } from '../components/BusinessLicenseModal';
 import { BatchBusinessLicenseModal } from '../components/BatchBusinessLicenseModal';
 import { NtsStatusAuditModal } from '../components/NtsStatusAuditModal';
+import { ExcelUploadModal, ExcelColumnDef } from '../components/ExcelUploadModal';
 
 export const Customers: React.FC = () => {
   const {
@@ -53,6 +54,80 @@ export const Customers: React.FC = () => {
   const [targetBizLicenseCustId, setTargetBizLicenseCustId] = useState<string | undefined>(undefined);
   const [showBatchLicenseModal, setShowBatchLicenseModal] = useState(false);
   const [showNtsAuditModal, setShowNtsAuditModal] = useState(false);
+
+  // 엑셀 일괄 고객/현장/담당자 등록 모달 상태
+  const [custExcelModalOpen, setCustExcelModalOpen] = useState(false);
+
+  const custExcelColumns: ExcelColumnDef[] = [
+    { key: 'name', label: '고객사명', required: true, sample: '(주)미래이엔씨' },
+    { key: 'businessNumber', label: '사업자등록번호', sample: '123-45-67890' },
+    { key: 'representative', label: '대표자명', sample: '홍길동' },
+    { key: 'contactPhone', label: '대표전화', sample: '02-1234-5678' },
+    { key: 'address', label: '본사주소', sample: '서울시 서초구 강남대로 100' },
+    { key: 'siteName', label: '현장명', sample: '송도 바이오단지 1공구' },
+    { key: 'siteAddress', label: '현장주소', sample: '인천 연수구 송도동 200' },
+    { key: 'contactName', label: '담당자명', sample: '김소장' },
+    { key: 'contactMobile', label: '담당자연락처', sample: '010-9876-5432' },
+    { key: 'contactRole', label: '담당자직함', sample: '현장소장' },
+  ];
+
+  const handleBatchUploadCustomers = async (rows: Record<string, any>[]) => {
+    let successCount = 0;
+    for (const row of rows) {
+      const name = String(row.name || '').trim();
+      if (!name) continue;
+
+      let targetCust = customers.find(c => 
+        (row.businessNumber && c.bizRegNo && c.bizRegNo.replace(/[^0-9]/g, '') === String(row.businessNumber).replace(/[^0-9]/g, '')) ||
+        c.name.trim().toLowerCase() === name.toLowerCase()
+      );
+
+      let customerId = targetCust?.id;
+
+      if (!targetCust) {
+        await saveCustomer({
+          name,
+          bizRegNo: String(row.businessNumber || ''),
+          representative: String(row.representative || ''),
+          repContact: String(row.contactPhone || ''),
+          address: String(row.address || '본사 주소 미지정'),
+          repEmail: '',
+          isClosed: false,
+          transactionStatus: 'ALLOWED'
+        });
+        const refreshedCust = db.customers.find(c => c.name === name);
+        customerId = refreshedCust?.id || `cust_${Date.now()}`;
+      }
+
+      if (customerId && row.siteName) {
+        await saveSite({
+          customerId,
+          name: String(row.siteName).trim(),
+          address: String(row.siteAddress || row.address || '현장 주소 미지정').trim(),
+          contactName: String(row.contactName || '').trim(),
+          contact: String(row.contactMobile || '').trim(),
+          email: ''
+        });
+      }
+
+      if (customerId && row.contactName) {
+        await saveContact({
+          customerId,
+          name: String(row.contactName).trim(),
+          contact: String(row.contactMobile || '').trim(),
+          position: String(row.contactRole || '담당자').trim(),
+          email: ''
+        });
+      }
+
+      successCount++;
+    }
+
+    await db.awaitPendingWrites();
+    await refreshAllData();
+    showToast(`${successCount}개사의 고객사 및 현장/담당자가 일괄 등록되었습니다.`);
+    return { successCount, message: '고객사 일괄 등록 완료' };
+  };
 
   const handleBizLicenseSuccess = async (savedCustomer: Customer, isNew: boolean) => {
     setSearchTerm(savedCustomer.name);
@@ -810,6 +885,15 @@ export const Customers: React.FC = () => {
               title="국세청 홈택스 사업자 휴폐업 상태 전수 점검 및 임대자산 회수 점검"
             >
               <ShieldAlert size={13} color="#ffffff" /> 국세청 휴폐업 점검
+            </button>
+          )}
+          {canSave && (
+            <button
+              className="btn-secondary"
+              onClick={() => setCustExcelModalOpen(true)}
+              style={{ padding: '5px 12px', fontSize: '12px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '5px', whiteSpace: 'nowrap' }}
+            >
+              <FileSpreadsheet size={13} color="var(--primary)" /> 엑셀 일괄 등록
             </button>
           )}
           {canSave && (
@@ -2864,6 +2948,16 @@ export const Customers: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* 🏢 고객/현장/담당자 엑셀 일괄 등록 모달 */}
+      <ExcelUploadModal
+        isOpen={custExcelModalOpen}
+        onClose={() => setCustExcelModalOpen(false)}
+        title="고객사 및 현장/담당자 엑셀 일괄 등록"
+        templateFileName="고객사_현장_일괄등록"
+        columns={custExcelColumns}
+        onUpload={handleBatchUploadCustomers}
+      />
 
     </div>
   );

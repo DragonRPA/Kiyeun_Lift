@@ -102,6 +102,14 @@ export const SYSTEM_MENU_CONFIG: MenuGroupConfig[] = [
     ]
   },
   {
+    id: 'grp_tools',
+    name: '도구 및 다운로드',
+    items: [
+      { id: 'operations_manual', name: '업무매뉴얼' },
+      { id: 'error_report', name: '오류 신고' }
+    ]
+  },
+  {
     id: 'grp_system_dev',
     name: '시스템관리 - 개발자',
     items: [
@@ -180,7 +188,14 @@ export const CANONICAL_MENU_ALIASES: Record<string, string> = {
   'agentbadge': 'agent_badge',
   'privacy-audit': 'privacy_audit',
   'privacy_access_logs': 'privacy_audit',
-  'privacy_access_log': 'privacy_audit'
+  'privacy_access_log': 'privacy_audit',
+  'error_report': 'error_report',
+  'error-report': 'error_report',
+  'error_reports': 'error_report',
+  'error-reports': 'error_report',
+  'error': 'error_report',
+  'errors': 'error_report',
+  '오류신고': 'error_report'
 };
 
 export function normalizeMenuId(menuId: string): string {

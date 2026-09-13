@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
-import { db, supabase, Tenant, TenantWorkplace, TenantYard, TenantBusinessType, TenantBankAccount, OFFICIAL_STAMP_BASE64, User, MenuPermission, createMenuPermission, CustomRole, RolePermission, Customer, CustomerContact, CustomerSite, Product, Asset, Consumable, ConsumableLog, ConsumablePurchaseRequest, MechanicConsumableStock, Contract, ContractAsset, ContractHistory, Delivery, Billing, BillingType, BillingDetail, Receivable, Payment, PaymentDepositLink, Repair, RepairConsumable, Todo, BankTransaction, BankMatchingRule, BankAccountInitialBalance, AssetInOutLog, GoogleConfig, Vendor, CashFlowSnapshot, OutboundInspection, TransportCompany, TransportDriver, TransportNegotiation, SubleaseNegotiation, DepreciationLog, PurchaseSettlement, PurchaseSettlementItem, SettlementPaymentLog, ExternalLease, PurchaseSettlementType, PurchaseSettlementStatus, findCustomerByNormalizedName, AnnualLeaveQuota, LeaveUsage, OvertimeRecord, PayrollClosing, InspectionChecklistItem, EquipmentManual, StandardOption, InboundDefectDetail, PrepaidTransaction, DelinquencyActionLog, LegalNoticeLog, LegalNoticeTemplate, calculateAssetDepreciation, FieldAsTicket, FieldAsPartUsed, FieldAsCollectedPart, CorporateVehicle, VehicleOperationLog, VehicleFuelLog, RepairPartUsed, RepairCollectedPart, SaleContractTerms, StocktakingAudit, StocktakingAuditItem, CollectedPart, PrintStation, PrintQueueItem, logPrivacyAccess } from '../services/db';
+import { db, supabase, Tenant, TenantWorkplace, TenantYard, TenantBusinessType, TenantBankAccount, OFFICIAL_STAMP_BASE64, User, MenuPermission, createMenuPermission, CustomRole, RolePermission, Customer, CustomerContact, CustomerSite, Product, Asset, Consumable, ConsumableLog, ConsumablePurchaseRequest, MechanicConsumableStock, Contract, ContractAsset, ContractHistory, Delivery, Billing, BillingType, BillingDetail, Receivable, Payment, PaymentDepositLink, Repair, RepairConsumable, Todo, BankTransaction, BankMatchingRule, BankAccountInitialBalance, AssetInOutLog, GoogleConfig, Vendor, CashFlowSnapshot, OutboundInspection, TransportCompany, TransportDriver, TransportNegotiation, SubleaseNegotiation, DepreciationLog, PurchaseSettlement, PurchaseSettlementItem, SettlementPaymentLog, ExternalLease, PurchaseSettlementType, PurchaseSettlementStatus, findCustomerByNormalizedName, AnnualLeaveQuota, LeaveUsage, OvertimeRecord, PayrollClosing, InspectionChecklistItem, EquipmentManual, StandardOption, InboundDefectDetail, PrepaidTransaction, DelinquencyActionLog, LegalNoticeLog, LegalNoticeTemplate, calculateAssetDepreciation, FieldAsTicket, FieldAsPartUsed, FieldAsCollectedPart, CorporateVehicle, VehicleOperationLog, VehicleFuelLog, RepairPartUsed, RepairCollectedPart, SaleContractTerms, StocktakingAudit, StocktakingAuditItem, CollectedPart, PrintStation, PrintQueueItem, logPrivacyAccess, ErrorReport, ErrorReportAttachment, ErrorReportStatus, ErrorReportSeverity, ErrorReportCategory } from '../services/db';
 import { enqueuePrintJob as serviceEnqueuePrintJob, registerPrintStation as serviceRegisterPrintStation, deletePrintStation as serviceDeletePrintStation, retryPrintJob as serviceRetryPrintJob, cancelPrintJob as serviceCancelPrintJob } from '../services/printQueueService';
 import { ErrorModal } from '../components/ErrorModal';
 import { getAllSystemMenuIds, normalizeMenuId } from '../config/menu_config';
@@ -433,6 +433,15 @@ interface AppContextType {
   retryPrintJob: (id: string) => Promise<void>;
   cancelPrintJob: (id: string) => Promise<void>;
 
+  // Error Reports (오류 신고 관리: 등록-접수-완료 3단계 라이프사이클 & 파일첨부)
+  errorReports: ErrorReport[];
+  addErrorReport: (report: Omit<ErrorReport, 'id' | 'createdAt' | 'updatedAt' | 'reportNo'> & { id?: string; reportNo?: string }) => Promise<ErrorReport>;
+  receiveErrorReport: (id: string, payload: { assigneeId: string; assigneeName: string; receptionNote?: string; targetCompletionDate?: string }) => Promise<void>;
+  completeErrorReport: (id: string, payload: { resolutionNote: string; resolvedVersion?: string; rootCause?: string }) => Promise<void>;
+  cancelErrorReport: (id: string, reason: string) => Promise<void>;
+  reopenErrorReport: (id: string) => Promise<void>;
+  deleteErrorReport: (id: string) => Promise<void>;
+
   // Navigation states (cross-page routing)
   activeTab: string;
   setActiveTab: (tab: string) => void;
@@ -607,6 +616,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [mechanicConsumableStocks, setMechanicConsumableStocks] = useState<MechanicConsumableStock[]>([]);
   const [printStations, setPrintStations] = useState<PrintStation[]>([]);
   const [printQueue, setPrintQueue] = useState<PrintQueueItem[]>([]);
+  const [errorReports, setErrorReports] = useState<ErrorReport[]>(() => db.errorReports || []);
 
 
   // Navigation / Routing states
@@ -729,6 +739,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setMechanicConsumableStocks([...db.mechanicConsumableStocks]);
     setPrintStations([...db.printStations]);
     setPrintQueue([...db.printQueue]);
+    setErrorReports([...(db.errorReports || [])]);
 
     setCurrentUser(prev => {
       if (prev && (prev.loginId === 'admin' || prev.id === 'sys-admin')) {
@@ -1010,8 +1021,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // 2. 단일 표준(SSOT) 단수형 메뉴 ID로 정규화
     const normMenuId = normalizeMenuId(menuId);
 
-    // 2-1. 연차신청, 매뉴얼 스튜디오 및 업무매뉴얼은 권한 구분 없이 모든 임직원의 공통 기능으로 처리 (전원 상시 개방)
-    if (normMenuId === 'leave_application' || normMenuId === 'manual_studio' || normMenuId === 'operations_manual') {
+    // 2-1. 연차신청, 매뉴얼 스튜디오, 업무매뉴얼 및 오류 신고는 권한 구분 없이 모든 임직원의 공통 기능으로 처리 (전원 상시 개방)
+    if (normMenuId === 'leave_application' || normMenuId === 'manual_studio' || normMenuId === 'operations_manual' || normMenuId === 'error_report') {
       return true;
     }
 
@@ -9045,12 +9056,113 @@ ${currentTenant?.corporateName || tenantCorp} 배상
     refreshAllData();
   };
 
+  // ─── 오류 신고 관리 (3단계 라이프사이클 & 파일첨부) ───
+  const addErrorReport = async (reportData: Omit<ErrorReport, 'id' | 'createdAt' | 'updatedAt' | 'reportNo'> & { id?: string; reportNo?: string }): Promise<ErrorReport> => {
+    const list = db.errorReports || [];
+    const reportNo = reportData.reportNo || `ERR-${new Date().toISOString().slice(0, 7).replace('-', '')}-${String(list.length + 1).padStart(4, '0')}`;
+    const newReport: ErrorReport = {
+      id: reportData.id || `ERR-${Date.now()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`,
+      reportNo,
+      title: reportData.title,
+      description: reportData.description,
+      menuId: reportData.menuId,
+      menuName: reportData.menuName,
+      category: reportData.category || 'OTHER',
+      severity: reportData.severity || 'MEDIUM',
+      status: 'REGISTERED',
+      reporterId: reportData.reporterId || currentUser?.id || 'usr-anon',
+      reporterName: reportData.reporterName || currentUser?.name || '시스템사용자',
+      reporterDept: reportData.reporterDept,
+      reporterPhone: reportData.reporterPhone,
+      reportedAt: reportData.reportedAt || new Date().toISOString().replace('T', ' ').slice(0, 16),
+      attachments: reportData.attachments || [],
+      environmentInfo: reportData.environmentInfo || {
+        userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : '',
+        screenResolution: typeof window !== 'undefined' ? `${window.innerWidth}x${window.innerHeight}` : '',
+        activeUrl: typeof window !== 'undefined' ? window.location.pathname : '',
+        appVersion: 'v1.14.0'
+      },
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+
+    const inserted = db.insertRow<ErrorReport>('errorReports', newReport);
+    await db.awaitPendingWrites();
+    setErrorReports([...db.errorReports]);
+    return inserted;
+  };
+
+  const receiveErrorReport = async (id: string, payload: { assigneeId: string; assigneeName: string; receptionNote?: string; targetCompletionDate?: string }): Promise<void> => {
+    const nowIso = new Date().toISOString();
+    const updates: Partial<ErrorReport> = {
+      status: 'IN_PROGRESS',
+      receiverId: currentUser?.id || 'usr-admin',
+      receiverName: currentUser?.name || '관리자',
+      receivedAt: nowIso.replace('T', ' ').slice(0, 16),
+      assigneeId: payload.assigneeId,
+      assigneeName: payload.assigneeName,
+      receptionNote: payload.receptionNote,
+      targetCompletionDate: payload.targetCompletionDate,
+      updatedAt: nowIso
+    };
+    db.updateRow<ErrorReport>('errorReports', id, updates);
+    await db.awaitPendingWrites();
+    setErrorReports([...db.errorReports]);
+  };
+
+  const completeErrorReport = async (id: string, payload: { resolutionNote: string; resolvedVersion?: string; rootCause?: string }): Promise<void> => {
+    const nowIso = new Date().toISOString();
+    const updates: Partial<ErrorReport> = {
+      status: 'COMPLETED',
+      resolverId: currentUser?.id || 'usr-admin',
+      resolverName: currentUser?.name || '관리자',
+      completedAt: nowIso.replace('T', ' ').slice(0, 16),
+      resolutionNote: payload.resolutionNote,
+      resolvedVersion: payload.resolvedVersion || 'v1.14.0',
+      rootCause: payload.rootCause,
+      updatedAt: nowIso
+    };
+    db.updateRow<ErrorReport>('errorReports', id, updates);
+    await db.awaitPendingWrites();
+    setErrorReports([...db.errorReports]);
+  };
+
+  const cancelErrorReport = async (id: string, reason: string): Promise<void> => {
+    const nowIso = new Date().toISOString();
+    const updates: Partial<ErrorReport> = {
+      status: 'CANCELLED',
+      resolutionNote: reason ? `[취소 사유]: ${reason}` : '신고자 요청 또는 중복 건 취소',
+      updatedAt: nowIso
+    };
+    db.updateRow<ErrorReport>('errorReports', id, updates);
+    await db.awaitPendingWrites();
+    setErrorReports([...db.errorReports]);
+  };
+
+  const reopenErrorReport = async (id: string): Promise<void> => {
+    const nowIso = new Date().toISOString();
+    const updates: Partial<ErrorReport> = {
+      status: 'REGISTERED',
+      updatedAt: nowIso
+    };
+    db.updateRow<ErrorReport>('errorReports', id, updates);
+    await db.awaitPendingWrites();
+    setErrorReports([...db.errorReports]);
+  };
+
+  const deleteErrorReport = async (id: string): Promise<void> => {
+    db.deleteRow('errorReports', id);
+    await db.awaitPendingWrites();
+    setErrorReports([...db.errorReports]);
+  };
+
   return (
     <AppContext.Provider value={{ receivables: db.receivables as any[], refreshReceivables: () => {}, 
       currentUser, theme, toggleTheme, login, logout, switchUser, hasPermission, showErrorModal,
       tenants, currentTenant, setCurrentTenantId, saveTenant,
       addTenantWorkplace, updateTenantWorkplace, deleteTenantWorkplace,
       addTenantYard, updateTenantYard, deleteTenantYard, setDefaultYard,
+      errorReports, addErrorReport, receiveErrorReport, completeErrorReport, cancelErrorReport, reopenErrorReport, deleteErrorReport,
       users, permissions, customers, contacts, sites, products, assets, consumables, consumableLogs, consumablePurchases, mechanicConsumableStocks, contracts, contractAssets, contractHistory, deliveries, billings, billingDetails, payments, paymentDepositLinks, repairs, repairConsumables, transportCompanies, transportDrivers, transportNegotiations, subleaseNegotiations, todos,
       stocktakingAudits, stocktakingAuditItems, collectedParts,
       bankTransactions, bankMatchingRules, bankInitialBalances, assetInOutLogs, vendors, googleConfigs, cashFlowSnapshots, outboundInspections, depreciationLogs,

@@ -98,9 +98,21 @@ export const SYSTEM_MENU_CONFIG: MenuGroupConfig[] = [
     ]
   },
   {
+    id: 'grp_tools',
+    name: '도구 및 다운로드',
+    items: [
+      { id: 'operations_manual', name: '업무매뉴얼' },
+      { id: 'error_report', name: '오류 신고' }
+    ]
+  },
+  {
     id: 'grp_system_dev',
     name: '시스템관리 - 개발자',
     items: [
+      { id: 'agentic_ai_lab', name: '에이전틱 AI 샌드박스 랩' },
+      { id: 'agentic_dispatch_studio', name: '에이전틱 배차 관제 스튜디오' },
+      { id: 'agentic_settlement_autopilot', name: '에이전틱 월말 대사 정산 오토파일럿' },
+      { id: 'agentic_asset_lifecycle', name: '에이전틱 자산 라이프사이클 관제' },
       { id: 'initial_db_upload', name: '초기DB 업로드' },
       { id: 'google_config', name: '구글 관리자 설정' },
       { id: 'dev_uploader', name: '[개발] DB 데이터 업로더' }

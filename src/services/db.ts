@@ -1280,6 +1280,60 @@ export interface EquipmentManual {
   updatedAt?: string;
 }
 
+// ─── 오류 신고 관리 (3단계 라이프사이클 & 파일첨부) ───
+export type ErrorReportStatus = 'REGISTERED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
+export type ErrorReportSeverity = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+export type ErrorReportCategory = 'UI_DISPLAY' | 'DATA_CALC' | 'COMM_STORAGE' | 'PERMISSION' | 'FEATURE_REQUEST' | 'OTHER';
+
+export interface ErrorReportAttachment {
+  id: string;
+  name: string;
+  size: number;
+  type: string;
+  url: string; // Base64 data URL or Storage public URL
+  storagePath?: string;
+  uploadedAt: string;
+}
+
+export interface ErrorReport {
+  id: string;
+  reportNo: string; // e.g. ERR-202609-0001
+  title: string;
+  description: string;
+  menuId?: string;
+  menuName?: string;
+  category: ErrorReportCategory;
+  severity: ErrorReportSeverity;
+  status: ErrorReportStatus;
+  reporterId: string;
+  reporterName: string;
+  reporterDept?: string;
+  reporterPhone?: string;
+  reportedAt: string;
+  attachments: ErrorReportAttachment[];
+  environmentInfo?: {
+    userAgent?: string;
+    screenResolution?: string;
+    activeUrl?: string;
+    appVersion?: string;
+  };
+  receiverId?: string;
+  receiverName?: string;
+  receivedAt?: string;
+  assigneeId?: string;
+  assigneeName?: string;
+  receptionNote?: string;
+  targetCompletionDate?: string;
+  resolverId?: string;
+  resolverName?: string;
+  completedAt?: string;
+  resolutionNote?: string;
+  resolvedVersion?: string;
+  rootCause?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 /** 유튜브 URL에서 11자리 고유 비디오 ID를 정규식으로 추출하는 순수 헬퍼 함수 */
 export function extractYoutubeVideoId(url: string): string | null {
   if (!url || typeof url !== 'string') return null;
@@ -4008,6 +4062,112 @@ export const SEED_VEHICLE_FUEL_LOGS: VehicleFuelLog[] = [
   }
 ];
 
+export const SEED_ERROR_REPORTS: ErrorReport[] = [
+  {
+    id: 'ERR-0000001',
+    reportNo: 'ERR-0000001',
+    title: '소모품 입출고 화면 바코드 스캔 연속 포커스 이탈 현상',
+    description: '소모품 입출고 화면에서 바코드 스캔 시 2번째 품목부터 포커스가 해제되어 수동 클릭이 필요합니다.',
+    menuId: 'consumable_inout',
+    menuName: '소모품 입출고',
+    category: 'UI_DISPLAY',
+    severity: 'MEDIUM',
+    status: 'REGISTERED',
+    reporterId: 'usr-mech1',
+    reporterName: '김정비',
+    reporterDept: 'AS팀',
+    reporterPhone: '010-3344-5566',
+    reportedAt: '2026-09-12 10:30',
+    attachments: [
+      {
+        id: 'att-seed-1',
+        name: '소모품스캔오류화면.png',
+        size: 142050,
+        type: 'image/png',
+        url: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+        uploadedAt: '2026-09-12 10:30'
+      }
+    ],
+    environmentInfo: {
+      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/128.0.0.0',
+      screenResolution: '1920x1080',
+      activeUrl: '/consumable_inout',
+      appVersion: 'v1.14.0.Build.84'
+    },
+    createdAt: '2026-09-12T10:30:00.000Z',
+    updatedAt: '2026-09-12T10:30:00.000Z'
+  },
+  {
+    id: 'ERR-0000002',
+    reportNo: 'ERR-0000002',
+    title: '배차 전송 시 왕복 운송비 할인 금액 표기 누락',
+    description: '대차 교체 단일 EXCHANGE 배차 시 왕복 할인(60,000원)이 배차 의뢰서 요약 표기에 미반영되는 경우가 발생합니다.',
+    menuId: 'delivery',
+    menuName: '배차/운송 관리',
+    category: 'DATA_CALC',
+    severity: 'HIGH',
+    status: 'IN_PROGRESS',
+    reporterId: 'usr-outbound1',
+    reporterName: '박출고',
+    reporterDept: '출고관리부',
+    reporterPhone: '010-7788-9900',
+    reportedAt: '2026-09-11 14:15',
+    attachments: [],
+    environmentInfo: {
+      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/128.0.0.0',
+      screenResolution: '1920x1080',
+      activeUrl: '/delivery',
+      appVersion: 'v1.14.0.Build.84'
+    },
+    receiverId: 'usr-admin',
+    receiverName: '강상안 최고관리자',
+    receivedAt: '2026-09-11 14:30',
+    assigneeId: 'usr-admin',
+    assigneeName: '개발자',
+    receptionNote: '헌장 2.3 단일 EXCHANGE 운송비 할인 로직 렌더링 파이프라인 정밀 점검 중',
+    targetCompletionDate: '2026-09-14',
+    createdAt: '2026-09-11T14:15:00.000Z',
+    updatedAt: '2026-09-11T14:30:00.000Z'
+  },
+  {
+    id: 'ERR-0000003',
+    reportNo: 'ERR-0000003',
+    title: '청구서 엑셀 내보내기 시 금액 컬럼 천단위 쉼표 서식 누락',
+    description: '월말 매출 청구 대장에서 엑셀 내보내기 시 공급가액과 세액 컬럼이 일반 텍스트로 처리되어 합계 수식 연산 시 오류 발생.',
+    menuId: 'billing',
+    menuName: '청구/수납 관리',
+    category: 'DATA_CALC',
+    severity: 'LOW',
+    status: 'COMPLETED',
+    reporterId: 'usr-sales1',
+    reporterName: '이영업',
+    reporterDept: '영업부',
+    reporterPhone: '010-1234-5678',
+    reportedAt: '2026-09-10 09:00',
+    attachments: [],
+    environmentInfo: {
+      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/128.0.0.0',
+      screenResolution: '1920x1080',
+      activeUrl: '/billing',
+      appVersion: 'v1.14.0.Build.83'
+    },
+    receiverId: 'usr-admin',
+    receiverName: '강상안 최고관리자',
+    receivedAt: '2026-09-10 09:15',
+    assigneeId: 'usr-admin',
+    assigneeName: '개발자',
+    receptionNote: 'SheetJS numFmt 속성 적용 예정',
+    resolverId: 'usr-admin',
+    resolverName: '개발자',
+    completedAt: '2026-09-10 11:20',
+    resolutionNote: 'SheetJS XLSX 엑셀 빌더 내 공급가액 및 세액 컬럼 서식을 #,##0 표준 화폐 포맷으로 강제 적용 완료',
+    resolvedVersion: 'v1.14.0.Build.84',
+    rootCause: 'XLSX 셀 타입이 s(string)으로 내보내기되던 결함',
+    createdAt: '2026-09-10T09:00:00.000Z',
+    updatedAt: '2026-09-10T11:20:00.000Z'
+  }
+];
+
 export const ALL_DB_KEYS = [
   'tenants', 'users', 'departments', 'permissions', 'customers', 'contacts', 'sites', 
   'products', 'assets', 'consumables', 'consumableLogs', 'consumablePurchases',
@@ -4021,7 +4181,7 @@ export const ALL_DB_KEYS = [
   'prepaidTransactions', 'delinquencyActionLogs', 'mechanicConsumableStocks', 'receivables', 'legalNoticeLogs', 'legalNoticeTemplates',
   'corporateVehicles', 'vehicleOperationLogs', 'vehicleFuelLogs',
   'stocktakingAudits', 'stocktakingAuditItems', 'collectedParts', 'equipmentManuals', 'standardOptions',
-  'printStations', 'printQueue', 'customRoles', 'rolePermissions', 'privacyAccessLogs'
+  'printStations', 'printQueue', 'customRoles', 'rolePermissions', 'privacyAccessLogs', 'errorReports'
 ];
 
 class LocalDB {
@@ -4458,9 +4618,13 @@ class LocalDB {
   get privacyAccessLogs() { return this.get<PrivacyAccessLog>('privacyAccessLogs', []); }
   set privacyAccessLogs(val: PrivacyAccessLog[]) { this.set('privacyAccessLogs', val); }
 
+  get errorReports() { return this.get<ErrorReport>('errorReports', SEED_ERROR_REPORTS); }
+  set errorReports(val: ErrorReport[]) { this.set('errorReports', val); }
+
   // Supabase 테이블 맵핑
   private mapToSupabaseTable(key: string): string {
     const mapping: Record<string, string> = {
+      errorReports: 'error_reports',
       privacyAccessLogs: 'privacy_access_logs',
       printStations: 'print_stations',
       printQueue: 'print_queue',
@@ -4866,6 +5030,7 @@ class LocalDB {
       case 'purchaseSettlements': prefix = 'PST-';    break;
       case 'purchaseSettlementItems': prefix = 'PSI-'; break;
       case 'privacyAccessLogs':   prefix = 'PLOG-';   break;
+      case 'errorReports':        prefix = 'ERR-';    break;
       default:
         prefix = key.slice(0, 4).toUpperCase() + '-';
     }
@@ -5016,6 +5181,8 @@ class LocalDB {
       rolePermissions: 'rolePermissions',
       privacy_access_logs: 'privacyAccessLogs',
       privacyAccessLogs: 'privacyAccessLogs',
+      error_reports: 'errorReports',
+      errorReports: 'errorReports',
     };
     return (reverseMapping[key] || key) as keyof LocalDB;
   }

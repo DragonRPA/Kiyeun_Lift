@@ -1,0 +1,129 @@
+{
+  "timestamp": "2026-09-13T00:57:12.379Z",
+  "totalTests": 20,
+  "passed": 20,
+  "failed": 0,
+  "results": [
+    {
+      "id": "WTT-RD-01",
+      "title": "MCP 도구 JSON-RPC 2.0 프로토콜 규격 정합성 검증",
+      "passed": true,
+      "duration": "1254ms"
+    },
+    {
+      "id": "WTT-RD-02",
+      "title": "응답 내 status === READY 상태 플래그 확인",
+      "passed": true,
+      "duration": "167ms"
+    },
+    {
+      "id": "WTT-RD-03",
+      "title": "응답 내 isReady === true 불리언 무결성 확인",
+      "passed": true,
+      "duration": "467ms"
+    },
+    {
+      "id": "WTT-RD-04",
+      "title": "DOM 셀렉터 body[data-erp-status=\"ready\"] 규격 일치",
+      "passed": true,
+      "duration": "431ms"
+    },
+    {
+      "id": "WTT-RD-05",
+      "title": "window.__ERP_READY__ 전역 윈도우 불리언 동기화 검증",
+      "passed": true,
+      "duration": "148ms"
+    },
+    {
+      "id": "WTT-RD-06",
+      "title": "현재 테넌트 (tenant-giyeun) 메타데이터 정상 반환",
+      "passed": true,
+      "duration": "153ms"
+    },
+    {
+      "id": "WTT-RD-07",
+      "title": "로그인 사용자 (강상안 최고관리자) 인증 세션 바인딩",
+      "passed": true,
+      "duration": "151ms"
+    },
+    {
+      "id": "WTT-RD-08",
+      "title": "활성 메뉴 (activeMenu: dashboard) 식별자 정합성",
+      "passed": true,
+      "duration": "150ms"
+    },
+    {
+      "id": "WTT-RD-09",
+      "title": "헌장 1.3 출고 RENTED 강제 가드레일 활성화 검증",
+      "passed": true,
+      "duration": "148ms"
+    },
+    {
+      "id": "WTT-RD-10",
+      "title": "헌장 2.3 단일 EXCHANGE 및 왕복할인 가드레일 활성화 검증",
+      "passed": true,
+      "duration": "157ms"
+    },
+    {
+      "id": "WTT-RD-11",
+      "title": "헌장 4.1 일할 매출 기여액 ₩0 차액 가드레일 활성화 검증",
+      "passed": true,
+      "duration": "146ms"
+    },
+    {
+      "id": "WTT-RD-12",
+      "title": "헌장 5.2 무음 실패 방지 가드레일 활성화 검증",
+      "passed": true,
+      "duration": "148ms"
+    },
+    {
+      "id": "WTT-RD-13",
+      "title": "실제 Supabase DB 원격 인스턴스 통신 유효성 (dbConnected: true)",
+      "passed": true,
+      "duration": "148ms"
+    },
+    {
+      "id": "WTT-RD-14",
+      "title": "미결 CUD 작업수 (pendingWritesCount === 0) 무결성",
+      "passed": true,
+      "duration": "148ms"
+    },
+    {
+      "id": "WTT-RD-15",
+      "title": "타임아웃 5,000ms 이내 초고속 응답 (평균 < 100ms) 검증",
+      "passed": true,
+      "duration": "151ms"
+    },
+    {
+      "id": "WTT-RD-16",
+      "title": "Playwright page.waitForSelector 셀렉터 매칭 가독성",
+      "passed": true,
+      "duration": "153ms"
+    },
+    {
+      "id": "WTT-RD-17",
+      "title": "window.whenErpReady() 비동기 프로미스 즉시 resolve",
+      "passed": true,
+      "duration": "147ms"
+    },
+    {
+      "id": "WTT-RD-18",
+      "title": "메뉴 전환 시 data-erp-menu 동적 갱신 호환성",
+      "passed": true,
+      "duration": "150ms"
+    },
+    {
+      "id": "WTT-RD-19",
+      "title": "연속 20회 고빈도 MCP 호출 시 레이스 컨디션 0건 입증",
+      "passed": true,
+      "duration": "150ms"
+    },
+    {
+      "id": "WTT-RD-20",
+      "title": "에이전틱 AI Pre-Flight 안전 게이트웨이 종단 확정",
+      "passed": true,
+      "duration": "146ms"
+    }
+  ],
+  "passRate": "100.00%"
+}

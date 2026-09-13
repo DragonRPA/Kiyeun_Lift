@@ -4,10 +4,11 @@ import { useApp } from '../context/AppContext';
 import { 
   ShoppingCart, Plus, ClipboardList, Download, Search, RefreshCw, 
   CheckCircle2, XCircle, Clock, FileText, Check, AlertCircle, AlertTriangle,
-  ExternalLink
+  ExternalLink, FileSpreadsheet
 } from 'lucide-react';
 import { exportToExcel } from '../services/excel';
 import { ConsumablePurchaseRequest, db } from '../services/db';
+import { ExcelUploadModal, ExcelColumnDef } from '../components/ExcelUploadModal';
 
 export const ConsumablePurchasesPage: React.FC = () => {
   const {
@@ -25,6 +26,50 @@ export const ConsumablePurchasesPage: React.FC = () => {
 
   // 활성 탭: REQ_WRITE (구매신청등록) | REQ_LIST (구매신청대장)
   const [activeTab, setActiveTab] = useState<'REQ_WRITE' | 'REQ_LIST'>('REQ_LIST');
+
+  // 엑셀 일괄 업로드 모달 상태
+  const [excelModalOpen, setExcelModalOpen] = useState(false);
+
+  // 엑셀 일괄 업로드 컬럼 정의
+  const consumableExcelColumns: ExcelColumnDef[] = [
+    { key: 'modelName', label: '품목명', required: true, sample: '유압작동유 (ISO VG 46)' },
+    { key: 'requestedQty', label: '신청수량', required: true, type: 'number', sample: 10 },
+    { key: 'unitPrice', label: '예상단가', required: true, type: 'number', sample: 45000 },
+    { key: 'sellerName', label: '공급처/구매처', required: true, sample: '삼화윤활유' },
+    { key: 'requestDate', label: '신청일자', type: 'date', sample: '2026-09-12' },
+    { key: 'purpose', label: '용도및비고', sample: '주기장 정비용' },
+  ];
+
+  // 엑셀 일괄 등록 처리 핸들러
+  const handleBatchUploadConsumables = async (rows: Record<string, any>[]) => {
+    let successCount = 0;
+    const today = new Date().toISOString().split('T')[0];
+
+    for (const row of rows) {
+      const modelName = String(row.modelName || '').trim();
+      if (!modelName) continue;
+      const qty = Math.max(1, Number(row.requestedQty) || 1);
+      const unitPrice = Math.max(0, Number(row.unitPrice) || 0);
+      const sellerName = String(row.sellerName || '일괄구매처').trim();
+      const requestDate = row.requestDate || today;
+
+      const matched = consumables.find(c => c.modelName?.toLowerCase() === modelName.toLowerCase());
+
+      await requestConsumablePurchase({
+        consumableId: matched ? matched.id : undefined,
+        modelName,
+        qty,
+        unitPrice,
+        requestDate,
+        sellerName
+      });
+      successCount++;
+    }
+
+    await db.awaitPendingWrites();
+    showToast(`${successCount}건의 소모품 구매신청이 일괄 등록되었습니다.`);
+    return { successCount, message: '정상 등록 완료' };
+  };
 
   // 토스트 알림 상태
   const [toastMessage, setToastMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -197,16 +242,28 @@ export const ConsumablePurchasesPage: React.FC = () => {
           </div>
         </div>
 
-        {activeTab === 'REQ_LIST' && (
-          <button 
-            className="btn-secondary" 
-            onClick={handleExportExcel} 
-            style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px' }}
-          >
-            <Download size={14} />
-            <span>구매대장 엑셀</span>
-          </button>
-        )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          {activeTab === 'REQ_LIST' && (
+            <button 
+              className="btn-secondary" 
+              onClick={handleExportExcel} 
+              style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px' }}
+            >
+              <Download size={14} />
+              <span>구매대장 엑셀</span>
+            </button>
+          )}
+          {canSave && (
+            <button
+              className="btn-primary"
+              onClick={() => setExcelModalOpen(true)}
+              style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', padding: '6px 14px' }}
+            >
+              <FileSpreadsheet size={14} />
+              <span>엑셀 일괄 등록</span>
+            </button>
+          )}
+        </div>
       </div>
 
       {/* ── 2. 핵심 지표 카드 (Gutenberg Scope) ── */}
@@ -672,6 +729,16 @@ export const ConsumablePurchasesPage: React.FC = () => {
           </form>
         </div>
       )}
+
+      {/* 엑셀 일괄 업로드 모달 */}
+      <ExcelUploadModal
+        isOpen={excelModalOpen}
+        onClose={() => setExcelModalOpen(false)}
+        title="소모품 구매 신청 엑셀 일괄 등록"
+        templateFileName="소모품_구매신청_일괄등록"
+        columns={consumableExcelColumns}
+        onUpload={handleBatchUploadConsumables}
+      />
     </div>
   );
 };

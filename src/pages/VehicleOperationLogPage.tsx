@@ -10,7 +10,8 @@ import {
   CorporateVehicleType,
   CorporateVehicleOwnership,
   CorporateVehicleFuelType,
-  OperationPurposeType
+  OperationPurposeType,
+  db
 } from '../services/db';
 import {
   Car,
@@ -32,9 +33,11 @@ import {
   Building2,
   User as UserIcon,
   Check,
-  ChevronDown
+  ChevronDown,
+  FileSpreadsheet
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
+import { ExcelUploadModal, ExcelColumnDef } from '../components/ExcelUploadModal';
 
 // 탭 정의 (헌장 3.1: 무수식어 건조 명사 표준)
 type PageTab = 'OPERATION_LOG' | 'FUEL_LOG' | 'FLEET_MASTER';
@@ -59,12 +62,68 @@ export const VehicleOperationLogPage: React.FC = () => {
     deleteCorporateVehicle,
     updateVehicleOperationLog,
     deleteVehicleOperationLog,
+    registerVehicleFuelLog,
     deleteVehicleFuelLog,
     showErrorModal
   } = useApp();
 
   // 현재 활성 탭 (운행일지 대장 임시 비활성화 -> 주유 영수증 대장이 기본 탭)
   const [activeTab, setActiveTab] = useState<PageTab>('FUEL_LOG');
+
+  // 주유내역 엑셀 일괄 등록 모달 상태
+  const [fuelExcelModalOpen, setFuelExcelModalOpen] = useState(false);
+
+  const fuelExcelColumns: ExcelColumnDef[] = [
+    { key: 'vehicleNo', label: '차량번호', required: true, sample: '12가 3456' },
+    { key: 'fuelDate', label: '주유일자', required: true, type: 'date', sample: '2026-09-10' },
+    { key: 'fuelVolume', label: '주유량(L)', required: true, type: 'number', sample: 55.4 },
+    { key: 'fuelUnitPrice', label: '리터당단가', type: 'number', sample: 1650 },
+    { key: 'fuelAmount', label: '총주유금액', required: true, type: 'number', sample: 91410 },
+    { key: 'gasStation', label: '주유소명', sample: 'GS칼텍스 직영점' },
+    { key: 'driverName', label: '운전자명', sample: '김기연' },
+    { key: 'currentMileage', label: '누적주행거리', type: 'number', sample: 45200 },
+    { key: 'paymentMethod', label: '결제방식', sample: '법인카드' },
+  ];
+
+  const handleBatchUploadFuelLogs = async (rows: Record<string, any>[]) => {
+    let successCount = 0;
+    const today = new Date().toISOString().split('T')[0];
+
+    for (const row of rows) {
+      const vehicleNo = String(row.vehicleNo || '').trim();
+      if (!vehicleNo) continue;
+
+      const matchedVeh = corporateVehicles.find(v => 
+        v.vehicleNo.replace(/\s/g, '').toLowerCase() === vehicleNo.replace(/\s/g, '').toLowerCase()
+      );
+
+      const vehicleId = matchedVeh?.id || `veh_manual_${vehicleNo.replace(/[^0-9a-zA-Z]/g, '')}`;
+      const fuelVolume = Math.max(0, Number(row.fuelVolume) || 0);
+      const fuelAmount = Math.max(0, Number(row.fuelAmount) || 0);
+      const fuelUnitPrice = Number(row.fuelUnitPrice) || (fuelVolume > 0 ? Math.round(fuelAmount / fuelVolume) : 0);
+      const currentMileage = Number(row.currentMileage) || matchedVeh?.currentMileage || 0;
+
+      await registerVehicleFuelLog({
+        vehicleId,
+        vehicleNo,
+        fuelDate: row.fuelDate || today,
+        driverName: row.driverName || matchedVeh?.primaryDriverName || '담당자',
+        gasStation: row.gasStation || '주유소',
+        fuelVolume,
+        fuelAmount,
+        fuelUnitPrice,
+        currentMileage,
+        paymentMethod: row.paymentMethod || '법인카드',
+        memo: '엑셀 일괄 등록',
+        tenant_id: 'giyeun'
+      } as any);
+
+      successCount++;
+    }
+
+    await db.awaitPendingWrites();
+    return { successCount, message: '주유내역 일괄 등록 완료' };
+  };
 
   // 검색/필터 상태
   const now = new Date();
@@ -417,26 +476,46 @@ export const VehicleOperationLogPage: React.FC = () => {
           )}
 
           {activeTab === 'FUEL_LOG' && (
-            <button
-              onClick={handleExportFuelExcel}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '5px',
-                backgroundColor: 'var(--primary)',
-                color: '#fff',
-                border: 'none',
-                padding: '6px 12px',
-                borderRadius: '5px',
-                fontSize: '12px',
-                fontWeight: '600',
-                cursor: 'pointer',
-                whiteSpace: 'nowrap'
-              }}
-            >
-              <Download size={13} />
-              <span>주유 영수증 대장 엑셀 다운로드</span>
-            </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <button
+                onClick={() => setFuelExcelModalOpen(true)}
+                className="btn-secondary"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                  padding: '6px 12px',
+                  borderRadius: '5px',
+                  fontSize: '12px',
+                  fontWeight: '600',
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap'
+                }}
+              >
+                <FileSpreadsheet size={13} color="var(--primary)" />
+                <span>주유내역 엑셀 일괄 등록</span>
+              </button>
+              <button
+                onClick={handleExportFuelExcel}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                  backgroundColor: 'var(--primary)',
+                  color: '#fff',
+                  border: 'none',
+                  padding: '6px 12px',
+                  borderRadius: '5px',
+                  fontSize: '12px',
+                  fontWeight: '600',
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap'
+                }}
+              >
+                <Download size={13} />
+                <span>주유 영수증 대장 엑셀 다운로드</span>
+              </button>
+            </div>
           )}
 
           {activeTab === 'FLEET_MASTER' && (
@@ -1705,6 +1784,16 @@ export const VehicleOperationLogPage: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* ⛽ 주유내역 엑셀 일괄 등록 모달 */}
+      <ExcelUploadModal
+        isOpen={fuelExcelModalOpen}
+        onClose={() => setFuelExcelModalOpen(false)}
+        title="법인차량 주유내역 엑셀 일괄 등록"
+        templateFileName="법인차량_주유내역_일괄등록"
+        columns={fuelExcelColumns}
+        onUpload={handleBatchUploadFuelLogs}
+      />
     </div>
   );
 };

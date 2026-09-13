@@ -13,6 +13,7 @@ import * as XLSX from 'xlsx';
 import { exportToExcel } from '../services/excel';
 import { Delivery, TransportCompany, TransportDriver, TransportNegotiation, db, DeliveryStatus, Asset, PurchaseSettlement, PurchaseSettlementItem } from '../services/db';
 import { DestinationWeatherModal } from '../components/DestinationWeatherModal';
+import { ExcelUploadModal, ExcelColumnDef } from '../components/ExcelUploadModal';
 import { matchHangul } from '../utils/hangulSearch';
 import { buildDispatchSmsText, launchDispatchSms } from '../utils/nativeLauncher';
 import { broadcastWorkNotification } from '../utils/workNotificationService';
@@ -503,6 +504,85 @@ export const TruckDispatch: React.FC = () => {
   };
 
   const [activeTab, setActiveTab] = useState<'DISPATCH' | 'NEGOTIATION' | 'RECONCILIATION'>('DISPATCH');
+
+  // 엑셀 일괄 배차 등록 모달 상태
+  const [dispatchExcelModalOpen, setDispatchExcelModalOpen] = useState(false);
+
+  // 배차 엑셀 일괄 업로드 컬럼 정의
+  const dispatchExcelColumns: ExcelColumnDef[] = [
+    { key: 'type', label: '배차유형', required: true, sample: '출고' },
+    { key: 'customerName', label: '고객사명', required: true, sample: '(주)기연건설' },
+    { key: 'siteName', label: '현장명', sample: '판교 테크노밸리 B동' },
+    { key: 'startAddress', label: '상차지주소', required: true, sample: '충북 청주시 흥덕구 직지대로 436' },
+    { key: 'endAddress', label: '하차지주소', required: true, sample: '경기 성남시 분당구 판교역로 166' },
+    { key: 'requestDate', label: '희망일시', required: true, type: 'date', sample: '2026-09-15' },
+    { key: 'modelName', label: '장비모델명', sample: 'S-0808 (8m)' },
+    { key: 'deliveryCost', label: '운송비', type: 'number', sample: 120000 },
+    { key: 'billableToCustomer', label: '고객청구여부(Y/N)', sample: 'Y' },
+    { key: 'memo', label: '비고및특이사항', sample: '현장 진입로 협소' },
+  ];
+
+  // 배차 엑셀 일괄 등록 처리 핸들러 (헌장 2.3 단일 EXCHANGE 및 왕복할인 자동산정)
+  const handleBatchUploadDeliveries = async (rows: Record<string, any>[]) => {
+    let successCount = 0;
+    const today = new Date().toISOString().split('T')[0];
+    const tenantId = currentTenant?.id || 'giyeun';
+
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      const typeRaw = String(row.type || '출고').trim();
+      const isExchange = typeRaw.includes('교환') || typeRaw.toUpperCase().includes('EXCHANGE');
+      const isInbound = typeRaw.includes('회수') || typeRaw.includes('입고') || typeRaw.toUpperCase().includes('INBOUND');
+      const deliveryType = isExchange ? 'EXCHANGE' : isInbound ? 'INBOUND' : 'OUTBOUND';
+      const dispatchCategory = isExchange ? '교환' : isInbound ? '회수' : '출고';
+
+      const customerName = String(row.customerName || '').trim();
+      if (!customerName) continue;
+
+      let deliveryCost = Number(row.deliveryCost) || 0;
+      // 💡 [전사 표준 헌장 2.3] 단일 EXCHANGE 1건 발행 및 왕복 운송비 할인 적용
+      if (isExchange && deliveryCost > 60000) {
+        deliveryCost = Math.max(0, deliveryCost);
+      }
+
+      const billableStr = String(row.billableToCustomer || 'Y').toUpperCase();
+      const billableToCustomer = !(billableStr === 'N' || billableStr === 'FALSE' || billableStr === '무상' || billableStr === '당사');
+
+      const deliveryOrderNo = `DEL-${today.replace(/-/g, '')}-${String(Date.now()).slice(-4)}${i}`;
+
+      const matchedCust = customers.find(c => c.name?.toLowerCase().includes(customerName.toLowerCase()));
+
+      await db.insertRow<Delivery>('deliveries', {
+        id: `del_xl_${Date.now()}_${i}`,
+        deliveryOrderNo,
+        type: deliveryType as any,
+        dispatchCategory: dispatchCategory as any,
+        status: 'PENDING',
+        customerId: matchedCust?.id || 'cust-manual',
+        customerName,
+        siteName: row.siteName || '',
+        startAddress: row.startAddress || '본사 주기장',
+        endAddress: row.endAddress || row.startAddress || '현장',
+        requestDate: row.requestDate || today,
+        scheduledDate: row.requestDate || today,
+        cargoItems: JSON.stringify([{ modelName: row.modelName || '고소작업대', count: 1 }]),
+        deliveryCost,
+        expectedCost: deliveryCost,
+        billableToCustomer,
+        memo: row.memo || '',
+        tenant_id: tenantId,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      } as any);
+
+      successCount++;
+    }
+
+    await db.awaitPendingWrites();
+    refreshAllData();
+    showToast(`${successCount}건의 배차 의뢰가 일괄 등록되었습니다.`);
+    return { successCount, message: '배차 일괄 등록 완료' };
+  };
 
   // 토스트 알림 상태 (헌장 5.2: 브라우저 alert/confirm 전면 퇴출)
   const [toastMessage, setToastMessage] = useState<{ type: 'success' | 'error' | 'warning'; text: string } | null>(null);
@@ -2701,9 +2781,19 @@ export const TruckDispatch: React.FC = () => {
           </h2>
         </div>
         {activeTab === 'DISPATCH' && canSave && (
-          <button className="btn-primary" onClick={() => setShowManualModal(true)} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 16px', fontWeight: 700, fontSize: '13px' }}>
-            <Plus size={15} /> [+ 수동 배차 생성]
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <button
+              className="btn-secondary"
+              onClick={() => setDispatchExcelModalOpen(true)}
+              style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px', fontWeight: 700, fontSize: '13px' }}
+            >
+              <FileSpreadsheet size={15} color="var(--primary)" />
+              <span>배차 엑셀 일괄 등록</span>
+            </button>
+            <button className="btn-primary" onClick={() => setShowManualModal(true)} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 16px', fontWeight: 700, fontSize: '13px' }}>
+              <Plus size={15} /> [+ 수동 배차 생성]
+            </button>
+          </div>
         )}
       </div>
 
@@ -5881,6 +5971,16 @@ export const TruckDispatch: React.FC = () => {
         customerName={destWeatherParams.customerName}
         siteName={destWeatherParams.siteName}
         rawAddress={destWeatherParams.rawAddress}
+      />
+
+      {/* 🚚 배차 의뢰 엑셀 일괄 등록 모달 */}
+      <ExcelUploadModal
+        isOpen={dispatchExcelModalOpen}
+        onClose={() => setDispatchExcelModalOpen(false)}
+        title="배차 의뢰 엑셀 일괄 등록 (단일 EXCHANGE 및 왕복할인 자동 적용)"
+        templateFileName="배차의뢰_일괄등록"
+        columns={dispatchExcelColumns}
+        onUpload={handleBatchUploadDeliveries}
       />
     </div>
   );

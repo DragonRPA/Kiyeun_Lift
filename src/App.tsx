@@ -6,12 +6,18 @@ import {
   Truck, Wrench, Shield, ShoppingBag, CreditCard, LogOut, Sun, Moon, Menu, X, Zap, Settings, Database as DatabaseIcon,
   TrendingUp, Clock, AlertTriangle, Building2, ChevronDown, ChevronRight, Briefcase, Box, FolderKanban, ShieldAlert, Terminal, ArrowLeftRight, CheckSquare,
   Smartphone, Monitor, Car, FileText, Search, Printer, PackagePlus, Boxes, Calendar, Camera, BookOpen,
-  FileCheck, ShieldCheck
+  FileCheck, ShieldCheck, Bot
 } from 'lucide-react';
 
 import { WeatherWidget } from './components/WeatherWidget';
 import { PrivacyPolicyModal } from './components/PrivacyPolicyModal';
 import { PrivacyAuditPage } from './pages/PrivacyAuditPage';
+import { AgenticAiLabPage } from './pages/AgenticAiLabPage';
+import { AgenticDispatchStudioPage } from './pages/AgenticDispatchStudioPage';
+import { AgenticSettlementAutopilotPage } from './pages/AgenticSettlementAutopilotPage';
+import { AgenticAssetLifecyclePage } from './pages/AgenticAssetLifecyclePage';
+import { markErpReady, markErpStatus } from './services/appReadySignal';
+import { ErpReadinessBadge } from './components/ErpReadinessBadge';
 
 // 페이지 컴포넌트 임포트 (SSOT 언더바 파일명 통일)
 import { Dashboard } from './pages/Dashboard';
@@ -64,6 +70,7 @@ import { GoogleConfig } from './pages/GoogleConfig';
 import { InitialDbUploader } from './pages/InitialDbUploader';
 import { AgentHeaderBadge } from './components/AgentHeaderBadge';
 import { OperationManualPage } from './pages/OperationManualPage';
+import { ErrorReportPage } from './pages/ErrorReportPage';
 import { MirrorSyncProgressToast } from './components/MirrorSyncProgressToast';
 import { MobileApp } from './mobile/MobileApp';
 import { initWorkNotificationListener } from './utils/workNotificationService';
@@ -174,6 +181,19 @@ const App: React.FC = () => {
     }
     loadTablesForMenu(activeTab);
   }, [activeTab]);
+
+  // 🚀 에이전틱 AI 및 MCP 자동화를 위한 시스템 Ready 상태 실시간 공표
+  useEffect(() => {
+    if (currentUser) {
+      markErpReady({
+        user: currentUser,
+        menu: activeTab,
+        tenant: currentTenant
+      });
+    } else {
+      markErpStatus('LOGIN_REQUIRED', 'login');
+    }
+  }, [currentUser, activeTab, currentTenant]);
 
   const handleLoginSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -302,6 +322,7 @@ const App: React.FC = () => {
       icon: <BookOpen size={17} />,
       items: [
         { id: 'operations_manual', name: '업무매뉴얼', icon: <BookOpen size={16} />, component: <OperationManualPage /> },
+        { id: 'error_report', name: '오류 신고', icon: <AlertTriangle size={16} />, component: <ErrorReportPage /> },
       ]
     },
     {
@@ -309,6 +330,10 @@ const App: React.FC = () => {
       name: '시스템관리 - 개발자',
       icon: <Terminal size={17} />,
       items: [
+        { id: 'agentic_ai_lab', name: '에이전틱 AI 샌드박스 랩', icon: <Bot size={16} />, component: <AgenticAiLabPage /> },
+        { id: 'agentic_dispatch_studio', name: '에이전틱 배차 관제 스튜디오', icon: <Truck size={16} />, component: <AgenticDispatchStudioPage /> },
+        { id: 'agentic_settlement_autopilot', name: '에이전틱 월말 대사 정산 오토파일럿', icon: <TrendingUp size={16} />, component: <AgenticSettlementAutopilotPage /> },
+        { id: 'agentic_asset_lifecycle', name: '에이전틱 자산 라이프사이클 관제', icon: <Layers size={16} />, component: <AgenticAssetLifecyclePage /> },
         { id: 'initial_db_upload', name: '초기DB 업로드', icon: <DatabaseIcon size={16} />, component: <InitialDbUploader /> },
         { id: 'google_config', name: '구글 관리자 설정', icon: <Settings size={16} />, component: <GoogleConfig /> },
         { id: 'dev_uploader', name: '[개발] DB 데이터 업로더', icon: <DatabaseIcon size={16} />, component: <DevDataUploader /> },
@@ -850,6 +875,9 @@ const App: React.FC = () => {
         {/* 사용자 정보 및 화면 모드 (밝은화면모드 / 어두운화면모드 / 모바일전환) */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
 
+          {/* 🟢 시스템 준비상태 (Ready) 인디케이터 배지 */}
+          <ErpReadinessBadge />
+
           {/* 🤖 로컬 사이드카 에이전트 실시간 상태 미니 배지 */}
           <AgentHeaderBadge currentUser={currentUser} />
 
@@ -875,6 +903,30 @@ const App: React.FC = () => {
           >
             <BookOpen size={14} color="#2563EB" />
             업무매뉴얼
+          </button>
+
+          {/* ⚠️ 오류 신고 바로가기 버튼 (헌장 1.1) */}
+          <button
+            onClick={() => setActiveTab('error_report')}
+            style={{
+              padding: '6px 13px',
+              borderRadius: '20px',
+              backgroundColor: activeTab === 'error_report' ? '#FEF2F2' : 'var(--bg-app)',
+              color: activeTab === 'error_report' ? '#DC2626' : 'var(--text-primary)',
+              border: activeTab === 'error_report' ? '1.5px solid #DC2626' : '1px solid var(--border-color)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              fontSize: '12.5px',
+              fontWeight: '700',
+              cursor: 'pointer',
+              whiteSpace: 'nowrap',
+              transition: 'all 0.15s ease'
+            }}
+            title="오류 신고 및 조치 현황 확인"
+          >
+            <AlertTriangle size={14} color="#DC2626" />
+            오류 신고
           </button>
 
           {/* 🛡️ 개인정보 처리방침 법정 고지 열람 버튼 */}
